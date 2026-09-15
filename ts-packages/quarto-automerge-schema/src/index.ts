@@ -241,6 +241,13 @@ export function addProjectToSet(
       existing.syncServer = entry.syncServer;
       changed = true;
     }
+    // Adopt an incoming cached summary only when the entry has none:
+    // freshness updates are owned by updateProjectSummaryInSet, so a
+    // re-add must never clobber a live summary with a stale copy.
+    if (!existing.summary && entry.summary) {
+      existing.summary = structuredClone(entry.summary);
+      changed = true;
+    }
     return changed;
   }
 
@@ -248,6 +255,10 @@ export function addProjectToSet(
     indexDocId: entry.indexDocId,
     syncServer: entry.syncServer,
     description: entry.description,
+    // Carry the cached peek summary when the caller has one ("Add to
+    // collection" copies an entry the sender already summarized) so
+    // invite previews and peeks work before the project's next open.
+    ...(entry.summary && { summary: structuredClone(entry.summary) }),
     addedAt: timestamp,
     lastAccessed: timestamp,
   };

@@ -12,7 +12,8 @@ A para.
 Another para.
 --------------------------------------------------------------------------------
     (document
-      (metadata)
+      (metadata
+        body: (yaml))
       (section
         (pandoc_paragraph
           (pandoc_str)

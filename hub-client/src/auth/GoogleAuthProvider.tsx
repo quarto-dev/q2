@@ -43,7 +43,7 @@ async function fetchLoginNonce(): Promise<string | null> {
   }
 }
 
-function SignInButton({ loginUri }: SignInButtonProps) {
+function SignInButton({ loginUri, text }: SignInButtonProps) {
   const [nonce, setNonce] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -82,6 +82,7 @@ function SignInButton({ loginUri }: SignInButtonProps) {
       ux_mode="redirect"
       login_uri={loginUri}
       nonce={nonce}
+      text={text}
       onSuccess={() => {
         // Not called in redirect mode — credential arrives via HttpOnly
         // cookie set by the server-side redirect callback.

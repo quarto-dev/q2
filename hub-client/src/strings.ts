@@ -110,6 +110,81 @@ export const sections = {
   about: 'ABOUT',
 } as const;
 
+/** Outbound links to Quarto's own sites. */
+export const links = {
+  /** The Quarto Hub project site — every "Learn more" leads here. */
+  quartoHub: 'https://quarto-dev.github.io/quarto-hub/',
+} as const;
+
+/**
+ * The landing page at quarto-hub.com — what anyone without a session
+ * sees, including someone arriving from an invite link (bd-g0uyp2v1).
+ *
+ * Wording is borrowed from the project site (links.quartoHub) so the two
+ * describe the product the same way. One claim there is deliberately not
+ * repeated: that a project link needs no account or Quarto install. That
+ * is the product's intent, but this deployment is allowlisted and the
+ * reader is looking at a sign-in button, so it would contradict the page
+ * it sits on.
+ */
+export const landing = {
+  product: 'Quarto Hub',
+  /** Rendered as two lines: the second sentence is the turn. */
+  taglineLead: 'Prose and code belong in one place.',
+  taglineFollow: 'So do the people.',
+  /**
+   * Three sentences, each ending on its own new idea (Gopen's stress
+   * position): live render, one .qmd, real-time collaboration. The
+   * third deliberately does *not* end "…on the same project in Quarto
+   * Hub" — the product name is the paragraph's own opening subject and
+   * the reader is already on the site, so putting it last spends the
+   * emphatic slot on the oldest information in the paragraph.
+   */
+  what:
+    'Quarto Hub is a Quarto editor in the browser that renders while you type. ' +
+    'Edit the markdown or the rendered page, and either way it is the same .qmd. ' +
+    'Share a link and your team can collaborate on the same project in real time.',
+  inviteOnly: 'quarto-hub.com is experimental and currently available by invite only.',
+  learnMore: 'Learn more about Quarto Hub',
+} as const;
+
+/**
+ * The demo disclaimer (bd-m6u9qu3u): what not to enter, and that nothing
+ * entered is protected or returned. Rendered by components/DemoDisclaimer
+ * on every card reachable without a session — the landing / sign-in
+ * screen and the invite landing cards — above their sign-in button.
+ *
+ * Structured rather than written as markdown: those cards render before
+ * the WASM markdown renderer (the About tab's) exists, and the formatting
+ * is fixed anyway — a heading, then two paragraphs that each open with a
+ * bold single-sentence lead. DemoDisclaimer builds the markup from this
+ * shape, so each `lead` must stay one sentence and end with its own
+ * period; the component joins `lead` and `body` with a space. The same
+ * two paragraphs open resources/more-info.md (the About tab's "More
+ * information"); keep the wording in step when editing either.
+ */
+export const demoDisclaimer = {
+  heading: 'Disclaimer',
+  useTestData: {
+    lead: 'Use test data, not real data.',
+    body:
+      'This is a live demo of a product still in development. ' +
+      'Please don’t enter anything sensitive, confidential, or proprietary — ' +
+      'no customer data, credentials, internal business info, or anyone else’s ' +
+      'personal information. If you wouldn’t post it on a public forum, ' +
+      'don’t put it here.',
+  },
+  notProtected: {
+    lead: 'Anything you enter is not protected, and we won’t return it.',
+    body:
+      'Data you share during this demo may be logged, cached, or otherwise ' +
+      'retained by Posit and any third-party services the demo relies on. ' +
+      'We don’t guarantee confidentiality, security, or deletion, and we can’t ' +
+      'retrieve or return data you enter once the demo session ends. ' +
+      'Enter information only if you’re comfortable with that.',
+  },
+} as const;
+
 /** The three notification tiers (see components/notifications.css). */
 export const notifications = {
   autoSaved: 'Auto-saved',

@@ -564,16 +564,14 @@ fn content_provenance_desync_warning(
     .build()
 }
 
-fn extract_between_delimiters(input: &str) -> Option<&str> {
-    let parts: Vec<&str> = input.split("---").collect();
-    if parts.len() >= 3 {
-        Some(parts[1].trim())
-    } else {
-        None
-    }
-}
-
-/// Convert RawBlock to ConfigValue using unified conversion.
+/// Convert a `quarto_minus_metadata` RawBlock to ConfigValue using unified conversion.
+///
+/// The block's `text` is the YAML between the `---` delimiters — exactly the
+/// grammar's `yaml` body node, delimiter lines excluded — and its
+/// `source_info` covers that same range, so YAML offsets map onto the source
+/// with no re-scanning here. (The reader once located the body itself by
+/// splitting the raw node text on `---`, which cut the YAML at the first
+/// `---` inside a value: bd-mjo6ao32, GH #671.)
 ///
 /// This function:
 /// 1. Preserves source location information
@@ -582,8 +580,7 @@ fn extract_between_delimiters(input: &str) -> Option<&str> {
 ///
 /// # Panics
 ///
-/// Panics if the RawBlock format is not "quarto_minus_metadata" or if YAML parsing fails.
-/// These should be replaced with proper error handling in production.
+/// Panics if the RawBlock format is not "quarto_minus_metadata".
 pub fn rawblock_to_config_value(
     block: &RawBlock,
     diagnostics: &mut crate::utils::diagnostic_collector::DiagnosticCollector,
@@ -595,23 +592,11 @@ pub fn rawblock_to_config_value(
         );
     }
 
-    // Extract YAML content between --- delimiters
-    let content = extract_between_delimiters(&block.text).unwrap();
-
-    // Calculate offsets within RawBlock.text
-    // Find the actual position of the trimmed content in the original text
-    // extract_between_delimiters trims the content, so we need to find where it actually starts
-    let yaml_start = block.text.find(content).unwrap();
-
-    // block.source_info is already quarto_source_map::SourceInfo
-    let parent = block.source_info.clone();
-
-    // Create Substring SourceInfo for the YAML content within the RawBlock
-    let yaml_parent =
-        quarto_source_map::SourceInfo::substring(parent, yaml_start, yaml_start + content.len());
+    // The block's source_info already spans exactly the YAML text.
+    let yaml_parent = block.source_info.clone();
 
     // Parse YAML with source tracking
-    let yaml = match quarto_yaml::parse_with_parent(content, yaml_parent.clone()) {
+    let yaml = match quarto_yaml::parse_with_parent(&block.text, yaml_parent.clone()) {
         Ok(y) => y,
         Err(e) => {
             // Report the YAML parse error as a diagnostic
@@ -649,33 +634,6 @@ mod tests {
 
     fn si() -> quarto_source_map::SourceInfo {
         quarto_source_map::SourceInfo::for_test()
-    }
-
-    #[test]
-    fn test_extract_between_delimiters_valid() {
-        let input = "---\ntitle: Test\n---";
-        let result = extract_between_delimiters(input);
-        assert_eq!(result, Some("title: Test"));
-    }
-
-    #[test]
-    fn test_extract_between_delimiters_with_extra_content() {
-        let input = "---\ntitle: Test\n---\nBody text";
-        let result = extract_between_delimiters(input);
-        assert_eq!(result, Some("title: Test"));
-    }
-
-    #[test]
-    fn test_extract_between_delimiters_missing_delimiters() {
-        // Only one delimiter
-        let input = "---\ntitle: Test";
-        let result = extract_between_delimiters(input);
-        assert_eq!(result, None);
-
-        // No delimiters
-        let input = "title: Test";
-        let result = extract_between_delimiters(input);
-        assert_eq!(result, None);
     }
 
     #[test]

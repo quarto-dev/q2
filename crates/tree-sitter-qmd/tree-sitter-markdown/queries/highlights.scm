@@ -8,9 +8,10 @@
 ;
 ; INVARIANT: never emit a token covering the interior of a code cell
 ; (`code_fence_content`) or the frontmatter (`metadata`) — those are left to
-; the embedded layer (zones 2/3). The `metadata` node is opaque (no child
-; nodes for the `---` fences), so the frontmatter delimiters are synthesized
-; in the extractor, not matched here.
+; the embedded layer (zones 2/3). The `metadata` node exposes its YAML as the
+; `body: (yaml)` child but has no child nodes for the `---` fences themselves,
+; so the frontmatter delimiters are synthesized in the extractor, not matched
+; here.
 
 ; --- Headings (ATX only; this grammar has no setext_heading) -----------------
 ; Capture the whole heading per level; the marker child (narrower) wins

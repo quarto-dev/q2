@@ -55,6 +55,9 @@ thiserror = "2.0"
 toml = "0.9.11"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 yaml-rust2 = "0.11"
+# Executor-agnostic async mutex (wasm-safe). Serializes the LRU cache
+# index read-modify-write across rayon workers (bd-ddahjqr1).
+async-lock = "3.4.2"
 async-trait = "0.1"
 tokio-util = "0.7"
 pollster = "0.4"

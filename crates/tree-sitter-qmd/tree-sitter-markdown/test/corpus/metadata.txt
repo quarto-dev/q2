@@ -8,7 +8,8 @@ hello: world
 This has metadata.
 --------------------------------------------------------------------------------
     (document
-      (metadata)
+      (metadata
+        body: (yaml))
       (section
         (pandoc_paragraph
           (pandoc_str)
@@ -32,7 +33,8 @@ title: inner
 More.
 --------------------------------------------------------------------------------
     (document
-      (metadata)
+      (metadata
+        body: (yaml))
       (section
         (pandoc_paragraph
           (pandoc_str)
@@ -40,7 +42,8 @@ More.
           (pandoc_str)
           (pandoc_space)
           (pandoc_str))
-        (metadata)
+        (metadata
+          body: (yaml))
         (pandoc_paragraph
           (pandoc_str))))
 ================================================================================
@@ -60,5 +63,89 @@ abstract: |
 
 --------------------------------------------------------------------------------
     (document
-      (metadata))
+      (metadata
+        body: (yaml)))
       
+================================================================================
+GH #671 - `---` inside a quoted value does not close the block
+================================================================================
+---
+description: "a --- b"
+author: Z
+---
+
+x
+--------------------------------------------------------------------------------
+    (document
+      (metadata
+        body: (yaml))
+      (section
+        (pandoc_paragraph
+          (pandoc_str))))
+================================================================================
+GH #671 - `---` inside a plain value does not close the block
+================================================================================
+---
+description: Hello --- world
+author: Z
+---
+
+x
+--------------------------------------------------------------------------------
+    (document
+      (metadata
+        body: (yaml))
+      (section
+        (pandoc_paragraph
+          (pandoc_str))))
+================================================================================
+GH #671 - an indented `---` line inside a block scalar does not close the block
+================================================================================
+---
+description: |
+  a
+
+  ---
+
+  b
+author: Z
+---
+
+x
+--------------------------------------------------------------------------------
+    (document
+      (metadata
+        body: (yaml))
+      (section
+        (pandoc_paragraph
+          (pandoc_str))))
+================================================================================
+GH #671 - closing delimiter may carry trailing whitespace
+================================================================================
+---
+title: T
+author: Z
+---   
+
+x
+--------------------------------------------------------------------------------
+    (document
+      (metadata
+        body: (yaml))
+      (section
+        (pandoc_paragraph
+          (pandoc_str))))
+================================================================================
+GH #671 - empty body is a zero-width yaml node
+================================================================================
+---
+---
+
+x
+--------------------------------------------------------------------------------
+    (document
+      (metadata
+        body: (yaml))
+      (section
+        (pandoc_paragraph
+          (pandoc_str))))

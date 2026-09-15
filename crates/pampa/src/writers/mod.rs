@@ -6,6 +6,7 @@
 #[cfg(feature = "terminal-support")]
 pub mod ansi;
 pub(crate) mod block_attr;
+pub(crate) mod format_chars;
 pub mod html;
 pub(crate) mod html_source;
 pub mod incremental;

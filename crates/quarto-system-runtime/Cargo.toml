@@ -21,6 +21,8 @@ js-bridge = []
 [dependencies]
 # Async methods in traits
 async-trait.workspace = true
+# Async mutex for the LRU index RMW (bd-ddahjqr1); works under pollster and on wasm
+async-lock.workspace = true
 # JSON serialization for JS interop
 serde_json.workspace = true
 # Serde derive for fetch_url response deserialization

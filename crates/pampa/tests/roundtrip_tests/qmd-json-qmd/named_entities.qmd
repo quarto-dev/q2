@@ -5,3 +5,9 @@ Multi-codepoint: x &NotEqualTilde; y.
 Numeric: A &#62; B &#60; C.
 
 Numeric quote: A &#34;E&#34; B.
+
+Format characters: a&ZeroWidthSpace;b hy&shy;phen &lrm;c &rlm;d e&NoBreak;f.
+
+Format aliases: f&af;x g&ApplyFunction;y &it; &InvisibleTimes; &ic; &InvisibleComma;.
+
+Numeric format: a&#x200B;b c&#8203;d e&#x2064;f.

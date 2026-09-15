@@ -55,7 +55,10 @@ typedef enum {
     ERROR,
     TRIGGER_ERROR,
     TOKEN_EOF,
-    MINUS_METADATA,
+    MINUS_METADATA_START,
+    MINUS_METADATA_OPEN_NEWLINE,
+    MINUS_METADATA_BODY,
+    MINUS_METADATA_END,
     PIPE_TABLE_START,
     PIPE_TABLE_LINE_ENDING,
     FENCED_DIV_START,
@@ -193,7 +196,10 @@ static char* token_names[] = {
     "ERROR",
     "TRIGGER_ERROR",
     "TOKEN_EOF",
-    "MINUS_METADATA",
+    "MINUS_METADATA_START",
+    "MINUS_METADATA_OPEN_NEWLINE",
+    "MINUS_METADATA_BODY",
+    "MINUS_METADATA_END",
     "PIPE_TABLE_START",
     "PIPE_TABLE_LINE_ENDING",
     "FENCED_DIV_START",
@@ -336,6 +342,11 @@ static const uint8_t STATE_MATCHING = 0x1 << 0;
 static const uint8_t STATE_WAS_SOFT_LINE_BREAK = 0x1 << 1;
 // We're inside an ATX heading where soft line endings are disallowed; track that
 static const uint8_t STATE_INSIDE_ATX = 0x1 << 2;
+// Between a YAML metadata block's opening `---` and its closing `---`. Gates
+// the block's interior tokens so they can only fire inside a block the
+// scanner itself opened (tree-sitter marks every external token valid during
+// error recovery).
+static const uint8_t STATE_IN_MINUS_METADATA = 0x1 << 3;
 // Block should be closed after next line break
 static const uint8_t STATE_CLOSE_BLOCK = 0x1 << 4;
 
@@ -1557,13 +1568,125 @@ static bool parse_cite_suppress_author(Scanner *_, TSLexer *lexer,
     return false;
 }
 
+// ---- YAML metadata blocks (`---` ... `---`) --------------------------------
+//
+// A metadata block is four external tokens (grammar.js `minus_metadata`):
+// MINUS_METADATA_START (the opening `---` plus trailing blanks),
+// MINUS_METADATA_OPEN_NEWLINE (its line break), MINUS_METADATA_BODY (every
+// line up to, not including, the closing delimiter line — exposed in the tree
+// as the `yaml` node so consumers take the YAML's range from the parse;
+// bd-mjo6ao32 / GH #671) and MINUS_METADATA_END (the closing `---` plus
+// trailing blanks; the grammar consumes its line break like any other
+// block's). START is only emitted once a look-ahead has confirmed a closing
+// line exists — otherwise `---` is a thematic break — so that look-ahead runs
+// speculatively on the raw lexer after `mark_end` has been placed where the
+// thematic-break token would end. A closing delimiter is recognised only at
+// the start of a line, which is why a `---` inside a value never ends the
+// block.
+
+static void metadata_advance(Scanner *s, TSLexer *lexer, bool speculative) {
+    if (speculative) {
+        lexer->advance(lexer, false);
+    } else {
+        advance(s, lexer);
+    }
+}
+
+// Consume one line break (`\n`, `\r` or `\r\n`) if the lexer sits on one.
+static void metadata_consume_line_break(Scanner *s, TSLexer *lexer,
+                                        bool speculative) {
+    if (lexer->lookahead == '\r') {
+        metadata_advance(s, lexer, speculative);
+        if (lexer->lookahead == '\n') {
+            metadata_advance(s, lexer, speculative);
+        }
+    } else if (lexer->lookahead == '\n') {
+        metadata_advance(s, lexer, speculative);
+    }
+}
+
+// At the start of a line: is it a closing delimiter — exactly `---`, then
+// optional blanks, then a line break or EOF? Consumes the dashes and blanks
+// whether or not the line qualifies; on success the lexer sits on the line
+// break (or at EOF).
+static bool metadata_at_closing_line(Scanner *s, TSLexer *lexer,
+                                     bool speculative) {
+    size_t minus_count = 0;
+    while (lexer->lookahead == '-') {
+        minus_count++;
+        metadata_advance(s, lexer, speculative);
+    }
+    if (minus_count != 3) {
+        return false;
+    }
+    while (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
+        metadata_advance(s, lexer, speculative);
+    }
+    return lexer->eof(lexer) || lexer->lookahead == '\n' ||
+           lexer->lookahead == '\r';
+}
+
+// From the start of a line, advance line by line until a closing delimiter
+// line is found; false at EOF. When not speculative, `mark_end` is placed at
+// the start of every line visited, so a token emitted on success ends exactly
+// where the closing line begins.
+static bool metadata_find_closing_line(Scanner *s, TSLexer *lexer,
+                                       bool speculative) {
+    for (;;) {
+        if (!speculative) {
+            mark_end(s, lexer);
+        }
+        if (metadata_at_closing_line(s, lexer, speculative)) {
+            return true;
+        }
+        while (!lexer->eof(lexer) && lexer->lookahead != '\n' &&
+               lexer->lookahead != '\r') {
+            metadata_advance(s, lexer, speculative);
+        }
+        if (lexer->eof(lexer)) {
+            return false;
+        }
+        metadata_consume_line_break(s, lexer, speculative);
+    }
+}
+
+// The tokens that can only occur inside an open metadata block. `scan` calls
+// this before any block-structure logic so the machinery that matches open
+// blocks at line starts never sees the body.
+static bool parse_minus_metadata_interior(Scanner *s, TSLexer *lexer,
+                                          const bool *valid_symbols) {
+    if (valid_symbols[MINUS_METADATA_OPEN_NEWLINE] &&
+        (lexer->lookahead == '\n' || lexer->lookahead == '\r')) {
+        metadata_consume_line_break(s, lexer, false);
+        s->column = 0;
+        mark_end(s, lexer);
+        EMIT_TOKEN(MINUS_METADATA_OPEN_NEWLINE);
+    }
+    if (valid_symbols[MINUS_METADATA_BODY]) {
+        if (metadata_find_closing_line(s, lexer, false)) {
+            // Zero-width when the closing line follows the opening one.
+            EMIT_TOKEN(MINUS_METADATA_BODY);
+        }
+        // Unterminated. Unreachable after a confirmed START, so only error
+        // recovery lands here; let the parser recover.
+        return false;
+    }
+    if (valid_symbols[MINUS_METADATA_END] &&
+        metadata_at_closing_line(s, lexer, false)) {
+        mark_end(s, lexer);
+        s->state &= (uint8_t)~STATE_IN_MINUS_METADATA;
+        EMIT_TOKEN(MINUS_METADATA_END);
+    }
+    return false;
+}
+
 static bool parse_minus(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     if (s->indentation <= 3 &&
         (valid_symbols[LIST_MARKER_MINUS] ||
          valid_symbols[LIST_MARKER_MINUS_DONT_INTERRUPT] ||
          valid_symbols[THEMATIC_BREAK] ||
          valid_symbols[CITE_SUPPRESS_AUTHOR_WITH_OPEN_BRACKET] || 
-         valid_symbols[MINUS_METADATA])) {
+         valid_symbols[MINUS_METADATA_START])) {
         mark_end(s, lexer);
         bool whitespace_after_minus = false;
         bool minus_after_whitespace = false;
@@ -1630,87 +1753,20 @@ static bool parse_minus(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             }
         }
         if (minus_count == 3 && (!minus_after_whitespace) && line_end &&
-            valid_symbols[MINUS_METADATA]) {
-            // Before we start scanning for metadata, peek ahead to check if there's
-            // a blank line after the opening ---. If so, this is a horizontal rule.
-            // We need to do this without consuming input.
-
-            // Current position: right after the three minuses, at the newline
-            // We need to check: is the character after this newline another newline?
-            // We can do this by advancing, checking, then either continuing or bailing
-
-            // Advance over the newline to peek at next line
-            if (lexer->lookahead == '\r') {
-                advance(s, lexer);
-                if (lexer->lookahead == '\n') {
-                    advance(s, lexer);
-                }
-            } else if (lexer->lookahead == '\n') {
-                advance(s, lexer);
-            }
-
-            // Check if we're at another newline (blank line)
-            bool is_blank_line = (lexer->lookahead == '\r' || lexer->lookahead == '\n');
-
-            // If is_blank_line, then this is a horizontal rule, not metadata
-            // Don't try to parse as metadata.
-            // The THEMATIC_BREAK handler should have already been tried.
-            // Don't return false here - instead, skip the metadata parsing
-            // and let the normal flow continue (which will check 'maybe_thematic_break' variable)
-            if (!is_blank_line) {
-                // Not a blank line, continue with metadata scanning
-                // Note: we've already advanced past the first newline above
-                bool first_iteration = true;
-                for (;;) {
-                    // On subsequent iterations, advance over the newline
-                    if (!first_iteration) {
-                        if (lexer->lookahead == '\r') {
-                            advance(s, lexer);
-                            if (lexer->lookahead == '\n') {
-                                advance(s, lexer);
-                            }
-                        } else {
-                            advance(s, lexer);
-                        }
-                    }
-                    first_iteration = false;
-                    // check for minuses
-                    minus_count = 0;
-                    while (lexer->lookahead == '-') {
-                        minus_count++;
-                        advance(s, lexer);
-                    }
-                    if (minus_count == 3) {
-                        // if exactly 3 check if next symbol (after eventual
-                        // whitespace) is newline
-                        while (lexer->lookahead == ' ' ||
-                            lexer->lookahead == '\t') {
-                            advance(s, lexer);
-                        }
-                        if (lexer->lookahead == '\r' || lexer->lookahead == '\n') {
-                            // if so also consume newline
-                            if (lexer->lookahead == '\r') {
-                                advance(s, lexer);
-                                if (lexer->lookahead == '\n') {
-                                    advance(s, lexer);
-                                }
-                            } else {
-                                advance(s, lexer);
-                            }
-                            mark_end(s, lexer);
-                            EMIT_TOKEN(MINUS_METADATA);
-                        }
-                    }
-                    // otherwise consume rest of line
-                    while (lexer->lookahead != '\n' && lexer->lookahead != '\r' &&
-                        !lexer->eof(lexer)) {
-                        advance(s, lexer);
-                    }
-                    // if end of file is reached, then this is not metadata
-                    if (lexer->eof(lexer)) {
-                        break;
-                    }
-                }
+            valid_symbols[MINUS_METADATA_START]) {
+            // The token, if emitted, is the opening `---` plus trailing
+            // blanks: the same span a thematic break would take, so one
+            // mark serves both outcomes. Everything past it is speculative.
+            mark_end(s, lexer);
+            metadata_consume_line_break(s, lexer, true);
+            // `---` followed by a blank line is a thematic break, not the
+            // start of metadata.
+            bool blank_after_opening = lexer->eof(lexer) ||
+                lexer->lookahead == '\n' || lexer->lookahead == '\r';
+            if (!blank_after_opening &&
+                metadata_find_closing_line(s, lexer, true)) {
+                s->state |= STATE_IN_MINUS_METADATA;
+                EMIT_TOKEN(MINUS_METADATA_START);
             }
         } else if (minus_count == 1 && valid_symbols[CITE_SUPPRESS_AUTHOR_WITH_OPEN_BRACKET]) {
             return parse_cite_suppress_author(s, lexer, valid_symbols);
@@ -2527,6 +2583,15 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     DEBUG_LOOKAHEAD;
     print_valid_symbols(valid_symbols);
     #endif
+
+    // Inside a YAML metadata block only the block's own tokens can occur;
+    // handle them before any block-structure logic runs.
+    if ((s->state & STATE_IN_MINUS_METADATA) &&
+        (valid_symbols[MINUS_METADATA_OPEN_NEWLINE] ||
+         valid_symbols[MINUS_METADATA_BODY] ||
+         valid_symbols[MINUS_METADATA_END])) {
+        return parse_minus_metadata_interior(s, lexer, valid_symbols);
+    }
 
     // A normal tree-sitter rule decided that the current branch is invalid and
     // now "requests" an error to stop the branch

@@ -1,0 +1,7 @@
+Literal named: \&copy; and \&nbsp; and \&ZeroWidthSpace; stay text.
+
+Literal numeric: \&#62; and \&#x200B; stay text.
+
+Bare ampersands: AT&T, a & b, &amp and &AM; and &; are not references.
+
+Decoded next to literal: &copy; vs \&copy;.

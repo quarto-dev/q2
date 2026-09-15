@@ -21,6 +21,14 @@
  * sensitive indexDocId from appearing in browser history or bookmarks.
  */
 
+import {
+  decodeInvitePreview,
+  decodeInviteStart,
+  encodeInvitePreview,
+  encodeInviteStart,
+} from './invitePreview';
+import type { CollectionInvitePreview, ProjectInvitePreview, InviteStart } from './invitePreview';
+
 /** * Prefix a path with the hub's mount base path, if any. */
 export function hubPath(path: string): string {
   return `${import.meta.env.VITE_HUB_BASE_PATH ?? ''}${path}`;
@@ -114,6 +122,10 @@ export interface ShareRoute {
    * share links must not carry it.
    */
   ephemeral?: boolean;
+  /** Display name of the person who sent the invite (bd-fxdcxbpq). */
+  from?: string;
+  /** Display-only invite preview payload; absent on legacy links. */
+  preview?: ProjectInvitePreview;
 }
 
 /**
@@ -159,6 +171,10 @@ export interface JoinCollectionRoute {
    * subscribes to the collection document instead.
    */
   entries: Array<{ indexDocId: string; syncServer: string; description: string }>;
+  /** Display-only invite preview payload; absent on legacy links (bd-fxdcxbpq). */
+  preview?: CollectionInvitePreview;
+  /** Project + file to open after joining; absent on legacy links. */
+  start?: InviteStart;
 }
 
 /**
@@ -239,6 +255,8 @@ export function parseHashRoute(hash: string): Route {
     const fileParam = queryParams.get('file') ?? '';
     const nameParam = queryParams.get('name') ?? '';
     const ephemeral = queryParams.get('ephemeral') === 'true';
+    const from = queryParams.get('from');
+    const preview = decodeInvitePreview(queryParams.get('preview'));
 
     return {
       type: 'share',
@@ -247,6 +265,8 @@ export function parseHashRoute(hash: string): Route {
       filePath: fileParam ? decodeURIComponent(fileParam) : '',
       name: nameParam ? decodeURIComponent(nameParam) : '',
       ...(ephemeral && { ephemeral: true }),
+      ...(from && { from }),
+      ...(preview?.kind === 'project' && { preview }),
     };
   }
 
@@ -275,6 +295,8 @@ export function parseHashRoute(hash: string): Route {
     } catch {
       // Malformed entries — join proceeds with an empty collection
     }
+    const preview = decodeInvitePreview(queryParams.get('preview'));
+    const start = decodeInviteStart(queryParams.get('start'));
     return {
       type: 'join-collection',
       collectionId: decodeURIComponent(segments[1]),
@@ -282,6 +304,8 @@ export function parseHashRoute(hash: string): Route {
       inviter: queryParams.get('from') ?? 'A collaborator',
       syncServer: queryParams.get('server') ?? '',
       entries,
+      ...(preview?.kind === 'collection' && { preview }),
+      ...(start && { start }),
     };
   }
 
@@ -370,6 +394,8 @@ export function buildHashRoute(route: Route): string {
       params.set('server', route.syncServer);
       params.set('file', route.filePath);
       params.set('name', route.name);
+      if (route.from) params.set('from', route.from);
+      if (route.preview) params.set('preview', encodeInvitePreview(route.preview));
       return `#/share/${encodeURIComponent(route.indexDocId)}?${params.toString()}`;
     }
 
@@ -389,6 +415,8 @@ export function buildHashRoute(route: Route): string {
           route.entries.map((e) => ({ d: e.indexDocId, s: e.syncServer, n: e.description })),
         ));
       }
+      if (route.preview) params.set('preview', encodeInvitePreview(route.preview));
+      if (route.start) params.set('start', encodeInviteStart(route.start));
       return `#/join-collection/${encodeURIComponent(route.collectionId)}?${params.toString()}`;
     }
 
@@ -434,7 +462,13 @@ export function buildShareableUrl(
   indexDocId: string,
   syncServer: string,
   projectName: string,
-  filePath: string
+  filePath: string,
+  opts?: {
+    /** Sender display name, shown on the invite landing (bd-fxdcxbpq). */
+    from?: string;
+    /** Display-only preview payload for the invite landing. */
+    preview?: ProjectInvitePreview;
+  }
 ): string {
   // Remove 'automerge:' prefix if present (we store it without prefix in URLs)
   const cleanIndexDocId = indexDocId.replace(/^automerge:/, '');
@@ -445,6 +479,8 @@ export function buildShareableUrl(
     syncServer,
     filePath,
     name: projectName,
+    ...(opts?.from && { from: opts.from }),
+    ...(opts?.preview && { preview: opts.preview }),
   };
 
   return buildFullUrl(route);
@@ -566,17 +602,30 @@ export function routesEqual(a: Route, b: Route): boolean {
 const PRE_AUTH_HASH_KEY = 'quarto-hub-pre-auth-hash';
 
 /**
- * Save the current hash fragment to sessionStorage.
+ * Save a hash fragment to sessionStorage (the current hash by default).
  *
  * Call this when the login screen is shown so that the hash (e.g., a
  * `#/share/...` link) survives the Google OAuth redirect roundtrip.
  * The server redirects back to `/` after auth, which loses the hash.
+ *
+ * The signed-out invite landing passes an explicit hash: share URLs are
+ * scrubbed from the address bar on mount (bd-fxdcxbpq), so the invite hash
+ * to return to is no longer in window.location by CTA time.
  */
-export function savePreAuthHash(): void {
-  const hash = window.location.hash;
+export function savePreAuthHash(hash: string = window.location.hash): void {
   if (hash && hash !== '#' && hash !== '#/') {
     sessionStorage.setItem(PRE_AUTH_HASH_KEY, hash);
   }
+}
+
+/**
+ * Drop any saved pre-auth hash. Called when an invite is consumed
+ * (joined/opened via the landing CTA, bd-fxdcxbpq): without this, a later
+ * visit to the bare app root would restore the stale invite hash and
+ * bounce the user back onto the landing card.
+ */
+export function clearPreAuthHash(): void {
+  sessionStorage.removeItem(PRE_AUTH_HASH_KEY);
 }
 
 /**

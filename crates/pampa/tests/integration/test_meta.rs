@@ -5,36 +5,31 @@
  * Updated to use ConfigValue API (Phase 5 migration).
  */
 
-use pampa::pandoc::location::{Location, Range, SourceInfo};
-use pampa::pandoc::{Inline, RawBlock, rawblock_to_config_value};
-use pampa::utils::diagnostic_collector::DiagnosticCollector;
-use quarto_pandoc_types::ConfigValueKind;
+use pampa::pandoc::Inline;
+use pampa::readers;
+use quarto_pandoc_types::{ConfigValue, ConfigValueKind};
 use std::fs;
+
+/// Read a whole `.qmd` document through the qmd reader and return its
+/// document-level metadata. The frontmatter's extent is decided by the
+/// grammar, exactly as it is for users; these tests used to hand the entire
+/// file (delimiters, body and all) to `rawblock_to_config_value`, which only
+/// worked because that function re-split the text on `---`.
+fn read_document_meta(path: &str) -> ConfigValue {
+    let content = fs::read_to_string(path).unwrap();
+    let mut sink = std::io::sink();
+    // Diagnostics are deliberately not asserted on: one fixture
+    // (`yaml-markdown-parse-failure.qmd`) exists to exercise strings whose
+    // markdown does not parse cleanly.
+    let (doc, _context, _warnings) =
+        readers::qmd::read(content.as_bytes(), false, path, &mut sink, true, None)
+            .unwrap_or_else(|errors| panic!("failed to read {path}: {errors:#?}"));
+    doc.meta
+}
 
 #[test]
 fn test_metadata_parsing() {
-    let content = fs::read_to_string("tests/features/metadata/metadata.qmd").unwrap();
-
-    let block = RawBlock {
-        format: "quarto_minus_metadata".to_string(),
-        text: content,
-        source_info: SourceInfo::with_range(Range {
-            start: Location {
-                offset: 0,
-                row: 0,
-                column: 0,
-            },
-            end: Location {
-                offset: 0,
-                row: 0,
-                column: 0,
-            },
-        })
-        .to_source_map_info(),
-    };
-
-    let mut diagnostics = DiagnosticCollector::new();
-    let config = rawblock_to_config_value(&block, &mut diagnostics);
+    let config = read_document_meta("tests/features/metadata/metadata.qmd");
 
     // Extract entries from ConfigValue
     let entries = if let ConfigValueKind::Map(entries) = &config.value {
@@ -103,28 +98,7 @@ fn test_metadata_parsing() {
 #[test]
 fn test_yaml_tagged_strings() {
     // Test that YAML tags (!path, !glob, !str) produce correct ConfigValue variants
-    let content = fs::read_to_string("tests/yaml-tagged-strings.qmd").unwrap();
-
-    let block = RawBlock {
-        format: "quarto_minus_metadata".to_string(),
-        text: content,
-        source_info: SourceInfo::with_range(Range {
-            start: Location {
-                offset: 0,
-                row: 0,
-                column: 0,
-            },
-            end: Location {
-                offset: 0,
-                row: 0,
-                column: 0,
-            },
-        })
-        .to_source_map_info(),
-    };
-
-    let mut diagnostics = DiagnosticCollector::new();
-    let config = rawblock_to_config_value(&block, &mut diagnostics);
+    let config = read_document_meta("tests/yaml-tagged-strings.qmd");
 
     // Extract entries from ConfigValue
     let entries = if let ConfigValueKind::Map(entries) = &config.value {
@@ -193,28 +167,7 @@ fn test_yaml_tagged_strings() {
 #[test]
 fn test_yaml_markdown_parse_behavior() {
     // Test how untagged strings that contain special characters are handled
-    let content = fs::read_to_string("tests/yaml-markdown-parse-failure.qmd").unwrap();
-
-    let block = RawBlock {
-        format: "quarto_minus_metadata".to_string(),
-        text: content,
-        source_info: SourceInfo::with_range(Range {
-            start: Location {
-                offset: 0,
-                row: 0,
-                column: 0,
-            },
-            end: Location {
-                offset: 0,
-                row: 0,
-                column: 0,
-            },
-        })
-        .to_source_map_info(),
-    };
-
-    let mut diagnostics = DiagnosticCollector::new();
-    let config = rawblock_to_config_value(&block, &mut diagnostics);
+    let config = read_document_meta("tests/yaml-markdown-parse-failure.qmd");
 
     // Extract entries from ConfigValue
     let entries = if let ConfigValueKind::Map(entries) = &config.value {

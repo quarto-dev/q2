@@ -84,7 +84,7 @@ pub use clipboard_js::ClipboardJsStage;
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) use clipboard_js::{CLIPBOARD_JS, CODE_COPY_INIT_JS};
 pub use code_highlight::CodeHighlightStage;
-pub use compile_theme_css::{CompileThemeCssStage, theme_fingerprint};
+pub use compile_theme_css::{CompileThemeCssStage, print_sass_stats_if_enabled, theme_fingerprint};
 pub use document_profile::DocumentProfileStage;
 pub use engine_execution::{ENGINE_CAPTURE_KIND, EngineExecutionStage};
 pub use include_expansion::{

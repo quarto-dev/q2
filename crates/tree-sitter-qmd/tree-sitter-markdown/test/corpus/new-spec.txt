@@ -446,7 +446,8 @@ Baz
       (pandoc_str)
       (pandoc_space)
       (pandoc_str))
-    (metadata)
+    (metadata
+      body: (yaml))
     (pandoc_paragraph
       (pandoc_str))
     (pandoc_horizontal_rule)
@@ -482,7 +483,8 @@ Extra text so this is not parsed as metadata.
       (pandoc_str)
       (pandoc_space)
       (pandoc_str))
-    (metadata)))
+    (metadata
+      body: (yaml))))
 ================================================================================
 Example 69 - https://github.github.com/gfm/#example-69
 ================================================================================

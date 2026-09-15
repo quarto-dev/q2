@@ -121,6 +121,44 @@ pub fn derive_doc_scss_layer(meta: &ConfigValue) -> SassLayer {
 /// Name of the cache namespace used for compiled SCSS CSS output.
 const SASS_CACHE_NAMESPACE: &str = "sass";
 
+/// Perf gauge for the SCSS compile path (bd-fq44dlnm). Counted
+/// unconditionally (atomic increments are cheap), printed only under
+/// `QUARTO_PERF_STATS=1` by [`print_sass_stats_if_enabled`]. Atomics
+/// because Pass 2 runs this stage from rayon workers concurrently.
+///
+/// - `hits`: variant served from the runtime `sass` cache.
+/// - `compiles`: variant that went through grass (cache miss, or
+///   caching disabled for this document).
+/// - `uncached`: variants compiled with `cache_ok == false` (subset of
+///   `compiles`); a nonzero value with a themed project means the
+///   cache is not even being consulted.
+mod sass_perf {
+    use std::sync::atomic::AtomicUsize;
+    pub static HITS: AtomicUsize = AtomicUsize::new(0);
+    pub static COMPILES: AtomicUsize = AtomicUsize::new(0);
+    pub static UNCACHED: AtomicUsize = AtomicUsize::new(0);
+}
+
+/// Print `perf.sass hits=N compiles=N uncached=N` to stderr when
+/// `QUARTO_PERF_STATS=1`. Call once at the end of a top-level command
+/// (`q2 render`), like the other `perf.*` gauges. With a project-wide
+/// theme, a healthy render shows `compiles` in the low single digits
+/// (one per variant) and `hits` ≈ 2 × documents; `compiles` tracking
+/// the document count means the cache key is varying per document
+/// (the 2026-09-13 Connect-docs profile: 78 % of serial render time).
+pub fn print_sass_stats_if_enabled() {
+    use std::sync::atomic::Ordering::Relaxed;
+    if !std::env::var_os("QUARTO_PERF_STATS").is_some_and(|v| v == "1") {
+        return;
+    }
+    eprintln!(
+        "perf.sass hits={} compiles={} uncached={}",
+        sass_perf::HITS.load(Relaxed),
+        sass_perf::COMPILES.load(Relaxed),
+        sass_perf::UNCACHED.load(Relaxed),
+    );
+}
+
 /// Fixed cache key for the default (no-theme) compiled CSS. The
 /// minified flag distinguishes minified from expanded output; the
 /// generational purge ([`ensure_sass_cache_ready`]) keyed on
@@ -189,7 +227,13 @@ impl Default for CompileThemeCssStage {
 /// The key is `SHA256(SCSS_RESOURCES_HASH + theme_identities +
 /// custom_file_contents + doc_vars + minified)`. Built-in themes contribute
 /// only their name (content is already covered by `SCSS_RESOURCES_HASH`).
-/// Custom themes contribute their resolved path and file contents.
+/// Custom themes contribute their resolved path and file contents. The
+/// path is the one `ThemeContext::resolve_path` returns — lexically
+/// normalized, so the per-document spellings the metadata merge
+/// produces for one file (`../theme.scss` vs `../../theme.scss`) share
+/// a key (bd-79c4do6g) — and it stays in the key because it is the
+/// proxy for the file's `@import` context: two files with identical
+/// text in different directories may import different partials.
 /// `doc_vars` contributes its serialized `defaults` string so two
 /// documents with different per-document variables (e.g. docked vs.
 /// floating sidebar → different `$sidebar-border`) get distinct keys
@@ -676,6 +720,7 @@ async fn variant_css(
             && let Ok(css) = String::from_utf8(cached)
         {
             trace_event!(ctx, EventLevel::Debug, "cache hit for default CSS");
+            sass_perf::HITS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             return Ok(css);
         }
 
@@ -684,6 +729,10 @@ async fn variant_css(
             EventLevel::Debug,
             "no theme / no doc-vars, compiling default Bootstrap + Quarto layer"
         );
+        sass_perf::COMPILES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if !cache_ok {
+            sass_perf::UNCACHED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
         return match compile_default(ctx, variant_config.minified).await {
             Ok(css) => {
                 if cache_ok {
@@ -772,6 +821,7 @@ async fn variant_css(
             "cache hit for theme CSS (key={})",
             key
         );
+        sass_perf::HITS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         return Ok(css);
     }
 
@@ -784,6 +834,10 @@ async fn variant_css(
         key
     );
 
+    sass_perf::COMPILES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    if !cache_ok || key.is_empty() {
+        sass_perf::UNCACHED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
     match compile_with_doc_vars_via_runtime(ctx, variant_config, theme_context, doc_vars).await {
         Ok(css) => {
             // Store in cache (best-effort, skip if no key or cache unavailable).
@@ -2283,18 +2337,54 @@ mod tests {
         assert_ne!(key1, key2);
     }
 
+    /// Two *different* files with identical contents must keep
+    /// distinct keys: the file's (normalized) path is the proxy for its
+    /// `@import` context — `a/theme.scss` and `b/theme.scss` can both
+    /// say `@import "_colors"` and mean different partials (the
+    /// partials themselves are not hashed; bd-m3hga05o). MockRuntime
+    /// returns empty bytes for every read, so only the path differs.
     #[test]
-    fn test_cache_key_custom_file_reads_content() {
-        // MockRuntime returns empty bytes for file_read, so two different
-        // custom paths with the same (empty) content but different paths
-        // should still differ.
+    fn test_cache_key_distinct_files_with_same_content_stay_distinct() {
         let runtime = MockRuntime;
-        let config_a = make_custom_config("theme_a.scss", true);
-        let config_b = make_custom_config("theme_b.scss", true);
+        let config_a = make_custom_config("a/theme.scss", true);
+        let config_b = make_custom_config("b/theme.scss", true);
         let ctx = ThemeContext::new(PathBuf::from("/project"), &runtime);
         let key_a = cache_key(&config_a, &ctx, &runtime, &SassLayer::default()).unwrap();
         let key_b = cache_key(&config_b, &ctx, &runtime, &SassLayer::default()).unwrap();
         assert_ne!(key_a, key_b);
+    }
+
+    /// bd-79c4do6g: the metadata merge rewrites a project-level
+    /// `theme: [theme.scss]` to a document-relative spelling per
+    /// document (`../theme.scss`, `../../theme.scss`, …), and the key
+    /// used to hash that spelling verbatim — one cache entry per
+    /// document directory for one file (97 % miss rate on the Connect
+    /// docs). The *same file* reached from different document dirs
+    /// must produce *one* key.
+    #[test]
+    fn test_cache_key_same_file_from_different_document_dirs() {
+        let runtime = MockRuntime;
+        let cases = [
+            ("/project", "theme.scss"),
+            ("/project/a", "../theme.scss"),
+            ("/project/a/b", "../../theme.scss"),
+            ("/project/a/b", "./../../theme.scss"),
+        ];
+        let keys: Vec<String> = cases
+            .iter()
+            .map(|(doc_dir, spelling)| {
+                let ctx = ThemeContext::new(PathBuf::from(doc_dir), &runtime);
+                let config = make_custom_config(spelling, true);
+                cache_key(&config, &ctx, &runtime, &SassLayer::default()).unwrap()
+            })
+            .collect();
+        for (i, key) in keys.iter().enumerate() {
+            assert_eq!(
+                key, &keys[0],
+                "spelling {:?} from {:?} must share the root spelling's key",
+                cases[i].1, cases[i].0
+            );
+        }
     }
 
     #[test]

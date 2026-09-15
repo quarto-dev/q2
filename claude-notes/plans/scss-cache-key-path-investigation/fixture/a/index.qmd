@@ -1,0 +1,5 @@
+---
+title: "a/index"
+---
+
+Hello from a/index.

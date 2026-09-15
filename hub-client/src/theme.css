@@ -221,6 +221,20 @@
 
   --bg-overlay: rgba(209, 219, 229, 0.95);
   --bg-modal: #ffffff;
+  /* The surface a single centered card sits on, when the card *is* the
+     page. Recessed from --bg-modal so the card reads as raised, opaque
+     in every theme (.claude/rules/hub-client-theme.md), and per-theme
+     because the direction is not derivable: mixing toward
+     --border-color lands *darker* than the card in light mode but
+     *lighter* in dark, where the navy ramp's border
+     (--posit-blue-dark-1) is lighter than its modal
+     (--posit-blue-dark-2) — elevation inverted.
+
+     Consumed by the quarto-hub.com landing only. InviteLanding.css
+     still derives its own page surface the border-mix way and so still
+     inverts in dark mode; it is a merged surface and out of scope here.
+     Pinned by e2e/invite-landing-theme.harness.spec.ts. */
+  --bg-page-recessed: color-mix(in srgb, var(--border-color) 14%, var(--bg-modal));
   --bg-card: var(--posit-blue-light-1);
   --bg-card-hover: var(--posit-blue-light-2);
   --bg-input: #ffffff;
@@ -388,6 +402,10 @@
 :root.dark {
   --bg-overlay: rgba(23, 33, 43, 0.9);
   --bg-modal: var(--posit-blue-dark-2);
+  /* Down toward black rather than toward --border-color: see the light
+     declaration. 40% yields 1.38:1 against the card, where the old
+     border-derived mix gave 1.06:1 the wrong way round. */
+  --bg-page-recessed: color-mix(in srgb, var(--black) 40%, var(--bg-modal));
   --bg-card: var(--posit-blue-dark-1);
   --bg-card-hover: var(--posit-blue);
   --bg-input: var(--posit-blue-dark-3);
@@ -584,6 +602,7 @@
   --dialog-border: var(--border-color);
   --dialog-input-border: var(--border-color);
   --dialog-file-input-border: var(--border-color);
+  --bg-page-recessed: color-mix(in srgb, var(--black) 40%, var(--bg-modal));
 }
 
 :root.dark .editor-container {

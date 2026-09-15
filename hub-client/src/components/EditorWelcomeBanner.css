@@ -1,0 +1,60 @@
+/**
+ * EditorWelcomeBanner — tinted one-time welcome bar under the editor
+ * toolbar (bd-fxdcxbpq). The tint mixes toward --editor-bg, the opaque
+ * semantic surface this bar sits above; mixing toward --bg-subtle left it
+ * translucent in both themes, against
+ * .claude/rules/hub-client-theme.md. Pinned by
+ * e2e/invite-landing-theme.harness.spec.ts.
+ */
+
+.ewb {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 8px 14px;
+  background: color-mix(in srgb, var(--posit-blue) 8%, var(--editor-bg));
+  border-bottom: 1px solid var(--border-color);
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+}
+
+.ewb-text {
+  flex: 1;
+  min-width: 0;
+  line-height: var(--leading-base);
+}
+
+.ewb-text strong {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.ewb-rename {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.ewb-rename .qh-input {
+  width: 160px;
+  padding: 4px 8px;
+  font-size: var(--text-base);
+}
+
+.ewb-dismiss {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: var(--text-lg);
+  line-height: 1;
+  padding: 2px 6px;
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+}
+
+.ewb-dismiss:hover {
+  color: var(--text-primary);
+  background: var(--bg-card-hover);
+}

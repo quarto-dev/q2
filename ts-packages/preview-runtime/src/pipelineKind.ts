@@ -28,6 +28,11 @@ export function pipelineKindForFormat(format: string): PipelineKind | undefined 
   switch (format) {
     case 'q2-preview':
       return 'preview';
+    // Sandboxed-preview port (bd-jgpz4hfq): the sandboxed renderer consumes
+    // the same post-pipeline AST as q2-preview. Mirrors
+    // `builtin_pseudo_format` in crates/quarto-core/src/format.rs.
+    case 'q2-sandboxed-preview':
+      return 'preview';
     default:
       return undefined;
   }

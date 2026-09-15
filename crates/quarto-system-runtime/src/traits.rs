@@ -98,6 +98,19 @@ pub enum PathKind {
 }
 
 /// Metadata about a file or directory
+/// One entry of a cache namespace, as enumerated by
+/// [`SystemRuntime::cache_list`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CacheEntryInfo {
+    /// The entry's key (file name in the native backend).
+    pub key: String,
+    /// Value size in bytes.
+    pub size: u64,
+    /// Last-modified time in milliseconds since the Unix epoch, when the
+    /// backend can report one.
+    pub modified_ms: Option<u64>,
+}
+
 #[derive(Debug, Clone)]
 pub struct PathMetadata {
     /// Type of path (file, directory, symlink)
@@ -659,6 +672,19 @@ pub trait SystemRuntime: Send + Sync {
     async fn cache_clear_namespace(&self, namespace: &str) -> RuntimeResult<()> {
         let _ = namespace;
         Ok(())
+    }
+
+    /// Enumerate the entries of a namespace.
+    ///
+    /// Returns `Ok(None)` when the backend cannot enumerate (the
+    /// default, and caching-disabled runtimes); `Ok(Some(vec![]))` for
+    /// an empty or absent namespace. Reserved bookkeeping keys are
+    /// included — callers filter. Used by the LRU wrapper to reconcile
+    /// its index against what the backend actually holds
+    /// (bd-ddahjqr1).
+    async fn cache_list(&self, namespace: &str) -> RuntimeResult<Option<Vec<CacheEntryInfo>>> {
+        let _ = namespace;
+        Ok(None)
     }
 }
 

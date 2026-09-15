@@ -16,8 +16,13 @@
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, cleanup, fireEvent } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { PreviewRoot } from './PreviewRoot';
 import type { PreviewRootProps } from './PreviewRoot';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 afterEach(() => {
     cleanup();
@@ -93,15 +98,54 @@ function mountPreviewRoot(overrides: Partial<PreviewRootProps> = {}) {
     return { setAst, ...render(<PreviewRoot {...props} />) };
 }
 
+/**
+ * Larger fixtures live in `__fixtures__/task-list-<name>.{qmd,ast.json}`;
+ * the JSON is verbatim `pampa <name>.qmd -t json` with the file name in
+ * `astContext.files[0].name` rewritten to `/task-list-<name>.qmd`.
+ */
+function mountFixture(name: string, overrides: Partial<PreviewRootProps> = {}) {
+    const dir = join(__dirname, '__fixtures__');
+    const astJson = readFileSync(join(dir, `task-list-${name}.ast.json`), 'utf8');
+    const content = readFileSync(join(dir, `task-list-${name}.qmd`), 'utf8');
+    return mountPreviewRoot({
+        astJson,
+        untransformedAstJson: astJson,
+        renderedContent: content,
+        currentFilePath: `/task-list-${name}.qmd`,
+        ...overrides,
+    });
+}
+
+/**
+ * The regression this file guards (bd-qif9l4cx): the checkbox and the
+ * item text must share one inline formatting context. Block-level
+ * decorations the dispatcher stack adds (CommentBlock's positioned
+ * wrapper, the attribution wrapper, the edit surface) must be ANCESTORS
+ * of the `<label>`, never descendants — a `<div>` after the `<input>`
+ * inside the label pushes the text onto its own line.
+ */
+function expectInlineLabel(input: Element, text: string) {
+    const label = input.parentElement!;
+    expect(label.tagName).toBe('LABEL');
+    expect(label.firstElementChild).toBe(input);
+    expect(label.querySelector('div, p, ul, ol, pre, table, section')).toBeNull();
+    expect(label.textContent).toBe(text);
+    // Wrappers may sit between the <li> and the label, never inside it.
+    expect(label.closest('li')).not.toBeNull();
+}
+
 describe('task-list rendering', () => {
     it('renders ul.task-list with label-wrapped checkboxes (writer parity)', () => {
         const { container } = mountPreviewRoot();
         const ul = container.querySelector('ul.task-list');
         expect(ul).not.toBeNull();
-        const inputs = ul!.querySelectorAll('li > label > input[type="checkbox"]');
+        const inputs = ul!.querySelectorAll('li label > input[type="checkbox"]');
         expect(inputs.length).toBe(2);
         expect((inputs[0] as HTMLInputElement).checked).toBe(false);
         expect((inputs[1] as HTMLInputElement).checked).toBe(true);
+        // Checkbox and text on one line: no block box inside the label.
+        expectInlineLabel(inputs[0], 'todo');
+        expectInlineLabel(inputs[1], 'done');
         // The ballot-box characters must not leak into the visible text.
         expect(container.textContent).not.toContain('☐');
         expect(container.textContent).not.toContain('☒');
@@ -172,5 +216,73 @@ describe('task-list rendering', () => {
         expect((inputs[0] as HTMLInputElement).disabled).toBe(true);
         fireEvent.click(inputs[0]);
         expect(setAst).not.toHaveBeenCalled();
+    });
+});
+
+describe('task-list DOM shape across list kinds (bd-qif9l4cx)', () => {
+    it('nested mixed list: the one task item keeps its checkbox inline', () => {
+        // The reporter's document: an outer bullet whose nested list mixes
+        // plain items with a single `[x]` item.
+        const { container } = mountFixture('nested');
+        const inputs = container.querySelectorAll('input[type="checkbox"]');
+        expect(inputs.length).toBe(1);
+        expect((inputs[0] as HTMLInputElement).checked).toBe(true);
+        expectInlineLabel(
+            inputs[0],
+            'working with Julia on getting her work on replacing vdocs in Positron merged',
+        );
+        // Writer parity: `class="task-list"` only when EVERY item is a task.
+        const innerUl = inputs[0].closest('ul')!;
+        expect(innerUl.classList.contains('task-list')).toBe(false);
+        expect(innerUl.querySelectorAll(':scope > li').length).toBe(2);
+        expect(container.querySelector('ul.task-list')).toBeNull();
+        expect(container.textContent).not.toContain('☒');
+    });
+
+    it('loose (Para-leading) items render li > p > label > input (writer parity)', () => {
+        const { container } = mountFixture('loose');
+        const inputs = container.querySelectorAll('li p > label > input[type="checkbox"]');
+        expect(inputs.length).toBe(2);
+        expect((inputs[0] as HTMLInputElement).checked).toBe(false);
+        expect((inputs[1] as HTMLInputElement).checked).toBe(true);
+        expectInlineLabel(inputs[0], 'todo');
+        expectInlineLabel(inputs[1], 'done');
+        expect(container.querySelector('ul.task-list')).not.toBeNull();
+        expect(container.textContent).not.toContain('☐');
+        expect(container.textContent).not.toContain('☒');
+    });
+
+    it('toggling a loose item flips its Para marker through the subtree channel', () => {
+        const { container, setAst } = mountFixture('loose');
+        const inputs = container.querySelectorAll('input[type="checkbox"]');
+        fireEvent.click(inputs[0]);
+
+        expect(setAst).toHaveBeenCalledTimes(1);
+        const payload = setAst.mock.calls[0][0];
+        expect(payload.channel).toBe('subtree');
+        const list = JSON.parse(payload.modifiedSubtreeJson).blocks[0];
+        expect(list.t).toBe('BulletList');
+        expect(list.c[0][0].t).toBe('Para');
+        expect(list.c[0][0].c[0]).toMatchObject({ t: 'Str', c: '☒' });
+        expect(list.c[1][0].c[0]).toMatchObject({ t: 'Str', c: '☒' });
+    });
+
+    it('ordered lists render inline checkboxes and never carry the task-list class', () => {
+        const { container, setAst } = mountFixture('ordered');
+        const ol = container.querySelector('ol')!;
+        expect(ol.classList.contains('task-list')).toBe(false);
+        const inputs = ol.querySelectorAll('li label > input[type="checkbox"]');
+        expect(inputs.length).toBe(2);
+        expect((inputs[0] as HTMLInputElement).checked).toBe(false);
+        expect((inputs[1] as HTMLInputElement).checked).toBe(true);
+        expectInlineLabel(inputs[0], 'todo');
+        expectInlineLabel(inputs[1], 'done');
+
+        fireEvent.click(inputs[1]);
+        expect(setAst).toHaveBeenCalledTimes(1);
+        const list = JSON.parse(setAst.mock.calls[0][0].modifiedSubtreeJson).blocks[0];
+        expect(list.t).toBe('OrderedList');
+        expect(list.c[1][0][0].c[0]).toMatchObject({ t: 'Str', c: '☐' });
+        expect(list.c[1][1][0].c[0]).toMatchObject({ t: 'Str', c: '☐' });
     });
 });

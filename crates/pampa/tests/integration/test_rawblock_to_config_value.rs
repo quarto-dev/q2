@@ -39,9 +39,7 @@ fn make_rawblock(content: &str) -> RawBlock {
 
 #[test]
 fn test_rawblock_to_config_value_simple_string() {
-    let content = r#"---
-title: Hello World
----"#;
+    let content = r#"title: Hello World"#;
     let block = make_rawblock(content);
     let mut diagnostics = DiagnosticCollector::new();
 
@@ -68,9 +66,7 @@ title: Hello World
 
 #[test]
 fn test_rawblock_to_config_value_boolean() {
-    let content = r#"---
-toc: true
----"#;
+    let content = r#"toc: true"#;
     let block = make_rawblock(content);
     let mut diagnostics = DiagnosticCollector::new();
 
@@ -98,9 +94,7 @@ toc: true
 
 #[test]
 fn test_rawblock_to_config_value_integer() {
-    let content = r#"---
-year: 2024
----"#;
+    let content = r#"year: 2024"#;
     let block = make_rawblock(content);
     let mut diagnostics = DiagnosticCollector::new();
 
@@ -128,11 +122,9 @@ year: 2024
 
 #[test]
 fn test_rawblock_to_config_value_array() {
-    let content = r#"---
-authors:
+    let content = r#"authors:
   - Alice
-  - Bob
----"#;
+  - Bob"#;
     let block = make_rawblock(content);
     let mut diagnostics = DiagnosticCollector::new();
 
@@ -160,11 +152,9 @@ authors:
 
 #[test]
 fn test_rawblock_to_config_value_nested_map() {
-    let content = r#"---
-format:
+    let content = r#"format:
   html:
-    toc: true
----"#;
+    toc: true"#;
     let block = make_rawblock(content);
     let mut diagnostics = DiagnosticCollector::new();
 
@@ -208,9 +198,7 @@ format:
 
 #[test]
 fn test_rawblock_to_config_value_parses_markdown() {
-    let content = r#"---
-title: This has *emphasis*
----"#;
+    let content = r#"title: This has *emphasis*"#;
     let block = make_rawblock(content);
     let mut diagnostics = DiagnosticCollector::new();
 
@@ -243,9 +231,7 @@ title: This has *emphasis*
 
 #[test]
 fn test_rawblock_to_config_value_str_tag() {
-    let content = r#"---
-filename: !str _foo_.py
----"#;
+    let content = r#"filename: !str _foo_.py"#;
     let block = make_rawblock(content);
     let mut diagnostics = DiagnosticCollector::new();
 
@@ -274,9 +260,7 @@ filename: !str _foo_.py
 
 #[test]
 fn test_rawblock_to_config_value_path_tag() {
-    let content = r#"---
-image: !path images/logo.png
----"#;
+    let content = r#"image: !path images/logo.png"#;
     let block = make_rawblock(content);
     let mut diagnostics = DiagnosticCollector::new();
 
@@ -301,9 +285,7 @@ image: !path images/logo.png
 
 #[test]
 fn test_rawblock_to_config_value_glob_tag() {
-    let content = r#"---
-files: !glob posts/*/index.qmd
----"#;
+    let content = r#"files: !glob posts/*/index.qmd"#;
     let block = make_rawblock(content);
     let mut diagnostics = DiagnosticCollector::new();
 
@@ -328,9 +310,7 @@ files: !glob posts/*/index.qmd
 
 #[test]
 fn test_rawblock_to_config_value_expr_tag() {
-    let content = r#"---
-date: !expr Sys.Date()
----"#;
+    let content = r#"date: !expr Sys.Date()"#;
     let block = make_rawblock(content);
     let mut diagnostics = DiagnosticCollector::new();
 
@@ -355,9 +335,7 @@ date: !expr Sys.Date()
 
 #[test]
 fn test_rawblock_to_config_value_prefer_tag() {
-    let content = r#"---
-title: !prefer My Title
----"#;
+    let content = r#"title: !prefer My Title"#;
     let block = make_rawblock(content);
     let mut diagnostics = DiagnosticCollector::new();
 
@@ -389,9 +367,7 @@ title: !prefer My Title
 
 #[test]
 fn test_rawblock_to_config_value_preserves_source_info() {
-    let content = r#"---
-title: Hello
----"#;
+    let content = r#"title: Hello"#;
     let block = make_rawblock(content);
     let mut diagnostics = DiagnosticCollector::new();
 
@@ -427,16 +403,14 @@ title: Hello
 
 #[test]
 fn test_no_diagnostics_for_valid_input() {
-    let content = r#"---
-title: Hello World
+    let content = r#"title: Hello World
 toc: true
 items:
   - first
   - second
 format:
   html:
-    theme: cosmo
----"#;
+    theme: cosmo"#;
     let block = make_rawblock(content);
     let mut diagnostics = DiagnosticCollector::new();
 

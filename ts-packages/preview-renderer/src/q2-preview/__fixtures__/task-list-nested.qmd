@@ -1,0 +1,3 @@
+* \[Elliot\]
+  * looking into QH file sync bug a bit
+  * [x] working with Julia on getting her work on replacing vdocs in Positron merged

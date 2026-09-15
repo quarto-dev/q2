@@ -3,10 +3,12 @@ import { renderChildren, dataLocProps } from '../../framework';
 import type { NodeArgs, ParaBlock } from '../../framework';
 import { PreviewContext } from '../PreviewContext';
 import { useCommentAnchorRef } from '../commentAnchor';
+import { stripTaskMarker, TaskLabel, useTaskItem } from './taskList';
 
 export const Para = (args: NodeArgs<ParaBlock>) => {
     const ctx = useContext(PreviewContext);
     const anchorRef = useCommentAnchorRef(args.node);
+    const task = useTaskItem();
     const poolId = (args.node as any).s as string | number | undefined;
     const resolved = ctx?.resolveSource ? ctx.resolveSource(args.node) : null;
 
@@ -35,5 +37,17 @@ export const Para = (args: NodeArgs<ParaBlock>) => {
         domProps.tabIndex = -1;
     }
 
-    return <p ref={anchorRef} {...domProps} {...dataLocProps(args.node)}>{renderChildren(args)}</p>;
+    // Head of a loose task item: the writer renders `<p><label><input…/>…</label></p>`;
+    // the label goes INSIDE the <p> so block-level wrappers stay outside it
+    // (bd-qif9l4cx).
+    const body = task ? stripTaskMarker(args.node.c) : null;
+    const children = task && body ? (
+        <TaskLabel state={task}>
+            {renderChildren({ ...args, node: { ...args.node, c: body } })}
+        </TaskLabel>
+    ) : (
+        renderChildren(args)
+    );
+
+    return <p ref={anchorRef} {...domProps} {...dataLocProps(args.node)}>{children}</p>;
 };

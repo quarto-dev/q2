@@ -23,8 +23,21 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-09-15
+
+- [`837bba995`](https://github.com/quarto-dev/q2/commits/837bba995): The invite landing cards carry the same disclaimer as the landing page, and the About tab's "More information" now opens with it.
+- [`17541e5e1`](https://github.com/quarto-dev/q2/commits/17541e5e1): The quarto-hub.com landing page now carries a disclaimer above the sign-in button: use test data, not real data, and nothing entered in the demo is protected or returned.
+
+### 2026-09-11
+
+- [`80a4e8c5`](https://github.com/quarto-dev/q2/commits/80a4e8c5): The quarto-hub.com landing page now says what Quarto Hub is instead of showing only a sign-in button, every "Learn more" points at the Quarto Hub site and opens in a new tab, and the card reads as raised off the page in dark mode again.
+
 ### 2026-09-10
 
+- [`14de97b62`](https://github.com/quarto-dev/q2/commits/14de97b62): The sandboxed preview now validates the sender of every cross-frame message, so other windows can't inject content into the preview or the document.
+- [`9f7efd8a9`](https://github.com/quarto-dev/q2/commits/9f7efd8a9): Custom render-components (user TSX overrides) and the code-copy button now work in the sandboxed preview.
+- [`0d5967f2a`](https://github.com/quarto-dev/q2/commits/0d5967f2a): The sandboxed preview now supports editor-preview scroll sync, click-to-source navigation, document links, slide navigation, and live editing — matching the standard preview.
+- [`0f17a8b2c`](https://github.com/quarto-dev/q2/commits/0f17a8b2c): q2-preview task lists: the checkbox and its item text render on one line again, and loose (blank-line-separated) task items now get checkboxes too
 - [`8f2e5802`](https://github.com/quarto-dev/q2/commits/8f2e5802): Comment bubbles in the live preview no longer wrap each block in an extra element, so theme styling of blockquote headings, callout bodies, list items and tabsets now matches the rendered site; bubbles keep their font on slide decks and are slightly larger there
 - [`42d91ad9`](https://github.com/quarto-dev/q2/commits/42d91ad9): Draft pages (`draft: true`) now show the "Draft" banner in the live preview, localized like the rendered site
 
@@ -36,10 +49,15 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-09-08
 
+- [`113f4a34`](https://github.com/quarto-dev/q2/commits/113f4a34): A collection invite no longer claims "0 files" for a project the sender has never opened locally — those rows now show the project name on its own, since a zero there means the file count simply isn't known yet.
+- [`4b8bc49c`](https://github.com/quarto-dev/q2/commits/4b8bc49c): Invite cards now name Quarto Hub on the top line so recipients can see where the link leads, drop the redundant "Join to collaborate on …" line above the Google button, and copying a project's share link fetches its file summary first when one isn't cached — so invites for projects you haven't opened locally no longer arrive with an empty preview.
+- [`c2f1a1ef`](https://github.com/quarto-dev/q2/commits/c2f1a1ef): Invite cards now read "<name> invites you to collaborate on …" for both collections and projects, and the "New to Quarto Hub?" explainer is a small footnote with a "Learn more" link below the button rather than a panel above it.
 - [`c0a6230e`](https://github.com/quarto-dev/q2/commits/c0a6230e): WASM tests that render now wire the dart-sass VFS importer, since a theme compile failure is a hard error (Q-14-6) instead of a silent fallback to default CSS
 
 ### 2026-09-03
 
+- [`6a3e535e`](https://github.com/quarto-dev/q2/commits/6a3e535e): A share link is now presented as an invitation to the whole project rather than to one document: the card says "project invitation", names the project in its call to action, and lists the project's contents in place of the empty ruled-paper thumbnail — which is omitted entirely when the project holds a single file. File counts also read "1 file" rather than "1 files".
+- [`ea9b46ec`](https://github.com/quarto-dev/q2/commits/ea9b46ec): Invite cards and the editor welcome banner now render correctly in dark mode — the preview box's dividers were drawn in a light-only brand color, which showed as near-white grid lines on the dark card, and several surfaces were painted with translucent tints.
 - [`546fdd37`](https://github.com/quarto-dev/q2/commits/546fdd37): The sandboxed preview bundle is rebuilt from its current sources — math rendering there is back on KaTeX 0.18.4, which a later bundle rebuild had quietly reverted to 0.18.2, and the preview's service worker no longer caches assets for offline use.
 
 ### 2026-09-02
@@ -48,6 +66,14 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-09-01
 
+- [`027b4d15`](https://github.com/quarto-dev/q2/commits/027b4d15): The "People & invite…" item in a collection's actions menu now opens the members and invite popover; previously the click was silently swallowed.
+- [`2fe033f6`](https://github.com/quarto-dev/q2/commits/2fe033f6): The projects home header now shows the real Quarto logo instead of a placeholder stacked-bars mark.
+- [`40a4a5e2`](https://github.com/quarto-dev/q2/commits/40a4a5e2): Invite cards now say "Join to collaborate on …" above the Google sign-in button when you're signed out, and simply "Open …" when you're already signed in.
+- [`f0b5ac14`](https://github.com/quarto-dev/q2/commits/f0b5ac14): Joining a collection invite now lands on the projects home screen with the joined collection at the top, instead of opening a document's editor; the welcome banner appears on the first project you open from that collection.
+- [`1b07531b`](https://github.com/quarto-dev/q2/commits/1b07531b): Adding a project to a collection now carries its cached file counts and contributors along, so collection cards and invite previews no longer show "0 files" for a populated project until its next open.
+- [`720c263e`](https://github.com/quarto-dev/q2/commits/720c263e): Collection and document invite links now land on a unified invitation card showing who invited you and a preview of what you're joining, with one click to join or open; document links no longer open the editor silently, joining uses your Google identity instead of a name form, and a one-time welcome banner orients you in the editor.
+- [`e7f9fcc2a`](https://github.com/quarto-dev/q2/commits/e7f9fcc2a): Images and theme fonts now load correctly in the sandboxed preview, including same-named images in different folders and pictures in subdirectories.
+- [`5684cfead`](https://github.com/quarto-dev/q2/commits/5684cfead): The `q2-sandboxed-preview` format now renders documents with the real preview renderer (headers, paragraphs, math, code highlighting, theme CSS) instead of the placeholder box view.
 - [`a4c3fb9c`](https://github.com/quarto-dev/q2/commits/a4c3fb9c): The experimental branch bar's Merge button now uses the app's standard accent color in both themes, and its branch-name input shows the standard keyboard focus ring.
 - [`41da392c`](https://github.com/quarto-dev/q2/commits/41da392c): Branch chips in the experimental branch bar now activate on click and via the keyboard, and deleting a branch no longer also switches to it.
 - [`e4a72819`](https://github.com/quarto-dev/q2/commits/e4a72819): Math rendering upgraded to KaTeX 0.18.4 everywhere — the sandboxed preview bundle, the hub client, and the CDN link rendering emits for `html-math-method: katex` stay aligned on one version.

@@ -93,15 +93,22 @@ const regexOr = (...groups) => regexBracket(groups.join("|"));
 const PANDOC_NON_ASCII_WHITESPACE =
     "\\u{00A0}\\u{1680}\\u{2000}-\\u{200A}\\u{2028}\\u{2029}\\u{202F}\\u{205F}\\u{3000}";
 
-// Combining marks (Mn nonspacing, Mc spacing, Me enclosing) plus the join
-// controls ZWNJ (U+200C) and ZWJ (U+200D). Pandoc folds all of these into the
-// surrounding `Str` verbatim: decomposed accents (`cafe` + U+0301), Indic
-// vowel signs (`का` = U+0915 + U+093E), enclosing marks, and ZWNJ/ZWJ between
-// letters (Persian/Indic joining control) are content, not markup. Without
-// this class a bare mark in prose produced a parse ERROR (bd-96fswwce) — the
-// same bug family as bd-6kewx above. ZWJ inside emoji sequences is unaffected:
-// EMOJI_REGEX matches those as a longer token, which wins.
-const PANDOC_COMBINING_MARKS = "\\p{M}\\u{200C}\\u{200D}";
+// Combining marks (Mn nonspacing, Mc spacing, Me enclosing) plus format
+// characters (Cf: zero width space U+200B, soft hyphen U+00AD, ZWNJ/ZWJ
+// U+200C/U+200D, bidi marks and controls, word joiner U+2060, the MathML
+// invisible operators U+2061–U+2064, U+FEFF, tag characters, …). Pandoc folds
+// all of these into the surrounding `Str` verbatim: decomposed accents
+// (`cafe` + U+0301), Indic vowel signs (`का` = U+0915 + U+093E), enclosing
+// marks, ZWNJ/ZWJ between letters (Persian/Indic joining control) and a
+// `&ZeroWidthSpace;` pasted as its raw codepoint are content, not markup.
+// Without this class a bare mark in prose produced a parse ERROR
+// (bd-96fswwce, marks) and so did every Cf character except ZWNJ/ZWJ
+// (bd-wuiu1of7, GH #672) — the same bug family as bd-6kewx above. The qmd
+// writer spells Cf characters as character references (`&ZeroWidthSpace;`,
+// `&#x2064;`), so raw ones in source are accepted but not canonical. ZWJ
+// inside emoji sequences is unaffected: EMOJI_REGEX matches those as a
+// longer token, which wins.
+const PANDOC_COMBINING_MARKS = "\\p{M}\\p{Cf}";
 
 const startStrRegex = regexOr(
     "[" + PANDOC_NON_ASCII_WHITESPACE + PANDOC_ALPHA_NUM + PANDOC_SMART_QUOTES + "-]");
@@ -180,6 +187,24 @@ module.exports = grammar({
             optional(alias($.minus_metadata, $.metadata)),
             alias(prec.right(repeat($._block_not_section)), $.section),
             repeat($.section),
+        ),
+
+        // YAML metadata block (`---` ... `---`). All four delimiting tokens
+        // are external: the scanner opens a block only on a `---` line that
+        // is followed by a non-blank line and, somewhere below, by a closing
+        // line — exactly `---` at column 0, optionally followed by blanks —
+        // and it recognises that closing line only at a line start, so a
+        // `---` inside a value is body text. The body is exposed as the
+        // `yaml` child so consumers take the YAML's exact range from the
+        // tree rather than re-scanning the text (bd-mjo6ao32, GH #671); it
+        // is also the node a YAML injection query would target. The closing
+        // delimiter's line break is consumed like any other block's.
+        minus_metadata: $ => seq(
+            $._minus_metadata_start,
+            $._minus_metadata_open_newline,
+            field('body', alias($._minus_metadata_body, $.yaml)),
+            $._minus_metadata_end,
+            choice($._newline, $._eof),
         ),
 
         ///////////////////////////////////////////////////////////////////////////////////////////
@@ -1118,7 +1143,12 @@ module.exports = grammar({
         $._trigger_error,
         $._eof,
 
-        $.minus_metadata,
+        // YAML metadata block, as four tokens; see the `minus_metadata` rule
+        // and the matching section of scanner.c.
+        $._minus_metadata_start,
+        $._minus_metadata_open_newline,
+        $._minus_metadata_body,
+        $._minus_metadata_end,
 
         $._pipe_table_start,
         $._pipe_table_line_ending,

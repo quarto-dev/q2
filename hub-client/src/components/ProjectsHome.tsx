@@ -82,6 +82,12 @@ interface Props {
   onUpdateProjectSummary?: (indexDocId: string, summary: ProjectSetEntrySummary) => void;
   /** All connected collections, root first (from useCollectionSets). */
   collections?: CollectionSnapshot[];
+  /**
+   * Sort this collection's section to the top (bd-fxdcxbpq): set after
+   * joining a collection via an invite so the invitee lands looking at
+   * what they just accepted.
+   */
+  promoteCollectionId?: string;
   onCreateCollection?: (name: string) => Promise<string>;
   onUnsubscribeCollection?: (collectionDocId: string) => Promise<void>;
   onRenameCollection?: (collectionDocId: string, name: string) => void;
@@ -237,6 +243,7 @@ export default function ProjectsHome({
   onRenameProject,
   onUpdateProjectSummary,
   collections: collectionsProp,
+  promoteCollectionId,
   onCreateCollection,
   onUnsubscribeCollection,
   onRenameCollection,
@@ -281,6 +288,8 @@ export default function ProjectsHome({
     peekTimerRef.current = window.setTimeout(() => setPeekFor(null), 180);
   }, []);
   const [peekRefreshing, setPeekRefreshing] = useState(false);
+  // Project whose share link is being prepared (fetching a peek summary).
+  const [sharingId, setSharingId] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
   // Dialogs
@@ -322,19 +331,26 @@ export default function ProjectsHome({
   // first). The root is the personal superset; the sections on this page
   // render the non-root collections, and "Everything else" is computed as
   // root entries not present in any of them.
-  const collectionViews: CollectionView[] = useMemo(
-    () =>
-      (collectionsProp ?? [])
-        .filter((c) => !c.isRoot)
-        .map((c) => ({
-          id: c.docId,
-          name: c.name ?? 'Untitled collection',
-          syncServer: c.syncServer,
-          entries: c.entries,
-          projectIds: c.entries.map((e) => e.indexDocId.replace(/^automerge:/, '')),
-        })),
-    [collectionsProp],
-  );
+  const collectionViews: CollectionView[] = useMemo(() => {
+    const views = (collectionsProp ?? [])
+      .filter((c) => !c.isRoot)
+      .map((c) => ({
+        id: c.docId,
+        name: c.name ?? 'Untitled collection',
+        syncServer: c.syncServer,
+        entries: c.entries,
+        projectIds: c.entries.map((e) => e.indexDocId.replace(/^automerge:/, '')),
+      }));
+    // A just-joined collection sorts to the top (stable otherwise) so the
+    // invitee lands looking at what they accepted (bd-fxdcxbpq).
+    if (promoteCollectionId) {
+      const bare = promoteCollectionId.replace(/^automerge:/, '');
+      views.sort((a, b) =>
+        Number(b.id.replace(/^automerge:/, '') === bare) -
+        Number(a.id.replace(/^automerge:/, '') === bare));
+    }
+    return views;
+  }, [collectionsProp, promoteCollectionId]);
   const collections = collectionViews;
   // Which collection's members-and-invite popover is open
   const [membersFor, setMembersFor] = useState<string | null>(null);
@@ -518,13 +534,31 @@ export default function ProjectsHome({
   }, [collections]);
 
   const entryFor = useCallback((indexDocId: string): Omit<ProjectSetEntry, 'addedAt' | 'lastAccessed'> | null => {
+    // Carry the cached peek summary along with the identity fields:
+    // dropping it here left collection copies with no file counts until
+    // the project's next open, so invite previews showed "0 files" for
+    // populated projects (bd-fxdcxbpq follow-up).
     const item = byId.get(indexDocId)
       ?? byId.get(indexDocId.replace(/^automerge:/, ''))
       ?? byId.get(`automerge:${indexDocId}`);
-    if (item) return { indexDocId: item.indexDocId, syncServer: item.syncServer, description: item.description };
+    if (item) {
+      return {
+        indexDocId: item.indexDocId,
+        syncServer: item.syncServer,
+        description: item.description,
+        ...(item.summary && { summary: item.summary }),
+      };
+    }
     for (const c of collections) {
       const e = c.entries.find((en) => en.indexDocId.replace(/^automerge:/, '') === indexDocId.replace(/^automerge:/, ''));
-      if (e) return { indexDocId: e.indexDocId, syncServer: e.syncServer, description: e.description };
+      if (e) {
+        return {
+          indexDocId: e.indexDocId,
+          syncServer: e.syncServer,
+          description: e.description,
+          ...(e.summary && { summary: e.summary }),
+        };
+      }
     }
     return null;
   }, [byId, collections]);
@@ -758,7 +792,12 @@ export default function ProjectsHome({
       setCopied(label);
       setTimeout(() => setCopied(null), 2000);
     } catch (err) {
+      // Surface the failure instead of only logging it: a rejected write
+      // (no transient activation left, permission denied) otherwise looks
+      // exactly like success — the label just never changes.
       console.error('Clipboard write failed:', err);
+      setCopied(`${label}:failed`);
+      setTimeout(() => setCopied(null), 3000);
     }
   }, []);
 
@@ -1138,14 +1177,14 @@ export default function ProjectsHome({
       >
         Duplicate
       </MenuItem>
-      <MenuItem
-        keepOpen
-        onSelect={() => copyToClipboard(
-          buildShareableUrl(item.indexDocId, item.syncServer, item.description, 'index.qmd'),
-          item.indexDocId + ':share',
-        )}
-      >
-        {copied === item.indexDocId + ':share' ? 'Link copied!' : 'Share link…'}
+      <MenuItem keepOpen onSelect={() => void shareProject(item)}>
+        {copied === item.indexDocId + ':share'
+          ? 'Link copied!'
+          : copied === item.indexDocId + ':share:failed'
+            ? 'Copy failed — try again'
+            : sharingId === item.indexDocId
+              ? 'Preparing link…'
+              : 'Share link…'}
       </MenuItem>
       <MenuItem
         keepOpen
@@ -1175,23 +1214,79 @@ export default function ProjectsHome({
   /** Refresh a peek summary via a short background connection. Contributors
    * are carried over: they only update on a real open, when presence data
    * is flowing. */
-  const refreshPeek = async (item: ProjectItem) => {
-    if (peekRefreshing || exportingId || duplicatingId) return;
+  /**
+   * Refresh a project's cached peek summary from the sync server.
+   *
+   * Returns the summary it wrote so callers can use it in the same turn —
+   * the write travels up through onUpdateProjectSummary and back down as
+   * props, so `item.summary` is still stale when this resolves. Returns
+   * null when the refresh was skipped or failed.
+   */
+  const refreshPeek = async (item: ProjectItem): Promise<ProjectSetEntrySummary | null> => {
+    if (peekRefreshing || exportingId || duplicatingId) return null;
     setPeekRefreshing(true);
     try {
       const files = await connect(resolveSyncServerUrl(item.syncServer), item.indexDocId);
-      onUpdateProjectSummary?.(item.indexDocId, {
+      const summary: ProjectSetEntrySummary = {
         fileCount: files.length,
         topFiles: files.slice(0, 5).map((f) => f.path),
         contributors: item.summary?.contributors ?? [],
         asOf: new Date().toISOString(),
-      });
+      };
+      onUpdateProjectSummary?.(item.indexDocId, summary);
+      return summary;
     } catch (err) {
       console.error('Peek refresh failed:', err);
+      return null;
     } finally {
       try { await disconnect(); } catch { /* connection already down */ }
       setPeekRefreshing(false);
     }
+  };
+
+  /**
+   * Copy a share link for a project, embedding the display-only preview
+   * the recipient's invite card renders (bd-fxdcxbpq).
+   *
+   * The preview comes from the cached peek summary, which is written
+   * while a project is open in this browser. A project never opened here
+   * has none, and its links used to ship with no preview at all, so this
+   * fetches one first in that case. The cached path stays synchronous:
+   * `navigator.clipboard.writeText` needs the click's transient
+   * activation, and awaiting a round trip can outlive it — hence the
+   * explicit failure label rather than a silent console error.
+   */
+  const shareProject = async (item: ProjectItem) => {
+    let summary = item.summary ?? null;
+    if (!summary) {
+      setSharingId(item.indexDocId);
+      try {
+        summary = await refreshPeek(item);
+      } finally {
+        setSharingId(null);
+      }
+    }
+    const url = buildShareableUrl(
+      item.indexDocId,
+      item.syncServer,
+      item.description,
+      'index.qmd',
+      {
+        from: userSettings?.userName,
+        preview: summary
+          ? {
+              kind: 'project',
+              fileName: 'index.qmd',
+              topFiles: summary.topFiles.filter((f) => f !== 'index.qmd').slice(0, 2),
+              fileCount: summary.fileCount,
+              contributorInitials: summary.contributors
+                .map((c) => initialsFor(c.name))
+                .slice(0, 4),
+            }
+          : undefined,
+      },
+    );
+    await copyToClipboard(url, item.indexDocId + ':share');
   };
 
   const renderPeek = (item: ProjectItem) => {
@@ -1261,16 +1356,40 @@ export default function ProjectsHome({
       summary: e.summary,
     }));
 
-  /** Invite = the collection document's id + server. Nothing else travels. */
-  const buildInviteUrl = (collection: CollectionView): string =>
-    buildFullUrl({
+  /**
+   * Invite = the collection document's id + server, plus (bd-fxdcxbpq) a
+   * display-only preview= built from the cached peek summaries. Joining
+   * lands on the home screen with the collection promoted to the top —
+   * the invite is to the collection, so no start= document is emitted
+   * (the parser still tolerates start= on links already in the wild).
+   * Nothing that grants access beyond the collection id itself travels.
+   */
+  const buildInviteUrl = (collection: CollectionView): string => {
+    const items = collectionItemsOf(collection);
+    return buildFullUrl({
       type: 'join-collection',
       collectionId: collection.id,
       collectionName: collection.name,
       inviter: userSettings?.userName ?? 'A collaborator',
       syncServer: collection.syncServer,
       entries: [],
+      preview: {
+        kind: 'collection',
+        projects: items.slice(0, 3).map((it) => ({
+          name: it.description || 'Untitled project',
+          topFiles: (it.summary?.topFiles ?? []).slice(0, 1),
+          fileCount: it.summary?.fileCount ?? 0,
+          contributorInitials: (it.summary?.contributors ?? [])
+            .map((c) => initialsFor(c.name))
+            .slice(0, 4),
+        })),
+        totalProjects: items.length,
+        memberFirstNames: peopleOn(collection)
+          .map((p) => p.name.split(/\s+/)[0])
+          .slice(0, 3),
+      },
     });
+  };
 
   /** People seen on a collection: you plus the contributor union from the
    * projects' cached summaries. Derived, not a stored member list. */
@@ -1497,7 +1616,11 @@ export default function ProjectsHome({
           {membersFor === collection.id && renderMembersPopover(collection)}
           {openMenu === menuKey && (
             <Menu className="qh-menu-right" onClose={() => closeAllMenus()} ignoreOutsideSelector=".qh-menu-anchor, .qh-peek" aria-label={`Actions for ${collection.name}`}>
-              <MenuItem onSelect={() => { setOpenMenu(null); setMembersFor(collection.id); }}>
+              {/* keepOpen: the activation must not reach the Menu root's
+                  closer — its onClose (closeAllMenus) also resets membersFor,
+                  which would cancel the popover in the same React batch it
+                  was requested. The onSelect closes the menu itself. */}
+              <MenuItem keepOpen onSelect={() => { setOpenMenu(null); setMembersFor(collection.id); }}>
                 People &amp; invite…
               </MenuItem>
               <MenuItem
@@ -1571,11 +1694,14 @@ export default function ProjectsHome({
     <div className="projects-home">
       <header className="qh-header">
         <div className="qh-logo">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <rect x="3" y="4" width="18" height="3.5" rx="1" stroke="var(--posit-teal)" strokeWidth="1.8" />
-            <rect x="3" y="10.2" width="18" height="3.5" rx="1" stroke="var(--posit-teal)" strokeWidth="1.8" />
-            <rect x="3" y="16.5" width="11" height="3.5" rx="1" stroke="var(--posit-teal)" strokeWidth="1.8" />
-          </svg>
+          <img
+            src="/quarto-icon.svg"
+            alt=""
+            width="20"
+            height="20"
+            style={{ filter: 'var(--logo-filter)' }}
+            aria-hidden="true"
+          />
           <span>Quarto Hub</span>
         </div>
         <div className="qh-search">
