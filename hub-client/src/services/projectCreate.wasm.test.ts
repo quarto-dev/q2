@@ -36,6 +36,13 @@ interface CreateProjectResponse {
   }>;
 }
 
+/**
+ * The registry's hub-only choice (bd-d147nkqx). `q2 create project` never
+ * offers it; the hub does. Currently the placeholder template — when the
+ * real hub-only template replaces it, this is the only line to update.
+ */
+const HUB_ONLY_CHOICE_ID = 'hub-placeholder';
+
 let wasm: WasmModule;
 
 beforeAll(async () => {
@@ -58,6 +65,34 @@ describe('get_project_choices', () => {
     expect(ids).toContain('default');
     expect(ids).toContain('website');
     expect(ids).toContain('blog');
+  });
+
+  it('offers the hub-only choice that the CLI hides (bd-d147nkqx)', () => {
+    const response = JSON.parse(wasm.get_project_choices()) as ProjectChoicesResponse;
+    const hubOnly = response.choices.find((c) => c.id === HUB_ONLY_CHOICE_ID);
+    expect(hubOnly).toBeDefined();
+    expect(hubOnly!.name.length).toBeGreaterThan(0);
+    expect(hubOnly!.description.length).toBeGreaterThan(0);
+  });
+});
+
+describe('create_project with a hub-only choice (bd-d147nkqx)', () => {
+  it('scaffolds the placeholder with the title substituted', () => {
+    const response = JSON.parse(
+      wasm.create_project(HUB_ONLY_CHOICE_ID, 'Hub Only Title'),
+    ) as CreateProjectResponse;
+    expect(response.success).toBe(true);
+
+    const byPath = new Map(response.files!.map((f) => [f.path, f]));
+    expect([...byPath.keys()].sort()).toEqual(['_quarto.yml', 'index.qmd']);
+
+    const quartoYml = byPath.get('_quarto.yml')!.content;
+    expect(quartoYml).toContain('type: website');
+    expect(quartoYml).toContain('title: "Hub Only Title"');
+    expect(byPath.get('index.qmd')!.content).toContain('title: "Hub Only Title"');
+    for (const file of response.files!) {
+      expect(file.content).not.toContain('$title$');
+    }
   });
 });
 

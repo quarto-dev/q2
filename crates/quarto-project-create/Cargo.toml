@@ -35,5 +35,9 @@ serde_yaml.workspace = true
 # Date parsing in the clock-independent blog-date test.
 time = { version = "0.3", features = ["parsing", "macros"] }
 
+# Asserting on the serialized shape of `ProjectChoice` (surface gating,
+# bd-d147nkqx): the hub client reads this through JSON.
+serde_json.workspace = true
+
 [lints]
 workspace = true

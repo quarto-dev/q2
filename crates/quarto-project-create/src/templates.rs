@@ -76,6 +76,19 @@ pub mod blog {
         include_bytes!("../resources/templates/website/blog/posts/post-with-code/image.jpg");
 }
 
+/// Scaffold contents for the hub-only placeholder template
+/// (`website:hub-placeholder`, bd-d147nkqx). Stands in for the first
+/// real hub-only template; replaced wholesale when that lands.
+pub mod hub_placeholder {
+    /// `_quarto.yml` template for the placeholder project.
+    pub const QUARTO_YML: &str =
+        include_str!("../resources/templates/website/hub-placeholder/_quarto.yml.template");
+
+    /// `index.qmd` template for the placeholder project.
+    pub const INDEX_QMD: &str =
+        include_str!("../resources/templates/website/hub-placeholder/index.qmd.template");
+}
+
 /// Scaffold contents for the website project type.
 pub mod website {
     /// `_quarto.yml` template for website projects.

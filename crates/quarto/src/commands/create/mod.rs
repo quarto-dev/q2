@@ -555,6 +555,26 @@ mod interactive_tests {
     }
 
     #[test]
+    fn typed_hub_only_choice_errors_without_prompting_further() {
+        // bd-d147nkqx: the registry's hub-only choice is implemented
+        // but not offered on the CLI. Typing it must fail up front,
+        // before any prompt, with the hub-specific wording.
+        use quarto_project_create::{Surface, available_choices};
+        let hub_only = available_choices()
+            .into_iter()
+            .find(|c| c.implemented && !c.available_on(Surface::Cli))
+            .expect("registry has a hub-only choice");
+        let mut p = ScriptedPrompter::new(vec![], vec![]);
+        let err = ProjectProvider
+            .resolve_interactive(&args(&[&hub_only.id, "d"]), Path::new("/x"), false, &mut p)
+            .unwrap_err();
+        let text = err.0.to_text(None);
+        assert!(text.contains("Quarto Hub"), "error text: {text}");
+        assert!(!text.contains("not yet implemented"), "error text: {text}");
+        assert!(p.transcript.is_empty(), "transcript: {:?}", p.transcript);
+    }
+
+    #[test]
     fn artifact_select_prompts_even_with_single_provider() {
         // Prompting (rather than auto-selecting) keeps behavior stable
         // when a second artifact type (extension) is registered.
