@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-09-15
+
+- [`17541e5e1`](https://github.com/quarto-dev/q2/commits/17541e5e1): The quarto-hub.com landing page now carries a disclaimer above the sign-in button: use test data, not real data, and nothing entered in the demo is protected or returned.
+
 ### 2026-09-11
 
 - [`80a4e8c5`](https://github.com/quarto-dev/q2/commits/80a4e8c5): The quarto-hub.com landing page now says what Quarto Hub is instead of showing only a sign-in button, every "Learn more" points at the Quarto Hub site and opens in a new tab, and the card reads as raised off the page in dark mode again.
