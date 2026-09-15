@@ -7,6 +7,9 @@
  * what Quarto Hub *is* (bd-g0uyp2v1) — a first-time visitor used to get
  * a logo and a Google button — and keeps that intro in the error states,
  * where "available by invite only" is the most useful line on the page.
+ * It also carries the demo disclaimer (bd-m6u9qu3u) — use test data, and
+ * nothing entered is protected or returned — since this is the last thing
+ * a visitor reads before they can enter anything.
  *
  * Renders the active AuthProvider's `SignInButton`. The flow shape
  * depends on the provider; for the default `googleAuthProvider`:
@@ -22,6 +25,7 @@ import './LoginScreen.css';
 import { useAuthProvider } from '../../auth/AuthProvider';
 import { authErrorMessage } from '../../auth/authError';
 import { hubPath } from '../../utils/routing';
+import DemoDisclaimer from '../DemoDisclaimer';
 import { landing, links } from '../../strings';
 
 /**
@@ -64,8 +68,11 @@ export function LoginScreen({ errorReason, message }: { errorReason?: string; me
         </p>
 
         {/* Everything that qualifies the offer sits above the button, so
-            nothing competes with it for last word. */}
+            nothing competes with it for last word: the invite-only line,
+            then the demo disclaimer (bd-m6u9qu3u). */}
         <p className="ls-footnote">{landing.inviteOnly}</p>
+
+        <DemoDisclaimer />
 
         {/* Nothing in the default state: the provider's button already
             says "Continue with Google", and a "Sign in with Google to

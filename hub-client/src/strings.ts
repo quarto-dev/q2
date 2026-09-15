@@ -148,6 +148,43 @@ export const landing = {
   learnMore: 'Learn more about Quarto Hub',
 } as const;
 
+/**
+ * The demo disclaimer (bd-m6u9qu3u): what not to enter, and that nothing
+ * entered is protected or returned. Rendered by components/DemoDisclaimer
+ * on every card reachable without a session — the landing / sign-in
+ * screen and the invite landing cards — above their sign-in button.
+ *
+ * Structured rather than written as markdown: those cards render before
+ * the WASM markdown renderer (the About tab's) exists, and the formatting
+ * is fixed anyway — a heading, then two paragraphs that each open with a
+ * bold single-sentence lead. DemoDisclaimer builds the markup from this
+ * shape, so each `lead` must stay one sentence and end with its own
+ * period; the component joins `lead` and `body` with a space. The same
+ * two paragraphs open resources/more-info.md (the About tab's "More
+ * information"); keep the wording in step when editing either.
+ */
+export const demoDisclaimer = {
+  heading: 'Disclaimer',
+  useTestData: {
+    lead: 'Use test data, not real data.',
+    body:
+      'This is a live demo of a product still in development. ' +
+      'Please don’t enter anything sensitive, confidential, or proprietary — ' +
+      'no customer data, credentials, internal business info, or anyone else’s ' +
+      'personal information. If you wouldn’t post it on a public forum, ' +
+      'don’t put it here.',
+  },
+  notProtected: {
+    lead: 'Anything you enter is not protected, and we won’t return it.',
+    body:
+      'Data you share during this demo may be logged, cached, or otherwise ' +
+      'retained by Posit and any third-party services the demo relies on. ' +
+      'We don’t guarantee confidentiality, security, or deletion, and we can’t ' +
+      'retrieve or return data you enter once the demo session ends. ' +
+      'Enter information only if you’re comfortable with that.',
+  },
+} as const;
+
 /** The three notification tiers (see components/notifications.css). */
 export const notifications = {
   autoSaved: 'Auto-saved',

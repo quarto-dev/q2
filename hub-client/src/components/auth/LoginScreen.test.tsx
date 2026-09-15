@@ -10,7 +10,7 @@ import type { ReactNode } from 'react';
 
 import { AuthProviderRoot } from '../../auth/AuthProvider';
 import { createMockAuthProvider, type MockAuthProvider } from '../../auth/MockAuthProvider';
-import { landing } from '../../strings';
+import { landing, demoDisclaimer } from '../../strings';
 import { LoginScreen } from './LoginScreen';
 
 let mock: MockAuthProvider;
@@ -152,6 +152,101 @@ describe('LoginScreen intro', () => {
     render(withProvider(<LoginScreen message="Your session expired — please sign in again." />));
     expect(screen.getByText(/session expired/i)).toBeTruthy();
     expect(screen.getByText(/Prose and code belong in one place/)).toBeTruthy();
+  });
+});
+
+/**
+ * The demo disclaimer (bd-m6u9qu3u).
+ *
+ * quarto-hub.com is a live demo, and this screen is the last thing a
+ * visitor sees before they can enter data, so it has to say: use test
+ * data, and nothing you enter is protected or returned. The copy is
+ * structured in strings.ts (heading + two lead/body pairs) rather than
+ * markdown, because the WASM renderer the About tab uses for its
+ * markdown documents does not exist yet at sign-in time. The block is
+ * the shared DemoDisclaimer component (the invite cards carry it too);
+ * these tests pin the structure it builds and where this card puts it.
+ */
+describe('LoginScreen disclaimer', () => {
+  /** The two lead/body pairs, read lazily so a missing export fails
+   *  these tests rather than the file's collection. */
+  const pairs = () => [demoDisclaimer.useTestData, demoDisclaimer.notProtected];
+
+  /** Child class names of the card, in document order. */
+  function cardOrder(container: HTMLElement): string[] {
+    return [...container.querySelector('.ls-card')!.children].map((el) => el.className);
+  }
+
+  it('has a level-2 heading named "Disclaimer"', () => {
+    render(withProvider(<LoginScreen />));
+    const heading = screen.getByRole('heading', { level: 2, name: /^disclaimer$/i });
+    // The card's tagline is its h1; the disclaimer is the next level
+    // down, not the h3 of the markdown draft.
+    expect(heading.closest('.demo-disclaimer')).not.toBeNull();
+  });
+
+  it('leads each paragraph with its bold sentence', () => {
+    const { container } = render(withProvider(<LoginScreen />));
+    const paragraphs = container.querySelectorAll('.demo-disclaimer p');
+    expect(paragraphs).toHaveLength(pairs().length);
+    paragraphs.forEach((p, i) => {
+      const strong = p.querySelector('strong');
+      expect(strong, `paragraph ${i + 1} has no bold lead`).not.toBeNull();
+      expect(p.firstElementChild, `paragraph ${i + 1} does not open with its lead`).toBe(strong);
+      expect(strong!.textContent).toBe(pairs()[i].lead);
+    });
+  });
+
+  it('runs the body copy on from the lead, verbatim', () => {
+    const { container } = render(withProvider(<LoginScreen />));
+    const paragraphs = container.querySelectorAll('.demo-disclaimer p');
+    paragraphs.forEach((p, i) => {
+      // One space between lead and body: the join is the component's,
+      // and a missing or doubled space is invisible in a snapshot.
+      expect(p.textContent).toBe(`${pairs()[i].lead} ${pairs()[i].body}`);
+    });
+    expect(screen.getByText(/live demo of a product still in development/)).toBeTruthy();
+    expect(screen.getByText(/may be logged, cached, or otherwise retained by Posit/)).toBeTruthy();
+  });
+
+  it('sits between the invite-only footnote and the sign-in button', () => {
+    const { container } = render(withProvider(<LoginScreen />));
+    const order = cardOrder(container);
+    const idx = (cls: string) => order.findIndex((c) => c.includes(cls));
+    expect(idx('demo-disclaimer')).toBeGreaterThan(idx('ls-footnote'));
+    expect(idx('ls-actions')).toBeGreaterThan(idx('demo-disclaimer'));
+    // Everything that qualifies the offer stays above the button.
+    expect(idx('ls-actions')).toBe(order.length - 1);
+  });
+
+  it('keeps the status line between the disclaimer and the button', () => {
+    const { container } = render(withProvider(<LoginScreen errorReason="denied" />));
+    const order = cardOrder(container);
+    const idx = (cls: string) => order.findIndex((c) => c.includes(cls));
+    expect(idx('ls-error')).toBeGreaterThan(idx('demo-disclaimer'));
+    expect(idx('ls-actions')).toBeGreaterThan(idx('ls-error'));
+  });
+
+  it('survives the auth-error and session-expiry states', () => {
+    // The same person is about to sign in again; the notice must not
+    // vanish because their last attempt failed.
+    for (const props of [
+      { errorReason: 'denied' },
+      { message: 'Your session expired — please sign in again.' },
+    ]) {
+      cleanup();
+      const { container } = render(withProvider(<LoginScreen {...props} />));
+      expect(container.querySelector('.demo-disclaimer')).not.toBeNull();
+      expect(screen.getByText(/^Use test data, not real data\.$/)).toBeTruthy();
+    }
+  });
+
+  it('is not hidden behind a disclosure', () => {
+    const { container } = render(withProvider(<LoginScreen />));
+    // A notice the visitor must see before entering data should not
+    // require a click.
+    expect(container.querySelector('.demo-disclaimer details')).toBeNull();
+    expect(container.querySelector('.demo-disclaimer')!.closest('details')).toBeNull();
   });
 });
 

@@ -8,8 +8,8 @@
  * inside it.
  *
  * One layout for both invite kinds: kicker → inviter line → title →
- * display-only payload preview → what-is-QuartoHub explainer → a single CTA,
- * which is always the last element of the card. Signed-out users get a
+ * display-only payload preview → demo disclaimer → a single CTA → the
+ * what-is-QuartoHub explainer footnote. Signed-out users get a
  * Google CTA (the caller wires it to the auth flow); signed-in users get a
  * one-click join/open. The card renders no identity form — identity comes
  * from the Google account.
@@ -21,6 +21,7 @@ import type { CollectionInvitePreview, ProjectInvitePreview, InvitePreview } fro
 import { generateColorFromId } from '../services/storage/utils';
 import { initialsFor } from '../utils/facepile';
 import { links } from '../strings';
+import DemoDisclaimer from './DemoDisclaimer';
 
 export interface InviteLandingProps {
   kind: 'collection' | 'project';
@@ -177,6 +178,12 @@ export default function InviteLanding(props: InviteLandingProps) {
             {error}
           </div>
         )}
+        {/* The demo disclaimer (bd-m6u9qu3u) sits above the CTA, as on
+            the landing page: a signed-out invitee sees this card instead
+            of that one and is about to sign in and enter data on the
+            strength of it. Kept for signed-in users too — the invite is
+            still their first sight of this project. */}
+        <DemoDisclaimer />
         <div className="il-actions">
           {/* Signed out, the provider's button is the whole CTA: the
               inviter line above already says what you are joining, so a
