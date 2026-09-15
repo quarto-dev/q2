@@ -67,7 +67,7 @@ test.describe('q2-sandboxed-preview format', () => {
       },
     ]);
 
-    await bootstrapProjectSet(page, serverUrl);
+    await bootstrapProjectSet(page);
     const localId = await seedProjectInBrowser(page, indexDocId, serverUrl);
 
     await page.goto(

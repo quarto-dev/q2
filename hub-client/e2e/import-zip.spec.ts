@@ -9,32 +9,9 @@
  * See claude-notes/plans/2026-06-01-import-from-zip.md (bd-apv23).
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { zipSync, strToU8 } from 'fflate';
-import { getServerUrl, seedUiVariant } from './helpers/projectFactory';
-
-/**
- * Bring a fresh browser context to the project-selector landing page with
- * a connected project set, so the "Import from ZIP" action is available.
- * Mirrors the bootstrap in share-link-project-set.spec.ts.
- */
-async function bootstrapProjectSet(page: Page, syncServer: string): Promise<void> {
-  // This spec drives the classic ProjectSelector; the app defaults to the
-  // collections home. See seedUiVariant.
-  await seedUiVariant(page, 'classic');
-  await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Quarto Hub' })).toBeVisible();
-  await expect(
-    page.getByText(/Get started by creating a new project set/i),
-  ).toBeVisible();
-
-  await page.locator('#setup-sync-server').fill(syncServer);
-  await page.getByRole('button', { name: /Create New Project Set/i }).click();
-
-  await expect(page.getByRole('heading', { name: 'Your Projects' })).toBeVisible({
-    timeout: 20000,
-  });
-}
+import { bootstrapProjectSet, getServerUrl } from './helpers/projectFactory';
 
 /** A minimal Quarto project zipped the way exportProjectAsZip would. */
 function buildFixtureZip(): Uint8Array {
@@ -76,7 +53,7 @@ test.describe('Import from ZIP', () => {
   test('creates a new project from an uploaded ZIP and renders it', async ({ page }) => {
     const syncServer = getServerUrl();
 
-    await bootstrapProjectSet(page, syncServer);
+    await bootstrapProjectSet(page);
 
     // Open the import form.
     await page.getByRole('button', { name: /Import from ZIP/i }).click();

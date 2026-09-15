@@ -61,7 +61,7 @@ async function openCommentFixture(page: Page): Promise<FrameLocator> {
         { path: 'comment.tsx', content: tsxContent, contentType: 'text' },
         { path: 'render-components-comment.qmd', content: qmdContent, contentType: 'text' },
     ]);
-    await bootstrapProjectSet(page, serverUrl);
+    await bootstrapProjectSet(page);
     const localId = await seedProjectInBrowser(page, indexDocId, serverUrl);
     await page.goto(`/#/p/${localId}/file/${encodeURIComponent('render-components-comment.qmd')}`);
     await waitForPreviewRender(page, { kind: 'q2-preview', timeout: 30_000 });

@@ -59,7 +59,7 @@ test.describe('q2-debug render-components', () => {
       },
     ]);
 
-    await bootstrapProjectSet(page, serverUrl);
+    await bootstrapProjectSet(page);
     const localId = await seedProjectInBrowser(page, indexDocId, serverUrl);
 
     await page.goto(
