@@ -205,13 +205,13 @@ connect → "No projects yet".
 
 ### Phase 4 — Ship prep
 
-- [ ] `cargo xtask verify` (hub-client changed → full, not
+- [x] `cargo xtask verify` (hub-client changed → full, not
       `--skip-hub-build`).
-- [ ] Two-commit changelog workflow (`hub-client/changelog.md`, entry
+- [x] Two-commit changelog workflow (`hub-client/changelog.md`, entry
       under `### 2026-09-15`).
 - [x] File the Q3 follow-up strand (empty-root replacement on inbound link) with `discovered-from`. Q4 is already bd-88qrvqi4.
-- [ ] Update this plan's checklist; close the strand after Carlos's
-      review and merge.
+- [ ] Close the strand after Carlos's review and merge (branch
+      `braid/bd-4h1hv60p-hub-client-auto-create`, commits 440098e41 + changelog).
 
 ## Notes
 

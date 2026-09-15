@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-09-15
 
+- [`440098e41`](https://github.com/quarto-dev/q2/commits/440098e41): New users go straight from sign-in to their (empty) project list — the project set is created automatically, and the "Create New Project Set" screen is gone; a connection failure shows a Try again card instead
 - [`837bba995`](https://github.com/quarto-dev/q2/commits/837bba995): The invite landing cards carry the same disclaimer as the landing page, and the About tab's "More information" now opens with it.
 - [`17541e5e1`](https://github.com/quarto-dev/q2/commits/17541e5e1): The quarto-hub.com landing page now carries a disclaimer above the sign-in button: use test data, not real data, and nothing entered in the demo is protected or returned.
 
