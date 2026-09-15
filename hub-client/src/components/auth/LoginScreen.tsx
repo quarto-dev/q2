@@ -25,6 +25,7 @@ import './LoginScreen.css';
 import { useAuthProvider } from '../../auth/AuthProvider';
 import { authErrorMessage } from '../../auth/authError';
 import { hubPath } from '../../utils/routing';
+import DemoDisclaimer from '../DemoDisclaimer';
 import { landing, links } from '../../strings';
 
 /**
@@ -71,21 +72,7 @@ export function LoginScreen({ errorReason, message }: { errorReason?: string; me
             then the demo disclaimer (bd-m6u9qu3u). */}
         <p className="ls-footnote">{landing.inviteOnly}</p>
 
-        {/* The disclaimer is structured copy (heading + lead/body pairs)
-            rendered as plain elements rather than markdown: this page
-            shows before the WASM renderer the About tab uses exists, and
-            the shape is fixed. Always open — a notice about what not to
-            enter must not need a click. */}
-        <section className="ls-disclaimer" aria-labelledby="ls-disclaimer-heading">
-          <h2 id="ls-disclaimer-heading" className="ls-disclaimer-heading">
-            {landing.disclaimer.heading}
-          </h2>
-          {[landing.disclaimer.useTestData, landing.disclaimer.notProtected].map((item) => (
-            <p key={item.lead}>
-              <strong>{item.lead}</strong> {item.body}
-            </p>
-          ))}
-        </section>
+        <DemoDisclaimer />
 
         {/* Nothing in the default state: the provider's button already
             says "Continue with Google", and a "Sign in with Google to

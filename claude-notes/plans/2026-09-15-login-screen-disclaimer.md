@@ -143,12 +143,20 @@ a layout choice; see Decisions §3.)
 7. **Keep the disclaimer in every state.** Like the intro (bd-g0uyp2v1),
    it must survive the auth-error and session-expiry states; the same
    person is about to sign in again.
-8. **Out of scope, filed as follow-ups if wanted:** (a) showing the same
-   disclaimer on the invite landing cards (`InviteLanding.tsx`), which a
-   signed-out invitee sees *instead of* `LoginScreen`; (b) reconciling
-   `resources/more-info.md`'s "DO NOT USE FOR PRIVATE DATA YET" section
-   with the new wording (it currently talks about public automerge sync
-   servers, not Posit retention).
+8. **Scope widened on review (Carlos, 2026-09-15).** Both items first
+   listed as out of scope are in this PR:
+   (a) the invite landing cards (`InviteLanding.tsx`) carry the same
+   notice — a signed-out invitee sees that card *instead of* `LoginScreen`.
+   The block became a shared component, `components/DemoDisclaimer.tsx`
+   (class `demo-disclaimer`, strings in the top-level `demoDisclaimer`
+   export), whose CSS owns type and colors while each host card owns the
+   outer margins. On the invite card it sits above the CTA, ruled off with
+   the card's hairline, in both signed states and for both invite kinds;
+   the explainer footnote stays last.
+   (b) Carlos rewrote `resources/more-info.md` so the About tab's "More
+   information" opens with the same two paragraphs plus the two
+   automerge caveats (no read-only permission, no deletion of past
+   versions); the rest of that document was dropped.
 
 ## Phase 1 — Tests first
 
@@ -213,7 +221,7 @@ a layout choice; see Decisions §3.)
   DOM snippet showing `section.ls-disclaimer > h2 + p > strong`) in this
   plan before closing the strand.
 
-## End-to-end verification record (2026-09-15)
+## End-to-end verification record (2026-09-15, landing page)
 
 The Chrome extension was not connected, so the harness pages were driven
 with headless Chromium through Playwright against `vite --port 5174`
@@ -250,3 +258,30 @@ happened to be on PATH, 30 unrelated jsdom tests in `usePreference` and
 - `VITE_E2E=1 npm run build` (tsc -b + vite) clean, then
   `playwright test --config playwright.harness.config.ts e2e/landing-card.harness.spec.ts`: 12 passed
 - `npm run build:all` exit 0; `npm run lint:css` clean
+
+## End-to-end verification record (2026-09-15, invite cards + more-info)
+
+Same headless-Chromium drive against `vite --port 5174`, 1280×720, both
+themes. Every page reports the shared block with an h2 "Disclaimer", 11px
+body, and its bottom edge above the CTA row:
+
+| page                              | card height | fits 720px viewport |
+| --------------------------------- | ----------: | :-----------------: |
+| invite-landing-collection         |       634px |         yes         |
+| invite-landing-project-signed-in  |       520px |         yes         |
+| landing                           |       565px |         yes         |
+
+Screenshots inspected: on the invite card the block sits under the
+payload box, ruled off with the card's hairline, above Continue with
+Google; the "New to Quarto Hub? Learn more." footnote stays last.
+
+Test runs (Node 24):
+
+- `vitest run` on InviteLanding + LoginScreen tests: 57 passed (3 new
+  invite tests + the 6 landing tests, now against `.demo-disclaimer`)
+- `npm run test`: 101 files, 1205 passed
+- `VITE_E2E=1 npm run build` (tsc -b + vite) clean, then
+  `playwright test --config playwright.harness.config.ts` on
+  `landing-card` + `invite-landing-theme`: 22 passed
+- `changelogRender.wasm.test.ts` (gates `resources/more-info.md`): 2 passed
+- `npm run lint:css` clean

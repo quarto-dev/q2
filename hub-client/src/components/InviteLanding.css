@@ -207,6 +207,17 @@
   text-decoration: underline;
 }
 
+/* ---- demo disclaimer (DemoDisclaimer.css owns its type) ---- */
+
+/* Ruled off from the payload box above it with the card's own hairline,
+   so it reads as the card's conditions rather than a continuation of
+   the inviter's pitch. */
+.il-card .demo-disclaimer {
+  border-block-start: 1px solid var(--il-divider);
+  padding-block-start: 14px;
+  margin-block: 0 16px;
+}
+
 /* ---- CTA (the explainer footnote is the only thing below it) ---- */
 
 /* Holds exactly one child: the primary button when signed in, or the

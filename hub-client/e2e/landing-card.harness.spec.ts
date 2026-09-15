@@ -138,7 +138,7 @@ for (const theme of THEMES) {
 
     // A left-aligned block has at least one line starting on the
     // content edge; a centered one has none.
-    for (const selector of ['.ls-what', '.ls-footnote', '.ls-disclaimer']) {
+    for (const selector of ['.ls-what', '.ls-footnote', '.demo-disclaimer']) {
       const { left } = await inkGaps(page, selector, 'leftmost-line');
       expect(
         left,
@@ -222,7 +222,7 @@ for (const theme of THEMES) {
     // click. ~120 words at the footnote's --text-2xs would be unreadable,
     // so it is one step up; both sizes are pinned to the scale, not to
     // pixels, for the same reason as the headline.
-    const disclaimer = page.locator('.ls-disclaimer');
+    const disclaimer = page.locator('.demo-disclaimer');
     await expect(disclaimer).toBeVisible();
     await expect(disclaimer.locator('p').first()).toBeVisible();
 

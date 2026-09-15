@@ -10,7 +10,7 @@ import type { ReactNode } from 'react';
 
 import { AuthProviderRoot } from '../../auth/AuthProvider';
 import { createMockAuthProvider, type MockAuthProvider } from '../../auth/MockAuthProvider';
-import { landing } from '../../strings';
+import { landing, demoDisclaimer } from '../../strings';
 import { LoginScreen } from './LoginScreen';
 
 let mock: MockAuthProvider;
@@ -163,13 +163,14 @@ describe('LoginScreen intro', () => {
  * data, and nothing you enter is protected or returned. The copy is
  * structured in strings.ts (heading + two lead/body pairs) rather than
  * markdown, because the WASM renderer the About tab uses for its
- * markdown documents does not exist yet at sign-in time; these tests pin
- * the structure the component builds from it.
+ * markdown documents does not exist yet at sign-in time. The block is
+ * the shared DemoDisclaimer component (the invite cards carry it too);
+ * these tests pin the structure it builds and where this card puts it.
  */
 describe('LoginScreen disclaimer', () => {
   /** The two lead/body pairs, read lazily so a missing export fails
    *  these tests rather than the file's collection. */
-  const pairs = () => [landing.disclaimer.useTestData, landing.disclaimer.notProtected];
+  const pairs = () => [demoDisclaimer.useTestData, demoDisclaimer.notProtected];
 
   /** Child class names of the card, in document order. */
   function cardOrder(container: HTMLElement): string[] {
@@ -181,12 +182,12 @@ describe('LoginScreen disclaimer', () => {
     const heading = screen.getByRole('heading', { level: 2, name: /^disclaimer$/i });
     // The card's tagline is its h1; the disclaimer is the next level
     // down, not the h3 of the markdown draft.
-    expect(heading.closest('.ls-disclaimer')).not.toBeNull();
+    expect(heading.closest('.demo-disclaimer')).not.toBeNull();
   });
 
   it('leads each paragraph with its bold sentence', () => {
     const { container } = render(withProvider(<LoginScreen />));
-    const paragraphs = container.querySelectorAll('.ls-disclaimer p');
+    const paragraphs = container.querySelectorAll('.demo-disclaimer p');
     expect(paragraphs).toHaveLength(pairs().length);
     paragraphs.forEach((p, i) => {
       const strong = p.querySelector('strong');
@@ -198,7 +199,7 @@ describe('LoginScreen disclaimer', () => {
 
   it('runs the body copy on from the lead, verbatim', () => {
     const { container } = render(withProvider(<LoginScreen />));
-    const paragraphs = container.querySelectorAll('.ls-disclaimer p');
+    const paragraphs = container.querySelectorAll('.demo-disclaimer p');
     paragraphs.forEach((p, i) => {
       // One space between lead and body: the join is the component's,
       // and a missing or doubled space is invisible in a snapshot.
@@ -212,8 +213,8 @@ describe('LoginScreen disclaimer', () => {
     const { container } = render(withProvider(<LoginScreen />));
     const order = cardOrder(container);
     const idx = (cls: string) => order.findIndex((c) => c.includes(cls));
-    expect(idx('ls-disclaimer')).toBeGreaterThan(idx('ls-footnote'));
-    expect(idx('ls-actions')).toBeGreaterThan(idx('ls-disclaimer'));
+    expect(idx('demo-disclaimer')).toBeGreaterThan(idx('ls-footnote'));
+    expect(idx('ls-actions')).toBeGreaterThan(idx('demo-disclaimer'));
     // Everything that qualifies the offer stays above the button.
     expect(idx('ls-actions')).toBe(order.length - 1);
   });
@@ -222,7 +223,7 @@ describe('LoginScreen disclaimer', () => {
     const { container } = render(withProvider(<LoginScreen errorReason="denied" />));
     const order = cardOrder(container);
     const idx = (cls: string) => order.findIndex((c) => c.includes(cls));
-    expect(idx('ls-error')).toBeGreaterThan(idx('ls-disclaimer'));
+    expect(idx('ls-error')).toBeGreaterThan(idx('demo-disclaimer'));
     expect(idx('ls-actions')).toBeGreaterThan(idx('ls-error'));
   });
 
@@ -235,7 +236,7 @@ describe('LoginScreen disclaimer', () => {
     ]) {
       cleanup();
       const { container } = render(withProvider(<LoginScreen {...props} />));
-      expect(container.querySelector('.ls-disclaimer')).not.toBeNull();
+      expect(container.querySelector('.demo-disclaimer')).not.toBeNull();
       expect(screen.getByText(/^Use test data, not real data\.$/)).toBeTruthy();
     }
   });
@@ -244,8 +245,8 @@ describe('LoginScreen disclaimer', () => {
     const { container } = render(withProvider(<LoginScreen />));
     // A notice the visitor must see before entering data should not
     // require a click.
-    expect(container.querySelector('.ls-disclaimer details')).toBeNull();
-    expect(container.querySelector('.ls-disclaimer')!.closest('details')).toBeNull();
+    expect(container.querySelector('.demo-disclaimer details')).toBeNull();
+    expect(container.querySelector('.demo-disclaimer')!.closest('details')).toBeNull();
   });
 });
 

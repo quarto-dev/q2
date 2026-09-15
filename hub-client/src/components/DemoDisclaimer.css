@@ -1,0 +1,38 @@
+/**
+ * The demo disclaimer (bd-m6u9qu3u), shared by the landing / sign-in
+ * card and the invite landing cards.
+ *
+ * ~120 words, so one step up from those cards' --text-2xs footnotes: at
+ * 10px that much prose is unreadable, and the notice exists to be read.
+ * The bold leads and the heading take --text-primary so the two things a
+ * skimmer must catch ("use test data", "not protected") stand out from
+ * the body at a glance. Outer margins belong to the host card, which
+ * knows what sits above and below it.
+ */
+
+.demo-disclaimer {
+  font-size: var(--text-xs);
+  line-height: var(--leading-base);
+  color: var(--text-secondary);
+}
+
+.demo-disclaimer-heading {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--leading-tight);
+  color: var(--text-primary);
+  margin-block: 0 6px;
+}
+
+.demo-disclaimer p {
+  margin-block: 0 8px;
+}
+
+.demo-disclaimer p:last-child {
+  margin-block-end: 0;
+}
+
+.demo-disclaimer strong {
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
