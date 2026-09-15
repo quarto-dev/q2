@@ -222,6 +222,7 @@ fn test_bootstrap_parity_expanded() {
     let dartsass_css = fs::read_to_string(&fixture_path).unwrap();
 
     let grass_css = compile_scss(&runtime, &bootstrap_scss, &[bootstrap_dir.clone()], false)
+        .map(|out| out.css)
         .expect("grass compilation should succeed");
 
     let report = compare_css(&grass_css, &dartsass_css);
@@ -274,6 +275,7 @@ fn test_bootstrap_parity_minified() {
     let dartsass_css = fs::read_to_string(&fixture_path).unwrap();
 
     let grass_css = compile_scss(&runtime, &bootstrap_scss, &[bootstrap_dir.clone()], true)
+        .map(|out| out.css)
         .expect("grass compilation should succeed");
 
     let report = compare_css(&grass_css, &dartsass_css);
@@ -350,7 +352,9 @@ fn test_bootswatch_themes_parity() {
         let theme_scss = assemble_theme_scss(&bootstrap_dir, &theme_path);
         let dartsass_css = fs::read_to_string(&fixture_path).unwrap();
 
-        match compile_scss(&runtime, &theme_scss, &[bootstrap_dir.clone()], false) {
+        match compile_scss(&runtime, &theme_scss, &[bootstrap_dir.clone()], false)
+            .map(|out| out.css)
+        {
             Ok(grass_css) => {
                 let report = compare_css(&grass_css, &dartsass_css);
 
@@ -421,7 +425,9 @@ fn test_all_themes_compile() {
         let theme_path = themes.join(format!("{}.scss", theme));
         let theme_scss = assemble_theme_scss(&bootstrap_dir, &theme_path);
 
-        match compile_scss(&runtime, &theme_scss, &[bootstrap_dir.clone()], false) {
+        match compile_scss(&runtime, &theme_scss, &[bootstrap_dir.clone()], false)
+            .map(|out| out.css)
+        {
             Ok(css) => {
                 // Basic sanity check - compiled CSS should be substantial
                 assert!(

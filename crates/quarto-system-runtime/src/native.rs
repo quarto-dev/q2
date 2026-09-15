@@ -21,8 +21,8 @@ use std::process::{Command, Stdio};
 
 use crate::sass_native;
 use crate::traits::{
-    CommandOutput, PathKind, PathMetadata, RuntimeError, RuntimeResult, SystemRuntime, TempDir,
-    XdgDirKind,
+    CommandOutput, PathKind, PathMetadata, RuntimeError, RuntimeResult, SassOutput, SystemRuntime,
+    TempDir, XdgDirKind,
 };
 
 /// Native runtime with full system access.
@@ -412,7 +412,7 @@ impl SystemRuntime for NativeRuntime {
         scss: &str,
         load_paths: &[PathBuf],
         minified: bool,
-    ) -> RuntimeResult<String> {
+    ) -> RuntimeResult<SassOutput> {
         sass_native::compile_scss(self, scss, load_paths, minified)
     }
 
@@ -1036,7 +1036,7 @@ mod tests {
         let result = pollster::block_on(rt.compile_sass(scss, &[], false));
 
         assert!(result.is_ok());
-        let css = result.unwrap();
+        let css = result.unwrap().css;
         assert!(css.contains("body"));
         assert!(css.contains("#333"));
     }
@@ -1049,7 +1049,7 @@ mod tests {
         let result = pollster::block_on(rt.compile_sass(scss, &[], true));
 
         assert!(result.is_ok());
-        let css = result.unwrap();
+        let css = result.unwrap().css;
         // Minified output should not have newlines between selectors and braces
         assert!(css.contains(".container{") || css.contains(".container {"));
     }
