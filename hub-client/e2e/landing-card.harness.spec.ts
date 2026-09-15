@@ -138,7 +138,7 @@ for (const theme of THEMES) {
 
     // A left-aligned block has at least one line starting on the
     // content edge; a centered one has none.
-    for (const selector of ['.ls-what', '.ls-footnote']) {
+    for (const selector of ['.ls-what', '.ls-footnote', '.ls-disclaimer']) {
       const { left } = await inkGaps(page, selector, 'leftmost-line');
       expect(
         left,
@@ -212,4 +212,43 @@ for (const theme of THEMES) {
     expect(linkSize, 'the link is not set at the description size').toBe(paraSize);
   });
 
+  test(`landing page (${theme}): the disclaimer is visible and on the type scale`, async ({
+    page,
+  }) => {
+    await bootHarness(page, 'landing', '.ls-card', theme);
+
+    // The demo disclaimer (bd-m6u9qu3u) sits above the sign-in button,
+    // always open — a notice about what not to enter must not need a
+    // click. ~120 words at the footnote's --text-2xs would be unreadable,
+    // so it is one step up; both sizes are pinned to the scale, not to
+    // pixels, for the same reason as the headline.
+    const disclaimer = page.locator('.ls-disclaimer');
+    await expect(disclaimer).toBeVisible();
+    await expect(disclaimer.locator('p').first()).toBeVisible();
+
+    const { bodySize, bodyStep, headingSize, headingStep } = await disclaimer.evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return {
+        bodySize: getComputedStyle(el.querySelector('p')!).fontSize,
+        bodyStep: cs.getPropertyValue('--text-xs').trim(),
+        headingSize: getComputedStyle(el.querySelector('h2')!).fontSize,
+        headingStep: cs.getPropertyValue('--text-sm').trim(),
+      };
+    });
+    expect(bodyStep, 'the type scale has no --text-xs step').not.toBe('');
+    expect(bodySize, `the disclaimer body is off the type scale (${bodySize})`).toBe(bodyStep);
+    expect(headingSize, `the disclaimer heading is off the type scale (${headingSize})`).toBe(
+      headingStep,
+    );
+
+    // Above the button, per the card's "nothing competes with the CTA
+    // for last word" rule.
+    const disclaimerBottom = await disclaimer.evaluate((el) => el.getBoundingClientRect().bottom);
+    const actionsTop = await page
+      .locator('.ls-actions')
+      .evaluate((el) => el.getBoundingClientRect().top);
+    expect(disclaimerBottom, 'the disclaimer sits below the sign-in button').toBeLessThanOrEqual(
+      actionsTop,
+    );
+  });
 }

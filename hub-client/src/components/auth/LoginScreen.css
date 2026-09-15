@@ -113,9 +113,48 @@
   font-size: var(--text-2xs);
   line-height: var(--leading-base);
   color: var(--text-secondary);
+  /* The disclaimer follows directly; the two read as one "conditions"
+     block under the hairline, so this gap is a paragraph gap, not the
+     section gap the CTA gets. */
+  margin: 0 0 14px;
+}
+
+/* ---- demo disclaimer (bd-m6u9qu3u) ----
+
+   ~120 words, so one step up from the footnote's --text-2xs: at 10px
+   that much prose is unreadable, and the notice exists to be read. The
+   bold leads and the heading take --text-primary so the two things a
+   skimmer must catch ("use test data", "not protected") stand out from
+   the body at a glance. */
+
+.ls-disclaimer {
+  font-size: var(--text-xs);
+  line-height: var(--leading-base);
+  color: var(--text-secondary);
   /* Enough air below that the centered CTA reads as its own footer
      group rather than an unexplained alignment change mid-block. */
-  margin: 0 0 22px;
+  margin-block: 0 22px;
+}
+
+.ls-disclaimer-heading {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--leading-tight);
+  color: var(--text-primary);
+  margin-block: 0 6px;
+}
+
+.ls-disclaimer p {
+  margin-block: 0 8px;
+}
+
+.ls-disclaimer p:last-child {
+  margin-block-end: 0;
+}
+
+.ls-disclaimer strong {
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
 }
 
 /* The themed blue accent: --accent-primary is the brand orange, and the

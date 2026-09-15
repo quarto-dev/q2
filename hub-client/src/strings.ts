@@ -146,6 +146,39 @@ export const landing = {
     'Share a link and your team can collaborate on the same project in real time.',
   inviteOnly: 'quarto-hub.com is experimental and currently available by invite only.',
   learnMore: 'Learn more about Quarto Hub',
+  /**
+   * The demo disclaimer (bd-m6u9qu3u): what not to enter, and that
+   * nothing entered is protected or returned. Shown above the sign-in
+   * button in every state of the landing page.
+   *
+   * Structured rather than written as markdown: the landing page renders
+   * before the WASM markdown renderer (the About tab's) exists, and the
+   * formatting is fixed anyway — a heading, then two paragraphs that each
+   * open with a bold single-sentence lead. LoginScreen builds the markup
+   * from this shape, so each `lead` must stay one sentence and end with
+   * its own period; the component joins `lead` and `body` with a space.
+   */
+  disclaimer: {
+    heading: 'Disclaimer',
+    useTestData: {
+      lead: 'Use test data, not real data.',
+      body:
+        'This is a live demo of a product still in development. ' +
+        'Please don’t enter anything sensitive, confidential, or proprietary — ' +
+        'no customer data, credentials, internal business info, or anyone else’s ' +
+        'personal information. If you wouldn’t post it on a public forum, ' +
+        'don’t put it here.',
+    },
+    notProtected: {
+      lead: 'Anything you enter is not protected, and we won’t return it.',
+      body:
+        'Data you share during this demo may be logged, cached, or otherwise ' +
+        'retained by Posit and any third-party services the demo relies on. ' +
+        'We don’t guarantee confidentiality, security, or deletion, and we can’t ' +
+        'retrieve or return data you enter once the demo session ends. ' +
+        'Enter information only if you’re comfortable with that.',
+    },
+  },
 } as const;
 
 /** The three notification tiers (see components/notifications.css). */
