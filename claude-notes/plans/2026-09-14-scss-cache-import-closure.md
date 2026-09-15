@@ -3,7 +3,7 @@
 **Date:** 2026-09-14
 **Braid:** bd-m3hga05o (P2, bug, label `perf`)
 **Branch:** `braid/bd-m3hga05o-scss-cache-import-closure` in the room-2 main checkout (based on `main` @ `35bc11415`; topic branch, no worktree, per user request)
-**Status:** Design agreed (option R, 2026-09-14). Awaiting go-ahead on the base-branch and remaining recommendations before Phase 0.
+**Status:** Implemented on the branch (2026-09-15); Phase 2 measurement partly done. Rebased onto `main` after PR #679 merged (`f0bcb9538`).
 
 ## Triage verdict
 
@@ -278,60 +278,103 @@ against `main`, four commits, full verify green per its description.
 
 ### Phase 0 — tests first (each must fail before its fix)
 
-- [ ] Rebase onto `origin/bugfix/bd-79c4do6g-scss-cache-key-path`;
-      verify green at the new base.
-- [ ] `sass_native.rs`: `compile_scss` reports the partial it loaded
+- [x] Rebase — onto `origin/main` instead (PR #679 had merged);
+      `cargo xtask verify --skip-hub-build` green at the new base.
+- [x] `sass_native.rs`: `compile_scss` reports the partial it loaded
       through the runtime and does **not** report embedded Bootstrap
       files (fixture: theme importing `_colors` from a temp dir, with
       `@import "bootstrap/…"` alongside).
-- [ ] `sass.test.ts` (`ts-packages/wasm-js-bridge`): the bridge result
+- [x] `sass.test.ts` (`ts-packages/wasm-js-bridge`): the bridge result
       carries the VFS files dart-sass loaded, mapped to `/project/…`
       paths; embedded resource URLs excluded.
-- [ ] `compile_theme_css.rs` unit: envelope encode/decode round-trip;
+- [x] `compile_theme_css.rs` unit: envelope encode/decode round-trip;
       an undecodable (legacy) value reads as a miss.
-- [ ] `compile_theme_css.rs` unit, the bug: custom theme importing a
+- [x] `compile_theme_css.rs` unit, the bug: custom theme importing a
       partial through a mock runtime; second lookup with the partial's
       contents changed must miss; unchanged must hit; a *removed*
       partial must miss.
-- [ ] `tests/integration/sass_cache_key.rs` (extend #679's file):
+- [x] `tests/integration/sass_cache_key.rs` (extend #679's file):
       three-depth site whose theme imports a partial — render, edit the
       partial, render again; the emitted theme CSS carries the new
       colour and `perf.sass` shows `compiles=1 stale=1`; a third render
       with nothing edited shows `compiles=0`.
-- [ ] Update the comment on
+- [x] Update the comment on
       `test_cache_key_distinct_files_with_same_content_stay_distinct`.
 
 ### Phase 1 — core change
 
-- [ ] `SassOutput` type + `compile_sass` signature change across
+- [x] `SassOutput` type + `compile_sass` signature change across
       `traits.rs`, `native.rs`, `wasm.rs`; `RuntimeFs` records reads.
-- [ ] `sass.js` / `sass.d.ts`: return `{css, loadedUrls}`; `wasm.rs`
+- [x] `sass.js` / `sass.d.ts`: return `{css, loadedUrls}`; `wasm.rs`
       unpacks and maps URLs to VFS paths.
-- [ ] `quarto-sass/compile.rs`: propagate `loaded_files` through the
+- [x] `quarto-sass/compile.rs`: propagate `loaded_files` through the
       `compile_with_doc_vars` chain; other callers take `.css`.
-- [ ] `compile_theme_css.rs`: envelope encode on `cache_set_lru`,
+- [x] `compile_theme_css.rs`: envelope encode on `cache_set_lru`,
       decode + manifest validation on `cache_get_lru`; `stale` counter;
       namespace version stamp gains a format tag; `cache_key` doc
       comment describes the two levels.
 
 ### Phase 2 — measure
 
-- [ ] Fixture: the three-render sequence above via `q2 render`, output
+- [x] Fixture: the three-render sequence above via `q2 render`, output
       inspected, recorded here.
 - [ ] Connect docs (posit-docs theme imports one partial): cold and
       warm serial with `QUARTO_PERF_STATS=1`; warm wall must not
       regress measurably against #679's 6.22 s (one extra small read +
       hash per document per variant).
-- [ ] hub-client: edit an imported partial in a project with a custom
-      theme and confirm the preview updates (browser session, or say
-      explicitly that it was not verified).
+- [x] hub-client (WASM path): verified at the Node level, not in a
+      browser. `hub-client/src/services/sassCachePartials.wasm.test.ts`
+      drives the real WASM module + dart-sass bridge + the cache
+      bridge's ephemeral in-memory mode, spies on `jsCompileSass`, and
+      asserts: unchanged inputs → no new compile; edited `_colors.scss`
+      → exactly one recompile and the new colour in the linked theme
+      CSS. With the bridge's `loadedUrls` blanked (the old behaviour)
+      the test fails at the edited-partial step. **A browser check
+      through `q2 preview` was attempted and could not run:** the
+      preview's project sync never puts `.scss` files into the VFS, so
+      the SPA fails with Q-14-4 before any cache code runs (`q2 render`
+      of the same project works). Filed as **bd-cmefgkq8**
+      (discovered-from this one); cause not yet located.
 
 ### Phase 3 — notes
 
-- [ ] `cache_lru.rs` module docs: values in the `sass` namespace are
+- [x] `cache_lru.rs` module docs: values in the `sass` namespace are
       enveloped; `cache_versioning` note on the format tag.
 - [ ] Strand comment + close; note the negative-dependency gap as a
       follow-up strand if the user wants it tracked.
+
+## End-to-end verification (fixture, after the fix, 2026-09-15)
+
+From `claude-notes/plans/scss-cache-import-closure-investigation/fixture/`,
+through the real binary, output inspected:
+
+```bash
+rm -rf .quarto/cache/sass _site
+QUARTO_JOBS=1 QUARTO_PERF_STATS=1 cargo run -q --bin q2 -- render .
+sed -i '' 's/#123456/#abcdef/' _colors.scss            # edit the PARTIAL only
+QUARTO_JOBS=1 QUARTO_PERF_STATS=1 cargo run -q --bin q2 -- render .
+QUARTO_JOBS=1 QUARTO_PERF_STATS=1 cargo run -q --bin q2 -- render .
+```
+
+| render                    | `perf.sass`                          | `index.html` links        | `.repro` in linked CSS | cache entries |
+|---------------------------|--------------------------------------|---------------------------|------------------------|--------------:|
+| cold                      | `hits=2 compiles=1 uncached=0 stale=0` | `…-1dea42e453982763.css` | `color:#123456`        |             1 |
+| `_colors.scss` edited     | `hits=2 compiles=1 uncached=0 stale=1` | `…-6b75e5a4dec17318.css` | `color:#abcdef`        |             1 |
+| warm, nothing edited      | `hits=3 compiles=0 uncached=0 stale=0` | same                     | same                   |             1 |
+
+Before the fix the second row read `hits=3 compiles=0` and still linked
+the first fingerprint (see "Repro at HEAD"). The one cache entry after
+the edit is the same key overwritten; its first two lines are
+
+```
+q2-sass-cache-v1
+[{"path":"_colors.scss","sha256":"b95decd7…"}]
+```
+
+Tests written first and seen failing at HEAD: the integration test
+(`editing_an_imported_partial_recompiles_the_theme`, stale CSS
+assertion), the JS bridge test (result was a string), and the
+new-API unit tests (compile errors). All pass after the change.
 
 ## Risks / tradeoffs
 

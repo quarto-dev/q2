@@ -41,6 +41,7 @@ use crate::config::ThemeConfig;
 use crate::error::SassError;
 use crate::resources::default_load_paths;
 use crate::themes::{ThemeContext, process_theme_specs};
+pub use quarto_system_runtime::SassOutput;
 
 // Native-only imports
 #[cfg(not(target_arch = "wasm32"))]
@@ -150,12 +151,16 @@ pub fn assemble_theme_scss(
 pub fn compile_theme_css(
     config: &ThemeConfig,
     context: &ThemeContext<'_>,
-) -> Result<String, SassError> {
+) -> Result<SassOutput, SassError> {
     use quarto_system_runtime::sass_native::compile_scss_with_embedded;
 
     if !config.has_themes() && config.highlight_style.is_none() {
         // No custom themes and default palette - use default Bootstrap
-        return compile_default_css(context.runtime(), config.minified);
+        // (built-in layers only: nothing is loaded through the runtime).
+        return compile_default_css(context.runtime(), config.minified).map(|css| SassOutput {
+            css,
+            loaded_files: Vec::new(),
+        });
     }
 
     let (scss, load_paths) = assemble_theme_scss(config, context)?;
@@ -202,7 +207,7 @@ pub fn compile_with_doc_vars(
     config: &ThemeConfig,
     context: &ThemeContext<'_>,
     doc_vars: &crate::SassLayer,
-) -> Result<String, SassError> {
+) -> Result<SassOutput, SassError> {
     use crate::bundle::{
         load_copy_code_layer, load_embed_example_layer, load_highlight_layer, load_listing_layer,
         load_title_block_layer,
@@ -225,7 +230,10 @@ pub fn compile_with_doc_vars(
         // assembly so its palette layer composes (and so the OnceLock
         // cache never holds a non-default palette).
         if config.title_block_layer && config.highlight_style.is_none() {
-            return compile_default_css(context.runtime(), config.minified);
+            return compile_default_css(context.runtime(), config.minified).map(|css| SassOutput {
+                css,
+                loaded_files: Vec::new(),
+            });
         }
     }
 
@@ -324,7 +332,7 @@ pub fn compile_css_from_config(
     let context = ThemeContext::new(document_dir.to_path_buf(), runtime);
 
     // Compile
-    compile_theme_css(&theme_config, &context)
+    compile_theme_css(&theme_config, &context).map(|out| out.css)
 }
 
 /// Compile the default Bootstrap CSS.
@@ -398,7 +406,8 @@ pub fn compile_default_css(
     let css = compile_scss_with_embedded(runtime, &resources, &scss, &load_paths, minified)
         .map_err(|e| SassError::CompilationFailed {
             message: e.to_string(),
-        })?;
+        })?
+        .css;
 
     // Cache minified result
     if minified {
@@ -432,9 +441,11 @@ pub fn compile_reveal_theme_css(
     use quarto_system_runtime::sass_native::compile_scss;
 
     let scss = crate::bundle::assemble_reveal_scss(theme_layers)?;
-    compile_scss(runtime, &scss, load_paths, minified).map_err(|e| SassError::CompilationFailed {
-        message: e.to_string(),
-    })
+    compile_scss(runtime, &scss, load_paths, minified)
+        .map(|out| out.css)
+        .map_err(|e| SassError::CompilationFailed {
+            message: e.to_string(),
+        })
 }
 
 /// Clear the default CSS cache.
@@ -472,10 +483,16 @@ pub fn clear_default_css_cache() {
 pub async fn compile_theme_css(
     config: &ThemeConfig,
     context: &ThemeContext<'_>,
-) -> Result<String, SassError> {
+) -> Result<SassOutput, SassError> {
     if !config.has_themes() && config.highlight_style.is_none() {
         // No custom themes and default palette - use default Bootstrap
-        return compile_default_css(context.runtime(), config.minified).await;
+        // (built-in layers only: nothing is loaded through the runtime).
+        return compile_default_css(context.runtime(), config.minified)
+            .await
+            .map(|css| SassOutput {
+                css,
+                loaded_files: Vec::new(),
+            });
     }
 
     let (scss, load_paths) = assemble_theme_scss(config, context)?;
@@ -497,7 +514,7 @@ pub async fn compile_with_doc_vars(
     config: &ThemeConfig,
     context: &ThemeContext<'_>,
     doc_vars: &crate::SassLayer,
-) -> Result<String, SassError> {
+) -> Result<SassOutput, SassError> {
     use crate::bundle::{
         load_copy_code_layer, load_embed_example_layer, load_highlight_layer, load_listing_layer,
         load_title_block_layer,
@@ -514,7 +531,12 @@ pub async fn compile_with_doc_vars(
         // See the native variant: a `highlight-style:` needs a direct
         // assembly so its palette layer composes.
         if config.title_block_layer && config.highlight_style.is_none() {
-            return compile_default_css(context.runtime(), config.minified).await;
+            return compile_default_css(context.runtime(), config.minified)
+                .await
+                .map(|css| SassOutput {
+                    css,
+                    loaded_files: Vec::new(),
+                });
         }
     }
 
@@ -573,7 +595,9 @@ pub async fn compile_css_from_config(
     let context = ThemeContext::new(document_dir.to_path_buf(), runtime);
 
     // Compile
-    compile_theme_css(&theme_config, &context).await
+    compile_theme_css(&theme_config, &context)
+        .await
+        .map(|out| out.css)
 }
 
 /// Compile the default Bootstrap CSS (WASM version).
@@ -641,7 +665,8 @@ pub async fn compile_default_css(
         .await
         .map_err(|e| SassError::CompilationFailed {
             message: e.to_string(),
-        })?;
+        })?
+        .css;
 
     // Cache minified result
     if minified {
@@ -667,6 +692,7 @@ pub async fn compile_reveal_theme_css(
     runtime
         .compile_sass(&scss, load_paths, minified)
         .await
+        .map(|out| out.css)
         .map_err(|e| SassError::CompilationFailed {
             message: e.to_string(),
         })
@@ -1281,7 +1307,7 @@ mod tests {
         let config = ThemeConfig::default_bootstrap();
         let context = ThemeContext::new(PathBuf::from("/doc"), &runtime);
 
-        let css = compile_theme_css(&config, &context).unwrap();
+        let css = compile_theme_css(&config, &context).unwrap().css;
 
         // Should be Bootstrap CSS
         assert!(css.contains(".btn"));
@@ -1295,7 +1321,7 @@ mod tests {
         let config = ThemeConfig::new(themes, true);
         let context = ThemeContext::new(PathBuf::from("/doc"), &runtime);
 
-        let css = compile_theme_css(&config, &context).unwrap();
+        let css = compile_theme_css(&config, &context).unwrap().css;
 
         // Should have Bootstrap classes
         assert!(css.contains(".btn"));
@@ -1327,7 +1353,7 @@ mod tests {
         let config = ThemeConfig::new(themes, true);
         let context = ThemeContext::new(PathBuf::from("/doc"), &runtime);
 
-        let css = compile_theme_css(&config, &context).unwrap();
+        let css = compile_theme_css(&config, &context).unwrap().css;
         assert!(
             css.contains(".quarto-listing"),
             "themed CSS must contain .quarto-listing rules from quarto-listing.scss"
@@ -1357,7 +1383,7 @@ mod tests {
             let themes = vec![ThemeSpec::parse("darkly").unwrap()];
             let config = ThemeConfig::new(themes, false);
             let context = ThemeContext::new(PathBuf::from("/doc"), &runtime);
-            compile_theme_css(&config, &context).unwrap()
+            compile_theme_css(&config, &context).unwrap().css
         };
         assert!(
             darkly_css.contains("border: solid #6c757d 1px"),
@@ -1369,7 +1395,7 @@ mod tests {
             let themes = vec![ThemeSpec::parse("cosmo").unwrap()];
             let config = ThemeConfig::new(themes, false);
             let context = ThemeContext::new(PathBuf::from("/doc"), &runtime);
-            compile_theme_css(&config, &context).unwrap()
+            compile_theme_css(&config, &context).unwrap().css
         };
         assert!(
             !cosmo_css.contains("border: solid #6c757d 1px"),
@@ -1391,7 +1417,7 @@ mod tests {
         let themes = vec![ThemeSpec::parse("cosmo").unwrap()];
         let config = ThemeConfig::new(themes, false);
         let context = ThemeContext::new(PathBuf::from("/doc"), &runtime);
-        let css = compile_theme_css(&config, &context).unwrap();
+        let css = compile_theme_css(&config, &context).unwrap().css;
         assert!(
             !css.contains("colorToRGBA("),
             "colorToRGBA() must be evaluated, not emitted literally"
@@ -1415,7 +1441,7 @@ mod tests {
             location: None,
         });
         let context = ThemeContext::new(PathBuf::from("/doc"), &runtime);
-        let css = compile_theme_css(&config, &context).unwrap();
+        let css = compile_theme_css(&config, &context).unwrap().css;
         assert!(
             css.contains("#d91e18"),
             "a11y-light keyword color must be present"
@@ -1437,7 +1463,7 @@ mod tests {
             location: None,
         });
         let context = ThemeContext::new(PathBuf::from("/doc"), &runtime);
-        let css = compile_theme_css(&config, &context).unwrap();
+        let css = compile_theme_css(&config, &context).unwrap().css;
         assert!(
             css.contains("#ffa07a"),
             "a11y-dark keyword color must be present"
@@ -1459,7 +1485,7 @@ mod tests {
             location: None,
         });
         let context = ThemeContext::new(PathBuf::from("/doc"), &runtime);
-        let css = compile_theme_css(&config, &context).unwrap();
+        let css = compile_theme_css(&config, &context).unwrap().css;
         assert!(
             css.contains("#859900"),
             "unknown style must fall back to the default (solarized) palette"
@@ -1476,7 +1502,7 @@ mod tests {
         let config = ThemeConfig::new(themes, true);
         let context = ThemeContext::new(PathBuf::from("/doc"), &runtime);
 
-        let css = compile_theme_css(&config, &context).unwrap();
+        let css = compile_theme_css(&config, &context).unwrap().css;
 
         // Should compile successfully with merged themes
         assert!(css.contains(".btn"));
@@ -1558,7 +1584,7 @@ mod tests {
         let config = ThemeConfig::new(themes, true);
         let context = ThemeContext::new(fixture_dir, &runtime);
 
-        let css = compile_theme_css(&config, &context).unwrap();
+        let css = compile_theme_css(&config, &context).unwrap().css;
 
         // Should have Bootstrap classes
         assert!(css.contains(".btn"));
@@ -1580,7 +1606,7 @@ mod tests {
         let config = ThemeConfig::new(themes, true);
         let context = ThemeContext::new(fixture_dir, &runtime);
 
-        let css = compile_theme_css(&config, &context).unwrap();
+        let css = compile_theme_css(&config, &context).unwrap().css;
 
         // Should have Bootstrap classes
         assert!(css.contains(".btn"));
@@ -1641,8 +1667,9 @@ mod tests {
         let doc_vars = parse_layer_from_parts("", "$sidebar-border: true;", "", "", "");
         let scss = assemble_with_user_layers(&[doc_vars]).unwrap();
 
-        let css =
-            compile_scss_with_embedded(&runtime, &resources, &scss, &load_paths, true).unwrap();
+        let css = compile_scss_with_embedded(&runtime, &resources, &scss, &load_paths, true)
+            .unwrap()
+            .css;
 
         // The rule should fire. Match on the selector + the property so
         // we don't hinge the test on the exact color (which inherits from

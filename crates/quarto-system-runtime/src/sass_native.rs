@@ -10,13 +10,14 @@
 //! - `compile_scss`: High-level function for SCSS compilation
 //! - Support for embedded resources (Bootstrap SCSS) via `EmbeddedResourceProvider`
 
+use std::cell::RefCell;
 use std::fmt::Debug;
 use std::io;
 use std::path::{Path, PathBuf};
 
 use grass::{Options, OutputStyle};
 
-use crate::traits::{RuntimeError, RuntimeResult, SystemRuntime};
+use crate::traits::{RuntimeError, RuntimeResult, SassOutput, SystemRuntime};
 
 /// Trait for providing embedded SCSS resources.
 ///
@@ -42,10 +43,20 @@ pub trait EmbeddedResourceProvider: Send + Sync {
 ///
 /// The adapter checks embedded resources first (if provided), then falls
 /// back to the runtime for file access.
+///
+/// Every file read that reaches the runtime is recorded (bd-m3hga05o):
+/// grass resolves `@import` / `@use` through this adapter, so after a
+/// compile [`RuntimeFs::take_loaded`] is exactly the import closure the
+/// compiled-SCSS cache needs to validate on its next lookup. Embedded
+/// hits are not recorded — they never change between builds without
+/// the resource hash in the cache key changing too.
 pub struct RuntimeFs<'a> {
     runtime: &'a dyn SystemRuntime,
     /// Optional embedded resources (e.g., Bootstrap SCSS)
     embedded: Option<&'a dyn EmbeddedResourceProvider>,
+    /// Runtime-resolved files, each once, in first-read order.
+    /// `RefCell` because `grass::Fs` takes `&self`.
+    loaded: RefCell<Vec<PathBuf>>,
 }
 
 impl<'a> RuntimeFs<'a> {
@@ -54,6 +65,7 @@ impl<'a> RuntimeFs<'a> {
         Self {
             runtime,
             embedded: None,
+            loaded: RefCell::new(Vec::new()),
         }
     }
 
@@ -68,6 +80,20 @@ impl<'a> RuntimeFs<'a> {
         Self {
             runtime,
             embedded: Some(embedded),
+            loaded: RefCell::new(Vec::new()),
+        }
+    }
+
+    /// The files read through the runtime so far (deduplicated, in
+    /// first-read order), leaving the adapter's record empty.
+    pub fn take_loaded(&self) -> Vec<PathBuf> {
+        std::mem::take(&mut *self.loaded.borrow_mut())
+    }
+
+    fn record(&self, path: &Path) {
+        let mut loaded = self.loaded.borrow_mut();
+        if !loaded.iter().any(|p| p == path) {
+            loaded.push(path.to_path_buf());
         }
     }
 }
@@ -112,9 +138,12 @@ impl grass::Fs for RuntimeFs<'_> {
             return Ok(content.to_vec());
         }
         // Fall back to runtime
-        self.runtime
+        let bytes = self
+            .runtime
             .file_read(path)
-            .map_err(|e| io::Error::other(e.to_string()))
+            .map_err(|e| io::Error::other(e.to_string()))?;
+        self.record(path);
+        Ok(bytes)
     }
 }
 
@@ -129,15 +158,26 @@ impl grass::Fs for RuntimeFs<'_> {
 ///
 /// # Returns
 ///
-/// Compiled CSS string on success, `RuntimeError::SassError` on failure.
+/// The compiled CSS and the runtime files grass loaded for it (see
+/// [`SassOutput`]); `RuntimeError::SassError` on failure.
 pub fn compile_scss(
     runtime: &dyn SystemRuntime,
     scss: &str,
     load_paths: &[PathBuf],
     minified: bool,
-) -> RuntimeResult<String> {
+) -> RuntimeResult<SassOutput> {
     let fs = RuntimeFs::new(runtime);
+    compile_through(&fs, scss, load_paths, minified)
+}
 
+/// Run grass over `fs` and pair the CSS with the files the adapter saw
+/// go through the runtime.
+fn compile_through(
+    fs: &RuntimeFs<'_>,
+    scss: &str,
+    load_paths: &[PathBuf],
+    minified: bool,
+) -> RuntimeResult<SassOutput> {
     let style = if minified {
         OutputStyle::Compressed
     } else {
@@ -145,11 +185,16 @@ pub fn compile_scss(
     };
 
     let options = Options::default()
-        .fs(&fs)
+        .fs(fs)
         .load_paths(load_paths)
         .style(style);
 
-    grass::from_string(scss, &options).map_err(|e| RuntimeError::SassError(e.to_string()))
+    let css =
+        grass::from_string(scss, &options).map_err(|e| RuntimeError::SassError(e.to_string()))?;
+    Ok(SassOutput {
+        css,
+        loaded_files: fs.take_loaded(),
+    })
 }
 
 /// Compile SCSS source to CSS using grass with embedded resources.
@@ -167,28 +212,18 @@ pub fn compile_scss(
 ///
 /// # Returns
 ///
-/// Compiled CSS string on success, `RuntimeError::SassError` on failure.
+/// The compiled CSS and the files grass loaded **through the runtime**
+/// (embedded hits excluded; see [`SassOutput`]); `RuntimeError::SassError`
+/// on failure.
 pub fn compile_scss_with_embedded(
     runtime: &dyn SystemRuntime,
     embedded: &dyn EmbeddedResourceProvider,
     scss: &str,
     load_paths: &[PathBuf],
     minified: bool,
-) -> RuntimeResult<String> {
+) -> RuntimeResult<SassOutput> {
     let fs = RuntimeFs::with_embedded(runtime, embedded);
-
-    let style = if minified {
-        OutputStyle::Compressed
-    } else {
-        OutputStyle::Expanded
-    };
-
-    let options = Options::default()
-        .fs(&fs)
-        .load_paths(load_paths)
-        .style(style);
-
-    grass::from_string(scss, &options).map_err(|e| RuntimeError::SassError(e.to_string()))
+    compile_through(&fs, scss, load_paths, minified)
 }
 
 #[cfg(test)]
@@ -201,7 +236,7 @@ mod tests {
         let runtime = NativeRuntime::new();
         let scss = "$primary: #007bff; .btn { color: $primary; }";
 
-        let css = compile_scss(&runtime, scss, &[], false).unwrap();
+        let css = compile_scss(&runtime, scss, &[], false).unwrap().css;
 
         assert!(css.contains(".btn"));
         assert!(css.contains("#007bff"));
@@ -212,7 +247,7 @@ mod tests {
         let runtime = NativeRuntime::new();
         let scss = "$primary: blue;\n\n.btn {\n  color: $primary;\n}";
 
-        let css = compile_scss(&runtime, scss, &[], true).unwrap();
+        let css = compile_scss(&runtime, scss, &[], true).unwrap().css;
 
         // Minified output should not have extra whitespace
         assert!(!css.contains("\n\n"));
@@ -233,7 +268,7 @@ mod tests {
             }
         "#;
 
-        let css = compile_scss(&runtime, scss, &[], false).unwrap();
+        let css = compile_scss(&runtime, scss, &[], false).unwrap().css;
 
         assert!(css.contains(".box"));
         assert!(css.contains("100px"));
@@ -253,7 +288,7 @@ mod tests {
             }
         "#;
 
-        let css = compile_scss(&runtime, scss, &[], false).unwrap();
+        let css = compile_scss(&runtime, scss, &[], false).unwrap().css;
 
         assert!(css.contains(".container"));
         assert!(css.contains("display: flex"));
@@ -289,11 +324,80 @@ mod tests {
             }
         "#;
 
-        let css = compile_scss(&runtime, scss, &[], false).unwrap();
+        let css = compile_scss(&runtime, scss, &[], false).unwrap().css;
 
         assert!(css.contains(".nav"));
         assert!(css.contains(".nav .item"));
         assert!(css.contains(".nav .item:hover"));
+    }
+
+    // ── bd-m3hga05o: the compile reports the files it loaded ──────────
+
+    /// Write `_colors.scss` into a temp dir; returns the guard and the
+    /// canonical dir.
+    fn partial_dir() -> (tempfile::TempDir, PathBuf) {
+        let temp = tempfile::TempDir::new().unwrap();
+        let dir = temp.path().canonicalize().unwrap();
+        std::fs::write(dir.join("_colors.scss"), "$c: #123457;\n").unwrap();
+        (temp, dir)
+    }
+
+    /// Every file grass resolves through the runtime is reported, once,
+    /// at the path grass opened it by — the import closure the sass
+    /// cache validates on its next lookup.
+    #[test]
+    fn compile_scss_reports_runtime_files_it_loaded() {
+        let runtime = NativeRuntime::new();
+        let (_guard, dir) = partial_dir();
+        // Imported twice: listed once.
+        let scss = "@import \"colors\";\n@import \"colors\";\n.x { color: $c; }";
+
+        let out = compile_scss(&runtime, scss, std::slice::from_ref(&dir), false).unwrap();
+
+        assert!(out.css.contains("#123457"));
+        assert_eq!(out.loaded_files, vec![dir.join("_colors.scss")]);
+    }
+
+    #[test]
+    fn compile_scss_without_imports_reports_no_files() {
+        let runtime = NativeRuntime::new();
+        let out = compile_scss(&runtime, ".x { color: red; }", &[], false).unwrap();
+        assert!(out.loaded_files.is_empty());
+    }
+
+    /// Embedded resources are served without touching the runtime and
+    /// must not appear in the report: the cache key already covers
+    /// them (`SCSS_RESOURCES_HASH`), and the runtime cannot re-read
+    /// them to validate a manifest.
+    #[test]
+    fn compile_scss_with_embedded_reports_only_runtime_files() {
+        struct OneEmbedded;
+        impl EmbeddedResourceProvider for OneEmbedded {
+            fn is_file(&self, path: &Path) -> bool {
+                path == Path::new("/__test_resources__/_vars.scss")
+            }
+            fn is_dir(&self, path: &Path) -> bool {
+                path == Path::new("/__test_resources__")
+            }
+            fn read(&self, path: &Path) -> Option<&'static [u8]> {
+                self.is_file(path).then_some(b"$w: 3px;\n".as_slice())
+            }
+        }
+        let runtime = NativeRuntime::new();
+        let (_guard, dir) = partial_dir();
+        let scss = "@import \"vars\";\n@import \"colors\";\n.x { color: $c; width: $w; }";
+        let load_paths = [PathBuf::from("/__test_resources__"), dir.clone()];
+
+        let out =
+            compile_scss_with_embedded(&runtime, &OneEmbedded, scss, &load_paths, false).unwrap();
+
+        assert!(out.css.contains("3px"), "embedded import resolved");
+        assert!(out.css.contains("#123457"), "runtime import resolved");
+        assert_eq!(
+            out.loaded_files,
+            vec![dir.join("_colors.scss")],
+            "only the runtime-resolved file is reported"
+        );
     }
 
     #[test]
@@ -377,7 +481,7 @@ mod tests {
         let result = compile_scss(&runtime, &bootstrap_scss, &[bootstrap_dir.clone()], false);
 
         match result {
-            Ok(css) => {
+            Ok(SassOutput { css, .. }) => {
                 // Basic sanity checks on the compiled CSS
                 assert!(
                     css.len() > 100_000,
@@ -422,7 +526,7 @@ mod tests {
         let result = compile_scss(&runtime, &bootstrap_scss, &[bootstrap_dir.clone()], true);
 
         match result {
-            Ok(css) => {
+            Ok(SassOutput { css, .. }) => {
                 // Minified should be smaller than expanded (typically ~30% smaller)
                 assert!(
                     css.len() > 80_000,

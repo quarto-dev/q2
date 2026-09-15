@@ -58,7 +58,7 @@ fn test_compile_bootstrap_from_embedded() {
         false,
     );
 
-    match result {
+    match result.map(|out| out.css) {
         Ok(css) => {
             // Basic sanity checks on the compiled CSS
             assert!(
@@ -109,7 +109,7 @@ fn test_compile_bootstrap_from_embedded_minified() {
         true,
     );
 
-    match result {
+    match result.map(|out| out.css) {
         Ok(css) => {
             // Minified should be smaller than expanded
             assert!(

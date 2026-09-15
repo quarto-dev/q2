@@ -26,4 +26,38 @@ describe('@quarto/wasm-js-bridge sass surface', () => {
     expect(typeof sass.jsSassCompilerName).toBe('function');
     expect(typeof sass.jsCompileSass).toBe('function');
   });
+
+  // bd-m3hga05o: the compile reports the VFS files it loaded, so the
+  // Rust side can validate its sass cache against imported partials.
+  describe('jsCompileSass loaded files', () => {
+    const vfs: Record<string, string> = {
+      '/project/theme/_colors.scss': '$c: #123457;',
+      '/project/theme/_more.scss': '@import "colors"; $d: $c;',
+    };
+    const install = () =>
+      sass.setVfsCallbacks(
+        (p: string) => vfs[p] ?? null,
+        (p: string) => p in vfs,
+        () => Object.keys(vfs),
+      );
+
+    it('returns the CSS and the VFS paths dart-sass loaded, transitively', async () => {
+      install();
+      const result = await sass.jsCompileSass(
+        '@import "more"; .x { color: $d; }',
+        'compressed',
+        JSON.stringify(['/project/theme']),
+      );
+      expect(result.css).toBe('.x{color:#123457}');
+      expect(result.loadedUrls).toEqual(['/project/theme/_more.scss', '/project/theme/_colors.scss']);
+    });
+
+    it('reports no files for an import-free compile', async () => {
+      install();
+      const result = await sass.jsCompileSass('.x { color: red; }', 'compressed', '[]');
+      expect(result.css).toBe('.x{color:red}');
+      expect(result.loadedUrls).toEqual([]);
+    });
+  });
 });
+

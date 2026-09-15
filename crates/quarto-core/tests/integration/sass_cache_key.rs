@@ -28,6 +28,7 @@ use quarto_core::format::Format;
 use quarto_core::project::ProjectContext;
 use quarto_core::project::orchestrator::{ProjectPipeline, project_type_for};
 use quarto_core::render_to_file::RenderToFileOptions;
+use quarto_core::stage::stages::sass_perf_counters;
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
 fn write(path: &Path, contents: &str) {
@@ -58,6 +59,14 @@ fn render_three_depth_site() -> (TempDir, PathBuf) {
 /// `theme:` value is spliced into `format.html`; `jobs` pins the
 /// Pass-2 worker count (`1` = serial).
 fn render_site(jobs: usize, theme_yaml: &str) -> (TempDir, PathBuf) {
+    let (temp, project_dir) = write_site(theme_yaml);
+    let cache_dir = render_project(&project_dir, jobs);
+    (temp, cache_dir)
+}
+
+/// Write the three-depth website (with `custom.scss` / `custom-dark.scss`)
+/// into a fresh temp dir; returns the guard and the canonical project dir.
+fn write_site(theme_yaml: &str) -> (TempDir, PathBuf) {
     let temp = TempDir::new().unwrap();
     let project_dir = temp
         .path()
@@ -84,11 +93,17 @@ fn render_site(jobs: usize, theme_yaml: &str) -> (TempDir, PathBuf) {
             &format!("---\ntitle: \"{page}\"\n---\n\nHello from {page}.\n"),
         );
     }
+    (temp, project_dir)
+}
 
+/// Render `project_dir` through `ProjectPipeline` with a real cache dir
+/// at `<project>/.quarto/cache` (the flavor `q2 render` constructs).
+/// Re-rendering the same dir reuses that cache. Returns the cache dir.
+fn render_project(project_dir: &Path, jobs: usize) -> PathBuf {
     let cache_dir = project_dir.join(".quarto/cache");
     let runtime: Arc<dyn SystemRuntime> =
         Arc::new(NativeRuntime::with_cache_dir(cache_dir.clone()));
-    let mut project = ProjectContext::discover(&project_dir, runtime.as_ref()).unwrap();
+    let mut project = ProjectContext::discover(project_dir, runtime.as_ref()).unwrap();
     let options = RenderToFileOptions::default();
     let project_type = project_type_for(&project);
     let mut pipeline = ProjectPipeline::new(
@@ -109,7 +124,7 @@ fn render_site(jobs: usize, theme_yaml: &str) -> (TempDir, PathBuf) {
     );
     assert_eq!(summary.outputs.len(), 3, "all three pages rendered");
 
-    (temp, cache_dir)
+    cache_dir
 }
 
 #[test]
@@ -162,4 +177,77 @@ fn parallel_render_leaves_no_untracked_sass_cache_entries() {
         on_disk, indexed,
         "every sass cache entry on disk must be tracked by the LRU index"
     );
+}
+
+// ── bd-m3hga05o: imported partials are part of the cached compile ────
+
+/// The theme CSS `index.html` actually links, read from `_site`.
+fn linked_theme_css(project_dir: &Path) -> String {
+    let html = std::fs::read_to_string(project_dir.join("_site/index.html")).unwrap();
+    let start = html
+        .find("site_libs/quarto/quarto-theme-")
+        .expect("index.html links a fingerprinted theme CSS");
+    let end = start + html[start..].find(".css").unwrap() + ".css".len();
+    let href = &html[start..end];
+    std::fs::read_to_string(project_dir.join("_site").join(href))
+        .unwrap_or_else(|e| panic!("read linked theme CSS {href}: {e}"))
+}
+
+/// The cache key hashes only the top-level theme file. Editing a
+/// partial the theme `@import`s (posit-docs' `_posit-colors.scss`, the
+/// documented way to split a custom theme) used to serve the previous
+/// compile from `.quarto/cache/sass` until the user deleted the cache
+/// by hand. The second render must emit the partial's new colour — and
+/// under the *same* key, so the cache still holds one entry.
+#[test]
+fn editing_an_imported_partial_recompiles_the_theme() {
+    let (_temp, project_dir) = write_site("theme: [custom.scss]");
+    write(
+        &project_dir.join("custom.scss"),
+        "/*-- scss:defaults --*/\n@import \"partial\";\n\n/*-- scss:rules --*/\n.partial-guard { color: $partial-fg; }\n",
+    );
+    write(
+        &project_dir.join("_partial.scss"),
+        "$partial-fg: #123457;\n",
+    );
+
+    let cache_dir = render_project(&project_dir, 1);
+    assert!(
+        linked_theme_css(&project_dir).contains("#123457"),
+        "first render carries the partial's colour"
+    );
+    let after_first = sass_perf_counters();
+    assert_eq!(after_first.compiles, 1, "serial cold render compiles once");
+    assert_eq!(after_first.stale, 0);
+
+    write(
+        &project_dir.join("_partial.scss"),
+        "$partial-fg: #abcdef;\n",
+    );
+    render_project(&project_dir, 1);
+    let css = linked_theme_css(&project_dir);
+    assert!(
+        css.contains("#abcdef"),
+        "editing the imported partial must recompile the theme; index.html still links stale CSS"
+    );
+    assert!(!css.contains("#123457"));
+    assert_eq!(
+        sass_cache_entries(&cache_dir).len(),
+        1,
+        "the top-level key is unchanged, so the recompile overwrites the one entry"
+    );
+    let after_edit = sass_perf_counters();
+    assert_eq!(
+        after_edit.stale, 1,
+        "the recompile is a stale-manifest miss, not a key miss"
+    );
+    assert_eq!(after_edit.compiles, 2);
+
+    // Nothing edited: the entry is served as is.
+    render_project(&project_dir, 1);
+    assert_eq!(linked_theme_css(&project_dir), css);
+    assert_eq!(sass_cache_entries(&cache_dir).len(), 1);
+    let after_warm = sass_perf_counters();
+    assert_eq!(after_warm.compiles, 2, "warm render compiles nothing");
+    assert_eq!(after_warm.stale, 1);
 }
