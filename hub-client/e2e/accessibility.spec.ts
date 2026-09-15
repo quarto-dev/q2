@@ -29,7 +29,7 @@ test.describe('accessibility (WCAG 2.2)', () => {
     page,
   }) => {
     const syncServer = getServerUrl();
-    await bootstrapProjectsHome(page, syncServer);
+    await bootstrapProjectsHome(page);
 
     // Wait for the home to finish rendering so no loading screen consumes
     // the first Tab press.
@@ -49,7 +49,7 @@ test.describe('accessibility (WCAG 2.2)', () => {
     page,
   }) => {
     const syncServer = getServerUrl();
-    await bootstrapProjectsHome(page, syncServer);
+    await bootstrapProjectsHome(page);
 
     // Seed a project and open it in the editor.
     const indexDocId = await createProjectOnServer(syncServer, [
@@ -96,7 +96,7 @@ test.describe('accessibility (WCAG 2.2)', () => {
 
   test('ProjectsHome dialogs expose dialog semantics', async ({ page }) => {
     const syncServer = getServerUrl();
-    await bootstrapProjectsHome(page, syncServer);
+    await bootstrapProjectsHome(page);
 
     // The "＋ New collection" button renders in the populated home layout,
     // so seed a project to leave the empty state.

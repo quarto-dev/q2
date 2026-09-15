@@ -25,7 +25,7 @@
  *       + serves monaco-editor from local devDep to prevent AMD init races.
  *    3. beforeEach stagger: workerIndex>0 waits 1 s so both browsers don't enter
  *       Monaco's AMD init window at exactly the same instant.
- *  - Prerequisites: VITE_E2E=1 npm run build, no hub on port 3031 (test port).
+ *  - Prerequisites: VITE_E2E=1 VITE_DEFAULT_SYNC_SERVER=/ws npm run build, no hub on port 3031 (test port).
  *
  * Preview-view test (monaco-absent path):
  *  - bootstrapProjectSet registers a CDN→local-files Monaco intercept.
@@ -57,7 +57,7 @@ async function openFile(
     docId: string,
     filename: string,
 ): Promise<FrameLocator> {
-    await bootstrapProjectSet(page, serverUrl);
+    await bootstrapProjectSet(page);
     const localId = await seedProjectInBrowser(page, docId, serverUrl);
     await page.goto(`/#/p/${localId}/file/${filename}`);
     // Wait for the preview iframe to render (the edit round-trip goes through
@@ -357,7 +357,7 @@ test.describe('q2-preview inline editing', () => {
             { path: 'preview-view.qmd', content: QMD, contentType: 'text' },
         ]);
 
-        await bootstrapProjectSet(page, serverUrl);
+        await bootstrapProjectSet(page);
         const localId = await seedProjectInBrowser(page, docId, serverUrl);
 
         // Abort all Monaco CDN requests so editorRef.current stays null.

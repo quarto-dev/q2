@@ -86,7 +86,7 @@ test.describe('Collections projects home', () => {
 
   test('boots into the home and organizes a project into a new collection', async ({ page }) => {
     const syncServer = getServerUrl();
-    await bootstrapProjectsHome(page, syncServer);
+    await bootstrapProjectsHome(page);
 
     await seedNamedProject(page, syncServer, 'Alpha Project');
     await createCollection(page, 'E2E Shelf');
@@ -102,7 +102,7 @@ test.describe('Collections projects home', () => {
 
   test('right-click opens the project menu; per-collection sort reorders cards', async ({ page }) => {
     const syncServer = getServerUrl();
-    await bootstrapProjectsHome(page, syncServer);
+    await bootstrapProjectsHome(page);
 
     await seedNamedProject(page, syncServer, 'Beta Project');
     await seedNamedProject(page, syncServer, 'Alpha Project');

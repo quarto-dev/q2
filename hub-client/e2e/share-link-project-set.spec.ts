@@ -18,6 +18,7 @@
 
 import { test, expect, type Page } from '@playwright/test';
 import {
+  bootstrapProjectSet,
   createProjectOnServer,
   getServerUrl,
   seedUiVariant,
@@ -38,31 +39,10 @@ import type {} from './helpers/testHooks';
  * where a hand-rolled createProjectSet + reload can land before the server
  * has acknowledged the new doc.
  */
-async function bootstrapReceiverProjectSet(
-  page: Page,
-  syncServer: string,
-): Promise<void> {
-  await page.goto('/');
-  await expect(page.locator('body')).toBeVisible();
-
-  // Fresh browser context lands on the first-time-setup screen.
-  await expect(
-    page.getByRole('heading', { name: 'Quarto Hub' }),
-  ).toBeVisible();
-  await expect(
-    page.getByText(/Get started by creating a new project set/i),
-  ).toBeVisible();
-
-  // Point at the local hub server (the input defaults to the public server).
-  await page.locator('#setup-sync-server').fill(syncServer);
-  await page
-    .getByRole('button', { name: /Create New Project Set/i })
-    .click();
-
-  // When the project set finishes connecting, ProjectSelector renders.
-  await expect(
-    page.getByRole('heading', { name: 'Your Projects' }),
-  ).toBeVisible({ timeout: 20000 });
+async function bootstrapReceiverProjectSet(page: Page): Promise<void> {
+  // The app establishes the project set silently on first run
+  // (bd-4h1hv60p); the shared helper waits for the classic selector.
+  await bootstrapProjectSet(page);
   await expect(
     page.getByRole('button', { name: /Connect to Project/i }),
   ).toBeVisible();
@@ -129,7 +109,7 @@ test.describe('Share link → synced project set', () => {
         // Step 1: bootstrap the receiver's existing synced project set in a
         // throwaway page, then close it.
         const bootstrapPage = await receiver.newPage();
-        await bootstrapReceiverProjectSet(bootstrapPage, syncServer);
+        await bootstrapReceiverProjectSet(bootstrapPage);
         await bootstrapPage.close();
 
         // Step 2: open the share URL in a fresh page. The synced project set
@@ -199,7 +179,7 @@ test.describe('Share link → synced project set', () => {
       try {
         // Bootstrap in a throwaway page — see the explanation in the other test.
         const bootstrapPage = await receiver.newPage();
-        await bootstrapReceiverProjectSet(bootstrapPage, syncServer);
+        await bootstrapReceiverProjectSet(bootstrapPage);
         await bootstrapPage.close();
 
         // Visit the share link in a fresh page so the App.tsx share handler
@@ -288,7 +268,7 @@ test.describe('Share link → synced project set', () => {
 
       try {
         const bootstrapPage = await receiver.newPage();
-        await bootstrapReceiverProjectSet(bootstrapPage, syncServer);
+        await bootstrapReceiverProjectSet(bootstrapPage);
 
         // Seed IDB directly with an entry that the synced project set knows
         // nothing about — this is exactly the state Bug A produces.

@@ -20,7 +20,7 @@ import {
 
 async function openEditor(page: Page, title: string, content: string) {
   const syncServer = getServerUrl();
-  await bootstrapProjectsHome(page, syncServer);
+  await bootstrapProjectsHome(page);
   const indexDocId = await createProjectOnServer(syncServer, [
     { path: 'index.qmd', content, contentType: 'text' },
   ]);
