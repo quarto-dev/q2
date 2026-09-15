@@ -1,0 +1,10 @@
+---
+title: QMD syntax changes
+---
+
+[>> comments]. [++ insertion suggestions], [-- deletion suggestions].
+
+- No indented code blocks
+- No setext headers
+
+## TBF: block-level footnotes

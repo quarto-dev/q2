@@ -1,9 +1,41 @@
 ---
-title: "$title$"
+title: "Welcome to Quarto-Hub!"
+format: q2-preview
 ---
 
-This project was created from the **hub placeholder** template.
+Welcome to Quarto-Hub!
 
-It stands in for the first Quarto Hub-only project template while the
-real one is being written. If you can read this in a project you just
-created, the placeholder has not been replaced yet.
+We hope this project serves as both a tour of the current hub capabilities as well
+as a tutorial for the most important changes between Quarto 1 and Quarto 2.
+
+The collaborative editor you're using is based on a new version of Quarto 2 currently
+under [active development](https://github.com/quarto-dev/q2). Although we aim for Quarto 2 to
+feel very familiar to Quarto users, Quarto 2 is not perfectly backwards compatible.
+
+## Give us feedback!
+
+The development of Quarto 2 and Quarto Hub currently happens on GitHub; that's where we'll host discussions. Please use [the Quarto discussion forum](https://github.com/orgs/quarto-dev/discussions), and the `quarto-hub-conf-preview` label specifically. That will let us quickly find you!
+
+## Get started
+
+You're probably curious to start collaborating. Find another conf attendee who joined the preview, click on the "share" link at the top-left of the page, and give them that URL. Now they have access to your project.
+
+### Work-in-progress: no read-only access for now
+
+Note: in the current version, it's not possible to provide read-only access for collaborators, and it's not possible to revoke access. You already know not to put sensitive information here, but in addition, know that projects you've shared will be forever accessible by people with access to that link.
+
+## What to know
+
+- [Markdown syntax changes](./qmd-changes.qmd)
+
+### Metadata changes
+
+In general, Quarto 2 will be a bit more explicit about declarations. For example, if you want to turn on `brand.yml` support, you'll need to add `brand: brand.yml` to your metadata; Quarto 2 won't pick it up automatically.
+
+## Advanced
+
+Stuff here is reserved for those who really want to go deep; you absolutely don't need to know
+about any of this to Quarto-Hub.
+
+- [MCP support](./mcp.qmd)
+- [React components](./react-component-demo/index.qmd)
