@@ -56,18 +56,23 @@ test.describe('Files header action row', () => {
   test.setTimeout(90_000);
 
   test('New and Upload share one compact row', async ({ page }) => {
-    await openEditor(page, 'Two Button Row', '---\ntitle: Two Button Row\n---\n\nHello.\n');
+    // `format: q2-html-render` opts out of the q2-preview default
+    // (bd-kltzdhle) into the full-DOM iframe, which has no printable
+    // version — so the header holds only New and Upload.
+    await openEditor(
+      page,
+      'Two Button Row',
+      '---\ntitle: Two Button Row\nformat: q2-html-render\n---\n\nHello.\n',
+    );
 
     await expect(page.locator('.print-file-btn')).toHaveCount(0);
     await expectSingleCompactRow(page, ['.new-file-btn', '.upload-asset-btn']);
   });
 
   test('Print, New and Upload share one compact row', async ({ page }) => {
-    await openEditor(
-      page,
-      'Three Button Row',
-      '---\ntitle: Three Button Row\nformat: q2-preview\n---\n\nHello.\n',
-    );
+    // A plain document (no `format:` key) renders through q2-preview by
+    // default (bd-kltzdhle), which is printable.
+    await openEditor(page, 'Three Button Row', '---\ntitle: Three Button Row\n---\n\nHello.\n');
 
     // Print appears once the format is detected as printable, and is
     // last in the row so the stable New/Upload pair doesn't shift.
