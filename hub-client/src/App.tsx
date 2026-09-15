@@ -4,7 +4,7 @@ import ProjectSelector from './components/ProjectSelector';
 import ProjectsHome from './components/ProjectsHome';
 import InviteLanding from './components/InviteLanding';
 import EditorWelcomeBanner from './components/EditorWelcomeBanner';
-import ProjectSetSetup from './components/ProjectSetSetup';
+import ProjectSetError from './components/ProjectSetError';
 
 // Lazy-loaded dev harness — only fetched when navigating to #/dev/... routes.
 // Dev routes are parsed only in development builds and VITE_E2E=1 test
@@ -53,6 +53,7 @@ import { installDebugApi } from './services/debugApi';
 import { getUserIdentity, updateUserName, actorIdFromUserId } from './services/userSettings';
 import { useRouting } from './hooks/useRouting';
 import { useCollectionSets } from './hooks/useCollectionSets';
+import { useAutoEstablishRoot } from './hooks/useAutoEstablishRoot';
 import { useAuth } from './hooks/useAuth';
 import { useAuthProbe } from './hooks/useAuthProbe';
 import { useSessionKeepAlive } from './hooks/useSessionKeepAlive';
@@ -211,6 +212,25 @@ function App() {
     return bootRoute.type === 'share' && bootRoute.ephemeral === true;
   });
 
+  // First-run onboarding (bd-4h1hv60p): when no project set exists, create
+  // the personal root silently against DEFAULT_SYNC_SERVER (or migrate
+  // legacy IDB projects into one) and land on the home — there is no setup
+  // screen. The one boot URL that owns setup itself is an inbound
+  // `#/link-project-set/…` link: its handler in the initial-URL effect
+  // links the other browser's set *as the root*, which an auto-created
+  // empty root would pre-empt (the linked set would land as a secondary
+  // collection). Captured once, like `ephemeralHub` — the address bar is
+  // scrubbed before the collections hook resolves.
+  const [bootLinksProjectSet] = useState(
+    () => parseHashRoute(window.location.hash).type === 'link-project-set',
+  );
+  useAutoEstablishRoot({
+    status: projectSetState.status,
+    enabled: !bootLinksProjectSet,
+    createProjectSet: projectSetActions.createProjectSet,
+    migrateProjects: projectSetActions.migrateProjects,
+  });
+
   // `q2 preview` session config (bd-ov4gqk3m): when the serving server
   // is a preview started without --allow-edit, the editor shows an
   // ephemeral-session banner. Null on a standalone hub (no such
@@ -346,28 +366,10 @@ function App() {
     [projectSetActions, resolveActorId, screenName, cursorColor, navigateToFile],
   );
 
-  // Invite-first onboarding: opening a collection invite establishes a
-  // personal root behind the landing screen, so the invitee only ever sees
-  // "join Team docs" — never the setup or migration prompts. A browser with a
-  // stray legacy project (needs-migration) migrates it silently into the new
-  // root (non-destructive: the legacy store is retained); a fresh browser
-  // (needs-setup) just creates an empty root. The landing shows "Connecting…"
-  // until the root is ready, then Join subscribes to the collection.
-  const inviteRootInitiatedRef = useRef(false);
-  useEffect(() => {
-    const inviteActive = route.type === 'join-collection' || pendingShare !== null;
-    if (!inviteActive || inviteRootInitiatedRef.current) return;
-    if (projectSetState.status === 'needs-setup') {
-      inviteRootInitiatedRef.current = true;
-      projectSetActions.createProjectSet(DEFAULT_SYNC_SERVER);
-    } else if (projectSetState.status === 'needs-migration') {
-      // Fire once: migrateProjects resets to needs-migration on failure, so
-      // an unguarded effect would retry-loop against an unreachable server.
-      inviteRootInitiatedRef.current = true;
-      projectSetActions.migrateProjects(DEFAULT_SYNC_SERVER);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [route.type, pendingShare, projectSetState.status]);
+  // Invite-first onboarding (bd-fxdcxbpq): the personal root is established
+  // behind the landing screen by useAutoEstablishRoot above (it runs for
+  // every boot now), so the invitee only ever sees "join Team docs". The
+  // landing's CTA stays disabled until the root is connected.
 
   // Keep the invite hash reachable across the OAuth round trip: share
   // URLs are scrubbed from the address bar on mount, so re-save the
@@ -446,28 +448,11 @@ function App() {
     [projectSetActions, navigateToProjectSelector],
   );
 
-  // Ephemeral preview boot (bd-zf4ryvuq): same invite-first pattern as
-  // join-collection above. The user asked for a preview, not project
-  // management, so establish the personal root silently — create on a
-  // fresh browser, migrate when legacy IDB projects exist — and never
-  // show the setup/migration screens. DEFAULT_SYNC_SERVER is '/ws' in
-  // the preview-embed build, i.e. the ephemeral hub itself; the root
-  // doc lives in IndexedDB and re-syncs to whatever ephemeral hub serves
-  // this origin next.
-  const ephemeralRootInitiatedRef = useRef(false);
-  useEffect(() => {
-    if (!ephemeralHub || ephemeralRootInitiatedRef.current) return;
-    if (projectSetState.status === 'needs-setup') {
-      ephemeralRootInitiatedRef.current = true;
-      projectSetActions.createProjectSet(DEFAULT_SYNC_SERVER);
-    } else if (projectSetState.status === 'needs-migration') {
-      // Fire once: migrateProjects resets to needs-migration on failure, so
-      // an unguarded effect would retry-loop against an unreachable server.
-      ephemeralRootInitiatedRef.current = true;
-      projectSetActions.migrateProjects(DEFAULT_SYNC_SERVER);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ephemeralHub, projectSetState.status]);
+  // Ephemeral preview boot (bd-zf4ryvuq): the personal root is established
+  // silently by useAutoEstablishRoot above. DEFAULT_SYNC_SERVER is '/ws' in
+  // the preview-embed build, i.e. the ephemeral hub itself; the root doc
+  // lives in IndexedDB and re-syncs to whatever ephemeral hub serves this
+  // origin next.
 
   // Denormalize a peek summary onto this user's project-set entry while a
   // project is open. Kept current as files and identities change (both are
@@ -1039,42 +1024,17 @@ function App() {
     );
   }
 
-  // Show project set setup/migration screen if needed. Ephemeral
-  // preview boots skip it: the effect above establishes the root
-  // silently while the share handler connects.
-  if (
-    !ephemeralHub &&
-    (projectSetState.status === 'needs-setup' ||
-      projectSetState.status === 'needs-migration')
-  ) {
-    return (
-      <ProjectSetSetup
-        hasMigration={projectSetState.status === 'needs-migration'}
-        legacyProjects={projectSetState.legacyProjects}
-        error={projectSetState.error}
-        isConnecting={false}
-        onCreateProjectSet={projectSetActions.createProjectSet}
-        onLinkProjectSet={projectSetActions.linkProjectSet}
-        onMigrateProjects={projectSetActions.migrateProjects}
-        onMergeIntoProjectSet={projectSetActions.mergeIntoProjectSet}
-      />
-    );
-  }
-
-  // Show error if project set connection failed. Ephemeral preview
-  // boots skip it too: the preview works without a project set, so a
-  // set failure must not block it.
+  // The root could not be established or reconnected: offer another
+  // attempt (bd-4h1hv60p). `needs-setup` / `needs-migration` fall through
+  // to the home: useAutoEstablishRoot flips them to 'connecting' in the
+  // same commit, and the home's skeleton covers both. Ephemeral preview
+  // boots skip the error card: the preview works without a project set,
+  // so a set failure must not block it.
   if (!ephemeralHub && projectSetState.status === 'error') {
     return (
-      <ProjectSetSetup
-        hasMigration={false}
-        legacyProjects={[]}
+      <ProjectSetError
         error={projectSetState.error}
-        isConnecting={false}
-        onCreateProjectSet={projectSetActions.createProjectSet}
-        onLinkProjectSet={projectSetActions.linkProjectSet}
-        onMigrateProjects={projectSetActions.migrateProjects}
-        onMergeIntoProjectSet={projectSetActions.mergeIntoProjectSet}
+        onRetry={() => void projectSetActions.retry()}
       />
     );
   }

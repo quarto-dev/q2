@@ -7,7 +7,7 @@ import { defineConfig, devices } from '@playwright/test';
  *
  * 1. **Production build with test hooks**:
  *    ```
- *    VITE_E2E=1 npm run build
+ *    VITE_E2E=1 VITE_DEFAULT_SYNC_SERVER=/ws npm run build
  *    ```
  *    Without `VITE_E2E=1` the bundle tree-shakes out `window.__quartoTest`
  *    and every test fails with "E2E test hooks not found". The full

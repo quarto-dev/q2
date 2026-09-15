@@ -55,7 +55,7 @@ async function openFileWithRichText(
             }),
         );
     });
-    await bootstrapProjectSet(page, serverUrl);
+    await bootstrapProjectSet(page);
     const localId = await seedProjectInBrowser(page, docId, serverUrl);
     await page.goto(`/#/p/${localId}/file/${filename}`);
     await waitForPreviewRender(page, { kind: 'q2-preview', timeout: 30000 });

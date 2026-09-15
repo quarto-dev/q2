@@ -49,7 +49,7 @@ test.describe('quartoDebug live inspector', () => {
       localStorage.setItem('quartoDebug', '1');
     });
 
-    await bootstrapProjectSet(page, serverUrl);
+    await bootstrapProjectSet(page);
     const localId = await seedProjectInBrowser(page, indexDocId, serverUrl);
     await page.goto(`/#/p/${localId}/file/index.qmd`);
 

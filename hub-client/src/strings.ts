@@ -19,7 +19,7 @@
  *
  * Scope: the app chrome (header, sidebar, outline, dialogs,
  * notifications, tabs) is migrated. ProjectsHome, the classic
- * ProjectSelector, and ProjectSetSetup keep local strings for now —
+ * ProjectSelector, and ProjectSetError keep local strings for now —
  * they share the common vocabulary below where trivially substitutable.
  *
  * Phase 2 deliverable of the UI/UX modernization plan.

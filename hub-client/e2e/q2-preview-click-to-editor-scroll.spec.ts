@@ -337,7 +337,7 @@ async function openDoc(
         { path: '_quarto.yml', content: 'project:\n  type: default\n', contentType: 'text' },
         { path: 'doc.qmd', content: fixture(format), contentType: 'text' },
     ]);
-    await bootstrapProjectSet(page, serverUrl);
+    await bootstrapProjectSet(page);
     const localId = await seedProjectInBrowser(page, docId, serverUrl);
     await page.goto(`/#/p/${localId}/file/doc.qmd`);
     await waitForPreviewRender(page, { kind, timeout: 30000 });
@@ -353,7 +353,7 @@ async function openDocWithContent(page: Page, content: string): Promise<void> {
         { path: '_quarto.yml', content: 'project:\n  type: default\n', contentType: 'text' },
         { path: 'doc.qmd', content, contentType: 'text' },
     ]);
-    await bootstrapProjectSet(page, serverUrl);
+    await bootstrapProjectSet(page);
     const localId = await seedProjectInBrowser(page, docId, serverUrl);
     await page.goto(`/#/p/${localId}/file/doc.qmd`);
     await waitForPreviewRender(page, { kind: 'q2-preview', timeout: 30000 });
@@ -369,7 +369,7 @@ async function openHtmlDocWithContent(page: Page, content: string): Promise<void
         { path: '_quarto.yml', content: 'project:\n  type: default\n', contentType: 'text' },
         { path: 'doc.qmd', content, contentType: 'text' },
     ]);
-    await bootstrapProjectSet(page, serverUrl);
+    await bootstrapProjectSet(page);
     const localId = await seedProjectInBrowser(page, docId, serverUrl);
     await page.goto(`/#/p/${localId}/file/doc.qmd`);
     await waitForPreviewRender(page, { kind: 'html', timeout: 30000 });

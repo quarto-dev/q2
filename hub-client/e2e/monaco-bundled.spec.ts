@@ -39,7 +39,7 @@ test.describe('Monaco without CDN', () => {
       },
     ]);
 
-    await bootstrapProjectSet(page, serverUrl);
+    await bootstrapProjectSet(page);
     const localId = await seedProjectInBrowser(page, indexDocId, serverUrl);
 
     await page.goto(`/#/p/${localId}/file/index.qmd`);

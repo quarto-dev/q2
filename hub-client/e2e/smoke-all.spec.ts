@@ -94,7 +94,7 @@ test.describe('smoke-all E2E tests', () => {
         // so the App lands in `connected` status before we add the legacy IDB
         // project entry; otherwise the entry would trigger the
         // "Upgrade: Synced Project List" screen and block navigation.
-        await bootstrapProjectSet(page, serverUrl);
+        await bootstrapProjectSet(page);
         const localId = await seedProjectInBrowser(
           page,
           indexDocId,

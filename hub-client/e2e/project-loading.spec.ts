@@ -39,7 +39,7 @@ test.describe('Project Loading', () => {
 
     // Initialize the synced project set so the App reaches `connected`
     // status before we add the legacy IDB project entry.
-    await bootstrapProjectSet(page, serverUrl);
+    await bootstrapProjectSet(page);
 
     // Seed the project in browser IndexedDB
     const localId = await seedProjectInBrowser(page, indexDocId, serverUrl);

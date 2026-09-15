@@ -23,7 +23,7 @@
  *
  *   # Prerequisites (run once when ts-packages/preview-renderer changed):
  *   #   cd ts-packages/preview-renderer && npm run build
- *   #   cd hub-client && VITE_E2E=1 npm run build
+ *   #   cd hub-client && VITE_E2E=1 VITE_DEFAULT_SYNC_SERVER=/ws npm run build
  *   cd hub-client
  *   npx playwright test q2-preview-self-heal-on-write.spec.ts --project=chromium
  */
@@ -103,7 +103,7 @@ async function openFile(
     docId: string,
     filename: string,
 ): Promise<FrameLocator> {
-    await bootstrapProjectSet(page, serverUrl);
+    await bootstrapProjectSet(page);
     const localId = await seedProjectInBrowser(page, docId, serverUrl);
     await page.goto(`/#/p/${localId}/file/${filename}`);
     await waitForPreviewRender(page, { kind: 'q2-preview', timeout: 30000 });

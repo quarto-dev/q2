@@ -184,7 +184,7 @@ export interface JoinCollectionRoute {
  */
 export interface DevRoute {
   type: 'dev';
-  /** The dev page to render (e.g. 'setup-migration', 'setup-fresh') */
+  /** The dev page to render (e.g. 'projects-home', 'project-set-error') */
   page: string;
 }
 
