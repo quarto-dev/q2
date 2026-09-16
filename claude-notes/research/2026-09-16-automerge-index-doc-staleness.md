@@ -45,6 +45,61 @@ is likely because such documents make *any* index staleness visible fastest
 (many editors, frequent renames/moves, frequent cross-links to them), not
 because the underlying mechanism is specific to that file's content.
 
+### Terminology: "stranded peer registration"
+
+Adopted term for the end state, settled 2026-09-16 after H1 tier 1's
+confirmation pinpointed exactly where the bad bookkeeping lives: a
+**stranded peer registration**. The client's transport layer
+(`NetworkSubsystem`) believes the hub is connected and correctly routes
+messages to it; the sync layer (`CollectionSynchronizer` / each affected
+`DocSynchronizer`) has no record of that peer for a given document, so it
+never initiates or resumes sync for it. Two words deliberately avoided:
+
+- **"dangling"** — already claimed, pointing the *opposite* direction:
+  bd-8x482xb0/bd-vm5e5u10 use it for an index *entry* referencing a file
+  doc that never arrived. This bug is an index *missing* an entry (or more
+  generally, a document not receiving updates) that peers already have.
+- **"forked"** — ruled out above; no CRDT divergence is implied.
+
+**PeerId vs. storageId — two different stability guarantees, matching H1
+vs. H2.** Checked directly against the vendored `samod` (Rust) source that
+becomes the production hub, not just inferred from the JS test harness:
+
+- `samod-core/src/peer_id.rs`'s own doc comment: *"Peer IDs are ephemeral
+  identifiers that identify a specific instance of a peer (e.g., a browser
+  tab, a **process**)... different from storage IDs which identify the
+  underlying storage."*
+- `samod/src/lib.rs:1330`: `PeerId::new_with_rng(&mut rng)` runs **once**,
+  when the `Repo`/`Samod` instance is built — once per hub **process**, not
+  once per client connection. `quarto-hub`'s server startup never calls
+  `RepoBuilder::with_peer_id(...)` to override it, so the hub's peerId is a
+  random string minted at process start and held fixed for that process's
+  entire uptime.
+
+Consequence: despite automerge-repo being peer-to-peer in theory, in this
+deployment every client dials into the same one hub process, and that hub
+presents **one stable peerId to every client, for as long as the hub
+process stays up**. That stability is not incidental to H1 — it's the
+precondition: `CollectionSynchronizer.addPeer`'s dedup guard only misfires
+because the peerId a reconnecting client sees really is the same value as
+before. If the hub minted a fresh peerId per connection, every reconnect
+would look like "a new peer arrived" and the guard would never trigger.
+Given the actual architecture, this is a standing risk for any client
+session that outlives even one reconnect blip against that hub, not a
+rare coincidence.
+
+`storageId` (what H2's throttle and the persisted `[docId, "sync-state",
+storageId]` entries are keyed on) sits on a *more* durable axis than
+peerId — it identifies the hub's underlying storage and can survive a hub
+process restart if the storage backend does (production runs on
+EBS/S3-backed storage; see `CLAUDE.md`'s local-prod notes). PeerId cannot
+survive a restart (a fresh process mints a fresh random one). This also
+explains why the IndexedDB-wipe workaround works without anyone having
+known which axis actually mattered: it discards the storageId-keyed
+persisted state *and*, by forcing a page reload, mints a fresh client-side
+`Repo` (and therefore fresh peerId-scoped bookkeeping) — clearing both
+axes at once.
+
 ## Sources now available for this investigation
 
 Symlinked into `external-sources/` (matching the existing `pandoc` /
