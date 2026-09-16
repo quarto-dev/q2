@@ -30,8 +30,8 @@ mod templates;
 mod types;
 
 pub use choices::{
-    ProjectChoice, ProjectTypeWithTemplate, available_choices, find_choice,
-    find_implemented_choice, implemented_choices,
+    ProjectChoice, ProjectTypeWithTemplate, Surface, available_choices, choices_for, find_choice,
+    find_choice_by_target, find_implemented_choice, implemented_choices,
 };
 pub use scaffold::{
     ProjectScaffold, ScaffoldContent, ScaffoldFileDef, ScaffoldedFile, get_scaffold,
@@ -701,6 +701,73 @@ mod render_tests {
         let result =
             create_project_from_choice(CreateFromChoiceOptions::new("manuscript", "My Paper"));
         assert!(matches!(result.unwrap_err(), CreateError::InvalidConfig(_)));
+    }
+
+    // ----------------------------------------------------------------
+    // Hub-only choices (bd-d147nkqx)
+    // ----------------------------------------------------------------
+
+    #[test]
+    fn create_from_choice_is_surface_agnostic_for_hub_only_choices() {
+        // The crate never gates on surface — the CLI does, before
+        // calling in. Every hub-only choice must therefore scaffold.
+        let hub_only: Vec<_> = available_choices()
+            .into_iter()
+            .filter(|c| c.implemented && !c.available_on(Surface::Cli))
+            .collect();
+        assert!(!hub_only.is_empty(), "registry has no hub-only choice");
+        for choice in hub_only {
+            let files =
+                create_project_from_choice(CreateFromChoiceOptions::new(&choice.id, "Hub Title"))
+                    .unwrap_or_else(|e| panic!("hub-only choice '{}' failed: {e}", choice.id));
+            let yml = file_content(&files, "_quarto.yml");
+            assert!(
+                yml.contains("type: website"),
+                "{}: _quarto.yml: {yml}",
+                choice.id
+            );
+        }
+    }
+
+    #[test]
+    fn hub_placeholder_scaffold_is_the_welcome_tour_with_fixed_titles() {
+        // The hub-only template is a tour of Quarto Hub: its documents
+        // carry fixed titles and ignore the project name the user typed.
+        let files = create_project_from_choice(CreateFromChoiceOptions::new(
+            "hub-placeholder",
+            "Placeholder Title",
+        ))
+        .unwrap();
+        let mut paths: Vec<String> = files
+            .iter()
+            .map(|f| f.path().to_string_lossy().into_owned())
+            .collect();
+        paths.sort();
+        assert_eq!(paths, ["_quarto.yml", "index.qmd", "qmd-changes.qmd"]);
+
+        let yml = file_content(&files, "_quarto.yml");
+        assert!(yml.contains("type: website"), "_quarto.yml: {yml}");
+        assert!(
+            yml.contains("title: \"Welcome to Quarto-Hub\""),
+            "_quarto.yml: {yml}"
+        );
+        let index = file_content(&files, "index.qmd");
+        assert!(
+            index.contains("title: \"Welcome to Quarto-Hub!\""),
+            "index.qmd: {index}"
+        );
+        // The tour links to its sibling page, which must ship with it.
+        assert!(index.contains("(./qmd-changes.qmd)"), "index.qmd: {index}");
+        assert!(file_content(&files, "qmd-changes.qmd").contains("title: QMD syntax changes"));
+        for f in &files {
+            if let ScaffoldedFile::Text { content, .. } = f {
+                assert!(
+                    !content.contains("Placeholder Title"),
+                    "name leaked: {content}"
+                );
+                assert!(!content.contains("$title$"), "template residue: {content}");
+            }
+        }
     }
 
     #[test]

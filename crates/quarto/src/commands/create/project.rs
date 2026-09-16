@@ -10,8 +10,8 @@ use std::path::{Path, PathBuf};
 
 use quarto_error_reporting::DiagnosticMessageBuilder;
 use quarto_project_create::{
-    ProjectTypeWithTemplate, ScaffoldedFile, available_choices, create_scaffolded_files,
-    find_choice, get_scaffold, implemented_choices,
+    ProjectChoice, ProjectTypeWithTemplate, ScaffoldedFile, Surface, available_choices,
+    choices_for, create_scaffolded_files, find_choice, find_choice_by_target, get_scaffold,
 };
 use serde::Deserialize;
 
@@ -35,12 +35,23 @@ struct ProjectDirective {
     dry_run: bool,
 }
 
+/// The registry entries this surface knows about: everything offered
+/// on the CLI, implemented or not. Hub-only choices (bd-d147nkqx) are
+/// excluded from listings, prompts, and error summaries alike, so the
+/// CLI never advertises a type it will refuse.
+fn cli_choices() -> Vec<ProjectChoice> {
+    available_choices()
+        .into_iter()
+        .filter(|c| c.available_on(Surface::Cli))
+        .collect()
+}
+
 /// One-line summary of valid choice ids, split by implementation
 /// status, for error messages.
 fn valid_choices_summary() -> String {
     let mut implemented = Vec::new();
     let mut pending = Vec::new();
-    for c in available_choices() {
+    for c in cli_choices() {
         if c.implemented {
             implemented.push(c.id);
         } else {
@@ -61,20 +72,45 @@ fn not_yet_implemented(choice: &str) -> CommandFailure {
     )
 }
 
+/// The choice exists and works, but is offered only in Quarto Hub
+/// (bd-d147nkqx). Worded apart from `not_yet_implemented` so a user
+/// who typed a hub-only id learns where it *is* available.
+fn hub_only(choice: &str) -> CommandFailure {
+    CommandFailure::new(
+        format!("Project type '{choice}' is only available in Quarto Hub"),
+        valid_choices_summary(),
+    )
+}
+
+/// Apply the CLI surface gate to a resolved choice.
+fn gate_for_cli(choice: &ProjectChoice, typed: &str) -> Result<(), CommandFailure> {
+    if !choice.available_on(Surface::Cli) {
+        return Err(hub_only(typed));
+    }
+    if !choice.implemented {
+        return Err(not_yet_implemented(typed));
+    }
+    Ok(())
+}
+
 /// Map a user-supplied choice string to a scaffold target. Accepts
 /// both choice ids (`website`, `blog`) and the colon form
 /// (`website:blog`) — the latter routes through
 /// `ProjectTypeWithTemplate::parse`.
 fn resolve_target(choice: &str) -> Result<ProjectTypeWithTemplate, CommandFailure> {
     if let Some(c) = find_choice(choice) {
-        if !c.implemented {
-            return Err(not_yet_implemented(choice));
-        }
+        gate_for_cli(&c, choice)?;
         return Ok(c.target);
     }
     if choice.contains(':')
         && let Ok(target) = ProjectTypeWithTemplate::parse(choice)
     {
+        // The colon form names a target, not a choice; a target owned
+        // by a registry entry inherits that entry's surface gate, so
+        // `website:<hub-only-template>` is refused like its id is.
+        if let Some(c) = find_choice_by_target(&target) {
+            gate_for_cli(&c, choice)?;
+        }
         return Ok(target);
     }
     Err(CommandFailure::new(
@@ -243,7 +279,7 @@ impl ArtifactProvider for ProjectProvider {
                 c.clone()
             }
             None => {
-                let choices = implemented_choices();
+                let choices = choices_for(Surface::Cli);
                 let items: Vec<PromptItem> = choices
                     .iter()
                     .map(|c| PromptItem {
@@ -289,7 +325,7 @@ impl ArtifactProvider for ProjectProvider {
     }
 
     fn choices(&self) -> Vec<ChoiceListing> {
-        available_choices()
+        cli_choices()
             .into_iter()
             .map(|c| ChoiceListing {
                 id: c.id,

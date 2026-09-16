@@ -1,0 +1,20 @@
+---
+title: QMD syntax changes
+format: q2-preview
+---
+
+[>> comments].
+
+[++ insertion suggestions], [-- deletion suggestions].
+
+- No indented code blocks
+- No setext headers:
+
+  ```
+  ## use headings like this
+
+  not like this
+  =============
+  ```
+
+## TBF: block-level footnotes
