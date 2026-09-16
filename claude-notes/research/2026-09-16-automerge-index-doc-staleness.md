@@ -1,12 +1,15 @@
 # Automerge index-document staleness — research notes
 
-**Status:** INVESTIGATION ONLY. Not reproducible on demand, so nothing here
-has been tested against a real repro — these are source-grounded hypotheses
-ranked by plausibility, not a diagnosis. No fix should be attempted from this
-doc alone; get a repro or add the instrumentation in "Next steps" first.
+**Status:** INVESTIGATION ONLY, mechanisms now characterized (2026-09-16,
+same day). H1 and H2 are both confirmed as *real, manufacturable*
+mechanisms against automerge-repo v2.5.6 — see "Characterization results"
+below. This still does **not** diagnose Gordon's specific incident: a
+manufactured repro proves a mechanism is possible and matches the symptom
+shape, not that it's what happened to his project. No fix has been
+attempted; that still needs Gordon's go-ahead per "Next steps."
 
-**Strand:** none yet — this is pre-strand investigation (Gordon, 2026-09-16).
-File a strand once/if this moves toward a fix.
+**Strand:** bd-6f21d4c6 ("Reproduce leading mechanisms of Automerge
+index-document staleness bug").
 
 **Worktree:** `.worktrees/workspace-2`, branch `explore/automerge-index-resync`.
 
@@ -227,9 +230,71 @@ add but it isn't a *reproduction* of anything — it would only catch a
 regression if this ever breaks in the future, not confirm or deny a cause
 of Gordon's symptom today.
 
+## Characterization results (2026-09-16)
+
+Both H1 tier 1 and H2 were exercised per the recipes above. Both are now
+**confirmed, mechanically, against the vendored automerge-repo v2.5.6
+source** — not just plausible from reading it. Tests are characterization
+tests (they pass against current upstream behavior; they are not
+fix-driving red tests) in `ts-packages/quarto-sync-client/src/`:
+
+- **H2 — CONFIRMED.**
+  `sync-state-save-throttle.test.ts`: a real `SyncClient` against a real
+  `startTestHub()`, with `vi.useFakeTimers()` controlling the 100ms
+  `#saveDebounceRate` window and a `vi.spyOn(MemoryStorageAdapter.prototype,
+  'save')` recording every storage write. Firing `sync-state` for doc A then
+  doc B within the same 100ms window: doc A's `[docId, "sync-state",
+  storageId]` save never happens; only doc B's does. A sanity variant
+  (events spaced past the window) confirms both saves happen when the
+  window doesn't overlap — the test discriminates the mechanism, it isn't
+  vacuously green. A second assertion (real edit to doc A's content,
+  polled against the hub's copy) confirms the sync protocol still
+  converges afterward — the drop is a storage-persistence effect only;
+  `DocSynchronizer`'s live in-memory sync state is set *before* the
+  `sync-state` event is emitted (`DocSynchronizer.ts`'s `#setSyncState`),
+  so it's untouched by the dropped persist. This keeps the original
+  "compounding factor, not standalone cause" framing honest.
+- **H1 tier 1 — CONFIRMED, and it's worse than "plausible."**
+  `collection-synchronizer-peer-dedup.test.ts`: a hand-written fake
+  `NetworkAdapter` drives a bare `Repo` directly. A first `peer-candidate`
+  for a peer starts `beginSync` on every registered document (spied
+  directly on the `DocSynchronizer` instance); a **second** `peer-candidate`
+  for the *same* `peerId`, with no intervening `peer-disconnected`, calls
+  `beginSync` **zero** additional times — the dedup guard's early return is
+  real, not covered by anything else in the pipeline. A control case (an
+  intervening `peer-disconnected` before the second `peer-candidate`) shows
+  `beginSync` firing normally, isolating that the suppression is
+  specifically about the missing-disconnect ordering, not something else.
+  Reading `NetworkSubsystem.addNetworkAdapter` while building the fake
+  adapter turned up something the original hypothesis didn't know: its
+  `peer-candidate` handler (`NetworkSubsystem.ts:52-66`) unconditionally
+  re-emits `"peer"` to `Repo` on *every* `peer-candidate`, including
+  repeats for an already-connected peer — with the library's own
+  acknowledged `// TODO: on reconnection, this would create problems!`
+  comment sitting right above it. So `CollectionSynchronizer.addPeer`'s
+  guard is the *only* place in the whole pipeline that could catch this,
+  and it doesn't. This raises H1 from "plausible, sibling to a known fixed
+  bug (bd-jit6pdwq)" to "a second, distinct, currently-unfixed defect in
+  the same reconnect-ordering neighborhood, confirmed by direct
+  experiment."
+
+Both tests are green (they characterize real, current behavior, not a
+regression), pass `npx tsc --noEmit` in `ts-packages/quarto-sync-client`,
+and the package's full suite (140 tests) is otherwise unaffected.
+
+**What is still not settled:** whether either mechanism (or H1 specifically,
+now that it's a confirmed defect) is *the* cause of Gordon's actual
+incident. Manufacturing the mechanism proves it's real and matches the
+symptom shape; it doesn't prove causation for any specific past occurrence
+without corroborating evidence from that occurrence (see "Next steps",
+unchanged). H1 tier 2 (a real-socket confirming test forcing an actual
+reconnect overlap) has not been attempted — per the handoff, that and any
+production fix wait on Gordon's decision now that tier 1 has settled the
+factual question tier 2 was gated behind.
+
 ## Leading hypotheses, ranked
 
-### H1 (most plausible): a peer add/remove ordering race silently skips resync for an already-open handle
+### H1 (most plausible, and — as of 2026-09-16 — tier-1-confirmed): a peer add/remove ordering race silently skips resync for an already-open handle
 
 `CollectionSynchronizer.addPeer(peerId)` (`CollectionSynchronizer.ts:
 179-193`) is a no-op if `peerId` is already in its `#peers` set — it assumes
@@ -262,7 +327,7 @@ call (peerId, and whether it was a no-op) across a long-lived session, then
 correlating a "files list froze" report against a same-peerId `addPeer`
 no-op that fired without an intervening `removePeer`.
 
-### H2 (plausible but weaker alone): per-storage-id sync-state persistence throttling can leave a stale-but-valid state for a specific document
+### H2 (confirmed as of 2026-09-16; plausible but weaker alone as a standalone cause): per-storage-id sync-state persistence throttling can leave a stale-but-valid state for a specific document
 
 `Repo.ts#saveSyncState` (`Repo.ts:371-403`) throttles persistence **per
 remote `storageId`**, not per document, via `asyncThrottle`
