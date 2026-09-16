@@ -77,20 +77,29 @@ describe('get_project_choices', () => {
 });
 
 describe('create_project with a hub-only choice (bd-d147nkqx)', () => {
-  it('scaffolds the placeholder with the title substituted', () => {
+  it('scaffolds the welcome tour with its fixed titles, ignoring the project name', () => {
+    // The hub-only template is a tour of Quarto Hub, so its documents
+    // carry fixed titles rather than the name the user typed.
     const response = JSON.parse(
       wasm.create_project(HUB_ONLY_CHOICE_ID, 'Hub Only Title'),
     ) as CreateProjectResponse;
     expect(response.success).toBe(true);
 
     const byPath = new Map(response.files!.map((f) => [f.path, f]));
-    expect([...byPath.keys()].sort()).toEqual(['_quarto.yml', 'index.qmd']);
+    expect([...byPath.keys()].sort()).toEqual(['_quarto.yml', 'index.qmd', 'qmd-changes.qmd']);
 
     const quartoYml = byPath.get('_quarto.yml')!.content;
     expect(quartoYml).toContain('type: website');
-    expect(quartoYml).toContain('title: "Hub Only Title"');
-    expect(byPath.get('index.qmd')!.content).toContain('title: "Hub Only Title"');
+    expect(quartoYml).toContain('title: "Welcome to Quarto-Hub"');
+
+    const indexQmd = byPath.get('index.qmd')!.content;
+    expect(indexQmd).toContain('title: "Welcome to Quarto-Hub!"');
+    // The tour links to its sibling page, which must therefore ship too.
+    expect(indexQmd).toContain('(./qmd-changes.qmd)');
+    expect(byPath.get('qmd-changes.qmd')!.content).toContain('title: QMD syntax changes');
+
     for (const file of response.files!) {
+      expect(file.content).not.toContain('Hub Only Title');
       expect(file.content).not.toContain('$title$');
     }
   });

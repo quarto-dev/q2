@@ -76,17 +76,22 @@ pub mod blog {
         include_bytes!("../resources/templates/website/blog/posts/post-with-code/image.jpg");
 }
 
-/// Scaffold contents for the hub-only placeholder template
-/// (`website:hub-placeholder`, bd-d147nkqx). Stands in for the first
-/// real hub-only template; replaced wholesale when that lands.
+/// Scaffold contents for the hub-only welcome tour
+/// (`website:hub-placeholder`, bd-d147nkqx). All static: the tour's
+/// documents carry fixed titles rather than the project name, so
+/// nothing here interpolates.
 pub mod hub_placeholder {
-    /// `_quarto.yml` template for the placeholder project.
+    /// Static `_quarto.yml` for the welcome tour.
     pub const QUARTO_YML: &str =
-        include_str!("../resources/templates/website/hub-placeholder/_quarto.yml.template");
+        include_str!("../resources/templates/website/hub-placeholder/_quarto.yml");
 
-    /// `index.qmd` template for the placeholder project.
+    /// Static landing page of the tour.
     pub const INDEX_QMD: &str =
-        include_str!("../resources/templates/website/hub-placeholder/index.qmd.template");
+        include_str!("../resources/templates/website/hub-placeholder/index.qmd");
+
+    /// Static tour page on qmd syntax changes, linked from `index.qmd`.
+    pub const QMD_CHANGES_QMD: &str =
+        include_str!("../resources/templates/website/hub-placeholder/qmd-changes.qmd");
 }
 
 /// Scaffold contents for the website project type.

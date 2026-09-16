@@ -722,7 +722,7 @@ mod render_tests {
                     .unwrap_or_else(|e| panic!("hub-only choice '{}' failed: {e}", choice.id));
             let yml = file_content(&files, "_quarto.yml");
             assert!(
-                yml.contains("title: \"Hub Title\""),
+                yml.contains("type: website"),
                 "{}: _quarto.yml: {yml}",
                 choice.id
             );
@@ -730,7 +730,9 @@ mod render_tests {
     }
 
     #[test]
-    fn hub_placeholder_scaffold_is_two_titled_files() {
+    fn hub_placeholder_scaffold_is_the_welcome_tour_with_fixed_titles() {
+        // The hub-only template is a tour of Quarto Hub: its documents
+        // carry fixed titles and ignore the project name the user typed.
         let files = create_project_from_choice(CreateFromChoiceOptions::new(
             "hub-placeholder",
             "Placeholder Title",
@@ -741,21 +743,28 @@ mod render_tests {
             .map(|f| f.path().to_string_lossy().into_owned())
             .collect();
         paths.sort();
-        assert_eq!(paths, ["_quarto.yml", "index.qmd"]);
+        assert_eq!(paths, ["_quarto.yml", "index.qmd", "qmd-changes.qmd"]);
 
         let yml = file_content(&files, "_quarto.yml");
         assert!(yml.contains("type: website"), "_quarto.yml: {yml}");
         assert!(
-            yml.contains("title: \"Placeholder Title\""),
+            yml.contains("title: \"Welcome to Quarto-Hub\""),
             "_quarto.yml: {yml}"
         );
         let index = file_content(&files, "index.qmd");
         assert!(
-            index.contains("title: \"Placeholder Title\""),
+            index.contains("title: \"Welcome to Quarto-Hub!\""),
             "index.qmd: {index}"
         );
+        // The tour links to its sibling page, which must ship with it.
+        assert!(index.contains("(./qmd-changes.qmd)"), "index.qmd: {index}");
+        assert!(file_content(&files, "qmd-changes.qmd").contains("title: QMD syntax changes"));
         for f in &files {
             if let ScaffoldedFile::Text { content, .. } = f {
+                assert!(
+                    !content.contains("Placeholder Title"),
+                    "name leaked: {content}"
+                );
                 assert!(!content.contains("$title$"), "template residue: {content}");
             }
         }

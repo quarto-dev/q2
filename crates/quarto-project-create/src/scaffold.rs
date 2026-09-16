@@ -284,13 +284,17 @@ pub fn get_scaffold(target: &ProjectTypeWithTemplate) -> Option<ProjectScaffold>
                 ),
                 Some("hub-placeholder") => Some(
                     ProjectScaffold::with_template(ProjectType::Website, "hub-placeholder")
-                        .add_file(ScaffoldFileDef::template(
+                        .add_file(ScaffoldFileDef::static_text(
                             "_quarto.yml",
                             templates::hub_placeholder::QUARTO_YML,
                         ))
-                        .add_file(ScaffoldFileDef::template(
+                        .add_file(ScaffoldFileDef::static_text(
                             "index.qmd",
                             templates::hub_placeholder::INDEX_QMD,
+                        ))
+                        .add_file(ScaffoldFileDef::static_text(
+                            "qmd-changes.qmd",
+                            templates::hub_placeholder::QMD_CHANGES_QMD,
                         )),
                 ),
                 Some(_) => None, // Unknown template
