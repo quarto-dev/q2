@@ -28,14 +28,12 @@ Note: in the current version, it's not possible to provide read-only access for 
 
 - [Markdown syntax changes](./qmd-changes.qmd)
 
+- The two formats that work the best right now are:
+
+  - `format: revealjs` for presentations
+  - `format: q2-preview` for the regular HTML format
+  - `format: html` (or no format at all) works, but you won't get comments, editable preview, author attribution, etc.
+
 ### Metadata changes
 
 In general, Quarto 2 will be a bit more explicit about declarations. For example, if you want to turn on `brand.yml` support, you'll need to add `brand: brand.yml` to your metadata; Quarto 2 won't pick it up automatically.
-
-## Advanced
-
-Stuff here is reserved for those who really want to go deep; you absolutely don't need to know
-about any of this to Quarto-Hub.
-
-- [MCP support](./mcp.qmd)
-- [React components](./react-component-demo/index.qmd)
