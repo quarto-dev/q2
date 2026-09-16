@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
-  getDocSyncActivity,
+  getDocSyncActivityWithPersisted,
   getDocRemoteChange,
   getConnectionLog,
   type DocSyncActivity,
@@ -133,13 +133,15 @@ function buildInlineDiffLines(
   return lines;
 }
 
-/** "42s ago" under a minute, then "3m ago", then "2h ago". */
+/** "42s ago" under a minute, then "3m ago", "2h ago", "5d ago". */
 function formatAgo(ms: number): string {
   const seconds = Math.max(0, Math.round(ms / 1000));
   if (seconds < 60) return `${seconds}s ago`;
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m ago`;
-  return `${Math.floor(minutes / 60)}h ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
 }
 
 function formatTimestamp(at: number | null, now: number): string {
@@ -243,8 +245,9 @@ export default function ConnectionStatusDialog({
   } catch {
     // not connected yet
   }
-  const fileStats = fileDocId ? getDocSyncActivity(fileDocId) : null;
-  const indexStats = indexDocId ? getDocSyncActivity(indexDocId) : null;
+  // Persisted variant: the three displayed timestamps survive page reloads.
+  const fileStats = fileDocId ? getDocSyncActivityWithPersisted(fileDocId) : null;
+  const indexStats = indexDocId ? getDocSyncActivityWithPersisted(indexDocId) : null;
   const fileChange = fileDocId ? getDocRemoteChange(fileDocId) : null;
   const indexChange = indexDocId ? getDocRemoteChange(indexDocId) : null;
 
