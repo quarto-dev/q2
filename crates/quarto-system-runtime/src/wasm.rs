@@ -24,8 +24,8 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 
 use crate::traits::{
-    CommandOutput, PathKind, PathMetadata, RuntimeError, RuntimeResult, SystemRuntime, TempDir,
-    XdgDirKind,
+    CommandOutput, PathKind, PathMetadata, RuntimeError, RuntimeResult, SassOutput, SystemRuntime,
+    TempDir, XdgDirKind,
 };
 use crate::vfs::{VirtualFileSystem, not_found_error};
 
@@ -61,7 +61,8 @@ extern "C" {
     /// * `load_paths_json` - JSON-encoded array of load paths
     ///
     /// # Returns
-    /// A Promise that resolves to the compiled CSS, or rejects with an error.
+    /// A Promise that resolves to `{ css, loadedUrls }` — the compiled
+    /// CSS and the VFS paths loaded for it — or rejects with an error.
     #[wasm_bindgen(js_name = "jsCompileSass", catch)]
     fn js_compile_sass_impl(
         scss: &str,
@@ -554,7 +555,7 @@ impl SystemRuntime for WasmRuntime {
         scss: &str,
         load_paths: &[PathBuf],
         minified: bool,
-    ) -> RuntimeResult<String> {
+    ) -> RuntimeResult<SassOutput> {
         // Convert load paths to JSON array of strings
         let load_paths_vec: Vec<String> = load_paths
             .iter()
@@ -577,10 +578,26 @@ impl SystemRuntime for WasmRuntime {
             .await
             .map_err(|e| RuntimeError::SassError(format!("SASS compilation failed: {:?}", e)))?;
 
-        // Convert result to String
-        result
-            .as_string()
-            .ok_or_else(|| RuntimeError::SassError("Result was not a string".to_string()))
+        // The bridge resolves to `{ css: string, loadedUrls: string[] }`
+        // (bd-m3hga05o): `loadedUrls` are the VFS paths dart-sass loaded
+        // through the custom importer, already mapped from `vfs:` URLs
+        // to the `/project/…` form `file_read` accepts.
+        let css = js_sys::Reflect::get(&result, &JsValue::from_str("css"))
+            .ok()
+            .and_then(|v| v.as_string())
+            .ok_or_else(|| RuntimeError::SassError("Result had no string `css`".to_string()))?;
+        let loaded_files = js_sys::Reflect::get(&result, &JsValue::from_str("loadedUrls"))
+            .ok()
+            .filter(|v| js_sys::Array::is_array(v))
+            .map(|v| {
+                js_sys::Array::from(&v)
+                    .iter()
+                    .filter_map(|u| u.as_string())
+                    .map(PathBuf::from)
+                    .collect()
+            })
+            .unwrap_or_default();
+        Ok(SassOutput { css, loaded_files })
     }
 
     // =========================================================================

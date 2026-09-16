@@ -2694,7 +2694,7 @@ pub async fn compile_scss(scss: &str, minified: bool, load_paths_json: &str) -> 
 
     // Compile SCSS
     match runtime.compile_sass(scss, &load_paths, minified).await {
-        Ok(css) => SassCompileResponse::ok(css),
+        Ok(out) => SassCompileResponse::ok(out.css),
         Err(e) => SassCompileResponse::error(&format!("{}", e)),
     }
 }
@@ -2761,7 +2761,7 @@ pub async fn compile_theme_css_by_name(theme_name: &str, minified: bool) -> Stri
 
     // Compile CSS
     match compile_theme_css(&theme_config, &context).await {
-        Ok(css) => SassCompileResponse::ok(css),
+        Ok(out) => SassCompileResponse::ok(out.css),
         Err(e) => SassCompileResponse::error(&format!("SASS compilation failed: {}", e)),
     }
 }
@@ -2802,7 +2802,7 @@ pub async fn compile_default_bootstrap_css(minified: bool) -> String {
 
     // Compile CSS
     match compile_theme_css(&theme_config, &context).await {
-        Ok(css) => SassCompileResponse::ok(css),
+        Ok(out) => SassCompileResponse::ok(out.css),
         Err(e) => SassCompileResponse::error(&format!("SASS compilation failed: {}", e)),
     }
 }
