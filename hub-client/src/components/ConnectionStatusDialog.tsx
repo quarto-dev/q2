@@ -14,8 +14,6 @@ import {
   getDocSyncActivity,
   getDocRemoteChange,
   getConnectionLog,
-  type ConnectionEvent,
-  type ConnectionInfo,
   type DocSyncActivity,
   type RemoteChangeSummary,
 } from '@quarto/quarto-sync-client';
@@ -26,27 +24,10 @@ import ModalDialog from './ModalDialog';
 import { dialogs } from '../strings';
 import './ConnectionStatusDialog.css';
 
-/** Canned render data for the dev-harness route (see DevHarness.tsx). */
-export interface ConnectionStatusHarnessData {
-  browserOnline: boolean;
-  connInfo: ConnectionInfo | null;
-  connLog: ConnectionEvent[];
-  fileStats: DocSyncActivity | null;
-  indexStats: DocSyncActivity | null;
-  fileChange: RemoteChangeSummary | null;
-  indexChange: RemoteChangeSummary | null;
-}
-
 interface ConnectionStatusDialogProps {
   /** Path of the currently open file, for per-document stats. */
   currentFilePath?: string | null;
   onClose: () => void;
-  /**
-   * Dev-harness only: when provided, the live preview-runtime /
-   * sync-client lookups are skipped (they throw with no connection).
-   * Production callers never pass this.
-   */
-  harnessData?: ConnectionStatusHarnessData;
 }
 
 /** Same badge look as the header's connection indicator. */
@@ -227,7 +208,6 @@ function RemoteChangeSection({
 export default function ConnectionStatusDialog({
   currentFilePath,
   onClose,
-  harnessData,
 }: ConnectionStatusDialogProps) {
   const [now, setNow] = useState(() => Date.now());
   const [liveBrowserOnline, setLiveBrowserOnline] = useState(() => navigator.onLine);
@@ -247,49 +227,29 @@ export default function ConnectionStatusDialog({
     };
   }, []);
 
-  const browserOnline = harnessData?.browserOnline ?? liveBrowserOnline;
+  const browserOnline = liveBrowserOnline;
 
   // Resolve the two documents of interest; re-evaluated every tick
-  // because handles appear as the project loads / files open. Skipped when
-  // the harness supplies canned data — the live lookups throw with no
-  // connection.
+  // because handles appear as the project loads / files open.
   let fileDocId: string | null = null;
   let indexDocId: string | null = null;
-  if (!harnessData) {
-    try {
-      fileDocId = currentFilePath ? (getFileHandle(currentFilePath)?.documentId ?? null) : null;
-    } catch {
-      // not connected yet
-    }
-    try {
-      indexDocId = getIndexHandle()?.documentId ?? null;
-    } catch {
-      // not connected yet
-    }
+  try {
+    fileDocId = currentFilePath ? (getFileHandle(currentFilePath)?.documentId ?? null) : null;
+  } catch {
+    // not connected yet
   }
-  const fileStats = harnessData
-    ? harnessData.fileStats
-    : fileDocId
-      ? getDocSyncActivity(fileDocId)
-      : null;
-  const indexStats = harnessData
-    ? harnessData.indexStats
-    : indexDocId
-      ? getDocSyncActivity(indexDocId)
-      : null;
-  const fileChange = harnessData
-    ? harnessData.fileChange
-    : fileDocId
-      ? getDocRemoteChange(fileDocId)
-      : null;
-  const indexChange = harnessData
-    ? harnessData.indexChange
-    : indexDocId
-      ? getDocRemoteChange(indexDocId)
-      : null;
+  try {
+    indexDocId = getIndexHandle()?.documentId ?? null;
+  } catch {
+    // not connected yet
+  }
+  const fileStats = fileDocId ? getDocSyncActivity(fileDocId) : null;
+  const indexStats = indexDocId ? getDocSyncActivity(indexDocId) : null;
+  const fileChange = fileDocId ? getDocRemoteChange(fileDocId) : null;
+  const indexChange = indexDocId ? getDocRemoteChange(indexDocId) : null;
 
-  const connInfo = harnessData ? harnessData.connInfo : getConnectionInfo();
-  const connLog = harnessData ? harnessData.connLog : getConnectionLog();
+  const connInfo = getConnectionInfo();
+  const connLog = getConnectionLog();
   const wsState = connInfo?.wsReadyState ?? null;
   const peers = connInfo?.peers ?? [];
   const WS_STATE_NAMES = ['Connecting', 'Open', 'Closing', 'Closed'];
