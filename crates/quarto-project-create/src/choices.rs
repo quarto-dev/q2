@@ -234,8 +234,8 @@ pub fn available_choices() -> Vec<ProjectChoice> {
         // scaffold — before the feature ships.
         ProjectChoice::new(
             "hub-placeholder",
-            "Hub placeholder",
-            "A placeholder for the first hub-only project template",
+            "Welcome to the Quarto-Hub preview",
+            "Get started here",
             ProjectTypeWithTemplate::with_template(ProjectType::Website, "hub-placeholder"),
         )
         .hub_only(),
