@@ -46,7 +46,7 @@ mod wasm;
 pub use cache_lru::{CACHE_LRU_INDEX_KEY, SASS_CACHE_BUDGET_BYTES, cache_get_lru, cache_set_lru};
 pub use cache_versioning::{CACHE_VERSION_KEY, ensure_namespace_version};
 pub use traits::{
-    CacheEntryInfo, CommandOutput, PathKind, PathMetadata, RuntimeError, RuntimeResult,
+    CacheEntryInfo, CommandOutput, PathKind, PathMetadata, RuntimeError, RuntimeResult, SassOutput,
     SystemRuntime, TempDir, XdgDirKind, validate_cache_key, validate_cache_namespace,
 };
 pub use vfs::{VfsWriteStats, VirtualFileSystem};

@@ -26,15 +26,25 @@ export function setVfsCallbacks(
 ): void;
 
 /**
+ * What a compile produced: the CSS and the VFS paths (`/project/…`)
+ * dart-sass loaded for it through the VFS importer, each once, in load
+ * order. Consumed by the Rust sass cache to validate imported partials.
+ */
+export interface SassCompileOutput {
+  css: string;
+  loadedUrls: string[];
+}
+
+/**
  * Compile SCSS to CSS.
  *
  * @param scss - The SCSS source code
  * @param style - Output style: "expanded" or "compressed"
  * @param loadPathsJson - JSON-encoded array of load paths
- * @returns The compiled CSS
+ * @returns The compiled CSS and the VFS files loaded for it
  */
 export function jsCompileSass(
   scss: string,
   style: string,
   loadPathsJson: string
-): Promise<string>;
+): Promise<SassCompileOutput>;

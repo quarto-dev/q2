@@ -33,6 +33,16 @@
 //! Simple enough to be hand-editable for debugging; compact enough that a
 //! full ~33-entry sass cache index fits in well under 10 KB.
 //!
+//! ## Values are opaque
+//!
+//! The wrapper never interprets the bytes it stores. The `sass` namespace,
+//! for one, keeps each value as an envelope — a header line, a JSON
+//! manifest of the files the compile `@import`ed, then the CSS — and
+//! validates the manifest on lookup so an edited partial invalidates the
+//! entry (bd-m3hga05o; see `compile_theme_css.rs` in `quarto-core`). That
+//! is the caller's contract with itself; here a value is a byte string
+//! with a size.
+//!
 //! ## Concurrency
 //!
 //! The index is read, mutated, and re-written as a single logical operation

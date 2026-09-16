@@ -233,13 +233,22 @@ function tryResolve(basePath) {
 /**
  * Compile SCSS to CSS.
  *
+ * Besides the CSS, the result names every VFS file dart-sass loaded
+ * while resolving `@import` / `@use` (bd-m3hga05o): the Rust side stores
+ * that list beside the cached CSS and re-hashes the files on its next
+ * lookup, so editing an imported partial invalidates the cache even
+ * though the cache key covers only the top-level theme file. URLs from
+ * other importers (none today) and the top-level string itself are not
+ * VFS files and are left out.
+ *
  * @param {string} scss - The SCSS source code
  * @param {string} style - Output style: "expanded" or "compressed"
  * @param {string} loadPathsJson - JSON-encoded array of load paths
- * @returns {Promise<string>} Compiled CSS
+ * @returns {Promise<{css: string, loadedUrls: string[]}>} Compiled CSS
+ *   and the VFS paths (`/project/…`) it loaded, each once, in load order
  *
  * @example
- * const css = await jsCompileSass(
+ * const { css, loadedUrls } = await jsCompileSass(
  *   "$primary: blue; .btn { color: $primary; }",
  *   "expanded",
  *   "[]"
@@ -269,7 +278,10 @@ export async function jsCompileSass(scss, style, loadPathsJson) {
 
   try {
     const result = sass.compileString(scss, options);
-    return result.css;
+    const loadedUrls = result.loadedUrls
+      .filter((url) => url.protocol === "vfs:")
+      .map((url) => url.pathname);
+    return { css: result.css, loadedUrls };
   } catch (error) {
     // Re-throw with a cleaner error message
     const message = error instanceof Error ? error.message : String(error);
