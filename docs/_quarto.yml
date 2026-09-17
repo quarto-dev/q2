@@ -351,6 +351,7 @@ website:
             - errors/image/Q-18-1.qmd
             - errors/image/Q-18-2.qmd
             - errors/image/Q-18-3.qmd
+            - errors/image/Q-18-4.qmd
 
 format:
   html:

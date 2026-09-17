@@ -301,6 +301,13 @@ Child strands: bd-sxiv2tio (phase 2, preview client), bd-l6e3sd45
 - The SVG root carries `font-family="sans-serif"`: the reader's browser
   resolves the generic, and hephaestus's `textLength` keeps every run at
   the width measured with Roboto. Phase 3 revisits the family name.
+- **Brand colors were pulled into phase 1** (user request, 2026-09-17):
+  the light brand's `background` / `foreground` / `primary` become the
+  plot palette's `paper` / `ink` / `accent` (`BrandPalette` in the
+  transform). Only hex values cross; anything else warns once per
+  document (`Q-18-4`). The palette is part of the artifact hash. Phase 3
+  (bd-l6e3sd45) stays typography-only. Example:
+  `examples/plots/01-hephaestus-basic/brand.yml`.
 
 ## Decisions as originally proposed
 

@@ -1,6 +1,7 @@
 ---
 title: "Hephaestus plot documents"
 format: html
+brand: brand.yml
 ---
 
 A [hephaestus](https://github.com/posit-dev/hephaestus) plot document

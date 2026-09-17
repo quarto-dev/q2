@@ -3,7 +3,10 @@
 A `format: html` document that references one
 [hephaestus](https://github.com/posit-dev/hephaestus) plot document
 (`figs/readings.hep`) three ways: as a captioned, cross-referenced
-figure; at an explicit size; and via a path that does not exist.
+figure; at an explicit size; and via a path that does not exist. It
+declares a brand (`brand: brand.yml`) with a dark background and a
+light foreground, so the plots come out inverted relative to the plain
+document.
 
 `figs/readings.hep` is the document hephaestus's own `document_save`
 example writes (two panels: a scatter and dashed trend lines). It is the
@@ -25,6 +28,13 @@ same file as `crates/quarto-core/tests/fixtures/hephaestus/basic.hep`.
 - **Deterministic output.** Text is shaped with the bundled Roboto faces
   (`resources/hephaestus/fonts/`), so the SVG bytes are the same on
   every machine.
+- **Brand colors.** `brand.yml`'s `background` becomes the plot's paper,
+  `foreground` its ink and `primary` its accent. The built-in
+  hephaestus theme derives every chrome color (panel, grid, ticks,
+  titles) from those anchors, so the whole plot follows the brand. The
+  data series keep their own colors — they come from the plot's color
+  scale, not the palette. Delete the `brand:` line from `document.qmd`
+  to see the plot's own white-paper theme.
 
 ## How to run
 
@@ -47,3 +57,5 @@ The page is written next to the source as `document.html`.
   requested size.
 - In the terminal: one `Q-18-1` warning and one `Q-5-6` warning for the
   missing file, nothing else.
+- Each SVG opens with `<rect … fill="#101820"/>` (the brand
+  background) and its titles and tick labels are `fill="#f2f2f2"`.

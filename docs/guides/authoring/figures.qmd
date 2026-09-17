@@ -173,6 +173,12 @@ laid out at — the plot re-flows to fit rather than being scaled:
 
 Without them, the size recorded when the plot was saved is used.
 
+When the document declares a brand (see [Brand](brand.qmd)), the
+brand's `background`, `foreground` and `primary` colors become the
+plot's paper, ink and accent, so plots follow the brand along with the
+rest of the page. Only hex colors carry over; a named CSS color in one
+of those slots leaves that slot as the plot defines it.
+
 If the file cannot be read or is not a plot document, Quarto warns
 (see the `image` section of the [error reference](../../errors/index.qmd))
 and leaves the image reference as written.

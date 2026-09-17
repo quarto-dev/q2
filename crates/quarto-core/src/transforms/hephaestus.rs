@@ -53,15 +53,27 @@
 //! Size: explicit `width` / `height` attributes (CSS pixels) win; else
 //! the size the writer recorded in the document; else 7in × 5in at
 //! 96 dpi, knitr's `fig-width` / `fig-height` defaults.
+//!
+//! Brand colors: when the document declares a brand (`brand:`), its
+//! semantic colors recolor every plot through hephaestus's palette —
+//! `background` → `paper`, `foreground` → `ink`, `primary` → `accent`.
+//! Built-in hephaestus themes derive every chrome color from those
+//! three anchors, so a dark-paper / light-ink brand inverts the whole
+//! plot in one step. Only hex values can cross into the plot (a named
+//! CSS color means nothing outside a browser); anything else warns
+//! once per document (`Q-18-4`) and leaves that one anchor alone. The
+//! light brand is used — dark mode is bd-myfwwmki.
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 
+use hephaestus::color::Color;
 use hephaestus::document::{ReadContext, read_document};
 use hephaestus::geometry::Size;
 use hephaestus::svg::{SvgConfig, SvgScene, encode_svg};
 use hephaestus::text::GenericFamilyKind;
 use quarto_error_reporting::DiagnosticMessageBuilder;
+use quarto_pandoc_types::ConfigValue;
 use quarto_pandoc_types::inline::Image;
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_source_map::SourceInfo;
@@ -136,12 +148,17 @@ impl AstTransform for HephaestusRenderTransform {
 
         let mut ordinal = 0usize;
         let runtime = self.runtime.clone();
+        let mut palette: Option<BrandPalette> = None;
         for_each_image_mut(&mut ast.blocks, &mut |img| {
             if !is_hep_target(&img.target.0) {
                 return;
             }
+            // Resolved on the first `.hep` only, so a brand-less or
+            // plot-less document never touches the brand file.
+            let palette =
+                palette.get_or_insert_with(|| brand_palette(&ast.meta, runtime.as_ref(), ctx));
             ordinal += 1;
-            render_image(img, ordinal, runtime.as_ref(), ctx);
+            render_image(img, ordinal, runtime.as_ref(), palette, ctx);
         });
         Ok(())
     }
@@ -190,6 +207,7 @@ fn render_image(
     img: &mut Image,
     ordinal: usize,
     runtime: &dyn SystemRuntime,
+    palette: &BrandPalette,
     ctx: &mut RenderContext,
 ) {
     let url = img.target.0.clone();
@@ -240,9 +258,12 @@ fn render_image(
 
     let (width, height) = choose_size(&img.attr.2, doc.hints.size);
     let mut composition = doc.composition;
+    palette.apply(&mut composition);
     let id_prefix = format!("hep{ordinal}-");
     let config = SvgConfig::new()
-        .background(doc.hints.background)
+        // The page-clearing rect follows the brand paper when there is
+        // one; otherwise whatever the writer expected to draw over.
+        .background(palette.paper.or(doc.hints.background))
         .id_prefix(id_prefix)
         .pick_ids(false);
     let size = Size::new(width, height);
@@ -265,7 +286,7 @@ fn render_image(
     }
 
     let svg = encode_svg(&scene);
-    let rel_path = artifact_path(&source, &bytes, width, height);
+    let rel_path = artifact_path(&source, &bytes, width, height, palette);
     let html_url = match &ctx.resource_resolver {
         Some(resolver) => resolver.html_url_for(ArtifactScope::Page, &rel_path),
         None => rel_path.to_string_lossy().into_owned(),
@@ -277,14 +298,145 @@ fn render_image(
     img.target.0 = html_url;
 }
 
-/// `figure-html/<stem>-<hash>.svg`, where the hash covers the document
-/// bytes and the render size: the same plot at two sizes is two
-/// artifacts, and re-rendering an unchanged plot reuses the name.
-fn artifact_path(source: &Path, bytes: &[u8], width: f64, height: f64) -> PathBuf {
+/// The brand's semantic colors as hephaestus palette anchors. A `None`
+/// slot leaves the document's own color in place.
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+struct BrandPalette {
+    paper: Option<Color>,
+    ink: Option<Color>,
+    accent: Option<Color>,
+}
+
+impl BrandPalette {
+    /// Overwrite the composition theme's palette anchors that the brand
+    /// sets. Per-plot theme overrides (`ThemePart`) still win, as they
+    /// do over any composition theme.
+    fn apply(&self, composition: &mut hephaestus::plot::PlotComposition) {
+        if self.paper.is_none() && self.ink.is_none() && self.accent.is_none() {
+            return;
+        }
+        composition.update_theme(|theme| {
+            if let Some(paper) = self.paper {
+                theme.palette.paper = paper;
+            }
+            if let Some(ink) = self.ink {
+                theme.palette.ink = ink;
+            }
+            if let Some(accent) = self.accent {
+                theme.palette.accent = accent;
+            }
+        });
+    }
+}
+
+/// Brand semantic color → palette anchor.
+const BRAND_SLOTS: [(&str, &str); 3] = [
+    ("background", "paper"),
+    ("foreground", "ink"),
+    ("primary", "accent"),
+];
+
+/// Resolve the document's (light) brand, if any, into palette anchors.
+/// Brand *loading* problems are not reported here — the theme stage
+/// already reports them — but a color that cannot become an anchor is
+/// (`Q-18-4`, once).
+fn brand_palette(
+    meta: &ConfigValue,
+    runtime: &dyn SystemRuntime,
+    ctx: &mut RenderContext,
+) -> BrandPalette {
+    let Ok(Some(brand)) = quarto_sass::resolve_brand(meta, runtime, &ctx.project.dir) else {
+        return BrandPalette::default();
+    };
+    let Some(color) = brand.brand.color.as_ref() else {
+        return BrandPalette::default();
+    };
+
+    let mut palette = BrandPalette::default();
+    let mut rejected: Vec<String> = Vec::new();
+    for (slot, anchor) in BRAND_SLOTS {
+        // Only a slot the brand actually sets: `resolve_color` hands an
+        // unset name back verbatim, which would read as a bad value.
+        if color.named(slot).is_none() {
+            continue;
+        }
+        let value = brand.brand.resolve_color_quiet(slot);
+        match parse_hex_color(&value) {
+            Some(c) => match anchor {
+                "paper" => palette.paper = Some(c),
+                "ink" => palette.ink = Some(c),
+                _ => palette.accent = Some(c),
+            },
+            None => rejected.push(format!("`{slot}` = `{value}`")),
+        }
+    }
+
+    if !rejected.is_empty() {
+        ctx.diagnostics.push(
+            DiagnosticMessageBuilder::warning("Brand color not applied to plot")
+                .with_code("Q-18-4")
+                .problem(format!(
+                    "Only hex colors can recolor a plot document; the plot keeps its own color for {}",
+                    rejected.join(", ")
+                ))
+                .add_hint("Write the color as `#rgb`, `#rrggbb` or `#rrggbbaa` in the brand file")
+                .build(),
+        );
+    }
+    palette
+}
+
+/// `#rgb`, `#rgba`, `#rrggbb` or `#rrggbbaa` → a color; anything else
+/// (named CSS colors, `rgb()` functions) is `None`.
+fn parse_hex_color(value: &str) -> Option<Color> {
+    let hex = value.trim().strip_prefix('#')?;
+    if !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    let channel = |i: usize| -> Option<u8> {
+        match hex.len() {
+            3 | 4 => {
+                let d = u8::from_str_radix(&hex[i..i + 1], 16).ok()?;
+                Some(d * 17)
+            }
+            6 | 8 => u8::from_str_radix(&hex[2 * i..2 * i + 2], 16).ok(),
+            _ => None,
+        }
+    };
+    let (r, g, b) = (channel(0)?, channel(1)?, channel(2)?);
+    let a = match hex.len() {
+        4 | 8 => channel(3)?,
+        _ => 255,
+    };
+    Some(hephaestus::color::rgba(
+        f32::from(r) / 255.0,
+        f32::from(g) / 255.0,
+        f32::from(b) / 255.0,
+        f32::from(a) / 255.0,
+    ))
+}
+
+/// `figure-html/<stem>-<hash>.svg`, where the hash covers everything
+/// the markup depends on — the document bytes, the render size and the
+/// brand palette — so the same plot at two sizes, or under two brands,
+/// is two artifacts, and re-rendering an unchanged plot reuses the name.
+fn artifact_path(
+    source: &Path,
+    bytes: &[u8],
+    width: f64,
+    height: f64,
+    palette: &BrandPalette,
+) -> PathBuf {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
     hasher.update(width.to_le_bytes());
     hasher.update(height.to_le_bytes());
+    for anchor in [palette.paper, palette.ink, palette.accent] {
+        match anchor {
+            Some(c) => hasher.update(c.to_rgba8().to_u8_array()),
+            None => hasher.update([0xffu8; 5]),
+        }
+    }
     let digest = hex::encode(hasher.finalize());
     let stem = source
         .file_stem()
@@ -375,16 +527,38 @@ mod tests {
 
     #[test]
     fn artifact_path_is_content_and_size_addressed() {
-        let a = artifact_path(Path::new("figs/plot.hep"), b"abc", 900.0, 420.0);
-        let b = artifact_path(Path::new("elsewhere/plot.hep"), b"abc", 900.0, 420.0);
-        let c = artifact_path(Path::new("figs/plot.hep"), b"abc", 300.0, 420.0);
-        let d = artifact_path(Path::new("figs/plot.hep"), b"abd", 900.0, 420.0);
+        let none = BrandPalette::default();
+        let branded = BrandPalette {
+            paper: parse_hex_color("#101820"),
+            ..BrandPalette::default()
+        };
+        let a = artifact_path(Path::new("figs/plot.hep"), b"abc", 900.0, 420.0, &none);
+        let b = artifact_path(Path::new("elsewhere/plot.hep"), b"abc", 900.0, 420.0, &none);
+        let c = artifact_path(Path::new("figs/plot.hep"), b"abc", 300.0, 420.0, &none);
+        let d = artifact_path(Path::new("figs/plot.hep"), b"abd", 900.0, 420.0, &none);
+        let e = artifact_path(Path::new("figs/plot.hep"), b"abc", 900.0, 420.0, &branded);
         assert_eq!(a, b, "the source directory is not part of the name");
         assert_ne!(a, c, "size participates");
         assert_ne!(a, d, "content participates");
+        assert_ne!(a, e, "the brand palette participates");
         let name = a.to_string_lossy();
         assert!(name.starts_with("figure-html/plot-"), "{name}");
         assert!(name.ends_with(".svg"), "{name}");
+    }
+
+    #[test]
+    fn hex_colors_parse_and_everything_else_does_not() {
+        let hex = |s: &str| parse_hex_color(s).map(|c| c.to_rgba8().to_u8_array());
+        assert_eq!(hex("#101820"), Some([0x10, 0x18, 0x20, 0xff]));
+        assert_eq!(hex("  #F2F2F2 "), Some([0xf2, 0xf2, 0xf2, 0xff]));
+        assert_eq!(hex("#abc"), Some([0xaa, 0xbb, 0xcc, 0xff]));
+        assert_eq!(hex("#abcd"), Some([0xaa, 0xbb, 0xcc, 0xdd]));
+        assert_eq!(hex("#ff6f6180"), Some([0xff, 0x6f, 0x61, 0x80]));
+        assert_eq!(hex("rebeccapurple"), None);
+        assert_eq!(hex("rgb(1, 2, 3)"), None);
+        assert_eq!(hex("#12345"), None);
+        assert_eq!(hex("#gg0000"), None);
+        assert_eq!(hex(""), None);
     }
 
     #[test]

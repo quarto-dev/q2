@@ -35,6 +35,7 @@ const FIXTURE_HEP: &[u8] = include_bytes!("../fixtures/hephaestus/basic.hep");
 /// Q-codes of the `image` subsystem this phase introduces.
 const CODE_NOT_FOUND: &str = "Q-18-1";
 const CODE_INVALID: &str = "Q-18-2";
+const CODE_BRAND_COLOR: &str = "Q-18-4";
 /// The resource collector's own "referenced resource not found".
 const CODE_RESOURCE_NOT_FOUND: &str = "Q-5-6";
 
@@ -64,12 +65,25 @@ fn read(path: &Path) -> String {
 /// files, for `format`. Returns the temp dir (kept alive) and the
 /// result.
 fn render_doc(format: &str, body: &str, files: &[(&str, &[u8])]) -> (TempDir, RenderToFileResult) {
+    render_doc_with_meta(format, "", body, files)
+}
+
+/// Like [`render_doc`], with extra front-matter lines.
+fn render_doc_with_meta(
+    format: &str,
+    extra_meta: &str,
+    body: &str,
+    files: &[(&str, &[u8])],
+) -> (TempDir, RenderToFileResult) {
     let temp = TempDir::new().unwrap();
     for (name, bytes) in files {
         write_bytes(&temp.path().join(name), bytes);
     }
     let qmd_path = temp.path().join("doc.qmd");
-    write_text(&qmd_path, &format!("---\ntitle: Plot\n---\n\n{body}\n"));
+    write_text(
+        &qmd_path,
+        &format!("---\ntitle: Plot\n{extra_meta}\n---\n\n{body}\n"),
+    );
     let options = RenderToFileOptions::default();
     let result =
         render_to_file(&qmd_path, format, &options, runtime_arc()).expect("single-doc render");
@@ -323,4 +337,75 @@ fn non_hephaestus_bytes_warn_and_leave_the_image() {
     let html = read(&result.output_path);
     assert_eq!(img_srcs(&html), vec!["bogus.hep".to_string()]);
     assert_eq!(diagnostic_codes(&result), vec![CODE_INVALID.to_string()]);
+}
+
+// ── brand.yml colors → the plot's palette ────────────────────────────────
+
+/// A brand declared by the document (`brand: brand.yml`) recolors the
+/// plot: `background` becomes hephaestus's `paper`, `foreground` its
+/// `ink`, `primary` its `accent`. The page-clearing rect and the
+/// ink-colored chrome both show it.
+#[test]
+fn brand_colors_map_onto_the_plot_palette() {
+    let brand =
+        b"color:\n  background: \"#101820\"\n  foreground: \"#f2f2f2\"\n  primary: \"#ff6f61\"\n";
+    let (_temp, result) = render_doc_with_meta(
+        "html",
+        "brand: brand.yml",
+        "![](basic.hep)",
+        &[("basic.hep", FIXTURE_HEP), ("brand.yml", brand)],
+    );
+    let (_, on_disk) = converted_svg(&result);
+    let svg = read(&on_disk);
+    assert!(
+        svg.contains("<rect width=\"900\" height=\"420\" fill=\"#101820\"/>"),
+        "page-clearing rect must use the brand background; got {:.400}",
+        svg
+    );
+    assert!(
+        svg.contains("fill=\"#f2f2f2\""),
+        "ink-colored chrome must use the brand foreground"
+    );
+    assert!(
+        !svg.contains("fill=\"#ffffff\""),
+        "the document's own white paper must be gone"
+    );
+    assert_eq!(diagnostic_codes(&result), Vec::<String>::new());
+}
+
+/// A brand color that is not a hex value cannot become a palette
+/// anchor: warn once (`Q-18-4`) and keep the document's own color for
+/// that slot. The other slots still apply.
+#[test]
+fn non_hex_brand_color_warns_and_keeps_the_documents_color() {
+    let brand = b"color:\n  background: rebeccapurple\n  foreground: \"#f2f2f2\"\n";
+    let (_temp, result) = render_doc_with_meta(
+        "html",
+        "brand: brand.yml",
+        "![](basic.hep)\n\n![](basic.hep){width=300 height=200}",
+        &[("basic.hep", FIXTURE_HEP), ("brand.yml", brand)],
+    );
+    let html = read(&result.output_path);
+    let srcs = img_srcs(&html);
+    assert_eq!(srcs.len(), 2);
+    let svg = read(&result.output_path.parent().unwrap().join(&srcs[0]));
+    assert!(
+        svg.contains("<rect width=\"900\" height=\"420\" fill=\"#ffffff\"/>"),
+        "paper stays the document's own white"
+    );
+    assert!(svg.contains("fill=\"#f2f2f2\""), "ink still applies");
+    assert_eq!(
+        diagnostic_codes(&result),
+        vec![CODE_BRAND_COLOR.to_string()],
+        "one warning per document, not per image"
+    );
+}
+
+/// Without a brand the document's own palette is used unchanged.
+#[test]
+fn no_brand_keeps_the_documents_palette() {
+    let (_temp, result) = render_doc("html", "![](basic.hep)", &[("basic.hep", FIXTURE_HEP)]);
+    let (_, on_disk) = converted_svg(&result);
+    let svg = read(&on_disk);
+    assert!(svg.contains("<rect width=\"900\" height=\"420\" fill=\"#ffffff\"/>"));
 }
