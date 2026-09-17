@@ -346,6 +346,11 @@ website:
             - errors/extension/Q-16-10.qmd
             - errors/extension/Q-16-11.qmd
             - errors/extension/Q-16-12.qmd
+        - section: "image"
+          contents:
+            - errors/image/Q-18-1.qmd
+            - errors/image/Q-18-2.qmd
+            - errors/image/Q-18-3.qmd
 
 format:
   html:

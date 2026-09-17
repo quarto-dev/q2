@@ -1224,7 +1224,7 @@ pub fn build_transform_pipeline(
     // for explicit banner colors/images, pushes the generated
     // include-in-header <style> + image ResourceCopyIntent. HTML-only
     // (self-gated on `ctx.format.is_html_based()`).
-    pipeline.push(Box::new(TitleBannerTransform::new(runtime)));
+    pipeline.push(Box::new(TitleBannerTransform::new(runtime.clone())));
     // bd-1tl09 Phase 0: code-block decoration Generate runs after
     // metadata-normalize so document-level defaults (e.g.
     // `code-copy: true`) are visible when computing per-block
@@ -1498,6 +1498,20 @@ pub fn build_transform_pipeline(
     // does not touch code blocks).
     pipeline.push(Box::new(CodeBlockRenderTransform::new()));
     pipeline.push(Box::new(ResourceCollectorTransform::new()));
+    // bd-3qych45b: render hephaestus plot documents (`![](plot.hep)`)
+    // to SVG artifacts under `figure-html/` and point the image at
+    // them. After `resource-collector` on purpose: the collector still
+    // copies the `.hep` beside the page (a future live-reflow layer
+    // wants it there) and never goes looking for the generated SVG in
+    // the source tree. Before `responsive-image` so the rewritten
+    // `<img>` is tagged `img-fluid` like any other. HTML-family
+    // self-gated; native-only (the preview renders `.hep` with the npm
+    // `hephaestus-svg-wasm` client in React) and listed in
+    // `Q2_PREVIEW_TRANSFORM_EXCLUDED`.
+    #[cfg(not(target_arch = "wasm32"))]
+    pipeline.push(Box::new(crate::transforms::HephaestusRenderTransform::new(
+        runtime.clone(),
+    )));
 
     // bd-2c8rg: tag every <table> with Bootstrap's `caption-top` and
     // `table` classes so the rendered HTML picks up the project's
@@ -1593,6 +1607,11 @@ pub fn build_transform_pipeline(
 /// in the full HTML pipeline (typo / rename guard).
 const Q2_PREVIEW_TRANSFORM_EXCLUDED: &[&str] = &[
     "callout-resolve",
+    // `hephaestus-render` swaps a `.hep` image for a rendered SVG
+    // artifact. In q2-preview the raw `Image` must reach React, where
+    // the `hephaestus-svg-wasm`-backed component renders it live
+    // (bd-3qych45b, phase 2). Native-only at the cargo level too.
+    "hephaestus-render",
     // `attribution-viewer` injects raw <style>/<script> tags into
     // `rendered.includes.{header,after-body}`, which the HTML
     // template wires into the final HTML. q2-preview's React leaves
