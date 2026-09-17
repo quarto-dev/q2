@@ -6,7 +6,7 @@ filed four times over three months, correctly diagnosed twice, never fixed.
 **Reported:** 2026-09-17, `~/Desktop/daily-log/2026/09/17/fig-test/test.qmd` (knitr cell with
 `#| fig-cap` + `![This is another figure](plot.png){#fig-test-2}`).
 **Verified against:** `main` @ `aa92c4b9e`. **Q1 reference:** `quarto` 99.9.9 (dev checkout).
-**Status:** executing on branch `braid/bd-n3sark9b-crossref-float-caption-prefix`. Phase 1 committed (`18fa6670d`); Phase 2 committed (see git log); Phase 3 (verify) in progress.
+**Status:** executing on branch `braid/bd-n3sark9b-crossref-float-caption-prefix`. Phase 1 committed (`18fa6670d`); Phase 2 committed (`1a83b4776`); full `cargo xtask verify` green 2026-09-17. **Awaiting push approval.**
 **Docs follow-up:** bd-t0qt409i (under the docs epic bd-tr81, blocked on this strand).
 
 ## TL;DR
@@ -304,7 +304,9 @@ nbsp — all out of scope.
 
 ### Phase 3 — close out
 
-- [ ] `cargo xtask verify` (full — `quarto-core` changed, so the WASM leg matters).
+- [x] `cargo xtask verify` (full) — all steps passed 2026-09-17: lints + clippy, fmt, Rust build, tree-sitter
+  tests, Rust tests, ts-packages build + MCP smoke, hub-client `build:all` (WASM rebuilt from the final
+  sources) and hub-client `test:ci`.
 - [ ] Unblock bd-t0qt409i (docs: filter-visible `Plain` caption contract) by closing this strand;
   it is `blocks`-linked so it surfaces in `braid ready` only once the behavior has shipped.
 - [ ] Ask before pushing. Recommend closing bd-uwv2eec2, bd-hb9a9ik8, bd-4vbd3b7g, bd-51k5yz4e as
