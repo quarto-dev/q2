@@ -1,14 +1,17 @@
 /**
  * Zombie-adapter regression (bd-jit6pdwq Phase 5).
  *
- * Upstream `BrowserWebSocketClientAdapter.disconnect()` clears the
- * retry *interval* but not the one-shot reconnect `setTimeout` that
- * `onClose` schedules after a failed/closed socket. A disconnected
- * adapter whose socket had already closed therefore RESURRECTS
- * itself when that timer fires — reconnecting to a dead port every
- * `retryInterval` forever. Found by the end-to-end WS-churn check:
- * the preview SPA's teardown-on-server-gone was calling disconnect()
- * and the churn continued anyway.
+ * Upstream `BrowserWebSocketClientAdapter.disconnect()` (≤ 2.5.6)
+ * cleared the retry *interval* but not the one-shot reconnect
+ * `setTimeout` that `onClose` schedules after a failed/closed socket.
+ * A disconnected adapter whose socket had already closed therefore
+ * RESURRECTED itself when that timer fired — reconnecting to a dead
+ * port every `retryInterval` forever. Found by the end-to-end WS-churn
+ * check: the preview SPA's teardown-on-server-gone was calling
+ * disconnect() and the churn continued anyway. automerge-repo
+ * 2.6.0-alpha.3 fixed the timer path upstream; a direct `connect()`
+ * after `disconnect()` still recreates the socket on the base class
+ * (the control test below), which is what the subclass keeps closed.
  *
  * `StoppableWebSocketClientAdapter` makes disconnect() terminal:
  * any later connect() (the zombie timer's, or anyone else's) is a
@@ -77,7 +80,8 @@ describe('StoppableWebSocketClientAdapter', () => {
 
   it('control: the resurrection path exists upstream (connect after disconnect recreates a socket on the base class)', async () => {
     // Documents WHY the subclass exists. If this control ever fails,
-    // upstream fixed disconnect() and the subclass can be retired.
+    // upstream made disconnect() terminal and the subclass can be
+    // retired.
     const { BrowserWebSocketClientAdapter } = await import(
       '@automerge/automerge-repo-network-websocket'
     );

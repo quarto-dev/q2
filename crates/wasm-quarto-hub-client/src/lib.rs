@@ -2027,7 +2027,7 @@ pub fn get_builtin_template(name: &str) -> String {
 // with quarto-doctemplate (pure Rust — no JS bridge involved).
 
 use quarto_project_create::{
-    CreateFromChoiceOptions, ScaffoldedFile, create_project_from_choice, implemented_choices,
+    CreateFromChoiceOptions, ScaffoldedFile, Surface, choices_for, create_project_from_choice,
 };
 
 /// A project choice for JSON serialization.
@@ -2111,7 +2111,9 @@ impl CreateProjectResponse {
 /// ```
 #[wasm_bindgen]
 pub fn get_project_choices() -> String {
-    let choices: Vec<JsonProjectChoice> = implemented_choices()
+    // The hub surface: every implemented choice, including the ones
+    // `q2 create project` deliberately hides (bd-d147nkqx).
+    let choices: Vec<JsonProjectChoice> = choices_for(Surface::Hub)
         .into_iter()
         .map(|c| JsonProjectChoice {
             id: c.id,
@@ -2692,7 +2694,7 @@ pub async fn compile_scss(scss: &str, minified: bool, load_paths_json: &str) -> 
 
     // Compile SCSS
     match runtime.compile_sass(scss, &load_paths, minified).await {
-        Ok(css) => SassCompileResponse::ok(css),
+        Ok(out) => SassCompileResponse::ok(out.css),
         Err(e) => SassCompileResponse::error(&format!("{}", e)),
     }
 }
@@ -2759,7 +2761,7 @@ pub async fn compile_theme_css_by_name(theme_name: &str, minified: bool) -> Stri
 
     // Compile CSS
     match compile_theme_css(&theme_config, &context).await {
-        Ok(css) => SassCompileResponse::ok(css),
+        Ok(out) => SassCompileResponse::ok(out.css),
         Err(e) => SassCompileResponse::error(&format!("SASS compilation failed: {}", e)),
     }
 }
@@ -2800,7 +2802,7 @@ pub async fn compile_default_bootstrap_css(minified: bool) -> String {
 
     // Compile CSS
     match compile_theme_css(&theme_config, &context).await {
-        Ok(css) => SassCompileResponse::ok(css),
+        Ok(out) => SassCompileResponse::ok(out.css),
         Err(e) => SassCompileResponse::error(&format!("SASS compilation failed: {}", e)),
     }
 }

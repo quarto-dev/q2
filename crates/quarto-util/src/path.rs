@@ -1,6 +1,6 @@
 //! Cross-platform path utilities
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Returns `true` if `path` has a root component.
 ///
@@ -55,6 +55,49 @@ pub fn is_external_url(path: &str) -> bool {
         && scheme
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+}
+
+/// Collapse `.` and `..` components lexically, without touching the
+/// filesystem.
+///
+/// `a/b/../../theme.scss` → `theme.scss`; `/project/a/../x` →
+/// `/project/x`. A `..` that has nothing to pop is kept
+/// (`../x` stays `../x`; `a/../../x` → `../x`), and `..` never climbs
+/// above a root or drive prefix. An input that collapses to nothing
+/// yields `.`.
+///
+/// Use this wherever the *spelling* of a path is used as an identity —
+/// a cache key, a load path, a diagnostic — and the same file can
+/// legitimately arrive under several spellings. The motivating case
+/// (bd-79c4do6g): the metadata merge rewrites one project-level
+/// `theme: [theme.scss]` to a document-relative form per document
+/// (`../theme.scss`, `../../theme.scss`, …), and hashing those
+/// spellings verbatim gave the compiled-SCSS cache one entry per
+/// document directory for byte-identical output. Symlinks are not
+/// resolved (that needs the filesystem — `SystemRuntime::canonicalize`);
+/// two spellings that differ only through a symlink stay distinct,
+/// which costs an extra entry, never a wrong hit.
+pub fn normalize_lexically(path: &Path) -> PathBuf {
+    use std::path::Component;
+    let mut out = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => match out.components().next_back() {
+                Some(Component::Normal(_)) => {
+                    out.pop();
+                }
+                Some(Component::RootDir | Component::Prefix(_)) => {}
+                _ => out.push(".."),
+            },
+            other => out.push(other.as_os_str()),
+        }
+    }
+    if out.as_os_str().is_empty() {
+        PathBuf::from(".")
+    } else {
+        out
+    }
 }
 
 #[cfg(test)]
@@ -126,5 +169,44 @@ mod tests {
         // Guards against regressing to a `starts_with('/')`-style check, which
         // would wrongly report a drive-rooted path as not rooted.
         assert!(is_rooted(Path::new("C:/abs/file.txt")));
+    }
+
+    #[test]
+    fn normalize_lexically_collapses_dot_and_dotdot() {
+        let n = |s: &str| normalize_lexically(Path::new(s));
+        assert_eq!(n("a/b/../../theme.scss"), PathBuf::from("theme.scss"));
+        assert_eq!(n("./a/./b/../c"), PathBuf::from("a/c"));
+        assert_eq!(n("/project/a/../x"), PathBuf::from("/project/x"));
+        assert_eq!(n("theme.scss"), PathBuf::from("theme.scss"));
+    }
+
+    #[test]
+    fn normalize_lexically_keeps_unpoppable_parent_dirs() {
+        let n = |s: &str| normalize_lexically(Path::new(s));
+        assert_eq!(n("../x"), PathBuf::from("../x"));
+        assert_eq!(n("a/../../x"), PathBuf::from("../x"));
+        assert_eq!(n("../../x/.."), PathBuf::from("../.."));
+    }
+
+    #[test]
+    fn normalize_lexically_never_climbs_above_root() {
+        let n = |s: &str| normalize_lexically(Path::new(s));
+        assert_eq!(n("/../x"), PathBuf::from("/x"));
+        assert_eq!(n("/a/../../b"), PathBuf::from("/b"));
+    }
+
+    #[test]
+    fn normalize_lexically_empty_result_is_dot() {
+        let n = |s: &str| normalize_lexically(Path::new(s));
+        assert_eq!(n("a/.."), PathBuf::from("."));
+        assert_eq!(n("."), PathBuf::from("."));
+        assert_eq!(n(""), PathBuf::from("."));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn normalize_lexically_keeps_drive_prefix() {
+        let n = |s: &str| normalize_lexically(Path::new(s));
+        assert_eq!(n(r"C:\proj\a\..\..\..\x"), PathBuf::from(r"C:\x"));
     }
 }

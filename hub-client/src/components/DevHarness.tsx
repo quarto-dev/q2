@@ -9,7 +9,7 @@
  */
 
 import React, { useState } from 'react';
-import ProjectSetSetup from './ProjectSetSetup';
+import ProjectSetError from './ProjectSetError';
 import ProjectsHome from './ProjectsHome';
 import NewFileDialog from './NewFileDialog';
 import ShareDialog from './ShareDialog';
@@ -42,7 +42,6 @@ import type { Diagnostic, Pass1Failure } from '@quarto/preview-renderer/types/di
 import SidebarDrawer from './SidebarDrawer';
 import { useSidebarDrawer } from '../hooks/useSidebarDrawer';
 import { ViewModeProvider } from './ViewModeContext';
-import type { ProjectEntry } from '@quarto/preview-renderer/types/project';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import type { Symbol } from '@quarto/preview-renderer/types/intelligence';
 import type { ProjectSetEntry } from '@quarto/quarto-automerge-schema';
@@ -50,33 +49,6 @@ import type { CollectionSnapshot } from '../services/projectSetService';
 import type { SearchFiles } from '../services/search';
 import type { PwaPromptStore } from '../pwaPrompt';
 import type { ReplayState, ReplayControls } from '../hooks/useReplayMode';
-
-const FAKE_LEGACY_PROJECTS: ProjectEntry[] = [
-  {
-    id: 'fake-1',
-    indexDocId: 'automerge:fake1',
-    syncServer: 'wss://sync.automerge.org',
-    description: 'My Research Paper',
-    createdAt: new Date(Date.now() - 86400000).toISOString(),
-    lastAccessed: new Date(Date.now() - 3600000).toISOString(),
-  },
-  {
-    id: 'fake-2',
-    indexDocId: 'automerge:fake2',
-    syncServer: 'wss://sync.automerge.org',
-    description: 'Course Notes',
-    createdAt: new Date(Date.now() - 172800000).toISOString(),
-    lastAccessed: new Date(Date.now() - 7200000).toISOString(),
-  },
-  {
-    id: 'fake-3',
-    indexDocId: 'automerge:fake3',
-    syncServer: 'wss://sync.automerge.org',
-    description: 'Blog',
-    createdAt: new Date().toISOString(),
-    lastAccessed: new Date().toISOString(),
-  },
-];
 
 const noop = async () => {};
 
@@ -838,40 +810,10 @@ const DEV_PAGES: Record<string, () => React.ReactNode> = {
       <LoginScreen errorReason="denied" />
     </AuthProviderRoot>
   ),
-  'setup-migration': () => (
-    <ProjectSetSetup
-      hasMigration={true}
-      legacyProjects={FAKE_LEGACY_PROJECTS}
-      error={null}
-      isConnecting={false}
-      onCreateProjectSet={noop}
-      onLinkProjectSet={noop}
-      onMigrateProjects={noop}
-      onMergeIntoProjectSet={noop}
-    />
-  ),
-  'setup-migration-error': () => (
-    <ProjectSetSetup
-      hasMigration={true}
-      legacyProjects={FAKE_LEGACY_PROJECTS}
+  'project-set-error': () => (
+    <ProjectSetError
       error="Connection failed: could not reach sync server"
-      isConnecting={false}
-      onCreateProjectSet={noop}
-      onLinkProjectSet={noop}
-      onMigrateProjects={noop}
-      onMergeIntoProjectSet={noop}
-    />
-  ),
-  'setup-fresh': () => (
-    <ProjectSetSetup
-      hasMigration={false}
-      legacyProjects={[]}
-      error={null}
-      isConnecting={false}
-      onCreateProjectSet={noop}
-      onLinkProjectSet={noop}
-      onMigrateProjects={noop}
-      onMergeIntoProjectSet={noop}
+      onRetry={noop}
     />
   ),
 

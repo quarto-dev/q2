@@ -80,7 +80,7 @@ async function openDoc(page: Page): Promise<void> {
         { path: '_quarto.yml', content: 'project:\n  type: default\n', contentType: 'text' },
         { path: 'doc.qmd', content: DOC, contentType: 'text' },
     ]);
-    await bootstrapProjectSet(page, serverUrl);
+    await bootstrapProjectSet(page);
     const localId = await seedProjectInBrowser(page, docId, serverUrl);
     await page.goto(`/#/p/${localId}/file/doc.qmd`);
     await waitForPreviewRender(page, { kind: 'q2-preview', timeout: 30000 });

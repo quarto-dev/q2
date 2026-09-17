@@ -138,12 +138,19 @@ cd hub-client && npx playwright test --config=playwright.smoke-all.config.ts e2e
 1. **Build with `VITE_E2E=1`** before running any Playwright test:
    ```bash
    cd hub-client
-   VITE_E2E=1 npm run build   # compiles test hooks into the bundle
+   VITE_E2E=1 VITE_DEFAULT_SYNC_SERVER=/ws npm run build   # compiles test hooks into the bundle
    ```
    Without this flag, `window.__quartoTest` is tree-shaken out and every
    `page.evaluate` call that reads it fails with "E2E test hooks not found".
    `bootstrapProjectSet` checks for this and throws a clear error, but the
    root cause is always a missing `VITE_E2E=1` build.
+
+   `VITE_DEFAULT_SYNC_SERVER=/ws` matters too: the app creates the personal
+   project set silently on first run against that default (bd-4h1hv60p),
+   and there is no setup form for a test to type the hub URL into. `/ws`
+   resolves to the page origin, which `vite preview` proxies to the e2e
+   hub; without it the suite would create every project set on the public
+   sync server.
 
 2. **No conflicting hub server on port 3031**: `globalSetup` starts its own
    `cargo run --bin hub` on port 3031. If a dev hub is already bound there,

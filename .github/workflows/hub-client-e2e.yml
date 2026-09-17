@@ -133,6 +133,13 @@ jobs:
       - name: Build TypeScript packages (ts-packages + hub-client)
         env:
           VITE_E2E: '1'
+          # The app establishes the personal project set silently on first
+          # run against DEFAULT_SYNC_SERVER (bd-4h1hv60p) — there is no
+          # setup form for a test to type the hub URL into. `/ws` resolves
+          # to the page origin, which `vite preview` proxies to the e2e hub
+          # (playwright.config.ts webServer.env.VITE_HUB_SERVER). Mirrors
+          # the test:e2e script in hub-client/package.json.
+          VITE_DEFAULT_SYNC_SERVER: '/ws'
           # Point the sandboxed-preview iframe at the freshly built
           # same-origin copy in public/ (built by build:sandboxed below)
           # instead of the GitHub Pages deployment — PR CI must test this

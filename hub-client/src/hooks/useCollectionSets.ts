@@ -67,6 +67,8 @@ export interface CollectionSetsActions {
   linkProjectSet: (projectSetDocId: string, syncServer: string) => Promise<void>;
   migrateProjects: (syncServer: string) => Promise<void>;
   mergeIntoProjectSet: (projectSetDocId: string, syncServer: string) => Promise<void>;
+  /** After an 'error': re-read the pointers and re-enter the state machine. */
+  retry: () => Promise<void>;
 
   // ---- root-set compat operations ----
   addProject: (entry: Omit<ProjectSetEntry, 'addedAt' | 'lastAccessed'>) => void;
@@ -222,31 +224,43 @@ export function useCollectionSets(): [CollectionSetsState, CollectionSetsActions
     setStatus('connected');
   }, []);
 
+  /** Read the pointers and enter the state machine: connect when there
+   * is something to connect to, otherwise report which setup is needed. */
+  const initialize = useCallback(async () => {
+    try {
+      const pointers = await getCollectionPointers();
+      if (pointers.length > 0) {
+        await connectAll(pointers);
+        return;
+      }
+      const legacy = await projectStorage.listProjects();
+      if (legacy.length > 0) {
+        setLegacyProjects(legacy);
+        setStatus('needs-migration');
+      } else {
+        setStatus('needs-setup');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setStatus('error');
+    }
+  }, [connectAll]);
+
   // Initialize on mount
   useEffect(() => {
     if (initRef.current) return;
     initRef.current = true;
+    void initialize();
+  }, [initialize]);
 
-    (async () => {
-      try {
-        const pointers = await getCollectionPointers();
-        if (pointers.length > 0) {
-          await connectAll(pointers);
-          return;
-        }
-        const legacy = await projectStorage.listProjects();
-        if (legacy.length > 0) {
-          setLegacyProjects(legacy);
-          setStatus('needs-migration');
-        } else {
-          setStatus('needs-setup');
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-        setStatus('error');
-      }
-    })();
-  }, [connectAll]);
+  /** Start over after an 'error': re-read the pointers and re-enter the
+   * state machine. Publishes 'loading' first so consumers keyed on a
+   * fresh cycle (useAutoEstablishRoot re-arms on it) see one. */
+  const retry = useCallback(async () => {
+    setStatus('loading');
+    setError(null);
+    await initialize();
+  }, [initialize]);
 
   // ---- setup actions ----
 
@@ -458,6 +472,7 @@ export function useCollectionSets(): [CollectionSetsState, CollectionSetsActions
     linkProjectSet,
     migrateProjects,
     mergeIntoProjectSet,
+    retry,
     addProject,
     removeProject,
     updateProjectDescription,

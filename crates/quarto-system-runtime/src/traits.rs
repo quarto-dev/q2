@@ -97,7 +97,38 @@ pub enum PathKind {
     Symlink,
 }
 
-/// Metadata about a file or directory
+/// What a SASS compile produced (bd-m3hga05o).
+///
+/// `loaded_files` is every file the compiler resolved **through the
+/// runtime** while following `@import` / `@use` — the import closure,
+/// each path once, in first-load order, spelled the way the compiler
+/// opened it (so `file_read` accepts it back). Embedded resources
+/// (Bootstrap and the other built-in SCSS) are served without the
+/// runtime and never appear here. The compiled-SCSS cache stores this
+/// list beside the CSS and re-hashes the files on its next lookup, so
+/// an edit to an imported partial invalidates the entry even though the
+/// cache key sees only the top-level theme file.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SassOutput {
+    /// The compiled CSS.
+    pub css: String,
+    /// Files loaded through the runtime during the compile.
+    pub loaded_files: Vec<PathBuf>,
+}
+
+/// One entry of a cache namespace, as enumerated by
+/// [`SystemRuntime::cache_list`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CacheEntryInfo {
+    /// The entry's key (file name in the native backend).
+    pub key: String,
+    /// Value size in bytes.
+    pub size: u64,
+    /// Last-modified time in milliseconds since the Unix epoch, when the
+    /// backend can report one.
+    pub modified_ms: Option<u64>,
+}
+
 #[derive(Debug, Clone)]
 pub struct PathMetadata {
     /// Type of path (file, directory, symlink)
@@ -593,22 +624,25 @@ pub trait SystemRuntime: Send + Sync {
     ///
     /// # Returns
     ///
-    /// Compiled CSS string on success, `RuntimeError::SassError` on compilation failure,
-    /// or `RuntimeError::NotSupported` if SASS compilation is not available.
+    /// The compiled CSS plus the files loaded through this runtime while
+    /// resolving imports (see [`SassOutput`]); `RuntimeError::SassError`
+    /// on compilation failure, or `RuntimeError::NotSupported` if SASS
+    /// compilation is not available.
     ///
     /// # Example
     ///
     /// ```ignore
     /// let scss = "$primary: blue; .btn { color: $primary; }";
-    /// let css = runtime.compile_sass(scss, &[], false).await?;
-    /// assert!(css.contains(".btn"));
+    /// let out = runtime.compile_sass(scss, &[], false).await?;
+    /// assert!(out.css.contains(".btn"));
+    /// assert!(out.loaded_files.is_empty());
     /// ```
     async fn compile_sass(
         &self,
         scss: &str,
         load_paths: &[PathBuf],
         minified: bool,
-    ) -> RuntimeResult<String> {
+    ) -> RuntimeResult<SassOutput> {
         let _ = (scss, load_paths, minified);
         Err(RuntimeError::NotSupported(
             "SASS compilation is not available on this runtime".to_string(),
@@ -659,6 +693,19 @@ pub trait SystemRuntime: Send + Sync {
     async fn cache_clear_namespace(&self, namespace: &str) -> RuntimeResult<()> {
         let _ = namespace;
         Ok(())
+    }
+
+    /// Enumerate the entries of a namespace.
+    ///
+    /// Returns `Ok(None)` when the backend cannot enumerate (the
+    /// default, and caching-disabled runtimes); `Ok(Some(vec![]))` for
+    /// an empty or absent namespace. Reserved bookkeeping keys are
+    /// included — callers filter. Used by the LRU wrapper to reconcile
+    /// its index against what the backend actually holds
+    /// (bd-ddahjqr1).
+    async fn cache_list(&self, namespace: &str) -> RuntimeResult<Option<Vec<CacheEntryInfo>>> {
+        let _ = namespace;
+        Ok(None)
     }
 }
 

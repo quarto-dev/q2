@@ -13,6 +13,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import InviteLanding from './InviteLanding';
+import { demoDisclaimer } from '../strings';
 import type { CollectionInvitePreview, ProjectInvitePreview } from '../utils/invitePreview';
 
 afterEach(cleanup);
@@ -220,6 +221,49 @@ describe('InviteLanding payload preview', () => {
   it('skips the payload block entirely when preview is absent (legacy links)', () => {
     renderLanding();
     expect(screen.queryByTestId('invite-payload-preview')).toBeNull();
+  });
+});
+
+/**
+ * The demo disclaimer (bd-m6u9qu3u) — the same notice the landing page
+ * carries, since a signed-out invitee sees this card *instead of* the
+ * landing page and is about to sign in and enter data on the strength of
+ * it. Shared component (DemoDisclaimer); these tests pin that it is here
+ * in both signed states and above the CTA, without displacing the
+ * explainer footnote from its last place.
+ */
+describe('InviteLanding demo disclaimer', () => {
+  const pairs = () => [demoDisclaimer.useTestData, demoDisclaimer.notProtected];
+
+  it('shows the disclaimer in both signed states and for both invite kinds', () => {
+    for (const signedIn of [false, true]) {
+      for (const preview of [collectionPreview, projectPreview]) {
+        renderLanding({ signedIn, preview, kind: preview.kind });
+        expect(screen.getByRole('heading', { level: 2, name: /^disclaimer$/i })).toBeTruthy();
+        const strongs = [...document.querySelectorAll('.demo-disclaimer p > strong:first-child')];
+        expect(strongs.map((s) => s.textContent)).toEqual(pairs().map((p) => p.lead));
+        cleanup();
+      }
+    }
+  });
+
+  it('sits above the CTA; the explainer footnote stays last', () => {
+    renderLanding({ preview: collectionPreview });
+    const card = screen.getByTestId('invite-landing-card');
+    const disclaimer = card.querySelector('.demo-disclaimer')!;
+    const actions = card.querySelector('.il-actions')!;
+    expect(disclaimer).not.toBeNull();
+    expect(
+      disclaimer.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING,
+      'the disclaimer should precede the CTA',
+    ).toBeTruthy();
+    expect(card.lastElementChild).toBe(card.querySelector('.il-explainer'));
+  });
+
+  it('adds no button or link of its own', () => {
+    renderLanding({ preview: collectionPreview, signedIn: true });
+    const disclaimer = document.querySelector('.demo-disclaimer')!;
+    expect(disclaimer.querySelector('button, a, details')).toBeNull();
   });
 });
 

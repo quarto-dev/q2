@@ -50,7 +50,7 @@ async function openKanbanFixture(page: Page): Promise<FrameLocator> {
         { path: 'kanban.tsx', content: tsxContent, contentType: 'text' },
         { path: 'render-components-kanban.qmd', content: qmdContent, contentType: 'text' },
     ]);
-    await bootstrapProjectSet(page, serverUrl);
+    await bootstrapProjectSet(page);
     const localId = await seedProjectInBrowser(page, indexDocId, serverUrl);
     await page.goto(`/#/p/${localId}/file/${encodeURIComponent('render-components-kanban.qmd')}`);
     await waitForPreviewRender(page, { kind: 'q2-preview', timeout: 30_000 });

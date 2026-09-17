@@ -113,9 +113,18 @@
   font-size: var(--text-2xs);
   line-height: var(--leading-base);
   color: var(--text-secondary);
+  /* The disclaimer follows directly; the two read as one "conditions"
+     block under the hairline, so this gap is a paragraph gap, not the
+     section gap the CTA gets. */
+  margin: 0 0 14px;
+}
+
+/* ---- demo disclaimer (DemoDisclaimer.css owns its type) ---- */
+
+.ls-card .demo-disclaimer {
   /* Enough air below that the centered CTA reads as its own footer
      group rather than an unexplained alignment change mid-block. */
-  margin: 0 0 22px;
+  margin-block: 0 22px;
 }
 
 /* The themed blue accent: --accent-primary is the brand orange, and the

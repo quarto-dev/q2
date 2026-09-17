@@ -23,6 +23,18 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-09-17
+
+- [`d0b3994`](https://github.com/quarto-dev/q2/commits/d0b3994): Sync stack moves to automerge-repo 2.6.0-alpha.5: a collection the sync server lacks is reported as "not found" again (rather than "sync unreachable"), and the debug page's document badge shows "unavailable" for docs the server does not have (bd-d08gpqvu)
+- [`07b2112`](https://github.com/quarto-dev/q2/commits/07b2112): Upgrade @automerge/automerge to 3.5.0 (bd-d08gpqvu)
+
+### 2026-09-15
+
+- [`267d24f`](https://github.com/quarto-dev/q2/commits/267d24f): Sass cache validates `@import`ed partials, so editing one recompiles the theme instead of serving stale CSS (bd-m3hga05o)
+- [`440098e41`](https://github.com/quarto-dev/q2/commits/440098e41): New users go straight from sign-in to their (empty) project list — the project set is created automatically, and the "Create New Project Set" screen is gone; a connection failure shows a Try again card instead
+- [`837bba995`](https://github.com/quarto-dev/q2/commits/837bba995): The invite landing cards carry the same disclaimer as the landing page, and the About tab's "More information" now opens with it.
+- [`17541e5e1`](https://github.com/quarto-dev/q2/commits/17541e5e1): The quarto-hub.com landing page now carries a disclaimer above the sign-in button: use test data, not real data, and nothing entered in the demo is protected or returned.
+
 ### 2026-09-11
 
 - [`80a4e8c5`](https://github.com/quarto-dev/q2/commits/80a4e8c5): The quarto-hub.com landing page now says what Quarto Hub is instead of showing only a sign-in button, every "Learn more" points at the Quarto Hub site and opens in a new tab, and the card reads as raised off the page in dark mode again.

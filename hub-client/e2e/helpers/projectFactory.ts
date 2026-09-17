@@ -196,27 +196,31 @@ async function interceptMonacoCdn(page: Page): Promise<void> {
   );
 }
 
-export async function bootstrapProjectSet(
-  page: Page,
-  syncServer: string,
-): Promise<void> {
-  await bootstrapProjectSetVariant(page, syncServer, 'classic');
+/**
+ * Bring a fresh browser context to the classic project selector with a
+ * connected project set.
+ *
+ * The app establishes the personal project set silently on first run
+ * (bd-4h1hv60p) against DEFAULT_SYNC_SERVER — `/ws` in the e2e build
+ * (see the test:e2e script), which `vite preview` proxies to the hub that
+ * globalSetup started. So there is no setup form to fill in and no server
+ * URL to pass: this helper installs the usual init scripts, loads `/`, and
+ * waits for the home to appear.
+ */
+export async function bootstrapProjectSet(page: Page): Promise<void> {
+  await bootstrapProjectSetVariant(page, 'classic');
 }
 
 /**
  * Like {@link bootstrapProjectSet}, but lands on the collections-based
  * projects home (the app's default variant) instead of the classic selector.
  */
-export async function bootstrapProjectsHome(
-  page: Page,
-  syncServer: string,
-): Promise<void> {
-  await bootstrapProjectSetVariant(page, syncServer, 'collections');
+export async function bootstrapProjectsHome(page: Page): Promise<void> {
+  await bootstrapProjectSetVariant(page, 'collections');
 }
 
 async function bootstrapProjectSetVariant(
   page: Page,
-  syncServer: string,
   variant: 'classic' | 'collections',
 ): Promise<void> {
   await mockAuthMe(page);
@@ -263,13 +267,10 @@ async function bootstrapProjectSetVariant(
   await page.goto('/');
   await expect(page.locator('body')).toBeVisible();
 
-  // Wait for React to render before checking test hooks — the `body` becomes
+  // Wait for React to mount before checking test hooks — the `body` becomes
   // visible before JS finishes executing, so checking window.__quartoTestReady
-  // at that point is a race. The "Quarto Hub" heading is React-rendered, so
-  // its presence proves JS has fully executed.
-  await expect(
-    page.getByRole('heading', { name: 'Quarto Hub' }),
-  ).toBeVisible();
+  // at that point is a race. A populated #root proves JS has fully executed.
+  await expect(page.locator('#root')).not.toBeEmpty();
 
   // Fail fast with a clear error if the app was not built with VITE_E2E=1.
   // Without that flag the test hooks (window.__quartoTest) are tree-shaken
@@ -280,20 +281,14 @@ async function bootstrapProjectSetVariant(
     throw new Error(
       '\n\nE2E test hooks not found (window.__quartoTestReady is absent).\n' +
       'The app must be built with VITE_E2E=1 before running Playwright tests:\n\n' +
-      '  VITE_E2E=1 npm run build\n\n' +
+      '  VITE_E2E=1 VITE_DEFAULT_SYNC_SERVER=/ws npm run build\n\n' +
       'Or use the full e2e command, which handles the build automatically:\n\n' +
       '  npm run test:e2e\n',
     );
   }
-  await expect(
-    page.getByText(/Get started by creating a new project set/i),
-  ).toBeVisible();
 
-  await page.locator('#setup-sync-server').fill(syncServer);
-  await page
-    .getByRole('button', { name: /Create New Project Set/i })
-    .click();
-
+  // The app creates the project set on its own and lands on the home once
+  // the set is connected (the collections status gates the render).
   if (variant === 'classic') {
     await expect(
       page.getByRole('heading', { name: 'Your Projects' }),

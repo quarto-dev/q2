@@ -132,30 +132,56 @@ const SASS_CACHE_NAMESPACE: &str = "sass";
 /// - `uncached`: variants compiled with `cache_ok == false` (subset of
 ///   `compiles`); a nonzero value with a themed project means the
 ///   cache is not even being consulted.
+/// - `stale`: the key matched an entry but its import manifest did not
+///   (an `@import`ed partial changed — bd-m3hga05o); subset of
+///   `compiles`. Distinguishes "the theme file changed" (a key miss)
+///   from "a file it imports changed".
 mod sass_perf {
     use std::sync::atomic::AtomicUsize;
     pub static HITS: AtomicUsize = AtomicUsize::new(0);
     pub static COMPILES: AtomicUsize = AtomicUsize::new(0);
     pub static UNCACHED: AtomicUsize = AtomicUsize::new(0);
+    pub static STALE: AtomicUsize = AtomicUsize::new(0);
 }
 
-/// Print `perf.sass hits=N compiles=N uncached=N` to stderr when
-/// `QUARTO_PERF_STATS=1`. Call once at the end of a top-level command
-/// (`q2 render`), like the other `perf.*` gauges. With a project-wide
-/// theme, a healthy render shows `compiles` in the low single digits
-/// (one per variant) and `hits` ≈ 2 × documents; `compiles` tracking
-/// the document count means the cache key is varying per document
-/// (the 2026-09-13 Connect-docs profile: 78 % of serial render time).
-pub fn print_sass_stats_if_enabled() {
+/// A snapshot of the [`sass_perf`] counters (process-wide, monotonic).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SassPerfCounters {
+    pub hits: usize,
+    pub compiles: usize,
+    pub uncached: usize,
+    pub stale: usize,
+}
+
+/// Read the [`sass_perf`] counters. Tests use this to assert *why* a
+/// variant compiled (key miss vs. stale manifest); `q2 render` prints
+/// the same numbers via [`print_sass_stats_if_enabled`].
+pub fn sass_perf_counters() -> SassPerfCounters {
     use std::sync::atomic::Ordering::Relaxed;
+    SassPerfCounters {
+        hits: sass_perf::HITS.load(Relaxed),
+        compiles: sass_perf::COMPILES.load(Relaxed),
+        uncached: sass_perf::UNCACHED.load(Relaxed),
+        stale: sass_perf::STALE.load(Relaxed),
+    }
+}
+
+/// Print `perf.sass hits=N compiles=N uncached=N stale=N` to stderr
+/// when `QUARTO_PERF_STATS=1`. Call once at the end of a top-level
+/// command (`q2 render`), like the other `perf.*` gauges. With a
+/// project-wide theme, a healthy render shows `compiles` in the low
+/// single digits (one per variant) and `hits` ≈ 2 × documents;
+/// `compiles` tracking the document count means the cache key is
+/// varying per document (the 2026-09-13 Connect-docs profile: 78 % of
+/// serial render time).
+pub fn print_sass_stats_if_enabled() {
     if !std::env::var_os("QUARTO_PERF_STATS").is_some_and(|v| v == "1") {
         return;
     }
+    let c = sass_perf_counters();
     eprintln!(
-        "perf.sass hits={} compiles={} uncached={}",
-        sass_perf::HITS.load(Relaxed),
-        sass_perf::COMPILES.load(Relaxed),
-        sass_perf::UNCACHED.load(Relaxed),
+        "perf.sass hits={} compiles={} uncached={} stale={}",
+        c.hits, c.compiles, c.uncached, c.stale,
     );
 }
 
@@ -177,6 +203,18 @@ fn default_cache_key(minified: bool) -> &'static str {
     }
 }
 
+/// Format tag of the values stored in the `sass` namespace. Bumped when
+/// the envelope layout changes so the generational purge clears the
+/// old entries in one go rather than each reading as a miss.
+const SASS_CACHE_FORMAT: &str = "env1";
+
+/// The version sentinel the `sass` namespace is stamped with:
+/// [`CSS_BUILD_ID`] (any SCSS resource or `quarto-sass` source change)
+/// plus the value format tag (any envelope change).
+pub fn sass_cache_version() -> Vec<u8> {
+    format!("{CSS_BUILD_ID}:{SASS_CACHE_FORMAT}").into_bytes()
+}
+
 /// Run the generational-purge check on the `sass` namespace.
 ///
 /// Called once per stage run (not memoized). On WASM this adds a single
@@ -186,9 +224,155 @@ fn default_cache_key(minified: bool) -> &'static str {
 /// between tests and between runtimes). Returns `false` if the cache
 /// layer errors out; callers fall through to compile-without-caching.
 async fn ensure_sass_cache_ready(runtime: &dyn SystemRuntime) -> bool {
-    ensure_namespace_version(runtime, SASS_CACHE_NAMESPACE, CSS_BUILD_ID.as_bytes())
+    ensure_namespace_version(runtime, SASS_CACHE_NAMESPACE, &sass_cache_version())
         .await
         .is_ok()
+}
+
+// ── Cache-value envelope: import manifest + CSS (bd-m3hga05o) ────────
+//
+// The cache *key* is a function of what is known before compiling: the
+// top-level theme file's contents, the doc-vars, the flags. What the
+// theme `@import`s is only known once the compiler has resolved it, so
+// it cannot be in the key — and without it, editing a partial served
+// the previous compile's CSS until the user deleted the cache by hand.
+//
+// So every value in the `sass` namespace is an envelope:
+//
+//     q2-sass-cache-v1
+
+//     <JSON array of {path, sha256}>
+
+//     <CSS bytes>
+//
+// The manifest lists the files the compile that produced the CSS loaded
+// through the runtime (the import closure; embedded resources are
+// covered by the key and excluded), each with the SHA-256 of its
+// contents at compile time. A lookup re-reads every listed file and
+// serves the CSS only if all hashes still match; otherwise it compiles
+// again, which yields the current closure, and overwrites the entry.
+//
+// Trusting the *previous* closure is sound because imports are declared
+// inside the files being hashed: for the closure to change, some listed
+// file must change, which fails validation. The one gap is a new file
+// that would now shadow an existing import path with no listed file
+// changing (a negative dependency); the normalized path in the key
+// rules out the cross-directory case, and the rest is documented in
+// `claude-notes/plans/2026-09-14-scss-cache-import-closure.md`.
+
+/// Magic first line of an enveloped cache value.
+const CACHE_ENVELOPE_HEADER: &str = "q2-sass-cache-v1";
+
+/// One file of the import closure a cached compile depended on.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ManifestEntry {
+    /// The path the compiler loaded the file by, forward-slashed. Read
+    /// back through `SystemRuntime::file_read` on validation.
+    pub path: String,
+    /// Lowercase hex SHA-256 of the file's contents at compile time.
+    pub sha256: String,
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    hex::encode(Sha256::digest(bytes))
+}
+
+/// Build the manifest for a compile that loaded `loaded_files` through
+/// `runtime`. Embedded resource paths are skipped. A file that cannot
+/// be read back (unexpected — the compiler just read it) gets an empty
+/// hash, which never matches, so the entry is re-validated as stale on
+/// every lookup rather than trusted.
+fn build_manifest(runtime: &dyn SystemRuntime, loaded_files: &[PathBuf]) -> Vec<ManifestEntry> {
+    loaded_files
+        .iter()
+        .filter(|p| !p.starts_with(quarto_sass::RESOURCE_PATH_PREFIX))
+        .map(|p| ManifestEntry {
+            path: quarto_util::to_forward_slashes(p),
+            sha256: runtime
+                .file_read(p)
+                .map(|bytes| sha256_hex(&bytes))
+                .unwrap_or_default(),
+        })
+        .collect()
+}
+
+/// `true` when every file in `manifest` still hashes to what the cached
+/// compile saw. Any unreadable or changed file makes the entry stale.
+fn manifest_is_current(runtime: &dyn SystemRuntime, manifest: &[ManifestEntry]) -> bool {
+    manifest.iter().all(|entry| {
+        runtime
+            .file_read(std::path::Path::new(&entry.path))
+            .is_ok_and(|bytes| sha256_hex(&bytes) == entry.sha256)
+    })
+}
+
+/// Serialize `(manifest, css)` into one cache value.
+fn encode_cache_value(manifest: &[ManifestEntry], css: &[u8]) -> Vec<u8> {
+    let json = serde_json::to_string(manifest).expect("manifest entries serialize");
+    let mut out = Vec::with_capacity(CACHE_ENVELOPE_HEADER.len() + json.len() + css.len() + 2);
+    out.extend_from_slice(CACHE_ENVELOPE_HEADER.as_bytes());
+    out.push(b'\n');
+    out.extend_from_slice(json.as_bytes());
+    out.push(b'\n');
+    out.extend_from_slice(css);
+    out
+}
+
+/// Split a cache value back into its manifest and CSS bytes. `None`
+/// for anything that is not a well-formed envelope (a pre-envelope raw
+/// CSS entry, a truncated write) — the caller treats that as a miss.
+fn decode_cache_value(bytes: &[u8]) -> Option<(Vec<ManifestEntry>, &[u8])> {
+    let header_end = bytes.iter().position(|&b| b == b'\n')?;
+    if &bytes[..header_end] != CACHE_ENVELOPE_HEADER.as_bytes() {
+        return None;
+    }
+    let rest = &bytes[header_end + 1..];
+    let json_end = rest.iter().position(|&b| b == b'\n')?;
+    let manifest: Vec<ManifestEntry> = serde_json::from_slice(&rest[..json_end]).ok()?;
+    Some((manifest, &rest[json_end + 1..]))
+}
+
+/// Why a cache lookup did not produce CSS.
+enum CacheMiss {
+    /// No entry under the key, an undecodable entry, or a cache error.
+    Absent,
+    /// An entry whose import manifest no longer matches the files.
+    Stale,
+}
+
+/// Look `key` up in the `sass` namespace and return its CSS if the
+/// entry decodes and its manifest is still current.
+async fn cache_lookup_css(runtime: &dyn SystemRuntime, key: &str) -> Result<String, CacheMiss> {
+    let Ok(Some(bytes)) = cache_get_lru(runtime, SASS_CACHE_NAMESPACE, key).await else {
+        return Err(CacheMiss::Absent);
+    };
+    let Some((manifest, css)) = decode_cache_value(&bytes) else {
+        return Err(CacheMiss::Absent);
+    };
+    if !manifest_is_current(runtime, &manifest) {
+        return Err(CacheMiss::Stale);
+    }
+    String::from_utf8(css.to_vec()).map_err(|_| CacheMiss::Absent)
+}
+
+/// Store `css` under `key` with the manifest of `loaded_files`
+/// (best-effort: cache errors are not surfaced).
+async fn cache_store_css(
+    runtime: &dyn SystemRuntime,
+    key: &str,
+    css: &str,
+    loaded_files: &[PathBuf],
+) {
+    let manifest = build_manifest(runtime, loaded_files);
+    let _ = cache_set_lru(
+        runtime,
+        SASS_CACHE_NAMESPACE,
+        key,
+        &encode_cache_value(&manifest, css.as_bytes()),
+        SASS_CACHE_BUDGET_BYTES,
+    )
+    .await;
 }
 
 /// Compile theme CSS and store as a pipeline artifact.
@@ -227,7 +411,16 @@ impl Default for CompileThemeCssStage {
 /// The key is `SHA256(SCSS_RESOURCES_HASH + theme_identities +
 /// custom_file_contents + doc_vars + minified)`. Built-in themes contribute
 /// only their name (content is already covered by `SCSS_RESOURCES_HASH`).
-/// Custom themes contribute their resolved path and file contents.
+/// Custom themes contribute their resolved path and file contents. The
+/// path is the one `ThemeContext::resolve_path` returns — lexically
+/// normalized, so the per-document spellings the metadata merge
+/// produces for one file (`../theme.scss` vs `../../theme.scss`) share
+/// a key (bd-79c4do6g). The files a custom theme `@import`s are **not**
+/// in the key: they are only known after compiling, so they travel in
+/// the cached value's manifest instead and are validated on lookup
+/// (bd-m3hga05o; see the envelope section above). The path stays in the
+/// key anyway — it keeps two directories with same-text themes apart
+/// without a manifest read.
 /// `doc_vars` contributes its serialized `defaults` string so two
 /// documents with different per-document variables (e.g. docked vs.
 /// floating sidebar → different `$sidebar-border`) get distinct keys
@@ -703,15 +896,15 @@ async fn variant_css(
         && variant_config.title_block_layer
         && variant_config.highlight_style.is_none()
     {
-        // Try the runtime cache first (cross-session persistence).
+        // Try the runtime cache first (cross-session persistence). The
+        // default bundle loads nothing through the runtime, so its
+        // manifest is empty and validation is trivial.
         if cache_ok
-            && let Ok(Some(cached)) = cache_get_lru(
+            && let Ok(css) = cache_lookup_css(
                 ctx.runtime.as_ref(),
-                SASS_CACHE_NAMESPACE,
                 default_cache_key(variant_config.minified),
             )
             .await
-            && let Ok(css) = String::from_utf8(cached)
         {
             trace_event!(ctx, EventLevel::Debug, "cache hit for default CSS");
             sass_perf::HITS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -730,12 +923,11 @@ async fn variant_css(
         return match compile_default(ctx, variant_config.minified).await {
             Ok(css) => {
                 if cache_ok {
-                    let _ = cache_set_lru(
+                    cache_store_css(
                         ctx.runtime.as_ref(),
-                        SASS_CACHE_NAMESPACE,
                         default_cache_key(variant_config.minified),
-                        css.as_bytes(),
-                        SASS_CACHE_BUDGET_BYTES,
+                        &css,
+                        &[],
                     )
                     .await;
                 }
@@ -802,21 +994,33 @@ async fn variant_css(
         }
     };
 
-    // Check cache (best-effort — errors are non-fatal).
-    if cache_ok
-        && !key.is_empty()
-        && let Ok(Some(cached)) =
-            cache_get_lru(ctx.runtime.as_ref(), SASS_CACHE_NAMESPACE, &key).await
-        && let Ok(css) = String::from_utf8(cached)
-    {
-        trace_event!(
-            ctx,
-            EventLevel::Debug,
-            "cache hit for theme CSS (key={})",
-            key
-        );
-        sass_perf::HITS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        return Ok(css);
+    // Check cache (best-effort — errors are non-fatal). A key hit whose
+    // import manifest no longer matches is a miss too (an `@import`ed
+    // partial changed); counted separately so the gauge can tell the
+    // two apart.
+    if cache_ok && !key.is_empty() {
+        match cache_lookup_css(ctx.runtime.as_ref(), &key).await {
+            Ok(css) => {
+                trace_event!(
+                    ctx,
+                    EventLevel::Debug,
+                    "cache hit for theme CSS (key={})",
+                    key
+                );
+                sass_perf::HITS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                return Ok(css);
+            }
+            Err(CacheMiss::Stale) => {
+                trace_event!(
+                    ctx,
+                    EventLevel::Debug,
+                    "cached theme CSS is stale: an imported file changed (key={})",
+                    key
+                );
+                sass_perf::STALE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            }
+            Err(CacheMiss::Absent) => {}
+        }
     }
 
     trace_event!(
@@ -833,19 +1037,13 @@ async fn variant_css(
         sass_perf::UNCACHED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
     match compile_with_doc_vars_via_runtime(ctx, variant_config, theme_context, doc_vars).await {
-        Ok(css) => {
-            // Store in cache (best-effort, skip if no key or cache unavailable).
+        Ok(out) => {
+            // Store in cache (best-effort, skip if no key or cache
+            // unavailable), with the import closure this compile loaded.
             if cache_ok && !key.is_empty() {
-                let _ = cache_set_lru(
-                    ctx.runtime.as_ref(),
-                    SASS_CACHE_NAMESPACE,
-                    &key,
-                    css.as_bytes(),
-                    SASS_CACHE_BUDGET_BYTES,
-                )
-                .await;
+                cache_store_css(ctx.runtime.as_ref(), &key, &out.css, &out.loaded_files).await;
             }
-            Ok(css)
+            Ok(out.css)
         }
         Err(e) => {
             let e = attach_entry_location(e, variant_config, theme_context);
@@ -1195,7 +1393,7 @@ async fn compile_with_doc_vars_via_runtime(
     theme_config: &ThemeConfig,
     theme_context: &ThemeContext<'_>,
     doc_vars: &SassLayer,
-) -> Result<String, quarto_sass::SassError> {
+) -> Result<quarto_sass::SassOutput, quarto_sass::SassError> {
     let _ = ctx; // runtime is captured inside theme_context
     quarto_sass::compile_with_doc_vars(theme_config, theme_context, doc_vars)
 }
@@ -1206,7 +1404,7 @@ async fn compile_with_doc_vars_via_runtime(
     theme_config: &ThemeConfig,
     theme_context: &ThemeContext<'_>,
     doc_vars: &SassLayer,
-) -> Result<String, quarto_sass::SassError> {
+) -> Result<quarto_sass::SassOutput, quarto_sass::SassError> {
     let _ = ctx; // runtime is captured inside theme_context
     quarto_sass::compile_with_doc_vars(theme_config, theme_context, doc_vars).await
 }
@@ -1757,10 +1955,7 @@ mod tests {
         let version =
             pollster::block_on(runtime.cache_get("sass", quarto_system_runtime::CACHE_VERSION_KEY))
                 .unwrap();
-        assert_eq!(
-            version.as_deref(),
-            Some(quarto_sass::CSS_BUILD_ID.as_bytes())
-        );
+        assert_eq!(version.as_deref(), Some(sass_cache_version().as_slice()));
     }
 
     #[tokio::test]
@@ -1777,15 +1972,17 @@ mod tests {
         pollster::block_on(runtime.cache_set(
             "sass",
             quarto_system_runtime::CACHE_VERSION_KEY,
-            quarto_sass::CSS_BUILD_ID.as_bytes(),
+            &sass_cache_version(),
         ))
         .unwrap();
+        // Seeded in the stored envelope form (empty import manifest:
+        // the default bundle loads nothing through the runtime).
         const SENTINEL: &str = "/* cached sentinel */";
         pollster::block_on(quarto_system_runtime::cache_set_lru(
             runtime.as_ref(),
             "sass",
             DEFAULT_CACHE_KEY_MINIFIED,
-            SENTINEL.as_bytes(),
+            &encode_cache_value(&[], SENTINEL.as_bytes()),
             quarto_system_runtime::SASS_CACHE_BUDGET_BYTES,
         ))
         .unwrap();
@@ -1880,7 +2077,7 @@ mod tests {
                 .unwrap();
         assert_eq!(
             version.as_deref(),
-            Some(quarto_sass::CSS_BUILD_ID.as_bytes()),
+            Some(sass_cache_version().as_slice()),
             "generational purge must rewrite the sentinel to the current CSS_BUILD_ID",
         );
     }
@@ -1926,10 +2123,7 @@ mod tests {
         let version =
             pollster::block_on(runtime.cache_get("sass", quarto_system_runtime::CACHE_VERSION_KEY))
                 .unwrap();
-        assert_eq!(
-            version.as_deref(),
-            Some(quarto_sass::CSS_BUILD_ID.as_bytes())
-        );
+        assert_eq!(version.as_deref(), Some(sass_cache_version().as_slice()));
     }
 
     #[tokio::test]
@@ -2331,18 +2525,56 @@ mod tests {
         assert_ne!(key1, key2);
     }
 
+    /// Two *different* files with identical contents must keep
+    /// distinct keys: `a/theme.scss` and `b/theme.scss` can both say
+    /// `@import "_colors"` and mean different partials. The partials
+    /// are validated through the cached value's manifest (bd-m3hga05o),
+    /// so this is no longer load-bearing for correctness, but the
+    /// (normalized) path keeps the two entries apart without a manifest
+    /// read. MockRuntime returns empty bytes for every read, so only the
+    /// path differs.
     #[test]
-    fn test_cache_key_custom_file_reads_content() {
-        // MockRuntime returns empty bytes for file_read, so two different
-        // custom paths with the same (empty) content but different paths
-        // should still differ.
+    fn test_cache_key_distinct_files_with_same_content_stay_distinct() {
         let runtime = MockRuntime;
-        let config_a = make_custom_config("theme_a.scss", true);
-        let config_b = make_custom_config("theme_b.scss", true);
+        let config_a = make_custom_config("a/theme.scss", true);
+        let config_b = make_custom_config("b/theme.scss", true);
         let ctx = ThemeContext::new(PathBuf::from("/project"), &runtime);
         let key_a = cache_key(&config_a, &ctx, &runtime, &SassLayer::default()).unwrap();
         let key_b = cache_key(&config_b, &ctx, &runtime, &SassLayer::default()).unwrap();
         assert_ne!(key_a, key_b);
+    }
+
+    /// bd-79c4do6g: the metadata merge rewrites a project-level
+    /// `theme: [theme.scss]` to a document-relative spelling per
+    /// document (`../theme.scss`, `../../theme.scss`, …), and the key
+    /// used to hash that spelling verbatim — one cache entry per
+    /// document directory for one file (97 % miss rate on the Connect
+    /// docs). The *same file* reached from different document dirs
+    /// must produce *one* key.
+    #[test]
+    fn test_cache_key_same_file_from_different_document_dirs() {
+        let runtime = MockRuntime;
+        let cases = [
+            ("/project", "theme.scss"),
+            ("/project/a", "../theme.scss"),
+            ("/project/a/b", "../../theme.scss"),
+            ("/project/a/b", "./../../theme.scss"),
+        ];
+        let keys: Vec<String> = cases
+            .iter()
+            .map(|(doc_dir, spelling)| {
+                let ctx = ThemeContext::new(PathBuf::from(doc_dir), &runtime);
+                let config = make_custom_config(spelling, true);
+                cache_key(&config, &ctx, &runtime, &SassLayer::default()).unwrap()
+            })
+            .collect();
+        for (i, key) in keys.iter().enumerate() {
+            assert_eq!(
+                key, &keys[0],
+                "spelling {:?} from {:?} must share the root spelling's key",
+                cases[i].1, cases[i].0
+            );
+        }
     }
 
     #[test]
@@ -3007,5 +3239,203 @@ mod tests {
             !has_sidebar_border_rule(&css_floating),
             "floating CSS should NOT have the rule"
         );
+    }
+
+    // ── bd-m3hga05o: imported partials must invalidate the cache ─────
+
+    /// A custom theme that reaches a colour through `@import`; the
+    /// partial is the only file that changes between runs.
+    const IMPORTING_THEME_SCSS: &str = "/*-- scss:defaults --*/\n@import \"colors\";\n\n/*-- scss:rules --*/\n.partial-guard { color: $partial-fg; }\n";
+
+    /// Run the stage once against `dir/test.qmd` with `theme: [theme.scss]`
+    /// and return the compiled CSS.
+    async fn compile_importing_theme(
+        runtime: &Arc<dyn quarto_system_runtime::SystemRuntime>,
+        dir: &std::path::Path,
+    ) -> Result<String, PipelineError> {
+        let mut ctx = make_stage_context_at(runtime.clone(), dir.to_str().unwrap());
+        let stage = CompileThemeCssStage::new();
+        let input = make_doc_ast_at(
+            dir.join("test.qmd").to_str().unwrap(),
+            meta_with_theme_array(&["theme.scss"]),
+        );
+        stage.run(input, &mut ctx).await?;
+        Ok(get_css_artifact(&ctx))
+    }
+
+    /// The cache key hashes only the top-level theme file, so editing a
+    /// partial it `@import`s used to serve the previous compile's CSS
+    /// until the user deleted `.quarto/cache/sass` by hand. The second
+    /// run must see the partial's new colour.
+    #[tokio::test]
+    async fn test_editing_an_imported_partial_invalidates_the_cache() {
+        let (_guard, dir) = temp_theme_dir(&[
+            ("theme.scss", IMPORTING_THEME_SCSS),
+            ("_colors.scss", "$partial-fg: #123457;\n"),
+        ]);
+        let cache = tempfile::TempDir::new().unwrap();
+        let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> = Arc::new(
+            quarto_system_runtime::NativeRuntime::with_cache_dir(cache.path().to_path_buf()),
+        );
+
+        let first = compile_importing_theme(&runtime, &dir).await.unwrap();
+        assert!(
+            first.contains("#123457"),
+            "first compile must carry the partial's colour"
+        );
+
+        std::fs::write(dir.join("_colors.scss"), "$partial-fg: #abcdef;\n").unwrap();
+        let second = compile_importing_theme(&runtime, &dir).await.unwrap();
+        assert!(
+            second.contains("#abcdef"),
+            "editing the imported partial must miss the cache and recompile; got the stale colour"
+        );
+        assert!(!second.contains("#123457"));
+
+        // Unchanged inputs still hit: same CSS, and the entry was
+        // overwritten under the same key rather than added beside it.
+        let third = compile_importing_theme(&runtime, &dir).await.unwrap();
+        assert_eq!(second, third);
+        let entries: Vec<String> = std::fs::read_dir(cache.path().join("sass"))
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .filter(|n| n != "_lru_index" && n != "_version")
+            .collect();
+        assert_eq!(
+            entries.len(),
+            1,
+            "the top-level key is unchanged, so the edit overwrites one entry; got {entries:?}"
+        );
+    }
+
+    /// Deleting a partial the cached compile depended on must not serve
+    /// the cached CSS either: the recompile fails the way a fresh
+    /// render would.
+    #[tokio::test]
+    async fn test_removing_an_imported_partial_invalidates_the_cache() {
+        let (_guard, dir) = temp_theme_dir(&[
+            ("theme.scss", IMPORTING_THEME_SCSS),
+            ("_colors.scss", "$partial-fg: #123457;\n"),
+        ]);
+        let cache = tempfile::TempDir::new().unwrap();
+        let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> = Arc::new(
+            quarto_system_runtime::NativeRuntime::with_cache_dir(cache.path().to_path_buf()),
+        );
+        compile_importing_theme(&runtime, &dir).await.unwrap();
+
+        std::fs::remove_file(dir.join("_colors.scss")).unwrap();
+        let result = compile_importing_theme(&runtime, &dir).await;
+        assert!(
+            result.is_err(),
+            "with the partial gone the theme no longer compiles; a cache hit would hide that"
+        );
+    }
+
+    // ── Cache-value envelope (manifest + CSS) ────────────────────────
+
+    #[test]
+    fn test_cache_envelope_round_trips_manifest_and_css() {
+        let manifest = vec![
+            ManifestEntry {
+                path: "_colors.scss".to_string(),
+                sha256: "ab".repeat(32),
+            },
+            ManifestEntry {
+                path: "sub/_more.scss".to_string(),
+                sha256: "cd".repeat(32),
+            },
+        ];
+        let css = ".x{color:#123457}\n/* not a header: q2-sass-cache-v1 */";
+        let bytes = encode_cache_value(&manifest, css.as_bytes());
+        let (decoded_manifest, decoded_css) = decode_cache_value(&bytes).expect("decodes");
+        assert_eq!(decoded_manifest, manifest);
+        assert_eq!(decoded_css, css.as_bytes());
+    }
+
+    #[test]
+    fn test_cache_envelope_empty_manifest_round_trips() {
+        let css = b"body{margin:0}";
+        let bytes = encode_cache_value(&[], css);
+        let (manifest, decoded_css) = decode_cache_value(&bytes).expect("decodes");
+        assert!(manifest.is_empty());
+        assert_eq!(decoded_css, css);
+    }
+
+    /// A pre-envelope entry (raw CSS bytes) or garbage must read as a
+    /// miss, never as CSS with an empty manifest.
+    #[test]
+    fn test_cache_envelope_rejects_legacy_and_malformed_values() {
+        assert!(decode_cache_value(b"body{margin:0}").is_none());
+        assert!(decode_cache_value(b"").is_none());
+        assert!(decode_cache_value(b"q2-sass-cache-v1\nnot json\nbody{}").is_none());
+        assert!(
+            decode_cache_value(b"q2-sass-cache-v1\n[]").is_none(),
+            "missing CSS separator"
+        );
+    }
+
+    /// Manifest validation re-reads every listed file through the
+    /// runtime: current when all hashes match, stale on any mismatch or
+    /// unreadable file.
+    #[test]
+    fn test_manifest_validation_against_runtime_contents() {
+        let (_guard, dir) =
+            temp_theme_dir(&[("_colors.scss", "$c: red;"), ("_sizes.scss", "$s: 1px;")]);
+        let rt = quarto_system_runtime::NativeRuntime::new();
+        let colors = dir.join("_colors.scss");
+        let sizes = dir.join("_sizes.scss");
+
+        let current = build_manifest(&rt, &[colors.clone(), sizes.clone()]);
+        assert_eq!(current.len(), 2);
+        assert_eq!(current[0].path, quarto_util::to_forward_slashes(&colors));
+        assert_eq!(current[0].sha256, sha256_hex(b"$c: red;"));
+        assert!(manifest_is_current(&rt, &current));
+
+        let mut edited = current.clone();
+        edited[1].sha256 = sha256_hex(b"$s: 2px;");
+        assert!(
+            !manifest_is_current(&rt, &edited),
+            "a changed hash is stale"
+        );
+
+        let mut missing = current.clone();
+        missing.push(ManifestEntry {
+            path: quarto_util::to_forward_slashes(&dir.join("_gone.scss")),
+            sha256: sha256_hex(b""),
+        });
+        assert!(
+            !manifest_is_current(&rt, &missing),
+            "an unreadable file is stale"
+        );
+
+        assert!(
+            manifest_is_current(&rt, &[]),
+            "an empty manifest is trivially current"
+        );
+
+        // An edit on disk is what a lookup must notice.
+        std::fs::write(&sizes, "$s: 2px;").unwrap();
+        assert!(!manifest_is_current(&rt, &current));
+        assert!(manifest_is_current(&rt, &edited));
+    }
+
+    /// Embedded resources never enter the manifest: they are covered by
+    /// `SCSS_RESOURCES_HASH` in the key, and the runtime cannot read
+    /// them back.
+    #[test]
+    fn test_build_manifest_skips_embedded_resource_paths() {
+        let rt = MockRuntime;
+        let manifest = build_manifest(
+            &rt,
+            &[
+                PathBuf::from(format!(
+                    "{}/bootstrap/scss/_variables.scss",
+                    quarto_sass::RESOURCE_PATH_PREFIX
+                )),
+                PathBuf::from("_colors.scss"),
+            ],
+        );
+        let paths: Vec<&str> = manifest.iter().map(|e| e.path.as_str()).collect();
+        assert_eq!(paths, vec!["_colors.scss"]);
     }
 }

@@ -46,7 +46,7 @@
  * Run via:
  *   cd hub-client && npx playwright test q2-preview-block-nav-p2-5b.spec.ts
  *
- * Prerequisites: VITE_E2E=1 npm run build (once); hub-client build output in dist/.
+ * Prerequisites: VITE_E2E=1 VITE_DEFAULT_SYNC_SERVER=/ws npm run build (once); hub-client build output in dist/.
  */
 
 import { test, expect, type Page, type FrameLocator } from '@playwright/test';
@@ -70,7 +70,7 @@ async function openFile(
     docId: string,
     filename: string,
 ): Promise<FrameLocator> {
-    await bootstrapProjectSet(page, serverUrl);
+    await bootstrapProjectSet(page);
     const localId = await seedProjectInBrowser(page, docId, serverUrl);
     await page.goto(`/#/p/${localId}/file/${filename}`);
     await waitForPreviewRender(page, { kind: 'q2-preview', timeout: 30000 });

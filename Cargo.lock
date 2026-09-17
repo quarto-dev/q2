@@ -221,6 +221,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-lock"
+version = "3.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "290f7f2596bd5b78a9fec8088ccd89180d7f9f55b94b0576823bbbdc72ee8311"
+dependencies = [
+ "event-listener",
+ "event-listener-strategy",
+ "pin-project-lite",
+]
+
+[[package]]
 name = "async-trait"
 version = "0.1.89"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5350,6 +5361,7 @@ version = "0.30.0"
 dependencies = [
  "quarto-doctemplate",
  "serde",
+ "serde_json",
  "serde_yaml",
  "thiserror 2.0.18",
  "time",
@@ -5431,6 +5443,7 @@ dependencies = [
 name = "quarto-system-runtime"
 version = "0.30.0"
 dependencies = [
+ "async-lock",
  "async-trait",
  "base64 0.22.1",
  "grass",

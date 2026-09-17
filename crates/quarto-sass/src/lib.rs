@@ -63,8 +63,8 @@ pub use bundle::{
 };
 pub use bundle::{is_known_highlight_palette, known_highlight_palettes};
 pub use compile::{
-    assemble_theme_scss, compile_css_from_config, compile_default_css, compile_reveal_theme_css,
-    compile_theme_css, compile_with_doc_vars,
+    SassOutput, assemble_theme_scss, compile_css_from_config, compile_default_css,
+    compile_reveal_theme_css, compile_theme_css, compile_with_doc_vars,
 };
 pub use config::{DarkThemeConfig, HighlightStyle, ResolvedVariants, ThemeConfig, resolve_brand};
 pub use error::SassError;
