@@ -481,6 +481,13 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   // Track last-seen captures for diffing
   let lastCaptures: Record<string, CaptureRef> = {};
 
+  // Index-document self-heal (bd-6f21d4c6 / H4): the 'change' handler
+  // currently attached to state.indexHandle, tracked so a recovery can
+  // detach it from the old (about-to-be-deleted) handle before attaching
+  // a fresh one. See attachIndexSubscription / recoverIndexDocument below.
+  let indexChangeHandler: (() => void) | null = null;
+  let indexRecoveryInFlight = false;
+
   // Helper: fire onIdentitiesChange if identities differ from last seen
   function notifyIdentitiesIfChanged(doc: IndexDocument): void {
     const current = getIdentitiesFromIndex(doc);
@@ -725,6 +732,169 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
         // The connection may have been torn down while we slept.
         if (state.repo !== repo) throw err;
       }
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Index-document self-heal (bd-6f21d4c6; see
+  // claude-notes/plans/2026-09-17-index-doc-duplicate-seq-self-heal.md).
+  // An Automerge actor id reused across two sessions (see
+  // actorIdFromUserId, userSettings.ts) can make two independently-edited
+  // copies of the SAME document claim the same (actor, seq) pair. When a
+  // sync message carrying the colliding change arrives, the underlying
+  // `automerge` library correctly throws `RangeError: duplicate seq N
+  // found for actor <id>` out of its (synchronous) receiveSyncMessage —
+  // that part is unaffected by automerge-repo's own version. automerge-repo
+  // itself just logs that throw and drops the message, with no recovery:
+  // in v2.5.6 that happened via an unhandled promise rejection from
+  // `Repo#receiveMessage`'s `this.synchronizer.receiveMessage(message)
+  // .catch(...)`; from v2.6.0-alpha.5 `receiveMessage` became synchronous
+  // and the same log-and-drop moved to a `try/catch` around dispatch in
+  // `Repo`'s own inbound "message" handler. Either way, the affected peer
+  // relationship for that document is wedged permanently, surviving
+  // reload, until something discards the local copy and re-fetches. This
+  // wraps the repo's own public CollectionSynchronizer#receiveMessage
+  // (still present, and still called through the same code path, across
+  // both automerge-repo shapes above — only whether it returns a promise
+  // changed) to detect that specific error for THIS connection's index
+  // document, and automates the scoped equivalent of the manual "clear
+  // IndexedDB" workaround: repo.delete() (drops the wedged per-peer sync
+  // state AND the persisted storage entry for that one document — see
+  // Repo's "delete-document" handling) followed by a fresh repo.find().
+  // No automerge-repo source is modified; this only monkey-patches an
+  // instance property on the Repo this SyncClient itself created, so it
+  // can't affect any other Repo instance.
+  // ---------------------------------------------------------------------
+
+  type IndexSynchronizer = Repo['synchronizer'];
+  type IndexReceivedMessage = Parameters<IndexSynchronizer['receiveMessage']>[0];
+
+  // Helper: reconcile file/identity/capture state against the index
+  // document's current content. Shared by the live 'change' subscription
+  // and by recoverIndexDocument's one-time post-recovery catch-up (a
+  // 'change' event only fires on FUTURE mutations, not retroactively).
+  function reconcileIndexDoc(handle: DocHandle<IndexDocument>, notifyCaptures: boolean): void {
+    const changedDoc = handle.doc();
+    if (changedDoc) {
+      const newFiles = getFilesFromIndex(changedDoc);
+      syncWithFilesHandled(newFiles);
+      callbacks.onFilesChange?.(newFiles);
+      notifyIdentitiesIfChanged(changedDoc);
+      if (notifyCaptures) notifyCapturesIfChanged(changedDoc);
+    }
+  }
+
+  // Helper: subscribe to index changes on the given handle, tracking the
+  // handler so a later recovery can detach it from a since-replaced handle.
+  function attachIndexSubscription(handle: DocHandle<IndexDocument>, notifyCaptures: boolean): void {
+    const handler = () => reconcileIndexDoc(handle, notifyCaptures);
+    handle.on('change', handler);
+    indexChangeHandler = handler;
+    state.cleanupFns.push(() => handle.off('change', handler));
+  }
+
+  /**
+   * Detect the swallowed duplicate-seq collision (H4) for
+   * `targetDocumentId` and trigger recovery. Returns an uninstall
+   * function; callers push it onto state.cleanupFns so disconnect()
+   * restores the original method.
+   */
+  function installDuplicateSeqRecovery(repo: Repo, targetDocumentId: DocumentId): () => void {
+    const synchronizer = repo.synchronizer as IndexSynchronizer | undefined;
+    // Defensive: some test doubles (and conceivably a future
+    // automerge-repo version) don't expose a real .synchronizer. This is
+    // a best-effort enhancement, not a required invariant for connect()
+    // to function — skip installing rather than crash the connection.
+    if (!synchronizer || typeof synchronizer.receiveMessage !== 'function') {
+      return () => {};
+    }
+    const original = synchronizer.receiveMessage.bind(synchronizer);
+    const handleCollision = (message: IndexReceivedMessage, err: unknown): void => {
+      if (
+        message.documentId === targetDocumentId &&
+        err instanceof RangeError &&
+        /duplicate seq \d+ found for actor/.test(err.message)
+      ) {
+        void recoverIndexDocument(message.documentId);
+      }
+    };
+    // Handle both shapes receiveMessage has had across automerge-repo
+    // versions (see the block comment above) without assuming which is
+    // currently installed, so a future version bump doesn't silently
+    // disable this: a synchronous throw (v2.6.0-alpha.5+) is caught
+    // directly and re-thrown so the repo's own handling still runs
+    // unchanged; a rejecting promise (v2.5.6) is tapped with an
+    // additional `.catch` without altering what's returned to the caller.
+    const wrapped = (message: IndexReceivedMessage) => {
+      try {
+        const result: unknown = original(message);
+        if (result instanceof Promise) {
+          result.catch((err: unknown) => handleCollision(message, err));
+        }
+        return result;
+      } catch (err) {
+        handleCollision(message, err);
+        throw err;
+      }
+    };
+    synchronizer.receiveMessage = wrapped as typeof synchronizer.receiveMessage;
+    return () => {
+      if (synchronizer.receiveMessage === wrapped) {
+        synchronizer.receiveMessage = original;
+      }
+    };
+  }
+
+  /**
+   * Recover a permanently-wedged index document (H4): discard the local
+   * copy (dropping its DocSynchronizer's poisoned per-peer sync state and
+   * its persisted storage entry) and re-fetch a fresh copy from the hub,
+   * then re-wire the live subscription and reconcile file/identity/
+   * capture state against whatever changed while this client was stuck.
+   * Scoped to the index document only — a collision on some OTHER
+   * document is not this connection's index doc and is left alone.
+   */
+  async function recoverIndexDocument(collidedDocumentId: DocumentId): Promise<void> {
+    const repo = state.repo;
+    const oldHandle = state.indexHandle;
+    if (!repo || !oldHandle || oldHandle.documentId !== collidedDocumentId) return;
+    if (indexRecoveryInFlight) return;
+    indexRecoveryInFlight = true;
+    try {
+      console.warn(
+        `[quarto-sync-client] index document ${collidedDocumentId} hit a duplicate-seq actor ` +
+          `collision (bd-6f21d4c6); discarding the local copy and re-fetching from the hub`,
+      );
+      if (indexChangeHandler) oldHandle.off('change', indexChangeHandler);
+      repo.delete(collidedDocumentId);
+
+      let freshHandle: DocHandle<IndexDocument>;
+      try {
+        freshHandle = await findDoc<IndexDocument>(collidedDocumentId);
+      } catch (err) {
+        console.warn(
+          `[quarto-sync-client] re-fetch of index document ${collidedDocumentId} after a ` +
+            `duplicate-seq collision failed; will retry on the next collision`,
+          err,
+        );
+        return;
+      }
+
+      // The connection may have been torn down (or replaced by a new
+      // connect()) while we were awaiting the re-fetch above — same race
+      // findDoc's own retry loop guards against. Applying a stale
+      // recovery's result to unrelated new state would be worse than the
+      // original collision.
+      if (state.repo !== repo) return;
+
+      freshHandle.change(d => migrateIndexDocument(d));
+      state.indexHandle = freshHandle;
+      attachIndexSubscription(freshHandle, true);
+      reconcileIndexDoc(freshHandle, true);
+
+      console.warn(`[quarto-sync-client] recovered index document ${collidedDocumentId}`);
+    } finally {
+      indexRecoveryInFlight = false;
     }
   }
 
@@ -1018,6 +1188,9 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       state.actorId = actorId ?? null;
       state.findDocRetry = { ...DEFAULT_FIND_DOC_RETRY, ...options.findDocRetry };
       trackPeers(state.repo);
+      state.cleanupFns.push(
+        installDuplicateSeqRecovery(state.repo, indexDocId as DocumentId),
+      );
 
       // Try to connect to peer, but continue in offline mode if it fails
       let isOnline = false;
@@ -1083,18 +1256,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       callbacks.onCapturesChange?.(lastCaptures);
 
       // Subscribe to index changes
-      const indexChangeHandler = () => {
-        const changedDoc = indexHandle.doc();
-        if (changedDoc) {
-          const newFiles = getFilesFromIndex(changedDoc);
-          syncWithFilesHandled(newFiles);
-          callbacks.onFilesChange?.(newFiles);
-          notifyIdentitiesIfChanged(changedDoc);
-          notifyCapturesIfChanged(changedDoc);
-        }
-      };
-      indexHandle.on('change', indexChangeHandler);
-      state.cleanupFns.push(() => indexHandle.off('change', indexChangeHandler));
+      attachIndexSubscription(indexHandle, true);
 
       // Subscribe to network events for ongoing connection status.
       // Initialize from the live peer set, not the waitForPeer outcome:
@@ -1827,6 +1989,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       // where repo.create() writes an initial change with a random actor.
       const indexUrl = generateAutomergeUrl();
       const { documentId: indexDocId } = parseAutomergeUrl(indexUrl);
+      state.cleanupFns.push(installDuplicateSeqRecovery(state.repo, indexDocId));
 
       const resolvedActorId = resolveActorId
         ? (await resolveActorId(indexDocId)) ?? undefined
@@ -1901,17 +2064,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       }
 
       // Subscribe to index changes
-      const indexChangeHandler = () => {
-        const changedDoc = indexHandle.doc();
-        if (changedDoc) {
-          const newFiles = getFilesFromIndex(changedDoc);
-          syncWithFilesHandled(newFiles);
-          callbacks.onFilesChange?.(newFiles);
-          notifyIdentitiesIfChanged(changedDoc);
-        }
-      };
-      indexHandle.on('change', indexChangeHandler);
-      state.cleanupFns.push(() => indexHandle.off('change', indexChangeHandler));
+      attachIndexSubscription(indexHandle, false);
 
       // Subscribe to network events for ongoing connection status.
       // Initialized from the live peer set for the same missed-peer-event
