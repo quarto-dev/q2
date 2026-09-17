@@ -1,9 +1,5 @@
-import { useState } from 'react'
-import {
-  useDocument,
-  useDocHandle,
-  useRepo,
-} from '@automerge/automerge-repo-react-hooks'
+import { useMemo, useState, useSyncExternalStore } from 'react'
+import { useDocument, useRepo } from '@automerge/automerge-repo-react-hooks'
 import {
   isValidAutomergeUrl,
   type AutomergeUrl,
@@ -68,10 +64,25 @@ interface PanelProps {
   onRemove: (docUrl: AutomergeUrl) => void
 }
 
+/**
+ * The repo's verdict on a document: `loading` / `ready` / `unavailable`
+ * / `failed`. Since automerge-repo 2.6 this lives on the DocumentQuery
+ * (`repo.findWithProgress`), not on the DocHandle — a handle is only
+ * handed out once ready, so `useDocHandle` stays `undefined` for a doc
+ * the sync server lacks and could never show the unavailable badge.
+ */
+function useDocQueryState(docUrl: AutomergeUrl): string {
+  const repo = useRepo()
+  const progress = useMemo(() => repo.findWithProgress(docUrl), [repo, docUrl])
+  return useSyncExternalStore(
+    (onChange) => progress.subscribe(() => onChange()),
+    () => progress.peek().state,
+  )
+}
+
 function DocumentPanel({ docUrl, subscribed, onAdd, onRemove }: PanelProps) {
-  const handle = useDocHandle<unknown>(docUrl)
+  const state = useDocQueryState(docUrl)
   const [doc] = useDocument<unknown>(docUrl)
-  const state = handle?.state ?? 'loading'
   const files = state === 'ready' ? indexDocFiles(doc) : null
 
   return (

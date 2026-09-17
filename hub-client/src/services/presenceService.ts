@@ -449,6 +449,7 @@ function broadcastPresence(): void {
   let selection: { start: string; end: string } | null = null;
   try {
     const doc = state.currentHandle.doc();
+    if (doc === undefined) return;
     if (state.localCursor !== null) {
       cursor = A.getCursor(doc, ['text'], state.localCursor);
     }

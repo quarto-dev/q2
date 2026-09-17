@@ -38,10 +38,10 @@
   },
   "dependencies": {
     "@automerge/automerge": "^3.5.0",
-    "@automerge/automerge-repo": "^2.5.6",
-    "@automerge/automerge-repo-network-websocket": "^2.5.6",
-    "@automerge/automerge-repo-react-hooks": "2.5.6",
-    "@automerge/automerge-repo-storage-indexeddb": "2.5.6",
+    "@automerge/automerge-repo": "2.6.0-alpha.5",
+    "@automerge/automerge-repo-network-websocket": "2.6.0-alpha.5",
+    "@automerge/automerge-repo-react-hooks": "2.6.0-alpha.5",
+    "@automerge/automerge-repo-storage-indexeddb": "2.6.0-alpha.5",
     "@monaco-editor/react": "^4.7.0",
     "@quarto/quarto-automerge-schema": "*",
     "@quarto/quarto-sync-client": "*",
@@ -58,7 +58,7 @@
     "zod": "^4.3.5"
   },
   "devDependencies": {
-    "@automerge/automerge-repo-storage-nodefs": "^2.5.6",
+    "@automerge/automerge-repo-storage-nodefs": "2.6.0-alpha.5",
     "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "^9.39.1",
     "@playwright/test": "^1.60.0",
