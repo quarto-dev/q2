@@ -6,7 +6,7 @@ filed four times over three months, correctly diagnosed twice, never fixed.
 **Reported:** 2026-09-17, `~/Desktop/daily-log/2026/09/17/fig-test/test.qmd` (knitr cell with
 `#| fig-cap` + `![This is another figure](plot.png){#fig-test-2}`).
 **Verified against:** `main` @ `aa92c4b9e`. **Q1 reference:** `quarto` 99.9.9 (dev checkout).
-**Status:** executing on branch `braid/bd-n3sark9b-crossref-float-caption-prefix`. Phase 0 done; Phase 1 in progress.
+**Status:** executing on branch `braid/bd-n3sark9b-crossref-float-caption-prefix`. Phase 1 committed (`18fa6670d`); Phase 2 committed (see git log); Phase 3 (verify) in progress.
 **Docs follow-up:** bd-t0qt409i (under the docs epic bd-tr81, blocked on this strand).
 
 ## TL;DR
@@ -230,9 +230,23 @@ nbsp — all out of scope.
   Figure 2: Attr form caption                          ← fixed
   Table 1: Table caption form                          ← fixed
   ```
-- [ ] **End-to-end (preview):** deferred to the end of Phase 2 so the WASM + SPA chain
-  (`npm run build:wasm`, `cargo xtask build-q2-preview-spa`, `cargo build --bin q2`) is rebuilt once;
-  check `q2 preview` shows the prefix on the attr-form figure in a real browser.
+- [x] **End-to-end (preview):** done at the end of Phase 2. Chain run 2026-09-17: `npm run build:wasm`
+  (under Node 24 via `fnm use` from the repo root — `fnm use` fails inside `hub-client/`, which has no
+  `.nvmrc`), `cargo xtask build-q2-preview-spa` (dist WASM sha `436389d5…` = fresh pkg build),
+  `cargo build --bin q2`, then `q2 preview t.qmd --no-browser` on the three-form fixture, opened in
+  Chrome via the DevTools MCP (the Claude-in-Chrome extension was not connected). Read from the
+  preview iframe's DOM:
+
+  ```
+  figcaption: "Figure 1: Div form caption"   hasP: false
+  figcaption: "Figure 2: Attr form caption"  hasP: false
+  #tbl-cap:   "… Table 1: Table caption form"
+  refs:       "See Figure 1, Figure 2, Table 1."
+  ```
+  Screenshot inspected. Pre-existing preview-only divergence noticed, not mine: the preview also shows
+  the table's own `<caption>` text above the float caption (the preview component does not elide it
+  the way `crossref_render` does for the native writer) — bd-d96axq4a territory (crossref floats in
+  preview), left alone.
 - [x] Full workspace run: 13932 tests, 2 expected failures fixed by updating them to the new contract —
   `revealjs_crossref_attribute_figure_resolves_and_stretches` (now asserts the prefix its comment had
   documented as missing) and the `llms_companion_rich_content` insta snapshot (1 file: caption line
@@ -242,23 +256,51 @@ nbsp — all out of scope.
 
 ### Phase 2 — canonicalize `caption_long` to `Plain` at the sugar boundary (approved)
 
-- [ ] Tests first: `float_ref_target.rs` unit tests asserting `caption_long[0]` is `Plain` for the
-  div-form trailing paragraph and for the `Div > Figure` flatten; `codeblock_shorthand.rs` test for
-  the `Wrapper::Div` path. Smoke fixture from Phase 0 gains a must-NOT-match on
-  `<figcaption[^>]*>\s*<p>`.
-- [ ] `float_ref_target.rs` `convert_div` general arm: emit `Plain` (not `Paragraph`) for the lifted
-  trailing paragraph. `codeblock_shorthand.rs` `Wrapper::Div`: reuse the Paragraph→Plain conversion
-  the Figure wrapper already does (factor it into one helper).
-- [ ] Document the slot contract in the `float_ref_target.rs` module doc (currently says
-  "contains the caption blocks verbatim") and in
-  `claude-notes/designs/float-layout-class-taxonomy.md`: `caption_long` is `[Plain[...]]` when the
-  source caption was a single inline run; consumers must still accept `Paragraph` (Lua filters and
-  the reader may hand us either).
-- [ ] Verify `qmd` writer round-trip is unaffected (bd-emr4 territory): the writer sees the
-  pre-sugar AST, so it should be, but run the roundtrip tests.
-- [ ] `cargo nextest run --workspace`; report every changed `.snap` with a summary, per the
-  snapshot policy.
-- [ ] End-to-end: re-render both fixtures; all figcaptions now bare-inline like Q1.
+- [x] Tests first (observed failing 2026-09-17, 10 Rust tests + the smoke must-NOT-match):
+  `float_ref_target.rs` — the div-form, `Div > Figure`, native-`Figure`, and new `Div > Table`
+  (Paragraph-captioned) tests all assert `caption_long[0]` is `Plain`; `crossref_render.rs` — the five
+  rendered-caption contract tests plus the uncaptioned-label test assert `Plain`; `crossref_fixtures.rs`
+  div-form control asserts the rendered caption block is `Plain`; the smoke fixture must-NOT-match
+  `<figcaption[^>]*>\s*<p>` ("Illegal pattern found" before the fix).
+- [x] Canonicalization lives at **one** boundary: `float_ref_target.rs::canonicalize_caption`, applied
+  where both `convert_div` and `convert_figure` fill the `caption_long` slot (leading `Paragraph` →
+  `Plain`, same inlines and source info; trailing blocks untouched). The general arm no longer
+  reconstructs the popped paragraph. **Design refinement vs. the original item:** `codeblock_shorthand.rs`
+  is deliberately *not* changed — its `Wrapper::Div` output is the div-form shape ("last paragraph is
+  the caption", Q1's `refCaptionFromDiv`) and is consumed by the same sugar boundary, so converting
+  there too would duplicate the rule. The uncaptioned label caption synthesized in `crossref_render.rs`
+  is now a `Plain` as well, so `<figcaption>Figure 1</figcaption>` has no `<p>` either.
+- [x] Slot contract documented in the `float_ref_target.rs` module doc and in a new "Caption slot
+  shape" section of `claude-notes/designs/float-layout-class-taxonomy.md` (including the
+  filter-visible divergence from Q1 and the pointer to bd-t0qt409i).
+- [x] `qmd` writer round-trip unaffected: the crossref roundtrip tests and the pampa writer suites
+  passed in the full workspace run (the writer sees the pre-sugar AST).
+- [x] `cargo nextest run --workspace` (13933 tests): one failure —
+  `quarto-lsp-core::crossref_outline::figure_div_appears_in_outline`, detail came back as a bare
+  "Figure 1". **A fourth Paragraph-only `caption_long` consumer** the Phase 1 audit missed because it
+  grepped only `quarto-core`: `crates/quarto-lsp-core/src/analysis.rs` (float symbol detail). Same bug
+  class — before this work the LSP outline showed no caption for attr-form figures and tables. Fixed
+  test-first: added `attr_form_figure_caption_appears_in_outline` (failed with "Figure 1" alongside the
+  div-form test), reader now accepts `Paragraph | Plain`; all 62 lsp-core tests pass. Tree-wide grep
+  for `caption_long` afterwards finds no other consumer (ast-reconcile's hits are Table struct
+  fields, not the slot). **No `.snap` file changed in Phase 2.** Full workspace re-run after the LSP
+  fix: 13934 tests, all passed. The hub-client WASM suite's `lspCrossrefOutline.wasm.test.ts` failed against
+  the WASM built *before* the LSP fix (`expected 'Figure 1' to contain 'An overview caption'`) and passes
+  after rebuilding — the same bug seen from the hub side. The new smoke fixture also passes through the
+  WASM smoke-all runner (`SMOKE_FILTER=crossref-caption-prefix npm run test:wasm`).
+- [x] End-to-end (render): `cargo build --bin q2`; `q2 render test.qmd` (reporter's file) and
+  `q2 render t.qmd` (three forms). Output inspected 2026-09-17 — every figcaption is bare inlines:
+
+  ```
+  <figcaption id="fig-test-caption" class="…quarto-float-fig">
+  Figure 1: This is a figure.                          ← <p> gone
+  …
+  Figure 2: This is another figure
+  …
+  Figure 1: Div form caption / Figure 2: Attr form caption / Table 1: Table caption form
+  ```
+  Byte-for-byte this now differs from Q1 only by the nbsp in the prefix and Q1's figcaption-id uuid
+  suffix (both pre-existing, out of scope).
 
 ### Phase 3 — close out
 

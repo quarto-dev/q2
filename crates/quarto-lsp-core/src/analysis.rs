@@ -386,10 +386,16 @@ fn crossref_label_tail(node: &pampa::pandoc::custom::CustomNode) -> Option<Strin
     {
         return Some(inlines_to_text(short));
     }
+    // The float sugar transform canonicalizes `caption_long` to a leading
+    // `Plain`; accept a `Paragraph` too, since Lua filters and the JSON
+    // reader can hand us either (bd-n3sark9b — matching Paragraph only
+    // left attr-form figures and tables without a caption in the outline).
     if let Some(Slot::Blocks(long)) = node.slots.get("caption_long") {
         for b in long {
-            if let Block::Paragraph(p) = b {
-                return Some(inlines_to_text(&p.content));
+            match b {
+                Block::Paragraph(p) => return Some(inlines_to_text(&p.content)),
+                Block::Plain(p) => return Some(inlines_to_text(&p.content)),
+                _ => {}
             }
         }
     }

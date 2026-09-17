@@ -8,6 +8,10 @@ title: "Crossref caption prefix, all float forms"
 # why this went unnoticed: "See Figure 2" worked while the figcaption read
 # just "Attr form caption". Q1 prefixes all three.
 #
+# Phase 2 of the same strand canonicalizes the caption block to Plain for
+# every form, so the figcaption never contains a <p> (Q1 emits bare inlines
+# for all three forms).
+#
 # Drives the real reader → pipeline → HTML writer path; the unit-level
 # coverage lives in crates/quarto-core/src/transforms/crossref_render.rs
 # and the reader-level coverage in
@@ -22,6 +26,10 @@ _quarto:
             "Figure 2: Attr form caption",
             "Table 1: Table caption form",
           ]
+        # Every figcaption holds bare inlines (Q1 parity): the div-form
+        # trailing paragraph is canonicalized to Plain at the sugar boundary,
+        # so no form wraps its caption in <p>.
+        - ["<figcaption[^>]*>\\s*<p>"]
 ---
 
 ::: {#fig-div}

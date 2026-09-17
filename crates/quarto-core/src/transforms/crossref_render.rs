@@ -629,13 +629,15 @@ fn render_float_ref_target(node: CustomNode, fs: &mut FloatState) -> Block {
         let caption_id = allocate_caption_id(&identifier, &mut fs.used_ids);
 
         // Uncaptioned floats still get a label-only caption ("Figure 1")
-        // plus the `quarto-uncaptioned` marker, matching Q1.
+        // plus the `quarto-uncaptioned` marker, matching Q1. A `Plain`, like
+        // every other float caption (the sugar transform's slot contract),
+        // so the writer emits bare inlines inside <figcaption>.
         let final_caption = if is_uncaptioned {
             let label = match number {
                 Some(n) => format!("{kind} {n}"),
                 None => kind.clone(),
             };
-            vec![Block::Paragraph(quarto_pandoc_types::block::Paragraph {
+            vec![Block::Plain(quarto_pandoc_types::block::Plain {
                 content: vec![Inline::Str(Str {
                     text: label,
                     source_info: source_info.clone(),
@@ -1389,7 +1391,7 @@ mod tests {
         let (outer, f) = float_shape(&ast.blocks[0]);
         assert_eq!(outer.attr.0, "fig-1");
         let long = f.caption.long.as_ref().unwrap();
-        let Block::Paragraph(p) = &long[0] else {
+        let Block::Plain(p) = &long[0] else {
             panic!();
         };
         // First inline should be the "Figure 1: " prefix.
@@ -1456,9 +1458,7 @@ mod tests {
         };
         assert!(matches!(content_div.content[0], Block::Table(_)));
         let long = fig.caption.long.as_ref().unwrap();
-        let Block::Paragraph(p) = &long[0] else {
-            panic!()
-        };
+        let Block::Plain(p) = &long[0] else { panic!() };
         let Inline::Str(s) = &p.content[0] else {
             panic!()
         };
@@ -1536,9 +1536,7 @@ mod tests {
         );
         // Caption still carries the "Figure 1: " prefix.
         let long = fig.caption.long.as_ref().unwrap();
-        let Block::Paragraph(p) = &long[0] else {
-            panic!()
-        };
+        let Block::Plain(p) = &long[0] else { panic!() };
         let Inline::Str(s) = &p.content[0] else {
             panic!()
         };
@@ -1659,9 +1657,7 @@ mod tests {
         assert!(matches!(content_div.content[0], Block::Table(_)));
         // Caption prefixed "Table 1: ".
         let long = fig.caption.long.as_ref().unwrap();
-        let Block::Paragraph(p) = &long[0] else {
-            panic!()
-        };
+        let Block::Plain(p) = &long[0] else { panic!() };
         let Inline::Str(s) = &p.content[0] else {
             panic!()
         };
@@ -1894,9 +1890,7 @@ mod tests {
             Some("1")
         );
         let long = fig.caption.long.as_ref().unwrap();
-        let Block::Paragraph(p) = &long[0] else {
-            panic!()
-        };
+        let Block::Plain(p) = &long[0] else { panic!() };
         let Inline::Str(s) = &p.content[0] else {
             panic!()
         };

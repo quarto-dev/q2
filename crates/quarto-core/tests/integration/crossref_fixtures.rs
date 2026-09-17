@@ -878,6 +878,19 @@ fn rendered_float_caption(ast: &Pandoc, id: &str) -> String {
     }
 }
 
+/// Whether the rendered float caption's first block is a `Plain`.
+fn rendered_float_caption_is_plain(ast: &Pandoc, id: &str) -> bool {
+    use quarto_pandoc_types::block::Block;
+    let outer = find_div_by_id(&ast.blocks, id).unwrap_or_else(|| panic!("outer Div #{id}"));
+    let Some(Block::Figure(fig)) = outer.content.first() else {
+        panic!("expected inner Figure under #{id}");
+    };
+    matches!(
+        fig.caption.long.as_ref().and_then(|l| l.first()),
+        Some(Block::Plain(_))
+    )
+}
+
 /// bd-n3sark9b — div-form control: `::: {#fig-…}` with a trailing caption
 /// paragraph. This form always prefixed correctly; it guards the fix for
 /// the other forms against regressing the working one.
@@ -898,6 +911,13 @@ Div form caption
     assert_eq!(
         rendered_float_caption(&ast, "fig-div"),
         "Figure 1: Div form caption"
+    );
+    // The trailing paragraph is canonicalized to Plain at the sugar boundary,
+    // so the HTML writer emits bare inlines inside <figcaption> for every
+    // float form (Q1 parity; bd-n3sark9b Phase 2).
+    assert!(
+        rendered_float_caption_is_plain(&ast, "fig-div"),
+        "div-form caption should be canonicalized to Plain"
     );
 }
 

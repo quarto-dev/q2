@@ -212,3 +212,25 @@ verbatim.
 4. **Phase 2 timing**: replacing the table-float Div shape changes rendered
    DOM for existing documents (captions become `<figcaption>`); fine to do in
    the same PR as Phase 1, or staged separately?
+
+## Caption slot shape (bd-n3sark9b)
+
+`FloatRefTarget.caption_long` always starts with a `Plain` block. The sugar
+transform (`float_ref_target.rs::canonicalize_caption`) converts a leading
+`Paragraph` — the div-form trailing paragraph, `#| fig-cap` cells — into a
+`Plain`; Pandoc-native `Figure` / `Table` captions are `Plain` already. The
+label-only caption synthesized for uncaptioned floats is a `Plain` too.
+
+Consequences:
+
+- Every consumer sees one shape. The crossref renderer's `prefix_caption` and
+  the index's caption extraction still accept a leading `Paragraph`
+  defensively (Lua filters / the JSON reader can hand us either), but nothing
+  in the pipeline *produces* one.
+- The HTML writer's `<figcaption>` holds bare inlines for every float form —
+  no `<p>` for the div form — which is what Q1 emits for all forms.
+- This is a deliberate divergence from Q1's *filter-visible* IR, where the
+  div-form caption stays a `Para` (`refCaptionFromDiv` returns it verbatim).
+  A Lua filter matching `Para` inside a float caption sees `Plain` in Q2.
+  Documented for filter authors under bd-t0qt409i.
+
