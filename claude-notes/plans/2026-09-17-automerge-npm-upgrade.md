@@ -107,8 +107,10 @@ was made on; phase 3 is the port itself.
       preview-runtime 78, hub-mcp 248, sync-test-harness 8), `hub-client`
       typecheck + vitest (1217) — all green on 3.5.0 / 2.5.6
 - [ ] Full gate: `cargo xtask verify` (hub-client + WASM legs included)
-- [ ] `hub-client/changelog.md` entry (two-commit workflow)
-- [ ] Commit, push topic branch, open PR (do not merge)
+- [x] `hub-client/changelog.md` entry (two-commit workflow) — `4084897a9`
+- [x] Commits `07b211229`, `d0b399460`, `4084897a9` pushed to
+      `origin/chore/bd-d08gpqvu-automerge-npm-upgrade`; PR #685 opened
+      against `main` for CI (not merged — awaiting review)
 
 ### Phase 2 — 2.6.0-alpha experiment (evidence for the decision)
 
@@ -150,8 +152,10 @@ step for this port).
 - [x] Full gate: `cargo xtask verify` — all 14 steps passed (Rust: 13924
       tests, 199 skipped; hub-client build:all incl. WASM; test:ci;
       trace-viewer; preview-*; hub MCP; q2-preview-spa build)
-- [ ] `hub-client/changelog.md` entry (two-commit workflow)
-- [ ] Commit, push topic branch, open PR (do not merge)
+- [x] `hub-client/changelog.md` entry (two-commit workflow) — `4084897a9`
+- [x] Commits `07b211229`, `d0b399460`, `4084897a9` pushed to
+      `origin/chore/bd-d08gpqvu-automerge-npm-upgrade`; PR #685 opened
+      against `main` for CI (not merged — awaiting review)
 
 #### Experiment result (2.6.0-alpha.5, 2026-09-17)
 
