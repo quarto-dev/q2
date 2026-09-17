@@ -1,11 +1,19 @@
 # Automerge index-document staleness — research notes
 
-**Status:** INVESTIGATION ONLY, mechanisms now characterized (2026-09-16,
-same day). H1 and H2 are both confirmed as *real, manufacturable*
-mechanisms against automerge-repo v2.5.6 — see "Characterization results"
-below. This still does **not** diagnose Gordon's specific incident: a
-manufactured repro proves a mechanism is possible and matches the symptom
-shape, not that it's what happened to his project. No fix has been
+**Status:** INVESTIGATION ONLY. The defining fact of this bug, from the
+start: a plain page reload does not fix a stuck session, only clearing
+the `automerge` IndexedDB database does. Every hypothesis here is judged
+against that fact, not just against the general "stops receiving
+updates" symptom. H1 and H2 (2026-09-16) are both confirmed as *real,
+manufacturable* mechanisms against automerge-repo v2.5.6, but neither
+explains the reload/wipe fact on its own — see "Characterization
+results." H4 (2026-09-17), found from a real production error trace
+rather than source-reading, explains it much better and is now the
+leading candidate — see its section below. Nothing here yet diagnoses a
+specific incident with certainty: a manufactured repro (H1/H2) proves a
+mechanism is possible; H4's swallowed-throw step is confirmed against
+source, but its root cause (how the same actor produced two colliding
+changes) is not yet confirmed against a real specimen. No fix has been
 attempted; that still needs Gordon's go-ahead per "Next steps."
 
 **Strand:** bd-6f21d4c6 ("Reproduce leading mechanisms of Automerge
@@ -414,6 +422,96 @@ Checked directly: `disconnect()` (`client.ts:1238-1286`) does null out
 `connect()` constructs a fresh `Repo`. No obvious cross-call leak found.
 Kept here only as a note that it was checked and looked clean, so a future
 investigator doesn't re-walk this same path expecting to find something.
+
+### H4 (new, 2026-09-17 — the strongest lead so far, from a real production error, not synthetic repro): an actor/seq collision makes `receiveSyncMessage` throw, and the throw is silently swallowed with no recovery
+
+Carlos posted a real console error from `quarto-hub.com`:
+
+```
+error receiving message {err: RangeError: duplicate seq 1 found for actor 4c2101fe42b5a6dd0e26fd976972c821cdb071d0615f2055bf3c1809537a17c5, message: {type: 'sync', documentId: 'PWeQvXwprjrUqV7M5MFuKxvU8t6', senderId: 'peer-9545744735139249438', targetId: 'peer-9d025je5a', data: Uint8Array(6740)}}
+```
+
+Traced end to end against the vendored source (automerge Rust core +
+automerge-repo v2.5.6):
+
+1. `RangeError: duplicate seq 1 found for actor <id>` is
+   `AutomergeError::DuplicateSeqNumber` (`automerge/src/error.rs:22`),
+   thrown from `apply_changes_batch_log_patches`
+   (`automerge/src/op_set2/change/batch.rs:1003-1020`) when an incoming
+   change's `(actor, seq)` pair either already exists in the document's
+   own change graph or collides with another change in the same
+   incoming batch — **not** a hash check, a same-actor-same-sequence-
+   number check. Its sibling variant,
+   `DuplicateActorId(ActorId)` → `"duplicate actor {0}: possible
+   document clone"`, is the crate authors' own name for this class of
+   mistake.
+2. `receive_sync_message_inner` (`automerge/src/sync.rs:373-441`) calls
+   `self.load_incremental_log_patches(&message_changes.join(), patch_log)?`
+   — the `?` means that error aborts the **entire** function immediately,
+   *before* any of `sync_state.shared_heads` / `their_have` / `their_heads`
+   / `their_need` get updated. So a message that trips this error doesn't
+   just fail to apply its changes — the peer's sync state for that
+   document is left exactly where it was before the message arrived.
+3. On the JS side, this surfaces at exactly the log line Carlos posted:
+   `Repo.ts:364-367`'s `this.synchronizer.receiveMessage(message).catch(err
+   => { console.log("error receiving message", { err, message }) })` —
+   a bare `console.log` (not even `console.error`), no retry, no
+   escalation, no recovery. The message is dropped, permanently, with no
+   visible sign to the user.
+
+Put together: if this document's local sync state with this peer never
+advances (step 2), and the hub has no reason to change what it's
+resending (it thinks the client hasn't caught up), the hub can keep
+sending the same colliding change on every subsequent sync attempt,
+forever, each one hitting the identical silent drop. That's a permanent,
+silent stall — matching the symptom exactly — and it fits the reload/
+wipe fact **better than H1 or H2**: the poison here is baked into the
+locally persisted document's own committed change history (snapshot/
+incremental bytes in IndexedDB), not in-memory peer bookkeeping (H1) or
+a persisted-but-recoverable sync-state entry (H2). A reload reloads the
+identical poisoned local history and hits the identical rejection on the
+very next sync attempt; only discarding the local copy (the IndexedDB
+wipe) removes the colliding branch and lets the client fetch a clean
+copy from the hub.
+
+**What's confirmed vs. still speculative:** the mechanism in the three
+steps above is confirmed directly against source — a `DuplicateSeqNumber`
+throw during `receiveSyncMessage` is provably swallowed with no recovery,
+and provably explains a permanent, reload-surviving stall. What's *not*
+yet confirmed is **how** the same actor ever produced two different
+"seq N" changes in the first place. The most plausible q2-specific
+candidate: `actorIdFromUserId` (`hub-client/src/services/userSettings.ts:
+18-40`, wired at `App.tsx:248`) deliberately derives a **stable**
+Automerge actor id from the local `userId` — "instead of getting a fresh
+random Automerge actor each session," per its own doc comment — and
+`userId` is stored in IndexedDB, shared across every tab of the same
+browser profile. Two concurrent live sessions for the same person (two
+tabs, two devices signed into one account, or a stale tab that never
+fully disconnected plus a fresh reconnect) would use the *identical*
+actor id; if both commit a local edit to the same document around the
+same moment, each numbers its own change relative to what *it* believes
+is that actor's latest sequence, and two genuinely different changes can
+end up both claiming to be "actor X's seq N" — exactly this error. The
+one detail that doesn't cleanly fit: `actorIdFromUserId` only ever
+produces a 32-hex-char (16-byte) actor id for its documented case (a
+`crypto.randomUUID()`-shaped `userId`, stripped of dashes), but the
+actor id in Carlos's error is 64 hex chars (32 bytes) — consistent with
+that function's UTF-8-fallback branch (a `userId` that *isn't*
+UUID-shaped, hex-encoded byte-for-byte) but not with its documented "in
+practice the app only ever passes `randomUUID()` ids" case. So: the
+swallowed-throw mechanism is confirmed; `actorIdFromUserId` as the
+origin of the specific collision is plausible and worth checking against
+a real specimen, not yet confirmed.
+
+**What would confirm this:** a captured specimen from an actual
+incident — the full error object (documentId, senderId/targetId,
+message bytes) plus the raw persisted document bytes for that
+documentId, decoded to see whether the local change graph really does
+contain two different changes claiming the same `(actor, seq)`, and
+whether that actor id traces back to `actorIdFromUserId`'s output for
+Carlos's own `userId` (or someone else's, if the collision is
+cross-user rather than cross-session-same-user). See
+`claude-notes/plans/2026-09-17-carlos-index-doc-capture-plan.md`.
 
 ## Prior, related work (not the same bug)
 
