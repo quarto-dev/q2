@@ -282,12 +282,13 @@ interface SyncClientState {
 
 /**
  * One index-referenced file that has NOT loaded, as reported by
- * `getSyncDiagnostics()`. `handleState` is the raw automerge-repo DocHandle
- * state (`'loading'` / `'requesting'` / `'unavailable'` / …), or null when
- * the repo holds no cached handle for the doc at all. `unavailableMarker`
+ * `getSyncDiagnostics()`. `handleState` is the repo's verdict on the doc
+ * (`'loading'` / `'unavailable'` / `'failed'` from its DocumentQuery, or
+ * the handle's own `'ready'` / `'deleted'` once loaded), or null when the
+ * repo holds no query for the doc at all. `unavailableMarker`
  * is this client's own dangling-entry marker (`markFileUnavailable`).
- * The two disagree exactly when a stall mechanism is hiding: e.g. a handle
- * stuck `requesting` with no marker means a find is still in flight (or
+ * The two disagree exactly when a stall mechanism is hiding: e.g. a query
+ * stuck `loading` with no marker means a find is still in flight (or
  * hung), while marker-set + `unavailable` is the settled verdict.
  */
 export interface StrandedFileDiagnostic {
@@ -311,8 +312,9 @@ export interface SyncDiagnostics {
  * API (`quartoDebug.am`, bd-q93tkglb).
  *
  * `docId` is the bare document id (no `automerge:` prefix).
- * `handleState` is the raw automerge-repo DocHandle state, or null when
- * the repo holds no cached handle for the doc. `heads` is the doc's
+ * `handleState` is the repo's verdict on the doc (see
+ * {@link StrandedFileDiagnostic}), or null when the repo holds no query
+ * for the doc. `heads` is the doc's
  * current change-hash heads when the handle is ready, else null.
  * `unavailableMarker` mirrors the client's dangling-entry marker: the
  * index references this path but the document never loaded — for those
@@ -588,6 +590,10 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       // ready; skip it so a doc loaded from IndexedDB (full of historic
       // remote actors) isn't reported as a fresh remote change.
       if (!handle.isReady()) return;
+      // automerge-repo ≥ 2.6 types the payload's `doc` as possibly undefined
+      // (a sub-handle whose path no longer resolves); root handles always
+      // carry one, so this only guards the type.
+      if (doc === undefined) return;
       try {
         const localActor = automergeGetActorId(doc);
         const changes = automergeGetChanges(patchInfo.before, patchInfo.after);
@@ -1672,11 +1678,10 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
         const bareId = raw.startsWith('automerge:')
           ? raw.slice('automerge:'.length)
           : raw;
-        const cached = repo?.handles?.[bareId as DocumentId];
         return {
           path,
           docId: raw,
-          handleState: cached?.state ?? null,
+          handleState: cachedDocState(repo, bareId),
           unavailableMarker: state.unavailableFiles.has(path),
         };
       });
@@ -1696,6 +1701,23 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
    */
   function getRepo(): Repo | null {
     return state.repo;
+  }
+
+  /**
+   * The repo's verdict on a document it already knows about, or null
+   * when it holds no query for that doc. Since automerge-repo 2.6,
+   * availability lives on the DocumentQuery, not the DocHandle: a
+   * handle's own `state` is only ever 'ready' or 'deleted', and
+   * `repo.find()` rejects for a doc no peer has instead of handing out
+   * an 'unavailable' handle. Only an existing query is consulted —
+   * `findWithProgress` on an unknown id would create one and start
+   * requesting the doc, which diagnostics must never do.
+   */
+  function cachedDocState(repo: Repo | null, bareId: string): string | null {
+    const cached = repo?.handles?.[bareId as DocumentId];
+    if (!repo || !cached) return null;
+    const query = repo.findWithProgress<unknown>(bareId as DocumentId).peek();
+    return query.state === 'ready' ? cached.state : query.state;
   }
 
   /** Heads of a handle's doc when ready, else null (plain string[]). */
@@ -1739,12 +1761,11 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       const bareId = rawDocId.startsWith('automerge:')
         ? rawDocId.slice('automerge:'.length)
         : rawDocId;
-      const cached = state.repo?.handles?.[bareId as DocumentId];
       byPath.push({
         docId: bareId,
         role: 'file',
         path,
-        handleState: cached?.state ?? null,
+        handleState: cachedDocState(state.repo, bareId),
         heads: null,
         unavailableMarker: true,
       });

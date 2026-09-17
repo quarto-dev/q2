@@ -79,12 +79,12 @@
       "hub-client": {
         "packageJson": {
           "dependencies": [
-            "npm:@automerge/automerge-repo-network-websocket@^2.5.6",
-            "npm:@automerge/automerge-repo-react-hooks@2.5.6",
-            "npm:@automerge/automerge-repo-storage-indexeddb@2.5.6",
-            "npm:@automerge/automerge-repo-storage-nodefs@^2.5.6",
-            "npm:@automerge/automerge-repo@^2.5.6",
-            "npm:@automerge/automerge@^3.4.1",
+            "npm:@automerge/automerge-repo-network-websocket@2.6.0-alpha.5",
+            "npm:@automerge/automerge-repo-react-hooks@2.6.0-alpha.5",
+            "npm:@automerge/automerge-repo-storage-indexeddb@2.6.0-alpha.5",
+            "npm:@automerge/automerge-repo-storage-nodefs@2.6.0-alpha.5",
+            "npm:@automerge/automerge-repo@2.6.0-alpha.5",
+            "npm:@automerge/automerge@^3.5.0",
             "npm:@babel/standalone@^7.29.2",
             "npm:@eslint/js@^9.39.1",
             "npm:@monaco-editor/react@^4.7.0",
@@ -276,8 +276,8 @@
       "ts-packages/preview-runtime": {
         "packageJson": {
           "dependencies": [
-            "npm:@automerge/automerge-repo@^2.5.1",
-            "npm:@automerge/automerge@^3.4.1",
+            "npm:@automerge/automerge-repo@2.6.0-alpha.5",
+            "npm:@automerge/automerge@^3.5.0",
             "npm:@quarto/pandoc-types@*",
             "npm:@quarto/preview-renderer@*",
             "npm:@quarto/quarto-automerge-schema@*",
@@ -325,8 +325,8 @@
       "ts-packages/quarto-hub-mcp": {
         "packageJson": {
           "dependencies": [
-            "npm:@automerge/automerge-repo-network-websocket@^2.5.6",
-            "npm:@automerge/automerge-repo@^2.5.6",
+            "npm:@automerge/automerge-repo-network-websocket@2.6.0-alpha.5",
+            "npm:@automerge/automerge-repo@2.6.0-alpha.5",
             "npm:@modelcontextprotocol/sdk@^1.12.1",
             "npm:@napi-rs/keyring@^1.3.0",
             "npm:@quarto/quarto-automerge-schema@*",
@@ -346,10 +346,10 @@
       "ts-packages/quarto-sync-client": {
         "packageJson": {
           "dependencies": [
-            "npm:@automerge/automerge-repo-network-websocket@^2.5.1",
-            "npm:@automerge/automerge-repo-storage-indexeddb@^2.5.4",
-            "npm:@automerge/automerge-repo@^2.5.1",
-            "npm:@automerge/automerge@^3.4.1",
+            "npm:@automerge/automerge-repo-network-websocket@2.6.0-alpha.5",
+            "npm:@automerge/automerge-repo-storage-indexeddb@2.6.0-alpha.5",
+            "npm:@automerge/automerge-repo@2.6.0-alpha.5",
+            "npm:@automerge/automerge@^3.5.0",
             "npm:@quarto/quarto-automerge-schema@*",
             "npm:@types/ws@^8.18.1",
             "npm:fflate@~0.8.2",
