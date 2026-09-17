@@ -92,7 +92,16 @@ Full write-up: `claude-notes/research/2026-09-13-connect-docs-render-profile.md`
 - Post-SCSS projection: memmove/AST construction 28 % + malloc 17.5 %,
   tree-sitter 15 %. → **bd-5yektmwt (P3)**.
 
-### Code changes made during the investigation (on `braid/bd-fq44dlnm-connect-docs-profile`)
+### Outcome (2026-09-17)
+
+bd-79c4do6g and bd-ddahjqr1 were fixed on `main` via PR #679 (plan
+`2026-09-13-scss-cache-key-path.md`), and the follow-up bd-m3hga05o /
+PR #682 covered `@import`ed partials. The `perf.sass` gauge landed there
+too (`aab25a7e`); the copy written during this investigation was dropped
+when merging `main` into this branch, so this branch adds only the note,
+the plan, the profiles, and `bucket_profile.py`.
+
+### Code changes made during the investigation, as originally written (on `braid/bd-fq44dlnm-connect-docs-profile`)
 
 - `crates/quarto-core/src/stage/stages/compile_theme_css.rs`: `perf.sass`
   gauge (hits / compiles / uncached; atomics, printed under
@@ -103,7 +112,8 @@ Full write-up: `claude-notes/research/2026-09-13-connect-docs-render-profile.md`
 - Profiles committed next to the research note (serial + parallel, with
   `.syms.json` sidecars), following the 2026-05-22 precedent.
 - clippy (`-D warnings`) clean on `quarto-core` + `quarto`; 152 theme/cache
-  tests pass. Full `cargo xtask verify --skip-hub-build` **not yet run**.
+  tests pass; `cargo xtask verify --skip-hub-build` passed on 2026-09-13
+  before the merge with `main`.
 
 ### Smoke run (release-perf binary, `--clean-cache`, default jobs, 2026-09-13)
 

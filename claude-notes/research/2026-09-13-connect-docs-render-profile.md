@@ -7,6 +7,16 @@
 **Profiles:** `2026-09-13-connect-docs-{serial,parallel}-profile.json.gz` (+ `.syms.json`) in this directory
 **Machine:** Apple M5 Max, 18 cores, 128 GB, macOS 26.6.2; q2 at `35bc1141` (main)
 
+> **Status (2026-09-17):** findings 1 and 2 were fixed on `main` before this
+> note merged — PR #679 (`4a2d219f` normalizes resolved theme paths so one
+> custom theme gets one sass cache key; `fbda74d9` serializes and reconciles
+> the LRU index so parallel renders stop leaking entries; `aab25a7e` landed
+> the `perf.sass` gauge described below). The follow-up bd-m3hga05o / PR #682
+> (`267d24f3`) then made the key validate `@import`ed partials, which the
+> content-only key would otherwise have missed. The numbers in this note are
+> the pre-fix baseline at `35bc1141`; bd-is4q72tt, bd-j0hmi3rx and
+> bd-5yektmwt remain open.
+
 ## TL;DR
 
 **78 % of the serial render is compiling Bootstrap SCSS, over and over.**
