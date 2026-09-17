@@ -513,6 +513,51 @@ Carlos's own `userId` (or someone else's, if the collision is
 cross-user rather than cross-session-same-user). See
 `claude-notes/plans/2026-09-17-carlos-index-doc-capture-plan.md`.
 
+**Would the in-progress automerge/automerge-repo upgrade fix this?
+Checked directly against the vendored clone's fetched history
+(2026-09-17), not guessed:**
+
+- **The swallowed-catch: no.** `Repo.ts:365-367`'s
+  `this.synchronizer.receiveMessage(message).catch(err => { console.log
+  ("error receiving message", { err, message }) })` is byte-for-byte
+  unchanged from `v2.5.6` (what q2 has) through every later tag
+  reachable in the vendored clone, including the newest prereleases
+  (`v2.6.0-alpha.3` current npm `latest`, `v2.6.0-alpha.5` `next`, and
+  `v2.7.0-authors.1`). A **different, real** bug in the same
+  neighborhood *was* fixed upstream — PR #673 ("catch errors thrown
+  while handling an inbound message", commit `4f0ba092`) wraps the
+  *outer* `#receiveMessage` dispatcher in try/catch, because a
+  *synchronous* throw there used to escape the `EventEmitter` entirely
+  and could crash a Node sync server. That's a genuine, worthwhile fix
+  to pick up, but it's a sibling issue, not this one: our failure is
+  already inside the async `.catch()` that existed both before and
+  after #673, unchanged.
+- **The root-cause actor-id-reuse question: also no, but not because
+  it's unfixable — because the fix was written and never shipped.**
+  Upstream once prototyped exactly the right primitive: commit
+  `31f12b13` ("add config option to repo to set actorIdPrefix", Jan
+  2024) adds a `RepoConfig.actorIdPrefix` that generates
+  `${actorIdPrefix}:${randomSessionUUID}` — a stable prefix (for
+  attribution) combined with a guaranteed-unique-per-instance suffix
+  (for safety) — the literal shape needed to give `actorIdFromUserId`'s
+  goal without the collision risk. It lived on a branch named
+  `stable-actor-ids` (the branch name alone is a striking match for
+  what this investigation needed) but **never merged into `main`** and
+  never shipped in any release, old or new. So there's no version to
+  upgrade *to* that would provide this.
+
+**Net: the in-progress upgrade is good hygiene (it picks up #673 and
+other real fixes) but would not have fixed, and will not fix, either
+half of H4** — the silent-drop behavior is unfixed upstream as of the
+latest fetched code, and the actor-id-stability primitive that would
+address the likely root cause was never shipped. If H4 is confirmed
+against a real specimen, a fix has to be either q2-side (stop deriving
+a bare, reused-across-sessions actor id in `actorIdFromUserId` — e.g.
+combine it with a per-session-unique component, by hand, the same way
+the abandoned upstream branch intended) or upstream-contributed (revive
+`stable-actor-ids`, and/or make `Repo.ts`'s catch actually recover
+instead of only logging).
+
 ## Prior, related work (not the same bug)
 
 - **bd-10bdjmjb** ("Browser sync offline-fallback race family", design at
