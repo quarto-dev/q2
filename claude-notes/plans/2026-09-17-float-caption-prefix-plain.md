@@ -6,7 +6,7 @@ filed four times over three months, correctly diagnosed twice, never fixed.
 **Reported:** 2026-09-17, `~/Desktop/daily-log/2026/09/17/fig-test/test.qmd` (knitr cell with
 `#| fig-cap` + `![This is another figure](plot.png){#fig-test-2}`).
 **Verified against:** `main` @ `aa92c4b9e`. **Q1 reference:** `quarto` 99.9.9 (dev checkout).
-**Status:** executing on branch `braid/bd-n3sark9b-crossref-float-caption-prefix`. Phase 1 committed (`18fa6670d`); Phase 2 committed (`1a83b4776`); full `cargo xtask verify` green 2026-09-17. **Awaiting push approval.**
+**Status:** executing on branch `braid/bd-n3sark9b-crossref-float-caption-prefix`. Phase 1 committed (`18fa6670d`); Phase 2 committed (`1a83b4776`); full `cargo xtask verify` green 2026-09-17. Pushed; PR https://github.com/quarto-dev/q2/pull/690 (CI in progress).
 **Docs follow-up:** bd-t0qt409i (under the docs epic bd-tr81, blocked on this strand).
 
 ## TL;DR
@@ -309,7 +309,14 @@ nbsp — all out of scope.
   sources) and hub-client `test:ci`.
 - [ ] Unblock bd-t0qt409i (docs: filter-visible `Plain` caption contract) by closing this strand;
   it is `blocks`-linked so it surfaces in `braid ready` only once the behavior has shipped.
-- [ ] Ask before pushing. Recommend closing bd-uwv2eec2, bd-hb9a9ik8, bd-4vbd3b7g, bd-51k5yz4e as
+- [x] Pushed with approval; PR https://github.com/quarto-dev/q2/pull/690. First CI pass: 7 of 10 checks
+  green. The three red legs are pre-existing and tracked elsewhere — both "Workspace TS suites" legs
+  fail on quarto-hub-mcp's `exit-drain.test.ts` timeout, red on `main` since PR #685
+  (bd-ppu6xmvv); "Run test suite (macos-latest)" hit `test_race_free_instance_exclusive`'s
+  DEADLOCK timeout under full-workspace load (bd-xxpbo8cf), which passed on ubuntu and in three
+  local full runs. Both fixes have since merged to `main` (#691 sizes the exit-drain budgets for
+  automerge-repo 2.6); `origin/main` merged into this branch for a fresh CI run.
+- [ ] Recommend closing bd-uwv2eec2, bd-hb9a9ik8, bd-4vbd3b7g, bd-51k5yz4e as
   duplicates once bd-n3sark9b closes (they are linked `duplicates` → bd-n3sark9b already; closing
   needs the user's ok).
 
