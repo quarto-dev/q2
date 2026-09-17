@@ -40,8 +40,8 @@
     "oauth4webapi": "^3.5.5"
   },
   "devDependencies": {
-    "@automerge/automerge-repo": "^2.5.6",
-    "@automerge/automerge-repo-network-websocket": "^2.5.6",
+    "@automerge/automerge-repo": "2.6.0-alpha.5",
+    "@automerge/automerge-repo-network-websocket": "2.6.0-alpha.5",
     "@types/node": "^22.15.0",
     "@types/ws": "^8.18.1",
     "esbuild": "^0.28.0",

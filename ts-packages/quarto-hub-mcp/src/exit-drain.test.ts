@@ -62,7 +62,29 @@ const FILE_BYTES = 64 * 1024;
 // the payload stops the test binding (table above), and `retry` lets it
 // pass even with the drain deleted, because the drain-off failure is
 // probabilistic and one of three attempts gets through.
-const DRAIN_BUDGET_MS = 30_000;
+//
+// The budget was 30 s until automerge-repo 2.6.0-alpha.5 (PR #685,
+// bd-d08gpqvu) made sync between two automerge-repo *JS* peers — this
+// server and the in-process `startTestHub()` — several times slower:
+// the same 4 MB that reached the hub in ~2 s on 2.5.6 takes ~13 s on
+// an idle M-series Mac, and 25-30 s on a CI runner, i.e. right at the
+// old budget. Whole-test time went from 10-13 s to 36-39 s on CI, and
+// the run tripped the 30 s vitest timeout on one platform per push
+// (bd-ppu6xmvv). Against the real Rust hub the drain takes ~5 s on
+// both versions, so this is a property of the test rig, not of
+// production; the budget is sized to the rig.
+const DRAIN_BUDGET_MS = 60_000;
+
+// The hang-detector bound on the exit itself, and the vitest timeout
+// that must be able to *contain* it. These are derived, not literal,
+// because the previous literals were inconsistent: the exit wait was
+// budget + 5 s = 35 s inside a 30 s vitest timeout, so the assertion
+// could never fire — a hung server always surfaced as an opaque
+// "Test timed out" instead of the failed `toBe(true)` on exit. The
+// vitest bound adds room for create_project (1.5-3 s idle, ~10 s on a
+// loaded runner) and the per-document hub checks after exit.
+const EXIT_BOUND_MS = DRAIN_BUDGET_MS + 5_000;
+const TEST_TIMEOUT_MS = EXIT_BOUND_MS + 30_000;
 
 function accidentFiles() {
   return Array.from({ length: FILE_COUNT }, (_, i) => ({
@@ -107,11 +129,12 @@ describe('exit drains outbound sync (bd-10deu8h4)', () => {
     // The exact accident: the host closes stdin right after the tool
     // call returns. The server must still exit — the drain is
     // event-driven and returns the moment the hub confirms, so this
-    // lands in ~2 s despite the raised budget. The bound here is a
-    // hang-detector, not a promptness assertion: prompt exit under the
-    // production 3000 ms budget is stdio-hygiene.test.ts's job, and
-    // pinning 5 s here as well is what made this test a throughput race.
-    expect(await client.endStdinAndWaitForExit(DRAIN_BUDGET_MS + 5000)).toBe(true);
+    // lands well inside the budget (see the timing notes above). The
+    // bound here is a hang-detector, not a promptness assertion: prompt
+    // exit under the production 3000 ms budget is stdio-hygiene.test.ts's
+    // job, and pinning 5 s here as well is what made this test a
+    // throughput race.
+    expect(await client.endStdinAndWaitForExit(EXIT_BOUND_MS)).toBe(true);
 
     // …but not before the created documents reached the hub.
     expect(
@@ -124,7 +147,7 @@ describe('exit drains outbound sync (bd-10deu8h4)', () => {
         `file doc for ${f.path} must reach the hub — its only copy was in-process`,
       ).toBe(true);
     }
-  }, 30000);
+  }, TEST_TIMEOUT_MS);
 
   it('warns loudly on stderr (and still exits promptly) when the hub is gone at shutdown', async () => {
     // Own hub — this test kills it mid-session.

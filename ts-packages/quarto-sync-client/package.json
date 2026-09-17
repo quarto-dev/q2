@@ -28,10 +28,10 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@automerge/automerge": "^3.4.1",
-    "@automerge/automerge-repo": "^2.5.1",
-    "@automerge/automerge-repo-network-websocket": "^2.5.1",
-    "@automerge/automerge-repo-storage-indexeddb": "^2.5.4",
+    "@automerge/automerge": "^3.5.0",
+    "@automerge/automerge-repo": "2.6.0-alpha.5",
+    "@automerge/automerge-repo-network-websocket": "2.6.0-alpha.5",
+    "@automerge/automerge-repo-storage-indexeddb": "2.6.0-alpha.5",
     "@quarto/quarto-automerge-schema": "*",
     "fflate": "^0.8.2",
     "ws": "^8.18.0"

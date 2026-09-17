@@ -4,23 +4,23 @@
  *
  * Upstream bug (automerge-repo 2.5.6,
  * `packages/automerge-repo-network-websocket/src/WebSocketClientAdapter.ts`):
- * `disconnect()` clears the retry `setInterval`, but the `onClose`
- * handler schedules reconnects with a one-shot `setTimeout` that
- * `disconnect()` never cancels. An adapter discarded after its socket
- * closed (server died, port now dead) resurrects itself when that
- * timer fires and retries the dead port every `retryInterval`,
+ * `disconnect()` cleared the retry `setInterval`, but the `onClose`
+ * handler scheduled reconnects with a one-shot `setTimeout` that
+ * `disconnect()` never cancelled. An adapter discarded after its socket
+ * closed (server died, port now dead) resurrected itself when that
+ * timer fired and retried the dead port every `retryInterval`,
  * forever. In Firefox those zombie attempts occupy the browser-wide
  * per-IP WebSocket handshake queue — the mechanism behind
  * bd-jit6pdwq — so a "torn down" stale tab kept breaking other tabs.
  *
- * The subclass gates `connect()` behind a stopped flag set by
- * `disconnect()`. Reconnect-after-disconnect is never desired here:
- * every connection in this codebase builds a fresh adapter.
- *
- * Upstreaming the `disconnect()` fix to automerge/automerge-repo is
- * tracked as follow-up work on the strand; if upstream lands it, this
- * subclass (and its control test, which detects exactly that) can be
- * retired.
+ * Upstream fixed the timer path in 2.6.0-alpha.3 (automerge-repo PR
+ * 690: `disconnect()` now clears the pending reconnect and a
+ * `#disconnected` flag skips one already queued). What upstream still
+ * allows is a *direct* `connect()` after `disconnect()`, which resets
+ * that flag and recreates the socket — so this subclass keeps
+ * `disconnect()` terminal by gating `connect()` behind its own stopped
+ * flag. Reconnect-after-disconnect is never desired here: every
+ * connection in this codebase builds a fresh adapter.
  */
 
 import { BrowserWebSocketClientAdapter } from '@automerge/automerge-repo-network-websocket';
@@ -33,14 +33,17 @@ export class StoppableWebSocketClientAdapter extends BrowserWebSocketClientAdapt
   #stopped = false;
 
   /**
-   * Upstream's `onError` rethrows any node error that isn't
-   * ECONNREFUSED — but a throw inside an event callback can't reach a
-   * caller; it becomes an uncaughtException and kills the host
-   * process (bd-xzspx4r9: the hub MCP server died on a mid-handshake
-   * 'socket hang up'). Recovery is the close/retry machinery's job;
-   * here we only record the diagnostic.
+   * Record the socket error as a diagnostic. Upstream ≤ 2.5.6 rethrew
+   * any node error that wasn't ECONNREFUSED — a throw inside an event
+   * callback can't reach a caller; it became an uncaughtException and
+   * killed the host process (bd-xzspx4r9: the hub MCP server died on a
+   * mid-handshake 'socket hang up'). Since 2.6.0-alpha.3 upstream only
+   * logs, and types the handler as `() => void`; the browser passes an
+   * opaque Event, Node's `ws` an ErrorEvent with `.error`, so the
+   * parameter stays optional and we keep recording what is there.
+   * Recovery is the close/retry machinery's job.
    */
-  override onError = (event: unknown): void => {
+  override onError = (event?: unknown): void => {
     const err = (event as { error?: { code?: string; message?: string } }).error;
     syncLog(
       `WebSocket error (will retry): ${err?.code ?? 'unknown'} ${err?.message ?? ''}`.trim(),
