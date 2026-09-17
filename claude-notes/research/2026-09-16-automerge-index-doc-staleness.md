@@ -513,6 +513,32 @@ Carlos's own `userId` (or someone else's, if the collision is
 cross-user rather than cross-session-same-user). See
 `claude-notes/plans/2026-09-17-carlos-index-doc-capture-plan.md`.
 
+**What H4 does to H1 and H2:** doesn't disprove either as real
+behaviors — both remain confirmed, source-grounded mechanisms that
+genuinely exist in automerge-repo v2.5.6 (see the characterization tests
+committed on this branch). What changes is whether either is *needed*
+to explain Carlos's incident:
+
+- **H1** was already demoted before H4: its state
+  (`CollectionSynchronizer.#peers` / each `DocSynchronizer`'s peer list)
+  is pure in-memory bookkeeping that a page reload provably resets
+  (hub-client runs its `Repo` directly in the page — no
+  `SharedWorker`/`ServiceWorker` to survive one). Reload-alone-
+  insufficient already ruled out H1 as a *sufficient* standalone cause.
+  H4 doesn't need H1 — it's independently sufficient, and (unlike H1)
+  explains *why* reload doesn't help, rather than merely being
+  compatible with reload not mattering to it.
+- **H2** was always framed as a compounding factor, not a standalone
+  cause: a dropped *persisted* sync-state write doesn't touch the live
+  in-memory sync state that actually drives message exchange, so the
+  protocol should still converge given continued messages. H4 provides
+  its own complete, self-sufficient account of a permanent wedge, so H2
+  isn't needed to explain durability either.
+
+Net: H1 and H2 remain true statements about the library, but neither is
+the leading explanation for *this* bug anymore. If H4 gets falsified
+against a real specimen, both come back into consideration.
+
 **Would the in-progress automerge/automerge-repo upgrade fix this?
 Checked directly against the vendored clone's fetched history
 (2026-09-17), not guessed:**
