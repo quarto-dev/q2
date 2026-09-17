@@ -40,6 +40,32 @@ fn find(symbols: &[Symbol], name: &str) -> Option<(SymbolKind, Option<String>)> 
         .map(|(_, k, d)| (k, d))
 }
 
+/// bd-n3sark9b: the attribute-form figure's caption is a `Plain` block, and
+/// (after Phase 2) so is every float caption. The outline detail must read
+/// it either way.
+#[test]
+fn attr_form_figure_caption_appears_in_outline() {
+    let doc = Document::new(
+        "test.qmd",
+        r#"---
+title: demo
+---
+
+![Attr caption here](placeholder.png){#fig-attr}
+"#,
+    );
+    let analysis = analyze_document(&doc);
+    let (kind, detail) =
+        find(&analysis.symbols, "fig-attr").expect("fig-attr should appear as an outline entry");
+    assert_eq!(kind, SymbolKind::Class);
+    let detail = detail.expect("fig-attr should carry a detail label");
+    assert!(detail.starts_with("Figure 1"), "detail was {detail:?}");
+    assert!(
+        detail.contains("Attr caption here"),
+        "detail was {detail:?}"
+    );
+}
+
 #[test]
 fn figure_div_appears_in_outline() {
     let doc = Document::new(
