@@ -1192,9 +1192,19 @@ fn render_resolved_ref(node: CustomNode, terms: Option<&LanguageTerms>) -> Inlin
     })
 }
 
-/// Prepend a numbered prefix onto the first Paragraph of a caption block
-/// list, returning a fresh Blocks. No-op if the kind is empty or the
-/// caption is empty.
+/// Prepend a numbered prefix onto the first block of a caption block list,
+/// returning a fresh Blocks. No-op if the kind is empty or the caption is
+/// empty.
+///
+/// The first caption block may be a `Paragraph` *or* a `Plain`: the
+/// div-form trailing paragraph arrives as `Paragraph`, while Pandoc-native
+/// `Figure` / `Table` captions (`![cap](img){#fig-x}`, `: cap {#tbl-x}`)
+/// arrive as `Plain`. The prefix lands in either and the block type is
+/// preserved, mirroring Q1's `decorate_caption_with_crossref`, which
+/// prepends into `caption_long.content` regardless of block type. If the
+/// first block carries no inlines at all (a code block, a nested div), a
+/// label-only `Plain` is inserted in front rather than dropping the prefix
+/// (bd-n3sark9b — the Paragraph-only match used to silently skip Plain).
 fn prefix_caption(caption: Blocks, kind: &str, number: Option<u32>) -> Blocks {
     if kind.is_empty() || caption.is_empty() {
         return caption;
@@ -1204,16 +1214,39 @@ fn prefix_caption(caption: Blocks, kind: &str, number: Option<u32>) -> Blocks {
         None => format!("{kind}: "),
     };
     let mut out = caption;
-    if let Some(Block::Paragraph(first)) = out.first_mut() {
-        // Prepend Str + Space-like (we use a single Str containing the
-        // trailing space so we don't have to synthesize Space inlines).
-        let src = first.source_info.clone();
+    // Prepend a single Str carrying the trailing space, so we don't have
+    // to synthesize Space inlines.
+    let prefix_into = |content: &mut Inlines, src: SourceInfo| {
         let mut new_content: Inlines = vec![Inline::Str(Str {
-            text: prefix_text,
+            text: prefix_text.clone(),
             source_info: src,
         })];
-        new_content.extend(std::mem::take(&mut first.content));
-        first.content = new_content;
+        new_content.append(content);
+        *content = new_content;
+    };
+    match out.first_mut() {
+        Some(Block::Paragraph(first)) => {
+            let src = first.source_info.clone();
+            prefix_into(&mut first.content, src);
+        }
+        Some(Block::Plain(first)) => {
+            let src = first.source_info.clone();
+            prefix_into(&mut first.content, src);
+        }
+        Some(other) => {
+            let src = other.source_info().clone();
+            out.insert(
+                0,
+                Block::Plain(quarto_pandoc_types::block::Plain {
+                    content: vec![Inline::Str(Str {
+                        text: prefix_text,
+                        source_info: src.clone(),
+                    })],
+                    source_info: src,
+                }),
+            );
+        }
+        None => unreachable!("caption checked non-empty above"),
     }
     out
 }
@@ -1984,6 +2017,171 @@ mod tests {
             panic!();
         };
         assert_eq!(s.text, "Figure: ");
+    }
+
+    #[test]
+    fn prefix_caption_prepends_into_plain_first_block() {
+        // bd-n3sark9b: Pandoc-native `Figure` and `Table` captions are
+        // `Plain`, not `Paragraph`. The prefix must land in either, and the
+        // block type must be preserved (a Plain caption stays Plain so the
+        // HTML writer emits bare inlines inside <figcaption>).
+        let cap = vec![Block::Plain(quarto_pandoc_types::block::Plain {
+            content: vec![str_inline("Hello")],
+            source_info: si(),
+        })];
+        let out = prefix_caption(cap, "Figure", Some(3));
+        assert_eq!(out.len(), 1);
+        let Block::Plain(p) = &out[0] else {
+            panic!("expected Plain to be preserved, got {:?}", out[0]);
+        };
+        let Inline::Str(s) = &p.content[0] else {
+            panic!();
+        };
+        assert_eq!(s.text, "Figure 3: ");
+        let Inline::Str(s) = &p.content[1] else {
+            panic!();
+        };
+        assert_eq!(s.text, "Hello");
+    }
+
+    #[test]
+    fn prefix_caption_inserts_leading_plain_when_first_block_is_container() {
+        // bd-n3sark9b: a caption whose first block carries no inlines
+        // (e.g. a CodeBlock) must not silently lose its prefix. Insert a
+        // label-only Plain in front, mirroring `prepend_theorem_label`.
+        let cap = vec![Block::CodeBlock(CodeBlock {
+            attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+            text: "x".into(),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        })];
+        let out = prefix_caption(cap, "Figure", Some(3));
+        assert_eq!(out.len(), 2);
+        let Block::Plain(p) = &out[0] else {
+            panic!("expected inserted Plain, got {:?}", out[0]);
+        };
+        assert_eq!(p.content.len(), 1);
+        let Inline::Str(s) = &p.content[0] else {
+            panic!();
+        };
+        assert_eq!(s.text, "Figure 3: ");
+        assert!(matches!(out[1], Block::CodeBlock(_)));
+    }
+
+    /// A native `Figure` with a crossref id and a `[Plain[...]]` caption —
+    /// what `![cap](img){#fig-x}` parses to.
+    fn native_figure_with_plain_caption(id: &str, cap: &str) -> Block {
+        let img = Inline::Image(quarto_pandoc_types::inline::Image {
+            attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+            content: vec![],
+            target: ("img.png".to_string(), String::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        });
+        Block::Figure(Figure {
+            attr: attr_id(id),
+            caption: Caption {
+                short: None,
+                long: Some(vec![Block::Plain(quarto_pandoc_types::block::Plain {
+                    content: vec![str_inline(cap)],
+                    source_info: si(),
+                })]),
+                source_info: si(),
+            },
+            content: vec![Block::Plain(quarto_pandoc_types::block::Plain {
+                content: vec![img],
+                source_info: si(),
+            })],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        })
+    }
+
+    /// First caption block's inlines, whichever of Plain / Paragraph it is.
+    fn first_caption_inlines(long: &Blocks) -> &Inlines {
+        match &long[0] {
+            Block::Paragraph(p) => &p.content,
+            Block::Plain(p) => &p.content,
+            other => panic!("caption first block is not inline-bearing: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn attr_form_figure_caption_gets_prefix() {
+        // bd-n3sark9b: `![Caption B](img){#fig-b}` — the caption arrives as
+        // `Plain` and used to lose its "Figure N: " prefix while the
+        // reference to it still resolved to "Figure N".
+        let ast = run_full(vec![
+            fig_div("fig-a", "Caption A"),
+            native_figure_with_plain_caption("fig-b", "Caption B"),
+        ])
+        .await;
+        let (outer, f) = float_shape(&ast.blocks[1]);
+        assert_eq!(outer.attr.0, "fig-b");
+        let long = f.caption.long.as_ref().unwrap();
+        let inlines = first_caption_inlines(long);
+        let Inline::Str(s) = &inlines[0] else {
+            panic!("expected prefix Str, got {:?}", inlines[0]);
+        };
+        assert_eq!(s.text, "Figure 2: ");
+        let Inline::Str(s) = &inlines[1] else {
+            panic!();
+        };
+        assert_eq!(s.text, "Caption B");
+    }
+
+    #[tokio::test]
+    async fn table_with_plain_caption_gets_prefix() {
+        // bd-n3sark9b: `Div(#tbl-x) > Table` where the Table's own caption
+        // is `[Plain[...]]` (Pandoc's convention, and what the
+        // `: cap {#tbl-x}` form desugars to).
+        let table = Block::Table(quarto_pandoc_types::table::Table {
+            attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+            caption: Caption {
+                short: None,
+                long: Some(vec![Block::Plain(quarto_pandoc_types::block::Plain {
+                    content: vec![str_inline("Numbers")],
+                    source_info: si(),
+                })]),
+                source_info: si(),
+            },
+            colspec: vec![],
+            head: quarto_pandoc_types::table::TableHead {
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                rows: vec![],
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+            },
+            bodies: vec![],
+            foot: quarto_pandoc_types::table::TableFoot {
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                rows: vec![],
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+            },
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let div = Block::Div(Div {
+            attr: attr_id("tbl-nums"),
+            content: vec![table],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let ast = run_full(vec![div]).await;
+        let (outer, f) = float_shape(&ast.blocks[0]);
+        assert_eq!(outer.attr.0, "tbl-nums");
+        let long = f.caption.long.as_ref().unwrap();
+        let inlines = first_caption_inlines(long);
+        let Inline::Str(s) = &inlines[0] else {
+            panic!("expected prefix Str, got {:?}", inlines[0]);
+        };
+        assert_eq!(s.text, "Table 1: ");
+        let Inline::Str(s) = &inlines[1] else {
+            panic!();
+        };
+        assert_eq!(s.text, "Numbers");
     }
 
     #[test]

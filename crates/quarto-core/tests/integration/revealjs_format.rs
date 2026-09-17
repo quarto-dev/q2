@@ -455,14 +455,14 @@ fn revealjs_crossref_attribute_figure_resolves_and_stretches() {
         !preceding.ends_with("<p>"),
         "stretched fig-1 img must be a direct child of <section>, not wrapped in <p>; got:\n{html}"
     );
-    // fig-1's caption text survives the hoist as a sibling `<p class="caption">`.
-    // (The numbered "Figure 1:" *prefix* is NOT asserted here: the attribute-form
-    // `![cap](x){#fig-…}` figure does not get a caption-number prefix even in
-    // plain HTML — a pre-existing crossref-render gap tracked separately. The
-    // *reference* numbering above already proves fig-1 entered the float pass.)
+    // fig-1's caption survives the hoist as a sibling `<p class="caption">`,
+    // numbered like every other float caption. (The attribute-form
+    // `![cap](x){#fig-…}` figure used to lose its "Figure 1: " prefix because
+    // crossref-render only prefixed Paragraph captions and native Figure
+    // captions are Plain — bd-n3sark9b.)
     assert!(
-        html.contains("class=\"caption\">A figure"),
-        "fig-1 caption text must survive the hoist; got:\n{html}"
+        html.contains("class=\"caption\">Figure 1: A figure"),
+        "fig-1 caption must survive the hoist with its number prefix; got:\n{html}"
     );
 }
 

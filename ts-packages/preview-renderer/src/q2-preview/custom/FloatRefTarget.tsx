@@ -5,6 +5,7 @@ import type {
     InlineNode,
     NodeArgs,
     ParaBlock,
+    PlainBlock,
 } from '../../framework';
 import { Node } from '../../framework';
 import { PreviewContext } from '../PreviewContext';
@@ -78,15 +79,21 @@ export const FloatRefTarget = ({
 
     // Compose the caption-prefix Str.
     const prefixText = composePrefixText(kind, number);
-    // Apply the prefix into the first Paragraph of caption_long (if any).
+    // Apply the prefix into the first inline-bearing block of caption_long
+    // (if any). That block is a Para for the div-form trailing paragraph
+    // and a Plain for Pandoc-native Figure / Table captions
+    // (`![cap](img){#fig-x}`, `: cap {#tbl-x}`); the prefix lands in
+    // either, mirroring crossref_render's `prefix_caption` (bd-n3sark9b —
+    // matching Para only used to drop the prefix for the Plain forms).
     // Returns the (virtually) prefixed blocks for rendering, plus a
     // pointer to the unmodified-source first inline so the per-inline
     // setLocalAst doesn't need to know about the synthetic prefix.
-    const firstCaptionPara =
-        captionLongBlocks.length > 0 && captionLongBlocks[0].t === 'Para'
-            ? (captionLongBlocks[0] as ParaBlock)
+    const firstCaptionBlock: ParaBlock | PlainBlock | undefined =
+        captionLongBlocks.length > 0 &&
+        (captionLongBlocks[0].t === 'Para' || captionLongBlocks[0].t === 'Plain')
+            ? (captionLongBlocks[0] as ParaBlock | PlainBlock)
             : undefined;
-    const remainingCaptionBlocks: BlockNode[] = firstCaptionPara
+    const remainingCaptionBlocks: BlockNode[] = firstCaptionBlock
         ? captionLongBlocks.slice(1)
         : captionLongBlocks;
 
@@ -101,40 +108,48 @@ export const FloatRefTarget = ({
     const replaceCaptionBlocks = (newBlocks: BlockNode[]) =>
         setSlot('caption_long')({ kind: 'blocks', value: newBlocks });
     const setFirstCaptionInline = (i: number) => (newInline: BlockNode | InlineNode) => {
-        if (!firstCaptionPara) return;
-        const nextInlines = firstCaptionPara.c.slice();
+        if (!firstCaptionBlock) return;
+        const nextInlines = firstCaptionBlock.c.slice();
         nextInlines[i] = newInline as InlineNode;
-        const nextPara: ParaBlock = { t: 'Para', c: nextInlines };
+        // Preserve the block type: a Plain caption stays Plain.
+        const nextBlock: ParaBlock | PlainBlock = { ...firstCaptionBlock, c: nextInlines };
         const nextCaption = captionLongBlocks.slice();
-        nextCaption[0] = nextPara;
+        nextCaption[0] = nextBlock;
         replaceCaptionBlocks(nextCaption);
     };
     const setRemainingCaptionBlock = (i: number) => (newBlock: BlockNode | InlineNode) => {
         const nextCaption = captionLongBlocks.slice();
-        const targetIdx = firstCaptionPara ? i + 1 : i;
+        const targetIdx = firstCaptionBlock ? i + 1 : i;
         nextCaption[targetIdx] = newBlock as BlockNode;
         replaceCaptionBlocks(nextCaption);
     };
 
-    // Caption JSX: <prefix>{first-Para inlines via Node} then remaining
-    // caption blocks via Node. Nothing is rendered if caption_long is
+    // Caption JSX: <prefix>{first-block inlines via Node} then remaining
+    // caption blocks via Node. A Para first block renders as <p>, a Plain
+    // one as bare inlines — the same distinction the native HTML writer
+    // draws inside <figcaption>. Nothing is rendered if caption_long is
     // empty.
+    const firstCaptionInlinesJsx = firstCaptionBlock ? (
+        <>
+            {prefixText}
+            {firstCaptionBlock.c.map((inl, i) => (
+                <Node
+                    key={i}
+                    node={inl}
+                    onNavigateToDocument={onNavigateToDocument}
+                    setLocalAst={setFirstCaptionInline(i)}
+                />
+            ))}
+        </>
+    ) : null;
     const captionJsx =
         captionLongBlocks.length === 0 ? null : (
             <>
-                {firstCaptionPara ? (
-                    <p>
-                        {prefixText}
-                        {firstCaptionPara.c.map((inl, i) => (
-                            <Node
-                                key={i}
-                                node={inl}
-                                onNavigateToDocument={onNavigateToDocument}
-                                setLocalAst={setFirstCaptionInline(i)}
-                            />
-                        ))}
-                    </p>
-                ) : null}
+                {firstCaptionBlock?.t === 'Para' ? (
+                    <p>{firstCaptionInlinesJsx}</p>
+                ) : (
+                    firstCaptionInlinesJsx
+                )}
                 {remainingCaptionBlocks.map((b, i) => (
                     <Node
                         key={i}

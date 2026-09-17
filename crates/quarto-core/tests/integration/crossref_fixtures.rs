@@ -858,6 +858,90 @@ async fn run_crossref_rendered(
     (ast, ctx.crossref_index.unwrap(), ctx.diagnostics)
 }
 
+/// Helper: the rendered float caption text for the float whose outer Div
+/// carries `id` — the flattened inlines of the first caption block of the
+/// inner `Figure`, whichever of `Plain` / `Paragraph` it is.
+fn rendered_float_caption(ast: &Pandoc, id: &str) -> String {
+    use quarto_pandoc_types::block::Block;
+    let outer = find_div_by_id(&ast.blocks, id).unwrap_or_else(|| panic!("outer Div #{id}"));
+    let Some(Block::Figure(fig)) = outer.content.first() else {
+        panic!(
+            "expected inner Figure under #{id}, got {:?}",
+            outer.content.first()
+        );
+    };
+    let long = fig.caption.long.as_ref().expect("caption.long present");
+    match long.first() {
+        Some(Block::Paragraph(p)) => flatten_inlines(&p.content),
+        Some(Block::Plain(p)) => flatten_inlines(&p.content),
+        other => panic!("caption first block is not inline-bearing: {other:?}"),
+    }
+}
+
+/// bd-n3sark9b — div-form control: `::: {#fig-…}` with a trailing caption
+/// paragraph. This form always prefixed correctly; it guards the fix for
+/// the other forms against regressing the working one.
+#[tokio::test]
+async fn rendered_div_form_figure_caption_is_prefixed() {
+    let qmd = r#"---
+title: t
+---
+
+::: {#fig-div}
+![](x.png)
+
+Div form caption
+:::
+"#;
+    let (ast, _idx, diags) = run_crossref_rendered(qmd).await;
+    assert!(diags.is_empty(), "diagnostics: {diags:?}");
+    assert_eq!(
+        rendered_float_caption(&ast, "fig-div"),
+        "Figure 1: Div form caption"
+    );
+}
+
+/// bd-n3sark9b — attribute-form figure `![cap](img){#fig-…}`. Parses to a
+/// native `Figure` whose caption is `[Plain[...]]`; the prefix used to be
+/// silently skipped because the renderer only handled `Paragraph`.
+#[tokio::test]
+async fn rendered_attr_form_figure_caption_is_prefixed() {
+    let qmd = r#"---
+title: t
+---
+
+![Attr form caption](x.png){#fig-attr}
+"#;
+    let (ast, _idx, diags) = run_crossref_rendered(qmd).await;
+    assert!(diags.is_empty(), "diagnostics: {diags:?}");
+    assert_eq!(
+        rendered_float_caption(&ast, "fig-attr"),
+        "Figure 1: Attr form caption"
+    );
+}
+
+/// bd-n3sark9b — caption-form pipe table `: cap {#tbl-…}`. The Table's own
+/// caption is `[Plain[...]]`, lifted onto the float verbatim.
+#[tokio::test]
+async fn rendered_caption_form_table_caption_is_prefixed() {
+    let qmd = r#"---
+title: t
+---
+
+| a | b |
+|---|---|
+| 1 | 2 |
+
+: Table caption form {#tbl-cap}
+"#;
+    let (ast, _idx, diags) = run_crossref_rendered(qmd).await;
+    assert!(diags.is_empty(), "diagnostics: {diags:?}");
+    assert_eq!(
+        rendered_float_caption(&ast, "tbl-cap"),
+        "Table 1: Table caption form"
+    );
+}
+
 /// Helper: return the first Div in the AST matching the given id.
 fn find_div_by_id<'a>(
     blocks: &'a [quarto_pandoc_types::block::Block],

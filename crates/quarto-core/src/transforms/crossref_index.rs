@@ -349,7 +349,11 @@ fn advance_sections(sections: &mut Vec<u32>, level: usize) {
 /// link text when `@id` is resolved.
 ///
 /// Prefers `caption_short` (a short form authored by the user). Falls back
-/// to concatenating the inlines of `caption_long`'s first Paragraph.
+/// to the inlines of `caption_long`'s first inline-bearing block — a
+/// `Paragraph` (div-form trailing paragraph) or a `Plain` (Pandoc-native
+/// `Figure` / `Table` captions). Matching Paragraph only used to leave
+/// every attr-form figure and every table without an indexed caption
+/// (bd-n3sark9b).
 fn extract_caption_inlines(node: &CustomNode) -> Option<quarto_pandoc_types::inline::Inlines> {
     if let Some(Slot::Inlines(short)) = node.slots.get("caption_short")
         && !short.is_empty()
@@ -358,8 +362,10 @@ fn extract_caption_inlines(node: &CustomNode) -> Option<quarto_pandoc_types::inl
     }
     if let Some(Slot::Blocks(long)) = node.slots.get("caption_long") {
         for block in long {
-            if let Block::Paragraph(p) = block {
-                return Some(p.content.clone());
+            match block {
+                Block::Paragraph(p) => return Some(p.content.clone()),
+                Block::Plain(p) => return Some(p.content.clone()),
+                _ => {}
             }
         }
     }
@@ -617,6 +623,36 @@ mod tests {
         advance_sections(&mut s, 1);
         advance_sections(&mut s, 3);
         assert_eq!(s, vec![1, 0, 1]);
+    }
+
+    #[tokio::test]
+    async fn caption_inlines_recorded_from_plain_caption() {
+        // bd-n3sark9b: a Plain-first caption_long (what `![cap](img){#fig-x}`
+        // and Table captions produce) must still populate the index
+        // entry's caption, not leave it `None`.
+        let mut node = CustomNode::new("FloatRefTarget", attr_id("fig-plain"), si());
+        node.plain_data = serde_json::json!({
+            "ref_type": "fig",
+            "kind": "Figure",
+            "identifier": "fig-plain",
+        });
+        node.slots.insert("content".into(), Slot::Blocks(vec![]));
+        node.slots.insert(
+            "caption_long".into(),
+            Slot::Blocks(vec![Block::Plain(quarto_pandoc_types::block::Plain {
+                content: vec![Inline::Str(Str {
+                    text: "Plain caption".into(),
+                    source_info: si(),
+                })],
+                source_info: si(),
+            })]),
+        );
+        let caption = extract_caption_inlines(&node).expect("caption inlines from Plain");
+        assert_eq!(caption.len(), 1);
+        match &caption[0] {
+            Inline::Str(s) => assert_eq!(s.text, "Plain caption"),
+            other => panic!("unexpected inline {other:?}"),
+        }
     }
 
     #[tokio::test]
