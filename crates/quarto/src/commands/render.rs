@@ -1159,6 +1159,8 @@ fn print_render_diagnostics(
     quarto_core::project::orchestrator::print_pass2_stats_if_enabled();
     // Plan 6 Phase 5: pass-1 engine-resolution lifted/fell_through gauge.
     quarto_core::project::orchestrator::print_pass1_engine_resolution_stats_if_enabled();
+    // bd-fq44dlnm: SCSS cache hits / grass compiles gauge.
+    quarto_core::stage::stages::print_sass_stats_if_enabled();
 }
 
 /// Text path: the existing ariadne-formatted output. Kept verbatim

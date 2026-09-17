@@ -121,6 +121,44 @@ pub fn derive_doc_scss_layer(meta: &ConfigValue) -> SassLayer {
 /// Name of the cache namespace used for compiled SCSS CSS output.
 const SASS_CACHE_NAMESPACE: &str = "sass";
 
+/// Perf gauge for the SCSS compile path (bd-fq44dlnm). Counted
+/// unconditionally (atomic increments are cheap), printed only under
+/// `QUARTO_PERF_STATS=1` by [`print_sass_stats_if_enabled`]. Atomics
+/// because Pass 2 runs this stage from rayon workers concurrently.
+///
+/// - `hits`: variant served from the runtime `sass` cache.
+/// - `compiles`: variant that went through grass (cache miss, or
+///   caching disabled for this document).
+/// - `uncached`: variants compiled with `cache_ok == false` (subset of
+///   `compiles`); a nonzero value with a themed project means the
+///   cache is not even being consulted.
+mod sass_perf {
+    use std::sync::atomic::AtomicUsize;
+    pub static HITS: AtomicUsize = AtomicUsize::new(0);
+    pub static COMPILES: AtomicUsize = AtomicUsize::new(0);
+    pub static UNCACHED: AtomicUsize = AtomicUsize::new(0);
+}
+
+/// Print `perf.sass hits=N compiles=N uncached=N` to stderr when
+/// `QUARTO_PERF_STATS=1`. Call once at the end of a top-level command
+/// (`q2 render`), like the other `perf.*` gauges. With a project-wide
+/// theme, a healthy render shows `compiles` in the low single digits
+/// (one per variant) and `hits` ≈ 2 × documents; `compiles` tracking
+/// the document count means the cache key is varying per document
+/// (the 2026-09-13 Connect-docs profile: 78 % of serial render time).
+pub fn print_sass_stats_if_enabled() {
+    use std::sync::atomic::Ordering::Relaxed;
+    if !std::env::var_os("QUARTO_PERF_STATS").is_some_and(|v| v == "1") {
+        return;
+    }
+    eprintln!(
+        "perf.sass hits={} compiles={} uncached={}",
+        sass_perf::HITS.load(Relaxed),
+        sass_perf::COMPILES.load(Relaxed),
+        sass_perf::UNCACHED.load(Relaxed),
+    );
+}
+
 /// Fixed cache key for the default (no-theme) compiled CSS. The
 /// minified flag distinguishes minified from expanded output; the
 /// generational purge ([`ensure_sass_cache_ready`]) keyed on
@@ -676,6 +714,7 @@ async fn variant_css(
             && let Ok(css) = String::from_utf8(cached)
         {
             trace_event!(ctx, EventLevel::Debug, "cache hit for default CSS");
+            sass_perf::HITS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             return Ok(css);
         }
 
@@ -684,6 +723,10 @@ async fn variant_css(
             EventLevel::Debug,
             "no theme / no doc-vars, compiling default Bootstrap + Quarto layer"
         );
+        sass_perf::COMPILES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if !cache_ok {
+            sass_perf::UNCACHED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
         return match compile_default(ctx, variant_config.minified).await {
             Ok(css) => {
                 if cache_ok {
@@ -772,6 +815,7 @@ async fn variant_css(
             "cache hit for theme CSS (key={})",
             key
         );
+        sass_perf::HITS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         return Ok(css);
     }
 
@@ -784,6 +828,10 @@ async fn variant_css(
         key
     );
 
+    sass_perf::COMPILES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    if !cache_ok || key.is_empty() {
+        sass_perf::UNCACHED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
     match compile_with_doc_vars_via_runtime(ctx, variant_config, theme_context, doc_vars).await {
         Ok(css) => {
             // Store in cache (best-effort, skip if no key or cache unavailable).
