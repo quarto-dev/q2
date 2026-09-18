@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-09-18
+
+- [`0c0fcde`](https://github.com/quarto-dev/q2/commits/0c0fcde): Hephaestus plot documents (`.hep`) render live in q2-preview documents and revealjs decks, laid out at the width they get and re-flowing on resize (bd-sxiv2tio)
+
 ### 2026-09-17
 
 - [`d0b3994`](https://github.com/quarto-dev/q2/commits/d0b3994): Sync stack moves to automerge-repo 2.6.0-alpha.5: a collection the sync server lacks is reported as "not found" again (rather than "sync unreachable"), and the debug page's document badge shows "unavailable" for docs the server does not have (bd-d08gpqvu)

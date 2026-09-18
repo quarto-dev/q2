@@ -567,7 +567,8 @@ this phase; the third is bd-9t5nmq81.
       preview draws plot documents live and reflows them.
 - [x] Full `cargo xtask verify` green (2026-09-18; lints, Rust build +
       tests, ts-packages, hub-client `build:all` + `test:ci`, SPA build).
-- [ ] hub-client `changelog.md` entry (two-commit workflow).
+- [x] hub-client `changelog.md` entry (two-commit workflow; code commit
+      `0c0fcde8b`).
 
 ### Phase 3 — brand.yml typography
 
