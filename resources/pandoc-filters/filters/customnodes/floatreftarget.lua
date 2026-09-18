@@ -193,7 +193,9 @@ function is_unlabeled_float(float)
 end
 
 function decorate_caption_with_crossref(float)
-  if not param("enable-crossref", true) then
+  -- QUARTO-PATCH(upstream PR quarto-dev/quarto-cli#14913): convert to
+  -- crossref_present() so external numbering still decorates captions.
+  if not _quarto.modules.crossref_numbering.crossref_present() then
     -- don't decorate captions with crossrefs information if crossrefs are disabled
     return float
   end
@@ -239,7 +241,9 @@ end
 quarto.doc.crossref.decorate_caption_with_crossref = decorate_caption_with_crossref
 
 function full_caption_prefix(float, subfloat)
-  if not param("enable-crossref", true) then
+  -- QUARTO-PATCH(upstream PR quarto-dev/quarto-cli#14913): convert to
+  -- crossref_present() so external numbering still decorates captions.
+  if not _quarto.modules.crossref_numbering.crossref_present() then
     -- don't decorate captions with crossrefs information if crossrefs are disabled
     return {}
   end
@@ -961,8 +965,10 @@ end, function(float)
   )
 end)
 
+-- QUARTO-PATCH(upstream PR quarto-dev/quarto-cli#14913): convert to
+-- crossref_present() so external numbering still decorates captions.
 _quarto.ast.add_renderer("FloatRefTarget", function(_)
-  return _quarto.format.isIpynbOutput() and param("enable-crossref", true)
+  return _quarto.format.isIpynbOutput() and _quarto.modules.crossref_numbering.crossref_present()
 end, function(float)
   decorate_caption_with_crossref(float)
   if float.content.t == "Plain" and #float.content.content == 1 and float.content.content[1].t == "Image" then
@@ -978,8 +984,10 @@ end, function(float)
 end)
 
 -- this should really be "_quarto.format.isEmbedIpynb()" or something like that..
+-- QUARTO-PATCH(upstream PR quarto-dev/quarto-cli#14913): convert to
+-- crossref_present() so external numbering still decorates captions.
 _quarto.ast.add_renderer("FloatRefTarget", function(_)
-  return _quarto.format.isIpynbOutput() and not param("enable-crossref", true)
+  return _quarto.format.isIpynbOutput() and not _quarto.modules.crossref_numbering.crossref_present()
 end, function(float)
   if float.content.t == "Plain" and #float.content.content == 1 and float.content.content[1].t == "Image" then
     local imgEl = float.content.content[1]

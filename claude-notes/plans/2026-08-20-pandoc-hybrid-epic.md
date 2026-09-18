@@ -70,7 +70,7 @@ commit history):
   Q1's own `custom.lua`. P6 narrowed this from "build an export" to "confirm the passthrough
   with a test" — a much smaller item than the epic originally scoped.
 - **`enable-crossref`'s gate surface is two structurally different predicates, not one** (P3):
-  an assign-numbers gate (`main.lua:718`, opposite polarity) and four present-numbers gates. The
+  an assign-numbers gate (`if enableCrossRef then`, at `main.lua:718`; opposite polarity) and four present-numbers gates. The
   original single-swap framing would have been a real bug (re-enabling Q1's numbering under
   external mode), not just an audit gap.
 - **Two wire types have no Q1 counterpart at all** (P5: `Equation`, `CrossrefResolvedRef` — Q1

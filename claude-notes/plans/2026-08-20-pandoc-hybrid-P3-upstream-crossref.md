@@ -5,7 +5,7 @@ plan's upstream PR: expose P5's Route-N functions on `quarto.doc.crossref`/`quar
 they're currently undefended bare globals and upstream's active `_quarto.modules` migration is
 heading straight at them. Also noted that P4's own `main.lua` splice patch is a second,
 independent edit to a file this plan also patches, and that it silently renumbers this plan's
-`main.lua:718` citation to `719`; recommended anchor-text citation instead. (An unsolicited
+`if enableCrossRef then` gate (`main.lua:718`) to line `719`; recommended anchor-text citation instead. (An unsolicited
 external audit also claimed this plan's `enable-crossref` audit misses the
 `layout/ipynb.lua:121,126` sites — checked directly and that claim is wrong: this plan's own audit
 table already covers both, verified as a no-op; recorded so a future reader doesn't rediscover the
@@ -20,7 +20,9 @@ explicit first pass, not a full audit. The audit found a second, structurally di
 class the prior draft's framing entirely missed, corrected the "known instances" line citations
 (they pointed at the wrong lines), confirmed the filter catalog's floatreftarget.lua "~9/11"
 claim with an exact per-branch breakdown, and resolved the fallback-policy aspiration with a
-concrete recommendation.)
+concrete recommendation.) **Also noted in round 4 review (2026-09-18): this plan's line-number
+citations should anchor to `if enableCrossRef then` instead, since P4's splice renumbers the
+site from `718` to `719` with no warning.**
 **Status:** Shape draft
 **Design (authoritative):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md)  |  Epic: `2026-08-20-pandoc-hybrid-epic.md`
 **Implementation task breakdown + test-seam prevalidation:** [`2026-09-18-pandoc-hybrid-P3-implementation.md`](2026-09-18-pandoc-hybrid-P3-implementation.md) — this plan's Coarse checklist converted into dispatchable `## Task N` units, each test bound to a named production seam and revert hunk.
@@ -38,15 +40,15 @@ The prior draft implied a single swap everywhere: `if not param("enable-crossref
 different gates that need opposite-polarity predicates — conflating them would be a real bug,
 not just an audit-completeness gap.**
 
-### 1. The assignment-group gate — `main.lua:718`, not `main.lua:226` as previously cited
+### 1. The assignment-group gate — `if enableCrossRef then` (`main.lua:718`), not `main.lua:226` as previously cited
 
 `main.lua:226-227` is only the `param()` *read*:
 ```lua
 -- see whether the cross ref filter is enabled
 local enableCrossRef = param("enable-crossref", true)
 ```
-That line is not itself a gate. The actual behavioral gate is **491 lines later**, at
-`main.lua:718`:
+That line is not itself a gate. The actual behavioral gate is **491 lines later** — the site with
+`if enableCrossRef then` (at `main.lua:718`):
 ```lua
 if enableCrossRef then
   tappend(quarto_filter_list, quarto_crossref_filters)
@@ -108,14 +110,14 @@ A full-tree grep for the literal string `enable-crossref` under
 `/Users/gordon/src/quarto-cli/src/resources/filters/` returns exactly **8 lines across 4
 files**: `main.lua:227`, `layout/ipynb.lua:121,126`, `customnodes/floatreftarget.lua:196,242,965,982`,
 `modules/callouts.lua:22`. **Note for future audits:** a literal-string grep alone would have
-missed `main.lua:718` — the master gate reads the *local variable* `enableCrossRef`, not the
+missed the assignment-group gate at `if enableCrossRef then` (`main.lua:718`) — the master gate reads the *local variable* `enableCrossRef`, not the
 string `"enable-crossref"`, so it only surfaces by also grepping the bare variable name and
 reading `main.lua` end-to-end. That's exactly what the prior draft's "first pass" missed.
 
 | Site | What it gates | Classification | Action |
 |---|---|---|---|
 | `main.lua:227` | (param read only) | not a gate | extend to also read `crossref-numbering` |
-| `main.lua:718` | entire numbering/index/@ref-resolve filter group | **assign-numbers** | new `assignCrossrefNumbers` predicate (opposite polarity from `crossref_present()`) |
+| `if enableCrossRef then` (`main.lua:718`) | entire numbering/index/@ref-resolve filter group | **assign-numbers** | new `assignCrossrefNumbers` predicate (opposite polarity from `crossref_present()`) |
 | `floatreftarget.lua:196` | `decorate_caption_with_crossref` | present-numbers | → `crossref_present()` |
 | `floatreftarget.lua:242` | `full_caption_prefix` | present-numbers | → `crossref_present()` |
 | `floatreftarget.lua:964`/`981` | FloatRefTarget-ipynb renderer pair (real fork — different bodies) | present-numbers | → `crossref_present()` / `not crossref_present()` |
@@ -154,7 +156,7 @@ doesn't over-trust the catalog's one-line summary for this file specifically.
 
 ## In scope
 - ~~Full audit of every `enable-crossref` gate site~~ **Done** (above).
-- Implement `assignCrossrefNumbers` (new predicate, `main.lua:718`) and `crossref_present()`
+- Implement `assignCrossrefNumbers` (new predicate, at `if enableCrossRef then`, `main.lua:718`) and `crossref_present()`
   (new predicate, the 4 render-decoration sites above); Q1 tests bit-for-bit on default **and**
   on `enable-crossref: false`.
 - Q2 golden showing external-mode keeps "Figure N:" from an injected order — must positively
@@ -170,7 +172,7 @@ doesn't over-trust the catalog's one-line summary for this file specifically.
 
 **Recommendation: carry the patch indefinitely; no timebox.** The audit above shows the total
 patch surface is small and stable: **3 files, ~6 edited lines**
-(`main.lua:718`; `floatreftarget.lua:196,242,965,982`; `modules/callouts.lua:22`), none of which
+(the `if enableCrossRef then` gate at `main.lua:718`; `floatreftarget.lua:196,242,965,982`; `modules/callouts.lua:22`), none of which
 touch logic likely to move under normal Q1 development (they're all top-of-function early-return
 guards or a single `if` around a filter-list append). Opening the upstream PR is still worth
 doing — merging removes the 3-file diff entirely and other quarto-cli consumers may want
@@ -190,16 +192,17 @@ needed. Recorded here only so a future reader doesn't rediscover the same false 
 **P4's `main.lua` splice (Finding 2, its own plan) is a second, independent edit to one of
 these same three files**, needed to load P5's shim (see P4 for the mechanism). This plan's
 fallback policy and the vendoring README P4 plans to create both need to account for **two
-plans, two edits, in two different marker categories** — P3's edits are upstreamable
-(each carries a `QUARTO-PATCH(upstream PR #<N>)` marker, see below) while P4's shim-loading
-splice references a Q2-only file (`quarto_pandoc_shim_filters`) that can never be upstreamed
-and needs its own marker category ("Q2-local, permanent") so a future re-vendor doesn't
-mistake it for a carried-pending-upstream edit that can be dropped once a PR merges.
+plans, two edits, in two marker categories**:
+- **`QUARTO-PATCH(upstream PR …)`** — P3's edits (at `main.lua` with anchor text `if enableCrossRef then`, plus the 4 render-decoration sites), each marked with a `QUARTO-PATCH(upstream PR #<N>)` comment indicating they're candidates for merging upstream.
+- **`Q2-local, permanent`** — P4's shim-loading splice, references a Q2-only file (`quarto_pandoc_shim_filters`) that can never be upstreamed.
+
 **Cite this plan's own patch sites by anchor text, not line number**, in this plan and
-wherever else they're referenced (the epic doc cites `main.lua:718` once) — P4's splice, once
+wherever else they're referenced (the epic doc cites `if enableCrossRef then` at `main.lua:718`) — P4's splice, once
 implemented, inserts a line between `main.lua:712` and `:713`, which silently renumbers this
-plan's `718` site to `719` with nothing to flag it. Anchor text: `if enableCrossRef then` for
-the assignment-group gate.
+plan's `718` site to `719` with nothing to flag it. Anchor text for the assignment-group gate:
+`if enableCrossRef then`. **P4's vendoring README must carry the same inventory** of the two
+marker categories so a future re-vendor doesn't mistake P4's permanent splice for a
+carried-pending-upstream edit that can be dropped once a PR merges.
 
 **Mechanism** (this also resolves what the prior draft's "marked vendored patch" aspiration was
 waiting on — it does not need anything from P4 beyond what P4 already plans): P4 vendors Q1's
@@ -250,28 +253,41 @@ the ~6 lines identified here.
 
 ## Coarse checklist
 - [x] Full audit of `enable-crossref` gate sites (all 8 literal-string hits plus the
-      variable-only `main.lua:718` site the literal grep misses); cross-checked against
+      variable-only `if enableCrossRef then` gate site (`main.lua:718`) the literal grep misses); cross-checked against
       `floatreftarget.lua`'s 11 format branches (exact 2-relevant / 1-native-writer /
       1-fallback / 7-format-not-in-q2 breakdown).
-- [ ] Implement `assignCrossrefNumbers` at `main.lua:718` and `crossref_present()` at the 4
+- [x] Implement `assignCrossrefNumbers` (at `if enableCrossRef then`, `main.lua:718`) and `crossref_present()` at the 4
       render-decoration sites; Q1 tests bit-for-bit on default **and** on
-      `enable-crossref: false`.
-- [ ] Q2 golden showing external-mode keeps "Figure N:" from an injected order (positive string
-      assertion, not just no-crash).
+      `enable-crossref: false`. Done upstream (quarto-cli `quarto2-crossref-numbering`, Tasks 2-3,
+      commits `83d48d8e8..8061f246a`) and carried into q2's vendored tree (Task 6, commit
+      `9dae23206`) — the predicates ended up in a new `modules/crossref_numbering.lua`, not inline
+      in `main.lua` as this item assumed, since they need to be `require`-able. q2-side behavioral
+      coverage: `crates/quarto-core/tests/integration/crossref_numbering_matrix.rs` (Task 7).
+- [x] Q2 golden showing external-mode keeps "Figure N:" from an injected order (positive string
+      assertion, not just no-crash). **Moved to P6 Task 4** (decided 2026-09-18, see this plan's
+      implementation companion's "Moved out" section) — its revert hunks bind to P5's `order`
+      passthrough and P6's param wiring, not to this plan's own hunks. Not re-added here.
 - [x] Decide and document the upstream-stall fallback policy: carry indefinitely, no timebox
       (see "Fallback policy" above).
-- [ ] **New (2026-09-18, round 4 review): cite this plan's patch sites by anchor text, not line
+- [x] **New (2026-09-18, round 4 review): cite this plan's patch sites by anchor text, not line
       number**, and note in the vendoring README (P4) that the tree carries two plans' edits in
       two marker categories (upstreamable-PR-linked for this plan's edits; Q2-local-permanent for
-      P4's shim-loading splice) — P4's splice renumbers this plan's `main.lua:718` site to `719`
-      with nothing to flag it otherwise.
-- [ ] Open the upstream PR; mark the 3 edited vendored files with a
-      `QUARTO-PATCH(upstream PR #<N>)` comment at each site; confirm P5's contract test covers
-      drift detection (no new mechanism needed beyond P5's existing plan).
-- [ ] **New (2026-09-18, round 4 review): fold a request into the same PR to expose P5's Route-N
+      P4's shim-loading splice) — P4's splice renumbers this plan's `if enableCrossRef then` gate site from `main.lua:718` to `719`
+      with nothing to flag it otherwise. Done (Task 1, q2 worktree `pandoc-hybrid-p3` commit
+      `09ed32a53`, cherry-picked into `feature/pandoc-writer-hybrid` as `24d648fa4`).
+- [x] Open the upstream PR; mark the vendored files with a
+      `QUARTO-PATCH(upstream PR quarto-dev/quarto-cli#14913)` comment at each site; confirm P5's
+      contract test covers drift detection (no new mechanism needed beyond P5's existing plan).
+      PR open: https://github.com/quarto-dev/quarto-cli/pull/14913. Vendored-tree markers landed
+      on **6 files**, not the 3 this item originally named (Task 6, commit `9dae23206` —
+      `modules/crossref_numbering.lua`'s introduction added touch points this plan didn't
+      anticipate). P5 drift-detection confirmation: recorded in Task 6's own ledger entry.
+- [x] **New (2026-09-18, round 4 review): fold a request into the same PR to expose P5's Route-N
       functions** (`refPrefix`, `crossrefOption`, `refHyperlink`, `renderEquation`,
       `refNumberOption`, `subrefNumber`, `refDelim`, `nbspString`) on `quarto.doc.crossref`/
       `quarto.utils`, following the existing `decorate_caption_with_crossref` precedent — see the
       Finding above. Cheap to ask for now, before upstream's active `_quarto.modules` migration
       (`#14702`) reaches `crossref/` and turns these into module-scoped fields with no warning to
-      q2. Not a blocker for P5's implementation either way.
+      q2. Not a blocker for P5's implementation either way. Done — upstream Task 5, commit
+      `0c497cd6d`, included in PR #14913 (6 commits, 33 files per
+      `gh pr view 14913 --json files,commits`).

@@ -108,7 +108,9 @@ function refNumberOption(type, entry)
   -- for sections just return the section levels
   if type == "sec" then
     local num = nil
-    if entry.appendix then
+    -- QUARTO-PATCH(upstream PR quarto-dev/quarto-cli#14913): guard against
+    -- crossref.startAppendix being nil (no appendix section seen yet).
+    if entry.appendix and crossref.startAppendix ~= nil then
       num = string.char(64 + entry.order.section[1] - crossref.startAppendix + 1)
     elseif crossrefOption("chapters", false) then
       num = tostring(entry.order.section[1])

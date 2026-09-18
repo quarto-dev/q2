@@ -8,6 +8,9 @@ _quarto.modules = {
   callouts = require("modules/callouts"),
   classpredicates = require("modules/classpredicates"),
   constants = require("modules/constants"),
+  -- QUARTO-PATCH(upstream PR quarto-dev/quarto-cli#14913): register the new
+  -- crossref_numbering module.
+  crossref_numbering = require("modules/crossref_numbering"),
   dashboard = require("modules/dashboard"),
   filenames = require("modules/filenames"),
   filters = require("modules/filters"),
