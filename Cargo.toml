@@ -131,7 +131,7 @@ version = "0.2.2"
 path = "./crates/quarto-error-catalog"
 
 [workspace.dependencies.quarto-source-map]
-version = "0.1.3"
+version = "0.1.4"
 
 [workspace.dependencies.quarto-xml]
 path = "./crates/quarto-xml"
