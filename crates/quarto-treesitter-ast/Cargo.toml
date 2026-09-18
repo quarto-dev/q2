@@ -10,3 +10,6 @@ tree-sitter = { workspace = true }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+tree-sitter-qmd = { workspace = true }

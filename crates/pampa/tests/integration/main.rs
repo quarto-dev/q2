@@ -74,6 +74,7 @@ pub mod test_math_attr;
 pub mod test_meta;
 pub mod test_metadata_source_tracking;
 pub mod test_nested_yaml_serialization;
+pub mod test_nesting_depth_limit;
 pub mod test_ordered_list_formatting;
 pub mod test_raw_json_roundtrip;
 pub mod test_rawblock_to_config_value;

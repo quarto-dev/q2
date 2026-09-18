@@ -155,16 +155,8 @@ pub fn read<T: Write>(
         }
     }
 
-    let depth = crate::utils::concrete_tree_depth::concrete_tree_depth(&tree);
-    // this is here mostly to prevent our fuzzer from blowing the stack
-    // with a deeply nested document
-    if depth > 100 {
-        let diagnostic = quarto_error_reporting::generic_error!(format!(
-            "The input document is too deeply nested (max depth: {} > 100).",
-            depth
-        ));
-        return Err(vec![diagnostic]);
-    }
+    // Documents nested too deeply to process safely are rejected by
+    // `treesitter_to_pandoc` (see `MAX_CONCRETE_TREE_DEPTH`).
 
     // Note: We no longer need to check parse_is_good(&tree) here because
     // the log_observer.had_errors() check above already catches parse errors

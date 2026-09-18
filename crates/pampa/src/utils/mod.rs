@@ -4,7 +4,6 @@
  */
 
 pub mod autoid;
-pub mod concrete_tree_depth;
 pub mod diagnostic_collector;
 pub mod output;
 pub mod text;
