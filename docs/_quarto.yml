@@ -346,6 +346,10 @@ website:
             - errors/extension/Q-16-10.qmd
             - errors/extension/Q-16-11.qmd
             - errors/extension/Q-16-12.qmd
+        - section: "engine"
+          contents:
+            - errors/engine/Q-18-1.qmd
+            - errors/engine/Q-18-2.qmd
 
 format:
   html:

@@ -144,6 +144,26 @@ pub enum ExecutionError {
         language: String,
     },
 
+    /// The engine ran and handed back a result, but it was not in the shape
+    /// Quarto's reader expects — a protocol mismatch between the engine's
+    /// producer and our deserializer, i.e. a Quarto bug, never a document
+    /// problem. Surfaced as `Q-18-1`; the raw result is kept on disk for
+    /// the bug report (bd-gy2ozix3 / GH #683).
+    #[error(
+        "engine '{engine}' returned a result Quarto could not read at `{field_path}`: {detail}"
+    )]
+    MalformedResult {
+        /// The engine whose result could not be read.
+        engine: String,
+        /// Dotted path to the offending field (`serde_path_to_error`
+        /// rendering; `.` for the root).
+        field_path: String,
+        /// The deserializer's own message.
+        detail: String,
+        /// Where the raw result was preserved, if it could be.
+        preserved: Option<PathBuf>,
+    },
+
     /// Engine-specific error with custom message.
     #[error("{0}")]
     Other(String),

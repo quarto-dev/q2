@@ -642,6 +642,9 @@ impl TsEngine {
             pandoc: result.pandoc,
             resource_files: result.resource_files,
             preserve: result.preserve,
+            // TS engines report problems through the protocol; nothing maps
+            // to `ExecuteResult::warnings` yet (bd-yd94iyq9).
+            warnings: Vec::new(),
         })
     }
 }

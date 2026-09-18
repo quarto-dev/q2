@@ -410,7 +410,24 @@ where
         return Err(convert_r_error_to_execution_error(&error_info, &stderr));
     }
 
-    // Read results file
+    parse_results::<R>(results_file, "knitr")
+}
+
+/// Read and parse the results file the R side wrote.
+///
+/// On success the temp file is dropped (deleted) as before. When the JSON
+/// does not match `R`, the file is **kept** on disk — the pipeline temp dir
+/// outlives the render — and the error names the offending field via
+/// `serde_path_to_error`, so the engine's raw bytes can be attached to a
+/// bug report (`Q-18-1`, bd-gy2ozix3 / GH #683). Nothing from the file is
+/// quoted in the message: the first bytes are the (large, irrelevant)
+/// `markdown` field, and slicing them risked splitting a multi-byte
+/// character.
+fn parse_results<R: DeserializeOwned>(
+    results_file: NamedTempFile,
+    engine: &str,
+) -> Result<R, ExecutionError> {
+    let results_path = results_file.path().to_path_buf();
     let results_json = std::fs::read_to_string(&results_path).map_err(|e| {
         ExecutionError::temp_file(
             format!(
@@ -422,21 +439,24 @@ where
         )
     })?;
 
-    // Parse results
-    let result: R = serde_json::from_str(&results_json).map_err(|e| {
-        ExecutionError::other(format!(
-            "Failed to parse R results: {}\nJSON: {}",
-            e,
-            truncate_for_error(&results_json, 500)
-        ))
-    })?;
+    let mut deserializer = serde_json::Deserializer::from_str(&results_json);
+    let (field_path, detail) = match serde_path_to_error::deserialize::<_, R>(&mut deserializer) {
+        Ok(result) => match deserializer.end() {
+            Ok(()) => return Ok(result),
+            Err(e) => (".".to_string(), e.to_string()),
+        },
+        Err(err) => (err.path().to_string(), err.into_inner().to_string()),
+    };
 
-    Ok(result)
-}
-
-/// Truncate a string for error messages.
-fn truncate_for_error(s: &str, max_len: usize) -> &str {
-    if s.len() <= max_len { s } else { &s[..max_len] }
+    // `keep` only fails if the file cannot be persisted (e.g. it vanished);
+    // the diagnostic then says the result could not be preserved.
+    let preserved = results_file.keep().ok().map(|(_, path)| path);
+    Err(ExecutionError::MalformedResult {
+        engine: engine.to_string(),
+        field_path,
+        detail,
+        preserved,
+    })
 }
 
 /// Convert parsed R error info to an ExecutionError.
@@ -522,6 +542,75 @@ pub fn determine_working_dir(document_dir: &Path, project_dir: Option<&Path>) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::knitr::KnitrExecuteResult;
+
+    // === parse_results (bd-gy2ozix3, T5) ===
+
+    fn results_file_with(dir: &Path, json: &str) -> NamedTempFile {
+        let mut file = NamedTempFile::new_in(dir).unwrap();
+        file.write_all(json.as_bytes()).unwrap();
+        file
+    }
+
+    /// A results file Quarto cannot read becomes `MalformedResult`, naming
+    /// the engine and the offending field (`serde_path_to_error`), and the
+    /// file is kept on disk so it can be attached to a bug report.
+    #[test]
+    fn parse_results_malformed_names_field_and_preserves_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let json = r#"{"engine":"knitr","markdown":"","includes":{"include-in-header":[42]}}"#;
+        let file = results_file_with(dir.path(), json);
+
+        let err = parse_results::<KnitrExecuteResult>(file, "knitr").unwrap_err();
+        let ExecutionError::MalformedResult {
+            engine,
+            field_path,
+            detail,
+            preserved,
+        } = err
+        else {
+            panic!("expected MalformedResult, got {err:?}");
+        };
+        assert_eq!(engine, "knitr");
+        // The visitor-based slot deserializer keeps the element index.
+        assert_eq!(field_path, "includes.include-in-header[0]");
+        assert!(
+            detail.contains("invalid type: integer `42`, expected a string"),
+            "detail must carry serde's message: {detail}"
+        );
+        let preserved = preserved.expect("the results file must be preserved");
+        assert_eq!(
+            std::fs::read_to_string(&preserved).unwrap(),
+            json,
+            "the preserved file must be the engine's raw bytes"
+        );
+    }
+
+    /// A well-formed results file is consumed and removed as before.
+    #[test]
+    fn parse_results_well_formed_removes_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = results_file_with(dir.path(), r##"{"engine":"knitr","markdown":"# ok"}"##);
+        let path = file.path().to_path_buf();
+
+        let result = parse_results::<KnitrExecuteResult>(file, "knitr").unwrap();
+        assert_eq!(result.markdown, "# ok");
+        assert!(!path.exists(), "a readable results file is not kept");
+    }
+
+    /// A root-level shape error (not an object at all) still reports a
+    /// path — `serde_path_to_error` renders the root as `.`.
+    #[test]
+    fn parse_results_root_error_reports_root_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = results_file_with(dir.path(), "[]");
+
+        let err = parse_results::<KnitrExecuteResult>(file, "knitr").unwrap_err();
+        let ExecutionError::MalformedResult { field_path, .. } = err else {
+            panic!("expected MalformedResult, got {err:?}");
+        };
+        assert_eq!(field_path, ".");
+    }
 
     // === find_rscript tests ===
 
@@ -721,13 +810,6 @@ source("renv/activate.R")
     }
 
     // === Truncation helper test ===
-
-    #[test]
-    fn test_truncate_for_error() {
-        assert_eq!(truncate_for_error("short", 100), "short");
-        assert_eq!(truncate_for_error("short", 5), "short");
-        assert_eq!(truncate_for_error("longer string", 5), "longe");
-    }
 
     // === Error conversion tests ===
 
