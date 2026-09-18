@@ -116,13 +116,14 @@ impl PipelineStage for AstTransformsStage {
 
         // Build the JIT pipeline if no custom pipeline was provided.
         //
-        // Dispatch on `ctx.format.pipeline_kind` (added in Plan 1
-        // commit 3): `Some("preview")` builds the q2-preview transform
-        // list, everything else builds the standard HTML one. The
-        // `target_format` argument carries the original string
-        // (e.g. `"q2-preview"`, not the base `"html"`) so shortcode
-        // resolution and downstream transforms see the user-facing
-        // format identity, not the pseudo-format's base.
+        // Dispatch on the `PipelineProfile` derived from `ctx.format.
+        // target_format` (the single derivation point replacing the old
+        // `ctx.format.pipeline_kind` string check): `HtmlPreview` /
+        // `RevealjsPreview` build the q2-preview transform list, everything
+        // else builds the standard pipeline. The `target_format` argument
+        // carries the original string (e.g. `"q2-preview"`, not the base
+        // `"html"`) so shortcode resolution and downstream transforms see
+        // the user-facing format identity, not the pseudo-format's base.
         let jit_pipeline;
         let pipeline = if let Some(ref p) = self.custom_pipeline {
             p
@@ -135,23 +136,30 @@ impl PipelineStage for AstTransformsStage {
                 .unwrap_or(std::path::Path::new("."));
             let shortcode_paths =
                 crate::transforms::extract_shortcode_paths(&doc.ast.meta, document_dir);
-            jit_pipeline = match ctx.format.pipeline_kind {
-                Some("preview") => build_q2_preview_transform_pipeline(
-                    shortcode_paths,
-                    ctx.extensions.clone(),
-                    ctx.runtime.clone(),
-                    ctx.format.target_format.clone(),
-                    ctx.variables.clone(),
-                    ctx.project_env.clone(),
-                    crate::project::project_profile::quarto_profile_env_value(
-                        &ctx.project.config.active_config_profiles,
-                    ),
-                ),
+            let pipeline_profile =
+                crate::format::PipelineProfile::from_format(&ctx.format.target_format);
+            jit_pipeline = match &pipeline_profile {
+                crate::format::PipelineProfile::HtmlPreview
+                | crate::format::PipelineProfile::RevealjsPreview => {
+                    build_q2_preview_transform_pipeline(
+                        shortcode_paths,
+                        ctx.extensions.clone(),
+                        ctx.runtime.clone(),
+                        ctx.format.target_format.clone(),
+                        pipeline_profile,
+                        ctx.variables.clone(),
+                        ctx.project_env.clone(),
+                        crate::project::project_profile::quarto_profile_env_value(
+                            &ctx.project.config.active_config_profiles,
+                        ),
+                    )
+                }
                 _ => build_transform_pipeline(
                     shortcode_paths,
                     ctx.extensions.clone(),
                     ctx.runtime.clone(),
                     ctx.format.target_format.clone(),
+                    pipeline_profile,
                     ctx.variables.clone(),
                     ctx.project_env.clone(),
                     crate::project::project_profile::quarto_profile_env_value(

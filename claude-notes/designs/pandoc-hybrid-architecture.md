@@ -173,14 +173,22 @@ Tails:
 - **q2-preview / q2-slides:** (chrome only) → wire format → React.
 - **Pandoc formats:** **skip Navigation** → wire format → Pandoc + vendored Q1 Lua.
 
-This replaces q2-preview's *subtractive* deny-list (`Q2_PREVIEW_TRANSFORM_EXCLUDED`) with an
-*additive* `PipelineProfile { HtmlFull, Revealjs, Preview, Pandoc(fmt) }` that selects a tail.
-**Superseded — flagged 2026-09-17, not yet landed here:** this four-variant shape is wrong (no
-slot for the Revealjs-family/Preview-kind cell, i.e. q2-slides, which the runtime already
-handles correctly today); P1 corrected it to the five-variant, two-axis shape
-`{ HtmlRender, HtmlPreview, RevealjsRender, RevealjsPreview, Pandoc(fmt) }`. This shorthand is
-retained here only for the tail-selection argument above, which holds either way; P1 owns
-landing the corrected shape in this section (checklist item still open).
+This is implemented as two parallel exclude-lists — `Q2_PREVIEW_TRANSFORM_EXCLUDED` and
+`PANDOC_TRANSFORM_EXCLUDED` — applied by `retain_excluding` inside the single
+`build_transform_pipeline` builder, dispatched by the five-variant, two-axis
+`PipelineProfile { HtmlRender, HtmlPreview, RevealjsRender, RevealjsPreview, Pandoc(fmt) }`
+(landed, P1 Task 1, 2026-09-18).
+
+**Corrected 2026-09-18 (M4, superseding the earlier note in this section):** the previous
+framing above ("replaces q2-preview's *subtractive* deny-list ... with an *additive*
+`PipelineProfile` ... that selects a tail") described the opposite of what P1 actually built. P1
+kept the **subtractive** shape deliberately on both axes — `Pandoc(fmt)` gets its own deny-list,
+not an additive per-tail composition — rather than switching mechanisms. That choice is safe
+because it is backed by exact-surviving-name-list tests that pin each exclude-list's output
+directly against the real pipeline rather than trusting the list by inspection: T2.3 for
+`PANDOC_TRANSFORM_EXCLUDED` (the `AstTransform` list) and T6.2 for `PANDOC_STAGE_EXCLUDED` (the
+`PipelineStage` list). A drift in either list fails one of those tests loudly instead of silently
+producing the wrong tail.
 
 ## 6. The four buckets + litmus (Decision 1 — frozen)
 
@@ -199,21 +207,35 @@ template/writer).
 | **Footnotes** | **SPLIT** | B1: `NoteRef`+`Def` → native Pandoc `Note`. B2/4: HTML `<section>`+backlinks |
 | TitleBlock; Sectionize; TitleBanner; Website{TitlePrefix,Favicon,BootstrapIcons,CanonicalUrl} | **B2** | HTML-family (title-block via template from Meta; section-divs is HTML-only) |
 | RevealColumns, RevealSlides, RevealFooterAlias, RevealFootnotes | **B2** | revealjs-family scaffolding |
-| entire Navigation phase (toc/navbar/sidebar/pagenav/footer, listings, feeds, categories) | **B4** | HTML/website chrome — Pandoc skips wholesale. **Added 2026-09-17 (were missing from this row despite being real Navigation-phase transforms, per an independent verification pass):** `breadcrumbs-render`, `quarto-nav-js`, `repo-actions-render`. |
-| CrossrefRender, **CalloutResolve**, Mermaid, CodeBlockRender, TableBootstrapClass, reveal auto-stretch, **AttributionRender**, **AttributionGenerate** | **B4** | HTML writer's copy of the renderer trinity. `CalloutResolve` moved here from the B1 row (P1 fix, 2026-09-17): it destroys the `Callout` CustomNode into Bootstrap-specific HTML DOM, already excluded from `Q2_PREVIEW_TRANSFORM_EXCLUDED` for exactly that reason (`pipeline.rs:1595`; confirmed by `Callout.tsx`'s own comment). **`AttributionRender`/`AttributionGenerate` added 2026-09-17** (were entirely unclassified, alongside the already-flagged `attribution-viewer`): both populate `ctx.format_options` fields consumed only by the HTML/JSON writers (per-node attribution records for hover badges) — no Pandoc consumer exists or is planned. |
+| entire Navigation phase (toc/navbar/sidebar/pagenav/footer, listings, feeds, categories) | **B4** | HTML/website chrome — Pandoc skips wholesale. **Added 2026-09-17 (were missing from this row despite being real Navigation-phase transforms, per an independent verification pass):** `breadcrumbs-render`, `quarto-nav-js`, `repo-actions-render`. **Added 2026-09-18 (round 4 correction reached `PANDOC_TRANSFORM_EXCLUDED` but never this row):** `secondary-nav-render`, `listing-feed-stage`, `listing-feed-link`. |
+| CrossrefRender, **CalloutResolve**, Mermaid, CodeBlockRender, TableBootstrapClass, reveal auto-stretch, **AttributionRender** | **B4** | HTML writer's copy of the renderer trinity. `CalloutResolve` moved here from the B1 row (P1 fix, 2026-09-17): it destroys the `Callout` CustomNode into Bootstrap-specific HTML DOM, already excluded from `Q2_PREVIEW_TRANSFORM_EXCLUDED` for exactly that reason (`pipeline.rs:1595`; confirmed by `Callout.tsx`'s own comment). **`AttributionRender` added 2026-09-17** (was entirely unclassified, alongside the already-flagged `attribution-viewer`): populates `ctx.format_options` fields consumed only by the HTML/JSON writers (per-node attribution records for hover badges) — no Pandoc consumer exists or is planned. **Corrected 2026-09-18 (M5): `AttributionGenerate` removed from this row.** It is the `name()` of a `PipelineStage` (`stage/stages/attribution_generate.rs`), not a member of `build_transform_pipeline` — it has no `phase()` override and `const BUCKETS` correctly omits it. It therefore belongs on no bucket row at all; Task 6's T6.3 pins this classification so it cannot be silently re-added as a transform. |
 | `panel-tabset` (sugar) | **B1** | **Added 2026-09-17** (was unclassified — P1's Pandoc exclude-list derivation depended on this row existing but it never did). Builds the `Tabset` CustomNode; must stay enabled for Pandoc so P5's Route-R shim has a node to route (unlike Preview, which excludes both halves — see P1). |
 | `panel-tabset-resolve` | **B4** | **Added 2026-09-17.** Exactly parallel to `Callout`/`CalloutResolve`: destroys the `Tabset` CustomNode into presentation HTML; excluded for both Preview and Pandoc. |
 | `ConditionalContentTransform` | **B1** | **Added 2026-09-17** (confirmed still missing by both P1 and P8's independent checks). Runs unconditionally, first in Normalization, before any HTML/reveal-family branching; format-parameterized via `lua_format_for()`; already correct for a genuine Pandoc `target_format` string with no further work. |
 | ResourceCollector | **B3** | resource/mediabag staging — Pandoc needs it |
 | LinkRewrite | **B3** | cross-doc/relative links; project/book-gated; no-op standalone. Resolved 2026-09-18 (was `B3?`) — unconditionally part of the B3 shared-services segment, decided with Gordon; see the Amendment log |
 | AppendixStructure | **B3** | Resolved 2026-09-17 (P1, decided with Gordon): `appendix.rs` emits pure Pandoc primitives (no RawHTML), already runs unexcluded for q2-preview's non-HTML consumer today — same argument extends to Pandoc. Excluding it would silently drop user appendix/license/citation content from docx/pptx with no replacement. |
+| `config-markdown` | **B1** | **Added 2026-09-18 (Task 9), closing a gap `const BUCKETS` had already caught.** Normalization-phase; markdown-parses blessed config scalars into inlines ahead of the shortcode walk — a metadata parse, not presentation, so it runs identically for every profile. |
+| `reference-link-diagnostics` | **B1** | **Added 2026-09-18.** Normalization-phase, read-only diagnostic over the document as authored; no format in its predicate, so it runs the same for `Pandoc(fmt)` as for HTML. |
+| `draft-alert` | **B2** | **Added 2026-09-18.** Normalization-phase; writes an HTML-template-only `rendered.draft-alert-text` field + a `quarto:status` header include — HTML-family scaffolding, sibling of `title-banner`. Deliberately *not* widened for Pandoc (P1 Task 3): doing so would stage a stray artifact into a docx/pptx output for no reason. |
+| `format-css` | **B2** | **Added 2026-09-18.** Normalization-phase; copies `css:` files into the output tree and rewrites the entries to per-page hrefs — stylesheet plumbing with no Pandoc analog. Deliberately *not* widened for Pandoc, same rationale as `draft-alert`. |
+| `responsive-image` | **B4** | **Added 2026-09-18.** Finalization-phase; part of the HTML writer's presentation tail (srcset/sizes rewriting); no Pandoc-writer output slot. |
+| `llms-capture` | **B3** | **Added 2026-09-18.** Finalization-phase; captures the markdown companion for llms.txt. A service, not format presentation — self-gates on `llms_view_active` (website + `llms-txt: true` + an `html` target), so it is inert for a Pandoc profile, but it must stay unexcluded because it is the only transform that clears the marker classes `conditional-content` plants under the identical predicate; the two must stay on the same side of the cut. |
 
-**This table's coverage is not yet asserted as total.** It was found, twice (2026-09-17, once by
-P1's own audit and once by an independent verification pass), to have missed real transforms
-that a mechanical derivation should have caught — see the additions above. Until a test asserts
-every transform registered in `build_transform_pipeline` has exactly one bucket here (tracked as
-a P1 recommendation, not yet a checklist item), treat this table as "believed complete," not
-"proven complete."
+**This table is advisory documentation of intent; the authoritative classification lives in
+code (P1 Task 7, 2026-09-18).** Hand-classification here has drifted from the real pipeline three
+times (2026-09-17 twice, 2026-09-18 once) — see the additions above, most recently the six rows
+Task 9 added to close a gap `const BUCKETS` had already caught. The classification is therefore
+maintained as `const BUCKETS: &[(&str, Bucket)]` in `crates/quarto-core/src/pipeline.rs`, whose
+totality over `build_transform_pipeline(HtmlRender)` is asserted by
+`bucket_classification_is_total_over_the_html_pipeline` (**Task 7, T7.2** — the mechanical guard
+over the const), and whose B1/B3-only survival to the Pandoc cut is asserted by
+`neutral_core_invariant_no_b2_b4_survives_the_pandoc_cut`. **Where this table and that const
+disagree, the const is correct and this table is stale.** T7.2 guards `BUCKETS`'s totality
+against `build_transform_pipeline`; it does **not** guard this table against `BUCKETS` — nothing
+does. This table is kept in sync by hand, as bookkeeping, the next time §6 is touched; a green
+T7.2 is evidence the *Rust classification* is total, not evidence this *table* is current.
+Resolves the `Footnotes` SPLIT row's "B2/4" as `footnotes` = B1, `footnotes-resolve` = B4.
 
 ## 7. Upstream Q1 contribution (Decision 5, New-4)
 

@@ -444,23 +444,31 @@ corrections.
 
 ## Coarse checklist
 - [x] Read `appendix.rs`, `link_rewrite.rs` directly — done (see Finding above).
-- [ ] Read `footnotes.rs` directly; confirm the split below is as internally decoupled as it looks.
-- [ ] **Introduce** `PipelineProfile` per the "Seam definition" above (corrected 2026-09-18 from
+- [x] Read `footnotes.rs` directly; confirm the split below is as internally decoupled as it
+  looks. **Done — Task 5 (F1):** read in full; the split was *not* as decoupled as it looked (no
+  existing code ever produced `Inline::Note`), resolved as two registered transforms
+  (`footnotes` / `footnotes-resolve`).
+- [x] **Introduce** `PipelineProfile` per the "Seam definition" above (corrected 2026-09-18 from
   "Rename" — nothing exists to rename; `PipelineProfile` doesn't exist in the codebase today).
   Five-variant, two-axis shape (`HtmlRender`/`HtmlPreview`/`RevealjsRender`/`RevealjsPreview`/
-  `Pandoc(fmt)`), module + dispatch + `RenderContext` field per the seam definition.
-- [ ] Add the `Pandoc`-kind exclude-list per the concrete name list above (B4 minus
+  `Pandoc(fmt)`), module + dispatch + `RenderContext` field per the seam definition. **Done —
+  Task 1:** `PipelineProfile` enum landed in `crates/quarto-core/src/format.rs` with exactly this
+  five-variant shape.
+- [x] Add the `Pandoc`-kind exclude-list per the concrete name list above (B4 minus
   `example-embed-render` + B2 + 20-member Navigation + `attribution-viewer` + `draft-alert` +
   `format-css` + `responsive-image` + `callout-resolve`; keep `panel-tabset` sugar enabled) plus
   its "names exist" validator test (all corrected 2026-09-18, see the exclude-list and Navigation
-  Findings above).
-- [ ] **Widen `panel_tabset.rs`'s self-gate only** per the corrected "self-gating transforms"
+  Findings above). **Done — Task 2:** `PANDOC_TRANSFORM_EXCLUDED` (`pipeline.rs:1746`) plus T2.1
+  ("names exist") and T2.2 (Navigation-completeness) validator tests.
+- [x] **Widen `panel_tabset.rs`'s self-gate only** per the corrected "self-gating transforms"
   finding above — required for the exclude-list decision above to actually produce a `Tabset`
   CustomNode for Pandoc targets. **Corrected 2026-09-18: do not widen `draft_alert.rs`,
   `format_css.rs`, or `responsive_image.rs`** — add those three to the exclude-list item above
   instead (widening them would stage stray artifacts like user CSS into a docx output dir). The
-  real self-gater count is 7, not 8 (`crossref_render.rs` doesn't self-gate at all).
-- [ ] **Add the `Pandoc`-kind *stage*-level exclude list** (new item, 2026-09-18 — the exclude-
+  real self-gater count is 7, not 8 (`crossref_render.rs` doesn't self-gate at all). **Done —
+  Task 3:** T3.1/T3.2 pin the widened gate and the other terms left intact; the three self-gaters
+  named above were left un-widened and added to the exclude-list instead, per the correction.
+- [x] **Add the `Pandoc`-kind *stage*-level exclude list** (new item, 2026-09-18 — the exclude-
   list above only covers `AstTransform`s; `PipelineStage`s are a separate list,
   `build_html_pipeline_stages_with_options`, `pipeline.rs:270`, and Preview already needs its own
   parallel `Q2_PREVIEW_STAGE_EXCLUDED`, `pipeline.rs:395`). At minimum drop `MathJsStage`,
@@ -485,31 +493,58 @@ corrections.
   states "P4 owns... the Pandoc-leg stage list itself, since P4 is the plan that introduces
   `PandocWriteStage`." Cross-reference P4's item explicitly here so ownership isn't
   one-directional (P4 already cross-references this item; this item did not, until now,
-  cross-reference P4).
-- [ ] **Build a byte-identity corpus + capture/diff harness for the "HTML/revealjs/q2-preview
+  cross-reference P4). **Done — Task 6:** `PANDOC_STAGE_EXCLUDED` (`pipeline.rs:455`) plus T6.1
+  ("names exist") and T6.2 (exact surviving stage-name list) tests; T6.3 pins
+  `attribution-generate` as stage-only, not a transform.
+- [x] **Build a byte-identity corpus + capture/diff harness for the "HTML/revealjs/q2-preview
   byte-identity" review bar** (new item, 2026-09-18 — this plan's stated hard no-regression bar
   has no backing mechanism; `quarto-core`'s 18 existing snapshots are all fragment-level, none a
   whole rendered document). Name a corpus (e.g. `docs/` + the crossref fixture set), capture
   output before this plan's refactor, capture again after, diff. Without this, "byte-identical"
-  will be demonstrated only by "workspace tests pass," a materially weaker claim.
+  will be demonstrated only by "workspace tests pass," a materially weaker claim. **Done — Task 8:**
+  `crates/quarto-core/tests/fixtures/phase5-single-doc-baseline/` + `expected_hashes.txt`
+  before/after capture-diff harness.
 - [x] Fix the design doc §6 bucket table: `CalloutResolve` was misclassified as B1 — it's
   empirically B4 (already excluded from Preview for exactly that reason); moved to the B4 row.
   Also updated `AppendixStructure`'s row from the open "B3?" to settled **B3**, and moved
   `ExampleEmbedRender` from the B4 row to B1 (format-parameterized).
-- [ ] Format-parameterize `ExampleEmbedRenderTransform` (decided with Gordon — see Finding
+- [x] Format-parameterize `ExampleEmbedRenderTransform` (decided with Gordon — see Finding
   above): emit the iframe only for iframe-capable profiles; emit snippet + numbered caption for
-  `Pandoc(fmt)`. Closes P5's "ExampleEmbed non-HTML behavior" open question.
-- [ ] Fix `title_block.rs`'s non-HTML branch or confirm the exclude-list makes it moot; add a regression test proving no duplicate title in a docx/pptx smoke fixture (coordinate with P7).
-- [ ] Footnotes split (native `Note` in core; HTML section excluded for Pandoc same as HTML-family); byte-identical HTML.
+  `Pandoc(fmt)`. Closes P5's "ExampleEmbed non-HTML behavior" open question. **Done — Task 5:**
+  `example_embed.rs` gates the iframe on `PipelineProfile::{HtmlRender,HtmlPreview,
+  RevealjsRender,RevealjsPreview}`; a `Pandoc(fmt)` profile gets the snippet + numbered caption
+  only.
+- [ ] Fix `title_block.rs`'s non-HTML branch or confirm the exclude-list makes it moot; add a
+  regression test proving no duplicate title in a docx/pptx smoke fixture (coordinate with P7).
+  **Half done, half deliberately deferred:** the transform-pipeline half is moot — `title-block`
+  is on `PANDOC_TRANSFORM_EXCLUDED` (`pipeline.rs:1755`, pinned by T2.1/T2.3) — but the
+  docx/pptx duplicate-title *regression test* is out of scope for P1 (there is no Pandoc output
+  path to test against yet) and is owned by **P7**, which introduces the per-format invocation
+  builder this test needs. Not forgotten; tracked in P7's own checklist.
+- [x] Footnotes split (native `Note` in core; HTML section excluded for Pandoc same as
+  HTML-family); byte-identical HTML. **Done — Task 5:** `footnotes` (B1, native `Inline::Note`)
+  and `footnotes-resolve` (B4, HTML chrome, excluded for Pandoc) registered adjacently; T5.1–T5.6
+  cover the split, the two-form (`^[inline]` + `[^ref]`/`[^ref]:`) fixture, and registration
+  adjacency; byte-identity for HTML is covered by Task 8's corpus.
 - [x] AppendixStructure litmus → classified **B3**, decided with Gordon (see Finding above).
-- [ ] `PipelineProfile` dispatch serves Preview and Pandoc from the same mechanism; preview parity holds.
-- [ ] Confirm no macro `PipelineStage` is implicitly HTML-shaped.
-- [ ] Neutral-core invariant test (no B2/B4 before the cut); **extend to assert total bucket
+- [x] `PipelineProfile` dispatch serves Preview and Pandoc from the same mechanism; preview
+  parity holds. **Done — Tasks 1/2/6:** both `build_q2_preview_transform_pipeline` and the
+  `Pandoc(fmt)` branch of `build_transform_pipeline` apply their exclude-list via the same
+  `retain_excluding` mechanism, dispatched off one `PipelineProfile`; preview parity is covered
+  by Task 8's byte-identity corpus.
+- [x] Confirm no macro `PipelineStage` is implicitly HTML-shaped. **Done — Task 6 (T6.2):**
+  `build_pandoc_pipeline_stages()`'s exact surviving stage-name list is pinned against the real
+  pipeline, so no unexamined stage can silently reach the Pandoc leg unclassified.
+- [x] Neutral-core invariant test (no B2/B4 before the cut); **extend to assert total bucket
   coverage** (every transform registered in `build_transform_pipeline` classified exactly once
   in the design doc §6 table) — added 2026-09-17 per an epic-wide review finding that the
   hand-enumerated exclude-list missed 4 real transforms (`breadcrumbs-render`, `quarto-nav-js`,
   `repo-actions-render`, plus the already-known `attribution-viewer` gap) that a total-coverage
-  test would have caught mechanically.
+  test would have caught mechanically. **Done — Task 7:** `neutral_core_invariant_no_b2_b4_
+  survives_the_pandoc_cut` (the invariant) and `bucket_classification_is_total_over_the_html_
+  pipeline` (T7.2, the total-coverage test) against `const BUCKETS`; per F3 (decided with
+  Gordon), coverage is asserted against the Rust const, not the design-doc §6 table, which is
+  now advisory (Task 9 sub-item 4).
 - [x] **Decide and document how `PipelineProfile::Pandoc(fmt)` and P4's `PandocWriteStage` behave
   under `#[cfg(target_arch = "wasm32")]`** — **resolved 2026-09-18 by the Seam definition item 5
   above** (this checklist item was left open a round after the decision itself landed in prose —
@@ -519,5 +554,10 @@ corrections.
   unreachable-for-wasm32 profile is a compile-time non-issue, not a runtime catalog error to
   design. Still validate with full `cargo xtask verify` (not `--skip-hub-build`) once implemented,
   per this repo's own CLAUDE.md warning about exactly this trap.
-- [ ] Add `ConditionalContentTransform` to design doc §6 bucket table as B1.
-- [ ] Fix the design doc §5 `PipelineProfile` shorthand to the corrected five-variant shape.
+- [x] Add `ConditionalContentTransform` to design doc §6 bucket table as B1. **Already done**
+  (added 2026-09-17, design doc §6 line ~206) — confirmed present and correctly classified during
+  Task 9's reconciliation pass.
+- [x] Fix the design doc §5 `PipelineProfile` shorthand to the corrected five-variant shape.
+  **Done — Task 9:** §5 rewritten to the landed `{ HtmlRender, HtmlPreview, RevealjsRender,
+  RevealjsPreview, Pandoc(fmt) }` shape, dropping the stale "Superseded — not yet landed here"
+  marker; also corrected the additive/subtractive framing alongside it (M4).

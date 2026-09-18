@@ -11,6 +11,7 @@
 //! - `create-worktree`: Create git worktree with CLAUDE.local.md context stub
 //! - `braid-snapshot`: Write a backup-only `braid export` to `.braid/snapshot.jsonl`
 //! - `pandoc-check`: Check local pandoc against the pampa oracle tests
+//! - `render-corpus-diff`: Dev-only byte-identity corpus capture/diff harness
 //! - `test`: Run workspace tests with platform-appropriate crate exclusions
 //! - `verify`: Run full project verification (build + tests for Rust and hub-client)
 //! - `build-all`: Fresh-clone build orchestration (npm install + hub-client + Rust workspace)
@@ -34,6 +35,7 @@ mod dev_setup;
 mod lint;
 mod node_version;
 mod pandoc_check;
+mod render_corpus_diff;
 mod stage_doc_examples;
 mod switch_task;
 mod test;
@@ -231,6 +233,32 @@ enum Command {
     /// ceiling — the exact line in `test.rs` to bump. Never edits the file.
     PandocCheck {},
 
+    /// Byte-diff a rendered corpus between `--base <commit>` and `HEAD`.
+    ///
+    /// Dev-only, local-only (Tier `G`): builds two real `q2` binaries (one
+    /// from a throwaway detached worktree of `--base`, one from this
+    /// worktree's `HEAD`), renders `--corpus` (default `docs`) with each,
+    /// and byte-diffs the two output trees. Written for the pandoc-hybrid
+    /// epic's P1 no-regression bar (Task 8) but not specific to it. Never
+    /// run from `cargo xtask verify` or CI.
+    RenderCorpusDiff {
+        /// Commit-ish to check out into a throwaway worktree and compare
+        /// against HEAD.
+        #[arg(long)]
+        base: String,
+
+        /// Corpus to render, relative to the repo root.
+        #[arg(long, default_value = "docs")]
+        corpus: String,
+
+        /// Keep the capture directories (and, on a clean run, the
+        /// throwaway `--base` worktree) instead of cleaning them up. A
+        /// failing run always leaves its captures behind regardless of
+        /// this flag.
+        #[arg(long)]
+        keep: bool,
+    },
+
     /// Stage doc-example projects into the docs site for `.embed-example-iframe`.
     ///
     /// Renders each project listed in `examples/manifest.yml` with `q2` and
@@ -415,6 +443,9 @@ fn main() -> Result<()> {
             verify::run(&config)
         }
         Command::PandocCheck {} => pandoc_check::run(),
+        Command::RenderCorpusDiff { base, corpus, keep } => {
+            render_corpus_diff::run(render_corpus_diff::Args { base, corpus, keep })
+        }
         Command::BuildAgentsDocs {} => build_agents_docs::run(),
         Command::StageDocExamples {} => stage_doc_examples::run(),
         Command::BuildTraceViewer {} => build_trace_viewer::run(),

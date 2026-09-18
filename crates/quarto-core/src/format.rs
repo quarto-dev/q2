@@ -27,6 +27,8 @@ pub enum FormatIdentifier {
     Pdf,
     /// Word document (requires Pandoc)
     Docx,
+    /// PowerPoint presentation (requires Pandoc)
+    Pptx,
     /// EPUB (requires Pandoc)
     Epub,
     /// Typst (requires typst binary)
@@ -46,6 +48,7 @@ impl FormatIdentifier {
             FormatIdentifier::Html => "html",
             FormatIdentifier::Pdf => "pdf",
             FormatIdentifier::Docx => "docx",
+            FormatIdentifier::Pptx => "pptx",
             FormatIdentifier::Epub => "epub",
             FormatIdentifier::Typst => "typst",
             FormatIdentifier::Revealjs => "revealjs",
@@ -86,6 +89,7 @@ impl TryFrom<&str> for FormatIdentifier {
             "html" => Ok(FormatIdentifier::Html),
             "pdf" => Ok(FormatIdentifier::Pdf),
             "docx" => Ok(FormatIdentifier::Docx),
+            "pptx" => Ok(FormatIdentifier::Pptx),
             "epub" => Ok(FormatIdentifier::Epub),
             "typst" => Ok(FormatIdentifier::Typst),
             "revealjs" => Ok(FormatIdentifier::Revealjs),
@@ -136,6 +140,90 @@ fn builtin_pseudo_format(name: &str) -> Option<(&'static str, Option<&'static st
 /// pseudo-format (`q2-slides`).
 pub fn is_revealjs_target(target_format: &str) -> bool {
     matches!(target_format, "revealjs" | "q2-slides")
+}
+
+/// The pipeline-composition axis: which family of transforms
+/// (HTML-scaffolding, revealjs-scaffolding, or none) a render runs, and
+/// whether it's the full render or the render/preview kind.
+///
+/// This is the single derivation point replacing two previously-independent
+/// ad-hoc checks: the inline `is_revealjs` family check in
+/// `build_transform_pipeline`, and the `pipeline_kind: Option<&'static str>`
+/// kind check in `AstTransformsStage::run()`. `RevealjsRender` is the native
+/// `revealjs` render; `RevealjsPreview` is `q2-slides` — the two must stay
+/// distinct cells (not collapsed into one "reveal" variant) because their
+/// surviving transform lists differ once a preview exclude-list applies.
+/// `Pandoc(fmt)` carries the raw `target_format` string (e.g. `"docx"`,
+/// `"pptx"`) since Pandoc has no bounded enum of destination formats here.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PipelineProfile {
+    /// Native HTML render (`html`, extension-style HTML formats, `q2-debug`).
+    HtmlRender,
+    /// HTML preview (`q2-preview`, `q2-sandboxed-preview`).
+    HtmlPreview,
+    /// Native revealjs render (`revealjs`).
+    RevealjsRender,
+    /// Revealjs preview (`q2-slides`).
+    RevealjsPreview,
+    /// A Pandoc-writer output format, carrying its raw format string
+    /// (e.g. `"docx"`, `"pptx"`, `"gfm"`).
+    Pandoc(String),
+}
+
+impl PipelineProfile {
+    /// Derive the pipeline profile from a `target_format` string.
+    ///
+    /// Reproduces [`is_revealjs_target`] and [`builtin_pseudo_format`]
+    /// exactly, deriving family from the raw string (never from a resolved
+    /// [`Format::identifier`]) — `q2-slides`'s *output writer* base is
+    /// `"html"`, so deriving family from the identifier would misclassify it
+    /// as `HtmlPreview`, losing its reveal-ness.
+    pub fn from_format(target_format: &str) -> PipelineProfile {
+        // Reveal family is resolved by the string itself, not by any
+        // downstream identifier: covers "revealjs" (Render) and
+        // "q2-slides" (Preview).
+        if is_revealjs_target(target_format) {
+            return if target_format == "q2-slides" {
+                PipelineProfile::RevealjsPreview
+            } else {
+                PipelineProfile::RevealjsRender
+            };
+        }
+
+        // Builtin pseudo-formats resolve to an HTML base with an optional
+        // "preview" pipeline_kind (q2-preview, q2-debug, q2-sandboxed-preview).
+        if let Some((_, pipeline_kind)) = builtin_pseudo_format(target_format) {
+            return if pipeline_kind == Some("preview") {
+                PipelineProfile::HtmlPreview
+            } else {
+                PipelineProfile::HtmlRender
+            };
+        }
+
+        // Known base format, e.g. "html", "docx", "pptx", "gfm".
+        if let Ok(identifier) = FormatIdentifier::try_from(target_format) {
+            return match identifier {
+                FormatIdentifier::Html => PipelineProfile::HtmlRender,
+                FormatIdentifier::Revealjs => PipelineProfile::RevealjsRender,
+                _ => PipelineProfile::Pandoc(target_format.to_string()),
+            };
+        }
+
+        // Extension-style formats, e.g. "acm-html" -> base "html".
+        let desc = parse_format_descriptor(target_format);
+        if let Ok(identifier) = FormatIdentifier::try_from(desc.base_format.as_str()) {
+            return match identifier {
+                FormatIdentifier::Html => PipelineProfile::HtmlRender,
+                FormatIdentifier::Revealjs => PipelineProfile::RevealjsRender,
+                _ => PipelineProfile::Pandoc(desc.base_format),
+            };
+        }
+
+        // Unknown format string: treat as a Pandoc writer name verbatim.
+        // `Format::from_format_string` is the authority on whether the
+        // string actually resolves; this function is total.
+        PipelineProfile::Pandoc(target_format.to_string())
+    }
 }
 
 /// The canonical Pandoc output format a Lua filter or shortcode should see as
@@ -281,6 +369,7 @@ fn output_extension_for(id: FormatIdentifier) -> String {
         FormatIdentifier::Html => "html",
         FormatIdentifier::Pdf => "pdf",
         FormatIdentifier::Docx => "docx",
+        FormatIdentifier::Pptx => "pptx",
         FormatIdentifier::Epub => "epub",
         FormatIdentifier::Typst => "pdf",
         FormatIdentifier::Revealjs => "html",
@@ -1004,6 +1093,79 @@ mod tests {
     #[test]
     fn test_from_format_string_leading_hyphen() {
         assert!(Format::from_format_string("-html").is_err());
+    }
+
+    // === pptx resolvability (Task 1 seam, T1.2) ===
+
+    #[test]
+    fn test_from_format_string_pptx() {
+        let f = Format::from_format_string("pptx").unwrap();
+        assert_eq!(f.identifier, FormatIdentifier::Pptx);
+        assert_eq!(f.output_extension, "pptx");
+        assert!(!f.native_pipeline);
+    }
+
+    // === PipelineProfile tests (Task 1 seam, T1.1) ===
+
+    #[test]
+    fn test_pipeline_profile_from_format() {
+        assert_eq!(
+            PipelineProfile::from_format("html"),
+            PipelineProfile::HtmlRender
+        );
+        assert_eq!(
+            PipelineProfile::from_format("q2-debug"),
+            PipelineProfile::HtmlRender
+        );
+        assert_eq!(
+            PipelineProfile::from_format("acm-html"),
+            PipelineProfile::HtmlRender
+        );
+        assert_eq!(
+            PipelineProfile::from_format("q2-preview"),
+            PipelineProfile::HtmlPreview
+        );
+        assert_eq!(
+            PipelineProfile::from_format("q2-sandboxed-preview"),
+            PipelineProfile::HtmlPreview
+        );
+        assert_eq!(
+            PipelineProfile::from_format("revealjs"),
+            PipelineProfile::RevealjsRender
+        );
+        assert_eq!(
+            PipelineProfile::from_format("q2-slides"),
+            PipelineProfile::RevealjsPreview
+        );
+        assert_eq!(
+            PipelineProfile::from_format("docx"),
+            PipelineProfile::Pandoc("docx".to_string())
+        );
+        assert_eq!(
+            PipelineProfile::from_format("pptx"),
+            PipelineProfile::Pandoc("pptx".to_string())
+        );
+        assert_eq!(
+            PipelineProfile::from_format("gfm"),
+            PipelineProfile::Pandoc("gfm".to_string())
+        );
+    }
+
+    /// Refactor-induced-vacuity guard: a four-variant `PipelineProfile` (no
+    /// slot for reveal+preview) would map `q2-slides` to `RevealjsRender`,
+    /// silently running the full reveal-render pipeline for the preview leg.
+    /// This asserts the `RevealjsPreview` cell by name AND by distinctness
+    /// from `RevealjsRender` — the only surface the two differ on.
+    #[test]
+    fn test_pipeline_profile_q2_slides_is_revealjs_preview_not_render() {
+        assert_ne!(
+            PipelineProfile::from_format("q2-slides"),
+            PipelineProfile::RevealjsRender
+        );
+        assert_eq!(
+            PipelineProfile::from_format("q2-slides"),
+            PipelineProfile::RevealjsPreview
+        );
     }
 
     // === is_minimal_html tests ===

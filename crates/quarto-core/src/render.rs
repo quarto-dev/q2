@@ -29,7 +29,7 @@ use crate::attribution::{
     AttributionData, AttributionRecord, AttributionSourceProvider, IdentityMap,
 };
 use crate::crossref::{CrossrefIndex, RefTypeRegistry};
-use crate::format::Format;
+use crate::format::{Format, PipelineProfile};
 use crate::project::index::ProjectIndex;
 use crate::project::{DocumentInfo, ProjectContext};
 use crate::resource_resolver::ResourceResolverContext;
@@ -216,6 +216,13 @@ pub struct RenderContext<'a> {
 
     /// Target format for this render
     pub format: &'a Format,
+
+    /// Pipeline-composition profile derived from `format.target_format`
+    /// (see [`PipelineProfile::from_format`]). The single typed seam a
+    /// transform matches on instead of reconstructing profile-equivalent
+    /// logic from `ctx.format.identifier.is_html_based()` — which cannot
+    /// see the render/preview axis `PipelineProfile` makes explicit.
+    pub pipeline_profile: PipelineProfile,
 
     /// Binary dependencies
     pub binaries: &'a BinaryDependencies,
@@ -450,6 +457,7 @@ impl<'a> RenderContext<'a> {
             project,
             document,
             format,
+            pipeline_profile: PipelineProfile::from_format(&format.target_format),
             binaries,
             options: RenderOptions::default(),
             includes: PandocIncludes::default(),
@@ -744,6 +752,20 @@ mod tests {
 
         let ctx = RenderContext::new(&project, &doc, &format, &binaries);
         assert!(!ctx.is_native());
+    }
+
+    #[test]
+    fn test_render_context_pipeline_profile_docx() {
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        let format = Format::docx();
+        let binaries = BinaryDependencies::new();
+
+        let ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        assert_eq!(
+            ctx.pipeline_profile,
+            crate::format::PipelineProfile::Pandoc("docx".to_string())
+        );
     }
 
     #[test]

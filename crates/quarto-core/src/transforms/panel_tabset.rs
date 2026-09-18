@@ -57,9 +57,11 @@
 //! ## Scope (design decision 2, plan
 //! `claude-notes/plans/2026-08-17-tabset-panel-tabset.md`)
 //!
-//! Bootstrap HTML only: the transform self-gates to HTML-based,
-//! non-reveal formats that are not minimal HTML. Everywhere else the
-//! Div passes through untouched (stacked headings, as today).
+//! Bootstrap HTML, or a Pandoc-writer output format: the transform
+//! self-gates to HTML-based formats *or* `PipelineProfile::Pandoc(_)`
+//! (docx, pptx, …), excluding reveal and minimal HTML from either case.
+//! Everywhere else the Div passes through untouched (stacked headings, as
+//! today).
 
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_pandoc_types::block::{Block, Div};
@@ -103,10 +105,17 @@ impl AstTransform for PanelTabsetTransform {
     }
 
     async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
-        // Bootstrap-HTML-only scope: reveal has its own (future) tabset
-        // story (bd-y5j0m776) and minimal HTML ships no Bootstrap CSS/JS
-        // for the nav-tabs markup to work with.
-        if !ctx.format.identifier.is_html_based()
+        // Bootstrap-HTML or Pandoc-writer scope: HTML-based formats and
+        // Pandoc-writer output formats (docx, pptx, … — PipelineProfile::
+        // Pandoc(_)) both convert the div to a Tabset CustomNode. Reveal
+        // has its own (future) tabset story (bd-y5j0m776) and minimal HTML
+        // ships no Bootstrap CSS/JS for the nav-tabs markup to work with,
+        // so both stay excluded regardless of format/profile.
+        if (!ctx.format.identifier.is_html_based()
+            && !matches!(
+                ctx.pipeline_profile,
+                crate::format::PipelineProfile::Pandoc(_)
+            ))
             || is_revealjs_target(&ctx.format.target_format)
             || is_minimal_html(&ast.meta)
         {
@@ -361,10 +370,15 @@ mod tests {
     }
 
     async fn run_transform(blocks: Vec<Block>, format: Format) -> (Pandoc, Vec<String>) {
-        let mut ast = Pandoc {
-            meta: quarto_pandoc_types::ConfigValue::default(),
-            blocks,
-        };
+        run_transform_with_meta(blocks, format, quarto_pandoc_types::ConfigValue::default()).await
+    }
+
+    async fn run_transform_with_meta(
+        blocks: Vec<Block>,
+        format: Format,
+        meta: quarto_pandoc_types::ConfigValue,
+    ) -> (Pandoc, Vec<String>) {
+        let mut ast = Pandoc { meta, blocks };
         let project = make_test_project();
         let doc = DocumentInfo::from_path("/project/test.qmd");
         let binaries = BinaryDependencies::new();
@@ -375,6 +389,20 @@ mod tests {
             .unwrap();
         let warnings = ctx.diagnostics.iter().map(|d| d.title.clone()).collect();
         (ast, warnings)
+    }
+
+    /// Metadata with a bare `minimal: true` key, matching this transform's
+    /// `is_minimal_html` gate term.
+    fn minimal_html_meta() -> quarto_pandoc_types::ConfigValue {
+        use quarto_pandoc_types::{ConfigMapEntry, ConfigValue};
+        ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "minimal".to_string(),
+                key_source: si(),
+                value: ConfigValue::new_bool(true, si()),
+            }],
+            si(),
+        )
     }
 
     #[tokio::test]
@@ -537,6 +565,27 @@ mod tests {
         assert!(
             matches!(&ast.blocks[0], Block::Div(_)),
             "reveal keeps the passthrough div (bd-y5j0m776 owns reveal tabsets)"
+        );
+        assert!(warnings.is_empty());
+    }
+
+    /// T3.2: the `is_minimal_html` gate term must survive the Task 3
+    /// widening untouched — minimal HTML ships no Bootstrap CSS/JS for the
+    /// nav-tabs markup to work with, so a tabset div must still pass
+    /// through unconverted under `format: html` + `minimal: true`.
+    #[tokio::test]
+    async fn minimal_html_is_passthrough() {
+        let (ast, warnings) = run_transform_with_meta(
+            vec![tabset_div(vec![header(2, "Tab", &[]), para("content")])],
+            Format::html(),
+            minimal_html_meta(),
+        )
+        .await;
+
+        assert!(
+            matches!(&ast.blocks[0], Block::Div(_)),
+            "minimal HTML keeps the passthrough div; got {:?}",
+            ast.blocks[0]
         );
         assert!(warnings.is_empty());
     }
