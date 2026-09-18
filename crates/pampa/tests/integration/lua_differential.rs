@@ -74,6 +74,12 @@ fn normalize_doc(mut v: Json) -> Json {
         if let Some(Json::Array(ver)) = map.get_mut("pandoc-api-version") {
             ver.truncate(3);
         }
+        // `quarto_pandoc_reader_opts` is a q2-only Meta sentinel (Task 7,
+        // P2) for the vendored Q1 Lua's benefit — real pandoc never emits
+        // it, so it is not a genuine AST divergence to track here.
+        if let Some(Json::Object(meta)) = map.get_mut("meta") {
+            meta.remove("quarto_pandoc_reader_opts");
+        }
     }
     normalize_nodes(&mut v);
     v

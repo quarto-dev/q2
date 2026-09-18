@@ -324,7 +324,7 @@ have — `serde_json` (Rust, already a dependency), `JSON.parse` (TS, native), a
   builder knows not to expect a `DecoratedCodeBlock` wire node.
 
 ## Coarse checklist
-- [ ] Record complete `plain_data`/slot field lists for all 8 real types, **read at the
+- [x] Record complete `plain_data`/slot field lists for all 8 real types, **read at the
   wire-format cut (after `crossref-index`/`crossref-resolve`), not at the construction site**
   (corrected 2026-09-18 — see the field-discovery correction above; the construction-site table
   further up gives construction sites for the base fields, but `order` for `Callout`,
@@ -338,11 +338,11 @@ have — `serde_json` (Rust, already a dependency), `JSON.parse` (TS, native), a
   row the same table had never updated after P1 resolved it entirely upstream.
 - [x] Decide codegen vs. hand-mirror — **decided: hand-mirror + cross-consumer test** (see
   "Decided" section above).
-- [ ] Author the canonical schema doc — **JSON, at `crates/quarto-pandoc-types/resources/
+- [x] Author the canonical schema doc — **JSON, at `crates/quarto-pandoc-types/resources/
   custom-node-schema.json`, per "The artifact's concrete form" above** (corrected 2026-09-18 from
   an unplaced "schema doc"); version field per the same section (bump policy deferred past v1,
   not "in-flight Automerge documents" — that motivation didn't hold up).
-- [ ] Rust construction-site test: assert each type's real `plain_data` keys (incl. conditional
+- [x] Rust construction-site test: assert each type's real `plain_data` keys (incl. conditional
   ones) match the schema exactly. **Drive the real transform, not a bare `CustomNode` literal**
   (2026-09-18 — a bare-construction test can't exercise the conditional-field logic the schema's
   `"when"` clauses describe, e.g. Callout's crossref-eligible-id branch); **one fixture per
@@ -352,13 +352,13 @@ have — `serde_json` (Rust, already a dependency), `JSON.parse` (TS, native), a
   `crossref-resolve`, not just the sugar transform** (2026-09-18, round 4 review) — asserting
   against the sugar transform's output alone would pass while still matching a schema that omits
   `order`, since `order` genuinely isn't present until that later stage runs.
-- [ ] File the `CrossrefResolvedRef` extension request (`cite_prefix`, `cite_mode`, `label_upper`
+- [x] File the `CrossrefResolvedRef` extension request (`cite_prefix`, `cite_mode`, `label_upper`
   — see the confirmed-extension-request note above) alongside the existing Proof `type` request.
-- [ ] Layer-1 introspection test (TS side) against `previewRegistry` *and* against the
+- [x] Layer-1 introspection test (TS side) against `previewRegistry` *and* against the
   hand-written per-type interfaces (e.g. `CalloutPlainData`); `Tabset`/`ExampleEmbed` both have
   nothing to introspect against React (neither reaches preview). Fix the demonstrated
   `CalloutPlainData` drift (missing `kind`, `identifier`) as part of this.
-- [ ] Round-trip + preview-parity gate green.
+- [x] Round-trip + preview-parity gate green.
 
 ## Deferred in-plan questions
 - ~~Which extra `plain_data` fields Q1 needs~~ — **partially resolved by P5's audit (2026-09-16):**

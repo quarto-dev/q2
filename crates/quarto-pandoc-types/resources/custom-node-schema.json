@@ -1,0 +1,141 @@
+{
+  "$comment": "ExampleEmbed is deliberately absent from `types` below (7 entries, not 8). Per design doc claude-notes/designs/pandoc-hybrid-architecture.md §3: 'ExampleEmbed is a real wire-format CustomNode, but never reaches this shim for Pandoc targets ... It is not a Route N case in practice — there is no CustomNode(\"ExampleEmbed\") left for the shim to route by the time a Pandoc render reaches this bridge.' The `example-embed-render` transform (crates/quarto-core/src/transforms/example_embed.rs:274) resolves ExampleEmbed entirely in Rust upstream of the wire-format cut, so no CustomNode(\"ExampleEmbed\") ever survives to be assigned a route. Every route value (L, R, or N) would misrepresent this, so the type is omitted rather than shoehorned in.",
+  "version": 1,
+  "types": {
+    "Callout": {
+      "route": "R",
+      "slots": {
+        "title": "Inlines",
+        "content": "Blocks"
+      },
+      "plain_data": {
+        "type": { "required": true },
+        "appearance": { "required": true },
+        "collapse": { "required": true },
+        "collapse_starts_collapsed": { "required": true },
+        "icon": { "required": true },
+        "ref_type": {
+          "required": false,
+          "when": "the Div has a non-empty id that the crossref registry classifies via `classify_cite_id` (callout.rs:288-296)"
+        },
+        "kind": {
+          "required": false,
+          "when": "the Div has a non-empty id that the crossref registry classifies via `classify_cite_id` (callout.rs:288-296)"
+        },
+        "identifier": {
+          "required": false,
+          "when": "the Div has a non-empty id that the crossref registry classifies via `classify_cite_id` (callout.rs:288-296)"
+        },
+        "order": {
+          "required": false,
+          "when": "crossref-index assigns an order iff `ref_type` is present (the crossref-eligible-id guard above matched) and the id is not a duplicate — crossref_index.rs:256-259 early-returns without `ref_type`, and :262-270 skips duplicates",
+          "producer": "crossref-index (post-construction)",
+          "shape": "{\"section\": [int], \"order\": int}"
+        }
+      }
+    },
+    "Tabset": {
+      "route": "R",
+      "slots": {
+        "title-{i}": "Inlines",
+        "content-{i}": "Blocks"
+      },
+      "plain_data": {
+        "level": { "required": true },
+        "tab_count": { "required": true },
+        "actives": { "required": true },
+        "group": {
+          "required": false,
+          "when": "the Div's attr carries a `group=` key (panel_tabset.rs:272,279-283)"
+        }
+      }
+    },
+    "FloatRefTarget": {
+      "route": "R",
+      "slots": {
+        "content": "Blocks",
+        "caption_long": "Blocks",
+        "caption_short": "Inlines"
+      },
+      "plain_data": {
+        "ref_type": { "required": true },
+        "kind": { "required": true },
+        "identifier": { "required": true },
+        "order": {
+          "required": false,
+          "when": "crossref-index assigns an order iff the identifier is non-empty and not a duplicate id — crossref_index.rs:252-254 early-returns on an empty identifier, and :262-270 skips duplicates",
+          "producer": "crossref-index (post-construction)",
+          "shape": "{\"section\": [int], \"order\": int}"
+        }
+      }
+    },
+    "Theorem": {
+      "route": "R",
+      "slots": {
+        "content": "Blocks",
+        "title": "Inlines"
+      },
+      "plain_data": {
+        "ref_type": { "required": true },
+        "kind": { "required": true },
+        "identifier": { "required": true },
+        "order": {
+          "required": false,
+          "when": "crossref-index assigns an order iff the identifier is non-empty and not a duplicate id — crossref_index.rs:252-254 early-returns on an empty identifier, and :262-270 skips duplicates",
+          "producer": "crossref-index (post-construction)",
+          "shape": "{\"section\": [int], \"order\": int}"
+        }
+      }
+    },
+    "Proof": {
+      "route": "R",
+      "slots": {
+        "content": "Blocks",
+        "title": "Inlines"
+      },
+      "plain_data": {
+        "kind": { "required": true },
+        "type": { "required": true }
+      }
+    },
+    "Equation": {
+      "route": "N",
+      "slots": {
+        "content": "Inlines"
+      },
+      "plain_data": {
+        "ref_type": { "required": true },
+        "kind": { "required": true },
+        "identifier": { "required": true },
+        "order": {
+          "required": false,
+          "when": "crossref-index assigns an order iff the identifier is non-empty and not a duplicate id — crossref_index.rs:252-254 early-returns on an empty identifier, and :262-270 skips duplicates",
+          "producer": "crossref-index (post-construction)",
+          "shape": "{\"section\": [int], \"order\": int}"
+        }
+      }
+    },
+    "CrossrefResolvedRef": {
+      "route": "N",
+      "slots": {
+        "suffix": "Inlines",
+        "cite_prefix": "Inlines"
+      },
+      "plain_data": {
+        "identifier": { "required": true },
+        "ref_type": { "required": true },
+        "kind": { "required": true },
+        "resolved": { "required": true },
+        "kind_source": { "required": true },
+        "cite_mode": { "required": true },
+        "label_upper": { "required": true },
+        "order": {
+          "required": false,
+          "when": "crossref-resolve inserts an order iff a matching CrossrefEntry was found for the identifier (crossref_resolve.rs:314-319); absent when the reference didn't resolve to a registered id",
+          "producer": "crossref-resolve (post-construction)",
+          "shape": "{\"section\": [int], \"order\": int}"
+        }
+      }
+    }
+  }
+}

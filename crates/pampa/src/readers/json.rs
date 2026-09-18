@@ -2643,6 +2643,14 @@ fn read_config_value_top_level(
 
     let mut entries = Vec::new();
     for (key, val) in obj {
+        // `quarto_pandoc_reader_opts` is a write-only sentinel for the
+        // vendored Q1 Lua (Task 7, P2) — it never existed in the user's
+        // document metadata and must not be reconstructed into Q2's own
+        // `ConfigValue::Map`, or it would round-trip back out into qmd
+        // front matter on the next write.
+        if key == "quarto_pandoc_reader_opts" {
+            continue;
+        }
         // Look up key_source from the provided map using deserializer
         let key_source = if let Some(sources) = key_sources {
             if let Some(sources_obj) = sources.as_object() {
