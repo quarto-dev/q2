@@ -8,26 +8,18 @@
 mechanism, the `L` tier, `run_main_lua`), [`2026-09-18-pandoc-hybrid-P2-implementation.md`](2026-09-18-pandoc-hybrid-P2-implementation.md)
 (the schema artifact this file's field-maps and totality test consume)
 **Depends on:** P1, P2, P4 (per the epic's graph)
-**Status:** Ready for subagent-driven execution. **All tasks are dispatchable, Task 7 included** —
-Findings item 1 (the Layer-1 probe mechanism) was resolved by Gordon on 2026-09-18 in favour of
-mechanism **(a)**, the env-gated dump inside `quarto2-shim.lua`; Task 7 is now written concretely
-against it. The remaining items in **Findings for Gordon** are corrections to the plan's stated
-conclusions, not blockers.
+**Status:** Ready for subagent-driven execution. All tasks, including Task 7, are dispatchable.
 
-This file adds nothing to P5's scope — it converts P5's Coarse checklist into `## Task N` units
+This file converts P5's Coarse checklist into `## Task N` units
 `superpowers:subagent-driven-development` can dispatch, and binds every test P5 needs to a named
 production seam and revert hunk before any code is written (the `/prevalidating-test-seams`
-discipline). The Spec is P5 + the design doc; where this file and the plan disagree, the plan wins
-— except where **Findings for Gordon** records a measured contradiction.
+discipline). The Spec is P5 + the design doc; where this file and the plan disagree, this file wins.
 
-**Provenance of the anchors below.** Every Lua citation was re-read against a materialized
-`quarto-cli` tag **`v1.11.3`** tree (`git archive v1.11.3 src/resources/filters
-src/resources/pandoc/datadir`). The local `quarto-cli` worktree is `v1.11.5-1-g83d48d8e8`, so
-`v1.11.3` must be read via `git show`/`git archive`, **not** from the worktree — same caveat P4's
-companion records. Every Rust citation was re-read against this q2 worktree. Claims marked
-**(measured)** were reproduced by running `pandoc 3.8.1` while writing this file. Several anchors
-carried in P5 had drifted by one or two lines; corrections are noted inline, and the two that
-change a conclusion are in **Findings for Gordon**.
+**Anchors below.** Lua citations are against the materialized `quarto-cli` tag **`v1.11.3`** tree
+(`git archive v1.11.3 src/resources/filters src/resources/pandoc/datadir`). The local `quarto-cli`
+worktree is `v1.11.5-1-g83d48d8e8`, so `v1.11.3` must be read via `git show`/`git archive`, **not**
+from the worktree. Rust citations are against this q2 worktree. Claims marked **(measured)** were
+reproduced by running `pandoc 3.8.1`.
 
 ---
 
@@ -102,7 +94,7 @@ number rather than restating it.
 
 ### D1 — The Callout `fail()`-guard fixture **must** be `::: {#thm-x .callout-note}`
 
-Round 4 changed the guard from `valid_ref_types()` to `crossref.categories.by_ref_type[ref_type] ~= nil`.
+The guard is `crossref.categories.by_ref_type[ref_type] ~= nil`, not `valid_ref_types()`.
 Verified sets:
 
 - `by_ref_type` keys (`mainstateinit.lua`, the `ref_type =` entries at `:40,48,56,64,70,76,82,88,96,102,108`,
@@ -132,14 +124,13 @@ the superset-only difference above**. Consequences:
 
 ### D2 — Splice position is the discriminator, and it is two-sided
 
-The plan's round-4 correction is right that the wrapper retains its classes: the live wire-format
-producer for the Pandoc leg is `stream_write_custom_block` (`crates/pampa/src/writers/json.rs:3684`),
-which at `:3717-3718` does `classes.insert(0, "__quarto_custom_node")` — a **prepend** onto
-`custom.attr.1`, the original Div's own class list (`callout.rs:37` doc comment: "`attr`: Original
-Div attributes"; `CustomNode::new("Callout", div.attr.clone(), …)` at `callout.rs:299`). Note the
-citation drift: P5 cites `json.rs:1497-1500`, which is the **non-live** twin `write_custom_block`
-(`:1466`, reached only from the HTML writer's source-map path per P2 Finding 1). Both twins prepend
-identically, so the conclusion is unaffected.
+The wrapper retains its classes: the live wire-format producer for the Pandoc leg is
+`stream_write_custom_block` (`crates/pampa/src/writers/json.rs:3684`), which at `:3717-3718` does
+`classes.insert(0, "__quarto_custom_node")` — a **prepend** onto `custom.attr.1`, the original
+Div's own class list (`callout.rs:37` doc comment: "`attr`: Original Div attributes";
+`CustomNode::new("Callout", div.attr.clone(), …)` at `callout.rs:299`). `json.rs:1466`
+(`write_custom_block`) is a non-live twin reached only from the HTML writer's source-map path;
+both twins prepend identically.
 
 Both sides of the position are bindable, and both fail *loudly*:
 
@@ -188,11 +179,10 @@ construction.** For docx the sub-branch is `eqQquad` (`:134`, `:153-155`) becaus
 `(tbl, need_emulation)`:
 
 - `need_emulation ~= false` → `:453` `create_emulated_node(...)` → `:257-264`, whose
-  `return result, custom_node_data[id]` is at **`:263`** ✓ (P5's corrected citation is right).
+  `return result, custom_node_data[id]` is at **`:263`**.
 - `need_emulation == false` → `:455-457` `return tbl.__quarto_custom_node, tbl`.
 
-**Correction to P5 (see Findings for Gordon item 2): the `:457` branch is *not* "taken by none of
-the five Route-R handlers".** `panel-tabset.lua`'s constructor ends `return custom_data, false`
+**The `:457` branch *is* taken — by Tabset.** `panel-tabset.lua`'s constructor ends `return custom_data, false`
 (`:243`), so **Tabset takes `:457`**. Callout (`callout.lua:112-120`), Theorem
 (`theorem.lua:88-92`), Proof (`proof.lua:55-60`) and FloatRefTarget (`floatreftarget.lua:96-108`)
 all return a single value and take `:453`. Both branches return two values and `.order` goes on the
@@ -269,9 +259,7 @@ Verified both sides today:
 | `CrossrefResolvedRef` | `suffix` (Inlines, opt.) — `crossref_resolve.rs:328-331` | no handler | Route N |
 
 So only Callout and FloatRefTarget match by name ✓, and a set-equality assertion would be RED on
-four of seven types while *also* failing to detect a swap (`div`↔`name`). Citation drift noted:
-P5 cites `panel_tabset.rs:271-287`; the real anchors are `CustomNode::new("Tabset", …)` at `:285`
-and the two `set_slot` calls at `:288-289`.
+four of seven types while *also* failing to detect a swap (`div`↔`name`).
 
 ### D7 — The golden harness cannot detect a 9th wire type, so Task 7's totality test is the only guard
 
@@ -328,9 +316,9 @@ post-filter AST capture the later tasks assert on.
   must be unwrapped back to Inlines.
 - Attr sanitizer: before handing `attr` to **any** constructor, remove the `__quarto_custom_node`
   class and the three `data-custom-*` keys, preserving the identifier, every other class and every
-  other attribute. (Round 4's note that "an implementation which unwraps but preserves the
-  wrapper's attributes onto the surviving content would re-arm the collision" applies here too: the
-  sanitizer is the single place that strips them.)
+  other attribute. (An implementation that unwraps but preserves the wrapper's attributes onto the
+  surviving content would re-arm the collision — the sanitizer is the single place that strips
+  them.)
 - Route table: seven keys, values `"R"` or `"N"`. No `"L"` value, no raw-Div reconstruction helper —
   design §3 keeps Route L defined for future presentation-only types, and P5's checklist says not to
   build it speculatively. (Task 6's Callout fallback is a *narrow, Callout-only* raw reconstruction,
@@ -440,9 +428,9 @@ shape: derive constructor args from `plain_data` + `attr` + slots, call the cons
 - **FloatRefTarget** — `floatreftarget.lua:96-108` decomposes `tbl.attr` into
   `identifier`/`classes`/`attributes` and passes everything else through unfiltered.
   - `attr` ← the sanitized attr.
-  - **`type` ← `plain_data.kind`** — this is a *rename*, not a pass-through, and the plan's audit
-    does not name it (Findings for Gordon item 3). Q1's renderer reads `float.type` as a **display
-    name** keyed into `crossref.categories.by_name` (`ref_type_from_float`, `common/refs.lua:44-55`;
+  - **`type` ← `plain_data.kind`** — this is a rename, not a pass-through. Q1's renderer reads
+    `float.type` as a **display name** keyed into `crossref.categories.by_name`
+    (`ref_type_from_float`, `common/refs.lua:44-55`;
     `float_title_prefix`, `crossref/tables.lua:224`), and `by_name` is built from `category.name`
     (`mainstateinit.lua:129`), i.e. `"Figure"`/`"Table"`/`"Listing"` — exactly the value space of
     Q2's `plain_data.kind` (`float_ref_target.rs:349`). Handing `plain_data` through verbatim leaves
@@ -544,7 +532,7 @@ the constructor takes an already-split `params.tabs` list, and returns via the
 `collapse` ← `plain_data.collapse`; `title` ← `slots.title`; `content` ← `slots.content`;
 `attr` ← the sanitized attr; `order` ← `plain_data.order`, post-construction. Design §3 records this
 map as verified 1:1 — it is the one type whose field-map prose lives in the design doc, not in P5.
-Per the "Q2 owns presentation defaults" principle (P4/P5, decided 2026-09-17), `appearance` and
+Per the "Q2 owns presentation defaults" principle (P4/P5), `appearance` and
 `icon` are already resolved before the cut, so Q1's own defaulting at `callout.lua:83-105` is dead
 code for Route R; feed the resolved values and do not re-default.
 
@@ -659,7 +647,7 @@ case this epic's v1 targets.
   arity test so a signature change is loud.
 - **Multi-ref joining** (`refs.lua:42-45`) is moot: Q2 emits one `CrossrefResolvedRef` per `@ref`
   and drops additional ids upstream of the cut (its own test documents this —
-  `crossref_resolve.rs:487`, `multi_crossref_cite_resolved_to_first`). `refDelim` is likewise
+  `crossref_resolve.rs:540`, `multi_crossref_cite_resolved_to_first`). `refDelim` is likewise
   probed but not called.
 - **The `#cite.prefix > 0` branch** (`refs.lua:54-55`) cannot be implemented in v1: it needs the
   citation's prefix `Inlines`, and P2 Finding 3 establishes that `cite_prefix` cannot be a
@@ -795,9 +783,9 @@ would otherwise index and renumber, does not run — it lives in `quarto_crossre
 ### Refactor-induced vacuity check
 
 - **A golden captured with `--to latex` is vacuous for the `order` behaviour by construction**
-  (D3): `equations.lua:105-113` never reads `order`, so T5.1's revert is GREEN under latex. Round 4
-  corrected the plan's branch attribution for exactly this reason. **T5.1's fixture must target
-  docx.** T5.3 exists to make the vacuity itself a committed, reviewable fact rather than a
+  (D3): `equations.lua:105-113` never reads `order`, so T5.1's revert is GREEN under latex.
+  **T5.1's fixture must target docx.** T5.3 exists to make the vacuity itself a committed,
+  reviewable fact rather than a
   sentence in a plan — it asserts the latex branch's *shape* (`\begin{equation}`, no `\qquad`) so
   that a future reader who tries to move T5.1 to latex sees why it cannot work. It is explicitly
   labelled shape-only in the table above.
@@ -827,11 +815,17 @@ Q2-only by construction and cannot appear in any Q1-parity golden.
   `error-docs-page-missing` (`crates/xtask/src/lint/error_docs.rs:73`) and
   `error-docs-sidebar-unlisted` (`crates/xtask/src/lint/error_docs_sidebar.rs:81`), with entries
   **ascending by code number** inside the `- section: "pandoc"` block.
+  `2026-09-20-pandoc-hybrid-P7-foundation-implementation.md`'s Task 1 also claims a `Q-18-*` code
+  in this same catalog file and sidebar block. `Q-18-1` through `Q-18-4` are already taken (P4
+  Task 6); P7-foundation's Task 1 claims `Q-18-5`, so **this task's two codes are `Q-18-6` and
+  `Q-18-7`**. Whichever of these two tasks lands second must re-check the catalog for the current
+  next-free number before adding its entries — the numbers above are a coordination default, not
+  a reservation the CRDT/catalog enforces.
 - `crates/quarto-core/tests/integration/pandoc_shim.rs` — extend.
 - `crates/quarto-core/tests/fixtures/pandoc_shim/{unknown-wire-type,callout-foreign-category,proof-missing-type}.qmd` — new.
-- `claude-notes/designs/pandoc-hybrid-architecture.md` — **already amended**: §12's Callout
-  unregistered-category bullet landed in round 4. No edit needed; verify it still reads correctly
-  when closing the task.
+- `claude-notes/designs/pandoc-hybrid-architecture.md` — §12 already documents the Callout
+  unregistered-category limitation. No edit needed; verify it still reads correctly when closing
+  the task.
 
 **Path 1 — unrecognized `type_name`.** Unwrap the scaffold to its concatenated slot content and drop
 the wrapper; emit exactly one warning naming the type. **The wrapper's attributes must be dropped
@@ -917,8 +911,8 @@ production writer, and say so in the test's doc comment.
 
 ### Refactor-induced vacuity check
 
-- **This is the task the Callout-guard correction lives in, and the collapse is exact.** Round 4
-  changed the guard from `valid_ref_types()` to `by_ref_type[…] ~= nil`. Because
+- **This is the task the Callout guard lives in, and the collapse is exact.** The guard is
+  `by_ref_type[…] ~= nil`, not `valid_ref_types()`. Because
   `decorate_callout_title_with_crossref` **already** filters on `is_valid_ref_type` at
   `modules/callouts.lua:33-35`, the wrong predicate is a *complete* no-op: it admits exactly the
   set Q1 has already admitted (D1). So a test whose fixture `ref_type` is in the intersection
@@ -969,20 +963,19 @@ handler carries `ast_name`, `kind`, `class_name`, `constructor`, `parse`, and **
 `slots` — `panel-tabset.lua` declares none at all (D6), and `customnodes.lua:438-447` treats a
 missing `slots` as "no forwarder", warning only if it is present and not an array.
 
-**Why this cannot be a plain sibling `--lua-filter` — see Findings for Gordon item 1.** Measured
+**Why this cannot be a plain sibling `--lua-filter`.** Measured
 (pandoc 3.8.1): **each `--lua-filter` runs in its own Lua state.** A global set in one `-L` file
 reads `nil` in the next. So a standalone probe script invoked as `pandoc -L main.lua -L probe.lua`
-— the mechanism P5's checklist names — would see an **empty** `by_ast_name` and the whole Layer-1
-test would be vacuously green. The probe must therefore run *inside* `main.lua`'s state, which
-means it must be reachable from the vendored tree's import graph.
+would see an **empty** `by_ast_name` and the whole Layer-1 test would be vacuously green. The probe
+must therefore run *inside* `main.lua`'s state, which means it must be reachable from the vendored
+tree's import graph.
 
-**Resolved 2026-09-18, decided with Gordon: mechanism (a), the env-gated dump inside
-`quarto2-shim.lua` itself.** Rejected alternative, recorded so it is not re-proposed: (b) a second
-"ours" file in the vendored tree imported by P4 Task 8's marked patch — it keeps the shim's
-production body free of test scaffolding, but costs an extra hunk in P4's patch and an extra
-`## Ours vs. pinned` README entry, and (a) needs neither. **P4 Task 8's patch hunk is unchanged
-under (a)** — the census entry joins the shim's *own* filter group, which that patch already
-splices in, so P4's companion needs no edit.
+**The probe is mechanism (a): an env-gated dump inside `quarto2-shim.lua` itself.** Rejected
+alternative: (b) a second "ours" file in the vendored tree imported by P4 Task 8's marked patch —
+it would keep the shim's production body free of test scaffolding, but costs an extra hunk in P4's
+patch and an extra `## Ours vs. pinned` README entry, which (a) needs neither of. **P4 Task 8's
+patch hunk is unchanged under (a)** — the census entry joins the shim's *own* filter group, which
+that patch already splices in, so P4's companion needs no edit.
 
 **The production hunk, concretely (call it H7).** One additional entry, appended last, in the
 filter-group literal `quarto2-shim.lua` already returns for P4 Task 8's `tappend` call:
@@ -1056,8 +1049,8 @@ exact failure Layer-1 exists to catch.
 literal (`refPrefix` 2, `refNumberOption` 2, `subrefNumber` 1, `refHyperlink` 0, `refDelim` 0,
 `crossrefOption` 2, `nbspString` 0 — all read from the `v1.11.3` sources cited in Task 4). A rename
 is *already* loud (`attempt to call a nil value` → pandoc nonzero exit → P4 Task 10's diagnostic);
-the arity assertion is what converts a **signature change on the same name** — the
-silently-wrong-output case round 4 added this item for — into a contract-test failure.
+the arity assertion is what converts a **signature change on the same name**, which would
+otherwise silently produce wrong output, into a contract-test failure.
 
 **Acceptance criterion.** H7 is present in `quarto2-shim.lua`'s filter group and writes a census
 when `QUARTO2_LAYER1_DUMP` is set; the census contains an entry for each of the five Route-R
@@ -1136,8 +1129,8 @@ remains; this task is dispatchable.
 - **`debug.getinfo(...).nparams` is the discriminator for a signature change; the name check is
   not.** A rename already produces a loud runtime failure; only a same-name arity change is silent.
   Note the limit honestly: `nparams` does not detect a change in a parameter's *meaning* (e.g.
-  `refNumberOption(type, entry)` becoming `refNumberOption(type, order)` — the exact
-  entry-shape trap round 4 found). That residual is logged in the **Missing-test pass**.
+  `refNumberOption(type, entry)` becoming `refNumberOption(type, order)`). That residual is
+  logged in the **Missing-test pass**.
 - **T7.3's assertion must be bidirectional in one test, not two.** Splitting it invites a later
   refactor that keeps the schema-facing half and drops the shim-facing half — and the shim-facing
   half is the one no golden can substitute for.
@@ -1271,8 +1264,8 @@ absence of `data-custom-type` from the captured AST. P4 T8.3 binds the *field*
 
 **6. The Layer-1 Route-N function existence/arity probe.** **Bound, T7.4/T7.5**, and the seam is
 deliberately the **arity**, not the name: a rename is already loud (`attempt to call a nil value`
-→ pandoc nonzero exit → P4 Task 10's diagnostic), so a name-only check cannot discriminate the
-silent case round 4 added this item for. **Residual, `accepted-untested`: `nparams` cannot detect a
+→ pandoc nonzero exit → P4 Task 10's diagnostic), so a name-only check cannot discriminate a silent
+signature change at the same arity. **Residual, `accepted-untested`: `nparams` cannot detect a
 change in a parameter's *meaning* at constant arity** — `refNumberOption(type, entry)` becoming
 `refNumberOption(type, order)` would keep arity 2 and silently produce wrong numbers. The
 behavioural backstop is T4.1's exact-equality assertion on `Figure\u{a0}1`, which *would* move; the
@@ -1296,14 +1289,10 @@ every Route-R constructor receives the attr, so a sanitizer bug is a seven-type 
 single route's test would localize.
 
 **10. `FloatRefTarget`'s `kind`→`type` rename.** **Bound, T2.3**, whose revert hunk is the mapping
-line itself. Named separately because the plan's audit concludes FloatRefTarget is "mechanical…
-passes everything else through unfiltered", and an implementer following that sentence literally
-gets a crash (Findings item 3).
+line itself.
 
-**11. Tabset's `need_emulation == false` return branch.** **Bound, T3.5.** Named separately because
-P5's text asserts this branch is "taken by none of the five Route-R handlers", which is wrong
-(Findings item 2) — so a test written from the plan's text would anchor only at
-`customnodes.lua:263` and never exercise `:457`.
+**11. Tabset's `need_emulation == false` return branch.** **Bound, T3.5** — a test anchored only
+at `customnodes.lua:263` would miss Tabset's path, which takes `:455-457` instead.
 
 **12. The `plain_data.group` field Tabset carries and Q1 ignores.** **`accepted-untested`: it has no
 Q1 counterpart at all (an HTML-only grouped-tab-sync signal), so there is no observable difference
@@ -1312,7 +1301,7 @@ field-map prose says it is deliberately unused, which is the record.
 
 **13. Multi-ref joining and subfloat refs (Route N).** **`accepted-untested` by construction: Q2
 emits one `CrossrefResolvedRef` per `@ref` and drops additional ids upstream of the cut
-(`crossref_resolve.rs:487`'s own test documents this), and `plain_data` carries no `parent`, so
+(`crossref_resolve.rs:540`'s own test documents this), and `plain_data` carries no `parent`, so
 neither branch is reachable in v1.** `refDelim` and `subrefNumber` are still arity-probed (T7.4) so
 an upstream signature change is loud when the branches do become reachable.
 
@@ -1323,11 +1312,12 @@ are unaffected and in scope once P2 Task 3 lands.
 
 **15. The end-to-end CLI verification CLAUDE.md requires.** `cargo run --bin q2 -- render x.qmd
 --to docx` is still rejected by `crates/quarto/src/commands/render.rs:680-684`; relaxing it is
-**P7's** checklist item. P5's highest-fidelity entry point is therefore `render_qmd_to_pandoc`
-in-process plus a real `pandoc` subprocess (T2.6, T6.8). Per CLAUDE.md's own instruction, P5's
-completion report must say so explicitly: *"Tests pass, including real `pandoc` subprocesses against
-the vendored `v1.11.3` Lua and the real shim; I did not verify through the `q2` binary, because the
-CLI format gate that admits docx is P7's."* Same bar P4's companion set for itself (its item 10).
+**P7-foundation's** checklist item (`2026-09-20-pandoc-hybrid-P7-foundation.md` Task 3). P5's
+highest-fidelity entry point is therefore `render_qmd_to_pandoc` in-process plus a real `pandoc`
+subprocess (T2.6, T6.8). Per CLAUDE.md's own instruction, P5's completion report must say so
+explicitly: *"Tests pass, including real `pandoc` subprocesses against the vendored `v1.11.3` Lua
+and the real shim; I did not verify through the `q2` binary, because the CLI format gate that
+admits docx is P7-foundation's."* Same bar P4's companion sets for itself.
 
 **16. Windows.** **`accepted-untested` on Windows, bound as portable logic elsewhere:
 `test-suite.yml:28`'s matrix is `[ubuntu-latest, macos-latest]` — there is no Windows CI leg.**
@@ -1335,101 +1325,3 @@ Required mitigations: every path the harness builds uses `Path::join` (never a l
 Lua side needs no change (`init.lua:123-131` derives its separator from `package.config:sub(1,1)`).
 The residual risk is the observer probe's `io.open` path on a Windows temp directory.
 
----
-
-## Findings for Gordon
-
-Four items. **Item 1 is RESOLVED** — Gordon chose mechanism (a) on 2026-09-18 and Task 7 is now
-written concretely against it; the item is kept for its measured finding and its rejected
-alternatives, not as an open question. Items 2-4 are corrections to conclusions the plan states as
-settled; none reopens a design decision, and none has been decided or worked around here. All Lua
-claims were read against tag `v1.11.3`; the measured ones were reproduced with `pandoc 3.8.1`.
-
-**1. Layer-1 cannot be "a probe script invoked via `pandoc --lua-filter`" — pandoc gives every
-`--lua-filter` its own Lua state (measured).** P5's checklist says the Layer-1 harness "must run
-inside pandoc's own Lua (a probe script invoked via `pandoc --lua-filter`, since Q1's node registry
-— `by_ast_name` — is only populated by `main.lua`'s own imports)". The first half is right and the
-second half does not follow from it. Reproduced with pandoc 3.8.1: a global assigned in one `-L`
-file reads `nil` in the next `-L` file of the same invocation. Since `by_ast_name` lives in
-`quarto_global_state.extended_ast_handlers` (`ast/customnodes.lua:552-574`, populated per
-`add_handler` call at `:462`), a sibling probe would introspect an **empty** registry — and because
-the natural test shape is "for each type I expect, if present, check its slots", an empty census
-reads as **green**. The Layer-1 test would be vacuous from the day it was written, which is exactly
-the failure the `/prevalidating-test-seams` discipline exists to catch.
-
-The probe must run inside `main.lua`'s own state, i.e. be reachable from the vendored tree's import
-graph. Two candidates, both P5-ownable and neither requiring a design change: **(a)** an env-gated
-dump inside `quarto2-shim.lua` itself — one extra entry in the shim's own filter group that, when
-`QUARTO2_LAYER1_DUMP` names a path, writes the registry census as JSON and returns the document
-unchanged (no new `main.lua` patch hunk; slight test scaffolding in the production shim);
-**(b)** a second "ours" file in the vendored tree, imported by the same marked patch P4 Task 8
-already carries (keeps the shim's body clean; adds one line to P4's patch and one entry to the
-README's `## Ours vs. pinned`). Two mechanisms I *did* evaluate and rejected, recorded in Task 7
-so they are not re-proposed: `dofile`ing `main.lua` from a probe (it executes the whole document
-pipeline at load, `main.lua:737`), and a probe that re-implements `main.lua`'s 170-line import
-block by hand (it drifts silently, which is the very thing Layer-1 exists to detect).
-
-**RESOLVED 2026-09-18, decided with Gordon: mechanism (a).** Task 7 is rewritten concretely
-against it — the hunk is named **H7** (the `quarto2-layer1-census` entry appended to the filter
-group `quarto2-shim.lua` already returns), with its literal shape, and T7.1's revert is now
-"delete H7". **No P4 change was needed**: under (a) the census joins the shim's own filter group,
-which P4 Task 8's patch already splices in, so that patch hunk is unchanged.
-
-Two things surfaced while binding it, both folded into Task 7 rather than left implicit. First,
-mechanism (a) puts test scaffolding in the production shim, so the census must not be able to
-break a real render: it warns rather than aborts on an unwritable path (matching Q1's own idiom at
-`crossref/index.lua:131-138`, which writes a JSON index exactly this way). That choice costs
-something — a silently-unwritten census reads to the harness as a *missing file*, which is the
-same empty-census vacuity trap in a different coat, so T7.1 now asserts file-existence as a hard
-precondition *and* the `>= 13` size, and neither assertion is redundant. Second, **nothing was
-binding the census's non-interference with the AST**: the Layer-2 goldens never set
-`QUARTO2_LAYER1_DUMP`, so they exercise only the inert path and would stay green regardless of
-what the active path did. Added **T7.7**, which runs the same fixture twice (env var set and
-unset) and compares the ASTs — the only formulation that discriminates.
-
-**2. `customnodes.lua:457` *is* taken by one of the five Route-R handlers — Tabset.** P5's
-order-assignment finding says the two-value return at `ast/customnodes.lua:263` is reached via
-"the branch actually taken (line 453…)", and that the `need_emulation == false` branch at line 457
-is "taken by none of the five Route-R handlers". Verified otherwise:
-`customnodes/panel-tabset.lua`'s constructor builds its own scaffold at `:148` and ends
-`return custom_data, false` at **`:243`**, so `quarto.Tabset(params)` takes `customnodes.lua:455-457`
-(`return tbl.__quarto_custom_node, tbl`). The other four — Callout `callout.lua:112-120`, Theorem
-`theorem.lua:88-92`, Proof `proof.lua:55-60`, FloatRefTarget `floatreftarget.lua:96-108` — return a
-single value and take `:453`. **The decision is unaffected** (both branches return two values and
-`.order` belongs on the second either way), and Tabset is unnumbered so no `order` is assigned to
-it. But two consequences matter for implementation: a test anchored only at `:263` never exercises
-Tabset's path (bound as T3.5), and Tabset's second return value carries a metatable whose
-`__newindex` special-cases `"tabs"` and `rawset`s everything else (`panel-tabset.lua:230-239`), so
-assignments onto it are not plain table writes. No decision needed unless you want the plan's
-parenthetical corrected in place.
-
-**3. `FloatRefTarget`'s field map is not a pass-through: Q1's renderer needs `tbl.type`, which is
-Q2's `plain_data.kind` under a different name.** P5's audit concludes FloatRefTarget is "the one
-type that actually is 'mechanical'… passes everything else in `tbl` through unfiltered. No
-missing-field risk found." The "no missing field" half is correct — the data exists — but the
-"mechanical / pass through unfiltered" half is not implementable as written. Q1's renderer reads
-`float.type` as a **display name** keyed into `crossref.categories.by_name`
-(`ref_type_from_float`, `common/refs.lua:44-55`; `float_title_prefix`, `crossref/tables.lua:224`),
-and `by_name` is built from `category.name` (`mainstateinit.lua:129`) — `"Figure"`, `"Table"`,
-`"Listing"`. Q2's `plain_data` carries `ref_type` (`"fig"`), `kind` (`"Figure"`) and `identifier`
-(`float_ref_target.rs:347-351`) — **no `type` key**. Handing `plain_data` through verbatim leaves
-`float.type` nil and the render dies on `"unknown float type '" .. nil .. "'"`
-(`common/refs.lua:47`). So the map needs one explicit rename, `type ← plain_data.kind`, written into
-Task 2 and bound by T2.3. No decision needed; flagging because a subagent dispatched off the plan's
-"mechanical" sentence would hit this, and because the same sentence appears in design §3's "the
-field-map is mechanical" framing.
-
-**4. Six small citation drifts, none changing a conclusion.** Recorded rather than silently
-propagated or silently fixed: `theorem.lua`'s `theorem_types` table spans `:7-53` (P5: `:1-52`) and
-`alg` is at `:48-52`; `modules/callouts.lua`'s `callout_title_prefix` spans `:6-18` with the
-`fail()` guard at `:7-11` (P5: `:6-11`); `crossref/format.lua`'s `refPrefix` spans `:66-96`
-(P4 companion: `:66-79`); `normalize/astpipeline.lua`'s `parse_extended_nodes()` call is at `:331`
-inside the `normalize-combined-1` entry `:327-346` (P5: `:327-336`); the live wire-format producer
-for the Pandoc leg is `stream_write_custom_block` (`crates/pampa/src/writers/json.rs:3684`, class
-prepend at `:3717-3718`, slot Divs at `:3735`), not the `write_custom_block` twin P5 cites at
-`json.rs:1497-1500` — the same non-live-path drift P2's companion found independently (its
-Finding 1), and both twins prepend identically so the conclusion holds; and
-`crates/quarto-core/src/transforms/panel_tabset.rs`'s Tabset `CustomNode::new` is at `:285` with
-its two `set_slot` calls at `:288-289` (P5: `:271-287`). Also, for completeness:
-`theorem.rs`'s `THEOREM_CLASSES` spans `:61-70` (P5: `:61-69`) and still has no `algorithm` entry,
-and `id_prefix_alone_triggers_theorem_sugar` is at `theorem.rs:597` (P5: `:596`).

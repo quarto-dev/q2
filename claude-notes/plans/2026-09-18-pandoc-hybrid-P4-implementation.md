@@ -9,27 +9,19 @@
 serialization step, though Tasks 1-8 can proceed against the *frozen schema decision* before P2's
 implementation lands. P4 is scheduled **before P5**, so the `main.lua` splice patch (Task 8) ships
 before the shim it splices in; Task 8's seams are bound to *position and shape*, never conversion.
-**Status:** Ready for subagent-driven execution. **No blockers remain on P4's own deliverable** —
-the five findings that needed a decision (items 1, 3, 6, 9, 10) were decided by Gordon on
-2026-09-18 and are applied; items 2, 4, 5, 7, 8 and 11 never needed one. Item 9 is now explicitly
-**closed as `accepted-untested`**, not open. One new cross-plan edge came out of it: **P4's
-transport smoke depends on P2 Task 7** (`quarto_pandoc_reader_opts`, reassigned to P2 — see
-Findings item 3). See `## Findings for Gordon` for the full status line-up.
+**Status:** Ready for subagent-driven execution. No blockers remain on P4's own deliverable.
+**P4's transport smoke depends on P2 Task 7** (`quarto_pandoc_reader_opts`).
 
 This file adds nothing to P4's scope — it converts P4's Coarse checklist into `## Task N` units
 `superpowers:subagent-driven-development` can dispatch, and binds every test P4 needs to a named
 production seam and revert hunk before any code is written (the `/prevalidating-test-seams`
-discipline). The Spec is P4 + the design doc; where this file and the plan disagree, the plan wins
-— except where **Findings for Gordon** records a measured contradiction, which needs a decision
-before the affected task is dispatched.
+discipline). The Spec is P4 + the design doc; where this file and the plan disagree, the plan wins.
 
-**Provenance of the anchors below.** Every Lua/TS citation was re-read against
-`/Users/gordon/src/quarto-cli` at tag **`v1.11.3`** (confirmed present; the local checkout is now
-`v1.11.5-1-g83d48d8e8`, so `v1.11.3` must be read via `git show v1.11.3:<path>`, not from the
-worktree). Every Rust citation was re-read against this worktree. Several anchors carried in P4
-had drifted; corrections are noted inline. Behaviour claims marked **(measured)** were reproduced
-by actually running `pandoc 3.8.1` against a materialized `v1.11.3` tree during the writing of
-this file — see the worked example in Task 4.
+Lua/TS citations are read against `quarto-cli` at tag **`v1.11.3`** (read via
+`git show v1.11.3:<path>` against `/Users/gordon/src/quarto-cli`, not the local checkout's current
+tip). Rust citations are read against this worktree. Behaviour claims marked **(measured)** were
+reproduced by actually running `pandoc 3.8.1` against a materialized `v1.11.3` tree — see the
+worked example in Task 4.
 
 ---
 
@@ -116,14 +108,13 @@ embed them. No materialization, no running — Task 2 owns that.
 - `resources/pandoc-filters/filters/**` — **the vendored copy** of upstream
   `src/resources/filters/` at `v1.11.3`. Root file `main.lua`; its `import()` block spans
   `main.lua:13` (`import("./mainstateinit.lua")`) through `main.lua:203`
-  (`import("./quarto-init/metainit.lua")`) — **170 `import(...)` lines, not "~45 lines at
-  `main.lua:13-60`" as Finding 2 states** (drift correction, 2026-09-18).
+  (`import("./quarto-init/metainit.lua")`) — **170 `import(...)` lines.**
 - `resources/pandoc-filters/pandoc/datadir/**` — **the vendored copy** of upstream
   `src/resources/pandoc/datadir/` at `v1.11.3`: 27 files, `init.lua` plus `_base64.lua`,
   `_format.lua`, `_json.lua`, `_utils.lua`, `logging.lua`, `lpegfenceddiv.lua`,
   `lpegshortcode.lua`, `profiler.lua`, `readqmd.lua`, and the `luacov/` subtree.
-  **Note the directory names are load-bearing, not cosmetic** — see Task 2 and Finding 4 in
-  **Findings for Gordon**: `init.lua:257` derives the filters path from the data-dir's own location.
+  **Note the directory names are load-bearing, not cosmetic** — see Task 2: `init.lua:257` derives
+  the filters path from the data-dir's own location.
 - `crates/quarto-core/src/pandoc_filters/mod.rs` — new; the two `include_dir!` statics and the pin
   constants (`QUARTO_CLI_PIN: &str = "v1.11.3"`, `PANDOC_PIN: &str = "3.10"`).
 - `crates/xtask/src/lint/vendored_pandoc_filters.rs` — new repo-level rule; registered by appending
@@ -163,8 +154,7 @@ intra-tree module reference (tests below).
   `test_missing_ours_file_is_flagged` RED.
 - T1.5 — Revert (delete) the real shim file from `resources/pandoc-filters/filters/` →
   `assert!(violations.is_empty())` in `test_real_tree_is_clean` RED. **This is the mechanical
-  re-vendor guard** the plan's Finding 2 asks for; without T1.4/T1.5 the README is the whole
-  mitigation.
+  re-vendor guard**; without T1.4/T1.5 the README is the whole mitigation.
 
 ### Refactor-induced vacuity check
 
@@ -191,8 +181,7 @@ intra-tree module reference (tests below).
   bundle per tree extracted into a shared parent. `ResourceBundle` is at
   `crates/quarto-core/src/resources.rs:383-392` (struct), `impl` `:394-454`; the disk-materializing
   methods are `ResourceBundle::path` `:421` (lazy, `get_or_init`) and the private
-  `ResourceBundle::extract` `:443`. (Plan cited `resources.rs:25-43, 359-452`; actual module doc is
-  `:26-44` and the type doc/impl span `:357-454` — drift correction.)
+  `ResourceBundle::extract` `:443`.
 - `crates/quarto-core/src/pandoc_filters/harness.rs` — new (ours); `run_main_lua`.
 - `crates/quarto-core/tests/integration/pandoc_transport.rs` — new (ours); registered as
   `pub mod pandoc_transport;` in `crates/quarto-core/tests/integration/main.rs` (alphabetical: after
@@ -205,9 +194,8 @@ intra-tree module reference (tests below).
   `local format = require '_format'` (`init.lua:149`) fails and pandoc refuses to run any filter:
   `Couldn't load 'init.lua': … module '_format' not found`, **exit 83** (measured, pandoc 3.8.1).
 - `init.lua:257` appends `pandoc.path.normalize(PANDOC_STATE.user_data_dir .. '/../../filters/?.lua')`
-  — so the filters tree must sit two levels above the data-dir, i.e. the single-root layout above.
-  This converts the plan's Finding 1 "two vendoring roots" into "two source subtrees, **one**
-  materialized root with Q1's own relative shape". See Finding 4 in **Findings for Gordon**.
+  — so the filters tree must sit two levels above the data-dir, i.e. the single-root layout above:
+  two source subtrees, **one** materialized root with Q1's own relative shape.
 - `QUARTO_FILTER_DEPENDENCY_FILE` must point at a writable file. Without it, `init.lua`'s
   dependency-file accessor `fail()`s and pandoc dumps ~35 KB of `init.lua` source to stderr **on an
   otherwise successful (exit 0) render** (measured). The plan's params table already notes
@@ -273,29 +261,29 @@ the shim, which is exactly what Task 8's prerequisite note bounds.
 
 **Scope.** Two small pure functions: the base64 encoder pinned to the exact variant Q1's decoder
 accepts, and the Windows environment-block size predicate. Kept separate from Task 4 because the
-*fallback* half of the size bound is an **open decision** (see Findings for Gordon, item 9) and must
-not block the params builder.
+*fallback* half of the size bound is `accepted-untested` by decision (no fallback is designed) and
+must not block the params builder.
 
 **Files:**
 - `crates/quarto-core/src/pandoc_filters/params_codec.rs` — new (ours).
   - `pub fn encode_params_blob(json: &str) -> String` — must use
     `base64::engine::general_purpose::STANDARD` (standard alphabet, **with** padding). Upstream
     writers: `pandoc.ts:310` and `pandoc.ts:335`, both `encodeBase64(JSON.stringify(...))` from
-    Deno's `encoding/base64`, which is standard+padded. (Plan cited `pandoc.ts:315,340` — drift
-    correction, actual `:310` and `:335`.) Upstream decoder: `init.lua:596`
+    Deno's `encoding/base64`, which is standard+padded. Upstream decoder: `init.lua:596`
     `base64.decode(os.getenv("QUARTO_FILTER_PARAMS"))`, then `init.lua:599-604`
     `function param(name, default)`.
   - `pub fn params_blob_exceeds_platform_limit(len: usize) -> bool` — the Windows 32,767-character
-    environment-block cap as data, per the plan's explicit instruction to make it a unit-testable
-    pure function because Windows has **no CI test leg** (`.github/workflows/test-suite.yml:28`,
-    `os: [ubuntu-latest, macos-latest]`).
+    environment-block cap as data, a unit-testable pure function because Windows has **no CI test
+    leg** (`.github/workflows/test-suite.yml:28`, `os: [ubuntu-latest, macos-latest]`).
 
 **Acceptance criterion.** `encode_params_blob` output round-trips through the real vendored
 `_base64.lua`/`_json.lua` (T3.4); `params_blob_exceeds_platform_limit` is exact at the boundary.
 
 **Prerequisite.** Task 2 for T3.4's harness. The **fallback** behaviour past the size limit is
-`seam deferred — undecided in the plan`; see Findings for Gordon, item 9. Task 3 binds the
-*predicate* only.
+`accepted-untested` by decision — no fallback is designed, and designing one is new functionality
+this epic is not taking on. If a real document ever exceeds the platform limit, the symptom is a
+`pandoc` exec failure surfaced by Task 10's nonzero-exit diagnostic. Task 3 binds the *predicate*
+only.
 
 ### Test Seam Spec
 
@@ -337,8 +325,7 @@ test design**:
   JSON and the render **succeeded with every key absent** (exit 0, sentinel `ABSENT`). **So an
   `L`-tier test asserting "wrong variant → nonzero exit" is payload-dependent and flaky.** T3.2
   therefore binds the *encoder's alphabet* at the `U` tier (deterministic), and T3.4 binds the
-  *positive* round-trip. This also corrects the plan's Finding 5(a) characterization — see Findings
-  for Gordon, item 5.
+  *positive* round-trip.
 - **T3.4's `uuid`.** A hardcoded sentinel value would still discriminate, but a per-run uuid also
   rules out a stale stderr capture from a previous invocation being read. Cheap; keep it.
 
@@ -349,8 +336,8 @@ test design**:
 **Scope.** Build the blob the plan's re-derivation specifies: `quartoFilterParams`'s ~28 core keys,
 `extractIncludeParams`'s include plumbing, `layoutFilterParams`, `crossrefFilterParams`'s four
 non-project keys, the top-level literals, and the synthetic single-file "project" value. Plus the
-two keys measurement shows are **structurally required** even though the plan's prose reads them as
-N/A or as P7's: `quarto-filters` and `language` (see Findings for Gordon, items 1 and 2).
+two keys that are **structurally required**: `quarto-filters` and `language` (P4 owns both — see
+the Upstream anchors below).
 
 **Files:**
 - `crates/quarto-core/src/pandoc_filters/params.rs` — new (ours). `FilterParamsBuilder` with a
@@ -365,24 +352,25 @@ N/A or as P7's: `quarto-filters` and `language` (see Findings for Gordon, items 
   full upstream locale set at `resources/language/_language*.yml` (111 keys in `_language.yml`), so
   the `language` bag needs no new data.
 
-**Upstream anchors** (all re-verified at `v1.11.3`):
+**Upstream anchors** (`v1.11.3`):
 - `filterParamsJson` — `src/command/render/filters.ts:128`; the `params` object literal ends at
-  `:201`. Plan's `filters.ts:128-201` ✓.
+  `:201`.
 - `languageFilterParams` — `filters.ts:465`; the `-prefix`-from-`-title` derivation loop at `:484`.
-  Plan's `filters.ts:465-494` ✓.
-- `projectFilterParams` — `filters.ts:498`. Plan's `filters.ts:498-526` ✓.
-- `projType.filterParams` signature — `src/project/types/types.ts:62` ✓ (the earlier
-  `project/types.ts:62` citation was already corrected in the plan).
-- `crossrefFilterActive` — `src/command/render/crossref.ts:27` ✓.
-- `layoutFilterParams` — `src/command/render/layout.ts:23` ✓.
-- `citeIndexFilterParams` — `src/project/project-cites.ts:22` ✓ (returns `{}` for every non-book
+- `projectFilterParams` — `filters.ts:498-526`.
+- `projType.filterParams` signature — `src/project/types/types.ts:62`.
+- `crossrefFilterActive` — `src/command/render/crossref.ts:27`.
+- `layoutFilterParams` — `src/command/render/layout.ts:23`.
+- `citeIndexFilterParams` — `src/project/project-cites.ts:22` (returns `{}` for every non-book
   render; nothing to build).
 - **`language`** — `src/command/render/pandoc.ts:488`,
-  `formatFilterParams["language"] = options.format.language;`. This is the key the plan's table
-  attributes to the caller-supplied `filterParams` row and defers to P7.
+  `formatFilterParams["language"] = options.format.language;`. **P4 owns this key, not P7** — it
+  is not format-specific and not optional, so it belongs in P4's required list rather than behind
+  P7's caller-supplied `filterParams` extension point.
 - **`quarto-filters`** — consumed at `src/resources/filters/ast/emulatedfilter.lua:45`,
   `for _, v in ipairs(param("quarto-filters").entryPoints) do` — **no default**, called
   unconditionally from `main.lua:735` `inject_user_filters_at_entry_points(quarto_filter_list)`.
+  Semantically N/A (Q2 runs user filters itself) but structurally required: P4 emits
+  `{"entryPoints": []}`.
 
 **The literal worked example the plan asks for** (measured end-to-end: pandoc 3.8.1 exit 0,
 10,795-byte docx). This is the *minimal* blob that makes `main.lua` run to completion for
@@ -411,8 +399,10 @@ N/A or as P7's: `quarto-filters` and `language` (see Findings for Gordon, items 
 `readqmd.lua:280-286` indexes the argument. `active-filters.normalization = false` does **not**
 gate it — that lever reaches only the single `normalize` entry (`main.lua:263-273`), while
 `normalize-capture-reader-state` is a separate sibling entry (`main.lua:275-278`). Without it:
-`readqmd.lua:283: attempt to index a nil value (local 'meta')`, exit 83 (measured). Ownership is
-unassigned — see Findings for Gordon, item 3.
+`readqmd.lua:283: attempt to index a nil value (local 'meta')`, exit 83 (measured). **This is
+P2's responsibility, not P4's** — it's part of the Meta contract (design doc §8: "P2 owns the
+carriage, P7 owns per-format Meta→template mapping"), landed as **P2 Task 7**, which emits an
+empty `MetaMap` for `quarto_pandoc_reader_opts`. P4's transport smoke depends on P2 Task 7.
 
 **Acceptance criterion.** For a fixed fixture, `FilterParamsBuilder::build()` produces a blob whose
 key set matches a committed `insta` snapshot; the required set (items 1-5 of the plan's
@@ -484,8 +474,8 @@ an injected test contributor's keys reach the blob.
   paths and the whole 111-key language bag; a value snapshot would be unstable and would bury the
   signal. The *values* that matter are bound individually (T4.2, T4.9, T4.11, and Task 5's family).
 - **T4.9 asserts presence of the inert numbering params — and presence is all it can assert.**
-  Design §11 (decided 2026-09-18, Gordon) is explicit that these three are required for API
-  completeness but inert under external mode, because the only Lua that reads them
+  Design §11 states these three are required for API completeness but inert under external mode,
+  because the only Lua that reads them
   (`quarto_crossref_filters`, gated at `main.lua:718` `if enableCrossRef then`) does not run. A test
   that asserted they *change the output* would be asserting a behaviour that by design does not
   exist. Their inertness is `accepted-untested` — see **Missing-test pass**.
@@ -499,8 +489,8 @@ an injected test contributor's keys reach the blob.
 ## Task 5: The `crossref-<type>-title` **and** `-prefix` families — Q2's registry becomes authoritative
 
 **Scope.** Emit both key families, one pair per registered ref-type, so Q2 owns the caption label
-*and* the reference-text label. This is the round-4 correction (`0b295831e`) and the implementation
-half of the "Q2 owns presentation defaults" standing principle.
+*and* the reference-text label — the implementation of the "Q2 owns presentation defaults"
+standing principle.
 
 **Files:**
 - `crates/quarto-core/src/pandoc_filters/params.rs` — the crossref-family contributor (ours).
@@ -528,9 +518,6 @@ for (ref_type, def) in registry.iter():
     emit "crossref-{ref_type}-title"  = title
     emit "crossref-{ref_type}-prefix" = prefix
 ```
-
-See Findings for Gordon, item 7 — the checklist's literal "from `RefTypeRegistry`" is not
-implementable as written.
 
 **Why both families, measured.** `title(type, default)` (`crossref/format.lua:4-7`) reads
 `crossref-<type>-title` and feeds **captions**. `refPrefix(type, upper)`
@@ -582,11 +569,11 @@ of theorems: `seam deferred until P5's shim implementation` for the wire-format 
 
 ### Refactor-induced vacuity check
 
-This is the task the prompt flags hardest, and three separate collapses are live here:
+Three separate collapses are live here:
 
 1. **"Some crossref param is set" is not a discriminator.** A test asserting
    `blob.keys().any(|k| k.starts_with("crossref-"))`, or asserting a `-title` key alone, passes
-   under the exact bug round 4 found — `-title` emitted, `-prefix` unfed. T5.1's discriminator is
+   if `-title` is emitted but `-prefix` is unfed. T5.1's discriminator is
    the **paired** count `2 * registry.len()`; T5.3's is the **reference text**, which is the only
    surface where the two states differ (measured: caption is identical in the `-title`-only and
    both-keys states).
@@ -617,9 +604,7 @@ commit, as both lint rules require.
 - `crates/quarto-error-catalog/error_catalog.json` — add `Q-18-*` entries. Verified today: the 15
   existing subsystems occupy `{0 internal, 1 yaml, 2 markdown, 3 writer, 5 project, 7 cli, 9 xml,
   10 template, 11 lua, 12 listing, 13 navigation, 14 theme, 15 crossref, 16 extension, 17 include}`;
-  **4, 6, 8 and 18 are all unused**, and the plan's decision (2026-09-18, round 4) is **18**, on the
-  stated grounds that the low gaps are undocumented as retired-or-reusable. That decision is frozen;
-  this task implements it.
+  **4, 6, 8 and 18 are all unused**; this task claims **18** for the `pandoc` subsystem.
 - `docs/errors/pandoc/Q-18-<n>.qmd` — one page per code; template per `docs/errors/README.md`;
   `docs_url` must be exactly `https://quarto.org/docs/errors/pandoc/Q-18-<n>`.
 - `docs/_quarto.yml` — a new `- section: "pandoc"` block in the `- id: errors` sidebar, entries
@@ -630,10 +615,8 @@ commit, as both lint rules require.
 `pandoc` binary not found; `pandoc` present but below the minimum version; `pandoc` exited nonzero
 (stderr verbatim); params-blob exceeds the platform environment-block limit. Task 10 decides whether
 the `[WARNING]`-passthrough diagnostic reuses the existing `Q-11-1` "Lua Filter Diagnostic" instead
-of a new `Q-18-*` — the plan explicitly invites that reuse, and `Q-11-1`
-(`error_catalog.json:891`) already has two real emitters at
-`crates/pampa/src/lua/diagnostics.rs:379` and `:386`, so it is **not** unclaimed as the plan's
-Finding 4 states (drift correction).
+of a new `Q-18-*`; `Q-11-1` (`error_catalog.json:891`) already has two real emitters at
+`crates/pampa/src/lua/diagnostics.rs:379` and `:386`.
 
 **Acceptance criterion.** `cargo xtask lint` green — specifically `error-docs-page-missing`
 (`crates/xtask/src/lint/error_docs.rs:73`) and `error-docs-sidebar-unlisted`
@@ -684,7 +667,7 @@ Finding 4 states (drift correction).
 diagnostic, the pandoc version recorded as part of the vendoring pin, the CI/dev-tooling bumps, and
 a `cargo xtask verify` preflight. Binary **location** is already done —
 `BinaryDependencies::discover` at `crates/quarto-core/src/render.rs:150` sets
-`pandoc: runtime.find_binary("pandoc", "QUARTO_PANDOC")` at `:154` (plan's `:154` ✓), returning
+`pandoc: runtime.find_binary("pandoc", "QUARTO_PANDOC")` at `:154`, returning
 `Option<PathBuf>` via `SystemRuntime::find_binary`
 (`crates/quarto-system-runtime/src/traits.rs:556`, native impl `native.rs:371`).
 
@@ -696,17 +679,20 @@ a `cargo xtask verify` preflight. Binary **location** is already done —
   (ts-packages), `:356` (hub-client build), `:382` (hub-client tests), `:405`, `:431`, `:467`,
   `:541`, `:594`, `:627`.
 - `crates/xtask/src/dev_setup.rs` — `check_pandoc()` at `:283`; the floor is an **inline literal**
-  `pandoc_version_at_least(&version_str, 3, 6)` at `:295` (the plan calls it a "constant" — it is
-  not), and the check is **warn-only and returns `()`**, so it cannot fail (`:286-292`, `:302-306`).
-  Promote to a hard failure per the plan.
+  `pandoc_version_at_least(&version_str, 3, 6)` at `:295`, and the check is **warn-only and
+  returns `()`**, so it cannot fail (`:286-292`, `:302-306`). Promote to a hard failure — this is
+  a signature change (`()` → `Result<(), _>` or equivalent), not a one-liner.
 - `.github/workflows/test-suite.yml:18` and `.github/workflows/ts-test-suite.yml:18` — both
-  `PANDOC_VERSION: "3.8.3"` ✓.
+  `PANDOC_VERSION: "3.8.3"`.
 - `resources/pandoc-filters/README.md` — record pandoc `3.10` alongside tag `v1.11.3` (Task 1's
   T1.3 already binds this).
 - **Reconcile with `crates/xtask/src/pandoc_check.rs`** — an existing `cargo xtask pandoc-check`
   subcommand (`pub fn run()` at `:45`, wired at `main.rs:232`/`:417`) that reads
   `PANDOC_ORACLE_MIN_VERSION = (3, 6)` and `PANDOC_ORACLE_MAX_VERSION = (3, 10)` out of
-  `crates/pampa/tests/integration/test.rs:117-118`. See Findings for Gordon, item 11.
+  `crates/pampa/tests/integration/test.rs:117-118`. Task 7's `verify` preflight must reconcile
+  with this existing subcommand, not become a third source of truth. Note **3.10 is exactly
+  pampa's oracle `MAX_VERSION`**, so this task's bump lands on the last value that keeps the four
+  oracle tests running; any later bump also needs that constant raised.
 
 **Acceptance criterion.** `pandoc 3.9.9` compares as **below** `3.10`; a version below the floor and
 an absent binary each produce their distinct `Q-18-*` code; the four places recording a pandoc
@@ -891,23 +877,21 @@ and the stage-list assembly.
   per `.claude/rules/wasm.md`.
 - `crates/quarto-core/src/pipeline.rs` — add `render_qmd_to_pandoc`, a sibling to
   `render_qmd_to_html` (`:843-849`, returning `RenderOutput { html, diagnostics, source_context }`
-  defined at `:166-173` — plan's `pipeline.rs:166-173,843` ✓).
+  defined at `:166-173`).
 - `crates/quarto-core/src/stage/data.rs` — `RenderedOutput` at `:441-465`; `content: String` at
-  `:449` (plan ✓); `output_path: PathBuf` at `:445`. Per Finding 3 the stage returns an **empty**
-  `content` and a populated `output_path`; no type change is needed, which is the point of that
-  decision.
+  `:449`; `output_path: PathBuf` at `:445`. The stage returns an **empty** `content` and a
+  populated `output_path`; no type change is needed.
 - `crates/pampa/src/writers/json.rs` — read-only consumer. The Pandoc-superset mode is
   `JsonConfig { raw: false }` — `JsonConfig` at `:42-81` (plan cited `40-81`; the `derive` is at
   `:41`), `raw` field at `:80`. Entry points: `write_with_config` `:1881`, `write` `:1892`.
   **Do not use `raw: true`** — explicitly non-Pandoc-compatible.
 - `crates/quarto-core/tests/integration/pandoc_transport.rs` — extend.
 
-**Note on `pandoc-api-version`.** The plan assigns P4 the conditional bump of pampa's hardcoded
-`[1, 23, 1]` at `json.rs:1869`. That anchor is correct but **incomplete**: the value is hardcoded a
-second time in the *streaming* writer at `json.rs:4248-4252`, and `write_with_config`/`write` both
-go through the streaming writer — so a bump touching only `:1869` would not change real output. See
-Findings for Gordon, item 8. No bump is required for pandoc 3.8.1/3.10 today; the anchor correction
-matters when one is.
+**Note on `pandoc-api-version`.** Pampa's hardcoded `[1, 23, 1]` is set in two places: at
+`json.rs:1869` and again in the *streaming* writer at `json.rs:4248-4252`. `write_with_config`/
+`write` both go through the streaming writer, so a conditional bump touching only `:1869` would
+not change real output — any future bump must touch both. No bump is required for pandoc
+3.8.1/3.10 today.
 
 **Acceptance criterion.** `render_qmd_to_pandoc` on a fixture writes a real `.docx` to the requested
 path; the returned `RenderedOutput` has an empty `content` and the correct `output_path`; the
@@ -917,7 +901,7 @@ serialized JSON handed to pandoc is Pandoc-superset shape (carries `pandoc-api-v
 **Prerequisite.** **P2's wire-format schema** for the serialization step (the epic's stated
 P4-after-P2 edge); Tasks 2, 4, 5 for the invocation. The **transform** exclude-list for the
 `Pandoc(fmt)` profile is `seam deferred until P1's PipelineProfile work` — P4 owns only the **stage**
-list that plugs `PandocWriteStage` in (Finding 3's explicit split).
+list that plugs `PandocWriteStage` in.
 
 ### Test Seam Spec
 
@@ -965,9 +949,9 @@ list that plugs `PandocWriteStage` in (Finding 3's explicit split).
 
 ## Task 10: The `pandoc` subprocess diagnostic — unconditional stderr capture, `[WARNING]` re-emission, verbatim nonzero-exit passthrough, temp-JSON retention
 
-**Scope.** Implement Finding 4 as corrected: capture stderr **unconditionally**, re-emit
-`[WARNING]`-shaped lines as diagnostics on a *successful* render, wrap stderr verbatim on a nonzero
-exit, and retain the temp JSON on failure.
+**Scope.** Capture stderr **unconditionally**, re-emit `[WARNING]`-shaped lines as diagnostics on
+a *successful* render, wrap stderr verbatim on a nonzero exit, and retain the temp JSON on
+failure.
 
 **Files** (all ours):
 - `crates/quarto-core/src/pandoc_filters/diagnostics.rs` — new; `classify_pandoc_stderr(&str) ->
@@ -1029,10 +1013,9 @@ on this diagnostic by name; P4 owns the channel, P5 owns the fixture —
 
 ### Refactor-induced vacuity check
 
-- **This is the task the prompt names explicitly, and the collapse is exact.** Commit `0b295831e`
-  changed the policy from *stderr-on-nonzero-exit-only* to *unconditional*. A test asserting "stderr
-  appears when pandoc exits nonzero" **passes under both the old and the new behaviour** — it cannot
-  fail for the reason the change exists. **The discriminator is the success case.** T10.1 (`U`) and
+- **The policy is *unconditional* stderr capture, not *stderr-on-nonzero-exit-only*.** A test
+  asserting "stderr appears when pandoc exits nonzero" **passes under both policies** — it cannot
+  discriminate between them. **The discriminator is the success case.** T10.1 (`U`) and
   T10.5 (`L`) are the only two tests in this task whose revert is the `if !status.success()` guard;
   T10.2/T10.3/T10.4 guard the older, already-correct half. This must stay visible in the test
   names: `..._on_successful_render_...` for the discriminators.
@@ -1050,8 +1033,8 @@ on this diagnostic by name; P4 owns the channel, P5 owns the fixture —
 ## Task 11: The transport smoke — "run `main.lua`, get bytes", with the blob-decoded check
 
 **Scope.** P4's reviewed deliverable: one fixture, the real params builder, the real materialized
-tree, the real `pandoc`, through `render_qmd_to_pandoc`. Plus the Finding 5(a) cheap check that the
-blob actually decoded.
+tree, the real `pandoc`, through `render_qmd_to_pandoc`. Plus a cheap check that the blob
+actually decoded.
 
 **Files** (all ours):
 - `crates/quarto-core/tests/integration/pandoc_transport.rs` — the smoke.
@@ -1060,7 +1043,7 @@ blob actually decoded.
 **Fixture constraint, forced by Task 8's prerequisite.** With only the **placeholder** shim in place,
 any wire-format custom node reaching `main.lua` keeps its original semantic classes and Q1's
 class-keyed dispatcher **will** fire on it in `quarto_normalize_filters`, producing a mis-rendered
-but non-crashing document (P5's round-4 correction). So `smoke.qmd` must contain **no** construct
+but non-crashing document. So `smoke.qmd` must contain **no** construct
 that Q2's sugar transforms turn into a `CustomNode` — no callout, no tabset, no theorem/proof, no
 `FloatRefTarget`-eligible figure with an id. A heading, prose, a plain code block and a plain image
 are safe. A `// P4 CONSTRAINT:` comment in the fixture should say why, so P5 knows it is free to
@@ -1096,30 +1079,28 @@ round-tripped; stderr is quiet.
 
 ### Refactor-induced vacuity check
 
-- **"Get bytes" is precisely the assertion the measured failure mode satisfies**, which is the plan's
-  own Finding 5(a) point. A docx is produced by `pandoc -f json -t docx` with **no** `-L` at all, and
+- **"Get bytes" is precisely the assertion the measured failure mode satisfies.** A docx is
+  produced by `pandoc -f json -t docx` with **no** `-L` at all, and
   (measured) can also be produced with a params blob whose every key silently decoded to absent. So
   T11.1's byte and ZIP assertions are **shape/gating only** — they confirm transport, not that the
   vendored Lua configured anything. **T11.2 carries the whole discriminator for this task**, and it
   must not be dropped as redundant with T3.4: T3.4 binds the codec against a hand-written blob; T11.2
   binds the *built* blob through the *production* entry point.
-- **T11.2's mechanism — decided 2026-09-18 with Gordon: a standalone probe `-L` filter.** Finding
-  5(a) had said "the shim asserts one sentinel param round-trips; the transport smoke checks it",
-  but the shim is P5's and does not exist at Task 11 (Findings item 6). The probe works because
-  **`init.lua` defines `param()` from `--data-dir` for every filter in the chain**, verified by
-  reproduction — so it needs no `main.lua` state and, critically, **no dependency on P5**. Two
-  things the implementer must preserve: the probe is a *test* artifact and must not be added to the
+- **T11.2's mechanism is a standalone probe `-L` filter.** It works because **`init.lua` defines
+  `param()` from `--data-dir` for every filter in the chain**, verified by reproduction — so it
+  needs no `main.lua` state and, critically, **no dependency on P5's shim existing**. Two things
+  the implementer must preserve: the probe is a *test* artifact and must not be added to the
   placeholder shim file Task 8 creates (keeping P5's inherited production file free of assertions
   it did not write); and the probe must write its observation out (a path from the env) rather than
   `assert`ing inside Lua, because a Lua-side `assert` surfaces as a pandoc nonzero exit that
   Task 10's diagnostic would attribute to the wrong cause.
 - **The CLI end-to-end verification CLAUDE.md requires is not available to P4.**
   `cargo run --bin q2 -- render smoke.qmd --to docx` is rejected by the format check at
-  `crates/quarto/src/commands/render.rs:680-684`, and relaxing it is **P7's** checklist item. P4's
-  highest-fidelity entry point is therefore `render_qmd_to_pandoc` in-process. Per CLAUDE.md's own
-  instruction, state this explicitly on completion: *"Tests pass, including a real `pandoc`
-  subprocess against the vendored Lua; I did not verify through the `q2` binary, because the CLI
-  format gate that admits docx is P7's."* See Findings for Gordon, item 10.
+  `crates/quarto/src/commands/render.rs:680-684`; relaxing it is **P7-foundation's** checklist
+  item. P4's highest-fidelity entry point is therefore `render_qmd_to_pandoc` in-process. Per
+  CLAUDE.md's own instruction, state this explicitly on completion: *"Tests pass, including a
+  real `pandoc` subprocess against the vendored Lua; I did not verify through the `q2` binary,
+  because the CLI format gate that admits docx is P7-foundation's."*
 
 ---
 
@@ -1168,8 +1149,8 @@ against the installed pandoc is explicitly rejected as environment-measuring.
 - **Bound mechanically, not README-only** — T1.4 (the new repo-level `vendored-pandoc-filters` rule,
   negative direction, in `tempfile`), T1.5 (positive direction against the real tree), T8.6 (the
   `main.lua` patch and the shim file specifically). This is the answer to "is the README the whole
-  mitigation": it is not, deliberately, because the plan's own Finding 2 warns the shim "gets deleted
-  with the rest of the `v1.11.3` tree" on a delete-and-recopy.
+  mitigation": it is not, deliberately, because a delete-and-recopy re-vendor would otherwise
+  remove the shim file along with the rest of the `v1.11.3` tree.
 - *That the copied bytes came from tag `v1.11.3`:* **`accepted-untested`: verifying byte provenance
   needs a `git` operation against an out-of-tree checkout of quarto-cli, which is exactly the
   `external-sources/`-in-CI dependency CLAUDE.md's External Sources Policy forbids. T1.3 binds the
@@ -1212,193 +1193,16 @@ P6 Finding 5's Tabset-containing-subfloat fixture binds the effect.
 
 **11. The `include-in-header` text-inlining path.** `extractIncludeParams` embeds include-file
 **text** into the blob. Task 4 builds the keys, but the size-bound **fallback** is
-`seam deferred — undecided in the plan` (Findings for Gordon, item 9), so there is no fallback to
-test. `accepted-untested: the predicate is bound (T3.3); the behaviour past the predicate does not
-exist yet.`
+`accepted-untested` by decision — no fallback is designed, and designing one is new
+functionality this epic is not taking on. `accepted-untested: the predicate is bound (T3.3); the
+behaviour past the predicate does not exist yet.`
 
 **12. `meta.quarto_pandoc_reader_opts`.** Required in the Pandoc `Meta` (measured crash at
-`readqmd.lua:283` via `capturereaderstate.lua:9`). **No seam is specified above because ownership is
-unassigned** — see Findings for Gordon, item 3. If it lands in P4, the seam is:
-`U` — assert the serialized `Meta` carries a `quarto_pandoc_reader_opts` `MetaMap`; revert the insert
-→ RED; plus `L` — omit it → pandoc exit 83 with `stderr.contains("readqmd.lua")` (measured).
+`readqmd.lua:283` via `capturereaderstate.lua:9`). This is **P2 Task 7's** seam, not P4's — see
+the AST-side note in Task 4.
 
 **13. `pandoc-api-version` agreement.** `accepted-untested: no bump is required for the pinned pandoc
 3.10, and pampa's own oracle tests already exercise the value against a real pandoc. The anchor
 correction (two hardcoded sites, `json.rs:1869` and `:4248-4252`) is recorded in Task 9 so a future
 bump does not silently miss the live path.`
 
----
-
-## Findings for Gordon
-
-Eleven items. Items 1-4 were **blockers for P4's own reviewed deliverable** (the transport smoke
-would not run without a decision on each); 5-7 change how a test must be written; 8-11 are precision
-corrections worth a look before dispatch. All were reproduced against `quarto-cli` tag `v1.11.3` with
-`pandoc 3.8.1`, or read against this worktree.
-
-**Status of these findings (updated 2026-09-18).** Gordon decided the five that needed a decision:
-**item 1** (P4 owns the `language` param — confirmed), **item 3** (`quarto_pandoc_reader_opts` is
-**P2's**, landed as P2 Task 7), **item 6** (the standalone probe filter, option a), **item 9**
-(the env-block size bound stays `accepted-untested` — a final decision, not a deferral), and
-**item 10** (P4's completion bar is the honest in-process-only one). Items 2, 4, 5, 7, 8 and 11
-never needed a decision — each is a verified correction with one answer, already written into the
-tasks. **Nothing in this list blocks P4 any more.**
-
-1. **The `language` param is required for docx and is currently attributed to P7.** `main.lua`'s
-   `quarto_layout_filters` calls `manuscript()` at construction time (`main.lua:630-634`), and
-   `layout/manuscript.lua:29-30` does `local language = param("language", nil)` then immediately
-   indexes it — for `isWordProcessorOutput()` and `isLatexOutput()`, i.e. docx. Without it:
-   `manuscript.lua:30: attempt to index a nil value (local 'language')`, pandoc exit 83.
-   `modules/authors.lua:854-864` then needs `title-block-author-single`/`-plural` from the same bag.
-   The key is injected upstream by `pandoc.ts:488`
-   (`formatFilterParams["language"] = options.format.language;`) — i.e. through the **caller-supplied
-   `filterParams`** row, which P4's table hands to P7 with "P4 just needs to plumb an extension
-   point." It is not format-specific and not optional. **P4's required list (items 1-5) omits it, and
-   P4's transport smoke cannot pass without it.** **CONFIRMED 2026-09-18 with Gordon: P4 owns the
-   `language` param**, not P7 — it is not format-specific and not optional, so it belongs in P4's
-   required list rather than behind P7's caller-supplied `filterParams` extension point. Already
-   written into Task 4; this finding is now a record of the confirmation, not a request for one.
-   Fix as proposed, small: build the bag from Q2's own
-   `LanguageTerms` (`crates/quarto-core/src/language.rs:128`, with `iter()` `:164` and
-   `to_config_value()` `:214`); Q2 already vendors the full upstream locale set at
-   `resources/language/_language*.yml` (111 keys in `_language.yml`). Written into Task 4 as a P4
-   item, and that ownership is now confirmed (above).
-
-2. **`quarto-filters` is structurally required even though it is semantically N/A.** The plan's
-   verdict ("Q2 runs user filters itself; genuinely N/A, not a gap") is right about *semantics* and
-   wrong about *structure*: `main.lua:735` calls `inject_user_filters_at_entry_points` unconditionally,
-   and `ast/emulatedfilter.lua:45` does `for _, v in ipairs(param("quarto-filters").entryPoints) do`
-   with **no default** → nil-index crash, exit 83. P4 must emit `{"entryPoints": []}`. Written into
-   Task 4 (T4.3/T4.4). No design change — just a key the plan's own reasoning argued out of the list.
-
-3. **`meta.quarto_pandoc_reader_opts` is required in the Pandoc `Meta`, and no plan owns it.**
-   `normalize/capturereaderstate.lua:9` does
-   `readqmd.meta_to_options(meta.quarto_pandoc_reader_opts)` unconditionally, and
-   `readqmd.lua:280-286` indexes the argument → `readqmd.lua:283: attempt to index a nil value (local
-   'meta')`, exit 83. An **empty `MetaMap` suffices** (every `reader_option_keys` entry then reads
-   nil and `pandoc.ReaderOptions({})` takes defaults). In Q1 this is supplied by `qmd-reader.lua`,
-   which the research doc correctly notes "falls away" under `-f json` — the consequence was just
-   never traced. `active-filters.normalization = false` cannot substitute: that lever gates only the
-   single `normalize` entry (`main.lua:263-273`), while `normalize-capture-reader-state` is a separate
-   ungated sibling (`main.lua:275-278`).
-
-   **RESOLVED 2026-09-18, decided with Gordon: this is P2's, not P4's.** It is part of the
-   **Meta contract** — P2 owns what the wire format's Pandoc `Meta` carries (design doc §8's
-   "Meta-block contract": "P2 owns the carriage, P7 owns per-format Meta→template mapping"), and
-   this key is carriage. Landed as **P2 Task 7** (`2026-09-18-pandoc-hybrid-P2-implementation.md`),
-   which emits an empty `MetaMap` for `quarto_pandoc_reader_opts` and binds it. P4's Missing-test
-   pass item 12 seam stays as written but is now a **cross-plan guard** pointing at P2 Task 7's
-   hunk, not an unassigned one. **Consequence for P4's transport smoke:** it depends on P2 Task 7,
-   which is a new edge P4's Prerequisite list did not have — P4 already depends on P2 per the
-   epic's graph, so this is within the graph, but it is a dependency on a *specific* P2 task and is
-   named as such.
-
-4. **`--data-dir` alone does not make `init.lua` work, and "two vendoring roots" must be "one
-   materialized root".** Two mechanisms the plan's Finding 1 does not mention:
-   (a) `init.lua:123-132` puts the datadir on `package.path` only if `QUARTO_SHARE_PATH` is set;
-   without it, `init.lua:149`'s `require '_format'` fails and pandoc refuses every filter
-   (`Couldn't load 'init.lua': … module '_format' not found`, exit 83 — reproduced).
-   (b) `init.lua:257` appends `PANDOC_STATE.user_data_dir .. '/../../filters/?.lua'` — so the filters
-   tree must sit exactly two levels above the data-dir. The materialized layout is therefore forced
-   to `<share>/pandoc/datadir/` + `<share>/filters/` under **one** root, not two independent
-   `ResourceBundle` temp dirs. Written into Tasks 1 and 2. This is a refinement of a frozen finding,
-   not a reversal — but it changes the `ResourceBundle` usage the plan prescribes.
-
-5. **Finding 5(a)'s "silently fails to decode — and this is not a crash" is payload-dependent, and
-   usually *is* a crash.** Reproduced, all pandoc exit 83: env var unset →
-   `_base64.lua:123 attempt to index a nil value (local 'b64')`; non-base64 garbage →
-   `_base64.lua:140 attempt to perform arithmetic on a nil value`; valid base64 of non-JSON →
-   `_json.lua:212`. The mechanism is `_base64.lua:112-121`, which builds a pattern from the decoder's
-   own alphabet and **strips** out-of-alphabet characters (`b64:gsub(pattern, '')`) rather than
-   rejecting them — so `URL_SAFE` input shifts the byte stream and *usually* fails JSON parsing, but
-   for at least one payload I reproduced the silent outcome the Finding describes (exit 0, every key
-   absent). Separately, `STANDARD_NO_PAD` is **indistinguishable** whenever the payload length is a
-   multiple of 3 (reproduced: a 27-byte payload decoded correctly under both). **The decision is
-   unaffected and in fact better justified** — a nondeterministic failure mode is worse than a silent
-   one. But a test written to the stated characterization would be flaky, so Task 3 binds the
-   *encoder's alphabet and padding* at the `U` tier and the *positive* round-trip at the `L` tier,
-   with the fixture length constrained to `len % 3 != 0`. Flagging because the Finding's text will
-   mislead the next reader.
-
-6. **Finding 5(a)'s named sentinel mechanism belongs to P5, and P4 runs first.** The text is "the
-   shim asserts one sentinel param round-trips; the transport smoke checks it" — but P4 has no shim.
-   Two P4-ownable alternatives, both verified viable: (a) a standalone probe `-L` filter reading
-   `param("quarto2-sentinel")` — works because `init.lua` defines `param()` from `--data-dir` for
-   *every* filter in the chain, so no `main.lua` state is needed (I used exactly this); (b) have the
-   placeholder shim file (Task 8) carry the assertion, which P5 then inherits.
-
-   **RESOLVED 2026-09-18, decided with Gordon: option (a), the standalone probe `-L` filter.** This
-   is the mechanism the finding was already written from (it is what I used to reproduce the
-   behaviour), so T11.2's assertion needed no change — only its "mechanism **undecided**" note and
-   the `seam deferred` line are gone. Two properties worth keeping in view: (a) works because
-   `init.lua` defines `param()` from `--data-dir` for **every** filter in the chain, so the probe
-   needs no `main.lua` state and therefore **no dependency on P5's shim existing** — which is the
-   whole reason it suits P4, running first; and it keeps test scaffolding out of the placeholder
-   shim file (Task 8), so P5 inherits a clean production file rather than an assertion it did not
-   write. Rejected (b) is recorded here so it is not re-proposed.
-
-7. **`crossref-<type>-prefix` cannot be sourced "from `RefTypeRegistry`" as the checklist says.**
-   `RefTypeDef` (`registry.rs:43-58`) has exactly two string fields: `ref_type` `:46` (the *id*
-   prefix, e.g. `"fig"`) and `kind` `:50` (the display name) — **no display-prefix field**. And
-   `resources/language/_language.yml` carries `crossref-<t>-prefix` only for `ch` `:96`, `apx` `:97`,
-   `sec` `:98`, `eq` `:99`. So the implementable mechanism is registry (for *which* types) ×
-   `LanguageTerms` (for *both* strings, `-prefix` falling back to `-title`, mirroring
-   `filters.ts:484`'s own derivation). Two incidental blockers: `RefTypeRegistry::entries` is private
-   and the type exposes **no iterator** (a new `pub fn iter` is needed), and
-   `localize_builtin_display_names` (`registry.rs:115-127`) already consults
-   `crossref-<t>-prefix` as a *fallback for the display name* — the opposite direction — so the two
-   must not be conflated. Written into Task 5. No decision needed unless you disagree with the
-   derivation rule.
-
-8. **`json.rs:1869` is not the live `pandoc-api-version` site.** The value `[1, 23, 1]` is hardcoded
-   twice: at `:1869` (a struct-literal field in the legacy `write_pandoc(...) -> Value` path) and
-   again in the *streaming* writer at `:4248-4252` (`w.key("pandoc-api-version")` then three
-   `w.u64_value` calls). `write_with_config` `:1881` and `write` `:1892` both go through the streaming
-   writer, so the conditional bump the plan assigns P4 would have no effect on real output if it
-   touched only `:1869`. Recorded in Task 9; no bump is needed for pandoc 3.10 today.
-
-9. **Finding 5(b)'s env-block size bound — CLOSED 2026-09-18 as `accepted-untested`, by decision.**
-   The plan had it as still-open (relabelled in round 4). Task 3 binds the *predicate*
-   (`params_blob_exceeds_platform_limit`); there is no fallback behaviour to test, so the
-   `include-in-header`-past-the-limit path is `accepted-untested` **by construction and now also by
-   choice**. **Gordon's decision: leave it that way for now** — no fallback is designed, and
-   designing one (temp file + path param past N bytes, or an accepted limitation with a `Q-18-*`
-   diagnostic) is new functionality this epic is not taking on. **This is a final decision, not a
-   deferral:** a future reader should not re-raise it as an open question. If a real document ever
-   exceeds the platform limit, the symptom is a `pandoc` exec failure surfaced by Task 10's
-   nonzero-exit diagnostic, which is a bad-but-visible outcome rather than a silent one.
-
-10. **P4 cannot do the CLI end-to-end verification CLAUDE.md requires.**
-    `crates/quarto/src/commands/render.rs:680-684` still rejects docx, and relaxing it is **P7's**
-    checklist item (design §14 even adds a warning to P7 for the side effect). So
-    `cargo run --bin q2 -- render x.qmd --to docx` is unavailable, and P4's highest-fidelity entry
-    point is `render_qmd_to_pandoc` in-process plus a real `pandoc` subprocess. I have written the
-    explicit honest-status sentence into Task 11.
-
-    **RESOLVED 2026-09-18, decided with Gordon: accept the honest in-process-only completion bar.**
-    Task 11's honest-status sentence **is** P4's completion bar, and P7's one-line format-gate
-    relaxation **stays in P7** (P7 Task 3). So P4 completes with: `render_qmd_to_pandoc` in-process
-    plus a real `pandoc` subprocess, and an explicit written statement that no
-    `cargo run --bin q2 -- render … --to docx` was exercised because that path does not exist yet.
-    This is exactly the "Tests pass, I did not verify the real render path" status CLAUDE.md's
-    end-to-end section names as valid and honest, and the alternative — pulling P7's relaxation
-    forward — would have put a user-visible format gate behind a plan whose own review bar is a
-    transport smoke. **Consequence to carry forward:** the first *genuine* CLI end-to-end
-    verification for the Pandoc leg happens in **P7**, not here; P7's companion already owns that
-    (its `E` tier and its end-to-end coverage map).
-
-11. **Three smaller reconciliations, no decision needed unless one surprises you.**
-    (a) **`cargo xtask pandoc-check` already exists** — `crates/xtask/src/pandoc_check.rs:45`, wired
-    at `main.rs:232`/`:417`, reading `PANDOC_ORACLE_MIN_VERSION = (3, 6)` and
-    `PANDOC_ORACLE_MAX_VERSION = (3, 10)` out of `crates/pampa/tests/integration/test.rs:117-118`.
-    Task 7's `verify` preflight must reconcile with it, not become a third source of truth. Note
-    **3.10 is exactly pampa's oracle `MAX_VERSION`**, so the plan's bump lands on the last value that
-    keeps the four oracle tests running; any later bump also needs that constant raised.
-    (b) **`dev_setup.rs:295`'s floor is an inline `(3, 6)` literal, not a constant**, and
-    `check_pandoc()` returns `()` and only `println!`s — it cannot fail (`:286-292`, `:302-306`). The
-    plan's "promoted to a hard failure" is therefore a signature change, not a one-liner.
-    (c) **`Q-11-1` is not unclaimed.** Finding 4 calls it "currently unclaimed by any actual emitter";
-    it has two, at `crates/pampa/src/lua/diagnostics.rs:379` and `:386`. That makes reuse *more*
-    attractive (the channel is live), but the Finding's premise is wrong. Also: subsystem numbers
-    **4, 6 and 8 are free** as well as 18 — the plan's reasoning for 18 stands, just noting the gap
-    set is larger than "4/6/8" implies it examined.
