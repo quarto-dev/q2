@@ -49,8 +49,9 @@ test.describe('Full-text search', () => {
     const localId = await seedProjectInBrowser(page, indexDocId, serverUrl);
     await page.goto(`/#/p/${localId}/file/index.qmd`);
 
-    // Wait for the project to load (preview renders the home page).
-    const previewFrame = page.frameLocator('iframe.preview-active');
+    // Wait for the project to load (preview renders the home page in the
+    // q2-preview iframe — the default renderer for plain documents).
+    const previewFrame = page.frameLocator('iframe[src*="q2-preview.html"]');
     await expect(previewFrame.locator('body')).toContainText('homepage', { timeout: 30000 });
 
     const searchBox = page.getByLabel('Search files');

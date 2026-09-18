@@ -7,7 +7,6 @@ import type { ActorIdentity, CaptureRef } from '@quarto/preview-runtime';
 import {
   parseQmdToAstWithAttribution,
   renderPageInProjectWithAttribution,
-  renderPageForPreview,
   isWasmReady,
   incrementalWriteQmd,
   applyNodeEdit,
@@ -249,17 +248,6 @@ async function doRender(
     };
   }
 
-  // Convergence (bd-vwp4y5ku): `format: revealjs` renders through the
-  // q2-preview pipeline too — via `renderPageForPreview`, the same WASM
-  // entry the `q2 preview` SPA uses. That entry applies `quarto preview`'s
-  // format substitution (`revealjs` → the `q2-slides` pseudo-format), so
-  // the full transform pipeline runs (incl. `CompileThemeCssStage`) and
-  // the returned AST carries the document's compiled reveal theme +
-  // `theme_fingerprint`. Without it, revealjs fell through to the
-  // parse-only path below — a raw AST the hand-rolled deck rendered with
-  // reveal's stock `white.css` (uppercase headings, centered content).
-  const isSlidesPreview = options.format === 'revealjs';
-
   if (usesPreviewPipeline(options.format)) {
     if (!options.documentPath) {
       return {
@@ -269,20 +257,31 @@ async function doRender(
       };
     }
 
-    // q2-preview threads author attribution through
-    // `renderPageInProjectWithAttribution` (`attributionJson` is produced
-    // by `useAttribution`; `null` is byte-identical to the no-attribution
-    // path). The revealjs slides path uses `renderPageForPreview`, which
-    // performs the preview format substitution but does not yet thread
-    // attribution — slides have no attribution overlay today (follow-up).
-    const result = isSlidesPreview
-      ? await renderPageForPreview(options.documentPath, undefined, options.captureGzJson)
-      : await renderPageInProjectWithAttribution(
-          options.documentPath,
-          undefined,
-          options.attributionJson,
-          options.captureGzJson,
-        );
+    // One entry point for every preview-pipeline format (bd-kltzdhle, D3):
+    // `renderPageInProjectWithAttribution` with `preferPreviewFormat = true`.
+    //
+    // The WASM re-detects the format from the file's own front matter, so
+    // the flag is what makes the router's decision stick: a plain document
+    // (no `format:` key, which the WASM reports as `html`) reaches us as
+    // `q2-preview` from `getQ2Format`, and the flag applies the same
+    // `html → q2-preview` substitution inside the pipeline so the response
+    // carries `ast_json` rather than `html`. The same flag maps
+    // `revealjs → q2-slides` (convergence, bd-vwp4y5ku): the full transform
+    // pipeline runs (incl. `CompileThemeCssStage`) and the returned AST
+    // carries the compiled reveal theme + `theme_fingerprint`. Previously
+    // the revealjs branch went through the SPA-only `renderPageForPreview`,
+    // which hard-codes the native-preview render host (suppressing Q-5-12)
+    // and takes no attribution; decks now get both.
+    //
+    // `attributionJson` is produced by `useAttribution`; `null` is
+    // byte-identical to the no-attribution path.
+    const result = await renderPageInProjectWithAttribution(
+      options.documentPath,
+      undefined,
+      options.attributionJson,
+      options.captureGzJson,
+      true,
+    );
     const allDiagnostics: Diagnostic[] = [
       ...(result.diagnostics ?? []),
       ...(result.warnings ?? []),

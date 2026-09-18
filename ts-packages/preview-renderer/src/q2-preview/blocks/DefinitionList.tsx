@@ -8,9 +8,10 @@ import type {
 } from '../../framework';
 import { PreviewContext } from '../PreviewContext';
 import { isLeadingBlockBorrowable } from './listBorrow';
+import { PlainHost } from '../commentAnchor';
 
 /**
- * DefinitionList → `<dl><dt>term</dt><dd>def</dd>...</dl>`. Pandoc
+ * DefinitionList → `<dl><dt>term</dt><dd>def</PlainHost>...</dl>`. Pandoc
  * writes one `<dt>` per term and one `<dd>` per definition; multiple
  * definitions for the same term yield multiple sibling `<dd>`s
  * (no wrapping element per item, matching Pandoc's HTML writer).
@@ -59,7 +60,7 @@ export const DefinitionList = (args: NodeArgs<DefinitionListBlock>) => {
                         ? { 'data-block-pool-id': borrowPoolId, tabIndex: -1 as const }
                         : {};
                     return (
-                        <dd key={`dd-${i}-${k}`} {...ddProps}>
+                        <PlainHost as="dd" key={`dd--`} {...ddProps}>
                             {blocks.map((b, m) => (
                                 <Node
                                     key={m}
@@ -76,7 +77,7 @@ export const DefinitionList = (args: NodeArgs<DefinitionListBlock>) => {
                                     }}
                                 />
                             ))}
-                        </dd>
+                        </PlainHost>
                     );
                 });
                 return [dt, ...dds] as React.ReactNode[];

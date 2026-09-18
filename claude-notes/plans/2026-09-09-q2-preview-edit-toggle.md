@@ -1,5 +1,11 @@
 # hub-client `q2-preview`: editable / read-only toggle in the bottom status bar
 
+> **Note (2026-09-09, bd-kltzdhle):** the "plain `format: html` preview" this
+> plan refers to is no longer hub-client's default. q2-preview is the default
+> renderer for html documents; the full-DOM MorphIframe path is now reached only
+> with `format: q2-html-render` (or for non-html formats). See
+> `2026-09-09-hub-client-default-q2-preview.md`.
+
 **Strand:** bd-ew0vak6b
 **Status:** implemented 2026-09-09 (commit `93b146c`); PR #667 open,
 pending CI and review.

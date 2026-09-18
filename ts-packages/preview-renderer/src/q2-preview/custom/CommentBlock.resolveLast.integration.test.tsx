@@ -104,30 +104,31 @@ function para(container: HTMLElement): HTMLElement {
     return p as HTMLElement;
 }
 
-/** The CommentWrapper host div (position: relative) around the paragraph. */
-function wrapper(container: HTMLElement): HTMLElement {
-    const host = para(container).parentElement as HTMLElement;
-    expect(host.style.position).toBe('relative');
-    return host;
+// The chrome is portalled into the body-level overlay layer (bd-q2wqj24c),
+// so bubble queries go through document.body; `container` stays in the
+// helper signatures for symmetry with `para()`.
+function chrome(_container: HTMLElement): HTMLElement | null {
+    return document.body.querySelector('[data-q2-owns-focus]');
 }
 
-function chrome(container: HTMLElement): HTMLElement | null {
-    return container.querySelector('[data-q2-owns-focus]');
+/** The pointer moves off the block onto plain page background. */
+function leaveBlock() {
+    fireEvent.mouseMove(document.body, { clientX: 10, clientY: 900 });
 }
 
-function bubble(container: HTMLElement): HTMLElement {
-    const b = container.querySelector('.q2-comment-bubble');
+function bubble(_container: HTMLElement): HTMLElement {
+    const b = document.body.querySelector('.q2-comment-bubble');
     expect(b).not.toBeNull();
     return b as HTMLElement;
 }
 
-function resolveButtons(container: HTMLElement): HTMLElement[] {
-    return [...container.querySelectorAll<HTMLElement>('[title="Resolve comment"]')];
+function resolveButtons(_container: HTMLElement): HTMLElement[] {
+    return [...document.body.querySelectorAll<HTMLElement>('[title="Resolve comment"]')];
 }
 
-/** The wrapper glows iff its box-shadow is something other than `none`. */
-function wrapperGlows(container: HTMLElement): boolean {
-    return wrapper(container).style.boxShadow !== 'none';
+/** The block glows iff the overlay glow element is mounted in the layer. */
+function wrapperGlows(_container: HTMLElement): boolean {
+    return document.body.querySelector('[data-q2-comment-layer] [data-q2-comment-glow]') !== null;
 }
 
 /** Stub an element's layout rect (jsdom reports all-zero rects). */
@@ -171,7 +172,7 @@ function addFirstCommentViaPlus(
 ) {
     fireEvent.mouseMove(para(container), { clientX: 10, clientY: 5 });
     fireEvent.click(bubble(container));
-    const input = container.querySelector('textarea.q2-comment-input') as HTMLTextAreaElement;
+    const input = document.body.querySelector('textarea.q2-comment-input') as HTMLTextAreaElement;
     expect(input).not.toBeNull();
     fireEvent.change(input, { target: { value: text } });
     fireEvent.keyDown(input, { key: 'Enter' });
@@ -179,7 +180,7 @@ function addFirstCommentViaPlus(
     expect(commit.mock.calls[0][1].c.filter(isCommentSpan)).toHaveLength(1);
     commit.mockClear();
     rerenderWith([text]);
-    expect(container.querySelector('textarea.q2-comment-input')).toBeNull();
+    expect(document.body.querySelector('textarea.q2-comment-input')).toBeNull();
     expect(resolveButtons(container)).toHaveLength(1);
 }
 
@@ -193,7 +194,7 @@ describe('CommentBlock after resolving the last comment (bd-bpt089zw)', () => {
 
         // Pointer leaves the block before the resolve so hover can't keep
         // the chrome alive on its own.
-        fireEvent.mouseLeave(wrapper(container));
+        leaveBlock();
         expect(resolveAt(container, commitSubtreeEdit, 0)).toEqual([]);
 
         rerenderWith([]);
@@ -236,7 +237,7 @@ describe('CommentBlock after resolving the last comment (bd-bpt089zw)', () => {
         resolveAt(container, commitSubtreeEdit, 0);
         rerenderWith([]);
 
-        fireEvent.mouseLeave(wrapper(container));
+        leaveBlock();
         expect(wrapperGlows(container)).toBe(false);
     });
 
@@ -262,13 +263,13 @@ describe('CommentBlock after resolving the last comment (bd-bpt089zw)', () => {
         expect(bubble(container).textContent).toBe('+');
 
         fireEvent.click(bubble(container));
-        expect(container.querySelector('textarea.q2-comment-input')).not.toBeNull();
+        expect(document.body.querySelector('textarea.q2-comment-input')).not.toBeNull();
 
         // A host re-render with no comment (nothing committed yet) must not
         // collapse the open input: the "empty + expanded" state is legitimate
         // while the input is open.
         rerenderWith([]);
-        expect(container.querySelector('textarea.q2-comment-input')).not.toBeNull();
+        expect(document.body.querySelector('textarea.q2-comment-input')).not.toBeNull();
         expect(chrome(container)).not.toBeNull();
     });
 

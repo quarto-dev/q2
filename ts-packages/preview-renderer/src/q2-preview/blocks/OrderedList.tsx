@@ -4,6 +4,7 @@ import type { NodeArgs, OrderedListBlock } from '../../framework';
 import { IncrementalContext } from '../IncrementalContext';
 import { PreviewContext } from '../PreviewContext';
 import { isLeadingBlockBorrowable } from './listBorrow';
+import { PlainHost } from '../commentAnchor';
 import { makeTaskToggle, TaskItemBlocks, taskItemChecked } from './taskList';
 
 const NOOP = () => {};
@@ -50,7 +51,7 @@ export const OrderedList = (args: NodeArgs<OrderedListBlock>) => {
         return (
             <ol {...olProps} {...dataLocProps(args.node)}>
                 {args.node.c[1].map((item, i) => (
-                    <li key={i} {...liItemAttrProps(args.node.itemAttr?.[i], incremental)}>
+                    <PlainHost as="li" key={i} {...liItemAttrProps(args.node.itemAttr?.[i], incremental)}>
                         {item.map((block, j) => (
                             <Node
                                 key={`${i}:${j}`}
@@ -59,7 +60,7 @@ export const OrderedList = (args: NodeArgs<OrderedListBlock>) => {
                                 setLocalAst={NOOP}
                             />
                         ))}
-                    </li>
+                    </PlainHost>
                 ))}
             </ol>
         );
@@ -92,18 +93,18 @@ export const OrderedList = (args: NodeArgs<OrderedListBlock>) => {
                 const checked = taskItemChecked(item);
                 if (checked !== null) {
                     return (
-                        <li key={i} {...itemAttrProps} {...liProps}>
+                        <PlainHost as="li" key={i} {...itemAttrProps} {...liProps}>
                             <TaskItemBlocks
                                 item={item}
                                 checked={checked}
                                 onToggle={makeTaskToggle(ctx, resolved, i)}
                                 onNavigateToDocument={args.onNavigateToDocument}
                             />
-                        </li>
+                        </PlainHost>
                     );
                 }
                 return (
-                    <li key={i} {...itemAttrProps} {...liProps}>
+                    <PlainHost as="li" key={i} {...itemAttrProps} {...liProps}>
                         {item.map((block, j) => (
                             <Node
                                 key={`${i}:${j}`}
@@ -112,7 +113,7 @@ export const OrderedList = (args: NodeArgs<OrderedListBlock>) => {
                                 setLocalAst={NOOP}
                             />
                         ))}
-                    </li>
+                    </PlainHost>
                 );
             })}
         </ol>

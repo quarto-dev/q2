@@ -45,9 +45,12 @@ WASM rebuild is needed for a changelog-only edit.
 - [`9f7efd8a9`](https://github.com/quarto-dev/q2/commits/9f7efd8a9): Custom render-components (user TSX overrides) and the code-copy button now work in the sandboxed preview.
 - [`0d5967f2a`](https://github.com/quarto-dev/q2/commits/0d5967f2a): The sandboxed preview now supports editor-preview scroll sync, click-to-source navigation, document links, slide navigation, and live editing — matching the standard preview.
 - [`0f17a8b2c`](https://github.com/quarto-dev/q2/commits/0f17a8b2c): q2-preview task lists: the checkbox and its item text render on one line again, and loose (blank-line-separated) task items now get checkboxes too
+- [`8f2e5802`](https://github.com/quarto-dev/q2/commits/8f2e5802): Comment bubbles in the live preview no longer wrap each block in an extra element, so theme styling of blockquote headings, callout bodies, list items and tabsets now matches the rendered site; bubbles keep their font on slide decks and are slightly larger there
+- [`42d91ad9`](https://github.com/quarto-dev/q2/commits/42d91ad9): Draft pages (`draft: true`) now show the "Draft" banner in the live preview, localized like the rendered site
 
 ### 2026-09-09
 
+- [`6d0aa438`](https://github.com/quarto-dev/q2/commits/6d0aa438): The live preview now renders every plain document (no `format:` key, or `format: html`) through the q2-preview renderer, the same one `q2 preview` uses, so comments, the Edit pill, Authors, and the printable version are available without opting in; add `format: q2-html-render` to a document to keep the previous full-page HTML preview instead
 - [`93b146c`](https://github.com/quarto-dev/q2/commits/93b146c): Edit pill in the document bottom bar turns q2-preview block editing on/off (off makes links plain links); the choice persists
 - [`0242ab91`](https://github.com/quarto-dev/q2/commits/0242ab91): Resolving the last comment on a block in the q2-preview no longer leaves an empty bubble behind or a block glow that never clears
 

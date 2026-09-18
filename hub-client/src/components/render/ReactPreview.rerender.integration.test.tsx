@@ -12,9 +12,11 @@
  * Mechanism: a sibling edit produces a fresh `fileContents` Map with the
  * SAME active-document `content`. If the re-render effect depends on
  * `fileContents`, changing only the Map identity must re-invoke the WASM
- * render (here `renderPageForPreview` for the revealjs slides path). Before
- * the fix the effect omitted `fileContents`, so the second render never
- * fired — the regression this test guards.
+ * render (`renderPageInProjectWithAttribution` with the preview-format
+ * substitution requested — the entry every preview-pipeline format uses,
+ * revealjs included, since bd-kltzdhle). Before the fix the effect omitted
+ * `fileContents`, so the second render never fired — the regression this
+ * test guards.
  *
  * @vitest-environment jsdom
  */
@@ -23,11 +25,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, waitFor } from '@testing-library/react';
 import React from 'react';
 
-// --- WASM renderer: spies. renderPageForPreview is the entry the revealjs
-//     slides path uses (doRender's isSlidesPreview branch). `vi.hoisted` so
-//     the (hoisted) `vi.mock` factory below can reference the spy. ---
-const { renderPageForPreview } = vi.hoisted(() => ({
-  renderPageForPreview: vi.fn(async () => ({
+// --- WASM renderer: spies. `vi.hoisted` so the (hoisted) `vi.mock`
+//     factory below can reference them. `renderPageForPreview` is the
+//     q2-preview SPA's entry point and must NOT be called from hub-client
+//     (it hard-codes the native-preview render host). ---
+const { renderPageInProjectWithAttribution, renderPageForPreview } = vi.hoisted(() => ({
+  renderPageForPreview: vi.fn(),
+  renderPageInProjectWithAttribution: vi.fn(async () => ({
     success: true,
     ast_json: '{"pandoc-api-version":[1,23,1],"meta":{},"blocks":[]}',
     untransformed_ast_json: '{"pandoc-api-version":[1,23,1],"meta":{},"blocks":[]}',
@@ -39,7 +43,7 @@ const { renderPageForPreview } = vi.hoisted(() => ({
 
 vi.mock('@quarto/preview-runtime', () => ({
   renderPageForPreview,
-  renderPageInProjectWithAttribution: vi.fn(),
+  renderPageInProjectWithAttribution,
   parseQmdToAstWithAttribution: vi.fn(async () => ({ success: true, ast: '{}', diagnostics: [] })),
   isWasmReady: () => true,
   incrementalWriteQmd: vi.fn(),
@@ -89,6 +93,7 @@ function baseProps(fileContents: Map<string, string>) {
 
 describe('ReactPreview re-render on sibling change (bd-4jjckvwt)', () => {
   beforeEach(() => {
+    renderPageInProjectWithAttribution.mockClear();
     renderPageForPreview.mockClear();
   });
 
@@ -103,8 +108,12 @@ describe('ReactPreview re-render on sibling change (bd-4jjckvwt)', () => {
 
     const { rerender } = render(<ReactPreview {...props} />);
 
-    // Mount render fires once.
-    await waitFor(() => expect(renderPageForPreview).toHaveBeenCalledTimes(1));
+    // Mount render fires once — through the hub-client entry point with
+    // the preview-format substitution requested (5th arg), never through
+    // the SPA-only `renderPageForPreview` (bd-kltzdhle, D3).
+    await waitFor(() => expect(renderPageInProjectWithAttribution).toHaveBeenCalledTimes(1));
+    expect(renderPageInProjectWithAttribution.mock.calls[0][4]).toBe(true);
+    expect(renderPageForPreview).not.toHaveBeenCalled();
 
     // A sibling edit: `_brand.yml` changed → App.tsx mints a NEW Map
     // identity. The active document's `content` is unchanged; only the
@@ -118,6 +127,6 @@ describe('ReactPreview re-render on sibling change (bd-4jjckvwt)', () => {
 
     // The deck must re-render (→ recompile theme CSS with the new brand).
     // Pre-fix the effect omitted `fileContents`, so this never fired.
-    await waitFor(() => expect(renderPageForPreview).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(renderPageInProjectWithAttribution).toHaveBeenCalledTimes(2));
   });
 });

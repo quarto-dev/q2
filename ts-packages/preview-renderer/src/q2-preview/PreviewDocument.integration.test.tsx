@@ -827,3 +827,51 @@ describe('PreviewDocument chrome injection (Phase F.2)', () => {
         expect(container.querySelector('footer.footer')).toBeNull();
     });
 });
+
+describe('PreviewDocument draft alert (bd-3cpv7dah)', () => {
+    // `DraftAlertTransform` publishes the localized label at
+    // `meta.rendered.draft-alert-text` for `draft: true` pages (it runs in
+    // the q2-preview pipeline; only the template markup was render-only).
+    // The preview mirrors template.rs: the banner is the first thing in
+    // the body, BEFORE the site header, with the icon as an `<i>` sibling
+    // followed by a bare text node — exactly Q1's markup.
+    const NAVBAR = '<nav class="navbar"><span>site</span></nav>';
+
+    it('renders Q1\'s banner markup before the header when the label is present', () => {
+        const { container } = mount({
+            rendered: mm({
+                'draft-alert-text': ms('Borrador'),
+                navigation: mm({ navbar: ms(NAVBAR) }),
+            }),
+        });
+        const banner = container.querySelector('div#quarto-draft-alert');
+        expect(banner).not.toBeNull();
+        expect(banner!.className).toBe('alert alert-warning');
+        expect(banner!.innerHTML).toBe('<i class="bi bi-pencil-square"></i>Borrador');
+
+        const header = container.querySelector('header#quarto-header');
+        expect(header).not.toBeNull();
+        // Banner precedes the header (Q1: insertBefore(header.firstChild);
+        // Q2 template: the banner sits directly above `$quarto-header()$`).
+        expect(
+            banner!.compareDocumentPosition(header!) & Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+    });
+
+    it('renders the banner on a page with no site header at all', () => {
+        const { container } = mount({
+            rendered: mm({ 'draft-alert-text': ms('Draft') }),
+        });
+        const banner = container.querySelector('div#quarto-draft-alert.alert.alert-warning');
+        expect(banner).not.toBeNull();
+        expect(banner!.textContent).toBe('Draft');
+        expect(container.querySelector('header#quarto-header')).toBeNull();
+    });
+
+    it('renders no banner when the label is absent (non-draft page)', () => {
+        const { container } = mount({
+            rendered: mm({ navigation: mm({ navbar: ms(NAVBAR) }) }),
+        });
+        expect(container.querySelector('#quarto-draft-alert')).toBeNull();
+    });
+});

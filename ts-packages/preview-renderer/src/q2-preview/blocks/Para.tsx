@@ -2,10 +2,12 @@ import { useContext } from 'react';
 import { renderChildren, dataLocProps } from '../../framework';
 import type { NodeArgs, ParaBlock } from '../../framework';
 import { PreviewContext } from '../PreviewContext';
+import { useCommentAnchorRef } from '../commentAnchor';
 import { stripTaskMarker, TaskLabel, useTaskItem } from './taskList';
 
 export const Para = (args: NodeArgs<ParaBlock>) => {
     const ctx = useContext(PreviewContext);
+    const anchorRef = useCommentAnchorRef(args.node);
     const task = useTaskItem();
     const poolId = (args.node as any).s as string | number | undefined;
     const resolved = ctx?.resolveSource ? ctx.resolveSource(args.node) : null;
@@ -47,5 +49,5 @@ export const Para = (args: NodeArgs<ParaBlock>) => {
         renderChildren(args)
     );
 
-    return <p {...domProps} {...dataLocProps(args.node)}>{children}</p>;
+    return <p ref={anchorRef} {...domProps} {...dataLocProps(args.node)}>{children}</p>;
 };

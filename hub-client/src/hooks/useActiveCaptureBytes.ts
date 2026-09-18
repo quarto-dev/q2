@@ -12,9 +12,9 @@ import { getBinaryDocById, type CaptureRef } from '@quarto/preview-runtime';
  * content), so it only re-fetches when a fresh capture arrives — not on every
  * keystroke — and a dangling/unreachable capture falls back to `undefined`.
  *
- * Shared by the `q2-preview` renderer (`ReactPreview`) and the default
- * `format: html` renderer (`Preview`), which both splice captures into their
- * respective render entries.
+ * Shared by the `q2-preview` renderer (`ReactPreview`, the default) and the
+ * full-DOM `format: q2-html-render` renderer (`Preview`), which both splice
+ * captures into their respective render entries.
  */
 export function useActiveCaptureBytes(
   captures: Record<string, CaptureRef> | undefined,

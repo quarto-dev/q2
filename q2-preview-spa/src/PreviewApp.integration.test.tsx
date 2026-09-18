@@ -1464,3 +1464,32 @@ describe('PreviewApp diagnostics surface (bd-b9kzg)', () => {
     });
   });
 });
+
+describe('PreviewApp: formats with no live preview (bd-kltzdhle, D5)', () => {
+  it('explains a successful render that produced html instead of ast_json, naming the format', async () => {
+    // `format: q2-html-render` (hub-client's full-DOM opt-out) — and any
+    // other non-preview format such as `pdf` — comes back from the WASM
+    // as a *successful* `html` render with no `ast_json`. The SPA has no
+    // full-DOM renderer, so it must say so instead of logging
+    // "renderPageInProject failed" and sitting on the boot screen.
+    runtimeMockState.renderResult = {
+      success: true,
+      html: '<!DOCTYPE html><html><body><p>Opt-out.</p></body></html>',
+      format: 'q2-html-render',
+    };
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    render(<PreviewApp />);
+
+    await waitFor(() => {
+      expect(screen.queryByText(/no live preview/i)).not.toBeNull();
+    });
+    const message = screen.getByText(/no live preview/i).textContent ?? '';
+    expect(message).toContain('q2-html-render');
+    expect(message).toContain('q2 render');
+    // A recognised, non-previewable format is not a failure worth an
+    // error log.
+    expect(consoleError).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+});

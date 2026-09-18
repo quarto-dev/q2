@@ -62,7 +62,7 @@ function mountWithComment(commentInlines: unknown[]) {
 
 /** The compact bubble div carries title="1 comment". */
 function bubbleText(container: HTMLElement): string {
-    const bubble = container.querySelector('[title="1 comment"]');
+    const bubble = document.body.querySelector('[title="1 comment"]');
     expect(bubble).not.toBeNull();
     return bubble!.textContent ?? '';
 }
@@ -104,7 +104,7 @@ describe('CommentBlock bubble text (bd-wcz4x7y0)', () => {
 
 /** The bubble element (compact chip carries title="1 comment"). */
 function bubbleEl(container: HTMLElement): HTMLElement {
-    const bubble = container.querySelector('[title="1 comment"]');
+    const bubble = document.body.querySelector('[title="1 comment"]');
     expect(bubble).not.toBeNull();
     return bubble as HTMLElement;
 }
@@ -187,7 +187,7 @@ describe('CommentBlock rich bubble content (bd-y66gbfs4)', () => {
             expect(ev.defaultPrevented).toBe(true);
             // The link click must not act as a bubble click (which would
             // self-expand and open the inline comment input).
-            expect(container.querySelector('textarea.q2-comment-input')).toBeNull();
+            expect(document.body.querySelector('textarea.q2-comment-input')).toBeNull();
         });
 
         it('clicking the bubble chrome away from a link still expands (link guard is scoped)', () => {
@@ -195,7 +195,7 @@ describe('CommentBlock rich bubble content (bd-y66gbfs4)', () => {
                 { t: 'Str', c: 'plain' },
             ]);
             fireEvent.click(bubbleEl(container));
-            expect(container.querySelector('textarea.q2-comment-input')).not.toBeNull();
+            expect(document.body.querySelector('textarea.q2-comment-input')).not.toBeNull();
         });
     });
 

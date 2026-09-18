@@ -120,4 +120,17 @@ describe('ReactPreview capture consumption (bd-sfet3264, Phase 1D)', () => {
       expect(call[3]).toBeUndefined();
     }
   });
+
+  it('requests the q2 preview default-format substitution (5th arg true) — bd-kltzdhle', async () => {
+    // hub-client routes `html` documents to ReactPreview as `q2-preview`;
+    // the WASM re-detects the format from the file, so every preview
+    // pipeline render must ask for `prefer_preview_format`, or a plain
+    // document would come back as `html` instead of `ast_json`.
+    render(<ReactPreview {...baseProps(undefined)} />);
+
+    await waitFor(() => expect(renderPageInProjectWithAttribution).toHaveBeenCalled());
+    for (const call of renderPageInProjectWithAttribution.mock.calls) {
+      expect(call[4]).toBe(true);
+    }
+  });
 });
