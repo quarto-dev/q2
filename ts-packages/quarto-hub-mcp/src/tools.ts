@@ -14,8 +14,9 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { fileUnavailableMessage, type SyncClient } from '@quarto/quarto-sync-client';
+import { fileUnavailableMessage, type FilePayload, type SyncClient } from '@quarto/quarto-sync-client';
 import { ConnectionManager } from './connection-manager.js';
+import { renderDiagnostics, type RenderedDiagnostic } from './local-render.js';
 import {
   AUTH_TOOL_DEFINITIONS,
   AuthToolsState,
@@ -123,6 +124,29 @@ function getReadTools(): Tool[] {
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false },
     },
+    {
+      name: 'get_errors',
+      description:
+        'Check a Quarto Hub project for errors by rendering it with the same pipeline ' +
+        'the browser preview uses, locally and on demand. Reports structured render ' +
+        'errors and warnings (with line/column and hints) for exactly the file content ' +
+        'the tool read (`checkedContentSha256` names it), plus engine execution errors ' +
+        'recorded by executors. After you edit a file, just call get_errors again — it ' +
+        'validates the new content immediately; there is nothing to wait for. Pass ' +
+        '`path` to check one document; omit it to check every .qmd in the project.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          project: { type: 'string', description: PROJECT_PARAM_DESC },
+          path: {
+            type: 'string',
+            description: 'Optional: check only this file path',
+          },
+        },
+        required: ['project'],
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+    },
   ];
 }
 
@@ -130,7 +154,10 @@ function getWriteTools(): Tool[] {
   return [
     {
       name: 'write_file',
-      description: 'Replace the entire content of a text file in a Quarto Hub project. Creates the file if it does not exist.',
+      description:
+        'Replace the entire content of a text file in a Quarto Hub project. Creates the file ' +
+        'if it does not exist. Writes to .qmd documents automatically render-check the new ' +
+        'content and report any errors in the response — fix them before moving on.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -144,7 +171,11 @@ function getWriteTools(): Tool[] {
     },
     {
       name: 'patch_file',
-      description: 'Apply a targeted edit to a text file by replacing a specific string. More context-efficient than write_file for small changes to large files.',
+      description:
+        'Apply a targeted edit to a text file by replacing a specific string. More ' +
+        'context-efficient than write_file for small changes to large files. Edits to .qmd ' +
+        'documents automatically render-check the new content and report any errors in the ' +
+        'response — fix them before moving on.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -159,7 +190,9 @@ function getWriteTools(): Tool[] {
     },
     {
       name: 'create_file',
-      description: 'Create a new text file in a Quarto Hub project.',
+      description:
+        'Create a new text file in a Quarto Hub project. New .qmd documents are automatically ' +
+        'render-checked; any errors in the initial content are reported in the response.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -325,6 +358,8 @@ async function handleTool(
       return handleReadFile(args, manager);
     case 'wait_for_change':
       return handleWaitForChange(args, manager);
+    case 'get_errors':
+      return handleGetErrors(args, manager);
     case 'write_file':
       return handleWriteFile(args, manager);
     case 'patch_file':
@@ -413,6 +448,135 @@ async function handleWaitForChange(args: ToolArgs, manager: ConnectionManager): 
   );
 }
 
+/** One file's entry in the `get_errors` report. */
+interface FileErrorsEntry {
+  path: string;
+  /** `sha256:<hex>` of the text this entry's render checked. */
+  checkedContentSha256?: string;
+  errors?: RenderedDiagnostic[];
+  warnings?: RenderedDiagnostic[];
+  /** Present on entries derived from a sibling's pass-1 failure. */
+  note?: string;
+  execution?: {
+    state: string;
+    lastError?: string;
+  };
+}
+
+/** Cap on how many documents a no-path call renders (each is a full render). */
+const MAX_CHECKED_DOCUMENTS = 25;
+
+async function handleGetErrors(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
+  const project = args.project as string;
+  const pathFilter = typeof args.path === 'string' && args.path !== '' ? args.path : undefined;
+  const state = await manager.connect(project);
+
+  let targets: string[];
+  let capped = false;
+  if (pathFilter) {
+    const payload = state.files.get(pathFilter);
+    if (!payload) {
+      const ghost = findUnavailable(state.client, pathFilter);
+      if (ghost) {
+        return unavailableFileError(pathFilter, ghost.docId);
+      }
+      return error(`Error: File not found: ${pathFilter}`);
+    }
+    if (payload.type !== 'text') {
+      return error(`Error: ${pathFilter} is a binary file; only text documents can be checked.`);
+    }
+    targets = [pathFilter];
+  } else {
+    targets = [...state.files.keys()]
+      .filter((p) => p.endsWith('.qmd') && state.files.get(p)!.type === 'text')
+      .sort();
+    if (targets.length > MAX_CHECKED_DOCUMENTS) {
+      targets = targets.slice(0, MAX_CHECKED_DOCUMENTS);
+      capped = true;
+    }
+  }
+
+  const entries = new Map<string, FileErrorsEntry>();
+  const entryFor = (p: string): FileErrorsEntry => {
+    let e = entries.get(p);
+    if (!e) {
+      e = { path: p };
+      entries.set(p, e);
+    }
+    return e;
+  };
+
+  for (const path of targets) {
+    const result = await renderDiagnostics(state.files, path);
+    const entry = entryFor(path);
+    entry.checkedContentSha256 = result.checkedContentSha256;
+    entry.errors = result.errors;
+    entry.warnings = result.warnings;
+    // Sibling pass-1 failures surface under the failing file's own path
+    // (only when that file wasn't/won't be rendered directly).
+    for (const sibling of result.pass1Failures) {
+      if (targets.includes(sibling.path)) continue;
+      const se = entryFor(sibling.path);
+      if (!se.errors?.length) {
+        se.errors = sibling.errors;
+        se.note = `pass-1 failure observed while rendering ${path}`;
+      }
+    }
+  }
+
+  // Execution errors come from the captures sidecar — they happen on
+  // executors elsewhere and cannot be recomputed locally.
+  for (const [p, cap] of Object.entries(state.sidecars.captures)) {
+    if (cap.state === 'error' || cap.state === 'running') {
+      entryFor(p).execution = {
+        state: cap.state,
+        ...(cap.lastError !== undefined ? { lastError: cap.lastError } : {}),
+      };
+    }
+  }
+
+  const files = [...entries.values()].sort((a, b) => (a.path < b.path ? -1 : 1));
+  const report: { project: string; files: FileErrorsEntry[]; note?: string } = { project, files };
+  if (capped) {
+    report.note = `Checked the first ${MAX_CHECKED_DOCUMENTS} .qmd documents; pass a path to check a specific other file.`;
+  }
+  return text(JSON.stringify(report, null, 2));
+}
+
+/**
+ * Render-check the content a write tool just committed and return a
+ * suffix for the tool response. Validity is a function of content, so
+ * the check stages the new text over the current file map rather than
+ * waiting for the CRDT callback to land. Never fails the write: a
+ * check that cannot run degrades to a pointer at get_errors.
+ */
+async function renderCheckSuffix(
+  files: Map<string, FilePayload>,
+  path: string,
+  newText: string,
+): Promise<string> {
+  if (!path.endsWith('.qmd')) return '';
+  try {
+    const staged = new Map(files);
+    staged.set(path, { type: 'text', text: newText });
+    const result = await renderDiagnostics(staged, path);
+    if (result.errors.length > 0) {
+      const n = result.errors.length;
+      return (
+        `\nRender check: ${n} error${n === 1 ? '' : 's'} in ${path}:\n` +
+        JSON.stringify(result.errors, null, 2)
+      );
+    }
+    const w = result.warnings.length;
+    return w > 0
+      ? `\nRender check: clean (${w} warning${w === 1 ? '' : 's'}; call get_errors to see them).`
+      : '\nRender check: clean.';
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return `\nRender check unavailable (${msg}); call get_errors to verify.`;
+  }
+}
+
 async function handleWriteFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
   const project = args.project as string;
   const path = args.path as string;
@@ -429,14 +593,14 @@ async function handleWriteFile(args: ToolArgs, manager: ConnectionManager): Prom
       return unavailableFileError(path, ghost.docId);
     }
     await state.client.createFile(path, content);
-    return text(`Created ${path}`);
+    return text(`Created ${path}` + (await renderCheckSuffix(state.files, path, content)));
   }
   if (existing.type === 'binary') {
     return error(`Error: ${path} is a binary file. Cannot write text content to it.`);
   }
 
   state.client.updateFileContent(path, content);
-  return text(`Updated ${path}`);
+  return text(`Updated ${path}` + (await renderCheckSuffix(state.files, path, content)));
 }
 
 async function handlePatchFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
@@ -475,7 +639,7 @@ async function handlePatchFile(args: ToolArgs, manager: ConnectionManager): Prom
     currentContent.slice(index + oldString.length);
 
   state.client.updateFileContent(path, newContent);
-  return text(`Patched ${path}`);
+  return text(`Patched ${path}` + (await renderCheckSuffix(state.files, path, newContent)));
 }
 
 async function handleCreateFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
@@ -494,7 +658,7 @@ async function handleCreateFile(args: ToolArgs, manager: ConnectionManager): Pro
   }
 
   await state.client.createFile(path, content);
-  return text(`Created ${path}`);
+  return text(`Created ${path}` + (await renderCheckSuffix(state.files, path, content)));
 }
 
 async function handleDeleteFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {

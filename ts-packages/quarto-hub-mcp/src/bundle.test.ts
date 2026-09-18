@@ -48,6 +48,12 @@ describe('bundle smoke', () => {
   it('ships the expected artifacts', () => {
     const bundleDir = path.join(tmpDir, 'bundle');
     expect(fs.existsSync(path.join(bundleDir, 'index.mjs'))).toBe(true);
+    // get_errors local validation: the WASM host + binary must ride in
+    // the bundle (index.mjs dynamic-imports ./wasm-host.mjs at first use).
+    expect(fs.existsSync(path.join(bundleDir, 'wasm-host.mjs'))).toBe(true);
+    const wasm = path.join(bundleDir, 'wasm_quarto_hub_client_bg.wasm');
+    expect(fs.existsSync(wasm)).toBe(true);
+    expect(fs.statSync(wasm).size).toBeGreaterThan(10_000_000);
     const info = JSON.parse(
       fs.readFileSync(path.join(bundleDir, 'build-info.json'), 'utf8'),
     ) as { gitCommit: string; nodeTarget: string; keyringPackages: string[] };

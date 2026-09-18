@@ -89,9 +89,25 @@ function handleUpgrade(req, socket, head) {
     headers: req.headers,
   };
 
+  // A client that drops without a closing handshake emits 'error'
+  // (ECONNRESET) on this socket. Unhandled, that event crashes the
+  // whole proxy process — tear down just this connection instead.
+  socket.on('error', (err) => {
+    console.error(`WebSocket client socket error: ${err.message}`);
+    socket.destroy();
+  });
+
   const proxyReq = http.request(options);
 
   proxyReq.on('upgrade', (proxyRes, proxySocket, proxyHead) => {
+    // Same hazard on the hub side of the pipe.
+    proxySocket.on('error', (err) => {
+      console.error(`WebSocket hub socket error: ${err.message}`);
+      socket.destroy();
+    });
+    socket.on('close', () => proxySocket.destroy());
+    proxySocket.on('close', () => socket.destroy());
+
     socket.write('HTTP/1.1 101 Switching Protocols\r\n');
     Object.keys(proxyRes.headers).forEach(key => {
       socket.write(`${key}: ${proxyRes.headers[key]}\r\n`);
