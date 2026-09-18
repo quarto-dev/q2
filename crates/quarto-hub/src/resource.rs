@@ -42,6 +42,10 @@ const BINARY_EXTENSIONS: &[(&str, &str)] = &[
     ("tif", "image/tiff"),
     // Documents
     ("pdf", "application/pdf"),
+    // hephaestus plot documents (bd-sxiv2tio). Not an IANA type; the
+    // vendor-tree name keeps the binary document self-describing. Mirror
+    // of `BINARY_EXTENSIONS` in ts-packages/quarto-automerge-schema.
+    ("hep", "application/vnd.hephaestus.plot"),
     // Fonts
     ("woff", "font/woff"),
     ("woff2", "font/woff2"),
@@ -344,6 +348,10 @@ mod tests {
         assert!(is_binary_extension("PNG"));
         assert!(is_binary_extension("jpg"));
         assert!(is_binary_extension("pdf"));
+        // hephaestus plot documents (bd-sxiv2tio): the preview draws them
+        // in the browser, so their bytes must sync like an image's.
+        assert!(is_binary_extension("hep"));
+        assert!(is_binary_extension("HEP"));
         assert!(!is_binary_extension("qmd"));
         assert!(!is_binary_extension("yml"));
         assert!(!is_binary_extension("txt"));
@@ -357,6 +365,10 @@ mod tests {
         assert_eq!(mime_type_from_extension("jpeg"), Some("image/jpeg"));
         assert_eq!(mime_type_from_extension("pdf"), Some("application/pdf"));
         assert_eq!(mime_type_from_extension("svg"), Some("image/svg+xml"));
+        assert_eq!(
+            mime_type_from_extension("hep"),
+            Some("application/vnd.hephaestus.plot")
+        );
         assert_eq!(mime_type_from_extension("unknown"), None);
     }
 

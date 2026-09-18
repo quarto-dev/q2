@@ -1,0 +1,36 @@
+---
+title: "Plot Rendered With Warnings"
+description: "A hephaestus plot document was rendered to SVG, but some of its features could not be expressed exactly."
+code: Q-18-3
+subsystem: image
+status: stub
+since: "99.9.9"
+categories:
+  - image
+---
+
+# `Q-18-3` — Plot Rendered With Warnings
+
+> A hephaestus plot document was rendered to SVG, but some of its features could not be expressed exactly.
+
+## What this means
+
+Quarto rendered the plot document to SVG and the page shows it, but
+hephaestus's SVG backend reported that some part of the scene has no
+exact SVG equivalent and was approximated or skipped. The message
+lists each warning the backend raised.
+
+## Why this happens
+
+The SVG backend aims at editable output — text stays text, links stay
+links — and a few things a rasterizer can draw have no faithful
+vector form: certain blend modes and compositing operations, some
+image sampling modes, and raster images when the build cannot decode
+their format.
+
+## How to fix
+
+Usually nothing: the rendered plot is still correct in every respect
+the warning does not name. If the degraded feature matters, change
+the plot to avoid it, or export a raster image from the program that
+produced the document and reference that instead.

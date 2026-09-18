@@ -34,6 +34,7 @@ pub mod format_css;
 pub mod format_path_keys;
 pub mod get_config_merge;
 pub mod headroom_pipeline;
+pub mod hephaestus_render;
 pub mod idempotence;
 pub mod include_code_fence;
 pub mod include_expansion_diagnostics;

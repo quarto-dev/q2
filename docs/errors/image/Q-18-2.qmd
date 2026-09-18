@@ -1,0 +1,47 @@
+---
+title: "Invalid Plot Document"
+description: "The file an image refers to is not a hephaestus plot document this version of Quarto can read."
+code: Q-18-2
+subsystem: image
+status: stub
+since: "99.9.9"
+categories:
+  - image
+---
+
+# `Q-18-2` — Invalid Plot Document
+
+> The file an image refers to is not a hephaestus plot document this version of Quarto can read.
+
+## What this means
+
+An image points at a file ending in `.hep`, Quarto read the file, but
+it is not a hephaestus plot document Quarto can rebuild. The image is
+left exactly as written and the rest of the page still renders; the
+browser then shows a broken image where the plot should be.
+
+The message includes the reason hephaestus gave for refusing the
+file.
+
+## Why this happens
+
+- **It is not a plot document at all.** A file with the `.hep`
+  extension that does not start with the hephaestus document magic —
+  for example an empty file, or a download that returned an error
+  page.
+- **It was written by a newer library.** The document format version
+  is compared for equality: a `.hep` written by a newer hephaestus
+  (typically through a newer R plotting package) than the one this
+  Quarto links cannot be read. The hint names the version Quarto
+  reads.
+- **It uses custom geoms or named formatters.** Those live in the
+  program that wrote the document and cannot travel in the file, so
+  the document cannot be rendered anywhere else.
+
+## How to fix
+
+If the file is not a plot document, regenerate it. If the versions
+disagree, update Quarto to a release that reads the newer format (or
+write the document with a matching library version). A document that
+depends on custom geoms or formatters must be rendered by the program
+that produced it — export a PNG or SVG from there instead.

@@ -76,6 +76,7 @@
     "@tiptap/pm": "^3.27.1",
     "@tiptap/react": "^3.27.1",
     "@tiptap/starter-kit": "^3.27.1",
+    "hephaestus-svg-wasm": "0.4.1",
     "morphdom": "^2.7.8",
     "prosemirror-markdown": "^1.13.1",
     "prosemirror-model": "^1.24.1",

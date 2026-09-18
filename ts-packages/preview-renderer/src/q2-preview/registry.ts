@@ -5,6 +5,7 @@ import * as Custom from './custom';
 import { Inline, CustomBlock, CustomInline } from './dispatchers';
 import { CommentBlock } from './custom/CommentBlock';
 import { MermaidCodeBlock } from './blocks/MermaidCodeBlock';
+import { HepImage } from './inlines/HepImage';
 import { PreviewDocument } from './PreviewDocument';
 
 /**
@@ -46,6 +47,12 @@ export const previewRegistry: FormatRegistry = {
     // from the `...Blocks` spread; user render-components overrides
     // of `CodeBlock` still layer on top via mergedPreviewRegistry.
     CodeBlock: MermaidCodeBlock,
+    // bd-sxiv2tio: hephaestus-aware Image wrapper — mounts a local
+    // `.hep` plot document as a live SVG via the npm hephaestus-svg-wasm
+    // client, delegates every other target to Inlines.Image. Overrides
+    // the plain entry from the `...Inlines` spread; user render-components
+    // overrides of `Image` still layer on top via mergedPreviewRegistry.
+    Image: HepImage,
     __fallback__: Custom.Fallback,
     __title_block__: Custom.PreviewTitleBlock,
     // Default comment/reaction chrome (custom/CommentBlock.tsx): wraps
