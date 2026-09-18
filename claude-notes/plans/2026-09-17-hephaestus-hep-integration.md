@@ -409,18 +409,165 @@ pages.
       and titles correctly.
 - [x] User docs: "Plot Documents" section in `docs/guides/authoring/figures.qmd`.
 
-### Phase 2 — preview / hub-client (`q2-preview`, `q2-slides`)
+### Phase 2 — preview / hub-client (`q2-preview`, `format: revealjs`)
 
-- [ ] `preview-renderer`: `HepImage` component + `Image` wrapper registered
-      in `registry.ts`; loader injection for tests (mirror
-      `MermaidCodeBlock`'s `activeLoader`); vitest coverage.
-- [ ] Bundle `hephaestus-svg-wasm` + its fonts; sandboxed-preview origin
-      check; `npm run build:all` green.
-- [ ] Version-parity test: Rust `hephaestus` crate version ==
-      npm `hephaestus-svg-wasm` version.
-- [ ] Browser verification in `q2 preview --no-browser` + Playwright (the
-      fallback noted in memory) and in hub-client.
-- [ ] hub-client `changelog.md` entry.
+Strand bd-sxiv2tio. Started 2026-09-17.
+
+**Orientation findings (2026-09-17).** "q2-slides" in the original plan
+is stale naming: in preview, `format: revealjs` renders through
+`RevealDeck`, which draws slide *content* through the same
+`previewRegistry` the html preview uses. `q2 preview` routes every
+document through `Q2PreviewIframe`, and hub-client routes `q2-preview`
+and `revealjs` there too. So one `Image` wrapper registered in
+`registry.ts` covers both formats in both hosts. The asset walker
+already mints a blob URL for any `Image` target, `.hep` included, and
+`guessMimeType` gives it `application/octet-stream` — fine for `fetch`.
+
+The npm client (`hephaestus-svg-wasm@0.4.1`, MIT) is a wasm-bindgen
+`web` build: `hephaestus-svg.js` (page API), the glue, a 2.4 MB wasm,
+and four Roboto TTFs. It locates the wasm and the fonts with
+`new URL(..., import.meta.url)`, which Vite rewrites to hashed assets.
+`PlotView.create` registers the bundled faces once (shaper +
+`@font-face`), observes the container with `ResizeObserver`, and
+`free()` releases the wasm-side document. `PlotDocument` exposes only
+`setDark` / `setTransparent` / `toSvg` — **no palette API**, so the
+brand colors phase 1 applies natively cannot be applied in the browser
+(bd-qcltc0ll).
+
+Three bundles include preview-renderer: the q2-preview SPA, hub-client's
+same-origin `q2-preview.html` iframe, and the separate-origin sandboxed
+frame (`format: q2-sandboxed-preview`, its own non-workspace npm project
+whose asset proxy does not classify `.hep` as binary). The first two are
+this phase; the third is bd-9t5nmq81.
+
+**Decisions (settled 2026-09-17 with the user):**
+
+1. **Sizing: reflow up to the hint width.** Container width = `width`
+   attr (px) → document hint → 672; `max-width: 100%`; height follows
+   the aspect ratio from attrs → hint → 672 × 480 via CSS
+   `aspect-ratio`. Wide columns match `q2 render`; narrow columns and
+   slides get a re-solved layout instead of a shrunk picture.
+2. **Sandboxed frame deferred** → bd-9t5nmq81.
+3. **Brand colors gap accepted** → bd-qcltc0ll (needs an upstream
+   palette setter on the wasm `PlotDocument`).
+4. **Verification bar:** vitest + browser check in `q2 preview` and
+   hub-client (a q2-preview document and a revealjs deck), evidence
+   recorded below. No new Playwright spec.
+5. Color scheme fixed to `'light'` (phase 4 is bd-myfwwmki; the theme
+   toggle has no plumbing into preview-renderer). Load failures render
+   a mermaid-style error box with the message. `format: html` in
+   hub-client (the plain-HTML iframe path) is out of scope.
+
+**Found during phase 2:**
+
+- **`.hep` was not a binary extension.** Which project files sync into
+  the preview VFS as *binary* documents is decided by an extension
+  allowlist — `BINARY_EXTENSIONS` in `crates/quarto-hub/src/resource.rs`
+  (hub discovery, sync, and `q2 preview`'s single-file closure all use
+  it) with a hand-kept mirror in `ts-packages/quarto-automerge-schema`
+  (`isBinaryExtension` / `inferMimeType`, used by hub-client uploads).
+  Neither knew `hep`, so the first browser check showed "bad magic" for
+  every plot: the manifest had no entry, the component fetched the raw
+  URL, and the preview host answered with its HTML fallback. Both lists
+  now carry `hep` → `application/vnd.hephaestus.plot` (tests on both
+  sides). The sandboxed frame's third copy (`assetPolicy.ts`) is
+  bd-9t5nmq81's.
+- **A manifest miss is reported, not fetched.** The plain `<img>` falls
+  back to the raw URL on a miss (its broken image is the signal). For a
+  `.hep` that fallback fetches HTML and reports "bad magic", so `HepImage`
+  shows "file not found in the project" without fetching — the preview's
+  analogue of `Q-18-1`.
+
+- [x] Rust version-parity test: `hephaestus` in `Cargo.lock` ==
+      `hephaestus-svg-wasm` in `ts-packages/preview-renderer/package.json`
+      (written first; failed until the dependency was added).
+- [x] vitest spec `inlines/HepImage.test.tsx` (written first): `.hep`
+      target mounts a plot container and calls `PlotView.create` with the
+      fetched bytes and `{ colorScheme: 'light', autoResize: true,
+      picking: false }`; non-`.hep` / external / `data:` targets fall
+      through to the plain `<img>`; query string and fragment ignored;
+      module loaded once across plots; fetch failure and `create`
+      rejection show the error box; `free()` on unmount; sizing rules
+      (attrs → hints → default, `max-width: 100%`); alt → `aria-label`;
+      id / classes / title propagate; registry entry + user override
+      layering; TS version pin equals `package.json` and `Cargo.lock`.
+      Manifest miss → error box, no fetch (20 tests).
+- [x] `hephaestus-svg-wasm` exact-pinned in preview-renderer
+      `package.json`; `npm install` from the root (Node 24 via fnm).
+- [x] `inlines/HepImage.tsx`: `isHepTarget` (mirror of the Rust
+      `is_hep_target`), loader seam (`setHephaestusLoaderForTests`),
+      `HepPlot` (fetch → `PlotView.create` → hints → CSS size), `HepImage`
+      wrapper delegating to `Image`; `Image: HepImage` in `registry.ts`.
+- [x] `hep` added to both binary-extension allowlists (see above), with
+      `resource.rs` + `fileType.test.ts` tests written first.
+- [x] `optimizeDeps.exclude` gets `hephaestus-svg-wasm` in hub-client and
+      q2-preview-spa vite configs (dev pre-bundling would break the glue's
+      `import.meta.url` asset lookups; production builds are unaffected).
+- [x] Bundles carry the client: `q2-preview-spa/dist/assets/` and
+      `hub-client/dist-preview-embed/assets/` (via
+      `cargo xtask build-hub-client-embed`, which runs `build:wasm` +
+      `build:sandboxed` + `vite build`) both contain
+      `hephaestus_svg_wasm_bg-<hash>.wasm` (2.4 MB) and the four
+      `roboto-*.ttf` files; the sandboxed project's `q2-preview-assets/`
+      picks them up too (the renderer source resolves the dependency from
+      the root `node_modules`).
+- [x] **Browser verification, `q2 preview` (2026-09-17).** Scratch project
+      (`_quarto.yml` + `index.qmd` with `format: html` + `deck.qmd` with
+      `format: revealjs` + `figs/readings.hep` copied from
+      `examples/plots/01-hephaestus-basic`), served with
+      `./target/debug/q2 preview --no-browser --port 5199 <dir>` after
+      `cargo xtask build-q2-preview-spa && cargo build --bin q2`, inspected
+      in Chrome through the DevTools MCP. Observed in the iframe DOM:
+      - `![Simulated sensor readings.](figs/readings.hep){#fig-readings}`
+        → `<figure><span class="hephaestus-plot img-fluid" role="img"
+        aria-label="Simulated sensor readings." style="display:
+        inline-block; width: 900px; max-width: 100%; aspect-ratio: 900 /
+        420; …"><svg width="799" height="373" …>` (21 `<text>` nodes) +
+        the figcaption. 900 is the document's hint; the 799 × 373 box is
+        the reflow to the column width (decision 1).
+      - `![](figs/readings.hep){width=420 height=260}` → a 420 × 260 box
+        and `<svg width="420" height="260">`.
+      - `![](figs/does-not-exist.hep)` → `Plot error:
+        figs/does-not-exist.hep: file not found in the project`.
+      - `![](figs/nothing.png)` → a plain `<img src="figs/nothing.png">`.
+      - `#hephaestus-svg-default-faces` `@font-face` block injected,
+        pointing at `/assets/roboto-*.ttf`; the plots render with axes,
+        ticks, titles and both panels (screenshot inspected). Console: only
+        the pre-existing sandbox-attribute warning.
+      - Deck: the lone image on "A plot on a slide" carries `r-stretch`
+        (Quarto's auto-stretch transform) and reveal sets an inline
+        `height: 495px` on the box, so the plot re-solves at 900 × 495 and
+        fills the slide; the `{width=500 height=300}` plot on the next
+        slide keeps 500 × 300. Both render; no errors.
+- [x] **Browser verification, hub-client (2026-09-18).** The embedded
+      hub-client (`cargo xtask build-hub-client-embed` + `cargo build --bin
+      q2`, then `./target/debug/q2 preview --no-browser --ui editor --port
+      5199 <dir>`; `PreviewRouter` → `ReactPreview` → `Q2PreviewIframe`
+      with `src="q2-preview.html"`), same scratch project plus a
+      `preview.qmd` with `format: q2-preview`, opened in a fresh browser
+      context via the printed share link:
+      - `preview.qmd`: the captioned `.hep` mounts inside `<figure>` as a
+        `hephaestus-plot img-fluid` box, 900 px hint reflowed to the
+        696 × 325 preview pane, `<svg width="696" height="325">`; the
+        `{width=420 height=260}` one is 420 × 260. `@font-face` injected,
+        no errors; screenshot inspected (both panels, axes, titles).
+      - `deck.qmd`: `RevealDeck` inside the same iframe; the `r-stretch`
+        plot fills the slide (reveal sets the inline height; the plot
+        re-solves at 900 × 495, later 1050 × 495 after a relayout), the
+        sized one keeps 500 × 300; screenshot inspected.
+      - `index.qmd` (`format: html`) goes through hub-client's plain-HTML
+        renderer, where the `.hep` shows nothing — the deprecated path,
+        out of scope (decision 5).
+      - Operational note: a document added to the project *after* `q2
+        preview` started did not appear in the editor's file list (and a
+        browser context that had seen the earlier session kept the stale
+        project); restarting the server and using a fresh context fixed
+        both. Unrelated to this strand; not investigated further.
+- [x] User docs: note in `docs/guides/authoring/figures.qmd` that the
+      preview draws plot documents live and reflows them.
+- [x] Full `cargo xtask verify` green (2026-09-18; lints, Rust build +
+      tests, ts-packages, hub-client `build:all` + `test:ci`, SPA build).
+- [ ] hub-client `changelog.md` entry (two-commit workflow).
 
 ### Phase 3 — brand.yml typography
 

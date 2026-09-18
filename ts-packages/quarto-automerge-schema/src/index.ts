@@ -469,6 +469,9 @@ const BINARY_EXTENSIONS = new Set([
   'tif',
   // Documents
   'pdf',
+  // hephaestus plot documents (bd-sxiv2tio). Mirror of
+  // `BINARY_EXTENSIONS` in crates/quarto-hub/src/resource.rs.
+  'hep',
   // Fonts
   'woff',
   'woff2',
@@ -546,6 +549,7 @@ export function inferMimeType(path: string): string {
     tif: 'image/tiff',
     // Documents
     pdf: 'application/pdf',
+    hep: 'application/vnd.hephaestus.plot',
     // Fonts
     woff: 'font/woff',
     woff2: 'font/woff2',

@@ -173,6 +173,11 @@ laid out at — the plot re-flows to fit rather than being scaled:
 
 Without them, the size recorded when the plot was saved is used.
 
+In `quarto preview` (and in Quarto Hub) plot documents are drawn live
+in the browser: the plot is laid out at the width it gets on the page,
+capped at the size above, and re-flows when the window or a slide
+changes size.
+
 When the document declares a brand (see [Brand](brand.qmd)), the
 brand's `background`, `foreground` and `primary` colors become the
 plot's paper, ink and accent, so plots follow the brand along with the

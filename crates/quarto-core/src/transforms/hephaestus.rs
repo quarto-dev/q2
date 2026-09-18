@@ -561,6 +561,56 @@ mod tests {
         assert_eq!(hex(""), None);
     }
 
+    /// The browser preview reads the same `.hep` files with the npm
+    /// `hephaestus-svg-wasm` client (bd-sxiv2tio). The crate and the
+    /// npm package are released in lockstep and the document format
+    /// version is compared for equality, so a `.hep` one side reads
+    /// the other must too: the version pinned in preview-renderer's
+    /// `package.json` has to equal the `hephaestus` crate in
+    /// `Cargo.lock`. The TS side asserts the same pair from its end.
+    #[test]
+    fn npm_client_version_matches_crate_version() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+
+        let lock = std::fs::read_to_string(root.join("Cargo.lock")).expect("read Cargo.lock");
+        let mut lines = lock.lines();
+        let crate_version = loop {
+            match lines.next() {
+                Some(r#"name = "hephaestus""#) => {
+                    let version = lines.next().expect("version line after name");
+                    break version
+                        .strip_prefix("version = \"")
+                        .and_then(|v| v.strip_suffix('"'))
+                        .expect("version line shape")
+                        .to_string();
+                }
+                Some(_) => continue,
+                None => panic!("hephaestus not found in Cargo.lock"),
+            }
+        };
+
+        let package_json = root.join("ts-packages/preview-renderer/package.json");
+        let package: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(&package_json).expect("read preview-renderer package.json"),
+        )
+        .expect("parse package.json");
+        let npm_version = package["dependencies"]["hephaestus-svg-wasm"]
+            .as_str()
+            .unwrap_or_else(|| {
+                panic!(
+                    "{}: no `hephaestus-svg-wasm` dependency; the preview client must be \
+                     pinned to the crate version",
+                    package_json.display()
+                )
+            });
+
+        assert_eq!(
+            npm_version, crate_version,
+            "hephaestus-svg-wasm ({npm_version}) in preview-renderer/package.json must be \
+             pinned exactly to the hephaestus crate ({crate_version}) in Cargo.lock"
+        );
+    }
+
     #[test]
     fn bundled_fonts_register_roboto_for_sans_serif() {
         ensure_bundled_fonts();
