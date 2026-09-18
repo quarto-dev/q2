@@ -28,13 +28,22 @@ import { makeSlotSetter } from '../utils';
  * appended) prepended to the body's first paragraph. Default label
  * text is the literal `"Proof."` (period included).
  *
- * `plain_data` (writer: `transforms/proof.rs:145`):
+ * `plain_data` (writer: `transforms/proof.rs:145`; keys mirrored from
+ * `crates/quarto-pandoc-types/resources/custom-node-schema.json`):
  *   - `kind` (string, hardcoded `"Proof"`): not used by render —
  *     the displayed label is `"Proof."` regardless.
+ *   - `type` (string): also not consumed by this component today.
  *
  * Identifier rule mirrors Theorem / FloatRefTarget — empty
  * `node.attr[0]` produces no `id` attribute on the wrapper.
+ *
+ * `PROOF_PLAIN_DATA_KEYS` exists purely so `schemaConformance.test.ts`'s
+ * T4.3 has something to compare Proof's schema key set against — this
+ * component reads `plain_data` for neither key and that is unchanged
+ * by this array's addition.
  */
+
+export const PROOF_PLAIN_DATA_KEYS = ['kind', 'type'] as const;
 
 export const Proof = ({ node, onNavigateToDocument, setLocalAst }: NodeArgs<CustomBlockNode>) => {
     const ctx = useContext(PreviewContext);

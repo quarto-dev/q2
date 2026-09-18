@@ -19,6 +19,7 @@ pub mod breadcrumbs_pipeline;
 pub mod capture_splice_engines;
 pub mod capture_splice_seam;
 pub mod crossref_fixtures;
+pub mod custom_node_schema_conformance;
 pub mod custom_project_type;
 pub mod document_profile_pipeline;
 pub mod echo_engine_e2e;

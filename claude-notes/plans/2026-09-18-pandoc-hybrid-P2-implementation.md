@@ -324,6 +324,9 @@ which owns `ExampleEmbedRenderTransform`'s format-parameterization.
   *intra-consumer* only (observed Rust slots == schema-declared Rust slots, T2.1's sibling
   assertion); the Q2↔Q1 slot *mapping* is P5's shim contract and is `seam deferred until P5's
   per-type Route-R field map`.
+  **Correction (final review, 2026-09-18):** no such sibling assertion exists in the committed
+  test file beyond `cite_prefix` (T3.4) — see the module doc note in
+  `custom_node_schema_conformance.rs` for the accepted-untested scope.
 - **The "wrong thing exercised" sibling trap — live in this tree.** Binding T2.3 to
   `write_custom_block` (`json.rs:1489-1494`) instead of `stream_write_custom_block`
   (`:3710-3715`) would produce a test that passes whether or not the production writer emits the

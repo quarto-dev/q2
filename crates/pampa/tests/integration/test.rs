@@ -353,6 +353,7 @@ fn matches_pandoc_markdown_reader(input: &str) -> bool {
     let mut our_value: serde_json::Value =
         serde_json::from_str(&json_output).expect("Failed to parse our JSON");
     remove_location_fields(&mut our_value);
+    remove_quarto_pandoc_reader_opts(&mut our_value);
     let json_output = serde_json::to_string(&our_value).expect("Failed to serialize our JSON");
 
     matches_canonical_pandoc_format(input, &native_output, "markdown", "native")
@@ -400,6 +401,10 @@ fn matches_pandoc_commonmark_reader(input: &str) -> bool {
     )
     .unwrap();
     let json_output = String::from_utf8(buf2).expect("Invalid UTF-8 in output");
+    let mut our_value: serde_json::Value =
+        serde_json::from_str(&json_output).expect("Failed to parse our JSON");
+    remove_quarto_pandoc_reader_opts(&mut our_value);
+    let json_output = serde_json::to_string(&our_value).expect("Failed to serialize our JSON");
     matches_canonical_pandoc_format(
         input,
         &native_output,
@@ -561,6 +566,15 @@ where
     );
 }
 
+/// Strip the `quarto_pandoc_reader_opts` Meta sentinel (Task 7, P2) from
+/// `our_json`. It exists only for the vendored Q1 Lua's benefit — real
+/// pandoc never emits it, so it is not a genuine AST divergence to compare.
+fn remove_quarto_pandoc_reader_opts(json: &mut serde_json::Value) {
+    if let Some(meta) = json.get_mut("meta").and_then(|m| m.as_object_mut()) {
+        meta.remove("quarto_pandoc_reader_opts");
+    }
+}
+
 /// Normalize pandoc-api-version in `pandoc_json` to match the length of the
 /// version array in `our_json`. pandoc-types 1.23.1.1 emits a 4-element version
 /// array [1,23,1,1] while we emit [1,23,1]. The extra trailing component is a
@@ -666,6 +680,7 @@ fn test_json_writer() {
                 let mut pandoc_value: serde_json::Value =
                     serde_json::from_str(&pandoc_json).expect("Failed to parse Pandoc JSON");
                 remove_location_fields(&mut our_value);
+                remove_quarto_pandoc_reader_opts(&mut our_value);
                 normalize_api_version(&mut pandoc_value, &our_value);
 
                 assert_eq!(
