@@ -100,20 +100,51 @@ The following files and modifications are *not* from `v1.11.3` and should be pre
 
 **Format for entries:** List items must be shaped exactly as `` - `<path/from/repo/root>` — description `` (backtick immediately after `- `) so the `cargo xtask lint` rule `vendored-pandoc-filters` can verify the path exists. The rule checks that every path listed here actually exists on disk.
 
-- `resources/pandoc-filters/filters/main.lua` — patched (Task 8). Two edits
-  marked `QUARTO2-PATCH`: an `import("./quarto2-shim.lua")` line after the
-  `customnodes/*.lua` import block, and a `tappend(quarto_filter_list,
-  quarto_pandoc_shim_filters)` line spliced between `quarto_init_filters`
-  and `quarto_normalize_filters`. Both are anchored by group name in the
-  patch comments, not by line number, since `main.lua`'s group contents
-  have been refactored twice in two years.
+- `resources/pandoc-filters/filters/main.lua` — patched twice, independently.
+  (1) Task 8: two edits marked `QUARTO2-PATCH`: an
+  `import("./quarto2-shim.lua")` line after the `customnodes/*.lua` import
+  block, and a `tappend(quarto_filter_list, quarto_pandoc_shim_filters)`
+  line spliced between `quarto_init_filters` and `quarto_normalize_filters`.
+  Both are anchored by group name in the patch comments, not by line
+  number, since `main.lua`'s group contents have been refactored twice in
+  two years. (2) P3 Task 6, upstream PR quarto-dev/quarto-cli#14913: edits
+  marked `QUARTO-PATCH` convert the old `if enableCrossRef then` gate to
+  `_quarto.modules.crossref_numbering.assign_crossref_numbers()`, and add a
+  fail-fast guard rejecting `crossref-numbering: external` combined with a
+  LaTeX-family or Typst target.
 - `resources/pandoc-filters/filters/quarto2-shim.lua` — new (ours, Task 8).
   P4 ships a placeholder `quarto_pandoc_shim_filters` group (an empty
   filter, so `main.lua` loads and runs unchanged); P5 replaces the body
   with the real wire-format-to-Q1-scaffold conversion.
-
-To be populated as further Q2 customizations are added:
-- P3 crossref patch (3 files)
+- `resources/pandoc-filters/filters/modules/crossref_numbering.lua` — new
+  (upstream, carried early via P3 Task 6, upstream PR
+  quarto-dev/quarto-cli#14913). Defines `crossref_present()` /
+  `assign_crossref_numbers()`, separating "should captions/refs still show
+  numbers" from "should quarto itself compute those numbers" — the second
+  question is false under `crossref-numbering: external`.
+- `resources/pandoc-filters/filters/modules/import_all.lua` — patched (P3
+  Task 6, upstream PR quarto-dev/quarto-cli#14913). One line marked
+  `QUARTO-PATCH`: registers `crossref_numbering` in `_quarto.modules`.
+- `resources/pandoc-filters/filters/customnodes/floatreftarget.lua` —
+  patched (P3 Task 6, upstream PR quarto-dev/quarto-cli#14913). Four call
+  sites marked `QUARTO-PATCH`: converted from `param("enable-crossref",
+  true)` to `_quarto.modules.crossref_numbering.crossref_present()`.
+- `resources/pandoc-filters/filters/modules/callouts.lua` — patched (P3
+  Task 6, upstream PR quarto-dev/quarto-cli#14913). Two sites marked
+  `QUARTO-PATCH`: one call site converted the same way as
+  `floatreftarget.lua`; the other adds a guard against a missing
+  `callout.order` field.
+- `resources/pandoc-filters/filters/crossref/format.lua` — patched (P3
+  Task 6, upstream PR quarto-dev/quarto-cli#14913). One site marked
+  `QUARTO-PATCH`: `refNumberOption` guards against `crossref.startAppendix`
+  being nil.
+- `resources/pandoc-filters/filters/layout/ipynb.lua` — comment-only
+  addition (P3 Task 6, upstream PR quarto-dev/quarto-cli#14913, not
+  marked `QUARTO-PATCH` since no logic changed). Explains why the two
+  `param("enable-crossref", true)` reads here are deliberately *not*
+  converted to `crossref_present()`: both predicates dispatch to the same
+  `render_ipynb_layout` callback, so the pair is a verified no-op
+  regardless of which flag it reads.
 
 ## License
 

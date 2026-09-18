@@ -8,16 +8,113 @@
 **unchanged** by the 2026-09-18 additions (Task 8 is upstream-only, `Q` tier). **One caveat:**
 Task 7, the q2-side `L`-tier matrix, is blocked on capabilities P4 owns — see
 `## Findings for Gordon` #1.
-**Status:** Ready for subagent-driven execution, with Task 7 explicitly parked behind named
-prerequisites. **Eight dispatchable tasks, Tasks 1–8** — note Task 8 is ordered *before* Task 5
-(which opens the PR carrying it); numbers here are identifiers, the `Prerequisite` fields are the
-ordering. **Updated 2026-09-18:** Gordon's two decisions are applied — the missing callout
-`order == nil` guard is folded into the upstream patch as anchor **A7** (Task 3), which also
-unblocks Task 7's labeled-callout fixture; and P3's checklist item 3 (the positive external-mode
-golden) has **moved to P6 Task 4** (its old section is now a non-dispatchable pointer, and the
-number 8 has been reused). **Also updated the same day:** Gordon's third decision adds **Task 8**,
-the TypeScript half of the upstream patch (`crossref: numbering:` key, schema entry, params read,
-two smoke tests), carried by Task 5's PR — resolving Findings #1.
+**Status:** **All eight tasks (1–8) executed and reviewed clean.** Tasks 1–5, 8 as of
+2026-09-18 (subagent-driven execution) — see "Execution status" below. **Tasks 6 and 7
+completed 2026-09-20**, in q2 worktree `.worktrees/workspace-1`, once P4 landed the vendored
+filters tree — see "Tasks 6 and 7 execution status" below. **Eight dispatchable tasks, Tasks 1–8** — note Task 8 is ordered
+*before* Task 5 (which opens the PR carrying it); numbers here are identifiers, the
+`Prerequisite` fields are the ordering. **Updated 2026-09-18:** Gordon's two decisions are
+applied — the missing callout `order == nil` guard is folded into the upstream patch as anchor
+**A7** (Task 3), which also unblocks Task 7's labeled-callout fixture; and P3's checklist item 3
+(the positive external-mode golden) has **moved to P6 Task 4** (its old section is now a
+non-dispatchable pointer, and the number 8 has been reused). **Also updated the same day:**
+Gordon's third decision adds **Task 8**, the TypeScript half of the upstream patch
+(`crossref: numbering:` key, schema entry, params read, two smoke tests), carried by Task 5's
+PR — resolving Findings #1.
+
+## Execution status (2026-09-18, subagent-driven execution — session `pandoc-hybrid-writer-impl-3`)
+
+**Tasks 1, 2, 3, 4, 8, 5 are done, reviewed clean, and committed — not merged, not pushed, no PR
+opened.**
+
+- **Task 1** — q2 worktree `.worktrees/pandoc-hybrid-p3`, branch `pandoc-hybrid-p3`, commit
+  `09ed32a53`. Reviewed clean. **Not merged** into `feature/pandoc-writer-hybrid` — held pending
+  Task 6, which lands in the same worktree once dispatchable.
+- **Tasks 2, 3, 4, 8, 5** — upstream `quarto-cli` checkout, branch
+  `quarto2-crossref-numbering`, commits `83d48d8e8..0c497cd6d`. Each task reviewed clean (Minor
+  findings ledgered, not fixed; one plan-mandated conflict ruled on — see below). **Not pushed.**
+- **Final whole-branch review** (most-capable-model pass across Tasks 2–8) found a real
+  **Critical** bug the task-level reviews missed: gating the whole `quarto_crossref_filters`
+  group on the new `assign_crossref_numbers()` predicate (Task 2's anchor-A1 conversion) also
+  silently skips `crossrefMetaInject`'s LaTeX preamble setup — unreachable before this patch
+  (skip was ipynb-only) but reachable for *any* format once Task 8 made `crossref-numbering`
+  YAML-settable. Reproduced: `--to pdf` under `crossref-numbering: external` crashed with
+  `LaTeX Error: Environment codelisting undefined`; `--to typst` crashed similarly. Fixed with a
+  fail-fast diagnostic scoping supported formats to docx/odt/pptx (the only formats this patch
+  actually validated) rather than the much larger structural fix of hoisting LaTeX/Typst
+  preamble setup out of the gated group — that deeper fix is out of scope for this PR and is a
+  real follow-up, not resolved here. Also fixed in the same round: an unsafe nil-deref in one of
+  Task 5's new exports (`refNumberOption` reading `crossref.startAppendix`), a missing changelog
+  entry, and missing `lua-types` declarations for Task 5's eight exports. Fix round + scoped
+  re-review both clean (commits `0c497cd6d..c6fd7a41c`).
+- **Rulings made during execution** (binding, recorded in full with cost-if-wrong in the
+  execution ledger at
+  `/Users/gordon/src/quarto-cli/.superpowers/sdd/2026-09-18-pandoc-hybrid-P3-implementation/progress.md`):
+  Task 6 deferred alongside Task 7 (see below); Task 1 dispatched against the q2 worktree per
+  this file's own Task 1 `Files` list, not upstream as an earlier dispatch prompt assumed; Task
+  3/6's grep-based acceptance criterion amended from 3 to 4 expected occurrences of
+  `param("enable-crossref"` after Task 2 necessarily moved the `enable-crossref` param read into
+  a new `modules/crossref_numbering.lua` (main.lua's anchor-A0 local is gone, not extended, as
+  the require-ability constraint demands); a since-closed test-vacuity gap between Tasks 3 and 4
+  (the A4/A5 ipynb-pair regression guard didn't actually redden on the named revert — closed by
+  Task 4 using its own explicit license to strengthen the test); Task 8's T8.3 coverage claim
+  re-pointed at the schema-default path after confirming its `undefined`-guard is unobservable
+  through `JSON.stringify`.
+- **Not done, deliberately:** no push, no `gh pr create` — a standing constraint requires
+  Gordon's explicit go-ahead before either, since opening a PR against `quarto-dev/quarto-cli` is
+  public and hard to reverse. A complete PR description draft exists in this session's scratch
+  directory, referenced from the execution ledger above.
+
+**Task 6's prerequisite was misjudged when this file was last written — corrected here.** This
+file's Task 6 section already said "Blocked on P4's vendored filters tree existing," but the
+dispatch prompt that kicked off this execution pass treated Task 6 as immediately dispatchable
+and only Task 7 as blocked. Verified 2026-09-18 (this execution pass): `resources/pandoc-filters/`
+does not exist on `feature/pandoc-writer-hybrid` or on any other q2 branch; P4's own
+implementation plan is marked "Ready for...execution" but its git history is planning-doc
+commits only, no code landed. **Tasks 6 and 7 are both deferred to a follow-up session**, to be
+picked up once P4 lands that vendored tree. (Separately, checked what P4 itself is blocked on:
+per P4's own plan, only its Task 9 and its transport smoke test depend on P2 — specifically
+`meta.quarto_pandoc_reader_opts`, landed as P2 Task 7. That work already exists on branch
+`pandoc-hybrid-P2-wire-schema`; it just hasn't merged into `feature/pandoc-writer-hybrid` yet.
+P4's Tasks 1–8 are otherwise unblocked.)
+
+## Tasks 6 and 7 execution status (2026-09-20, q2 worktree `.worktrees/workspace-1`)
+
+**Both tasks done, reviewed clean, committed to `feature/pandoc-writer-hybrid` — not pushed.**
+Full detail in this worktree's ledger,
+`.superpowers/sdd/2026-09-18-pandoc-hybrid-P3-implementation/progress.md`.
+
+- **Task 6** — commit `9dae23206`. Corrected scope vs. this file's stale 3-file list: the
+  upstream patch (Tasks 2-3) introduced a new file, `modules/crossref_numbering.lua` (the
+  predicates had to be `require`-able, so they couldn't stay inline in `main.lua` as this file's
+  Files list assumed) — actual touch points: `modules/crossref_numbering.lua` (new),
+  `modules/import_all.lua`, `main.lua`, `customnodes/floatreftarget.lua`, `modules/callouts.lua`,
+  `crossref/format.lua` (nil-deref guard only, not the Route-N export line), plus a comment-only
+  addition to `layout/ipynb.lua`. T6.1a's allow-list is 6 marker-bearing files, not 3; T6.1c's
+  allow-list of remaining raw `param("enable-crossref"` reads is 4 occurrences (`layout/ipynb.lua`
+  x2, `modules/crossref_numbering.lua` x2), not 3 — `main.lua` no longer reads the param directly.
+  Implemented by a dispatched subagent (`superpowers:subagent-driven-development`, per this file's
+  stated process), task-reviewed by the controller directly (Gordon's explicit instruction for
+  this task) rather than a separate reviewer subagent. Verified against a real pandoc 3.10 (the
+  local system pandoc, 3.8.1, is below this file's L-tier floor): full `quarto-core` suite
+  4569/4569 passed, 0 failed.
+- **Task 7** — commit `147156c22`. Implemented directly by the controller
+  (`superpowers:executing-plans`, per Gordon's explicit process switch — no implementer or
+  reviewer subagent for this task). All five named revert hunks (T7.1-T7.5) verified red-then-green
+  by hand against the real vendored Lua. **One plan-text correction, ruled on in the ledger**:
+  T7.2's stated revert hunk ("invert A1's polarity") does not actually redden M2, because
+  `crossref_present()` independently gates docx caption decoration regardless of the assign-gate's
+  state — M2, like M5 (already acknowledged elsewhere in this file as "identical to M1 by
+  construction"), is a cell where `crossref-numbering` stays unset, so Tasks 2-3's real behavior
+  change doesn't reach it. A real substitute discriminator was verified by hand
+  (`crossref_present()`'s own `or` disjunct) and documented in the test's own doc comment. Full
+  `quarto-core` suite (same pinned pandoc): 4574/4574 passed, 0 failed.
+
+**Findings for Gordon #1's blocking condition is resolved**: P4's vendored filters tree +
+`QUARTO_FILTER_PARAMS` blob builder + pandoc-version reconciliation all now exist on
+`feature/pandoc-writer-hybrid`; Task 7's prerequisite is fully satisfied. This file's Task 6 and
+Task 7 sections' own `**Prerequisite.**` lines (stating the vendored tree "does not exist in this
+worktree," verified 2026-09-18) describe pre-P4 reality and are now historical, not current.
 
 This file adds nothing to P3's scope — it converts P3's Coarse checklist into `## Task N` units
 `superpowers:subagent-driven-development` can dispatch, and binds every test P3 needs to a named

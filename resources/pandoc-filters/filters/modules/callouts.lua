@@ -9,6 +9,12 @@ local function callout_title_prefix(callout, withDelimiter)
     fail("unknown callout prefix '" .. refType(callout.attr.identifier) .. "'")
     return
   end
+  -- QUARTO-PATCH(upstream PR quarto-dev/quarto-cli#14913): guard against a
+  -- missing order field instead of crashing on the nil comparison below.
+  if callout.order == nil then
+    warn("field 'order' is missing from callout. Cannot determine title prefix for crossref.")
+    return {}
+  end
 
   -- https://github.com/quarto-dev/quarto-cli/issues/10894
   -- honor custom callout title if it exists
@@ -19,7 +25,9 @@ end
 
 local function decorate_callout_title_with_crossref(callout)
   callout = ensure_custom(callout)
-  if not param("enable-crossref", true) then
+  -- QUARTO-PATCH(upstream PR quarto-dev/quarto-cli#14913): convert to
+  -- crossref_present() so external numbering still decorates captions.
+  if not _quarto.modules.crossref_numbering.crossref_present() then
     -- don't decorate captions with crossrefs information if crossrefs are disabled
     return callout
   end
