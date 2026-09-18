@@ -325,8 +325,8 @@ fn postprocess_markdown(markdown: &str, source_path: &Path) -> String {
 
 /// Convert knitr includes to PandocIncludes.
 ///
-/// Reads include file contents and converts them to the PandocIncludes format
-/// used by the rest of the pipeline.
+/// Reads the contents of every file each slot names, in order, into the
+/// `PandocIncludes` form the rest of the pipeline consumes.
 fn convert_includes(includes: &Option<KnitrIncludes>) -> crate::stage::PandocIncludes {
     use crate::stage::PandocIncludes;
 
@@ -335,27 +335,19 @@ fn convert_includes(includes: &Option<KnitrIncludes>) -> crate::stage::PandocInc
     };
 
     let mut result = PandocIncludes::default();
-
-    // Read include file contents
-    if let Some(ref path) = inc.include_in_header
-        && let Ok(content) = std::fs::read_to_string(path)
-    {
-        result.header_includes.push(content);
-    }
-
-    if let Some(ref path) = inc.include_before_body
-        && let Ok(content) = std::fs::read_to_string(path)
-    {
-        result.include_before.push(content);
-    }
-
-    if let Some(ref path) = inc.include_after_body
-        && let Ok(content) = std::fs::read_to_string(path)
-    {
-        result.include_after.push(content);
-    }
-
+    read_include_files(&inc.include_in_header, &mut result.header_includes);
+    read_include_files(&inc.include_before_body, &mut result.include_before);
+    read_include_files(&inc.include_after_body, &mut result.include_after);
     result
+}
+
+/// Append the contents of each readable file in `paths` to `out`, in order.
+fn read_include_files(paths: &[PathBuf], out: &mut Vec<String>) {
+    for path in paths {
+        if let Ok(content) = std::fs::read_to_string(path) {
+            out.push(content);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -657,11 +649,7 @@ mod tests {
 
     #[test]
     fn test_convert_includes_empty() {
-        let includes = KnitrIncludes {
-            include_in_header: None,
-            include_before_body: None,
-            include_after_body: None,
-        };
+        let includes = KnitrIncludes::default();
 
         let result = convert_includes(&Some(includes));
 
@@ -685,9 +673,9 @@ mod tests {
         std::fs::write(&after_path, "<div>After</div>").unwrap();
 
         let includes = KnitrIncludes {
-            include_in_header: Some(header_path),
-            include_before_body: Some(before_path),
-            include_after_body: Some(after_path),
+            include_in_header: vec![header_path],
+            include_before_body: vec![before_path],
+            include_after_body: vec![after_path],
         };
 
         let result = convert_includes(&Some(includes));
@@ -704,15 +692,40 @@ mod tests {
     fn test_convert_includes_missing_file() {
         // Path to a file that doesn't exist
         let includes = KnitrIncludes {
-            include_in_header: Some(PathBuf::from("/nonexistent/header.html")),
-            include_before_body: None,
-            include_after_body: None,
+            include_in_header: vec![PathBuf::from("/nonexistent/header.html")],
+            include_before_body: Vec::new(),
+            include_after_body: Vec::new(),
         };
 
         let result = convert_includes(&Some(includes));
 
         // Should gracefully handle missing file
         assert!(result.header_includes.is_empty());
+    }
+
+    /// T3 (bd-gy2ozix3): several files in one slot are read in order.
+    #[test]
+    fn test_convert_includes_multiple_header_files_in_order() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let first = temp_dir.path().join("first.html");
+        std::fs::write(&first, "<script src=\"a.js\"></script>").unwrap();
+        let second = temp_dir.path().join("second.html");
+        std::fs::write(&second, "<script src=\"b.js\"></script>").unwrap();
+
+        let includes = KnitrIncludes {
+            include_in_header: vec![first, second],
+            ..Default::default()
+        };
+
+        let result = convert_includes(&Some(includes));
+
+        assert_eq!(
+            result.header_includes,
+            vec![
+                "<script src=\"a.js\"></script>".to_string(),
+                "<script src=\"b.js\"></script>".to_string()
+            ]
+        );
     }
 
     // === Integration Tests (require R installation) ===

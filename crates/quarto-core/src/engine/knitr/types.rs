@@ -36,13 +36,15 @@
 //!   "markdown": "# Hello\n\n::: {.cell}\n...\n:::",
 //!   "supporting": ["/path/to/doc_files"],
 //!   "filters": ["rmarkdown/pagebreak.lua"],
-//!   "includes": { "include-in-header": "/tmp/header.html" },
+//!   "includes": { "include-in-header": ["/tmp/header.html"] },
 //!   "postProcess": false
 //! }
 //! ```
 
+use std::fmt;
 use std::path::PathBuf;
 
+use serde::de::{self, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
@@ -136,69 +138,139 @@ pub struct KnitrExecuteResult {
 
 /// Include files from knitr execution.
 ///
-/// These are file paths to content that should be included in specific
-/// locations of the final document.
+/// Each slot is a list of files whose contents go into the named location
+/// of the final document. `execute.R`'s `create_pandoc_includes` writes one
+/// file per slot and wraps its path in `I()`, so `jsonlite::toJSON(auto_unbox
+/// = TRUE)` emits a **one-element array**, never a bare string — Quarto 1
+/// declares the same slot as `string[]`. A bare string is also accepted
+/// (bd-gy2ozix3 / GH #683: typing the slot as a single path made every
+/// document with an HTML dependency fail to render).
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct KnitrIncludes {
-    /// Content to include in document header (e.g., CSS, JS)
-    #[serde(default)]
-    pub include_in_header: Option<PathBuf>,
+    /// Files to include in the document header (e.g., CSS, JS)
+    #[serde(default, deserialize_with = "deserialize_string_or_seq")]
+    pub include_in_header: Vec<PathBuf>,
 
-    /// Content to include before body
-    #[serde(default)]
-    pub include_before_body: Option<PathBuf>,
+    /// Files to include before the body
+    #[serde(default, deserialize_with = "deserialize_string_or_seq")]
+    pub include_before_body: Vec<PathBuf>,
 
-    /// Content to include after body
-    #[serde(default)]
-    pub include_after_body: Option<PathBuf>,
+    /// Files to include after the body
+    #[serde(default, deserialize_with = "deserialize_string_or_seq")]
+    pub include_after_body: Vec<PathBuf>,
 }
 
-/// Custom deserializer that handles both `{}` and `[]` for includes.
+impl KnitrIncludes {
+    /// True when no slot names any file.
+    pub fn is_empty(&self) -> bool {
+        self.include_in_header.is_empty()
+            && self.include_before_body.is_empty()
+            && self.include_after_body.is_empty()
+    }
+}
+
+/// Deserialize an include slot from a bare path string, a list of path
+/// strings, or `null`.
 ///
-/// The R scripts sometimes return an empty array `[]` instead of an empty
-/// object `{}` when there are no includes. This deserializer handles both cases.
+/// Implemented as a visitor rather than via an intermediate
+/// `serde_json::Value` so that a type error keeps its position in the
+/// document: `serde_path_to_error` can then report the offending field as
+/// `includes.include-in-header` instead of just `includes`.
+fn deserialize_string_or_seq<'de, D>(deserializer: D) -> Result<Vec<PathBuf>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct SlotVisitor;
+
+    impl<'de> Visitor<'de> for SlotVisitor {
+        type Value = Vec<PathBuf>;
+
+        fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            f.write_str("a path string or a list of path strings")
+        }
+
+        fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
+            Ok(Vec::new())
+        }
+
+        fn visit_none<E: de::Error>(self) -> Result<Self::Value, E> {
+            Ok(Vec::new())
+        }
+
+        fn visit_some<D2: Deserializer<'de>>(self, d: D2) -> Result<Self::Value, D2::Error> {
+            d.deserialize_any(SlotVisitor)
+        }
+
+        fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+            Ok(vec![PathBuf::from(v)])
+        }
+
+        fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+            let mut paths = Vec::with_capacity(seq.size_hint().unwrap_or(0));
+            while let Some(path) = seq.next_element::<String>()? {
+                paths.push(PathBuf::from(path));
+            }
+            Ok(paths)
+        }
+    }
+
+    deserializer.deserialize_any(SlotVisitor)
+}
+
+/// Deserialize the `includes` field from an object, an empty array, or
+/// `null`.
+///
+/// The R scripts return an empty array `[]` instead of an empty object `{}`
+/// when there are no includes (an empty R `list()` serializes as `[]`).
+/// An object with no populated slot also yields `None`. Visitor-based for
+/// the same reason as [`deserialize_string_or_seq`]: field errors keep
+/// their path.
 fn deserialize_includes<'de, D>(deserializer: D) -> Result<Option<KnitrIncludes>, D::Error>
 where
     D: Deserializer<'de>,
 {
-    use serde::de::Error;
+    struct IncludesVisitor;
 
-    let value: Value = Deserialize::deserialize(deserializer)?;
+    impl<'de> Visitor<'de> for IncludesVisitor {
+        type Value = Option<KnitrIncludes>;
 
-    match value {
-        // null -> None
-        Value::Null => Ok(None),
-
-        // Empty array [] -> None (quirk from R)
-        Value::Array(arr) if arr.is_empty() => Ok(None),
-
-        // Non-empty array is an error
-        Value::Array(_) => Err(D::Error::custom(
-            "expected object or empty array for includes, got non-empty array",
-        )),
-
-        // Object -> deserialize as KnitrIncludes
-        Value::Object(_) => {
-            let includes: KnitrIncludes =
-                serde_json::from_value(value).map_err(D::Error::custom)?;
-
-            // If all fields are None, return None
-            if includes.include_in_header.is_none()
-                && includes.include_before_body.is_none()
-                && includes.include_after_body.is_none()
-            {
-                Ok(None)
-            } else {
-                Ok(Some(includes))
-            }
+        fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            f.write_str("an includes object, an empty array, or null")
         }
 
-        // Other types are errors
-        _ => Err(D::Error::custom(
-            "expected object, array, or null for includes",
-        )),
+        fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
+            Ok(None)
+        }
+
+        fn visit_none<E: de::Error>(self) -> Result<Self::Value, E> {
+            Ok(None)
+        }
+
+        fn visit_some<D2: Deserializer<'de>>(self, d: D2) -> Result<Self::Value, D2::Error> {
+            d.deserialize_any(IncludesVisitor)
+        }
+
+        fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+            if seq.next_element::<de::IgnoredAny>()?.is_some() {
+                return Err(de::Error::custom(
+                    "expected an includes object or an empty array, got a non-empty array",
+                ));
+            }
+            Ok(None)
+        }
+
+        fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
+            let includes = KnitrIncludes::deserialize(de::value::MapAccessDeserializer::new(map))?;
+            Ok(if includes.is_empty() {
+                None
+            } else {
+                Some(includes)
+            })
+        }
     }
+
+    deserializer.deserialize_any(IncludesVisitor)
 }
 
 /// Request wrapper sent to R via stdin.
@@ -338,13 +410,13 @@ mod tests {
 
         assert_eq!(
             includes.include_in_header,
-            Some(PathBuf::from("/tmp/header.html"))
+            vec![PathBuf::from("/tmp/header.html")]
         );
         assert_eq!(
             includes.include_before_body,
-            Some(PathBuf::from("/tmp/before.html"))
+            vec![PathBuf::from("/tmp/before.html")]
         );
-        assert!(includes.include_after_body.is_none());
+        assert!(includes.include_after_body.is_empty());
     }
 
     #[test]
@@ -362,9 +434,104 @@ mod tests {
         let result: KnitrExecuteResult = serde_json::from_str(json).unwrap();
         let includes = result.includes.unwrap();
 
-        assert!(includes.include_in_header.is_some());
-        assert!(includes.include_before_body.is_some());
-        assert!(includes.include_after_body.is_some());
+        assert_eq!(
+            includes.include_in_header,
+            vec![PathBuf::from("/tmp/h.html")]
+        );
+        assert_eq!(
+            includes.include_before_body,
+            vec![PathBuf::from("/tmp/b.html")]
+        );
+        assert_eq!(
+            includes.include_after_body,
+            vec![PathBuf::from("/tmp/a.html")]
+        );
+    }
+
+    // ── T2: every slot shape the wire can carry (bd-gy2ozix3) ────────────
+
+    fn parse_includes(includes_json: &str) -> Option<KnitrIncludes> {
+        let json = format!(r#"{{"engine":"knitr","markdown":"","includes":{includes_json}}}"#);
+        serde_json::from_str::<KnitrExecuteResult>(&json)
+            .unwrap_or_else(|e| panic!("includes {includes_json} must deserialize: {e}"))
+            .includes
+    }
+
+    #[test]
+    fn include_slot_accepts_two_element_array_in_order() {
+        let includes = parse_includes(r#"{"include-in-header":["/tmp/a","/tmp/b"]}"#).unwrap();
+        assert_eq!(
+            includes.include_in_header,
+            vec![PathBuf::from("/tmp/a"), PathBuf::from("/tmp/b")]
+        );
+    }
+
+    #[test]
+    fn include_slot_accepts_bare_string() {
+        let includes = parse_includes(r#"{"include-after-body":"/tmp/after"}"#).unwrap();
+        assert_eq!(
+            includes.include_after_body,
+            vec![PathBuf::from("/tmp/after")]
+        );
+        assert!(includes.include_in_header.is_empty());
+    }
+
+    #[test]
+    fn include_slot_empty_array_counts_as_absent() {
+        assert!(parse_includes(r#"{"include-in-header":[]}"#).is_none());
+    }
+
+    #[test]
+    fn include_slot_null_counts_as_absent() {
+        assert!(parse_includes(r#"{"include-in-header":null}"#).is_none());
+    }
+
+    #[test]
+    fn include_slot_rejects_non_string_element_naming_the_slot() {
+        let json = r#"{"engine":"knitr","markdown":"","includes":{"include-in-header":[42]}}"#;
+        let err = serde_json::from_str::<KnitrExecuteResult>(json).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("invalid type: integer `42`, expected a string"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn includes_non_empty_array_is_rejected() {
+        let json = r#"{"engine":"knitr","markdown":"","includes":["/tmp/x"]}"#;
+        let err = serde_json::from_str::<KnitrExecuteResult>(json).unwrap_err();
+        assert!(
+            err.to_string().contains("got a non-empty array"),
+            "unexpected error: {err}"
+        );
+    }
+
+    /// bd-gy2ozix3 / GH #683: the results file exactly as `execute.R`
+    /// writes it when the document attaches an HTML dependency (an
+    /// htmlwidget, or any `htmltools::htmlDependency`). Captured verbatim
+    /// from a failing render on 2026-09-18, with only the `markdown` field
+    /// elided and paths shortened. `create_pandoc_includes` wraps each
+    /// include path in `I()`, so jsonlite's `auto_unbox = TRUE` leaves it
+    /// as a one-element array — Quarto 1's declared type is `string[]`.
+    /// Revert binding: typing a slot as a single path makes this fail with
+    /// `invalid type: sequence, expected path string`.
+    const CAPTURED_HTML_DEPENDENCY_RESULT: &str = r#"{"engine":"knitr","markdown":"","supporting":["/work/doc_files"],"filters":["rmarkdown/pagebreak.lua"],"includes":{"include-in-header":["/tmp/quarto-pipeline_46gJNU/file65026e45f832"]},"engineDependencies":{},"preserve":{},"postProcess":true}"#;
+
+    #[test]
+    fn captured_html_dependency_result_deserializes() {
+        let result: KnitrExecuteResult = serde_json::from_str(CAPTURED_HTML_DEPENDENCY_RESULT)
+            .expect("the shape execute.R actually writes must deserialize");
+        let includes = result.includes.expect("one include slot is populated");
+        assert_eq!(
+            includes.include_in_header,
+            vec![PathBuf::from(
+                "/tmp/quarto-pipeline_46gJNU/file65026e45f832"
+            )]
+        );
+        assert!(includes.include_before_body.is_empty());
+        assert!(includes.include_after_body.is_empty());
+        assert!(result.post_process);
     }
 
     #[test]
