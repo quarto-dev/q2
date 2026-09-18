@@ -1,26 +1,20 @@
 # P1 — Implementation tasks & Test Seam Spec
 
-**Date:** 2026-09-18
 **Plan (authoritative scope):** [`2026-08-20-pandoc-hybrid-P1-neutral-core.md`](2026-08-20-pandoc-hybrid-P1-neutral-core.md)
 **Design (authoritative):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md)
 **Epic:** [`2026-08-20-pandoc-hybrid-epic.md`](2026-08-20-pandoc-hybrid-epic.md)
 **Depends on:** nothing (per the epic's graph, P1/P2/P3 are parallel immediately). **Consumed by:**
 P5 (needs the `Pandoc`-kind exclude-list decision — specifically that `panel-tabset`'s sugar half
-stays enabled), P7 (needs the `PipelineProfile` seam + the B3 shared-services segment).
-**Status:** Ready for subagent-driven execution. **All nine tasks are dispatchable** — the three
-findings that previously parked work (F1's Footnotes shape, F3's bucket-coverage mechanism, F6's
-`LinkRewrite` cell) were decided by Gordon on 2026-09-18 and are applied; see
-`## Findings for Gordon`. No task is blocked on a finding.
+stays enabled), P7 (needs the `PipelineProfile` seam), and P7-foundation (needs the B3
+shared-services segment).
+**Status:** Ready for subagent-driven execution. All nine tasks are dispatchable; none is blocked.
 
-This file adds nothing to P1's scope — it converts P1's Coarse checklist into `## Task N` units
+This file converts P1's Coarse checklist into `## Task N` units
 `superpowers:subagent-driven-development` can dispatch, and binds every test P1 needs to a named
 production seam and revert hunk before any code is written (the `/prevalidating-test-seams`
 discipline). The Spec is P1 + the design doc; where this file and the plan disagree, the plan wins.
 
-Every `file.rs:line` below was opened and confirmed against the worktree at
-`feature/pandoc-writer-hybrid` on 2026-09-18. Where a plan citation had drifted, this file cites
-what is actually there and records the drift in **Findings for Gordon** (§F7) rather than silently
-propagating or silently "fixing" it.
+Every `file.rs:line` below cites what is actually in the worktree at `feature/pandoc-writer-hybrid`.
 
 ## Tiers used in this file
 
@@ -59,8 +53,8 @@ behavioral change to any existing format.**
   item 1). `Pptx` variant into the enum at `format.rs:29` (`Docx` already exists — confirmed).
   Three edits follow it: the exhaustive `as_str()` match (`format.rs:44-56`), the exhaustive
   `output_extension_for()` match (`format.rs:279-291`), **and the non-exhaustive
-  `TryFrom<&str> for FormatIdentifier` string match (`format.rs:82-96`)** — see Finding F5: only
-  the third one actually makes `pptx` resolvable, and the compiler will not force it.
+  `TryFrom<&str> for FormatIdentifier` string match (`format.rs:84-101`)** — only the third one
+  actually makes `pptx` resolvable, since it is the only one of the three that isn't compiler-forced.
 - `crates/quarto-core/src/format.rs:110-131` (`builtin_pseudo_format`) and
   `format.rs:137-139` (`is_revealjs_target`) — the two existing mechanisms `from_format` must
   reproduce exactly.
@@ -80,12 +74,11 @@ behavioral change to any existing format.**
 **Acceptance criterion.**
 1. `PipelineProfile::from_format` returns, exactly: `"html"`→`HtmlRender`, `"q2-debug"`→`HtmlRender`,
    `"acm-html"`→`HtmlRender`, `"q2-preview"`→`HtmlPreview`,
-   **`"q2-sandboxed-preview"`→`HtmlPreview`** (see F4), `"revealjs"`→`RevealjsRender`,
+   **`"q2-sandboxed-preview"`→`HtmlPreview`**, `"revealjs"`→`RevealjsRender`,
    `"q2-slides"`→`RevealjsPreview`, `"docx"`→`Pandoc("docx")`, `"pptx"`→`Pandoc("pptx")`,
    `"gfm"`→`Pandoc("gfm")` — asserted by T1.1.
 2. `Format::from_format_string("pptx")` returns `Ok`, with `identifier == FormatIdentifier::Pptx`,
-   `output_extension == "pptx"`, `native_pipeline == false` — asserted by T1.2. (Today it returns
-   `Err("Unknown format: pptx")` from `format.rs:449`.)
+   `output_extension == "pptx"`, `native_pipeline == false` — asserted by T1.2.
 3. `RenderContext::new(&project, &doc, &docx_format, &binaries).pipeline_profile ==
    PipelineProfile::Pandoc("docx".into())`, with **zero** changes to any existing
    `RenderContext::new` call site — asserted by T1.3, enforced by the build.
@@ -104,7 +97,7 @@ behavioral change to any existing format.**
 | # | Tier | Real unit exercised | Seam (invoked → asserted) | Mock boundary | Named revert hunk |
 |---|---|---|---|---|---|
 | T1.1 | U | `quarto_core::format::PipelineProfile::from_format` | call with the 10 format strings in criterion 1 → `assert_eq!` each against its variant | none | the `"q2-slides"` and `"q2-sandboxed-preview"` arms of `from_format` |
-| T1.2 | U | `quarto_core::format::Format::from_format_string` | `from_format_string("pptx")` → `Ok`, identifier/extension/native fields | none | the `"pptx" => Ok(FormatIdentifier::Pptx)` arm in `TryFrom<&str>` (`format.rs:82-96`) |
+| T1.2 | U | `quarto_core::format::Format::from_format_string` | `from_format_string("pptx")` → `Ok`, identifier/extension/native fields | none | the `"pptx" => Ok(FormatIdentifier::Pptx)` arm in `TryFrom<&str>` (`format.rs:84-101`) |
 | T1.3 | U | `quarto_core::render::RenderContext::new` | build a docx `Format`, construct a context → `ctx.pipeline_profile` | `ProjectContext`/`DocumentInfo`/`BinaryDependencies` test doubles already used by `format.rs`/`pipeline.rs` tests | the `pipeline_profile: PipelineProfile::from_format(&format.target_format)` initializer inside `RenderContext::new` |
 | T1.4 | U | `quarto_core::pipeline::build_transform_pipeline` | build with `HtmlRender` → `assert_eq!` the full ordered `Vec<&str>` of `t.name()` against a literal captured pre-refactor | test `SystemRuntime` (`make_test_runtime()`, already used at `pipeline.rs:3835`) | the `PipelineProfile::HtmlRender \| HtmlPreview => { TitleBlock, Sectionize }` arm replacing the `else` branch at `pipeline.rs:1274-1277` |
 | T1.5 | U | same | build with `RevealjsRender` → exact ordered name list contains `reveal-columns`/`reveal-slides`/`reveal-footer-alias` and **not** `title-block`/`sectionize` | same | the `RevealjsRender \| RevealjsPreview` arm replacing `if is_revealjs` at `pipeline.rs:1264` |
@@ -117,10 +110,9 @@ behavioral change to any existing format.**
   And: Revert ⟨the `"q2-sandboxed-preview" => HtmlPreview` arm⟩ →
   ⟨`assert_eq!(from_format("q2-sandboxed-preview"), HtmlPreview)`⟩ RED.
 - **T1.2** — Revert ⟨the `"pptx" => Ok(FormatIdentifier::Pptx)` arm in `TryFrom<&str> for
-  FormatIdentifier`, `format.rs:82-96`⟩ → ⟨`assert!(Format::from_format_string("pptx").is_ok())`⟩
-  RED (it returns `Err("Unknown format: pptx")` from `format.rs:449`). Note the inverse is *not*
-  true: adding only the `as_str`/`output_extension_for` arms leaves this assertion RED, which is
-  exactly F5.
+  FormatIdentifier`, `format.rs:84-101`⟩ → ⟨`assert!(Format::from_format_string("pptx").is_ok())`⟩
+  RED (it returns `Err("Unknown format: pptx")` from `format.rs:538`). Note the inverse is *not*
+  true: adding only the `as_str`/`output_extension_for` arms leaves this assertion RED.
 - **T1.3** — Revert ⟨the `pipeline_profile: …` initializer in `RenderContext::new`,
   `render.rs:442`, replacing it with `PipelineProfile::HtmlRender`⟩ →
   ⟨`assert_eq!(ctx.pipeline_profile, PipelineProfile::Pandoc("docx".into()))`⟩ RED.
@@ -133,10 +125,8 @@ behavioral change to any existing format.**
 
 ### Refactor-induced vacuity check
 
-**The four→five-variant correction (landed in commit `917b943a5`, "PipelineProfile's four flat
-variant names conflate the two axes with no slot for reveal+preview").** The old shorthand
-`{HtmlFull, Revealjs, Preview, Pandoc(fmt)}` — still standing in design §5 line 177 — has **no
-q2-slides cell**. A test that asserts only four variants, or that asserts
+**`PipelineProfile` must have five variants, not four — a four-variant shorthand has no
+`q2-slides` cell.** A test that asserts only four variants, or that asserts
 `from_format("q2-slides")` is "some reveal variant", **survives the bug**: `q2-slides` would map to
 `RevealjsRender`, the full reveal-render pipeline would run for the preview leg, and nothing would
 be asserted about it. T1.1 therefore must assert the `RevealjsPreview` cell **by name and by
@@ -153,11 +143,11 @@ Its reveal-family membership comes only from `is_revealjs_target` matching the *
 `is_html_based()`-shaped predicates**. T1.1's explicit `q2-slides → RevealjsPreview` assertion is
 the discriminator; `is_html_based()` is not.
 
-**The `Pptx` cost-model correction (commit `4844c707c`).** The corrected expected value —
-"two-arm change, not a ripple" — is *load-bearing for scope* but **does not discriminate the bug
-it was written about.** `as_str` and `output_extension_for` are the two matches the compiler
+**Adding `Pptx` is a three-arm change, but only one arm discriminates.** "Two-arm change, not a
+ripple" is *load-bearing for scope* but **does not discriminate the actual failure.**
+`as_str` and `output_extension_for` are the two matches the compiler
 forces; neither is on the failure path. The state this test exists to distinguish is
-"`--to pptx` resolves" vs. "`--to pptx` dies at `format.rs:449`", and the only hunk that moves
+"`--to pptx` resolves" vs. "`--to pptx` dies at `format.rs:538`", and the only hunk that moves
 that is the `TryFrom` arm. T1.2 asserts `from_format_string("pptx")`, not `Pptx.as_str()`, for
 exactly that reason. An `assert_eq!(FormatIdentifier::Pptx.as_str(), "pptx")` test would compile
 only *after* the fix and pass whether or not `pptx` is resolvable — vacuous. Keep such an
@@ -205,12 +195,11 @@ derived by querying `phase()` rather than by hand-enumeration.
   `draft-alert`, `format-css`, `responsive-image`.
 - **Design-doc-table corrections, two:** `callout-resolve`, `panel-tabset-resolve`.
 
-4 + 7 + 20 + 5 + 2 = **38**. The plan's "~33-name Pandoc list" (`pipeline.rs:2851` note) is a
-stale approximation; 38 is the derived figure. **`attribution-generate` is deliberately absent** —
-see Finding F2: it is not a member of `build_transform_pipeline` at all, so listing it here would
-fail T2.1. **`panel-tabset` (sugar) is deliberately absent** (diverges from Preview's list, per the
-plan and design §6's `panel-tabset` row). `config-markdown`, `reference-link-diagnostics` and
-`llms-capture` are deliberately absent per the plan's round-4 correction (format-agnostic /
+4 + 7 + 20 + 5 + 2 = **38**. **`attribution-generate` is deliberately absent** — it is not a
+member of `build_transform_pipeline` at all, so listing it here would fail T2.1 (it belongs on
+Task 6's stage-level exclude-list instead, see T6.3). **`panel-tabset` (sugar) is deliberately
+absent** (diverges from Preview's list, per design §6's `panel-tabset` row). `config-markdown`,
+`reference-link-diagnostics` and `llms-capture` are deliberately absent (format-agnostic /
 `website.llms-txt`-gated).
 
 After Task 5 lands, the list grows by exactly one: the Footnotes HTML-half's new `name()`.
@@ -285,19 +274,19 @@ breaks P5's entire Route-R Tabset path, and **every absence-shaped assertion sti
   job is to catch *omissions* mechanically; T2.3 is its counterweight for over-exclusion. Neither
   alone is sufficient, and neither should be written without the other.
 
-**The Navigation count correction (18 → 20, commit `4844c707c`).** The corrected expected value
-20 still discriminates — but only in the query-based form. An `assert_eq!(nav_names.len(), 20)`
-written **against a hand-list** collapses the moment a 21st Navigation transform lands: the
-hand-list has 20, the pipeline has 21, and the assertion compares the hand-list to itself. T2.2
-derives both sides from `build_transform_pipeline` + `phase()`, so the `20` is a tripwire on
-*pipeline growth*, not a restatement of the list. If a reviewer ever finds the `20` literal and
-the exclude-list's Navigation portion coming from the same source, the test has gone vacuous.
+**The Navigation count (20) only discriminates in the query-based form.** An
+`assert_eq!(nav_names.len(), 20)` written **against a hand-list** collapses the moment a 21st
+Navigation transform lands: the hand-list has 20, the pipeline has 21, and the assertion compares
+the hand-list to itself. T2.2 derives both sides from `build_transform_pipeline` + `phase()`, so
+the `20` is a tripwire on *pipeline growth*, not a restatement of the list. If a reviewer ever
+finds the `20` literal and the exclude-list's Navigation portion coming from the same source, the
+test has gone vacuous.
 
-**The `example-embed-render` B4→B1 reclassification (commit `a684cfac0`).** Expected value changed
-from "on the exclude-list" to "not on the exclude-list." It still discriminates only because T2.3
-asserts the exact list: `example-embed-render` appearing in the surviving list is the positive
-assertion. A test that only asserted the excluded set would read identically before and after the
-reclassification for this name, since its absence from an absence-list is not an assertion.
+**`example-embed-render` must appear in the *surviving* list, not merely be absent from the
+exclude-list.** It still discriminates only because T2.3 asserts the exact list:
+`example-embed-render` appearing in the surviving list is the positive assertion. A test that only
+asserted the excluded set would pass whether or not `example-embed-render` actually survives,
+since its absence from an absence-list is not an assertion.
 
 ---
 
@@ -349,18 +338,17 @@ that keeps `panel-tabset` enabled). Neither is external to this plan.
 
 - **T3.1** — Revert ⟨`panel_tabset.rs:109`'s widened first term back to the bare
   `!ctx.format.identifier.is_html_based()`⟩ → ⟨`assert!(ast_contains_custom_node(&ast, "Tabset"))`⟩
-  RED. This is the bug the plan's self-gating Finding exists for: `is_html_based()` is
-  `matches!(self, Html | Revealjs)` (`format.rs:63-65`), so for a docx `Format` the transform
-  returns at `:113` and builds nothing — **while Task 2's exclude-list still reads as "panel-tabset
-  enabled."**
+  RED. `is_html_based()` is `matches!(self, Html | Revealjs)` (`format.rs:66-68`), so for a docx
+  `Format` the transform returns at `:113` and builds nothing — **while Task 2's exclude-list
+  still reads as "panel-tabset enabled."**
 - **T3.2** — Revert ⟨delete the `|| is_minimal_html(&ast.meta)` term at `panel_tabset.rs:111`⟩ →
   ⟨`assert!(!ast_contains_custom_node(&ast, "Tabset"))` under minimal HTML⟩ RED.
 
 ### Refactor-induced vacuity check
 
-**The widening-criterion correction (commit `4844c707c`: "widen only `panel-tabset`", was "widen
-all four").** The corrected criterion changed *which hunks are edited*, not an expected value — so
-the vacuity question here is about the **absence** of three tests. There is deliberately **no**
+**Only `panel_tabset.rs`'s self-gate is widened — not `draft_alert.rs`/`format_css.rs`/
+`responsive_image.rs`.** That scope choice means the vacuity question here is about the
+**absence** of three tests. There is deliberately **no**
 test asserting `format_css.rs`'s gate is un-widened, because such a test would have to assert the
 *absence* of a code change, which no runtime surface distinguishes: with `format-css` on the
 exclude-list, its gate never executes for a Pandoc profile, so widened or not, every behavioral
@@ -431,13 +419,13 @@ registered at `pipeline.rs:1303`; the render half at `pipeline.rs:1475`.
 
 ### Refactor-induced vacuity check
 
-**The B4→format-parameterized-B1 reclassification (commit `a684cfac0`).** The expected value moved
-from "excluded, so nothing is emitted" to "included, emits everything but the iframe." These two
-states are **indistinguishable on an absence-only assertion**: "no iframe in docx output" is true
-under both. The discriminator is T4.3 (`Demo 2:` label present) and T4.1's positive half (snippet
-blocks present) — without those two, the whole reclassification is untested and a regression back
-to wholesale exclusion would be invisible. Any implementer who writes only "no `RawBlock("html")`"
-has written a test that passes for the classification the plan explicitly rejected.
+**`ExampleEmbedRenderTransform` is included and format-parameterized, not excluded wholesale — an
+absence-only assertion cannot tell the two apart.** "excluded, so nothing is emitted" and
+"included, emits everything but the iframe" are **indistinguishable on an absence-only assertion**:
+"no iframe in docx output" is true under both. The discriminator is T4.3 (`Demo 2:` label present)
+and T4.1's positive half (snippet blocks present) — without those two, a regression back to
+wholesale exclusion would be invisible. Any implementer who writes only "no `RawBlock("html")`"
+has written a vacuous test.
 
 ---
 
@@ -464,12 +452,9 @@ document:
   with an embedded `<hr>` and an `OrderedList`; `create_footnote_item` (`:567+`) appends the
   `footnote-back` backlink.
 
-**Prerequisite — and the reason this task carried Finding F1.** The plan's In-scope text describes
-this as *"B1 half (`NoteRef`+`Def` → native Pandoc `Note`) stays in the core; HTML
-`<section>`+backlinks half is excluded for `Pandoc` the same way"* — i.e. via the name exclude-list.
-The direct read says that is not available as written:
+**Prerequisite.** The single-transform exclude-list mechanism cannot express this split by itself:
 - The transform has **one** `name()` (`"footnotes"`), so `retain_excluding` cannot exclude half of
-  it. The exclude-list mechanism alone cannot express the split.
+  it.
 - There is **no existing B1 half to relocate.** Nothing in `footnotes.rs` ever produces an
   `Inline::Note`; `Inline::Note` is a *parser* output that this transform *destroys* at `:384-388`.
   The `NoteReference`→`Note` reconstruction the design doc's §6 SPLIT row describes
@@ -478,12 +463,11 @@ The direct read says that is not available as written:
   a `Paragraph`/`Plain` wrap to become `Note`'s `Blocks`), so the work is small and local — but it
   is new behavior, and the seam for T5.1 therefore does not exist until this task creates it.
 
-**RESOLVED 2026-09-18, decided with Gordon: two registered transforms, not an in-transform profile
-branch.** This is the shape the codebase already uses twice for exactly this
-semantics-then-presentation split — `callout` / `callout-resolve` and `panel-tabset` /
-`panel-tabset-resolve` — and it keeps the exclude-list as the single mechanism that decides what
-crosses the cut, rather than introducing a second, invisible one (a profile `match` inside a
-transform that the exclude-list validators cannot see).
+**The shape: two registered transforms, not an in-transform profile branch.** This is the shape
+the codebase already uses twice for exactly this semantics-then-presentation split — `callout` /
+`callout-resolve` and `panel-tabset` / `panel-tabset-resolve` — and it keeps the exclude-list as
+the single mechanism that decides what crosses the cut, rather than introducing a second,
+invisible one (a profile `match` inside a transform that the exclude-list validators cannot see).
 
 **The concrete shape:**
 
@@ -548,7 +532,7 @@ epic's frozen-decision sections are not edited without a reason that survives a 
 6. `cargo clippy -p quarto-core --all-targets -- -D warnings` +
    `cargo nextest run -p quarto-core` green.
 
-**Byte-identity exception (final-review Important #1, recorded 2026-09-19).** The split is
+**Byte-identity exception.** The split is
 byte-identical to the pre-split transform under `HtmlRender`/`RevealjsRender` **except** for
 documents mixing an inline `^[...]` note with a named footnote whose id is a decimal integer (e.g.
 `[^1]`). Pre-split, an inline note's synthetic id (`number.to_string()`) collided with a
@@ -648,28 +632,24 @@ HTML assumption" item by freezing the surviving stage list.
   `bootstrap-js` (13, `:2185`), `clipboard-js` (14, `:2190`), `tabsets-js` (15, `:2194`),
   `code-highlight` (21, `:2204`), `math-js` (22, `:2209`), `render-html-body` (23, `:2210`),
   `apply-template` (24, `:2211`).
-- `crates/quarto-core/src/stage/stages/attribution_generate.rs:61-63` (the stage's `name()`;
-  the plan's `:67` citation drifted by 4 lines — see F7).
+- `crates/quarto-core/src/stage/stages/attribution_generate.rs:61-63` (the stage's `name()`).
 
-**The list** (`name()` strings, per the plan's round-4 correction (1)):
+**The list** (`name()` strings):
 `&["compile-theme-css", "bootstrap-js", "clipboard-js", "tabsets-js", "code-highlight",
 "math-js", "render-html-body", "apply-template"]`.
 
-**Joint ownership.** Per the plan's round-4 correction (3), this list is **owned jointly with P4**
-(P4 Finding 3: "P4 owns … the Pandoc-leg stage list itself, since P4 is the plan that introduces
-`PandocWriteStage`"). P1's half is the const + the two validators; P4's half is inserting
-`PandocWriteStage` and deciding the final composition. An implementer must not treat the list as
-final.
+**Joint ownership.** This list is **owned jointly with P4** — P4 is the plan that introduces
+`PandocWriteStage` and owns the Pandoc-leg stage list itself. P1's half is the const + the two
+validators; P4's half is inserting `PandocWriteStage` and deciding the final composition. An
+implementer must not treat the list as final.
 
-**The `attribution-generate` decision (plan round-4 correction (2)) is answered here, and the
-answer differs from the plan's.** The plan says `attribution-generate` is "the `name()` of **both**
-a transform (excluded above …) and a distinct stage." Verified: the *stage* is real
-(`attribution_generate.rs:61-63`, `stages[16]`, `pipeline.rs:2198`), but
+**`attribution-generate` goes on the stage-level list only, not the transform list.** The *stage*
+is real (`attribution_generate.rs:61-63`, `stages[16]`, `pipeline.rs:2198`), but
 `AttributionGenerateTransform` is **never pushed into `build_transform_pipeline`** — grepping the
 whole workspace, its only non-test references are doc comments at `pipeline.rs:672` and `:1091`
 plus its `pub use` at `transforms/mod.rs:102`; it runs from inside `AstTransformsStage`. It has no
 `phase()` override either, consistent with not being a pipeline member. So it cannot go on Task 2's
-transform list without failing T2.1. See Finding F2. **Stage-level only** — and T6.3 pins that.
+transform list without failing T2.1 — **stage-level only**, and T6.3 pins that.
 
 **Acceptance criterion.**
 1. `PANDOC_STAGE_EXCLUDED` holds exactly the 8 names above; every one is a real stage name in
@@ -696,24 +676,22 @@ transform list without failing T2.1. See Finding F2. **Stage-level only** — an
 
 - **T6.1** — Revert ⟨write the const with a Rust type name instead of a `name()` string, e.g.
   `"CompileThemeCssStage"` in place of `"compile-theme-css"`⟩ → ⟨`assert!(unknown.is_empty(), …)`⟩
-  RED. This is the plan's own round-4 specification gap (1), made mechanical.
+  RED.
 - **T6.2** — Revert ⟨delete `"compile-theme-css"` from `PANDOC_STAGE_EXCLUDED`⟩ → ⟨the exact
   surviving stage-list `assert_eq!`⟩ RED. (This is the "stage stray `site_libs/*` next to a
-  `.docx`" failure shape the plan invokes the 2026-04-20 `CodeHighlightStage` incident about — and
+  `.docx`" failure shape the 2026-04-20 `CodeHighlightStage` incident is an example of — and
   T6.2's exact-list form catches over-exclusion too, e.g. dropping `engine-execution`, which would
   silently skip code execution for a docx render.)
 - **T6.3** — Revert ⟨add `"attribution-generate"` to `PANDOC_TRANSFORM_EXCLUDED`⟩ → ⟨T2.1's
   `unknown.is_empty()`⟩ RED, and T6.3's own `∉ transform names` assertion stays GREEN, naming the
   cause. T6.3 has no revert hunk of its own because it asserts a *structural fact about the
   existing code* (a transform type that is not a pipeline member) rather than new behavior; it is
-  the guard that keeps Finding F2 from being re-introduced. Flagged rather than omitted, per Check 1.
+  the guard that keeps `attribution-generate` from being re-added to the transform list.
 
 ### Refactor-induced vacuity check
 
-**No expected value changed for the stage list across rounds** other than the plan's own round-4
-specification corrections, which are all *naming* corrections (type names → `name()` strings). The
-live risk is the reverse of vacuity: T6.2 is the **only** assertion that a Pandoc stage list even
-exists, and it can be satisfied trivially (an implementer who never wires the const into any
+**The live risk here is the reverse of vacuity: T6.2 is the only assertion that a Pandoc stage
+list even exists**, and it can be satisfied trivially (an implementer who never wires the const into any
 builder can still make the literal match by writing the literal from the unfiltered list). The
 guard is that T6.2's literal must be written to **exclude** the 8 names *and* the test must build
 via the real profile-selecting entry point, not by hand-filtering in the test body. Stated here so
@@ -723,24 +701,19 @@ a reviewer can check it.
 
 ## Task 7: Neutral-core invariant + total bucket coverage
 
-**Scope.** Assert the plan's central invariant (no B2/B4 transform survives to the Pandoc cut) and
-the totality the plan promoted to a requirement after three rounds of hand-enumeration misses
-(every transform registered in `build_transform_pipeline` has exactly one bucket).
+**Scope.** Assert the central invariant (no B2/B4 transform survives to the Pandoc cut) and total
+bucket coverage (every transform registered in `build_transform_pipeline` has exactly one
+bucket) — hand-enumeration is not reliable enough to trust without a mechanical check.
 
 **Files.** `crates/quarto-core/src/pipeline.rs` — the new `const BUCKETS: &[(&str, Bucket)]` in the
 module proper (see the note below), plus the new tests beside
-`test_build_transform_pipeline_phase_ordering` at `:3829`. **F3's specification question is
-resolved** (Rust const + `#[test]`, not an xtask lint rule).
+`test_build_transform_pipeline_phase_ordering` at `:3829`. This is a Rust `#[test]` against a Rust
+const, not an xtask lint rule against the markdown table.
 
-**Prerequisite — resolved, no longer blocked.** The plan's checklist says "every transform
-registered in `build_transform_pipeline` classified exactly once **in the design doc §6 table**."
-Reconciling a Rust pipeline against a *markdown table* would be a repo-level xtask lint rule (the
-pattern `error-docs-page-missing` / `ci-test-suite-unwired` establish); reconciling against a Rust
-const is a plain `#[test]`. **Decided 2026-09-18 with Gordon (F3): the Rust `#[test]` against
-`const BUCKETS: &[(&str, Bucket)]`, declared in `crates/quarto-core/src/pipeline.rs` beside
-`PANDOC_TRANSFORM_EXCLUDED`. No lint rule; the design-doc §6 table is advisory.** T7.1/T7.2 below
-were already written against this form and are unchanged by the decision. This task has no
-remaining open specification question.
+**Mechanism: a Rust `#[test]` against `const BUCKETS: &[(&str, Bucket)]`, declared in
+`crates/quarto-core/src/pipeline.rs` beside `PANDOC_TRANSFORM_EXCLUDED`. No lint rule; the
+design-doc §6 table is advisory, not authoritative.** T7.1/T7.2 below are written against this
+form.
 
 **One thing the implementer must get right, because the decision moves the authority.** `BUCKETS`
 is now the authoritative classification, so it must be declared where the pipeline is — not in a
@@ -828,9 +801,8 @@ invocation is `cargo run --bin q2 -- render docs/` (per CLAUDE.md — never Q1's
 
 **Acceptance criterion.**
 1. The harness renders the named corpus at the pre-refactor commit and at HEAD and reports a
-   byte-level diff; the diff is empty (T8.1). **Scope correction (final-review Important #2,
-   2026-09-19): this proves byte-identity for the `HtmlRender` leg of the `docs/` corpus
-   specifically** — `docs/` contains zero real `format: revealjs` documents (every occurrence is
+   byte-level diff; the diff is empty (T8.1). **This proves byte-identity for the `HtmlRender` leg
+   of the `docs/` corpus specifically, not for revealjs or the preview AST leg** — `docs/` contains zero real `format: revealjs` documents (every occurrence is
    inside a fenced code block) and exactly one live footnote (an inline `^[...]`, no reference-style
    `[^a]`/`[^a]:` pair). The harness does **not** itself exercise revealjs, the preview AST leg, or
    footnote-reference-id dedup; those are covered instead by `revealjs_features.rs` (revealjs
@@ -896,36 +868,26 @@ precondition test (extend it to assert the two capture manifests carry different
    landed here" marker with the five-variant, two-axis shape
    `{HtmlRender, HtmlPreview, RevealjsRender, RevealjsPreview, Pandoc(fmt)}`. This is the plan's
    last open checklist line.
-2. **§6 Navigation row, line 202** — its "Added 2026-09-17" note lists only `breadcrumbs-render`,
-   `quarto-nav-js`, `repo-actions-render`. The three found in round 4 —
-   `secondary-nav-render`, `listing-feed-stage`, `listing-feed-link` — reached P1's exclude-list
-   but **never reached this row**. Add them.
-3. **§6 — the six transforms with no row at all**, per P1's round-4 correction:
-   `config-markdown` (Normalization), `reference-link-diagnostics` (Normalization),
-   `draft-alert` (Normalization), `format-css` (Normalization), `responsive-image` (Finalization),
-   `llms-capture` (Finalization). All six verified as real `build_transform_pipeline` members with
-   real `phase()` overrides.
-4. **§6 line 211-216** — "tracked as a P1 recommendation, **not yet a checklist item**" is stale:
-   P1's checklist now carries the total-coverage item. **F3 is resolved (2026-09-18, Gordon), so
-   the replacement sentence is now determined:** say that the authoritative classification is
-   `const BUCKETS` in `crates/quarto-core/src/pipeline.rs`, that **T7.2 is the mechanical guard
-   over it**, and that **this table is advisory documentation of intent with no mechanical guard of
-   its own**. That last clause is the important one — it is the accepted cost of the decision, and
-   without it a future reader will keep treating the table as the enforced artifact (which is how
-   it drifted three times already).
-5. **Plan checklist reconciliation** (per the user-global rule about reconciling a plan's checklist
-   against reality before hand-off): `- [ ] Add ConditionalContentTransform to design doc §6 bucket
-   table as B1` is **already done** — the row exists at design §6 line 206, added 2026-09-17. Check
-   it off. Likewise re-verify the three `[x]` items (`appendix.rs`/`link_rewrite.rs` read;
-   §6 CalloutResolve/AppendixStructure/ExampleEmbedRender fixes; the wasm32 decision) — all three
-   confirmed landed in the current design doc text.
-6. **§6 `LinkRewrite` row, line 208, read `B3?`** while this plan's own "Produces for P7" section
-   asserts "ResourceCollector, LinkRewrite, Appendix — **all confirmed in, not conditional**."
-   **RESOLVED and LANDED 2026-09-18 with Gordon's explicit sign-off (F6): the cell now reads plain
-   `B3`**, with the resolution noted in the cell and a full entry in the design doc's Amendment
-   log. Nothing left for this task to do on this sub-item except *not* re-open it — the `?` is
-   gone, and the epic's convention that frozen sections need explicit sign-off was honored rather
-   than routed around.
+2. **§6 Navigation row** must list all 20 Navigation-phase transforms, including
+   `secondary-nav-render`, `listing-feed-stage`, `listing-feed-link` alongside
+   `breadcrumbs-render`, `quarto-nav-js`, `repo-actions-render`.
+3. **§6 needs a row for each of these six transforms**: `config-markdown` (Normalization),
+   `reference-link-diagnostics` (Normalization), `draft-alert` (Normalization), `format-css`
+   (Normalization), `responsive-image` (Finalization), `llms-capture` (Finalization). All six are
+   real `build_transform_pipeline` members with real `phase()` overrides.
+4. **§6's prose on bucket-coverage totality** should say: the authoritative classification is
+   `const BUCKETS` in `crates/quarto-core/src/pipeline.rs`, **T7.2 is the mechanical guard over
+   it**, and **this table is advisory documentation of intent with no mechanical guard of its
+   own**. That last clause matters — without it a future reader will treat the table as the
+   enforced artifact, which is how it drifts.
+5. **Plan checklist reconciliation**: verify `- [ ]`/`- [x]` items against the design doc's
+   current text before hand-off — in particular that `ConditionalContentTransform` is classified
+   B1 in §6's bucket table, and that the `appendix.rs`/`link_rewrite.rs` read, the §6
+   CalloutResolve/AppendixStructure/ExampleEmbedRender fixes, and the wasm32 decision are all
+   reflected there.
+6. **§6's `LinkRewrite` row must read plain `B3`, not `B3?`** — this plan's own "Produces for
+   P7-foundation" section asserts "ResourceCollector, LinkRewrite, Appendix — all confirmed in,
+   not conditional," and `link-rewrite` is in the surviving set T2.3 pins.
 
 **Acceptance criterion.** `cargo xtask lint` green; the design doc contains no remaining
 "not yet landed here" marker in §5; §6's bucket table names every one of the transforms registered
@@ -940,10 +902,10 @@ in `build_transform_pipeline`; P1's checklist has no `- [ ]` item whose work is 
 
 `accepted-untested: Task 9 edits only markdown in claude-notes/. The one reconciliation that could
 be mechanized — design §6's table vs. build_transform_pipeline's membership — is deliberately NOT
-mechanized: F3 (resolved 2026-09-18) made const BUCKETS authoritative and the §6 table advisory, so
-T7.2 guards the Rust classification and nothing guards the table. Adding a doc-parsing check here
-would re-authoritize the table against that decision. The table's accuracy is this task's
-bookkeeping responsibility, re-checked when §6 is next touched.`
+mechanized: const BUCKETS is authoritative and the §6 table is advisory, so T7.2 guards the Rust
+classification and nothing guards the table. Adding a doc-parsing check here would re-authoritize
+the table against that decision. The table's accuracy is this task's bookkeeping responsibility,
+re-checked when §6 is next touched.`
 
 ---
 
@@ -955,23 +917,21 @@ Silent omission would read as "covered."
 
 ### Verdicts the prompt requires explicitly
 
-1. **Self-gating transforms (the plan's own Finding, 7 gaters not 8).** Re-verified all seven
-   against real code: `mermaid.rs:175` (`!is_html_based()` → return), `title_block.rs:97`
-   (`should_add_h1(.., ctx.format.is_html())` → return, helper at `:65-75`),
-   `panel_tabset.rs:109-114`, `draft_alert.rs:126` (gate) with its predicate at `:142`,
-   `format_css.rs:93`, `responsive_image.rs:152`, and `toc_generate.rs:85`. Plus
-   `crossref_render.rs:88` which is **not** a gate (`html_float_dom: …is_html_based()` is a
-   `FloatState` config field, no early return) — the plan's correction is right.
+1. **Self-gating transforms — 7 real gaters, not 8.** `mermaid.rs:175` (`!is_html_based()` →
+   return), `title_block.rs:97` (`should_add_h1(.., ctx.format.is_html())` → return, helper at
+   `:65-75`), `panel_tabset.rs:109-114`, `draft_alert.rs:126` (gate) with its predicate at `:142`,
+   `format_css.rs:93`, `responsive_image.rs:152`, and `toc_generate.rs:85`. `crossref_render.rs:88`
+   is **not** a gate (`html_float_dom: …is_html_based()` is a `FloatState` config field, no early
+   return).
    - **Bound:** `panel-tabset` → T3.1 (widened, positive assertion) + T3.2 (other gate terms
      intact).
    - **Bound (by exclusion, not by gate):** `mermaid-render`, `title-block`, `draft-alert`,
      `format-css`, `responsive-image` → T2.3's exact surviving-name list. Their self-gates never
      execute for a Pandoc profile, so there is nothing else to assert in P1.
-   - **`toc_generate.rs:85` — a drift correction, not a gate.** The plan's table calls it a gate
-     shape (`identifier == FormatIdentifier::Html`). Read directly, it is inside
-     `fn toc_title_term(ctx)` selecting between the `toc-title-website` and `toc-title-document`
-     language terms — no early return. `toc-generate`'s real early return, if any, is elsewhere in
-     the file. Moot for the decision (`toc-generate` is excluded either way), recorded in F7.
+   - **`toc_generate.rs:85` is not a gate.** It is inside `fn toc_title_term(ctx)` selecting
+     between the `toc-title-website` and `toc-title-document` language terms — no early return.
+     `toc-generate`'s real early return, if any, is elsewhere in the file. Moot for the decision
+     (`toc-generate` is excluded either way).
    - `accepted-untested: the "a self-gated transform left on the exclude-list is invisible to a
      membership test" case. Correct, and unfixable in P1 — with the transform excluded there is no
      runtime surface on which its gate's state is observable. The compensating control is T7.2's
@@ -982,29 +942,21 @@ Silent omission would read as "covered."
      three not-widened gates — no stray .css / .docx-adjacent site_libs artifacts. P1 has no
      Pandoc output directory to inspect.`
 
-2. **Design §6's "coverage is not yet asserted as total" admission (lines 211-216).** **Verdict:
-   a P1 seam, not `accepted-untested`** — it is Task 7's T7.2, and the plan already promoted it
-   from a recommendation to a requirement. **Mechanism resolved 2026-09-18 (F3, decided with
-   Gordon): a Rust `#[test]` over `const BUCKETS` in `pipeline.rs`, not an xtask lint rule over
-   the markdown. Bound, no longer deferred.** Note the verdict has shifted slightly in the process:
-   T7.2 now guards the **Rust classification's** totality against `build_transform_pipeline`, while
-   design §6's table — the thing lines 211-216 are actually about — becomes advisory and is
-   guarded by **nothing**. So the honest split is: *pipeline-vs-classification* bound (T7.2);
-   *classification-vs-§6-table* **`accepted-untested` by decision**, with Task 9 sub-item 4 owning
-   the prose that says so. Recorded this way rather than letting T7.2's green be read as evidence
-   the table is correct.
+2. **Design §6's bucket-coverage totality.** **Verdict: a P1 seam, bound as Task 7's T7.2** — a
+   Rust `#[test]` over `const BUCKETS` in `pipeline.rs`, not an xtask lint rule over the markdown.
+   T7.2 guards the **Rust classification's** totality against `build_transform_pipeline`; design
+   §6's table becomes advisory and is guarded by **nothing**. So the honest split is:
+   *pipeline-vs-classification* bound (T7.2); *classification-vs-§6-table*
+   **`accepted-untested` by decision**, with Task 9 sub-item 4 owning the prose that says so. T7.2's
+   green should not be read as evidence the table is correct.
 
-3. **The Footnotes B1/B2-4 split's decoupling premise** (the epic doc's "One item remains genuinely
-   open"). **Verdict: verified by direct read, and the premise does not hold as stated** — see
-   Task 5's Prerequisite and Finding F1. The *data* is decoupled enough (a `definitions` map, a
-   `NoteContent` enum, a collector) but the *transform* is not: one `name()`, and the B1 behavior
-   (`→ Inline::Note`) exists nowhere in the file. **Shape resolved 2026-09-18 (F1, decided with
-   Gordon): two registered transforms**, so the split is now expressible through the exclude-list
-   mechanism after all. Bound seams: T5.1 → hunk **H5a**, plus **T5.5** (`collect_note_definitions`
-   stayed in the B1 half — the leak T5.1 cannot see) and **T5.6** (the two halves are registered
-   adjacently and only the resolve half is excluded). **Not
-   deferred, but Gordon must choose the split's shape (two registered transforms vs. an
-   in-transform profile branch) before an implementer starts.**
+3. **The Footnotes B1/B2-4 split's decoupling.** The *data* is decoupled enough (a `definitions`
+   map, a `NoteContent` enum, a collector) but the *transform* is not: one `name()`, and the B1
+   behavior (`→ Inline::Note`) exists nowhere in the file. **Shape: two registered transforms**,
+   so the split is expressible through the exclude-list mechanism after all. Bound seams: T5.1 →
+   hunk **H5a**, plus **T5.5** (`collect_note_definitions` stayed in the B1 half — the leak T5.1
+   cannot see) and **T5.6** (the two halves are registered adjacently and only the resolve half is
+   excluded).
 
 4. **`test_build_transform_pipeline_phase_ordering` (`pipeline.rs:3829`) — does the profile refactor
    preserve it, and does it still discriminate?** Preserved: yes, mechanically — its only coupling
@@ -1015,18 +967,19 @@ Silent omission would read as "covered."
    vacuity check. **Verdict: bound (T7.3), with the vacuity explicitly documented in the test's own
    doc comment so a future reader does not over-trust it.**
 
-### Further load-bearing branches and contracts found in this pass
+### Further load-bearing branches and contracts
 
 5. **`q2-sandboxed-preview` and `q2-debug`.** `builtin_pseudo_format` (`format.rs:110-131`) has
    **five** pseudo-formats, not the two P1 names: `q2-slides` and `q2-preview` and
    `q2-sandboxed-preview` all carry `Some("preview")`; `q2-debug` carries `None`. A `from_format`
    that omits `q2-sandboxed-preview` silently routes the sandboxed-preview port (bd-jgpz4hfq)
-   through the full HTML pipeline. **Bound: T1.1.** See F4.
+   through the full HTML pipeline. **Bound: T1.1.**
 6. **`Pandoc(fmt)` for formats nobody asked for.** `from_format("gfm")`/`("pdf")`/`("typst")`/
    `("epub")` must derive `Pandoc(fmt)` from "not native", not from a docx/pptx allowlist — an
    allowlist would leave `gfm` mapping to `HtmlRender` and running the whole HTML tail.
    **Bound: T1.1** (the `"gfm" → Pandoc("gfm")` row). The `render.rs:680-685` `is_native()` gate
-   still rejects all of them at the CLI until P7 relaxes it, so this is shape, not reachability.
+   still rejects all of them at the CLI until **P7-foundation** relaxes it, so this is shape, not
+   reachability.
 7. **`retain_excluding`'s silent unknown-name drop** (`transform.rs:230-233`). A renamed transform
    silently un-excludes itself from both lists. **Bound: T2.1 and T6.1** (the two "names exist"
    validators). This is the single highest-value pair of tests in P1 relative to their cost.
@@ -1063,187 +1016,3 @@ Silent omission would read as "covered."
     snapshots is not on P1's checklist and would be new scope. Recorded so the gap is visible
     rather than assumed closed; a natural follow-on, and the kind of thing that belongs in a
     braid strand rather than this plan.`
-
----
-
-## Findings for Gordon
-
-Six substantive findings plus a citation-drift list. None of these relitigate a frozen decision;
-each is a place where a test cannot be written the way the plan describes, or where a bookkeeping
-cell has no owner.
-
-**Status of these findings (updated 2026-09-18).** The three that needed a decision — **F1**
-(Footnotes split shape), **F3** (bucket-coverage mechanism) and **F6** (§6's `LinkRewrite` cell) —
-**were all decided by Gordon on 2026-09-18 and are applied**: two registered transforms, a Rust
-`#[test]` over `const BUCKETS`, and a confirmed `B3` landed in the design doc with explicit
-sign-off. **F2, F4 and F5 never needed a decision** — each is a verified correction with one
-behavior-preserving answer, already written into the tasks (F2: stage-level list only, pinned by
-T6.3; F4: `q2-sandboxed-preview` → `HtmlPreview` and family derived from
-`is_revealjs_target(target_format)`, bound by T1.1; F5: the third, non-compiler-forced `"pptx"`
-arm, bound by T1.2). **F7 is a drift list, informational.** **Nothing on P1 is open**, and no task
-in this file is parked behind a finding.
-
-**F1 — The Footnotes split's B1 half does not exist, and the exclude-list mechanism cannot express
-the split.** `crates/quarto-core/src/transforms/footnotes.rs` was read in full. `FootnotesTransform`
-has one `name()` (`"footnotes"`, `:97-99`), so `retain_excluding` cannot exclude half of it — the
-plan's phrasing ("HTML `<section>`+backlinks half is excluded for `Pandoc` the same way") is not
-available. More importantly, nothing in the file ever *produces* an `Inline::Note`: the transform
-**consumes** `Inline::Note` at `:382-389` and replaces it with `create_footnote_ref`'s
-`Span#fnrefN[Superscript[Link]]` (`:473-514`), resolves `Inline::NoteReference` (`:390-396`) and
-the pampa-lowered `Span.quarto-note-reference` form (`:425-451`) the same way, and appends
-`create_footnotes_section` (`:131-132`). So the design doc §6 SPLIT row's "B1: `NoteRef`+`Def` →
-native Pandoc `Note`" is **new behavior to be written**, not an existing half to relocate. The
-inputs are all there (`definitions: HashMap<String, NoteContent>`; `NoteContent::Inlines` needs a
-`Paragraph` wrap to satisfy `Note`'s `Blocks`), so this is small. **This is the epic doc's own
-"one item remains genuinely open"; it is now closed as a fact and (see below) as a decision.**
-
-**RESOLVED 2026-09-18, decided with Gordon: two registered transforms** — `"footnotes"` (B1) and
-`"footnotes-resolve"` (B2/B4) — **not** one transform with an internal
-`PipelineProfile::Pandoc(_)` branch. Rationale as Gordon framed it: it is the shape the codebase
-already uses twice for this exact semantics-then-presentation split
-(`callout`/`callout-resolve`, `panel-tabset`/`panel-tabset-resolve`), and it keeps the exclude-list
-as the *single* mechanism deciding what crosses the cut. A profile `match` inside a transform would
-be a second cut mechanism that Task 2's exclude-list validators cannot see.
-
-Task 5 is rewritten against that shape: the two halves are tabulated (name, phase, what each does,
-exclude-list membership, registration point), three hunks are named (**H5a** the B1 resolution,
-**H5b** the new transform + its push site + its exclude-list entry, **H5c** `collect_note_definitions`
-staying in B1), and T5.1's "seam deferred" is replaced by a binding to H5a.
-
-Binding it surfaced two things worth recording, because neither was in the original F1 text and
-both are silent-failure shaped:
-- **`collect_note_definitions` must go to the B1 half, and T5.1 cannot detect it if it doesn't.**
-  An `^[inline note]` produces an `Inline::Note` with no definition block, so a fixture's inline
-  footnote satisfies T5.1's count while its `[^1]`/`[^1]:` pair leaks `NoteDefinitionPara` into the
-  wire format — a node type pandoc has no equivalent for. Added **T5.5** and made the two-form
-  fixture an explicit acceptance item.
-- **`footnotes-resolve`'s registration must be *adjacent* to `footnotes`, and nothing else guards
-  that.** If it were registered at an arbitrary later position, an intervening transform could
-  consume or rewrite the `Inline::Note`s before the chrome step saw them. The byte-identity
-  snapshots would catch it only if one covered footnotes, and **none of the 18 does** (verified in
-  Task 7's vacuity note). Added **T5.6** with an adjacency+order assertion.
-
-Also checked, so it is not left implicit: both halves stay `Normalization`, so the phase-ordering
-invariant is satisfied trivially. Note the asymmetry with the pattern being copied —
-`callout-resolve` is `Finalization` — because footnote chrome consumes `Inline::Note`, not crossref
-structure. The symmetry is in the name/registration shape, not the phase.
-
-**Design-doc impact: none.** §6's SPLIT row ("B1: `NoteRef`+`Def` → native Pandoc `Note`. B2/4:
-HTML `<section>`+backlinks") is accurate prose for the two-transform shape and never claimed the
-split was reachable by exclude-list alone, so it is left untouched — per the epic's convention that
-frozen-decision sections are not edited without a reason that survives a re-read.
-
-**F2 — `attribution-generate` cannot go on the transform exclude-list; it would fail the
-validator the same plan requires.** The plan's stage-exclude-list item says `attribution-generate`
-is "the `name()` of **both** a transform (excluded above …) and a distinct stage." The stage is real
-(`stage/stages/attribution_generate.rs:61-63`, `stages[16]`, asserted at `pipeline.rs:2198`). The
-transform is **not a member of `build_transform_pipeline`**: grepping the whole workspace,
-`AttributionGenerateTransform`'s only non-test references are doc comments at `pipeline.rs:672` and
-`:1091` and its `pub use` at `transforms/mod.rs:102`; it runs from inside `AstTransformsStage`, and
-it has no `phase()` override (consistent with not being a pipeline member — the phase-ordering test
-would otherwise fail its exhaustiveness check). So putting `"attribution-generate"` on
-`PANDOC_TRANSFORM_EXCLUDED` makes T2.1 (the "names exist" validator the plan itself requires) go
-RED. **Proposed resolution: stage-level list only; `attribution-render` and `attribution-viewer`
-stay on the transform list (both verified registered, `pipeline.rs:1541` and `:1552`).** T6.3 is
-specified to pin this so it cannot be re-introduced.
-
-**F3 — The total-bucket-coverage test's mechanism is undecided, and the test cannot be written
-until it is.** P1's checklist says "every transform registered in `build_transform_pipeline`
-classified exactly once **in the design doc §6 table**." Reconciling Rust against a markdown table
-is a repo-level `cargo xtask lint` rule (the pattern `error-docs-page-missing` and
-`ci-test-suite-unwired` establish) — a new lint rule in `crates/xtask/src/lint/`, not a `#[test]`.
-Reconciling against a Rust `const BUCKETS: &[(&str, Bucket)]` is a plain `#[test]` in `pipeline.rs`
-but makes the design-doc table advisory rather than authoritative. Both are defensible; they are
-different amounts of work in different crates. I specified T7.1/T7.2 against the Rust-const form
-and flagged it rather than deciding.
-
-**RESOLVED 2026-09-18, decided with Gordon: the Rust `#[test]` against
-`const BUCKETS: &[(&str, Bucket)]`, in `crates/quarto-core/src/pipeline.rs`. The design doc's §6
-table becomes advisory, not authoritative.** No `cargo xtask lint` rule.
-
-**Task 7 and Task 9 sub-item 4 are unblocked; nothing else changes.** T7.1 and T7.2 were already
-written against this option, and re-reading them against the final decision confirms they need
-**no edits** — T7.1 asserts every surviving `Pandoc("docx")` name's bucket ∈ {B1, B3}; T7.2 asserts
-exact-once coverage in both directions against `build_transform_pipeline`; and both name reverts
-that are mutations of *Rust*, not of markdown (`crossref-render` removed from the exclude-list; a
-pipeline push added without a bucket entry). Task 7's "Prerequisite / blocked sub-item" paragraph
-and its `(conditional on F3's resolution)` qualifier were the only stale parts, and are corrected.
-
-**One consequence worth stating plainly, since it is the cost of this choice.** The design-doc §6
-table is now *documentation of intent* with no mechanical guard — nothing fails if it drifts from
-`BUCKETS`. That is a real, accepted loss: §6's own text already admits the table "is not yet
-asserted as total," and it has in fact drifted three times (the round-4 additions). What the
-decision buys is that the *pipeline* can no longer drift unnoticed, which is the failure mode that
-actually shipped bugs. Task 9 sub-item 4 now rewrites §6's "tracked as a P1 recommendation, not yet
-a checklist item" sentence to say exactly this — table advisory, `BUCKETS` authoritative, T7.2 the
-guard — so a future reader does not mistake the table for the enforced artifact. Keeping the two in
-sync stays Task 9's bookkeeping, not a lint rule's job.
-
-**F4 — P1's `PipelineProfile` variant enumeration omits `q2-sandboxed-preview`, and `q2-slides`'
-base format is `html`, not `revealjs`.** `builtin_pseudo_format` (`format.rs:110-131`) has five
-entries: `q2-slides → ("html", Some("preview"))`, `q2-debug → ("html", None)`,
-`q2-preview → ("html", Some("preview"))`, `q2-sandboxed-preview → ("html", Some("preview"))`. P1
-names only `q2-preview` and `q2-slides`. A `from_format` that omits `q2-sandboxed-preview` routes
-the sandboxed-preview port (bd-jgpz4hfq) through the full HTML pipeline — a silent regression with
-no test naming it. And because `q2-slides`' *identifier* is `Html`, family must be derived from
-`is_revealjs_target(target_format)` (the string), never from `format.identifier`. Neither point is a
-design decision — mapping `q2-sandboxed-preview` to `HtmlPreview` is the only behavior-preserving
-choice — but both need to be in the plan's enumeration, and both are bound by T1.1.
-
-**F5 — `FormatIdentifier::Pptx` is a three-edit change, and the third edit is the only one that
-matters.** The plan's round-4 correction says "a two-arm addition (`as_str`,
-`output_extension_for`)". Verified: those are indeed the only two *exhaustive* matches on the enum
-(`format.rs:44-56` and `:279-291`; confirmed by grepping `FormatIdentifier::Html =>` workspace-wide
-— exactly two non-test hits). But `Format::from_format_string` resolves via
-`FormatIdentifier::try_from(format_str)` (`format.rs:401`), whose match is on **strings** with a
-`_ => Err` catch-all (`format.rs:82-96`). Without a `"pptx" => Ok(FormatIdentifier::Pptx)` arm
-there, `from_format_string("pptx")` still returns `Err("Unknown format: pptx")` from
-`format.rs:449` — and **the compiler will not tell you**, because that match is not exhaustive.
-So: two compiler-forced arms plus one silent-but-required arm. T1.2 asserts
-`from_format_string("pptx")` rather than `Pptx.as_str()` for exactly this reason. Worth a one-line
-correction in the plan so nobody implements the two arms and believes `--to pptx` now resolves.
-
-**F6 — Design §6's `LinkRewrite` cell still reads `B3?`, and no checklist item owns landing it.**
-Design doc line 208: `| LinkRewrite | **B3?** | cross-doc/relative links; project/book-gated; no-op
-standalone |`. Meanwhile P1's own "Produces for P7" section asserts "the B3 shared-services segment
-(ResourceCollector, LinkRewrite, Appendix — **all confirmed in, not conditional**)", and
-`link-rewrite` is in the surviving set T2.3 pins. So the plan has effectively decided it while the
-frozen-decision table still shows the question mark. The AppendixStructure cell got an explicit
-checklist item and a Finding; LinkRewrite got neither. I have listed it as Task 9 sub-item 6 and
-marked it **do not land without you**, since a `?` in a frozen section reads as an open decision
-rather than a typo. (Supporting evidence, if it helps: `link-rewrite` is `TransformPhase::Finalization`,
-runs at `pipeline.rs:1465` immediately before `appendix-structure` at `:1466`, and is already
-unexcluded for q2-preview's non-HTML consumer — the same argument that settled Appendix as B3.)
-
-**RESOLVED and LANDED 2026-09-18, decided with Gordon: confirmed `B3`.** The design doc's §6 cell
-now reads plain `B3` with an inline "Resolved 2026-09-18" note, and the Amendment log carries an
-entry recording the decision, the supporting evidence above, and the fact that Gordon signed off
-explicitly. **This is the only frozen-§6-cell edit made during the whole prevalidation pass** —
-every other design-doc-touching finding either needed no edit (F1) or was recorded as a
-consequence rather than a change (F3). Noted because the epic's convention is that frozen sections
-are not edited without explicit sign-off, and this pass should not read as having relaxed it.
-
-**F7 — Citation drift (cited as-is above; not silently propagated, not silently fixed).** Seven
-anchors in P1 and the design doc have moved or were slightly off. All are harmless to the decisions
-they support; listing them so the plans can be corrected in one pass:
-
-| Cited in | Says | Actually |
-|---|---|---|
-| P1, "What the current mechanism actually is" | `pipeline.rs:2990` — `render_qmd_to_preview_ast_builds_reveal_slides_for_q2_slides` | `pipeline.rs:2996` (2990 is mid doc-comment) |
-| P1, same section | `Q2_PREVIEW_TRANSFORM_EXCLUDED`, `pipeline.rs:1594-1643` | `1594-1639` |
-| P1, same section | `is_revealjs_target` at `format.rs:138` | fn at `format.rs:137`; the `matches!` body at `:138` |
-| P1, Seam item 2 | `Format::from_format_string` fails at `format.rs:447` | `format.rs:449` |
-| P1, stage-list item (2) | `stage/stages/attribution_generate.rs:67` | `:61-63` (`fn name` at 61, string at 62) |
-| P1, Navigation correction | `llms-capture` at `project/llms_post_render.rs` | `transforms/llms.rs:178`. (`project/llms_post_render.rs` exists, but is not where the transform's `name()` lives.) |
-| P1, self-gating table | `draft_alert.rs:127,142` | gate at `:126`, `return Ok(())` at `:127`, predicate `fn format_supports_draft_alert` at `:141-143` |
-| P1, self-gating table | `toc_generate.rs:85` listed as a gate shape | `:85` is inside `fn toc_title_term` selecting a language term — **not an early return**. Same category as the `crossref_render.rs` entry the plan already corrected. Moot for the decision (`toc-generate` is excluded), but it means the "7 self-gaters" count may itself be 6. |
-
-Verified-and-correct anchors, for the record (no action needed): `pipeline.rs:1264-1277` (family
-if/else, exact), `:1595` (`callout-resolve`), `:1465-1466` (LinkRewrite→Appendix ordering), `:1608`
-(the appendix-structure "now INCLUDED" comment), `:2198` (`stages[16]`), `:2851` and `:4007` (both
-validators), `:270`, `:395`, `:1144`, `:3829`; `format.rs:29` (`Docx`), `:58-60` (`is_native`),
-`:279-291` (`output_extension_for`); `render.rs:680-684` (the `is_native()` gate, actually 680-685);
-`panel_tabset.rs:109-114` (the round-4 citation fix is right); `title_block.rs:65-75` and `:97`;
-`mermaid.rs:175`; `format_css.rs:93`; `responsive_image.rs:152`; `crossref_render.rs:28-31` and
-`:88`; `example_embed.rs:380-409`. The **20**-member Navigation count and the
-`Q2_PREVIEW_TRANSFORM_EXCLUDED` 7-item count both independently re-derived and confirmed.

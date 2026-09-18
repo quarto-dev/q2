@@ -18,8 +18,25 @@ missing pptx's `echo: false`/`warning: false`, an unstated pandoc-defaults forwa
 multi-format render guardrail this plan's own `render.rs` relaxation removes, and three concrete
 build gaps in this plan's own golden-artifact proposal — closed, see the "Finding" section below.)
 **Status:** Shape draft
-**Design (authoritative):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md)  |  Epic: `2026-08-20-pandoc-hybrid-epic.md`  |  Depends on: P1, P2, P4, P5
-**Implementation task breakdown + test-seam prevalidation:** [`2026-09-18-pandoc-hybrid-P7-implementation.md`](2026-09-18-pandoc-hybrid-P7-implementation.md) — this plan's Coarse checklist converted into dispatchable `## Task N` units, each test bound to a named production seam and revert hunk.
+**Design (authoritative):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md)  |  Epic: `2026-08-20-pandoc-hybrid-epic.md`  |  Depends on: **P7-foundation** (new, 2026-09-20 — see below), P1, P2, P4, P5
+**Implementation task breakdown + test-seam prevalidation:** [`2026-09-18-pandoc-hybrid-P7-implementation.md`](2026-09-18-pandoc-hybrid-P7-implementation.md) — this plan's Coarse checklist converted into dispatchable `## Task N` units, each test bound to a named production seam and revert hunk. **As of 2026-09-20, that companion's Tasks 1, 2, 3, and 7 have moved to [`2026-09-20-pandoc-hybrid-P7-foundation-implementation.md`](2026-09-20-pandoc-hybrid-P7-foundation-implementation.md)** — see the note immediately below.
+
+## 2026-09-20 — extracted P7-foundation (format-agnostic CLI plumbing)
+
+A session evaluating whether typst/epub (both "blocked on the whole epic, P1-P8" in their own plan
+docs) could start sooner found that most of what they actually needed from this plan wasn't
+docx/pptx-specific: the `render.rs` native-format gate relaxation, routing through P4's
+`render_qmd_to_pandoc`, the multi-format-render warning (§14), the project-mode containment gate
+(§13), and B3 shared-services wiring (resource staging + link rewriting) are all needed by *any*
+Pandoc-tail format, not just docx/pptx. None of it needs P5 or P6 — only P1, P2, and P4, all
+already landed. **Extracted as [`2026-09-20-pandoc-hybrid-P7-foundation.md`](2026-09-20-pandoc-hybrid-P7-foundation.md)**,
+carrying former Tasks 1 (multi-format warning), 2 (containment gate), 3 (gate relaxation +
+routing), and 7 (B3 services, renumbered Task 4 there) verbatim — no scope change, only a
+dependency-graph correction. This plan now depends on P7-foundation in addition to P1/P2/P4/P5;
+its own remaining scope is the docx/pptx-specific facts (defaults, forwarding allow-list,
+callout-icon vendoring, `Meta` mapping) and the golden-parity harness, neither of which is
+format-agnostic. Typst and epub's follow-on plans now depend on P7-foundation directly instead of
+informally "following P7's pattern."
 
 ## Goal
 Turn the working transport + shim into real per-format output. Each format's **tail** = skip
@@ -158,6 +175,12 @@ Both items previously carried as "Deferred in-plan questions" in this plan
      what the plan says it means.
 
 ## In scope
+
+**Moved to P7-foundation, 2026-09-20 (no longer this plan's scope — see the note above):** the
+`render.rs` native-format gate relaxation + `render_qmd_to_pandoc` routing, the multi-format-render
+warning, the project-mode containment gate, and B3 shared-services wiring. This plan now assumes
+P7-foundation has landed and builds the docx/pptx-specific work on top of it.
+
 - **Build the golden-test methodology for binary formats first.** docx/pptx are zipped XML; the
   epic's "byte-similarity" testing strategy doesn't apply as stated. Every P3/P5/P6/P7
   parity gate depends on a structural-diff approach (unzip + normalize + XML-diff) that doesn't
@@ -218,29 +241,6 @@ Both items previously carried as "Deferred in-plan questions" in this plan
 - **Meta-block contract:** map Q2's normalized doc metadata (title/date/authors) into the wire
   output's Pandoc `Meta` (P2 confirmed carriage; P7 does the per-format mapping — trivial for
   docx, richer for jats later).
-- **B3 shared services for the Pandoc tail:** confirm ResourceCollector staging (mediabag drain)
-  and LinkRewrite run before the handoff. **The `link_rewrite.rs:29` stale-comment/behavior gap
-  this plan previously flagged no longer exists** — verified 2026-09-17 by reading the file
-  directly: `link_rewrite.rs`'s doc comment (lines ~19-30) already documents that
-  `Image::target.0` is rewritten via `resolve_static_resource_href`, explicitly "matching Q1."
-  Image rewriting landed later than this plan's original claim, via Case B
-  (bd-root-relative-paths-design-fc5pvkcv, commit `1d17a9ce7`) — the transform can be reused
-  verbatim for the Pandoc tail with no fix needed here.
-- Relax `render.rs:680-684` (corrected 2026-09-17 from `~628`, matching the epic doc's own
-  citation fix) to admit docx/pptx through the hybrid path; end-to-end via
-  `cargo run --bin q2 -- render fixture.qmd --to docx`. **Corrected 2026-09-18 (round 4 review —
-  confirmed independently by three reviewers): this relaxation is sufficient for docx and
-  insufficient for pptx.** `Format::from_format_string("pptx")` fails at
-  `crates/quarto-core/src/format.rs:447` (`Err("Unknown format: pptx")`) at
-  `render.rs:676`'s `resolve_format(&format_str)?` call — **one line above** the `is_native()`
-  gate this item relaxes — because `FormatIdentifier` had no `Pptx` variant. P1 now adds
-  `FormatIdentifier::Pptx` (see P1's corrected Seam definition); this item's end-to-end test must
-  cover **both** `--to docx` and `--to pptx`, not just docx, to actually catch the gap the prior
-  text missed. **Also route `Pandoc(fmt)` formats through P4's `render_qmd_to_pandoc` entry point**
-  (P4 Finding 3) — the real call chain today is `render.rs` → `render_document_to_file` →
-  `render_to_file.rs:358`'s `render_qmd_to_html(...)`, and nothing in this plan previously routed
-  a relaxed docx/pptx render anywhere else; confirm `RenderedOutput.content` being empty (P4's
-  binary-output decision) doesn't break the `OutputSink`/artifact path at `render_to_file.rs:358-375`.
 - **Confirm no in-scope docx/pptx fixture uses `.algorithm`; if one does, land
   `THEOREM_CLASSES`/`RefTypeRegistry::BUILTINS` first; otherwise file the follow-on strand.**
   Added 2026-09-17 (epic-wide review, I10): the epic's Definition of done has this exact
@@ -259,13 +259,17 @@ Both items previously carried as "Deferred in-plan questions" in this plan
 - latex beyond a documented stub.
 
 ## Consumes / Produces (seams)
-- **Consumes:** P1 profile/tail seam + B3 services (including the `Pandoc`-kind exclude-list
-  P1 introduces — this plan's invocation builder may need to extend it per format); P2 wire
-  format + Meta carriage; P4 machinery; P5 shim; (P6 for correct numbers); the per-format facts
-  in `claude-notes/research/2026-07-13-q1-format-typescript.md`.
+- **Consumes:** **P7-foundation** (the relaxed `render.rs` gate, `render_qmd_to_pandoc` routing,
+  the multi-format warning, the project-mode containment gate, B3 services wiring — all
+  format-agnostic, extracted 2026-09-20); P1 profile/tail seam (including the `Pandoc`-kind
+  exclude-list P1 introduces — this plan's invocation builder may need to extend it per format);
+  P2 wire format + Meta carriage; P4 machinery; P5 shim; (P6 for correct numbers); the per-format
+  facts in `claude-notes/research/2026-07-13-q1-format-typescript.md`.
 - **Produces:** docx/pptx golden-parity to Q1; **the working Pandoc tail P8 needs** for its own
   `.content-visible`/`.content-hidden` smoke fixture (corrected 2026-09-17 — see checklist above;
-  this used to be phrased as a P7 dependency on P8, which was the wrong direction).
+  this used to be phrased as a P7 dependency on P8, which was the wrong direction). Note the
+  *reachability* half of that tail (CLI gate + routing) is now P7-foundation's product; this plan
+  contributes the docx/pptx-specific defaults/mapping/golden harness on top of it.
 
 ## Coarse checklist
 - [ ] Build the golden-test harness per the concrete proposal above (name 6-10 fixtures, engine-
@@ -295,31 +299,18 @@ Both items previously carried as "Deferred in-plan questions" in this plan
 - [ ] **New (2026-09-18): vendor the 5 docx callout-icon PNGs** from
   `src/resources/formats/docx/` (Finding 1 — outside P4's traced `src/resources/filters/`
   closure) or explicitly accept icon-less docx callouts in writing.
-- [ ] **New (2026-09-18): multi-format render warning** (Finding 3 / design doc §14) — when
-  `format:` declares more than one key and only one renders, name which was used and which were
-  skipped. Restores the guardrail this plan's own `render.rs` relaxation removes. **Needs a real
-  `Q-pandoc-*` code** (round 4 review, Reviewer C) — this is a user-facing diagnostic, not routed
-  through stderr passthrough like the other `pandoc`-subsystem cases; assign it a code + docs page
-  + sidebar entry alongside P4's initial code set (subsystem 18), don't leave it as a bare warning
-  string with no catalog entry.
-- [ ] **New (2026-09-18, round 4 review — Gordon's decision, design doc §13): land the
-  project-mode containment gate in this plan.** Relaxing `render.rs:680-684`/`resolve_format`
-  makes `q2 render <website-project> --to docx` reachable in the same commit, and
-  `WebsiteProjectType::post_render` (`crates/quarto-core/src/project/orchestrator.rs:517-580`) has
-  **no format gate at all** — it unconditionally writes a sitemap of `.html` URLs that don't exist
-  (`output_href` is hardcoded `.qmd`→`.html`), and `write_alias_redirects` can hard-fail with an
-  HTML-specific diagnostic for a render that produced no HTML. Gordon decided (round 4 review):
-  gate `WebsiteProjectType::post_render`'s hook sequence on `format.identifier.is_html_based()` —
-  the same one-line fix `bd-bgeet2mw` already describes, landed here rather than waiting on that
-  strand, since this plan is what makes the risk reachable. This matches Q1's own established
-  behavior (`websiteProjectType.postRender` already filters to HTML-only) and is squarely inside
-  the "no new functionality" principle — it removes a regression this plan's own relaxation
-  introduces, the same shape as the multi-format-render warning above (design doc §14).
+- [x] **Moved to P7-foundation, 2026-09-20:** the multi-format render warning (Finding 3 / design
+  doc §14) and the project-mode containment gate (design doc §13, Gordon's decision) — both
+  format-agnostic guardrails made necessary by relaxing `render.rs`'s format gate at all, not by
+  anything docx/pptx-specific. See
+  [`2026-09-20-pandoc-hybrid-P7-foundation.md`](2026-09-20-pandoc-hybrid-P7-foundation.md) Tasks 1
+  and 2.
 - [ ] Meta-block mapping (docx/pptx).
-- [ ] B3 services wired into the Pandoc tail (resources staged, links rewritten).
-- [ ] `render.rs` admits docx/pptx; end-to-end inspected output for **both formats** (corrected
-  2026-09-18 — see the render.rs correction above, pptx needs `FormatIdentifier::Pptx` from P1
-  first); Q1 golden per format.
+- [x] **Moved to P7-foundation, 2026-09-20:** B3 services wired into the Pandoc tail (resources
+  staged, links rewritten) and `render.rs` admitting docx/pptx with routing through
+  `render_qmd_to_pandoc` — both format-agnostic. See P7-foundation's Tasks 3 and 4. This plan's
+  remaining responsibility is the docx/pptx-specific golden verification (Q1 golden per format)
+  once P7-foundation's CLI path exists.
 - [ ] Confirm no in-scope docx/pptx fixture uses `.algorithm`; land the `THEOREM_CLASSES`
   fix first if one does, otherwise file the follow-on strand (epic DoD item, owned here as of
   2026-09-17 — see In scope above).

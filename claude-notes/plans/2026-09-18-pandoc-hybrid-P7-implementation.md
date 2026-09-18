@@ -1,28 +1,29 @@
 # P7 — Implementation tasks & Test Seam Spec
 
-**Date:** 2026-09-18
 **Plan (authoritative scope):** [`2026-08-20-pandoc-hybrid-P7-format-tail.md`](2026-08-20-pandoc-hybrid-P7-format-tail.md)
 **Design (authoritative):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md) (§11 golden-capture strategy, §12 known limitations, §13 project-mode gate, §14 multi-format guardrail)
 **Epic:** [`2026-08-20-pandoc-hybrid-epic.md`](2026-08-20-pandoc-hybrid-epic.md)
 **Research companion:** [`../research/2026-07-13-q1-format-typescript.md`](../research/2026-07-13-q1-format-typescript.md)
-**Sibling companions:** [`P1`](2026-09-18-pandoc-hybrid-P1-implementation.md), [`P2`](2026-09-18-pandoc-hybrid-P2-implementation.md), [`P3`](2026-09-18-pandoc-hybrid-P3-implementation.md), [`P4`](2026-09-18-pandoc-hybrid-P4-implementation.md), [`P5`](2026-09-18-pandoc-hybrid-P5-implementation.md), [`P6`](2026-09-18-pandoc-hybrid-P6-implementation.md) — prerequisites below cite their task numbers
-**Depends on:** P1, P2, P4, P5 — **and P6**, for correct numbers in its golden (per the epic's graph). P7 is last.
-**Status:** Ready for subagent-driven execution, with the caveats in **Findings for Gordon**.
+**Sibling companions:** [`P1`](2026-09-18-pandoc-hybrid-P1-implementation.md), [`P2`](2026-09-18-pandoc-hybrid-P2-implementation.md), [`P3`](2026-09-18-pandoc-hybrid-P3-implementation.md), [`P4`](2026-09-18-pandoc-hybrid-P4-implementation.md), [`P5`](2026-09-18-pandoc-hybrid-P5-implementation.md), [`P6`](2026-09-18-pandoc-hybrid-P6-implementation.md), [`P7-foundation`](2026-09-20-pandoc-hybrid-P7-foundation-implementation.md) — prerequisites below cite their task numbers
+**Depends on:** **P7-foundation**, P1, P2, P4, P5 — **and P6**, for correct numbers in its golden (per the epic's graph). P7 is last.
+**Status:** Ready for subagent-driven execution.
 
-This file adds nothing to P7's scope — it converts P7's Coarse checklist into `## Task N` units
-`superpowers:subagent-driven-development` can dispatch, and binds every test P7 needs to a named
-production seam and revert hunk before any code is written (the `/prevalidating-test-seams`
-discipline). The Spec is P7 + the design doc; where this file and the plan disagree, the plan wins
-— except where **Findings for Gordon** records a measured contradiction, which needs a decision
-before the affected task is dispatched.
+This document's tasks are numbered **4, 5, 6, 8, 9, 10, 11, 12**. Tasks 1, 2, 3, and 7 live in
+[`2026-09-20-pandoc-hybrid-P7-foundation-implementation.md`](2026-09-20-pandoc-hybrid-P7-foundation-implementation.md)
+(Task 7 renumbered Task 4 there) — that document owns the format-agnostic CLI plumbing (the
+`render.rs` gate relaxation, the multi-format warning, the project-mode containment gate, and B3
+shared-services wiring) that any Pandoc-tail format needs, not only docx/pptx. Cross-references to
+those tasks below say "P7-foundation Task N."
 
-**Provenance of the anchors below.** Every Rust citation was re-read against this worktree
-(`feature/pandoc-writer-hybrid`) on 2026-09-18. Every quarto-cli fixture path was verified to
-**exist at tag `v1.11.3`** with `git cat-file -e v1.11.3:<path>` — the local checkout is now
-`v1.11.5-1-g83d48d8e8`, so the pinned tag must be read via `git show v1.11.3:<path>`, never from
-the worktree (same discipline P4's companion adopted). Behaviour claims marked **(measured)** were
-reproduced by running **pandoc 3.8.1** locally while writing this file; the OOXML element/style
-names in the extractor spec are all measured, not recalled.
+This file converts P7's Coarse checklist into `## Task N` units `superpowers:subagent-driven-development`
+can dispatch, and binds every test P7 needs to a named production seam and revert hunk before any
+code is written (the `/prevalidating-test-seams` discipline). The Spec is P7 + the design doc;
+where this file and the plan disagree, the plan wins.
+
+**Reading the vendored Q1 source.** The local `quarto-cli` checkout tracks `main` and will diverge
+from the pinned tag `v1.11.3`. Always read pinned content via `git show v1.11.3:<path>`, never from
+the worktree directly — every quarto-cli fixture path below was verified present at `v1.11.3` this
+way. Behaviour claims marked **(measured)** were reproduced by running pandoc 3.8.1 locally.
 
 ---
 
@@ -42,12 +43,12 @@ One `integration` binary per crate. `crates/quarto-core/tests/integration/main.r
 `pub mod` entries today; `crates/quarto/tests/integration/` has 31 files. New files are appended
 alphabetically.
 
-**Row tally across all 12 tasks (including the rows added in the Missing-test pass):**
-`U=39`, `I=7`, `E=15`, `L=9`, `G=1`, `X=4` — 75 bound rows, plus **3 deferred seams**
-(T8.3, T12.3, T12.4). The `I`/`L` split is by *environment*, not by file location: a row that
-reaches `PandocWriteStage` shells out to a real `pandoc` and is therefore `L`, even though it lives
-in an `integration` binary and is invoked in-process. Nine such rows are labelled `L` rather than
-`I` so the gate policy below actually covers them.
+**Row tally across this document's 8 tasks (4, 5, 6, 8-12):** `U=31`, `I=4`, `E=5`, `L=4`, `G=1`,
+`X=2` — 47 bound rows, plus **3 deferred seams** (T8.3, T12.3, T12.4). (P7-foundation's companion
+carries 26 bound rows across its 4 tasks — `U=6`, `I=4`, `E=10`, `L=4`, `X=2` — for a combined 73
+bound rows across both documents.) The `I`/`L` split is by *environment*, not by file location: a
+row that reaches `PandocWriteStage` shells out to a real `pandoc` and is therefore `L`, even though
+it lives in an `integration` binary and is invoked in-process.
 
 ### `E`- and `L`-tier gate policy (explicit, and its skipping is visible)
 
@@ -80,15 +81,15 @@ it has none and why.
 
 | User-visible behavior | Driven through the real `q2` binary? | Where |
 |---|---|---|
-| `q2 render f.qmd --to docx` produces a real `.docx` | **Yes** | T3.1 (`E`) |
-| `q2 render f.qmd --to pptx` produces a real `.pptx` | **Yes** — separately from docx, per the round-4 pptx finding | T3.2 (`E`) |
-| Multi-format `format:` block warns, naming used + skipped | **Yes** | T3.4 (`E`); message construction at T1.1-T1.3 (`U`) |
-| Website project + `--to docx` writes no sitemap / no alias redirects | **Yes** | T2.4 (`E`) |
-| Website project + `--to html` **still** writes them | **Yes** (the "path was actually exercised" half) | T2.5 (`E`) |
+| `q2 render f.qmd --to docx` produces a real `.docx` | **Yes** | P7-foundation T3.1 (`E`) |
+| `q2 render f.qmd --to pptx` produces a real `.pptx` | **Yes** — separately from docx | P7-foundation T3.2 (`E`) |
+| Multi-format `format:` block warns, naming used + skipped | **Yes** | P7-foundation T3.4 (`E`); message construction at P7-foundation T1.1-T1.3 (`U`) |
+| Website project + `--to docx` writes no sitemap / no alias redirects | **Yes** | P7-foundation T2.4 (`E`) |
+| Website project + `--to html` **still** writes them | **Yes** (the "path was actually exercised" half) | P7-foundation T2.5 (`E`) |
 | `--reference-doc` reaches pandoc and changes the output | **Yes** | T4.6 (`E`) |
 | `--reference-doc` pointing at a missing file diagnoses with a span | **Yes** | T4.7 (`E`) |
 | Document metadata reaches `docProps/core.xml` | **Yes** | T6.3 (`E`) |
-| Staged resources / rewritten links survive into the docx | **Yes** | T7.3 (`E`) |
+| Staged resources / rewritten links survive into the docx | **Yes** | P7-foundation T4.3 (`E`) |
 | `--to latex` still refuses cleanly (stub, no variant added) | **Yes** | T4.9 (`E`) |
 | pptx hides echoed source + warnings on slides | **No** — `I` only (T5.2/T5.3); see the `accepted-untested` entry in the Missing-test pass (needs a Python/R toolchain) | — |
 | docx/pptx semantic content matches Q1 | **No** — `I` against committed `G`-captured snapshots (T11.*); the `G` half needs a real Q1 binary and is out of CI by policy | — |
@@ -129,16 +130,15 @@ unassertable.
 5. **Paragraph order** — the extraction is a sequence, not a set.
 6. **`<w:pStyle w:val="…"/>` / pptx placeholder role**, per paragraph. **(measured)**: a
    title/author/date/body document yields exactly `Title`, `Author`, `Date`, `FirstParagraph`.
-7. **`<m:oMath>` flattened text content + element count** (round-4, Reviewer B). **(measured)**
+7. **`<m:oMath>` flattened text content + element count.** **(measured)**
    `$$x=1$$` produces one `m:oMath` in docx and one in pptx. Without this, the extraction is
    byte-identical whether an equation number is present, absent, or wrong.
 8. **Image/media inventory** — the `word/media/` (resp. `ppt/media/`) file-name list, and the
    `word/_rels/document.xml.rels` relationships **whose `Type` ends in `/image`**, by `Target`.
-   **Precision on P7's own wording (which says "entry count + targets"): a raw entry count is
-   version-noise, not signal.** **(measured)** an image-free document already carries 7+
-   relationships (`numbering`, `styles`, `settings`, `theme`, `fontTable`, `webSettings`,
-   `footnotes`). Filter to image relationships, or the count drifts with any pandoc change to the
-   default reference doc.
+   **A raw entry count is version-noise, not signal.** **(measured)** an image-free document
+   already carries 7+ relationships (`numbering`, `styles`, `settings`, `theme`, `fontTable`,
+   `webSettings`, `footnotes`). Filter to image relationships, or the count drifts with any
+   pandoc change to the default reference doc.
 9. **`<w:drawing>` count** and **`<w:br w:type="page"/>` count**.
 10. **Non-empty `docProps/core.xml` fields** `dc:title`, `dc:creator`, `dc:subject`, `cp:keywords`.
 
@@ -167,7 +167,7 @@ dropped `filename` header, missing section numbers, the one mermaid case) is rec
 
 ---
 
-## Which of P7's tasks creates the golden harness (predecessor plans defer to it)
+## Which of P7's tasks creates the golden harness
 
 The harness is **Tasks 9, 10, 11**, and the borrowable unit is **Task 9**:
 
@@ -177,21 +177,18 @@ The harness is **Tasks 9, 10, 11**, and the borrowable unit is **Task 9**:
   `quarto-core`, because `xtask` has no `quarto-core` dependency today (verified:
   `crates/xtask/Cargo.toml` deps are `anyhow, clap, nodejs-semver, proc-macro2, serde, serde_json,
   serde_yaml, syn, tempfile, time, walkdir`) and adding one would put the whole engine closure in
-  front of every `cargo xtask lint`. This is the concrete answer to P7 Finding 4's "the shared
-  extraction function needs a home."
+  front of every `cargo xtask lint`.
 - **Task 10 — the `G`-tier capture** (`cargo xtask capture-pandoc-goldens`) + the fixture copy-in.
 - **Task 11 — the `I`-tier assertion** against the same committed snapshots, plus per-fixture
   accepted-divergence provenance.
 
-**P7 runs last, so P5 and P6 cannot borrow Task 9 — and both have now resolved that on their own
-side, so P7 inherits nothing from them.** Both plans recorded the ordering problem and offered the
-same two options; both sibling companions then picked option **(a)**, a narrower harness of their
-own, rather than deferring behind P7:
+**P7 runs last, so P5 and P6 cannot borrow Task 9 — each has resolved that on its own side, so P7
+inherits nothing from them:**
 
 - P5's Layer-2 goldens item (`P5-lua-shim.md:655-659`) → resolved as **P5 companion Task 8**,
   *"Layer-2 per-type goldens — a narrow post-filter-AST harness, committed as `insta` snapshots"*.
   It asserts on the **post-filter Pandoc AST**, not on rendered OOXML, so it needs no extractor.
-- P6's number-parity item (`P6-*.md:272-278`) → resolved as **P6 companion Task 5**,
+- P6's number-parity item (`P6-numbering-wiring.md:272-278`) → resolved as **P6 companion Task 5**,
   *"Figure / theorem / callout number-parity goldens — **schedulable without P7**"*.
 
 **Consequence for P7:** Task 11 is not carrying deferred predecessor items, and Task 10's fixture
@@ -199,290 +196,28 @@ set has no inherited obligation to mirror theirs. What P7 adds on top is the one
 sibling harness can reach — **the rendered docx/pptx surface**, where a number can be correct in the
 post-filter AST and still be lost by the writer (the `<m:oMath>` case is exactly that shape). T11.3
 is therefore a genuine second, independent check of the epic's number-identity claim, not a
-duplicate of P6 Task 5. See **Findings for Gordon** F7 for the one residual coupling.
+duplicate of P6 Task 5. (P6 Task 5 and P7 T11.3 assert number identity at different depths — P6 at
+the post-filter AST, P7 at the rendered OOXML — and are not duplicates for that reason: the
+`<m:oMath>` case is correct-in-AST-but-lost-in-writer, which only P7 can see.)
 
 ---
 
-## Task 1: The multi-format render warning — pure diagnostic + its `Q-18-*` code, page and sidebar entry
+## Tasks 1-3 and 7 — see P7-foundation
 
-**Scope.** A pure function that, given a document's `format:` declaration and the single key that
-was actually used, returns a `Q-18-*` warning naming the used key and the skipped keys. Lands
-**before** Task 3's relaxation, so the warning exists the moment the guardrail it replaces is
-removed (design doc §14). No rendering capability is added — this is one diagnostic.
-
-**Files.**
-- `crates/quarto-core/src/format.rs` — new `pub fn multi_format_diagnostics(...) -> Vec<DiagnosticMessage>`,
-  next to the two places that silently reduce a multi-key `format:` to one:
-  `format_key_from_frontmatter` at `format.rs:182-190` (`serde_yaml::Value::Mapping(m) =>
-  m.keys().find_map(...)` — the CLI path) and `format_key_from_config_value` at `format.rs:208-217`
-  (`entries.first()` — the project/pipeline path). Model it on `project_kind_diagnostics`
-  (`crates/quarto-core/src/project/mod.rs:352-379`), which is the house shape: a pure function
-  returning `Vec<DiagnosticMessage>`, built with `DiagnosticMessageBuilder::warning(...)
-  .with_code("Q-5-18").problem(...)` (`mod.rs:365-378`).
-- `crates/quarto-error-catalog/error_catalog.json` — one new `Q-18-*` entry in the `pandoc`
-  subsystem **P4 Task 6 reserves** (subsystem number 18, frozen there). P7 *extends* that code
-  set; it does not reserve a subsystem.
-- `docs/errors/pandoc/Q-18-<n>.qmd` — the page, per `docs/errors/README.md`;
-  `docs_url` exactly `https://quarto.org/docs/errors/pandoc/Q-18-<n>`.
-- `docs/_quarto.yml` — the sidebar entry in P4's `- section: "pandoc"` block, **ascending by code
-  number** (the `error-docs-sidebar-unlisted` rule enforces intra-section numeric order).
-
-**Acceptance criterion.**
-1. `multi_format_diagnostics` given `format: {docx: default, html: default}` and used key `"docx"`
-   returns exactly one warning whose code is the new `Q-18-<n>`, whose text names **`docx`** as
-   used and **`html`** as skipped, and which lists skipped keys in the document's declaration
-   order.
-2. Given a single-key `format:` (map or scalar), and given an absent `format:`, it returns an
-   empty vec.
-3. `cargo xtask lint` green — specifically `error-docs-page-missing`
-   (`crates/xtask/src/lint/error_docs.rs`) and `error-docs-sidebar-unlisted`
-   (`crates/xtask/src/lint/error_docs_sidebar.rs`).
-4. Nothing is wired into `render.rs` yet — that is Task 3, deliberately.
-
-**Prerequisite.** **P4 Task 6** (the `pandoc` subsystem, number 18, with its `- section: "pandoc"`
-sidebar block). Without it this task has nowhere to put the code and both lint rules fail.
-
-### Test Seam Spec
-
-| # | Tier | Real unit exercised | Seam (invoked → asserted) | Mock boundary | Named revert hunk |
-|---|---|---|---|---|---|
-| T1.1 | U | `format::multi_format_diagnostics` | Call with a 2-key `format:` map + used `"docx"` → assert `len()==1`, `.code()=="Q-18-<n>"`, message contains `docx` **and** `html`, and `html` appears in the "skipped" clause not the "used" clause | none | the `.with_code("Q-18-<n>")` call, and the skipped-keys `format!` argument |
-| T1.2 | U | same | Call with a 3-key map (`docx, html, pptx`), used `"docx"` → assert the skipped list is `["html", "pptx"]` **in declaration order** | none | the iteration that builds the skipped list |
-| T1.3 | U | same | Call with a 1-key map, with a scalar `format: html`, and with `format:` absent → assert empty vec in all three | none | the `keys().count() > 1` guard |
-| T1.4 | X | `xtask::lint::error_docs::check(workspace_root)` | Run against the real `workspace_root` → zero violations | none | `docs/errors/pandoc/Q-18-<n>.qmd` deleted |
-| T1.5 | X | `xtask::lint::error_docs_sidebar::check(workspace_root)` | Run against the real `workspace_root` → zero violations | none | the new sidebar entry in `docs/_quarto.yml` |
-| T1.6 | U | `quarto-error-catalog`'s catalog data | Load → assert the new code's `subsystem == "pandoc"` and `docs_url == "https://quarto.org/docs/errors/pandoc/Q-18-<n>"` | none | the entry's `docs_url` field |
-
-**Revert hunks, stated exactly:**
-- T1.1 — Revert ⟨the skipped-keys `format!` argument to a constant string such as `"other formats"`⟩ → ⟨`assert!(msg.contains("html"))` in `test_multi_format_names_skipped_key`⟩ RED.
-- T1.2 — Revert ⟨the declaration-order iteration to a `BTreeSet`/sorted collect⟩ → ⟨`assert_eq!(skipped, ["html", "pptx"])` in `test_multi_format_skipped_order`⟩ RED. (Chosen because `docx, html, pptx` is *already* alphabetical; the fixture therefore uses a declaration order that is **not** alphabetical — `format: {docx:, pptx:, html:}` → expected `["pptx", "html"]` — so a sort collapses the discriminator and the test reddens. See the vacuity check.)
-- T1.3 — Revert ⟨the `> 1` guard to `>= 1`⟩ → ⟨`assert!(diags.is_empty())` in `test_single_format_no_warning`⟩ RED.
-- T1.4 — Revert ⟨delete `docs/errors/pandoc/Q-18-<n>.qmd`⟩ → ⟨`assert!(violations.is_empty())`⟩ RED.
-- T1.5 — Revert ⟨delete the new sidebar entry⟩ → ⟨`assert!(violations.is_empty())`⟩ RED.
-- T1.6 — Revert ⟨the entry's `docs_url` to the `lua` subsystem's URL shape⟩ → ⟨`assert_eq!(entry.docs_url, expected)`⟩ RED.
-
-### Refactor-induced vacuity check
-
-- **T1.2's expected value is the one that can collapse.** If the fixture's declaration order is
-  alphabetical, the assertion reads identical whether the implementation preserves declaration
-  order or sorts — it then survives its own revert. The fixture is therefore pinned to
-  `{docx:, pptx:, html:}` with expected `["pptx", "html"]`, which differs across the two states.
-- **T1.1 must not assert on the whole message string.** A whole-string equality assertion is
-  brittle against harmless wording edits *and* non-discriminating about which key landed in which
-  clause. Assert the two clauses separately (`used` clause contains `docx` and not `html`;
-  `skipped` clause contains `html`).
-- **This task's tests deliberately do not assert that the warning ever fires in a real render.**
-  Before Task 3, the multi-format case still hard-errors at `render.rs:680-684`, so an `E`-tier
-  test written here would pass **for the wrong reason** — the old refusal, not the new warning.
-  That ordering trap is the whole point of §14, and its resolution is T3.4, not a test here. See
-  Task 3's vacuity check.
-
----
-
-## Task 2: The project-mode containment gate (design doc §13, Gordon's decision)
-
-**Scope.** Gate `WebsiteProjectType::post_render`'s hook sequence on
-`format.identifier.is_html_based()`, so a website/book/manuscript project rendered to a Pandoc
-target does not write a sitemap of `.html` URLs that do not exist, and does not hard-fail in
-`write_alias_redirects` with an HTML-specific diagnostic. Matches Q1's own
-`websiteProjectType.postRender`, which already filters `outputFiles` to HTML-only. Lands before
-Task 3, which is what makes the risk reachable.
-
-**Files.**
-- `crates/quarto-core/src/project/orchestrator.rs` — **the gate goes at the call site**,
-  `orchestrator.rs:1220-1231` (`self.project_type.post_render(...)`), because `self.format` is
-  already in scope there and used eleven lines earlier at `:1122`
-  (`self.format.identifier.as_str()`). **`async fn post_render` at `orchestrator.rs:517-580` takes
-  no `format` argument** (params: `project, index, output_paths, project_artifacts, resolver,
-  runtime, diagnostics`) — so the alternative shape, threading a `format: &Format` into the trait
-  method, also touches the trait definition at `orchestrator.rs:397-406` and the test double at
-  `crates/quarto-core/tests/integration/project_pipeline.rs:227`. The call-site gate is chosen
-  here; it is the "one-line fix" §13 and `bd-bgeet2mw` both describe. See Findings F4.
-- `crates/quarto-core/src/format.rs:63-65` — `is_html_based()`, read-only. **Do not widen it.**
-- `crates/quarto-core/tests/integration/website_post_render_format_gate.rs` — new; registered in
-  `crates/quarto-core/tests/integration/main.rs` alphabetically.
-- `crates/quarto/tests/integration/project_pandoc_gate_e2e.rs` — new; registered in
-  `crates/quarto/tests/integration/main.rs`.
-
-**Acceptance criterion.** With a minimal website project (`_quarto.yml` with
-`project: type: website`, `website: site-url: https://example.com`, one `index.qmd` carrying an
-`aliases:` entry):
-
-```
-$ cargo run --bin q2 -- render . --to docx
-$ ls _site
-index.docx
-$ ls _site/sitemap.xml _site/robots.txt 2>&1
-ls: _site/sitemap.xml: No such file or directory
-ls: _site/robots.txt: No such file or directory
-```
-
-and, for the same project with `--to html`, `_site/sitemap.xml`, `_site/robots.txt` and the alias
-redirect stub **are all present**. Both halves inspected; the second half is what makes the first
-half mean something.
-
-**Prerequisite.** Task 3's relaxation is **not** required to *test* this: `Format::from_format_string("docx")`
-already returns `Ok` today (`FormatIdentifier::Docx` exists at `format.rs:29`), so the `I`-tier
-rows can construct a docx `Format` and drive the orchestrator in-process right now. The `E`-tier
-rows (T2.4/T2.5) **are** gated on Task 3 — before it, `render.rs:680` refuses. Dispatch this task
-before Task 3 but land T2.4/T2.5 with, or immediately after, Task 3.
-
-### Test Seam Spec
-
-| # | Tier | Real unit exercised | Seam (invoked → asserted) | Mock boundary | Named revert hunk |
-|---|---|---|---|---|---|
-| T2.1 | L | the real orchestrator + `WebsiteProjectType::post_render` | Drive a website project to completion with a **docx** `Format` → assert no `sitemap.xml`, no `robots.txt`, no alias stub under `output_dir` | filesystem via `tempfile`; no mocked project type; **real pandoc** (the docx render reaches `PandocWriteStage`) | the `if self.format.identifier.is_html_based()` guard at `orchestrator.rs:1220` |
-| T2.2 | I | same | Same project with an **html** `Format` → assert `sitemap.xml`, `robots.txt` and the alias stub **do** exist | as above, no pandoc needed (native HTML leg) | the same guard, inverted |
-| T2.3 | L | same, alias-collision path | A docx render of a project whose `aliases:` collide (the case `write_alias_redirects` turns into an *error*, `orchestrator.rs:548-552`) → assert the render returns `Ok` | as T2.1 | the guard (without it, `write_alias_redirects` hard-fails the render) |
-| T2.4 | **E** | the real `q2` binary, project render | `q2 render . --to docx` → exit 0, `_site/index.docx` exists and is non-empty, `_site/sitemap.xml` does **not** exist | nothing mocked | the guard |
-| T2.5 | **E** | same | `q2 render . --to html` → exit 0, `_site/index.html` **and** `_site/sitemap.xml` both exist | nothing mocked | the guard |
-| T2.6 | U | `FormatIdentifier::is_html_based` | Assert `Docx`/`Pptx`/`Pdf`/`Gfm` → `false`; `Html`/`Revealjs` → `true` | none | the `matches!` arm at `format.rs:64` |
-
-**Revert hunks, stated exactly:**
-- T2.1 — Revert ⟨remove the `is_html_based()` guard at `orchestrator.rs:1220`, restoring the unconditional `post_render` call⟩ → ⟨`assert!(!out.join("sitemap.xml").exists())` in `test_docx_project_writes_no_sitemap`⟩ RED.
-- T2.2 — Revert ⟨widen the guard to `if false`, i.e. gate *everything* off⟩ → ⟨`assert!(out.join("sitemap.xml").exists())` in `test_html_project_still_writes_sitemap`⟩ RED. **This is the "the path was actually exercised" row.**
-- T2.3 — Revert ⟨the guard⟩ → ⟨`assert!(result.is_ok())` in `test_docx_project_survives_alias_collision`⟩ RED (`write_alias_redirects` returns `Err`).
-- T2.4 — Revert ⟨the guard⟩ → ⟨the `!sitemap.exists()` assertion in `test_e2e_docx_project_no_sitemap`⟩ RED.
-- T2.5 — Revert ⟨gate the hooks on `is_native()` **and** additionally on `identifier == Html`, dropping revealjs⟩ → ⟨`test_e2e_html_project_sitemap_present`, extended to a `revealjs` project, reddens⟩. Stated for the revealjs sub-case; the `Html` sub-case is covered by T2.2.
-- T2.6 — Revert ⟨add `Docx` to the `is_html_based` `matches!` arm⟩ → ⟨`assert!(!FormatIdentifier::Docx.is_html_based())`⟩ RED.
-
-### Refactor-induced vacuity check
-
-- **The gate produces the *absence* of artifacts, and an absence assertion is satisfied by any
-  render that fails early.** A docx render that panicked in the pipeline also writes no
-  `sitemap.xml`. T2.1/T2.4 therefore **must** pair the absence assertion with a positive one:
-  the render returned `Ok` / exited 0, **and** `_site/index.docx` exists and is non-empty. Without
-  that pairing the test passes before the gate exists (today's `render.rs:680` refusal produces
-  exactly the same absence) and keeps passing after any future regression that breaks docx
-  rendering entirely.
-- **T2.2/T2.5 are the "the path was actually exercised" rows** and are not optional garnish: they
-  are the only thing distinguishing "the gate is correct" from "the hook sequence is broken for
-  everyone."
-- **`is_html_based()` and `is_native()` return the same value for every `FormatIdentifier` variant
-  that exists today** (`format.rs:58-60` vs `:63-65`, both `matches!(Html | Revealjs)`), and P1
-  Task 1 adds `Pptx` to neither. So a refactor that routes this gate through `is_native()` by
-  mistake is **behaviorally invisible** to any test that only checks outcomes. T2.6 pins the
-  predicate's own table, and the gate must be written against `is_html_based()` because that is the
-  one whose *meaning* is "HTML family" — `is_native()`'s meaning ("renders in-process") is exactly
-  what Task 3 stops being true of a supported format. Flagged in Findings F5; no code change is
-  requested, only awareness that these two tests cannot distinguish the predicates.
-- **T2.3's expected value is `Ok`, which is also what a no-op render returns.** Pair it with the
-  same non-empty-output assertion as T2.1.
-
----
-
-## Task 3: Relax the format gate — admit **docx and pptx**, route through `render_qmd_to_pandoc`, wire the warning in
-
-**Scope.** Replace `render.rs`'s blanket non-native refusal with one that admits docx and pptx and
-routes them to P4's Pandoc entry point, and emit Task 1's warning at the same site. Verified
-end-to-end for **both** formats.
-
-**Files.**
-- `crates/quarto/src/commands/render.rs:680-684` — **citation verified accurate today**: line 680
-  is `if !format.identifier.is_native() {`, 681-684 the `anyhow::bail!("Format '{}' is not yet
-  supported. Only HTML and revealjs are available in this version.", …)`. Relax to admit
-  `Docx | Pptx` (and keep refusing `Pdf | Epub | Typst | Gfm | CommonMark`).
-- `crates/quarto/src/commands/render.rs:676` — `let format = resolve_format(&format_str)?;`.
-  **This is the round-4 Critical finding, verified:** `resolve_format` (`render.rs:1490-1492`)
-  delegates to `Format::from_format_string`, whose only `pptx` outcome today is
-  `Err(format!("Unknown format: {}", format_str))` at **`format.rs:449`** (P7's text cites
-  `:447`; the `Err` is at `:449`, the comment at `:448`). `FormatIdentifier` has no `Pptx` variant
-  (`format.rs:23-41`), and the resolution path that actually matters is the **non-exhaustive**
-  `TryFrom<&str> for FormatIdentifier` string match at `format.rs:82-96` — the compiler will not
-  force it. **P1 Task 1 adds the variant plus all four edits.** Relaxing line 680 alone leaves
-  pptx failing four lines earlier.
-- `crates/quarto/src/commands/render.rs` — call `multi_format_diagnostics` next to
-  `detect_single_input_format` (`render.rs:673-676`), which is the site that reduces a multi-key
-  `format:` to one via `format_key_from_frontmatter` (`format.rs:186`).
-- `crates/quarto-core/src/render_to_file.rs:357-364` — the real call chain today is
-  `render.rs` → `render_document_to_file` → `render_qmd_to_html(...)` at `:357`. Branch to P4 Task
-  9's `render_qmd_to_pandoc` for `Pandoc(fmt)` profiles, and confirm that P4's decision — an
-  **empty** `RenderedOutput.content` with a populated `output_path` — does not break the
-  `OutputSink` / artifact path immediately below (`render_to_file.rs:366-380`, `OutputSink::new(resolver.allowed_output_roots())`).
-- `crates/quarto/tests/integration/render_pandoc_formats_e2e.rs` — new; registered in
-  `crates/quarto/tests/integration/main.rs`.
-
-**Acceptance criterion.** Exact invocations and observed output, both inspected:
-
-```
-$ cargo run --bin q2 -- render fixture.qmd --to docx
-$ file fixture.docx
-fixture.docx: Microsoft Word 2007+
-$ unzip -p fixture.docx word/document.xml | grep -o '<w:t[^>]*>[^<]*</w:t>' | head -1
-<w:t xml:space="preserve">Hello</w:t>
-
-$ cargo run --bin q2 -- render fixture.qmd --to pptx
-$ unzip -l fixture.pptx | grep ppt/slides/slide1.xml
-     1730  ...  ppt/slides/slide1.xml
-
-$ cargo run --bin q2 -- render multi.qmd     # front matter: format: {docx: default, html: default}
-Warning: [Q-18-<n>] `format:` declares more than one format; only one is rendered
-  ...rendered `docx`; skipped `html`.
-$ ls multi.docx && test ! -e multi.html && echo "html correctly not produced"
-```
-
-`--to pdf` / `--to epub` / `--to typst` must still refuse with the existing message.
-
-**Prerequisite.** **P1 Task 1** (`FormatIdentifier::Pptx` — without it `--to pptx` is unreachable
-and the pptx half of this task is untestable), **P1 Task 2** (the `Pandoc`-kind transform
-exclude-list) and **P1 Task 6** (the stage-level one), **P2 Task 5** (the `Meta` carriage),
-**P4 Task 9** (`render_qmd_to_pandoc` + `PandocWriteStage`), **P4 Task 10** (the pandoc-subprocess
-diagnostic — this is what surfaces a pandoc failure through the CLI), **Task 1 of this plan** (the
-warning), and — for the *content* to be right, though not for this task's assertions, which are
-structural — **P5 companion Tasks 1-5** (the shim's recognizer + Route R/N) and
-**P6 companion Tasks 1, 2 and 4** (`crossref-numbering: external` for `Pandoc(fmt)` profiles, the
-Callout reclassification, and the suppression matrix).
-
-### Test Seam Spec
-
-| # | Tier | Real unit exercised | Seam (invoked → asserted) | Mock boundary | Named revert hunk |
-|---|---|---|---|---|---|
-| T3.1 | **E** | the real `q2` binary, full `execute()` chain through clap | `q2 render f.qmd --to docx` → exit 0; `f.docx` first 4 bytes `PK\x03\x04`; `word/document.xml` present; its concatenated `<w:t>` text contains the fixture's body string | nothing mocked | the `Docx` arm of the relaxed gate at `render.rs:680` |
-| T3.2 | **E** | same | `q2 render f.qmd --to pptx` → exit 0; `f.pptx` is a zip containing `ppt/slides/slide1.xml`; its `<a:t>` text contains the body string | nothing mocked | `FormatIdentifier::Pptx`'s arm in `TryFrom<&str>` (`format.rs:82-96`) **and** the `Pptx` arm of the relaxed gate — two separate hunks, T3.3 separates them |
-| T3.3 | U | `Format::from_format_string` | `from_format_string("pptx")` → `Ok`, `identifier == Pptx`, `output_extension == "pptx"`, `native_pipeline == false`; and `from_format_string("docx")` → `Ok` | none | the `"pptx" => Ok(FormatIdentifier::Pptx)` arm at `format.rs:82-96` |
-| T3.4 | **E** | the real binary + the warning wiring | `q2 render multi.qmd` (front matter `format: {docx: default, html: default}`) → **exit 0**, stderr contains `Q-18-<n>` and both `docx` and `html`, `multi.docx` exists and is non-empty, `multi.html` does **not** exist | nothing mocked | the `multi_format_diagnostics` call in `render.rs` |
-| T3.5 | **E** | same | `q2 render f.qmd --to pdf` → non-zero exit, stderr contains `is not yet supported` | nothing mocked | the `Pdf` arm still refused by the relaxed gate |
-| T3.6 | L | `render_document_to_file`'s profile branch | Call with a docx `Format` → assert the returned `RenderedOutput.content.is_empty()` and `output_path` ends `.docx`, and the file on disk is non-empty | filesystem via `tempfile`; **real pandoc** | the `Pandoc(fmt)` branch to `render_qmd_to_pandoc` at `render_to_file.rs:357` |
-| T3.7 | L | `OutputSink` + the artifact path | Same docx render → assert no `OutputSink` refusal, and that no zero-byte artifact was enqueued for the empty `content` | filesystem via `tempfile`; **real pandoc** | the empty-`content` handling below `render_to_file.rs:366` |
-
-**Revert hunks, stated exactly:**
-- T3.1 — Revert ⟨restore the unconditional `anyhow::bail!` at `render.rs:681-684`⟩ → ⟨`assert_eq!(out.status.code(), Some(0))` and the `PK\x03\x04` assertion in `test_e2e_render_docx`⟩ RED.
-- T3.2 — Revert ⟨drop the `"pptx"` arm from `TryFrom<&str> for FormatIdentifier`, `format.rs:82-96`, **leaving the relaxed `render.rs:680` gate in place**⟩ → ⟨`test_e2e_render_pptx` reddens with `Unknown format: pptx`⟩. This is the exact failure the naive "relax the gate" change would have shipped.
-- T3.3 — Revert ⟨same `TryFrom` arm⟩ → ⟨`assert!(Format::from_format_string("pptx").is_ok())`⟩ RED.
-- T3.4 — Revert ⟨the `multi_format_diagnostics` call in `render.rs`⟩ → ⟨`assert!(stderr.contains("Q-18-<n>"))` in `test_e2e_multi_format_warns`⟩ RED. **And** the paired assertion `assert_eq!(status.code(), Some(0))` reddens if the relaxation itself is reverted — see the vacuity check.
-- T3.5 — Revert ⟨relax the gate to admit everything, i.e. delete the `bail!` outright⟩ → ⟨`assert_ne!(status.code(), Some(0))` in `test_e2e_pdf_still_refused`⟩ RED.
-- T3.6 — Revert ⟨the `Pandoc(fmt)` branch, sending docx back through `render_qmd_to_html`⟩ → ⟨`assert!(out.output_path.extension() == Some("docx")) && assert!(fs::metadata(path)?.len() > 0)` reddens (the HTML writer writes HTML bytes to a `.docx` path, or writes nothing)⟩ RED.
-- T3.7 — Revert ⟨treat the empty `content` as an artifact to enqueue⟩ → ⟨`assert!(!out.join("f.docx").metadata()?.len() == 0)`, i.e. the zero-byte-overwrite assertion⟩ RED.
-
-### Refactor-induced vacuity check
-
-- **"`--to docx` is no longer rejected" says nothing about pptx.** This is the round-4 Critical
-  finding made concrete: the two formats fail at *different lines* (`render.rs:680` for docx;
-  `render.rs:676` → `format.rs:449` for pptx, four lines earlier), so they need **two separately
-  bound tests with two different revert hunks** — T3.1/T3.2, and T3.3 isolating the `TryFrom` arm.
-  A single parameterized "both formats render" test with one revert hunk would let the pptx
-  regression hide behind the docx pass. Verified against the real tree on 2026-09-18:
-  `FormatIdentifier` at `format.rs:23-41` has `Html, Pdf, Docx, Epub, Typst, Revealjs, Gfm,
-  CommonMark` and **no `Pptx`**.
-- **The multi-format warning restores a signal that this task's own change removes, so "a warning
-  appears" is the wrong discriminator.** Today `format: {docx:, html:}` fails loudly at
-  `render.rs:681` — an accident of the refusal, but a real guardrail (§14). A test written *before*
-  the relaxation that asserted "the multi-format case does not silently succeed" would **pass for
-  the wrong reason**. T3.4 is therefore a **conjunction**: exit code 0 **and** the `Q-18-<n>`
-  warning **and** `multi.docx` non-empty **and** `multi.html` absent. Reverting the relaxation
-  reddens the first clause; reverting the warning wiring reddens the second. Neither revert alone
-  leaves the test green. **Ordering is load-bearing: Task 1 (warning machinery, `U`-bound only)
-  must land before Task 3, and T3.4 must be written as part of Task 3, never Task 1.**
-- **T3.1's `PK\x03\x04` check is non-discriminating about content.** A pandoc run with no Lua
-  filters at all produces a valid zip. The text assertion (the fixture's body string inside
-  `<w:t>`) is what makes it more than a magic-number check; the *semantic* assertions are Task 11's,
-  not this task's. Do not strengthen T3.1 toward numbering — it would duplicate Task 11 and drift.
-- **T3.6's `content.is_empty()` is also what an unimplemented stub returns.** Pair it with the
-  on-disk non-empty assertion (as written), or the row passes against a stage that does nothing.
+**The multi-format render warning, the project-mode containment gate, the format-gate relaxation +
+`render_qmd_to_pandoc` routing, and B3 shared services** (formerly this document's Tasks 1, 2, 3,
+and 7) live in
+[`2026-09-20-pandoc-hybrid-P7-foundation-implementation.md`](2026-09-20-pandoc-hybrid-P7-foundation-implementation.md)
+as its Tasks 1, 2, 3, and 4 respectively — see that file for scope, acceptance criteria, test-seam
+specs, revert hunks, and vacuity checks.
 
 ---
 
 ## Task 4: The per-format invocation builder — docx + pptx, the pandoc-defaults allow-list, `FORMAT_PATH_KEYS`, the callout-icon PNGs, and the latex stub
+
+This is this document's Task 4, distinct from
+`2026-09-20-pandoc-hybrid-P7-foundation-implementation.md`'s own Task 4 (B3 shared services) —
+always disambiguate with the plan name when citing either from a third document.
 
 **Scope.** One task for the whole same-shape forwarding family, per the plan's own grouped
 checklist item: `--to`, the per-format `pandoc` defaults, the forwarding allow-list, the two new
@@ -490,30 +225,29 @@ path-shaped keys, the 5 docx callout-icon params + their PNGs, and latex documen
 
 **Files.**
 - `crates/quarto-core/src/pandoc_invocation.rs` (new, or wherever P4 Task 9's `PandocWriteStage`
-  assembles argv — extend, don't duplicate) — the per-format table. Values from the research doc
-  (`2026-07-13-q1-format-typescript.md:81-84`) and P7 Finding 1:
+  assembles argv — extend, don't duplicate) — the per-format table:
   **docx/odt** `page-width: 6.5`, `default-image-extension: png`;
   **pptx** `output-divs: false` (overrides the HTML-family base), `default-image-extension: png`;
   **latex** stub only — `format: latex` emits `.tex` directly, the extension wins over the inner
   `pdf` recipe, so no latexmk/tectonic step is in scope.
-- The **forwarding allow-list** (P7 Finding 2 — allow-list, *not* full `kPandocDefaultsKeys`
-  pass-through): `reference-doc`, `template`, `highlight-style`, `toc`, `toc-depth`,
+- The **forwarding allow-list** (allow-list, *not* full `kPandocDefaultsKeys` pass-through):
+  `reference-doc`, `template`, `highlight-style`, `toc`, `toc-depth`,
   `reference-location`, `shift-heading-level-by`, and `slide-level` for pptx. Each with its own
   test row.
-- `crates/quarto-core/src/project/format_paths.rs:99-105` — **citation verified accurate**:
-  `FORMAT_PATH_KEYS` currently holds exactly 5 entries (`css` `ExistenceDiagnose/Entries`, `theme`
-  `ExistenceSilent/Theme`, and the three `include-*` `Always/Include`). Add `reference-doc` and
-  `template`, resolving relative to the declaring file with a leading `/` meaning project root.
+- `crates/quarto-core/src/project/format_paths.rs:99-105` — `FORMAT_PATH_KEYS` currently holds
+  exactly 5 entries (`css` `ExistenceDiagnose/Entries`, `theme` `ExistenceSilent/Theme`, and the
+  three `include-*` `Always/Include`). Add `reference-doc` and `template`, resolving relative to
+  the declaring file with a leading `/` meaning project root.
 - `claude-notes/designs/path-resolution-model.md` — add both to the consumption-site inventory, per
   the repo rule in CLAUDE.md ("Path resolution is a bug *class*"). A deliberate scope-out needs a
   strand linked to `bd-oejuizi9`.
 - `resources/formats/docx/{note,tip,warning,caution,important}.png` (new, in-tree) — vendored from
-  `v1.11.3:src/resources/formats/docx/`. **Verified present at the tag**, 5 files, 749-1257 bytes
-  each. They are **outside P4's traced `src/resources/filters/` vendoring closure**, so P7 vendors
-  them separately. Consumed via the 5 docx callout-icon filter params (`docxCalloutImage` returns
-  `nil` when unset, `v1.11.3:src/resources/filters/modules/callouts.lua:84-96` — degradation is
-  graceful but **silent**, which is why T4.8 asserts the params are set rather than only that the
-  render succeeds).
+  `v1.11.3:src/resources/formats/docx/`, 5 files, 749-1257 bytes each. They are **outside P4's
+  traced `src/resources/filters/` vendoring closure**, so P7 vendors them separately. Consumed via
+  the 5 docx callout-icon filter params (`docxCalloutImage` returns `nil` when unset,
+  `v1.11.3:src/resources/filters/modules/callouts.lua:84-96` — degradation is graceful but
+  **silent**, which is why T4.8 asserts the params are set rather than only that the render
+  succeeds).
 - `crates/quarto-core/src/pandoc_formats/latex.rs` (new, doc-comment only) — the documented stub.
   **No `FormatIdentifier::Latex` variant is added**; `--to latex` continues to return
   `Err("Unknown format: latex")`.
@@ -575,13 +309,12 @@ this plan, and this task supplies them).
   anything about `.tex` output, KOMA template context, `formatExtras`, or latexmk — none of which
   exists. There is no production hunk whose revert reddens T4.9 in the usual sense, because the
   behavior it pins is *the absence of an implementation*; the hunk it guards against is a **future
-  addition** (`"latex" => Ok(FormatIdentifier::Latex)` in `format.rs:82-96`). Recorded here so
+  addition** (`"latex" => Ok(FormatIdentifier::Latex)` in `format.rs:84-101`). Recorded here so
   nobody reads T4.9 as evidence the stub "works".
-- **T4.2's discriminator is the *excluded* keys, not the included ones.** P7 Finding 2 chose an
-  allow-list specifically to avoid silently forwarding everything Q1's TS type declares. A test
-  asserting only that the 8 named keys arrive passes identically under a full pass-through — it
-  survives the exact refactor the decision exists to prevent. Hence the three non-allow-listed
-  keys in the fixture.
+- **T4.2's discriminator is the *excluded* keys, not the included ones.** The allow-list exists
+  specifically to avoid silently forwarding everything Q1's TS type declares. A test asserting only
+  that the 8 named keys arrive passes identically under a full pass-through — it survives the exact
+  refactor the decision exists to prevent. Hence the three non-allow-listed keys in the fixture.
 - **T4.6's discriminator must be a style name unique to the reference doc.** Asserting "the render
   succeeded with `--reference-doc`" is non-discriminating: **(measured)** pandoc 3.8.1 succeeds
   with a valid reference doc whether or not its styles are used, and succeeds identically with
@@ -597,9 +330,8 @@ this plan, and this task supplies them).
 
 ## Task 5: Format-specific `execute` defaults — pptx's `echo: false` / `warning: false` and both formats' figure sizes
 
-**Scope.** Apply the per-format `execute` defaults P7 Finding 1 enumerates, at the one
-format-aware seam where the engine's own defaults and the document's `execute:` scope meet. P7
-owns this explicitly (round-4 correction: previously stated but disowned, leaving it ownerless).
+**Scope.** Apply the per-format `execute` defaults, at the one format-aware seam where the engine's
+own defaults and the document's `execute:` scope meet.
 
 **Files.**
 - `crates/quarto-core/src/stage/stages/engine_execution.rs:463-481` — **this is the seam.**
@@ -617,8 +349,8 @@ owns this explicitly (round-4 correction: previously stated but disowned, leavin
   overlays whatever arrives in the execute scope on top. So an injection at the `engine_execution.rs`
   seam lands correctly between the two, **engine-agnostically** (jupyter and knitr both read the
   same `execute_scope`), rather than needing a per-engine edit.
-- Values (P7 Finding 1, from `v1.11.3:src/format/formats.ts:315-331` and
-  `formats-shared.ts:170-186`): **docx/odt** `execute.fig-width: 5`, `execute.fig-height: 4`;
+- Values, from `v1.11.3:src/format/formats.ts:315-331` and `formats-shared.ts:170-186`:
+  **docx/odt** `execute.fig-width: 5`, `execute.fig-height: 4`;
   **pptx** `execute.fig-width: 11`, `execute.fig-height: 5.5`, **`echo: false`, `warning: false`**;
   base for comparison `fig-width: 7`, `fig-height: 5`, `echo: true`.
 
@@ -677,19 +409,16 @@ consequence.
 - `crates/quarto-core/src/…` — the per-format `Meta` mapping, sited wherever P4 Task 9's
   `PandocWriteStage` builds the `Pandoc` value it serializes. P2 Task 5 confirms the *carriage*;
   this task does the per-format mapping (design doc §8's Meta-block contract, §10's P2↔P7 seam).
-- `crates/quarto-core/src/template.rs:1347` / `:1361` — **citation drift corrected**: P7's text
-  cites `template.rs:221` for the nested-`<p>` bug; line 221 today is an unrelated doc comment
-  about `$rendered.navigation.toc-relocated$`. The real site is `fn titleblock_field_to_html` at
-  **`template.rs:1361`**, called from **`template.rs:1347`**. (The research doc's own anchors,
-  `2026-07-09-q1-filter-catalog.md:117` and `:342`, cite `template.rs:220,677` / `:221` + `:679` —
-  also drifted.) **Note the split consequence:** the `<p>`-in-`<p>` symptom is HTML-only and does
+- `crates/quarto-core/src/template.rs:1347` / `:1361` — `fn titleblock_field_to_html` at
+  **`template.rs:1361`**, called from **`template.rs:1347`**, is the real site of the nested-`<p>`
+  bug. **Note the split consequence:** the `<p>`-in-`<p>` symptom is HTML-only and does
   not affect docx output, but the *underlying* missing `ensureMetaInlines` coercion does: a
   `PandocBlocks`-valued `title`/`subtitle` reaching Pandoc `Meta` as `MetaBlocks` is not what
   Pandoc's docx writer reads for `title`. **(measured)** with a normal inline title, pandoc 3.8.1
   puts it in `docProps/core.xml` as `<dc:title>My Title</dc:title>` **and** in
   `word/document.xml` as a paragraph with `<w:pStyle w:val="Title"/>`.
 - `crates/quarto-core/tests/integration/pandoc_meta_mapping.rs` — new.
-- `crates/quarto/tests/integration/render_pandoc_formats_e2e.rs` — extend (Task 3 creates it).
+- `crates/quarto/tests/integration/render_pandoc_formats_e2e.rs` — extend (P7-foundation's Task 3 creates it).
 
 **Acceptance criterion.**
 
@@ -706,7 +435,7 @@ $ unzip -p meta.pptx docProps/core.xml | grep -o '<dc:title>[^<]*</dc:title>'
 with the block-valued-title case producing `MetaInlines`, not `MetaBlocks`.
 
 **Prerequisite.** **P2 Task 5** (the confirmed `Meta` carriage — "produces for P7"), **P4 Task 9**
-(the serialization point), **Task 3 of this plan** (for the `E` row to run at all).
+(the serialization point), **P7-foundation's Task 3** (for the `E` row to run at all).
 
 ### Test Seam Spec
 
@@ -743,74 +472,6 @@ with the block-valued-title case producing `MetaInlines`, not `MetaBlocks`.
 
 ---
 
-## Task 7: B3 shared services wired into the Pandoc tail (staged resources, rewritten links)
-
-**Scope.** Confirm — with tests, not by reading — that `ResourceCollector`'s mediabag/resource
-staging and `LinkRewriteTransform` run **before** the wire-format handoff for a `Pandoc(fmt)`
-render, so images and relative links resolve in the produced docx/pptx. Both are classified **B3**
-(design doc §6): shared post-core services that cross the cut.
-
-**Files.**
-- `crates/quarto-core/src/pipeline.rs` — the `Pandoc(fmt)` transform list assembled by P1 Task 2:
-  assert `ResourceCollector` and `link-rewrite` are **present**, i.e. *not* on the Pandoc-kind
-  exclude list.
-- `crates/quarto-core/src/transforms/link_rewrite.rs` — read-only. **P7's checklist item here is
-  already resolved and correctly marked `[x]`**: re-verified 2026-09-18, the doc comment at
-  `link_rewrite.rs:19-30` documents that `Image::target.0` is rewritten via
-  `resolve_static_resource_href`, explicitly "matching Q1" (landed via commit `1d17a9ce7`). The
-  transform is reused verbatim; there is no fix in this task, only a binding test.
-- `crates/quarto-core/tests/integration/pandoc_b3_services.rs` — new.
-- `crates/quarto/tests/integration/render_pandoc_formats_e2e.rs` — extend.
-
-**Acceptance criterion.**
-
-```
-$ cargo run --bin q2 -- render img.qmd --to docx     # body: ![cap](sub/pic.png)
-$ unzip -l img.docx | grep word/media
-     1234  ...  word/media/image1.png
-$ unzip -p img.docx word/_rels/document.xml.rels | grep -o 'Target="media/image1.png"'
-Target="media/image1.png"
-```
-
-and **no** `[WARNING] Could not fetch resource` line on stderr.
-
-**Prerequisite.** **P1 Task 2** (the `Pandoc`-kind transform exclude-list — this task asserts what
-that list does *not* contain), **P4 Task 9**, **Task 3 of this plan**.
-
-### Test Seam Spec
-
-| # | Tier | Real unit exercised | Seam (invoked → asserted) | Mock boundary | Named revert hunk |
-|---|---|---|---|---|---|
-| T7.1 | I | `build_transform_pipeline` for `Pandoc("docx")` | Build → assert the ordered transform-name list **contains** `resource-collector` and `link-rewrite` | none | those two names' presence in the `Pandoc` arm / absence from the exclude list |
-| T7.2 | I | `LinkRewriteTransform` on a Pandoc-profile render | Run the pipeline on a fixture with `![cap](sub/pic.png)` and a relative `[text](other.qmd)` → assert the `Image.target` is the resolved staged href and the link target is rewritten | filesystem via `tempfile` | the `Image::target.0` rewrite in `link_rewrite.rs` |
-| T7.3 | **E** | the real binary + real pandoc | `q2 render img.qmd --to docx` → `word/media/` contains one entry; `word/_rels/document.xml.rels` has an `image`-typed relationship targeting it; **stderr contains no `Could not fetch resource`** | nothing mocked | the `resource-collector` entry in the `Pandoc` transform list |
-| T7.4 | **E** | same | The same fixture where the image path is authored project-root-absolute (`/sub/pic.png`) → same assertions | nothing mocked | the leading-`/` handling in `resolve_static_resource_href` |
-
-**Revert hunks, stated exactly:**
-- T7.1 — Revert ⟨add `resource-collector` to the `Pandoc`-kind exclude list⟩ → ⟨`assert!(names.contains(&"resource-collector"))`⟩ RED.
-- T7.2 — Revert ⟨the `Image::target.0` rewrite⟩ → ⟨`assert_eq!(img.target.0, expected_staged_href)`⟩ RED.
-- T7.3 — Revert ⟨exclude `resource-collector` for the Pandoc profile⟩ → ⟨`assert!(media_entries.len() == 1)` **and** `assert!(!stderr.contains("Could not fetch resource"))` in `test_e2e_docx_image_staged`⟩ RED.
-- T7.4 — Revert ⟨the leading-`/`-means-project-root branch⟩ → ⟨the same assertions with the absolute-authored fixture⟩ RED.
-
-### Refactor-induced vacuity check
-
-- **"An image is missing" does not fail a docx render.** **(measured)** pandoc 3.8.1 emits
-  `[WARNING] Could not fetch resource nope.png: replacing image with description` and substitutes
-  the alt text, **exiting 0**. So an `E` row asserting only "the render succeeded" or "the docx
-  exists" is fully non-discriminating about resource staging. The two discriminators are the
-  `word/media/` entry count and the absence of that stderr line — both asserted in T7.3. This is
-  the same blind spot the extractor's media inventory closes for the goldens (Task 9,
-  preserve-item 8).
-- **T7.1's presence assertion is not a substitute for T7.3.** A transform can be *in the list* and
-  still have no effect for a profile that never reaches its self-gate — the exact failure mode
-  behind CLAUDE.md's 2026-04-20 `CodeHighlightStage` incident. T7.3 is the "the path was actually
-  exercised" row.
-- **T7.4 is not redundant with T7.2.** CLAUDE.md's path-resolution rule is explicit that a fix for
-  one key or one form routinely leaves the sibling form broken; the two authored forms are
-  separate states.
-
----
-
 ## Task 8: Triage the two pre-existing Q2 bugs before any golden diff is trusted
 
 **Scope.** Both bugs produce Q1/Q2 diffs unrelated to the hybrid work. The plan's requirement is
@@ -824,13 +485,13 @@ bound test for whichever branch is taken.
   `MetaBlocks`→`MetaInlines` coercion). The HTML-leg `<p>`-in-`<p>` symptom has **no** docx or pptx
   surface and is explicitly flagged, not fixed, here — recorded as an `accepted-untested` line in
   the Missing-test pass with its own strand if one does not exist.
-- **Bug B — the silent multi-id crossref drop.** **Citation drift corrected**: P7's text cites
-  `crossref_resolve.rs:487`, which is the *test* `fn multi_crossref_cite_resolved_to_first` (whose
-  own comment states "We currently resolve to the first; the second is dropped. (Phase 1 scope…)").
-  The **production** site is `let first = cite.citations.first()?;` at
-  **`crates/quarto-core/src/transforms/crossref_resolve.rs:238`**. Note that the *mixed* case
-  (crossrefs intermixed with bibliographic citations) already emits a diagnostic at
-  `crossref_resolve.rs:246-254`; the **all-crossrefs** case `[@fig-a; @fig-b]` is the silent one.
+- **Bug B — the silent multi-id crossref drop.** The production site is
+  `let first = cite.citations.first()?;` at `crates/quarto-core/src/transforms/crossref_resolve.rs:253`;
+  the existing test `fn multi_crossref_cite_resolved_to_first` (whose own comment states "We
+  currently resolve to the first; the second is dropped. (Phase 1 scope…)") is at
+  `crossref_resolve.rs:540`. Note that the *mixed* case (crossrefs intermixed with bibliographic
+  citations) already emits a diagnostic at `crossref_resolve.rs:246-254`; the **all-crossrefs**
+  case `[@fig-a; @fig-b]` is the silent one.
 - `crates/quarto-core/tests/integration/…` — the binding test for whichever branch is taken.
 
 **Acceptance criterion.** A written record in the tree (plan checklist + a strand for anything not
@@ -845,12 +506,12 @@ plan's "before trusting any golden diff" phrasing.
 
 | # | Tier | Real unit exercised | Seam (invoked → asserted) | Mock boundary | Named revert hunk |
 |---|---|---|---|---|---|
-| T8.1 | U | `crossref_resolve::resolve` | `[@fig-a; @fig-b]`, both crossrefs, both indexed → assert **either** (fix branch) both ids resolve, **or** (flag branch) exactly one resolves **and** a diagnostic naming the dropped id is returned | none | fix branch: the multi-id loop replacing `citations.first()?` at `:238`. Flag branch: the new diagnostic push |
-| T8.2 | U | same | The existing test `multi_crossref_cite_resolved_to_first` (`crossref_resolve.rs:486`) is **updated, not deleted**, to state the chosen behavior | none | whichever hunk T8.1 names |
+| T8.1 | U | `crossref_resolve::resolve` | `[@fig-a; @fig-b]`, both crossrefs, both indexed → assert **either** (fix branch) both ids resolve, **or** (flag branch) exactly one resolves **and** a diagnostic naming the dropped id is returned | none | fix branch: the multi-id loop replacing `citations.first()?` at `:253`. Flag branch: the new diagnostic push |
+| T8.2 | U | same | The existing test `multi_crossref_cite_resolved_to_first` (`crossref_resolve.rs:540`) is **updated, not deleted**, to state the chosen behavior | none | whichever hunk T8.1 names |
 | T8.3 | — | Bug A | `seam deferred until Task 6 of this plan` (T6.2/T6.5 are its binding tests, on the docx-relevant surface); the HTML `<p>`-in-`<p>` half is `accepted-untested` — see the Missing-test pass | — | — |
 
 **Revert hunks, stated exactly:**
-- T8.1 (flag branch, the likely one given the epic's "no new functionality" principle) — Revert ⟨the diagnostic push added next to `crossref_resolve.rs:238`⟩ → ⟨`assert_eq!(diags.len(), 1)` in `test_multi_crossref_drop_is_diagnosed`⟩ RED.
+- T8.1 (flag branch, the likely one given the epic's "no new functionality" principle) — Revert ⟨the diagnostic push added next to `crossref_resolve.rs:253`⟩ → ⟨`assert_eq!(diags.len(), 1)` in `test_multi_crossref_drop_is_diagnosed`⟩ RED.
 - T8.1 (fix branch) — Revert ⟨the multi-id loop, restoring `citations.first()?`⟩ → ⟨`assert_eq!(resolved_ids, ["fig-a", "fig-b"])`⟩ RED.
 - T8.2 — Revert ⟨the updated expectation in the existing test⟩ → ⟨that test reddens⟩. Named to prevent the common shortcut of deleting the inconvenient existing test.
 
@@ -948,12 +609,11 @@ checks, each with the specific expected value examined:
   states. The downstream cost of getting this wrong is precise: P6's number-parity golden and P5's
   Route-N `alg.\u{a0}1` assertion both reach their expectation *through this function*, so both go
   vacuous together.
-- **T9.4's discriminator moved once already, in this document.** P7's own extraction spec says
-  "relationship entry count + targets"; a count over *all* relationships does not differ between a
-  document with a resolved image and one without (both carry the 7+ boilerplate relationships, and
-  a missing image is replaced by alt text with **no** relationship). The count only discriminates
-  after the `/image` filter. The collapsed raw count is kept **only** as a shape check, never as
-  the image-presence discriminator.
+- **T9.4's discriminator only exists after the `/image` filter.** A count over *all* relationships
+  does not differ between a document with a resolved image and one without (both carry the 7+
+  boilerplate relationships, and a missing image is replaced by alt text with **no** relationship).
+  The collapsed raw count is kept **only** as a shape check, never as the image-presence
+  discriminator.
 - **T9.8's fixture needs ≥10 slides.** With 2 slides, lexicographic and numeric ordering agree and
   the ordering assertion survives its own revert.
 - **T9.3 is an anti-assertion and needs its positive twin.** "Contains no timestamp" is satisfied
@@ -983,9 +643,8 @@ fixtures to docx and pptx, run Task 9's extractor, write `.snap` files under an 
 - `crates/quarto-core/tests/fixtures/pandoc-goldens/README.md` (new) — the provenance ledger:
   source path, source tag, copy date, and one line on why each fixture is in the set.
 
-**The fixture set — 9 fixtures, every path verified present at tag `v1.11.3`** (`git cat-file -e
-v1.11.3:<path>`; note P7's own text writes these as `docs/…`, dropping the `tests/` prefix — the
-real prefix is `tests/`):
+**The fixture set — 9 fixtures, every path verified present at tag `v1.11.3`** (via `git cat-file -e
+v1.11.3:<path>`; the real path prefix is `tests/`, not `docs/`):
 
 | # | Source (at `v1.11.3`) | Exercises | Engine-free? |
 |---|---|---|---|
@@ -994,10 +653,10 @@ real prefix is `tests/`):
 | 3 | `tests/docs/crossrefs/callouts.qmd` | **cross-referenceable** callouts — the Route-R Callout `order` reclassification (design §3) | yes |
 | 4 | `tests/docs/crossrefs/theorems.qmd` | `::: {#thm-line}` + an unlabeled `$$` | yes |
 | 5 | `tests/docs/crossrefs/theorem-types.qmd` | one div per theorem type (`lem/cor/prp/cnj/def/exm/exr`) — and **not** `alg`, which is Task 12's point | yes |
-| 6 | `tests/docs/crossrefs/equations.qmd` | one labeled `$$ {#eq-black-scholes}` + an `@eq-` ref — the `<m:oMath>` path Reviewer B added | yes |
+| 6 | `tests/docs/crossrefs/equations.qmd` | one labeled `$$ {#eq-black-scholes}` + an `@eq-` ref — the `<m:oMath>` path | yes |
 | 7 | `tests/docs/smoke-all/crossrefs/theorem/proof-rendering.qmd` | `.proof`, `.proof name=…`, empty `.proof`, `.remark` — P5's Proof Route-R shape | yes |
 | 8 | `tests/docs/smoke-all/2025/01/08/7260.qmd` | the smallest clean `.panel-tabset` (Tab A / Tab B `{.active}`) — the Tabset Route-R reclassification | yes |
-| 9 | `tests/docs/smoke-all/mermaid/backticks.qmd` | **the one labeled accepted-divergence fixture** (round 4) — see Task 11 | no engine cells, but a `mermaid` cell |
+| 9 | `tests/docs/smoke-all/mermaid/backticks.qmd` | **the one labeled accepted-divergence fixture** — see Task 11 | no engine cells, but a `mermaid` cell |
 
 Plus **one fixture we author ourselves**, because no quarto-cli fixture covers it: a **Tabset
 containing a FloatRefTarget subfloat** (P6 Finding 5) →
@@ -1008,10 +667,10 @@ containing a FloatRefTarget subfloat** (P6 Finding 5) →
 checked and carry zero such cells. (Fixture 9's `mermaid` cell is a mermaid-engine cell, not
 R/Python/Julia; see Task 11 for what its snapshot is expected to show.)
 
-**Exclusions kept as-is** (P7 Finding 4, as corrected): the code-block `filename`-header fixtures
-and the `crossref:`-presentation-option fixtures stay **out**, because those genuinely are
-structural blind spots and accepted gaps (design §12). **mermaid is not excluded** — the round-4
-correction found its exclusion circular.
+**Exclusions kept as-is:** the code-block `filename`-header fixtures and the
+`crossref:`-presentation-option fixtures stay **out**, because those genuinely are structural
+blind spots and accepted gaps (design §12). **mermaid is not excluded** — its exclusion would be
+circular, since the point of fixture 9 is to record the mermaid divergence.
 
 **Acceptance criterion.**
 1. `cargo xtask capture-pandoc-goldens` with no real `quarto` on `PATH` **fails loudly**, naming
@@ -1020,8 +679,7 @@ correction found its exclusion circular.
    10 fixtures × docx + pptx) at the `insta::Settings`-declared path, and re-running it produces
    **zero** `git diff`.
 3. The written filenames match exactly what Task 11's test looks up — verified by running Task 11's
-   test immediately after and observing **no** "snapshot not found, created new" line. (P7 Finding
-   4 names this as the silent-pass hazard.)
+   test immediately after and observing **no** "snapshot not found, created new" line.
 4. `cargo xtask capture-pandoc-goldens` is **not** invoked from `cargo xtask verify` or any CI
    workflow. CLAUDE.md's "keep `verify` and CI in sync" rule cuts the other way here: nothing is
    added to CI, so nothing is added to `verify`.
@@ -1045,7 +703,7 @@ first-capture diff is diagnosable. A real Q1 `quarto` at the pinned release for 
 - T10.1 — Revert ⟨the missing-binary `bail!` into `return Ok(())`⟩ → ⟨`assert!(result.is_err())` in `test_capture_fails_without_quarto`⟩ RED. **This is the "a skip must itself be visible" row.**
 - T10.2 — Revert ⟨the version comparison⟩ → ⟨`assert!(err.to_string().contains("v1.11.3"))`⟩ RED.
 - T10.3 — Revert ⟨the `insta::Settings` explicit path/name to insta's `module_path!()` default⟩ → ⟨`assert_eq!(derived, ("…/snapshots", "pandoc_golden_all_docx_docx"))`⟩ RED. Bound because the failure mode is a **silent pass** ("snapshot not found, created new"), not a build error.
-- T10.4 — Revert ⟨drop `img/thinker.jpg` from the copy-in⟩ → ⟨`assert!(resource.exists())` in `test_fixture_manifest_complete`⟩ RED. The failure this guards is an unresolved image that *still renders*, per T7.3's measured note.
+- T10.4 — Revert ⟨drop `img/thinker.jpg` from the copy-in⟩ → ⟨`assert!(resource.exists())` in `test_fixture_manifest_complete`⟩ RED. The failure this guards is an unresolved image that *still renders*, per P7-foundation T4.3's measured note.
 - T10.5 — Revert ⟨any behavioral change in the capture path⟩ → ⟨a non-empty second-run `git diff`⟩. Stated as a *deliberate* revert because T10.5's real job is to catch an accidental one.
 - T10.6 — Revert ⟨read a fixture from `~/src/quarto-cli` at capture time instead of the copied tree⟩ → ⟨the lint reddens⟩ (for the macro form) **and** T10.4 reddens (for the runtime-path form).
 - T10.7 — Revert ⟨add the capture step to `verify.rs`⟩ → ⟨`assert!(!verify_steps().contains("capture-pandoc-goldens"))`⟩ RED.
@@ -1157,30 +815,27 @@ correct numbers in its golden" edge in the epic's graph. **Dispatch last.**
 
 ## Task 12: Evaluate whether any in-scope docx/pptx fixture exercises the `algorithm` theorem type, and record the outcome
 
-**Scope.** The epic's Definition-of-done conditional, whose ownership was fixed to P7 in review
-I10 (P5 disowns the implementation twice; P7 owns the *evaluation* because it owns the fixture set).
-Evaluate the condition, then either land the `THEOREM_CLASSES`/`RefTypeRegistry::BUILTINS` fix or
-file the follow-on strand — and leave an artifact either way.
+**Scope.** The epic's Definition-of-done conditional; P7 owns the *evaluation* because it owns the
+fixture set. Evaluate the condition, then either land the
+`THEOREM_CLASSES`/`RefTypeRegistry::BUILTINS` fix or file the follow-on strand — and leave an
+artifact either way.
 
 **Files.**
-- `crates/quarto-core/src/transforms/theorem.rs:61-70` — `THEOREM_CLASSES`, **verified**: 8 entries
+- `crates/quarto-core/src/transforms/theorem.rs:61-70` — `THEOREM_CLASSES`, 8 entries
   (`theorem/thm/Theorem`, `lemma`, `corollary`, `proposition`, `conjecture`, `definition`,
   `example`, `exercise`). **No `algorithm`/`alg`.**
-- `crates/quarto-core/src/crossref/registry.rs:78-106` — `BUILTINS`, **verified**: 21 entries
+- `crates/quarto-core/src/crossref/registry.rs:78-106` — `BUILTINS`, 21 entries
   (`fig, tbl, lst, eq, sec, thm, lem, cor, prp, cnj, def, exm, exr, sol, rem, nte, wrn, tip, imp,
   cau, demo`). **No `alg`.** Both halves of the gap are real.
 - `crates/quarto-core/tests/fixtures/pandoc-goldens/README.md` — the recorded artifact (see below).
 
-**The evaluation criterion — and a terminology correction that changes its result.** The epic, P5
-and P7 all phrase this as "the `algorithm` **theorem class**". Verified: **there is no
-`.algorithm` class in Quarto.** The algorithm theorem type is selected by the **div id prefix
-`#alg-`**, exactly like `#thm-`; the string `algorithm` appears only as the LaTeX/typst
-*environment* name in Q1's `v1.11.3:src/resources/filters/customnodes/theorem.lua:45-49`
-(`alg = { env = "algorithm", style = "plain", title = "Algorithm" }`). A grep for `.algorithm`
-alone returns **zero** hits and would wrongly conclude "no fixture uses it, for the wrong reason."
-
-**So the criterion is:** grep the copied fixture set (and the 9 sourced paths at `v1.11.3`) for
-`#alg-`, `@alg-`, `@Alg-` — **not** `.algorithm`.
+**The evaluation criterion.** There is no `.algorithm` class in Quarto. The algorithm theorem type
+is selected by the **div id prefix `#alg-`**, exactly like `#thm-`; the string `algorithm` appears
+only as the LaTeX/typst *environment* name in Q1's
+`v1.11.3:src/resources/filters/customnodes/theorem.lua:45-49`
+(`alg = { env = "algorithm", style = "plain", title = "Algorithm" }`). So the criterion is: grep the
+copied fixture set (and the 9 sourced paths at `v1.11.3`) for `#alg-`, `@alg-`, `@Alg-` — **not**
+`.algorithm`, which returns zero hits regardless of whether any fixture uses the type.
 
 **Pre-computed result (verify, don't trust).** `git grep -l -E '#alg-|\.algorithm' v1.11.3 --
 '*.qmd'` over the whole quarto-cli repo at the pinned tag returns **exactly one** file:
@@ -1246,14 +901,14 @@ needs a labeled golden, a bound seam, or an `accepted-untested` verdict.
 
 | # | Envelope item | Verdict |
 |---|---|---|
-| 1 | **No mermaid rendering** (source text appears instead) | **Labeled golden** — fixture 9, T11.6, `DIVERGENCES.md` naming `bd-h1ub8f8z`. The self-gate `mermaid.rs:175` (`if !ctx.format.identifier.is_html_based() { return Ok(()) }` — **verified**) additionally gets a bound unit row: `accepted-untested` is **not** used here. Add **T11.7 (`U`)**: assert `MermaidTransform::transform` is a no-op for a docx `RenderContext` — Revert ⟨the `is_html_based()` self-gate at `mermaid.rs:175`⟩ → ⟨`assert_eq!(ast_before, ast_after)`⟩ RED. |
-| 2 | **No section numbers** (`number-sections` / `@sec-`, `bd-5aklrxgi`) | **Bound negative seam.** Add **T4.11 (`U`)**: assert the pandoc-defaults allow-list does **not** contain `number-sections` or `number-offset` — this is design §11's frozen decision (forwarding them would produce a third, unaudited behavior; Q1 itself *deletes* them, `v1.11.3:src/command/render/pandoc.ts:1056-1057`, guarded at `:1048-1052`, with the comment at `:1044-1047`; **note P7/design cite `1049-1062`, the actual span is `1048-1062`**). Revert ⟨add `number-sections` to the allow-list⟩ → ⟨`assert!(!allow_list.contains("number-sections"))`⟩ RED. **Verified (measured):** docx is neither latex, typst, nor markdown output, so docx **does** take Q1's delete branch — Q1's Lua owns numbering for docx, which is precisely why forwarding is wrong. |
+| 1 | **No mermaid rendering** (source text appears instead) | **Labeled golden** — fixture 9, T11.6, `DIVERGENCES.md` naming `bd-h1ub8f8z`. The self-gate `mermaid.rs:175` (`if !ctx.format.identifier.is_html_based() { return Ok(()) }`) additionally gets a bound unit row: `accepted-untested` is **not** used here. Add **T11.7 (`U`)**: assert `MermaidTransform::transform` is a no-op for a docx `RenderContext` — Revert ⟨the `is_html_based()` self-gate at `mermaid.rs:175`⟩ → ⟨`assert_eq!(ast_before, ast_after)`⟩ RED. |
+| 2 | **No section numbers** (`number-sections` / `@sec-`, `bd-5aklrxgi`) | **Bound negative seam.** Add **T4.11 (`U`)**: assert the pandoc-defaults allow-list does **not** contain `number-sections` or `number-offset` — this is design §11's frozen decision (forwarding them would produce a third, unaudited behavior; Q1 itself *deletes* them, `v1.11.3:src/command/render/pandoc.ts:1056-1057`, guarded at `:1048-1052`, comment at `:1044-1047`). Revert ⟨add `number-sections` to the allow-list⟩ → ⟨`assert!(!allow_list.contains("number-sections"))`⟩ RED. **Verified (measured):** docx is neither latex, typst, nor markdown output, so docx **does** take Q1's delete branch — Q1's Lua owns numbering for docx, which is precisely why forwarding is wrong. |
 | 3 | **No code-block `filename` headers** (upstream, quarto-cli#14906) | `accepted-untested: the loss happens inside Q1's own vendored `decoratedcodeblock.lua`, which has renderers for html/markdown/latex only; there is no Q2-side hunk whose revert could redden a test, and design §11 resolved this as an accepted upstream gap explicitly out of epic scope. The `filename` fixtures are deliberately excluded from the golden set (Task 10) so no snapshot silently encodes the loss as a Q2 baseline.` |
-| 4 | **Listing pages render prose-only** | `accepted-untested: `listing-generate`/`listing-render` are excluded for the Pandoc leg by **P1 Task 2**'s exclude list, which P1 tests directly; a P7 test would duplicate P1's binding and drift from it. T7.1's "contains" assertion covers the inverse direction (what must *not* be excluded).` |
-| 5 | **No project-mode rendering** | **Bound** — Task 2 in full (T2.1-T2.6), with T2.2/T2.5 as the "path was actually exercised" rows. |
-| 6 | **One format per invocation, now with a warning** | **Bound** — Task 1 (T1.1-T1.3, `U`) + T3.4 (`E`, the conjunction). |
-| 7 | **`Post`-position user Lua filters can't see custom-node content** (`bd-o90yz5mg`) | **Bound structural seam.** Add **T3.8 (`I`)**: for a `Pandoc("docx")` render, assert `UserFiltersStage::post()` observes an AST that still contains `CustomNode` wrappers, and that the **`Pre`** position observes none (verified in round-4 review: `pre()` runs before any sugar transform). Revert ⟨reorder `UserFiltersStage::post()` after the wire-format cut⟩ → ⟨the `Pre`-sees-no-CustomNode assertion⟩ RED. This pins the *documented* shape so a future reorder is a reviewed change, not a surprise. |
-| 8 | **An explicit `crossref:` override is honored on Pandoc and silently ignored on HTML** (`bd-wqdi1pd2`) | `accepted-untested: verified zero Q2 readers of `crossref.title-delim`/`fig-prefix`/`ref-hyperlink` anywhere in `crates/` — only `crossref_render.rs:29`'s own comment admits the gap (**re-verified 2026-09-18**: `crossref_render.rs:26-31` hard-codes `"<Kind> <N>: "`). A test asserting the asymmetry would pin a *bug* the epic explicitly declines to fix, and would redden the day `bd-wqdi1pd2` lands. The `crossref:`-presentation fixtures are excluded from the golden set for the same reason.` |
+| 4 | **Listing pages render prose-only** | `accepted-untested: `listing-generate`/`listing-render` are excluded for the Pandoc leg by **P1 Task 2**'s exclude list, which P1 tests directly; a P7 test would duplicate P1's binding and drift from it. P7-foundation's T4.1 "contains" assertion covers the inverse direction (what must *not* be excluded).` |
+| 5 | **No project-mode rendering** | **Bound in P7-foundation** — its Task 2 in full (T2.1-T2.6), with T2.2/T2.5 as the "path was actually exercised" rows. |
+| 6 | **One format per invocation, now with a warning** | **Bound in P7-foundation** — its Task 1 (T1.1-T1.3, `U`) + Task 3's T3.4 (`E`, the conjunction). |
+| 7 | **`Post`-position user Lua filters can't see custom-node content** (`bd-o90yz5mg`) | **Bound in P7-foundation** — its Task 3's T3.8 (`I`): for a `Pandoc("docx")` render, assert `UserFiltersStage::post()` observes an AST that still contains `CustomNode` wrappers, and that the **`Pre`** position observes none (`pre()` runs before any sugar transform). Revert ⟨reorder `UserFiltersStage::post()` after the wire-format cut⟩ → ⟨the `Pre`-sees-no-CustomNode assertion⟩ RED. This pins the *documented* shape so a future reorder is a reviewed change, not a surprise. |
+| 8 | **An explicit `crossref:` override is honored on Pandoc and silently ignored on HTML** (`bd-wqdi1pd2`) | `accepted-untested: verified zero Q2 readers of `crossref.title-delim`/`fig-prefix`/`ref-hyperlink` anywhere in `crates/` — only `crossref_render.rs:29`'s own comment admits the gap (`crossref_render.rs:26-31` hard-codes `"<Kind> <N>: "`). A test asserting the asymmetry would pin a *bug* the epic explicitly declines to fix, and would redden the day `bd-wqdi1pd2` lands. The `crossref:`-presentation fixtures are excluded from the golden set for the same reason.` |
 | 9 | **A callout whose crossref category Q2 knows and Q1 doesn't renders unnumbered, with a dangling ref** | `accepted-untested in P7: the `fail()`-fallback, its `by_ref_type` guard and its warning are **P5 companion Task 6**'s hunk and tests (design §12's last bullet, P6 Finding 2). P7's fixture 3 (`tests/docs/crossrefs/callouts.qmd`) exercises only Q1-known categories, so no P7 golden encodes the fallback. If P5 Task 6's tests are ever dropped, nothing in P7 catches it — recorded so that is a known, not a discovered, gap.` |
 
 ### Other load-bearing branches
@@ -1262,10 +917,10 @@ needs a labeled golden, a bound seam, or an `accepted-untested` verdict.
 |---|---|
 | **The `algorithm`/`THEOREM_CLASSES` condition** | **Bound** — Task 12 in full, with T12.2 as the expiry mechanism and a committed README artifact (not a memory). |
 | **`--reference-doc` — file missing** | **Bound** — T4.7 (`E`), asserting the Q2-side span-bearing diagnostic, which fires *before* pandoc. **(measured)** without it pandoc 3.8.1 exits 99 with the bare line `File X not found in resource path`. |
-| **`--reference-doc` — file present but malformed** | `accepted-untested: outside `MarkPolicy::ExistenceDiagnose`'s reach (existence, not content), and P7's plan does not name a content check. **(measured)** pandoc 3.8.1 exits **1** with a GHC `CallStack` backtrace (`Data.Binary.Get.runGet at position 4: Did not find end of central directory signature`), which P4 Task 10's verbatim nonzero-exit passthrough would print to the user as-is. Surfaced as **Findings F6** rather than fixed here, because turning it into a `Q-18-*` would be a new content-validity check nobody has scoped.` |
-| **`pandoc` absent, at the CLI level** | **Bound, by reference.** P4 Task 7 owns the check and its `Q-18-*` code. P7 adds **T3.9 (`E`)**: run `q2 render f.qmd --to docx` with a `PATH` containing no `pandoc` → non-zero exit, stderr contains the `Q-18-*` code and the word `pandoc`, and **no** partial `.docx` is left on disk. Revert ⟨P4's pre-flight check, letting the `Command::new("pandoc")` spawn fail⟩ → ⟨`assert!(stderr.contains("Q-18-"))` and `assert!(!out.join("f.docx").exists())`⟩ RED. This is the row that answers "does the CLI surface it *well*", which P4's own tier cannot: P4's `L`-tier tests *require* pandoc. |
-| **`pandoc` present but below the floor** | `accepted-untested in P7: P4 Task 7 owns the version comparison and its gate, with its own tests. A P7 `E` row would need a stub `pandoc` on `PATH` reporting a low version, which is a second copy of P4's harness; the CLI-surfacing shape is already covered by T3.9's code-and-message assertion, which shares the diagnostic path.` |
-| **Binary output — the contract beyond "a file exists"** | **Bound, three ways, because "a file exists" is exactly the failure mode.** (a) T3.1/T3.2 assert the zip magic `PK\x03\x04` and a required internal entry (`word/document.xml` / `ppt/slides/slide1.xml`) — this is what rules out HTML-in-a-`.docx`. (b) **T3.10 (`E`, new)**: assert the output file's length is **> 0** and that `Content-Type`-shaped sniffing does not match text — concretely, `assert_ne!(&bytes[..2], b"<!")` and `assert!(bytes.len() > 1000)`, guarding the zero-byte and HTML-written-to-a-binary-path cases. Revert ⟨P4's `content: String::new()` decision into "write `RenderedOutput.content` to the output path"⟩ → ⟨T3.10's length assertion reddens with a 0-byte file⟩ RED. (c) T9.9 makes the extractor reject a non-OOXML input with `Err`, so a corrupt output cannot pass Task 11 as an empty extraction. |
+| **`--reference-doc` — file present but malformed** | `accepted-untested: outside `MarkPolicy::ExistenceDiagnose`'s reach (existence, not content), and P7's plan does not name a content check. **(measured)** pandoc 3.8.1 exits **1** with a GHC `CallStack` backtrace (`Data.Binary.Get.runGet at position 4: Did not find end of central directory signature`), which P4 Task 10's verbatim nonzero-exit passthrough would print to the user as-is. A content-validity check (e.g. a `PK\x03\x04` pre-flight on `reference-doc`) would be new functionality nobody has scoped — see Open questions.` |
+| **`pandoc` absent, at the CLI level** | **Bound, by reference.** P4 Task 7 owns the check and its `Q-18-*` code. **P7-foundation's Task 3 adds T3.9 (`E`)**: run `q2 render f.qmd --to docx` with a `PATH` containing no `pandoc` → non-zero exit, stderr contains the `Q-18-*` code and the word `pandoc`, and **no** partial `.docx` is left on disk. Revert ⟨P4's pre-flight check, letting the `Command::new("pandoc")` spawn fail⟩ → ⟨`assert!(stderr.contains("Q-18-"))` and `assert!(!out.join("f.docx").exists())`⟩ RED. This is the row that answers "does the CLI surface it *well*", which P4's own tier cannot: P4's `L`-tier tests *require* pandoc. |
+| **`pandoc` present but below the floor** | `accepted-untested: P4 Task 7 owns the version comparison and its gate, with its own tests. An `E` row would need a stub `pandoc` on `PATH` reporting a low version, which is a second copy of P4's harness; the CLI-surfacing shape is already covered by P7-foundation's T3.9 code-and-message assertion, which shares the diagnostic path.` |
+| **Binary output — the contract beyond "a file exists"** | **Bound, three ways, because "a file exists" is exactly the failure mode.** (a) P7-foundation's T3.1/T3.2 assert the zip magic `PK\x03\x04` and a required internal entry (`word/document.xml` / `ppt/slides/slide1.xml`) — this is what rules out HTML-in-a-`.docx`. (b) **P7-foundation's T3.10 (`E`)**: assert the output file's length is **> 0** and that `Content-Type`-shaped sniffing does not match text — concretely, `assert_ne!(&bytes[..2], b"<!")` and `assert!(bytes.len() > 1000)`, guarding the zero-byte and HTML-written-to-a-binary-path cases. Revert ⟨P4's `content: String::new()` decision into "write `RenderedOutput.content` to the output path"⟩ → ⟨T3.10's length assertion reddens with a 0-byte file⟩ RED. (c) **T9.9 (this document's Task 9)** makes the extractor reject a non-OOXML input with `Err`, so a corrupt output cannot pass Task 11 as an empty extraction. |
 | **The HTML-leg nested-`<p>` symptom** | `accepted-untested: HTML-only, with no docx/pptx surface; the docx-relevant half (the `MetaBlocks`→`MetaInlines` coercion) **is** bound, at T6.2/T6.5. Flagged, not fixed, per Task 8; needs a strand if one does not already exist.` |
 | **The `latex` stub** | **Bound negatively** — T4.9 asserts `--to latex` still refuses. See Task 4's vacuity check for what it deliberately does not assert. |
 | **The `G` tier's own skip** | **Bound** — T10.1/T10.2 make a missing or wrong-version `quarto` a loud failure, never a skip; T10.7 keeps the capture out of `verify`/CI. |
@@ -1273,106 +928,14 @@ needs a labeled golden, a bound seam, or an `accepted-untested` verdict.
 
 ---
 
-## Findings for Gordon
+## Open questions
 
-Measured contradictions and drift. **None of these reopens a frozen design decision**; each is
-either a citation correction, a fact that changes how a task must be written, or a scope question I
-declined to decide.
-
-**F1 — The local quarto-cli checkout is `v1.11.5-1-g83d48d8e8`, not the pinned `v1.11.3`.**
-`git -C /Users/gordon/src/quarto-cli describe --tags`. P4's companion already adopted the
-workaround (read the tag via `git show v1.11.3:<path>`); recorded here because P7's Task 10 *renders
-with a real `quarto` binary*, and a binary built from the worktree would be v1.11.5. The release
-binary for the pinned tag is what Task 10 must locate — as the plan already says. **All 17
-quarto-cli paths this document names were verified present at tag `v1.11.3`.** No decision needed.
-
-**F2 — `.algorithm` is not a Quarto class; the algorithm theorem type is the `#alg-` id prefix.**
-The epic DoD, P5 and P7 all phrase the gap as "the `algorithm` theorem class". Verified: Q1
-registers `alg = { env = "algorithm", … }` in
-`v1.11.3:src/resources/filters/customnodes/theorem.lua:45-49`, Q1's only algorithm fixture uses
-`::: {#alg-gcd}`, and `alg-cap` does not exist anywhere in quarto-cli. A `.algorithm` grep — the
-literal reading of the DoD item — returns zero hits **for the wrong reason**. Both Q2 gap sites are
-real and confirmed (`theorem.rs:61-70` has no `algorithm` row; `registry.rs:78-106` has no `alg`
-row). Task 12 uses the corrected predicate and pre-computes the expected outcome (condition does
-not fire → file the strand). **No decision needed; the plan text is worth correcting when next
-touched.**
-
-**F3 — Four citation drifts in P7's own text, and five citations re-verified as accurate.**
-Drifted: (a) the nested-`<p>` bug's `template.rs:221` → the real site is `titleblock_field_to_html`
-at `template.rs:1361`, caller `:1347` (line 221 today is an unrelated TOC doc comment; the research
-doc's `template.rs:220,677`/`:221`+`:679` have drifted too). (b) the multi-id crossref drop's
-`crossref_resolve.rs:487` → that is the *test* `multi_crossref_cite_resolved_to_first`; the
-production site is `cite.citations.first()?` at `crossref_resolve.rs:238`. (c)
-`format.rs:447` → the `Err("Unknown format: …")` is at `format.rs:449`. (d) the fixture paths are
-written `docs/crossrefs/all-docx.qmd` — the real prefix is `tests/`. Also `pandoc.ts:1049-1062` →
-the actual span is `1048-1062` (deletes at `1056-1057`). **Verified accurate today:**
-`render.rs:680-684`, `format.rs:58-60` (`is_native`), `format_paths.rs:99-105` (5 entries),
-`orchestrator.rs:517-580` (`post_render`), `pipeline.rs:322` (`engine_stage`), `mermaid.rs:175`,
-`crossref_render.rs:28-31`, `Cargo.toml:37` (`quick-xml = "0.39"`, no `zip`). Surfaced rather than
-silently propagated or silently fixed, per the grounding rules.
-
-**F4 — `WebsiteProjectType::post_render` takes no `format` argument, and `post_resources` is a
-second unconditional HTML-assuming hook that §13's wording does not cover.** The §13 gate as worded
-("gate `WebsiteProjectType::post_render`'s hook sequence on `format.identifier.is_html_based()`")
-needs either a trait-signature change (`orchestrator.rs:397-406` + the test double at
-`crates/quarto-core/tests/integration/project_pipeline.rs:227`) or a call-site gate
-(`orchestrator.rs:1220-1231`, where `self.format` is already in scope and used at `:1122`). **Task 2
-picks the call site** — it is the "one-line fix" §13 describes — and says so, because the choice
-determines which revert hunk exists. The part I am **not** deciding: `async fn post_resources`
-(immediately after `post_render`, writing llms.txt + per-page markdown companions) is *also*
-unconditional and *also* assumes HTML outputs exist. §13 names only `post_render`. Whether the
-containment gate should cover `post_resources` too is a scope question for you, not something I
-should widen Task 2 to absorb.
-
-**F5 — `is_html_based()` and `is_native()` are behaviorally indistinguishable today.** Both are
-`matches!(self, Html | Revealjs)` (`format.rs:58-60` and `:63-65`), and P1 Task 1 adds `Pptx` to
-neither. So no outcome-level test can tell whether the §13 gate was written against the right
-predicate, and Task 3's relaxation is exactly the change that makes `is_native()`'s meaning
-("renders in-process") stop matching "is a supported format". Task 2 pins the predicate's own table
-(T2.6) and Task 2's vacuity check records the hazard. No code change requested — recorded so that
-if the two predicates are ever deliberately diverged, the reviewer knows which tests depend on
-which.
-
-**F6 — A malformed `--reference-doc` surfaces a GHC backtrace to the user.** **(measured, pandoc
-3.8.1)** a non-zip file passed as `--reference-doc` exits **1** with
-`pandoc: Data.Binary.Get.runGet at position 4: Did not find end of central directory signature`
-plus a `CallStack`/`HasCallStack` trace. Under P4 Task 10's verbatim nonzero-exit passthrough, that
-is what the user reads. The *missing*-file case is clean (Task 4 diagnoses it with a span before
-pandoc runs, via `MarkPolicy::ExistenceDiagnose`), but the malformed case is outside that policy's
-reach and P7's plan does not name it. Logged as `accepted-untested` in the Missing-test pass and
-surfaced here because a content-validity check (e.g. a `PK\x03\x04` pre-flight on `reference-doc`)
-would be new functionality nobody has scoped — your call, not mine.
-
-**F7 — the P5/P6 harness-ordering question resolved itself while this file was being written, and
-the residual coupling is now small but unstated.** P5 (`P5-lua-shim.md:655-659`) and P6
-(`P6-*.md:272-278`) each recorded the same "(a) build a narrower one-off harness now, or (b)
-explicitly schedule this item after P7" choice, with P6 adding "Don't leave it silently
-unschedulable." **Both sibling companions picked (a)** — P5 companion **Task 8** asserts on the
-post-filter Pandoc AST, P6 companion **Task 5** is titled "schedulable without P7". So P7 inherits
-no deferred predecessor items, and I removed the fixture-superset obligation I was going to raise.
-
-What remains is one unstated overlap worth a sentence in P7's "Produces" seam list if you want it
-explicit: **P6 Task 5 and P7 T11.3 both assert number identity, at different depths** — P6 at the
-post-filter AST, P7 at the rendered OOXML. They are not duplicates (the `<m:oMath>` case is
-correct-in-AST-but-lost-in-writer, which only P7 can see), but nothing says so, so a future reader
-could reasonably delete one as redundant. I have not added it.
-
-**F8 — One measured fact that makes P7's own extraction spec sharper, folded into this document
-rather than left as a surprise.** P7's extraction spec says "record the relationship/media
-inventory (`word/_rels/document.xml.rels` entry count + targets)". **(measured)** an image-free docx
-already carries **7+** relationships (numbering, styles, settings, theme, fontTable, webSettings,
-footnotes), so a raw entry count neither indicates image presence nor is stable across pandoc's
-default-reference-doc changes; and `docProps/core.xml` carries wall-clock
-`dcterms:created`/`dcterms:modified`, which would make every snapshot fail on every run. Task 9's
-contract therefore filters relationships to `Type` ending `/image` and excludes the two timestamp
-fields. I read this as a precision on P7's own wording rather than a scope change, but it is the
-kind of refinement worth seeing.
-
-**Everything else checked out.** The extractor's central tension — suppress Pandoc-version noise
-while preserving the discriminator — resolves cleanly and was measured, not reasoned: pandoc 3.8.1
-emits U+00A0 verbatim inside `<w:t>` and `<a:t>` (hexdumped: `4669 6775 7265 c2a0 31`), so the
-extractor can preserve crossref numbers, prefixes and the nbsp between them while normalizing
-attribute order, run splitting, generated ids, and zip metadata. **The one thing it must not do is
-normalize whitespace**, and that is the single instruction most likely to be "cleaned up" by a
-future contributor — which is why T9.1 is a byte-literal assertion and why T11.3 compares
-`as_bytes()`.
+- **A malformed `--reference-doc` surfaces a GHC backtrace to the user.** **(measured, pandoc
+  3.8.1)** a non-zip file passed as `--reference-doc` exits **1** with
+  `pandoc: Data.Binary.Get.runGet at position 4: Did not find end of central directory signature`
+  plus a `CallStack`/`HasCallStack` trace. Under P4 Task 10's verbatim nonzero-exit passthrough,
+  that is what the user reads. The *missing*-file case is clean (Task 4 diagnoses it with a span
+  before pandoc runs, via `MarkPolicy::ExistenceDiagnose`), but the malformed case is outside that
+  policy's reach and no task above names it. Whether to add a content-validity check (e.g. a
+  `PK\x03\x04` pre-flight on `reference-doc`) is Gordon's call — it would be new functionality
+  nobody has scoped yet.
