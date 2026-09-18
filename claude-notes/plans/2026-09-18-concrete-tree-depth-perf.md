@@ -2,7 +2,7 @@
 
 **Strand:** bd-t7i6oanu (related finding: bd-khect2gq)
 **Branch:** `braid/bd-t7i6oanu-make-concrete-tree-depth`
-**Status:** approved 2026-09-18. Approach B plus bd-khect2gq on the same branch, as two separate commits.
+**Status:** complete 2026-09-18: commits `40eadc50` (bd-t7i6oanu) and `6ea8cf1d` (bd-khect2gq). Not pushed.
 
 ## Overview
 
@@ -254,8 +254,38 @@ fails today starts passing. Phase 1 pins it with a boundary test.
       matched the dump text (`{Node ` / `print_whole_tree`).
 
 ### Phase 4 — measure and verify
-- [ ] Re-profile the same fixture with the same command; record the numbers
-      before and after.
-- [ ] `cargo nextest run --workspace`; full `cargo xtask verify`.
-- [ ] End-to-end: `q2 render` the fixture and a too-deep fixture; `pampa -v`
-      on a small file. Inspect the output.
+- [x] Re-profiled the same fixture with the same command (after `6ea8cf1d`).
+      Direct callees of `pampa::readers::qmd::read`, as a share of all samples:
+
+      | callee                          | before | after  |
+      | ------------------------------- | -----: | -----: |
+      | `treesitter_to_pandoc`          | 23.61% | 22.70% |
+      | `MarkdownParser::parse`         | 12.93% | 12.43% |
+      | `filters::topdown_traverse`     |  3.00% |  2.63% |
+      | `print_whole_tree` (sink)       |  2.44% |   —    |
+      | `concrete_tree_depth`           |  1.63% |   —    |
+      | `ts_tree_delete`                |  1.11% |  1.06% |
+      | **`read` total**                | **45.01%** | **38.95%** |
+
+      Both extra walks are gone. `treesitter_to_pandoc`, which now carries the
+      depth check, did not grow.
+- [x] `cargo nextest run --workspace`: 13965 passed.
+- [x] Full `cargo xtask verify --skip-rust-tests` (Rust tests had just run on
+      the same tree): all 14 steps pass, including the WASM rebuild and
+      hub-client `test:ci`, whose `*.wasm.test.ts` failures in Phase 2 are
+      thereby confirmed as stale-artifact noise.
+- [x] End-to-end with `target/debug/q2 render` and the output inspected: 95
+      nested blockquotes render (`edge2.html` has exactly 95
+      `<blockquote>`), 96 fail with `Error [Q-0-99]: The input document is too
+      deeply nested (more than 99 levels).`, and 300 nested spans fail with
+      the same error (no crash). The fixture renders (`_site/api/index.html`,
+      2.0 MB, 36 `<h2>`). `pampa -v` on `Hello *x*` still prints the tree
+      (`document: {Node document (0, 0) - (1, 0)}` …) to stderr.
+
+## Side observation (not filed)
+
+Nested blockquotes and nested lists stop parsing somewhere between 100 and
+200 levels (tree-sitter reports a parse error; 10k `>` never reaches the
+depth guard). Nested spans and emphasis parse to any depth. Given the
+99-level guard this has no user impact. It is most likely a limit on the
+external scanner's serialized state size.
