@@ -1,0 +1,64 @@
+---
+title: "Engine Returned an Unreadable Result"
+description: "An execution engine finished, but the result it handed back was not in the shape Quarto expects, so the render could not continue."
+code: Q-18-1
+subsystem: engine
+status: stub
+since: "99.9.9"
+categories:
+  - engine
+---
+
+# `Q-18-1` — Engine Returned an Unreadable Result
+
+> An execution engine finished, but the result it handed back was not
+> in the shape Quarto expects, so the render could not continue.
+
+## What this means
+
+When a document has executable code cells, Quarto hands the document to
+an execution engine (knitr for R, jupyter for Python and other kernels,
+or an engine extension). The engine runs the cells and returns a
+structured result: the markdown with cell outputs spliced in, plus
+supporting files, header includes, and similar bookkeeping.
+
+This error means the engine ran and returned *something*, but Quarto
+could not read one of those fields. The message names the field (for
+example `includes.include-in-header`) and what was wrong with it.
+
+**This is not a problem with your document.** The engine and the code
+that reads its result both ship with Quarto; a mismatch between them is
+a bug in Quarto's integration with that engine.
+
+## Why this happens
+
+- A Quarto release changed one side of the engine protocol without the
+  other. (The first instance of this code: knitr reports header
+  includes as a list of files, and an early Quarto 2 expected a single
+  file, so any R output that attached an HTML dependency — an
+  htmlwidget such as `reactable` or `DT` — failed to render.)
+- A newer or older engine package than the one Quarto was tested with
+  (for example an unusual `knitr` or `rmarkdown` version) writes a field
+  in a shape Quarto has not seen.
+
+## How to fix
+
+There is nothing to change in your document. Please report the problem:
+
+1. Open an issue at <https://github.com/quarto-dev/q2/issues>.
+2. Include the full error text — it names the field that could not be
+   read.
+3. Attach the preserved result file. The message names its path; Quarto
+   keeps the engine's raw output on disk when this error fires, so the
+   exact bytes the engine produced can be inspected.
+4. Mention the engine and its version (for knitr, the output of
+   `packageVersion("knitr")` and `packageVersion("rmarkdown")` in R).
+
+If you are blocked, check whether the cell that triggers the failure can
+be narrowed: for knitr, the trigger is usually the first cell whose
+output carries an HTML dependency.
+
+## Related errors
+
+- [`Q-18-2`](Q-18-2.qmd) — the result was readable, but one of the
+  include files it named could not be read.

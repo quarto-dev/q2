@@ -1615,5 +1615,19 @@
     "message_template": "A `theme:` entry names an `.scss` file that contains none of the `/*-- scss:... --*/` layer boundary markers Quarto needs to merge it into the Bootstrap bundle. Start the file with a marker such as `/*-- scss:defaults --*/` or `/*-- scss:rules --*/`, or list a plain stylesheet under `css:` instead.",
     "docs_url": "https://quarto.org/docs/errors/theme/Q-14-7",
     "since_version": "99.9.9"
+  },
+  "Q-18-1": {
+    "subsystem": "engine",
+    "title": "Engine Returned an Unreadable Result",
+    "message_template": "An execution engine finished, but the result it returned was not in the shape Quarto expects, so the render could not continue. The offending field is named. This is a mismatch between the engine and Quarto's reader, not a problem in the document; the raw result is preserved on disk for a bug report.",
+    "docs_url": "https://quarto.org/docs/errors/engine/Q-18-1",
+    "since_version": "99.9.9"
+  },
+  "Q-18-2": {
+    "subsystem": "engine",
+    "title": "Engine Include File Could Not Be Read",
+    "message_template": "An execution engine asked Quarto to include the contents of a file in the output (header, before body, or after body), but the file could not be read. The render continues without it, so content the engine expected on the page — typically an HTML dependency's scripts and stylesheets — is missing.",
+    "docs_url": "https://quarto.org/docs/errors/engine/Q-18-2",
+    "since_version": "99.9.9"
   }
 }

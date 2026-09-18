@@ -5,7 +5,7 @@
 **Phase C strand:** bd-yd94iyq9 (separate; decided 2026-09-18)
 **GitHub:** https://github.com/quarto-dev/q2/issues/683
 **Date:** 2026-09-18
-**Status:** plan reviewed 2026-09-18; all six design decisions approved. execution started 2026-09-18
+**Status:** Phases A and B complete and committed 2026-09-18; awaiting push approval. Phase C is bd-yd94iyq9.
 
 ## Overview
 
@@ -309,19 +309,21 @@ renders; the content is what matters.)
       (confirm the exact `_files/<name>-<version>/` layout against real
       output when writing the test), and that file exists on disk.
       Fails today with the parse error.
-- [ ] **T5** Phase B unit test on the new parse helper (see A/B below):
+- [x] **T5** Phase B unit test on the new parse helper (see A/B below):
       malformed JSON → `ExecutionError::MalformedResult` carrying engine
       name, field path `includes.include-in-header`, serde message, and
       the preserved path; the preserved file exists and equals the input.
-- [ ] **T6** Phase B diagnostic test: the `ExecutionError → DiagnosticMessage`
+- [x] **T6** Phase B diagnostic test: the `ExecutionError → DiagnosticMessage`
       conversion yields code `Q-18-1`, error severity, the field path in
       the problem line, the preserved path in a detail, the report hint.
-- [ ] **T7** (if decision 6 accepted) `convert_includes` with an
-      unreadable path returns a `Q-18-2` warning and drops the entry.
-- [ ] **T8** Multi-byte safety: a results file whose byte 500 splits a
-      character no longer panics (moot if decision 5 removes the dump;
-      keep as a regression test on whatever replaces it, or delete
-      `truncate_for_error` outright).
+- [x] **T7** `convert_includes` with an unreadable path returns a
+      `Q-18-2` warning and drops the entry (plus: readable siblings in
+      the same slot still land, one warning per bad file).
+- [x] **T9** (added) `engine_execution.rs`: warnings on
+      `ExecuteResult::warnings` drain into `ctx.diagnostics` exactly once.
+- [x] **T8** Moot: `truncate_for_error` and its test were deleted with
+      the JSON dump (decision 5); no byte-slicing of the results file
+      remains.
 
 ### Phase A — fix the wire type
 
@@ -351,39 +353,65 @@ renders; the content is what matters.)
 
 ### Phase B — malformed-result diagnostic
 
-- [ ] Add `ExecutionError::MalformedResult { engine, field_path: Option<String>, detail, preserved: Option<PathBuf> }`
-      (name open to bikeshedding).
-- [ ] In `call_r`: replace the `serde_json::from_str` + `other(...)`
-      with a `parse_results::<R>(json, results_file)` helper that uses
-      `serde_path_to_error`, calls `results_file.keep()` on failure, and
-      returns the new variant. Delete `truncate_for_error`.
-- [ ] Add `serde_path_to_error` as a direct dep of `quarto-core`.
-- [ ] Catalog: `Q-18-1` (`engine` subsystem, `since_version` per current
-      convention `99.9.9`); page `docs/errors/engine/Q-18-1.qmd` from
-      the `docs/errors/README.md` template; new `- section: "engine"`
-      in `docs/_quarto.yml`. (`Q-18-2` likewise if decision 6 holds.)
-- [ ] `engine_execution.rs:511`: replace `e.to_string()` with a
-      `engine_error_diagnostic(&ExecutionError) -> DiagnosticMessage`
-      seam. Phase B implements only `MalformedResult`; every other
-      variant falls through to today's `DiagnosticMessage::error(e.to_string())`,
-      so behavior elsewhere is unchanged and Phase C has one place to
-      fill in.
-- [ ] `cargo xtask lint` (both `error-docs-*` rules), T5–T8 green,
-      `cargo nextest run --workspace`, `cargo xtask verify --skip-hub-build`
-      (Rust-only; `quarto-core` changed, so run the full
-      `cargo xtask verify` before the push request).
-- [ ] **End-to-end:** temporarily point the deserializer at the old
-      shape (or feed a hand-broken results file via a test hook) and run
-      the real binary to confirm the `Q-18-1` text above appears and the
-      preserved file exists. Record here.
+- [x] Added `ExecutionError::MalformedResult { engine, field_path: String, detail, preserved: Option<PathBuf> }`
+      (`field_path` is never absent: `serde_path_to_error` renders the
+      root as `.`).
+- [x] `call_r` ends in `parse_results::<R>(results_file, "knitr")`:
+      `serde_path_to_error` names the field (down to the element index,
+      e.g. `includes.include-in-header[0]`), `NamedTempFile::keep()` on
+      failure, trailing-garbage caught via `Deserializer::end()`.
+      `truncate_for_error` deleted.
+- [x] `serde_path_to_error = "0.1.20"` as a workspace dep, used by `quarto-core`.
+- [x] Catalog entries `Q-18-1` and `Q-18-2` (`engine` subsystem,
+      `99.9.9`); pages `docs/errors/engine/Q-18-{1,2}.qmd` (status
+      `stub`); `- section: "engine"` appended to the errors sidebar.
+- [x] New module `crates/quarto-core/src/engine/diagnostics.rs` with
+      `engine_error_diagnostic` (the seam; `MalformedResult` → `Q-18-1`,
+      everything else falls through to `DiagnosticMessage::error(e.to_string())`)
+      and `unreadable_include_diagnostic` (`Q-18-2`). The stage's
+      `map_err` now goes through the seam. `ExecuteResult` gained
+      `warnings: Vec<DiagnosticMessage>` (`#[serde(default)]`, so stored
+      captures still load; a replayed trace re-raises them), drained into
+      `ctx.diagnostics` right after the capture emit.
+- [x] Full `cargo xtask verify` green (2026-09-18): lints + clippy,
+      workspace build, Rust tests, ts-packages, WASM + hub-client build
+      and tests. (Local prerequisites that bit along the way: the shell's
+      Node must come from fnm, and a stale `node_modules`/WASM artifact
+      after main's automerge upgrade needed `npm install` + the full
+      hub-build leg.)
+- [x] **End-to-end (2026-09-18), via throwaway local patches, reverted,
+      not committed** — neither code can be reached from a real document
+      any more, which is the point. `cargo run --bin q2 -- render <repro>`:
+
+      Patch A (slot visitor rejects arrays) → exit 1:
+      ```
+      error: while rendering <scratch>/repro/q2-issue-683.qmd
+      Error [Q-18-1]: Engine Returned an Unreadable Result
+      the `knitr` engine ran, but the result it returned is not in the shape Quarto expects — at `includes.include-in-header`: invalid type: sequence, expected a path string or a list of path strings at line 1 column 5789.
+      ✖ The engine's raw result was preserved at /var/folders/.../quarto-pipeline_De6x8V/.tmpTOm78b.
+      ℹ This is a bug in Quarto's integration with the `knitr` engine, not a problem in your document. Please report it at https://github.com/quarto-dev/q2/issues, including this message and the preserved file.
+      1 error
+      ```
+      The preserved file existed and began with the engine's JSON.
+
+      Patch B (a nonexistent path injected into `include-in-header`) → exit 0,
+      widget still rendered:
+      ```
+      Warning [Q-18-2]: Engine Include File Could Not Be Read
+      the `knitr` engine asked for the contents of /nonexistent/q2-dep-header.html to be placed in `include-in-header`, but the file could not be read: No such file or directory (os error 2).
+      ✖ The page was rendered without it, so content the engine expected there (typically an HTML dependency's scripts and stylesheets) is missing.
+      ℹ Re-run the render; if it recurs, check that the path exists and is readable, or report it at https://github.com/quarto-dev/q2/issues. Use `--strict` to make this stop the render.
+      1 warning
+      ```
+      With `--strict` the same run exits 1 (`1 error`).
 
 ### Wrap-up
 
-- [ ] `braid dep add bd-gy2ozix3 bd-5oyk1xce --type related`.
+- [x] `braid dep add bd-gy2ozix3 bd-5oyk1xce --type related`.
 - [x] File the `quarto-json` follow-up (bd-rfug8fxo, `discovered-from`).
 - [x] Phase C filed as its own strand (bd-yd94iyq9).
-- [ ] Commit at each phase boundary per the pre-commit checklist; ask
-      before pushing.
+- [x] Phase A committed (7b456302); Phase B committed (see git log).
+- [ ] Push + PR — awaiting explicit approval.
 
 ## Phase C — candidate follow-up: the rest of `ExecutionError`
 
