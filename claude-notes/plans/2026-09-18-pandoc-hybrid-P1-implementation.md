@@ -548,6 +548,18 @@ epic's frozen-decision sections are not edited without a reason that survives a 
 6. `cargo clippy -p quarto-core --all-targets -- -D warnings` +
    `cargo nextest run -p quarto-core` green.
 
+**Byte-identity exception (final-review Important #1, recorded 2026-09-19).** The split is
+byte-identical to the pre-split transform under `HtmlRender`/`RevealjsRender` **except** for
+documents mixing an inline `^[...]` note with a named footnote whose id is a decimal integer (e.g.
+`[^1]`). Pre-split, an inline note's synthetic id (`number.to_string()`) collided with a
+same-valued named reference id, and the dedup scan silently dropped the named footnote's already-
+detached definition content. The split's marker-based dedup (keyed on the named reference id only)
+does not have this collision, so both footnotes now render correctly. This is a genuine, beneficial
+bug fix — not a regression, and not reverted — but it is an undocumented exception to the "byte-
+identical to today" bar until this note. Pinned by
+`crates/quarto-core/tests/integration/footnotes_dedup.rs`'s
+`inline_note_and_numerically_named_footnote_do_not_collide`.
+
 ### Test Seam Spec
 
 | # | Tier | Real unit exercised | Seam (invoked → asserted) | Mock boundary | Named revert hunk |
@@ -816,7 +828,17 @@ invocation is `cargo run --bin q2 -- render docs/` (per CLAUDE.md — never Q1's
 
 **Acceptance criterion.**
 1. The harness renders the named corpus at the pre-refactor commit and at HEAD and reports a
-   byte-level diff; the diff is empty for `html`, `revealjs`, and the preview AST leg (T8.1).
+   byte-level diff; the diff is empty (T8.1). **Scope correction (final-review Important #2,
+   2026-09-19): this proves byte-identity for the `HtmlRender` leg of the `docs/` corpus
+   specifically** — `docs/` contains zero real `format: revealjs` documents (every occurrence is
+   inside a fenced code block) and exactly one live footnote (an inline `^[...]`, no reference-style
+   `[^a]`/`[^a]:` pair). The harness does **not** itself exercise revealjs, the preview AST leg, or
+   footnote-reference-id dedup; those are covered instead by `revealjs_features.rs` (revealjs
+   end-to-end render + per-slide footnote coalescing), `t1_5`/`pipeline.rs` (reveal transform
+   name-list pinning), `t2_5`/`pipeline.rs` (preview transform name-list pinning), and
+   `footnotes_dedup.rs` (footnote-reference dedup, at the unit/integration level, not corpus level).
+   Extending the corpus (or adding a sibling fixture corpus) to close this gap directly is valid
+   future follow-up work, out of scope here.
 2. It **fails loudly** (non-zero exit, named missing path) when either capture directory is absent
    — a silently-skipping harness is a vacuous harness (T8.2).
 3. The existing committed HTML-leg tests are green with zero `.snap` updates:
