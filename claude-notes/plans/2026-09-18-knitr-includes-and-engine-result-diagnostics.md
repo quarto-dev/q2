@@ -5,7 +5,7 @@
 **Phase C strand:** bd-yd94iyq9 (separate; decided 2026-09-18)
 **GitHub:** https://github.com/quarto-dev/q2/issues/683
 **Date:** 2026-09-18
-**Status:** Phases A and B complete and committed 2026-09-18; awaiting push approval. Phase C is bd-yd94iyq9.
+**Status:** Phases A and B complete and committed 2026-09-18; PR #694 open. Phase C is bd-yd94iyq9.
 
 ## Overview
 
@@ -411,7 +411,7 @@ renders; the content is what matters.)
 - [x] File the `quarto-json` follow-up (bd-rfug8fxo, `discovered-from`).
 - [x] Phase C filed as its own strand (bd-yd94iyq9).
 - [x] Phase A committed (7b456302); Phase B committed (see git log).
-- [ ] Push + PR — awaiting explicit approval.
+- [x] Pushed; PR https://github.com/quarto-dev/q2/pull/694 (closes #683).
 
 ## Phase C — candidate follow-up: the rest of `ExecutionError`
 
