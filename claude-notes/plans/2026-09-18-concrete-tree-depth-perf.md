@@ -239,15 +239,19 @@ fails today starts passing. Phase 1 pins it with a boundary test.
       removed the check from `read`.
 - [x] Deleted `crates/pampa/src/utils/concrete_tree_depth.rs` and its `mod`.
 - [x] Tests green (workspace: 13961 passed), fmt, clippy/lints via verify
-      step 1, commit. `verify --skip-hub-build` still runs hub-client's
+      step 1, commit `40eadc50`. `verify --skip-hub-build` still runs hub-client's
       `*.wasm.test.ts` against the existing WASM artifact, which was built
       Sep 11 (stale), and those fail. The full `verify` in Phase 4 rebuilds
       WASM and is the real gate.
 
 ### Phase 3 — commit 2: stop dumping the tree in `read` (bd-khect2gq)
-- [ ] Add `dump_concrete_tree`, remove the call from `read`, wire `pampa -v`,
-      delete the dead copy in `main.rs`.
-- [ ] Tests green, review checklist, commit.
+- [x] Add `dump_concrete_tree`, remove the call from `read`, wire `pampa -v`,
+      delete the dead copy in `main.rs`. (The copy was never flagged because
+      `main.rs` has `#![allow(dead_code)]`; removing it made `io::Write`
+      unused there, so the import went too.)
+- [x] Tests green (workspace: 13965 passed), clippy `-D warnings` clean on
+      pampa and quarto-treesitter-ast, commit. Nothing else in the repo
+      matched the dump text (`{Node ` / `print_whole_tree`).
 
 ### Phase 4 — measure and verify
 - [ ] Re-profile the same fixture with the same command; record the numbers

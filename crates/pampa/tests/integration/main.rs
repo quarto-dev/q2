@@ -40,6 +40,7 @@ pub mod test_cli_input_arg;
 pub mod test_code_block_attributes;
 pub mod test_code_block_writer_roundtrip;
 pub mod test_code_span;
+pub mod test_concrete_tree_dump;
 pub mod test_diagnostic_determinism;
 pub mod test_diagnostic_path_normalization;
 pub mod test_doubled_brace;
