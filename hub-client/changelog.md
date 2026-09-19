@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-09-19
+
+- [`32a96ec6`](https://github.com/quarto-dev/q2/commits/32a96ec6): New users now start with an "Examples / Templates" collection: four example projects (Meeting Notes, Website, Article, Presentation) are created on first run as your own editable copies, each ending with a link to the getting started guide.
+
 ### 2026-09-17
 
 - [`d0b3994`](https://github.com/quarto-dev/q2/commits/d0b3994): Sync stack moves to automerge-repo 2.6.0-alpha.5: a collection the sync server lacks is reported as "not found" again (rather than "sync unreachable"), and the debug page's document badge shows "unavailable" for docs the server does not have (bd-d08gpqvu)
