@@ -1,0 +1,37 @@
+---
+title: "Website"
+format: q2-preview
+---
+
+A Quarto website is a folder of pages with shared navigation. The navbar above comes from `_quarto.yml`, and every `.qmd` file listed there becomes a page. To add a page, add a file and list it in the navbar.
+
+This example has three pages:
+
+- **Home**, this page, which also shows how a team reviews text together.
+- [Features](features.qmd), a short tour of what a page can do: tabs, callouts, tables, diagrams, footnotes, cross-references.
+- [About](about.qmd), where the team lists itself.
+
+## Reviewing together
+
+Everyone with the link edits the same source, and the preview updates as they type. Review happens in the text, with four marks. Here is a sentence under review:
+
+Anyone with the project link can edit after signing in. Their changes appear for everyone [-- within a few seconds][++ as they type], and the preview [!! updates without a refresh]. [>> Worth adding that a shared link cannot be revoked yet?]
+
+| Mark        | Meaning                       | How it renders      |
+|-------------|-------------------------------|---------------------|
+| `[++ text]` | proposed insertion            | green               |
+| `[-- text]` | proposed deletion             | red, struck through |
+| `[!! text]` | highlight, no change proposed | yellow              |
+| `[>> text]` | comment                       | comment bubble      |
+
+To add a comment without typing brackets, hover to the right of a paragraph in the preview and click the plus sign. The check mark in the bubble resolves it.
+
+::: {.callout-note}
+These marks are suggestions, not tracked changes. To accept an insertion or keep text marked for deletion, remove the brackets. To reject an insertion or accept a deletion, delete the marked text. Quarto Hub does not yet have accept and reject buttons.
+:::
+
+## Make it yours
+
+For an initial walkthrough of Quarto Hub itself, start with the [getting started guide](https://quarto-dev.github.io/quarto-hub/get-started.html).
+
+Fork this project ![](fork-icon.svg){style="height:1em;vertical-align:middle"} from your project list. In your copy, rename the site in `_quarto.yml` and replace this text.

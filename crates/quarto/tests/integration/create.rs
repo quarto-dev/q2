@@ -361,65 +361,73 @@ fn unimplemented_choice_says_so() {
 // surfaces it is offered on. The CLI must neither list nor accept a
 // choice that is hub-only — through any of its front doors.
 
-/// The registry's implemented hub-only choice, derived rather than
-/// hardcoded so replacing the placeholder template needs no edit here.
-fn hub_only_choice() -> quarto_project_create::ProjectChoice {
+/// The registry's implemented hub-only choices, derived rather than
+/// hardcoded so adding or replacing hub-only templates needs no edit
+/// here (bd-d147nkqx shipped the placeholder; bd-3fwtdhil added the
+/// four seeded examples).
+fn hub_only_choices() -> Vec<quarto_project_create::ProjectChoice> {
     use quarto_project_create::{Surface, available_choices};
-    let mut hub_only: Vec<_> = available_choices()
+    let hub_only: Vec<_> = available_choices()
         .into_iter()
         .filter(|c| c.implemented && !c.available_on(Surface::Cli))
         .collect();
-    assert_eq!(hub_only.len(), 1, "expected exactly one hub-only choice");
-    hub_only.pop().unwrap()
+    assert!(
+        !hub_only.is_empty(),
+        "expected at least one hub-only choice"
+    );
+    hub_only
 }
 
 #[test]
 fn hub_only_choice_is_rejected_on_cli_with_hub_message() {
-    let tmp = TempDir::new().unwrap();
-    let choice = hub_only_choice();
-    let out = run_q2_create(tmp.path(), &["project", &choice.id, "d"]);
-    assert!(!out.status.success());
-    let stderr = stderr_str(&out);
-    assert!(stderr.contains(&choice.id), "stderr: {stderr}");
-    assert!(stderr.contains("Quarto Hub"), "stderr: {stderr}");
-    // Distinct from the unimplemented wording: this choice *is*
-    // implemented, just not offered here.
-    assert!(!stderr.contains("not yet implemented"), "stderr: {stderr}");
-    assert!(!tmp.path().join("d").exists());
+    for choice in hub_only_choices() {
+        let tmp = TempDir::new().unwrap();
+        let out = run_q2_create(tmp.path(), &["project", &choice.id, "d"]);
+        assert!(!out.status.success(), "choice: {}", choice.id);
+        let stderr = stderr_str(&out);
+        assert!(stderr.contains(&choice.id), "stderr: {stderr}");
+        assert!(stderr.contains("Quarto Hub"), "stderr: {stderr}");
+        // Distinct from the unimplemented wording: this choice *is*
+        // implemented, just not offered here.
+        assert!(!stderr.contains("not yet implemented"), "stderr: {stderr}");
+        assert!(!tmp.path().join("d").exists());
+    }
 }
 
 #[test]
 fn hub_only_colon_form_is_rejected_on_cli_with_hub_message() {
-    let tmp = TempDir::new().unwrap();
-    let choice = hub_only_choice();
-    let colon = choice.target.to_id_string();
-    assert!(
-        colon.contains(':'),
-        "placeholder target must use a template: {colon}"
-    );
-    let out = run_q2_create(tmp.path(), &["project", &colon, "d"]);
-    assert!(!out.status.success());
-    let stderr = stderr_str(&out);
-    assert!(stderr.contains(&colon), "stderr: {stderr}");
-    assert!(stderr.contains("Quarto Hub"), "stderr: {stderr}");
-    assert!(!tmp.path().join("d").exists());
+    for choice in hub_only_choices() {
+        let tmp = TempDir::new().unwrap();
+        let colon = choice.target.to_id_string();
+        assert!(
+            colon.contains(':'),
+            "hub-only target must use a template: {colon}"
+        );
+        let out = run_q2_create(tmp.path(), &["project", &colon, "d"]);
+        assert!(!out.status.success(), "colon form: {colon}");
+        let stderr = stderr_str(&out);
+        assert!(stderr.contains(&colon), "stderr: {stderr}");
+        assert!(stderr.contains("Quarto Hub"), "stderr: {stderr}");
+        assert!(!tmp.path().join("d").exists());
+    }
 }
 
 #[test]
 fn valid_choices_summary_omits_hub_only_choice() {
     let tmp = TempDir::new().unwrap();
-    let choice = hub_only_choice();
     let out = run_q2_create(tmp.path(), &["project", "frobnicate", "d"]);
     assert!(!out.status.success());
     let stderr = stderr_str(&out);
     assert!(stderr.contains("Valid project types"), "stderr: {stderr}");
-    assert!(!stderr.contains(&choice.id), "stderr: {stderr}");
+    for choice in hub_only_choices() {
+        assert!(!stderr.contains(&choice.id), "stderr: {stderr}");
+    }
 }
 
 #[test]
 fn list_omits_hub_only_choice_in_json_and_text() {
     let tmp = TempDir::new().unwrap();
-    let choice = hub_only_choice();
+    let choices = hub_only_choices();
 
     let out = run_q2_create(tmp.path(), &["--list", "--json"]);
     assert!(out.status.success(), "stderr: {}", stderr_str(&out));
@@ -436,34 +444,39 @@ fn list_omits_hub_only_choice_in_json_and_text() {
         .map(|c| c["id"].as_str().unwrap())
         .collect();
     assert!(ids.contains(&"blog"), "ids: {ids:?}");
-    assert!(!ids.contains(&choice.id.as_str()), "ids: {ids:?}");
+    for choice in &choices {
+        assert!(!ids.contains(&choice.id.as_str()), "ids: {ids:?}");
+    }
 
     let out = run_q2_create(tmp.path(), &["--list"]);
     assert!(out.status.success(), "stderr: {}", stderr_str(&out));
     let stdout = stdout_str(&out);
-    assert!(!stdout.contains(&choice.id), "stdout: {stdout}");
+    for choice in &choices {
+        assert!(!stdout.contains(&choice.id), "stdout: {stdout}");
+    }
 }
 
 #[test]
 fn json_hub_only_choice_errors_with_json_diagnostic() {
-    let tmp = TempDir::new().unwrap();
-    let choice = hub_only_choice();
-    let directive = format!(
-        r#"{{"artifact":"project","directory":"d","choice":"{}","title":"T"}}"#,
-        choice.id
-    );
-    let out = run_q2_create_stdin(tmp.path(), &["--json"], &directive);
-    assert!(!out.status.success());
-    assert_eq!(stdout_str(&out).trim(), "");
-    let diags = stderr_json_lines(&stderr_str(&out));
-    assert!(
-        diags
-            .iter()
-            .any(|d| d.to_string().contains(&choice.id) && d.to_string().contains("Quarto Hub")),
-        "expected JSON diagnostic naming the hub-only choice; stderr: {}",
-        stderr_str(&out)
-    );
-    assert!(!tmp.path().join("d").exists());
+    for choice in hub_only_choices() {
+        let tmp = TempDir::new().unwrap();
+        let directive = format!(
+            r#"{{"artifact":"project","directory":"d","choice":"{}","title":"T"}}"#,
+            choice.id
+        );
+        let out = run_q2_create_stdin(tmp.path(), &["--json"], &directive);
+        assert!(!out.status.success(), "choice: {}", choice.id);
+        assert_eq!(stdout_str(&out).trim(), "");
+        let diags = stderr_json_lines(&stderr_str(&out));
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.to_string().contains(&choice.id) && d.to_string().contains("Quarto Hub")),
+            "expected JSON diagnostic naming the hub-only choice; stderr: {}",
+            stderr_str(&out)
+        );
+        assert!(!tmp.path().join("d").exists());
+    }
 }
 
 #[test]

@@ -43,12 +43,15 @@ import {
   getFileContent,
   applyEditorOperations,
   createNewProject,
+  getProjectChoices,
+  createProject as wasmCreateProject,
   type ActorIdentity,
   type CaptureRef,
   type EditorContentChange,
 } from '@quarto/preview-runtime';
 import type { ProjectFile } from '@quarto/preview-runtime';
 import * as projectStorage from './services/projectStorage';
+import { seedExampleProjects } from './services/seedExamples';
 import { installDebugApi } from './services/debugApi';
 import { getUserIdentity, updateUserName, actorIdFromUserId } from './services/userSettings';
 import { useRouting } from './hooks/useRouting';
@@ -224,11 +227,50 @@ function App() {
   const [bootLinksProjectSet] = useState(
     () => parseHashRoute(window.location.hash).type === 'link-project-set',
   );
+
+  // Seed the "Examples / Templates" collection (bd-3fwtdhil) once a
+  // brand-new browser has created its root. Skipped for invite boots
+  // (share and join-collection links), so an invitee lands on what they
+  // were sent and nothing else, and for ephemeral preview hubs, whose
+  // project set is throwaway. Every project comes from a registry choice
+  // flagged `seed`; failures are per project and logged, never fatal.
+  const [bootIsInvite] = useState(() => {
+    const type = parseHashRoute(window.location.hash).type;
+    return type === 'share' || type === 'join-collection';
+  });
+  const seedExamples = useCallback(async () => {
+    const result = await seedExampleProjects({
+      syncServer: DEFAULT_SYNC_SERVER,
+      resolveSyncServerUrl,
+      getProjectChoices,
+      createProject: wasmCreateProject,
+      createNewProject: (opts) =>
+        createNewProject(
+          { ...opts, storage: isEphemeralStorage() ? 'memory' : 'indexeddb' },
+          undefined,
+          screenName,
+          cursorColor,
+          resolveActorId,
+        ),
+      addLocalProject: projectStorage.addProject,
+      createCollection: projectSetActions.createCollection,
+      addProjectToCollection: projectSetActions.addProjectToCollection,
+      log: (message, detail) => console.warn(`[seedExamples] ${message}`, detail),
+    });
+    if (result) {
+      console.log(
+        `[seedExamples] seeded ${result.seeded.length} example project(s)` +
+          (result.failed.length > 0 ? `, ${result.failed.length} failed` : ''),
+      );
+    }
+  }, [screenName, cursorColor, resolveActorId, projectSetActions]);
+
   useAutoEstablishRoot({
     status: projectSetState.status,
     enabled: !bootLinksProjectSet,
     createProjectSet: projectSetActions.createProjectSet,
     migrateProjects: projectSetActions.migrateProjects,
+    onFreshRoot: bootIsInvite || ephemeralHub ? undefined : seedExamples,
   });
 
   // `q2 preview` session config (bd-ov4gqk3m): when the serving server

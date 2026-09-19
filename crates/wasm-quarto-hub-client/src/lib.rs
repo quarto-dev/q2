@@ -2039,6 +2039,8 @@ struct JsonProjectChoice {
     name: String,
     /// Short description
     description: String,
+    /// Seeded into a new user's "Examples / Templates" collection (bd-3fwtdhil)
+    seed: bool,
 }
 
 /// Response for get_project_choices().
@@ -2119,6 +2121,7 @@ pub fn get_project_choices() -> String {
             id: c.id,
             name: c.name,
             description: c.description,
+            seed: c.seed,
         })
         .collect();
 

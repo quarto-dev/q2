@@ -88,3 +88,88 @@ describe('useAutoEstablishRoot', () => {
     expect(h.migrateProjects).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * `onFreshRoot` (bd-3fwtdhil): runs once, after a `needs-setup` boot has
+ * created its root and reached `connected`. That is the one moment a
+ * brand-new browser exists with an empty root, which is when the
+ * "Examples / Templates" collection gets seeded. Migrations, returning
+ * browsers, failed setups, and disabled boots never fire it.
+ */
+describe('useAutoEstablishRoot onFreshRoot', () => {
+  function harness(initial: CollectionsStatus, enabled = true) {
+    const onFreshRoot = vi.fn(async () => {});
+    const createProjectSet = vi.fn(async () => {});
+    const migrateProjects = vi.fn(async () => {});
+    const hook = renderHook(
+      ({ status, enabled }) =>
+        useAutoEstablishRoot({ status, enabled, createProjectSet, migrateProjects, onFreshRoot }),
+      { initialProps: { status: initial, enabled } },
+    );
+    return { ...hook, onFreshRoot };
+  }
+
+  it('fires once when a needs-setup boot reaches connected', () => {
+    const h = harness('loading');
+    h.rerender({ status: 'needs-setup', enabled: true });
+    h.rerender({ status: 'connecting', enabled: true });
+    expect(h.onFreshRoot).not.toHaveBeenCalled();
+    h.rerender({ status: 'connected', enabled: true });
+    expect(h.onFreshRoot).toHaveBeenCalledTimes(1);
+    h.rerender({ status: 'connected', enabled: true });
+    h.rerender({ status: 'connecting', enabled: true });
+    h.rerender({ status: 'connected', enabled: true });
+    expect(h.onFreshRoot).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not fire for a migration boot', () => {
+    const h = harness('needs-migration');
+    h.rerender({ status: 'connecting', enabled: true });
+    h.rerender({ status: 'connected', enabled: true });
+    expect(h.onFreshRoot).not.toHaveBeenCalled();
+  });
+
+  it('does not fire for a returning browser that connects directly', () => {
+    const h = harness('loading');
+    h.rerender({ status: 'connecting', enabled: true });
+    h.rerender({ status: 'connected', enabled: true });
+    expect(h.onFreshRoot).not.toHaveBeenCalled();
+  });
+
+  it('does not fire when a needs-setup boot ends in error', () => {
+    const h = harness('needs-setup');
+    h.rerender({ status: 'connecting', enabled: true });
+    h.rerender({ status: 'error', enabled: true });
+    expect(h.onFreshRoot).not.toHaveBeenCalled();
+  });
+
+  it('fires after a retry cycle that finally connects', () => {
+    const h = harness('needs-setup');
+    h.rerender({ status: 'connecting', enabled: true });
+    h.rerender({ status: 'error', enabled: true });
+    h.rerender({ status: 'loading', enabled: true });
+    h.rerender({ status: 'needs-setup', enabled: true });
+    h.rerender({ status: 'connecting', enabled: true });
+    h.rerender({ status: 'connected', enabled: true });
+    expect(h.onFreshRoot).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not fire when disabled', () => {
+    const h = harness('needs-setup', false);
+    h.rerender({ status: 'connecting', enabled: false });
+    h.rerender({ status: 'connected', enabled: false });
+    expect(h.onFreshRoot).not.toHaveBeenCalled();
+  });
+
+  it('is optional: the hook works without it', () => {
+    const createProjectSet = vi.fn(async () => {});
+    const migrateProjects = vi.fn(async () => {});
+    const hook = renderHook(
+      ({ status }) =>
+        useAutoEstablishRoot({ status, enabled: true, createProjectSet, migrateProjects }),
+      { initialProps: { status: 'needs-setup' as CollectionsStatus } },
+    );
+    hook.rerender({ status: 'connected' });
+    expect(createProjectSet).toHaveBeenCalledTimes(1);
+  });
+});

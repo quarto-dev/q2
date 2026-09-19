@@ -1048,6 +1048,11 @@ export interface ProjectChoice {
   id: string;
   name: string;
   description: string;
+  /**
+   * True for the example projects seeded into a new user's "Examples /
+   * Templates" collection (bd-3fwtdhil). Set by the Rust registry.
+   */
+  seed?: boolean;
 }
 
 /**
