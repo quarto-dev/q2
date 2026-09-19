@@ -59,7 +59,10 @@ impl LanguageServer for QuartoLanguageServer {
             capabilities: server_capabilities(),
             server_info: Some(ServerInfo {
                 name: "quarto-lsp".to_string(),
-                version: Some(env!("CARGO_PKG_VERSION").to_string()),
+                // The effective Quarto version (nightly override aware,
+                // bd-p4ljdp2e), so an editor shows the same string as
+                // `q2 --version`.
+                version: Some(quarto_util::cli_version().to_string()),
             }),
         })
     }

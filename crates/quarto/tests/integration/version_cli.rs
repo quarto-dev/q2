@@ -6,8 +6,15 @@
 //! placeholder).
 //!
 //! The LAST whitespace-separated token must remain the bare version:
-//! release.yml's verify step parses `${RAW##* }` and compares it to
-//! the tag. Breaking that token breaks releases.
+//! the release pipeline's verify step parses `${RAW##* }` and compares
+//! it to the tag (or, for a nightly, to the gate's version). Breaking
+//! that token breaks releases.
+//!
+//! Nightly builds (bd-p4ljdp2e) set `QUARTO_VERSION_OVERRIDE` at build
+//! time and then print that string instead of `CARGO_PKG_VERSION`. A
+//! test build never sets it, so these tests pin the plain case; the
+//! override's own contract lives in `quarto_util::version`'s unit tests
+//! and in the Nightly workflow's verify gate.
 
 use std::process::Command;
 

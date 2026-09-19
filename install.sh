@@ -26,7 +26,12 @@
 #     refusal with install guidance, not a silent downgrade;
 #     --insecure-skip-signature is the explicit escape hatch.
 #   - Tested by crates/quarto/tests/integration/bootstrap_sh.rs,
-#     offline, through --artifact-url file:// + --checksum.
+#     offline, through --artifact-url file:// + --checksum (and, for
+#     --nightly, a file:// releases API via Q2_RELEASES_API_BASE).
+#   - --nightly installs the rolling `nightly` prerelease that the
+#     Nightly workflow publishes from main (bd-p4ljdp2e). Same archive
+#     contract, same signing key; only the lookup differs (the version
+#     is in the asset name, not the tag).
 #
 # Note `q2 mcp` additionally needs Node.js 24+ at runtime (the MCP
 # server is embedded in the binary but runs on your node). Everything
@@ -49,8 +54,18 @@ MINISIGN_PUBKEY="RWR2A9ILpZX1kVF3Q6uk5TRus8FDM25H2F+KKKHEuqlxv+JJSLyPalvN"
 # Test hook: lets the test suite simulate a machine without minisign.
 # No weaker than PATH, which an attacker in this position also controls.
 MINISIGN_BIN="${Q2_MINISIGN:-minisign}"
+# Test hook: where the GitHub releases API is read from, so the offline
+# test suite can serve `releases/tags/nightly` from a file:// directory.
+# Used in exactly one place (resolve_nightly); the stable path through
+# releases/latest never consults it. Redirecting it lets an attacker
+# choose the archive and its .sha256 sidecar — not the signature, which
+# must still verify against the key pinned above with a trusted comment
+# equal to the filename. That check is the trust boundary; this variable
+# exposes strictly less than the documented --artifact-url flag.
+RELEASES_API_BASE="${Q2_RELEASES_API_BASE:-https://api.github.com/repos/${OWNER}/${REPO}}"
 
 VERSION=""
+NIGHTLY=0
 DEST=""
 ARTIFACT_URL=""
 CHECKSUM=""
@@ -99,6 +114,10 @@ Usage:
 
 Options:
   --version vX.Y.Z          Install a specific version (default: latest release)
+  --nightly                 Install the latest nightly build instead: the
+                            rolling prerelease built from main whenever it
+                            changes (version like 0.33.0-nightly.20260919,
+                            replaced daily; same signing key)
   --dest DIR                Install directory (default: ~/.local/bin)
   --artifact-url URL        Install from a specific artifact URL (file:// works)
   --checksum SHA256         Expected SHA-256 of the artifact
@@ -133,6 +152,7 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --version)   need_value "$1" $#; VERSION="$2"; shift 2 ;;
         --version=*) VERSION="${1#*=}"; shift ;;
+        --nightly)   NIGHTLY=1; shift ;;
         --dest)      need_value "$1" $#; DEST="$2"; shift 2 ;;
         --dest=*)    DEST="${1#*=}"; shift ;;
         --artifact-url)   need_value "$1" $#; ARTIFACT_URL="$2"; shift 2 ;;
@@ -151,6 +171,19 @@ while [ $# -gt 0 ]; do
         *) die "unknown option: $1 (see --help)" ;;
     esac
 done
+
+# Channel selection is one or the other. Nightlies are replaced daily,
+# so there is no tag to pin a nightly version to: `--version 0.33.0-
+# nightly.20260919` can never resolve, and the right spelling is --nightly.
+if [ "$NIGHTLY" -eq 1 ] && [ -n "$VERSION" ]; then
+    die "--nightly and --version are mutually exclusive: pass --nightly for the latest nightly, or --version vX.Y.Z for a release"
+fi
+case "$VERSION" in
+    *-nightly.*) die "nightly builds cannot be pinned by version (they are replaced daily); use --nightly instead of --version $VERSION" ;;
+esac
+if [ "$NIGHTLY" -eq 1 ] && [ "$FROM_SOURCE" -eq 1 ]; then
+    die "--nightly and --from-source are mutually exclusive (--from-source already builds the current main)"
+fi
 
 # Dest precedence: --dest flag > Q2_INSTALL_DIR > ~/.local/bin.
 if [ -z "$DEST" ]; then
@@ -207,6 +240,38 @@ resolve_version() {
         v[0-9]*) VERSION="$tag"; log_step "latest release: $VERSION" ;;
         *) die "could not determine the latest release; pass --version vX.Y.Z or --from-source" ;;
     esac
+}
+
+# ============================================================================
+# Nightly resolution (bd-p4ljdp2e). The rolling `nightly` prerelease is
+# invisible to releases/latest (GitHub excludes prereleases), and its
+# tag carries no version — the version is in the asset name
+# (q2-<version>-<platform>.tar.gz). So: read the release by tag, pick
+# this platform's archive by name. The .sha256/.minisig sidecars are
+# then fetched from the same URL stem, exactly as for a release.
+# ============================================================================
+NIGHTLY_ARTIFACT_URL=""
+resolve_nightly() {
+    local platform="$1" json url name
+    log_step "resolving nightly release..."
+    json=$(curl -fsSL --connect-timeout 10 --max-time 30 \
+        -H "Accept: application/vnd.github+json" \
+        "${RELEASES_API_BASE}/releases/tags/nightly" 2>/dev/null) \
+        || die "could not resolve the nightly release (is one published at https://github.com/${OWNER}/${REPO}/releases/tag/nightly?); for a release, drop --nightly"
+
+    # One field per line (GitHub pretty-prints, but do not rely on it),
+    # then the archive for this platform — the .tar.gz itself, not its
+    # .sha256/.minisig sidecars, which the trailing anchor excludes.
+    url=$(printf '%s\n' "$json" | tr ',' '\n' \
+        | sed -n 's/.*"browser_download_url": *"\([^"]*\/'"${BINARY_NAME}"'-[^"/]*-'"${platform}"'\.tar\.gz\)".*/\1/p' \
+        | head -n 1)
+    [ -n "$url" ] || die "the nightly release has no ${platform} archive (expected ${BINARY_NAME}-<version>-${platform}.tar.gz); re-run without --nightly for a release"
+
+    name="$(basename "$url")"
+    VERSION="${name#"${BINARY_NAME}-"}"
+    VERSION="${VERSION%"-${platform}.tar.gz"}"
+    NIGHTLY_ARTIFACT_URL="$url"
+    log_step "nightly release: $VERSION"
 }
 
 # ============================================================================
@@ -357,6 +422,10 @@ install_from_artifact() {
     if [ -n "$ARTIFACT_URL" ]; then
         url="$ARTIFACT_URL"
         archive_name="$(basename "$ARTIFACT_URL")"
+    elif [ "$NIGHTLY" -eq 1 ]; then
+        resolve_nightly "$platform"
+        url="$NIGHTLY_ARTIFACT_URL"
+        archive_name="$(basename "$url")"
     else
         resolve_version
         local tag="v${VERSION#v}" ver="${VERSION#v}"

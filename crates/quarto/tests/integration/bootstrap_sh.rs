@@ -120,7 +120,9 @@ impl Sandbox {
         )
         .unwrap();
         fs::set_permissions(&uname, fs::Permissions::from_mode(0o755)).unwrap();
-        format!("{}:{}", shim.display(), SYSTEM_PATH)
+        // Same tail as `run`'s default PATH (system dirs + minisign), so
+        // a shimmed-platform install can still verify signatures.
+        format!("{}:{}", shim.display(), default_sandbox_path())
     }
 }
 
@@ -298,6 +300,7 @@ fn help_lists_every_flag_and_exits_zero() {
         "--from-source",
         "--uninstall",
         "--print-platform",
+        "--nightly",
         "--quiet",
         "--help",
         "Q2_INSTALL_DIR",
@@ -998,6 +1001,247 @@ fn shellcheck_clean_if_available() {
     );
 }
 
+// --- nightly channel (bd-p4ljdp2e) -----------------------------------------------
+//
+// `--nightly` resolves the rolling `nightly` prerelease through the
+// releases API (`GET .../releases/tags/nightly`) and picks the asset for
+// the detected platform by name — the version lives in the asset name,
+// not the tag. Offline here via the Q2_RELEASES_API_BASE seam: a file://
+// directory laid out like the API (`releases/tags/nightly` is the JSON).
+// The seam moves only WHERE the release list is read from; the checksum
+// and signature checks are untouched, and `nightly_refuses_an_asset_not_
+// signed_by_the_pinned_key` below is the proof.
+
+const NIGHTLY_VERSION: &str = "0.33.0-nightly.20260919";
+
+/// A fake releases API on disk plus the signed artifacts it points at.
+struct NightlyFixture {
+    /// file:// URL standing in for https://api.github.com/repos/OWNER/REPO
+    api_base: String,
+    /// Public half of the key that signed every artifact in the fixture.
+    pub_key: String,
+}
+
+/// Build the rolling nightly release for `platforms`: one signed
+/// `q2-<NIGHTLY_VERSION>-<platform>.tar.gz` each (the fake `q2` inside
+/// prints its platform and, last, its version — the `--version`
+/// contract), plus the `.sha256` / `.minisig` sidecars the real release
+/// carries, all listed as assets in `releases/tags/nightly`.
+fn make_nightly_fixture(dir: &Path, platforms: &[&str]) -> NightlyFixture {
+    let key = TestKey::generate(dir);
+    let assets_dir = dir.join("download").join("nightly");
+    fs::create_dir_all(&assets_dir).unwrap();
+
+    let mut assets = Vec::new();
+    for platform in platforms {
+        let payload = dir.join(format!("payload-{platform}"));
+        fs::create_dir_all(&payload).unwrap();
+        let bin = payload.join("q2");
+        fs::write(
+            &bin,
+            format!("#!/bin/sh\necho \"q2 (quarto 2) [{platform}] {NIGHTLY_VERSION}\"\n"),
+        )
+        .unwrap();
+        fs::set_permissions(&bin, fs::Permissions::from_mode(0o755)).unwrap();
+
+        let name = format!("q2-{NIGHTLY_VERSION}-{platform}.tar.gz");
+        let archive = assets_dir.join(&name);
+        let status = Command::new("tar")
+            .args(["-czf"])
+            .arg(&archive)
+            .arg("-C")
+            .arg(&payload)
+            .arg("q2")
+            .status()
+            .unwrap();
+        assert!(status.success(), "tar failed");
+
+        let sha = sha256_hex(&fs::read(&archive).unwrap());
+        fs::write(
+            assets_dir.join(format!("{name}.sha256")),
+            format!("{sha}  {name}\n"),
+        )
+        .unwrap();
+        key.sign(&archive);
+
+        for suffix in ["", ".sha256", ".minisig"] {
+            let asset = format!("{name}{suffix}");
+            assets.push(format!(
+                r#"{{"name":"{asset}","browser_download_url":"file://{}"}}"#,
+                assets_dir.join(&asset).display()
+            ));
+        }
+    }
+
+    let tags_dir = dir.join("api").join("releases").join("tags");
+    fs::create_dir_all(&tags_dir).unwrap();
+    fs::write(
+        tags_dir.join("nightly"),
+        format!(
+            r#"{{"tag_name":"nightly","name":"q2 nightly {NIGHTLY_VERSION}","prerelease":true,"assets":[{}]}}"#,
+            assets.join(",")
+        ),
+    )
+    .unwrap();
+
+    NightlyFixture {
+        api_base: format!("file://{}", dir.join("api").display()),
+        pub_key: key.pub_key,
+    }
+}
+
+/// Run the installer in nightly mode against `fx` on the shimmed platform.
+fn run_nightly(sb: &Sandbox, fx: &NightlyFixture, os: &str, arch: &str, extra: &[&str]) -> Output {
+    let path = sb.uname_shim(os, arch);
+    let mut args = vec!["--nightly", "--minisign-pubkey", &fx.pub_key, "--dest"];
+    let dest = dest_arg(sb);
+    args.push(&dest);
+    args.extend_from_slice(extra);
+    sb.run_env(
+        &args,
+        &[("PATH", &path), ("Q2_RELEASES_API_BASE", &fx.api_base)],
+    )
+}
+
+#[test]
+fn nightly_installs_the_platform_asset_of_the_rolling_release() {
+    let sb = Sandbox::new();
+    let fx = make_nightly_fixture(sb.tmp.path(), &["linux_amd64", "darwin_arm64"]);
+    let out = run_nightly(&sb, &fx, "Linux", "x86_64", &[]);
+    assert_success(&out);
+
+    // Progress names the channel and the resolved version.
+    let log = stderr(&out);
+    assert!(
+        log.contains("nightly") && log.contains(NIGHTLY_VERSION),
+        "log should name the nightly version\nstderr: {log}"
+    );
+    assert!(log.contains("checksum verified"), "stderr: {log}");
+    assert!(
+        log.contains(&format!(
+            "signature verified (trusted comment: q2-{NIGHTLY_VERSION}-linux_amd64.tar.gz)"
+        )),
+        "stderr: {log}"
+    );
+
+    // The installed binary is the platform's asset and reports the
+    // nightly version as its last token (the release-workflow contract).
+    let run = Command::new(sb.installed_binary()).output().unwrap();
+    let text = String::from_utf8_lossy(&run.stdout);
+    assert!(
+        text.contains("[linux_amd64]"),
+        "wrong asset installed: {text}"
+    );
+    assert_eq!(text.split_whitespace().last(), Some(NIGHTLY_VERSION));
+}
+
+#[test]
+fn nightly_picks_the_asset_for_the_detected_platform() {
+    let sb = Sandbox::new();
+    let fx = make_nightly_fixture(sb.tmp.path(), &["linux_amd64", "darwin_arm64"]);
+    let out = run_nightly(&sb, &fx, "Darwin", "arm64", &[]);
+    assert_success(&out);
+    let run = Command::new(sb.installed_binary()).output().unwrap();
+    let text = String::from_utf8_lossy(&run.stdout);
+    assert!(
+        text.contains("[darwin_arm64]"),
+        "wrong asset installed: {text}"
+    );
+}
+
+#[test]
+fn nightly_refuses_an_asset_not_signed_by_the_pinned_key() {
+    // The threat model for the API seam (plan, Decision 6): a redirected
+    // release list can pick any archive and its matching .sha256, but
+    // not forge the signature. No --minisign-pubkey here, so the script
+    // verifies against the REAL pinned q2 key and must refuse.
+    let sb = Sandbox::new();
+    let fx = make_nightly_fixture(sb.tmp.path(), &["linux_amd64"]);
+    let path = sb.uname_shim("Linux", "x86_64");
+    let out = sb.run_env(
+        &["--nightly", "--dest", &dest_arg(&sb)],
+        &[("PATH", &path), ("Q2_RELEASES_API_BASE", &fx.api_base)],
+    );
+    assert_failure(&out);
+    assert!(
+        stderr(&out).contains("signature verification FAILED"),
+        "stderr: {}",
+        stderr(&out)
+    );
+    assert!(!sb.installed_binary().exists());
+}
+
+#[test]
+fn nightly_and_version_are_mutually_exclusive() {
+    let sb = Sandbox::new();
+    let fx = make_nightly_fixture(sb.tmp.path(), &["linux_amd64"]);
+    let out = run_nightly(&sb, &fx, "Linux", "x86_64", &["--version", "v0.32.0"]);
+    assert_failure(&out);
+    let err = stderr(&out);
+    assert!(
+        err.contains("--nightly") && err.contains("--version"),
+        "error should name both flags\nstderr: {err}"
+    );
+    assert!(!sb.installed_binary().exists());
+}
+
+#[test]
+fn version_with_a_nightly_suffix_points_at_the_nightly_flag() {
+    // Nightlies are replaced daily, so there is no tag to pin a nightly
+    // version to; the right spelling is `--nightly`.
+    let sb = Sandbox::new();
+    let out = sb.run(&["--version", NIGHTLY_VERSION, "--dest", &dest_arg(&sb)]);
+    assert_failure(&out);
+    assert!(
+        stderr(&out).contains("--nightly"),
+        "stderr: {}",
+        stderr(&out)
+    );
+    assert!(!sb.installed_binary().exists());
+}
+
+#[test]
+fn nightly_without_an_asset_for_the_platform_dies_cleanly() {
+    let sb = Sandbox::new();
+    let fx = make_nightly_fixture(sb.tmp.path(), &["linux_amd64"]);
+    let out = run_nightly(&sb, &fx, "Darwin", "arm64", &[]);
+    assert_failure(&out);
+    let err = stderr(&out);
+    assert!(
+        err.contains("darwin_arm64") && err.contains("nightly"),
+        "error should name the platform and the channel\nstderr: {err}"
+    );
+    assert!(!sb.installed_binary().exists());
+}
+
+#[test]
+fn nightly_dies_cleanly_when_no_nightly_release_exists() {
+    let sb = Sandbox::new();
+    let empty_api = sb.tmp.path().join("empty-api");
+    fs::create_dir_all(&empty_api).unwrap();
+    let path = sb.uname_shim("Linux", "x86_64");
+    let api_base = format!("file://{}", empty_api.display());
+    let out = sb.run_env(
+        &["--nightly", "--dest", &dest_arg(&sb)],
+        &[("PATH", &path), ("Q2_RELEASES_API_BASE", &api_base)],
+    );
+    assert_failure(&out);
+    assert!(stderr(&out).contains("nightly"), "stderr: {}", stderr(&out));
+    assert!(!sb.installed_binary().exists());
+}
+
+#[test]
+fn nightly_does_not_consult_the_stable_release_lookup() {
+    // The seam must never touch the stable path: with --nightly the
+    // script reads releases/tags/nightly and nothing else under the API
+    // base (releases/latest is deliberately absent from the fixture).
+    let sb = Sandbox::new();
+    let fx = make_nightly_fixture(sb.tmp.path(), &["linux_amd64"]);
+    assert!(!sb.tmp.path().join("api/releases/latest").exists());
+    let out = run_nightly(&sb, &fx, "Linux", "x86_64", &[]);
+    assert_success(&out);
+}
+
 // --- network (run manually / in plan Phase 4 once a release exists) -------------
 
 #[test]
@@ -1014,4 +1258,27 @@ fn resolves_latest_version_from_github() {
         .unwrap();
     // Output shape: "quarto <workspace-version>" (quarto-util/src/version.rs).
     assert!(String::from_utf8_lossy(&run.stdout).contains("quarto"));
+}
+
+#[test]
+#[ignore = "needs a published nightly release; run by hand after the first Nightly run (plan Phase 4)"]
+fn resolves_nightly_from_github() {
+    // The real --nightly path: resolves the rolling `nightly`
+    // prerelease through api.github.com, downloads this platform's
+    // archive, verifies the published .sha256 and .minisig against the
+    // pinned key, installs. The installed binary must report a
+    // `-nightly.` version as its last token.
+    let sb = Sandbox::new();
+    let out = sb.run(&["--nightly", "--dest", &dest_arg(&sb)]);
+    assert_success(&out);
+    let run = Command::new(sb.installed_binary())
+        .arg("--version")
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&run.stdout);
+    let version = text.split_whitespace().last().unwrap_or("");
+    assert!(
+        version.contains("-nightly."),
+        "expected a nightly version, got {text:?}"
+    );
 }
