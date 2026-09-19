@@ -148,11 +148,21 @@ gh run list --repo quarto-dev/q2 --workflow=release.yml --limit 1
 gh run watch <run-id> --repo quarto-dev/q2     # or watch in the Actions UI
 ```
 
-Job graph: `preflight` → `web-payloads` (WASM → preview SPA + trace
-viewer + the `q2 docs llms` docs embed, built once) → `build` matrix
-(5 platforms, each builds the per-target MCP bundle then the binary,
-then a **verify gate**) → `release` (combines checksums, signs every
-`.tar.gz`, publishes).
+Job graph: `preflight` → **`release-pipeline.yml`** (a reusable
+`workflow_call` workflow, shared with the Nightly — see § Nightlies):
+`check-inputs` → `web-payloads` (WASM → preview SPA + trace viewer + the
+`q2 docs llms` docs embed, built once) → `build` matrix (5 platforms,
+each builds the per-target MCP bundle then the binary, then a **verify
+gate**) → `release` (combines checksums, signs every `.tar.gz`,
+publishes). In the Actions UI the pipeline's jobs appear nested under
+the `Release pipeline` job of the `Release` run.
+
+`workflow_dispatch` also takes a `publish` checkbox; untick it for a
+**dry run** that builds, verifies and signs an existing tag and uploads
+the would-be release as a `release-set` artifact without creating or
+touching any release. That is how to test changes to the pipeline
+itself from a branch (`gh workflow run release.yml --ref <branch> -f
+tag=vX.Y.Z -f publish=false`).
 
 The per-target verify gate is the anti-stale-embed guard: it fails the
 leg unless `q2 mcp --launcher-info` reports a real (non-placeholder)
@@ -226,6 +236,58 @@ Update the release strand, note the release URL, and (if the release
 introduced user-facing changes) make sure the README install snippet
 still matches.
 
+## Nightlies (bd-p4ljdp2e)
+
+`.github/workflows/nightly.yml` runs every night at 08:00 UTC and, **only
+if `main` has unreleased changes**, builds it through the same
+`release-pipeline.yml` and publishes the result as the rolling **`nightly`
+prerelease**. Nothing here changes the release procedure above; this
+section is what to know when the two interact.
+
+- **What "unreleased" means.** `scripts/nightly-gate.sh` skips iff `main`'s
+  HEAD is exactly the newest `v*` tag (you just released) or exactly the
+  current `nightly` tag (last night already built it). Any other HEAD
+  builds — a docs-only commit included. A skipped night is one small
+  runner for a few seconds.
+- **The version.** `<next minor>-nightly.<YYYYMMDD>` — with `0.32.0` on
+  `main`, tonight's nightly is `0.33.0-nightly.20260919`. It sorts above
+  the release it contains (so `quarto-required: ">=0.32.0"` accepts it)
+  and below the real `0.33.0`. It is injected at build time via
+  `QUARTO_VERSION_OVERRIDE` (`quarto-util/src/version.rs`); `Cargo.toml`
+  and both lockfiles are untouched and `--locked` still holds. **One
+  string everywhere:** `q2 --version`, the asset filenames, the release
+  title, the HTML `generator` tag, the project cache key, and the verify
+  gate all use it. If you ever add another place that reports "the
+  Quarto version", read it from `quarto_util::cli_version()`, not
+  `CARGO_PKG_VERSION`.
+- **Rolling tag.** Each nightly deletes the previous `nightly` release and
+  tag and recreates both at the built commit. `git fetch --tags` will
+  report the tag as moved; that is expected. Only the latest nightly's
+  assets exist.
+- **Stable installs are unaffected.** `releases/latest` never returns a
+  prerelease. Nightlies install with `install.sh --nightly` /
+  `install.ps1 -Nightly` (README has the one-liners); the installers
+  resolve the `nightly` release by tag and pick the platform asset by
+  name. Same signing key.
+- **It is also the installers' only CI.** After publishing, the
+  `install-smoke` job runs both README one-liners on linux, macOS and
+  Windows against the fresh nightly and asserts `q2 --version`. A red
+  `install-smoke` with a green pipeline means the installers or the
+  release-notes contract regressed, not the build.
+- **A red nightly is a signal.** The pipeline gates are the release
+  gates; a nightly failure means the next release would fail the same
+  way. Fix it before tagging. Failure emails go to whoever last
+  committed `nightly.yml`.
+- **Forcing / dry-running.** `gh workflow run nightly.yml -f force=true`
+  builds a released HEAD (e.g. to reissue a nightly after a pipeline
+  fix); `-f publish=false` builds, verifies and signs without touching
+  the `nightly` release. From a branch (`--ref <branch>`), the gate
+  evaluates that branch's HEAD, which is how to test pipeline changes
+  before they reach `main`.
+- **Cache interplay is a bonus.** The pipeline's `rust-cache` keys are
+  shared, and caches saved on `main` are readable by tag runs, so a
+  nightly the night before a release keeps the release's caches warm.
+
 ## Gotchas (learned the hard way in the v0.1.0 dry-run)
 
 - **Tag must equal `Cargo.toml` version** — preflight enforces it.
@@ -289,10 +351,15 @@ still matches.
   cargo resolves the dated nightly in `rust-toolchain.toml`; the
   workflow runs `rustup target add <target>` to bridge that, or builds
   die with `E0463: can't find crate for core/std`.
-- **The version string's last token is the bare version.** Preflight
-  and `install.sh` parse `${output##* }`. `q2 --version` prints
-  `q2 (quarto 2) X.Y.Z`; anything appended to that string must keep the
-  version last (guarded by `crates/quarto/tests/integration/version_cli.rs`).
+- **The version string's last token is the bare version.** The
+  pipeline's verify gate and `install.sh` parse `${output##* }`. `q2
+  --version` prints `q2 (quarto 2) X.Y.Z` (or `X.Y.Z-nightly.YYYYMMDD`
+  for a nightly, see § Nightlies); anything appended to that string must
+  keep the version last (guarded by
+  `crates/quarto/tests/integration/version_cli.rs`). Never export
+  `QUARTO_VERSION_OVERRIDE` empty: `option_env!` sees `Some("")` and the
+  compile-time check fails the build (the pipeline guards this with
+  `[ -n ]`, not a plain `env:` entry).
 - **The docs embed needs `docs/examples/` staged, and only the xtask does it.**
   `docs/_quarto.yml` declares the gitignored `docs/examples/` tree (output of
   `cargo xtask stage-doc-examples`) as a project resource, and `q2 render`
@@ -326,7 +393,11 @@ still matches.
 
 | Path | Role |
 |------|------|
-| `.github/workflows/release.yml` | the workflow |
+| `.github/workflows/release.yml` | the release trigger + preflight; calls the pipeline |
+| `.github/workflows/release-pipeline.yml` | the reusable build/verify/sign/publish pipeline (both channels) |
+| `.github/workflows/nightly.yml` | the nightly trigger + gate + install smoke; calls the pipeline |
+| `scripts/nightly-gate.sh` | "does main have unreleased changes?" + the nightly version |
+| `crates/quarto/tests/integration/nightly_gate.rs` | tests for the gate script |
 | `Cargo.toml` `[workspace.package].version` | source of truth for the version |
 | `install.sh` / `install.ps1` | installers; pinned `MINISIGN_PUBKEY` |
 | `crates/quarto/tests/integration/bootstrap_sh.rs` | offline installer tests |

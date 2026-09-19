@@ -406,17 +406,26 @@ release's caches warm.
 
 ### Phase 2 — Extract `release-pipeline.yml` (behaviour-preserving)
 
-- [ ] Move `web-payloads`, `hub-mcp-bundle`, `build`, `asset-manifest-check`,
+- [x] Move `web-payloads`, `hub-mcp-bundle`, `build`, `asset-manifest-check`,
       `release` into `release-pipeline.yml` under `on: workflow_call`;
       replace `needs.preflight.outputs.{tag,version}` with `inputs.*`;
       keep every comment block (they are the institutional memory of four
-      dry-run iterations).
-- [ ] `release.yml` becomes preflight + `uses:` with `secrets: inherit`.
-- [ ] Add `inputs.publish` (dry-run: sign, then upload `release-set`
-      artifact, skip `gh release create`) and `inputs.rolling`.
-- [ ] Add `QUARTO_VERSION_OVERRIDE` to the `Build release binary` env and to
+      dry-run iterations). Inputs as built: `ref`, `version`, `tag`,
+      `channel` (`release`|`nightly`), `publish`, `notes_range`. A single
+      `channel` switch replaced the sketch's separate `prerelease` /
+      `rolling` / title inputs — fewer inconsistent combinations, and a
+      new `check-inputs` job rejects a channel/tag/version mismatch
+      before any runner is spent.
+- [x] `release.yml` becomes preflight + `uses:` with `secrets: inherit`
+      (plus a `publish` dispatch input for dry runs).
+- [x] Add `inputs.publish` (dry-run: sign, then upload `release-set`
+      artifact, skip `gh release create`); rolling behaviour is implied by
+      `channel: nightly`.
+- [x] Add `QUARTO_VERSION_OVERRIDE` to the `Build release binary` env and to
       the docs-embed step's host `q2` build, so the embedded docs and the
       binary agree. Verify gate compares against `inputs.version`.
+      Exported only when non-empty: an empty value trips the compile-time
+      assertion (`option_env!` yields `Some("")`).
 - [ ] Dry-run on a branch: `workflow_dispatch` `release.yml` against the
       existing `v0.32.0` tag with `publish: false` and confirm all legs
       green and the artifact set matches the published v0.32.0 byte-for-byte
@@ -433,15 +442,18 @@ release's caches warm.
       the gate's SHA, not the branch name, so a merge during the run cannot
       change what is built), `tag: nightly`, `prerelease: true`, `rolling:
       true`, `notes_range: <prev_release_tag>..<sha>`.
-- [ ] `install.sh --nightly` and `install.ps1 -Nightly` per Decision 6
+- [x] `install.sh --nightly` and `install.ps1 -Nightly` per Decision 6
       (tests from Phase 0 go green here). `--help` text, the header
       comment, and the `resolves_latest_version_from_github` ignored test
       gain a nightly sibling (`resolves_nightly_from_github`, also ignored,
-      run by hand in Phase 4).
-- [ ] Release notes: the rolling-tag caveat, the exact SHA, "changes since
+      run by hand in Phase 4). `install.ps1` has no `Q2_RELEASES_API_BASE`
+      seam (no offline suite exists for it; the smoke job is its test) and
+      could not be parsed locally (no `pwsh` on this machine) — the
+      Windows smoke leg is its first execution.
+- [x] Release notes: the rolling-tag caveat, the exact SHA, "changes since
       v0.32.0" from `git log`, and the same two install one-liners the
       README carries (with the nightly flag).
-- [ ] `install-smoke` job, `needs: pipeline`, matrix `ubuntu-latest`,
+- [x] `install-smoke` job, `needs: pipeline`, matrix `ubuntu-latest`,
       `macos-15`, `windows-latest`: run the README one-liner for the
       platform with the nightly flag from `raw.githubusercontent.com/.../main`
       (the installers land on `main` before the first nightly, so this is the
@@ -449,8 +461,9 @@ release's caches warm.
       `--version` last token equals the gate's version. This is the
       end-to-end verification CLAUDE.md requires, done by the workflow every
       night instead of by hand once. Skipped when `publish: false`.
-- [ ] `run-name` shows the version and SHA in the Actions list; skipped
-      runs show `Nightly — main already released (v0.32.0)`.
+- [x] `run-name` distinguishes scheduled / manual / forced / dry-run
+      (`run-name` cannot see job outputs, so the version and SHA go to the
+      job summary and the gate job's name instead of the run title).
 - [ ] First real run via `workflow_dispatch force=true publish=true`, then
       the next scheduled run must **skip** (same SHA). Record both run ids.
 
@@ -466,18 +479,19 @@ release's caches warm.
       (`releases/latest` ignores prereleases). Run the two ignored
       network tests in `bootstrap_sh.rs`. Record invocations and output
       here.
-- [ ] README "Installing": the nightly one-liners under the stable ones
-      (Decision 6 wording), plus the manual-verification line updated to
-      say the nightly archives are signed with the same key.
-- [ ] Runbook: new section "Nightlies" (what they are, how to force one,
+- [x] README "Installing": the nightly one-liners under the stable ones
+      (Decision 6 wording), with a short paragraph on what a nightly is
+      and that it is signed with the same key.
+- [x] Runbook: new section "Nightlies" (what they are, how to force one,
       how to dry-run the pipeline on a branch, that `release.yml` now
       delegates to `release-pipeline.yml`, that the installers have a
-      nightly mode). Fix the stale "one approving review" note in CLAUDE.md
-      and the stale "smoke-tested by the release workflow" header in
-      `bootstrap_sh.rs` while there.
-- [ ] `cargo xtask lint` has no rule for workflows; add the nightly cron to
-      the CI/verify drift note in CLAUDE.md so `verify` readers know it
-      exists.
+      nightly mode). Fixed the stale "one approving review" note in
+      CLAUDE.md and the stale "smoke-tested by the release workflow"
+      header in `bootstrap_sh.rs`.
+- [x] `cargo xtask lint` has no rule for workflows; noted in CLAUDE.md's
+      verify/CI drift paragraph that `nightly.yml` and the release
+      pipeline are deliberately outside `verify`'s mirror (they publish,
+      they do not gate).
 - [ ] Close-out: comment on the strand with run ids and the first nightly
       URL.
 

@@ -2,8 +2,11 @@
 //!
 //! Unix-only: the harness runs `bash install.sh` and shims `uname` with
 //! executable shell scripts, so the whole suite is gated to `cfg(unix)`.
-//! The Windows installer (install.ps1) is checksum-only and smoke-tested
-//! by the release workflow instead.
+//! The Windows installer (install.ps1) is checksum-only and has no
+//! offline suite; its only CI coverage is the Nightly workflow's
+//! `install-smoke` job (.github/workflows/nightly.yml), which runs both
+//! installers' README one-liners against each freshly published nightly
+//! on linux, macOS and Windows (bd-p4ljdp2e).
 //!
 //! Ported from cscheid/braid's installer test harness
 //! (external-sources/braid/crates/braid/tests/bootstrap_sh.rs), offline
