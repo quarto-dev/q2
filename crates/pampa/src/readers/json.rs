@@ -2783,6 +2783,27 @@ fn read_config_value(value: &Value, deserializer: &SourceInfoDeserializer) -> Re
             let c = obj
                 .get("c")
                 .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
+            // Pandoc-superset shape (`JsonConfig { raw: false, .. }`,
+            // matching real Pandoc's own `MetaMap` encoding): `c` is a
+            // genuine JSON object mapping key to MetaValue, with no
+            // `key_source` sidecar. Checked before the array case below,
+            // which is pampa's own raw round-trip shape.
+            if let Some(map_obj) = c.as_object() {
+                let mut entries = Vec::new();
+                for (key, value) in map_obj {
+                    let value = read_config_value(value, deserializer)?;
+                    entries.push(ConfigMapEntry {
+                        key: key.clone(),
+                        key_source: quarto_source_map::SourceInfo::default(),
+                        value,
+                    });
+                }
+                return Ok(ConfigValue {
+                    value: ConfigValueKind::Map(entries),
+                    source_info,
+                    merge_op,
+                });
+            }
             let arr = c.as_array().ok_or_else(|| {
                 JsonReadError::InvalidType("MetaMap content must be array".to_string())
             })?;

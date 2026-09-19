@@ -5367,6 +5367,7 @@ dependencies = [
  "walkdir",
  "which",
  "yaml-rust2",
+ "zip",
 ]
 
 [[package]]

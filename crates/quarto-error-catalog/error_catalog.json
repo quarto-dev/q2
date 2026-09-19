@@ -1441,6 +1441,34 @@
     "docs_url": "https://quarto.org/docs/errors/include/Q-17-4",
     "since_version": "99.9.9"
   },
+  "Q-20-1": {
+    "subsystem": "pandoc",
+    "title": "Pandoc Not Found",
+    "message_template": "The `pandoc` binary could not be found on `PATH`, and `QUARTO_PANDOC` is not set. This format requires shelling out to a real `pandoc` binary; install pandoc or set `QUARTO_PANDOC` to its path.",
+    "docs_url": "https://quarto.org/docs/errors/pandoc/Q-20-1",
+    "since_version": "99.9.9"
+  },
+  "Q-20-2": {
+    "subsystem": "pandoc",
+    "title": "Pandoc Version Too Old",
+    "message_template": "The `pandoc` binary found on `PATH` reports a version older than the minimum this Quarto version requires. Upgrade pandoc to the required version or newer.",
+    "docs_url": "https://quarto.org/docs/errors/pandoc/Q-20-2",
+    "since_version": "99.9.9"
+  },
+  "Q-20-3": {
+    "subsystem": "pandoc",
+    "title": "Pandoc Exited With An Error",
+    "message_template": "The `pandoc` subprocess exited with a nonzero status. Its stderr is reproduced verbatim below, including any Lua filter traceback.",
+    "docs_url": "https://quarto.org/docs/errors/pandoc/Q-20-3",
+    "since_version": "99.9.9"
+  },
+  "Q-20-4": {
+    "subsystem": "pandoc",
+    "title": "Filter Params Blob Too Large",
+    "message_template": "The `QUARTO_FILTER_PARAMS` payload passed to pandoc's Lua filters exceeds the platform's environment-block size limit. This typically happens when a large `include-in-header` file is inlined into the params blob.",
+    "docs_url": "https://quarto.org/docs/errors/pandoc/Q-20-4",
+    "since_version": "99.9.9"
+  },
   "Q-2-43": {
     "subsystem": "markdown",
     "title": "Callout Title Given Twice",

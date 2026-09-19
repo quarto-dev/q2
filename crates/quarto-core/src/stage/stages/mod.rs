@@ -57,6 +57,13 @@ mod source_conversion;
 // and WASM pipelines (math display is safe under iframe reinit).
 mod math_js;
 mod metadata_merge;
+// Pandoc-hybrid leg's writer stage: shells out to a real `pandoc`
+// subprocess via `std::process::Command` and materializes the vendored
+// filter tree via `crate::pandoc_filters::bundle::extract_share_tree`
+// (`tempfile`-backed). Same WASM-exclusion reasoning as `bootstrap_js`
+// and `crate::pandoc_filters::{bundle, harness}`.
+#[cfg(not(target_arch = "wasm32"))]
+mod pandoc_write;
 mod parse_document;
 mod pre_engine_sugaring;
 mod render_html;
@@ -99,6 +106,10 @@ pub use link_resolution::LinkResolutionStage;
 pub use listing_item_info::ListingItemInfoStage;
 pub use math_js::{DEFAULT_KATEX_URL_BASE, DEFAULT_MATHJAX_URL, MathEngine, MathJsStage};
 pub use metadata_merge::MetadataMergeStage;
+#[cfg(not(target_arch = "wasm32"))]
+pub use pandoc_write::{
+    PandocWriteStage, classify_pandoc_completion, retain_temp_json_unless_success,
+};
 pub use parse_document::ParseDocumentStage;
 pub use pre_engine_sugaring::PreEngineSugaringStage;
 pub use render_html::RenderHtmlBodyStage;

@@ -16,7 +16,7 @@ relabeled the env-block size-bound item as still-open, not closed. (Prior pass, 
 implementation-feasibility review found five wiring gaps — two vendoring roots not one; the
 shim's loading mechanism; the binary-output data contract; no error-catalog subsystem; unpinned
 base64/no size bound — closed with concrete decisions, see the "Finding" section below.)
-**Status:** Shape draft
+**Status:** Complete (2026-09-19) — see the Coarse checklist below and the implementation ledger.
 **Design (authoritative):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md)  |  Epic: `2026-08-20-pandoc-hybrid-epic.md`
 **Implementation task breakdown + test-seam prevalidation:** [`2026-09-18-pandoc-hybrid-P4-implementation.md`](2026-09-18-pandoc-hybrid-P4-implementation.md) — this plan's Coarse checklist converted into dispatchable `## Task N` units, each test bound to a named production seam and revert hunk.
 
@@ -446,12 +446,12 @@ concretely enough to implement without inventing an answer.
 - [x] Re-derive the full `QUARTO_FILTER_PARAMS` key set (all three research-doc open questions
       resolved above); decided which keys the smoke/v1 minimally needs (items 1-5) vs. deferred
       (item 6, with reasons).
-- [ ] Trace `main.lua`'s transitive require/resource closure; vendor accordingly (not just top-level dirs) — **two roots, not one, see Finding 1**: the filters tree AND `init.lua`'s separate `src/resources/pandoc/datadir/` tree. `include_dir!` for storage, `ResourceBundle` to materialize both to disk at invocation time (`main.lua` needs real files, `include_dir!` alone doesn't extract them); lint green.
-- [ ] **New (2026-09-18): vendor the shim's loading mechanism** — a small, marked patch to
+- [x] Trace `main.lua`'s transitive require/resource closure; vendor accordingly (not just top-level dirs) — **two roots, not one, see Finding 1**: the filters tree AND `init.lua`'s separate `src/resources/pandoc/datadir/` tree. `include_dir!` for storage, `ResourceBundle` to materialize both to disk at invocation time (`main.lua` needs real files, `include_dir!` alone doesn't extract them); lint green. **Done: Task 1.**
+- [x] **New (2026-09-18): vendor the shim's loading mechanism** — a small, marked patch to
       `main.lua` inserting `tappend(quarto_filter_list, quarto_pandoc_shim_filters)` between
       `quarto_init_filters` and `quarto_normalize_filters` (per Finding 2), in the same spirit as
-      P3's crossref patch. This is P4's item, not P5's — P4 owns the vendored `main.lua`.
-- [ ] **New (2026-09-18): decide and document the `pandoc`-nonzero-exit diagnostic** (stderr
+      P3's crossref patch. This is P4's item, not P5's — P4 owns the vendored `main.lua`. **Done: Task 8.**
+- [x] **New (2026-09-18): decide and document the `pandoc`-nonzero-exit diagnostic** (stderr
       passthrough policy, temp-JSON retention on failure) and reserve the new `pandoc` error
       catalog subsystem, **number 18** (Finding 4) — needed before P5/P6/P7 each independently
       invent one. **Corrected/expanded 2026-09-18, round 4 review:** (a) capture the `pandoc`
@@ -465,15 +465,18 @@ concretely enough to implement without inventing an answer.
       block to `docs/_quarto.yml`'s errors sidebar, confirm `cargo xtask lint` green — this is the
       exact "no `- section:` block at all" scenario the sidebar lint rule was created to catch,
       and a Finding-only acknowledgment (as this item previously was) is where obligations in this
-      epic have repeatedly gone to be forgotten.
-- [ ] **New (2026-09-18): pin the base64 variant (standard + padded) and state a size bound +
+      epic have repeatedly gone to be forgotten. **Done: Task 6 (catalog subsystem 18 + docs pages
+      + sidebar) and Task 10 (unconditional capture, Q-11-1 reuse, verbatim nonzero-exit wrap,
+      temp-JSON retention).**
+- [x] **New (2026-09-18): pin the base64 variant (standard + padded) and state a size bound +
       fallback for `QUARTO_FILTER_PARAMS`'s included text** (Finding 5) — a Windows correctness
-      risk if left unbounded.
+      risk if left unbounded. **Done: Task 3 (codec + size-bound predicate); the fallback itself
+      stays `accepted-untested`/undecided per Findings item 9 — a final decision, not a gap.**
 - [x] Pin the vendored source to a release tag, not a dev commit — **resolved 2026-09-17,
       decided with Gordon** (see above): vendor from `v1.11.3`. Actually creating
       `resources/pandoc-filters/README.md` with this pin recorded happens alongside the vendoring
       work itself (the item above), not as a separate step.
-- [ ] Build the Pandoc version-compatibility matrix; min-version gate + catalog error (pandoc
+- [x] Build the Pandoc version-compatibility matrix; min-version gate + catalog error (pandoc
       *location* is already done — `BinaryDependencies::discover`, see above — this item is
       version-gating only). **New, added 2026-09-18 (round 4 review, Reviewer D — measured, not
       estimated): the vendored Lua's implied pandoc floor is above what this repo's CI and
@@ -501,20 +504,28 @@ concretely enough to implement without inventing an answer.
       32,767-char env-block risk lives on — make that size-bound check a unit-testable pure
       function (e.g. `fn params_blob_exceeds_platform_limit(len) -> bool` with the Windows
       constant as data) so it is at least covered by `cargo nextest run --workspace` on the
-      platforms that do run in CI, even though the platform it protects doesn't.
-- [ ] Document the runtime-environment contract (cwd/temp-file layout/`--resource-path`) Q1's Lua assumes.
+      platforms that do run in CI, even though the platform it protects doesn't. **Done: Tasks 7-8.**
+- [x] Document the runtime-environment contract (cwd/temp-file layout/`--resource-path`) Q1's Lua assumes. **Done: Task 2** (`harness.rs` module doc + `resources/pandoc-filters/README.md`).
 - [x] Resolve the source of `languageFilterParams`'s `crossref-<type>-title` family —
       **resolved 2026-09-17, decided with Gordon** (see finding above): source from Q2's
       `RefTypeRegistry`, not Q1's own locale files. Closes P5's "constructor default-passthrough
       policy" open question as a standing principle, not just a Theorem-specific fix.
-- [ ] Build `languageFilterParams`'s params from `RefTypeRegistry`, one `crossref-<ref_type>-title`
+- [x] Build `languageFilterParams`'s params from `RefTypeRegistry`, one `crossref-<ref_type>-title`
       **and one `crossref-<ref_type>-prefix`** key per registered type (corrected 2026-09-18,
       round 4 review — see the Critical correction above: `-title` alone leaves the reference-text
       path, `refPrefix()`, reading an unfed param and falling through to a bare literal for every
-      theorem-family type) — the actual implementation of the decision above.
-- [ ] `PandocWriteStage` (including the synthetic single-file "project" value for the params
+      theorem-family type) — the actual implementation of the decision above. **Done: Task 5.**
+- [x] `PandocWriteStage` (including the synthetic single-file "project" value for the params
       builder; writes its own output file, per Finding 3 — no bytes threaded through
       `PipelineData`); a new Pandoc-leg entry point (e.g. `render_qmd_to_pandoc`, sibling to
       `render_qmd_to_html`) and the Pandoc-leg stage list (P1 owns the transform exclude-list,
       P4 owns the stage list that plugs `PandocWriteStage` in); transport smoke: "run main.lua,
       get bytes" for one fixture, using pampa's Pandoc-superset JSON mode (not `raw: true`).
+      **Done: Task 9 (`PandocWriteStage` + `render_qmd_to_pandoc` + stage list) and Task 11
+      (transport smoke, reviewed and clean).**
+
+**P4 status: complete.** All 11 implementation tasks (see
+`2026-09-18-pandoc-hybrid-P4-implementation.md` and its ledger at
+`.superpowers/sdd/2026-09-18-pandoc-hybrid-P4-implementation/progress.md`) landed, reviewed, and
+verified green at the workspace-wide `cargo nextest run --workspace` phase boundary. Status line
+below updated from "Shape draft" accordingly.

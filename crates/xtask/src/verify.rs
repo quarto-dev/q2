@@ -92,6 +92,46 @@ fn needs_node(config: &VerifyConfig) -> bool {
             && config.skip_hub_mcp_tests)
 }
 
+/// The Pandoc-hybrid `L`-tier tests in `quarto-core` (Task 7, P4) are part
+/// of `cargo nextest run --workspace`, so they need pandoc whenever Rust
+/// tests run at all.
+fn needs_pandoc(config: &VerifyConfig) -> bool {
+    !config.skip_rust_tests
+}
+
+/// The pandoc preflight's gate logic, pure and unit-testable: `found` is
+/// `pandoc --version`'s stdout (or `None` if the subprocess couldn't be
+/// spawned at all). Mirrors `quarto_core::pandoc_filters::version::gate`,
+/// but duplicated rather than imported — `xtask` cannot depend on
+/// `quarto-core` (a large crate; `xtask` is meant to build fast) — see
+/// `crates/quarto-core/src/pandoc_filters/version.rs`'s own doc comment on
+/// this same tradeoff.
+fn pandoc_preflight(found: Option<&str>) -> Result<()> {
+    let floor = crate::dev_setup::PANDOC_HYBRID_MIN_VERSION;
+    match found {
+        None => bail!(
+            "pandoc not found on PATH. The Pandoc-hybrid `L`-tier tests in `quarto-core` \
+             require it (floor {}.{}). Install from https://pandoc.org/installing.html",
+            floor.0,
+            floor.1
+        ),
+        Some(version_str) => {
+            if crate::dev_setup::pandoc_version_at_least(version_str, floor.0, floor.1) {
+                Ok(())
+            } else {
+                let first_line = version_str.lines().next().unwrap_or("unknown version");
+                bail!(
+                    "{first_line} detected, but the Pandoc-hybrid `L`-tier tests in \
+                     `quarto-core` require {}.{}+. Update from \
+                     https://pandoc.org/installing.html",
+                    floor.0,
+                    floor.1
+                )
+            }
+        }
+    }
+}
+
 /// Run the verify command.
 pub fn run(config: &VerifyConfig) -> Result<()> {
     let project_root = find_project_root()?;
@@ -114,6 +154,26 @@ pub fn run(config: &VerifyConfig) -> Result<()> {
         crate::node_version::preflight_verify(&project_root)?;
     } else {
         println!("  (skipped — every npm-driven step is disabled)");
+    }
+
+    // Preflight: pandoc toolchain. The Pandoc-hybrid `L`-tier tests in
+    // `quarto-core` (P4) hard-panic if pandoc is absent or below the floor,
+    // but only once nextest reaches them deep into step 5 — check first, so
+    // a missing/stale pandoc fails in seconds with the cause named, exactly
+    // like the Node preflight above.
+    println!("\n━━━ Preflight: pandoc toolchain ━━━\n");
+    if needs_pandoc(config) {
+        let version_output = std::process::Command::new("pandoc")
+            .arg("--version")
+            .output();
+        let stdout = version_output
+            .as_ref()
+            .ok()
+            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned());
+        pandoc_preflight(stdout.as_deref())?;
+        println!("  pandoc — suitable version detected");
+    } else {
+        println!("  (skipped — Rust tests are disabled)");
     }
 
     // Step 1: Custom lint checks + hub-client css lint + clippy gate
@@ -765,6 +825,38 @@ mod tests {
         assert!(
             workflow.contains(&format!("run: {local}")),
             "ts-test-suite.yml has no `run: {local}` step; keep CI and verify in sync"
+        );
+    }
+
+    /// T7.5: the pandoc preflight helper, injected version strings.
+    #[test]
+    fn test_verify_pandoc_preflight() {
+        assert!(pandoc_preflight(Some("pandoc 3.6.0\n...")).is_err());
+        assert!(pandoc_preflight(Some("pandoc 3.10\n...")).is_ok());
+        assert!(pandoc_preflight(None).is_err());
+    }
+
+    #[test]
+    fn needs_pandoc_follows_skip_rust_tests() {
+        assert!(needs_pandoc(&VerifyConfig::default()));
+        assert!(!needs_pandoc(&VerifyConfig {
+            skip_rust_tests: true,
+            ..VerifyConfig::default()
+        }));
+    }
+
+    /// T7.5's vacuity note: a test of `pandoc_preflight` alone survives
+    /// removing its call from `run` entirely (the CSS-lint-in-CI failure
+    /// mode this repo already had once, bd-4bu7vwi5). Assert the wiring
+    /// itself, the same way `css_lint_command_matches_ci_workflow` guards
+    /// its own step's presence.
+    #[test]
+    fn pandoc_preflight_is_wired_into_run() {
+        let source = include_str!("verify.rs");
+        assert!(
+            source.contains("pandoc_preflight(stdout.as_deref())?"),
+            "`run` no longer calls `pandoc_preflight` — the preflight helper is untested \
+             by any wiring-reachability check if this call is removed"
         );
     }
 }

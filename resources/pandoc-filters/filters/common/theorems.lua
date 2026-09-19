@@ -1,0 +1,2 @@
+-- theorems.lua
+-- Copyright (C) 2020-2022 Posit Software, PBC

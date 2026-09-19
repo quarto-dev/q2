@@ -356,6 +356,12 @@ website:
             - errors/image/Q-19-2.qmd
             - errors/image/Q-19-3.qmd
             - errors/image/Q-19-4.qmd
+        - section: "pandoc"
+          contents:
+            - errors/pandoc/Q-20-1.qmd
+            - errors/pandoc/Q-20-2.qmd
+            - errors/pandoc/Q-20-3.qmd
+            - errors/pandoc/Q-20-4.qmd
 
 format:
   html:

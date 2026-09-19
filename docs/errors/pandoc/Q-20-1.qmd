@@ -1,0 +1,40 @@
+---
+title: "Pandoc Not Found"
+description: "The pandoc binary could not be found on PATH, and QUARTO_PANDOC is not set."
+code: Q-20-1
+subsystem: pandoc
+status: stub
+since: "99.9.9"
+categories:
+  - pandoc
+---
+
+# `Q-20-1` — Pandoc Not Found
+
+> The `pandoc` binary could not be found on `PATH`, and `QUARTO_PANDOC` is
+> not set.
+
+## What this means
+
+Some Quarto output formats (currently docx and pptx) are produced by
+shelling out to a real `pandoc` binary rather than Quarto's own native
+renderer. Quarto looked for `pandoc` on `PATH` and did not find it, and no
+`QUARTO_PANDOC` environment variable pointed at an explicit location.
+
+## Why this happens
+
+- Pandoc is not installed on this machine.
+- Pandoc is installed but not on the shell's `PATH` (common with a
+  non-standard install location, or a CI image that installs pandoc into a
+  directory not added to `PATH`).
+- `QUARTO_PANDOC` is set to a path that does not exist.
+
+## How to fix
+
+Install pandoc from [pandoc.org](https://pandoc.org/installing.html), or —
+if it is already installed somewhere not on `PATH` — set the `QUARTO_PANDOC`
+environment variable to the full path of the `pandoc` binary.
+
+## Related errors
+
+- [`Q-20-2`](Q-20-2.qmd) — pandoc was found, but its version is too old.

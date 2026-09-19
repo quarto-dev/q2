@@ -4036,7 +4036,21 @@ fn stream_write_config_value<W: io::Write>(
                 Ok(())
             })
         }
-        ConfigValueKind::Map(entries) => {
+        // Raw mode preserves pampa's own extended shape (an array of
+        // `{key, key_source, value}` triples) so key source-location and
+        // key order round-trip losslessly back through pampa's own reader.
+        // Pandoc-superset mode must instead match real Pandoc's `MetaMap`
+        // shape exactly -- a genuine JSON object mapping key to MetaValue,
+        // with `key_source` dropped (nothing downstream of a real `pandoc`
+        // subprocess needs it). This is the one `ConfigValueKind` arm in
+        // this function that didn't already branch on `raw` the way every
+        // scalar variant above does -- undetected until the pandoc-hybrid
+        // epic's P4 Task 9 fed this writer's non-raw output through a real
+        // `pandoc` JSON reader for the first time: any document reaching a
+        // nested metadata map (e.g. `authors_normalize`'s `labels`, present
+        // on every title-block-eligible render) failed pandoc's reader with
+        // "expected Object, but encountered Array".
+        ConfigValueKind::Map(entries) if raw => {
             stream_write_meta_node(w, "MetaMap", value, ctx, |w, ctx| {
                 w.begin_array()?;
                 for entry in entries {
@@ -4050,6 +4064,17 @@ fn stream_write_config_value<W: io::Write>(
                     w.end_object()?;
                 }
                 w.end_array()?;
+                Ok(())
+            })
+        }
+        ConfigValueKind::Map(entries) => {
+            stream_write_meta_node(w, "MetaMap", value, ctx, |w, ctx| {
+                w.begin_object()?;
+                for entry in entries {
+                    w.key(&entry.key)?;
+                    stream_write_config_value(w, &entry.value, ctx)?;
+                }
+                w.end_object()?;
                 Ok(())
             })
         }
@@ -4848,6 +4873,95 @@ mod tests {
             }
             other => panic!("Expected Custom block, got {:?}", other),
         }
+    }
+
+    /// A nested metadata `Map` (a `ConfigValueKind::Map` value found
+    /// *inside* `meta`, not the top-level meta map itself — e.g.
+    /// `quarto-core`'s `authors_normalize` transform's `meta.labels`)
+    /// must serialize its `MetaMap.c` field as a genuine JSON object under
+    /// `JsonConfig { raw: false, .. }` (the Pandoc-superset shape real
+    /// `pandoc` reads), not pampa's own `{key, key_source, value}`-triple
+    /// array shape. Before this fix, `ConfigValueKind::Map` was the one
+    /// variant in `stream_write_config_value` that didn't branch on `raw`
+    /// the way every scalar variant already does — undetected until the
+    /// pandoc-hybrid epic fed this writer's non-raw output through a real
+    /// `pandoc` JSON reader for the first time, where it failed with
+    /// "expected Object, but encountered Array".
+    #[test]
+    fn test_nested_meta_map_is_pandoc_object_shape_when_not_raw() {
+        use crate::readers::json as json_reader;
+
+        let nested_map = quarto_pandoc_types::ConfigValue::new_map(
+            vec![
+                quarto_pandoc_types::ConfigMapEntry {
+                    key: "authors".to_string(),
+                    key_source: SourceInfo::for_test(),
+                    value: quarto_pandoc_types::ConfigValue::new_string(
+                        "Author",
+                        SourceInfo::for_test(),
+                    ),
+                },
+                quarto_pandoc_types::ConfigMapEntry {
+                    key: "affiliations".to_string(),
+                    key_source: SourceInfo::for_test(),
+                    value: quarto_pandoc_types::ConfigValue::new_string(
+                        "Affiliation",
+                        SourceInfo::for_test(),
+                    ),
+                },
+            ],
+            SourceInfo::for_test(),
+        );
+        let mut meta_entries = std::collections::HashMap::new();
+        meta_entries.insert("labels".to_string(), nested_map);
+        let meta = quarto_pandoc_types::ConfigValue::new_map(
+            meta_entries
+                .into_iter()
+                .map(|(key, value)| quarto_pandoc_types::ConfigMapEntry {
+                    key,
+                    key_source: SourceInfo::for_test(),
+                    value,
+                })
+                .collect(),
+            SourceInfo::for_test(),
+        );
+        let pandoc = crate::pandoc::Pandoc {
+            meta,
+            blocks: vec![],
+        };
+
+        let context = make_test_context();
+        let mut output = Vec::new();
+        write_with_config(
+            &pandoc,
+            &context,
+            &mut output,
+            &JsonConfig {
+                raw: false,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let json_str = String::from_utf8(output.clone()).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+
+        let labels_c = &parsed["meta"]["labels"]["c"];
+        assert!(
+            labels_c.is_object(),
+            "expected meta.labels.c to be a JSON object, got: {labels_c}"
+        );
+        assert_eq!(labels_c["authors"]["c"], "Author");
+
+        // Round-trips back through pampa's own reader too.
+        let (read_pandoc, _) = json_reader::read(&mut output.as_slice()).unwrap();
+        let labels = read_pandoc
+            .meta
+            .get("labels")
+            .expect("labels key should round-trip");
+        assert_eq!(
+            labels.get("authors").and_then(|v| v.as_plain_text()),
+            Some("Author".to_string())
+        );
     }
 
     #[test]

@@ -159,6 +159,11 @@ walkdir.workspace = true
 tokio = { version = "1", features = ["rt", "macros"] }
 tracing-subscriber.workspace = true
 socket2 = "0.6"
+# T11.1: reading back the docx a real `pandoc` subprocess produces, to
+# assert `word/document.xml` is extractable — not writing archives, so
+# only the deflate read codec is needed (same minimal feature set as
+# quarto-source-fetch, which already vendors this at the same version).
+zip = { version = "6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [lints]
 workspace = true
