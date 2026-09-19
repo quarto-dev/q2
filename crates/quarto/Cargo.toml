@@ -13,6 +13,8 @@ path = "src/main.rs"
 
 [dependencies]
 clap.workspace = true
+# Global allocator for the native CLI; see the `#[global_allocator]` in main.rs.
+mimalloc = "0.1"
 anyhow.workspace = true
 async-trait.workspace = true
 tracing.workspace = true

@@ -377,7 +377,8 @@ impl<'a> SourceInfoSerializer<'a> {
                     },
                 )
             }
-            SourceInfo::Generated { by, from } => {
+            SourceInfo::Generated(g) => {
+                let quarto_source_map::Generated { by, from } = &**g;
                 // Anchors are interned *before* this Generated entry so that
                 // every si_id is strictly less than the resulting pool index
                 // — the reader's `si_id < current_index` guard depends on it.
@@ -5236,10 +5237,7 @@ mod tests {
         let config = make_test_config();
         let mut serializer = SourceInfoSerializer::new(&context, &config);
 
-        let gen_info = SourceInfo::Generated {
-            by: By::sectionize(),
-            from: SmallVec::new(),
-        };
+        let gen_info = SourceInfo::generated(By::sectionize());
         let id = serializer.intern(&gen_info);
 
         // Pool starts at 0; this intern lands
@@ -5295,10 +5293,7 @@ mod tests {
         });
         let mut from = SmallVec::<[Anchor; 2]>::new();
         from.push(Anchor::invocation(Arc::clone(&target)));
-        let gen_info = SourceInfo::Generated {
-            by: By::shortcode("meta"),
-            from,
-        };
+        let gen_info = SourceInfo::generated_with(By::shortcode("meta"), from);
 
         let id = serializer.intern(&gen_info);
         // anchor target interned at slot 0, Generated at 1.
@@ -5338,10 +5333,7 @@ mod tests {
         let make = || {
             let mut from = SmallVec::<[Anchor; 2]>::new();
             from.push(Anchor::invocation(Arc::clone(&shared)));
-            SourceInfo::Generated {
-                by: By::shortcode("meta"),
-                from,
-            }
+            SourceInfo::generated_with(By::shortcode("meta"), from)
         };
         let id1 = serializer.intern(&make());
         let id2 = serializer.intern(&make());
@@ -5452,10 +5444,7 @@ mod tests {
         });
         let mut from = SmallVec::<[Anchor; 2]>::new();
         from.push(Anchor::invocation(Arc::clone(&target)));
-        let gen_info = SourceInfo::Generated {
-            by: By::shortcode("meta"),
-            from,
-        };
+        let gen_info = SourceInfo::generated_with(By::shortcode("meta"), from);
         let _ = serializer.intern(&gen_info);
 
         // anchor target at 0, Generated at 1.

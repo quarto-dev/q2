@@ -50,7 +50,6 @@ use quarto_pandoc_types::table::{
     Alignment, Cell, ColSpec, ColWidth, Row, Table, TableBody, TableFoot, TableHead,
 };
 use quarto_source_map::{By, FileId, SourceInfo};
-use smallvec::smallvec;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -1007,7 +1006,7 @@ fn parse_local_range(info: &SourceInfo) -> Option<(usize, usize)> {
             ..
         } => Some((*start_offset, *end_offset)),
         // Concat/Generated have no single contiguous slice of the input.
-        SourceInfo::Concat { .. } | SourceInfo::Generated { .. } => None,
+        SourceInfo::Concat { .. } | SourceInfo::Generated(_) => None,
     }
 }
 
@@ -1561,32 +1560,31 @@ pub fn postprocess(
                 // This fixes an issue where tree-sitter emits both break types when
                 // a hard break (backslash-newline) is present. Pandoc only emits LineBreak
                 // in this case, so we match that behavior by dropping the redundant SoftBreak.
-                let mut break_cleaned = vec![];
-                let mut i = 0;
-
-                while i < inlines.len() {
-                    let current = &inlines[i];
-
-                    // Check if current is LineBreak and next is SoftBreak
-                    if matches!(current, Inline::LineBreak(_))
-                        && i + 1 < inlines.len()
-                        && matches!(inlines[i + 1], Inline::SoftBreak(_))
-                    {
-                        // Keep the LineBreak
-                        break_cleaned.push(inlines[i].clone());
-                        // Skip the SoftBreak (i+1)
-                        i += 2;
-                    } else {
-                        // Keep the current inline
-                        break_cleaned.push(inlines[i].clone());
-                        i += 1;
+                // Move the inlines through rather than cloning them: this
+                // closure runs on every inline vector in the document, and
+                // a deep clone here was paid once per ancestor level.
+                let mut break_cleaned = Vec::with_capacity(inlines.len());
+                let mut skip_next_softbreak = false;
+                for inline in inlines {
+                    if skip_next_softbreak && matches!(inline, Inline::SoftBreak(_)) {
+                        skip_next_softbreak = false;
+                        continue;
                     }
+                    skip_next_softbreak = matches!(inline, Inline::LineBreak(_));
+                    break_cleaned.push(inline);
                 }
 
                 // Step 1: Handle Math nodes followed by Attr (process on break_cleaned)
                 // Pattern: Math, Space (optional), Attr -> Span with "quarto-math-with-attribute" class
-                let mut math_processed = vec![];
+                let mut math_processed = Vec::with_capacity(break_cleaned.len());
                 let mut i = 0;
+                // Fast path: the pattern below needs an `Attr`, so a vector
+                // without one moves through untouched (no per-element clone).
+                let has_attr = break_cleaned.iter().any(|x| matches!(x, Inline::Attr(_)));
+                if !has_attr {
+                    math_processed = break_cleaned;
+                    break_cleaned = Vec::new();
+                }
 
                 while i < break_cleaned.len() {
                     if let Inline::Math(math) = &break_cleaned[i] {
@@ -1699,10 +1697,7 @@ pub fn postprocess(
                                         cite.content.push(Inline::Space(Space {
                                             // Synthetic Space: inserted to separate citation from suffix.
                                             // Plan 6 §"tree-sitter postprocess" — Generated, no preimage.
-                                            source_info: SourceInfo::Generated {
-                                                by: By::tree_sitter_postprocess(),
-                                                from: smallvec![],
-                                            },
+                                            source_info: SourceInfo::generated(By::tree_sitter_postprocess()),
                                         }));
 
                                         // The span content may have been merged into a single string, so we need to
@@ -1950,20 +1945,19 @@ pub fn merge_strs(pandoc: Pandoc) -> Pandoc {
         &mut Filter::new().with_inlines(|inlines, _ctx| {
             let mut current_str: Option<String> = None;
             let mut current_source_info: Option<quarto_source_map::SourceInfo> = None;
-            let mut result: Inlines = Vec::new();
+            let mut result: Inlines = Vec::with_capacity(inlines.len());
             let mut did_merge = false;
             for inline in inlines {
                 match inline {
                     Inline::Str(s) => {
-                        let str_text = s.text.clone();
                         if let Some(ref mut current) = current_str {
-                            current.push_str(&str_text);
+                            current.push_str(&s.text);
                             if let Some(ref mut info) = current_source_info {
                                 *info = info.combine(&s.source_info);
                             }
                             did_merge = true;
                         } else {
-                            current_str = Some(str_text);
+                            current_str = Some(s.text);
                             current_source_info = Some(s.source_info);
                         }
                     }

@@ -209,10 +209,7 @@ impl SourceInfoDeserializer {
         match s_val {
             Some(v) => self.from_json_ref(v),
             None => match &self.completing_default_by {
-                Some(by) => Ok(quarto_source_map::SourceInfo::Generated {
-                    by: by.clone(),
-                    from: SmallVec::new(),
-                }),
+                Some(by) => Ok(quarto_source_map::SourceInfo::generated(by.clone())),
                 None => Err(JsonReadError::MissingSourceInfoRef {
                     node_path: node_path.to_string(),
                 }),
@@ -431,10 +428,10 @@ impl SourceInfoDeserializer {
                             .as_u64()
                             .ok_or(JsonReadError::MalformedSourceInfoPool)?
                             as usize;
-                        quarto_source_map::SourceInfo::Generated {
-                            by: By::filter(filter_path.to_string(), line),
-                            from: SmallVec::new(),
-                        }
+                        quarto_source_map::SourceInfo::generated(By::filter(
+                            filter_path.to_string(),
+                            line,
+                        ))
                     } else {
                         return Err(JsonReadError::MalformedSourceInfoPool);
                     }
@@ -506,7 +503,7 @@ impl SourceInfoDeserializer {
                         }
                     }
 
-                    quarto_source_map::SourceInfo::Generated { by, from }
+                    quarto_source_map::SourceInfo::generated_with(by, from)
                 }
                 _ => {
                     return Err(JsonReadError::MalformedSourceInfoPool);
@@ -3349,7 +3346,8 @@ mod tests {
         let deserializer = SourceInfoDeserializer::new(&pool_json).unwrap();
         assert_eq!(deserializer.pool.len(), 1);
         match &deserializer.pool[0] {
-            SourceInfo::Generated { by, from } => {
+            SourceInfo::Generated(g) => {
+                let quarto_source_map::Generated { by, from } = &**g;
                 assert!(from.is_empty());
                 let (path, line) = by.as_filter().expect("expected filter By");
                 assert_eq!(path, "/path/to/filter.lua");
@@ -3503,7 +3501,8 @@ mod tests {
 
         let deserializer = SourceInfoDeserializer::new(&pool_json).unwrap();
         match &deserializer.pool[0] {
-            SourceInfo::Generated { by, from } => {
+            SourceInfo::Generated(g) => {
+                let quarto_source_map::Generated { by, from } = &**g;
                 assert_eq!(by.kind, "sectionize");
                 assert!(by.data.is_null());
                 assert!(from.is_empty());
@@ -3530,7 +3529,8 @@ mod tests {
 
         let deserializer = SourceInfoDeserializer::new(&pool_json).unwrap();
         match &deserializer.pool[0] {
-            SourceInfo::Generated { by, from } => {
+            SourceInfo::Generated(g) => {
+                let quarto_source_map::Generated { by, from } = &**g;
                 let (path, line) = by.as_filter().expect("expected filter By");
                 assert_eq!(path, "/x.lua");
                 assert_eq!(line, 7);
@@ -3564,7 +3564,8 @@ mod tests {
 
         let deserializer = SourceInfoDeserializer::new(&pool_json).unwrap();
         match &deserializer.pool[1] {
-            SourceInfo::Generated { by, from } => {
+            SourceInfo::Generated(g) => {
+                let quarto_source_map::Generated { by, from } = &**g;
                 assert_eq!(by.kind, "shortcode");
                 assert_eq!(from.len(), 1);
                 assert!(matches!(from[0].role, AnchorRole::Invocation));
@@ -3598,7 +3599,8 @@ mod tests {
 
         let deserializer = SourceInfoDeserializer::new(&pool_json).unwrap();
         match &deserializer.pool[3] {
-            SourceInfo::Generated { from, .. } => {
+            SourceInfo::Generated(g) => {
+                let quarto_source_map::Generated { from, .. } = &**g;
                 assert_eq!(from.len(), 3);
                 assert!(matches!(from[0].role, AnchorRole::Invocation));
                 assert!(matches!(from[1].role, AnchorRole::ValueSource));
@@ -3625,7 +3627,7 @@ mod tests {
         ]);
 
         let deserializer = SourceInfoDeserializer::new(&pool_json).unwrap();
-        assert!(matches!(deserializer.pool[0], SourceInfo::Generated { .. }));
+        assert!(matches!(deserializer.pool[0], SourceInfo::Generated(_)));
     }
 
     /// Forward-compat: unknown `by.kind` decodes opaquely — the wire
@@ -3647,7 +3649,8 @@ mod tests {
 
         let deserializer = SourceInfoDeserializer::new(&pool_json).unwrap();
         match &deserializer.pool[0] {
-            SourceInfo::Generated { by, from } => {
+            SourceInfo::Generated(g) => {
+                let quarto_source_map::Generated { by, from } = &**g;
                 assert_eq!(by.kind, "ext/future/foo");
                 assert_eq!(by.data["anything"], json!([1, 2, 3]));
                 assert!(from.is_empty());
@@ -3838,7 +3841,8 @@ mod tests {
         ]);
         let deserializer = SourceInfoDeserializer::new(&pool_json).unwrap();
         match &deserializer.pool[0] {
-            SourceInfo::Generated { by, .. } => {
+            SourceInfo::Generated(g) => {
+                let quarto_source_map::Generated { by, .. } = &**g;
                 assert!(by.data.is_null());
             }
             _ => panic!("Expected Generated"),

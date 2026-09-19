@@ -50,7 +50,6 @@ use quarto_pandoc_types::block::{Block, Div, Header, Paragraph};
 use quarto_pandoc_types::inline::{Inline, Link, Space, Str};
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_source_map::{By, SourceInfo};
-use smallvec::smallvec;
 
 use quarto_pandoc_types::ConfigValue;
 
@@ -296,10 +295,7 @@ fn title_inlines(title: &str, source_info: &SourceInfo) -> Vec<Inline> {
 /// already carry the class (pushing onto a `Vec<String>` is not idempotent
 /// the way Quarto 1's `classList.add` is).
 fn appendix_heading(meta: &ConfigValue, term_key: &str, english: &str) -> Block {
-    let source_info = SourceInfo::Generated {
-        by: By::appendix(),
-        from: smallvec![],
-    };
+    let source_info = SourceInfo::generated(By::appendix());
     Block::Header(Header {
         level: 2,
         attr: (
@@ -351,10 +347,7 @@ fn wrap_footnotes(footnotes: Block, meta: &ConfigValue) -> Block {
 
 /// Wrap bibliography in a section with appropriate attributes.
 fn wrap_bibliography(bibliography: Block, meta: &ConfigValue) -> Block {
-    let source_info = SourceInfo::Generated {
-        by: By::appendix(),
-        from: smallvec![],
-    };
+    let source_info = SourceInfo::generated(By::appendix());
 
     // Create header for the bibliography section
     let header = appendix_heading(meta, "section-title-references", "References");
@@ -380,10 +373,7 @@ fn create_appendix_container(sections: Blocks, style_class: &str) -> Block {
             LinkedHashMap::new(),
         ),
         content: sections,
-        source_info: SourceInfo::Generated {
-            by: By::appendix(),
-            from: smallvec![],
-        },
+        source_info: SourceInfo::generated(By::appendix()),
         attr_source: AttrSourceInfo::empty(),
     })
 }
@@ -406,10 +396,7 @@ fn create_license_section(meta: &ConfigValue) -> Option<Block> {
             .and_then(|v| v.as_plain_text())?
     };
 
-    let source_info = SourceInfo::Generated {
-        by: By::appendix(),
-        from: smallvec![],
-    };
+    let source_info = SourceInfo::generated(By::appendix());
 
     let header = appendix_heading(meta, "section-title-reuse", "Reuse");
 
@@ -451,10 +438,7 @@ fn create_copyright_section(meta: &ConfigValue) -> Option<Block> {
             .and_then(|v| v.as_plain_text())?
     };
 
-    let source_info = SourceInfo::Generated {
-        by: By::appendix(),
-        from: smallvec![],
-    };
+    let source_info = SourceInfo::generated(By::appendix());
 
     let header = appendix_heading(meta, "section-title-copyright", "Copyright");
 
@@ -489,10 +473,7 @@ fn create_citation_section(meta: &ConfigValue) -> Option<Block> {
     // (bd-y89ihf0i)
     let citation_url = citation.get("url").and_then(|v| v.as_plain_text());
 
-    let source_info = SourceInfo::Generated {
-        by: By::appendix(),
-        from: smallvec![],
-    };
+    let source_info = SourceInfo::generated(By::appendix());
 
     let header = appendix_heading(meta, "section-title-citation", "Citation");
 
@@ -1091,7 +1072,8 @@ mod tests {
             panic!("Expected Div");
         };
         match &div.source_info {
-            SourceInfo::Generated { by, from } => {
+            SourceInfo::Generated(g) => {
+                let quarto_source_map::Generated { by, from } = &**g;
                 assert_eq!(by.kind, "appendix");
                 assert!(from.is_empty());
             }

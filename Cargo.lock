@@ -3323,6 +3323,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
+name = "libmimalloc-sys"
+version = "0.1.49"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a45a52f43e1c16f667ccfe4dd8c85b7f7c204fd5e3bf46c5b0db9a5c3c0b8e9"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "libredox"
 version = "0.1.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3498,6 +3507,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "mimalloc"
+version = "0.1.52"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d4139bb28d14ad1facf21d5eb8825051b326e172d216b39f6d31df53cc97862"
+dependencies = [
+ "libmimalloc-sys",
 ]
 
 [[package]]
@@ -4865,6 +4883,7 @@ dependencies = [
  "clap",
  "include_dir",
  "inquire",
+ "mimalloc",
  "open",
  "openssl-sys",
  "pampa",
@@ -5087,9 +5106,9 @@ dependencies = [
 
 [[package]]
 name = "quarto-error-reporting"
-version = "0.2.2"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d6e887d60a9206cf83c304732c41a99064a45ef46871f3713a4f32ff97ccbef"
+checksum = "6fdac7249f35a9325eb940fbc71cab6f4199757cc65f31d727d3845f33d96b17"
 dependencies = [
  "ariadne",
  "quarto-source-map",
@@ -5432,9 +5451,9 @@ dependencies = [
 
 [[package]]
 name = "quarto-source-map"
-version = "0.1.4"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8841b3f0214a2ee34e36836646401696db7f11f7b0f36a2ebfe069f27248b9fb"
+checksum = "c5c7f7b2a29e8a12f6e799a64ec66b97425a8af5efcc37a07ebdc3e026723dc0"
 dependencies = [
  "serde",
  "serde_json",
@@ -5538,9 +5557,9 @@ dependencies = [
 
 [[package]]
 name = "quarto-yaml"
-version = "0.1.3"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "221ecfcb2612596a3fc789f35c3a39f7d1c20657fbc157a1136ea18ff11d7a7c"
+checksum = "63b186997c02d9b5814068295038f52ce5c57df689e53b6312f6c8fda3c70ced"
 dependencies = [
  "quarto-source-map",
  "serde",

@@ -74,7 +74,7 @@ fn assert_raw_file_span(loc: &SourceInfo, what: &str) {
              splicing at it would write at byte 0 of the user's file. \
              Got: {loc:?}"
         ),
-        SourceInfo::Substring { .. } | SourceInfo::Generated { .. } => panic!(
+        SourceInfo::Substring { .. } | SourceInfo::Generated(_) => panic!(
             "{what} is neither a raw file span nor a recognised safe shape; \
              this crate reads byte offsets straight out of it. Got: {loc:?}"
         ),

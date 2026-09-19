@@ -10,6 +10,17 @@ use quarto_core::attribution::AttributionMode;
 
 mod commands;
 
+// mimalloc as the global allocator for the native CLI. A `q2 render` is
+// allocation-heavy (millions of small AST-node and `Vec` allocations per
+// document); on the Connect docs' api/index.qmd this swap alone was ~10%
+// of wall time, on top of the traversal changes measured in
+// claude-notes/research/2026-09-19-topdown-traverse-alloc-perf.md
+// (bd-w0x91nmh). Native binary only — the WASM crate does not depend on
+// this crate. Note `#[global_allocator]` covers Rust allocations only;
+// tree-sitter's C side still uses libc malloc.
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 #[derive(Parser)]
 // "q2" is the actual binary name (and what usage/help should show);
 // "(quarto 2)" in the version string disambiguates from TS Quarto, so
