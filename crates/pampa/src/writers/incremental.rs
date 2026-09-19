@@ -1727,7 +1727,7 @@ fn classify_none_preimage(
     findings: &mut Vec<TilingFinding>,
 ) {
     match si {
-        SourceInfo::Generated { .. } if si.invocation_anchor().is_none() => {
+        SourceInfo::Generated(_) if si.invocation_anchor().is_none() => {
             findings.push(TilingFinding {
                 kind: TilingFindingKind::GeneratedNoInvocation,
                 message: format!("GeneratedNoInvocation: `{node_type}` has no Invocation anchor"),

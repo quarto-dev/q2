@@ -429,7 +429,7 @@ dependencies = [
 
 [[package]]
 name = "comrak-to-pandoc"
-version = "0.31.0"
+version = "0.32.0"
 dependencies = [
  "comrak",
  "hashlink",
@@ -2467,7 +2467,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-analysis"
-version = "0.31.0"
+version = "0.32.0"
 dependencies = [
  "quarto-error-reporting",
  "quarto-pandoc-types",
@@ -2489,7 +2489,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-brand"
-version = "0.31.0"
+version = "0.32.0"
 dependencies = [
  "hashlink",
  "pathdiff",
@@ -2501,7 +2501,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-citeproc"
-version = "0.31.0"
+version = "0.32.0"
 dependencies = [
  "glob",
  "hashlink",
@@ -2532,7 +2532,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-core"
-version = "0.31.0"
+version = "0.32.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2570,6 +2570,7 @@ dependencies = [
  "scraper",
  "serde",
  "serde_json",
+ "serde_path_to_error",
  "serde_yaml",
  "sha2 0.11.0",
  "smallvec",
@@ -2586,7 +2587,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-csl"
-version = "0.31.0"
+version = "0.32.0"
 dependencies = [
  "quarto-error-reporting",
  "quarto-source-map",
@@ -2622,9 +2623,9 @@ dependencies = [
 
 [[package]]
 name = "quarto-error-reporting"
-version = "0.2.2"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d6e887d60a9206cf83c304732c41a99064a45ef46871f3713a4f32ff97ccbef"
+checksum = "6fdac7249f35a9325eb940fbc71cab6f4199757cc65f31d727d3845f33d96b17"
 dependencies = [
  "ariadne",
  "quarto-source-map",
@@ -2637,7 +2638,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-highlight"
-version = "0.31.0"
+version = "0.32.0"
 dependencies = [
  "once_cell",
  "quarto-highlight-encoding",
@@ -2664,7 +2665,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-highlight-encoding"
-version = "0.31.0"
+version = "0.32.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -2672,7 +2673,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-lsp-core"
-version = "0.31.0"
+version = "0.32.0"
 dependencies = [
  "pampa",
  "pollster",
@@ -2693,7 +2694,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-navigation"
-version = "0.31.0"
+version = "0.32.0"
 dependencies = [
  "quarto-config",
  "quarto-pandoc-types",
@@ -2730,7 +2731,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-project-create"
-version = "0.31.0"
+version = "0.32.0"
 dependencies = [
  "quarto-doctemplate",
  "serde",
@@ -2740,7 +2741,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-sass"
-version = "0.31.0"
+version = "0.32.0"
 dependencies = [
  "include_dir",
  "once_cell",
@@ -2761,9 +2762,9 @@ dependencies = [
 
 [[package]]
 name = "quarto-source-map"
-version = "0.1.3"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a89e06e4e076edf57f2cc0389c03e9d5a58a9c2ae51d69be1e91db931e8e3cc"
+checksum = "c5c7f7b2a29e8a12f6e799a64ec66b97425a8af5efcc37a07ebdc3e026723dc0"
 dependencies = [
  "serde",
  "serde_json",
@@ -2772,7 +2773,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-system-runtime"
-version = "0.31.0"
+version = "0.32.0"
 dependencies = [
  "async-lock",
  "async-trait",
@@ -2790,7 +2791,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-trace"
-version = "0.31.0"
+version = "0.32.0"
 dependencies = [
  "flate2",
  "serde",
@@ -2808,7 +2809,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-util"
-version = "0.31.0"
+version = "0.32.0"
 dependencies = [
  "dirs",
  "serde",
@@ -2817,7 +2818,7 @@ dependencies = [
 
 [[package]]
 name = "quarto-xml"
-version = "0.31.0"
+version = "0.32.0"
 dependencies = [
  "quarto-error-reporting",
  "quarto-source-map",
@@ -2827,9 +2828,9 @@ dependencies = [
 
 [[package]]
 name = "quarto-yaml"
-version = "0.1.3"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "221ecfcb2612596a3fc789f35c3a39f7d1c20657fbc157a1136ea18ff11d7a7c"
+checksum = "63b186997c02d9b5814068295038f52ce5c57df689e53b6312f6c8fda3c70ced"
 dependencies = [
  "quarto-source-map",
  "serde",
@@ -3540,6 +3541,17 @@ dependencies = [
  "serde",
  "serde_core",
  "zmij",
+]
+
+[[package]]
+name = "serde_path_to_error"
+version = "0.1.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10a9ff822e371bb5403e391ecd83e182e0e77ba7f6fe0160b795797109d1b457"
+dependencies = [
+ "itoa",
+ "serde",
+ "serde_core",
 ]
 
 [[package]]
@@ -4502,7 +4514,7 @@ dependencies = [
 
 [[package]]
 name = "wasm-printf-fmt"
-version = "0.31.0"
+version = "0.32.0"
 
 [[package]]
 name = "wasm-quarto-hub-client"

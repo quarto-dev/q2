@@ -1,0 +1,180 @@
+# Nightly (bd-p4ljdp2e): every night, if `main` has changes no release
+# has shipped, build it through the shared release pipeline and publish
+# the result as the rolling `nightly` PRERELEASE.
+#
+#   gate ──(build=true)──▶ release-pipeline.yml ──▶ install-smoke ×3
+#
+# - `gate` runs scripts/nightly-gate.sh: skip iff HEAD is exactly the
+#   newest `v*` tag (main is fully released) or exactly the current
+#   `nightly` tag (last night already built this tree). Otherwise it
+#   picks the version — the NEXT minor of Cargo.toml with a dated
+#   prerelease, e.g. 0.33.0-nightly.20260919 — and the sha to build.
+#   A skipped night costs one small runner for a few seconds.
+# - The pipeline is the same file release.yml calls, with
+#   channel: nightly (build-time QUARTO_VERSION_OVERRIDE, rolling tag,
+#   prerelease, nightly install notes). Every release gate applies.
+# - `install-smoke` then runs the README one-liners with the nightly
+#   flag on linux, macOS and Windows against the just-published release
+#   and asserts `q2 --version` reports the gate's version: the
+#   end-to-end check the CLAUDE.md rule asks for, every night, and the
+#   only CI that exercises install.sh/install.ps1 against a real release.
+#
+# Stable installs are unaffected: releases/latest never returns a
+# prerelease. Nightlies install with `install.sh --nightly` /
+# `install.ps1 -Nightly`.
+#
+# Manual runs (workflow_dispatch) can force a build of a released HEAD
+# and/or dry-run without publishing; from a branch, that is how to test
+# changes to this file or the pipeline before they reach main.
+#
+# Plan: claude-notes/plans/2026-09-19-nightly-release-workflow.md
+
+name: Nightly
+
+run-name: >-
+  ${{
+    github.event_name == 'schedule' && 'Nightly'
+    || format('Nightly (manual{0}{1})',
+              inputs.force && ', forced' || '',
+              (!inputs.publish) && ', dry run' || '')
+  }}
+
+on:
+  schedule:
+    # 03:00 EST / 04:00 EDT — an hour after the e2e nightly
+    # (hub-client-e2e.yml, 0 7 * * *) so the two never race for the
+    # same rust-cache write window.
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Build even if HEAD is already released / already the current nightly'
+        type: boolean
+        default: false
+      publish:
+        description: 'Publish the nightly release (untick for a dry run: build, verify, sign, upload as artifact)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: Unreleased changes on ${{ github.ref_name }}?
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: github.repository == 'quarto-dev/q2'
+    outputs:
+      build: ${{ steps.gate.outputs.build }}
+      reason: ${{ steps.gate.outputs.reason }}
+      version: ${{ steps.gate.outputs.version }}
+      sha: ${{ steps.gate.outputs.sha }}
+      prev_release_tag: ${{ steps.gate.outputs.prev_release_tag }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # The gate compares HEAD against tags; it needs all of them.
+          fetch-depth: 0
+          fetch-tags: true
+
+      - id: gate
+        shell: bash
+        env:
+          NIGHTLY_FORCE: ${{ inputs.force && '1' || '0' }}
+        run: bash scripts/nightly-gate.sh
+
+      - name: Summary
+        shell: bash
+        env:
+          BUILD: ${{ steps.gate.outputs.build }}
+          REASON: ${{ steps.gate.outputs.reason }}
+          VERSION: ${{ steps.gate.outputs.version }}
+          SHA: ${{ steps.gate.outputs.sha }}
+          PREV: ${{ steps.gate.outputs.prev_release_tag }}
+        run: |
+          {
+            if [ "$BUILD" = true ]; then
+              echo "### Building nightly \`$VERSION\` from \`${SHA:0:12}\` ($REASON)"
+            else
+              echo "### Skipped: \`${SHA:0:12}\` is $REASON"
+            fi
+            echo
+            echo "Last release: \`${PREV:-none}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  pipeline:
+    name: Nightly pipeline
+    needs: gate
+    if: needs.gate.outputs.build == 'true'
+    uses: ./.github/workflows/release-pipeline.yml
+    with:
+      # The exact sha the gate looked at, not the branch: a merge landing
+      # mid-run must not change what this nightly is built from.
+      ref: ${{ needs.gate.outputs.sha }}
+      version: ${{ needs.gate.outputs.version }}
+      tag: nightly
+      channel: nightly
+      # Scheduled runs have no inputs; they always publish.
+      publish: ${{ github.event_name == 'schedule' || inputs.publish }}
+      notes_range: >-
+        ${{ needs.gate.outputs.prev_release_tag != ''
+            && format('{0}..{1}', needs.gate.outputs.prev_release_tag, needs.gate.outputs.sha)
+            || '' }}
+    secrets: inherit
+
+  # The real user path: the README one-liners, fetched from this ref
+  # (`main` on a scheduled run), installing the release the pipeline just
+  # published, verified with the key pinned in the installers. The
+  # installed binary must report exactly the gate's version.
+  install-smoke:
+    name: Install smoke (${{ matrix.os }})
+    needs: [gate, pipeline]
+    if: >-
+      needs.gate.outputs.build == 'true'
+      && (github.event_name == 'schedule' || inputs.publish)
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-15, windows-latest]
+    env:
+      EXPECTED: ${{ needs.gate.outputs.version }}
+      RAW_BASE: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}
+    steps:
+      - name: Install minisign (the installer requires it)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then brew install minisign
+          else sudo apt-get update && sudo apt-get install -y minisign; fi
+
+      - name: install.sh --nightly
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          curl -fsSL "$RAW_BASE/install.sh" | bash -s -- --nightly --dest "$RUNNER_TEMP/q2-bin"
+          RAW=$("$RUNNER_TEMP/q2-bin/q2" --version)
+          echo "$RAW"
+          if [ "${RAW##* }" != "$EXPECTED" ]; then
+            echo "::error::installed nightly reports '$RAW', expected version $EXPECTED"
+            exit 1
+          fi
+
+      - name: install.ps1 -Nightly
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $dest = Join-Path $env:RUNNER_TEMP 'q2-bin'
+          & ([scriptblock]::Create((irm "$env:RAW_BASE/install.ps1"))) -Nightly -Dest $dest
+          $raw = & (Join-Path $dest 'q2.exe') --version
+          Write-Host $raw
+          if (($raw -split '\s+')[-1] -ne $env:EXPECTED) {
+            Write-Host "::error::installed nightly reports '$raw', expected version $env:EXPECTED"
+            exit 1
+          }

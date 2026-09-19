@@ -26,6 +26,6 @@ rather than being scaled down:
 ## Left alone
 
 An ordinary image is untouched, and a `.hep` that does not exist warns
-(`Q-18-1`) and is left as written, so the rest of the page still renders:
+(`Q-19-1`) and is left as written, so the rest of the page still renders:
 
 ![](figs/does-not-exist.hep)

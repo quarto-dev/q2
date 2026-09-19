@@ -157,7 +157,7 @@ interface HepPlotProps {
      * the signal); here that would fetch the preview host's HTML
      * fallback and report "bad magic" for a file that is simply not
      * there, so a miss is reported as such — the preview's analogue of
-     * the native transform's `Q-18-1`.
+     * the native transform's `Q-19-1`.
      */
     src: string | null;
     kvs: Record<string, string>;

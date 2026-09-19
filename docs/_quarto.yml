@@ -346,12 +346,16 @@ website:
             - errors/extension/Q-16-10.qmd
             - errors/extension/Q-16-11.qmd
             - errors/extension/Q-16-12.qmd
+        - section: "engine"
+          contents:
+            - errors/engine/Q-18-1.qmd
+            - errors/engine/Q-18-2.qmd
         - section: "image"
           contents:
-            - errors/image/Q-18-1.qmd
-            - errors/image/Q-18-2.qmd
-            - errors/image/Q-18-3.qmd
-            - errors/image/Q-18-4.qmd
+            - errors/image/Q-19-1.qmd
+            - errors/image/Q-19-2.qmd
+            - errors/image/Q-19-3.qmd
+            - errors/image/Q-19-4.qmd
 
 format:
   html:

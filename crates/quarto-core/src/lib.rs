@@ -92,12 +92,15 @@ pub use transforms::{
     ResourceCollectorTransform, TitleBlockTransform,
 };
 
-/// Return the current `quarto-core` crate version (from `Cargo.toml`).
+/// Return the Quarto version this build reports.
 ///
 /// Used by `build_engine_registry` to populate `HostGlobalConfig.quarto_version`.
-/// `quarto-core`'s version tracks the overall Quarto release version.
+/// `quarto-core`'s version tracks the overall Quarto release version; a
+/// nightly build reports its `QUARTO_VERSION_OVERRIDE` instead
+/// (bd-p4ljdp2e), which is why this goes through `quarto_util` rather
+/// than reading `CARGO_PKG_VERSION` directly.
 pub fn version() -> &'static str {
-    env!("CARGO_PKG_VERSION")
+    quarto_util::cli_version()
 }
 
 // Re-export render-to-file types (native only)

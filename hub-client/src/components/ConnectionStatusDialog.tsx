@@ -11,11 +11,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
-  getDocSyncActivity,
+  getDocSyncActivityWithPersisted,
   getDocRemoteChange,
   getConnectionLog,
-  type ConnectionEvent,
-  type ConnectionInfo,
   type DocSyncActivity,
   type RemoteChangeSummary,
 } from '@quarto/quarto-sync-client';
@@ -26,27 +24,10 @@ import ModalDialog from './ModalDialog';
 import { dialogs } from '../strings';
 import './ConnectionStatusDialog.css';
 
-/** Canned render data for the dev-harness route (see DevHarness.tsx). */
-export interface ConnectionStatusHarnessData {
-  browserOnline: boolean;
-  connInfo: ConnectionInfo | null;
-  connLog: ConnectionEvent[];
-  fileStats: DocSyncActivity | null;
-  indexStats: DocSyncActivity | null;
-  fileChange: RemoteChangeSummary | null;
-  indexChange: RemoteChangeSummary | null;
-}
-
 interface ConnectionStatusDialogProps {
   /** Path of the currently open file, for per-document stats. */
   currentFilePath?: string | null;
   onClose: () => void;
-  /**
-   * Dev-harness only: when provided, the live preview-runtime /
-   * sync-client lookups are skipped (they throw with no connection).
-   * Production callers never pass this.
-   */
-  harnessData?: ConnectionStatusHarnessData;
 }
 
 /** Same badge look as the header's connection indicator. */
@@ -152,13 +133,15 @@ function buildInlineDiffLines(
   return lines;
 }
 
-/** "42s ago" under a minute, then "3m ago", then "2h ago". */
+/** "42s ago" under a minute, then "3m ago", "2h ago", "5d ago". */
 function formatAgo(ms: number): string {
   const seconds = Math.max(0, Math.round(ms / 1000));
   if (seconds < 60) return `${seconds}s ago`;
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m ago`;
-  return `${Math.floor(minutes / 60)}h ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
 }
 
 function formatTimestamp(at: number | null, now: number): string {
@@ -227,7 +210,6 @@ function RemoteChangeSection({
 export default function ConnectionStatusDialog({
   currentFilePath,
   onClose,
-  harnessData,
 }: ConnectionStatusDialogProps) {
   const [now, setNow] = useState(() => Date.now());
   const [liveBrowserOnline, setLiveBrowserOnline] = useState(() => navigator.onLine);
@@ -247,49 +229,30 @@ export default function ConnectionStatusDialog({
     };
   }, []);
 
-  const browserOnline = harnessData?.browserOnline ?? liveBrowserOnline;
+  const browserOnline = liveBrowserOnline;
 
   // Resolve the two documents of interest; re-evaluated every tick
-  // because handles appear as the project loads / files open. Skipped when
-  // the harness supplies canned data — the live lookups throw with no
-  // connection.
+  // because handles appear as the project loads / files open.
   let fileDocId: string | null = null;
   let indexDocId: string | null = null;
-  if (!harnessData) {
-    try {
-      fileDocId = currentFilePath ? (getFileHandle(currentFilePath)?.documentId ?? null) : null;
-    } catch {
-      // not connected yet
-    }
-    try {
-      indexDocId = getIndexHandle()?.documentId ?? null;
-    } catch {
-      // not connected yet
-    }
+  try {
+    fileDocId = currentFilePath ? (getFileHandle(currentFilePath)?.documentId ?? null) : null;
+  } catch {
+    // not connected yet
   }
-  const fileStats = harnessData
-    ? harnessData.fileStats
-    : fileDocId
-      ? getDocSyncActivity(fileDocId)
-      : null;
-  const indexStats = harnessData
-    ? harnessData.indexStats
-    : indexDocId
-      ? getDocSyncActivity(indexDocId)
-      : null;
-  const fileChange = harnessData
-    ? harnessData.fileChange
-    : fileDocId
-      ? getDocRemoteChange(fileDocId)
-      : null;
-  const indexChange = harnessData
-    ? harnessData.indexChange
-    : indexDocId
-      ? getDocRemoteChange(indexDocId)
-      : null;
+  try {
+    indexDocId = getIndexHandle()?.documentId ?? null;
+  } catch {
+    // not connected yet
+  }
+  // Persisted variant: the three displayed timestamps survive page reloads.
+  const fileStats = fileDocId ? getDocSyncActivityWithPersisted(fileDocId) : null;
+  const indexStats = indexDocId ? getDocSyncActivityWithPersisted(indexDocId) : null;
+  const fileChange = fileDocId ? getDocRemoteChange(fileDocId) : null;
+  const indexChange = indexDocId ? getDocRemoteChange(indexDocId) : null;
 
-  const connInfo = harnessData ? harnessData.connInfo : getConnectionInfo();
-  const connLog = harnessData ? harnessData.connLog : getConnectionLog();
+  const connInfo = getConnectionInfo();
+  const connLog = getConnectionLog();
   const wsState = connInfo?.wsReadyState ?? null;
   const peers = connInfo?.peers ?? [];
   const WS_STATE_NAMES = ['Connecting', 'Open', 'Closing', 'Closed'];

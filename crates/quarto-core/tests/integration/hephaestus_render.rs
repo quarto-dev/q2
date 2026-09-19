@@ -33,9 +33,9 @@ use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 const FIXTURE_HEP: &[u8] = include_bytes!("../fixtures/hephaestus/basic.hep");
 
 /// Q-codes of the `image` subsystem this phase introduces.
-const CODE_NOT_FOUND: &str = "Q-18-1";
-const CODE_INVALID: &str = "Q-18-2";
-const CODE_BRAND_COLOR: &str = "Q-18-4";
+const CODE_NOT_FOUND: &str = "Q-19-1";
+const CODE_INVALID: &str = "Q-19-2";
+const CODE_BRAND_COLOR: &str = "Q-19-4";
 /// The resource collector's own "referenced resource not found".
 const CODE_RESOURCE_NOT_FOUND: &str = "Q-5-6";
 
@@ -313,7 +313,7 @@ fn non_hep_images_are_untouched() {
 
 // ── Failure modes: warn, leave the image, keep rendering ─────────────────
 
-/// A missing `.hep` is reported twice, on purpose: `Q-18-1` says the
+/// A missing `.hep` is reported twice, on purpose: `Q-19-1` says the
 /// plot was not rendered, and the resource collector's `Q-5-6` says the
 /// file could not be copied beside the page — the same warning any
 /// missing image gets.
@@ -374,7 +374,7 @@ fn brand_colors_map_onto_the_plot_palette() {
 }
 
 /// A brand color that is not a hex value cannot become a palette
-/// anchor: warn once (`Q-18-4`) and keep the document's own color for
+/// anchor: warn once (`Q-19-4`) and keep the document's own color for
 /// that slot. The other slots still apply.
 #[test]
 fn non_hex_brand_color_warns_and_keeps_the_documents_color() {

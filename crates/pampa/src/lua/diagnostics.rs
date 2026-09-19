@@ -106,7 +106,8 @@ fn source_info_to_lua_table(lua: &Lua, si: &SourceInfo) -> Result<Table> {
             }
             table.set("pieces", pieces_table)?;
         }
-        SourceInfo::Generated { by, from } => {
+        SourceInfo::Generated(g) => {
+            let quarto_source_map::Generated { by, from } = &**g;
             table.set("t", "Generated")?;
             table.set("by", by_to_lua_table(lua, by)?)?;
             let from_table = lua.create_table()?;
@@ -198,18 +199,15 @@ fn source_info_from_lua_table(table: &Table) -> Result<SourceInfo> {
                     });
                 }
             }
-            Ok(SourceInfo::Generated { by, from })
+            Ok(SourceInfo::generated_with(by, from))
         }
         // Legacy back-compat: read the old "FilterProvenance" tag as
         // `Generated { by: filter(...), from: [] }`. Writers never emit
         // this tag after Plan 4 Phase 4.
-        "FilterProvenance" => Ok(SourceInfo::Generated {
-            by: By::filter(
-                table.get::<String>("filter_path")?,
-                table.get::<usize>("line")?,
-            ),
-            from: SmallVec::new(),
-        }),
+        "FilterProvenance" => Ok(SourceInfo::generated(By::filter(
+            table.get::<String>("filter_path")?,
+            table.get::<usize>("line")?,
+        ))),
         _ => Err(Error::runtime(format!("Unknown SourceInfo type: {}", t))),
     }
 }
@@ -262,10 +260,7 @@ fn extract_source_info_from_element(lua: &Lua, elem: &Value) -> Result<Option<Ta
 fn get_caller_source_info(lua: &Lua) -> SourceInfo {
     let (source, line) = get_caller_location(lua);
     let source_path = source.strip_prefix('@').unwrap_or(&source);
-    SourceInfo::Generated {
-        by: By::filter(source_path, line.max(0) as usize),
-        from: SmallVec::new(),
-    }
+    SourceInfo::generated(By::filter(source_path, line.max(0) as usize))
 }
 
 /// Add a diagnostic to the quarto._diagnostics table
@@ -535,8 +530,8 @@ mod tests {
         // Verify source location was captured
         assert!(diagnostics[0].location.is_some());
 
-        if let Some(SourceInfo::Generated { by, .. }) = &diagnostics[0].location
-            && let Some((filter_path, line)) = by.as_filter()
+        if let Some(SourceInfo::Generated(g)) = &diagnostics[0].location
+            && let Some((filter_path, line)) = g.by.as_filter()
         {
             // The path should contain the filter name (@ prefix is stripped)
             assert!(
@@ -602,8 +597,8 @@ mod tests {
                 assert_eq!(*start_offset, 100, "start_offset should be preserved");
                 assert_eq!(*end_offset, 110, "end_offset should be preserved");
             }
-            Some(SourceInfo::Generated { by, .. }) if by.is_kind("filter") => {
-                let (filter_path, line) = by.as_filter().unwrap();
+            Some(SourceInfo::Generated(g)) if g.by.is_kind("filter") => {
+                let (filter_path, line) = g.by.as_filter().unwrap();
                 panic!(
                     "Expected SourceInfo::Original, but got filter-Generated({}, {}). \
                      This is the bug we're fixing!",
@@ -879,7 +874,8 @@ mod tests {
         table.set("line", 7usize).unwrap();
         let parsed = source_info_from_lua_table(&table).unwrap();
         match parsed {
-            SourceInfo::Generated { by, from } => {
+            SourceInfo::Generated(g) => {
+                let quarto_source_map::Generated { by, from } = &*g;
                 assert_eq!(by.as_filter(), Some(("legacy.lua", 7)));
                 assert!(from.is_empty());
             }
@@ -930,7 +926,7 @@ mod tests {
         assert_eq!(diagnostics.len(), 1);
         // Should have filter-Generated since the element wasn't recognized
         match &diagnostics[0].location {
-            Some(SourceInfo::Generated { by, .. }) if by.is_kind("filter") => {}
+            Some(SourceInfo::Generated(g)) if g.by.is_kind("filter") => {}
             other => panic!(
                 "Expected filter-Generated for non-userdata element, got {:?}",
                 other

@@ -52,7 +52,19 @@
 //!   - `"content"`: [`Slot::Blocks`] — the body blocks (image, table,
 //!     whatever). Empty is allowed.
 //!   - `"caption_long"`: [`Slot::Blocks`] — present iff the original shape
-//!     had a caption. Contains the caption blocks verbatim.
+//!     had a caption. Its **first block is always a `Plain`**: a caption
+//!     authored as a trailing paragraph (div form, `#| fig-cap` cells)
+//!     arrives as a `Paragraph` and is canonicalized here, while
+//!     Pandoc-native `Figure` / `Table` captions are `Plain` already. One
+//!     shape for every float form means every consumer (the crossref
+//!     renderer's prefix step, the index, the HTML writer's `<figcaption>`)
+//!     behaves identically regardless of how the float was written — and
+//!     the writer emits bare inlines inside `<figcaption>`, as Q1 does.
+//!     Any trailing blocks are kept as authored. Consumers must still accept
+//!     a leading `Paragraph` defensively: Lua filters and the JSON reader can
+//!     hand the pipeline either. (bd-n3sark9b; Q1's own IR is *not*
+//!     canonical — its div-form caption stays a `Para` — so this is a
+//!     deliberate, documented divergence for filter authors: bd-t0qt409i.)
 //!   - `"caption_short"`: [`Slot::Inlines`] — present iff the original
 //!     shape carried a short caption (e.g. Figure.caption.short or a
 //!     `fig-scap` attribute). Not yet populated in Phase 1; a later task
@@ -62,7 +74,7 @@
 //! fills it during the crossref phase.
 
 use quarto_pandoc_types::attr::{Attr, AttrSourceInfo};
-use quarto_pandoc_types::block::{Block, Blocks, Div, Figure, Paragraph};
+use quarto_pandoc_types::block::{Block, Blocks, Div, Figure, Plain};
 use quarto_pandoc_types::custom::{CustomNode, Slot};
 use quarto_pandoc_types::pandoc::Pandoc;
 use serde_json::json;
@@ -277,6 +289,26 @@ fn maybe_wrap_bare_table_into_div(block: &mut Block, reg: &RefTypeRegistry) {
     }
 }
 
+/// Canonicalize a float caption to the slot contract documented in the
+/// module doc: a leading `Paragraph` becomes a `Plain` with the same inlines
+/// and source info; any other leading block, and every trailing block, is
+/// left untouched.
+fn canonicalize_caption(mut caption: Blocks) -> Blocks {
+    if matches!(caption.first(), Some(Block::Paragraph(_))) {
+        let Block::Paragraph(para) = caption.remove(0) else {
+            unreachable!("matched Paragraph above");
+        };
+        caption.insert(
+            0,
+            Block::Plain(Plain {
+                content: para.content,
+                source_info: para.source_info,
+            }),
+        );
+    }
+    caption
+}
+
 /// Convert a `Div` that we already know is a crossref target into a
 /// FloatRefTarget custom node.
 ///
@@ -318,28 +350,14 @@ fn convert_div(div: Div, def: &crate::crossref::RefTypeDef) -> CustomNode {
             (vec![Block::Table(table)], caption_long, caption_short)
         }
         _ => {
-            // General case: last Paragraph becomes caption.
-            let caption = match content_blocks.last() {
-                Some(Block::Paragraph(_)) => {
-                    let last = content_blocks.pop().unwrap();
-                    let Block::Paragraph(para) = last else {
-                        unreachable!()
-                    };
-                    Some(para)
-                }
-                _ => None,
+            // General case: last Paragraph becomes caption (Q1's
+            // `refCaptionFromDiv`). It is canonicalized to Plain when the
+            // slot is filled below.
+            let long = match content_blocks.last() {
+                Some(Block::Paragraph(_)) => vec![content_blocks.pop().unwrap()],
+                _ => Vec::new(),
             };
-            let (content, long) = match caption {
-                Some(para) => {
-                    let para_block = Block::Paragraph(Paragraph {
-                        content: para.content,
-                        source_info: para.source_info,
-                    });
-                    (content_blocks, vec![para_block])
-                }
-                None => (content_blocks, Vec::new()),
-            };
-            (content, long, None)
+            (content_blocks, long, None)
         }
     };
 
@@ -351,8 +369,10 @@ fn convert_div(div: Div, def: &crate::crossref::RefTypeDef) -> CustomNode {
     });
     node.slots.insert("content".into(), Slot::Blocks(content));
     if !caption_long.is_empty() {
-        node.slots
-            .insert("caption_long".into(), Slot::Blocks(caption_long));
+        node.slots.insert(
+            "caption_long".into(),
+            Slot::Blocks(canonicalize_caption(caption_long)),
+        );
     }
     if let Some(short) = caption_short
         && !short.is_empty()
@@ -382,8 +402,10 @@ fn convert_figure(fig: Figure, def: &crate::crossref::RefTypeDef) -> CustomNode 
     });
     node.slots.insert("content".into(), Slot::Blocks(content));
     if !caption_long.is_empty() {
-        node.slots
-            .insert("caption_long".into(), Slot::Blocks(caption_long));
+        node.slots.insert(
+            "caption_long".into(),
+            Slot::Blocks(canonicalize_caption(caption_long)),
+        );
     }
     if let Some(short) = caption_short
         && !short.is_empty()
@@ -469,15 +491,80 @@ mod tests {
         assert_eq!(content.len(), 1);
         assert!(matches!(content[0], Block::CodeBlock(_)));
 
-        // Caption long: the paragraph.
+        // Caption long: the trailing paragraph, canonicalized to `Plain`
+        // (bd-n3sark9b — every float form presents the same caption shape).
         let Slot::Blocks(cap) = node.slots.get("caption_long").unwrap() else {
             panic!("caption_long slot not a Blocks");
         };
         assert_eq!(cap.len(), 1);
         match &cap[0] {
-            Block::Paragraph(p) => assert_eq!(p.content.len(), 1),
-            other => panic!("caption first block should be Paragraph, got {:?}", other),
+            Block::Plain(p) => {
+                assert_eq!(p.content.len(), 1);
+                assert!(matches!(&p.content[0], Inline::Str(s) if s.text == "Hello, world."));
+            }
+            other => panic!("caption first block should be Plain, got {:?}", other),
         }
+    }
+
+    /// Assert the target's `caption_long` starts with a `Plain` whose first
+    /// inline is `Str(text)`.
+    fn assert_plain_caption(node: &CustomNode, text: &str) {
+        let Slot::Blocks(cap) = node.slots.get("caption_long").expect("caption_long slot") else {
+            panic!("caption_long slot not a Blocks");
+        };
+        match cap.first() {
+            Some(Block::Plain(p)) => {
+                assert!(
+                    matches!(&p.content[0], Inline::Str(s) if s.text == text),
+                    "caption inlines: {:?}",
+                    p.content
+                );
+            }
+            other => panic!("caption first block should be Plain, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn div_over_table_with_paragraph_caption_canonicalizes_to_plain() {
+        // A Table whose caption.long starts with a Paragraph (possible from
+        // Lua filters or the JSON reader; Pandoc itself emits Plain).
+        use quarto_pandoc_types::table::{Table, TableFoot, TableHead};
+        let reg = RefTypeRegistry::builtin();
+        let table = Block::Table(Table {
+            attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+            caption: Caption {
+                short: None,
+                long: Some(vec![para("Numbers")]),
+                source_info: si(),
+            },
+            colspec: vec![],
+            head: TableHead {
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                rows: vec![],
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+            },
+            bodies: vec![],
+            foot: TableFoot {
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                rows: vec![],
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+            },
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let div = Block::Div(Div {
+            attr: attr_id("tbl-nums"),
+            content: vec![table],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let out = run_transform(vec![div], &reg);
+        let Block::Custom(node) = &out[0] else {
+            panic!("expected custom node");
+        };
+        assert_plain_caption(node, "Numbers");
     }
 
     #[test]
@@ -517,10 +604,8 @@ mod tests {
         let Block::Custom(node) = &out[0] else {
             panic!();
         };
-        assert!(matches!(
-            node.slots.get("caption_long"),
-            Some(Slot::Blocks(b)) if b.len() == 1
-        ));
+        // A Paragraph caption on a native Figure is canonicalized to Plain too.
+        assert_plain_caption(node, "Caption from Figure.");
     }
 
     #[test]
@@ -555,7 +640,8 @@ mod tests {
         };
         assert_eq!(content.len(), 1);
         assert!(matches!(&content[0], Block::Paragraph(p) if p.content.len() == 1));
-        assert!(node.slots.get("caption_long").is_some());
+        // The inner Figure's Paragraph caption is canonicalized to Plain.
+        assert_plain_caption(node, "inner cap");
     }
 
     #[test]

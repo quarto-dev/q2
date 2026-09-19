@@ -1,6 +1,5 @@
 ---
 source: crates/quarto-core/tests/integration/llms_txt.rs
-assertion_line: 694
 expression: md
 ---
 # Rich Page
@@ -25,7 +24,7 @@ print("hello")
 | --- | --- |
 | 1   | 2   |
 
-Numbers
+Table 1: Numbers
 
 :::
 

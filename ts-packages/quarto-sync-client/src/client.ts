@@ -1950,13 +1950,13 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     await disconnect();
 
     try {
-      state.wsAdapter = wrapAdapter(
-        await buildWsAdapter(
-          options.syncServer,
-          options.auth,
-          options.retryIntervalMs,
-        ),
+      const rawAdapter = await buildWsAdapter(
+        options.syncServer,
+        options.auth,
+        options.retryIntervalMs,
       );
+      state.rawWsAdapter = rawAdapter;
+      state.wsAdapter = wrapAdapter(rawAdapter);
       state.repo = new Repo({
         network: [state.wsAdapter],
         storage: buildStorageAdapter(options.storage),

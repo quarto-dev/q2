@@ -155,10 +155,7 @@ fn roundtrip_generated_with_invocation_anchor_via_public_api() {
     });
     let mut from = SmallVec::<[Anchor; 2]>::new();
     from.push(Anchor::invocation(Arc::clone(&target)));
-    let original = SourceInfo::Generated {
-        by: By::shortcode("meta"),
-        from,
-    };
+    let original = SourceInfo::generated_with(By::shortcode("meta"), from);
     let recovered = roundtrip_str_source_info(original.clone());
     assert_eq!(original, recovered);
 }
@@ -179,10 +176,7 @@ fn roundtrip_generated_with_all_anchor_roles_via_public_api() {
         role: AnchorRole::Other("ext/foo/bar".to_string()),
         source_info: mk_target(30, 35),
     });
-    let original = SourceInfo::Generated {
-        by: By::shortcode("meta"),
-        from,
-    };
+    let original = SourceInfo::generated_with(By::shortcode("meta"), from);
     let recovered = roundtrip_str_source_info(original.clone());
     assert_eq!(original, recovered);
 }
@@ -248,8 +242,8 @@ fn streaming_writer_generated_round_trip_preserves_by_data() {
     });
     let mut from = SmallVec::<[Anchor; 2]>::new();
     from.push(Anchor::invocation(Arc::clone(&target)));
-    let original = SourceInfo::Generated {
-        by: By::raw(
+    let original = SourceInfo::generated_with(
+        By::raw(
             "ext/example/foo",
             serde_json::json!({
                 "nested": {
@@ -261,7 +255,7 @@ fn streaming_writer_generated_round_trip_preserves_by_data() {
             }),
         ),
         from,
-    };
+    );
     let recovered = roundtrip_str_source_info(original.clone());
     assert_eq!(original, recovered);
 }
@@ -326,7 +320,8 @@ fn completing_reader_fills_missing_source_info_with_placeholder() {
         panic!("Expected Str inline")
     };
     match &str_node.source_info {
-        SourceInfo::Generated { by, .. } => {
+        SourceInfo::Generated(g) => {
+            let quarto_source_map::Generated { by, .. } = &**g;
             assert_eq!(by.kind, "unknown");
         }
         other => panic!("Expected Generated{{by: unknown}}, got {:?}", other),

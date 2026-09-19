@@ -61,7 +61,7 @@
 //! three anchors, so a dark-paper / light-ink brand inverts the whole
 //! plot in one step. Only hex values can cross into the plot (a named
 //! CSS color means nothing outside a browser); anything else warns
-//! once per document (`Q-18-4`) and leaves that one anchor alone. The
+//! once per document (`Q-19-4`) and leaves that one anchor alone. The
 //! light brand is used — dark mode is bd-myfwwmki.
 
 use std::path::{Path, PathBuf};
@@ -218,7 +218,7 @@ fn render_image(
         Err(e) => {
             ctx.diagnostics.push(
                 DiagnosticMessageBuilder::warning("Plot document not found")
-                    .with_code("Q-18-1")
+                    .with_code("Q-19-1")
                     .with_location(origin(img))
                     .problem(format!(
                         "Cannot read the plot document `{}` (resolved to `{}`): {}",
@@ -240,7 +240,7 @@ fn render_image(
         Err(e) => {
             ctx.diagnostics.push(
                 DiagnosticMessageBuilder::warning("Invalid plot document")
-                    .with_code("Q-18-2")
+                    .with_code("Q-19-2")
                     .with_location(origin(img))
                     .problem(format!(
                         "`{}` is not a plot document this version of Quarto can read: {}",
@@ -274,7 +274,7 @@ fn render_image(
         let list: Vec<String> = scene.warnings().iter().map(|w| format!("{w:?}")).collect();
         ctx.diagnostics.push(
             DiagnosticMessageBuilder::warning("Plot rendered with warnings")
-                .with_code("Q-18-3")
+                .with_code("Q-19-3")
                 .with_location(origin(img))
                 .problem(format!(
                     "`{}` uses features the SVG output cannot express exactly: {}",
@@ -339,7 +339,7 @@ const BRAND_SLOTS: [(&str, &str); 3] = [
 /// Resolve the document's (light) brand, if any, into palette anchors.
 /// Brand *loading* problems are not reported here — the theme stage
 /// already reports them — but a color that cannot become an anchor is
-/// (`Q-18-4`, once).
+/// (`Q-19-4`, once).
 fn brand_palette(
     meta: &ConfigValue,
     runtime: &dyn SystemRuntime,
@@ -374,7 +374,7 @@ fn brand_palette(
     if !rejected.is_empty() {
         ctx.diagnostics.push(
             DiagnosticMessageBuilder::warning("Brand color not applied to plot")
-                .with_code("Q-18-4")
+                .with_code("Q-19-4")
                 .problem(format!(
                     "Only hex colors can recolor a plot document; the plot keeps its own color for {}",
                     rejected.join(", ")

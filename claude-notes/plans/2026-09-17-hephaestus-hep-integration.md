@@ -1,7 +1,7 @@
 # Hephaestus (`.hep` plot document) support in Quarto 2
 
 **Strand:** bd-3qych45b
-**Status:** phase 1 implemented (branch `braid/bd-3qych45b-hephaestus-hep-svg`); phases 2–5 filed as child strands
+**Status:** phases 1–2 implemented (branch `feature/bd-3qych45b-hephaestus-hep-svg`, PR #688); phases 3–5 filed as child strands. The `image` error subsystem is **`Q-19-*`** (it was `Q-18-*` until the 2026-09-19 merge of main, where `engine` had taken 18).
 **Date:** 2026-09-17
 
 ## Overview
@@ -271,7 +271,7 @@ All five recommendations below were accepted as written:
 
 1. SVG first; PNG only as a later opt-in via a CPU route (bd-br9bmysi).
 2. Bundle the four Roboto faces; `resources/hephaestus/fonts/`.
-3. New `image` diagnostics subsystem, codes `Q-18-*`.
+3. New `image` diagnostics subsystem, codes `Q-19-*`.
 4. Light/dark deferred to a follow-up (bd-myfwwmki), blocked on a Q2
    light/dark image-pair convention (bd-74sxnthr).
 5. Brand fonts (bd-l6e3sd45): measure with the bundled fallback, name the
@@ -295,9 +295,9 @@ Child strands: bd-sxiv2tio (phase 2, preview client), bd-l6e3sd45
 - **First `.hep` render pays ~2 s once per process** for font-context
   initialization (system font enumeration). Documents without `.hep`
   images never pay it; the registration is lazy.
-- **A missing `.hep` warns twice** — `Q-18-1` (plot not rendered) and
+- **A missing `.hep` warns twice** — `Q-19-1` (plot not rendered) and
   the resource collector's `Q-5-6` (file not copied), like any missing
-  image. Deliberate; documented on the `Q-18-1` page.
+  image. Deliberate; documented on the `Q-19-1` page.
 - The SVG root carries `font-family="sans-serif"`: the reader's browser
   resolves the generic, and hephaestus's `textLength` keeps every run at
   the width measured with Roboto. Phase 3 revisits the family name.
@@ -305,7 +305,7 @@ Child strands: bd-sxiv2tio (phase 2, preview client), bd-l6e3sd45
   the light brand's `background` / `foreground` / `primary` become the
   plot palette's `paper` / `ink` / `accent` (`BrandPalette` in the
   transform). Only hex values cross; anything else warns once per
-  document (`Q-18-4`). The palette is part of the artifact hash. Phase 3
+  document (`Q-19-4`). The palette is part of the artifact hash. Phase 3
   (bd-l6e3sd45) stays typography-only. Example:
   `examples/plots/01-hephaestus-basic/brand.yml`.
 
@@ -395,7 +395,7 @@ pages.
 - [x] `transforms/hephaestus.rs`: the transform per option A (plus a shared `transforms/image_walk.rs` walker, extracted from `responsive_image`); register in
       `build_transform_pipeline` after `resource-collector`; add to
       `Q2_PREVIEW_TRANSFORM_EXCLUDED`; phase-ordering test stays green.
-- [x] Error codes `Q-18-1`..`Q-18-3` in `quarto-error-catalog` + `docs/errors/<subsystem>/`
+- [x] Error codes `Q-19-1`..`Q-19-3` in `quarto-error-catalog` + `docs/errors/<subsystem>/`
       pages + sidebar entries (decision 4).
 - [x] End-to-end (2026-09-17): a scratch `doc.qmd` with
       `![Sine and scatter](figs/plot.hep){#fig-sine}` and
@@ -476,7 +476,7 @@ this phase; the third is bd-9t5nmq81.
   back to the raw URL on a miss (its broken image is the signal). For a
   `.hep` that fallback fetches HTML and reports "bad magic", so `HepImage`
   shows "file not found in the project" without fetching — the preview's
-  analogue of `Q-18-1`.
+  analogue of `Q-19-1`.
 
 - [x] Rust version-parity test: `hephaestus` in `Cargo.lock` ==
       `hephaestus-svg-wasm` in `ts-packages/preview-renderer/package.json`

@@ -187,7 +187,7 @@ describe('HepImage', () => {
         // project VFS. The plain <img> falls back to the raw URL (a broken
         // image is its signal); here that would fetch the preview host's
         // HTML fallback and report "bad magic" for a file that simply is
-        // not there, so say so instead — the preview's analogue of Q-18-1.
+        // not there, so say so instead — the preview's analogue of Q-19-1.
         const loader = installFakeClient();
         const { container } = renderNode(image('figs/does-not-exist.hep'), {});
         await waitFor(() => {

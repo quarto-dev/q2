@@ -1,7 +1,7 @@
 ---
 title: "Invalid Plot Document"
 description: "The file an image refers to is not a hephaestus plot document this version of Quarto can read."
-code: Q-18-2
+code: Q-19-2
 subsystem: image
 status: stub
 since: "99.9.9"
@@ -9,7 +9,7 @@ categories:
   - image
 ---
 
-# `Q-18-2` — Invalid Plot Document
+# `Q-19-2` — Invalid Plot Document
 
 > The file an image refers to is not a hephaestus plot document this version of Quarto can read.
 

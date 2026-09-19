@@ -784,16 +784,14 @@ end
                 assert_eq!(s.text, "created-by-filter");
                 // Check that the source_info is Generated { by: filter, .. }
                 match &s.source_info {
-                    quarto_source_map::SourceInfo::Generated { by, from }
-                        if by.is_kind("filter") =>
-                    {
+                    quarto_source_map::SourceInfo::Generated(g) if g.by.is_kind("filter") => {
                         assert!(
-                            from.is_empty(),
+                            g.from.is_empty(),
                             "Filter-constructed Generated nodes carry no anchors yet"
                         );
-                        let (path, line) = by
-                            .as_filter()
-                            .expect("filter-kind Generated should expose path/line");
+                        let (path, line) =
+                            g.by.as_filter()
+                                .expect("filter-kind Generated should expose path/line");
                         // The filter_path should contain our filter file name
                         assert!(
                             path.contains("provenance_test.lua"),
@@ -1810,8 +1808,8 @@ end
     );
 
     // Check source location
-    if let Some(quarto_source_map::SourceInfo::Generated { by, .. }) = &diagnostics[0].location
-        && let Some((filter_path, line)) = by.as_filter()
+    if let Some(quarto_source_map::SourceInfo::Generated(g)) = &diagnostics[0].location
+        && let Some((filter_path, line)) = g.by.as_filter()
     {
         assert!(filter_path.contains("warn_test.lua"));
         assert!(line > 0, "Line should be positive");

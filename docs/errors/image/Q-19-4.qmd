@@ -1,7 +1,7 @@
 ---
 title: "Brand Color Not Applied To Plot"
 description: "A brand color meant to recolor a hephaestus plot is not a hex color, so the plot keeps its own color for that slot."
-code: Q-18-4
+code: Q-19-4
 subsystem: image
 status: stub
 since: "99.9.9"
@@ -9,7 +9,7 @@ categories:
   - image
 ---
 
-# `Q-18-4` — Brand Color Not Applied To Plot
+# `Q-19-4` — Brand Color Not Applied To Plot
 
 > A brand color meant to recolor a hephaestus plot is not a hex color,
 > so the plot keeps its own color for that slot.

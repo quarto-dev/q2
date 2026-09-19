@@ -102,6 +102,7 @@ export { MemoryStorageAdapter } from './storage-adapter.js';
 export {
   getSyncActivity,
   getDocSyncActivity,
+  getDocSyncActivityWithPersisted,
   getDocRemoteChange,
   getConnectionLog,
 } from './sync-activity.js';

@@ -19,5 +19,6 @@ pub mod traversals;
 // Re-export commonly used items at crate root
 pub use traversals::{
     bottomup_traverse_concrete_tree, bottomup_traverse_concrete_tree_no_context,
-    topdown_traverse_concrete_tree, BottomUpTraversePhase, TraversePhase,
+    bottomup_traverse_concrete_tree_with_depth_limit, topdown_traverse_concrete_tree,
+    BottomUpTraversePhase, DepthLimitExceeded, TraversePhase,
 };

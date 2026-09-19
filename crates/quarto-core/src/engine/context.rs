@@ -368,6 +368,17 @@ pub struct ExecuteResult {
     /// pre-date this field to deserialize successfully.
     #[serde(default)]
     pub preserve: HashMap<String, String>,
+
+    /// Warnings the engine raised without failing — e.g. knitr's `Q-18-2`
+    /// for an include file it named but Quarto could not read.
+    /// `EngineExecutionStage` drains these into the stage's diagnostics so
+    /// they are counted, printed, and promotable by `--strict`
+    /// (bd-gy2ozix3).
+    ///
+    /// `#[serde(default)]` keeps stored engine-capture fixtures that
+    /// pre-date this field deserializable.
+    #[serde(default)]
+    pub warnings: Vec<quarto_error_reporting::DiagnosticMessage>,
 }
 
 impl ExecuteResult {

@@ -107,7 +107,7 @@ mod tests {
             panic!("expected a paragraph, got {:?}", pandoc.blocks[0]);
         };
         assert!(
-            matches!(p.source_info, SourceInfo::Generated { .. }),
+            matches!(p.source_info, SourceInfo::Generated(_)),
             "block source_info should be Generated, got {:?}",
             p.source_info,
         );
@@ -120,7 +120,7 @@ mod tests {
         );
         for inline in &p.content {
             assert!(
-                matches!(inline.source_info(), SourceInfo::Generated { .. }),
+                matches!(inline.source_info(), SourceInfo::Generated(_)),
                 "inline source_info should be Generated, got {:?}",
                 inline.source_info(),
             );

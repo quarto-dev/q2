@@ -72,6 +72,7 @@ function mount(blocks: any[], registryOverride?: FormatRegistry) {
 
 const STR = (c: string) => ({ t: 'Str', c });
 const PARA = (...inlines: any[]) => ({ t: 'Para', c: inlines });
+const PLAIN = (...inlines: any[]) => ({ t: 'Plain', c: inlines });
 
 // Test fixtures —————————————————————————————————————————————————————————
 
@@ -629,6 +630,24 @@ describe('FloatRefTarget', () => {
         expect(div).not.toBeNull();
         // Caption is appended (not wrapped in figcaption).
         expect(div!.textContent).toContain('Table 1: tcap');
+    });
+
+    it('prefixes a Plain-first caption_long (bd-n3sark9b)', () => {
+        // `![cap](img){#fig-x}` and Table captions arrive as Plain, not
+        // Para. The prefix must land in either; it used to be skipped.
+        const { container } = mount([
+            floatRefAst({
+                refType: 'fig',
+                kind: 'Figure',
+                identifier: 'fig-plain',
+                order: 3,
+                content: [PARA(STR('image-placeholder'))],
+                captionLong: [PLAIN(STR('plain cap'))],
+            }),
+        ]);
+        const figcap = container.querySelector('figcaption');
+        expect(figcap).not.toBeNull();
+        expect(figcap!.textContent).toBe('Figure 3: plain cap');
     });
 
     it('uses ASCII space (NOT NBSP) between kind and number in the caption prefix', () => {
