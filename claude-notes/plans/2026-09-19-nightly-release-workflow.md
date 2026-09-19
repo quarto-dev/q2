@@ -2,7 +2,9 @@
 
 **Date:** 2026-09-19
 **Braid:** bd-p4ljdp2e (feature, P2, labels release/ci)
-**Status:** PR #697 open against `main` (2026-09-19). Post-merge items remain in Phase 3/4.
+**Status:** Done. PR #697 merged 2026-09-19; first nightly published the
+same day (run 35465215381, all gates + install smoke green). One
+observation outstanding: the 2026-09-20 scheduled run should skip.
 **Review log:** 2026-09-19 Carlos accepted Decision 1 (prerelease channel)
 and added two requirements: (i) installing a nightly must be as easy as
 installing a release, so the README gets a nightly one-liner and the
@@ -482,8 +484,25 @@ release's caches warm.
 - [x] `run-name` distinguishes scheduled / manual / forced / dry-run
       (`run-name` cannot see job outputs, so the version and SHA go to the
       job summary and the gate job's name instead of the run title).
-- [ ] First real run via `workflow_dispatch force=true publish=true`, then
-      the next scheduled run must **skip** (same SHA). Record both run ids.
+- [x] Post-merge nightly **dry run**: run 35461772435 (`main` @ `6b7be8f0`,
+      `force=false publish=false` — the gate's real `unreleased` path).
+      Every job green; `install-smoke` skipped as designed. `release-set`
+      inspected: 17 nightly-named assets, darwin_arm64 binary prints
+      `q2 (quarto 2) 0.33.0-nightly.20260919`, renders
+      `generator" content="quarto-rust-0.33.0-nightly.20260919"`, docs
+      embed real at `6b7be8f0`; notes use the nightly template with
+      `## Changes (v0.32.0 → 6b7be8f07fbf)`. The web-payloads log shows
+      `building the docs-render q2 as 0.33.0-nightly.20260919`.
+- [x] First real run (`force=false publish=true`): **run 35465215381**
+      (2026-09-19). Every job green, including all three `install-smoke`
+      legs (ubuntu, macos-15, windows-latest — the Windows leg was the
+      first ever execution of `install.ps1 -Nightly`). Published:
+      `q2 nightly 0.33.0-nightly.20260919 (6b7be8f0)`, prerelease, 18
+      assets, `nightly` tag at `6b7be8f0` == `origin/main`;
+      `releases/latest` still `v0.32.0`.
+- [ ] Next scheduled run (2026-09-20 08:00 UTC) must **skip**. Local
+      preview on `main` with the tag fetched already reports
+      `build=false reason=nightly-current`; confirm from the Actions run.
       **Branch-side dry run is not possible:** `gh workflow run
       nightly.yml --ref <branch>` returns `HTTP 404: workflow nightly.yml
       not found on the default branch` — GitHub registers a
@@ -496,16 +515,20 @@ release's caches warm.
 
 ### Phase 4 — Verification and docs
 
-- [ ] End-to-end (CLAUDE.md rule), by hand on this machine in addition to
-      the `install-smoke` job: run the README nightly one-liner into a temp
-      dest, then `q2 --version` (expect `0.33.0-nightly.<date>`), `q2 mcp
-      --launcher-info` (bundled ×3), `q2 docs llms --embed-info` (`source:
-      real`, commit = the gate SHA), render a fixture, check `<meta
-      name="generator">` carries the nightly version. Then run the *stable*
-      one-liner into another dest and confirm it still installs `v0.32.0`
-      (`releases/latest` ignores prereleases). Run the two ignored
-      network tests in `bootstrap_sh.rs`. Record invocations and output
-      here.
+- [x] End-to-end (CLAUDE.md rule), by hand on this machine (2026-09-19,
+      output inspected), in addition to the `install-smoke` job:
+      ```
+      $ curl -fsSL https://raw.githubusercontent.com/quarto-dev/q2/main/install.sh | bash -s -- --nightly --dest /tmp/q2-nightly-verify/bin
+      ✓ done: q2 (quarto 2) 0.33.0-nightly.20260919
+      $ /tmp/q2-nightly-verify/bin/q2 mcp --launcher-info | grep -c '^default .*: bundled'
+      3
+      $ curl -fsSL https://raw.githubusercontent.com/quarto-dev/q2/main/install.sh | bash -s -- --dest /tmp/q2-stable-verify/bin
+      ✓ done: q2 (quarto 2) 0.32.0
+      $ cargo nextest run -p quarto --test integration -E 'test(resolves_latest_version_from_github) | test(resolves_nightly_from_github)' --run-ignored ignored-only
+      2 tests run: 2 passed
+      ```
+      Render + `generator` tag + docs-embed commit were checked on the
+      dry-run artifact of the same commit (Phase 3 above).
 - [x] README "Installing": the nightly one-liners under the stable ones
       (Decision 6 wording), with a short paragraph on what a nightly is
       and that it is signed with the same key.
@@ -519,8 +542,10 @@ release's caches warm.
       verify/CI drift paragraph that `nightly.yml` and the release
       pipeline are deliberately outside `verify`'s mirror (they publish,
       they do not gate).
-- [ ] Close-out: comment on the strand with run ids and the first nightly
-      URL.
+- [x] Close-out: strand commented and closed with run ids and the first
+      nightly URL (https://github.com/quarto-dev/q2/releases/tag/nightly).
+      Runs: 35456861792 (release dry run, branch), 35461772435 (nightly
+      dry run, main), 35465215381 (first nightly, main).
 
 ## Follow-ups (file as strands, not in scope)
 
