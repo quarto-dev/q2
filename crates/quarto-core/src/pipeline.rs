@@ -58,6 +58,8 @@ use crate::stage::stages::ApplyTemplateConfig;
 use crate::stage::stages::BootstrapJsStage;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::stage::stages::ClipboardJsStage;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::stage::stages::PandocWriteStage;
 use crate::stage::{
     ApplyTemplateStage, AstTransformsStage, AttributionGenerateStage, CompileThemeCssStage,
     DocumentProfileStage, EngineExecutionStage, IncludeExpansionStage, IncludeResolveStage,
@@ -371,6 +373,37 @@ pub fn build_html_pipeline_stages_with_options(
     stages
 }
 
+/// Render QMD content through the Pandoc-hybrid leg (docx/pptx today).
+///
+/// Sibling of [`render_qmd_to_html`], using [`build_pandoc_pipeline_stages`]
+/// instead of the HTML stage list. The pandoc subprocess writes the output
+/// file directly; the returned [`RenderedOutput::content`] is always empty
+/// (Finding 3's explicit decision — no binary bytes travel through
+/// `PipelineData`).
+///
+/// Native-only: the Pandoc-hybrid leg shells out to a real `pandoc`
+/// binary, which has no WASM equivalent.
+///
+/// # Errors
+///
+/// Returns an error if parsing, transforms, or the `pandoc` subprocess
+/// fail.
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn render_qmd_to_pandoc(
+    content: &[u8],
+    source_name: &str,
+    ctx: &mut RenderContext<'_>,
+    runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
+) -> Result<crate::stage::RenderedOutput> {
+    let stages = build_pandoc_pipeline_stages();
+    let (output, _diagnostics) = run_pipeline(content, source_name, ctx, runtime, stages).await?;
+    output.into_rendered_output().ok_or_else(|| {
+        crate::error::QuartoError::Other(
+            "Pandoc pipeline did not produce RenderedOutput".to_string(),
+        )
+    })
+}
+
 /// Names of stages in [`build_html_pipeline_stages_with_options`]
 /// that the q2-preview pipeline drops. All three turn the AST into
 /// an HTML string (or wrap one); q2-preview returns the AST itself
@@ -465,14 +498,21 @@ const PANDOC_STAGE_EXCLUDED: &[&str] = &[
 
 /// Build the stage list for a `PipelineProfile::Pandoc(_)` render (docx,
 /// pptx, …): [`build_html_pipeline_stages_with_options`] with the names in
-/// [`PANDOC_STAGE_EXCLUDED`] removed. Order is preserved.
+/// [`PANDOC_STAGE_EXCLUDED`] removed, plus [`PandocWriteStage`] appended as
+/// the tail (P4 Task 9) — the stage that serializes the wire-format AST and
+/// shells out to a real `pandoc` subprocess. Order is preserved for the
+/// retained prefix.
 ///
-/// P4 (which introduces `PandocWriteStage`) is expected to extend this
-/// builder rather than duplicate the `retain` — see the joint-ownership
-/// note on [`PANDOC_STAGE_EXCLUDED`].
+/// The AST-transform exclude-list *within* `AstTransformsStage` (which
+/// individual transforms should not run for a `Pandoc(fmt)` profile) is a
+/// separate mechanism from this stage-level list and is `seam deferred
+/// until P1's PipelineProfile work` — this function owns only which
+/// **stages** run.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn build_pandoc_pipeline_stages() -> Vec<Box<dyn PipelineStage>> {
     let mut stages = build_html_pipeline_stages_with_options(None);
     stages.retain(|s| !PANDOC_STAGE_EXCLUDED.contains(&s.name()));
+    stages.push(Box::new(PandocWriteStage::new()));
     stages
 }
 
@@ -5070,6 +5110,7 @@ mod tests {
                 "ast-transforms",
                 "user-filters-post",
                 "resource-report",
+                "pandoc-write",
             ]
         );
 

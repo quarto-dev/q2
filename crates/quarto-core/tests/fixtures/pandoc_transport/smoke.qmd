@@ -1,0 +1,20 @@
+<!-- P4 CONSTRAINT: this fixture must not contain any construct that Q2's
+     sugar transforms turn into a wire-format CustomNode (a callout, a
+     tabset, a theorem/proof, or a FloatRefTarget-eligible figure with an
+     id). With only the placeholder shim in place (Task 8), a CustomNode
+     reaching main.lua keeps its original semantic classes, and Q1's
+     class-keyed dispatcher in quarto_normalize_filters fires on it,
+     mis-rendering (not crashing) the document. A heading, prose, and a
+     plain code block are safe. P5 is free to enrich this fixture once its
+     shim exists — see Task 11 of
+     claude-notes/plans/2026-09-18-pandoc-hybrid-P4-implementation.md. -->
+
+# Transport smoke
+
+This document exercises the Pandoc-hybrid transport end to end: a
+heading, a paragraph, and a plain code block, with nothing that becomes a
+wire-format custom node.
+
+```python
+print("hello")
+```

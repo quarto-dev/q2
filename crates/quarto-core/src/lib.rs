@@ -57,6 +57,7 @@ pub mod glob;
 pub mod language;
 pub mod metadata;
 pub mod output_sink;
+pub mod pandoc_filters;
 pub mod pipeline;
 pub mod project;
 pub mod project_resources;

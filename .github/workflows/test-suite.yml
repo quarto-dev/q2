@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PANDOC_VERSION: "3.8.3"
+  PANDOC_VERSION: "3.10"
   # Deno version provisioned for the QUARTO_CI assertion test in ts_process.rs.
   # Must provide `Deno.Command`/`Deno.stdin.isTerminal()` (available since Deno 1.40+).
   DENO_VERSION: "2.9.0"

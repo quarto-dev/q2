@@ -165,6 +165,16 @@ impl RefTypeRegistry {
         self.entries.get(ref_type)
     }
 
+    /// Iterate over every registered ref-type's `(prefix, def)` pair, in
+    /// unspecified order. Added for the pandoc-hybrid epic's
+    /// `crossref-<type>-title`/`-prefix` param family (P4 Task 5), which
+    /// must generalize to every registered type, not a hardcoded builtin
+    /// list — see `claude-notes/plans/2026-09-18-pandoc-hybrid-P4-implementation.md`
+    /// Findings for Gordon, item 7.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &RefTypeDef)> {
+        self.entries.iter().map(|(k, v)| (k.as_str(), v))
+    }
+
     /// Classify an identifier (Cite id, element id, ...). Returns `Some` if
     /// the id has the shape `"<prefix>-<rest>"` and `<prefix>` is registered.
     ///
