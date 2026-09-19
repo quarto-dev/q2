@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-19
 **Braid:** bd-p4ljdp2e (feature, P2, labels release/ci)
-**Status:** Approved 2026-09-19 (seam kept, analysis kept). Executing on branch `braid/bd-p4ljdp2e-nightly-release-workflow-build`.
+**Status:** PR #697 open against `main` (2026-09-19). Post-merge items remain in Phase 3/4.
 **Review log:** 2026-09-19 Carlos accepted Decision 1 (prerelease channel)
 and added two requirements: (i) installing a nightly must be as easy as
 installing a release, so the README gets a nightly one-liner and the
