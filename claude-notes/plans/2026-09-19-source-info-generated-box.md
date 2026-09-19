@@ -215,7 +215,7 @@ site.
       `assert!(size_of::<Inline>() <= 400)` and
       `assert!(size_of::<Block>() <= 900)`, so the next fat field is
       caught in review.
-- [x] `cargo nextest run --workspace` (13,997 pass, 0 snapshot changes); full `cargo xtask verify` in progress
+- [x] `cargo nextest run --workspace` (13,997 pass, 0 snapshot changes); full `cargo xtask verify` green with both workspaces patched, and again against the released crates
       (pampa feeds the WASM leg). The JSON snapshot suites are the
       wire-compatibility check on the pampa side — **no `.snap` file
       should change**; if one does, the serialization shape moved.
@@ -228,12 +228,13 @@ site.
 
 ### Phase 3 — releases and cutover
 
-- [ ] `quarto-source-map` 0.2.0 published.
-- [ ] `quarto-error-reporting` dep bump → 0.2.3 published.
-- [ ] `quarto-yaml` dep bump → 0.1.4 published.
-- [ ] q2: bump all three in `Cargo.toml`, `cargo update -p` each,
-      confirm `cargo tree -d` shows a single `quarto-source-map`, commit
-      the migration, PR.
+- [x] `quarto-source-map` 0.2.0 published (2026-09-19).
+- [x] `quarto-error-reporting` dep bump → published as **0.3.0** (not 0.2.3).
+- [x] `quarto-yaml` dep bump → published as **0.2.0** (not 0.1.4).
+- [x] q2: bumped all three in the root `Cargo.toml` and in
+      `crates/wasm-quarto-hub-client/Cargo.toml`, `cargo update -p` in
+      both workspaces, `cargo tree -d` shows a single copy of each.
+      Folded into PR #698 (bd-w0x91nmh) rather than a separate PR.
 
 ## Notes for the implementing agent
 
