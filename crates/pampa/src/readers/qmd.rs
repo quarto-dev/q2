@@ -20,9 +20,19 @@ use std::io::Write;
 use tree_sitter::LogType;
 use tree_sitter_qmd::MarkdownParser;
 
-fn print_whole_tree<T: Write>(cursor: &mut tree_sitter_qmd::MarkdownCursor, buf: &mut T) {
+/// Write the tree-sitter concrete syntax tree of `input_bytes` to `buf`: one
+/// line per node, indented two spaces per level.
+///
+/// This is a debugging aid (`pampa -v`), so it parses the input itself rather
+/// than being part of [`read`]: every node is visited and formatted, which is
+/// far too expensive to do on each parse only to discard the text
+/// (bd-khect2gq).
+pub fn dump_concrete_tree<T: Write>(input_bytes: &[u8], buf: &mut T) {
+    let tree = MarkdownParser::default()
+        .parse(input_bytes, None)
+        .expect("Failed to parse input");
     let mut depth = 0;
-    traversals::topdown_traverse_concrete_tree(cursor, &mut |node, phase| {
+    traversals::topdown_traverse_concrete_tree(&mut tree.walk(), &mut |node, phase| {
         if phase == traversals::TraversePhase::Enter {
             writeln!(buf, "{}{}: {:?}", "  ".repeat(depth), node.kind(), node).unwrap();
             depth += 1;
@@ -155,22 +165,13 @@ pub fn read<T: Write>(
         }
     }
 
-    let depth = crate::utils::concrete_tree_depth::concrete_tree_depth(&tree);
-    // this is here mostly to prevent our fuzzer from blowing the stack
-    // with a deeply nested document
-    if depth > 100 {
-        let diagnostic = quarto_error_reporting::generic_error!(format!(
-            "The input document is too deeply nested (max depth: {} > 100).",
-            depth
-        ));
-        return Err(vec![diagnostic]);
-    }
+    // Documents nested too deeply to process safely are rejected by
+    // `treesitter_to_pandoc` (see `MAX_CONCRETE_TREE_DEPTH`).
 
     // Note: We no longer need to check parse_is_good(&tree) here because
     // the log_observer.had_errors() check above already catches parse errors
     // and produces better formatted diagnostics via produce_diagnostic_messages.
     // The old parse_is_good check was causing duplicate error messages.
-    print_whole_tree(&mut tree.walk(), &mut output_stream);
 
     // Create diagnostic collector and convert to Pandoc AST
     let mut error_collector = DiagnosticCollector::new();

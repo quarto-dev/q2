@@ -5512,6 +5512,7 @@ name = "quarto-treesitter-ast"
 version = "0.1.0"
 dependencies = [
  "tree-sitter",
+ "tree-sitter-qmd",
 ]
 
 [[package]]
