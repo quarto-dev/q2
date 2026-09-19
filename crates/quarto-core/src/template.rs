@@ -932,7 +932,7 @@ pub fn render_with_compiled_template(
     // and unused variables are harmlessly ignored.
     ctx.insert(
         "version",
-        TemplateValue::String(env!("CARGO_PKG_VERSION").to_string()),
+        TemplateValue::String(quarto_util::cli_version().to_string()),
     );
     if ctx.get("page-layout").is_none() {
         ctx.insert("page-layout", TemplateValue::String("article".to_string()));
