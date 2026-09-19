@@ -179,33 +179,33 @@ define_filter_with_methods!(
 // Macro to generate repetitive match arms
 // Macro to reduce repetition in filter logic
 macro_rules! handle_inline_filter {
-    ($variant:ident, $value:ident, $filter_field:ident, $filter:expr, $ctx:expr) => {
+    ($variant:ident, $value:ident, $filter_field:ident, $filter:expr, $ctx:expr, $out:expr) => {
         if let Some(f) = &mut $filter.$filter_field {
-            return inlines_apply_and_maybe_recurse!($value, f, $filter, $ctx);
+            inlines_apply_and_maybe_recurse!($value, f, $filter, $ctx, $out)
         } else if let Some(f) = &mut $filter.inline {
-            return inlines_apply_and_maybe_recurse!($value.as_inline(), f, $filter, $ctx);
+            inlines_apply_and_maybe_recurse!($value.as_inline(), f, $filter, $ctx, $out)
         } else {
-            vec![traverse_inline_structure(
+            $out.push(traverse_inline_structure(
                 Inline::$variant($value),
                 $filter,
                 $ctx,
-            )]
+            ))
         }
     };
 }
 
 macro_rules! handle_block_filter {
-    ($variant:ident, $value:ident, $filter_field:ident, $filter:expr, $ctx:expr) => {
+    ($variant:ident, $value:ident, $filter_field:ident, $filter:expr, $ctx:expr, $out:expr) => {
         if let Some(f) = &mut $filter.$filter_field {
-            return blocks_apply_and_maybe_recurse!($value, f, $filter, $ctx);
+            blocks_apply_and_maybe_recurse!($value, f, $filter, $ctx, $out)
         } else if let Some(f) = &mut $filter.block {
-            return blocks_apply_and_maybe_recurse!(Block::$variant($value), f, $filter, $ctx);
+            blocks_apply_and_maybe_recurse!(Block::$variant($value), f, $filter, $ctx, $out)
         } else {
-            vec![traverse_block_structure(
+            $out.push(traverse_block_structure(
                 Block::$variant($value),
                 $filter,
                 $ctx,
-            )]
+            ))
         }
     };
 }
@@ -497,14 +497,14 @@ impl BlockFilterableStructure for Block {
 }
 
 macro_rules! inlines_apply_and_maybe_recurse {
-    ($item:expr, $filter_fn:expr, $filter:expr, $ctx:expr) => {
+    ($item:expr, $filter_fn:expr, $filter:expr, $ctx:expr, $out:expr) => {
         match $filter_fn($item, $ctx) {
-            FilterReturn::Unchanged(inline) => vec![inline.filter_structure($filter, $ctx)],
+            FilterReturn::Unchanged(inline) => $out.push(inline.filter_structure($filter, $ctx)),
             FilterReturn::FilterResult(new_content, recurse) => {
                 if !recurse {
-                    new_content
+                    $out.extend(new_content)
                 } else {
-                    topdown_traverse_inlines(new_content, $filter, $ctx)
+                    $out.extend(topdown_traverse_inlines(new_content, $filter, $ctx))
                 }
             }
         }
@@ -512,14 +512,14 @@ macro_rules! inlines_apply_and_maybe_recurse {
 }
 
 macro_rules! blocks_apply_and_maybe_recurse {
-    ($item:expr, $filter_fn:expr, $filter:expr, $ctx:expr) => {
+    ($item:expr, $filter_fn:expr, $filter:expr, $ctx:expr, $out:expr) => {
         match $filter_fn($item, $ctx) {
-            FilterReturn::Unchanged(block) => vec![block.filter_structure($filter, $ctx)],
+            FilterReturn::Unchanged(block) => $out.push(block.filter_structure($filter, $ctx)),
             FilterReturn::FilterResult(new_content, recurse) => {
                 if !recurse {
-                    new_content
+                    $out.extend(new_content)
                 } else {
-                    topdown_traverse_blocks(new_content, $filter, $ctx)
+                    $out.extend(topdown_traverse_blocks(new_content, $filter, $ctx))
                 }
             }
         }
@@ -531,73 +531,93 @@ pub fn topdown_traverse_inline(
     filter: &mut Filter,
     ctx: &mut FilterContext,
 ) -> Inlines {
+    let mut out = Vec::with_capacity(1);
+    topdown_traverse_inline_into(inline, filter, ctx, &mut out);
+    out
+}
+
+/// Visit one inline and append its replacement(s) to `out`.
+///
+/// This is the worker behind [`topdown_traverse_inline`]. It appends
+/// rather than returning a `Vec` because the overwhelmingly common
+/// outcome is one node in, one node out — including every terminal
+/// `Str`/`Space` the filter never touches — and returning `vec![node]`
+/// per visit cost an allocation, a free, and an extra ~800-byte move for
+/// each of the ~200k inlines in a large document, per traversal pass
+/// (claude-notes/research/2026-09-19-topdown-traverse-alloc-perf.md).
+fn topdown_traverse_inline_into(
+    inline: Inline,
+    filter: &mut Filter,
+    ctx: &mut FilterContext,
+    out: &mut Inlines,
+) {
     match inline {
         Inline::Str(s) => {
-            handle_inline_filter!(Str, s, str, filter, ctx)
+            handle_inline_filter!(Str, s, str, filter, ctx, out)
         }
         Inline::Emph(e) => {
-            handle_inline_filter!(Emph, e, emph, filter, ctx)
+            handle_inline_filter!(Emph, e, emph, filter, ctx, out)
         }
         Inline::Underline(u) => {
-            handle_inline_filter!(Underline, u, underline, filter, ctx)
+            handle_inline_filter!(Underline, u, underline, filter, ctx, out)
         }
         Inline::Strong(sg) => {
-            handle_inline_filter!(Strong, sg, strong, filter, ctx)
+            handle_inline_filter!(Strong, sg, strong, filter, ctx, out)
         }
         Inline::Strikeout(st) => {
-            handle_inline_filter!(Strikeout, st, strikeout, filter, ctx)
+            handle_inline_filter!(Strikeout, st, strikeout, filter, ctx, out)
         }
         Inline::Superscript(sp) => {
-            handle_inline_filter!(Superscript, sp, superscript, filter, ctx)
+            handle_inline_filter!(Superscript, sp, superscript, filter, ctx, out)
         }
         Inline::Subscript(sb) => {
-            handle_inline_filter!(Subscript, sb, subscript, filter, ctx)
+            handle_inline_filter!(Subscript, sb, subscript, filter, ctx, out)
         }
         Inline::SmallCaps(sc) => {
-            handle_inline_filter!(SmallCaps, sc, small_caps, filter, ctx)
+            handle_inline_filter!(SmallCaps, sc, small_caps, filter, ctx, out)
         }
         Inline::Quoted(q) => {
-            handle_inline_filter!(Quoted, q, quoted, filter, ctx)
+            handle_inline_filter!(Quoted, q, quoted, filter, ctx, out)
         }
         Inline::Cite(c) => {
-            handle_inline_filter!(Cite, c, cite, filter, ctx)
+            handle_inline_filter!(Cite, c, cite, filter, ctx, out)
         }
         Inline::Code(co) => {
-            handle_inline_filter!(Code, co, code, filter, ctx)
+            handle_inline_filter!(Code, co, code, filter, ctx, out)
         }
         Inline::Space(sp) => {
-            handle_inline_filter!(Space, sp, space, filter, ctx)
+            handle_inline_filter!(Space, sp, space, filter, ctx, out)
         }
         Inline::SoftBreak(sb) => {
-            handle_inline_filter!(SoftBreak, sb, soft_break, filter, ctx)
+            handle_inline_filter!(SoftBreak, sb, soft_break, filter, ctx, out)
         }
         Inline::LineBreak(lb) => {
-            handle_inline_filter!(LineBreak, lb, line_break, filter, ctx)
+            handle_inline_filter!(LineBreak, lb, line_break, filter, ctx, out)
         }
         Inline::Math(m) => {
-            handle_inline_filter!(Math, m, math, filter, ctx)
+            handle_inline_filter!(Math, m, math, filter, ctx, out)
         }
         Inline::RawInline(ri) => {
-            handle_inline_filter!(RawInline, ri, raw_inline, filter, ctx)
+            handle_inline_filter!(RawInline, ri, raw_inline, filter, ctx, out)
         }
         Inline::Link(l) => {
-            handle_inline_filter!(Link, l, link, filter, ctx)
+            handle_inline_filter!(Link, l, link, filter, ctx, out)
         }
         Inline::Image(i) => {
-            handle_inline_filter!(Image, i, image, filter, ctx)
+            handle_inline_filter!(Image, i, image, filter, ctx, out)
         }
         Inline::Note(note) => {
-            handle_inline_filter!(Note, note, note, filter, ctx)
+            handle_inline_filter!(Note, note, note, filter, ctx, out)
         }
         Inline::Span(span) => {
-            handle_inline_filter!(Span, span, span, filter, ctx)
+            handle_inline_filter!(Span, span, span, filter, ctx, out)
         }
         // quarto extensions
         Inline::Shortcode(shortcode) => {
-            handle_inline_filter!(Shortcode, shortcode, shortcode, filter, ctx)
+            handle_inline_filter!(Shortcode, shortcode, shortcode, filter, ctx, out)
         }
         Inline::NoteReference(note_ref) => {
-            handle_inline_filter!(NoteReference, note_ref, note_reference, filter, ctx)
+            handle_inline_filter!(NoteReference, note_ref, note_reference, filter, ctx, out)
         }
         Inline::Attr(inline_attr) => {
             // Special handling for Attr — filters don't actually work on Attr values.
@@ -605,33 +625,33 @@ pub fn topdown_traverse_inline(
             if let Some(f) = &mut filter.inline {
                 let inline = Inline::Attr(inline_attr);
                 match f(inline.clone(), ctx) {
-                    FilterReturn::Unchanged(_) => vec![inline],
-                    FilterReturn::FilterResult(result, _should_recurse) => result,
+                    FilterReturn::Unchanged(_) => out.push(inline),
+                    FilterReturn::FilterResult(result, _should_recurse) => out.extend(result),
                 }
             } else {
-                vec![traverse_inline_structure(
+                out.push(traverse_inline_structure(
                     Inline::Attr(inline_attr),
                     filter,
                     ctx,
-                )]
+                ))
             }
         }
         Inline::Insert(ins) => {
-            handle_inline_filter!(Insert, ins, insert, filter, ctx)
+            handle_inline_filter!(Insert, ins, insert, filter, ctx, out)
         }
         Inline::Delete(del) => {
-            handle_inline_filter!(Delete, del, delete, filter, ctx)
+            handle_inline_filter!(Delete, del, delete, filter, ctx, out)
         }
         Inline::Highlight(hl) => {
-            handle_inline_filter!(Highlight, hl, highlight, filter, ctx)
+            handle_inline_filter!(Highlight, hl, highlight, filter, ctx, out)
         }
         Inline::EditComment(ec) => {
-            handle_inline_filter!(EditComment, ec, edit_comment, filter, ctx)
+            handle_inline_filter!(EditComment, ec, edit_comment, filter, ctx, out)
         }
         Inline::Custom(custom) => {
             // Custom nodes: recursively filter the content in slots, then pass through
             // For now, just pass through - Custom nodes shouldn't appear in Rust filter context yet
-            vec![Inline::Custom(custom)]
+            out.push(Inline::Custom(custom))
         }
     }
 }
@@ -641,96 +661,110 @@ pub fn topdown_traverse_block(
     filter: &mut Filter,
     ctx: &mut FilterContext,
 ) -> Blocks {
+    let mut out = Vec::with_capacity(1);
+    topdown_traverse_block_into(block, filter, ctx, &mut out);
+    out
+}
+
+/// Visit one block and append its replacement(s) to `out`.
+/// See [`topdown_traverse_inline_into`] for why this appends.
+fn topdown_traverse_block_into(
+    block: Block,
+    filter: &mut Filter,
+    ctx: &mut FilterContext,
+    out: &mut Blocks,
+) {
     match block {
         Block::Paragraph(para) => {
-            handle_block_filter!(Paragraph, para, paragraph, filter, ctx)
+            handle_block_filter!(Paragraph, para, paragraph, filter, ctx, out)
         }
         Block::CodeBlock(code) => {
-            handle_block_filter!(CodeBlock, code, code_block, filter, ctx)
+            handle_block_filter!(CodeBlock, code, code_block, filter, ctx, out)
         }
         Block::RawBlock(raw) => {
-            handle_block_filter!(RawBlock, raw, raw_block, filter, ctx)
+            handle_block_filter!(RawBlock, raw, raw_block, filter, ctx, out)
         }
         Block::BulletList(list) => {
-            handle_block_filter!(BulletList, list, bullet_list, filter, ctx)
+            handle_block_filter!(BulletList, list, bullet_list, filter, ctx, out)
         }
         Block::OrderedList(list) => {
-            handle_block_filter!(OrderedList, list, ordered_list, filter, ctx)
+            handle_block_filter!(OrderedList, list, ordered_list, filter, ctx, out)
         }
         Block::BlockQuote(quote) => {
-            handle_block_filter!(BlockQuote, quote, block_quote, filter, ctx)
+            handle_block_filter!(BlockQuote, quote, block_quote, filter, ctx, out)
         }
         Block::Div(div) => {
-            handle_block_filter!(Div, div, div, filter, ctx)
+            handle_block_filter!(Div, div, div, filter, ctx, out)
         }
         Block::Figure(figure) => {
-            handle_block_filter!(Figure, figure, figure, filter, ctx)
+            handle_block_filter!(Figure, figure, figure, filter, ctx, out)
         }
         Block::Plain(plain) => {
-            handle_block_filter!(Plain, plain, plain, filter, ctx)
+            handle_block_filter!(Plain, plain, plain, filter, ctx, out)
         }
         Block::LineBlock(line_block) => {
-            handle_block_filter!(LineBlock, line_block, line_block, filter, ctx)
+            handle_block_filter!(LineBlock, line_block, line_block, filter, ctx, out)
         }
         Block::DefinitionList(def_list) => {
-            handle_block_filter!(DefinitionList, def_list, definition_list, filter, ctx)
+            handle_block_filter!(DefinitionList, def_list, definition_list, filter, ctx, out)
         }
         Block::Header(header) => {
-            handle_block_filter!(Header, header, header, filter, ctx)
+            handle_block_filter!(Header, header, header, filter, ctx, out)
         }
         Block::Table(table) => {
-            handle_block_filter!(Table, table, table, filter, ctx)
+            handle_block_filter!(Table, table, table, filter, ctx, out)
         }
         Block::HorizontalRule(hr) => {
-            handle_block_filter!(HorizontalRule, hr, horizontal_rule, filter, ctx)
+            handle_block_filter!(HorizontalRule, hr, horizontal_rule, filter, ctx, out)
         }
         // quarto extensions
         Block::BlockMetadata(meta) => {
             if let Some(f) = &mut filter.meta {
-                return match f(meta.meta, ctx) {
-                    FilterReturn::Unchanged(m) => vec![Block::BlockMetadata(MetaBlock {
+                match f(meta.meta, ctx) {
+                    FilterReturn::Unchanged(m) => out.push(Block::BlockMetadata(MetaBlock {
                         meta: m,
                         source_info: meta.source_info,
-                    })],
+                    })),
                     FilterReturn::FilterResult(new_meta, recurse) => {
                         if !recurse {
-                            vec![Block::BlockMetadata(MetaBlock {
+                            out.push(Block::BlockMetadata(MetaBlock {
                                 meta: new_meta,
                                 source_info: meta.source_info,
-                            })]
+                            }))
                         } else {
                             let traversed = topdown_traverse_config_value(new_meta, filter, ctx);
-                            vec![Block::BlockMetadata(MetaBlock {
+                            out.push(Block::BlockMetadata(MetaBlock {
                                 meta: traversed,
                                 source_info: meta.source_info,
-                            })]
+                            }))
                         }
                     }
                 };
+                return;
             }
-            vec![Block::BlockMetadata(meta)]
+            out.push(Block::BlockMetadata(meta))
         }
         Block::NoteDefinitionPara(refdef) => {
             // Process the inline content of the reference definition
             let content = topdown_traverse_inlines(refdef.content, filter, ctx);
-            vec![Block::NoteDefinitionPara(
+            out.push(Block::NoteDefinitionPara(
                 crate::pandoc::block::NoteDefinitionPara {
                     id: refdef.id,
                     content,
                     source_info: refdef.source_info,
                 },
-            )]
+            ))
         }
         Block::NoteDefinitionFencedBlock(refdef) => {
             // Process the block content of the fenced reference definition
             let content = topdown_traverse_blocks(refdef.content, filter, ctx);
-            vec![Block::NoteDefinitionFencedBlock(
+            out.push(Block::NoteDefinitionFencedBlock(
                 crate::pandoc::block::NoteDefinitionFencedBlock {
                     id: refdef.id,
                     content,
                     source_info: refdef.source_info,
                 },
-            )]
+            ))
         }
         Block::CaptionBlock(_) => {
             // CaptionBlock should have been removed by postprocessing
@@ -741,7 +775,7 @@ pub fn topdown_traverse_block(
         Block::Custom(custom) => {
             // Custom nodes: recursively filter the content in slots, then pass through
             // For now, just pass through - Custom nodes shouldn't appear in Rust filter context yet
-            vec![Block::Custom(custom)]
+            out.push(Block::Custom(custom))
         }
     }
 }
@@ -752,9 +786,9 @@ pub fn topdown_traverse_inlines(
     ctx: &mut FilterContext,
 ) -> Inlines {
     fn walk_vec(vec: Inlines, filter: &mut Filter, ctx: &mut FilterContext) -> Inlines {
-        let mut result = vec![];
+        let mut result = Vec::with_capacity(vec.len());
         for inline in vec {
-            result.extend(topdown_traverse_inline(inline, filter, ctx));
+            topdown_traverse_inline_into(inline, filter, ctx, &mut result);
         }
         result
     }
@@ -1037,9 +1071,9 @@ pub fn topdown_traverse_blocks(
     ctx: &mut FilterContext,
 ) -> Blocks {
     fn walk_vec(vec: Blocks, filter: &mut Filter, ctx: &mut FilterContext) -> Blocks {
-        let mut result = vec![];
+        let mut result = Vec::with_capacity(vec.len());
         for block in vec {
-            result.extend(topdown_traverse_block(block, filter, ctx));
+            topdown_traverse_block_into(block, filter, ctx, &mut result);
         }
         result
     }

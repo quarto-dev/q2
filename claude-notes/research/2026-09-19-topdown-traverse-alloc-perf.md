@@ -1,10 +1,18 @@
 # Why `topdown_traverse_blocks::walk_vec` bottoms out in the allocator (and memmove)
 
-**Status:** fact-finding, no solution committed. Branch
-`perf/topdown-traverse-alloc` (off `main` @ `6b7be8f0`). The experimental
-code changes described below are left **uncommitted in the working tree**
-of that branch so they can be diffed and discarded or picked up
-individually; only this note is committed.
+**Status:** experiments B, D and E below are being landed as
+bd-w0x91nmh on branch `perf/topdown-traverse-alloc` (off `main` @
+`6b7be8f0`), with the counting allocator, per-pass counters, backtrace
+print and size/benchmark test stripped out and an allocation-budget
+regression test (`crates/pampa/tests/integration/topdown_traverse_alloc_budget.rs`)
+added in their place. The size-shrinking suggestions (3–5) are deferred.
+
+**Full-site result (2026-09-19, same machine):** warm, single core
+(`QUARTO_JOBS=1`), all 352 files of `docs-quarto-2`, hyperfine 3 runs
+back to back: baseline **5.657 s ± 0.022** → B+D+E **4.769 s ± 0.025**,
+i.e. −16% (user 4.85 s → 4.01 s). A separate earlier baseline run gave
+5.41 s ± 0.09, so the machine drifts by ~5% between sessions; the
+back-to-back pair is the number to trust.
 
 Related: bd-5yektmwt ("AST construction memmove is ~28% of non-SCSS
 render CPU"), `claude-notes/research/2026-09-13-connect-docs-render-profile.md`,
