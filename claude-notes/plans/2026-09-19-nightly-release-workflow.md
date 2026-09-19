@@ -426,11 +426,29 @@ release's caches warm.
       binary agree. Verify gate compares against `inputs.version`.
       Exported only when non-empty: an empty value trips the compile-time
       assertion (`option_env!` yields `Some("")`).
-- [ ] Dry-run on a branch: `workflow_dispatch` `release.yml` against the
-      existing `v0.32.0` tag with `publish: false` and confirm all legs
-      green and the artifact set matches the published v0.32.0 byte-for-byte
-      except for signatures (minisign signatures are randomized).
-      Record run id here.
+- [x] Dry-run on a branch: `workflow_dispatch` `release.yml` against the
+      existing `v0.32.0` tag with `publish: false`. **Run 35456861792**
+      (2026-09-19, from `feature/bd-p4ljdp2e-nightly-release-workflow`):
+      every job green — preflight, `check-inputs`, hub-mcp-bundle,
+      web-payloads, all 5 build legs (both Alpine gates included),
+      asset-manifest check, and the release job's dry-run branch. Verified
+      from the `release-set` artifact (output inspected):
+      - file set identical to the published v0.32.0 release (18 assets);
+      - `shasum -c checksums.sha256` OK for all 6 archives;
+      - every `.minisig` verifies with local minisign against the pubkey
+        pinned in `install.sh`;
+      - `gh release list` unchanged (v0.32.0 still Latest, published
+        2026-09-18T22:42:44Z); no tag touched;
+      - the darwin_arm64 binary, run natively: `q2 (quarto 2) 0.32.0`,
+        `default … : bundled` ×3, docs embed `source: real` at
+        `192a231d…` (`(dirty)`, same as the real v0.32.0 run —
+        bd-8e96g942).
+      Not byte-identical to the published archives, and that expectation
+      was wrong: the tar member mtime is the build time, and the binary
+      itself embeds build timestamps (MCP `build-info.json`, docs embed),
+      so the two binaries differ in hash at identical size (106907824 B).
+      Release notes differ in exactly one line — the Changes heading now
+      reads `## Changes (v0.31.0 → 192a231d8da2)`.
 
 ### Phase 3 — `nightly.yml`
 
@@ -466,6 +484,15 @@ release's caches warm.
       job summary and the gate job's name instead of the run title).
 - [ ] First real run via `workflow_dispatch force=true publish=true`, then
       the next scheduled run must **skip** (same SHA). Record both run ids.
+      **Branch-side dry run is not possible:** `gh workflow run
+      nightly.yml --ref <branch>` returns `HTTP 404: workflow nightly.yml
+      not found on the default branch` — GitHub registers a
+      `workflow_dispatch` workflow only once it exists on `main`. So the
+      nightly channel's first execution is after merge: run it first with
+      `force=true publish=false` (dry run of the override build, no tag
+      touched), then `force=true publish=true` for the first real nightly.
+      The release channel's dry run (below, Phase 2) does exercise the
+      shared pipeline from the branch.
 
 ### Phase 4 — Verification and docs
 
