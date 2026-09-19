@@ -78,10 +78,23 @@ pub struct Generated {
 }
 
 impl SourceInfo {
-    pub fn generated(by: By, from: impl Into<SmallVec<[Anchor; 2]>>) -> Self { .. }
-    pub fn as_generated(&self) -> Option<&Generated> { .. }
+    pub fn generated(by: By) -> Self;                                  // exists today; keep
+    pub fn generated_with(by: By, from: impl Into<SmallVec<[Anchor; 2]>>) -> Self; // new
+    pub fn as_generated(&self) -> Option<&Generated>;                  // new
+    pub fn as_generated_mut(&mut self) -> Option<&mut Generated>;      // new
 }
 ```
+
+**Crate-side plan of record:** the `quarto-source-map` repo has its own
+plan at `claude-notes/plans/2026-09-19-source-info-generated-box.md`
+(same date, same name), written by the agent working there. It agrees
+with this design and is more precise on the crate internals; where the
+two differ, **that file wins for the crate and this file wins for the q2
+migration**. The one correction it made to an earlier draft of this
+file: the existing one-argument `SourceInfo::generated(by)` must keep
+its signature — q2 has 228 call sites of it and only one hand-built
+`Generated { by, from }` with non-empty anchors — so anchors-at-
+construction gets a new `generated_with`, not a second argument.
 
 - **Wire shape is unchanged.** serde's externally tagged enum encoding
   of a newtype variant wrapping a struct is `{"Generated": {"by": …,
@@ -114,8 +127,11 @@ impl SourceInfo {
   semver; only take it with Carlos's explicit sign-off.
 
 In q2: 114 `Generated {` sites in 19 non-test files (52 constructions,
-42 patterns), plus test files. Constructions become
-`SourceInfo::generated(by, from)`; patterns become
+42 patterns), plus test files; the 228 existing `SourceInfo::generated(by)`
+calls need no change. Hand-built constructions become
+`SourceInfo::generated(by)` / `generated_with(by, from)`; the ~10 sites
+that mutate `from` in place use the crate's existing `append_anchor` or
+the new `as_generated_mut`; patterns become
 `SourceInfo::Generated(g)` with `g.by` / `g.from` (or
 `let Generated { by, from } = &**g;`). Heaviest files:
 `pampa/src/writers/json.rs` (21), `pampa/src/readers/json.rs` (18),
