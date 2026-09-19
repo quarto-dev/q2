@@ -51,7 +51,6 @@ use quarto_pandoc_types::inline::{Inline, Link, Span, Str, Superscript};
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_pandoc_types::{Blocks, Inlines, ListNumberDelim, ListNumberStyle};
 use quarto_source_map::{By, SourceInfo};
-use smallvec::smallvec;
 
 use quarto_pandoc_types::ConfigValue;
 
@@ -529,10 +528,7 @@ fn create_footnotes_section(footnotes: &[CollectedFootnote]) -> Block {
     // OrderedList wrapping the footnote items) is pure synthesis: it
     // corresponds to no source bytes. The footnote content inside (created
     // by `create_footnote_item`) retains the original Note's source_info.
-    let source_info = SourceInfo::Generated {
-        by: By::footnotes(),
-        from: smallvec![],
-    };
+    let source_info = SourceInfo::generated(By::footnotes());
 
     // Create list items for each footnote
     let list_items: Vec<Blocks> = footnotes.iter().map(create_footnote_item).collect();
@@ -1206,7 +1202,8 @@ mod tests {
             panic!("Expected Div");
         };
         match &div.source_info {
-            SourceInfo::Generated { by, from } => {
+            SourceInfo::Generated(g) => {
+                let quarto_source_map::Generated { by, from } = &**g;
                 assert_eq!(by.kind, "footnotes");
                 assert!(from.is_empty());
             }
@@ -1216,8 +1213,6 @@ mod tests {
         let Block::HorizontalRule(hr) = &div.content[0] else {
             panic!("Expected HorizontalRule");
         };
-        assert!(
-            matches!(&hr.source_info, SourceInfo::Generated { by, .. } if by.kind == "footnotes")
-        );
+        assert!(matches!(&hr.source_info, SourceInfo::Generated(g) if g.by.kind == "footnotes"));
     }
 }

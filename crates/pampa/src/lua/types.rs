@@ -16,7 +16,6 @@ use mlua::{
     UserDataRef, Value, Variadic,
 };
 use quarto_source_map::{By, SourceInfo};
-use smallvec::SmallVec;
 
 use crate::pandoc::{Block, Inline};
 
@@ -2304,10 +2303,10 @@ pub fn filter_source_info(lua: &Lua) -> SourceInfo {
                 // The source often starts with "@" for file paths
                 let path: &str = src.strip_prefix("@").unwrap_or(&src);
                 let line_num = line.unwrap_or(0);
-                return Some(SourceInfo::Generated {
-                    by: By::filter(path.to_string(), line_num),
-                    from: SmallVec::new(),
-                });
+                return Some(SourceInfo::generated(By::filter(
+                    path.to_string(),
+                    line_num,
+                )));
             }
             None
         }) && let Some(info) = result

@@ -47,7 +47,6 @@ use crate::pandoc::block::{Block, Div, Header};
 use hashlink::LinkedHashMap;
 use quarto_pandoc_types::attr::AttrSourceInfo;
 use quarto_source_map::{By, SourceInfo};
-use smallvec::smallvec;
 
 /// Wrap headers in section Divs.
 ///
@@ -97,10 +96,7 @@ pub fn sectionize_blocks(blocks: Vec<Block>) -> Vec<Block> {
                     let section_div = Block::Div(Div {
                         attr: section_attr,
                         content: section_content,
-                        source_info: SourceInfo::Generated {
-                            by: By::sectionize(),
-                            from: smallvec![],
-                        },
+                        source_info: SourceInfo::generated(By::sectionize()),
                         attr_source: AttrSourceInfo::empty(),
                     });
                     // Add closed section to parent, or output if no parent
@@ -152,10 +148,7 @@ pub fn sectionize_blocks(blocks: Vec<Block>) -> Vec<Block> {
         let section_div = Block::Div(Div {
             attr: section_attr,
             content: section_content,
-            source_info: SourceInfo::Generated {
-                by: By::sectionize(),
-                from: smallvec![],
-            },
+            source_info: SourceInfo::generated(By::sectionize()),
             attr_source: AttrSourceInfo::empty(),
         });
         if let Some((_, _, parent_content)) = section_stack.last_mut() {
@@ -622,7 +615,8 @@ mod tests {
             panic!("Expected section Div");
         };
         match &div.source_info {
-            SourceInfo::Generated { by, from } => {
+            SourceInfo::Generated(g) => {
+                let quarto_source_map::Generated { by, from } = &**g;
                 assert_eq!(by.kind, "sectionize");
                 assert!(
                     from.is_empty(),
@@ -637,7 +631,8 @@ mod tests {
             panic!("Expected section Div");
         };
         match &div2.source_info {
-            SourceInfo::Generated { by, from } => {
+            SourceInfo::Generated(g) => {
+                let quarto_source_map::Generated { by, from } = &**g;
                 assert_eq!(by.kind, "sectionize");
                 assert!(from.is_empty());
             }

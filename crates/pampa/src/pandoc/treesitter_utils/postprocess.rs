@@ -50,7 +50,6 @@ use quarto_pandoc_types::table::{
     Alignment, Cell, ColSpec, ColWidth, Row, Table, TableBody, TableFoot, TableHead,
 };
 use quarto_source_map::{By, FileId, SourceInfo};
-use smallvec::smallvec;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -1007,7 +1006,7 @@ fn parse_local_range(info: &SourceInfo) -> Option<(usize, usize)> {
             ..
         } => Some((*start_offset, *end_offset)),
         // Concat/Generated have no single contiguous slice of the input.
-        SourceInfo::Concat { .. } | SourceInfo::Generated { .. } => None,
+        SourceInfo::Concat { .. } | SourceInfo::Generated(_) => None,
     }
 }
 
@@ -1698,10 +1697,7 @@ pub fn postprocess(
                                         cite.content.push(Inline::Space(Space {
                                             // Synthetic Space: inserted to separate citation from suffix.
                                             // Plan 6 §"tree-sitter postprocess" — Generated, no preimage.
-                                            source_info: SourceInfo::Generated {
-                                                by: By::tree_sitter_postprocess(),
-                                                from: smallvec![],
-                                            },
+                                            source_info: SourceInfo::generated(By::tree_sitter_postprocess()),
                                         }));
 
                                         // The span content may have been merged into a single string, so we need to

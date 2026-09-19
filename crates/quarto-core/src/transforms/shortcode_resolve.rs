@@ -1155,7 +1155,8 @@ fn stamp_block(block: &mut Block, name: &str, token_arc: &Arc<SourceInfo>) {
 /// when the metadata loader threads per-key source-info through.
 fn enrich_or_create(existing: &SourceInfo, name: &str, token_arc: &Arc<SourceInfo>) -> SourceInfo {
     let by = match existing {
-        SourceInfo::Generated { by, .. } if by.kind == "filter" => {
+        SourceInfo::Generated(g) if g.by.kind == "filter" => {
+            let by = &g.by;
             let lua_path = by.data.get("filter_path").cloned();
             let lua_line = by.data.get("line").cloned();
             let mut data = serde_json::json!({ "name": name });
@@ -1172,10 +1173,7 @@ fn enrich_or_create(existing: &SourceInfo, name: &str, token_arc: &Arc<SourceInf
         }
         _ => By::shortcode(name),
     };
-    SourceInfo::Generated {
-        by,
-        from: smallvec![Anchor::invocation(Arc::clone(token_arc))],
-    }
+    SourceInfo::generated_with(by, smallvec![Anchor::invocation(Arc::clone(token_arc))])
 }
 
 /// Extract shortcode paths from merged metadata.
@@ -3867,7 +3865,8 @@ mod tests {
             };
             assert_eq!(s.text, "Hello typed");
             match &s.source_info {
-                SourceInfo::Generated { by, from } => {
+                SourceInfo::Generated(g) => {
+                    let quarto_source_map::Generated { by, from } = &**g;
                     // Kind promoted to "shortcode", NOT "filter".
                     assert_eq!(
                         by.kind, "shortcode",
@@ -4005,7 +4004,8 @@ mod tests {
         };
         assert_eq!(s.text, "Test Title");
         match &s.source_info {
-            SourceInfo::Generated { by, from } => {
+            SourceInfo::Generated(g) => {
+                let quarto_source_map::Generated { by, from } = &**g;
                 assert_eq!(by.kind, "shortcode");
                 assert_eq!(by.data.get("name").and_then(|v| v.as_str()), Some("meta"));
                 assert_eq!(from.len(), 1);
@@ -4050,7 +4050,8 @@ mod tests {
         // Helper: extract the Invocation source_info from an inline.
         fn invocation_si(inline: &Inline) -> &SourceInfo {
             match inline.source_info() {
-                SourceInfo::Generated { by, from } => {
+                SourceInfo::Generated(g) => {
+                    let quarto_source_map::Generated { by, from } = &**g;
                     assert_eq!(by.kind, "shortcode", "Got by.kind = {:?}", by.kind);
                     assert_eq!(from.len(), 1);
                     assert_eq!(from[0].role, quarto_source_map::AnchorRole::Invocation);
@@ -4237,11 +4238,12 @@ mod tests {
         // Walk every inline in the AST and assert: any
         // Generated{by.kind=="shortcode"} carries at least one Invocation.
         fn check_inline(inline: &Inline) {
-            if let SourceInfo::Generated { by, from } = inline.source_info()
-                && by.kind == "shortcode"
+            if let SourceInfo::Generated(g) = inline.source_info()
+                && g.by.kind == "shortcode"
             {
                 assert!(
-                    from.iter()
+                    g.from
+                        .iter()
                         .any(|a| a.role == quarto_source_map::AnchorRole::Invocation),
                     "Generated{{by:shortcode}} missing Invocation anchor"
                 );

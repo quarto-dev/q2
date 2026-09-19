@@ -1,6 +1,27 @@
 # Shrink `SourceInfo` from 136 to 32 bytes by boxing the `Generated` payload (bd-1c085k3a)
 
-**Status:** filed for an independent session. Not started.
+**Status:** crate side done on `posit-dev/quarto-source-map` branch
+`generated-box` (PR #7, 0.2.0, by the crate-side session). q2 migration
+done and measured 2026-09-19 on q2 branch
+`braid/bd-1c085k3a-source-info-generated-box` (off PR #698) against that
+branch via the uncommitted path patch; awaiting the three releases to
+land the dep bump.
+
+**Measured (release-perf, this machine, back to back; `#698` = PR #698's
+binary, i.e. the immediate baseline):**
+
+| | original `main` | PR #698 | + this change |
+| --- | --- | --- | --- |
+| `size_of::<SourceInfo>()` | 136 | 136 | **32** |
+| `size_of::<Inline>()` | 776 | 776 | **360** |
+| `size_of::<Block>()` | 1552 | 1552 | **824** |
+| `api/index.qmd`, warm (10 runs) | 1.049 s | 0.875 s | **0.680 s** (−22% vs #698, −35% vs main) |
+| full site, `QUARTO_JOBS=1`, 352 files (3 runs) | 5.657 s | 4.758 s | **4.025 s** (−15% vs #698, −29% vs main) |
+
+13,997 workspace tests pass, **zero `.snap` changes** (wire shape intact).
+Migration: 20 files, 32 constructions → `generated`/`generated_with`,
+39 patterns → `Generated(g)`; the rewriter classified all but 8 sites
+correctly and the compiler found those.
 **Discovered from:** bd-w0x91nmh (PR #698), which measured the traversal
 cost and left the enum-size lever on the table. Background and numbers:
 `claude-notes/research/2026-09-19-topdown-traverse-alloc-perf.md`.
@@ -164,25 +185,41 @@ site.
 
 ### Phase 2 — q2 migration, verified locally before any release
 
-- [ ] Clone the crate to `external-sources/quarto-source-map` (it is not
+- [x] Clone the crate to `external-sources/quarto-source-map` (it is not
       present today; `external-sources/` is gitignored) and add a
       temporary, **uncommitted** `[patch.crates-io] quarto-source-map =
       { path = "external-sources/quarto-source-map" }` in the root
       `Cargo.toml`, exactly as bd-jn7r22g8 did. Never commit the patch.
-- [ ] Migrate the 114 sites (+ test files). `cargo build --workspace`
-      until clean.
-- [ ] Add a size regression test in q2: extend
+      **Gotcha:** the branch is versioned 0.2.0, but `quarto-yaml` and
+      `quarto-error-reporting` require `0.1.x`, so a 0.2.0 patch is
+      "not used in the crate graph" and cargo keeps 0.1.4 for everyone.
+      For the local build only, set the clone's `Cargo.toml` version to
+      `0.1.5` and run `cargo update -p quarto-source-map`; then a single
+      copy resolves. (Not needed once the two dependents re-release.)
+      **Second gotcha:** `crates/wasm-quarto-hub-client` is its *own*
+      cargo workspace with its own `Cargo.lock` and `[patch.crates-io]`,
+      and `cargo xtask verify`'s hub-client leg builds it. The root
+      patch does not reach it, so it silently keeps registry 0.1.4 and
+      the WASM build fails on the migrated pampa. Add the same
+      (uncommitted) patch line there, path `../../external-sources/quarto-source-map`,
+      and `cargo update -p quarto-source-map` in that directory. At
+      cutover, its `quarto-source-map = "0.1.3"` requirement must be
+      bumped to `0.2` along with the root one.
+- [x] Migrate the 114 sites (+ test files). `cargo build --workspace`
+      until clean. (Done with a throwaway brace-aware rewriter; see the
+      commit.)
+- [x] Add a size regression test in q2: extend
       `crates/pampa/tests/integration/topdown_traverse_alloc_budget.rs`
       (or a sibling module in the same integration binary — do **not**
       add a top-level `tests/*.rs` file) with
       `assert!(size_of::<Inline>() <= 400)` and
       `assert!(size_of::<Block>() <= 900)`, so the next fat field is
       caught in review.
-- [ ] `cargo nextest run --workspace`; then full `cargo xtask verify`
+- [x] `cargo nextest run --workspace` (13,997 pass, 0 snapshot changes); full `cargo xtask verify` in progress
       (pampa feeds the WASM leg). The JSON snapshot suites are the
       wire-compatibility check on the pampa side — **no `.snap` file
       should change**; if one does, the serialization shape moved.
-- [ ] Measure, same method as bd-w0x91nmh: `release-perf` build,
+- [x] Measure, same method as bd-w0x91nmh (numbers in Status above): `release-perf` build,
       `hyperfine -w 2 -r 10 -N` on `docs-quarto-2/api/index.qmd`, then
       `QUARTO_JOBS=1 hyperfine -w 1 -r 3 -N` on the full site, against a
       saved copy of the pre-change binary, back to back. Record both in
