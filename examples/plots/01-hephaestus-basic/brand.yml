@@ -1,0 +1,11 @@
+# A deliberately inverted brand — dark paper, light ink — so the effect
+# on the plot is unmistakable. Declared by the document's `brand:` key
+# (Quarto 2 does not auto-discover brand files).
+color:
+  palette:
+    night: "#101820"
+    chalk: "#f2f2f2"
+    coral: "#ff6f61"
+  background: night
+  foreground: chalk
+  primary: coral

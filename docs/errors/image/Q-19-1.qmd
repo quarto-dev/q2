@@ -1,0 +1,54 @@
+---
+title: "Plot Document Not Found"
+description: "The hephaestus plot document (`.hep`) an image refers to could not be read."
+code: Q-19-1
+subsystem: image
+status: stub
+since: "99.9.9"
+categories:
+  - image
+---
+
+# `Q-19-1` — Plot Document Not Found
+
+> The hephaestus plot document (`.hep`) an image refers to could not be read.
+
+## What this means
+
+An image in the document points at a hephaestus plot document — a
+file ending in `.hep` — and Quarto could not read that file. Quarto
+renders `.hep` files to SVG at render time so every HTML page shows
+the plot; when the file cannot be read there is nothing to render, so
+the image is left exactly as written and the rest of the page still
+renders. The browser then shows a broken image where the plot should
+be.
+
+The message names the path as written and the location it resolved
+to.
+
+## Why this happens
+
+Common causes:
+
+- **The path is wrong.** A relative path is resolved against the
+  directory of the document that contains the image, not the
+  project root. A path starting with `/` is resolved against the
+  project root.
+- **The file was never written.** A code cell that was expected to
+  produce the plot did not run, failed, or wrote the file somewhere
+  else (for example under a different `fig-path`).
+- **The file is not readable** because of permissions, or it was
+  deleted or renamed after the reference was written.
+
+## How to fix
+
+Check the resolved location the message reports against where the
+file actually is, then fix the path or move the file. For a plot
+produced by a code cell, look for an earlier error from that cell.
+
+## Related errors
+
+- [`Q-5-6`](../project/Q-5-6.qmd) — Referenced Resource Not Found. A
+  missing `.hep` raises both: this code says the plot was not rendered,
+  `Q-5-6` says the file could not be copied into the output alongside
+  the page, as for any missing image.

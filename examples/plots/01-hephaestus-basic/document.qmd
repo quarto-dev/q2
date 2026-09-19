@@ -1,0 +1,31 @@
+---
+title: "Hephaestus plot documents"
+format: html
+brand: brand.yml
+---
+
+A [hephaestus](https://github.com/posit-dev/hephaestus) plot document
+(`.hep`) stores a plot's data, scales and theme rather than a picture
+of it. Quarto lays the plot out itself at render time and writes an SVG
+next to this page.
+
+## A figure, with a caption and a cross-reference
+
+@fig-readings is referenced like any other figure.
+
+![Simulated sensor readings, one panel of points and one of trend lines.](figs/readings.hep){#fig-readings}
+
+## The same document at an explicit size
+
+`width` and `height` (pixels) set the size the plot is laid out at. The
+plot re-flows to fit — compare the tick density with @fig-readings —
+rather than being scaled down:
+
+![](figs/readings.hep){width=420 height=260}
+
+## Left alone
+
+An ordinary image is untouched, and a `.hep` that does not exist warns
+(`Q-19-1`) and is left as written, so the rest of the page still renders:
+
+![](figs/does-not-exist.hep)

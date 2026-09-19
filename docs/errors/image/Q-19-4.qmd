@@ -1,0 +1,40 @@
+---
+title: "Brand Color Not Applied To Plot"
+description: "A brand color meant to recolor a hephaestus plot is not a hex color, so the plot keeps its own color for that slot."
+code: Q-19-4
+subsystem: image
+status: stub
+since: "99.9.9"
+categories:
+  - image
+---
+
+# `Q-19-4` — Brand Color Not Applied To Plot
+
+> A brand color meant to recolor a hephaestus plot is not a hex color,
+> so the plot keeps its own color for that slot.
+
+## What this means
+
+When a document declares a brand (`brand: _brand.yml`), Quarto
+recolors every hephaestus plot document (`.hep`) it renders with the
+brand's semantic colors: `background` becomes the plot's paper,
+`foreground` its ink, and `primary` its accent. One of those colors
+resolved to a value that is not a hex color, so that one slot was left
+as the plot document specifies it. The other slots still apply, and
+the warning is raised once per document.
+
+## Why this happens
+
+- **A named CSS color** such as `rebeccapurple` or `navy`. The
+  stylesheet side of the brand accepts any CSS color, but a plot is
+  laid out outside the browser and only understands hex.
+- **A CSS function** such as `rgb(16, 24, 32)` or `hsl(…)`, for the
+  same reason.
+- **A palette entry that points at one of the above.**
+
+## How to fix
+
+Write the color as `#rgb`, `#rrggbb` or `#rrggbbaa` in the brand
+file, either directly or in the palette entry the semantic color
+refers to.

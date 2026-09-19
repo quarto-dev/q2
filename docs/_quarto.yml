@@ -350,6 +350,12 @@ website:
           contents:
             - errors/engine/Q-18-1.qmd
             - errors/engine/Q-18-2.qmd
+        - section: "image"
+          contents:
+            - errors/image/Q-19-1.qmd
+            - errors/image/Q-19-2.qmd
+            - errors/image/Q-19-3.qmd
+            - errors/image/Q-19-4.qmd
 
 format:
   html:

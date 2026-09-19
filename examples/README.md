@@ -54,6 +54,16 @@ Minimal `format: revealjs` decks, one per authoring feature, under
 with a single `slides.qmd`. They back the reveal.js documentation page
 (`docs/presentations/revealjs/index.qmd`).
 
+## Plot examples
+
+Hephaestus plot documents (`.hep`) rendered at render time
+(bd-3qych45b; plan
+`claude-notes/plans/2026-09-17-hephaestus-hep-integration.md`).
+
+| Example | Demonstrates |
+|---|---|
+| `plots/01-hephaestus-basic` | A `.hep` as a captioned figure, at an explicit size, and the fail-soft path for a missing file |
+
 ## Other example categories
 
 Future categories (books, manuscripts) will get their own
