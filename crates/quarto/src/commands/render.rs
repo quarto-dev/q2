@@ -689,15 +689,16 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         }
     }
 
-    // Native formats (HTML, revealjs) render in-process. Docx/Pptx route
-    // through Pandoc via `render_qmd_to_pandoc` (P7-foundation Task 3) —
-    // everything else (Pdf, Epub, Typst, Gfm, CommonMark) is still not
-    // yet supported.
+    // Native formats (HTML, revealjs) render in-process. Docx/Pptx/Epub
+    // route through Pandoc via `render_qmd_to_pandoc` (P7-foundation
+    // Task 3; epub added by the epub follow-on plan) — everything else
+    // (Pdf, Typst, Gfm, CommonMark) is still not yet supported.
     if !format.identifier.is_native()
         && !matches!(
             format.identifier,
             quarto_core::format::FormatIdentifier::Docx
                 | quarto_core::format::FormatIdentifier::Pptx
+                | quarto_core::format::FormatIdentifier::Epub
         )
     {
         anyhow::bail!(
