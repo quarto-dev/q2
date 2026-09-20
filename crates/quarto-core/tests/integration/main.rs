@@ -75,6 +75,8 @@ pub mod page_navigation_pipeline;
 pub mod pandoc_filters;
 pub mod pandoc_filters_patch;
 pub mod pandoc_profile_cut;
+pub mod pandoc_shim;
+pub mod pandoc_shim_goldens;
 pub mod pandoc_transport;
 pub mod pass1_engine_resolution_pipeline;
 pub mod preview_render_css_parity;

@@ -1,0 +1,45 @@
+---
+title: "Unrecognized Custom Node Type"
+description: "The pandoc-leg wire-format shim received a custom node type it does not recognize."
+code: Q-20-5
+subsystem: pandoc
+status: stub
+since: "99.9.9"
+categories:
+  - pandoc
+---
+
+# `Q-20-5` — Unrecognized Custom Node Type
+
+> The pandoc-leg wire-format shim received a custom node type it does not
+> recognize.
+
+## What this means
+
+Quarto's docx/pptx output goes through a Lua shim that translates Quarto's
+internal "custom node" representation (theorems, callouts, cross-references,
+and similar) into real pandoc AST nodes that pandoc's own Lua filters know
+how to render. The shim received a custom node type its own vendored filter
+tree has no entry for. Rather than failing the whole render, it dropped the
+node's wrapper and passed its content through unchanged, without whatever
+special formatting that type would normally get.
+
+## Why this happens
+
+- The version of Quarto that produced the document is newer than the
+  vendored pandoc filter tree the shim ships with, and introduced a new
+  custom node type in between.
+- A third-party extension or filter produced a custom node type Quarto's
+  own writer never emits.
+
+## How to fix
+
+Upgrade Quarto to a version whose pandoc-leg shim recognizes the type. If
+the type comes from a third-party extension, check whether that extension
+supports docx/pptx output at all.
+
+## Related errors
+
+- [`Q-20-6`](Q-20-6.qmd) — a different pandoc-leg fallback, for a callout
+  whose crossref category is not registered rather than for an entirely
+  unrecognized node type.

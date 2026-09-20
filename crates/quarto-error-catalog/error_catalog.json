@@ -1469,6 +1469,27 @@
     "docs_url": "https://quarto.org/docs/errors/pandoc/Q-20-4",
     "since_version": "99.9.9"
   },
+  "Q-20-5": {
+    "subsystem": "pandoc",
+    "title": "Unrecognized Custom Node Type",
+    "message_template": "The pandoc-leg wire-format shim received a custom node type it does not recognize. Its wrapper was dropped and its content passed through unchanged, without the type's normal formatting. This usually means the shim's vendored Q1 filter tree predates a Quarto feature that introduced this type; upgrading Quarto should resolve it.",
+    "docs_url": "https://quarto.org/docs/errors/pandoc/Q-20-5",
+    "since_version": "99.9.9"
+  },
+  "Q-20-6": {
+    "subsystem": "pandoc",
+    "title": "Callout Has No Registered Crossref Category",
+    "message_template": "A callout's identifier prefix is a recognized cross-reference type, but not one registered for callout/figure-style numbering. The callout was rendered without a number instead of aborting the render; any `@ref` to it will not resolve to a number. Give the callout an identifier prefix registered for numbering (e.g. `note-`), or remove the prefix if the callout was not meant to be numbered.",
+    "docs_url": "https://quarto.org/docs/errors/pandoc/Q-20-6",
+    "since_version": "99.9.9"
+  },
+  "Q-20-7": {
+    "subsystem": "pandoc",
+    "title": "Theorem Has No Registered Theorem Type For Its Identifier",
+    "message_template": "A theorem-family block's identifier prefix is a recognized cross-reference type, but not one registered as a theorem type. The block was rendered as a plain, unstyled div without theorem numbering instead of aborting the render; any `@ref` to it will not resolve to a number. Give the block an identifier prefix registered as a theorem type (e.g. `thm-`, `lem-`, `cor-`), or match its class to the identifier's actual cross-reference type.",
+    "docs_url": "https://quarto.org/docs/errors/pandoc/Q-20-7",
+    "since_version": "99.9.9"
+  },
   "Q-2-43": {
     "subsystem": "markdown",
     "title": "Callout Title Given Twice",

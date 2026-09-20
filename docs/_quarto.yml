@@ -362,6 +362,9 @@ website:
             - errors/pandoc/Q-20-2.qmd
             - errors/pandoc/Q-20-3.qmd
             - errors/pandoc/Q-20-4.qmd
+            - errors/pandoc/Q-20-5.qmd
+            - errors/pandoc/Q-20-6.qmd
+            - errors/pandoc/Q-20-7.qmd
 
 format:
   html:

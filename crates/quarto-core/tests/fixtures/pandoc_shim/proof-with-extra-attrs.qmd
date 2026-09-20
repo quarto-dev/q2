@@ -1,0 +1,3 @@
+::: {.proof .column-margin data-foo="bar"}
+Some proof content.
+:::

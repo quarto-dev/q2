@@ -112,10 +112,19 @@ The following files and modifications are *not* from `v1.11.3` and should be pre
   `_quarto.modules.crossref_numbering.assign_crossref_numbers()`, and add a
   fail-fast guard rejecting `crossref-numbering: external` combined with a
   LaTeX-family or Typst target.
-- `resources/pandoc-filters/filters/quarto2-shim.lua` — new (ours, Task 8).
-  P4 ships a placeholder `quarto_pandoc_shim_filters` group (an empty
-  filter, so `main.lua` loads and runs unchanged); P5 replaces the body
-  with the real wire-format-to-Q1-scaffold conversion.
+- `resources/pandoc-filters/filters/quarto2-shim.lua` — new (ours, Task 8;
+  body implemented across P5 Tasks 1-8, plus a post-review fix wave).
+  Decodes Q2's wire-format `CustomNode` scaffold back into real Q1 nodes,
+  so Q1's own render handlers run: Route R (Callout, Tabset, Theorem,
+  Proof, FloatRefTarget — a real Q1 constructor exists) and Route N
+  (CrossrefResolvedRef, Equation — no Q1 constructor; the shim calls Q1's
+  render functions directly). The `routes` R/N classification is derived
+  from `route_handlers`'s keys, not hand-maintained as a second table.
+- `resources/pandoc-filters/filters/quarto2-shim-probe.lua` — new (ours, P5
+  Task 1). A test-only observer `-L` filter appended after `main.lua` by the
+  harness's `run_main_lua_capturing_ast`, capturing the post-filter AST for
+  assertions without displacing the real writer. Never part of the
+  production filter chain.
 - `resources/pandoc-filters/filters/modules/crossref_numbering.lua` — new
   (upstream, carried early via P3 Task 6, upstream PR
   quarto-dev/quarto-cli#14913). Defines `crossref_present()` /

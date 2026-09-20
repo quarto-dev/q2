@@ -201,6 +201,245 @@ pub fn run_probe_filter(
     }
 }
 
+/// The outcome of a `run_shim_lua_script` invocation -- a standalone
+/// `pandoc lua <script>` run, not a `-L` filter chain (there is no output
+/// document, so no [`PandocRunOutcome::out_path`]).
+pub struct PandocLuaOutcome {
+    pub status: ExitStatus,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+/// Escapes `path` as a Lua double-quoted string literal.
+fn lua_string_literal(path: &Path) -> String {
+    let escaped = path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"");
+    format!("\"{escaped}\"")
+}
+
+/// Runs `pandoc lua <script>` against `script_body`, a caller-supplied Lua
+/// script that can assume the wire-format shim (`quarto2-shim.lua`) is
+/// already loaded as the global `quarto2_shim`, with `quarto.json`
+/// bootstrapped from the real vendored `_json.lua` module (reachable via
+/// `package.path`) -- but with **none** of `main.lua`'s other runtime state
+/// (no `crossref`/`quarto_global_state`, no other `quarto.*` members). This
+/// is the `L`(lua) tier: a standalone `pandoc lua` script exercising the
+/// shim's pure helpers directly, as opposed to `run_main_lua`/
+/// `run_main_lua_capturing_ast`'s `L`(chain) tier, which runs the real
+/// `-L main.lua` filter chain.
+///
+/// `script_body` is expected to `assert(...)` its own expectations and
+/// raise a Lua error (nonzero exit, message on stderr) on failure.
+pub fn run_shim_lua_script(script_body: &str) -> PandocLuaOutcome {
+    let share_dir = tempfile::Builder::new()
+        .prefix("quarto-pandoc-share-")
+        .tempdir()
+        .expect("failed to create temp share dir");
+    extract_share_tree(share_dir.path()).expect("failed to extract Q1 filter tree");
+    let share = share_dir.path();
+
+    let datadir = share.join("pandoc").join("datadir");
+    let shim_path = share.join("filters").join("quarto2-shim.lua");
+
+    let script = format!(
+        "package.path = {} .. \"/?.lua;\" .. package.path\n\
+         local json = require('_json')\n\
+         quarto = {{ json = json }}\n\
+         dofile({})\n\
+         {}\n",
+        lua_string_literal(&datadir),
+        lua_string_literal(&shim_path),
+        script_body,
+    );
+
+    let mut script_file = tempfile::Builder::new()
+        .prefix("quarto-shim-script-")
+        .suffix(".lua")
+        .tempfile()
+        .expect("failed to create temp file for shim script");
+    script_file
+        .write_all(script.as_bytes())
+        .expect("failed to write shim script");
+
+    let output = Command::new("pandoc")
+        .arg("lua")
+        .arg(script_file.path())
+        .output()
+        .expect("failed to execute pandoc lua");
+
+    PandocLuaOutcome {
+        status: output.status,
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+    }
+}
+
+/// Runs `pandoc` with Q1's `main.lua` filter chain, followed by a second
+/// observer `-L` probe (`quarto2-shim-probe.lua`) that captures the
+/// post-`main.lua`-filter AST to a temp file and writes it verbatim, so
+/// `FORMAT == "docx"` (or whichever `to_format`) is preserved for
+/// `main.lua`'s own writer while the intermediate AST stays inspectable.
+/// Measured against pandoc 3.8.1: a second `-L` sees the first filter's
+/// output AST and does not otherwise perturb the render.
+///
+/// Returns the render outcome alongside the captured AST (`Value::Null` if
+/// the probe never wrote anything, e.g. because the render failed before
+/// reaching the probe).
+pub fn run_main_lua_capturing_ast(
+    ast_json: &str,
+    to_format: &str,
+    params_blob_json: &str,
+    out: &Path,
+) -> (PandocRunOutcome, serde_json::Value) {
+    let share_dir = tempfile::Builder::new()
+        .prefix("quarto-pandoc-share-")
+        .tempdir()
+        .expect("failed to create temp share dir");
+    extract_share_tree(share_dir.path()).expect("failed to extract Q1 filter tree");
+    let share = share_dir.path();
+
+    let mut ast_file = tempfile::Builder::new()
+        .prefix("quarto-pandoc-ast-")
+        .suffix(".json")
+        .tempfile()
+        .expect("failed to create temp file for AST input");
+    ast_file
+        .write_all(ast_json.as_bytes())
+        .expect("failed to write AST input");
+
+    // init.lua's dependenciesFile() only needs the path to exist and be
+    // readable/writable -- it doesn't need pre-existing content.
+    let deps_file = tempfile::Builder::new()
+        .prefix("quarto-pandoc-deps-")
+        .suffix(".txt")
+        .tempfile()
+        .expect("failed to create temp file for dependency file");
+
+    let capture_file = tempfile::Builder::new()
+        .prefix("quarto-pandoc-capture-")
+        .suffix(".json")
+        .tempfile()
+        .expect("failed to create temp file for captured AST");
+
+    let params_b64 = encode_params_blob(params_blob_json);
+
+    let output = Command::new("pandoc")
+        .arg("-f")
+        .arg("json")
+        .arg("-t")
+        .arg(to_format)
+        .arg("--data-dir")
+        .arg(share.join("pandoc").join("datadir"))
+        .arg("-L")
+        .arg(share.join("filters").join("main.lua"))
+        .arg("-L")
+        .arg(share.join("filters").join("quarto2-shim-probe.lua"))
+        .arg("-o")
+        .arg(out)
+        .arg(ast_file.path())
+        .env("QUARTO_SHARE_PATH", share)
+        .env("QUARTO_FILTER_PARAMS", params_b64)
+        .env("QUARTO_FILTER_DEPENDENCY_FILE", deps_file.path())
+        .env("QUARTO2_SHIM_PROBE_OUT", capture_file.path())
+        .output()
+        .expect("failed to execute pandoc");
+
+    let outcome = PandocRunOutcome {
+        status: output.status,
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        out_path: out.to_path_buf(),
+    };
+
+    let captured_ast = std::fs::read_to_string(capture_file.path())
+        .ok()
+        .filter(|s| !s.is_empty())
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or(serde_json::Value::Null);
+
+    (outcome, captured_ast)
+}
+
+/// Runs `main.lua` with `QUARTO2_LAYER1_DUMP` set to a fresh temp path and
+/// returns the parsed Layer-1 registry census H7 (`quarto2-shim.lua`'s
+/// `quarto2-layer1-census` filter, P5 Task 7) writes there: Q1's live
+/// `by_ast_name` handler registry plus the shim's own route table, in one
+/// JSON object.
+///
+/// **Panics if the census file was never written** (H7 absent from the
+/// shipped shim, or its `io.open` write failed) rather than falling back to
+/// an empty/default census — "file missing" must be a hard error here, not
+/// a silently-empty census, which is the same vacuity trap in a different
+/// coat (see the Task 7 vacuity-check note: an empty census would satisfy
+/// any "for each expected type, if present then …" assertion).
+pub fn capture_layer1_introspection(ast_json: &str, params_blob_json: &str) -> serde_json::Value {
+    let share_dir = tempfile::Builder::new()
+        .prefix("quarto-pandoc-share-")
+        .tempdir()
+        .expect("failed to create temp share dir");
+    extract_share_tree(share_dir.path()).expect("failed to extract Q1 filter tree");
+    let share = share_dir.path();
+
+    let mut ast_file = tempfile::Builder::new()
+        .prefix("quarto-pandoc-ast-")
+        .suffix(".json")
+        .tempfile()
+        .expect("failed to create temp file for AST input");
+    ast_file
+        .write_all(ast_json.as_bytes())
+        .expect("failed to write AST input");
+
+    let deps_file = tempfile::Builder::new()
+        .prefix("quarto-pandoc-deps-")
+        .suffix(".txt")
+        .tempfile()
+        .expect("failed to create temp file for dependency file");
+
+    // A path that does not exist yet: H7's `io.open(out, "w")` creates it.
+    let census_dir = tempfile::Builder::new()
+        .prefix("quarto-pandoc-layer1-")
+        .tempdir()
+        .expect("failed to create temp dir for the Layer-1 census");
+    let census_path = census_dir.path().join("census.json");
+
+    let params_b64 = encode_params_blob(params_blob_json);
+    let out_path = share.join("layer1-probe-out.docx");
+
+    let output = Command::new("pandoc")
+        .arg("-f")
+        .arg("json")
+        .arg("-t")
+        .arg("docx")
+        .arg("--data-dir")
+        .arg(share.join("pandoc").join("datadir"))
+        .arg("-L")
+        .arg(share.join("filters").join("main.lua"))
+        .arg("-o")
+        .arg(&out_path)
+        .arg(ast_file.path())
+        .env("QUARTO_SHARE_PATH", share)
+        .env("QUARTO_FILTER_PARAMS", params_b64)
+        .env("QUARTO_FILTER_DEPENDENCY_FILE", deps_file.path())
+        .env("QUARTO2_LAYER1_DUMP", &census_path)
+        .output()
+        .expect("failed to execute pandoc");
+
+    assert!(
+        output.status.success(),
+        "expected the Layer-1 census render to succeed, stderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let contents = std::fs::read_to_string(&census_path).unwrap_or_else(|e| {
+        panic!(
+            "expected the Layer-1 census file at {census_path:?} to exist \
+             (H7 missing from quarto2-shim.lua, or its write failed): {e}"
+        )
+    });
+    serde_json::from_str(&contents).expect("Layer-1 census file should contain valid JSON")
+}
+
 /// `L`-tier hard-gate: panics (never skips) when `pandoc` is not on `PATH`,
 /// or is present but below [`super::version::pandoc_floor`]. A missing or
 /// too-old pandoc must never read as a silently-passed test — see the L-tier

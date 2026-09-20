@@ -1,0 +1,46 @@
+---
+title: "Callout Has No Registered Crossref Category"
+description: "A callout's identifier prefix is a recognized cross-reference type, but not one registered for callout/figure-style numbering."
+code: Q-20-6
+subsystem: pandoc
+status: stub
+since: "99.9.9"
+categories:
+  - pandoc
+---
+
+# `Q-20-6` — Callout Has No Registered Crossref Category
+
+> A callout's identifier prefix is a recognized cross-reference type, but
+> not one registered for callout/figure-style numbering.
+
+## What this means
+
+A callout's identifier (e.g. `#thm-x`) starts with a prefix Quarto
+recognizes as a cross-reference type in general, but that prefix is not one
+of the categories registered for callout/figure-style numbering
+specifically. Quarto 1 would abort the whole render in this situation; the
+pandoc-leg shim instead renders the callout without a number, so the
+document still builds. Any `@ref` to that callout will not resolve to a
+number, since none was assigned.
+
+## Why this happens
+
+- The identifier prefix belongs to another cross-reference family (for
+  example a theorem-environment prefix like `thm-`, `lem-`, `cor-`) that
+  was used on a callout by mistake.
+- A custom or extension-registered cross-reference prefix was applied to a
+  callout without also registering it for callout-style numbering.
+
+## How to fix
+
+Give the callout an identifier prefix that is registered for numbering
+(for example `note-`, `tip-`, `warning-`, `important-`, `caution-`), or
+remove the numeric-looking prefix entirely if the callout was never meant
+to be numbered.
+
+## Related errors
+
+- [`Q-20-5`](Q-20-5.qmd) — a different pandoc-leg fallback, for an entirely
+  unrecognized custom node type rather than a callout with an
+  unregistered crossref category.

@@ -1,0 +1,3 @@
+[see @fig-x].
+
+![A caption.](img.png){#fig-x}
