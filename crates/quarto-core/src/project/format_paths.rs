@@ -93,7 +93,8 @@ enum KeyForms {
 /// The path-shaped format keys marked at each metadata-merge layer —
 /// the in-tree seed of the contract's unified path-shaped-key
 /// registry (`claude-notes/designs/path-resolution-model.md`).
-/// Residual same-class keys (`template`, `template-partials`,
+/// `reference-doc`/`template` were added by P7 Task 4 (docx/pptx pandoc
+/// invocation forwarding). Residual same-class keys (`template-partials`,
 /// `filters`, …) are tracked in bd-hjv5o; adding one is one row here
 /// plus its form handling.
 const FORMAT_PATH_KEYS: &[(&str, MarkPolicy, KeyForms)] = &[
@@ -109,6 +110,19 @@ const FORMAT_PATH_KEYS: &[(&str, MarkPolicy, KeyForms)] = &[
     ("epub-cover-image", MarkPolicy::Always, KeyForms::Entries),
     ("epub-metadata", MarkPolicy::Always, KeyForms::Entries),
     ("epub-embed-font", MarkPolicy::Always, KeyForms::Entries),
+    // P7 Task 4: `ExistenceSilent`, not `ExistenceDiagnose` — a missing
+    // `reference-doc`/`template` is fatal to a Pandoc-leg render (pandoc
+    // cannot proceed without it), not a gracefully-degrading warning like
+    // `css`. The merge-time marking pass only resolves the path when it
+    // exists; `crate::pandoc_filters::format_defaults::build_forwarded_args`
+    // is the downstream consumer that turns "still `Scalar`" (unresolved)
+    // into the hard `Q-5-30` error, right before invoking pandoc.
+    (
+        "reference-doc",
+        MarkPolicy::ExistenceSilent,
+        KeyForms::Entries,
+    ),
+    ("template", MarkPolicy::ExistenceSilent, KeyForms::Entries),
 ];
 
 /// Apply `f` to a value's string-bearing leaves: the scalar forms
@@ -690,6 +704,149 @@ mod tests {
         assert_eq!(
             theme.get("dark").unwrap().value,
             ConfigValueKind::Path("../dark.scss".to_string())
+        );
+    }
+
+    // === reference-doc / template: ExistenceSilent (P7 Task 4) ===
+
+    /// T4.4: a `reference-doc` declared relative to a subdirectory
+    /// `_metadata.yml` (the `layer_base`) resolves against **that
+    /// directory**, not the project root — the discriminator CLAUDE.md's
+    /// path-resolution rule requires: if the fixture instead declared the
+    /// entry at the project root, "resolve against the declaring file" and
+    /// "resolve against the project root" would produce the same path and
+    /// this test would survive its own revert.
+    #[test]
+    fn reference_doc_resolves_against_declaring_layer_not_project_root() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let project = temp.path().canonicalize().unwrap();
+        let shared_dir = project.join("shared");
+        std::fs::create_dir_all(&shared_dir).unwrap();
+        std::fs::write(shared_dir.join("ref.docx"), "x").unwrap();
+        // The subdirectory that declares `reference-doc: ../shared/ref.docx`
+        // in its own `_metadata.yml`.
+        let declaring_dir = project.join("posts").join("2026");
+        std::fs::create_dir_all(&declaring_dir).unwrap();
+        let doc_dir = declaring_dir.clone();
+
+        let mut meta = key_map("reference-doc", vec![scalar("../../shared/ref.docx")]);
+        let diags = mark_format_path_values(
+            &mut meta,
+            &declaring_dir, // layer_base: the `_metadata.yml`'s own directory
+            &project,
+            &doc_dir,
+            &NativeRuntime::new(),
+        );
+        assert!(diags.is_empty());
+        assert_eq!(
+            meta.get("reference-doc").unwrap().value,
+            ConfigValueKind::Path("../../shared/ref.docx".to_string()),
+            "expected resolution against the declaring directory, not the project root \
+             (which would instead resolve to a nonexistent path and stay Scalar)"
+        );
+    }
+
+    /// T4.4 (continued): a leading `/` anchors at the project root even
+    /// though the layer base is a subdirectory.
+    #[test]
+    fn reference_doc_rooted_entry_anchors_at_project_root() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let project = temp.path().canonicalize().unwrap();
+        std::fs::write(project.join("ref.docx"), "x").unwrap();
+        let doc_dir = project.join("posts").join("2026");
+        std::fs::create_dir_all(&doc_dir).unwrap();
+
+        let mut meta = key_map("reference-doc", vec![scalar("/ref.docx")]);
+        let diags = mark_format_path_values(
+            &mut meta,
+            &doc_dir, // layer base is the doc dir — must not be used
+            &project,
+            &doc_dir,
+            &NativeRuntime::new(),
+        );
+        assert!(diags.is_empty());
+        assert_eq!(
+            meta.get("reference-doc").unwrap().value,
+            ConfigValueKind::Path("../../ref.docx".to_string())
+        );
+    }
+
+    /// T4.4/T4.7: a `reference-doc` naming no existing file is left
+    /// `Scalar` (unresolved) and — unlike `css` — **silently**, no
+    /// merge-time diagnostic. The hard failure lives downstream, at
+    /// `build_forwarded_args`, right before pandoc actually needs the
+    /// file.
+    #[test]
+    fn reference_doc_missing_file_stays_scalar_and_silent() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let project = temp.path().canonicalize().unwrap();
+
+        let mut meta = key_map("reference-doc", vec![scalar("missing.docx")]);
+        let diags = mark_format_path_values(
+            &mut meta,
+            &project,
+            &project,
+            &project,
+            &NativeRuntime::new(),
+        );
+        assert!(
+            diags.is_empty(),
+            "reference-doc must never diagnose at merge time (ExistenceSilent)"
+        );
+        assert!(matches!(
+            meta.get("reference-doc").unwrap().value,
+            ConfigValueKind::Scalar { .. }
+        ));
+    }
+
+    /// T4.5: `template` gets the identical two-case treatment as
+    /// `reference-doc` — declaring-layer resolution, and project-root
+    /// anchoring for a leading `/`.
+    #[test]
+    fn template_resolves_against_declaring_layer_not_project_root() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let project = temp.path().canonicalize().unwrap();
+        let shared_dir = project.join("shared");
+        std::fs::create_dir_all(&shared_dir).unwrap();
+        std::fs::write(shared_dir.join("custom.docx"), "x").unwrap();
+        let declaring_dir = project.join("posts").join("2026");
+        std::fs::create_dir_all(&declaring_dir).unwrap();
+
+        let mut meta = key_map("template", vec![scalar("../../shared/custom.docx")]);
+        let diags = mark_format_path_values(
+            &mut meta,
+            &declaring_dir,
+            &project,
+            &declaring_dir,
+            &NativeRuntime::new(),
+        );
+        assert!(diags.is_empty());
+        assert_eq!(
+            meta.get("template").unwrap().value,
+            ConfigValueKind::Path("../../shared/custom.docx".to_string())
+        );
+    }
+
+    #[test]
+    fn template_rooted_entry_anchors_at_project_root() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let project = temp.path().canonicalize().unwrap();
+        std::fs::write(project.join("custom.docx"), "x").unwrap();
+        let doc_dir = project.join("sub");
+        std::fs::create_dir_all(&doc_dir).unwrap();
+
+        let mut meta = key_map("template", vec![scalar("/custom.docx")]);
+        let diags = mark_format_path_values(
+            &mut meta,
+            &doc_dir,
+            &project,
+            &doc_dir,
+            &NativeRuntime::new(),
+        );
+        assert!(diags.is_empty());
+        assert_eq!(
+            meta.get("template").unwrap().value,
+            ConfigValueKind::Path("../custom.docx".to_string())
         );
     }
 }

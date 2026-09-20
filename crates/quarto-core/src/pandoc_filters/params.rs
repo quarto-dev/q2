@@ -34,6 +34,41 @@ pub trait FilterParamsContributor {
     fn contribute(&self, blob: &mut Map<String, Value>);
 }
 
+/// The 5 docx callout-icon params (P7 Task 4). `docxCalloutImage` in the
+/// vendored `callouts.lua` reads `param("icon-" .. type, nil)` for each
+/// callout type and returns `nil` (icon-less, but a successful render) when
+/// unset — see `resources/pandoc-filters/filters/modules/callouts.lua`.
+/// `share_dir` is the directory that has a `formats/docx/<name>.png` child:
+/// either the per-render extracted share tree
+/// (`PandocWriteStage`'s real wiring) or the checked-in `resources/`
+/// directory directly (this module's own unit test — see
+/// [`format_defaults`](super::format_defaults) module docs for why the two
+/// share one relative shape).
+pub struct DocxCalloutIconsContributor {
+    pub share_dir: PathBuf,
+}
+
+/// The 5 callout types `docxCalloutImage` looks up by
+/// `"icon-" .. type` — one PNG each, vendored at
+/// `resources/formats/docx/<name>.png`.
+pub const DOCX_CALLOUT_ICON_NAMES: &[&str] = &["note", "tip", "warning", "caution", "important"];
+
+impl FilterParamsContributor for DocxCalloutIconsContributor {
+    fn contribute(&self, blob: &mut Map<String, Value>) {
+        for name in DOCX_CALLOUT_ICON_NAMES {
+            let path = self
+                .share_dir
+                .join("formats")
+                .join("docx")
+                .join(format!("{name}.png"));
+            blob.insert(
+                format!("icon-{name}"),
+                json!(path.to_string_lossy().into_owned()),
+            );
+        }
+    }
+}
+
 /// Builds the `QUARTO_FILTER_PARAMS` blob for one Pandoc-leg render.
 pub struct FilterParamsBuilder<'a> {
     format: &'a Format,
@@ -85,7 +120,7 @@ impl<'a> FilterParamsBuilder<'a> {
         let mut blob = Map::new();
 
         insert_format_identifier(&mut blob, self.format);
-        insert_active_filters(&mut blob);
+        insert_active_filters(&mut blob, self.format);
         insert_quarto_filters(&mut blob);
         insert_project_keys(&mut blob, self.project);
         insert_language(&mut blob, self.language);
@@ -124,13 +159,22 @@ fn insert_format_identifier(blob: &mut Map<String, Value>, format: &Format) {
     );
 }
 
-/// `enable-crossref`, `output-divs`, `active-filters` — structural literals
-/// from the Task 4 worked example. Q2's crossref/normalization/AST-pipeline
-/// features are always active for the Pandoc leg, so these are constants,
-/// not derived from render options.
-fn insert_active_filters(blob: &mut Map<String, Value>) {
+/// `enable-crossref`, `output-divs`, `active-filters`, `page-width` —
+/// structural literals from the Task 4 worked example, with `output-divs`
+/// and `page-width` overridable per format
+/// ([`super::format_defaults::format_pandoc_defaults`], P7 Task 4 Finding
+/// 1). Neither is a pandoc CLI flag — both are read from
+/// `QUARTO_FILTER_PARAMS` by the vendored layout Lua (`page-width` by
+/// `wp.lua`'s `wpPageWidth()`). Q2's crossref/normalization/AST-pipeline
+/// features are always active for the Pandoc leg, so `enable-crossref`/
+/// `active-filters` stay constants, not derived from render options.
+fn insert_active_filters(blob: &mut Map<String, Value>, format: &Format) {
+    let defaults = super::format_defaults::format_pandoc_defaults(&format.output_extension);
     blob.insert("enable-crossref".to_string(), json!(true));
-    blob.insert("output-divs".to_string(), json!(true));
+    blob.insert(
+        "output-divs".to_string(),
+        json!(defaults.output_divs.unwrap_or(true)),
+    );
     blob.insert(
         "active-filters".to_string(),
         json!({
@@ -139,6 +183,9 @@ fn insert_active_filters(blob: &mut Map<String, Value>) {
             "jats_subarticle": false,
         }),
     );
+    if let Some(page_width) = defaults.page_width {
+        blob.insert("page-width".to_string(), json!(page_width));
+    }
 }
 
 /// `quarto-filters: { entryPoints: [] }` — structurally required
@@ -257,6 +304,8 @@ fn insert_top_level_literals(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
+
     use crate::crossref::RefTypeRegistry;
     use crate::language::resolve_language;
     use crate::project::{DocumentInfo, ProjectContext};
@@ -533,5 +582,55 @@ mod tests {
         assert!(paths.contains_key("Rscript"));
         assert!(paths.contains_key("TinyTexBinDir"));
         assert!(paths.contains_key("Typst"));
+    }
+
+    /// P7 T4.1: `output-divs`/`page-width` are per-format
+    /// (`format_defaults::format_pandoc_defaults`), not the flat constant
+    /// they used to be.
+    #[test]
+    fn test_output_divs_and_page_width_are_per_format() {
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = fixture_language();
+
+        let docx = Format::docx();
+        let blob = fixture_builder(&docx, &project, &registry, &language).build();
+        assert_eq!(blob["output-divs"], json!(true));
+        assert_eq!(blob["page-width"], json!(6.5));
+
+        let pptx = Format::from_format_string("pptx").expect("pptx format");
+        let blob = fixture_builder(&pptx, &project, &registry, &language).build();
+        assert_eq!(blob["output-divs"], json!(false));
+        assert!(
+            blob.as_object().unwrap().get("page-width").is_none(),
+            "pptx has no page-width entry in Task 4's table"
+        );
+    }
+
+    /// P7 T4.8: all 5 docx callout-icon params are present and each points
+    /// at an existing file under `resources/formats/docx/`. The failure
+    /// this guards is silent: `docxCalloutImage` returns `nil` when unset,
+    /// the render still succeeds, and callouts simply have no icons.
+    #[test]
+    fn test_docx_callout_icons_present() {
+        let resources_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../resources");
+        let contributor = DocxCalloutIconsContributor {
+            share_dir: resources_dir,
+        };
+        let mut blob = Map::new();
+        contributor.contribute(&mut blob);
+
+        for name in DOCX_CALLOUT_ICON_NAMES {
+            let key = format!("icon-{name}");
+            let path_str = blob
+                .get(&key)
+                .unwrap_or_else(|| panic!("missing {key}"))
+                .as_str()
+                .unwrap_or_else(|| panic!("{key} is not a string"));
+            assert!(
+                Path::new(path_str).is_file(),
+                "{key} names a file that does not exist: {path_str}"
+            );
+        }
     }
 }

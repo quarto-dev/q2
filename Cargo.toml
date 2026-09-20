@@ -35,6 +35,7 @@ edition = "2024"
 [workspace.dependencies]
 anyhow = "1.0.101"
 quick-xml = "0.39"
+zip = { version = "6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 ariadne = "0.6"
 clap = { version = "4.5", features = ["derive", "cargo", "env"] }
 # Interactive terminal prompts for `q2 create` (bd-hh1erpfx). Chosen

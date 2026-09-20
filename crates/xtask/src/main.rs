@@ -30,6 +30,7 @@ mod build_hub_client_embed;
 mod build_hub_mcp_bundle;
 mod build_q2_preview_spa;
 mod build_trace_viewer;
+mod capture_pandoc_goldens;
 mod create_worktree;
 mod dev_setup;
 mod lint;
@@ -232,6 +233,18 @@ enum Command {
     /// gate, then reports pass/fail and — on a green run past the current
     /// ceiling — the exact line in `test.rs` to bump. Never edits the file.
     PandocCheck {},
+
+    /// Dev-only `G`-tier capture of docx/pptx golden fixtures from a real,
+    /// pinned-release `quarto` (pandoc-hybrid epic, P7 Task 10).
+    ///
+    /// Requires a real `quarto` binary at exactly the pinned release
+    /// (`capture_pandoc_goldens::QUARTO_PINNED_VERSION`) on `PATH` — fails
+    /// loudly, never skips, if absent or at the wrong version. Renders each
+    /// fixture in `tests/fixtures/pandoc-goldens/` to docx and pptx,
+    /// extracts semantic content via `quarto-ooxml-extract`, and writes the
+    /// result as a committed insta snapshot. Never invoked from `cargo
+    /// xtask verify` or CI.
+    CapturePandocGoldens {},
 
     /// Byte-diff a rendered corpus between `--base <commit>` and `HEAD`.
     ///
@@ -443,6 +456,7 @@ fn main() -> Result<()> {
             verify::run(&config)
         }
         Command::PandocCheck {} => pandoc_check::run(),
+        Command::CapturePandocGoldens {} => capture_pandoc_goldens::run(),
         Command::RenderCorpusDiff { base, corpus, keep } => {
             render_corpus_diff::run(render_corpus_diff::Args { base, corpus, keep })
         }

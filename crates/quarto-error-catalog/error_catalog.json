@@ -996,7 +996,7 @@
   "Q-12-9": {
     "subsystem": "listing",
     "title": "Quarto 1 EJS Listing Template Extension",
-    "message_template": "The `.ejs` / `.ejs.md` extensions mark a Quarto 1 EJS listing template. Quarto 2 does not run EJS; custom listing templates use doctemplate syntax. See the Listings guide, “Custom templates”.",
+    "message_template": "The `.ejs` / `.ejs.md` extensions mark a Quarto 1 EJS listing template. Quarto 2 does not run EJS; custom listing templates use doctemplate syntax. See the Listings guide, \u201cCustom templates\u201d.",
     "docs_url": "https://quarto.org/docs/errors/listing/Q-12-9",
     "since_version": "99.9.9"
   },
@@ -1101,7 +1101,7 @@
   "Q-12-24": {
     "subsystem": "listing",
     "title": "Custom Listing Template Is Not a Doctemplate",
-    "message_template": "A `type: custom` listing template contains no doctemplate directives, or contains Quarto 1 EJS `<% … %>` markup. Quarto 2 listing templates use doctemplate syntax; the listing is skipped.",
+    "message_template": "A `type: custom` listing template contains no doctemplate directives, or contains Quarto 1 EJS `<% \u2026 %>` markup. Quarto 2 listing templates use doctemplate syntax; the listing is skipped.",
     "docs_url": "https://quarto.org/docs/errors/listing/Q-12-24",
     "since_version": "99.9.9"
   },
@@ -1192,7 +1192,7 @@
   "Q-14-8": {
     "subsystem": "theme",
     "title": "Invalid brand font weight",
-    "message_template": "A `weight:` value in the brand's `typography` section is not a weight Quarto understands. Use a number from 100 to 900, a weight keyword such as `bold`, a list of those, or — on `typography.fonts` entries only — a numeric range such as `400..700`.",
+    "message_template": "A `weight:` value in the brand's `typography` section is not a weight Quarto understands. Use a number from 100 to 900, a weight keyword such as `bold`, a list of those, or \u2014 on `typography.fonts` entries only \u2014 a numeric range such as `400..700`.",
     "docs_url": "https://quarto.org/docs/errors/theme/Q-14-8",
     "since_version": "99.9.9"
   },
@@ -1227,14 +1227,14 @@
   "Q-5-8": {
     "subsystem": "project",
     "title": "Project Render Script Failed",
-    "message_template": "A `project.pre-render` or `project.post-render` script exited with a non-zero status (or was terminated by a signal). The render is aborted; remaining scripts in the list do not run. The script's own output appears above the diagnostic — fix the script (or remove it from `_quarto.yml`) and render again.",
+    "message_template": "A `project.pre-render` or `project.post-render` script exited with a non-zero status (or was terminated by a signal). The render is aborted; remaining scripts in the list do not run. The script's own output appears above the diagnostic \u2014 fix the script (or remove it from `_quarto.yml`) and render again.",
     "docs_url": "https://quarto.org/docs/errors/project/Q-5-8",
     "since_version": "99.9.9"
   },
   "Q-5-9": {
     "subsystem": "project",
     "title": "Pre-render Script Changed a Forbidden Project Setting",
-    "message_template": "While `project.pre-render` scripts ran, `_quarto.yml` changed its `project.type` or `project.output-dir`. Pre-render scripts may modify the project — add input files, edit configuration — but these two settings must stay fixed, because the scripts already received `QUARTO_PROJECT_OUTPUT_DIR` computed from them. Make the change directly in `_quarto.yml` instead of from a script.",
+    "message_template": "While `project.pre-render` scripts ran, `_quarto.yml` changed its `project.type` or `project.output-dir`. Pre-render scripts may modify the project \u2014 add input files, edit configuration \u2014 but these two settings must stay fixed, because the scripts already received `QUARTO_PROJECT_OUTPUT_DIR` computed from them. Make the change directly in `_quarto.yml` instead of from a script.",
     "docs_url": "https://quarto.org/docs/errors/project/Q-5-9",
     "since_version": "99.9.9"
   },
@@ -1269,7 +1269,7 @@
   "Q-5-17": {
     "subsystem": "project",
     "title": "Unknown Project Type",
-    "message_template": "`_quarto.yml` sets a `project.type` that is not a string, is not a built-in project type (`default`, `website`, `book`, `manuscript`), and does not match any extension contributing a project type (`contributes: project:` in an `_extensions/` manifest), so the project cannot be rendered. The render stops before any document is processed — earlier Quarto 2 versions silently continued with default-project behavior, which hides a broken site build and scatters per-document copies of shared JS/CSS next to every source file. Check the type name for typos; the hints list the project-contributing extensions that were found, and any manifest that failed to load is reported alongside as Q-16-1 (a broken manifest is a common root cause).",
+    "message_template": "`_quarto.yml` sets a `project.type` that is not a string, is not a built-in project type (`default`, `website`, `book`, `manuscript`), and does not match any extension contributing a project type (`contributes: project:` in an `_extensions/` manifest), so the project cannot be rendered. The render stops before any document is processed \u2014 earlier Quarto 2 versions silently continued with default-project behavior, which hides a broken site build and scatters per-document copies of shared JS/CSS next to every source file. Check the type name for typos; the hints list the project-contributing extensions that were found, and any manifest that failed to load is reported alongside as Q-16-1 (a broken manifest is a common root cause).",
     "docs_url": "https://quarto.org/docs/errors/project/Q-5-17",
     "since_version": "99.9.9"
   },
@@ -1367,14 +1367,14 @@
   "Q-16-3": {
     "subsystem": "extension",
     "title": "Unknown Shortcode",
-    "message_template": "A shortcode invocation does not match any built-in handler, extension-contributed handler, or document-level `shortcodes:` script. The invocation renders as a visible `?name` marker. Check the shortcode name for typos, and check earlier Q-16-1/Q-16-2 warnings — a failed extension or script load surfaces here at the use site.",
+    "message_template": "A shortcode invocation does not match any built-in handler, extension-contributed handler, or document-level `shortcodes:` script. The invocation renders as a visible `?name` marker. Check the shortcode name for typos, and check earlier Q-16-1/Q-16-2 warnings \u2014 a failed extension or script load surfaces here at the use site.",
     "docs_url": "https://quarto.org/docs/errors/extension/Q-16-3",
     "since_version": "99.9.9"
   },
   "Q-16-4": {
     "subsystem": "extension",
     "title": "Shortcode Handler Shadowed",
-    "message_template": "Two loaded shortcode scripts define a handler with the same name; the later registration wins (document `shortcodes:` scripts load first, then extensions in discovery order, so the more local definition takes precedence). This is informational — overriding a built-in extension is a supported pattern — but if the shadowing is unintentional, rename or remove one of the handlers.",
+    "message_template": "Two loaded shortcode scripts define a handler with the same name; the later registration wins (document `shortcodes:` scripts load first, then extensions in discovery order, so the more local definition takes precedence). This is informational \u2014 overriding a built-in extension is a supported pattern \u2014 but if the shadowing is unintentional, rename or remove one of the handlers.",
     "docs_url": "https://quarto.org/docs/errors/extension/Q-16-4",
     "since_version": "99.9.9"
   },
@@ -1388,7 +1388,7 @@
   "Q-16-6": {
     "subsystem": "extension",
     "title": "Block Shortcode In Inline Position",
-    "message_template": "A shortcode used inline (inside a sentence or other inline content) produced block-level output (for example a raw HTML block from the `video` shortcode), and none of it could be carried into the inline position — the output was dropped. Put the shortcode in its own paragraph, surrounded by blank lines.",
+    "message_template": "A shortcode used inline (inside a sentence or other inline content) produced block-level output (for example a raw HTML block from the `video` shortcode), and none of it could be carried into the inline position \u2014 the output was dropped. Put the shortcode in its own paragraph, surrounded by blank lines.",
     "docs_url": "https://quarto.org/docs/errors/extension/Q-16-6",
     "since_version": "99.9.9"
   },
@@ -1409,7 +1409,7 @@
   "Q-16-9": {
     "subsystem": "extension",
     "title": "Project Type Contribution Missing Base Type",
-    "message_template": "An extension's `contributes.project` fragment does not declare `project.type`, so the custom project type falls back to the `default` base type. This is almost always an authoring mistake in the extension — a website-styled project type without `project: type: website` silently loses all website behavior. Declare the base type in the extension's `_extension.yml`.",
+    "message_template": "An extension's `contributes.project` fragment does not declare `project.type`, so the custom project type falls back to the `default` base type. This is almost always an authoring mistake in the extension \u2014 a website-styled project type without `project: type: website` silently loses all website behavior. Declare the base type in the extension's `_extension.yml`.",
     "docs_url": "https://quarto.org/docs/errors/extension/Q-16-9",
     "since_version": "99.9.9"
   },
@@ -1423,14 +1423,14 @@
   "Q-17-2": {
     "subsystem": "include",
     "title": "Include File Not Found",
-    "message_template": "The file named by an `{{< include >}}` shortcode could not be read. Its content cannot be supplied, so the document fails to render rather than being written with the content missing. The path is resolved relative to the directory of the file containing the shortcode — check it for typos and check that the file exists.",
+    "message_template": "The file named by an `{{< include >}}` shortcode could not be read. Its content cannot be supplied, so the document fails to render rather than being written with the content missing. The path is resolved relative to the directory of the file containing the shortcode \u2014 check it for typos and check that the file exists.",
     "docs_url": "https://quarto.org/docs/errors/include/Q-17-2",
     "since_version": "99.9.9"
   },
   "Q-17-3": {
     "subsystem": "include",
     "title": "Include File Parse Error",
-    "message_template": "The file named by an `{{< include >}}` shortcode was read but could not be parsed as qmd. Its content cannot be supplied, so the document fails to render rather than being written with the content missing. The included file's own parse errors are reported alongside this one — fix those and the include will succeed.",
+    "message_template": "The file named by an `{{< include >}}` shortcode was read but could not be parsed as qmd. Its content cannot be supplied, so the document fails to render rather than being written with the content missing. The included file's own parse errors are reported alongside this one \u2014 fix those and the include will succeed.",
     "docs_url": "https://quarto.org/docs/errors/include/Q-17-3",
     "since_version": "99.9.9"
   },
@@ -1514,14 +1514,14 @@
   "Q-2-45": {
     "subsystem": "markdown",
     "title": "Reference-style links are not supported",
-    "message_template": "`[label][ref]` is reference-style link syntax, which quarto-markdown does not support — `[...]` is reserved for span syntax (`[text]{.class}`). The brackets are discarded and the two halves render as empty spans. Use the inline form `[label](url)`. `qmd-syntax-helper convert -r reference-links` migrates these automatically.",
+    "message_template": "`[label][ref]` is reference-style link syntax, which quarto-markdown does not support \u2014 `[...]` is reserved for span syntax (`[text]{.class}`). The brackets are discarded and the two halves render as empty spans. Use the inline form `[label](url)`. `qmd-syntax-helper convert -r reference-links` migrates these automatically.",
     "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-45",
     "since_version": "99.9.9"
   },
   "Q-2-46": {
     "subsystem": "markdown",
     "title": "Link reference definitions are not supported",
-    "message_template": "A line of the form `[ref]: https://example.com` is a link reference definition, which quarto-markdown does not collect. It renders as a visible paragraph instead of disappearing. Move the URL into an inline link — `[text](url)` — at each use site and delete the definition line. `qmd-syntax-helper convert -r reference-links` does both.",
+    "message_template": "A line of the form `[ref]: https://example.com` is a link reference definition, which quarto-markdown does not collect. It renders as a visible paragraph instead of disappearing. Move the URL into an inline link \u2014 `[text](url)` \u2014 at each use site and delete the definition line. `qmd-syntax-helper convert -r reference-links` does both.",
     "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-46",
     "since_version": "99.9.9"
   },
@@ -1535,7 +1535,7 @@
   "Q-2-48": {
     "subsystem": "markdown",
     "title": "Wrong cell-option marker for a diagram cell",
-    "message_template": "Cell options are written in the cell language's own comment syntax. A mermaid diagram comments with `%%`, so its options are `%%|` — `#|` is not a mermaid comment and becomes part of the diagram, which mermaid then fails to parse.",
+    "message_template": "Cell options are written in the cell language's own comment syntax. A mermaid diagram comments with `%%`, so its options are `%%|` \u2014 `#|` is not a mermaid comment and becomes part of the diagram, which mermaid then fails to parse.",
     "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-48",
     "since_version": "99.9.9"
   },
@@ -1591,14 +1591,14 @@
   "Q-2-52": {
     "subsystem": "markdown",
     "title": "Shortcode delimiter not separated by a space",
-    "message_template": "A shortcode's delimiters must be separated from its content by whitespace. Write `{{< fa plus >}}` — a space after `{{<` and a space before `>}}` — rather than `{{<fa plus>}}`.",
+    "message_template": "A shortcode's delimiters must be separated from its content by whitespace. Write `{{< fa plus >}}` \u2014 a space after `{{<` and a space before `>}}` \u2014 rather than `{{<fa plus>}}`.",
     "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-52",
     "since_version": "99.9.9"
   },
   "Q-5-27": {
     "subsystem": "project",
     "title": "Invalid `diagnostics:` Entry",
-    "message_template": "An entry under `diagnostics:` could not be understood. Each entry maps an error code to a level — `Q-2-49: off` — or to a map with a `level:` key and an optional `reason:`.",
+    "message_template": "An entry under `diagnostics:` could not be understood. Each entry maps an error code to a level \u2014 `Q-2-49: off` \u2014 or to a map with a `level:` key and an optional `reason:`.",
     "docs_url": "https://quarto.org/docs/errors/project/Q-5-27",
     "since_version": "99.9.9"
   },
@@ -1614,6 +1614,13 @@
     "title": "Declared Stylesheet Not Found",
     "message_template": "A `css:` entry names a stylesheet that does not exist, so it was not copied into the output. Every page linking it will request a file that is not there. The path is resolved relative to the file that declares it. The render continues; the (broken) link is still emitted.",
     "docs_url": "https://quarto.org/docs/errors/project/Q-5-29",
+    "since_version": "99.9.9"
+  },
+  "Q-5-30": {
+    "subsystem": "project",
+    "title": "Pandoc Path Option Not Found",
+    "message_template": "A `reference-doc` or `template` entry names a file that does not exist, so pandoc cannot use it. Resolved relative to the file that declared it (a leading `/` anchors at the project root). Fix the path or add the missing file.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-30",
     "since_version": "99.9.9"
   },
   "Q-13-8": {
@@ -1633,7 +1640,7 @@
   "Q-13-10": {
     "subsystem": "navigation",
     "title": "Sidebar entry has both section: and text:",
-    "message_template": "A sidebar entry carries both a `section:` and a `text:` key. They are alternate spellings for a section's display label, and `section:` takes precedence — the `text:` value is ignored. Remove one of the two keys.",
+    "message_template": "A sidebar entry carries both a `section:` and a `text:` key. They are alternate spellings for a section's display label, and `section:` takes precedence \u2014 the `text:` value is ignored. Remove one of the two keys.",
     "docs_url": "https://quarto.org/docs/errors/navigation/Q-13-10",
     "since_version": "99.9.9"
   },
@@ -1654,7 +1661,7 @@
   "Q-13-13": {
     "subsystem": "navigation",
     "title": "Page-level `repo-actions: true` ignored",
-    "message_template": "A page's front matter sets `repo-actions: true`. This key does not enable repository actions — the action list always comes from `website.repo-actions` — it asks only that a page with no table of contents show the actions in the margin rather than the page footer. Quarto 2 does not implement that placement, so the value is ignored and the actions render in the page footer at every width. Page-level `repo-actions: false`, which suppresses the actions for a single page, is supported.",
+    "message_template": "A page's front matter sets `repo-actions: true`. This key does not enable repository actions \u2014 the action list always comes from `website.repo-actions` \u2014 it asks only that a page with no table of contents show the actions in the margin rather than the page footer. Quarto 2 does not implement that placement, so the value is ignored and the actions render in the page footer at every width. Page-level `repo-actions: false`, which suppresses the actions for a single page, is supported.",
     "docs_url": "https://quarto.org/docs/errors/navigation/Q-13-13",
     "since_version": "99.9.9"
   },

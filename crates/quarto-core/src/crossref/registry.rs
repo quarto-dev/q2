@@ -293,6 +293,41 @@ mod tests {
         SourceInfo::original(FileId(0), 0, 0)
     }
 
+    /// T12.1: pins `BUILTINS`'s exact contents so the `algorithm`/`alg`
+    /// gap's eventual closure (or widening) is a visible, reviewed change —
+    /// see P7 Task 12 (`claude-notes/plans/2026-09-18-pandoc-hybrid-P7-implementation.md`)
+    /// and `crates/quarto-core/tests/fixtures/pandoc-goldens/README.md`.
+    #[test]
+    fn test_builtins_pinned_no_alg() {
+        assert_eq!(
+            BUILTINS,
+            &[
+                ("fig", "Figure"),
+                ("tbl", "Table"),
+                ("lst", "Listing"),
+                ("eq", "Equation"),
+                ("sec", "Section"),
+                ("thm", "Theorem"),
+                ("lem", "Lemma"),
+                ("cor", "Corollary"),
+                ("prp", "Proposition"),
+                ("cnj", "Conjecture"),
+                ("def", "Definition"),
+                ("exm", "Example"),
+                ("exr", "Exercise"),
+                ("sol", "Solution"),
+                ("rem", "Remark"),
+                ("nte", "Note"),
+                ("wrn", "Warning"),
+                ("tip", "Tip"),
+                ("imp", "Important"),
+                ("cau", "Caution"),
+                ("demo", "Demo"),
+            ]
+        );
+        assert!(!BUILTINS.iter().any(|(rt, _)| *rt == "alg"));
+    }
+
     #[test]
     fn builtin_covers_common_categories() {
         let reg = RefTypeRegistry::builtin();

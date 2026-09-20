@@ -613,6 +613,159 @@ fn e2e_docx_image_staged() {
     );
 }
 
+/// A minimal valid docx built by hand (real pandoc, `--reference-doc`
+/// pass-through) whose `word/styles.xml` carries a style name unique
+/// enough that its presence in another docx's output can only mean the
+/// reference doc's styles were actually forwarded — per the task's
+/// vacuity note, "the render succeeded with --reference-doc" is
+/// non-discriminating (pandoc 3.11 succeeds identically whether or not
+/// the reference doc's styles are used).
+fn build_reference_doc_with_unique_style(dest: &Path, style_name: &str) {
+    let temp = TempDir::new().unwrap();
+    let src_dir = canonical(temp.path());
+    write_file(&src_dir.join("base.qmd"), "Base content.\n");
+    let base_docx = src_dir.join("base.docx");
+    let status = Command::new(Q2_BIN)
+        .current_dir(&src_dir)
+        .arg("render")
+        .arg("base.qmd")
+        .arg("--to")
+        .arg("docx")
+        .status()
+        .expect("spawn q2 to build the base reference doc");
+    assert!(status.success(), "failed to build the base reference doc");
+
+    // Unzip, inject a uniquely-named style into styles.xml, re-zip. This
+    // is simpler and more robust across pandoc versions than hand-authoring
+    // a whole docx from scratch.
+    let bytes = std::fs::read(&base_docx).unwrap();
+    let cursor = std::io::Cursor::new(bytes);
+    let mut zip = zip::ZipArchive::new(cursor).unwrap();
+
+    let mut entries: Vec<(String, Vec<u8>)> = Vec::new();
+    for i in 0..zip.len() {
+        let mut entry = zip.by_index(i).unwrap();
+        let name = entry.name().to_string();
+        let mut buf = Vec::new();
+        std::io::Read::read_to_end(&mut entry, &mut buf).unwrap();
+        if name == "word/styles.xml" {
+            let text = String::from_utf8(buf).unwrap();
+            let injected = format!(
+                "<w:style w:type=\"paragraph\" w:styleId=\"{style_name}\">\
+                 <w:name w:val=\"{style_name}\"/></w:style></w:styles>"
+            );
+            let text = text.replace("</w:styles>", &injected);
+            entries.push((name, text.into_bytes()));
+        } else {
+            entries.push((name, buf));
+        }
+    }
+
+    let out_file = std::fs::File::create(dest).unwrap();
+    let mut writer = zip::ZipWriter::new(out_file);
+    for (name, buf) in entries {
+        writer
+            .start_file(&name, zip::write::SimpleFileOptions::default())
+            .unwrap();
+        std::io::Write::write_all(&mut writer, &buf).unwrap();
+    }
+    writer.finish().unwrap();
+}
+
+/// T4.6 (real binary + real pandoc): `q2 render ref.qmd --to docx` with a
+/// `reference-doc:` whose `word/styles.xml` carries a uniquely-named style
+/// — the style must appear in the rendered output's `word/styles.xml`.
+#[test]
+fn e2e_reference_doc_forwarded() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    build_reference_doc_with_unique_style(&dir.join("custom-ref.docx"), "T4P6QuartoCustomStyle");
+    write_file(
+        &dir.join("ref.qmd"),
+        "---\ntitle: Ref\nreference-doc: custom-ref.docx\n---\n\nBody.\n",
+    );
+
+    let output = run_q2(&dir, &["ref.qmd", "--to", "docx"]);
+    assert!(
+        output.status.success(),
+        "q2 render --to docx with reference-doc should succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let bytes = std::fs::read(dir.join("ref.docx")).expect("ref.docx should exist");
+    let cursor = std::io::Cursor::new(bytes);
+    let mut zip = zip::ZipArchive::new(cursor).unwrap();
+    let mut styles_xml = String::new();
+    std::io::Read::read_to_string(
+        &mut zip.by_name("word/styles.xml").unwrap(),
+        &mut styles_xml,
+    )
+    .unwrap();
+    assert!(
+        styles_xml.contains("T4P6QuartoCustomStyle"),
+        "reference-doc's style did not reach the rendered output"
+    );
+}
+
+/// T4.7 (real binary, missing-path diagnostic): `q2 render f.qmd --to
+/// docx` with `reference-doc: missing.docx` exits non-zero, and stderr
+/// names the missing file **and** carries a source span pointing at the
+/// `reference-doc:` line — the span is the discriminator; without the
+/// Q2-side diagnostic, pandoc itself exits 99 with a bare, span-free
+/// line naming the file.
+#[test]
+fn e2e_missing_reference_doc_diagnosed() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_file(
+        &dir.join("f.qmd"),
+        "---\ntitle: F\nreference-doc: missing.docx\n---\n\nBody.\n",
+    );
+
+    let output = run_q2(&dir, &["f.qmd", "--to", "docx"]);
+    assert!(
+        !output.status.success(),
+        "render must fail when reference-doc does not exist"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("missing.docx"),
+        "expected the missing filename on stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("Q-5-30"),
+        "expected the Q-5-30 diagnostic code: {stderr}"
+    );
+    assert!(
+        stderr.contains("f.qmd"),
+        "expected a source span naming f.qmd: {stderr}"
+    );
+    assert!(
+        !dir.join("f.docx").exists(),
+        "no partial docx should be left on disk"
+    );
+}
+
+/// T4.9: `--to latex` still refuses cleanly — the latex stub
+/// (`pandoc_formats::latex`) adds no `FormatIdentifier::Latex` variant.
+#[test]
+fn e2e_latex_still_unknown_format() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_file(&dir.join("f.qmd"), "---\ntitle: F\n---\n\nBody.\n");
+
+    let output = run_q2(&dir, &["f.qmd", "--to", "latex"]);
+    assert!(
+        !output.status.success(),
+        "q2 render --to latex must still fail"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("Unknown format: latex"),
+        "unexpected refusal message: {stderr}"
+    );
+}
+
 /// T4.4: not redundant with the in-process `link_rewrite` unit tests —
 /// a fix for one authored form (relative) routinely leaves the sibling
 /// form (project-root-absolute, leading `/`) broken. Same fixture,
@@ -650,5 +803,87 @@ fn e2e_docx_image_staged_absolute_path() {
     assert!(
         rels.contains(&format!("media/{media_name}")) && rels.contains("relationships/image"),
         "expected an image-typed relationship targeting {media_name}: {rels}"
+    );
+}
+fn zip_entry_text(bytes: &[u8], name: &str) -> String {
+    let cursor = std::io::Cursor::new(bytes.to_vec());
+    let mut zip = zip::ZipArchive::new(cursor).expect("output should be a valid zip archive");
+    let mut text = String::new();
+    std::io::Read::read_to_string(
+        &mut zip
+            .by_name(name)
+            .unwrap_or_else(|_| panic!("output should contain {name}")),
+        &mut text,
+    )
+    .unwrap();
+    text
+}
+
+/// T6.3 (real binary + real pandoc): `q2 render meta.qmd --to docx` with
+/// `title: My Title` / `author: Alice` puts the title in
+/// `docProps/core.xml` **and** in `word/document.xml` as a
+/// `w:pStyle w:val="Title"`-styled paragraph — both surfaces, because
+/// they come from different pandoc code paths (a `Meta.title` that
+/// reaches core props but not the body, or vice versa, is a real partial
+/// failure a single assertion would miss). The value must be asserted,
+/// not just the element's presence: **(measured)** pandoc emits
+/// `<dc:title></dc:title>` (empty) when `Meta` carries no title at all.
+#[test]
+fn e2e_docx_meta_title() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_file(
+        &dir.join("meta.qmd"),
+        "---\ntitle: My Title\nauthor: Alice\ndate: 2026-01-02\n---\n\nBody.\n",
+    );
+
+    let output = run_q2(&dir, &["meta.qmd", "--to", "docx"]);
+    assert!(
+        output.status.success(),
+        "q2 render --to docx should succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let bytes = std::fs::read(dir.join("meta.docx")).expect("meta.docx should exist");
+    let core_xml = zip_entry_text(&bytes, "docProps/core.xml");
+    assert!(
+        core_xml.contains("<dc:title>My Title</dc:title>"),
+        "docProps/core.xml missing the title value: {core_xml}"
+    );
+    assert!(
+        core_xml.contains("<dc:creator>Alice</dc:creator>"),
+        "docProps/core.xml missing the author value: {core_xml}"
+    );
+
+    let document_xml = zip_entry_text(&bytes, "word/document.xml");
+    assert!(
+        document_xml.contains(r#"w:pStyle w:val="Title""#) && document_xml.contains("My Title"),
+        "word/document.xml missing a Title-styled paragraph containing the title text"
+    );
+}
+
+/// T6.4 (real binary + real pandoc): same, pptx — `docProps/core.xml`
+/// carries the title.
+#[test]
+fn e2e_pptx_meta_title() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_file(
+        &dir.join("meta.qmd"),
+        "---\ntitle: My Title\nauthor: Alice\n---\n\nBody.\n",
+    );
+
+    let output = run_q2(&dir, &["meta.qmd", "--to", "pptx"]);
+    assert!(
+        output.status.success(),
+        "q2 render --to pptx should succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let bytes = std::fs::read(dir.join("meta.pptx")).expect("meta.pptx should exist");
+    let core_xml = zip_entry_text(&bytes, "docProps/core.xml");
+    assert!(
+        core_xml.contains("<dc:title>My Title</dc:title>"),
+        "docProps/core.xml missing the title value: {core_xml}"
     );
 }

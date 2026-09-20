@@ -1,0 +1,14 @@
+---
+source: crates/xtask/src/capture_pandoc_goldens.rs
+expression: extraction.to_string()
+---
+core_props:
+slide 1:
+  Tab A
+  Content for Tab A
+  Tab B
+  Content for Tab B
+media: []
+image_relationships: []
+drawing_count: 0
+page_break_count: 0

@@ -55,6 +55,7 @@ expression: keys
     "number-offset",
     "number-sections",
     "output-divs",
+    "page-width",
     "quarto-environment",
     "quarto-filters",
     "results-file",

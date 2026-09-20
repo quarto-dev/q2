@@ -35,7 +35,8 @@ use crate::format::FormatIdentifier;
 use crate::language::LanguageTerms;
 use crate::pandoc_filters::bundle::{extract_formats_tree, extract_share_tree};
 use crate::pandoc_filters::diagnostics::{classify_pandoc_stderr, nonzero_exit_error};
-use crate::pandoc_filters::params::FilterParamsBuilder;
+use crate::pandoc_filters::format_defaults::build_forwarded_args;
+use crate::pandoc_filters::params::{DocxCalloutIconsContributor, FilterParamsBuilder};
 use crate::pandoc_filters::params_codec::encode_params_blob;
 use crate::pandoc_filters::version;
 use crate::stage::{
@@ -258,13 +259,18 @@ impl PipelineStage for PandocWriteStage {
         input: PipelineData,
         ctx: &mut StageContext,
     ) -> Result<PipelineData, PipelineError> {
-        let PipelineData::DocumentAst(doc) = input else {
+        let PipelineData::DocumentAst(mut doc) = input else {
             return Err(PipelineError::unexpected_input(
                 self.name(),
                 self.input_kind(),
                 input.kind(),
             ));
         };
+
+        // P7 Task 6: `title`/`subtitle` reaching Pandoc `Meta` as
+        // `MetaBlocks` is not what the docx/pptx writers read for
+        // `title` — coerce to `MetaInlines` before serialization.
+        crate::pandoc_filters::meta_coerce::coerce_meta_blocks_to_inlines(&mut doc.ast.meta);
 
         // Findings 3/4 (final review): resolve the binary through the
         // runtime (honouring `QUARTO_PANDOC`) and enforce the version
@@ -282,15 +288,32 @@ impl PipelineStage for PandocWriteStage {
         let temp_dir = ctx.temp_dir()?.to_path_buf();
         let results_file = temp_dir.join("pandoc-results.json");
 
-        let params_blob = FilterParamsBuilder::new(
+        // Finding 5 (final review): extracted into the per-render temp
+        // dir rather than a process-global cache, so cleanup rides on
+        // `ctx.temp_dir()`'s existing lifecycle instead of leaking.
+        // Computed here (before the actual extraction, below) because
+        // Task 4's docx callout-icon params need the path to embed in
+        // `QUARTO_FILTER_PARAMS` — the files only need to exist on disk by
+        // the time pandoc actually runs, not when this string is built.
+        let share = temp_dir.join("pandoc-share");
+
+        let mut builder = FilterParamsBuilder::new(
             &ctx.format,
             &ctx.project,
             ctx.ref_type_registry.as_ref(),
             &language,
             results_file,
-        )
-        .build()
-        .to_string();
+        );
+        // P7 Task 4: the 5 docx callout-icon params
+        // (`docxCalloutImage`/`param("icon-" .. type, nil)`,
+        // `resources/pandoc-filters/filters/modules/callouts.lua`) — docx
+        // only; pptx has no callout-icon consumer in the vendored filters.
+        if ctx.format.output_extension == "docx" {
+            builder = builder.with_contributor(Box::new(DocxCalloutIconsContributor {
+                share_dir: share.clone(),
+            }));
+        }
+        let params_blob = builder.build().to_string();
 
         // T9.1: the Pandoc-superset shape (`raw: false`), never pampa's
         // native `raw-json` envelope.
@@ -319,10 +342,6 @@ impl PipelineStage for PandocWriteStage {
             PipelineError::stage_error(self.name(), format!("failed to write temp JSON: {e}"))
         })?;
 
-        // Finding 5 (final review): extracted into the per-render temp
-        // dir rather than a process-global cache, so cleanup rides on
-        // `ctx.temp_dir()`'s existing lifecycle instead of leaking.
-        let share = temp_dir.join("pandoc-share");
         std::fs::create_dir_all(&share).map_err(|e| {
             PipelineError::stage_error(
                 self.name(),
@@ -367,9 +386,37 @@ impl PipelineStage for PandocWriteStage {
         } else {
             Vec::new()
         };
+        // P7 Task 4: the per-format `--default-image-extension` default
+        // plus the pandoc-defaults forwarding allow-list
+        // (`reference-doc`/`template`/`highlight-style`/`toc`/`toc-depth`/
+        // `reference-location`/`shift-heading-level-by`/`slide-level`).
+        // `doc.path`'s parent is the document's own directory — the base a
+        // `reference-doc`/`template` entry's `FORMAT_PATH_KEYS`-resolved,
+        // document-relative `Path` value is rebased against, since this
+        // `Command` inherits the process cwd rather than setting its own.
+        let doc_dir = doc.path.parent().unwrap_or_else(|| Path::new("."));
+        let forwarded_args = build_forwarded_args(self.name(), doc_dir, &doc.ast.meta, to_format)?;
 
+        // Body-content `Image`/`Link` targets (e.g. `img/thinker.jpg`)
+        // reach pandoc as literal, unrebased strings from the AST — unlike
+        // the `FORMAT_PATH_KEYS` config keys `build_forwarded_args` already
+        // rebases above, nothing upstream of this stage rewrites them for
+        // filesystem resolution (the sibling `link-rewrite` B3 transform
+        // only rewrites for browser/HTML consumption, and only when a
+        // `ResourceResolverContext` is attached). Pandoc's own docx/pptx
+        // writers read the referenced file's bytes directly to embed it,
+        // resolving a relative target against pandoc's cwd — which this
+        // `Command` never sets, so it inherits whatever cwd the host
+        // process happens to have. `--resource-path` tells pandoc to also
+        // check `doc_dir`, matching every other resolution in this stage.
+        // Without it, every docx/pptx render referencing an image by a
+        // relative path silently drops the image (measured: `cargo run
+        // --bin q2 -- render <fixture with a relative image> --to docx`
+        // printed `Warning [Q-11-1]: Could not fetch resource
+        // img/thinker.jpg: replacing image with description`).
+        //
         // T9.6: `-f json -t <to_format> --data-dir <share>/pandoc/datadir
-        // -L <share>/filters/main.lua -o <output>`.
+        // -L <share>/filters/main.lua --resource-path <doc_dir> -o <output>`.
         let output = Command::new(&pandoc_bin)
             .arg("-f")
             .arg("json")
@@ -380,8 +427,11 @@ impl PipelineStage for PandocWriteStage {
             .arg("-L")
             .arg(share.join("filters").join("main.lua"))
             .args(&format_extra_args)
+            .arg("--resource-path")
+            .arg(doc_dir)
             .arg("-o")
             .arg(&output_path)
+            .args(&forwarded_args)
             .arg(&json_path)
             .env("QUARTO_SHARE_PATH", share)
             .env("QUARTO_FILTER_PARAMS", encode_params_blob(&params_blob))

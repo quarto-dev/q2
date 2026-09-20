@@ -113,6 +113,75 @@ fn render_document_to_file_docx_sink_does_not_truncate_pandoc_output() {
     );
 }
 
+/// A relative image reference must resolve against the **document's own
+/// directory**, not whatever directory the process happens to have as its
+/// cwd. `PandocWriteStage` shells out to a real `pandoc` subprocess to
+/// write the docx; pandoc itself (not Q2) reads the image bytes off disk
+/// at that point, resolving a relative target against its own cwd unless
+/// told otherwise. Reproduced via `cargo run --bin q2 -- render
+/// <fixture>/all-docx.qmd --to docx`, which printed `Warning [Q-11-1]:
+/// [WARNING] Could not fetch resource img/thinker.jpg: replacing image
+/// with description` — the image silently drops out of every real docx
+/// render that references one by a relative path, which is the common
+/// case.
+///
+/// Revert hunk: reverting the `--resource-path` argument added to
+/// `PandocWriteStage`'s `Command` in `pandoc_write.rs` reddens this test —
+/// the output docx would then carry zero `word/media/` entries.
+#[test]
+fn render_document_to_file_docx_embeds_a_relatively_referenced_image() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = temp.path().canonicalize().unwrap();
+
+    // A minimal valid 1x1 PNG (the smallest well-known valid PNG byte
+    // sequence), placed in a subdirectory so the qmd's `img/dot.png`
+    // reference is genuinely relative, not accidentally already at the
+    // process cwd.
+    const ONE_PIXEL_PNG: &[u8] = &[
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44,
+        0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f,
+        0x15, 0xc4, 0x89, 0x00, 0x00, 0x00, 0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00,
+        0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49,
+        0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+    ];
+    write(
+        &project_dir.join("doc.qmd"),
+        "---\ntitle: F\n---\n\n![alt](img/dot.png)\n",
+    );
+    std::fs::create_dir_all(project_dir.join("img")).unwrap();
+    std::fs::write(project_dir.join("img/dot.png"), ONE_PIXEL_PNG).unwrap();
+
+    let input_path = project_dir.join("doc.qmd");
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let options = RenderToFileOptions::default();
+
+    let result = render_document_to_file(
+        &input_path,
+        "docx",
+        &options,
+        None,
+        runtime,
+        None,
+        None,
+        None,
+    )
+    .expect("docx render should succeed");
+
+    let bytes = std::fs::read(&result.output_path).expect("output file should be readable");
+    let cursor = std::io::Cursor::new(bytes);
+    let zip = zip::ZipArchive::new(cursor).expect("output should be a valid ZIP archive");
+    let media_entries: Vec<&str> = zip
+        .file_names()
+        .filter(|name| name.starts_with("word/media/"))
+        .collect();
+    assert!(
+        !media_entries.is_empty(),
+        "expected the relatively-referenced image to be embedded under word/media/, \
+         found no such entry among: {:?}",
+        zip.file_names().collect::<Vec<_>>()
+    );
+}
+
 /// Walk a document's top-level blocks for any `Block::Custom` (the
 /// typed AST variant `AstTransformsStage` creates when it desugars a
 /// callout div — see `crates/quarto-pandoc-types/src/custom.rs`).
