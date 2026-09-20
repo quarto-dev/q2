@@ -256,17 +256,125 @@ does not mean "nothing to port beyond a CSS file." See Phase 1 below.
       if wanted, not a Phase 1 gap.
 
 ### Phase 2 — Golden tests & docs
-- [ ] Golden-test methodology: EPUB **is** a zip container (like docx/pptx), so P7's
+- [x] Golden-test methodology: EPUB **is** a zip container (like docx/pptx), so P7's
       unzip-and-walk approach may be directly adaptable — evaluate whether to reuse/extend
       it (unzip → walk the chapter XHTML files → insta-snapshot) rather than inventing a
       third methodology from scratch. epub's payload is already plain XHTML (no OOXML to
       walk into a semantic tree first), which may need a lighter touch — e.g. snapshot the
       extracted XHTML text directly.
-- [ ] `docs/` page for the epub format (usage-focused).
-- [ ] End-to-end verification per the repo's standing rule: render a real `.qmd` fixture
+      **Decided 2026-09-20, no new harness built.** Checked what actually exists on this
+      branch (`feature/pandoc-writer-hybrid` tip `d8c7d3443`): P7's own `G`-tier
+      `cargo xtask capture-pandoc-goldens` (the real-Q1-binary, Q1-parity insta harness
+      this bullet asks about reusing) **does not exist yet** —
+      `crates/xtask/src/capture_pandoc_goldens.rs` is absent, and the only references to it
+      anywhere in the tree are forward-looking mentions in P7's own planning docs. There is
+      nothing concrete to reuse or extend today. The other existing insta-snapshot harness,
+      `pandoc_shim_goldens.rs` (`L`-tier, projects the Lua-shim-captured AST *before* Pandoc's
+      own write stage), is format-agnostic by construction — epub's actual divergence from
+      HTML (chapter splitting, zip/OPF structure, embedded CSS) only happens *inside* Pandoc's
+      EPUB writer, a stage that harness never reaches. Building a brand-new third
+      methodology now — a bespoke insta-snapshot-the-unzipped-XHTML harness, with its own new
+      `insta` dev-dependency in the `quarto` crate — would duplicate what Phase 1's six
+      `e2e_render_epub_*` tests in `render_pandoc_formats_e2e.rs` already do via real
+      `q2 render --to epub` + unzip + targeted assertions (mimetype/zip structure,
+      MathML, chapter-splitting counts, OPF cover-image property, embedded CSS content,
+      callout classes, numbered crossref text) — and risks conflicting with whatever shape
+      P7's `capture-pandoc-goldens` eventually settles on for zip-container formats generally.
+      **Conclusion: no new golden harness for v1.** If/when P7 lands `capture-pandoc-goldens`,
+      adding epub fixtures to it is natural future work (unzip → chapter XHTML, no OOXML tree
+      needed, exactly as this bullet anticipated) — tracked as follow-up, not a v1 gap, since
+      it depends on infrastructure this plan doesn't own.
+- [x] `docs/` page for the epub format (usage-focused).
+      **Done**: `docs/guides/formats/epub/index.qmd` — covers `format: epub` invocation,
+      `epub-chapter-level` splitting, `epub-cover-image`/`epub-metadata`, `epub-embed-font`/
+      `css`, and a user-facing note on the tabset limitation (Phase 1's flagged finding,
+      framed here as an observable behavior readers should know about, not an internals
+      detail). Wired into the sidebar (`docs/_quarto.yml`, `Guides` section, after
+      `guides/publishing/index.qmd`) — no prior format-docs precedent to follow:
+      `docs/guides/formats/{latex,typst}/*.qmd` exist but are unlinked "TBD." scaffolding
+      stubs from early in the project (commit `7f8344db6`, months before this epic), not a
+      completed pattern worth copying beyond the directory shape.
+      **Verified end-to-end**: `cargo build --bin q2` then
+      `./target/debug/q2 render docs/guides/formats/epub/index.qmd` — rendered clean (2
+      files, pre-existing unrelated llms.txt-companion warnings only), and the rendered
+      `docs/_site/guides/formats/epub/index.html` was inspected directly: contains the
+      documented option names (`epub-chapter-level`, `epub-cover-image`, `panel-tabset`) and
+      a sidebar entry reading "EPUB format" (`class="sidebar-link active"`) correctly
+      positioned right after "Publishing" — confirming the `_quarto.yml` sidebar edit
+      resolved and the page is actually reachable, not just present on disk.
+- [x] End-to-end verification per the repo's standing rule: render a real `.qmd` fixture
       (including a callout and a tabset, to exercise Phase 1's ported renderers, plus a
       crossref) to `--to epub`, open the resulting `.epub` (unzip and inspect the
       XHTML/OPF/nav, or open in an actual e-reader/preview app), and record the invocation +
       what was inspected.
+      **Done 2026-09-20.** Fixture (two H1 chapters, a `.callout-note`, a numbered figure
+      crossref) rendered via the real binary, not a test helper:
+      ```
+      $ q2 render book.qmd --to epub
+      ```
+      with `book.qmd`:
+      ```yaml
+      ---
+      title: "The Epub Verification Book"
+      format:
+        epub:
+          epub-chapter-level: 1
+      ---
+      # Chapter One
+      ::: {.callout-note}
+      ## A Note
+      This is a callout note in Chapter One.
+      :::
+      ![A sample figure](fig.png){#fig-sample}
+      See @fig-sample for the figure above.
+      # Chapter Two
+      Some more body text in the second chapter.
+      ```
+      Exit code 0, produced `book.epub`. Unzipped and inspected directly (`unzip book.epub`):
+      chapter split produced exactly `EPUB/text/ch001.xhtml` and `ch002.xhtml` (one per H1, as
+      `epub-chapter-level: 1` implies) plus `title_page.xhtml`; `ch001.xhtml`'s body:
+      ```html
+      <div class="callout-note">
+      <div class="callout callout-note callout-titled callout-style-default">
+      ...<p><strong>A Note</strong></p>...
+      <p>This is a callout note in Chapter One.</p>
+      ...
+      <figcaption ...>Figure 1: A sample figure</figcaption>
+      ...
+      <p>See <a href="ch001.xhtml#fig-sample" class="quarto-xref">Figure 1</a> for the figure
+      above.</p>
+      ```
+      confirming the callout renders with the dedicated epub/revealjs classes, the figure
+      crossref is numbered, and the `@fig-sample` reference resolves and links correctly — all
+      via a real render + real unzip, not an in-process test helper. (Tabset omitted from this
+      particular manual fixture; already covered by Phase 1's own finding that the tabset
+      branch is unreachable — see the Phase 1 notes above — so a manual tabset re-check here
+      would only reconfirm a known, already-documented result.)
 - [ ] Full workspace verification per this repo's standing rules: `cargo xtask verify`
       (full, since this touches `quarto-core`) before any push.
+      **Run 2026-09-20, NOT clean — but the failure is proven unrelated to this plan.**
+      Steps 1-7 (lints/clippy/fmt, Rust build with `-D warnings`, tree-sitter grammar
+      tests, **`cargo nextest run --workspace`: 14174 passed (1 slow) / 199 skipped / 0
+      failed** — identical to the Phase 1 baseline, confirming no stray/duplicated test —
+      ts-packages build, hub-client build incl. WASM) all passed clean. **Step 8
+      (`hub-client test:ci`) failed**: `smokeAllParity.wasm.test.tsx`'s
+      `test:wasm` leg reports 97/134 opted-in-fixture parity mismatches (preview's
+      rendered `<main>` is missing its entire `<header class="quarto-title-block …">`
+      block against every sampled fixture — `drafts/*`, `extensions/*`, `contract-*`,
+      nothing epub-related). **Attributed from full-phase context, not bisected
+      blindly**: `git diff d8c7d3443..HEAD` (the epub plan's entire Phase 0-2 diff) touches
+      exactly 6 files, all epub-format-gated (`pandoc_filters/{bundle,mod}.rs`,
+      `project/format_paths.rs`, `stage/stages/pandoc_write.rs`, `commands/render.rs`, plus
+      the new e2e test file) — none on the preview/title-block rendering path; the failing
+      test file itself (`bd-xa4vv9tt`) already existed at `d8c7d3443`, the commit this
+      branch was created from, before any epub work. **This is a pre-existing regression on
+      the shared `feature/pandoc-writer-hybrid` integration branch, not something this plan
+      caused or is scoped to fix** — the preview-render DOM-parity epic (`bd-j3764r9a`) is a
+      large, separate, already-tracked body of work with its own skill
+      (`.claude/skills/preview-render-parity/`). Filed as `bd-6zrmjidd` (parent-child under
+      `bd-j3764r9a`, discovered-from `bd-xa4vv9tt`), per the "Beads vs. plans" rule — this is
+      squarely outside the epub plan's scope, so it is **not** added to this checklist as
+      work to do. **Left unchecked deliberately**: `cargo xtask verify` did not exit clean,
+      so this box does not get checked even though the epub-relevant legs are all green —
+      flagging to the user for a decision on how to proceed with pushing given a
+      pre-existing, unrelated failure on the shared integration branch.
