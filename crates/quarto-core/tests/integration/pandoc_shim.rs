@@ -192,10 +192,27 @@ pub(crate) fn build_ast_and_params_from_content(
     fixture_name: &str,
     content: &[u8],
 ) -> (String, String) {
+    build_ast_and_params_from_content_for_format(fixture_name, content, Format::docx())
+}
+
+/// `build_ast_and_params_from_content`'s format-parametrized variant, for
+/// callers that need the real pipeline-minus-`PandocWriteStage` seam under a
+/// non-docx format (e.g. typst's `route_crossref_resolved_ref` fix, which
+/// only matters when `format.identifier` is `FormatIdentifier::Typst` --
+/// `insert_crossref_numbering_mode` reads `format.identifier` directly, so a
+/// docx-shaped `Format` here would wrongly set `crossref-numbering:
+/// external` and mask the typst-only branch entirely).
+pub(crate) fn build_ast_and_params_from_content_for_format(
+    fixture_name: &str,
+    content: &[u8],
+    format: Format,
+) -> (String, String) {
     let project_dir = tempfile::tempdir().expect("failed to create temp project dir");
     let input_path = project_dir.path().join(fixture_name);
     std::fs::write(&input_path, content).expect("failed to write fixture input");
-    let output_path = project_dir.path().join("out.docx");
+    let output_path = project_dir
+        .path()
+        .join(format!("out.{}", format.output_extension));
 
     let project = ProjectContext {
         dir: project_dir.path().to_path_buf(),
@@ -205,7 +222,6 @@ pub(crate) fn build_ast_and_params_from_content(
         ..Default::default()
     };
     let doc = DocumentInfo::from_path(&input_path).with_output(&output_path);
-    let format = Format::docx();
     let binaries = BinaryDependencies::new();
     let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 

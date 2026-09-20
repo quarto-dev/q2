@@ -519,6 +519,23 @@ local function route_crossref_resolved_ref(node, wire)
     end
   end
 
+  -- Typst half: `refs.lua:89-91`. Typst resolves crossref numbers natively
+  -- at compile time from a `#ref(<label>, ...)` call -- unlike every other
+  -- format here, there is no "number half" to bake as static text, and
+  -- baking `data.order` as a number would risk disagreeing with whatever
+  -- Typst's own compiler-native counter assigns to the referenced
+  -- element (design doc note reopened 2026-09-20, plan's "Math delivery"
+  -- bullet). Mirrors `refs.lua`'s own `elseif _quarto.format.isTypstOutput()`
+  -- sibling branch exactly: wrap the already-computed prefix inlines (built
+  -- above, nbsp-free per `add_ref_prefix`'s own typst guard) as `#ref()`'s
+  -- `supplement:` argument, and return before the number half / hyperlink
+  -- wrap below -- Typst's `#ref()` is already the link.
+  if _quarto.format.isTypstOutput() then
+    ref:insert(1, pandoc.RawInline("typst", "#ref(<" .. data.identifier .. ">, supplement: ["))
+    ref:insert(pandoc.RawInline("typst", "])"))
+    return ref
+  end
+
   -- Number half: `refs.lua:111-113`, `entry.parent == nil` branch only
   -- (subfloats scoped out above). `refNumberOption` takes an
   -- index-entry-shaped table (`crossref/index.lua:66-78`), not a raw

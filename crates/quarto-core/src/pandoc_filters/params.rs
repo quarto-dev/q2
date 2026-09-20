@@ -22,7 +22,7 @@ use std::path::PathBuf;
 use serde_json::{Map, Value, json};
 
 use crate::crossref::RefTypeRegistry;
-use crate::format::{Format, PipelineProfile};
+use crate::format::{Format, FormatIdentifier};
 use crate::language::LanguageTerms;
 use crate::project::ProjectContext;
 
@@ -259,10 +259,22 @@ fn insert_numbering_params(blob: &mut Map<String, Value>) {
 /// `param("crossref-numbering", "quarto")`'s own default branch
 /// unreachable and untested (P3's companion already logged that trade-off
 /// for the value pair this key introduces).
+///
+/// **Docx/Pptx only — not every `Pandoc(_)` profile.** `main.lua:737-752`'s
+/// own fail-fast guard rejects `crossref-numbering: external` combined with
+/// a LaTeX/Typst target ("only docx, odt, and pptx are supported"), and for
+/// good reason: external mode skips the *entire* `quarto_crossref_filters`
+/// group (not just number-assignment), including `resolveRefs` — the code
+/// that emits Typst's `#ref(<label>, supplement: [...])`
+/// (`crossref/refs.lua:89-91`). Typst (and eventually LaTeX) computes its
+/// own crossref numbers natively at compile time; Q2 has no `.order` to
+/// protect there, so Q1's own crossref group must run unsuppressed
+/// (pandoc-hybrid-typst Phase 1, cross-session finding from the
+/// `explore/latex-typst-numbering-influence` investigation).
 fn insert_crossref_numbering_mode(blob: &mut Map<String, Value>, format: &Format) {
     if matches!(
-        PipelineProfile::from_format(&format.target_format),
-        PipelineProfile::Pandoc(_)
+        format.identifier,
+        FormatIdentifier::Docx | FormatIdentifier::Pptx
     ) {
         blob.insert("crossref-numbering".to_string(), json!("external"));
     }
@@ -515,13 +527,13 @@ mod tests {
         assert_eq!(blob["execution-engine"], json!("overridden"));
     }
 
-    /// P6 T1.1: `crossref-numbering: "external"` is present for a Pandoc
+    /// P6 T1.1: `crossref-numbering: "external"` is present for a docx
     /// profile, suppressing Q1's own crossref auto-indexer (`main.lua:718`'s
     /// `assignCrossrefNumbers` predicate, P3) so it never clobbers the
     /// wire-format shim's pre-assigned `.order` (bd-fzqykm0n).
     ///
     /// Revert hunk: removing the `crossref-numbering` insertion under the
-    /// `PipelineProfile::Pandoc(_)` arm makes this RED (key absent).
+    /// `Docx | Pptx` arm makes this RED (key absent).
     #[test]
     fn test_pandoc_profile_sets_external_crossref_numbering() {
         let format = Format::docx();
@@ -541,8 +553,8 @@ mod tests {
     /// function directly with a non-Pandoc `Format` to prove the gate, not
     /// just the insert.
     ///
-    /// Revert hunk: hoisting the insertion out of the `Pandoc(_)`-only gate
-    /// (making it unconditional) makes this RED.
+    /// Revert hunk: hoisting the insertion out of the `Docx | Pptx`-only
+    /// gate (making it unconditional) makes this RED.
     #[test]
     fn test_non_pandoc_profile_omits_crossref_numbering() {
         let project = fixture_project(true);
@@ -558,6 +570,37 @@ mod tests {
                 "expected no crossref-numbering key for {target_format}, got {blob}"
             );
         }
+    }
+
+    /// pandoc-hybrid-typst Phase 1: a Typst `Format` must **not** get
+    /// `crossref-numbering: "external"`. Typst has no Route-R pre-assigned
+    /// `.order` to protect — it uses Route N, and the whole point of
+    /// external numbering (suppressing Q1's own `quarto_crossref_filters`
+    /// auto-indexer group) is backwards for typst, which *needs* that group
+    /// to run: `crossref/refs.lua`'s `#ref(<label>, supplement: ...)`
+    /// emission (Q1's actual typst crossref mechanism, confirmed against
+    /// `filters/main.lua:737-752`'s own fail-fast guard, which rejects
+    /// `crossref-numbering: external` combined with a Typst/LaTeX target
+    /// outright — "only docx, odt, and pptx are supported"). Before this
+    /// fix, `insert_crossref_numbering_mode` set the key for *any*
+    /// `PipelineProfile::Pandoc(_)`, which made every Typst render hit that
+    /// fail-fast guard unconditionally (crossref-less documents included,
+    /// since `enable-crossref`'s structural-literal default is `true`).
+    ///
+    /// Revert hunk: widening the identifier match back to "every
+    /// `Pandoc(_)` profile" makes this RED.
+    #[test]
+    fn test_typst_profile_omits_crossref_numbering() {
+        let format = Format::from_format_string("typst").unwrap();
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = fixture_language();
+        let blob = fixture_builder(&format, &project, &registry, &language).build();
+
+        assert!(
+            !blob.as_object().unwrap().contains_key("crossref-numbering"),
+            "typst must not get crossref-numbering: external, got {blob}"
+        );
     }
 
     /// T4.11: `results-file` is an absolute path and `quarto-environment`
