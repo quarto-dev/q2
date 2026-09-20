@@ -22,7 +22,7 @@ use std::path::PathBuf;
 use serde_json::{Map, Value, json};
 
 use crate::crossref::RefTypeRegistry;
-use crate::format::Format;
+use crate::format::{Format, PipelineProfile};
 use crate::language::LanguageTerms;
 use crate::project::ProjectContext;
 
@@ -97,6 +97,7 @@ impl<'a> FilterParamsBuilder<'a> {
             );
         }
         insert_numbering_params(&mut blob);
+        insert_crossref_numbering_mode(&mut blob, self.format);
         insert_top_level_literals(&mut blob, &self.results_file, self.typst_binary);
 
         for contributor in &self.contributors {
@@ -188,6 +189,36 @@ fn insert_numbering_params(blob: &mut Map<String, Value>) {
     blob.insert("number-sections".to_string(), json!(false));
     blob.insert("number-offset".to_string(), json!([] as [i64; 0]));
     blob.insert("number-depth".to_string(), json!(6));
+}
+
+/// `crossref-numbering: "external"` — Pandoc-leg profiles only (P6 Task 1).
+///
+/// P5's wire-format shim already assigns every Route-R node's `.order` from
+/// Q2's own `CrossrefIndexTransform` before this render starts. Without this
+/// key, Q1's own `quarto_crossref_filters` auto-indexer group
+/// (`main.lua:718`'s `assignCrossrefNumbers` predicate, gated by P3's
+/// upstream patch) stays active and unconditionally *overwrites* that
+/// pre-assigned order — `crossref_theorems()`/`crossref_figures()`/
+/// `crossref_callouts()` all call `add_crossref`, which always calls
+/// `indexNextOrder` with no idempotency check against an existing value.
+/// For a flat single-element fixture the two counters happen to agree (both
+/// start from 1 in document order), which is why this went unnoticed until
+/// a discriminating fixture was built — but for any real multi-element
+/// document, or a `CrossrefResolvedRef` citing a Route-R element's
+/// Q2-resolved number, the two can silently disagree (bd-fzqykm0n).
+///
+/// Every non-Pandoc profile omits the key entirely, deliberately not
+/// `"quarto"` — emitting the literal Q1 default would make
+/// `param("crossref-numbering", "quarto")`'s own default branch
+/// unreachable and untested (P3's companion already logged that trade-off
+/// for the value pair this key introduces).
+fn insert_crossref_numbering_mode(blob: &mut Map<String, Value>, format: &Format) {
+    if matches!(
+        PipelineProfile::from_format(&format.target_format),
+        PipelineProfile::Pandoc(_)
+    ) {
+        blob.insert("crossref-numbering".to_string(), json!("external"));
+    }
 }
 
 /// `results-file`, `execution-engine`, `quarto-environment` — top-level
@@ -433,6 +464,51 @@ mod tests {
 
         assert_eq!(blob["t4-probe"], json!(1));
         assert_eq!(blob["execution-engine"], json!("overridden"));
+    }
+
+    /// P6 T1.1: `crossref-numbering: "external"` is present for a Pandoc
+    /// profile, suppressing Q1's own crossref auto-indexer (`main.lua:718`'s
+    /// `assignCrossrefNumbers` predicate, P3) so it never clobbers the
+    /// wire-format shim's pre-assigned `.order` (bd-fzqykm0n).
+    ///
+    /// Revert hunk: removing the `crossref-numbering` insertion under the
+    /// `PipelineProfile::Pandoc(_)` arm makes this RED (key absent).
+    #[test]
+    fn test_pandoc_profile_sets_external_crossref_numbering() {
+        let format = Format::docx();
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = fixture_language();
+        let blob = fixture_builder(&format, &project, &registry, &language).build();
+
+        assert_eq!(blob["crossref-numbering"], json!("external"));
+    }
+
+    /// P6 T1.2: non-Pandoc profiles (native HTML render/preview) never see
+    /// the key at all — not `"quarto"` — so Q1's own
+    /// `param("crossref-numbering", "quarto")` default stays the reachable,
+    /// tested code path. This builder is only ever wired into the Pandoc
+    /// leg in production (`PandocWriteStage`), so this row exercises the
+    /// function directly with a non-Pandoc `Format` to prove the gate, not
+    /// just the insert.
+    ///
+    /// Revert hunk: hoisting the insertion out of the `Pandoc(_)`-only gate
+    /// (making it unconditional) makes this RED.
+    #[test]
+    fn test_non_pandoc_profile_omits_crossref_numbering() {
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = fixture_language();
+
+        for target_format in ["html", "q2-preview"] {
+            let format = Format::from_format_string(target_format)
+                .unwrap_or_else(|e| panic!("failed to build Format for {target_format}: {e}"));
+            let blob = fixture_builder(&format, &project, &registry, &language).build();
+            assert!(
+                !blob.as_object().unwrap().contains_key("crossref-numbering"),
+                "expected no crossref-numbering key for {target_format}, got {blob}"
+            );
+        }
     }
 
     /// T4.11: `results-file` is an absolute path and `quarto-environment`

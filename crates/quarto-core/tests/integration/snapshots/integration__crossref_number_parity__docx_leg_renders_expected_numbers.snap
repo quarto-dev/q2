@@ -1,0 +1,13 @@
+---
+source: crates/quarto-core/tests/integration/crossref_number_parity.rs
+assertion_line: 184
+expression: plain
+---
+  ------------------------------------------------------------
+                      Figure 1: A caption.
+
+  ------------------------------------------------------------
+
+Theorem 1 (My Special Title) Theorem body.
+
+Proof. Proof body.

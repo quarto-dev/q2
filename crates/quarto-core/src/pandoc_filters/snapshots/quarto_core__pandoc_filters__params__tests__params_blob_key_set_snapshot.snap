@@ -30,6 +30,7 @@ expression: keys
     "crossref-lst-title",
     "crossref-nte-prefix",
     "crossref-nte-title",
+    "crossref-numbering",
     "crossref-prp-prefix",
     "crossref-prp-title",
     "crossref-rem-prefix",

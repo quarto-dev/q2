@@ -67,9 +67,13 @@ fn base_params_json() -> String {
 /// Builds the params blob for one matrix run. `enable_crossref = None`
 /// leaves the builder's own default (`true`) untouched — behaviorally
 /// identical to "unset" at the Lua `param()` call site, since the builder
-/// always emits the key. `crossref_numbering = None` leaves the key absent
-/// entirely, so `param("crossref-numbering", "quarto")` falls back to its
-/// own default.
+/// always emits the key. `crossref_numbering = None` **removes** the key
+/// (rather than leaving it as built), so `param("crossref-numbering",
+/// "quarto")` falls back to its own default — since P6 Task 1 landed, the
+/// real builder now always inserts `"external"` for a Pandoc-profile
+/// `Format` (this matrix's `base_params_json` uses `Format::docx()`), so
+/// simulating "unset" requires an explicit removal, not just an absent
+/// override.
 fn numbering_params_json(
     enable_crossref: Option<bool>,
     crossref_numbering: Option<&str>,
@@ -79,8 +83,13 @@ fn numbering_params_json(
     if let Some(v) = enable_crossref {
         obj.insert("enable-crossref".to_string(), json!(v));
     }
-    if let Some(v) = crossref_numbering {
-        obj.insert("crossref-numbering".to_string(), json!(v));
+    match crossref_numbering {
+        Some(v) => {
+            obj.insert("crossref-numbering".to_string(), json!(v));
+        }
+        None => {
+            obj.remove("crossref-numbering");
+        }
     }
     params.to_string()
 }
