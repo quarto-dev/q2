@@ -18,6 +18,7 @@ pub mod brand_render;
 pub mod breadcrumbs_pipeline;
 pub mod capture_splice_engines;
 pub mod capture_splice_seam;
+pub mod conditional_content_pandoc;
 pub mod crossref_fixtures;
 pub mod crossref_numbering_matrix;
 pub mod custom_node_schema_conformance;

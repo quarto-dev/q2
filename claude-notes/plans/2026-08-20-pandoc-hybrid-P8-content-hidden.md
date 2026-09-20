@@ -9,8 +9,12 @@ direction, see design doc §9). Also: the design doc §6 table gap this plan fla
 (landed in the same review pass, design doc commit `43c3326c2`) — updated the note below to say
 so instead of "still missing." (Prior pass, 2026-09-16: see "Status update" below; folded
 verification tasks into one section.)
-**Status:** Mostly done, landed outside this epic. Remaining work is verification against
-Pandoc targets, not implementation.
+**Status:** Verification complete for Tasks 1-3 (2026-09-20) — 12 new tests (14 assertions,
+11 pre-existing-hunk regression guards, 2 unit-level pre-existing-hunk guards, 1 cross-plan)
+added across `conditional_content.rs`, `format.rs`, `llms.rs`, and a new
+`tests/integration/conditional_content_pandoc.rs`; every row's named revert hunk was applied,
+confirmed RED, and restored. Only Task 4 (the docx/pptx smoke fixture) remains, correctly
+gated on P7's Pandoc tail.
 **Design (authoritative):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md)  |  Epic: `2026-08-20-pandoc-hybrid-epic.md`
 **Implementation task breakdown + test-seam prevalidation:** [`2026-09-18-pandoc-hybrid-P8-implementation.md`](2026-09-18-pandoc-hybrid-P8-implementation.md) — this plan's Coarse checklist converted into dispatchable `## Task N` units, each test bound to a named production seam and revert hunk.
 
@@ -54,19 +58,31 @@ in §6 (design doc commit `43c3326c2`) — no longer an open item for P1 either.
 
 ## Coarse checklist
 
-- [ ] Verify `when-format`/`unless-format` gating produces correct results when `target_format`
+- [x] Verify `when-format`/`unless-format` gating produces correct results when `target_format`
   is a genuine Pandoc format string (docx/pptx/latex) — today it has only been exercised for
-  html/revealjs/preview/llms.
-- [ ] Verify the resolved-Div unwrapping (bd-wbnaa2ud's fix) produces the AST shape Pandoc's
+  html/revealjs/preview/llms. **Done 2026-09-20** via the implementation companion's Task 1
+  (T1.1-T1.6): the four-quadrant matrix holds for docx and pptx, `unless-format` inverts
+  correctly, and `ConditionalContentTransform::transform` itself (not just the `Walker` test
+  helper) was driven with a real `Format::from_format_string("docx")` to close the
+  `lua_format_for`-bypass hole the plan flagged.
+- [x] Verify the resolved-Div unwrapping (bd-wbnaa2ud's fix) produces the AST shape Pandoc's
   writers expect — no stray empty wrapper Divs feeding into e.g. docx's paragraph/section model.
-- [ ] Confirm there is no hidden HTML-only assumption inside `is_bare_wrapper` (the "when do we
+  **Done 2026-09-20** via Task 2 (T2.2/T2.3): a real `pandoc -f json -t docx`/`pptx` invocation
+  on the resolved AST, asserting no stray `Div` node in the pre-pandoc JSON and the correct
+  sentinel text in `word/document.xml` / `ppt/slides/*.xml`.
+- [x] Confirm there is no hidden HTML-only assumption inside `is_bare_wrapper` (the "when do we
   unwrap the Div wrapper" check) that would misbehave for Pandoc's Div handling in docx/pptx
-  writers specifically.
-- [ ] Confirm the llms-view two-view evaluation path (bd-stbdlesy) is genuinely orthogonal to the
+  writers specifically. **Done 2026-09-20** via Task 2 (T2.1): the same bare-wrapper fixture run
+  under html/docx/pptx produces the identical resolved shape, by measurement.
+- [x] Confirm the llms-view two-view evaluation path (bd-stbdlesy) is genuinely orthogonal to the
   Pandoc tail and doesn't need touching — llms output is a markdown companion, not a Pandoc
-  writer target, so this is likely a non-issue, but hasn't been explicitly checked.
+  writer target, so this is likely a non-issue, but hasn't been explicitly checked. **Done
+  2026-09-20** via Task 3 (T3.2/T3.3): `llms_view_active` is `false` for a docx `Format` even
+  with `website.llms-txt: true` set (the format conjunct, not the config conjunct, gates it),
+  and `when-format="llms"` is inert under docx without the llms view active.
 - [ ] **Add a docx/pptx smoke fixture exercising `.content-visible`/`.content-hidden`, once P7's
   Pandoc tail exists.** Owned here as of 2026-09-17 (epic-wide review, I1) — this item and P7's
   checklist previously each pointed at the other for the same fixture, a latent cycle with no
   actual owner; resolved in this direction since P7 produces the tail this verification needs,
-  not the reverse.
+  not the reverse. **Still gated** — deliberately not started this session; see the
+  implementation companion's Task 4.
