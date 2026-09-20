@@ -43,9 +43,9 @@ Landing this plan makes `q2 render f.qmd --to docx` and `--to pptx` **reach pand
 
 ## Coarse checklist
 
-- [ ] Task 1 — the multi-format render warning (`Q-18-*` diagnostic, docs page, sidebar entry).
-- [ ] Task 2 — the project-mode containment gate (`is_html_based()` guard on `WebsiteProjectType::post_render`).
-- [ ] Task 3 — relax the format gate, admit docx and pptx, route through `render_qmd_to_pandoc`, wire the warning in.
-- [ ] Task 4 (formerly P7's Task 7) — B3 shared services (resource staging, link rewriting) confirmed wired into the Pandoc tail.
+- [x] Task 1 — the multi-format render warning (`Q-18-*` diagnostic, docs page, sidebar entry).
+- [x] Task 2 — the project-mode containment gate (`is_html_based()` guard on `WebsiteProjectType::post_render`).
+- [x] Task 3 — relax the format gate, admit docx and pptx, route through `render_qmd_to_pandoc`, wire the warning in.
+- [x] Task 4 (formerly P7's Task 7) — B3 shared services (resource staging, link rewriting) confirmed wired into the Pandoc tail.
 
 See the implementation companion for full acceptance criteria, test-seam specs, revert hunks, and vacuity checks — migrated verbatim from P7's companion.

@@ -277,6 +277,72 @@ pub fn format_key_from_frontmatter(content: &str) -> Option<String> {
     }
 }
 
+/// Extract every key a document's leading YAML front-matter `format:`
+/// declares, in declaration order: the scalar wrapped as a single-element
+/// vec, or every key when it is a map (e.g. `format: {docx: default, html:
+/// default}` → `["docx", "html"]`). Returns an empty vec when there is no
+/// front matter or no `format:` key.
+///
+/// The counterpart to [`format_key_from_frontmatter`], which returns only
+/// the single key that reduction picks; this returns the full declaration so
+/// [`multi_format_diagnostics`] can name what else was skipped.
+pub fn format_keys_from_frontmatter(content: &str) -> Vec<String> {
+    let Some(yaml) = extract_yaml_frontmatter(content) else {
+        return Vec::new();
+    };
+    let Ok(value) = serde_yaml::from_str::<serde_yaml::Value>(&yaml) else {
+        return Vec::new();
+    };
+    match value.get("format") {
+        Some(serde_yaml::Value::String(s)) => vec![s.clone()],
+        Some(serde_yaml::Value::Mapping(m)) => m
+            .keys()
+            .filter_map(|k| k.as_str().map(str::to_string))
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// Warn when a document's `format:` declares more than one key but only one
+/// is actually rendered — a signal `render.rs`'s blanket non-native-format
+/// refusal used to provide as a side effect before P7-foundation relaxed it
+/// to admit `Docx`/`Pptx` (design doc §14). Returns an empty vec when
+/// `all_keys` has zero or one entries, or when every declared key besides
+/// `used_key` has already been accounted for.
+///
+/// Modeled on [`crate::project::project_kind_diagnostics`]'s shape: a pure
+/// function over already-resolved data, returning `Vec<DiagnosticMessage>`
+/// for the caller to print.
+pub fn multi_format_diagnostics(
+    all_keys: &[String],
+    used_key: &str,
+) -> Vec<quarto_error_reporting::DiagnosticMessage> {
+    use quarto_error_reporting::DiagnosticMessageBuilder;
+
+    if all_keys.len() <= 1 {
+        return Vec::new();
+    }
+    let skipped: Vec<&str> = all_keys
+        .iter()
+        .map(String::as_str)
+        .filter(|k| *k != used_key)
+        .collect();
+    if skipped.is_empty() {
+        return Vec::new();
+    }
+    vec![
+        DiagnosticMessageBuilder::warning(
+            "`format:` declares more than one format; only one is rendered",
+        )
+        .with_code("Q-20-8")
+        .problem(format!(
+            "rendered `{used_key}`; skipped `{}`.",
+            skipped.join("`, `")
+        ))
+        .build(),
+    ]
+}
+
 /// Return the text of the leading YAML front-matter block (between the opening
 /// `---` and the closing `---` / `...` line), if present.
 pub fn extract_yaml_frontmatter(content: &str) -> Option<String> {
@@ -736,6 +802,13 @@ mod tests {
         // Non-HTML formats
         assert!(!FormatIdentifier::Pdf.is_html_based());
         assert!(!FormatIdentifier::Docx.is_html_based());
+        // T2.6 (P7-foundation Task 2): `Pptx` must read as non-HTML too.
+        // `is_html_based()` and `is_native()` return the same value for
+        // every variant that existed before P1 added `Pptx`, so a future
+        // regression that routes this gate through `is_native()` instead
+        // would be invisible to any test that only checks outcomes —
+        // this pins the predicate's own table.
+        assert!(!FormatIdentifier::Pptx.is_html_based());
         assert!(!FormatIdentifier::Epub.is_html_based());
         assert!(!FormatIdentifier::Typst.is_html_based());
         assert!(!FormatIdentifier::Gfm.is_html_based());
@@ -1255,5 +1328,78 @@ mod tests {
             entry("theme", ConfigValue::new_string("cosmo", si())),
         ]);
         assert!(is_minimal_html(&meta));
+    }
+
+    // === multi_format_diagnostics tests (P7-foundation Task 1, T1.1-T1.3) ===
+
+    fn keys(strs: &[&str]) -> Vec<String> {
+        strs.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// T1.1: a 2-key `format:` map names the used key and the skipped key in
+    /// their own clauses — not a whole-message equality assertion, which
+    /// would be brittle against wording edits and non-discriminating about
+    /// which key landed in which clause.
+    #[test]
+    fn test_multi_format_names_skipped_key() {
+        let diags = multi_format_diagnostics(&keys(&["docx", "html"]), "docx");
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].code.as_deref(), Some("Q-20-8"));
+        let text = diags[0].to_text(None);
+        assert!(
+            text.contains("docx") && !text.split("skipped").next().unwrap().contains("html"),
+            "used clause must name docx, not html: {text}"
+        );
+        assert!(
+            text.contains("html"),
+            "skipped clause must name html: {text}"
+        );
+    }
+
+    /// T1.2: the skipped list preserves declaration order. Pinned to a
+    /// non-alphabetical declaration (`docx, pptx, html`) so a regression to a
+    /// sorted/`BTreeSet` collection reddens this test instead of passing by
+    /// accident (an alphabetical fixture would make sorted and
+    /// declaration-order output indistinguishable).
+    #[test]
+    fn test_multi_format_skipped_order() {
+        let diags = multi_format_diagnostics(&keys(&["docx", "pptx", "html"]), "docx");
+        assert_eq!(diags.len(), 1);
+        let text = diags[0].to_text(None);
+        let pptx_pos = text.find("pptx").expect("pptx named");
+        let html_pos = text.find("html").expect("html named");
+        assert!(
+            pptx_pos < html_pos,
+            "skipped keys must appear in declaration order (pptx before html): {text}"
+        );
+    }
+
+    /// T1.3: a single-key map, a scalar `format:`, and no declared keys at
+    /// all all produce no warning.
+    #[test]
+    fn test_single_format_no_warning() {
+        assert!(multi_format_diagnostics(&keys(&["html"]), "html").is_empty());
+        assert!(multi_format_diagnostics(&[], "html").is_empty());
+    }
+
+    #[test]
+    fn test_format_keys_from_frontmatter_map_preserves_order() {
+        let content =
+            "---\nformat:\n  docx: default\n  pptx: default\n  html: default\n---\nbody\n";
+        assert_eq!(
+            format_keys_from_frontmatter(content),
+            vec!["docx", "pptx", "html"]
+        );
+    }
+
+    #[test]
+    fn test_format_keys_from_frontmatter_scalar() {
+        let content = "---\nformat: html\n---\nbody\n";
+        assert_eq!(format_keys_from_frontmatter(content), vec!["html"]);
+    }
+
+    #[test]
+    fn test_format_keys_from_frontmatter_absent() {
+        assert!(format_keys_from_frontmatter("no front matter here").is_empty());
     }
 }

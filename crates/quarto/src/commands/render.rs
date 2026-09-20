@@ -675,9 +675,31 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     };
     let format = resolve_format(&format_str)?;
 
-    // Native formats (HTML, revealjs) render in-process; non-native formats
-    // still need Pandoc and are not yet supported.
-    if !format.identifier.is_native() {
+    // P7-foundation Task 1/3 (design doc §14): relaxing the format gate
+    // below removes the only existing signal that a multi-format
+    // `format:` declaration silently reduces to one rendered format.
+    // Emit the replacement warning at the same site that made the
+    // reduction, before the gate below decides whether to bail.
+    for diagnostic in
+        multi_format_warning_diagnostics(&args.inputs, args.to.as_deref(), &format_str)
+    {
+        let code = diagnostic.code.as_deref();
+        if let Some(text) = render_diagnostic_guarded(code, || diagnostic.to_text(None)) {
+            eprintln!("{}", text);
+        }
+    }
+
+    // Native formats (HTML, revealjs) render in-process. Docx/Pptx route
+    // through Pandoc via `render_qmd_to_pandoc` (P7-foundation Task 3) —
+    // everything else (Pdf, Epub, Typst, Gfm, CommonMark) is still not
+    // yet supported.
+    if !format.identifier.is_native()
+        && !matches!(
+            format.identifier,
+            quarto_core::format::FormatIdentifier::Docx
+                | quarto_core::format::FormatIdentifier::Pptx
+        )
+    {
         anyhow::bail!(
             "Format '{}' is not yet supported. Only HTML and revealjs are available in this version.",
             format.identifier
@@ -1491,12 +1513,11 @@ fn resolve_format(format_str: &str) -> Result<Format> {
     Format::from_format_string(format_str).map_err(|e| anyhow::anyhow!("{}", e))
 }
 
-/// When `--to` is absent, detect the target format from a single `.qmd`
-/// input's front-matter `format:` key. Returns `None` for project renders
-/// (multiple inputs or a directory) — per-file format inside a project is a
-/// later phase. Best-effort: any read/parse failure yields `None` (caller
-/// falls back to `"html"`).
-fn detect_single_input_format(inputs: &[String]) -> Option<String> {
+/// Read a single `.qmd`/`.md` input's content for front-matter format
+/// detection. Returns `None` for project renders (multiple inputs or a
+/// directory) — per-file format inside a project is a later phase.
+/// Best-effort: any read failure yields `None`.
+fn read_single_input_content(inputs: &[String]) -> Option<String> {
     if inputs.len() != 1 {
         return None;
     }
@@ -1512,10 +1533,40 @@ fn detect_single_input_format(inputs: &[String]) -> Option<String> {
     {
         return None;
     }
-    let content = std::fs::read_to_string(path).ok()?;
-    // Shared with the project pipeline's per-document format resolution so the
-    // single-file and project paths agree on how `format:` is read.
+    std::fs::read_to_string(path).ok()
+}
+
+/// When `--to` is absent, detect the target format from a single input's
+/// front-matter `format:` key. Best-effort: any parse failure yields
+/// `None` (caller falls back to `"html"`).
+///
+/// Shared with the project pipeline's per-document format resolution so
+/// the single-file and project paths agree on how `format:` is read.
+fn detect_single_input_format(inputs: &[String]) -> Option<String> {
+    let content = read_single_input_content(inputs)?;
     quarto_core::format::format_key_from_frontmatter(&content)
+}
+
+/// P7-foundation Task 1/3 (design doc §14): when a single input's
+/// front-matter `format:` declares more than one key but only `used_key`
+/// is actually rendered, emit the `Q-18-*` warning naming which was used
+/// and which were skipped. A no-op when `--to` was given explicitly (the
+/// user made the choice on the command line, not via a declaration this
+/// render silently reduced), for project renders, or when the input has
+/// no front matter.
+fn multi_format_warning_diagnostics(
+    inputs: &[String],
+    cli_to: Option<&str>,
+    used_key: &str,
+) -> Vec<quarto_error_reporting::DiagnosticMessage> {
+    if cli_to.is_some() {
+        return Vec::new();
+    }
+    let Some(content) = read_single_input_content(inputs) else {
+        return Vec::new();
+    };
+    let all_keys = quarto_core::format::format_keys_from_frontmatter(&content);
+    quarto_core::format::multi_format_diagnostics(&all_keys, used_key)
 }
 
 // ====================================================================

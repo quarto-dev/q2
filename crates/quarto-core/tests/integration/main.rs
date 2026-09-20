@@ -78,6 +78,7 @@ pub mod page_navigation_pipeline;
 pub mod pandoc_filters;
 pub mod pandoc_filters_patch;
 pub mod pandoc_profile_cut;
+pub mod pandoc_render_to_file;
 pub mod pandoc_shim;
 pub mod pandoc_shim_goldens;
 pub mod pandoc_transport;
@@ -112,5 +113,6 @@ pub mod toc_title_context;
 pub mod video_shortcode_preview;
 pub mod website_aliases;
 pub mod website_post_render;
+pub mod website_post_render_format_gate;
 
 fn main() {}

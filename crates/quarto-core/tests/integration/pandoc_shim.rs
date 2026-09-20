@@ -855,7 +855,7 @@ fn test_theorem_end_to_end_through_production_path() {
     let runtime: std::sync::Arc<dyn quarto_system_runtime::SystemRuntime> =
         std::sync::Arc::new(quarto_system_runtime::NativeRuntime::new());
 
-    let rendered = pollster::block_on(render_qmd_to_pandoc(
+    let (rendered, _diagnostics) = pollster::block_on(render_qmd_to_pandoc(
         &content,
         "theorem-basic.qmd",
         &mut ctx,

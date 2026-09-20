@@ -355,6 +355,25 @@ mod tests {
         }
     }
 
+    /// T1.6 (P7-foundation Task 1): the multi-format render warning's code
+    /// exists, carries `subsystem == "pandoc"`, and follows the canonical
+    /// `https://quarto.org/docs/errors/pandoc/<code>` docs_url shape.
+    ///
+    /// Revert hunk: changing the entry's `docs_url` to another subsystem's
+    /// URL shape (e.g. the `lua` subsystem's) makes the `assert!` RED.
+    #[test]
+    fn test_multi_format_warning_catalog_entry() {
+        let code = "Q-20-8";
+        let info = ERROR_CATALOG
+            .get(code)
+            .unwrap_or_else(|| panic!("{code} must be in the catalog"));
+        assert_eq!(info.subsystem, "pandoc");
+        assert_eq!(
+            info.docs_url.as_deref(),
+            Some("https://quarto.org/docs/errors/pandoc/Q-20-8")
+        );
+    }
+
     // ─── Integration: install() wires this catalog into quarto-error-reporting ─
     //
     // These exercise the installed-global delegation path end-to-end. Each calls

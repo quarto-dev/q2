@@ -72,7 +72,7 @@ use crate::artifact_flush::{enqueue_artifacts, route_drained_project_artifacts};
 use crate::error::QuartoError;
 use crate::format::Format;
 use crate::output_sink::{OutputSink, OutputSinkError};
-use crate::pipeline::{HtmlRenderConfig, RenderOutput, render_qmd_to_html};
+use crate::pipeline::{HtmlRenderConfig, RenderOutput, render_qmd_to_html, render_qmd_to_pandoc};
 use crate::project::index::ProjectIndex;
 use crate::project::orchestrator::project_type_for;
 use crate::project::{DocumentInfo, ProjectContext};
@@ -299,8 +299,19 @@ pub fn render_document_to_file(
         resources::prepare_html_resources(&output_dir, &output_stem, runtime.as_ref())?;
 
     // Set up render context
-    let doc_info = DocumentInfo::from_path(input_path);
     let render_format = format_from_name(format)?;
+    // P7-foundation Task 3: the Pandoc-hybrid leg's `PandocWriteStage`
+    // writes its output file directly at `ctx.output_path()`, whose
+    // top priority is `document.output` (see `StageContext::output_path`)
+    // — unlike the HTML leg, which writes via `OutputSink` using the
+    // `output_path` computed above and never consults `ctx.output_path()`
+    // for the actual write. Native (HTML/revealjs) renders leave
+    // `document.output` unset, preserving byte-identical behavior.
+    let doc_info = if render_format.identifier.is_native() {
+        DocumentInfo::from_path(input_path)
+    } else {
+        DocumentInfo::from_path(input_path).with_output(&output_path)
+    };
     // Discover binaries from the runtime so the git path (used by
     // `GitBlameProvider`) is populated alongside pandoc/typst/etc.
     let binaries = BinaryDependencies::discover(runtime.as_ref());
@@ -354,14 +365,44 @@ pub fn render_document_to_file(
         ));
     }
 
+    // P7-foundation Task 3: route a Pandoc(fmt) profile (docx, pptx, ...)
+    // through `render_qmd_to_pandoc` instead of the HTML pipeline.
+    // `render_qmd_to_html` sets `ctx.engine_registry_override` from
+    // `config.engine_registry` internally; the Pandoc leg has no
+    // `HtmlRenderConfig`, so that assignment is replicated here for
+    // both branches — a Pandoc render still executes code cells and
+    // must honor the same engine-registry override / replay-capture
+    // seam as the HTML leg.
+    ctx.engine_registry_override = config.engine_registry.clone();
+
     // Run the render pipeline
-    let mut render_output = pollster::block_on(render_qmd_to_html(
-        &input_bytes,
-        &input_path.to_string_lossy(),
-        &mut ctx,
-        &config,
-        runtime.clone(),
-    ))?;
+    let mut render_output = if render_format.identifier.is_native() {
+        pollster::block_on(render_qmd_to_html(
+            &input_bytes,
+            &input_path.to_string_lossy(),
+            &mut ctx,
+            &config,
+            runtime.clone(),
+        ))?
+    } else {
+        let (rendered, diagnostics) = pollster::block_on(render_qmd_to_pandoc(
+            &input_bytes,
+            &input_path.to_string_lossy(),
+            &mut ctx,
+            runtime.clone(),
+        ))?;
+        // Finding 3's decision (see `render_qmd_to_pandoc`'s doc comment):
+        // no binary bytes travel through `content` — `PandocWriteStage`
+        // already wrote `rendered.output_path` (== `output_path` above,
+        // via `doc_info.output`) directly. `html` stays empty so the
+        // `sink.write` below is skipped for this branch, rather than
+        // overwriting the file pandoc just wrote with zero bytes.
+        RenderOutput {
+            html: String::new(),
+            diagnostics,
+            source_context: rendered.source_context,
+        }
+    };
 
     // bd-cfl67: one sink per render owns every destructive write.
     // Construct it from the resolver's declared output roots so
@@ -420,8 +461,15 @@ pub fn render_document_to_file(
 
     // Output HTML also goes through the sink so the whole render's
     // destructive output is validated and committed atomically.
-    sink.write(output_path.clone(), render_output.html.as_bytes().to_vec())
-        .map_err(QuartoError::from)?;
+    //
+    // P7-foundation Task 3: skipped for the Pandoc leg. `PandocWriteStage`
+    // already wrote `output_path` directly (`render_output.html` is
+    // empty for that branch, per Finding 3) — enqueuing it here would
+    // overwrite the real pandoc output with a zero-byte file.
+    if render_format.identifier.is_native() {
+        sink.write(output_path.clone(), render_output.html.as_bytes().to_vec())
+            .map_err(QuartoError::from)?;
+    }
 
     // Distinguish a resource-copy fault (the bytes the user referenced
     // couldn't be placed — Q-5-7) from any other destructive write in
@@ -479,17 +527,17 @@ fn determine_output_paths(
     format: &str,
     options: &RenderToFileOptions,
 ) -> Result<(PathBuf, PathBuf, String)> {
-    // Determine file extension using the base format (strips extension prefix)
+    // Determine file extension using the base format (strips extension prefix).
+    // P7-foundation Task 3: this used to re-derive the extension via its own
+    // match on `identifier.as_str()`, which never knew about `Pptx` (or
+    // `Epub`/`Gfm`/`CommonMark`) and silently fell back to `"html"` for
+    // every format it didn't list — reachable only once a non-native format
+    // reached this far, which nothing did before Task 3 relaxed the CLI
+    // gate. `output_extension_for` (`format.rs`) is the single source of
+    // truth for every `FormatIdentifier` variant; `render_format` already
+    // carries its result, so reuse it instead of duplicating the mapping.
     let render_format = Format::from_format_string(format).unwrap_or_else(|_| Format::html());
-    let extension = match render_format.identifier.as_str() {
-        "html" => "html",
-        "pdf" => "pdf",
-        "docx" => "docx",
-        "typst" => "typ",
-        // Note: "latex"/"tex" was previously handled here but FormatIdentifier
-        // has no Latex variant yet. Add one when latex output is supported.
-        _ => "html",
-    };
+    let extension = render_format.output_extension.clone();
 
     // Get input stem
     let stem = input_path
