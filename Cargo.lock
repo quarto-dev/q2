@@ -5339,6 +5339,7 @@ dependencies = [
  "quarto-error-reporting",
  "quarto-highlight",
  "quarto-navigation",
+ "quarto-ooxml-extract",
  "quarto-pandoc-types",
  "quarto-sass",
  "quarto-source-map",
@@ -5608,6 +5609,14 @@ dependencies = [
  "quarto-source-map",
  "quarto-util",
  "yaml-rust2",
+]
+
+[[package]]
+name = "quarto-ooxml-extract"
+version = "0.30.0"
+dependencies = [
+ "quick-xml 0.39.3",
+ "zip",
 ]
 
 [[package]]
@@ -9362,8 +9371,10 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "insta",
  "nodejs-semver",
  "proc-macro2",
+ "quarto-ooxml-extract",
  "serde",
  "serde_json",
  "serde_yaml",

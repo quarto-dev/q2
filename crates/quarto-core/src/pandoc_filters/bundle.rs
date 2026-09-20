@@ -26,25 +26,32 @@
 
 use std::path::Path;
 
-use super::{DATADIR_DIR, FILTERS_DIR, FORMATS_DIR};
+use super::{DATADIR_DIR, FILTERS_DIR, FORMATS_DIR, FORMATS_DOCX_DIR};
 use crate::resources::ResourceError;
 
 /// Extracts the embedded Q1 filter trees into `dest`, creating
-/// `dest/filters/` and `dest/pandoc/datadir/`. `dest` must already exist.
+/// `dest/filters/`, `dest/pandoc/datadir/`, and `dest/formats/docx/`.
+/// `dest` must already exist.
 pub fn extract_share_tree(dest: &Path) -> Result<(), ResourceError> {
     let filters_dest = dest.join("filters");
     let datadir_dest = dest.join("pandoc").join("datadir");
+    let formats_docx_dest = dest.join("formats").join("docx");
 
     // `Dir::extract` requires its destination to already exist (it only
     // creates directories for nested entries, not the base path itself).
     std::fs::create_dir_all(&filters_dest).map_err(|e| ResourceError::Extract(e.to_string()))?;
     std::fs::create_dir_all(&datadir_dest).map_err(|e| ResourceError::Extract(e.to_string()))?;
+    std::fs::create_dir_all(&formats_docx_dest)
+        .map_err(|e| ResourceError::Extract(e.to_string()))?;
 
     FILTERS_DIR
         .extract(&filters_dest)
         .map_err(|e| ResourceError::Extract(e.to_string()))?;
     DATADIR_DIR
         .extract(&datadir_dest)
+        .map_err(|e| ResourceError::Extract(e.to_string()))?;
+    FORMATS_DOCX_DIR
+        .extract(&formats_docx_dest)
         .map_err(|e| ResourceError::Extract(e.to_string()))?;
 
     Ok(())

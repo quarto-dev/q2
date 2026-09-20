@@ -626,6 +626,11 @@ checks, each with the specific expected value examined:
 
 ## Task 10: `cargo xtask capture-pandoc-goldens` — the fixture set, the copy-in, and the `insta::Settings` capture
 
+**Done 2026-09-21 — T10.5 (the real capture run).** All 20 snapshots captured, idempotent on
+re-run (T10.5's stated acceptance criterion). The mermaid fixture's earlier hang was a one-time
+macOS Gatekeeper check on the freshly-downloaded `chrome-headless-shell` binary, not a lasting
+CDP incompatibility. See the main plan file's checklist entry for the full account.
+
 **Scope.** The dev-only `G`-tier capture: locate a real pinned-release `quarto`, render the named
 fixtures to docx and pptx, run Task 9's extractor, write `.snap` files under an explicit
 `insta::Settings` path. Plus the one-time copy of quarto-cli-sourced fixtures into our own tree.
@@ -726,6 +731,14 @@ first-capture diff is diagnosable. A real Q1 `quarto` at the pinned release for 
 ---
 
 ## Task 11: The CI-runnable Q2-side golden assertion + per-fixture accepted-divergence provenance
+
+**Done 2026-09-21.** `crates/quarto-core/tests/integration/pandoc_goldens.rs` (5 tests) +
+`crates/quarto-core/tests/fixtures/pandoc-goldens/DIVERGENCES.md`. `golden_snapshot_name`/
+`FIXTURES` moved into `quarto_ooxml_extract::golden_fixtures` (both sides now call the one
+definition — see the module doc there). Getting this green surfaced and fixed two real
+production bugs (relatively-referenced images dropped from docx/pptx; a crossref-numbered
+table's caption duplicated in docx/pptx) — recorded in the main plan file's checklist entry for
+this item, with the RED-confirmed regression tests that bind each fix.
 
 **Scope.** The half of the harness that gates. Render each fixture through Q2's own hybrid path,
 apply the **identical** extraction, and assert it against the same committed snapshot the capture

@@ -14,8 +14,10 @@ pub mod bundle;
 mod crossref_params;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod diagnostics;
+pub mod format_defaults;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod harness;
+pub mod meta_coerce;
 pub mod params;
 pub mod params_codec;
 pub mod version;
@@ -33,3 +35,9 @@ pub static DATADIR_DIR: include_dir::Dir =
 /// `src/resources/formats/` per the External Sources Policy.
 pub static FORMATS_DIR: include_dir::Dir =
     include_dir!("$CARGO_MANIFEST_DIR/../../resources/formats");
+/// The 5 docx callout-icon PNGs (P7 Task 4), vendored from
+/// `v1.11.3:src/resources/formats/docx/` — outside P4's traced
+/// `src/resources/filters/` vendoring closure, so extracted into the share
+/// tree separately by [`bundle::extract_share_tree`].
+pub static FORMATS_DOCX_DIR: include_dir::Dir =
+    include_dir!("$CARGO_MANIFEST_DIR/../../resources/formats/docx");

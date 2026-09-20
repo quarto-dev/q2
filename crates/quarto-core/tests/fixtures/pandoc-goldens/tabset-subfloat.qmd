@@ -1,0 +1,21 @@
+---
+title: Tabset Subfloat Test
+---
+
+::: {.panel-tabset}
+
+## Tab A
+
+| Col1 | Col2 |
+| ---- | ---- |
+| A    | B    |
+
+: A table nested inside a tab {#tbl-in-tab}
+
+See @tbl-in-tab.
+
+## Tab B
+
+Some other content, no float.
+
+:::

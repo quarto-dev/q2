@@ -151,6 +151,9 @@ fontique = { version = "0.9", default-features = false, features = ["fontconfig-
 [dev-dependencies]
 insta.workspace = true
 quarto-error-catalog = { workspace = true }
+# P7 Task 11: the shared docx/pptx semantic extractor + pandoc-goldens
+# fixture manifest, also used by `cargo xtask capture-pandoc-goldens`.
+quarto-ooxml-extract = { path = "../quarto-ooxml-extract" }
 # Enables `quarto_config::span_assert` for tests that assert *where* a
 # diagnostic points, not just which code it carries (bd-9yh3pzfu).
 quarto-config = { workspace = true, features = ["span-assert"] }

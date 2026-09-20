@@ -1,0 +1,24 @@
+---
+source: crates/xtask/src/capture_pandoc_goldens.rs
+expression: extraction.to_string()
+---
+core_props:
+  title: Proof rendering
+slide 1:
+  Proof rendering
+slide 2:
+  Proof with content
+  Proof. This is a proof with content.
+slide 3:
+  Named proof
+  Proof (Of the main theorem). Named proof body.
+slide 4:
+  Empty proof
+  Proof. 
+slide 5:
+  Remark
+  Remark. This is a remark.
+media: []
+image_relationships: []
+drawing_count: 0
+page_break_count: 0

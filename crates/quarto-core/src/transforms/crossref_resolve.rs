@@ -279,6 +279,20 @@ fn classify_cite(
             )));
             return None;
         }
+
+        // All citations classify as the same ref-type (e.g. `[@fig-a; @fig-b]`).
+        // We currently resolve only the first and silently drop the rest
+        // (Phase 1 scope: single-id crossref cites; multi-crossref ranges
+        // like "Figures 1-3" are deferred). Flag the drop so it's
+        // diagnosable rather than silent.
+        let dropped: Vec<&str> = cite.citations[1..].iter().map(|c| c.id.as_str()).collect();
+        diags.push(DiagnosticMessage::warning(format!(
+            "crossref `@{first}` is part of a multi-id citation `[@{first}; ...]`; \
+             only the first id is resolved and the rest ({dropped}) are dropped. \
+             Use separate `@{first}` references if you need to cite each one.",
+            first = first.id,
+            dropped = dropped.join(", @")
+        )));
     }
 
     // Ensure the resolved reference carries the empty suffix expected
@@ -391,6 +405,7 @@ mod tests {
     use super::*;
     use crate::crossref::{CrossrefEntry, CrossrefIndex, Order, RefTypeRegistry};
     use hashlink::LinkedHashMap;
+    use quarto_error_reporting::DiagnosticKind;
     use quarto_pandoc_types::attr::{Attr, AttrSourceInfo};
     use quarto_pandoc_types::block::{Block, Paragraph};
     use quarto_pandoc_types::inline::{Citation, CitationMode, Str};
@@ -541,16 +556,34 @@ mod tests {
         // `@fig-a; @fig-b` — both crossrefs. We currently resolve to the
         // first; the second is dropped. (Phase 1 scope: single-id
         // crossref cites. Multi-crossref ranges like "Figures 1-3" are
-        // deferred.)
+        // deferred.) Flagged, not fixed (bd-h1ub8f8z's sibling triage,
+        // P7 Task 8): the drop is diagnosed rather than silent.
         let reg = RefTypeRegistry::builtin();
         let idx = make_index_with(&[("fig-a", "fig"), ("fig-b", "fig")]);
         let mut inline = make_multi_cite(&["fig-a", "fig-b"]);
         let diags = resolve(&mut inline, &reg, Some(&idx));
-        assert!(diags.is_empty());
+        assert_eq!(diags.len(), 1);
+        assert!(diags[0].title.contains("fig-a"));
+        assert!(diags[0].title.contains("fig-b"));
         let Inline::Custom(node) = inline else {
             panic!();
         };
         assert_eq!(node.plain_data["identifier"], "fig-a");
+    }
+
+    #[test]
+    fn test_multi_crossref_drop_is_diagnosed() {
+        // T8.1 (flag branch): `[@fig-a; @fig-b; @fig-c]`, all same ref-type.
+        // Exactly one diagnostic is emitted, and it names every dropped id.
+        let reg = RefTypeRegistry::builtin();
+        let idx = make_index_with(&[("fig-a", "fig"), ("fig-b", "fig"), ("fig-c", "fig")]);
+        let mut inline = make_multi_cite(&["fig-a", "fig-b", "fig-c"]);
+        let diags = resolve(&mut inline, &reg, Some(&idx));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].kind, DiagnosticKind::Warning);
+        assert!(diags[0].title.contains("fig-a"));
+        assert!(diags[0].title.contains("fig-b"));
+        assert!(diags[0].title.contains("fig-c"));
     }
 
     #[test]
