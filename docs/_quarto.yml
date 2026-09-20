@@ -45,6 +45,7 @@ website:
             - guides/projects/environment.qmd
             - guides/projects/profiles.qmd
             - guides/publishing/index.qmd
+            - guides/formats/epub/index.qmd
     - id: Authoring
       collapse-level: 1
       contents:
