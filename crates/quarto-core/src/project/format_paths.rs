@@ -102,6 +102,13 @@ const FORMAT_PATH_KEYS: &[(&str, MarkPolicy, KeyForms)] = &[
     ("include-in-header", MarkPolicy::Always, KeyForms::Include),
     ("include-before-body", MarkPolicy::Always, KeyForms::Include),
     ("include-after-body", MarkPolicy::Always, KeyForms::Include),
+    // epub pandoc-defaults forwarding (claude-notes/plans/2026-09-18-pandoc-hybrid-epub.md):
+    // always genuine file paths, same reasoning as include-in-header — a
+    // missing file is still rebased so a downstream diagnostic names the
+    // resolved location, not a bogus doc-dir join.
+    ("epub-cover-image", MarkPolicy::Always, KeyForms::Entries),
+    ("epub-metadata", MarkPolicy::Always, KeyForms::Entries),
+    ("epub-embed-font", MarkPolicy::Always, KeyForms::Entries),
 ];
 
 /// Apply `f` to a value's string-bearing leaves: the scalar forms

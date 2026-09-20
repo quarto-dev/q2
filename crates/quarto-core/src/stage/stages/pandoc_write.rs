@@ -24,14 +24,16 @@
 //! See `claude-notes/plans/2026-09-18-pandoc-hybrid-P4-implementation.md`
 //! Task 9.
 
-use std::path::Path;
+use std::ffi::OsString;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use async_trait::async_trait;
 use quarto_error_reporting::DiagnosticMessage;
 
+use crate::format::FormatIdentifier;
 use crate::language::LanguageTerms;
-use crate::pandoc_filters::bundle::extract_share_tree;
+use crate::pandoc_filters::bundle::{extract_formats_tree, extract_share_tree};
 use crate::pandoc_filters::diagnostics::{classify_pandoc_stderr, nonzero_exit_error};
 use crate::pandoc_filters::params::FilterParamsBuilder;
 use crate::pandoc_filters::params_codec::encode_params_blob;
@@ -108,6 +110,119 @@ fn resolve_and_gate_pandoc(
         .map_err(|diag| PipelineError::stage_error_with_diagnostics(stage_name, vec![diag]))?;
 
     Ok(pandoc_path.unwrap_or_else(|| std::path::PathBuf::from("pandoc")))
+}
+
+/// Format-specific extra pandoc CLI args, appended before `-o <output>`.
+///
+/// Epub only, for now (Q1's `createEbookFormat`,
+/// `claude-notes/plans/2026-09-18-pandoc-hybrid-epub.md` Phase 1):
+/// `--default-image-extension=png`, `--math-method=mathml` (epub3's own
+/// default already produces MathML — set explicitly to match Q1's intent
+/// rather than rely on an unstated Pandoc default), two
+/// `--include-in-header` CSS files extracted from the embedded
+/// `FORMATS_DIR` tree, and (when the document sets it) `--split-level`
+/// from the `epub-chapter-level` metadata key — Q1's name for what Pandoc
+/// itself calls `--split-level` (`--epub-chapter-level` is Pandoc's own
+/// deprecated synonym for the same flag). Deliberately **not** merged into
+/// one file (Q1's `merge-includes: false`) — passing two separate
+/// `--include-in-header` flags already keeps them from colliding, with no
+/// merge step to disable.
+/// Collects the string-bearing leaves of a scalar-or-array metadata value
+/// (mirrors `project::format_paths::for_each_entry`, which is private to
+/// that module).
+fn entry_strings(value: &quarto_pandoc_types::ConfigValue) -> Vec<String> {
+    match value.as_array() {
+        Some(items) => items.iter().filter_map(|v| v.as_plain_text()).collect(),
+        None => value.as_plain_text().into_iter().collect(),
+    }
+}
+
+/// Resolves a `mark_format_path_values`-normalized path value (already
+/// document-relative — see `project::format_paths`) against the
+/// document's own directory, producing an absolute path pandoc's
+/// subprocess can open regardless of its own cwd.
+fn resolve_doc_relative(doc_dir: &Path, declared: &str) -> PathBuf {
+    doc_dir.join(declared)
+}
+
+fn epub_extra_args(
+    temp_dir: &Path,
+    doc_path: &Path,
+    meta: &quarto_pandoc_types::ConfigValue,
+) -> Result<Vec<OsString>, PipelineError> {
+    let doc_dir = doc_path.parent().unwrap_or_else(|| Path::new("."));
+    let formats_root = temp_dir.join("pandoc-formats");
+    std::fs::create_dir_all(&formats_root).map_err(|e| {
+        PipelineError::stage_error(
+            "pandoc-write",
+            format!("failed to create formats directory: {e}"),
+        )
+    })?;
+    extract_formats_tree(&formats_root).map_err(|e| {
+        PipelineError::stage_error(
+            "pandoc-write",
+            format!("failed to materialize vendored format resources: {e}"),
+        )
+    })?;
+    let formats_dest = formats_root.join("formats");
+    let mut args = vec![
+        OsString::from("--default-image-extension=png"),
+        OsString::from("--math-method=mathml"),
+        {
+            let mut arg = OsString::from("--include-in-header=");
+            arg.push(formats_dest.join("html").join("styles-callout.html"));
+            arg
+        },
+        {
+            let mut arg = OsString::from("--include-in-header=");
+            arg.push(formats_dest.join("epub").join("styles.html"));
+            arg
+        },
+    ];
+    if let Some(level) = meta
+        .get("epub-chapter-level")
+        .and_then(|v| v.as_int_lenient())
+    {
+        args.push(OsString::from(format!("--split-level={level}")));
+    }
+
+    // Single-valued path keys: mark_format_path_values normalized these
+    // to a document-relative `Path` value at merge time (see
+    // `project::format_paths::FORMAT_PATH_KEYS`); resolve against the
+    // document's own directory to hand pandoc an absolute path.
+    for (key, flag) in [
+        ("epub-cover-image", "--epub-cover-image="),
+        ("epub-metadata", "--epub-metadata="),
+    ] {
+        if let Some(declared) = meta.get(key).and_then(|v| v.as_plain_text()) {
+            let mut arg = OsString::from(flag);
+            arg.push(resolve_doc_relative(doc_dir, &declared));
+            args.push(arg);
+        }
+    }
+
+    // Repeatable path keys: pandoc accepts multiple --epub-embed-font /
+    // --css flags, one per file.
+    for (key, flag) in [("epub-embed-font", "--epub-embed-font="), ("css", "--css=")] {
+        if let Some(value) = meta.get(key) {
+            for declared in entry_strings(value) {
+                let mut arg = OsString::from(flag);
+                arg.push(resolve_doc_relative(doc_dir, &declared));
+                args.push(arg);
+            }
+        }
+    }
+
+    // Not a path — an internal directory *name* inside the epub
+    // container, passed through verbatim.
+    if let Some(subdir) = meta
+        .get("epub-subdirectory")
+        .and_then(|v| v.as_plain_text())
+    {
+        args.push(OsString::from(format!("--epub-subdirectory={subdir}")));
+    }
+
+    Ok(args)
 }
 
 pub struct PandocWriteStage;
@@ -247,6 +362,12 @@ impl PipelineStage for PandocWriteStage {
         })?;
         let to_format = &ctx.format.output_extension;
 
+        let format_extra_args = if ctx.format.identifier == FormatIdentifier::Epub {
+            epub_extra_args(&temp_dir, &doc.path, &doc.ast.meta)?
+        } else {
+            Vec::new()
+        };
+
         // T9.6: `-f json -t <to_format> --data-dir <share>/pandoc/datadir
         // -L <share>/filters/main.lua -o <output>`.
         let output = Command::new(&pandoc_bin)
@@ -258,6 +379,7 @@ impl PipelineStage for PandocWriteStage {
             .arg(share.join("pandoc").join("datadir"))
             .arg("-L")
             .arg(share.join("filters").join("main.lua"))
+            .args(&format_extra_args)
             .arg("-o")
             .arg(&output_path)
             .arg(&json_path)

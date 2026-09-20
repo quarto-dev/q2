@@ -26,7 +26,7 @@
 
 use std::path::Path;
 
-use super::{DATADIR_DIR, FILTERS_DIR};
+use super::{DATADIR_DIR, FILTERS_DIR, FORMATS_DIR};
 use crate::resources::ResourceError;
 
 /// Extracts the embedded Q1 filter trees into `dest`, creating
@@ -47,5 +47,21 @@ pub fn extract_share_tree(dest: &Path) -> Result<(), ResourceError> {
         .extract(&datadir_dest)
         .map_err(|e| ResourceError::Extract(e.to_string()))?;
 
+    Ok(())
+}
+
+/// Extracts the embedded `resources/formats/` tree (per-format
+/// `--include-in-header` CSS, currently just epub's two files) into
+/// `dest/formats/`. `dest` must already exist.
+///
+/// No `init.lua`-shaped layout constraint here (unlike
+/// [`extract_share_tree`]) — this is a plain resource tree consumed by
+/// CLI flag paths, not by the Lua filter search path.
+pub fn extract_formats_tree(dest: &Path) -> Result<(), ResourceError> {
+    let formats_dest = dest.join("formats");
+    std::fs::create_dir_all(&formats_dest).map_err(|e| ResourceError::Extract(e.to_string()))?;
+    FORMATS_DIR
+        .extract(&formats_dest)
+        .map_err(|e| ResourceError::Extract(e.to_string()))?;
     Ok(())
 }

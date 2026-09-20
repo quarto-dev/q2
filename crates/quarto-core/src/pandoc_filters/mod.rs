@@ -27,3 +27,9 @@ pub static FILTERS_DIR: include_dir::Dir =
     include_dir!("$CARGO_MANIFEST_DIR/../../resources/pandoc-filters/filters");
 pub static DATADIR_DIR: include_dir::Dir =
     include_dir!("$CARGO_MANIFEST_DIR/../../resources/pandoc-filters/pandoc/datadir");
+
+/// Static per-format `--include-in-header` resources (currently just the
+/// epub follow-on's two CSS files), vendored from Q1's
+/// `src/resources/formats/` per the External Sources Policy.
+pub static FORMATS_DIR: include_dir::Dir =
+    include_dir!("$CARGO_MANIFEST_DIR/../../resources/formats");
