@@ -381,6 +381,12 @@ pub fn build_html_pipeline_stages_with_options(
 /// (Finding 3's explicit decision — no binary bytes travel through
 /// `PipelineData`).
 ///
+/// Returns the pipeline's diagnostics alongside the rendered output —
+/// P7-foundation Task 3's first real caller (`render_document_to_file`)
+/// needs `PandocWriteStage`'s classified pandoc-stderr warnings (e.g.
+/// `Q-11-1` "Could not fetch resource") to actually reach the CLI's
+/// printed diagnostics, not be dropped on the floor.
+///
 /// Native-only: the Pandoc-hybrid leg shells out to a real `pandoc`
 /// binary, which has no WASM equivalent.
 ///
@@ -394,14 +400,15 @@ pub async fn render_qmd_to_pandoc(
     source_name: &str,
     ctx: &mut RenderContext<'_>,
     runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
-) -> Result<crate::stage::RenderedOutput> {
+) -> Result<(crate::stage::RenderedOutput, Vec<DiagnosticMessage>)> {
     let stages = build_pandoc_pipeline_stages();
-    let (output, _diagnostics) = run_pipeline(content, source_name, ctx, runtime, stages).await?;
-    output.into_rendered_output().ok_or_else(|| {
+    let (output, diagnostics) = run_pipeline(content, source_name, ctx, runtime, stages).await?;
+    let rendered = output.into_rendered_output().ok_or_else(|| {
         crate::error::QuartoError::Other(
             "Pandoc pipeline did not produce RenderedOutput".to_string(),
         )
-    })
+    })?;
+    Ok((rendered, diagnostics))
 }
 
 /// Names of stages in [`build_html_pipeline_stages_with_options`]
@@ -4464,6 +4471,39 @@ mod tests {
             !docx_names.contains(&"footnotes-resolve"),
             "[Pandoc(\"docx\")] \"footnotes-resolve\" must NOT survive — a Pandoc writer has no \
              HTML chrome to build; got: {docx_names:?}",
+        );
+    }
+
+    /// T4.1 (P7-foundation Task 4): the two B3 shared post-core services —
+    /// `resource-collector` (mediabag/resource staging) and `link-rewrite`
+    /// (body link/image rewriting) — are present in the `Pandoc("docx")`
+    /// transform list, i.e. neither is on `PANDOC_TRANSFORM_EXCLUDED`. A
+    /// presence check alone is not a substitute for exercising the real
+    /// path end-to-end (see the E-tier `pandoc_b3_services` tests, which
+    /// drive a real `q2 render --to docx` and inspect `word/media/`) — this
+    /// row only guards the exclude-list itself.
+    #[test]
+    fn t4_1_pandoc_docx_pipeline_includes_b3_shared_services() {
+        let docx_pipeline = build_transform_pipeline(
+            vec![],
+            vec![],
+            make_test_runtime(),
+            "docx".to_string(),
+            crate::format::PipelineProfile::Pandoc("docx".to_string()),
+            None,
+            Default::default(),
+            None,
+        );
+        let docx_names: Vec<&str> = docx_pipeline.iter().map(|t| t.name()).collect();
+        assert!(
+            docx_names.contains(&"resource-collector"),
+            "[Pandoc(\"docx\")] \"resource-collector\" must survive — B3 shared service; \
+             got: {docx_names:?}",
+        );
+        assert!(
+            docx_names.contains(&"link-rewrite"),
+            "[Pandoc(\"docx\")] \"link-rewrite\" must survive — B3 shared service; \
+             got: {docx_names:?}",
         );
     }
 

@@ -1490,6 +1490,13 @@
     "docs_url": "https://quarto.org/docs/errors/pandoc/Q-20-7",
     "since_version": "99.9.9"
   },
+  "Q-20-8": {
+    "subsystem": "pandoc",
+    "title": "Multiple Formats Declared, Only One Rendered",
+    "message_template": "The document's `format:` declares more than one output format, but Quarto renders only one format per invocation. This message names which format was rendered and which were skipped; the skipped formats were not produced.",
+    "docs_url": "https://quarto.org/docs/errors/pandoc/Q-20-8",
+    "since_version": "99.9.9"
+  },
   "Q-2-43": {
     "subsystem": "markdown",
     "title": "Callout Title Given Twice",

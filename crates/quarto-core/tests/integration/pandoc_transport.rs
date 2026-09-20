@@ -663,7 +663,7 @@ fn test_render_qmd_to_pandoc_writes_docx() {
         std::sync::Arc::new(quarto_system_runtime::NativeRuntime::new());
 
     let content = b"# Hello\n\nWorld.\n";
-    let rendered = pollster::block_on(render_qmd_to_pandoc(
+    let (rendered, _diagnostics) = pollster::block_on(render_qmd_to_pandoc(
         content,
         "smoke.qmd",
         &mut ctx,
@@ -1091,7 +1091,7 @@ fn test_transport_smoke_produces_valid_docx() {
     let runtime: std::sync::Arc<dyn quarto_system_runtime::SystemRuntime> =
         std::sync::Arc::new(quarto_system_runtime::NativeRuntime::new());
 
-    let rendered = pollster::block_on(render_qmd_to_pandoc(
+    let (rendered, _diagnostics) = pollster::block_on(render_qmd_to_pandoc(
         &content,
         "smoke.qmd",
         &mut ctx,

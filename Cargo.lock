@@ -5233,6 +5233,7 @@ dependencies = [
  "url",
  "walkdir",
  "yaml-rust2",
+ "zip",
 ]
 
 [[package]]

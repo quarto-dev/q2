@@ -1,0 +1,43 @@
+---
+title: "Multiple Formats Declared, Only One Rendered"
+description: "The document's format: declares more than one output format, but Quarto renders only one per invocation."
+code: Q-20-8
+subsystem: pandoc
+status: stub
+since: "99.9.9"
+categories:
+  - pandoc
+---
+
+# `Q-20-8` — Multiple Formats Declared, Only One Rendered
+
+> The document's `format:` declares more than one output format, but
+> Quarto renders only one per invocation.
+
+## What this means
+
+A document's front matter declared more than one key under `format:`
+(for example `format: {docx: default, html: default}`), but a single
+`q2 render` invocation produces exactly one output. Quarto picked one
+of the declared formats to render — either the one named by an
+explicit `--to`, or the first key declared — and the rest were
+skipped entirely. This warning names which format was used and which
+were skipped, so the skipped ones don't go missing silently.
+
+## Why this happens
+
+- A document was ported from a workflow (or from Quarto 1 project
+  configuration) where multiple formats render in a single pass, and
+  the `format:` block was carried over unchanged.
+- A document intentionally declares more than one format as a menu of
+  options, expecting the caller to pick one with `--to` on each
+  invocation — which is the supported pattern, but it produces this
+  warning on every invocation that doesn't use `--to`.
+
+## How to fix
+
+- If you only ever want one of the declared formats, remove the
+  others from `format:` and keep a single scalar or single-key map.
+- If you want multiple formats from the same source, render once per
+  format with an explicit `--to`, e.g. `q2 render doc.qmd --to docx`
+  and `q2 render doc.qmd --to html` as two separate invocations.
