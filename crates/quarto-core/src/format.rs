@@ -445,6 +445,57 @@ fn output_extension_for(id: FormatIdentifier) -> String {
     .to_string()
 }
 
+/// The pandoc **writer** name to pass as `-t` for a `PipelineProfile::Pandoc`
+/// render — distinct from [`output_extension_for`], which names the file
+/// extension of the *final* user-facing artifact.
+///
+/// For every format currently routed through `PandocWriteStage` except
+/// typst, the two coincide (`docx` writes `.docx`, `pptx` writes `.pptx`,
+/// …), which is why nothing needed this distinction before. Typst breaks
+/// that: pandoc's typst *writer* is invoked with `-t typst`, but the
+/// user-facing output is a compiled PDF (`output_extension_for` correctly
+/// says `"pdf"`) — there is no direct `-t pdf` path through pandoc's typst
+/// writer, and passing the final extension here would skip the writer, the
+/// vendored Lua filters, and the template entirely. Compiling the `.typ`
+/// pandoc produces into that PDF is `TypstCompileStage`'s job (pandoc-hybrid
+/// Phase 2), not this stage's.
+fn pandoc_writer_name_for(id: FormatIdentifier) -> String {
+    match id {
+        FormatIdentifier::Typst => "typst".to_string(),
+        other => output_extension_for(other),
+    }
+}
+
+/// Extra pandoc CLI flags `PandocWriteStage` should append for a
+/// `PipelineProfile::Pandoc` render, beyond the shared `-f json -t
+/// <writer> -o <output>` invocation every format gets.
+///
+/// Only typst needs any (`format-typst.ts`'s `pandoc.standalone = true`,
+/// `wrap: none`, `default-image-extension: svg`) — every other
+/// Pandoc-hybrid format keeps the pre-existing bare invocation unchanged.
+/// `citeproc: false` from the same registration needs no entry here: Q2
+/// never passes `--citeproc` to pandoc for *any* Pandoc-hybrid format
+/// (citations are resolved upstream of this stage), so "false" is the
+/// already-existing default, not a flag to add. The opt-in `-citations`
+/// variant (Q1 auto-adds a target-format variant when the user asks for
+/// pandoc's native citeproc) is deferred — there is no existing
+/// pseudo-format-variant seam to model it on (see
+/// `builtin_pseudo_format` above, which only maps whole-format aliases,
+/// not opt-in suffixes on a base format), so it needs its own design
+/// decision rather than a guess here.
+fn pandoc_invocation_args_for(id: FormatIdentifier) -> Vec<String> {
+    match id {
+        FormatIdentifier::Typst => vec![
+            "--standalone".to_string(),
+            "--wrap".to_string(),
+            "none".to_string(),
+            "--default-image-extension".to_string(),
+            "svg".to_string(),
+        ],
+        _ => Vec::new(),
+    }
+}
+
 /// A complete format specification
 #[derive(Debug, Clone)]
 pub struct Format {
@@ -602,6 +653,20 @@ impl Format {
 
         // 4. Unknown format
         Err(format!("Unknown format: {}", format_str))
+    }
+
+    /// The pandoc writer name `PandocWriteStage` should pass as `-t` for a
+    /// `PipelineProfile::Pandoc` render. See [`pandoc_writer_name_for`] for
+    /// why this differs from [`Self::output_extension`] for typst.
+    pub fn pandoc_writer_name(&self) -> String {
+        pandoc_writer_name_for(self.identifier)
+    }
+
+    /// Extra pandoc CLI flags this format needs beyond the shared
+    /// invocation. See [`pandoc_invocation_args_for`] for why only typst
+    /// needs any today.
+    pub fn pandoc_invocation_args(&self) -> Vec<String> {
+        pandoc_invocation_args_for(self.identifier)
     }
 
     /// Check if this format is HTML-based
@@ -1121,6 +1186,97 @@ mod tests {
         let f = Format::from_format_string("typst").unwrap();
         assert_eq!(f.identifier, FormatIdentifier::Typst);
         assert_eq!(f.output_extension, "pdf");
+    }
+
+    /// The pandoc writer name (`-t` argument) must stay `"typst"` even
+    /// though the final user-facing `output_extension` is `"pdf"` — see
+    /// `pandoc_writer_name_for`'s doc comment.
+    #[test]
+    fn test_typst_pandoc_writer_name_differs_from_output_extension() {
+        let f = Format::from_format_string("typst").unwrap();
+        assert_eq!(f.output_extension, "pdf");
+        assert_eq!(f.pandoc_writer_name(), "typst");
+    }
+
+    /// For every other Pandoc-routed format, the writer name and the
+    /// output extension still coincide (no behavior change for docx/pptx).
+    #[test]
+    fn test_pandoc_writer_name_matches_output_extension_for_non_typst() {
+        for fmt in ["docx", "pptx", "epub", "gfm", "commonmark"] {
+            let f = Format::from_format_string(fmt).unwrap();
+            assert_eq!(
+                f.pandoc_writer_name(),
+                f.output_extension,
+                "writer name should match output_extension for {fmt}"
+            );
+        }
+    }
+
+    /// pandoc-hybrid-typst Phase 1 invocation builder: typst needs
+    /// `--standalone`, `--wrap none`, and `--default-image-extension svg`
+    /// (`format-typst.ts`'s `pandoc.standalone = true` / `wrap: none` /
+    /// `default-image-extension: svg`) — none of which any other
+    /// Pandoc-hybrid format passes today.
+    ///
+    /// Revert hunk: emptying `pandoc_invocation_args_for`'s `Typst` arm
+    /// makes this RED (the expected flags go missing).
+    #[test]
+    fn test_typst_invocation_args_include_standalone_wrap_and_image_extension() {
+        let f = Format::from_format_string("typst").unwrap();
+        let args = f.pandoc_invocation_args();
+        assert!(
+            args.iter().any(|a| a == "--standalone"),
+            "expected --standalone, got {args:?}"
+        );
+        assert_eq!(
+            windowed_pair(&args, "--wrap"),
+            Some("none".to_string()),
+            "expected --wrap none, got {args:?}"
+        );
+        assert_eq!(
+            windowed_pair(&args, "--default-image-extension"),
+            Some("svg".to_string()),
+            "expected --default-image-extension svg, got {args:?}"
+        );
+    }
+
+    /// `citeproc: false` in Q1's typst registration means "don't ask
+    /// pandoc's own citeproc to run" — Q2 never asks pandoc for citeproc on
+    /// any Pandoc-hybrid format (citations are resolved upstream), so this
+    /// is a non-emission, not a flag. Confirms the invocation builder
+    /// doesn't regress that default by accidentally emitting `--citeproc`.
+    #[test]
+    fn test_typst_invocation_args_omit_citeproc_by_default() {
+        let f = Format::from_format_string("typst").unwrap();
+        let args = f.pandoc_invocation_args();
+        assert!(
+            !args.iter().any(|a| a == "--citeproc"),
+            "typst must not pass --citeproc by default, got {args:?}"
+        );
+    }
+
+    /// Every other Pandoc-hybrid format gets no extra invocation args —
+    /// this bullet is typst-only (no behavior change for docx/pptx/epub).
+    #[test]
+    fn test_non_typst_formats_get_no_extra_invocation_args() {
+        for fmt in ["docx", "pptx", "epub", "gfm", "commonmark"] {
+            let f = Format::from_format_string(fmt).unwrap();
+            assert!(
+                f.pandoc_invocation_args().is_empty(),
+                "expected no extra invocation args for {fmt}, got {:?}",
+                f.pandoc_invocation_args()
+            );
+        }
+    }
+
+    /// Test helper: returns the value immediately following `flag` in
+    /// `args`, if `flag` appears. Used to assert `--wrap none`-shaped
+    /// two-token pairs without depending on exact adjacent indices.
+    fn windowed_pair(args: &[String], flag: &str) -> Option<String> {
+        args.iter()
+            .position(|a| a == flag)
+            .and_then(|i| args.get(i + 1))
+            .cloned()
     }
 
     #[test]

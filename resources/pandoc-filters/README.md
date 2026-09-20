@@ -30,6 +30,23 @@ This directory contains Lua filters from Quarto 1 that are used with Pandoc to p
   - `profiler.lua`, `readqmd.lua` - Performance and parsing tools
   - `luacov/` - Code coverage utility
 
+- `typst-template/` - the 8-partial typst doctemplate (pandoc-hybrid-typst
+  Phase 1), vendored **unmodified** from
+  `src/resources/formats/typst/pandoc/quarto/` (a different upstream
+  subtree than `filters/`/`pandoc/datadir/` above, but the same pin — see
+  Source below). `template.typ` is the orchestrator passed to pandoc's
+  `--template`; the other 7 (`numbering.typ`, `definitions.typ`,
+  `typst-template.typ`, `page.typ`, `typst-show.typ`, `notes.typ`,
+  `biblio.typ`) are `$partial.typ()$`-included by it and by each other, and
+  must stay flat siblings — Pandoc resolves a partial relative to the
+  *including* template's own directory, so nesting them would break the
+  chain. Materialized by
+  `crate::pandoc_filters::bundle::extract_typst_template`, independent of
+  the `filters/`/`pandoc/datadir/` layout above (`--template` and
+  `--data-dir`/`-L` are unrelated pandoc mechanisms). No Q2 customizations
+  exist here yet, so there is no corresponding "Ours vs. pinned" entry
+  below — if that changes, add one.
+
 ### Required runtime layout
 
 At runtime these two subtrees must be materialized on disk as **siblings

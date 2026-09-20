@@ -20,6 +20,8 @@ pub mod harness;
 pub mod meta_coerce;
 pub mod params;
 pub mod params_codec;
+pub mod typst_brand;
+pub mod typst_params;
 pub mod version;
 
 pub const QUARTO_CLI_PIN: &str = "v1.11.3";
@@ -41,3 +43,10 @@ pub static FORMATS_DIR: include_dir::Dir =
 /// tree separately by [`bundle::extract_share_tree`].
 pub static FORMATS_DOCX_DIR: include_dir::Dir =
     include_dir!("$CARGO_MANIFEST_DIR/../../resources/formats/docx");
+/// The 8 vendored typst doctemplate partials (pandoc-hybrid-typst Phase 1
+/// template vendoring), flat — Pandoc's `$partial.typ()$` inclusion syntax
+/// resolves relative to the main template's own directory, so all 8 must
+/// stay siblings. See `typst_brand`/`typst_params` for the filter-param
+/// side of typst support; this is the template-text side.
+pub static TYPST_TEMPLATE_DIR: include_dir::Dir =
+    include_dir!("$CARGO_MANIFEST_DIR/../../resources/pandoc-filters/typst-template");

@@ -97,6 +97,17 @@ enum KeyForms {
 /// invocation forwarding). Residual same-class keys (`template-partials`,
 /// `filters`, …) are tracked in bd-hjv5o; adding one is one row here
 /// plus its form handling.
+///
+/// `template`'s policy stays `ExistenceSilent` even though typst (added
+/// independently in pandoc-hybrid-typst Phase 1) has its own dedicated
+/// `--template` handling (`pandoc_write::resolve_user_template_path` +
+/// the vendored-8-partial-directory copy-over): typst is excluded from
+/// `build_forwarded_args`'s generic forwarding of this key
+/// (`base_format == "typst"` check there) rather than getting a second,
+/// differently-policied row here — a single key can only carry one
+/// merge-time policy, and `ExistenceSilent` is what P7's own
+/// `reference-doc`/`template` Q-5-30 hard-error path needs for
+/// docx/pptx.
 const FORMAT_PATH_KEYS: &[(&str, MarkPolicy, KeyForms)] = &[
     ("css", MarkPolicy::ExistenceDiagnose, KeyForms::Entries),
     ("theme", MarkPolicy::ExistenceSilent, KeyForms::Theme),

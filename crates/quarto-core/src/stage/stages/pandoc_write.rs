@@ -226,6 +226,49 @@ fn epub_extra_args(
     Ok(args)
 }
 
+/// Resolves the `brand` filter param for a typst render (Phase 1's
+/// `extractTypstFilterParams` bullet). `meta` is the document's already-
+/// merged metadata (`doc.ast.meta`, a `ConfigValue`) — the same config
+/// shape every other single-variant brand consumer
+/// (`quarto_sass::resolve_brand`'s doc comment: favicon fallback, reveal)
+/// reads a brand out of. Returns `Ok(None)` for a brand-less document,
+/// which is the common case and not an error.
+///
+/// Errors ([`quarto_sass::SassError`] — invalid `_brand.yml` shape, a bad
+/// font weight, a missing brand file) are real user-facing configuration
+/// problems, mapped through the same `sass_error_to_parse_error` bridge
+/// `compile_theme_css` uses. The candidate-source list here is smaller
+/// than that stage's (no profile overlays/extension manifests) because a
+/// `brand:` value reaching `PandocWriteStage` came from either the
+/// project config or the document itself — good enough for the span
+/// binding to land on the right file in the common case.
+fn resolve_typst_brand_param(
+    _stage_name: &str,
+    meta: &quarto_pandoc_types::ConfigValue,
+    ctx: &StageContext,
+) -> Result<Option<serde_json::Value>, PipelineError> {
+    let light =
+        quarto_sass::resolve_brand(meta, ctx.runtime.as_ref(), &ctx.project.dir).map_err(|e| {
+            let mut candidates: Vec<(quarto_source_map::FileId, std::path::PathBuf)> = Vec::new();
+            if let Some(p) = ctx.project.config.config_path.as_deref() {
+                candidates.push((
+                    quarto_yaml::file_id_for_filename(&p.to_string_lossy()),
+                    p.to_path_buf(),
+                ));
+            }
+            candidates.push((quarto_source_map::FileId(0), ctx.document.input.clone()));
+            PipelineError::Structured(crate::theme_diagnostic::sass_error_to_parse_error(
+                &e,
+                &candidates,
+            ))
+        })?;
+    Ok(crate::pandoc_filters::typst_brand::build_brand_param(
+        light.as_ref(),
+        None,
+        &ctx.project.dir,
+    ))
+}
+
 pub struct PandocWriteStage;
 
 impl PandocWriteStage {
@@ -272,6 +315,22 @@ impl PipelineStage for PandocWriteStage {
         // `title` — coerce to `MetaInlines` before serialization.
         crate::pandoc_filters::meta_coerce::coerce_meta_blocks_to_inlines(&mut doc.ast.meta);
 
+        // pandoc-hybrid-typst Phase 1: `section-numbering`/
+        // `shift-heading-level-by` (`format-typst.ts:82-100`) are
+        // typst-only and must be resolved right here, immediately before
+        // the wire-format cut — `section-numbering` mutates the metadata
+        // that's about to be serialized below; `shift-heading-level-by`
+        // is computed from the same fully resolved `Block` list, not
+        // from `DocumentProfile.outline` (see the two functions' doc
+        // comments for why).
+        let shift_heading_level_by =
+            if ctx.format.identifier == crate::format::FormatIdentifier::Typst {
+                insert_typst_section_numbering(&mut doc.ast.meta);
+                shift_heading_level_by_for(&doc.ast.blocks, &doc.ast.meta)
+            } else {
+                None
+            };
+
         // Findings 3/4 (final review): resolve the binary through the
         // runtime (honouring `QUARTO_PANDOC`) and enforce the version
         // floor before spawning anything.
@@ -297,6 +356,22 @@ impl PipelineStage for PandocWriteStage {
         // the time pandoc actually runs, not when this string is built.
         let share = temp_dir.join("pandoc-share");
 
+        // pandoc-hybrid-typst Phase 1: `extractTypstFilterParams` — the
+        // `brand` key, typst-only (see `typst_params`'s module docs for why
+        // this isn't a core, format-independent key yet). Resolved from the
+        // document's own merged metadata, matching every other single-
+        // variant brand consumer (favicon fallback, reveal); the **dark**
+        // half is deliberately not resolved here — it needs the full
+        // `ThemeConfig::resolve_variants` machinery `compile_theme_css`
+        // uses, out of scope for this wiring (typst renders one PDF per
+        // invocation, so only the active `brand-mode` — "light" unless a
+        // future doc sets it otherwise — is actually reachable today).
+        let typst_brand_param = if ctx.format.identifier == crate::format::FormatIdentifier::Typst {
+            resolve_typst_brand_param(self.name(), &doc.ast.meta, ctx)?
+        } else {
+            None
+        };
+
         let mut builder = FilterParamsBuilder::new(
             &ctx.format,
             &ctx.project,
@@ -312,6 +387,13 @@ impl PipelineStage for PandocWriteStage {
             builder = builder.with_contributor(Box::new(DocxCalloutIconsContributor {
                 share_dir: share.clone(),
             }));
+        }
+        if let Some(brand) = typst_brand_param {
+            builder = builder.with_contributor(Box::new(
+                crate::pandoc_filters::typst_params::TypstFilterParamsContributor {
+                    brand: Some(brand),
+                },
+            ));
         }
         let params_blob = builder.build().to_string();
 
@@ -355,6 +437,55 @@ impl PipelineStage for PandocWriteStage {
             )
         })?;
 
+        // pandoc-hybrid-typst Phase 1: the 8-partial typst doctemplate,
+        // typst-only. Staged independent of `share` above (verified: no
+        // positional relationship between `--template` and
+        // `--data-dir`/`-L` — see `bundle::extract_typst_template`'s doc
+        // comment).
+        let typst_template_path = if ctx.format.identifier == crate::format::FormatIdentifier::Typst
+        {
+            let template_dir = temp_dir.join("pandoc-typst-template");
+            std::fs::create_dir_all(&template_dir).map_err(|e| {
+                PipelineError::stage_error(
+                    self.name(),
+                    format!("failed to create typst template directory: {e}"),
+                )
+            })?;
+            crate::pandoc_filters::bundle::extract_typst_template(&template_dir).map_err(|e| {
+                PipelineError::stage_error(
+                    self.name(),
+                    format!("failed to materialize vendored typst template: {e}"),
+                )
+            })?;
+            let vendored_template = template_dir.join("template.typ");
+
+            // pandoc-hybrid-typst Phase 1's "Pandoc-defaults forwarding
+            // allow-list" bullet, `template` entry: a user-configured
+            // `format.typst.template` replaces the vendored template file,
+            // mirroring Q1's `userTemplate`
+            // (`command/render/pandoc.ts:784-810`). The vendored partials
+            // stay staged alongside it unchanged, so a custom template can
+            // still reference them (`$numbering.typ()$` etc).
+            let doc_dir = doc
+                .path
+                .parent()
+                .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
+            if let Some(user_template) = resolve_user_template_path(&doc.ast.meta, &doc_dir) {
+                std::fs::copy(&user_template, &vendored_template).map_err(|e| {
+                    PipelineError::stage_error(
+                        self.name(),
+                        format!(
+                            "failed to stage user-configured typst template {}: {e}",
+                            user_template.display()
+                        ),
+                    )
+                })?;
+            }
+            Some(vendored_template)
+        } else {
+            None
+        };
+
         let output_path = ctx.output_path();
         if let Some(parent) = output_path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| {
@@ -379,7 +510,7 @@ impl PipelineStage for PandocWriteStage {
                 format!("failed to create filter dependency file: {e}"),
             )
         })?;
-        let to_format = &ctx.format.output_extension;
+        let to_format = ctx.format.pandoc_writer_name();
 
         let format_extra_args = if ctx.format.identifier == FormatIdentifier::Epub {
             epub_extra_args(&temp_dir, &doc.path, &doc.ast.meta)?
@@ -416,19 +547,34 @@ impl PipelineStage for PandocWriteStage {
         // img/thinker.jpg: replacing image with description`).
         //
         // T9.6: `-f json -t <to_format> --data-dir <share>/pandoc/datadir
-        // -L <share>/filters/main.lua --resource-path <doc_dir> -o <output>`.
+        // -L <share>/filters/main.lua --resource-path <doc_dir> -o <output>`,
+        // plus any format-specific extra flags (pandoc-hybrid-typst Phase 1's
+        // invocation builder — typst needs `--standalone --wrap none
+        // --default-image-extension svg`; see `Format::pandoc_invocation_args`).
         let output = Command::new(&pandoc_bin)
             .arg("-f")
             .arg("json")
             .arg("-t")
-            .arg(to_format)
+            .arg(&to_format)
             .arg("--data-dir")
             .arg(share.join("pandoc").join("datadir"))
             .arg("-L")
             .arg(share.join("filters").join("main.lua"))
             .args(&format_extra_args)
+            .args(ctx.format.pandoc_invocation_args())
             .arg("--resource-path")
             .arg(doc_dir)
+            .args(
+                shift_heading_level_by
+                    .map(|n| vec!["--shift-heading-level-by".to_string(), n.to_string()])
+                    .unwrap_or_default(),
+            )
+            .args(
+                typst_template_path
+                    .as_ref()
+                    .map(|p| vec!["--template".to_string(), p.to_string_lossy().into_owned()])
+                    .unwrap_or_default(),
+            )
             .arg("-o")
             .arg(&output_path)
             .args(&forwarded_args)
@@ -471,10 +617,246 @@ impl PipelineStage for PandocWriteStage {
     }
 }
 
+/// Whether `blocks` contains a level-1 `Header` anywhere in the final
+/// document, recursing into every block container Pandoc's own AST walk
+/// would visit — not just top-level blocks. This matters because a
+/// heading can arrive from executed code (`results: asis` printing `#
+/// Section`), which may land nested inside a wrapper `Div`/`BlockQuote`/
+/// list/figure rather than at the top level.
+///
+/// pandoc-hybrid-typst Phase 1: feeds the `shift-heading-level-by: -1`
+/// decision (`format-typst.ts:92-100`) — computed here, immediately
+/// before the wire-format cut, over the fully resolved `Block` list, per
+/// the document-profile contract's invariant against consuming the
+/// earlier-captured `DocumentProfile.outline` for this purpose (see
+/// `claude-notes/designs/document-profile-contract.md`).
+fn has_level_one_heading(blocks: &[quarto_pandoc_types::Block]) -> bool {
+    use quarto_pandoc_types::Block;
+    blocks.iter().any(|block| match block {
+        Block::Header(h) => h.level == 1,
+        Block::BlockQuote(bq) => has_level_one_heading(&bq.content),
+        Block::OrderedList(ol) => ol.content.iter().any(|item| has_level_one_heading(item)),
+        Block::BulletList(bl) => bl.content.iter().any(|item| has_level_one_heading(item)),
+        Block::DefinitionList(dl) => dl
+            .content
+            .iter()
+            .any(|(_, defs)| defs.iter().any(|def| has_level_one_heading(def))),
+        Block::Div(d) => has_level_one_heading(&d.content),
+        Block::Figure(f) => has_level_one_heading(&f.content),
+        Block::Table(t) => {
+            t.head
+                .rows
+                .iter()
+                .chain(t.foot.rows.iter())
+                .any(|row| row.cells.iter().any(|c| has_level_one_heading(&c.content)))
+                || t.bodies.iter().any(|body| {
+                    body.body
+                        .iter()
+                        .any(|row| row.cells.iter().any(|c| has_level_one_heading(&c.content)))
+                })
+        }
+        Block::Custom(c) => c.slots.iter().any(|(_, slot)| match slot {
+            quarto_pandoc_types::Slot::Block(b) => has_level_one_heading(std::slice::from_ref(b)),
+            quarto_pandoc_types::Slot::Blocks(bs) => has_level_one_heading(bs),
+            quarto_pandoc_types::Slot::Inline(_) | quarto_pandoc_types::Slot::Inlines(_) => false,
+        }),
+        Block::Plain(_)
+        | Block::Paragraph(_)
+        | Block::LineBlock(_)
+        | Block::CodeBlock(_)
+        | Block::RawBlock(_)
+        | Block::HorizontalRule(_)
+        | Block::BlockMetadata(_)
+        | Block::NoteDefinitionPara(_)
+        | Block::NoteDefinitionFencedBlock(_)
+        | Block::CaptionBlock(_) => false,
+    })
+}
+
+/// `format-typst.ts:92-105`'s decision, re-derived: `Some(-1)` when the
+/// document has no level-1 heading anywhere AND the user hasn't set
+/// `shift-heading-level-by` explicitly, `None` (no shift) otherwise. Q1
+/// checks this key's absence (`flags`/`format.pandoc`) before applying its
+/// own default; folded into a single Rust implementation (bd-pandoc-hybrid
+/// fold), an explicit `shift-heading-level-by:` must win over this
+/// heuristic the same way — otherwise `build_forwarded_args`'s allow-listed
+/// forwarding of the same key (P7 Task 4) and this auto value would both
+/// emit `--shift-heading-level-by` for the same render.
+fn shift_heading_level_by_for(
+    blocks: &[quarto_pandoc_types::Block],
+    meta: &quarto_pandoc_types::ConfigValue,
+) -> Option<i64> {
+    if has_level_one_heading(blocks) || meta.get("shift-heading-level-by").is_some() {
+        None
+    } else {
+        Some(-1)
+    }
+}
+
+/// pandoc-hybrid-typst Phase 1's "Pandoc-defaults forwarding allow-list"
+/// bullet, `template` entry: resolves a user-configured `template:` value
+/// (already flattened from `format: typst: template: ...` into a plain
+/// top-level `template` key by `resolve_format_config`, and marked
+/// `ConfigValueKind::Path` — document-relative — by `FORMAT_PATH_KEYS` at
+/// merge time) into an absolute filesystem path, joined against the
+/// document's own directory. Mirrors Q1's `userTemplate`
+/// (`command/render/pandoc.ts:784-810`). Only the `Path` variant is
+/// handled: `MarkPolicy::Always` guarantees any string entry is marked, so
+/// an unmarked value here means no `template:` key was set at all.
+fn resolve_user_template_path(
+    meta: &quarto_pandoc_types::ConfigValue,
+    doc_dir: &Path,
+) -> Option<PathBuf> {
+    let value = meta.get("template")?;
+    match &value.value {
+        quarto_pandoc_types::config_value::ConfigValueKind::Path(s) => Some(doc_dir.join(s)),
+        _ => None,
+    }
+}
+
+/// `format-typst.ts:82-90`'s `section-numbering: "1.1.a"`, inserted into
+/// the document metadata when `number-sections` is on. A pure
+/// metadata-flag check with no AST dependency, so — unlike
+/// `shift_heading_level_by_for` — it's safe to compute from any snapshot
+/// of the resolved metadata, including right here at the wire-format
+/// cut.
+fn insert_typst_section_numbering(meta: &mut quarto_pandoc_types::ConfigValue) {
+    if meta.get("number-sections").and_then(|v| v.as_bool()) == Some(true) {
+        meta.insert_path(
+            &["section-numbering"],
+            quarto_pandoc_types::ConfigValue::new_string(
+                "1.1.a",
+                quarto_source_map::SourceInfo::generated(
+                    quarto_source_map::By::programmatic_config(),
+                ),
+            ),
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use quarto_error_reporting::DiagnosticKind;
+    use quarto_pandoc_types::{Block, BlockQuote, ConfigValue, Div, Header};
+    use quarto_source_map::SourceInfo;
+
+    fn header(level: usize) -> Block {
+        Block::Header(Header {
+            level,
+            attr: quarto_pandoc_types::empty_attr(),
+            content: vec![],
+            source_info: SourceInfo::for_test(),
+            attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
+        })
+    }
+
+    fn div(content: Vec<Block>) -> Block {
+        Block::Div(Div {
+            attr: quarto_pandoc_types::empty_attr(),
+            content,
+            source_info: SourceInfo::for_test(),
+            attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
+        })
+    }
+
+    /// pandoc-hybrid-typst Phase 1: a top-level level-1 heading means no
+    /// shift is needed.
+    ///
+    /// Revert hunk: flipping `shift_heading_level_by_for`'s branches
+    /// makes this RED (would return `Some(-1)` despite the level-1
+    /// heading being present).
+    #[test]
+    fn test_shift_absent_when_top_level_h1_present() {
+        let blocks = vec![header(1), header(2)];
+        assert_eq!(shift_heading_level_by_for(&blocks), None);
+    }
+
+    /// No heading at all in the document → shift by -1, same as "no
+    /// level-1 heading".
+    #[test]
+    fn test_shift_applied_when_no_headings_at_all() {
+        let blocks = vec![Block::Paragraph(quarto_pandoc_types::Paragraph {
+            content: vec![],
+            source_info: SourceInfo::for_test(),
+        })];
+        assert_eq!(shift_heading_level_by_for(&blocks), Some(-1));
+    }
+
+    /// Only a level-2 heading at top level → shift by -1.
+    ///
+    /// Revert hunk: removing the `Block::Header` arm's `level == 1`
+    /// check (treating any header as level-1) makes this RED.
+    #[test]
+    fn test_shift_applied_when_only_h2_present() {
+        let blocks = vec![header(2), header(3)];
+        assert_eq!(shift_heading_level_by_for(&blocks), Some(-1));
+    }
+
+    /// A level-1 heading emitted by executed code can land nested
+    /// inside a wrapper `Div` rather than at the top level — the
+    /// motivating case from the plan's `results: asis` example. The
+    /// scan must still find it.
+    ///
+    /// Revert hunk: removing the `Block::Div` recursion arm (treating
+    /// `Div` as opaque) makes this RED.
+    #[test]
+    fn test_shift_absent_when_h1_nested_inside_div() {
+        let blocks = vec![div(vec![header(1)])];
+        assert_eq!(shift_heading_level_by_for(&blocks), None);
+    }
+
+    /// Nesting two levels deep (`Div` inside `BlockQuote`) must still be
+    /// found — confirms the recursion, not just one level of it.
+    #[test]
+    fn test_shift_absent_when_h1_nested_two_levels_deep() {
+        let blocks = vec![Block::BlockQuote(BlockQuote {
+            content: vec![div(vec![header(1)])],
+            source_info: SourceInfo::for_test(),
+        })];
+        assert_eq!(shift_heading_level_by_for(&blocks), None);
+    }
+
+    fn meta_with_number_sections(value: Option<bool>) -> ConfigValue {
+        let mut meta = ConfigValue::new_map(vec![], SourceInfo::for_test());
+        if let Some(v) = value {
+            meta.insert_path(
+                &["number-sections"],
+                ConfigValue::new_bool(v, SourceInfo::for_test()),
+            );
+        }
+        meta
+    }
+
+    /// `number-sections: true` gets `section-numbering: "1.1.a"` inserted.
+    ///
+    /// Revert hunk: emptying `insert_typst_section_numbering`'s body
+    /// makes this RED (key stays absent).
+    #[test]
+    fn test_section_numbering_inserted_when_number_sections_true() {
+        let mut meta = meta_with_number_sections(Some(true));
+        insert_typst_section_numbering(&mut meta);
+        assert_eq!(
+            meta.get("section-numbering")
+                .and_then(|v| v.as_plain_text()),
+            Some("1.1.a".to_string())
+        );
+    }
+
+    /// `number-sections: false` (or absent) leaves the key out entirely
+    /// — both polarities, so this is a discriminator, not a presence
+    /// check.
+    #[test]
+    fn test_section_numbering_absent_when_number_sections_false_or_unset() {
+        for value in [Some(false), None] {
+            let mut meta = meta_with_number_sections(value);
+            insert_typst_section_numbering(&mut meta);
+            assert!(
+                meta.get("section-numbering").is_none(),
+                "expected no section-numbering key for number-sections={value:?}"
+            );
+        }
+    }
 
     /// T10.1: a zero-exit render whose stderr carries a `[WARNING]` line
     /// surfaces a corresponding diagnostic — the success-case

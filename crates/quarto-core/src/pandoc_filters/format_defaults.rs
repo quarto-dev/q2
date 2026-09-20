@@ -136,6 +136,18 @@ pub fn build_forwarded_args(
     let mut args = Vec::new();
 
     for key in PATH_SHAPED_ALLOW_LIST_KEYS {
+        // Typst has its own dedicated `--template` mechanism
+        // (`pandoc_write::resolve_user_template_path` + copying the user's
+        // file over the vendored 8-partial template directory, since
+        // Pandoc's `$partial.typ()$` inclusion requires every partial to be
+        // a sibling of the file passed via `--template`). Forwarding
+        // `template` generically here as well would emit a second
+        // `--template` pointing directly at the user's single file, which
+        // — placed later in the pandoc invocation than typst's own flag —
+        // would silently win and drop the vendored partials.
+        if *key == "template" && base_format == "typst" {
+            continue;
+        }
         let Some(value) = meta.get(key) else {
             continue;
         };

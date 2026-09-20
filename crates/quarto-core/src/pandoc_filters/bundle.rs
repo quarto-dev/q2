@@ -26,7 +26,7 @@
 
 use std::path::Path;
 
-use super::{DATADIR_DIR, FILTERS_DIR, FORMATS_DIR, FORMATS_DOCX_DIR};
+use super::{DATADIR_DIR, FILTERS_DIR, FORMATS_DIR, FORMATS_DOCX_DIR, TYPST_TEMPLATE_DIR};
 use crate::resources::ResourceError;
 
 /// Extracts the embedded Q1 filter trees into `dest`, creating
@@ -71,4 +71,21 @@ pub fn extract_formats_tree(dest: &Path) -> Result<(), ResourceError> {
         .extract(&formats_dest)
         .map_err(|e| ResourceError::Extract(e.to_string()))?;
     Ok(())
+}
+
+/// Extracts the 8 vendored typst doctemplate partials into `dest`, flat
+/// (no subdirectory) — Pandoc's `--template` flag takes the orchestrator
+/// (`template.typ`) and resolves each `$partial.typ()$` call relative to
+/// that file's own directory, so every partial must be a sibling of it.
+/// Independent of [`extract_share_tree`]'s `<share>/filters/` +
+/// `<share>/pandoc/datadir/` layout (verified against `pandoc_write.rs`'s
+/// invocation: `--template` and `--data-dir`/`-L` are unrelated pandoc
+/// mechanisms with no positional constraint between them) — callers may
+/// stage this anywhere, e.g. a sibling temp directory.
+///
+/// `dest` must already exist.
+pub fn extract_typst_template(dest: &Path) -> Result<(), ResourceError> {
+    TYPST_TEMPLATE_DIR
+        .extract(dest)
+        .map_err(|e| ResourceError::Extract(e.to_string()))
 }
