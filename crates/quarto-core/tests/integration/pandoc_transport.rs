@@ -875,7 +875,7 @@ fn test_real_q1_warn_call_is_surfaced() {
 /// `L`-tier tests in this codebase for the pandoc-hybrid epic. Later tasks
 /// that add `L`-tier tests to a `pandoc_*.rs` integration test file must
 /// bump this constant in the same commit.
-const L_TIER_TEST_COUNT: usize = 17;
+const L_TIER_TEST_COUNT: usize = 69;
 
 /// T2.6: the `L`-tier census, counted mechanically.
 ///

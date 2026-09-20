@@ -62,9 +62,10 @@ pub fn classify_pandoc_stderr(stderr: &str) -> Vec<DiagnosticMessage> {
         .filter_map(|line| {
             let stripped = strip_ansi(line);
             if stripped.starts_with("[WARNING]") || stripped.starts_with("WARNING (") {
+                let code = shim_warning_code(&stripped).unwrap_or("Q-11-1");
                 Some(
                     DiagnosticMessageBuilder::warning(stripped.into_owned())
-                        .with_code("Q-11-1")
+                        .with_code(code)
                         .build(),
                 )
             } else {
@@ -72,6 +73,29 @@ pub fn classify_pandoc_stderr(stderr: &str) -> Vec<DiagnosticMessage> {
             }
         })
         .collect()
+}
+
+/// Recognizes the wire-format shim's own two warning-shaped messages
+/// (`quarto2-shim.lua`'s `warn(...)` calls, P5 Task 6) by a fixed
+/// substring in the message text, and maps each to its own catalog code
+/// rather than the generic `Q-11-1` every other warning-shaped line gets.
+/// Every other Lua-filter warning (pandoc's own `[WARNING]` lines, Q1's
+/// `quarto.warn()` calls elsewhere in the vendored tree) still falls
+/// through to `Q-11-1` unchanged.
+fn shim_warning_code(message: &str) -> Option<&'static str> {
+    if message.contains("quarto2-shim: unrecognized custom node type") {
+        Some("Q-20-5")
+    } else if message.contains("quarto2-shim: callout")
+        && message.contains("no registered crossref category")
+    {
+        Some("Q-20-6")
+    } else if message.contains("quarto2-shim: theorem")
+        && message.contains("no theorem type registered")
+    {
+        Some("Q-20-7")
+    } else {
+        None
+    }
 }
 
 /// Builds the `Q-20-3` error for a nonzero pandoc exit.

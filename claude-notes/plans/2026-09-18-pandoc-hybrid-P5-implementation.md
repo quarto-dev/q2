@@ -8,7 +8,21 @@
 mechanism, the `L` tier, `run_main_lua`), [`2026-09-18-pandoc-hybrid-P2-implementation.md`](2026-09-18-pandoc-hybrid-P2-implementation.md)
 (the schema artifact this file's field-maps and totality test consume)
 **Depends on:** P1, P2, P4 (per the epic's graph)
-**Status:** Ready for subagent-driven execution. All tasks, including Task 7, are dispatchable.
+**Status:** **Complete, including post-review fixes.** All eight tasks implemented and
+independently verified on `braid/pandoc-hybrid-p5-lua-shim` (commits `1b4596c72`, `79acc955e`,
+`6b4e018ac`, `3cc1870a3`, `2328a638e`, `9118e64d1`, `afb28cbf6`, `fe93e21bc` — Tasks 1–8
+respectively). A whole-branch `/code-review` against `MERGE_BASE 8e29267e7` then found 9 findings
+across Tasks 1–8, all fixed with the same TDD discipline and committed in 6 groups: `9fc901fc4`
+(two crash bugs: duplicate-label Equation, foreign-ref-type Theorem), `4b6d5831a` (Theorem/Proof
+attribute preservation), `70bb4c41d` (Callout `collapse` translation), `2a11e0c0c` (resolved-ref
+`cite_prefix`), `127a82dfd` (test-integrity: goldens leak check, a missing positive assertion, and
+a new zero-wire-node regression test), `55ed915c2` (derive the shim's `routes` table from
+`route_handlers` instead of hand-maintaining both). Per-task and per-finding details, corrections,
+and full verification records live in the SDD ledger at
+`.superpowers/sdd/2026-09-18-pandoc-hybrid-P5-implementation/progress.md` (gitignored, session
+scratch); the shape plan's own Coarse checklist has been reconciled against this file's Task 1–8
+completion. Full `cargo nextest run --workspace` at this phase boundary: 14102/14102 pass, 0
+failures. Branch not yet pushed — awaiting explicit push approval per repo `GIT PUSH POLICY`.
 
 This file converts P5's Coarse checklist into `## Task N` units
 `superpowers:subagent-driven-development` can dispatch, and binds every test P5 needs to a named

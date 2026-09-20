@@ -1,0 +1,8 @@
+---
+source: crates/quarto-core/tests/integration/pandoc_shim_goldens.rs
+assertion_line: 291
+expression: "render_and_project(\"equation-numbered.qmd\")"
+---
+Para
+  Span Some(("eq-x", []))
+    Math[DisplayMath] "\nE = mc^2\n \\qquad(1)"

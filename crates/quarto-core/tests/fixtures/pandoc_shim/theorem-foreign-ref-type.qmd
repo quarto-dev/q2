@@ -1,0 +1,3 @@
+::: {#fig-x .theorem}
+Some theorem-shaped content.
+:::

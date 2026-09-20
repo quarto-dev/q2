@@ -1,0 +1,3 @@
+::: {#thm-x .theorem .column-margin data-foo="bar" name="My Title"}
+Some theorem content.
+:::

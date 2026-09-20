@@ -1,0 +1,25 @@
+---
+source: crates/quarto-core/tests/integration/pandoc_shim_goldens.rs
+assertion_line: 199
+expression: "render_and_project(\"callout-numbered.qmd\")"
+---
+Div Some(("", ["docx-callout"]))
+  RawBlock[openxml] "      <w:tbl>\n      <w:tblPr>\n        <w:tblStyle w:val=\"Table\" />\n        <w:tblLook w:firstRow=\"0\" w:lastRow=\"0\" w:firstColumn=\"0\" w:lastColumn=\"0\" w:noHBand=\"0\" w:noVBand=\"0\" w:val=\"0000\" />\n        <w:tblBorders>  \n          <w:top w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"0758E5\"/>  \n          <w:left w:val=\"single\" w:sz=\"24\" w:space=\"0\" w:color=\"0758E5\"/>  \n          <w:bottom w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"0758E5\"/>  \n          <w:right w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"0758E5\"/>  \n        </w:tblBorders> \n        <w:tblCellMar>\n          <w:left w:w=\"144\" w:type=\"dxa\" />\n          <w:right w:w=\"144\" w:type=\"dxa\" />\n        </w:tblCellMar>\n        <w:tblLook w:firstRow=\"0\" w:lastRow=\"0\" w:firstColumn=\"0\" w:lastColumn=\"0\" w:noHBand=\"0\" w:noVBand=\"0\" w:val=\"0000\" />\n      </w:tblPr>\n      <w:tr>\n        <w:trPr>\n          <w:cantSplit/>\n        </w:trPr>\n        <w:tc>\n          <w:tcPr>\n            <w:shd w:color=\"auto\" w:fill=\"dae6fb\" w:val=\"clear\"/>\n            <w:tcMar>\n              <w:top w:w=\"92\" w:type=\"dxa\" />\n              <w:bottom w:w=\"92\" w:type=\"dxa\" />\n            </w:tcMar>\n          </w:tcPr>\n    "
+  Para
+    RawInline[openxml] "<w:pPr>\n<w:spacing w:before=\"16\" w:after=\"16\"/>\n</w:pPr>"
+    Str "Note"
+    Str "\u{a0}"
+    Str "1"
+    Str ":"
+    Space
+    Str "Setup"
+  Div Some(("", []))
+    RawBlock[openxml] "        </w:tc>\n      </w:tr>\n      <w:tr>\n        <w:trPr>\n          <w:cantSplit/>\n        </w:trPr>\n        <w:tc> \n        <w:tcPr>\n          <w:tcMar>\n            <w:top w:w=\"108\" w:type=\"dxa\" />\n            <w:bottom w:w=\"108\" w:type=\"dxa\" />\n          </w:tcMar>\n        </w:tcPr>\n  \n    "
+  Para
+    RawInline[openxml] "<w:pPr>\n<w:spacing w:before=\"16\" w:after=\"16\"/>\n</w:pPr>"
+    Str "Some"
+    Space
+    Str "setup"
+    Space
+    Str "instructions."
+  RawBlock[openxml] "      <w:p/>\n      </w:tc>\n      </w:tr>\n    </w:tbl>\n    "
