@@ -183,7 +183,15 @@ pub(crate) fn build_fixture_ast_and_params(fixture_name: &str) -> (String, Strin
 /// file per variant. `build_fixture_ast_and_params` is the disk-backed
 /// special case of this, kept separate since every other test wants "read
 /// this named fixture" and shouldn't have to construct a `Vec<u8>` for it.
-fn build_ast_and_params_from_content(fixture_name: &str, content: &[u8]) -> (String, String) {
+///
+/// `pub(crate)` so other modules in this `integration` binary (e.g. P6's
+/// `crossref_custom_passthrough`) can drive the same real
+/// pipeline-minus-`PandocWriteStage` seam — including `MetadataMergeStage`'s
+/// key-retention logic — without a second in-memory-fixture harness.
+pub(crate) fn build_ast_and_params_from_content(
+    fixture_name: &str,
+    content: &[u8],
+) -> (String, String) {
     let project_dir = tempfile::tempdir().expect("failed to create temp project dir");
     let input_path = project_dir.path().join(fixture_name);
     std::fs::write(&input_path, content).expect("failed to write fixture input");
@@ -1670,11 +1678,25 @@ fn test_equation_number_is_an_integer() {
 /// `FORMAT` global (set from the real `-t` argument), not anything in
 /// `QUARTO_FILTER_PARAMS` -- so the docx-built params/AST pair is reused
 /// unchanged, only the pandoc invocation's target format changes.
+///
+/// **P6 note:** strips `crossref-numbering` from the docx-built params
+/// (present as `"external"` since P6 Task 1). P3's upstream patch fails
+/// fast (`main.lua:749`) when `crossref-numbering: external` is combined
+/// with a LaTeX/Typst target -- correct production behavior (the epic's
+/// latex leg is a stub that never reaches this chain), but orthogonal to
+/// what this test exercises (the `isLatexOutput()` branch in
+/// `equations.lua`), so it would mask the assertion below entirely.
 #[test]
 fn test_equation_latex_branch_ignores_order() {
     assert_pandoc_available();
 
     let (ast_json, params_json) = build_fixture_ast_and_params("equation-numbered.qmd");
+    let mut params: serde_json::Value = serde_json::from_str(&params_json).expect("valid JSON");
+    params
+        .as_object_mut()
+        .expect("params blob is an object")
+        .remove("crossref-numbering");
+    let params_json = params.to_string();
     let out_dir = tempfile::tempdir().expect("failed to create temp output dir");
     let out_path = out_dir.path().join("out.tex");
 

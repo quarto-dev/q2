@@ -432,8 +432,19 @@ const THEOREM_AST_JSON: &str = r#"{"pandoc-api-version":[1,23,1],"meta":{"quarto
 /// Converts a real params `Value` (from `full_params_json`, minus the
 /// `PathBuf`-based `results-file`, which is irrelevant here) with one
 /// crossref key overridden/added, back to a JSON string.
+///
+/// **P6 note:** also strips `crossref-numbering` (present as `"external"`
+/// in `full_params_json()`'s output since P6 Task 1). This fixture is Q1's
+/// *raw* syntax — a bare `Div`/`Cite`, not P5's wire-format shim — so it
+/// depends on Q1's own `quarto_crossref_filters` group (`crossref_theorems()`
+/// assigning `.order`, `resolveRefs()` resolving the citation) actually
+/// running to exercise the `crossref-<type>-title`/`-prefix` params this
+/// test targets; under external mode that whole group is suppressed
+/// (P6's own point, exercised instead by `crossref_external_mode_matrix.rs`)
+/// and neither the Div nor the citation would ever be numbered/resolved.
 fn theorem_params_json(key: &str, value: &str) -> String {
-    let mut params: Value = serde_json::from_str(&full_params_json()).expect("valid JSON");
+    let mut params: Value =
+        serde_json::from_str(&params_json_without_key("crossref-numbering")).expect("valid JSON");
     params
         .as_object_mut()
         .expect("params blob is an object")
@@ -821,13 +832,20 @@ const UNRESOLVED_CROSSREF_AST_JSON: &str = r#"{"pandoc-api-version":[1,23,1],"me
 /// (`diagnostics.rs`) back to a bare `line.starts_with("[WARNING]")` makes
 /// this RED, since Q1's `warn()` wraps the line in `lunacolors.yellow`,
 /// which never starts with `[WARNING]`.
+///
+/// **P6 note:** strips `crossref-numbering` (`"external"` in
+/// `full_params_json()`'s output since P6 Task 1) — `resolveRefs()`, the
+/// producer of this test's warning, lives inside the `quarto_crossref_filters`
+/// group that external mode suppresses entirely (`main.lua:755`), so this
+/// fixture's `@fig-nope` would never even reach `crossref/refs.lua:128` under
+/// production's real default.
 #[test]
 fn test_real_q1_warn_call_is_surfaced() {
     assert_pandoc_available();
 
     let out_dir = tempfile::tempdir().expect("failed to create temp output dir");
     let out_path = out_dir.path().join("out.docx");
-    let params_json = full_params_json();
+    let params_json = params_json_without_key("crossref-numbering");
 
     let outcome = run_main_lua(
         UNRESOLVED_CROSSREF_AST_JSON,

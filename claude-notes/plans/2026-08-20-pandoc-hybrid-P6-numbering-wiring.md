@@ -45,7 +45,7 @@ handles user-declared extensions:
 | `theorem_types` | `customnodes/theorem.lua:7-53` | **No** — static table, no registration function exists at all | `thm,lem,cor,prp,cnj,def,exm,exr,alg` |
 | bespoke `eq` handling | `crossref/equations.lua` | No — hardcoded string, native LaTeX/Typst numbering (`\begin{equation}`, `#math.equation`), no display-name table entry at all | `eq` |
 | bespoke `sec` handling | `crossref/sections.lua` | No — hardcoded string, native Pandoc header numbering (`1.2 Title`), no display-name table entry at all | `sec` |
-| `crossref.custom` (**this is what `custom.lua` actually is**) | `crossref/custom.lua:6-158` | Yes — `initialize_custom_crossref_categories(meta)` parses `meta.crossref.custom` directly and calls `add_crossref_category` | user-declared only |
+| `crossref.custom` (**this is what `custom.lua` actually is**) | `crossref/custom.lua:6-157` | Yes — `initialize_custom_crossref_categories(meta)` parses `meta.crossref.custom` directly and calls `add_crossref_category` | user-declared only |
 
 Confirmed authoritative via `valid_ref_types()` (`crossref/refs.lua:198-212`, corrected
 2026-09-18 from `198-210`):
@@ -144,7 +144,7 @@ triple when the id matches a registered ref-type (`test_callout_with_crossref_id
 
 Route L discards this: it reconstructs a **raw classed Div** (no `plain_data`, no wire fields at
 all) and lets Q1's unmodified `callout.lua` parse+render fully re-derive everything from scratch —
-including `.order`, normally assigned by `crossref_callouts()` (`customnodes/callout.lua:467-480`).
+including `.order`, normally assigned by `crossref_callouts()` (`customnodes/callout.lua:469-482`).
 But `crossref_callouts` is part of `quarto_crossref_filters`, the exact filter group
 `crossref-numbering: external` (P3) suppresses globally. So under external mode, a Route-L
 callout with a crossref id gets **no order from either side** — not from Q2 (thrown away by
@@ -161,7 +161,7 @@ confirmed mechanical/1:1 in the design doc (`plain_data.{type,appearance,icon}` 
 `slots.{title,content}` → `quarto.Callout({type,appearance,icon,title,content})`); Route R just
 means the shim calls that same constructor directly and assigns `.order` onto the returned table
 before invoking `render` — the identical post-construction-assignment mechanism P5 already
-designed for Theorem (`theorem.lua:220`, constructor has no `order` field, renderer reads it off
+designed for Theorem (`theorem.lua:222`, constructor has no `order` field, renderer reads it off
 the table directly). No new mechanism, no new field-map — just a routing-table change plus reuse
 of an existing pattern.
 
@@ -188,7 +188,7 @@ or an appendix-relocated float, landing on the same numbering machinery) against
   has an `in_appendix` field, but `crossref_index.rs`'s builder hardcodes it to `false` with the
   comment "deferred" — Phase 1 is explicitly flat, single-file numbering only. Q1's own
   appendix-numbering machinery (`crossref.startAppendix`, set by `indexNextChapter` in
-  `crossref/index.lua:31-41`, consumed by `format.lua:111-112,156-157` to render "A.1"-style
+  `crossref/index.lua:31-43`, consumed by `format.lua:111-112,156-157` to render "A.1"-style
   labels) is **entirely inside** the same assign-group P3 suppresses under external mode — so
   even if it weren't dormant on the Q2 side, Q1 could never independently reconstruct it either
   once numbering goes external. **Since Q2 never produces an appendix-flagged order today, there
@@ -197,15 +197,28 @@ or an appendix-relocated float, landing on the same numbering machinery) against
   need to inject its own "A.1"-style formatting via `plain_data` (the same way flat order is
   injected today) rather than relying on Q1's `crossref.startAppendix`/`format.lua` path, since
   that path is unreachable under external mode. File that as new scope then, not now.
-- **The Tabset/subfloat nesting case is a P5 shim-mechanics question, not a new P6 mechanism.**
-  Now that Tabset routes R (P5) and Callout routes R (Finding 4), a Tabset containing FloatRefTarget
-  subfloats is just nested Route-R reconstruction. `prependSubrefNumber(caption_content, float.order)`
-  (`customnodes/floatreftarget.lua:221`) reads `.order` generically off whatever table it's handed,
-  with no special-casing for nesting depth or container type. As long as P5's shim assigns
-  `.order` post-construction uniformly to every Route-R node it builds (already its stated
-  mechanism for Theorem, and now Callout), nested subfloats inside a Route-R Tabset get the same
-  treatment for free. No new checklist item needed here beyond confirming this in P5's Layer-2
-  golden — cross-reference, don't duplicate.
+- **The Tabset/subfloat nesting case is dormant too, not "gets the same treatment for free"
+  (corrected 2026-09-20, per P6 Task 6's implementation-companion review).** The original claim
+  here was that `prependSubrefNumber(caption_content, float.order)`
+  (`customnodes/floatreftarget.lua:221`) reads `.order` generically off whatever table it's
+  handed, so a Tabset-containing-figure gets subfloat lettering "for free." Reading the
+  surrounding branch shows that path is reached only for a float Q1 recognizes as a *subfloat*,
+  which requires a `parent` link — and Q2 hardcodes `parent: None, // subfloats deferred`
+  (`crossref_index.rs:304`), exactly like the `in_appendix: false` field one paragraph above.
+  `CrossrefEntry.parent` (`crossref/index.rs:97`) is documented infrastructure with **zero
+  readers** anywhere in `crates/quarto-core/src/crossref/` or the crossref transforms. So no Q2
+  wire node can carry the parent link that selects the subfloat branch, and a
+  Tabset-containing-figure fixture asserts **top-level** numbering of a nested figure, not
+  subfloat lettering — the same verdict as the `in_appendix` bullet above: **confirmed dormant,
+  no live bug exists.** Tracked as `bd-plcqhfcn` (parented to the crossref epic `bd-jsbg`), which
+  is the first strand for a deferral already on record twice in
+  `claude-notes/plans/2026-04-15-crossref-design.md` (lines 77 and 405) with no strand until now.
+  P5's own round-4 traversal sub-finding already names the fixture this needs
+  (`nested-float-in-callout.qmd`, a `FloatRefTarget` inside a `Callout`'s `content` slot) and P5's
+  Layer-2 goldens own it; P6's own nesting coverage is its `test_all_three_injected_orders_*`
+  pair in `crossref_external_mode_matrix.rs`, which asserts top-level numbers for all three types
+  together, not subfloat lettering. No new checklist item needed — the gap is a feature request,
+  not a P6 bug.
 
 **This checklist item is closed for v1**, downgraded from "trace" to "confirmed dormant + one
 cross-reference to P5's existing golden coverage." Re-open only when Q2 implements appendix-aware
@@ -260,22 +273,59 @@ numbering.
 - [x] Decide Callout's route (Finding 4) — **Route R**, decided with Gordon.
 - [x] Land the design-doc §3 table update for Callout, alongside Tabset's — done 2026-09-17
       (commit `8e9e546b4`).
-- [ ] Land the Callout-to-R change in the shim itself (P5's file — implementation, not the
-      table update above).
-- [ ] Confirm `crossref.custom` passthrough into `Pandoc(fmt)` Meta with a regression test
-      (Finding 2) — no new export code, just the test.
-- [ ] Set `crossref-numbering: external` for `Pandoc(fmt)` profiles in the params-blob builder
-      (P6 supplies the value, P4's existing plumbing consumes it).
-- [ ] Figure/theorem/callout number-parity golden: docx numbers == HTML numbers (still a valid
-      goal — the epic's DoD narrowed to *numbers*, not presentation, per design doc §12, and
-      numbers are unaffected by that narrowing), for a document exercising all three (plus one
-      nested subfloat-in-Tabset case, cross-referencing P5's Layer-2 golden rather than
-      duplicating it — Finding 5). **Ordering note, added 2026-09-18:** this golden needs docx
-      semantic-extraction machinery that doesn't exist until P7 builds it
-      (`cargo xtask capture-pandoc-goldens`); since the epic runs P6 before P7, either (a) assert
-      at the wire-AST/pandoc-JSON level instead of the rendered docx for this plan's own gate
-      (comparing the `order` Q2 injects against what the shim's Route-R output carries, no docx
-      round-trip needed), deferring the full docx-rendered assertion to P7's harness, or (b)
-      explicitly schedule this checklist item after P7. Don't leave it silently unschedulable.
+- [x] Land the Callout-to-R change in the shim itself (P5's file — implementation, not the
+      table update above) — **done in P5** (commit `4fb8b38e8`, "P5 Task 3: Route R for Callout
+      and Tabset"); confirmed by reading `resources/pandoc-filters/filters/quarto2-shim.lua`'s
+      `route_callout`, and by P5's own test suite (`test_numbered_callout_gets_prefix`,
+      `test_unnumbered_callout_has_no_prefix`, `test_callout_order_must_be_on_the_data_table`,
+      `test_nested_wire_nodes_convert_inner_first`).
+- [x] Confirm `crossref.custom` passthrough into `Pandoc(fmt)` Meta with a regression test
+      (Finding 2) — no new export code, just the test — **done**:
+      `crossref_custom_passthrough.rs`'s `test_crossref_custom_survives_into_wire_meta_verbatim`
+      (T3.1, negative-space guard on `metadata_merge.rs:460`) and
+      `test_crossref_custom_category_renders_its_declared_prefix` (T3.2, real Q1-side render of
+      the same fixture, asserts `Diagram\u{a0}1:`).
+- [x] Set `crossref-numbering: external` for `Pandoc(fmt)` profiles in the params-blob builder
+      (P6 supplies the value, P4's existing plumbing consumes it) — **done**: `params.rs`'s
+      `insert_crossref_numbering_mode`, tested by `test_pandoc_profile_sets_external_crossref_numbering`
+      / `test_non_pandoc_profile_omits_crossref_numbering`. Landing this surfaced (and fixed) a
+      real collateral effect on four pre-existing P3/P4/P5 `L`-tier tests that relied on Q1's own
+      `quarto_crossref_filters` group running against hand-built docx params
+      (`crossref_numbering_matrix.rs`'s M1/M2, `pandoc_transport.rs`'s
+      `test_thm_caption_uses_title_param`/`test_thm_reference_uses_prefix_param`/
+      `test_real_q1_warn_call_is_surfaced`, `pandoc_shim.rs`'s
+      `test_equation_latex_branch_ignores_order`) — each now explicitly strips or overrides
+      `crossref-numbering` to restore the Q1-native-numbering path they were built to exercise.
+- [x] Numbering-suppression discrimination matrix (design doc §7/§11, this plan's "In scope"
+      item D) — **done**: `crossref_external_mode_matrix.rs`, 9 tests. Bound twice, on two
+      independent surfaces per the plan's own discipline: injected orders (`fig`=7, `thm`=5,
+      `nte`=3) Q1 would never independently compute, with `_when_reverted` companions proving
+      attribution to Task 1's hunk; and the order-free `number-sections` collateral-suppression
+      surface (design doc §11, a labeled accepted divergence, `bd-5aklrxgi`). Also a per-mechanism
+      registration tripwire (all four built-in category mechanisms stay recognized under external
+      mode — labeled as a tripwire, not coverage, since P3 already established registration is
+      unconditional).
+- [x] **Scope correction, 2026-09-20 (decided with Gordon):** figure/theorem number-parity golden
+      — **not callout**. Verified empirically (`q2 render --to html` of a labeled, titled
+      callout): Q2's native HTML crossref renderer never numbers `Callout` at all (no "Note N:"
+      prefix anywhere), unlike Figure/Theorem, which both render correctly. This is a genuine
+      **numbers** gap on the HTML side, not the presentation-only divergence design doc §12
+      already documents — there is no callout number on the HTML leg to compare against the
+      docx leg's. Out of scope for this epic (its own governing principle); filed as `bd-pk3gtn2i`
+      and recorded as a new §12 bullet. **Done**: `crossref_number_parity.rs`, docx numbers ==
+      HTML numbers for a fig+thm+proof fixture (the epic's DoD narrowed to *numbers*, not
+      presentation, per design doc §12, and numbers are unaffected by that narrowing); the Proof
+      renders unnumbered on both legs (Finding 3). **Ordering note resolved:** took option (a) —
+      asserted against a real `--to docx` render with a P6-local `docx_to_plain` text extractor
+      (a second `pandoc -f docx -t plain` subprocess call, no new dependency), not P7's
+      not-yet-built `cargo xtask capture-pandoc-goldens` harness; P7 may re-capture the same
+      fixture through its own harness when it lands, per this plan's own hand-off note.
+      **Fixture note:** the figure uses the `Div(#fig-..)` authoring form, not the bare
+      implicit-figure `![](){}` form — the latter's caption currently renders unnumbered in
+      HTML on this pre-rebase branch due to the closed, already-fixed-on-`main` bug
+      `bd-hb9a9ik8`/`bd-n3sark9b` (PR #690, merged 2026-09-17, one day after
+      `feature/pandoc-writer-hybrid` was cut); decided with Gordon to keep working the plan now
+      and let the eventual squash-rebase onto `main` pick up the fix, rather than cherry-pick it
+      mid-plan.
 - [x] Trace the combined subfloat/panel case — done (Finding 5): confirmed dormant for v1
       (Q2 has no appendix-aware numbering yet); nesting mechanics fold into P5's existing golden.

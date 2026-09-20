@@ -405,6 +405,16 @@ someone picks it up later.
   — see §6's B1 row).
 - **Section numbering (`number-sections`, `@sec-` refs) is unsupported for the Pandoc leg** until
   `bd-5aklrxgi` lands (a general, pre-existing Q2 gap, not new to this epic — see §11).
+- **Q2's native HTML crossref renderer never numbers Callout at all** — verified 2026-09-20
+  (P6 Task 5): rendering a labeled, titled callout to HTML produces no "Note N:" prefix
+  whatsoever (`crossref_render.rs`'s `CrossrefRenderTransform` explicitly does not touch
+  `CustomNode("Callout")`; `callout_resolve.rs`'s `is_crossref` flag only suppresses a redundant
+  screen-reader span). The Pandoc leg (docx/pptx, via P5's shim + real Q1 Lua) *does* render the
+  number correctly for the same source document. Unlike the presentation-only divergence above,
+  this is a genuine **numbers** gap, not a presentation one — there is no number on the HTML side
+  to present differently. Decided with Gordon: out of scope for this epic (the governing
+  principle at the top of this section applies), so **P6's number-parity golden (Task 5) covers
+  Figure + Theorem only**, not Callout. Tracked as `bd-pk3gtn2i`.
 - **Listing pages render with only their prose body** (`listing-generate`/`listing-render` are
   excluded for the Pandoc leg) — near-parity with Q1, which also doesn't produce real docx/pptx
   listings, but worth stating since "my listing page came out blank" is a plausible report.
