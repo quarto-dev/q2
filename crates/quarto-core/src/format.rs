@@ -983,7 +983,9 @@ mod tests {
 
     #[test]
     fn test_lua_format_for_passes_through_real_formats() {
-        for f in ["html", "revealjs", "latex", "pdf", "gfm", "typst", "docx"] {
+        for f in [
+            "html", "revealjs", "latex", "pdf", "gfm", "typst", "docx", "pptx", "beamer",
+        ] {
             assert_eq!(lua_format_for(f), f, "real format {f} must pass through");
         }
     }
