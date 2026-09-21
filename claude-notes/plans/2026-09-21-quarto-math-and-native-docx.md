@@ -285,21 +285,50 @@ markup for a fixture plus, for OMML, an `xmllint --schema` pass.
 - [ ] Out of scope for this epic; the Typst format writer (whichever leg
       lands) consumes `quarto_math::convert(_, Target::Typst)`.
 
-## Open decisions
+## Decisions (2026-09-21)
 
-1. **Style vocabulary.** Q1 users' reference docs are keyed on pandoc's style
-   names (`Source Code`, `Body Text`, `First Paragraph`, `Compact`). Names are
-   not code; we can define them in our own `styles.xml`, or adopt Word's names
-   from python-docx's template. Affects the writer from the first commit.
-2. **mitex dependency mode.** Git dependency (tracks upstream, but pulls in
-   `mitex-spec-gen`'s submodule/`typst` build step unless we depend only on
-   `mitex-lexer` + `mitex-parser`) vs vendored copy (lets us add the span side
-   table at the `builder.token` sites). Leaning vendored.
-3. **Use-site attribution inside macro expansions.** Definition-site is fine
-   for v1; revisit if users report confusing math diagnostics.
-4. **MathML writer.** Every browser now renders MathML Core; a MathML target
-   would let HTML output drop MathJax for many documents. Not in this epic,
-   but the word-splitting pass is designed for it.
+1. **Style vocabulary: keep pandoc's style names.** Decided. Q1 users'
+   reference docs are keyed on pandoc's names (`Source Code`, `Body Text`,
+   `First Paragraph`, `Compact`, `Block Text`, `Caption`, `Image Caption`,
+   `Table Caption`, `Verbatim Char`, `Hyperlink`, …); matching them keeps
+   `reference-doc` and `custom-style` customizations portable from Q1. Names
+   are not code: our own `styles.xml` defines them (the definitions are ours,
+   the vocabulary is the public Q1 contract). python-docx's template supplies
+   the Word-native scaffolding (Normal, Heading 1–9, Table Grid, numbering,
+   theme, fonts) that those styles inherit from. The writer resolves a style
+   *name* to a `w:styleId` by looking it up in the reference doc's
+   `styles.xml`, adding a definition when the name is missing, so the body's
+   only reference-doc-dependent bytes are style ids.
+2. **mitex dependency mode: vendor `mitex-lexer` + `mitex-parser`.**
+   Recommended pending confirmation. Upstream velocity for those two crates is
+   near zero (two commits since 2025-01, one of them CI-only; see the
+   2026-09-21 velocity check in the session transcript), so a quarterly
+   `git log <upstream> -- crates/mitex-lexer crates/mitex-parser` check is
+   enough to track bugfixes. Vendoring lets us add the span side table at the
+   parser's `builder.token` sites and drop `mitex-spec-gen`'s Typst/submodule
+   build step entirely. Record the upstream commit in `VENDORED.md`.
+3. **Use-site attribution inside macro expansions: definition-site for v1.**
+   Decided. Revisit if users report confusing math diagnostics.
+4. **MathML writer: follow-up strand bd-9z83tcv0.** Decided. Not in this
+   epic; the word-splitting pass in Phase 1 is designed for it.
+
+### Reference docs and the pullback (why the blast radius is small)
+
+A reference doc contributes the *non-body* parts of the package: `styles.xml`
+(style definitions), `numbering.xml` (list definitions we may inherit),
+`theme`, `fontTable`, `settings`, headers/footers, and the final `w:sectPr`
+(page size, margins) copied into `document.xml`. The body of `document.xml`
+is generated from the AST alone and refers to styles by id; changing the
+reference doc changes how those ids *render*, not the paragraph/run structure.
+So `v1.docx` vs `v2.docx` (same `.qmd`, different reference doc) differ in
+`styles.xml`, `sectPr`, and possibly style-id attribute values, and nowhere
+else in the body. The pullback (Word comments / tracked changes back to
+`.qmd`) is therefore insensitive to the reference doc. What it *is* sensitive
+to is Word's re-save, which splits and merges runs and adds `w:rsid*`
+attributes, so the pullback must anchor on paragraph identity plus in-paragraph
+text diffing, never on run structure. Candidate anchor: `w14:paraId`, which
+Word assigns per paragraph and preserves across edits for co-authoring
+(unverified; Phase 4 fixture).
 
 ## References
 
