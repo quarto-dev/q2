@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/typst.rs
+expression: to_typst(&n)
+---
+integral.cont arrow(E) ⋅ d arrow(A) = (Q)/(ϵ_(0))

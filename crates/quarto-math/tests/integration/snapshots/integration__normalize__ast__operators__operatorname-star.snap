@@ -3,8 +3,8 @@ source: crates/quarto-math/tests/integration/normalize.rs
 expression: rendered(&n)
 ---
 row @0..29
-  scripts Auto @0..24
-    text Roman "argmax" @0..22
+  scripts UndOvr @0..24
+    func "argmax" UndOvr @0..22
     sub:
       run "x" @23..24
   run "f" @25..26

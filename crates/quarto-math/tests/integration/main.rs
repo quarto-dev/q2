@@ -8,3 +8,4 @@ pub mod omml;
 pub mod omml_schema;
 pub mod reader;
 pub mod spec;
+pub mod typst;

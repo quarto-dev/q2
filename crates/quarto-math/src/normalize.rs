@@ -265,14 +265,23 @@ impl<'a> Normalizer<'a> {
             SyntaxKind::ClauseArgument => {
                 // An argument clause wraps exactly one item (or a bare token).
                 // A brace/bracket group loses its delimiters here.
+                // A greedy command's clause (`\color{blue} x`) holds the
+                // group *and* everything after it; only a lone group is
+                // unwrapped.
                 let span = self.node_span(node);
-                let group = node.children().find(|c| {
-                    matches!(
-                        c.kind(),
-                        SyntaxKind::ItemCurly | SyntaxKind::ItemBracket | SyntaxKind::ItemParen
-                    )
-                });
-                if let Some(group) = group {
+                let mut nodes = node.children();
+                let sole_group = match (nodes.next(), nodes.next()) {
+                    (Some(g), None)
+                        if matches!(
+                            g.kind(),
+                            SyntaxKind::ItemCurly | SyntaxKind::ItemBracket | SyntaxKind::ItemParen
+                        ) =>
+                    {
+                        Some(g)
+                    }
+                    _ => None,
+                };
+                if let Some(group) = sole_group {
                     let inner = self.operand(&group);
                     return Node::new(inner.kind, span);
                 }
@@ -605,6 +614,23 @@ impl<'a> Normalizer<'a> {
                     return Some(self.arity_error(name, full_span));
                 };
                 let text = argument_text(arg);
+                if name.starts_with("operatorname") {
+                    // `\operatorname{argmax}`: an operator named by its
+                    // argument (upright, function spacing); the starred and
+                    // `withlimits` forms put limits under and over.
+                    let limits = if name == "operatorname" {
+                        LimLoc::Auto
+                    } else {
+                        LimLoc::UndOvr
+                    };
+                    return Some(Node::new(
+                        NodeKind::Func {
+                            name: text.trim().to_string(),
+                            limits,
+                        },
+                        full_span,
+                    ));
+                }
                 Node::new(NodeKind::Text { variant, text }, full_span)
             }
             Semantics::Space { em } => {
@@ -656,10 +682,22 @@ impl<'a> Normalizer<'a> {
                 let Some(color_arg) = args.first() else {
                     return Some(self.arity_error(name, full_span));
                 };
+                // `\textcolor{c}{x}` binds two clauses; greedy `\color{c} x`
+                // binds one clause holding the color group and the rest.
                 let color = argument_text(color_arg).trim().to_string();
-                let body_items: Vec<Node> = operands.drain(1..).collect();
+                let mut body_items: Vec<Node> = if args.len() > 1 {
+                    operands.drain(1..).collect()
+                } else {
+                    let rest = color_arg
+                        .children_with_tokens()
+                        .skip_while(|c| !matches!(c, NodeOrToken::Node(n) if n.kind() == SyntaxKind::ItemCurly))
+                        .skip(1);
+                    let mut items = Vec::new();
+                    self.items_into(rest, &mut items);
+                    items
+                };
                 let body_span = span_of_nodes(&body_items);
-                let body = unwrap_single(body_items, body_span);
+                let body = unwrap_single(std::mem::take(&mut body_items), body_span);
                 Node::new(
                     NodeKind::Color {
                         color,

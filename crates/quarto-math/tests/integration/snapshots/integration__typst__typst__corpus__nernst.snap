@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/typst.rs
+expression: to_typst(&n)
+---
+E_(c e l l) (= E)^(∘)_(c e l l) - (R T)/(n ℑ) ln (Q = E)^(∘)_(c e l l) - (0.0592)/(n) log Q

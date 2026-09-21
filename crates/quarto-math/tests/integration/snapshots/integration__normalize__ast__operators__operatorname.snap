@@ -4,7 +4,7 @@ expression: rendered(&n)
 ---
 row @0..28
   scripts Auto @0..23
-    text Roman "argmax" @0..21
+    func "argmax" Auto @0..21
     sub:
       run "x" @22..23
   run "f" @24..25

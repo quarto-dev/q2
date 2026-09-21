@@ -256,10 +256,10 @@ markup for a fixture plus, for OMML, an `xmllint --schema` pass.
       same commit (`cargo xtask lint` enforces both).
 - [x] (done 2026-09-21: `quarto_math::omml::{to_omml, to_omml_document}`; total writer, Error nodes become literal runs and the seam decides the fallback; 263 per-fixture snapshots, every fixture validates against `shared-math.xsd`, 15 structural tests; text-mode weight/slant go through `w:b`/`w:i` because the schema makes `m:nor` exclusive with `m:sty`/`m:scr`) **OMML writer** `MathAst -> String` (`m:oMath` / `m:oMathPara` for
       display). Test: snapshots + `xmllint` against the vendored schema.
-- [ ] **Typst writer** `MathAst -> String` emitting plain Typst math (no
+- [x] (done 2026-09-21: `quarto_math::typst::to_typst`; every syntax choice probed against Typst 0.15 first; 263 snapshots; the whole corpus compiles in one `typst compile` when the binary is present; runs are split letter by letter via `quarto_math::split`, which is the word-splitting pass MathML will reuse) **Typst writer** `MathAst -> String` emitting plain Typst math (no
       mitex prelude). Test: snapshots; optional compile check when `typst` is
       on PATH (skip otherwise, say so).
-- [ ] **Word splitting** pass (`TokenWord` → identifiers / numbers /
+- [x] (done 2026-09-21 as `quarto_math::split::split_run`, a pure function the Typst writer applies to every run; MathML will apply it to the AST; partition property unit-tested) **Word splitting** pass (`TokenWord` → identifiers / numbers /
       operators) behind a flag; needed by MathML, harmless for OMML. Test: spans
       of split children partition the parent span.
 - [ ] pampa integration point: `quarto_math::convert(&Math, Target) ->

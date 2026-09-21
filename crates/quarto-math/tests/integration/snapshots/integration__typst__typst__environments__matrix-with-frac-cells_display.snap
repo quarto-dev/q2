@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/typst.rs
+expression: to_typst(&n)
+---
+mat(delim: "(", (1)/(2), 0; 0, (1)/(2))

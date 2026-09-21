@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/typst.rs
+expression: to_typst(&n)
+---
+integral_(- ∞)^(∞) e^(- x^(2)) d x = sqrt(π)

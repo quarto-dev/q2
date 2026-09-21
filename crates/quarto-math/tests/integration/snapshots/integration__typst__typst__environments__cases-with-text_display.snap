@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/typst.rs
+expression: to_typst(&n)
+---
+f ( x ) = cases(1 & "if " x ∈ A, 0 & "otherwise")

@@ -563,7 +563,25 @@ fn text_styles_and_functions() {
     let n = norm(r"\operatorname{argmax}_x f(x)");
     let mut saw = false;
     n.root.walk(&mut |node| {
-        if matches!(&node.kind, NodeKind::Text { text, variant: Variant::Roman } if text == "argmax") {
+        if matches!(&node.kind, NodeKind::Func { name, limits: LimLoc::Auto } if name == "argmax") {
+            saw = true;
+        }
+    });
+    assert!(
+        saw,
+        "\\operatorname is a Func named by its argument:\n{}",
+        n.root
+    );
+    let n = norm(r"\operatorname*{argmax}_x f(x)");
+    let mut saw = false;
+    n.root.walk(&mut |node| {
+        if matches!(
+            &node.kind,
+            NodeKind::Func {
+                limits: LimLoc::UndOvr,
+                ..
+            }
+        ) {
             saw = true;
         }
     });

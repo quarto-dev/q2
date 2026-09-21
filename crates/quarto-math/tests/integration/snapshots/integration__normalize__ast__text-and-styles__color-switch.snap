@@ -5,6 +5,6 @@ expression: rendered(&n)
 row @0..18
   row @0..16
     color "blue" @1..15
-      row @-
+      run "x" @14..15
   run "y" @17..18
 -- problems --

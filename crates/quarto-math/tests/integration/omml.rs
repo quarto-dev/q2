@@ -244,9 +244,13 @@ fn functions_are_upright_names_with_an_empty_body() {
         &xml,
         r#"<m:fName><m:limLow><m:e><m:r><m:rPr><m:sty m:val="p"/></m:rPr><m:t>lim</m:t></m:r></m:e><m:lim>"#,
     );
-    // \operatorname is upright text.
+    // \operatorname is a function named by its argument; inline, its
+    // limits sit beside the name.
     let xml = omml(r"\operatorname{argmax}_x f(x)");
-    assert_contains(&xml, r#"<m:nor/></m:rPr><m:t>argmax</m:t>"#);
+    assert_contains(
+        &xml,
+        r#"<m:func><m:fName><m:sSub><m:e><m:r><m:rPr><m:sty m:val="p"/></m:rPr><m:t>argmax</m:t></m:r></m:e><m:sub><m:r><m:t>x</m:t></m:r></m:sub></m:sSub></m:fName><m:e/></m:func>"#,
+    );
 }
 
 #[test]

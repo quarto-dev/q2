@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/typst.rs
+expression: to_typst(&n)
+---
+integral_(a)^(b) f ( x ) thin d x = F ( b ) - F ( a )
