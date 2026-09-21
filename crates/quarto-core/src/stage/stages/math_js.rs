@@ -59,6 +59,7 @@ use quarto_pandoc_types::inline::Inline;
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_source_map::{By, SourceInfo};
 
+use crate::math_method::{MathMethod, MathMethodConfig};
 use crate::stage::{
     EventLevel, PipelineData, PipelineDataKind, PipelineError, PipelineStage, StageContext,
 };
@@ -101,53 +102,30 @@ impl MathEngine {
         }
     }
 
-    /// Parse the `html-math-method` value out of the document metadata.
+    /// Select the engine from the document's `html-math-method`.
     ///
-    /// Accepts both forms supported by Quarto 1 / Pandoc:
-    /// - **String form** — `html-math-method: mathjax | katex`. Engine
-    ///   is selected; URL falls back to the engine default.
-    /// - **Object form** — `html-math-method: { method: ..., url: ... }`.
-    ///   Both fields honored; `url` overrides the default. The `method`
-    ///   key is required in this shape; if missing, we fall back to the
-    ///   default engine.
+    /// Parsing is shared with `EquationNumberStage` through
+    /// [`MathMethodConfig`] so the two stages read the option identically.
+    /// Both Quarto 1 / Pandoc shapes are accepted (`html-math-method:
+    /// katex`, or `{ method: ..., url: ... }` where `url` overrides the
+    /// engine's default loader location).
     ///
-    /// Unknown method strings (e.g. `webtex`, `gladtex`) are *not*
-    /// supported in v1 and produce `None`. The caller should treat
-    /// `None` as "math rendering is not q2's responsibility for this
-    /// document" and skip injection. (Today this only applies if the
-    /// user explicitly opts out; `None` is never returned for absent /
-    /// `mathjax` / `katex`.)
+    /// Returns `None` for methods q2 does not load an engine for:
+    /// `plain`, `mathml` (converted at render time by bd-3evfzwal),
+    /// `webtex`, `gladtex` and unknown strings. The caller then leaves
+    /// `meta.math` unset so the author can supply their own approach via
+    /// includes / a custom template. Absent, `mathjax` and `katex` never
+    /// yield `None`.
     pub fn from_meta(meta: &ConfigValue) -> Option<Self> {
-        let Some(value) = meta.get("html-math-method") else {
-            return Some(Self::default_engine());
-        };
-
-        // Object form first: { method: ..., url?: ... }.
-        if value.is_map() {
-            let method = value.get("method").and_then(|v| v.as_plain_text());
-            let url = value.get("url").and_then(|v| v.as_plain_text());
-            return match method.as_deref() {
-                Some("mathjax") | None => Some(Self::Mathjax {
-                    url: url.unwrap_or_else(|| DEFAULT_MATHJAX_URL.to_string()),
-                }),
-                Some("katex") => Some(Self::Katex {
-                    url_base: url.unwrap_or_else(|| DEFAULT_KATEX_URL_BASE.to_string()),
-                }),
-                Some(_other) => None,
-            };
-        }
-
-        // String form.
-        match value.as_plain_text().as_deref() {
-            Some("mathjax") => Some(Self::Mathjax {
-                url: DEFAULT_MATHJAX_URL.to_string(),
+        let MathMethodConfig { method, url } = MathMethodConfig::from_meta(meta);
+        match method {
+            MathMethod::Mathjax => Some(Self::Mathjax {
+                url: url.unwrap_or_else(|| DEFAULT_MATHJAX_URL.to_string()),
             }),
-            Some("katex") => Some(Self::Katex {
-                url_base: DEFAULT_KATEX_URL_BASE.to_string(),
+            MathMethod::Katex => Some(Self::Katex {
+                url_base: url.unwrap_or_else(|| DEFAULT_KATEX_URL_BASE.to_string()),
             }),
-            // Other strings (webtex, gladtex, mathml, plain) — defer.
-            Some(_) => None,
-            None => Some(Self::default_engine()),
+            MathMethod::MathMl | MathMethod::Plain | MathMethod::Unknown(_) => None,
         }
     }
 

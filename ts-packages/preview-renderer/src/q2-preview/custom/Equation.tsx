@@ -9,14 +9,19 @@ import { Node } from '../../framework';
 import { makeSlotSetter } from '../utils';
 
 /**
- * Equation — q2-preview port of `render_equation` at
- * `crates/quarto-core/src/transforms/crossref_render.rs:601-650`.
+ * Equation — q2-preview counterpart of `render_equation`
+ * (`crates/quarto-core/src/transforms/crossref_render.rs`) plus the
+ * `TexTag` encoding of `EquationNumberStage`
+ * (`crates/quarto-core/src/stage/stages/equation_number.rs`).
  *
  * `CrossrefRenderTransform` is excluded from q2-preview's pipeline
- * (see `Q2_PREVIEW_TRANSFORM_EXCLUDED` at `pipeline.rs:1071`), so the
- * `Equation` CustomNode wrapper survives into the iframe. q2-preview
- * ports the `\tag{N}` append from Rust into JS so KaTeX can render
- * the equation number natively.
+ * (see `Q2_PREVIEW_TRANSFORM_EXCLUDED` in `pipeline.rs`), so the
+ * `Equation` CustomNode wrapper survives into the iframe. In the native
+ * render path crossref-render records the number on the reserved
+ * `quarto-eq-number` span attribute and `EquationNumberStage` later
+ * encodes it per math engine (`\tag{N}` for MathJax/KaTeX, ` \qquad(N)`
+ * otherwise, a sibling label for MathML). The preview always typesets
+ * with KaTeX, so it applies the `\tag{N}` encoding directly here.
  *
  * Output: `<span id="{identifier}">{Math (with \tag{N} appended)}</span>`.
  *
