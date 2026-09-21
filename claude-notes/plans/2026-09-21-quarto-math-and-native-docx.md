@@ -187,12 +187,12 @@ emitter from ECMA-376 Part 1 §22.1 is bounded work.
       every fixture in `crates/pampa/tests/…` with math, mapping `text`
       offset 0 and `text.len()` back through `SourceContext` lands inside the
       node span and on the right line.
-- [ ] Vendor mitex (decision 2/6): `crates/quarto-math/vendor/mitex-{lexer,parser,spec,glob}`
+- [x] (done 2026-09-21; `crates/quarto-math/vendor/VENDORED.md` lists the four local patches; 52 upstream tests pass) Vendor mitex (decision 2/6): `crates/quarto-math/vendor/mitex-{lexer,parser,spec,glob}`
       as separate crates, edition pinned to 2021, upstream `LICENSE` copied
       next to each, one `VENDORED.md` naming the upstream commit (`985d8e7`,
       2026-07-07) and listing every local patch. Keep upstream test suites.
       Strip the rkyv feature from mitex-spec.
-- [ ] Dump mitex's prebuilt spec (`default.rkyv`, artifacts submodule; a copy
+- [x] (done 2026-09-21: `crates/quarto-math/spec/upstream/mitex-default-spec.json`, 995 entries; tool in the probes dir) Dump mitex's prebuilt spec (`default.rkyv`, artifacts submodule; a copy
       is in the room-5 checkout) to JSON with a throwaway tool built against
       `external-sources/mitex`, so the symbol rows can be generated without
       the Typst build step. (`typst` is now installed locally too, so

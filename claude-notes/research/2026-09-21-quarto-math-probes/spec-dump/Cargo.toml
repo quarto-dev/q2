@@ -1,0 +1,10 @@
+[package]
+name = "spec-dump"
+version = "0.0.0"
+edition = "2021"
+[workspace]
+[dependencies]
+mitex-spec = { path = "../../../../external-sources/mitex/crates/mitex-spec" }
+mitex-spec-gen = { path = "../../../../external-sources/mitex/crates/mitex-spec-gen", features = ["prebuilt"] }
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }

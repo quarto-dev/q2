@@ -8,6 +8,10 @@ repository.workspace = true
 description = "TeX math front end (mitex parser + source maps) with OMML and Typst writers for Quarto."
 
 [dependencies]
+# Vendored mitex front end (Apache-2.0); see vendor/VENDORED.md.
+mitex-lexer = { path = "vendor/mitex-lexer" }
+mitex-parser = { path = "vendor/mitex-parser" }
+mitex-spec = { path = "vendor/mitex-spec" }
 
 [dev-dependencies]
 

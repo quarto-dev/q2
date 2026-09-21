@@ -1,0 +1,14 @@
+# Vendored from mitex (https://github.com/mitex-rs/mitex) at 985d8e7 (2026-07-07),
+# Apache-2.0; see ../VENDORED.md for the local patch list.
+[package]
+name = "mitex-glob"
+description = "Glob impl for MiTeX"
+version = "0.2.7"
+edition = "2021"
+license = "Apache-2.0"
+homepage = "https://github.com/mitex-rs/mitex"
+repository = "https://github.com/mitex-rs/mitex"
+publish = false
+
+[features]
+glob-tests = []

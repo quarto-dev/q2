@@ -15,3 +15,8 @@ kept for reproducibility, not as project code; nothing builds them in CI.
   macro-expanded ones). Requires `git submodule update --init` inside
   `external-sources/mitex` (prebuilt spec artifact) and is built outside the
   q2 workspace (`[workspace]` stanza in its Cargo.toml).
+- `spec-dump/` — dumps mitex's prebuilt command spec (`default.rkyv`) to
+  the sorted JSON committed at
+  `crates/quarto-math/spec/upstream/mitex-default-spec.json`. Same
+  submodule requirement and out-of-workspace build as `mitex-probe/`:
+  `cd spec-dump && cargo run --release > ../../../../crates/quarto-math/spec/upstream/mitex-default-spec.json`.

@@ -1,0 +1,24 @@
+# Vendored from mitex (https://github.com/mitex-rs/mitex) at 985d8e7 (2026-07-07),
+# Apache-2.0; see ../VENDORED.md for the local patch list.
+[package]
+name = "mitex-lexer"
+description = "Lexer for MiTeX"
+version = "0.2.7"
+edition = "2021"
+license = "Apache-2.0"
+homepage = "https://github.com/mitex-rs/mitex"
+repository = "https://github.com/mitex-rs/mitex"
+publish = false
+
+[dependencies]
+mitex-spec = { path = "../mitex-spec" }
+
+logos = "0.14"
+ena = "0.14.3"
+ecow = "0.2.2"
+rustc-hash = "2"
+once_cell = "1"
+
+[dev-dependencies]
+insta = "1"
+serde_json = "1"
