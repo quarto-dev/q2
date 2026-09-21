@@ -4,11 +4,29 @@
 **Strand (phase 1, this branch):** bd-entbg6x3 (quarto-math)
 **Branch:** `braid/bd-entbg6x3-quarto-math`
 **Status:** executing Phase 0 (started 2026-09-21 afternoon; decisions 5–9 below settled with the user).
-**Related, parallel experiment:** the pandoc-hybrid leg (bd-fzqykm0n,
-bd-ymkkrn64; plan file lives on a colleague's branch as
-`claude-notes/plans/2026-09-18-pandoc-hybrid-P5-implementation.md`) reaches
-docx/pptx/typst through Lua filters plus Pandoc. Both approaches proceed in
-parallel until we decide which is easier, cleaner, and faster to land.
+**Related, parallel leg:** the pandoc-hybrid leg
+(PR #704, `feature/pandoc-writer-hybrid`; bd-fzqykm0n, bd-ymkkrn64) reaches
+docx/pptx/epub/typst through Lua filters plus Pandoc and is landing on `main`
+first. This crate is still needed for the eventual native docx writer and the
+directional change-tracking work, so both proceed concurrently.
+
+**Merge readiness against #704 (checked 2026-09-21 by a throwaway trial
+merge of `origin/feature/pandoc-writer-hybrid` into this branch):** every
+source file merges cleanly, including the four files both branches edit
+(`pampa/src/writers/json.rs`, `pampa/src/readers/json.rs`,
+`pampa/tests/integration/test.rs`, `quarto-core/src/transforms/crossref_render.rs`;
+#704 does not touch `Math` or `render_equation`). The only conflicts are
+three regenerable artifacts, to be resolved by regeneration, never by hand:
+`Cargo.lock` (`cargo update -w` / accept theirs then `cargo build`),
+`crates/pampa/snapshots/json/math-with-attr.snap` (`cargo insta accept`
+after review: only `textS` refs and pool rows should differ), and
+`ts-packages/annotated-qmd/examples/academic-paper.json`
+(`cargo run --bin pampa -- -t json -i ts-packages/annotated-qmd/examples/academic-paper.qmd > …json`).
+The same three artifacts are the only expected conflicts between the
+bd-ieldbghj PR and `main` once #704 merges. #704 also keeps the
+"not yet supported" gate in `crates/quarto/src/commands/render.rs` for
+formats it does not route through Pandoc; Phase 3's `--to docx` wiring must
+be placed relative to that route, not to the pre-#704 gate.
 
 ## Overview
 
@@ -503,8 +521,12 @@ oversold, each now pinned by a test in `tests/integration/reader.rs`:
    Local patch set stays minimal (span side table, rkyv removal, clippy
    allows); everything else lives in quarto-math on top of the vendored
    tree.
-7. **Error subsystem 20, `math`.** Decided 2026-09-21. Pages under
-   `docs/errors/math/` plus a sidebar section, same commit as each code.
+7. **Error subsystem 22, `math`** (was 20). Decided 2026-09-21, renumbered
+   the same day: PR #704 (`feature/pandoc-writer-hybrid`, the pandoc-hybrid
+   leg) takes `Q-20-*` for subsystem `pandoc` and `Q-21-*` for `typst`.
+   Math codes are `Q-22-N`, pages under `docs/errors/math/`, a
+   `- section: "math"` sidebar block appended after `typst`, same commit as
+   each code. No code on this branch referenced `Q-20` before the change.
 8. **quarto-math API boundary: `(&str, MathType-equivalent, SourceInfo)`.**
    Decided 2026-09-21. quarto-math does not depend on quarto-pandoc-types;
    pampa adapts `Inline::Math` at the call site. Keeps the crate small for
