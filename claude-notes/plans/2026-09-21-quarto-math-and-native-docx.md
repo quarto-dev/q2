@@ -262,10 +262,10 @@ markup for a fixture plus, for OMML, an `xmllint --schema` pass.
 - [x] (done 2026-09-21 as `quarto_math::split::split_run`, a pure function the Typst writer applies to every run; MathML will apply it to the AST; partition property unit-tested) **Word splitting** pass (`TokenWord` → identifiers / numbers /
       operators) behind a flag; needed by MathML, harmless for OMML. Test: spans
       of split children partition the parent span.
-- [ ] pampa integration point: `quarto_math::convert(&Math, Target) ->
+- [x] (done 2026-09-21 as `quarto_math::convert(text, Mode, Target, &text_source, &Spec) -> Conversion { output: Option<String>, diagnostics, tree }` per decision 8: no dependency on pampa's types; `output` is `None` whenever the tree has an `Error` node, so the writer emits verbatim TeX in a code style; warnings ride along with output. End-to-end seam test in pampa (`tests/integration/quarto_math_seam.rs`, quarto-math as a native dev-dependency): `> $$\n> x + \\bogus y\n> $$` parsed by `readers::qmd::read`, converted with `Math.text_source`, and the `Q-22-1` diagnostic resolves through `map_offset` to exactly the bytes `\\bogus` on row 2 of the `.qmd`. No CLI surface exists yet, so the binary-level end-to-end check belongs to Phase 3's `--to docx` wiring.) pampa integration point: `quarto_math::convert(&Math, Target) ->
       Result<String, Diagnostic>` with the verbatim-TeX-in-code-style fallback
       the writers use on error.
-- [ ] `cargo xtask verify --skip-hub-build`, then full `cargo xtask verify`
+- [x] (full `cargo xtask verify` green on 2026-09-21 at the end of Phase 1; the pampa mapping branch had its own full verify earlier) `cargo xtask verify --skip-hub-build`, then full `cargo xtask verify`
       if anything under `quarto-core`/`pampa` changed (the pampa Math mapping
       does).
 

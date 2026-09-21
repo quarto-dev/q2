@@ -19,6 +19,7 @@
 //! (bd-entbg6x3, epic bd-pq9k90z2).
 
 pub mod ast;
+pub mod convert;
 pub mod diagnostics;
 pub mod normalize;
 pub mod omml;

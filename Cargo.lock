@@ -4678,6 +4678,7 @@ dependencies = [
  "quarto-error-message-macros",
  "quarto-error-reporting",
  "quarto-highlight-encoding",
+ "quarto-math",
  "quarto-pandoc-types",
  "quarto-parse-errors",
  "quarto-source-map",
