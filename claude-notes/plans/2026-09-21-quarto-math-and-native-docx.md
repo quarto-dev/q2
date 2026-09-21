@@ -3,7 +3,7 @@
 **Epic:** bd-pq9k90z2 (native docx writer)
 **Strand (phase 1, this branch):** bd-entbg6x3 (quarto-math)
 **Branch:** `braid/bd-entbg6x3-quarto-math`
-**Status:** planning; research complete 2026-09-21, no code yet.
+**Status:** executing Phase 0 (started 2026-09-21 afternoon; decisions 5–9 below settled with the user).
 **Related, parallel experiment:** the pandoc-hybrid leg (bd-fzqykm0n,
 bd-ymkkrn64; plan file lives on a colleague's branch as
 `claude-notes/plans/2026-09-18-pandoc-hybrid-P5-implementation.md`) reaches
@@ -173,18 +173,30 @@ emitter from ECMA-376 Part 1 §22.1 is bounded work.
       `docs/` and the Q1 test corpus (grep `$` in `.qmd` fixtures).
 - [ ] pampa: `Inline::Math` text mapping — record `SourceInfo::substring` /
       `concat` for the math *text* (bd-q6ed / bd-qpa2 touch the same code;
-      coordinate). Test: for every fixture in
-      `crates/pampa/tests/…` with math, mapping `text` offset 0 and
-      `text.len()` back through `SourceContext` lands inside the node span
-      and on the right line.
-- [ ] Decide mitex dependency mode (see Open decisions) and vendor or pin it.
-      If vendored: `crates/quarto-math/vendor/mitex-{lexer,parser}` with
-      `LICENSE-APACHE` and a `VENDORED.md` naming the upstream commit
-      (`985d8e7`, 2026-07-07).
-- [ ] Vendor the OMML schema (`shared-math.xsd` from ECMA-376 Part 4) under
-      `crates/quarto-math/tests/schemas/` for `xmllint` validation of writer
-      output; test helper skips (with a clear message) when `xmllint` is
-      absent.
+      coordinate). **Decision 5:** done as its own strand and PR against
+      `main` (worktree under `.worktrees/`), then merged into this branch
+      locally so both the native and pandoc-hybrid legs get it. Test: for
+      every fixture in `crates/pampa/tests/…` with math, mapping `text`
+      offset 0 and `text.len()` back through `SourceContext` lands inside the
+      node span and on the right line.
+- [ ] Vendor mitex (decision 2/6): `crates/quarto-math/vendor/mitex-{lexer,parser,spec,glob}`
+      as separate crates, edition pinned to 2021, upstream `LICENSE` copied
+      next to each, one `VENDORED.md` naming the upstream commit (`985d8e7`,
+      2026-07-07) and listing every local patch. Keep upstream test suites.
+      Strip the rkyv feature from mitex-spec.
+- [ ] Dump mitex's prebuilt spec (`default.rkyv`, artifacts submodule; a copy
+      is in the room-5 checkout) to JSON with a throwaway tool built against
+      `external-sources/mitex`, so the symbol rows can be generated without
+      the Typst build step. (`typst` is now installed locally too, so
+      `typst query` regeneration is a fallback.)
+- [ ] Vendor the OMML schema under `crates/quarto-math/tests/schemas/`:
+      `shared-math.xsd`, `shared-commonSimpleTypes.xsd` and W3C's `xml.xsd`,
+      taken from `external-sources/python-docx/ref/xsd/` (MIT notice kept),
+      with the one-line import patch (`schemaLocation="xml.xsd"` on the
+      `xml:` namespace import) that libxml2 needs. Test helper skips (with a
+      clear message) when `xmllint` is absent. Verified 2026-09-21: with the
+      patch, `xmllint --schema` accepts a correct `m:oMath` (frac, sSup, nary)
+      and rejects `m:den` before `m:num` with a precise message.
 
 ### Phase 1 — `quarto-math` crate (bd-entbg6x3)
 
@@ -311,6 +323,38 @@ markup for a fixture plus, for OMML, an `xmllint --schema` pass.
    Decided. Revisit if users report confusing math diagnostics.
 4. **MathML writer: follow-up strand bd-9z83tcv0.** Decided. Not in this
    epic; the word-splitting pass in Phase 1 is designed for it.
+5. **pampa math-text mapping lands on `main` first.** Decided 2026-09-21. It
+   is a prerequisite that touches the same `treesitter.rs` lines as the open
+   bd-q6ed / bd-qpa2 fixes; a small separate strand + PR keeps this branch
+   additive and gives the pandoc-hybrid leg the same mapping.
+6. **Vendor all four mitex front-end crates as crates.** Decided 2026-09-21
+   (supersedes the "lexer + parser" wording of decision 2). Measured: lexer
+   1,987 / parser 1,482 / spec 705 / glob 2,170 source lines (~6,300 total).
+   `mitex-glob` is itself a vendored `glob-match` (MIT) used at one call site
+   in the parser's argument matcher; keeping it beats reimplementing it.
+   New third-party deps: `rowan`, `logos`, `ena`, `ecow`; `rkyv` is dropped.
+   Local patch set stays minimal (span side table, rkyv removal, clippy
+   allows); everything else lives in quarto-math on top of the vendored
+   tree.
+7. **Error subsystem 20, `math`.** Decided 2026-09-21. Pages under
+   `docs/errors/math/` plus a sidebar section, same commit as each code.
+8. **quarto-math API boundary: `(&str, MathType-equivalent, SourceInfo)`.**
+   Decided 2026-09-21. quarto-math does not depend on quarto-pandoc-types;
+   pampa adapts `Inline::Math` at the call site. Keeps the crate small for
+   WASM.
+9. **Schemas come from python-docx's `ref/`, not an ECMA download.** Decided
+   2026-09-21. `external-sources/python-docx/ref/` carries the transitional
+   XSDs (the `schemas.openxmlformats.org` namespaces Word writes), RelaxNG
+   compact forms, and the four ISO/IEC 29500 PDFs; Part 1 §22.1 (OMML) is
+   pages 3591–3707 and `pdftotext` extracts it in seconds. Phase 2 note:
+   Word-saved parts (including python-docx's `default.docx`) fail plain XSD
+   validation on `mc:Ignorable`; validating a Word round-trip fixture needs
+   a markup-compatibility strip first. Our own writer output does not emit
+   MCE, so this does not affect writer tests.
+10. **No Word available for ground truth.** Neither of us has MS Word at the
+    moment. The OMML writer is written from ISO 29500 Part 1 §22.1 plus the
+    schema; Word-generated samples remain wanted whenever someone with Word
+    can produce them (fixture request recorded in Phase 1).
 
 ### Reference docs and the pullback (why the blast radius is small)
 
@@ -332,7 +376,7 @@ Word assigns per paragraph and preserves across edits for co-authoring
 
 ## References
 
-- python-docx: `external-sources/python-docx` (MIT, v1.2.0 `e454546`)
+- python-docx: `external-sources/python-docx` (MIT, v1.2.0 `e454546`); schemas + ISO PDFs under `ref/`
 - mitex: `external-sources/mitex` (Apache-2.0, `985d8e7`; run
   `git submodule update --init` for the prebuilt spec)
 - redoc: `external-sources/redoc` (MIT); mechanism in `R/officer-embed.R`
