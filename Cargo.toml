@@ -83,6 +83,13 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 tower-lsp = "0.20"
 lsp-types = "0.97"
 
+# Package staging for the typst compile step (pandoc-hybrid-typst Phase 2).
+# Not published on crates.io (confirmed 404) — pinned to a tag per Gordon's
+# 2026-09-20 decision, not a local path dep (would break CI) or a branch
+# (would drift silently). See
+# claude-notes/plans/2026-09-18-pandoc-hybrid-typst.md.
+typst-gather = { git = "https://github.com/quarto-dev/typst-gather", tag = "v0.2.3" }
+
 [workspace.dependencies.proc-macro-error2]
 version = "2.0.1"
 default-features = false

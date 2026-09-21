@@ -73,6 +73,12 @@ mod resource_report;
 // Bootstrap is active. Same WASM-exclusion reasoning as `bootstrap_js`.
 #[cfg(not(target_arch = "wasm32"))]
 mod tabsets_js;
+// pandoc-hybrid-typst Phase 2: compiles PandocWriteStage's intermediate
+// `.typ` output to PDF via a real `typst compile` subprocess. Native-only
+// for the same reason as `pandoc_write`: shells out to a real binary, no
+// WASM equivalent.
+#[cfg(not(target_arch = "wasm32"))]
+mod typst_compile;
 mod unwrap_profile;
 mod user_filters;
 
@@ -117,5 +123,7 @@ pub use resource_report::ResourceReportStage;
 pub use source_conversion::SourceConversionStage;
 #[cfg(not(target_arch = "wasm32"))]
 pub use tabsets_js::TabsetsJsStage;
+#[cfg(not(target_arch = "wasm32"))]
+pub use typst_compile::TypstCompileStage;
 pub use unwrap_profile::UnwrapProfileStage;
 pub use user_filters::UserFiltersStage;

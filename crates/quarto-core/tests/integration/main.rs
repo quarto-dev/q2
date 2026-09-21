@@ -87,6 +87,7 @@ pub mod pandoc_shim;
 pub mod pandoc_shim_goldens;
 pub mod pandoc_shim_typst_crossref;
 pub mod pandoc_transport;
+pub mod pandoc_typst_compile;
 pub mod pandoc_typst_writer;
 pub mod pass1_engine_resolution_pipeline;
 pub mod preview_render_css_parity;

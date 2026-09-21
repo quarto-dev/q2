@@ -228,7 +228,7 @@ pub(crate) fn build_ast_and_params_from_content_for_format(
     let runtime: std::sync::Arc<dyn quarto_system_runtime::SystemRuntime> =
         std::sync::Arc::new(quarto_system_runtime::NativeRuntime::new());
 
-    let mut stages = build_pandoc_pipeline_stages();
+    let mut stages = build_pandoc_pipeline_stages(quarto_core::format::FormatIdentifier::Docx);
     stages.pop();
 
     let (data, _diagnostics) = pollster::block_on(run_pipeline(
@@ -2230,7 +2230,7 @@ fn test_proof_missing_type_surfaces_lua_traceback() {
     let runtime: std::sync::Arc<dyn quarto_system_runtime::SystemRuntime> =
         std::sync::Arc::new(quarto_system_runtime::NativeRuntime::new());
 
-    let mut stages = build_pandoc_pipeline_stages();
+    let mut stages = build_pandoc_pipeline_stages(quarto_core::format::FormatIdentifier::Docx);
     stages.pop(); // drop PandocWriteStage; invoked by hand below after mutating the AST
 
     let (data, _diagnostics) = pollster::block_on(run_pipeline(

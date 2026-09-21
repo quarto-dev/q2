@@ -26,7 +26,9 @@
 
 use std::path::Path;
 
-use super::{DATADIR_DIR, FILTERS_DIR, FORMATS_DIR, FORMATS_DOCX_DIR, TYPST_TEMPLATE_DIR};
+use super::{
+    DATADIR_DIR, FILTERS_DIR, FORMATS_DIR, FORMATS_DOCX_DIR, TYPST_PACKAGES_DIR, TYPST_TEMPLATE_DIR,
+};
 use crate::resources::ResourceError;
 
 /// Extracts the embedded Q1 filter trees into `dest`, creating
@@ -86,6 +88,23 @@ pub fn extract_formats_tree(dest: &Path) -> Result<(), ResourceError> {
 /// `dest` must already exist.
 pub fn extract_typst_template(dest: &Path) -> Result<(), ResourceError> {
     TYPST_TEMPLATE_DIR
+        .extract(dest)
+        .map_err(|e| ResourceError::Extract(e.to_string()))
+}
+
+/// Extracts the vendored typst packages + fonts into `dest`, producing
+/// `dest/packages/preview/<name>/<version>/` and `dest/fonts/` — the exact
+/// layout a real typst package cache and `--font-path` argument expect
+/// (pandoc-hybrid-typst Phase 2's compile step). `dest` must already exist.
+///
+/// Unconditional, full staging (all 5 vendored packages every render) —
+/// simpler than `typst-gather`'s selective per-document analysis, and
+/// correct for any document that only references Quarto's bundled
+/// packages. Selective staging for arbitrary user-referenced `@preview`
+/// packages beyond the vendored 5 is `typst-gather` integration, tracked
+/// separately (see the plan's Phase 2 package-staging bullet).
+pub fn extract_typst_packages(dest: &Path) -> Result<(), ResourceError> {
+    TYPST_PACKAGES_DIR
         .extract(dest)
         .map_err(|e| ResourceError::Extract(e.to_string()))
 }

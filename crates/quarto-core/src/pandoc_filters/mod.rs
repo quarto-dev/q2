@@ -50,3 +50,12 @@ pub static FORMATS_DOCX_DIR: include_dir::Dir =
 /// side of typst support; this is the template-text side.
 pub static TYPST_TEMPLATE_DIR: include_dir::Dir =
     include_dir!("$CARGO_MANIFEST_DIR/../../resources/pandoc-filters/typst-template");
+
+/// The vendored typst packages (fontawesome/marginalia/octique/showybox/
+/// theorion) + embedded Font Awesome fonts (pandoc-hybrid-typst Phase 1
+/// package/font vendoring), staged unconditionally by Phase 2's
+/// `TypstCompileStage` — `resources/typst-packages/packages/preview/<name>/
+/// <version>/` and `resources/typst-packages/fonts/`. See
+/// `resources/typst-packages/README.md`.
+pub static TYPST_PACKAGES_DIR: include_dir::Dir =
+    include_dir!("$CARGO_MANIFEST_DIR/../../resources/typst-packages");
