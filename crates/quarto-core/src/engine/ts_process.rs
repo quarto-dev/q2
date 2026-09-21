@@ -586,14 +586,11 @@ pub fn spawn_into_tcp(
 /// bindings in scope for the per-test body: the connected socket `conn`, a
 /// `TextDecoder dec`, and a `TextEncoder enc`.
 ///
-/// Gated to match its only callers (`proc_tests`, `registry.rs`'s
-/// `test_shutdown_all_kills_ts_engine`) — both `unix`-only, not because the
-/// loopback-TCP dial-back mechanism itself is unix-specific (it isn't).
-/// `proc_tests` needs `unix` for two of its own tests (a `kill -0`
-/// liveness probe and a SIGKILL exit-code assertion); the registry test has
-/// no unix-specific check of its own and is only conservatively gated to
-/// match. Keep this gate equal to theirs; loosening it back to
-/// `#[cfg(test)]` alone reintroduces a Windows dead_code build failure.
+/// The only callers are Unix-gated: `proc_tests` is gated because two tests
+/// use `kill -0` or assert a SIGKILL exit code, while
+/// `registry::tests::test_shutdown_all_kills_ts_engine` currently uses the
+/// same gate. Keep this constant's gate aligned with its callers; otherwise,
+/// `-D warnings` reports it as dead code on Windows.
 #[cfg(all(test, unix))]
 const DIALBACK_PREAMBLE: &str = r#"
 const args = Deno.args;
