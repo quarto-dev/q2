@@ -46,6 +46,11 @@ mod code_highlight;
 mod compile_theme_css;
 mod document_profile;
 mod engine_execution;
+// Equation-number encoding (bd-vlhi2zkj): turns the reserved
+// `quarto-eq-number` attribute into `\tag{N}` / ` \qquad(N)` / a sibling
+// label for the selected math renderer. Runs after user post filters so
+// Lua can rewrite the attribute first. Included on native and WASM.
+mod equation_number;
 mod include_expansion;
 mod include_resolve;
 mod language_resolve;
@@ -90,6 +95,9 @@ pub use compile_theme_css::{
 };
 pub use document_profile::DocumentProfileStage;
 pub use engine_execution::{ENGINE_CAPTURE_KIND, EngineExecutionStage};
+pub use equation_number::{
+    EQ_NUMBER_LABEL_CLASS, EQ_SIBLING_NUMBER_CLASS, EquationNumberStage, NumberEncoding,
+};
 pub use include_expansion::{
     IncludeExpansionStage, collect_include_paths, expand_document_includes, extract_include_path,
 };

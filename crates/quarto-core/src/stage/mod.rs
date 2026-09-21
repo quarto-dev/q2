@@ -115,11 +115,11 @@ pub use stages::CodeHighlightStage;
 pub use stages::TabsetsJsStage;
 pub use stages::{
     ApplyTemplateStage, AstTransformsStage, AttributionGenerateStage, CaptureSpliceStage,
-    CompileThemeCssStage, DocumentProfileStage, EngineExecutionStage, IncludeExpansionStage,
-    IncludeResolveStage, LanguageResolveStage, LinkResolutionStage, ListingItemInfoStage,
-    MathJsStage, MetadataMergeStage, ParseDocumentStage, PreEngineSugaringStage,
-    RenderHtmlBodyStage, ResourceReportStage, SourceConversionStage, UnwrapProfileStage,
-    UserFiltersStage, expand_document_includes,
+    CompileThemeCssStage, DocumentProfileStage, EngineExecutionStage, EquationNumberStage,
+    IncludeExpansionStage, IncludeResolveStage, LanguageResolveStage, LinkResolutionStage,
+    ListingItemInfoStage, MathJsStage, MetadataMergeStage, ParseDocumentStage,
+    PreEngineSugaringStage, RenderHtmlBodyStage, ResourceReportStage, SourceConversionStage,
+    UnwrapProfileStage, UserFiltersStage, expand_document_includes,
 };
 
 // Re-export the trace_event macro

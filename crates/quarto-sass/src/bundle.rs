@@ -371,6 +371,30 @@ pub fn load_embed_example_layer() -> Result<SassLayer, SassError> {
     parse_layer(content, Some("embed-example.scss"))
 }
 
+/// Load the equation-number layout SCSS layer (bd-vlhi2zkj).
+///
+/// Reads `equation-number.scss` from the embedded templates directory. The
+/// layer lays out the `Sibling` encoding `EquationNumberStage` emits when
+/// the math renderer cannot typeset the number itself (`html-math-method:
+/// mathml`): `span.quarto-eq-sibling-number` becomes a row with the math
+/// centered and `span.quarto-eq-number` at the right edge, where MathJax
+/// and KaTeX put a `\tag`.
+///
+/// Shared by the HTML path (`compile_*`) and the revealjs path
+/// (`assemble_reveal_scss`) like [`load_copy_code_layer`]; included as a
+/// built-in user layer so themes can restyle the label.
+pub fn load_equation_number_layer() -> Result<SassLayer, SassError> {
+    use crate::resources::TEMPLATES_RESOURCES;
+
+    let content = TEMPLATES_RESOURCES
+        .read_str(Path::new("equation-number.scss"))
+        .ok_or_else(|| SassError::CompilationFailed {
+            message: "equation-number.scss not found in templates resources".to_string(),
+        })?;
+
+    parse_layer(content, Some("equation-number.scss"))
+}
+
 /// Load the listing (cards / table / category chips / pagination) SCSS
 /// layer (bd-57y4).
 ///
@@ -552,9 +576,14 @@ pub fn assemble_reveal_scss(theme_layers: &[SassLayer]) -> Result<String, SassEr
     // (bd-lg6t6qfy, lifting the bd-fu1a5g6l suppression). Placed in the
     // theme slot before user theme layers, matching the highlight layer.
     let copy_code = load_copy_code_layer()?;
-    let mut combined: Vec<SassLayer> = Vec::with_capacity(2 + theme_layers.len());
+    // Equation-number layout (`equation-number.scss`), the same layer the
+    // HTML path includes: revealjs is HTML-based, so `EquationNumberStage`
+    // applies the `Sibling` encoding to decks too (bd-vlhi2zkj).
+    let equation_number = load_equation_number_layer()?;
+    let mut combined: Vec<SassLayer> = Vec::with_capacity(3 + theme_layers.len());
     combined.push(highlight);
     combined.push(copy_code);
+    combined.push(equation_number);
     combined.extend_from_slice(theme_layers);
     let merged = merge_layers(&combined);
 

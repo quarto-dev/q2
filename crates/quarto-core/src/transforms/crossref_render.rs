@@ -41,12 +41,14 @@ use quarto_pandoc_types::attr::{Attr, AttrSourceInfo, TargetSourceInfo};
 use quarto_pandoc_types::block::{Block, Blocks, Div, Figure};
 use quarto_pandoc_types::caption::Caption;
 use quarto_pandoc_types::custom::{CustomNode, Slot};
-use quarto_pandoc_types::inline::{Inline, Inlines, Link, Math, Span, Str};
+use quarto_pandoc_types::inline::{Inline, Inlines, Link, Span, Str};
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_source_map::SourceInfo;
 
 use crate::Result;
-use crate::crossref::{CROSSREF_RESOLVED_REF, EQUATION, FLOAT_REF_TARGET, PROOF, THEOREM};
+use crate::crossref::{
+    CROSSREF_RESOLVED_REF, EQ_NUMBER_ATTR, EQUATION, FLOAT_REF_TARGET, PROOF, THEOREM,
+};
 use crate::language::LanguageTerms;
 use crate::render::RenderContext;
 use crate::transform::{AstTransform, TransformPhase};
@@ -1045,18 +1047,24 @@ fn render_proof(node: CustomNode, terms: Option<&LanguageTerms>) -> Block {
 }
 
 /// Convert an Equation custom node into a `Span(id=...)` containing the
-/// original `Math(DisplayMath, ...)` with `\tag{N}` appended for MathJax
-/// numbering.
+/// original `Math(DisplayMath, ...)`, byte-identical to the source, with
+/// the equation's number on the reserved [`EQ_NUMBER_ATTR`]
+/// (`quarto-eq-number`) attribute.
 ///
 /// Output shape:
 ///
 /// ```html
-/// <span id="eq-einstein">$$e = mc^2\tag{1}$$</span>
+/// <span id="eq-einstein" quarto-eq-number="1">$$e = mc^2$$</span>
 /// ```
 ///
-/// The `\tag{}` command tells MathJax/KaTeX to display the equation number
-/// in the right margin, matching Q1's approach. The Span wrapper carries
-/// the id for anchor linking from `@eq-xxx` references.
+/// How the number is *typeset* is not decided here: `\tag{N}` is an
+/// `amsmath` command only MathJax and KaTeX understand, while a converter
+/// that reads math alone needs ` \qquad(N)` or a label outside the math.
+/// That choice depends on the format and `html-math-method`, so it is made
+/// by `EquationNumberStage`, which runs after user post filters (so a Lua
+/// filter can rewrite or delete the attribute) and removes the attribute.
+/// The Span wrapper carries the id for anchor linking from `@eq-xxx`
+/// references.
 fn render_equation(node: CustomNode) -> Inline {
     let number = node
         .plain_data
@@ -1066,43 +1074,22 @@ fn render_equation(node: CustomNode) -> Inline {
         .map(|n| n as u32);
 
     let source_info = node.source_info.clone();
-    let attr = node.attr.clone();
+    let mut attr = node.attr.clone();
+    if let Some(n) = number {
+        attr.2.insert(EQ_NUMBER_ATTR.to_string(), n.to_string());
+    }
 
-    // Extract the math inline from the content slot.
+    // Extract the math inline from the content slot. The math text is
+    // passed through untouched (see the doc comment).
     let mut slots = node.slots;
-    let math_inline = match slots.remove("content") {
-        Some(Slot::Inlines(mut is)) if !is.is_empty() => is.remove(0),
-        _ => {
-            // Fallback: no content slot — return an empty Span.
-            return Inline::Span(Span {
-                attr,
-                content: vec![],
-                source_info,
-                attr_source: AttrSourceInfo::empty(),
-            });
-        }
-    };
-
-    // If we have a number, append \tag{N} to the math text.
-    let content_inline = if let Some(n) = number {
-        match math_inline {
-            Inline::Math(math) => {
-                let tagged_text = format!("{}\\tag{{{}}}", math.text, n);
-                Inline::Math(Math {
-                    math_type: math.math_type,
-                    text: tagged_text,
-                    source_info: math.source_info,
-                })
-            }
-            other => other,
-        }
-    } else {
-        math_inline
+    let content = match slots.remove("content") {
+        Some(Slot::Inlines(mut is)) if !is.is_empty() => vec![is.remove(0)],
+        _ => vec![],
     };
 
     Inline::Span(Span {
         attr,
-        content: vec![content_inline],
+        content,
         source_info,
         attr_source: AttrSourceInfo::empty(),
     })
@@ -2459,28 +2446,67 @@ mod tests {
         })
     }
 
+    /// After rendering, the equation CustomNode becomes a Span carrying
+    /// the number as the reserved `quarto-eq-number` attribute. The math
+    /// text is left byte-identical: the number's *encoding* (`\tag{N}`,
+    /// `\qquad(N)`, a sibling label) is a format decision that
+    /// `EquationNumberStage` makes later, after user post filters.
     #[tokio::test]
-    async fn equation_renders_to_span_with_tag() {
+    async fn equation_renders_to_span_with_number_attribute() {
         let ast = run_full(vec![eq_para("eq-einstein", "e = mc^2")]).await;
         let Block::Paragraph(p) = &ast.blocks[0] else {
             panic!("expected Paragraph, got {:?}", ast.blocks[0]);
         };
-        // After rendering, the equation CustomNode becomes a Span with the
-        // original DisplayMath but with \tag{1} appended.
         let Inline::Span(span) = &p.content[0] else {
             panic!("expected Span, got {:?}", p.content[0]);
         };
         assert_eq!(span.attr.0, "eq-einstein");
+        assert_eq!(
+            span.attr.2.get(EQ_NUMBER_ATTR).map(String::as_str),
+            Some("1"),
+            "the number rides on the reserved attribute; attrs: {:?}",
+            span.attr.2
+        );
         assert_eq!(span.content.len(), 1);
         let Inline::Math(math) = &span.content[0] else {
             panic!("expected Math, got {:?}", span.content[0]);
         };
         assert_eq!(math.math_type, MathType::DisplayMath);
-        assert!(
-            math.text.contains("\\tag{1}"),
-            "expected \\tag{{1}} in math text, got: {}",
-            math.text
+        assert_eq!(math.text, "e = mc^2", "the math text is untouched");
+    }
+
+    /// A custom node without an `order` (nothing numbered it) renders to
+    /// a span with no `quarto-eq-number` attribute and untouched math.
+    #[test]
+    fn unnumbered_equation_gets_no_attribute() {
+        let mut slots = LinkedHashMap::new();
+        slots.insert(
+            "content".to_string(),
+            Slot::Inlines(vec![Inline::Math(Math {
+                math_type: MathType::DisplayMath,
+                text: "x".to_string(),
+                source_info: si(),
+            })]),
         );
+        let node = CustomNode {
+            type_name: EQUATION.to_string(),
+            slots,
+            plain_data: serde_json::json!({}),
+            attr: (
+                "eq-plain".to_string(),
+                vec!["quarto-math-with-attribute".to_string()],
+                LinkedHashMap::new(),
+            ),
+            source_info: si(),
+        };
+        let Inline::Span(span) = render_equation(node) else {
+            panic!("expected Span");
+        };
+        assert!(!span.attr.2.contains_key(EQ_NUMBER_ATTR));
+        let Inline::Math(math) = &span.content[0] else {
+            panic!("expected Math");
+        };
+        assert_eq!(math.text, "x");
     }
 
     #[tokio::test]
@@ -2524,12 +2550,15 @@ mod tests {
             let Inline::Math(math) = &span.content[0] else {
                 panic!();
             };
-            let expected_tag = format!("\\tag{{{}}}", i + 1);
+            assert_eq!(
+                span.attr.2.get(EQ_NUMBER_ATTR).map(String::as_str),
+                Some((i + 1).to_string().as_str()),
+                "eq #{i}: attrs {:?}",
+                span.attr.2
+            );
             assert!(
-                math.text.contains(&expected_tag),
-                "eq #{}: expected {} in '{}' ",
-                i,
-                expected_tag,
+                !math.text.contains("\\tag"),
+                "eq #{i}: crossref-render must not encode the number; got '{}'",
                 math.text
             );
         }
