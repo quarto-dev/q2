@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>𝐯</mi></mrow><annotation encoding="application/x-tex">\renewcommand{\vec}[1]{\mathbf{#1}} \vec{v}</annotation></semantics></math>

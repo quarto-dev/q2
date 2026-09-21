@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mrow><mfrac><mrow><mi>d</mi><mi>f</mi></mrow><mrow><mi>d</mi><mi>x</mi></mrow></mfrac><mo stretchy="true">|</mo></mrow><mrow><mi>x</mi><mo>=</mo><mn>0</mn></mrow></msub></mrow><annotation encoding="application/x-tex">\left. \frac{df}{dx} \right|_{x=0}</annotation></semantics></math>

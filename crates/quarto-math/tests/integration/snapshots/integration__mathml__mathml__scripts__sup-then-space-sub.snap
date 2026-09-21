@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><msup><mi>E</mi><mo>∘</mo></msup><mrow><mi>c</mi><mi>e</mi><mi>l</mi><mi>l</mi></mrow></msub></mrow><annotation encoding="application/x-tex">E^\circ _{cell}</annotation></semantics></math>

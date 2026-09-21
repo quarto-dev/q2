@@ -6277,6 +6277,7 @@ dependencies = [
  "quarto-error-reporting",
  "quarto-math",
  "quarto-source-map",
+ "quick-xml 0.39.3",
  "rowan",
  "rustc-hash 2.1.2",
  "serde",

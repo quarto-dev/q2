@@ -4,8 +4,9 @@ expression: rendered(&n)
 ---
 row @0..4
   scripts Auto @0..4
-    row @0..2
-      run "x" @0..1
+    run "x" @0..1
     sup:
-      run "2" @3..4
+      row @1..4
+        sym "′" @1..2
+        run "2" @3..4
 -- problems --

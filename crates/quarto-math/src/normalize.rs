@@ -63,6 +63,10 @@ pub struct Problem {
 #[derive(Debug, Clone)]
 pub struct Normalized {
     pub mode: Mode,
+    /// The math text the tree was built from; every node span indexes it.
+    /// Writers that annotate their output with the source (MathML's
+    /// `<annotation encoding="application/x-tex">`) read it from here.
+    pub text: String,
     /// Always a `Row` spanning the whole text.
     pub root: Node,
     pub problems: Vec<Problem>,
@@ -77,6 +81,7 @@ pub fn normalize(text: &str, mode: Mode, spec: &Spec) -> Normalized {
     let root = Node::new(NodeKind::Row(items), Some(0..text.len()));
     Normalized {
         mode,
+        text: text.to_string(),
         root,
         problems: n.problems,
     }
@@ -98,6 +103,41 @@ fn join(a: Option<Range<usize>>, b: Option<Range<usize>>) -> Option<Range<usize>
         (Some(a), Some(b)) => Some(a.start.min(b.start)..a.end.max(b.end)),
         (Some(a), None) | (None, Some(a)) => Some(a),
         (None, None) => None,
+    }
+}
+
+/// A `Sym` made only of prime marks (`′`, `″`, `‴`, `⁗`).
+fn is_prime(node: &Node) -> bool {
+    matches!(&node.kind, NodeKind::Sym(t) if !t.is_empty() && t.chars().all(|c| matches!(c, '′' | '″' | '‴' | '⁗')))
+}
+
+/// How many primes a prime `Sym` stands for.
+fn prime_count(node: &Node) -> usize {
+    match &node.kind {
+        NodeKind::Sym(t) => t
+            .chars()
+            .map(|c| match c {
+                '′' => 1,
+                '″' => 2,
+                '‴' => 3,
+                '⁗' => 4,
+                _ => 0,
+            })
+            .sum(),
+        _ => 0,
+    }
+}
+
+/// The glyph for `n` primes: Unicode has single to quadruple, longer runs
+/// spell out the rest.
+fn prime_glyph(n: usize) -> String {
+    match n {
+        0 => String::new(),
+        1 => "′".to_string(),
+        2 => "″".to_string(),
+        3 => "‴".to_string(),
+        4 => "⁗".to_string(),
+        more => "⁗".to_string() + &prime_glyph(more - 4),
     }
 }
 
@@ -833,10 +873,25 @@ impl<'a> Normalizer<'a> {
             }
         }
         let script_span = span_of_nodes(&script_items);
-        let script = unwrap_single(script_items, script_span);
         let base = base.unwrap_or_else(|| Node::new(NodeKind::Row(vec![]), None));
-        let Some(op) = op else {
-            return base;
+        let (op, script) = match op {
+            Some(op) => (op, unwrap_single(script_items, script_span)),
+            None => {
+                // No `^`/`_`: this is mitex's shape for `f'`. The prime is
+                // a superscript (`f'` ≡ `f^{\prime}`); several merge into
+                // one glyph. Anything else here is unexpected; keep it
+                // rather than drop it.
+                let primes = script_items.iter().filter(|n| is_prime(n)).count();
+                if primes == 0 || primes != script_items.len() {
+                    let mut items = vec![base];
+                    items.extend(script_items);
+                    return Node::new(NodeKind::Row(items), span);
+                }
+                (
+                    '^',
+                    Node::new(NodeKind::Sym(prime_glyph(primes)), script_span),
+                )
+            }
         };
 
         // Fold onto an existing Scripts node from the inner attachment.
@@ -845,10 +900,26 @@ impl<'a> Normalizer<'a> {
         match &mut target.kind {
             NodeKind::Scripts { sub, sup, .. } => {
                 let slot = if op == '^' { sup } else { sub };
-                if slot.is_none() {
-                    *slot = Some(Box::new(script));
-                } else {
-                    rejected = Some(script);
+                match slot.as_deref_mut() {
+                    None => *slot = Some(Box::new(script)),
+                    // `f'^2` is `f^{\prime 2}`, and `f''` folds prime onto
+                    // prime: the superscript slot is shared, not doubled.
+                    Some(existing) if op == '^' && is_prime(existing) => {
+                        let merged_span = match (&existing.span, &script.span) {
+                            (Some(a), Some(b)) => Some(a.start.min(b.start)..a.end.max(b.end)),
+                            _ => None,
+                        };
+                        if is_prime(&script) {
+                            let count = prime_count(existing) + prime_count(&script);
+                            existing.kind = NodeKind::Sym(prime_glyph(count));
+                            existing.span = merged_span;
+                        } else {
+                            let prime =
+                                std::mem::replace(existing, Node::new(NodeKind::Row(vec![]), None));
+                            *existing = Node::new(NodeKind::Row(vec![prime, script]), merged_span);
+                        }
+                    }
+                    Some(_) => rejected = Some(script),
                 }
                 target.span = span.clone();
             }

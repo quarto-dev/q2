@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mover accent="true"><mi>β</mi><mo>ˆ</mo></mover><mo>=</mo><mo stretchy="false">(</mo><msup><mi>X</mi><mo>⊤</mo></msup><mi>X</mi><msup><mo stretchy="false">)</mo><mrow><mo>−</mo><mn>1</mn></mrow></msup><msup><mi>X</mi><mo>⊤</mo></msup><mi>y</mi></mrow><annotation encoding="application/x-tex">\hat{\beta} = (X^\top X)^{-1} X^\top y</annotation></semantics></math>

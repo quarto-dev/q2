@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mrow><mo stretchy="true">(</mo><mi>x</mi></mrow></mrow><annotation encoding="application/x-tex">\left( x \right.</annotation></semantics></math>

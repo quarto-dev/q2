@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>a</mi><mspace width="0.5em"></mspace><mn>3</mn><mi>m</mi><mi>u</mi><mi>b</mi><mspace width="0.5em"></mspace><mn>6</mn><mi>m</mi><mi>u</mi><mi>c</mi></mrow><annotation encoding="application/x-tex">a\mkern3mu b\mskip 6mu c</annotation></semantics></math>

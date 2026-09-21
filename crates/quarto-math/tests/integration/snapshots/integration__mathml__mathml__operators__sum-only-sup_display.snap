@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mover><mo>∑</mo><mi>N</mi></mover><msub><mi>a</mi><mi>k</mi></msub></mrow><annotation encoding="application/x-tex">\sum^{N} a_k</annotation></semantics></math>

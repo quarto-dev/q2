@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi><mi>r</mi><mi>i</mi><mi>c</mi><mi>e</mi><mo>=</mo><msub><mover accent="true"><mi>β</mi><mo>ˆ</mo></mover><mn>0</mn></msub><mo>+</mo><msub><mover accent="true"><mi>β</mi><mo>ˆ</mo></mover><mn>1</mn></msub><mo>×</mo><mi>a</mi><mi>r</mi><mi>e</mi><mi>a</mi><mo>+</mo><mi>ϵ</mi></mrow><annotation encoding="application/x-tex">price = \hat{\beta}_0 + \hat{\beta}_1 \times area + \epsilon</annotation></semantics></math>

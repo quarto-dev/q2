@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mroot><mrow><msup><mi>x</mi><mn>2</mn></msup><msup><mrow><mo>+</mo><mi>y</mi></mrow><mn>2</mn></msup></mrow><mrow><mi>n</mi><mo>+</mo><mn>1</mn></mrow></mroot></mrow><annotation encoding="application/x-tex">\sqrt[n+1]{x^2+y^2}</annotation></semantics></math>

@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mtext>50\% of \$x</mtext></mrow><annotation encoding="application/x-tex">\text{50\% of \$x}</annotation></semantics></math>

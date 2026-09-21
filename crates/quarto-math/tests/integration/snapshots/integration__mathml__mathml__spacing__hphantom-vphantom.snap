@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mpadded height="0" depth="0"><mphantom><mi>x</mi></mphantom></mpadded><mi>y</mi><mpadded width="0"><mphantom><mfrac><mi>a</mi><mi>b</mi></mfrac></mphantom></mpadded><mi>z</mi></mrow><annotation encoding="application/x-tex">\hphantom{x} y \vphantom{\frac{a}{b}} z</annotation></semantics></math>

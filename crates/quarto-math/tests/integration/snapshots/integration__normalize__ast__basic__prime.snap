@@ -3,14 +3,19 @@ source: crates/quarto-math/tests/integration/normalize.rs
 expression: rendered(&n)
 ---
 row @0..14
-  run "f" @0..1
+  scripts Auto @0..2
+    run "f" @0..1
+    sup:
+      sym "′" @1..2
   run "(" @2..3
   run "x" @3..4
   run ")" @4..5
-  row @6..10
+  scripts Auto @6..11
     row @6..9
       run "=" @6..7
       run "f" @8..9
+    sup:
+      sym "″" @9..11
   run "(" @11..12
   run "x" @12..13
   run ")" @13..14

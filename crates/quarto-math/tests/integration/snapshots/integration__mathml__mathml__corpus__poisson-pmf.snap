@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo><mo>=</mo><mfrac><mrow><msup><mi>e</mi><mrow><mo>−</mo><mi>λ</mi></mrow></msup><msup><mi>λ</mi><mi>x</mi></msup></mrow><mrow><mi>x</mi><mo>!</mo></mrow></mfrac></mrow><annotation encoding="application/x-tex">p(x)=\frac{e^{-\lambda} \lambda^{x}}{x !}</annotation></semantics></math>

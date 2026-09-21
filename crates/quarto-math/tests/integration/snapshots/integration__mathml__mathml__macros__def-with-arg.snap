@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mrow></mrow><merror><mtext>\pr</mtext></merror><mo>#</mo><mn>1</mn><mrow><mi>P</mi><mo stretchy="false">(</mo><mo>#</mo><mn>1</mn><mo stretchy="false">)</mo></mrow><merror><mtext>\pr</mtext></merror><mrow><mi>x</mi></mrow></mrow><annotation encoding="application/x-tex">\def\pr#1{P(#1)} \pr{x}</annotation></semantics></math>

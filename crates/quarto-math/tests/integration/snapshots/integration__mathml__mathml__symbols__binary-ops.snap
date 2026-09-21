@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>a</mi><mo>±</mo><mi>b</mi><mo>∓</mo><mi>c</mi><mo>×</mo><mi>d</mi><mo>÷</mo><mi>e</mi><mo>⋅</mo><mi>f</mi><mo>∘</mo><mi>g</mi><mo>∗</mo><mi>h</mi><mo>⊕</mo><mi>i</mi><mo>⊗</mo><mi>j</mi><mo>∧</mo><mi>k</mi><mo>∨</mo><mi>l</mi><mo>⋆</mo><mi>m</mi><mo>∙</mo><mi>n</mi></mrow><annotation encoding="application/x-tex">a \pm b \mp c \times d \div e \cdot f \circ g \ast h \oplus i \otimes j \wedge k \vee l \star m \bullet n</annotation></semantics></math>

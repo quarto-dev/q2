@@ -1,0 +1,8 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mrow><mo stretchy="true">‖</mo><mtable><mtr><mtd><mi>a</mi></mtd><mtd><mi>b</mi></mtd></mtr><mtr><mtd><mi>c</mi></mtd><mtd><mi>d</mi></mtd></mtr></mtable><mo stretchy="true">‖</mo></mrow></mrow><annotation encoding="application/x-tex">\begin{Vmatrix}
+a &amp; b \\
+c &amp; d
+\end{Vmatrix}</annotation></semantics></math>

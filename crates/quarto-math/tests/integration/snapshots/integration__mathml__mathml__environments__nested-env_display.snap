@@ -1,0 +1,8 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mrow><mo stretchy="true">{</mo><mtable columnalign="left"><mtr><mtd><mtable columnalign="right left"><mtr><mtd><mi>a</mi></mtd><mtd><mrow><mo>=</mo><mi>b</mi></mrow></mtd></mtr><mtr><mtd><mi>c</mi></mtd><mtd><mrow><mo>=</mo><mi>d</mi></mrow></mtd></mtr></mtable></mtd><mtd><mrow><mtext>if </mtext><mi>x</mi></mrow></mtd></mtr><mtr><mtd><mn>0</mn></mtd><mtd><mtext>else</mtext></mtd></mtr></mtable></mrow></mrow><annotation encoding="application/x-tex">\begin{cases}
+\begin{aligned} a &amp;= b \\ c &amp;= d \end{aligned} &amp; \text{if } x \\
+0 &amp; \text{else}
+\end{cases}</annotation></semantics></math>

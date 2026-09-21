@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false">⟨</mo><mi>u</mi><mo>,</mo><mi>v</mi><mo stretchy="false">⟩</mo></mrow><annotation encoding="application/x-tex">\newcommand{\inner}[2]{\langle #1, #2 \rangle} \inner{u}{v}</annotation></semantics></math>
