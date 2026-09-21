@@ -45,7 +45,7 @@ const ms = (c: string) => ({ t: 'MetaString', c });
 const mb = (c: boolean) => ({ t: 'MetaBool', c });
 const mm = (entries: Record<string, unknown>) => ({
     t: 'MetaMap',
-    c: Object.entries(entries).map(([key, value]) => ({ key, value })),
+    c: entries,
 });
 
 const NAVBAR_HTML = '<nav class="navbar navbar-expand-lg"><div>NAVBAR_BODY</div></nav>';
