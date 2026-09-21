@@ -171,8 +171,9 @@ static MASK_INLINE_RE: LazyLock<Regex> = LazyLock::new(|| {
 /// `SourceInfo` would silently resolve offsets past its end into the next
 /// block's source text if left `Original`. `mask` stamps every block it
 /// actually rewrites, and separately its **top-level ancestor** (the writer's
-/// piece loop is top-level-only), with `SourceInfo::Generated { by.kind:
-/// "nested-cell-mask", from: [Other("nested-cell-mask/origin")] }` so
+/// piece loop is top-level-only), with a `Generated` source info whose
+/// `by.kind` is `"nested-cell-mask"` and whose `from` is
+/// `[Other("nested-cell-mask/origin")]`, so
 /// `map_offset` returns "location unknown" instead of a confidently wrong
 /// offset. See `mark_generated` below.
 ///
@@ -197,7 +198,7 @@ pub fn mask(doc: &mut Pandoc) -> Vec<usize> {
             // descendant changed — stamp it now using the pre-mutation
             // original, so the writer's top-level-only piece loop sees
             // Generated for the whole ancestor's piece (T17).
-            if !matches!(block.source_info(), SourceInfo::Generated { .. }) {
+            if !matches!(block.source_info(), SourceInfo::Generated(_)) {
                 mark_generated(block, original);
             }
             changed.push(idx);
@@ -211,16 +212,16 @@ pub fn mask(doc: &mut Pandoc) -> Vec<usize> {
 /// anchor. `Other` rather than `Invocation` is deliberate — see the module
 /// doc's Provenance section and the spec.
 fn mark_generated(block: &mut Block, original: SourceInfo) {
-    *block.source_info_mut() = SourceInfo::Generated {
-        by: By {
+    *block.source_info_mut() = SourceInfo::generated_with(
+        By {
             kind: GENERATED_BY_KIND.to_string(),
             data: serde_json::Value::Null,
         },
-        from: smallvec![Anchor {
+        smallvec![Anchor {
             role: AnchorRole::Other(ORIGIN_ANCHOR_ROLE.to_string()),
             source_info: Arc::new(original),
         }],
-    };
+    );
 }
 
 /// Restore both rewrites `mask` performs. Openers are matched by
@@ -702,7 +703,8 @@ mod tests {
         // `preimage_in`'s `Generated` arm only walks `Invocation`, so this
         // anchor must be provably inert to any byte-copying writer).
         match doc.blocks[0].source_info() {
-            quarto_source_map::SourceInfo::Generated { by, from } => {
+            quarto_source_map::SourceInfo::Generated(g) => {
+                let quarto_source_map::Generated { by, from } = &**g;
                 assert_eq!(
                     by.kind, "nested-cell-mask",
                     "Generated.by.kind must be the mask's own kebab-case kind"
@@ -804,7 +806,8 @@ mod tests {
         // SourceInfo — not just the nested block's — must be Generated with
         // the same precise anchor as T15.
         match doc.blocks[0].source_info() {
-            quarto_source_map::SourceInfo::Generated { by, from } => {
+            quarto_source_map::SourceInfo::Generated(g) => {
+                let quarto_source_map::Generated { by, from } = &**g;
                 assert_eq!(
                     by.kind, "nested-cell-mask",
                     "the ancestor Div's Generated.by.kind must be the mask's own kebab-case kind"

@@ -1,0 +1,1068 @@
+# Release pipeline (bd-c6l13j79), as a REUSABLE workflow (bd-p4ljdp2e):
+# web payloads → 5-target binary build → checksummed, signed artifacts →
+# GitHub Release. Two callers:
+#
+#   release.yml  tag push / dispatch on an existing tag  → channel: release
+#   nightly.yml  schedule, when main has unreleased work → channel: nightly
+#
+# The callers own trigger, preflight/gate, concurrency and the repo
+# guard; this file owns everything from "what ref + version" onward, so
+# every gate below (placeholder-embed, no-glibc, asset-manifest parity,
+# minisign against the pinned key) applies to nightlies and releases
+# alike, from one copy. Inputs are documented under `on.workflow_call`.
+#
+# Nightly deltas, all keyed on `inputs.channel == 'nightly'`:
+#   - the binary is built with QUARTO_VERSION_OVERRIDE=<inputs.version>
+#     (quarto-util/src/version.rs): main carries the LAST released
+#     version and a nightly must not commit to it, so the version the
+#     nightly publishes under is injected at build time. The docs-embed
+#     host build gets the same override so `q2 docs llms` and the binary
+#     agree. NEVER export the variable EMPTY — `option_env!` then sees
+#     Some("") and the compile-time well-formedness assertion fails the
+#     build — hence the `[ -n ]` guards rather than a plain `env:` entry.
+#   - the release is a rolling PRERELEASE on the `nightly` tag: the
+#     previous nightly release + tag are deleted, the tag is re-pointed
+#     at inputs.ref, and the release is recreated. releases/latest never
+#     returns a prerelease, so the stable installers are unaffected.
+#   - the notes carry the nightly install one-liners instead of the
+#     stable ones.
+#
+# `inputs.publish: false` stops after signing and uploads the signed set
+# as a `release-set` artifact instead: the dry-run mode for testing this
+# file on a branch without touching any release or tag.
+#
+# Ported from cscheid/braid's release.yml (study copy in
+# external-sources/braid). The artifact naming and checksum layout is a
+# contract with install.sh (encoded by
+# crates/quarto/tests/integration/bootstrap_sh.rs):
+#
+#   q2-<version>-<platform>.tar.gz          single member: q2
+#   q2-<version>-<platform>.tar.gz.sha256   "<sha256>  <filename>"
+#   q2-<version>-<platform>.tar.gz.minisig  minisign (Ed25519) signature;
+#                                           trusted comment = the archive
+#                                           filename (replay protection —
+#                                           install.sh compares it)
+#   checksums.sha256                        all .sha256 lines, combined
+#
+# <version> has no "v" prefix in filenames; the tag does (v0.1.0 →
+# q2-0.1.0-darwin_arm64.tar.gz).
+#
+# q2 deltas from braid:
+#
+# - A functional q2 binary embeds THREE payloads via include_dir!:
+#   the hub MCP bundle (quarto-mcp-launcher), the preview SPA
+#   (quarto-preview), and the trace viewer (quarto-trace-server). A
+#   build without them succeeds but ships placeholders (the 2026-05-20
+#   stale-embed incident class) — the per-target "verify binary" step
+#   fails the release if any placeholder is detected. The musl legs get
+#   a second gate on top of it ("assert the binary needs no glibc"),
+#   which runs the binary under alpine:latest — the runner has glibc, so
+#   only a glibc-less container can prove the static-linux promise
+#   (bd-3b47pxmm).
+# - The `web-payloads` job builds the target-INDEPENDENT payloads once
+#   (WASM → preview SPA, trace viewer; the WASM toolchain is heavy and
+#   identical for every target). The MCP bundle is built per target:
+#   its keyring native addons must match the *user's* platform
+#   (KEYRING_PLATFORMS; see ts-packages/quarto-hub-mcp/scripts/
+#   stage-keyring.mjs).
+# - The `hub-mcp-bundle` job ships the same MCP server as a standalone,
+#   downloadable tarball (quarto-hub-mcp-<version>.tar.gz) so people can
+#   run it directly (`node index.mjs`) without the q2 binary. ONE
+#   universal bundle: index.mjs is byte-identical across platforms and
+#   the keyring loader detects the platform at runtime, so every keyring
+#   addon co-stages in a single bundle. TEMPORARY/STOPGAP — the clean
+#   distribution is `npx @quarto/hub-mcp` (bd-3tak0lyy); this tarball
+#   exists only until the npm channel lands (bd-sca6g1tu; plan
+#   claude-notes/plans/2026-06-19-release-standalone-hub-mcp-bundle.md).
+# - The bundled quarto-hub.com OAuth defaults (QUARTO_HUB_BUNDLED_*)
+#   are injected from repo secrets/vars into the cargo build env —
+#   release builds only; see crates/quarto-mcp-launcher/src/defaults.rs
+#   for why the Desktop-app client secret is safe to embed.
+# - Linux targets are static musl — ONE artifact per arch that runs on
+#   every distro, Alpine included, with no glibc floor at all. (They
+#   were briefly gnu: rusty_v8, via deno_core → quarto-system-runtime,
+#   shipped no musl prebuilts and both musl legs 404'd in the v0.1.0
+#   dry-run, run 27449454203. That dependency was removed in
+#   bd-3e3sam51 and the switch back landed in bd-dofxhzaj.) Because the
+#   binary is static, the runner's own glibc is irrelevant, so these
+#   legs track ubuntu-latest rather than pinning an old image. No gnu
+#   artifact is published; anyone who needs a dynamically-linked build
+#   can use `install.sh --from-source`.
+# - The linux legs still build with `--features vendored-openssl` so
+#   the binary has no runtime libssl dependency. openssl reaches q2
+#   only through our samod fork's tungstenite/native-tls wiring;
+#   bd-r7s13dfb tracks moving that to rustls, which would let this
+#   feature (and the openssl build entirely) go away.
+#
+# Signing key: MINISIGN_SECRET_KEY repo secret; the public half is pinned
+# in install.sh (MINISIGN_PUBKEY) and README. The sign step verifies its
+# output against the key extracted from install.sh, so a secret/pinned-key
+# mismatch fails the release instead of shipping unverifiable artifacts.
+#
+# Plan: claude-notes/plans/2026-06-12-q2-github-releases-bundled-mcp.md
+
+name: Release pipeline
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: >-
+          What to build: the release tag (release.yml) or the exact commit
+          sha the gate selected (nightly.yml). Every job checks this out.
+        required: true
+        type: string
+      version:
+        description: >-
+          The bare version the artifacts are published under (no "v"):
+          "0.32.0" for a release, "0.33.0-nightly.20260919" for a nightly.
+          Goes into every filename and is what the verify gate expects
+          `q2 --version` to end with.
+        required: true
+        type: string
+      tag:
+        description: 'Git tag to release under: "vX.Y.Z" or "nightly".'
+        required: true
+        type: string
+      channel:
+        description: '"release" (default) or "nightly" — see header.'
+        required: false
+        type: string
+        default: release
+      publish:
+        description: >-
+          false = build, verify and sign, then upload the signed set as a
+          `release-set` artifact instead of creating the GitHub Release
+          (dry-run; no release or tag is touched).
+        required: false
+        type: boolean
+        default: true
+      notes_range:
+        description: >-
+          git log range for the "Changes" section (e.g. "v0.32.0..abc123").
+          Empty = derive from the previous tag as before.
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Fail fast on a caller that passes an inconsistent channel/version pair
+  # before anything expensive runs. (Callers also validate; this is the
+  # belt to their braces.)
+  check-inputs:
+    name: Check pipeline inputs
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - shell: bash
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          VERSION: ${{ inputs.version }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          case "$CHANNEL" in
+            release)
+              [ "$TAG" = "v$VERSION" ] || { echo "::error::release tag $TAG must equal v$VERSION"; exit 1; } ;;
+            nightly)
+              [ "$TAG" = nightly ] || { echo "::error::nightly channel releases under the 'nightly' tag, got $TAG"; exit 1; }
+              case "$VERSION" in
+                *-nightly.*) ;;
+                *) echo "::error::nightly version must carry a -nightly.<date> prerelease, got $VERSION"; exit 1 ;;
+              esac ;;
+            *) echo "::error::unknown channel '$CHANNEL' (release|nightly)"; exit 1 ;;
+          esac
+          echo "channel=$CHANNEL tag=$TAG version=$VERSION ref=${{ inputs.ref }} publish=${{ inputs.publish }}"
+
+  # Target-independent embedded payloads, built once: the WASM module
+  # (wasm32, same bytes for every release target), the preview SPA that
+  # consumes it, the trace viewer, and the `q2 docs llms` docs embed.
+  # Toolchain steps mirror hub-client-e2e.yml (the canonical WASM CI
+  # setup).
+  #
+  # The docs embed step compiles a host `q2` (to render `docs/`) on top
+  # of everything else, hence the wider timeout than the SPA builds
+  # alone needed — a cold rust-cache pays for the full q2 dependency
+  # tree here.
+  web-payloads:
+    name: Build web payloads (SPA + trace viewer + docs embed)
+    needs: check-inputs
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: wasm32-unknown-unknown
+          components: rust-src
+
+      - name: Set up Clang
+        uses: egor-tensin/setup-clang@v2
+        with:
+          version: latest
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-web-payloads
+          cache-on-failure: true
+
+      # build-wasm.js verifies wasm-bindgen CLI matches the version
+      # pinned in Cargo.lock; install that exact version.
+      - name: Install wasm-bindgen-cli
+        run: |
+          VERSION=$(awk '/^name = "wasm-bindgen"$/{getline; gsub(/version = |"/, ""); print; exit}' Cargo.lock)
+          echo "Installing wasm-bindgen-cli $VERSION"
+          cargo install -f wasm-bindgen-cli --version "$VERSION"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: npm ci
+        run: npm ci
+
+      # wasm-opt (binaryen) is `build:wasm` step 3 (live-share payload
+      # plan Phase 1). Pinned to the version local dev uses (Homebrew
+      # binaryen 132) so CI and dev builds produce the same bytes.
+      - name: Install binaryen (wasm-opt)
+        run: npm install -g binaryen@132.0.0
+
+      - name: Build WASM (hub-client)
+        run: npm run build:wasm
+        working-directory: hub-client
+
+      # Same npm invocations as `cargo xtask build-trace-viewer` /
+      # `build-q2-preview-spa`, without compiling xtask on this runner.
+      - name: Build trace-viewer
+        run: npm run build
+        working-directory: trace-viewer
+
+      - name: Build q2-preview-spa
+        run: npm run build
+        working-directory: q2-preview-spa
+
+      # Docs embed for `q2 docs llms` (bd-hwop1zii). Target-independent
+      # like the SPA dists, so it is staged once here rather than on
+      # every build leg — where cross-compiled targets could not run the
+      # `q2` that renders the docs anyway. `build-agents-docs` builds a
+      # host `q2` itself (via `cargo run --bin q2`); a debug binary is
+      # fine, it only has to render.
+      # The xtask also stages `docs/examples/` (a gitignored resource the
+      # docs declare) first — on this fresh checkout nothing else does,
+      # and `q2 render docs` fails hard without it (v0.27.0 attempt 1).
+      #
+      # Nightly: the host `q2` that renders the docs is built with the
+      # same QUARTO_VERSION_OVERRIDE as the release binary, so the docs
+      # embed and `q2 --version` agree. Exported only when non-empty
+      # (an empty override fails the compile-time assertion; see header).
+      - name: Stage docs embed (q2 docs llms)
+        shell: bash
+        env:
+          NIGHTLY_VERSION: ${{ inputs.channel == 'nightly' && inputs.version || '' }}
+        run: |
+          if [ -n "$NIGHTLY_VERSION" ]; then
+            export QUARTO_VERSION_OVERRIDE="$NIGHTLY_VERSION"
+            echo "building the docs-render q2 as $QUARTO_VERSION_OVERRIDE"
+          fi
+          cargo xtask build-agents-docs
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: web-payloads
+          path: |
+            trace-viewer/dist
+            q2-preview-spa/dist
+            agents-docs-dist
+          retention-days: 7
+          if-no-files-found: error
+
+  # Standalone hub MCP server bundle (bd-sca6g1tu): the same
+  # ts-packages/quarto-hub-mcp dist-bundle that gets embedded into q2,
+  # published as its own downloadable tarball so people can run the MCP
+  # server directly with an ambient Node.js instead of installing q2.
+  #
+  # TEMPORARY/STOPGAP: the clean distribution is `npx @quarto/hub-mcp`
+  # (bd-3tak0lyy); we ship this tarball only until the npm channel lands
+  # (we don't want to wire up npm publish credentials yet). Expected
+  # lifetime ~a couple of months — when bd-3tak0lyy ships, reassess
+  # whether to drop this job. Plan:
+  # claude-notes/plans/2026-06-19-release-standalone-hub-mcp-bundle.md.
+  #
+  # ONE universal bundle (vs. the per-target binaries): index.mjs is
+  # byte-identical across platforms; only the @napi-rs/keyring .node
+  # addons differ, and the keyring loader does runtime platform/arch/libc
+  # detection, so all platforms co-stage in one bundle. KEYRING_PLATFORMS
+  # carries every target; non-host addon packages are fetched via
+  # `npm pack` at the loader's locked version (the path the per-target
+  # build already relies on — see stage-keyring.mjs).
+  hub-mcp-bundle:
+    name: Build standalone hub MCP bundle
+    needs: check-inputs
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Every keyring platform the q2 release matrix covers, co-staged
+      # into the one universal bundle. Keep in sync with the per-target
+      # `keyring:` matrix values in the `build` job below.
+      KEYRING_PLATFORMS: darwin-x64,darwin-arm64,linux-x64-gnu,linux-x64-musl,linux-arm64-gnu,linux-arm64-musl,win32-x64-msvc,win32-arm64-msvc
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: npm ci
+        run: npm ci
+
+      # esbuild compiles the @quarto/* workspace deps from TS source (the
+      # `source` condition in scripts/bundle.mjs), so no prior workspace
+      # build is needed here.
+      - name: Build universal hub MCP bundle
+        run: npm run bundle -w ts-packages/quarto-hub-mcp
+
+      # Fail closed: a real bundle (not the empty/placeholder case), every
+      # requested keyring addon staged, and the module graph actually
+      # loads under node (the linux-x64 addon resolves on this runner).
+      - name: Verify bundle
+        shell: bash
+        run: |
+          DIR=ts-packages/quarto-hub-mcp/dist-bundle
+          for f in index.mjs build-info.json; do
+            test -f "$DIR/$f" || { echo "::error::$DIR/$f missing"; exit 1; }
+          done
+          IFS=',' read -ra PLATFORMS <<< "$KEYRING_PLATFORMS"
+          for P in "${PLATFORMS[@]}"; do
+            test -d "$DIR/node_modules/@napi-rs/keyring-$P" \
+              || { echo "::error::keyring addon for $P not staged"; exit 1; }
+          done
+          node "$DIR/index.mjs" --help >/dev/null
+
+      # Build a copy named for the version so the tarball extracts into a
+      # self-describing directory, drop in README + NOTICE, then archive.
+      - name: Package standalone bundle (README + NOTICE + tarball)
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          PKG="quarto-hub-mcp-${VERSION}"
+          cp -r ts-packages/quarto-hub-mcp/dist-bundle "$PKG"
+          cat > "$PKG/README.md" <<EOF
+          # Quarto Hub MCP server — standalone bundle (v${VERSION})
+
+          The Quarto Hub MCP server (\`@quarto/hub-mcp\`), bundled as one
+          self-contained ES module. It gives an MCP-capable AI agent read/write
+          access to files in Quarto Hub projects over Automerge sync, speaking
+          the Model Context Protocol over stdio.
+
+          ## Requirements
+
+          - **Node.js 24 or newer.** This bundle targets node24 and is NOT
+            version-guarded (unlike \`q2 mcp\`, which enforces the floor before
+            launching); older Node may fail in non-obvious ways.
+
+          ## Run
+
+              node index.mjs --help
+              node index.mjs --server wss://quarto-hub.com/ws
+
+          Point your MCP client's server command at \`node /path/to/index.mjs\`.
+
+          ## Authentication
+
+          Unlike the \`q2 mcp\` launcher, this standalone bundle does **not**
+          embed quarto-hub.com OAuth client credentials. Supply your own via
+          the environment: \`QUARTO_HUB_MCP_CLIENT_ID\`,
+          \`QUARTO_HUB_MCP_CLIENT_SECRET\`, and (optionally)
+          \`QUARTO_HUB_MCP_ISSUER\`. The sync server defaults to
+          \`wss://quarto-hub.com/ws\` (override with \`--server\`).
+
+          ## Contents
+
+          - \`index.mjs\`               the bundled server
+          - \`build-info.json\`         source git commit + build timestamp
+          - \`node_modules/@napi-rs/\`  the OS-keyring native addon (all platforms)
+
+          ## Status
+
+          Experimental, and a temporary distribution channel: the intended
+          long-term path is \`npx @quarto/hub-mcp\`. See \`build-info.json\` for
+          the exact source commit this was built from.
+          EOF
+          cat > "$PKG/NOTICE" <<EOF
+          Quarto Hub MCP server — standalone bundle
+          Copyright (c) Posit, PBC. MIT licensed.
+
+          This bundle inlines code from the following third-party packages at
+          build time (esbuild). Each is distributed under its own license
+          (all MIT at the versions bundled); consult each project for full
+          terms:
+
+            - @modelcontextprotocol/sdk   (MIT)
+            - jose                        (MIT)
+            - oauth4webapi                (MIT)
+            - @automerge/automerge        (MIT)
+            - ws                          (MIT)
+            - @napi-rs/keyring            (MIT)  native addon, node_modules/@napi-rs/
+          EOF
+          tar -czf "$PKG.tar.gz" "$PKG"
+          sha256sum "$PKG.tar.gz" > "$PKG.tar.gz.sha256"
+          sha256sum -c "$PKG.tar.gz.sha256"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: hub-mcp-bundle
+          path: |
+            quarto-hub-mcp-${{ inputs.version }}.tar.gz
+            quarto-hub-mcp-${{ inputs.version }}.tar.gz.sha256
+          retention-days: 7
+          if-no-files-found: error
+
+  build:
+    name: Build (${{ matrix.platform }})
+    needs: [check-inputs, web-payloads]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # keyring: the @napi-rs/keyring platform addons staged into
+          # the MCP bundle. They must match the *user's node* on the
+          # target platform — both libc flavors on linux (glibc + Alpine
+          # node), both mac archs (Rosetta mismatch: x64 q2 under an
+          # arm64 node and vice versa), both win archs (arm64 Windows
+          # runs x64 q2 under emulation with a native arm64 node).
+          # NOTE the keyring lists stay libc-plural even though q2 itself
+          # is now musl-only: the addon must match the user's *node*, and
+          # an Alpine user runs a musl node while a Debian user runs a
+          # glibc one. That is independent of how q2 was linked.
+          # cargo_flags: linux legs vendor openssl (no runtime libssl
+          # dep); macOS/Windows TLS is security-framework/schannel, no
+          # openssl involved. Both linux legs build NATIVELY (no
+          # cross-compilation), so musl-tools' musl-gcc is the right
+          # compiler on each runner.
+          - platform: linux_amd64
+            target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            ext: tar.gz
+            keyring: linux-x64-gnu,linux-x64-musl
+            cargo_flags: --features vendored-openssl
+          - platform: linux_arm64
+            target: aarch64-unknown-linux-musl
+            os: ubuntu-24.04-arm
+            ext: tar.gz
+            keyring: linux-arm64-gnu,linux-arm64-musl
+            cargo_flags: --features vendored-openssl
+          - platform: darwin_amd64
+            target: x86_64-apple-darwin
+            os: macos-15  # arm64 runner; the x86_64 binary runs under Rosetta
+            ext: tar.gz
+            keyring: darwin-x64,darwin-arm64
+            cargo_flags: ''
+          - platform: darwin_arm64
+            target: aarch64-apple-darwin
+            os: macos-15
+            ext: tar.gz
+            keyring: darwin-arm64,darwin-x64
+            cargo_flags: ''
+          - platform: windows_amd64
+            target: x86_64-pc-windows-msvc
+            os: windows-latest
+            ext: zip
+            keyring: win32-x64-msvc,win32-arm64-msvc
+            cargo_flags: ''
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: ${{ matrix.target }}
+
+      # The toolchain action adds the target to the *latest* nightly,
+      # but cargo resolves the dated nightly pinned in
+      # rust-toolchain.toml (bd-at72) — which auto-installs with only
+      # its own declared targets. Add the matrix target to the pinned
+      # toolchain explicitly, or every cross/musl build dies with
+      # E0463 "can't find crate for core" (v0.1.0 dry-run, run
+      # 27448388974).
+      - name: Add ${{ matrix.target }} to the pinned toolchain
+        shell: bash
+        run: rustup target add ${{ matrix.target }}
+
+      # musl-gcc, needed by the C-building deps on the linux legs
+      # (openssl-src under vendored-openssl, aws-lc-sys, tree-sitter,
+      # mlua). The `cc` crate selects it automatically for
+      # *-linux-musl targets.
+      - name: Install musl-tools
+        if: contains(matrix.target, 'musl')
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.target }}
+
+      # Defender real-time scanning inspects every object/rlib/exe the
+      # compiler writes; excluding the workspace cuts the MSVC build
+      # time markedly.
+      - name: Exclude workspace from Defender scanning
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Add-MpPreference -ExclusionPath "${{ github.workspace }}"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: npm ci
+        run: npm ci
+
+      # Target-independent payloads from the web-payloads job, placed
+      # where the include_dir! build scripts look for them.
+      - uses: actions/download-artifact@v8
+        with:
+          name: web-payloads
+          path: .
+
+      # Per-target payload: the MCP bundle, with keyring addons for the
+      # *target's* users (esbuild compiles workspace TS from source;
+      # missing addon packages are fetched via npm pack at the loader's
+      # locked version).
+      - name: Build hub MCP bundle
+        shell: bash
+        env:
+          KEYRING_PLATFORMS: ${{ matrix.keyring }}
+        run: npm run bundle -w ts-packages/quarto-hub-mcp
+
+      # The bundled quarto-hub.com defaults. Secrets here are masked in
+      # logs; they are public-client credentials (RFC 8252) kept out of
+      # the repo only to avoid GOCSPX- scanners — see
+      # crates/quarto-mcp-launcher/src/defaults.rs.
+      #
+      # Nightly: QUARTO_VERSION_OVERRIDE=<inputs.version> makes the binary
+      # report the nightly version (the "one version string" invariant —
+      # the verify step below then checks it). Exported only when
+      # non-empty; see the header for why.
+      - name: Build release binary
+        shell: bash
+        env:
+          QUARTO_HUB_BUNDLED_CLIENT_ID: ${{ secrets.QUARTO_HUB_MCP_CLIENT_ID }}
+          QUARTO_HUB_BUNDLED_CLIENT_SECRET: ${{ secrets.QUARTO_HUB_MCP_CLIENT_SECRET }}
+          QUARTO_HUB_BUNDLED_SERVER: ${{ vars.QUARTO_HUB_SERVER }}
+          NIGHTLY_VERSION: ${{ inputs.channel == 'nightly' && inputs.version || '' }}
+        run: |
+          for VAR in QUARTO_HUB_BUNDLED_CLIENT_ID QUARTO_HUB_BUNDLED_CLIENT_SECRET QUARTO_HUB_BUNDLED_SERVER; do
+            if [ -z "${!VAR}" ]; then
+              echo "::error::$VAR is empty — release builds must carry the bundled hub defaults (repo secrets/vars)"
+              exit 1
+            fi
+          done
+          if [ -n "$NIGHTLY_VERSION" ]; then
+            export QUARTO_VERSION_OVERRIDE="$NIGHTLY_VERSION"
+            echo "building as $QUARTO_VERSION_OVERRIDE (nightly override)"
+          fi
+          cargo build --release --locked --target ${{ matrix.target }} -p quarto ${{ matrix.cargo_flags }}
+
+      # Every target in the matrix can execute on its runner (musl
+      # binaries are static; darwin x86_64 runs under Rosetta; windows
+      # runs natively), so these checks are unconditional. `shell: bash`
+      # uses Git Bash on the windows runner.
+      #
+      # Beyond braid's version check, this is the anti-stale-embed /
+      # anti-placeholder gate: a release binary must carry a real MCP
+      # bundle (with the target's keyring addons), real bundled hub
+      # defaults, and real SPA payloads.
+      - name: Verify binary (version, embeds, bundled defaults)
+        shell: bash
+        run: |
+          BIN="./target/${{ matrix.target }}/release/q2"
+          [ "$RUNNER_OS" = "Windows" ] && BIN="$BIN.exe"
+
+          RAW=$("$BIN" --version)
+          ACTUAL="${RAW##* }"
+          if [ "$ACTUAL" != "${{ inputs.version }}" ]; then
+            echo "::error::binary reports '$RAW', expected version ${{ inputs.version }}"
+            exit 1
+          fi
+
+          INFO=$("$BIN" mcp --launcher-info)
+          printf '%s\n' "$INFO"
+          FAIL=0
+          if printf '%s' "$INFO" | grep -q "PLACEHOLDER"; then
+            echo "::error::release binary embeds the placeholder MCP bundle"
+            FAIL=1
+          fi
+          for VAR in QUARTO_HUB_MCP_CLIENT_ID QUARTO_HUB_MCP_CLIENT_SECRET QUARTO_HUB_SERVER; do
+            if ! printf '%s' "$INFO" | grep -q "default $VAR: bundled"; then
+              echo "::error::$VAR is not reported as bundled in the release binary"
+              FAIL=1
+            fi
+          done
+          IFS=',' read -ra PLATFORMS <<< "${{ matrix.keyring }}"
+          for P in "${PLATFORMS[@]}"; do
+            if ! printf '%s' "$INFO" | grep -q "keyring-$P"; then
+              echo "::error::MCP bundle is missing keyring addon for $P"
+              FAIL=1
+            fi
+          done
+
+          # Docs embed for `q2 docs llms` (bd-hwop1zii). A release binary
+          # must carry real docs, built from this tag's source — a
+          # placeholder ships a command that only knows how to say it is
+          # missing, and a foreign commit means the docs describe a
+          # different Quarto than the binary implements.
+          DOCS=$("$BIN" docs llms --embed-info)
+          printf '%s\n' "$DOCS"
+          if ! printf '%s' "$DOCS" | grep -q '^source: real$'; then
+            echo "::error::release binary embeds placeholder docs for \`q2 docs llms\`"
+            FAIL=1
+          fi
+          DOCS_COMMIT_LINE=$(printf '%s' "$DOCS" | grep '^commit: ' || true)
+          DOCS_SHA=${DOCS_COMMIT_LINE#commit: }
+          DOCS_SHA=${DOCS_SHA% (dirty)}
+          EXPECTED_SHA=$(git rev-parse HEAD)
+          if [ "$DOCS_SHA" != "$EXPECTED_SHA" ]; then
+            echo "::error::embedded docs were staged from $DOCS_SHA, expected this tag's $EXPECTED_SHA"
+            FAIL=1
+          fi
+          # Dirtiness is a diagnostic, not a correctness failure: the
+          # docs still came from this commit. Surface it rather than
+          # blocking the release, since it means something modified
+          # tracked files inside the web-payloads job.
+          case "$DOCS_COMMIT_LINE" in
+            *"(dirty)") echo "::warning::embedded docs were staged from a dirty tree at $EXPECTED_SHA" ;;
+          esac
+          exit $FAIL
+
+      # Live-share local asset serving (plan Phase 2, bd-ee2fqm95): a
+      # --join guest serves SPA assets locally iff its embedded manifest
+      # hash equals the host's. That is only true cross-platform if every
+      # release binary embeds byte-identical dists — the web-payloads
+      # artifact makes that true by construction, and this step is the
+      # tripwire: record each platform's embedded hashes so the
+      # asset-manifest-check job can fail the release on drift. A missing
+      # viewer hash means the placeholder SPA snuck in, so fail here.
+      - name: Record embedded asset manifest hashes
+        shell: bash
+        run: |
+          BIN="./target/${{ matrix.target }}/release/q2"
+          [ "$RUNNER_OS" = "Windows" ] && BIN="$BIN.exe"
+          OUT="asset-manifest-hashes-${{ matrix.platform }}.txt"
+          "$BIN" preview --print-asset-manifest-hashes | tee "$OUT"
+          if ! grep -Eq '^viewer: [0-9a-f]{64}$' "$OUT"; then
+            echo "::error::release binary embeds no viewer asset manifest (placeholder SPA?)"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: asset-manifest-hashes-${{ matrix.platform }}
+          path: asset-manifest-hashes-${{ matrix.platform }}.txt
+          retention-days: 7
+          if-no-files-found: error
+
+      # The no-glibc gate (bd-3b47pxmm). The step above proves the binary
+      # runs on the RUNNER, which has glibc — it cannot detect an
+      # accidental dynamic link against libc, so it cannot defend the
+      # headline promise of the musl switch ("static, any distro"). Nothing
+      # in the build pins staticness: crt-static is a *default* of the
+      # *-unknown-linux-musl targets, and a future RUSTFLAGS / cargo config
+      # / build-script link flag could flip it while every other gate stays
+      # green. alpine:latest ships musl and NO glibc at all, so a
+      # dynamically-linked binary cannot even exec there.
+      #
+      # This replaces the manual post-release check the runbook used to
+      # ask for (§6): it needed Docker on the maintainer's machine and, on
+      # Apple Silicon, would only ever have exercised one arch. Here each
+      # linux leg runs its own arch's container NATIVELY (amd64 on
+      # ubuntu-latest, arm64 on ubuntu-24.04-arm) — no qemu, no
+      # --platform. Docker is present on both runner images; the
+      # bd-dofxhzaj spike ran this exact invocation green on both.
+      #
+      # Two traps that spike paid for, do not "simplify" them away:
+      #   * `file` describes the arches DIFFERENTLY — x86_64 comes out
+      #     "static-pie linked", aarch64 plain "statically linked".
+      #     Matching one spelling passes on one arch and fails on the other.
+      #   * `ldd` says "not a dynamic executable" on a static binary but
+      #     EXITS NON-ZERO, so it can be logged and never asserted on.
+      #
+      # `q2 mcp --launcher-info` is deliberately not run in the container:
+      # it spawns Node, which alpine:latest does not have. That check
+      # belongs on the runner, where it already is.
+      - name: Assert the binary needs no glibc (Alpine)
+        if: contains(matrix.target, 'musl')
+        shell: bash
+        run: |
+          BIN="target/${{ matrix.target }}/release/q2"
+
+          # Cheap and fast-failing: localizes a dynamic link to one clear
+          # message instead of an opaque container exec failure.
+          file "$BIN"
+          file "$BIN" | grep -Eq 'static-pie linked|statically linked' || {
+            echo "::error::$BIN is not statically linked — it will not run without glibc"
+            exit 1
+          }
+          ldd "$BIN" 2>&1 || true   # informational only; see above
+
+          # The real proof.
+          docker run --rm \
+            -v "$PWD:/work" -w /work \
+            -e BIN="$BIN" \
+            -e EXPECTED="${{ inputs.version }}" \
+            alpine:latest \
+            sh -eux -c '
+              cat /etc/alpine-release
+              RAW=$("$BIN" --version)
+              echo "$RAW"
+              [ "${RAW##* }" = "$EXPECTED" ]
+            ' || {
+            echo "::error::$BIN failed to run under alpine:latest (no glibc present)"
+            exit 1
+          }
+
+      # Unix targets ship a .tar.gz of the `q2` binary.
+      - name: Package archive + checksum (tar.gz)
+        if: matrix.ext == 'tar.gz'
+        shell: bash
+        run: |
+          ARCHIVE="q2-${{ inputs.version }}-${{ matrix.platform }}.tar.gz"
+          tar -czf "$ARCHIVE" -C "target/${{ matrix.target }}/release" q2
+          if command -v sha256sum >/dev/null; then
+            sha256sum "$ARCHIVE" > "$ARCHIVE.sha256"
+            sha256sum -c "$ARCHIVE.sha256"
+          else
+            shasum -a 256 "$ARCHIVE" > "$ARCHIVE.sha256"
+            shasum -a 256 -c "$ARCHIVE.sha256"
+          fi
+
+      # Windows ships a .zip of q2.exe. The .sha256 is written in GNU
+      # coreutils format ("<lowercase-hash>  <file>", LF-terminated, no
+      # BOM) so the ubuntu combine job's `sha256sum -c` accepts it
+      # alongside the unix lines.
+      - name: Package archive + checksum (zip)
+        if: matrix.ext == 'zip'
+        shell: pwsh
+        run: |
+          $version = "${{ inputs.version }}"
+          $archive = "q2-$version-${{ matrix.platform }}.zip"
+          Compress-Archive -Path "target/${{ matrix.target }}/release/q2.exe" -DestinationPath $archive
+          $hash = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLower()
+          [System.IO.File]::WriteAllText((Join-Path (Get-Location) "$archive.sha256"), "$hash  $archive`n")
+
+      # Signing happens in the release job, NOT here: centralizing the
+      # signature step means the secret key is touched by exactly one
+      # job and signs the exact bytes being published, after their
+      # artifact round-trip. (The original reason was narrower — the
+      # then-jammy linux runners had no minisign apt package; v0.1.0
+      # dry-run iteration 3, run 27450999322. The linux legs are no
+      # longer on jammy, but the macOS/Windows build runners still have
+      # no minisign, and the one-job-touches-the-key property is the
+      # part actually worth keeping.)
+      - uses: actions/upload-artifact@v7
+        if: matrix.ext == 'tar.gz'
+        with:
+          name: q2-${{ matrix.platform }}
+          path: |
+            q2-${{ inputs.version }}-${{ matrix.platform }}.tar.gz
+            q2-${{ inputs.version }}-${{ matrix.platform }}.tar.gz.sha256
+          retention-days: 7
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v7
+        if: matrix.ext == 'zip'
+        with:
+          name: q2-${{ matrix.platform }}
+          path: |
+            q2-${{ inputs.version }}-${{ matrix.platform }}.zip
+            q2-${{ inputs.version }}-${{ matrix.platform }}.zip.sha256
+          retention-days: 7
+          if-no-files-found: error
+
+  # Live-share plan Phase 2 (bd-ee2fqm95): every per-platform binary
+  # must embed SPA bundles with identical manifest hashes, or a
+  # cross-platform host/guest pair silently loses local asset serving
+  # (the runtime fallback is safe — full tunneling — but invisible).
+  # The web-payloads artifact already makes the viewer dist identical
+  # by construction; this job is the tripwire for that and for the
+  # per-platform build.rs editor-manifest generation.
+  asset-manifest-check:
+    name: Asset manifests identical across platforms
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: asset-manifest-hashes-*
+          path: asset-hashes
+          merge-multiple: true
+
+      - name: Compare hashes across platforms
+        run: |
+          cd asset-hashes
+          EXPECTED="linux_amd64 linux_arm64 darwin_amd64 darwin_arm64 windows_amd64"
+          for platform in $EXPECTED; do
+            f="asset-manifest-hashes-$platform.txt"
+            if [ ! -f "$f" ]; then
+              echo "::error::missing asset manifest hashes for $platform"
+              exit 1
+            fi
+          done
+          cat asset-manifest-hashes-*.txt
+          # Identical across platforms => exactly one viewer line and
+          # one editor line after dedupe.
+          UNIQUE=$(sort -u asset-manifest-hashes-*.txt | wc -l | tr -d ' ')
+          if [ "$UNIQUE" -ne 2 ]; then
+            echo "::error::embedded asset manifest hashes differ across platforms — cross-platform live-share pairs would tunnel all assets"
+            exit 1
+          fi
+
+  release:
+    name: Create GitHub Release
+    needs: [build, hub-mcp-bundle, asset-manifest-check]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0  # changelog needs the previous tag
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          merge-multiple: true
+          pattern: q2-*
+
+      # The standalone MCP bundle (its own artifact name, so it is not
+      # swept up by the q2-* platform-completeness check below).
+      - uses: actions/download-artifact@v8
+        with:
+          name: hub-mcp-bundle
+          path: artifacts
+
+      - name: Validate all platforms present, combine and verify checksums
+        run: |
+          cd artifacts
+          VERSION="${{ inputs.version }}"
+          MISSING=()
+          # "<platform>:<ext>" — Windows ships .zip, the rest .tar.gz.
+          for entry in linux_amd64:tar.gz linux_arm64:tar.gz \
+                       darwin_amd64:tar.gz darwin_arm64:tar.gz \
+                       windows_amd64:zip; do
+            platform="${entry%%:*}"; ext="${entry##*:}"
+            for f in "q2-${VERSION}-${platform}.${ext}" \
+                     "q2-${VERSION}-${platform}.${ext}.sha256"; do
+              [ -f "$f" ] || MISSING+=("$f")
+            done
+          done
+          if [ ${#MISSING[@]} -gt 0 ]; then
+            echo "::error::missing release files: ${MISSING[*]}"
+            exit 1
+          fi
+          cat -- *.sha256 | sort -k2 > checksums.sha256
+          sha256sum -c checksums.sha256
+          cat checksums.sha256
+
+      # Trusted comment = archive filename: it is part of the signed
+      # payload, and install.sh compares it against the file they asked
+      # for, so a signature cannot be replayed from another artifact.
+      # The Windows .zip is not signed: install.ps1 does not verify
+      # signatures (SHA-256 only), so it has no .minisig consumer today.
+      # Signing lives here (not in the build matrix) so the secret key
+      # is handled by one job and signs the exact bytes being published;
+      # the macOS/Windows build runners also have no minisign.
+      - name: Sign tar.gz archives (minisign, Ed25519)
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        run: |
+          sudo apt-get update && sudo apt-get install -y minisign
+          key="$(mktemp)"
+          trap 'rm -f "$key"' EXIT
+          chmod 600 "$key"
+          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$key"
+          # Verify with the public key pinned in install.sh: a mismatch
+          # between the repo secret and the pinned key fails the release
+          # here instead of shipping artifacts no installer can verify.
+          PUBKEY="$(sed -n 's/^MINISIGN_PUBKEY="\(.*\)"$/\1/p' install.sh)"
+          test -n "$PUBKEY"
+          # The q2 platform archives plus the standalone MCP bundle. Each
+          # gets a signature whose trusted comment is its own filename.
+          for ARCHIVE in artifacts/q2-*.tar.gz artifacts/quarto-hub-mcp-*.tar.gz; do
+            NAME="$(basename "$ARCHIVE")"
+            minisign -Sm "$ARCHIVE" -s "$key" -t "$NAME"
+            minisign -Vm "$ARCHIVE" -P "$PUBKEY"
+          done
+          ls -l artifacts/*.minisig
+
+      # Two note templates, one per channel. The nightly one leads with
+      # what a nightly IS (a moving tag, replaced daily) and installs via
+      # the --nightly / -Nightly flags; the rest (verification, MCP
+      # bundle, changes) is shared.
+      - name: Generate release notes
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          TAG: ${{ inputs.tag }}
+          VERSION: ${{ inputs.version }}
+          NOTES_RANGE: ${{ inputs.notes_range }}
+        run: |
+          PUBKEY="$(sed -n 's/^MINISIGN_PUBKEY="\(.*\)"$/\1/p' install.sh)"
+          SHA=$(git rev-parse HEAD)
+          if [ -n "$NOTES_RANGE" ]; then
+            RANGE="$NOTES_RANGE"
+          else
+            PREV_TAG=$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)
+            RANGE="${PREV_TAG:+${PREV_TAG}..${TAG}}"
+          fi
+          {
+            if [ "$CHANNEL" = nightly ]; then
+              echo "> **Nightly build** of \`main\` at ${SHA} (version \`${VERSION}\`). Nightlies are"
+              echo "> rebuilt every night \`main\` changes and **replace** the previous one: the \`nightly\`"
+              echo "> tag moves, and yesterday's assets are gone. For a stable install use a release."
+              echo
+              echo "## Install"
+              echo
+              echo '```sh'
+              echo "curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/install.sh | bash -s -- --nightly"
+              echo '```'
+              echo
+              echo "On Windows (PowerShell):"
+              echo
+              echo '```powershell'
+              echo "& ([scriptblock]::Create((irm https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/install.ps1))) -Nightly"
+              echo '```'
+            else
+              echo "> **Experimental.** q2 is under active development and not ready for production use."
+              echo
+              echo "## Install"
+              echo
+              echo '```sh'
+              echo "curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/install.sh | bash"
+              echo '```'
+              echo
+              echo "On Windows (PowerShell):"
+              echo
+              echo '```powershell'
+              echo "irm https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/install.ps1 | iex"
+              echo '```'
+            fi
+            echo
+            echo "\`q2 mcp\` (the Quarto Hub MCP server) needs [Node.js](https://nodejs.org) 24+ at runtime;"
+            echo "everything else works standalone. Hub connection defaults for quarto-hub.com are built in."
+            echo
+            echo "The Linux binaries are statically linked (musl): one build per architecture, no glibc"
+            echo "requirement, works on Alpine and old distros alike. If you specifically need a"
+            echo "dynamically-linked build, \`install.sh --from-source\` builds one."
+            echo
+            echo "| Platform | File |"
+            echo "|---|---|"
+            echo "| Linux x86_64 (static, any distro) | \`q2-${VERSION}-linux_amd64.tar.gz\` |"
+            echo "| Linux ARM64 (static, any distro) | \`q2-${VERSION}-linux_arm64.tar.gz\` |"
+            echo "| macOS Intel | \`q2-${VERSION}-darwin_amd64.tar.gz\` |"
+            echo "| macOS Apple Silicon | \`q2-${VERSION}-darwin_arm64.tar.gz\` |"
+            echo "| Windows x86_64 | \`q2-${VERSION}-windows_amd64.zip\` |"
+            echo
+            echo "**Verify a manual download** (Unix archives are signed with [minisign](https://jedisct1.github.io/minisign/), Ed25519):"
+            echo
+            echo '```sh'
+            echo "minisign -Vm q2-${VERSION}-<platform>.tar.gz -P ${PUBKEY}"
+            echo '```'
+            echo
+            echo "The trusted comment should name exactly the file you downloaded."
+            echo "Checksums (all platforms): \`sha256sum -c checksums.sha256 --ignore-missing\`"
+            echo
+            echo "## Standalone Quarto Hub MCP server"
+            echo
+            echo "\`q2 mcp\` is also published on its own as a self-contained Node bundle for"
+            echo "running the MCP server **without** installing \`q2\` — e.g. embedding it in"
+            echo "another tool. Requires [Node.js](https://nodejs.org) **24+**. Download"
+            echo "\`quarto-hub-mcp-${VERSION}.tar.gz\`, extract, and run \`node index.mjs --help\`."
+            echo "Unlike \`q2 mcp\`, this bundle does not embed quarto-hub.com credentials — see"
+            echo "the bundled \`README.md\` for the OAuth env vars to set."
+            echo "_(Experimental, temporary channel — \`npx\` distribution is planned.)_"
+            echo
+            if [ -n "$RANGE" ]; then
+              echo "## Changes (${RANGE%%..*} → ${SHA:0:12})"
+              echo
+              git log --pretty='- %s (%h)' "$RANGE"
+            else
+              echo "## Changes"
+              echo
+              git log --pretty='- %s (%h)' HEAD | head -50
+            fi
+          } > notes.md
+          cat notes.md
+
+      # Release channel: create the release on the (already pushed) tag,
+      # prerelease iff the tag has a -suffix, exactly as before.
+      # Nightly channel: ROLLING — remove last night's release and tag,
+      # re-point `nightly` at the built commit, publish as a prerelease.
+      # The tag is pushed with GITHUB_TOKEN, which never triggers other
+      # workflows (and `nightly` does not match release.yml's `v*` anyway).
+      - name: Publish release
+        if: inputs.publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANNEL: ${{ inputs.channel }}
+          TAG: ${{ inputs.tag }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          FLAGS=()
+          TITLE="q2 $TAG"
+          case "$TAG" in *-*) FLAGS+=(--prerelease) ;; esac
+          if [ "$CHANNEL" = nightly ]; then
+            FLAGS+=(--prerelease)
+            TITLE="q2 nightly $VERSION ($(git rev-parse --short HEAD))"
+            # Previous nightly: release (with its tag) if any, then a bare
+            # tag left behind by an earlier partial run, if any.
+            gh release delete "$TAG" --cleanup-tag --yes 2>/dev/null || true
+            git push --delete origin "refs/tags/$TAG" 2>/dev/null || true
+            git -c user.name='github-actions[bot]' \
+                -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+                tag -f -a "$TAG" -m "q2 nightly $VERSION" HEAD
+            git push origin "refs/tags/$TAG"
+          fi
+          gh release create "$TAG" \
+            --title "$TITLE" \
+            --notes-file notes.md \
+            --verify-tag \
+            "${FLAGS[@]}" \
+            artifacts/q2-*.tar.gz artifacts/q2-*.tar.gz.sha256 \
+            artifacts/q2-*.tar.gz.minisig \
+            artifacts/q2-*.zip artifacts/q2-*.zip.sha256 \
+            artifacts/quarto-hub-mcp-*.tar.gz artifacts/quarto-hub-mcp-*.tar.gz.sha256 \
+            artifacts/quarto-hub-mcp-*.tar.gz.minisig \
+            artifacts/checksums.sha256
+
+      # Dry run: everything above ran (build, verify gates, signing), and
+      # the would-be release contents are inspectable here instead.
+      - name: Upload signed release set (dry run, publish=false)
+        if: ${{ !inputs.publish }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-set
+          path: |
+            artifacts/
+            notes.md
+          retention-days: 7
+          if-no-files-found: error

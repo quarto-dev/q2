@@ -1,0 +1,63 @@
+---
+title: "Engine Include File Could Not Be Read"
+description: "An execution engine asked Quarto to include the contents of a file in the output, but the file could not be read; the render continues without it."
+code: Q-18-2
+subsystem: engine
+status: stub
+since: "99.9.9"
+categories:
+  - engine
+---
+
+# `Q-18-2` — Engine Include File Could Not Be Read
+
+> An execution engine asked Quarto to include the contents of a file in
+> the output, but the file could not be read; the render continues
+> without it.
+
+## What this means
+
+Engines can hand Quarto extra content to place in the document header,
+before the body, or after the body. knitr uses this to deliver the
+`<script>` and `<link>` tags an HTML dependency needs — for example the
+JavaScript and CSS behind an htmlwidget. The engine writes that content
+to a temporary file and tells Quarto where it is.
+
+This warning means one of those files could not be read. Quarto skips
+it and keeps rendering, so the page is produced, but whatever that file
+carried is missing: a widget may appear as an empty box, a stylesheet
+may not apply, a script may not run.
+
+## Why this happens
+
+- The temporary directory the engine wrote to was cleaned up before
+  Quarto read it (an aggressive temp cleaner, or a tool that removes
+  the render's working directory mid-run).
+- The engine reported a path relative to a directory Quarto is not
+  running in.
+- File permissions prevent Quarto from reading the file.
+
+## How to fix
+
+The message names the path that could not be read and the reason the
+operating system gave.
+
+1. Re-run the render. A transient cleanup race usually does not recur.
+2. If it recurs, check the named path: does it exist, and is it readable
+   by the user running Quarto?
+3. If the path looks wrong (relative, or in a directory Quarto never
+   created), this is a bug in the engine integration — report it at
+   <https://github.com/quarto-dev/q2/issues> with the full warning
+   text.
+
+Use `--strict` to make this warning stop the render instead of
+producing a page with missing content:
+
+```bash
+q2 render --strict
+```
+
+## Related errors
+
+- [`Q-18-1`](Q-18-1.qmd) — the engine's result itself could not be
+  read.

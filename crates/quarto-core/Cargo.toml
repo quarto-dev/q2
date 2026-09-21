@@ -17,6 +17,7 @@ async-trait.workspace = true
 tokio-util.workspace = true
 pollster.workspace = true
 serde_json.workspace = true
+serde_path_to_error.workspace = true
 yaml-rust2.workspace = true
 smallvec.workspace = true
 hashlink = "0.11"
@@ -93,6 +94,17 @@ clap = ["dep:clap"]
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tempfile = "3"
 which = "8"
+# hephaestus plot documents (`.hep`) → SVG at render time
+# (bd-3qych45b). Renderer-free configuration on purpose: `document-read`
+# decodes the document, `svg` is the GPU-less vector backend, `png` lets
+# a document that embeds raster images render them. No `vello` /
+# `wgpu` — rasterizing needs a GPU adapter, which a headless render
+# machine may not have. Native-only: the browser preview renders the
+# same documents with the npm `hephaestus-svg-wasm` client instead of
+# linking this into the main WASM bundle. See
+# `claude-notes/plans/2026-09-17-hephaestus-hep-integration.md`.
+hephaestus = { version = "0.4.1", default-features = false, features = ["document-read", "svg", "png"] }
+
 # `scraper` (CSS-selector HTML reader) for the L7 post-render upgrade
 # (`bd-qf7r`). Native-only by construction: post_render runs only
 # under `quarto render`, never in the WASM hub-client preview. The
@@ -123,6 +135,18 @@ runtimelib = { version = "2.0", features = ["tokio-runtime"] }
 jupyter-protocol = "2.0"
 tokio = { version = "1", features = ["sync", "time", "rt-multi-thread", "process", "fs", "net", "io-util"] }
 uuid.workspace = true
+
+# hephaestus's text stack (parley → fontique) enumerates system fonts
+# through fontconfig on Linux, and by default *links* libfontconfig at
+# build time (pkg-config), which would make `libfontconfig1-dev` a
+# build requirement for anyone compiling q2 on Linux. Enabling
+# fontique's `fontconfig-dlopen` feature (additive across the graph)
+# loads the library at run time instead and degrades to an empty
+# system collection when it is absent — fine for us, since the plot
+# text is shaped with the bundled faces in `resources/hephaestus/`.
+# Keep the version in step with the `fontique` parley pulls in.
+[target.'cfg(target_os = "linux")'.dependencies]
+fontique = { version = "0.9", default-features = false, features = ["fontconfig-dlopen"] }
 
 [dev-dependencies]
 insta.workspace = true

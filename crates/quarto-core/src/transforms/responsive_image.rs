@@ -72,16 +72,15 @@
 //! group, not with this one.
 
 use quarto_pandoc_types::ConfigValue;
-use quarto_pandoc_types::Slot;
 use quarto_pandoc_types::attr::Attr;
-use quarto_pandoc_types::block::Block;
-use quarto_pandoc_types::inline::{Inline, Inlines};
 use quarto_pandoc_types::pandoc::Pandoc;
 
 use crate::Result;
 use crate::format::Format;
 use crate::render::RenderContext;
 use crate::transform::{AstTransform, TransformPhase};
+
+use super::image_walk::for_each_image_mut;
 
 /// Bootstrap class that caps an image at its container's width.
 /// Ships in the compiled theme as `max-width: 100%; height: auto`.
@@ -125,7 +124,7 @@ impl AstTransform for ResponsiveImageTransform {
         if !responsive_enabled(ctx.format, &ast.meta) {
             return Ok(());
         }
-        visit_blocks(&mut ast.blocks);
+        for_each_image_mut(&mut ast.blocks, &mut |img| apply_to_image(&mut img.attr));
         Ok(())
     }
 }
@@ -193,159 +192,16 @@ fn apply_to_image(attr: &mut Attr) {
     }
 }
 
-fn visit_blocks(blocks: &mut [Block]) {
-    for block in blocks.iter_mut() {
-        visit_block(block);
-    }
-}
-
-fn visit_block(block: &mut Block) {
-    match block {
-        Block::Plain(p) => visit_inlines(&mut p.content),
-        Block::Paragraph(p) => visit_inlines(&mut p.content),
-        Block::LineBlock(lb) => {
-            for line in lb.content.iter_mut() {
-                visit_inlines(line);
-            }
-        }
-        Block::BlockQuote(bq) => visit_blocks(&mut bq.content),
-        Block::OrderedList(ol) => {
-            for item in ol.content.iter_mut() {
-                visit_blocks(item);
-            }
-        }
-        Block::BulletList(bl) => {
-            for item in bl.content.iter_mut() {
-                visit_blocks(item);
-            }
-        }
-        Block::DefinitionList(dl) => {
-            for (term, defs) in dl.content.iter_mut() {
-                visit_inlines(term);
-                for def in defs.iter_mut() {
-                    visit_blocks(def);
-                }
-            }
-        }
-        Block::Header(h) => visit_inlines(&mut h.content),
-        Block::Div(d) => visit_blocks(&mut d.content),
-        Block::Figure(f) => {
-            visit_blocks(&mut f.content);
-            if let Some(short) = f.caption.short.as_mut() {
-                visit_inlines(short);
-            }
-            if let Some(long) = f.caption.long.as_mut() {
-                visit_blocks(long);
-            }
-        }
-        Block::Table(t) => {
-            if let Some(short) = t.caption.short.as_mut() {
-                visit_inlines(short);
-            }
-            if let Some(long) = t.caption.long.as_mut() {
-                visit_blocks(long);
-            }
-            for row in t.head.rows.iter_mut().chain(t.foot.rows.iter_mut()) {
-                for cell in row.cells.iter_mut() {
-                    visit_blocks(&mut cell.content);
-                }
-            }
-            for body in t.bodies.iter_mut() {
-                for row in body.head.iter_mut().chain(body.body.iter_mut()) {
-                    for cell in row.cells.iter_mut() {
-                        visit_blocks(&mut cell.content);
-                    }
-                }
-            }
-        }
-        Block::CaptionBlock(cb) => visit_inlines(&mut cb.content),
-        Block::Custom(c) => {
-            for (_name, slot) in c.slots.iter_mut() {
-                visit_slot(slot);
-            }
-        }
-        // Not walked. `CodeBlock` / `RawBlock` / `HorizontalRule` /
-        // `BlockMetadata` are true leaves. The two `NoteDefinition*`
-        // variants do carry content, but `FootnotesTransform` has
-        // already lifted every reachable definition into a trailing
-        // `Div#footnotes` by the time this runs, so anything still in
-        // one is unreferenced and never rendered. Same set
-        // `link_rewrite` skips.
-        Block::CodeBlock(_)
-        | Block::RawBlock(_)
-        | Block::HorizontalRule(_)
-        | Block::BlockMetadata(_)
-        | Block::NoteDefinitionPara(_)
-        | Block::NoteDefinitionFencedBlock(_) => {}
-    }
-}
-
-fn visit_inlines(inlines: &mut Inlines) {
-    for inline in inlines.iter_mut() {
-        visit_inline(inline);
-    }
-}
-
-fn visit_inline(inline: &mut Inline) {
-    match inline {
-        Inline::Image(img) => {
-            apply_to_image(&mut img.attr);
-            // An image's alt-text inlines can themselves hold an image
-            // after a filter pass; keep walking.
-            visit_inlines(&mut img.content);
-        }
-        Inline::Link(l) => visit_inlines(&mut l.content),
-        Inline::Emph(e) => visit_inlines(&mut e.content),
-        Inline::Underline(u) => visit_inlines(&mut u.content),
-        Inline::Strong(s) => visit_inlines(&mut s.content),
-        Inline::Strikeout(s) => visit_inlines(&mut s.content),
-        Inline::Superscript(s) => visit_inlines(&mut s.content),
-        Inline::Subscript(s) => visit_inlines(&mut s.content),
-        Inline::SmallCaps(s) => visit_inlines(&mut s.content),
-        Inline::Quoted(q) => visit_inlines(&mut q.content),
-        Inline::Note(n) => visit_blocks(&mut n.content),
-        Inline::Span(s) => visit_inlines(&mut s.content),
-        Inline::Insert(i) => visit_inlines(&mut i.content),
-        Inline::Delete(d) => visit_inlines(&mut d.content),
-        Inline::Highlight(h) => visit_inlines(&mut h.content),
-        Inline::Custom(c) => {
-            for (_name, slot) in c.slots.iter_mut() {
-                visit_slot(slot);
-            }
-        }
-        // Not walked. Most are true leaves; `Cite` and `EditComment`
-        // do carry inlines, but a `Cite`'s content is generated
-        // citation text and an `EditComment`'s is editorial markup —
-        // neither is authored image content. Same set `link_rewrite`
-        // skips.
-        Inline::Str(_)
-        | Inline::Cite(_)
-        | Inline::Code(_)
-        | Inline::Space(_)
-        | Inline::SoftBreak(_)
-        | Inline::LineBreak(_)
-        | Inline::Math(_)
-        | Inline::RawInline(_)
-        | Inline::Shortcode(_)
-        | Inline::NoteReference(_)
-        | Inline::Attr(_)
-        | Inline::EditComment(_) => {}
-    }
-}
-
-fn visit_slot(slot: &mut Slot) {
-    match slot {
-        Slot::Block(b) => visit_block(b),
-        Slot::Blocks(bs) => visit_blocks(bs),
-        Slot::Inline(i) => visit_inline(i),
-        Slot::Inlines(is) => visit_inlines(is),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use hashlink::LinkedHashMap;
+
+    /// The pre-refactor entry point the tests below were written
+    /// against: one tagging pass over `blocks`.
+    fn visit_blocks(blocks: &mut [Block]) {
+        for_each_image_mut(blocks, &mut |img| apply_to_image(&mut img.attr));
+    }
     use quarto_pandoc_types::ConfigMapEntry;
     use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
     use quarto_pandoc_types::block::{

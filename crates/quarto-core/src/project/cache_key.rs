@@ -113,13 +113,16 @@ pub const PROFILE_KEY_VERSION: u32 = 2;
 
 /// Returns the Quarto build identifier baked into every cache key.
 ///
-/// Today this is just `CARGO_PKG_VERSION`. A future enhancement may
-/// concatenate a git short hash for dev builds via a `build.rs`;
-/// when that ships, this function's return value will change and
-/// existing caches will silently invalidate (which is the intended
-/// behavior — dev iterations should not see stale cache).
+/// This is the *effective* CLI version: `CARGO_PKG_VERSION`, or the
+/// `QUARTO_VERSION_OVERRIDE` a nightly build was published under
+/// (bd-p4ljdp2e) — a nightly must not share cache entries with the
+/// release it followed. A future enhancement may concatenate a git
+/// short hash for dev builds via a `build.rs`; when that ships, this
+/// function's return value will change and existing caches will
+/// silently invalidate (which is the intended behavior — dev
+/// iterations should not see stale cache).
 pub fn quarto_build_id() -> &'static str {
-    env!("CARGO_PKG_VERSION")
+    quarto_util::cli_version()
 }
 
 /// Inputs to [`pass1_key`].
@@ -560,5 +563,14 @@ mod tests {
         // assertion is "this constant participates in the hash
         // domain" which is visible from `pass1_key`'s code.)
         let _ = key;
+    }
+
+    #[test]
+    fn build_id_follows_the_cli_version_including_nightly_overrides() {
+        // bd-p4ljdp2e: a nightly (QUARTO_VERSION_OVERRIDE set at build
+        // time) must not share cache entries with the release it
+        // followed, so the build id is the *effective* CLI version, not
+        // the raw manifest version. Without an override the two agree.
+        assert_eq!(quarto_build_id(), quarto_util::cli_version());
     }
 }

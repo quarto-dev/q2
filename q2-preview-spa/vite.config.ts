@@ -65,7 +65,8 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    exclude: ['wasm-quarto-hub-client', '@automerge/automerge'],
+    // hephaestus-svg-wasm: see the matching note in hub-client/vite.config.ts.
+    exclude: ['wasm-quarto-hub-client', '@automerge/automerge', 'hephaestus-svg-wasm'],
   },
   build: {
     target: 'esnext',

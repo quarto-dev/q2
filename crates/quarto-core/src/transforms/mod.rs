@@ -74,6 +74,14 @@ mod reference_link_diagnostics;
 mod repo_actions_render;
 mod resource_collector;
 mod responsive_image;
+// Shared mutable walk over body images (bd-3qych45b), used by
+// `responsive_image` and `hephaestus`.
+mod image_walk;
+// hephaestus `.hep` → SVG (bd-3qych45b). Native-only: the crate links
+// hephaestus's SVG backend, which the WASM preview replaces with the
+// npm `hephaestus-svg-wasm` client — see the module docs.
+#[cfg(not(target_arch = "wasm32"))]
+mod hephaestus;
 mod secondary_nav_render;
 // Fixed-header JS shipping (bd-ersobfbt). Native-only: the preview
 // excludes ApplyTemplateStage (no <script> emission) and injects the
@@ -131,6 +139,8 @@ pub use footer_render::FooterRenderTransform;
 pub use footnotes::FootnotesTransform;
 pub use format_css::FormatCssTransform;
 pub(crate) use format_css::user_css_urls;
+#[cfg(not(target_arch = "wasm32"))]
+pub use hephaestus::HephaestusRenderTransform;
 pub use link_rewrite::LinkRewriteTransform;
 pub use listing_generate::ListingGenerateTransform;
 pub use listing_render::ListingRenderTransform;

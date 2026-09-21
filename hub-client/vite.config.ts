@@ -243,7 +243,11 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    exclude: ['wasm-quarto-hub-client', '@automerge/automerge'],
+    // hephaestus-svg-wasm: the wasm-bindgen glue locates its .wasm and
+    // font files with `new URL(..., import.meta.url)`; esbuild
+    // pre-bundling would relocate the JS to node_modules/.vite/deps and
+    // break those relative lookups in dev (bd-sxiv2tio).
+    exclude: ['wasm-quarto-hub-client', '@automerge/automerge', 'hephaestus-svg-wasm'],
   },
   build: {
     target: 'esnext',

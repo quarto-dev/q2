@@ -782,8 +782,8 @@ pub fn resolve_metadata_path(
     // predicate so the producer-side `By::*` kind controls the
     // semantic instead of relying on the historical `Original{0,0,0}`
     // sentinel value.
-    if let SourceInfo::Generated { by, .. } = source
-        && by.is_programmatic_sentinel()
+    if let SourceInfo::Generated(g) = source
+        && g.by.is_programmatic_sentinel()
     {
         return raw.to_string();
     }

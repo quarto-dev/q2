@@ -209,8 +209,10 @@ impl ExecutionEngine for KnitrEngine {
         // Step 9: Post-process markdown (fix .rmarkdown references)
         let markdown = postprocess_markdown(&result.markdown, &ctx.source_path);
 
-        // Step 10: Convert includes
-        let includes = convert_includes(&result.includes);
+        // Step 10: Convert includes (an unreadable include file is a Q-18-2
+        // warning, drained by the stage)
+        let mut warnings = Vec::new();
+        let includes = convert_includes(&result.includes, self.name(), &mut warnings);
 
         // Step 11: Build and return result
         Ok(ExecuteResult {
@@ -220,6 +222,7 @@ impl ExecutionEngine for KnitrEngine {
             includes,
             needs_postprocess: result.post_process,
             html_dependencies: Vec::new(),
+            warnings,
             ..Default::default()
         })
     }
@@ -325,9 +328,16 @@ fn postprocess_markdown(markdown: &str, source_path: &Path) -> String {
 
 /// Convert knitr includes to PandocIncludes.
 ///
-/// Reads include file contents and converts them to the PandocIncludes format
-/// used by the rest of the pipeline.
-fn convert_includes(includes: &Option<KnitrIncludes>) -> crate::stage::PandocIncludes {
+/// Reads the contents of every file each slot names, in order, into the
+/// `PandocIncludes` form the rest of the pipeline consumes. A file that
+/// cannot be read is skipped with a `Q-18-2` warning pushed to `warnings`
+/// (bd-gy2ozix3): silently dropping it would ship a page whose HTML
+/// dependencies never load, with nothing to explain why.
+fn convert_includes(
+    includes: &Option<KnitrIncludes>,
+    engine: &str,
+    warnings: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
+) -> crate::stage::PandocIncludes {
     use crate::stage::PandocIncludes;
 
     let Some(inc) = includes else {
@@ -335,26 +345,33 @@ fn convert_includes(includes: &Option<KnitrIncludes>) -> crate::stage::PandocInc
     };
 
     let mut result = PandocIncludes::default();
-
-    // Read include file contents
-    if let Some(ref path) = inc.include_in_header
-        && let Ok(content) = std::fs::read_to_string(path)
-    {
-        result.header_includes.push(content);
-    }
-
-    if let Some(ref path) = inc.include_before_body
-        && let Ok(content) = std::fs::read_to_string(path)
-    {
-        result.include_before.push(content);
-    }
-
-    if let Some(ref path) = inc.include_after_body
-        && let Ok(content) = std::fs::read_to_string(path)
-    {
-        result.include_after.push(content);
-    }
-
+    let mut slot = |name: &str, paths: &[PathBuf], out: &mut Vec<String>| {
+        for path in paths {
+            match std::fs::read_to_string(path) {
+                Ok(content) => out.push(content),
+                Err(cause) => {
+                    warnings.push(crate::engine::diagnostics::unreadable_include_diagnostic(
+                        engine, name, path, &cause,
+                    ))
+                }
+            }
+        }
+    };
+    slot(
+        "include-in-header",
+        &inc.include_in_header,
+        &mut result.header_includes,
+    );
+    slot(
+        "include-before-body",
+        &inc.include_before_body,
+        &mut result.include_before,
+    );
+    slot(
+        "include-after-body",
+        &inc.include_after_body,
+        &mut result.include_after,
+    );
     result
 }
 
@@ -648,7 +665,7 @@ mod tests {
 
     #[test]
     fn test_convert_includes_none() {
-        let result = convert_includes(&None);
+        let result = convert_includes(&None, "knitr", &mut Vec::new());
 
         assert!(result.header_includes.is_empty());
         assert!(result.include_before.is_empty());
@@ -657,13 +674,9 @@ mod tests {
 
     #[test]
     fn test_convert_includes_empty() {
-        let includes = KnitrIncludes {
-            include_in_header: None,
-            include_before_body: None,
-            include_after_body: None,
-        };
+        let includes = KnitrIncludes::default();
 
-        let result = convert_includes(&Some(includes));
+        let result = convert_includes(&Some(includes), "knitr", &mut Vec::new());
 
         assert!(result.header_includes.is_empty());
         assert!(result.include_before.is_empty());
@@ -685,12 +698,17 @@ mod tests {
         std::fs::write(&after_path, "<div>After</div>").unwrap();
 
         let includes = KnitrIncludes {
-            include_in_header: Some(header_path),
-            include_before_body: Some(before_path),
-            include_after_body: Some(after_path),
+            include_in_header: vec![header_path],
+            include_before_body: vec![before_path],
+            include_after_body: vec![after_path],
         };
 
-        let result = convert_includes(&Some(includes));
+        let mut warnings = Vec::new();
+        let result = convert_includes(&Some(includes), "knitr", &mut warnings);
+        assert!(
+            warnings.is_empty(),
+            "readable files raise no warning: {warnings:?}"
+        );
 
         assert_eq!(result.header_includes.len(), 1);
         assert_eq!(result.header_includes[0], "<style>body{}</style>");
@@ -700,19 +718,85 @@ mod tests {
         assert_eq!(result.include_after[0], "<div>After</div>");
     }
 
+    /// T7 (bd-gy2ozix3): an include file the engine named but Quarto
+    /// cannot read is skipped **with a `Q-18-2` warning** naming the slot and
+    /// the path — silently dropping it ships a page whose widgets never
+    /// hydrate, with no message.
     #[test]
-    fn test_convert_includes_missing_file() {
-        // Path to a file that doesn't exist
+    fn test_convert_includes_missing_file_warns_q_18_2() {
         let includes = KnitrIncludes {
-            include_in_header: Some(PathBuf::from("/nonexistent/header.html")),
-            include_before_body: None,
-            include_after_body: None,
+            include_in_header: vec![PathBuf::from("/nonexistent/header.html")],
+            include_before_body: Vec::new(),
+            include_after_body: Vec::new(),
         };
 
-        let result = convert_includes(&Some(includes));
+        let mut warnings = Vec::new();
+        let result = convert_includes(&Some(includes), "knitr", &mut warnings);
 
-        // Should gracefully handle missing file
         assert!(result.header_includes.is_empty());
+        assert_eq!(warnings.len(), 1, "exactly one warning: {warnings:?}");
+        let warning = &warnings[0];
+        assert_eq!(warning.code.as_deref(), Some("Q-18-2"));
+        assert_eq!(
+            warning.kind,
+            quarto_error_reporting::DiagnosticKind::Warning
+        );
+        let text = warning.to_text(None);
+        assert!(
+            text.contains("/nonexistent/header.html"),
+            "names the path: {text}"
+        );
+        assert!(text.contains("include-in-header"), "names the slot: {text}");
+        assert!(text.contains("knitr"), "names the engine: {text}");
+    }
+
+    /// One warning per unreadable file; readable siblings still land.
+    #[test]
+    fn test_convert_includes_partial_read_keeps_good_files() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let good = temp_dir.path().join("good.html");
+        std::fs::write(&good, "<b>ok</b>").unwrap();
+
+        let includes = KnitrIncludes {
+            include_after_body: vec![
+                PathBuf::from("/nonexistent/a"),
+                good,
+                PathBuf::from("/nonexistent/b"),
+            ],
+            ..Default::default()
+        };
+
+        let mut warnings = Vec::new();
+        let result = convert_includes(&Some(includes), "knitr", &mut warnings);
+
+        assert_eq!(result.include_after, vec!["<b>ok</b>".to_string()]);
+        assert_eq!(warnings.len(), 2);
+        assert!(warnings.iter().all(|w| w.code.as_deref() == Some("Q-18-2")));
+    }
+
+    /// T3 (bd-gy2ozix3): several files in one slot are read in order.
+    #[test]
+    fn test_convert_includes_multiple_header_files_in_order() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let first = temp_dir.path().join("first.html");
+        std::fs::write(&first, "<script src=\"a.js\"></script>").unwrap();
+        let second = temp_dir.path().join("second.html");
+        std::fs::write(&second, "<script src=\"b.js\"></script>").unwrap();
+
+        let includes = KnitrIncludes {
+            include_in_header: vec![first, second],
+            ..Default::default()
+        };
+
+        let result = convert_includes(&Some(includes), "knitr", &mut Vec::new());
+
+        assert_eq!(
+            result.header_includes,
+            vec![
+                "<script src=\"a.js\"></script>".to_string(),
+                "<script src=\"b.js\"></script>".to_string()
+            ]
+        );
     }
 
     // === Integration Tests (require R installation) ===

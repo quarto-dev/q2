@@ -146,6 +146,48 @@ To combine the above methods, separate arguments by a space, for example:
 ![](elephant.png){fig-alt="A drawing of an elephant." fig-align="left" width=20%}
 ```
 
+## Plot Documents
+
+Quarto can render [hephaestus](https://github.com/posit-dev/hephaestus)
+plot documents — files ending in `.hep` — directly. A plot document
+stores a plot's data, scales, and theme rather than a picture of it, so
+Quarto lays the plot out itself at render time. Reference one exactly
+like an image:
+
+```markdown
+![Monthly readings](figures/readings.hep){#fig-readings}
+```
+
+For the `html` and `revealjs` formats Quarto renders the document to an
+SVG next to the page (under the page's `_files/figure-html/` directory)
+and the figure behaves like any other: it can be captioned,
+cross-referenced, sized, and placed in layouts. Text in the plot stays
+text, so it is crisp at every zoom level and searchable.
+
+`width` and `height` attributes, in pixels, set the size the plot is
+laid out at — the plot re-flows to fit rather than being scaled:
+
+```markdown
+![](figures/readings.hep){width=480 height=320}
+```
+
+Without them, the size recorded when the plot was saved is used.
+
+In `quarto preview` (and in Quarto Hub) plot documents are drawn live
+in the browser: the plot is laid out at the width it gets on the page,
+capped at the size above, and re-flows when the window or a slide
+changes size.
+
+When the document declares a brand (see [Brand](brand.qmd)), the
+brand's `background`, `foreground` and `primary` colors become the
+plot's paper, ink and accent, so plots follow the brand along with the
+rest of the page. Only hex colors carry over; a named CSS color in one
+of those slots leaves that slot as the plot defines it.
+
+If the file cannot be read or is not a plot document, Quarto warns
+(see the `image` section of the [error reference](../../errors/index.qmd))
+and leaves the image reference as written.
+
 ## Cross References
 
 You can cross-reference figures by adding an ID with the `fig-` prefix to them, and then referencing the figure using the `@` prefix. For example:

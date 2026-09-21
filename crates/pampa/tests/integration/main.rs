@@ -10,6 +10,42 @@
 //! The harness handles `#[test]` discovery across all modules, and
 //! nextest still runs each test in its own process for isolation.
 
+fn main() {}
+
+// Counting global allocator for allocation-budget tests
+// (`topdown_traverse_alloc_budget`). A thin wrapper over `System` that
+// counts calls; nextest runs each test in its own process, so the
+// counters are per-test. Negligible overhead for the other tests.
+pub mod alloc_counter {
+    use std::alloc::{GlobalAlloc, Layout, System};
+    use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
+
+    pub static ALLOCS: AtomicU64 = AtomicU64::new(0);
+
+    pub struct Counting;
+
+    unsafe impl GlobalAlloc for Counting {
+        unsafe fn alloc(&self, l: Layout) -> *mut u8 {
+            ALLOCS.fetch_add(1, Relaxed);
+            unsafe { System.alloc(l) }
+        }
+        unsafe fn dealloc(&self, p: *mut u8, l: Layout) {
+            unsafe { System.dealloc(p, l) }
+        }
+        unsafe fn realloc(&self, p: *mut u8, l: Layout, n: usize) -> *mut u8 {
+            ALLOCS.fetch_add(1, Relaxed);
+            unsafe { System.realloc(p, l, n) }
+        }
+    }
+
+    pub fn allocs() -> u64 {
+        ALLOCS.load(Relaxed)
+    }
+}
+
+#[global_allocator]
+static GLOBAL: alloc_counter::Counting = alloc_counter::Counting;
+
 pub mod annotated_qmd_fixture_guard;
 pub mod attribution_html_coalescing_test;
 pub mod attribution_json_wire_test;
@@ -40,6 +76,7 @@ pub mod test_cli_input_arg;
 pub mod test_code_block_attributes;
 pub mod test_code_block_writer_roundtrip;
 pub mod test_code_span;
+pub mod test_concrete_tree_dump;
 pub mod test_diagnostic_determinism;
 pub mod test_diagnostic_path_normalization;
 pub mod test_doubled_brace;
@@ -74,6 +111,7 @@ pub mod test_math_attr;
 pub mod test_meta;
 pub mod test_metadata_source_tracking;
 pub mod test_nested_yaml_serialization;
+pub mod test_nesting_depth_limit;
 pub mod test_ordered_list_formatting;
 pub mod test_raw_json_roundtrip;
 pub mod test_rawblock_to_config_value;
@@ -96,5 +134,4 @@ pub mod test_yaml_tag_regression;
 pub mod test_yaml_to_config_value;
 pub mod tiling_corpus_tests;
 pub mod tiling_phase3_tests;
-
-fn main() {}
+pub mod topdown_traverse_alloc_budget;

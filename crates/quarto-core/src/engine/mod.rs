@@ -57,6 +57,7 @@ pub mod capture_files;
 pub mod capture_splice;
 mod context;
 mod detection;
+pub mod diagnostics;
 mod error;
 mod markdown;
 pub mod nested_cell_mask;

@@ -506,9 +506,14 @@ impl PipelineStage for EngineExecutionStage {
             });
 
             trace_event!(ctx, EventLevel::Info, "executing engine: {}", engine.name());
-            let mut result = engine
-                .execute(&qmd, &exec_context)
-                .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?;
+            // Engine failures go through the engine-diagnostics seam
+            // (`Q-18-*`), never `e.to_string()` (bd-gy2ozix3).
+            let mut result = engine.execute(&qmd, &exec_context).map_err(|e| {
+                PipelineError::stage_error_with_diagnostics(
+                    self.name(),
+                    vec![crate::engine::diagnostics::engine_error_diagnostic(&e)],
+                )
+            })?;
             // nested-cell-masking (spec § "The engine capture — asymmetric,
             // by necessity"): unmask does not need the AST — the marker is
             // self-identifying — so it runs textually over the engine's
@@ -582,6 +587,11 @@ impl PipelineStage for EngineExecutionStage {
                     );
                 }
             }
+
+            // Drain warnings the engine raised without failing (e.g.
+            // knitr's Q-18-2) into the stage diagnostics. After the capture
+            // emit above, so a replayed trace re-raises them faithfully.
+            ctx.add_diagnostics(std::mem::take(&mut result.warnings));
 
             // Accumulate engine-produced includes and supporting files
             // (append-only; later engines add to earlier ones). See
@@ -3315,6 +3325,96 @@ mod tests {
              FileId({intermediate_id:?}) — that would mean reconcile \
              replaced it, attributing the author's own example to a temp \
              file; got {ids:?}"
+        );
+    }
+
+    // ── T9 (bd-gy2ozix3): engine warnings reach the stage's diagnostics ──
+    //
+    // An engine can attach warnings to its `ExecuteResult` (knitr does for
+    // an include file it could not read, `Q-18-2`). They must be drained
+    // into `ctx.diagnostics` so they are counted, printed, and promotable
+    // by `--strict` like every other stage diagnostic.
+    struct WarningEngine;
+
+    impl ExecutionEngine for WarningEngine {
+        fn name(&self) -> &str {
+            "warny"
+        }
+        fn execute(
+            &self,
+            _input: &str,
+            _ctx: &ExecutionContext,
+        ) -> Result<crate::engine::ExecuteResult, crate::engine::ExecutionError> {
+            let mut result = crate::engine::ExecuteResult::new("---\ntitle: Test\n---\n\nran\n");
+            result.warnings.push(
+                DiagnosticMessageBuilder::warning("Engine Include File Could Not Be Read")
+                    .with_code("Q-18-2")
+                    .problem("test warning from the engine")
+                    .build(),
+            );
+            Ok(result)
+        }
+        fn is_available(&self) -> bool {
+            true
+        }
+        fn claims_language(
+            &self,
+            language: &str,
+            _first_class: Option<&str>,
+        ) -> crate::engine::LanguageClaim {
+            if language == "warny" {
+                crate::engine::LanguageClaim::Primary(1)
+            } else {
+                crate::engine::LanguageClaim::None
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn engine_result_warnings_drain_to_stage_diagnostics() {
+        use crate::format::Format;
+        use crate::project::{DocumentInfo, ProjectContext};
+
+        let mut reg = EngineRegistry::new();
+        reg.register(Arc::new(WarningEngine));
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            registry: Arc::new(reg),
+            is_single_file: true,
+            output_dir: PathBuf::from("/project"),
+            ..Default::default()
+        };
+        let mut ctx = StageContext::new(
+            Arc::new(MockRuntime),
+            Format::html(),
+            project,
+            DocumentInfo::from_path("/project/test.qmd"),
+        )
+        .unwrap();
+
+        let stage = EngineExecutionStage::new();
+        let content = b"---\ntitle: Test\n---\n\n```{warny}\nx\n```\n";
+        let doc_ast = parse_qmd_to_ast(content, "/project/test.qmd");
+
+        stage
+            .run(PipelineData::DocumentAst(doc_ast), &mut ctx)
+            .await
+            .expect("a warning does not fail the render");
+
+        let drained: Vec<_> = ctx
+            .diagnostics
+            .iter()
+            .filter(|d| d.code.as_deref() == Some("Q-18-2"))
+            .collect();
+        assert_eq!(
+            drained.len(),
+            1,
+            "the engine's warning must be drained exactly once; diagnostics: {:?}",
+            ctx.diagnostics
+        );
+        assert_eq!(
+            drained[0].problem.as_ref().map(|p| p.as_str()),
+            Some("test warning from the engine")
         );
     }
 }

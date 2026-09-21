@@ -81,7 +81,7 @@ static WHITESPACE_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"\s+").unwrap()
 });
 
-use crate::traversals::bottomup_traverse_concrete_tree;
+use crate::traversals::{DepthLimitExceeded, bottomup_traverse_concrete_tree_with_depth_limit};
 
 use treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
 
@@ -1773,6 +1773,20 @@ fn native_visitor<T: Write>(
     result
 }
 
+/// Deepest concrete-syntax-tree node the reader accepts, counting the root
+/// as 1.
+///
+/// Documents nested more deeply than this are rejected with a diagnostic.
+/// The conversion walk itself is iterative, but much of what runs on the
+/// resulting AST (filters, writers, `Drop`) recurses, and a fuzzer-style
+/// input nested thousands of levels deep would overflow the stack there.
+///
+/// The value is 99 rather than 100 for continuity: the check used to be a
+/// separate pass whose depth count started at 1 and then also counted the
+/// root, and it rejected counts above 100. Keeping 99 here keeps exactly the
+/// same set of documents accepted.
+pub const MAX_CONCRETE_TREE_DEPTH: usize = 99;
+
 pub fn treesitter_to_pandoc<T: Write>(
     buf: &mut T,
     tree: &tree_sitter_qmd::MarkdownTree,
@@ -1780,14 +1794,27 @@ pub fn treesitter_to_pandoc<T: Write>(
     context: &ASTContext,
     error_collector: &mut crate::utils::diagnostic_collector::DiagnosticCollector,
 ) -> Result<Pandoc, Vec<quarto_error_reporting::DiagnosticMessage>> {
-    let result = bottomup_traverse_concrete_tree(
+    // The depth guard rides along with the conversion walk instead of being
+    // a separate pass over the tree (bd-t7i6oanu). The walk stops before the
+    // visitor sees any node past the limit.
+    let result = match bottomup_traverse_concrete_tree_with_depth_limit(
         &mut tree.walk(),
         &mut |node, children, input_bytes, context| {
             native_visitor(buf, node, children, input_bytes, context, error_collector)
         },
         input_bytes,
         context,
-    );
+        MAX_CONCRETE_TREE_DEPTH,
+    ) {
+        Ok(result) => result,
+        Err(DepthLimitExceeded { max_depth }) => {
+            let diagnostic = quarto_error_reporting::generic_error!(format!(
+                "The input document is too deeply nested (more than {} levels).",
+                max_depth
+            ));
+            return Err(vec![diagnostic]);
+        }
+    };
     let (_, PandocNativeIntermediate::IntermediatePandoc(pandoc)) = result else {
         // Top-level parse produced something other than a document
         // This happens when the entire input is malformed

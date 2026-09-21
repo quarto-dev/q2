@@ -14,6 +14,13 @@
 #
 # Flags (for testing / non-default installs):
 #   -Version v0.1.0      install a specific tag instead of the latest
+#   -Nightly             install the latest nightly build instead: the
+#                        rolling prerelease built from main whenever it
+#                        changes (version like 0.33.0-nightly.20260919,
+#                        replaced daily). Same archive contract; resolved
+#                        by tag since releases/latest skips prereleases.
+#                        Pass it through the one-liner as
+#                          & ([scriptblock]::Create((irm <url>))) -Nightly
 #   -Dest <dir>          install directory (default: %USERPROFILE%\.local\bin)
 #   -ArtifactUrl <u>     override the download (a URL or a local path — the
 #                        local path form is what the CI smoke test uses)
@@ -25,7 +32,8 @@ param(
     [string]$Dest,
     [string]$ArtifactUrl,
     [string]$Checksum,
-    [switch]$NoVerify
+    [switch]$NoVerify,
+    [switch]$Nightly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -58,7 +66,24 @@ function Get-Artifact([string]$src, [string]$out) {
     }
 }
 
-if (-not $Version -and -not $ArtifactUrl) {
+# Channel selection is one or the other (mirrors install.sh): nightlies
+# are replaced daily, so a nightly version can never be pinned by tag.
+if ($Nightly -and $Version) { Die '-Nightly and -Version are mutually exclusive: -Nightly for the latest nightly, -Version vX.Y.Z for a release' }
+if ($Version -match '-nightly\.') { Die "nightly builds cannot be pinned by version (they are replaced daily); use -Nightly instead of -Version $Version" }
+
+if ($Nightly -and -not $ArtifactUrl) {
+    # The rolling `nightly` prerelease: invisible to releases/latest, and
+    # its tag carries no version — the version is in the asset name
+    # (q2-<version>-windows_amd64.zip), so pick the asset by name.
+    Step 'resolving nightly release...'
+    $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/$Owner/$Repo/releases/tags/nightly" -Headers $UA
+    $asset = @($rel.assets | Where-Object { $_.name -match "^q2-.+-$Platform\.zip$" })
+    if ($asset.Count -eq 0) { Die "the nightly release has no $Platform archive (expected q2-<version>-$Platform.zip)" }
+    $ArtifactUrl = $asset[0].browser_download_url
+    $Version = $asset[0].name -replace '^q2-', '' -replace "-$Platform\.zip$", ''
+    Step "nightly release: $Version"
+}
+elseif (-not $Version -and -not $ArtifactUrl) {
     Step 'resolving latest release...'
     $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/$Owner/$Repo/releases/latest" -Headers $UA
     $Version = $rel.tag_name

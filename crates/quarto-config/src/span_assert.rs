@@ -163,7 +163,7 @@ pub fn context_for(filename: &str, content: &str) -> SourceContext {
 /// must carry an `Invocation` anchor, or we refuse rather than guess.
 fn peel_generated(info: &SourceInfo) -> Result<&SourceInfo, SpanProblem> {
     let mut current = info;
-    while let SourceInfo::Generated { .. } = current {
+    while let SourceInfo::Generated(_) = current {
         current = current.invocation_anchor().ok_or(SpanProblem::Generated)?;
     }
     Ok(current)
@@ -321,7 +321,7 @@ fn is_gapless_over(
     ctx: &SourceContext,
 ) -> bool {
     match info {
-        SourceInfo::Original { .. } | SourceInfo::Generated { .. } => true,
+        SourceInfo::Original { .. } | SourceInfo::Generated(_) => true,
         SourceInfo::Substring {
             parent,
             start_offset,
@@ -374,7 +374,7 @@ pub fn resolve_span(info: &SourceInfo, ctx: &SourceContext) -> Result<ResolvedSp
     {
         return Err(SpanProblem::SuspiciousDefault);
     }
-    if matches!(info, SourceInfo::Generated { .. }) && info.invocation_anchor().is_none() {
+    if matches!(info, SourceInfo::Generated(_)) && info.invocation_anchor().is_none() {
         return Err(SpanProblem::Generated);
     }
 
