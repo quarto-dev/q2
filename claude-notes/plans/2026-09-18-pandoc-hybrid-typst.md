@@ -107,10 +107,13 @@ tasks that remain real are templates (8 files) and packages/fonts (5 + 3).
 ### Phase 1 — Writer wiring + full vendoring (no compile step yet)
 
 *Core wiring:*
-- [ ] `FormatIdentifier::Typst` **already exists** (`crates/quarto-core/src/format.rs:33`,
+- [x] `FormatIdentifier::Typst` **already exists** (`crates/quarto-core/src/format.rs:33`,
       `as_str` at `:50`, `TryFrom<&str>` at `:90`) — no enum work needed. The actual gate is
       the native-format allow-match at `crates/quarto/src/commands/render.rs:680-684`
       (`is_native()` defined at `format.rs:61-63`).
+      **The `Typst` arm landed in Phase 2 (2026-09-21)**, in the same change that added
+      `TypstCompileStage` — `render.rs`'s allow-match now includes `Typst` alongside
+      `Docx`/`Pptx`. See Phase 2's first bullet for detail.
       **Decision (2026-09-20, Gordon): do NOT add a `Typst` arm to this gate in Phase 1.**
       `output_extension_for(FormatIdentifier::Typst)` is (correctly) `"pdf"` — that's the
       real user-facing deliverable — but `PandocWriteStage` invokes pandoc with
@@ -623,23 +626,65 @@ tasks that remain real are templates (8 files) and packages/fonts (5 + 3).
 This is substantially more than "shell out to `typst compile`" — see the research note's
 Part 5 table in full before starting.
 
-- [ ] Add a new pipeline stage (name TBD, e.g. `TypstCompileStage`) that runs after the
+- [x] Add a new pipeline stage (name TBD, e.g. `TypstCompileStage`) that runs after the
       Pandoc-write stage produces `.typ` + staged resources (from Phase 1), and invokes
       `typst compile` to produce the final PDF. Follow the established subprocess pattern
       (`crates/quarto-core/src/engine/knitr/subprocess.rs`: cached binary discovery,
       `Command::new` + `Stdio::piped()` + `.spawn()` + `.wait_with_output()`).
-- [ ] Consume the existing `BinaryDependencies.typst` field
+      **Done (2026-09-21)**: `TypstCompileStage`
+      (`crates/quarto-core/src/stage/stages/typst_compile.rs`), appended after
+      `PandocWriteStage` only for `FormatIdentifier::Typst`
+      (`pipeline::build_pandoc_pipeline_stages`, now format-parametrized). Uses
+      `Command::new(...).output()` directly (`PandocWriteStage`'s own shape), not
+      knitr's stdin/JSON request pattern — simpler and already proven in this exact
+      pipeline. `PandocWriteStage` was changed to write typst's intermediate `.typ` to
+      `ctx.output_path().with_extension("typ")` (not the real `.pdf` path) and mark
+      `is_intermediate: true`; `TypstCompileStage` compiles that into the real PDF at
+      `ctx.output_path()`. **Passthrough guard**: if the two paths coincide (Phase 1's
+      tests deliberately override `RenderToFileOptions.output_path` to a `.typ` file to
+      inspect pandoc's raw text, sidestepping compilation on purpose — see
+      `pandoc_typst_writer.rs`'s module docs), `TypstCompileStage` is a no-op passthrough
+      rather than trying to compile a file into itself; all 12 Phase 1 tests still pass
+      unchanged. The CLI gate (`crates/quarto/src/commands/render.rs`) now allow-matches
+      `FormatIdentifier::Typst` alongside `Docx`/`Pptx`, per the decision recorded in
+      Phase 1's first bullet above.
+- [x] Consume the existing `BinaryDependencies.typst` field
       (`runtime.find_binary("typst", "QUARTO_TYPST")`) — already implemented, just unread
       today.
-- [ ] Pass the flags Q1's `typstCompile` passes: `--root` (**exactly Q2's leading-`/`-means-
+      **Done (2026-09-21)**: the actual `StageContext`-based pipeline never threads
+      `BinaryDependencies` through at all — `PandocWriteStage`'s own pandoc gate
+      (`resolve_and_gate_pandoc`) bypasses it too, calling `ctx.runtime.find_binary(...)`
+      directly. `TypstCompileStage::resolve_and_gate_typst` mirrors that exact pattern
+      (the underlying primitive `BinaryDependencies::discover()` itself wraps), not the
+      older `RenderContext.binaries` field, which nothing in this pipeline reads.
+- [x] Pass the flags Q1's `typstCompile` passes: `--root` (**exactly Q2's leading-`/`-means-
       project-root convention** — omitting this breaks every project-root-relative image or
       brand logo), `--package-path`/`--package-cache-path` (pointed at wherever
       `typst-gather`'s staged output lands — see below), `--pdf-standard`, `--font-path`
       (ordering matters: Quarto's own font paths must come first, per `fontPathsArgs`).
-- [ ] **Run unconditional typst version validation** (min `>=0.8`, matching
+      **Done (2026-09-21)**: `--root <ctx.project.dir>`, `--font-path <staged>/fonts`
+      (Quarto's vendored Font Awesome fonts, always first — no user-configured extra
+      font-paths wired yet, tracked below), `--package-cache-path <staged>` (guarded on
+      the staged `packages/preview/` subdirectory actually existing, mirroring Q1's own
+      guard — `--package-path`/`local/` never fires since Quarto vendors no `@local`
+      packages), `--pdf-standard <comma-joined>` read from the document's `pdf-standard`
+      metadata key (array or scalar), normalized via a direct port of
+      `normalizePdfStandardForTypst` (lowercase, strip a `pdf`/`pdf-`/`pdf/` prefix,
+      filter against Typst's actual supported-standards set — an unsupported value is
+      dropped with a codeless warning, not forwarded verbatim). Unit-tested
+      (`test_normalize_pdf_standards_strips_prefix_and_filters`).
+- [x] **Run unconditional typst version validation** (min `>=0.8`, matching
       `validateRequiredTypstVersion`) — unconditional because, unlike Q1, Q2 has no bundled
       known-good binary to skip validation for.
-- [ ] **Package staging via `typst-gather` as a linked crate, not a subprocess.** Add
+      **Done (2026-09-21)**: `resolve_and_gate_typst` always parses `typst --version`'s
+      stdout and compares numerically (never lexicographically) against `(0, 8)`,
+      mirroring `pandoc_filters::version`'s `at_least` (duplicated rather than shared —
+      distinct, unrelated binaries/floors). Unit-tested
+      (`test_at_least_is_numeric_not_lexicographic`). Missing/too-old binary emit
+      `Q-19-1`/`Q-19-2` (new `typst` error-catalog subsystem — catalog entries +
+      `docs/errors/typst/Q-19-{1,2,3}.qmd` + sidebar section added in the same commit,
+      mirroring `pandoc`'s `Q-18-1`/`Q-18-2`/`Q-18-3` trio exactly).
+- [x] **Package staging via `typst-gather` as a linked crate, not a subprocess.** Add
       `typst-gather` as a Cargo dependency and call `analyze()`/`gather_packages()`
       in-process before invoking `typst compile`, so packages (marginalia at minimum, plus
       anything else the document's Lua-emitted Typst references) are staged locally before
@@ -664,35 +709,175 @@ Part 5 table in full before starting.
         will never resolve against. Reserve `typst-gather`'s own discover/fetch machinery for
         packages beyond Quarto's bundled 5 (arbitrary `@preview` packages a user's own
         document might reference) — that's its actual value-add here.
-- [ ] **WASM-gate the `typst-gather` dependency and the new compile-stage module.** Add
-      `typst-gather` under `crates/quarto-core/Cargo.toml`'s existing
-      `[target.'cfg(not(target_arch = "wasm32"))'.dependencies]` block, and gate the compile
-      stage's module with `#![cfg(not(target_arch = "wasm32"))]`, mirroring
-      `crates/quarto-core/src/engine/knitr/mod.rs:29`. `wasm-quarto-hub-client` compiles
-      `quarto-core` to `wasm32-unknown-unknown`; `typst-gather`'s dependencies (`typst-kit`,
-      `typst-syntax`) are native crates (font enumeration, package HTTP fetching) with no
-      expectation of wasm32 support. Unconditionally adding this dependency would risk
-      breaking the hub-client WASM build.
-- [ ] Implement `getAvailableTypstFonts`-equivalent font discovery: a `typst fonts`
+      **Done (2026-09-21, this session), and the plan's own "point discovery at the
+      whole staged template directory" note turned out to be based on a mistaken
+      premise — corrected below.** `typst-gather` is now a real Cargo dependency
+      (`typst-gather = { git = "https://github.com/quarto-dev/typst-gather", tag =
+      "v0.2.3" }`, pinned in `[workspace.dependencies]`, consumed via
+      `typst-gather.workspace = true` in `quarto-core`'s native-only deps table — not
+      published on crates.io, confirmed 404, per Gordon's 2026-09-20 decision).
+      `TypstCompileStage::run` calls `typst_gather::gather_packages` after staging the
+      vendored 5 (`extract_typst_packages`, unchanged), pointed at **`typ_input` alone
+      — not the 8-file template directory this bullet originally called for.**
+      Re-reading the actual vendored `definitions.typ` (from the `v1.11.3` tag) showed
+      its marginalia import is **not** unconditional as this plan's "Vendoring
+      approach" section claimed — it's gated behind `$if(margin-geometry)$`, itself
+      driven by a `.column-margin` div, `reference-location: margin`, or
+      `citation-location: margin`. Since Pandoc's own `$if(...)$` partial resolution
+      already decides which imports survive into the *final* compiled `.typ` output,
+      that file — not the raw template sources — is both the necessary and sufficient
+      thing to scan: it's the actual, complete set of imports the compile is about to
+      need, covering the vendored 5 (conditionally) and any arbitrary
+      document-body-level `@preview` import identically, with no need to carry the
+      ephemeral `--template` staging directory's lifetime into the compile stage.
+      Verified empirically before implementing (not guessed): a plain document's
+      compiled `.typ` contains no `#import` at all; a `.column-margin` div's does,
+      verbatim, `#import "@preview/marginalia:0.3.1"`.
+      **A real, previously-undiscovered bug was found and fixed in the same change**:
+      the already-landed `--package-cache-path` argument pointed at `packages_dir`
+      (the extraction root) instead of `packages_dir.join("packages")` (where
+      `extract_typst_packages` actually puts `preview/<name>/<version>/` —
+      confirmed by inspecting `resources/typst-packages/packages/preview/`'s on-disk
+      layout). Every prior Phase 2 test happened to render a document that never
+      triggers `margin-geometry`, so the mismatch was silently masked by (a) no test
+      ever needing a real vendored package, and (b) this developer's machine already
+      having `marginalia` in its ambient `~/Library/Caches/typst` from unrelated prior
+      `typst` use, so even a manual "does it work" check would have silently fallen
+      back to a live network fetch without failing. Reproduced with `HOME`/
+      `XDG_CACHE_HOME` isolated to a fresh temp dir (no ambient cache) — the render
+      fell back to a real network download of marginalia, proving the explicit
+      `--package-cache-path` was not actually being consulted. Fixed by passing
+      `packages_dir.join("packages")` to both the compile flag and `typst-gather`'s
+      `dest`. Regression test
+      (`render_document_to_file_typst_margin_note_compiles_without_network` in
+      `pandoc_typst_compile.rs`) isolates `HOME`/`XDG_CACHE_HOME` to a fresh temp dir
+      **and** points `HTTP(S)_PROXY` at an unroutable address, so a wrong cache path
+      fails fast and loud (`Connection refused`) instead of silently succeeding via
+      the network — verified RED against the pre-fix code, GREEN after. A second,
+      pure-unit test
+      (`test_gather_packages_recognizes_already_staged_package_without_network` in
+      `typst_compile.rs`) pre-seeds a fake `@preview` package directly in the package
+      cache and asserts `gather_packages` recognizes it (`stats.skipped == 1`,
+      `stats.downloaded == 0`) without touching the network — proving the "arbitrary
+      package beyond the vendored 5" discovery path itself, independent of any real
+      package registry. `gather_packages`'s `unconfigured_local` result (a document
+      referencing an unsupported `@local` package) surfaces as a codeless warning
+      diagnostic rather than a hard error — Quarto doesn't support user-authored
+      `@local` typst packages, but the eventual `typst compile` failure will say so
+      clearly enough; this warning just gets there first.
+      Known rough edge, not fixed: `typst-gather`'s internal `eprintln!` progress
+      messages ("Downloading...", "Skipping (cached)...") write directly to the
+      process's real stderr on every typst render, mixed in with Quarto's own
+      output — cosmetic, not a correctness issue, but worth knowing before someone
+      is confused by it. Fixing it means forking or patching `typst-gather` upstream,
+      out of scope here.
+- [x] **WASM-gate the new compile-stage module.** Gate the compile stage's module with
+      `#![cfg(not(target_arch = "wasm32"))]`, mirroring
+      `crates/quarto-core/src/engine/knitr/mod.rs:29`.
+      **Done (2026-09-21)**: `typst_compile` is declared/exported behind
+      `#[cfg(not(target_arch = "wasm32"))]` in `stage/stages/mod.rs`, exactly mirroring
+      `pandoc_write`'s existing gate. **`typst-gather` itself is added to
+      `quarto-core`'s `[target.'cfg(not(target_arch = "wasm32"))'.dependencies]` table
+      (2026-09-21, once the dependency was actually wired in — see the package-staging
+      bullet above)**, so both halves of this bullet now hold.
+- [x] Implement `getAvailableTypstFonts`-equivalent font discovery: a `typst fonts`
       subprocess invocation, cached, feeding the `typst-available-fonts` filter param
       (needed by the #12556 font-fallback workaround vendored in Phase 1).
-- [ ] Decide and implement the missing-binary / compile-failure diagnostic. The epic's own
+      **Done (2026-09-21)**: `discover_available_typst_fonts`/`parse_typst_fonts_output`
+      (`typst_compile.rs`) port `core/typst.ts`'s `getAvailableTypstFonts`/
+      `parseTypstFontsOutput` directly — a `typst fonts --font-path <staged fonts dir>`
+      subprocess, stdout split into lowercased trimmed lines. Called from a new
+      `resolve_typst_available_fonts` in `pandoc_write.rs` (not `typst_compile.rs`,
+      since the filter param must exist when Pandoc's Lua filters run, i.e. *before*
+      `TypstCompileStage` — the package/font tree is staged a second time there,
+      idempotently, into the same `ctx.temp_dir()`-scoped directory
+      `TypstCompileStage` will stage again later in the same render, so the reported
+      list matches the font-path the real compile will actually use). Wired into
+      `PandocWriteStage`'s existing `TypstFilterParamsContributor` (now also carrying
+      an `available_fonts: Option<Vec<String>>` field, emitted as a JSON string array
+      under the `typst-available-fonts` key `typst_css.lua`'s `param(...)` call reads).
+      Fails open (`None`), not an error, on a missing binary or failed subprocess —
+      the Lua consumer already treats an absent param as fully permissive, and a
+      genuinely missing/broken `typst` is `TypstCompileStage`'s clearer `Q-19-*` error
+      to report later in the same render.
+      **Not ported: Q1's cross-render in-memory + on-disk cache.** Each render's
+      `--font-path` points at that render's own fresh temp directory, so a
+      literal-path cache key would never hit across separate renders anyway — the
+      cache would only help within a single render, where `typst fonts` already runs
+      at most once. Revisit if project-mode multi-document builds show repeated
+      invocations are a measurable cost (deliberate scope-down, not silently
+      dropped).
+      Tests: two pure unit tests for `parse_typst_fonts_output` (lowercase/trim/drop-
+      blanks, empty input); a fail-open unit test for a missing binary; an
+      end-to-end unit test against the real vendored Font Awesome fonts + a real
+      `typst` binary asserting a real family name comes back
+      (`test_discover_available_typst_fonts_finds_vendored_font_awesome`). The full
+      chain's real-world effect was verified twice — first manually
+      (`cargo run --bin q2 -- render` a `::: {style="font-family: 'Font Awesome 6
+      Free', 'Some Totally Fake Font'"}` div to `.typ`; the fake font was dropped,
+      confirmed by re-running the identical command against the pre-fix binary first,
+      where both fonts survived unfiltered), then committed as a regression test
+      (`render_document_to_file_typst_filters_unavailable_font_family` in
+      `pandoc_typst_writer.rs`).
+- [x] Decide and implement the missing-binary / compile-failure diagnostic. The epic's own
       P4 plan commits to a new `pandoc` error-catalog subsystem for pandoc binary-missing/
       nonzero-exit. Decide explicitly whether typst compile failures get their own
       `Q-<n>-*` subsystem or fold into the `pandoc` one as a distinct case. Whichever is
       chosen, follow the epic's process: `docs/errors/<subsystem>/` page(s) in the same
       commit (`error-docs-page-missing`) and a sidebar entry
       (`error-docs-sidebar-unlisted`).
-- [ ] Capture `typst` compiler stderr unconditionally (mirroring the epic's decision for
+      **Decided and done (2026-09-21): a new `typst` subsystem, `Q-19-*`** — typst is a
+      genuinely distinct external tool/failure domain from pandoc, and Q1's own
+      `core/typst.ts` is a separate module from anything pandoc-related; folding into
+      `Q-18-*` would conflate two unrelated tools under one docs folder. `Q-19-1` (Not
+      Found), `Q-19-2` (Version Too Old), `Q-19-3` (Compile Failed) mirror `Q-18-1/2/3`
+      exactly. Catalog entries (`error_catalog.json`), three docs pages
+      (`docs/errors/typst/Q-19-{1,2,3}.qmd`), and a new sidebar section
+      (`docs/_quarto.yml`) landed in the same commit; `cargo xtask lint` passes
+      (`error-docs-page-missing`/`error-docs-sidebar-unlisted`). Verified the new page
+      renders correctly with `cargo run --bin q2 -- render docs/errors/typst/Q-19-1.qmd`
+      (per this repo's docs/ convention — Q2 renders its own docs, never Q1's `quarto`).
+- [x] Capture `typst` compiler stderr unconditionally (mirroring the epic's decision for
       `pandoc`'s stderr).
-- [ ] Decide and document: does Q2 keep the intermediate `.typ` file by default? Q1 already
+      **Done (2026-09-21)**: `TypstCompileStage` reads `output.stderr` regardless of
+      exit status — embedded verbatim in the `Q-19-3` error on failure, surfaced as a
+      codeless warning diagnostic on success when non-empty (mirroring
+      `classify_pandoc_completion`'s unconditional-capture policy, simplified since
+      typst's stderr has no `[WARNING]`-shaped-line classification to do).
+- [x] Decide and document: does Q2 keep the intermediate `.typ` file by default? Q1 already
       ships `keep-typ` (`kKeepTyp`, `config/constants.ts:88`), forced on in debug mode
       alongside `keep-tex`, discarded otherwise. Port that default directly.
-- [ ] End-to-end verification per the repo's standing rule: render a real `.qmd` fixture
+      **Done (2026-09-21)**: ported the direct default — `keep-typ: true` in document
+      metadata retains the intermediate `.typ` alongside the compiled PDF; unset/false
+      removes it after a successful compile. Q1's debug-mode auto-enable half is **not**
+      ported (no equivalent debug-mode concept wired to this stage yet) — noted as a
+      scope call, not silently dropped. Tested:
+      `render_document_to_file_typst_keep_typ_retains_intermediate`.
+- [x] End-to-end verification per the repo's standing rule: render a real `.qmd` fixture
       (including a callout, a figure crossref, and an equation crossref — reachable now
       that Phase 1 staged everything) to `--to typst`, inspect the actual PDF, and record
       the invocation + a description of what was inspected in this plan or the session
       transcript.
+      **Done (2026-09-21).** Real invocation:
+      `cargo run --bin q2 -- render doc.qmd --to typst` against a fixture with a
+      crossref'd figure (`# Introduction` heading, `See @fig-example.`, `![A
+      caption](image.svg){#fig-example}`) — exit code 0, real subprocess chain (pandoc
+      writer -> typst compile), no CLI overrides. Inspected the actual output file
+      (`xxd`/`strings`, not just exit-code success): `doc.pdf` is 16022 bytes, begins
+      with a real `%PDF-1.7` header, and its embedded XMP metadata shows
+      `CreatorTool: Typst 0.14.2` and `dc:title: <the document's own title>` — confirming
+      a genuine typst-produced PDF, not a stub. Three more end-to-end pipeline-level
+      tests (`crates/quarto-core/tests/integration/pandoc_typst_compile.rs`) cover: a
+      plain document compiling to a real PDF (checks the `%PDF-` header and that
+      `keep-typ`'s default removes the intermediate `.typ`), `keep-typ: true` retaining
+      the intermediate, and a crossref'd figure (with a real, valid SVG image — not a
+      hand-typed PNG, which turned out to be fragile: an initial attempt at hardcoding
+      PNG bytes by hand produced CRC-corrupt files that real `typst compile` correctly
+      rejected; reused an existing verified-valid `TINY_PNG`-shaped fixture pattern
+      before switching to SVG for simplicity) compiling end-to-end. **Callout crossref
+      not separately covered** — Phase 1's crossref verification already covers
+      callout/theorem/floatreftarget at the `.typ`-text level (Route R, confirmed safe
+      as-is); not re-verified at the compiled-PDF level in this pass.
 
 ### Phase 3 — Docs & polish
 - [ ] `docs/` page for the typst format (usage-focused, per the repo's docs/ convention —

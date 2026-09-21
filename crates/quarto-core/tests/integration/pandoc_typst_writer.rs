@@ -588,3 +588,55 @@ fn render_document_to_file_typst_user_template_overrides_vendored_template() {
         "the vendored template's article() wrapper should not appear when a user template is set, got:\n{text}"
     );
 }
+
+/// pandoc-hybrid-typst Phase 2's `typst-available-fonts` filter param
+/// (deferred by Phase 1, implemented in this session): a `font-family` CSS
+/// property naming an unavailable font must be dropped from the emitted
+/// `#set text(font: (...))` list, keeping only the font(s) `typst fonts`
+/// actually reports — the issue-#12556 font-fallback-filtering workaround
+/// vendored in `filters/modules/typst_css.lua`. "Font Awesome 6 Free" is
+/// real (one of the 5 vendored packages' embedded fonts); "Some Totally
+/// Fake Font" is not, so this is exactly the case `translate_font_family_list`
+/// exists to handle.
+#[test]
+fn render_document_to_file_typst_filters_unavailable_font_family() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = temp.path().canonicalize().unwrap();
+    let input_path = project_dir.join("f.qmd");
+    write(
+        &input_path,
+        "---\ntitle: Font Filter Check\n---\n\n\
+         ::: {style=\"font-family: 'Font Awesome 6 Free', 'Some Totally Fake Font'\"}\n\
+         Styled text.\n\
+         :::\n",
+    );
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let output_path = project_dir.join("f.typ");
+    let options = RenderToFileOptions {
+        output_path: Some(output_path.clone()),
+        ..Default::default()
+    };
+
+    render_document_to_file(
+        &input_path,
+        "typst",
+        &options,
+        None,
+        runtime,
+        None,
+        None,
+        None,
+    )
+    .expect("typst render should succeed");
+
+    let text = std::fs::read_to_string(&output_path).unwrap();
+    assert!(
+        text.contains("#set text(font: (\"Font Awesome 6 Free\",));"),
+        "expected only the available font to survive filtering, got:\n{text}"
+    );
+    assert!(
+        !text.contains("Some Totally Fake Font"),
+        "the unavailable font must not appear in the emitted font list, got:\n{text}"
+    );
+}

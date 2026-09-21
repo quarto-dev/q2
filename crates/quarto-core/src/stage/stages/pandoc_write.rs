@@ -269,6 +269,43 @@ fn resolve_typst_brand_param(
     ))
 }
 
+/// Resolves the `typst-available-fonts` filter param (pandoc-hybrid-typst
+/// Phase 2's `getAvailableTypstFonts` bullet, deferred by Phase 1). Stages
+/// the same vendored packages/fonts tree `TypstCompileStage` will stage
+/// again later in this render (idempotent — both extract into the same
+/// `ctx.temp_dir()`-scoped directory) so `typst fonts` is asked about
+/// exactly the font-path Typst will actually compile against.
+///
+/// Returns `Ok(None)` — not an error — when the `typst` binary can't be
+/// found or `typst fonts` fails; that failure mode belongs to
+/// `TypstCompileStage`'s later, clearer `Q-19-*` diagnostic, and the Lua
+/// consumer already treats an absent param as fully permissive.
+fn resolve_typst_available_fonts(
+    stage_name: &str,
+    ctx: &mut StageContext,
+) -> Result<Option<Vec<String>>, PipelineError> {
+    let temp_dir = ctx.temp_dir()?.to_path_buf();
+    let packages_dir = temp_dir.join("typst-packages");
+    std::fs::create_dir_all(&packages_dir).map_err(|e| {
+        PipelineError::stage_error(
+            stage_name,
+            format!("failed to create typst packages directory: {e}"),
+        )
+    })?;
+    crate::pandoc_filters::bundle::extract_typst_packages(&packages_dir).map_err(|e| {
+        PipelineError::stage_error(
+            stage_name,
+            format!("failed to materialize vendored typst packages: {e}"),
+        )
+    })?;
+    let typst_path = ctx.runtime.find_binary("typst", "QUARTO_TYPST");
+    let font_args = super::typst_compile::font_path_args(&packages_dir);
+    Ok(super::typst_compile::discover_available_typst_fonts(
+        typst_path.as_deref(),
+        &font_args,
+    ))
+}
+
 pub struct PandocWriteStage;
 
 impl PandocWriteStage {
@@ -366,11 +403,15 @@ impl PipelineStage for PandocWriteStage {
         // uses, out of scope for this wiring (typst renders one PDF per
         // invocation, so only the active `brand-mode` — "light" unless a
         // future doc sets it otherwise — is actually reachable today).
-        let typst_brand_param = if ctx.format.identifier == crate::format::FormatIdentifier::Typst {
-            resolve_typst_brand_param(self.name(), &doc.ast.meta, ctx)?
-        } else {
-            None
-        };
+        let (typst_brand_param, typst_available_fonts) =
+            if ctx.format.identifier == crate::format::FormatIdentifier::Typst {
+                (
+                    resolve_typst_brand_param(self.name(), &doc.ast.meta, ctx)?,
+                    resolve_typst_available_fonts(self.name(), ctx)?,
+                )
+            } else {
+                (None, None)
+            };
 
         let mut builder = FilterParamsBuilder::new(
             &ctx.format,
@@ -388,10 +429,11 @@ impl PipelineStage for PandocWriteStage {
                 share_dir: share.clone(),
             }));
         }
-        if let Some(brand) = typst_brand_param {
+        if typst_brand_param.is_some() || typst_available_fonts.is_some() {
             builder = builder.with_contributor(Box::new(
                 crate::pandoc_filters::typst_params::TypstFilterParamsContributor {
-                    brand: Some(brand),
+                    brand: typst_brand_param,
+                    available_fonts: typst_available_fonts,
                 },
             ));
         }
@@ -486,7 +528,18 @@ impl PipelineStage for PandocWriteStage {
             None
         };
 
-        let output_path = ctx.output_path();
+        // pandoc-hybrid-typst Phase 2: for typst, `ctx.output_path()` is
+        // the *final* PDF path (`output_extension` is `"pdf"`) — but this
+        // stage only ever produces pandoc's `.typ` source. Writing that
+        // text directly to a file named `.pdf` would be a misleading
+        // artifact; `TypstCompileStage` (appended after this stage only
+        // for typst, see `pipeline::build_pandoc_pipeline_stages`) compiles
+        // this intermediate into the real PDF at `ctx.output_path()`.
+        let output_path = if ctx.format.identifier == crate::format::FormatIdentifier::Typst {
+            ctx.output_path().with_extension("typ")
+        } else {
+            ctx.output_path()
+        };
         if let Some(parent) = output_path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| {
                 PipelineError::stage_error(
@@ -603,13 +656,17 @@ impl PipelineStage for PandocWriteStage {
         ctx.add_diagnostics(warnings);
 
         // T9.2: no binary bytes travel through `PipelineData` — pandoc
-        // already wrote `output_path` directly.
+        // already wrote `output_path` directly. For typst, `output_path`
+        // is the intermediate `.typ` file `TypstCompileStage` compiles
+        // next — `is_intermediate` mirrors that (see the output_path
+        // computation above).
+        let is_intermediate = ctx.format.identifier == crate::format::FormatIdentifier::Typst;
         Ok(PipelineData::RenderedOutput(RenderedOutput {
             input_path: doc.path,
             output_path,
             format: ctx.format.clone(),
             content: String::new(),
-            is_intermediate: false,
+            is_intermediate,
             supporting_files: vec![],
             metadata: doc.ast.meta,
             source_context: doc.source_context,

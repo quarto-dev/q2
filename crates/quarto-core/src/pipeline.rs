@@ -60,6 +60,8 @@ use crate::stage::stages::BootstrapJsStage;
 use crate::stage::stages::ClipboardJsStage;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::stage::stages::PandocWriteStage;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::stage::stages::TypstCompileStage;
 use crate::stage::{
     ApplyTemplateStage, AstTransformsStage, AttributionGenerateStage, CompileThemeCssStage,
     DocumentProfileStage, EngineExecutionStage, IncludeExpansionStage, IncludeResolveStage,
@@ -401,7 +403,7 @@ pub async fn render_qmd_to_pandoc(
     ctx: &mut RenderContext<'_>,
     runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
 ) -> Result<(crate::stage::RenderedOutput, Vec<DiagnosticMessage>)> {
-    let stages = build_pandoc_pipeline_stages();
+    let stages = build_pandoc_pipeline_stages(ctx.format.identifier);
     let (output, diagnostics) = run_pipeline(content, source_name, ctx, runtime, stages).await?;
     let rendered = output.into_rendered_output().ok_or_else(|| {
         crate::error::QuartoError::Other(
@@ -504,11 +506,18 @@ const PANDOC_STAGE_EXCLUDED: &[&str] = &[
 ];
 
 /// Build the stage list for a `PipelineProfile::Pandoc(_)` render (docx,
-/// pptx, …): [`build_html_pipeline_stages_with_options`] with the names in
-/// [`PANDOC_STAGE_EXCLUDED`] removed, plus [`PandocWriteStage`] appended as
-/// the tail (P4 Task 9) — the stage that serializes the wire-format AST and
-/// shells out to a real `pandoc` subprocess. Order is preserved for the
-/// retained prefix.
+/// pptx, typst, …): [`build_html_pipeline_stages_with_options`] with the
+/// names in [`PANDOC_STAGE_EXCLUDED`] removed, plus [`PandocWriteStage`]
+/// appended as the tail (P4 Task 9) — the stage that serializes the
+/// wire-format AST and shells out to a real `pandoc` subprocess. Order is
+/// preserved for the retained prefix.
+///
+/// `format_identifier` decides whether a further tail stage is needed:
+/// typst is the one Pandoc-hybrid format where `PandocWriteStage`'s output
+/// (`.typ` source) is not the final artifact — pandoc-hybrid-typst Phase 2
+/// appends [`TypstCompileStage`] after it, which compiles that intermediate
+/// file to the real PDF. docx/pptx get no further stage: pandoc's own
+/// output there already is the final artifact.
 ///
 /// The AST-transform exclude-list *within* `AstTransformsStage` (which
 /// individual transforms should not run for a `Pandoc(fmt)` profile) is a
@@ -516,10 +525,15 @@ const PANDOC_STAGE_EXCLUDED: &[&str] = &[
 /// until P1's PipelineProfile work` — this function owns only which
 /// **stages** run.
 #[cfg(not(target_arch = "wasm32"))]
-pub fn build_pandoc_pipeline_stages() -> Vec<Box<dyn PipelineStage>> {
+pub fn build_pandoc_pipeline_stages(
+    format_identifier: crate::format::FormatIdentifier,
+) -> Vec<Box<dyn PipelineStage>> {
     let mut stages = build_html_pipeline_stages_with_options(None);
     stages.retain(|s| !PANDOC_STAGE_EXCLUDED.contains(&s.name()));
     stages.push(Box::new(PandocWriteStage::new()));
+    if format_identifier == crate::format::FormatIdentifier::Typst {
+        stages.push(Box::new(TypstCompileStage::new()));
+    }
     stages
 }
 
@@ -5127,7 +5141,7 @@ mod tests {
     /// incident).
     #[test]
     fn t6_2_pandoc_stage_list_produces_exact_surviving_name_list() {
-        let stages = build_pandoc_pipeline_stages();
+        let stages = build_pandoc_pipeline_stages(crate::format::FormatIdentifier::Docx);
         let names: Vec<&str> = stages.iter().map(|s| s.name()).collect();
 
         assert_eq!(
@@ -5161,6 +5175,24 @@ mod tests {
                  list; got: {names:?}",
             );
         }
+    }
+
+    /// pandoc-hybrid-typst Phase 2: typst's stage list appends
+    /// `typst-compile` after `pandoc-write` — pandoc's own `.typ` output
+    /// is not the final artifact for typst the way it is for docx/pptx.
+    ///
+    /// Revert hunk: removing the `if format_identifier == ... Typst`
+    /// branch in `build_pandoc_pipeline_stages` makes this RED (the tail
+    /// would just be `"pandoc-write"`).
+    #[test]
+    fn typst_stage_list_appends_typst_compile_after_pandoc_write() {
+        let stages = build_pandoc_pipeline_stages(crate::format::FormatIdentifier::Typst);
+        let names: Vec<&str> = stages.iter().map(|s| s.name()).collect();
+        assert_eq!(
+            &names[names.len() - 2..],
+            ["pandoc-write", "typst-compile"],
+            "got: {names:?}"
+        );
     }
 
     /// Task 6 (T6.3): `"attribution-generate"` is a real stage name but is

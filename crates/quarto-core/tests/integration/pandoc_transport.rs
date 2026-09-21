@@ -985,7 +985,7 @@ fn build_smoke_ast_and_params(sentinel: Option<&str>) -> (String, String) {
     let runtime: std::sync::Arc<dyn quarto_system_runtime::SystemRuntime> =
         std::sync::Arc::new(quarto_system_runtime::NativeRuntime::new());
 
-    let mut stages = build_pandoc_pipeline_stages();
+    let mut stages = build_pandoc_pipeline_stages(quarto_core::format::FormatIdentifier::Docx);
     stages.pop();
 
     let (data, _diagnostics) = pollster::block_on(run_pipeline(

@@ -222,7 +222,7 @@ fn callout_fixture_ctx(project_dir: &Path) -> (ProjectContext, DocumentInfo, For
 /// no `Block::Custom` either, reddening this test.
 #[tokio::test]
 async fn user_filters_pre_sees_no_custom_node_post_position_does() {
-    let stages = build_pandoc_pipeline_stages();
+    let stages = build_pandoc_pipeline_stages(quarto_core::format::FormatIdentifier::Docx);
     let pre_idx = stages
         .iter()
         .position(|s| s.name() == "user-filters-pre")
@@ -246,10 +246,11 @@ async fn user_filters_pre_sees_no_custom_node_post_position_does() {
         let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
         let content = std::fs::read(&doc.input).unwrap();
 
-        let pre_stages: Vec<_> = build_pandoc_pipeline_stages()
-            .into_iter()
-            .take(pre_idx + 1)
-            .collect();
+        let pre_stages: Vec<_> =
+            build_pandoc_pipeline_stages(quarto_core::format::FormatIdentifier::Docx)
+                .into_iter()
+                .take(pre_idx + 1)
+                .collect();
         let (output, _diags) = run_pipeline(&content, "callout.qmd", &mut ctx, runtime, pre_stages)
             .await
             .expect("pipeline through user-filters-pre should succeed");
@@ -274,10 +275,11 @@ async fn user_filters_pre_sees_no_custom_node_post_position_does() {
         let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
         let content = std::fs::read(&doc.input).unwrap();
 
-        let post_stages: Vec<_> = build_pandoc_pipeline_stages()
-            .into_iter()
-            .take(ast_transforms_idx + 1)
-            .collect();
+        let post_stages: Vec<_> =
+            build_pandoc_pipeline_stages(quarto_core::format::FormatIdentifier::Docx)
+                .into_iter()
+                .take(ast_transforms_idx + 1)
+                .collect();
         let (output, _diags) =
             run_pipeline(&content, "callout.qmd", &mut ctx, runtime, post_stages)
                 .await
