@@ -35,6 +35,18 @@ pub fn parse(input: &str, spec: CommandSpec) -> SyntaxNode {
     SyntaxNode::new_root(Parser::new_macro(input, spec).parse())
 }
 
+/// q2 local patch: parse with macro expansion and also return the span side
+/// table — `spans[i]` is the byte range of the i-th leaf token (document
+/// order) in `input`. Leaves produced by a macro expansion map to the macro
+/// body's definition site; macro arguments map to the use site.
+pub fn parse_with_spans(
+    input: &str,
+    spec: CommandSpec,
+) -> (SyntaxNode, Vec<Option<std::ops::Range<usize>>>) {
+    let (green, spans) = Parser::new_macro(input, spec).parse_with_spans();
+    (SyntaxNode::new_root(green), spans)
+}
+
 /// It is only for internal testing
 pub fn parse_without_macro(input: &str, spec: CommandSpec) -> SyntaxNode {
     SyntaxNode::new_root(Parser::new(input, spec).parse())

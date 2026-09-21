@@ -13,6 +13,9 @@ mitex-lexer = { path = "vendor/mitex-lexer" }
 mitex-parser = { path = "vendor/mitex-parser" }
 mitex-spec = { path = "vendor/mitex-spec" }
 
+rowan = "0.15"
+serde_json = { workspace = true }
+
 [dev-dependencies]
 
 [lints]

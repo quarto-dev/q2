@@ -368,7 +368,20 @@ pub struct MacroEngine<'a> {
     reading_if: Vec<Option<IfState>>,
     /// Toekns used by macro stack
     pub scanned_tokens: Vec<Tok<'a>>,
+    /// q2 local patch: tokens produced by macro expansion so far. Once past
+    /// [`EXPANSION_BUDGET`] the engine stops expanding and emits an error
+    /// token instead, so a self-referential `\newcommand` cannot spin
+    /// forever on user input.
+    expanded_tokens: usize,
 }
+
+/// q2 local patch: upper bound on tokens a single input may produce through
+/// macro expansion. Real documents expand a few hundred; the bound only has
+/// to be far above that and far below anything that takes noticeable time.
+pub const EXPANSION_BUDGET: usize = 200_000;
+
+/// q2 local patch: text of the error token emitted when the budget is hit.
+pub const EXPANSION_LIMIT_ERROR: &str = "macro expansion limit exceeded";
 
 impl<'a> TokenStream<'a> for MacroEngine<'a> {
     fn bump(&mut self, ctx: &mut StreamContext<'a>) {
@@ -392,7 +405,16 @@ impl<'a> MacroEngine<'a> {
             reading_macro: Vec::new(),
             reading_if: Vec::new(),
             scanned_tokens: Vec::new(),
+            expanded_tokens: 0,
         }
+    }
+
+    /// q2 local patch: account for `produced` expansion tokens; `false` once
+    /// the budget is exhausted (the caller then emits an error token and
+    /// drops the expansion).
+    fn charge_expansion(&mut self, produced: usize) -> bool {
+        self.expanded_tokens = self.expanded_tokens.saturating_add(produced);
+        self.expanded_tokens <= EXPANSION_BUDGET
     }
 
     /// fills the peek cache with a page of tokens at the same time
@@ -644,6 +666,10 @@ impl<'a> MacroEngine<'a> {
                 let args = Self::read_macro_args(ctx, cmd.num_args, cmd.opt.clone())?;
                 // Expand tokens by arguments
                 let expanded = Self::expand_tokens(&args, &cmd.def);
+                if !self.charge_expansion(expanded.len().max(1)) {
+                    ctx.push_outer((Token::Error, EXPANSION_LIMIT_ERROR));
+                    return None;
+                }
 
                 // Push the reversed tokens to inner stream
                 ctx.extend_inner(expanded.into_iter().rev());
@@ -663,6 +689,10 @@ impl<'a> MacroEngine<'a> {
                 let body = Self::read_env_body(ctx, &env.name)?;
                 let expanded_begin = Self::expand_tokens(&args, &env.begin_def);
                 let expanded_end = Self::expand_tokens(&args, &env.end_def);
+                if !self.charge_expansion((expanded_begin.len() + expanded_end.len()).max(1)) {
+                    ctx.push_outer((Token::Error, EXPANSION_LIMIT_ERROR));
+                    return None;
+                }
 
                 ctx.extend_inner(
                     expanded_end

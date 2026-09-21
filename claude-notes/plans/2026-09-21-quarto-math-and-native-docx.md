@@ -211,7 +211,7 @@ emitter from ECMA-376 Part 1 §22.1 is bounded work.
 Tests first for every item; each writer test is a snapshot of the emitted
 markup for a fixture plus, for OMML, an `xmllint --schema` pass.
 
-- [ ] Crate skeleton `crates/quarto-math` (workspace member, `wasm32`-clean:
+- [x] (done 2026-09-21; `Spec::builtin()` embeds `spec/upstream/mitex-default-spec.json` until `commands.json` exists) Crate skeleton `crates/quarto-math` (workspace member, `wasm32`-clean:
       no std::fs at runtime; spec embedded via `include_str!`).
 - [ ] **Spec** `spec/commands.json`, owned by q2: per command/env/symbol →
       arg shape (mitex's `ArgShape`/`ArgPattern` JSON form), semantic kind for
@@ -220,7 +220,7 @@ markup for a fixture plus, for OMML, an `xmllint --schema` pass.
       symbol rows from mitex's spec + `codex`; hand-write the ~150 structural
       rows. Test: every mitex spec entry has a row; every row's codepoint is a
       valid scalar.
-- [ ] **Reader**: `parse(text, &Spec) -> Cst` via mitex-parser with a
+- [x] (done 2026-09-21: `quarto_math::reader::parse` → `Parsed { root, spans, leaves }`; side table recorded at the parser's `builder.token` sites, vendored patch #5; 10 tests in `tests/integration/reader.rs` incl. the corpus-wide leaf/tiling properties and the probe's two macro cases) **Reader**: `parse(text, &Spec) -> Cst` via mitex-parser with a
       leaf-index → original-span side table (record at the `builder.token`
       call sites; fallback: the two-pass zip from the probe). Test: probe
       cases as unit tests, including both macro cases; property test that
@@ -304,6 +304,28 @@ markup for a fixture plus, for OMML, an `xmllint --schema` pass.
 
 - [ ] Out of scope for this epic; the Typst format writer (whichever leg
       lands) consumes `quarto_math::convert(_, Target::Typst)`.
+
+## Findings while building the reader (2026-09-21)
+
+Three properties of mitex's tree that the plan's "rowan is lossless" line
+oversold, each now pinned by a test in `tests/integration/reader.rs`:
+
+1. **Not byte-lossless.** The whitespace between a command and a bare
+   argument (`\hat x`) is dropped, and an environment is a name leaf alone
+   (`begin(sym'("aligned"))`): the `\begin{`, `\end{` and the `}` after the
+   name never reach a leaf. Leaf spans are monotone and select their own
+   bytes; gaps are exactly whitespace or that environment syntax. Node spans
+   in `MathAst` must therefore be computed as the union of leaf spans plus
+   the enclosing dropped syntax, not assumed contiguous.
+2. **One synthesized token.** The macro engine emits
+   `(Token::Error, "invalid number of arguments")` with text that is not a
+   slice of the input; it is the only leaf without a span. Diagnostics for it
+   need the enclosing node's span.
+3. **Unbounded recursion upstream.** `\newcommand{\loop}{\loop} \loop`
+   never terminates in mitex. Vendored patch #6 adds an expansion budget
+   (200 000 tokens) after which the engine emits
+   `"macro expansion limit exceeded"` and stops; `errors/recursive-macro`
+   now parses in milliseconds.
 
 ## Decisions (2026-09-21)
 

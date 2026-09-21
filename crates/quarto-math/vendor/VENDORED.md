@@ -39,9 +39,21 @@ Not vendored: `mitex` (the Typst converter; we write our own emitters),
    deserializes `../spec/upstream/mitex-default-spec.json`, instead of
    `mitex_spec_gen::DEFAULT_SPEC`.
 
-Planned (Phase 1, will be appended here when landed): a leaf-index → original
-byte span side table recorded at the parser's `builder.token` call sites, so
-macro-expanded tokens keep their source position.
+5. **Span side table in `mitex-parser`** (`src/parser.rs`, `src/lib.rs`):
+   `Parser` keeps the input and a `spans: Vec<Option<Range<usize>>>`; every
+   `builder.token` site calls `record_span`, which recovers the token text's
+   byte range from its address within the input (lexer texts are always
+   slices of the input, macro bodies included). The two sites that used to
+   emit a fresh one-character `String` (`single_char`, the word-splitting
+   argument matcher) now emit subslices so they map too. New entry points
+   `Parser::parse_with_spans` and `mitex_parser::parse_with_spans`;
+   `parse` is unchanged in behavior and output.
+6. **Macro expansion budget in `mitex-lexer`** (`src/macro_engine.rs`):
+   `MacroEngine` counts the tokens it produces by expansion and, past
+   `EXPANSION_BUDGET` (200 000), stops expanding and emits
+   `(Token::Error, "macro expansion limit exceeded")` in place of the macro
+   call. Upstream loops forever on `\newcommand{\loop}{\loop} \loop`; a
+   reader fed `.qmd` content must terminate and diagnose instead.
 
 ## Updating
 

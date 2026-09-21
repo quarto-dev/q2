@@ -122,6 +122,14 @@ pub struct Parser<'a, S: TokenStream<'a> = ()> {
     /// State used by item_list/argument_list parser
     /// The current state
     list_state: ListState,
+
+    /// q2 local patch (span side table): the original input, so that every
+    /// token's text — always a slice of it, macro expansions included — can
+    /// be mapped back to a byte range.
+    input: &'a str,
+    /// q2 local patch: `spans[i]` is the original byte range of the i-th
+    /// token handed to `builder.token`, i.e. the i-th leaf in document order.
+    spans: Vec<Option<std::ops::Range<usize>>>,
 }
 
 impl<'a> Parser<'a> {
@@ -135,6 +143,8 @@ impl<'a> Parser<'a> {
             arg_matchers: ArgMatcherBuilder::default(),
             list_state: Default::default(),
             trivia_buffer: Vec::new(),
+            input: text,
+            spans: Vec::new(),
         }
     }
 
@@ -148,11 +158,30 @@ impl<'a> Parser<'a> {
             arg_matchers: ArgMatcherBuilder::default(),
             list_state: Default::default(),
             trivia_buffer: Vec::new(),
+            input: text,
+            spans: Vec::new(),
         }
     }
 }
 
 impl<'a, S: TokenStream<'a>> Parser<'a, S> {
+    /// q2 local patch: record the original span of a token's text.
+    ///
+    /// Lexer texts are always slices of `self.input` (the macro engine hands
+    /// out slices of the definition for a macro body and of the use site for
+    /// its arguments; nothing is synthesized), so the range is recovered from
+    /// the slice's address. A text outside the input records `None`.
+    fn record_span(&mut self, text: &str) {
+        let base = self.input.as_ptr() as usize;
+        let start = text.as_ptr() as usize;
+        let span = if start >= base && start + text.len() <= base + self.input.len() {
+            Some(start - base..start - base + text.len())
+        } else {
+            None
+        };
+        self.spans.push(span);
+    }
+
     /// List State
     /// The start position of the list
     #[inline]
@@ -193,6 +222,7 @@ impl<'a, S: TokenStream<'a>> Parser<'a, S> {
         let (kind, text) = self.lexer.eat().unwrap();
         let kind: SyntaxKind = kind.into();
         self.builder.token(kind.into(), text);
+        self.record_span(text);
     }
 
     /// Lexer Interface
@@ -207,6 +237,7 @@ impl<'a, S: TokenStream<'a>> Parser<'a, S> {
     fn eat_as(&mut self, kind: SyntaxKind) {
         let (_, text) = self.lexer.eat().unwrap();
         self.builder.token(kind.into(), text);
+        self.record_span(text);
     }
 
     /// Lexer Interface
@@ -230,17 +261,22 @@ impl<'a, S: TokenStream<'a>> Parser<'a, S> {
 
     /// Lexer Interface
     fn extract_holding_trivia(&mut self) {
-        for (kind, text) in self.trivia_buffer.drain(..) {
+        for (kind, text) in std::mem::take(&mut self.trivia_buffer) {
             let kind: SyntaxKind = kind.into();
             self.builder.token(kind.into(), text);
+            self.record_span(text);
         }
     }
 
     /// Lexer Interface
     fn single_char(&mut self) -> Option<()> {
-        let first_char = self.lexer.peek_char()?;
-        self.builder
-            .token(TokenWord.into(), &first_char.to_string());
+        // q2 local patch: emit the character as a subslice of the lexer's
+        // text rather than a fresh String, so its span is recoverable.
+        let text = self.lexer.peek_text()?;
+        let first_char = text.chars().next()?;
+        let piece = &text[..first_char.len_utf8()];
+        self.builder.token(TokenWord.into(), piece);
+        self.record_span(piece);
         self.lexer.consume_utf8_bytes(first_char.len_utf8());
 
         Some(())
@@ -256,11 +292,19 @@ impl<'a, S: TokenStream<'a>> Parser<'a, S> {
 
     /// Entry point
     /// The main entry point of the parser
-    pub fn parse(mut self) -> GreenNode {
+    pub fn parse(self) -> GreenNode {
+        self.parse_with_spans().0
+    }
+
+    /// q2 local patch: like [`Self::parse`], also returning the span side
+    /// table (`spans[i]` = original byte range of the i-th leaf token in
+    /// document order; see `record_span`).
+    pub fn parse_with_spans(mut self) -> (GreenNode, Vec<Option<std::ops::Range<usize>>>) {
         self.builder.start_node(ScopeRoot.into());
         self.item_list(ParseScope::Root);
         self.builder.finish_node();
-        self.builder.finish()
+        let spans = std::mem::take(&mut self.spans);
+        (self.builder.finish(), spans)
     }
 
     /// Parsing Helper
@@ -704,7 +748,11 @@ impl<'a, S: TokenStream<'a>> Parser<'a, S> {
                 Token::Word if !GREEDY => {
                     // Split the word into single characters for term matching
                     let mut split_cnt = 0usize;
-                    for c in self.lexer.peek_text().unwrap().chars() {
+                    // q2 local patch: `word` outlives the borrow of `self`
+                    // (`peek_text` returns `&'a str`), so each character can
+                    // be emitted as a subslice and keep its span.
+                    let word: &'a str = self.lexer.peek_text().unwrap();
+                    for (i, c) in word.char_indices() {
                         if !searcher.try_match(ARGUMENT_KIND_TERM) {
                             if split_cnt > 0 {
                                 self.lexer.consume_utf8_bytes(split_cnt);
@@ -712,9 +760,11 @@ impl<'a, S: TokenStream<'a>> Parser<'a, S> {
                             return;
                         }
                         split_cnt += c.len_utf8();
+                        let piece = &word[i..i + c.len_utf8()];
 
                         arg::<GREEDY, _, _>(self, |this| {
-                            this.builder.token(TokenWord.into(), &c.to_string())
+                            this.builder.token(TokenWord.into(), piece);
+                            this.record_span(piece);
                         });
                     }
 
