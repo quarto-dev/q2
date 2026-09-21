@@ -6,8 +6,8 @@
 //! oracle-test floor at `crates/pampa/tests/integration/test.rs:117-118`,
 //! reconciled via `crates/xtask/src/pandoc_check.rs`) — a third,
 //! independent copy, because `quarto-core` cannot depend on `xtask` (a
-//! dev-only binary crate) and pandoc-hybrid's floor (`3.10`) is a distinct,
-//! stricter requirement from pampa's oracle-test window (`3.6`-`3.10`).
+//! dev-only binary crate) and pandoc-hybrid's floor (`3.11`) is a distinct,
+//! stricter requirement from pampa's oracle-test window (`3.6`-`3.11`).
 //! Reconciling all three into one shared crate is out of scope for this
 //! task; see `claude-notes/plans/2026-09-18-pandoc-hybrid-P4-implementation.md`
 //! Findings for Gordon, item 11(a).
@@ -132,10 +132,12 @@ mod tests {
     /// this RED.
     #[test]
     fn test_gate_rejects_old() {
-        let err = gate(Some("3.8.3")).expect_err("3.8.3 is below the 3.10 floor");
+        let err = gate(Some("3.8.3")).expect_err("3.8.3 is below the 3.11 floor");
         assert_eq!(err.code.as_deref(), Some("Q-20-2"));
 
-        assert!(gate(Some("3.10")).is_ok());
+        let err = gate(Some("3.10")).expect_err("3.10 is below the 3.11 floor");
+        assert_eq!(err.code.as_deref(), Some("Q-20-2"));
+
         assert!(gate(Some("3.11")).is_ok());
     }
 

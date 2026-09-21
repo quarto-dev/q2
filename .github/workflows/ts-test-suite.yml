@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PANDOC_VERSION: "3.10"
+  PANDOC_VERSION: "3.11"
   # Deno version for engine-host-deno vitest + deno-test + bundle freshness gate.
   DENO_VERSION: "2.9.0"
 

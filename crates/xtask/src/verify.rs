@@ -832,7 +832,8 @@ mod tests {
     #[test]
     fn test_verify_pandoc_preflight() {
         assert!(pandoc_preflight(Some("pandoc 3.6.0\n...")).is_err());
-        assert!(pandoc_preflight(Some("pandoc 3.10\n...")).is_ok());
+        assert!(pandoc_preflight(Some("pandoc 3.10\n...")).is_err());
+        assert!(pandoc_preflight(Some("pandoc 3.11\n...")).is_ok());
         assert!(pandoc_preflight(None).is_err());
     }
 

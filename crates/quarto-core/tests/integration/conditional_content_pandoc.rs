@@ -31,7 +31,7 @@ fn fixture(target_format: &str) -> String {
 }
 
 /// Unlike `pandoc_filters::harness::assert_pandoc_available` (calibrated
-/// for the Lua-filter transport tests' 3.10 floor), this test uses no
+/// for the Lua-filter transport tests' 3.11 floor), this test uses no
 /// Lua filter and no `QUARTO_SHARE_PATH` -- a bare `pandoc -f json -t
 /// docx`/`pptx` invocation, which the oracle range's floor of 3.6
 /// (`crates/pampa/tests/integration/test.rs`) already covers. Requiring
