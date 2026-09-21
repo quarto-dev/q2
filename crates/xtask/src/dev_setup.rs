@@ -288,7 +288,7 @@ fn wasm_opt_install_hints() -> &'static [&'static str] {
 /// `PANDOC_VERSION` — see
 /// `claude-notes/plans/2026-09-18-pandoc-hybrid-P4-implementation.md`
 /// Task 7 / Findings for Gordon, item 11(b).
-pub(crate) const PANDOC_HYBRID_MIN_VERSION: (u32, u32) = (3, 10);
+pub(crate) const PANDOC_HYBRID_MIN_VERSION: (u32, u32) = (3, 11);
 
 /// Check for Pandoc 3.6+ (optional — needed only for pampa comparison tests).
 ///
@@ -300,7 +300,7 @@ pub(crate) const PANDOC_HYBRID_MIN_VERSION: (u32, u32) = (3, 10);
 /// `cargo xtask dev-setup` runs are not working on that leg, and a hard
 /// failure here would block unrelated setup steps (cargo-nextest,
 /// wasm-bindgen-cli, ...) for every contributor whose local pandoc happens
-/// to be between 3.6 and 3.10.
+/// to be between 3.6 and 3.11.
 fn check_pandoc() {
     let output = Command::new("pandoc").arg("--version").output();
 
