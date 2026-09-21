@@ -111,11 +111,18 @@ impl MathEngine {
     /// engine's default loader location).
     ///
     /// Returns `None` for methods q2 does not load an engine for:
-    /// `plain`, `mathml` (converted at render time by bd-3evfzwal),
-    /// `webtex`, `gladtex` and unknown strings. The caller then leaves
-    /// `meta.math` unset so the author can supply their own approach via
-    /// includes / a custom template. Absent, `mathjax` and `katex` never
-    /// yield `None`.
+    /// `plain`, `webtex`, `gladtex` and unknown strings. The caller then
+    /// leaves `meta.math` unset so the author can supply their own
+    /// approach via includes / a custom template. Absent, `mathjax` and
+    /// `katex` never yield `None`.
+    ///
+    /// `mathml` yields the default MathJax engine: `MathMlStage` runs
+    /// before this stage and converts every expression it can, so any
+    /// `Inline::Math` still in the document is one it had to leave as TeX
+    /// (bd-3evfzwal, the hybrid fallback). This stage only injects when
+    /// the walk finds math, so a fully converted document loads nothing.
+    /// The object form's `url` is ignored for `mathml` (it names a
+    /// MathML converter, not a loader).
     pub fn from_meta(meta: &ConfigValue) -> Option<Self> {
         let MathMethodConfig { method, url } = MathMethodConfig::from_meta(meta);
         match method {
@@ -125,7 +132,8 @@ impl MathEngine {
             MathMethod::Katex => Some(Self::Katex {
                 url_base: url.unwrap_or_else(|| DEFAULT_KATEX_URL_BASE.to_string()),
             }),
-            MathMethod::MathMl | MathMethod::Plain | MathMethod::Unknown(_) => None,
+            MathMethod::MathMl => Some(Self::default_engine()),
+            MathMethod::Plain | MathMethod::Unknown(_) => None,
         }
     }
 
@@ -154,7 +162,11 @@ impl MathEngine {
 ///   equations — `CrossrefRenderTransform` injects `\tag{N}` so this
 ///   flag is required for equation numbering to render.
 /// - `options.skipHtmlTags` excludes elements MathJax must not typeset
-///   (code blocks, scripts, pre, etc.) — Pandoc's defaults.
+///   (scripts, pre, etc.). `annotation`/`annotation-xml` are MathJax's own
+///   defaults and must stay: under `html-math-method: mathml` the converted
+///   `<math>` elements carry their TeX in an `<annotation>`, and a loader
+///   brought in for a leftover expression (bd-3evfzwal) would otherwise
+///   re-typeset every `\begin{…}` it finds there.
 fn mathjax_slot_html(url: &str) -> String {
     format!(
         "<script>\n\
@@ -165,7 +177,7 @@ fn mathjax_slot_html(url: &str) -> String {
          \x20\x20\x20\x20tags: 'ams',\n\
          \x20\x20}},\n\
          \x20\x20options: {{\n\
-         \x20\x20\x20\x20skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre'],\n\
+         \x20\x20\x20\x20skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'annotation', 'annotation-xml'],\n\
          \x20\x20}},\n\
          }};\n\
          </script>\n\
@@ -410,7 +422,7 @@ impl PipelineStage for MathJsStage {
 
         // Read the user-selected engine (or fall back to default).
         // `from_meta` returns `None` for explicitly-unsupported methods
-        // (`webtex` / `gladtex` / `mathml` / `plain` — deferred). In
+        // (`webtex` / `gladtex` / `plain`). In
         // that case we leave `meta.math` unset so the document author
         // can supply their own approach via includes / custom template.
         let Some(engine) = MathEngine::from_meta(&doc.ast.meta) else {
@@ -967,6 +979,46 @@ mod tests {
             math.is_none(),
             "code-block text mentioning $x$ must NOT trigger meta.math"
         );
+    }
+
+    /// `html-math-method: mathml` (bd-3evfzwal): MathJax is the fallback
+    /// for expressions `MathMlStage` left as TeX, so injection happens
+    /// iff `Inline::Math` survives — never for a fully converted page.
+    #[tokio::test]
+    async fn mathml_method_injects_mathjax_only_for_leftover_math() {
+        let leftover = run_and_get_math(
+            vec![paragraph(vec![inline_math("x + \\bogus y")])],
+            meta_with_string("html-math-method", "mathml"),
+        )
+        .await
+        .expect("leftover TeX needs MathJax");
+        assert!(leftover.contains(DEFAULT_MATHJAX_URL));
+
+        let converted = run_and_get_math(
+            vec![paragraph(vec![str_inline("only a <math> element here")])],
+            meta_with_string("html-math-method", "mathml"),
+        )
+        .await;
+        assert!(converted.is_none(), "no leftover math → nothing to load");
+    }
+
+    /// The MathJax skip list must keep MathJax's own `annotation` and
+    /// `annotation-xml` entries: under `html-math-method: mathml` the
+    /// converted `<math>` elements carry the source TeX in an
+    /// `<annotation>`, and when MathJax is loaded for a leftover
+    /// expression (bd-3evfzwal) it would otherwise re-typeset every
+    /// `\begin{…}` it finds in those annotations (seen in a browser:
+    /// zero-size assistive MathML inside the converted matrices).
+    #[test]
+    fn mathjax_skip_list_excludes_annotations() {
+        let slot = MathEngine::default_engine().render_math_slot();
+        let skip = slot
+            .lines()
+            .find(|l| l.contains("skipHtmlTags"))
+            .expect("skipHtmlTags in the MathJax config");
+        for tag in ["'annotation'", "'annotation-xml'", "'pre'", "'script'"] {
+            assert!(skip.contains(tag), "{tag} missing from {skip}");
+        }
     }
 
     // ── Tests for the engine config parser (independent of stage) ──

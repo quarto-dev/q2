@@ -43,10 +43,10 @@ use async_trait::async_trait;
 
 use quarto_pandoc_types::attr::AttrSourceInfo;
 use quarto_pandoc_types::block::Block;
-use quarto_pandoc_types::custom::Slot;
-use quarto_pandoc_types::inline::{Inline, Inlines, Math, MathType, Span, Str};
+use quarto_pandoc_types::inline::{Inline, Math, MathType, Span, Str};
 use quarto_source_map::SourceInfo;
 
+use crate::ast_walk::for_each_inline_mut;
 use crate::crossref::EQ_NUMBER_ATTR;
 use crate::format::Format;
 use crate::math_method::{MathMethod, MathMethodConfig};
@@ -136,10 +136,7 @@ impl PipelineStage for EquationNumberStage {
 
         let method = MathMethodConfig::from_meta(&doc.ast.meta).method;
         let encoding = NumberEncoding::for_document(&ctx.format, &method);
-        let mut outcome = Outcome::default();
-        for block in doc.ast.blocks.iter_mut() {
-            visit_block(block, encoding, &mut outcome);
-        }
+        let outcome = encode_document(&mut doc.ast.blocks, encoding);
 
         if outcome.encoded > 0 || outcome.non_canonical > 0 {
             trace_event!(
@@ -156,10 +153,14 @@ impl PipelineStage for EquationNumberStage {
     }
 }
 
+/// What one pass over a document did.
 #[derive(Default)]
-struct Outcome {
-    encoded: usize,
-    non_canonical: usize,
+pub struct Outcome {
+    /// Spans whose number was encoded.
+    pub encoded: usize,
+    /// Spans that carried the attribute but not `[Math(DisplayMath), …]`;
+    /// only the attribute was removed.
+    pub non_canonical: usize,
 }
 
 /// Apply `encoding` to one equation span that carried `number`. Returns
@@ -214,146 +215,23 @@ fn append_to_tex(math: &mut Math, suffix: &str) {
     math.text.push_str(suffix);
 }
 
-fn visit_block(block: &mut Block, encoding: NumberEncoding, out: &mut Outcome) {
-    match block {
-        Block::Plain(p) => visit_inlines(&mut p.content, encoding, out),
-        Block::Paragraph(p) => visit_inlines(&mut p.content, encoding, out),
-        Block::LineBlock(lb) => {
-            for line in lb.content.iter_mut() {
-                visit_inlines(line, encoding, out);
-            }
+/// Encode every `quarto-eq-number` attribute under `blocks` and remove it.
+pub fn encode_document(blocks: &mut [Block], encoding: NumberEncoding) -> Outcome {
+    let mut out = Outcome::default();
+    for_each_inline_mut(blocks, &mut |inline| {
+        let Inline::Span(span) = inline else {
+            return;
+        };
+        let Some(number) = span.attr.2.remove(EQ_NUMBER_ATTR) else {
+            return;
+        };
+        if encode_number(span, &number, encoding) {
+            out.encoded += 1;
+        } else {
+            out.non_canonical += 1;
         }
-        Block::BlockQuote(bq) => visit_blocks(&mut bq.content, encoding, out),
-        Block::OrderedList(ol) => {
-            for item in ol.content.iter_mut() {
-                visit_blocks(item, encoding, out);
-            }
-        }
-        Block::BulletList(bl) => {
-            for item in bl.content.iter_mut() {
-                visit_blocks(item, encoding, out);
-            }
-        }
-        Block::DefinitionList(dl) => {
-            for (term, defs) in dl.content.iter_mut() {
-                visit_inlines(term, encoding, out);
-                for def in defs.iter_mut() {
-                    visit_blocks(def, encoding, out);
-                }
-            }
-        }
-        Block::Header(h) => visit_inlines(&mut h.content, encoding, out),
-        Block::Div(d) => visit_blocks(&mut d.content, encoding, out),
-        Block::Figure(f) => {
-            if let Some(short) = f.caption.short.as_mut() {
-                visit_inlines(short, encoding, out);
-            }
-            if let Some(long) = f.caption.long.as_mut() {
-                visit_blocks(long, encoding, out);
-            }
-            visit_blocks(&mut f.content, encoding, out);
-        }
-        Block::Table(t) => {
-            if let Some(short) = t.caption.short.as_mut() {
-                visit_inlines(short, encoding, out);
-            }
-            if let Some(long) = t.caption.long.as_mut() {
-                visit_blocks(long, encoding, out);
-            }
-            for row in t.head.rows.iter_mut().chain(t.foot.rows.iter_mut()) {
-                for cell in row.cells.iter_mut() {
-                    visit_blocks(&mut cell.content, encoding, out);
-                }
-            }
-            for body in t.bodies.iter_mut() {
-                for row in body.head.iter_mut().chain(body.body.iter_mut()) {
-                    for cell in row.cells.iter_mut() {
-                        visit_blocks(&mut cell.content, encoding, out);
-                    }
-                }
-            }
-        }
-        Block::CaptionBlock(cb) => visit_inlines(&mut cb.content, encoding, out),
-        Block::Custom(c) => {
-            for (_name, slot) in c.slots.iter_mut() {
-                visit_slot(slot, encoding, out);
-            }
-        }
-        Block::CodeBlock(_)
-        | Block::RawBlock(_)
-        | Block::HorizontalRule(_)
-        | Block::BlockMetadata(_)
-        | Block::NoteDefinitionPara(_)
-        | Block::NoteDefinitionFencedBlock(_) => {}
-    }
-}
-
-fn visit_blocks(blocks: &mut [Block], encoding: NumberEncoding, out: &mut Outcome) {
-    for block in blocks.iter_mut() {
-        visit_block(block, encoding, out);
-    }
-}
-
-fn visit_inlines(inlines: &mut Inlines, encoding: NumberEncoding, out: &mut Outcome) {
-    for inline in inlines.iter_mut() {
-        visit_inline(inline, encoding, out);
-    }
-}
-
-fn visit_inline(inline: &mut Inline, encoding: NumberEncoding, out: &mut Outcome) {
-    match inline {
-        Inline::Span(s) => {
-            if let Some(number) = s.attr.2.remove(EQ_NUMBER_ATTR) {
-                if encode_number(s, &number, encoding) {
-                    out.encoded += 1;
-                } else {
-                    out.non_canonical += 1;
-                }
-            }
-            // A filter may have nested things; keep walking.
-            visit_inlines(&mut s.content, encoding, out);
-        }
-        Inline::Emph(e) => visit_inlines(&mut e.content, encoding, out),
-        Inline::Underline(u) => visit_inlines(&mut u.content, encoding, out),
-        Inline::Strong(s) => visit_inlines(&mut s.content, encoding, out),
-        Inline::Strikeout(s) => visit_inlines(&mut s.content, encoding, out),
-        Inline::Superscript(s) => visit_inlines(&mut s.content, encoding, out),
-        Inline::Subscript(s) => visit_inlines(&mut s.content, encoding, out),
-        Inline::SmallCaps(s) => visit_inlines(&mut s.content, encoding, out),
-        Inline::Quoted(q) => visit_inlines(&mut q.content, encoding, out),
-        Inline::Link(l) => visit_inlines(&mut l.content, encoding, out),
-        Inline::Image(i) => visit_inlines(&mut i.content, encoding, out),
-        Inline::Note(n) => visit_blocks(&mut n.content, encoding, out),
-        Inline::Insert(i) => visit_inlines(&mut i.content, encoding, out),
-        Inline::Delete(d) => visit_inlines(&mut d.content, encoding, out),
-        Inline::Highlight(h) => visit_inlines(&mut h.content, encoding, out),
-        Inline::Custom(c) => {
-            for (_name, slot) in c.slots.iter_mut() {
-                visit_slot(slot, encoding, out);
-            }
-        }
-        Inline::Str(_)
-        | Inline::Cite(_)
-        | Inline::Code(_)
-        | Inline::Space(_)
-        | Inline::SoftBreak(_)
-        | Inline::LineBreak(_)
-        | Inline::Math(_)
-        | Inline::RawInline(_)
-        | Inline::Shortcode(_)
-        | Inline::NoteReference(_)
-        | Inline::Attr(_)
-        | Inline::EditComment(_) => {}
-    }
-}
-
-fn visit_slot(slot: &mut Slot, encoding: NumberEncoding, out: &mut Outcome) {
-    match slot {
-        Slot::Block(b) => visit_block(b, encoding, out),
-        Slot::Blocks(bs) => visit_blocks(bs, encoding, out),
-        Slot::Inline(i) => visit_inline(i, encoding, out),
-        Slot::Inlines(is) => visit_inlines(is, encoding, out),
-    }
+    });
+    out
 }
 
 #[cfg(test)]
@@ -631,9 +509,7 @@ mod tests {
     // ── the walker ─────────────────────────────────────────────────
 
     fn walk(blocks: &mut [Block], encoding: NumberEncoding) -> Outcome {
-        let mut out = Outcome::default();
-        visit_blocks(blocks, encoding, &mut out);
-        out
+        encode_document(blocks, encoding)
     }
 
     fn para(content: Vec<Inline>) -> Block {
@@ -646,7 +522,7 @@ mod tests {
     #[test]
     fn walker_reaches_spans_nested_in_blocks_inlines_and_custom_slots() {
         use quarto_pandoc_types::block::{BulletList, Div};
-        use quarto_pandoc_types::custom::CustomNode;
+        use quarto_pandoc_types::custom::{CustomNode, Slot};
         use quarto_pandoc_types::inline::Emph;
 
         let eq = || Inline::Span(numbered_span("1", vec![math(MathType::DisplayMath, "x")]));

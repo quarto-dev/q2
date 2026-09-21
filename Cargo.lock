@@ -5494,6 +5494,7 @@ dependencies = [
  "quarto-error-catalog",
  "quarto-error-reporting",
  "quarto-highlight",
+ "quarto-math",
  "quarto-navigation",
  "quarto-pandoc-types",
  "quarto-sass",

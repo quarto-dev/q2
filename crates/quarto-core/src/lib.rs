@@ -38,6 +38,7 @@
 
 pub mod artifact;
 pub mod artifact_flush;
+pub mod ast_walk;
 pub mod attribution;
 pub mod brand_fonts;
 pub mod cell_options;

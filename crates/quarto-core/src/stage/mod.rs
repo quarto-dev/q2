@@ -117,7 +117,7 @@ pub use stages::{
     ApplyTemplateStage, AstTransformsStage, AttributionGenerateStage, CaptureSpliceStage,
     CompileThemeCssStage, DocumentProfileStage, EngineExecutionStage, EquationNumberStage,
     IncludeExpansionStage, IncludeResolveStage, LanguageResolveStage, LinkResolutionStage,
-    ListingItemInfoStage, MathJsStage, MetadataMergeStage, ParseDocumentStage,
+    ListingItemInfoStage, MathJsStage, MathMlStage, MetadataMergeStage, ParseDocumentStage,
     PreEngineSugaringStage, RenderHtmlBodyStage, ResourceReportStage, SourceConversionStage,
     UnwrapProfileStage, UserFiltersStage, expand_document_includes,
 };

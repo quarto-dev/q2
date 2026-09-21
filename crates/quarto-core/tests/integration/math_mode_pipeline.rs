@@ -310,3 +310,167 @@ fn website_only_math_page_references_mathjax() {
         "math-free page must NOT reference MathJax CDN"
     );
 }
+
+// ── html-math-method: mathml (bd-3evfzwal) ──────────────────────────────
+
+/// Render `doc.qmd` with the given body under `html-math-method: mathml`
+/// and return the HTML plus the render diagnostics.
+fn render_mathml(body: &str) -> (String, Vec<quarto_error_reporting::DiagnosticMessage>) {
+    let temp = TempDir::new().unwrap();
+    let qmd_path = temp.path().join("doc.qmd");
+    write_file(
+        &qmd_path,
+        &format!("---\ntitle: MathML\nhtml-math-method: mathml\n---\n\n{body}\n"),
+    );
+    let runtime = runtime_arc();
+    let options = RenderToFileOptions::default();
+    let result = render_to_file(&qmd_path, "html", &options, runtime).expect("render");
+    let html = read(&result.output_path);
+    (html, result.render_output.diagnostics)
+}
+
+/// Every expression converts: native `<math>` in the page, the TeX
+/// delimiters gone, no JS engine loaded, and a numbered equation's label
+/// sits outside the math.
+#[test]
+fn mathml_method_emits_native_mathml_and_no_loader() {
+    let (html, diagnostics) = render_mathml(
+        "Inline $x^2$ and display:\n\n$$\\frac{a}{b}$$\n\n$$E = mc^2$$ {#eq-e}\n\nSee @eq-e.",
+    );
+    assert!(
+        html.contains(r#"<span class="math inline"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>x</mi><mn>2</mn></msup></mrow>"#),
+        "inline math must be native MathML inside the usual span; got:\n{html}"
+    );
+    assert!(
+        html.contains(r#"<span class="math display"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mfrac><mi>a</mi><mi>b</mi></mfrac></mrow>"#),
+        "display math must be block MathML; got:\n{html}"
+    );
+    assert!(
+        html.contains(r#"<annotation encoding="application/x-tex">E = mc^2</annotation></semantics></math></span><span class="quarto-eq-number">(1)</span></span>"#),
+        "the numbered equation keeps its TeX untouched and carries the label as a sibling; got:\n{html}"
+    );
+    assert!(
+        !html.contains("\\("),
+        "no inline TeX delimiters may remain:\n{html}"
+    );
+    assert!(
+        !html.contains("\\["),
+        "no display TeX delimiters may remain:\n{html}"
+    );
+    assert!(!html.contains("\\tag{"));
+    assert!(
+        !html.contains(MATHJAX_CONFIG_SENTINEL),
+        "no MathJax when everything converted"
+    );
+    assert!(!html.contains("cdn.jsdelivr.net/npm/mathjax"));
+    assert!(!html.contains("cdn.jsdelivr.net/npm/katex"));
+    assert!(
+        html.contains("Equation\u{a0}1"),
+        "the crossref link still resolves"
+    );
+    let math_codes: Vec<&str> = diagnostics
+        .iter()
+        .filter_map(|d| d.code.as_deref())
+        .filter(|c| c.starts_with("Q-22-"))
+        .collect();
+    assert!(
+        math_codes.is_empty(),
+        "no math diagnostics expected, got {math_codes:?}"
+    );
+}
+
+/// An expression the converter rejects stays TeX, and MathJax is loaded
+/// for the page so the reader still sees it rendered (plan decision 2).
+/// The author gets a `Q-22-1` *warning* pointing at the command.
+#[test]
+fn mathml_method_falls_back_to_mathjax_for_an_unconvertible_expression() {
+    let (html, diagnostics) = render_mathml("Good $a^2$ and bad $x + \\bogus y$.");
+    assert!(
+        html.contains("<mrow><msup><mi>a</mi><mn>2</mn></msup></mrow>"),
+        "the convertible expression is MathML; got:\n{html}"
+    );
+    assert!(
+        html.contains(r#"<span class="math inline">\(x + \bogus y\)</span>"#),
+        "the unconvertible expression stays TeX for MathJax; got:\n{html}"
+    );
+    assert!(
+        html.contains(MATHJAX_CONFIG_SENTINEL) && html.contains(DEFAULT_MATHJAX_URL),
+        "MathJax must be loaded for the leftover expression; got:\n{html}"
+    );
+    // …and must not re-typeset the TeX inside the converted math's
+    // `<annotation>` (MathJax's default skip list covers it; ours must too).
+    assert!(
+        html.contains("'annotation', 'annotation-xml'"),
+        "the MathJax skip list must include annotation elements; got:\n{html}"
+    );
+    let bogus: Vec<_> = diagnostics
+        .iter()
+        .filter(|d| d.code.as_deref() == Some("Q-22-1"))
+        .collect();
+    assert_eq!(
+        bogus.len(),
+        1,
+        "one unknown-command diagnostic; got {diagnostics:?}"
+    );
+    assert_eq!(
+        bogus[0].kind,
+        quarto_error_reporting::DiagnosticKind::Warning,
+        "the page still renders (MathJax), so this is a warning, not an error"
+    );
+    assert!(
+        bogus[0].location.is_some(),
+        "the diagnostic points into the .qmd"
+    );
+}
+
+/// No math: neither `<math>` nor a loader.
+#[test]
+fn mathml_method_without_math_emits_nothing() {
+    let (html, _) = render_mathml("Just prose.");
+    assert!(!html.contains("<math"));
+    assert!(!html.contains(MATHJAX_CONFIG_SENTINEL));
+}
+
+/// Math is converted wherever it sits: headers, list items, table cells,
+/// and footnotes.
+#[test]
+fn mathml_method_reaches_math_in_every_container() {
+    let (html, _) = render_mathml(
+        "# Header $h^2$\n\n- item $i^2$\n\n| a |\n|---|\n| $t^2$ |\n\nText^[note $n^2$]",
+    );
+    for var in ["h", "i", "t", "n"] {
+        assert!(
+            html.contains(&format!("<msup><mi>{var}</mi><mn>2</mn></msup>")),
+            "math in a container ({var}) must be converted; got:\n{html}"
+        );
+    }
+    assert!(!html.contains("\\("));
+    assert!(!html.contains(MATHJAX_CONFIG_SENTINEL));
+}
+
+/// Two-page site: the mathml page gets `<math>` and no loader; the
+/// math-free page gets neither.
+#[test]
+fn website_mathml_page_has_math_and_no_loader() {
+    let project_dir = render_website(|dir| {
+        write_file(
+            &dir.join("_quarto.yml"),
+            "project:\n  type: website\nformat:\n  html:\n    html-math-method: mathml\n",
+        );
+        write_file(
+            &dir.join("index.qmd"),
+            "---\ntitle: Home\n---\n\nNothing here.\n",
+        );
+        write_file(
+            &dir.join("equations.qmd"),
+            "---\ntitle: Equations\n---\n\nWe have $x + 1 = y$.\n",
+        );
+    });
+    let site = project_dir.join("_site");
+    let index_html = read(&site.join("index.html"));
+    let eq_html = read(&site.join("equations.html"));
+    assert!(eq_html.contains("<math xmlns="), "got:\n{eq_html}");
+    assert!(!eq_html.contains(MATHJAX_CONFIG_SENTINEL));
+    assert!(!index_html.contains("<math"));
+    assert!(!index_html.contains(MATHJAX_CONFIG_SENTINEL));
+}

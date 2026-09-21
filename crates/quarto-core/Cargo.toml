@@ -61,6 +61,8 @@ pampa = { workspace = true, features = ["lua-filter", "json-filter"] }
 # `quarto-highlight` crate itself to avoid compiling wasmtime for the
 # wasm32-unknown-unknown target.
 quarto-highlight.workspace = true
+# `MathMlStage` (html-math-method: mathml) converts math at render time.
+quarto-math = { path = "../quarto-math" }
 
 # Used by the listings module's `b64_encode_unicode` helper (mirroring
 # Q1's `b64EncodeUnicode` for the categories click handler). Available
