@@ -2,4 +2,128 @@
 title: Typst format
 ---
 
-TBD.
+## Overview
+
+`typst` output renders your document with [Typst](https://typst.app), a
+modern typesetting system, and produces a PDF. It's an alternative to
+`pdf` (LaTeX) worth considering when you want fast compiles and don't need
+LaTeX-specific packages.
+
+Rendering to `typst` requires a `typst` binary. Quarto does not bundle
+one — install it from [typst.app](https://typst.app) and make sure it's on
+your `PATH`, or point the `QUARTO_TYPST` environment variable at wherever
+it lives. Quarto requires `typst` 0.8 or newer.
+
+## Basic usage
+
+Render a single document to `typst` from the command line:
+
+``` bash
+quarto render document.qmd --to typst
+```
+
+Or set it as the document's format in the YAML front matter:
+
+``` {.yaml filename="document.qmd"}
+---
+title: "My Document"
+format: typst
+---
+```
+
+Either way, the output is a PDF — the intermediate Typst source Quarto
+generates along the way is deleted once the compile succeeds (see
+`keep-typ` below if you want to keep it).
+
+## Format options
+
+Set these under `format: typst:` in your document or project YAML.
+
+### Multi-column layout
+
+``` {.yaml filename="document.qmd"}
+format:
+  typst:
+    columns: 2
+```
+
+### Custom template
+
+Typst output is built from a Quarto-provided template. Point `template`
+at your own `.typ` file to override it:
+
+``` {.yaml filename="document.qmd"}
+format:
+  typst:
+    template: my-template.typ
+```
+
+Your template can still reference Quarto's own template partials (for
+example the numbering and page-geometry helpers) — they're staged
+alongside it, not replaced.
+
+### PDF standard
+
+Typst can target a specific PDF/A or PDF/UA conformance level via
+`pdf-standard`:
+
+``` {.yaml filename="document.qmd"}
+format:
+  typst:
+    pdf-standard: "a-2b"
+```
+
+Accepts either a single value or an array (e.g. `["2.0", "a-2b"]`). An
+unrecognized standard is dropped with a warning rather than passed
+through to `typst` verbatim.
+
+### Keeping the intermediate Typst source
+
+Quarto deletes the intermediate `.typ` file after a successful compile.
+Set `keep-typ: true` to keep it alongside the PDF — useful if you want to
+inspect or hand-edit the generated Typst source:
+
+``` {.yaml filename="document.qmd"}
+format:
+  typst:
+    keep-typ: true
+```
+
+## Cross-references and numbering
+
+Figures, tables, equations, and other cross-referenced elements are
+numbered natively by Typst's own compiler, not by Quarto — the same
+`@fig-`/`@tbl-`/`@eq-` syntax you use for every other format works as
+expected, and the numbers Typst prints always match the numbers your
+`@ref`s resolve to.
+
+## Margin notes
+
+Content placed in a `column-margin` div (or referenced via margin
+citations) renders in the page margin, using Typst's
+[marginalia](https://typst.app/universe/package/marginalia) package,
+which Quarto vendors and stages automatically — no extra installation
+step required:
+
+``` markdown
+Body text with a reference to the margin.[^note]
+
+::: {.column-margin}
+This appears in the margin next to the paragraph above.
+:::
+```
+
+## brand.yml support
+
+`typst` output honors your project's [`_brand.yml`](/guides/authoring/brand.qmd)
+for colors and typography, the same way other formats do.
+
+## Packages beyond the ones Quarto vendors
+
+Quarto vendors a handful of Typst packages its own template and Lua
+filters depend on (including `marginalia` for margin notes). If your
+document's own Typst content references an additional
+[Typst Universe](https://typst.app/universe) package via `#import
+"@preview/..."` — for example inside a raw Typst block — Quarto detects
+that reference and fetches the package automatically before compiling,
+the first time it's needed.

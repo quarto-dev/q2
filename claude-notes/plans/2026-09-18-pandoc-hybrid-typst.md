@@ -880,13 +880,117 @@ Part 5 table in full before starting.
       as-is); not re-verified at the compiled-PDF level in this pass.
 
 ### Phase 3 — Docs & polish
-- [ ] `docs/` page for the typst format (usage-focused, per the repo's docs/ convention —
+- [x] `docs/` page for the typst format (usage-focused, per the repo's docs/ convention —
       not technical internals).
-- [ ] Audit the Q1-cited upstream Pandoc bugs (image alt-text #11394, width/height units
+      **Done (2026-09-21)**: `docs/guides/formats/typst/index.qmd` (replacing the
+      long-standing `TBD.` stub — `git log` showed it untouched since the original
+      site-scaffolding commit) covers: requirements (`typst` on `PATH` or
+      `QUARTO_TYPST`, min version 0.8), basic usage (`--to typst` / `format: typst`),
+      `format.typst.{columns,template,pdf-standard,keep-typ}`, native crossref
+      numbering, margin notes (`.column-margin` → vendored `marginalia`), brand.yml
+      support, and the `typst-gather`-backed automatic fetch of arbitrary
+      `@preview` packages beyond Quarto's vendored 5. Added to the "Guides" sidebar
+      section in `docs/_quarto.yml` (the page was otherwise unreachable from site
+      navigation — confirmed the same is true of the pre-existing, equally-orphaned
+      `guides/formats/{latex,html}` pages; leaving those as-is is a deliberate scope
+      call, not an oversight — fixing that is a separate, pre-existing gap unrelated
+      to this plan). Rendered with `cargo run --bin q2 -- render
+      docs/guides/formats/typst/index.qmd` per this repo's docs/ convention (Q2
+      renders its own docs, never Q1's `quarto`); inspected the real output HTML —
+      correct `<title>`, all code/option blocks present, external links to
+      typst.app resolve.
+- [x] Audit the Q1-cited upstream Pandoc bugs (image alt-text #11394, width/height units
       #9945, table-in-figure #10438 — all in `filters/quarto-post/typst.lua`; Skylighting
       block styling #14126 in `format-typst.ts`'s postprocessor) against **the epic's
       pinned minimum pandoc version (3.10, per P4)**, not whatever pandoc happens to be
       installed locally. Drop any workaround the 3.10 floor already fixes rather than
       porting dead code.
-- [ ] Full workspace verification per this repo's standing rules:
+      **Done (2026-09-21) — audited against real upstream history via `gh`, not
+      guessed. Conclusion: keep all four unchanged; none are dead code at the 3.10
+      floor.**
+      - **#9945** (width/height unitless→inches): the pandoc issue itself was never
+        fixed on pandoc's side (closed 2025-01-02 without a merged pandoc PR) — the
+        actual fix was Quarto's *own* downstream PR
+        (`quarto-dev/quarto-cli#11676`, merged 2025-01-17), i.e. exactly the Lua
+        workaround already vendored here. Still required at any pandoc version.
+      - **#11394** (image alt text): closed *without merging* — jgm closed it
+        "in favor of a fresh change" that did land upstream
+        (`jgm/pandoc@cc72b8054c`, "Typst writer: include alt attributes on
+        images", 2026-02-14, with escaping/data-URI follow-ups
+        `04848401d5`/`a0448c7168`), which predates the 3.10 release
+        (2026-06-04) — so pandoc *does* now pass `alt` through natively. **Kept
+        anyway**: this vendored code does substantially more than the pandoc bug
+        it's named after — it also implements Quarto's own `fig-alt` > `alt` >
+        caption-as-alt precedence and a caption-suppression flag, neither of
+        which pandoc's native fix knows about, so *some* version of this logic
+        stays necessary regardless of pandoc version. Decisive check: **Q1's own
+        current upstream `typst.lua`** (`quarto-dev/quarto-cli@18634c0ac`, "Update
+        Pandoc, Typst, Dart Sass, esbuild, and veraPDF") is **already pinned to
+        pandoc 3.10** (`configuration`'s `PANDOC=3.10`) and still carries this
+        exact code, byte-for-byte, unchanged. Per this repo's "vendor Q1's Lua
+        verbatim" policy, matching Q1's own current judgment at the identical
+        floor is the right call, not a unilateral simplification based on reading
+        pandoc's changelog in isolation.
+      - **#10438** (table-in-figure): a `quarto-cli` issue, not a pandoc bug —
+        closed as `COMPLETED` by the very workaround being audited
+        (`typst:no-figure` class insertion). No pandoc version could "fix" this;
+        it's a permanent Quarto-side layout choice. Confirmed unchanged in Q1's
+        current `typst.lua` too.
+      - **#14126** (Skylighting block styling): also a `quarto-cli` issue (not
+        pandoc or skylighting), closed `COMPLETED` in 2026-03 by Q1's own
+        postprocessor — "temporary until upstreamed to the Skylighting library"
+        never happened; Q1's current `format-typst.ts`, pinned to the same
+        pandoc 3.10 floor, still carries the regex-based postprocessor unchanged.
+      **New finding, deliberately not acted on — flagged for Gordon rather than
+      unilaterally designed:** Q2 has **no equivalent of the #14126 Skylighting
+      postprocessor at all** — it was never in this plan's Phase 1/2 vendoring
+      scope (only the 7 Lua files were), so Q2's typst code blocks likely carry
+      the same missing-width/inset/radius visual bug Q1 patches around. Porting
+      it verbatim would mean regex-patching pandoc's own generated `.typ` text
+      after `PandocWriteStage` writes it — precisely the "DOM/text postprocessor"
+      shape this repo's architecture policy (`CLAUDE.md`'s "No DOM postprocessor"
+      section) says to re-express as an AST transform instead, and flags as "do
+      not introduce without an extremely strong, explicitly-discussed reason."
+      Unlike HTML, typst genuinely has no earlier AST-level seam to move this
+      into: the Skylighting function is pandoc's *own* writer-generated
+      boilerplate, injected into the `.typ` text only after Pandoc has already
+      written it — there is no Quarto-owned AST node representing it to
+      transform instead. `TypstCompileStage` (which already reads/mutates the
+      intermediate `.typ` before compiling, for `keep-typ` etc.) is the one
+      existing seam that could host a text patch without inventing a new
+      pipeline stage, but doing so is still the same architectural shape the
+      policy warns about, just reusing an existing stage rather than adding one.
+      This needs a design decision, not a unilateral implementation — out of
+      this bullet's audit scope, and per this plan's own checklist convention it
+      belongs as new discovered work *in this plan* if picked up (not a beads
+      strand — it's squarely inside "full Q1 feature parity," this plan's stated
+      end state), not attempted here.
+- [x] Full workspace verification per this repo's standing rules:
       `cargo xtask verify` (full, since this touches `quarto-core`) before any push.
+      **Done (2026-09-21), with an honest caveat — full `cargo xtask verify` does
+      not currently pass on this branch, for a reason unrelated to this plan.**
+      `cargo xtask verify` (unabridged) failed at step 8/14 (hub-client tests):
+      the `smoke-all preview <-> render DOM parity` suite
+      (`hub-client/src/services/smokeAllParity.wasm.test.tsx`) fails on nearly
+      every fixture. Diffing an artifact directly
+      (`hub-client/test-results/parity/drafts__draft-banner.qmd/*.norm.txt`)
+      showed the real cause: the **WASM preview pipeline omits the entire
+      `<header class="quarto-title-block">` block** that the real `q2 render`
+      path emits — a severe, systemic, pre-existing bug, filed as `bd-sv5dqgbd`
+      (priority 1) rather than fixed here, since it's title-block rendering in
+      the WASM preview path, unrelated to typst output and squarely outside
+      this plan's scope (the "Beads vs. plans" rule: this is *not* part of
+      completing this plan, so it's a strand, not a checklist item here).
+      Confirmed not caused by this session: zero of this session's changed
+      files compile into the `wasm32` target (`pandoc_write.rs`/
+      `typst_compile.rs` are both already native-only-gated modules), and the
+      `Cargo.lock` diff is purely additive (no existing package version
+      changed). Re-ran `cargo xtask verify --skip-hub-tests` to confirm every
+      *other* leg is clean: lint/clippy, Rust formatting, full workspace build,
+      `cargo nextest run --workspace` (**14215/14215 passed, 199 skipped** —
+      matching the per-crate delta reported above), tree-sitter grammar tests,
+      ts-packages builds, hub-client build (including a real WASM rebuild),
+      trace-viewer/preview-*/hub-MCP package tests, and the q2-preview-spa
+      build all passed — `✓ All verification steps passed!`. The only red leg
+      is the one this plan should not silently paper over by skipping it
+      without saying so.
