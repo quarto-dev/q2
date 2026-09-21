@@ -1,0 +1,16 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..13
+  run "f" @0..1
+  run "(" @1..2
+  run "x" @2..3
+  run ")" @3..4
+  run "=" @5..6
+  run "[" @7..8
+  run "a" @8..9
+  run "," @9..10
+  run "b" @11..12
+  run "]" @12..13
+-- problems --

@@ -1,0 +1,53 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..99
+  scripts Auto @0..8
+    run "E" @0..1
+    sub:
+      row @2..8
+        run "cell" @3..7
+  scripts Auto @9..26
+    row @9..19
+      scripts Auto @9..18
+        row @9..12
+          run "=" @9..10
+          run "E" @11..12
+        sup:
+          sym "∘" @13..18
+    sub:
+      row @20..26
+        run "cell" @21..25
+  run "-" @27..28
+  frac Bar @29..49
+    row @34..40
+      row @35..39
+        run "RT" @36..38
+    row @40..49
+      row @41..48
+        run "n" @42..43
+        sym "ℑ" @43..46
+  func "ln" Auto @49..52
+  scripts Auto @53..72
+    row @53..65
+      scripts Auto @53..64
+        row @53..58
+          run "Q" @53..54
+          run "=" @55..56
+          run "E" @57..58
+        sup:
+          sym "∘" @59..64
+    sub:
+      row @66..72
+        run "cell" @67..71
+  run "-" @73..74
+  frac Bar @75..93
+    row @80..90
+      row @81..89
+        run "0.0592" @82..88
+    row @90..93
+      run "n" @91..92
+  func "log" Auto @93..97
+  run "Q" @98..99
+-- problems --

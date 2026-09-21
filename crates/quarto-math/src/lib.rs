@@ -18,5 +18,7 @@
 //! Plan: `claude-notes/plans/2026-09-21-quarto-math-and-native-docx.md`
 //! (bd-entbg6x3, epic bd-pq9k90z2).
 
+pub mod ast;
+pub mod normalize;
 pub mod reader;
 pub mod spec;

@@ -1,0 +1,12 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..17
+  limpos Top @0..17
+    annotation:
+      row @9..14
+        run "def" @10..13
+    row @14..17
+      run "=" @15..16
+-- problems --

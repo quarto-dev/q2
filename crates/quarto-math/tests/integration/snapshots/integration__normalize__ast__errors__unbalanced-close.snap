@@ -1,0 +1,9 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..2
+  run "a" @0..1
+  error "unbalanced brace" "}" @1..2
+-- problems --
+UnbalancedBrace @1..2 unbalanced brace

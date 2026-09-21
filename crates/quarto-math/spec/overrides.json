@@ -1,20 +1,9 @@
 {
   "rows": {
-    " ": {
+    "": {
       "sem": {
         "kind": "space",
         "em": 0.3333
-      },
-      "parse": {
-        "Cmd": {
-          "args": {
-            "kind": "right",
-            "pattern": {
-              "kind": "none"
-            }
-          },
-          "alias": null
-        }
       }
     },
     "!": {

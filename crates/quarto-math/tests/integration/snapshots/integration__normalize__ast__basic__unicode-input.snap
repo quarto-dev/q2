@@ -1,0 +1,11 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..18
+  run "α" @0..2
+  run "≠" @3..6
+  run "∅" @7..10
+  run "→" @11..14
+  run "∞" @15..18
+-- problems --

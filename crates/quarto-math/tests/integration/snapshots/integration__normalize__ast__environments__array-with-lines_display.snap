@@ -1,0 +1,19 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..52
+  matrix Matrix - @0..52
+    row 0:
+      row @19..20
+        run "a" @19..20
+      row @23..24
+        run "b" @23..24
+    row 1:
+      row @35..36
+        row @-
+        run "c" @35..36
+      row @39..40
+        run "d" @39..40
+-- problems --
+Dropped @28..34 `\hline` has no equivalent in a matrix; dropped

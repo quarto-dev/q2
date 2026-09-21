@@ -1,0 +1,9 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..13
+  bar Bot @0..13
+    row @10..13
+      run "x" @11..12
+-- problems --

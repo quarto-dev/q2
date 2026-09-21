@@ -1,0 +1,60 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..111
+  func "log" Auto @0..4
+  run "(" @4..5
+  scripts Auto @5..10
+    sym "μ" @5..8
+    sub:
+      run "i" @9..10
+  run ")" @10..11
+  space 1em @12..17
+  run "=" @18..19
+  space 1em @20..25
+  scripts Auto @26..34
+    run "x" @26..27
+    sub:
+      run "i" @28..29
+    sup:
+      sym "⊤" @30..34
+  sym "β" @35..40
+  run "," @40..41
+  space 1em @42..47
+  scripts Auto @48..51
+    run "y" @48..49
+    sub:
+      run "i" @50..51
+  sym "∼" @52..56
+  style Roman @57..70
+    row @64..70
+      run "Pois" @65..69
+  run "(" @70..71
+  scripts Auto @71..76
+    sym "μ" @71..74
+    sub:
+      run "i" @75..76
+  run ")" @76..77
+  run "," @77..78
+  space 1em @79..84
+  run "E" @85..86
+  run "[" @86..87
+  scripts Auto @87..90
+    run "y" @87..88
+    sub:
+      run "i" @89..90
+  space 0.1667em @91..93
+  run "|" @94..95
+  space 0.1667em @96..98
+  scripts Auto @99..102
+    run "x" @99..100
+    sub:
+      run "i" @101..102
+  run "]" @102..103
+  run "=" @104..105
+  scripts Auto @106..111
+    sym "μ" @106..109
+    sub:
+      run "i" @110..111
+-- problems --

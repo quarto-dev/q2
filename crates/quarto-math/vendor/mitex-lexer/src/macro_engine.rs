@@ -610,10 +610,10 @@ impl<'a> MacroEngine<'a> {
                         self.add_macro(name, m);
                     }
                     UpdateAction::Renew => {
-                        if self.get_macro(name).is_none() {
-                            ctx.push_outer((Token::Error, name));
-                        }
-
+                        // q2 local patch: TeX allows `\renewcommand` of any existing
+                        // command, and the spec's built-ins (`\vec`) are existing commands
+                        // the macro table does not hold, so redefining one is not an
+                        // error here.
                         self.add_macro(name, m);
                     }
                     UpdateAction::Provide => {

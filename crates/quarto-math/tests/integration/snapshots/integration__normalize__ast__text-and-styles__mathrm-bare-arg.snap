@@ -1,0 +1,10 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..19
+  style Roman @0..9
+    run "r" @8..9
+  style Roman @10..19
+    run "S" @18..19
+-- problems --

@@ -1,0 +1,13 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..15
+  run "i" @0..1
+  run "=" @2..3
+  run "1" @4..5
+  run "," @5..6
+  sym "…" @7..12
+  run "," @12..13
+  run "n" @14..15
+-- problems --

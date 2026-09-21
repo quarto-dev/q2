@@ -1,0 +1,11 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..15
+  run "α" @0..2
+  run "+" @3..4
+  sym "β" @5..10
+  run "=" @11..12
+  run "γ" @13..15
+-- problems --

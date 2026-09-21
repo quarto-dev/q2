@@ -1,0 +1,9 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..16
+  frac Bar @0..16
+    sym "α" @5..11
+    sym "β" @11..16
+-- problems --

@@ -146,10 +146,13 @@ fn find_commands(text: &str) -> Vec<String> {
                 out.push(name);
                 continue;
             }
-            // Control symbols: `\,` `\;` `\!` `\ ` `\{` `\|` etc.
+            // Control symbols: `\,` `\;` `\!` `\ ` `\{` `\|` etc. mitex names
+            // `\ ` with the empty string (the space is lexed separately).
             if start < bytes.len() {
                 let c = bytes[start] as char;
-                if !c.is_ascii_alphabetic() && c != '\\' {
+                if c == ' ' {
+                    out.push(String::new());
+                } else if !c.is_ascii_alphabetic() && c != '\\' {
                     out.push(c.to_string());
                 }
                 i = start + 1;

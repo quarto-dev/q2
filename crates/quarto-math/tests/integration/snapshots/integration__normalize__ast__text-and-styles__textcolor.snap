@@ -1,0 +1,9 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..18
+  color "red" @0..18
+    row @15..18
+      run "x" @16..17
+-- problems --

@@ -244,7 +244,7 @@ markup for a fixture plus, for OMML, an `xmllint --schema` pass.
       cases as unit tests, including both macro cases; property test that
       spans are within bounds and non-decreasing per leaf for macro-free
       input.
-- [ ] **Normalization** `Cst -> MathAst`: flatten nested attachments into
+- [x] (done 2026-09-21: `quarto_math::normalize` → `Normalized { mode, root, problems }`; 263 per-fixture snapshots under `tests/integration/snapshots/` plus 22 structural tests; two mitex macro-engine gaps allowlisted under bd-f047ynng; vendored patch #7 lets `\renewcommand` redefine built-ins) **Normalization** `Cst -> MathAst`: flatten nested attachments into
       one `SubSup`, bind `\limits`/`\nolimits`, split env bodies into rows and
       cells, resolve `ItemLR` delimiters, attach `SourceInfo` to every node
       (`substring` of the math text info; node span = union of leaves).

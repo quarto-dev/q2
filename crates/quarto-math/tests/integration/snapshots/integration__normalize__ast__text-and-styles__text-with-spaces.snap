@@ -1,0 +1,7 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..26
+  text Roman "the quick brown fox" @0..26
+-- problems --

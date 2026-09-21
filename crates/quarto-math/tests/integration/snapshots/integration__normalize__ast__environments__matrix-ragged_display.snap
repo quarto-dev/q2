@@ -1,0 +1,20 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..44
+  matrix Matrix "(" ")" @0..44
+    row 0:
+      row @16..17
+        run "a" @16..17
+      row @20..21
+        run "b" @20..21
+      row @24..25
+        run "c" @24..25
+    row 1:
+      row @29..30
+        run "d" @29..30
+      row @-
+      row @-
+-- problems --
+RaggedRows @7..14 rows of `pmatrix` have different numbers of cells; short rows padded

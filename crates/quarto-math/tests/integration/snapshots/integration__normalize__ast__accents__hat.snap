@@ -1,0 +1,12 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..13
+  scripts Auto @0..13
+    accent "\u{302}" @0..11
+      row @4..11
+        sym "β" @5..10
+    sub:
+      run "0" @12..13
+-- problems --

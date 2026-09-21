@@ -1,0 +1,10 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..8
+  scripts Auto @0..8
+    run "90" @0..2
+    sup:
+      sym "∘" @3..8
+-- problems --

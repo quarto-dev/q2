@@ -1,0 +1,25 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..60
+  run "price" @0..5
+  run "=" @6..7
+  scripts Auto @8..21
+    accent "\u{302}" @8..19
+      row @12..19
+        sym "β" @13..18
+    sub:
+      run "0" @20..21
+  run "+" @22..23
+  scripts Auto @24..37
+    accent "\u{302}" @24..35
+      row @28..35
+        sym "β" @29..34
+    sub:
+      run "1" @36..37
+  sym "×" @38..44
+  run "area" @45..49
+  run "+" @50..51
+  sym "ϵ" @52..60
+-- problems --

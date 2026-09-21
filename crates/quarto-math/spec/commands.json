@@ -13,28 +13,10 @@
         }
       },
       "sem": {
-        "kind": "unsupported",
-        "why": "no semantics assigned"
-      },
-      "typst": "thick"
-    },
-    " ": {
-      "parse": {
-        "Cmd": {
-          "args": {
-            "kind": "right",
-            "pattern": {
-              "kind": "none"
-            }
-          },
-          "alias": null
-        }
-      },
-      "sem": {
         "kind": "space",
         "em": 0.3333
       },
-      "typst": null
+      "typst": "thick"
     },
     "!": {
       "parse": {

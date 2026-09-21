@@ -1,0 +1,8 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..17
+  text Roman "for all " @0..15
+  run "x" @16..17
+-- problems --

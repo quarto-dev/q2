@@ -1,0 +1,25 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..29
+  scripts UndOvr @0..8
+    func "sup" UndOvr @0..4
+    sub:
+      row @5..8
+        run "x" @6..7
+  run "f" @9..10
+  run "(" @10..11
+  run "x" @11..12
+  run ")" @12..13
+  run "-" @14..15
+  scripts UndOvr @16..24
+    func "inf" UndOvr @16..20
+    sub:
+      row @21..24
+        run "x" @22..23
+  run "f" @25..26
+  run "(" @26..27
+  run "x" @27..28
+  run ")" @28..29
+-- problems --

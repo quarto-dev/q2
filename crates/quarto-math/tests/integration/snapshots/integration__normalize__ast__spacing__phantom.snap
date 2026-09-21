@@ -1,0 +1,10 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..13
+  phantom h=true v=true @0..11
+    row @8..11
+      run "x" @9..10
+  run "y" @12..13
+-- problems --

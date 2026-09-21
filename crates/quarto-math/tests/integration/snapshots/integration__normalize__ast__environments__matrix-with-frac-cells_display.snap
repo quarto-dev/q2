@@ -1,0 +1,25 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..64
+  matrix Matrix "(" ")" @0..64
+    row 0:
+      row @16..27
+        frac Bar @16..27
+          row @21..24
+            run "1" @22..23
+          row @24..27
+            run "2" @25..26
+      row @30..31
+        run "0" @30..31
+    row 1:
+      row @35..36
+        run "0" @35..36
+      row @39..50
+        frac Bar @39..50
+          row @44..47
+            run "1" @45..46
+          row @47..50
+            run "2" @48..49
+-- problems --

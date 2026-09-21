@@ -54,6 +54,11 @@ Not vendored: `mitex` (the Typst converter; we write our own emitters),
    `(Token::Error, "macro expansion limit exceeded")` in place of the macro
    call. Upstream loops forever on `\newcommand{\loop}{\loop} \loop`; a
    reader fed `.qmd` content must terminate and diagnose instead.
+7. **`\renewcommand` of a built-in** (`mitex-lexer/src/macro_engine.rs`):
+   upstream emits an error token when `\renewcommand` names something that
+   is not in its macro table, which rejects `\renewcommand{\vec}[1]{…}`.
+   TeX allows redefining any existing command; the vendored engine just
+   installs the new definition.
 
 ## Updating
 

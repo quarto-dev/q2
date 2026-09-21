@@ -1,0 +1,32 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..53
+  frac Bar @0..12
+    row @5..8
+      run "d" @6..7
+    row @8..12
+      run "dx" @9..11
+  delimited "(" ")" @12..47
+    row @19..40
+      scripts Auto @19..31
+        nary "∫" Auto @19..23
+        sub:
+          row @24..27
+            run "a" @25..26
+        sup:
+          row @28..31
+            run "x" @29..30
+      run "f" @32..33
+      run "(" @33..34
+      run "u" @34..35
+      run ")" @35..36
+      space 0.1667em @36..38
+      run "du" @38..40
+  run "=f" @47..49
+  run "(" @49..50
+  run "x" @50..51
+  run ")" @51..52
+  run "." @52..53
+-- problems --
