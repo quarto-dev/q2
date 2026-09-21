@@ -1,0 +1,3325 @@
+{
+  "rows": {
+    " ": {
+      "sem": {
+        "kind": "space",
+        "em": 0.3333
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "none"
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "!": {
+      "sem": {
+        "kind": "space",
+        "em": -0.1667
+      }
+    },
+    "#": {
+      "sem": {
+        "kind": "sym",
+        "text": "#"
+      }
+    },
+    "$": {
+      "sem": {
+        "kind": "sym",
+        "text": "$"
+      }
+    },
+    "%": {
+      "sem": {
+        "kind": "sym",
+        "text": "%"
+      }
+    },
+    "&": {
+      "sem": {
+        "kind": "sym",
+        "text": "&"
+      }
+    },
+    ",": {
+      "sem": {
+        "kind": "space",
+        "em": 0.1667
+      }
+    },
+    ":": {
+      "sem": {
+        "kind": "space",
+        "em": 0.2222
+      }
+    },
+    ";": {
+      "sem": {
+        "kind": "space",
+        "em": 0.2778
+      }
+    },
+    ">": {
+      "sem": {
+        "kind": "space",
+        "em": 0.2222
+      }
+    },
+    "AA": {
+      "sem": {
+        "kind": "sym",
+        "text": "Å"
+      }
+    },
+    "Bbb": {
+      "sem": {
+        "kind": "style",
+        "variant": "double-struck"
+      }
+    },
+    "Big": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "Bigg": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "Biggl": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "Biggm": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "Biggr": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "Bigl": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "Bigm": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "Bigr": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "Bmatrix": {
+      "sem": {
+        "kind": "env",
+        "layout": "matrix",
+        "delims": [
+          "{",
+          "}"
+        ]
+      }
+    },
+    "Bra": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "Braket": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "Cap": {
+      "sem": {
+        "kind": "sym",
+        "text": "⋒"
+      }
+    },
+    "Colonapprox": {
+      "sem": {
+        "kind": "sym",
+        "text": "∷≈"
+      }
+    },
+    "Colonsim": {
+      "sem": {
+        "kind": "sym",
+        "text": "∷∼"
+      }
+    },
+    "H": {
+      "sem": {
+        "kind": "accent",
+        "text": "̋"
+      }
+    },
+    "Huge": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "Im": {
+      "sem": {
+        "kind": "sym",
+        "text": "ℑ"
+      }
+    },
+    "KaTeX": {
+      "sem": {
+        "kind": "text",
+        "variant": "roman"
+      }
+    },
+    "Ket": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "LARGE": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "LaTeX": {
+      "sem": {
+        "kind": "text",
+        "variant": "roman"
+      }
+    },
+    "Large": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "P": {
+      "sem": {
+        "kind": "sym",
+        "text": "¶"
+      }
+    },
+    "Pr": {
+      "sem": {
+        "kind": "func",
+        "name": "Pr"
+      }
+    },
+    "Re": {
+      "sem": {
+        "kind": "sym",
+        "text": "ℜ"
+      }
+    },
+    "S": {
+      "sem": {
+        "kind": "sym",
+        "text": "§"
+      }
+    },
+    "Set": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "TeX": {
+      "sem": {
+        "kind": "text",
+        "variant": "roman"
+      }
+    },
+    "Vert": {
+      "sem": {
+        "kind": "sym",
+        "text": "‖"
+      }
+    },
+    "Vmatrix": {
+      "sem": {
+        "kind": "env",
+        "layout": "matrix",
+        "delims": [
+          "‖",
+          "‖"
+        ]
+      }
+    },
+    "_": {
+      "sem": {
+        "kind": "sym",
+        "text": "_"
+      }
+    },
+    "aa": {
+      "sem": {
+        "kind": "sym",
+        "text": "å"
+      }
+    },
+    "abstract": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "acute": {
+      "sem": {
+        "kind": "accent",
+        "text": "́"
+      }
+    },
+    "align": {
+      "sem": {
+        "kind": "env",
+        "layout": "aligned"
+      }
+    },
+    "align*": {
+      "sem": {
+        "kind": "env",
+        "layout": "aligned"
+      }
+    },
+    "alignat": {
+      "sem": {
+        "kind": "env",
+        "layout": "aligned"
+      },
+      "parse": {
+        "Env": {
+          "args": {
+            "kind": "fixed-len",
+            "len": 1
+          },
+          "ctx_feature": {
+            "kind": "is-math"
+          },
+          "alias": null
+        }
+      }
+    },
+    "alignat*": {
+      "sem": {
+        "kind": "env",
+        "layout": "aligned"
+      },
+      "parse": {
+        "Env": {
+          "args": {
+            "kind": "fixed-len",
+            "len": 1
+          },
+          "ctx_feature": {
+            "kind": "is-math"
+          },
+          "alias": null
+        }
+      }
+    },
+    "aligned": {
+      "sem": {
+        "kind": "env",
+        "layout": "aligned"
+      }
+    },
+    "alignedat": {
+      "sem": {
+        "kind": "env",
+        "layout": "aligned"
+      }
+    },
+    "allowbreak": {
+      "sem": {
+        "kind": "ignore"
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "none"
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "approxcolon": {
+      "sem": {
+        "kind": "sym",
+        "text": "≈:"
+      }
+    },
+    "approxcoloncolon": {
+      "sem": {
+        "kind": "sym",
+        "text": "≈∷"
+      }
+    },
+    "arccos": {
+      "sem": {
+        "kind": "func",
+        "name": "arccos"
+      }
+    },
+    "arcctg": {
+      "sem": {
+        "kind": "func",
+        "name": "arcctg"
+      }
+    },
+    "arcsin": {
+      "sem": {
+        "kind": "func",
+        "name": "arcsin"
+      }
+    },
+    "arctan": {
+      "sem": {
+        "kind": "func",
+        "name": "arctan"
+      }
+    },
+    "arctg": {
+      "sem": {
+        "kind": "func",
+        "name": "arctg"
+      }
+    },
+    "arg": {
+      "sem": {
+        "kind": "func",
+        "name": "arg"
+      }
+    },
+    "argmax": {
+      "sem": {
+        "kind": "func",
+        "name": "argmax",
+        "limits": "und-ovr"
+      }
+    },
+    "argmin": {
+      "sem": {
+        "kind": "func",
+        "name": "argmin",
+        "limits": "und-ovr"
+      }
+    },
+    "array": {
+      "sem": {
+        "kind": "env",
+        "layout": "matrix",
+        "cols_from_arg": true
+      }
+    },
+    "atop": {
+      "sem": {
+        "kind": "frac",
+        "style": "no-bar"
+      }
+    },
+    "backslash": {
+      "sem": {
+        "kind": "sym",
+        "text": "\\"
+      }
+    },
+    "bar": {
+      "sem": {
+        "kind": "accent",
+        "text": "̄"
+      }
+    },
+    "bcancel": {
+      "sem": {
+        "kind": "cancel"
+      }
+    },
+    "begingroup": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "bf": {
+      "sem": {
+        "kind": "style",
+        "variant": "bold"
+      }
+    },
+    "big": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "bigcap": {
+      "sem": {
+        "kind": "nary",
+        "text": "⋂"
+      }
+    },
+    "bigcup": {
+      "sem": {
+        "kind": "nary",
+        "text": "⋃"
+      }
+    },
+    "bigdot": {
+      "sem": {
+        "kind": "nary",
+        "text": "⨀"
+      }
+    },
+    "bigg": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "biggl": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "biggm": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "biggr": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "bigl": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "bigm": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "bigodot": {
+      "sem": {
+        "kind": "nary",
+        "text": "⨀"
+      }
+    },
+    "bigoplus": {
+      "sem": {
+        "kind": "nary",
+        "text": "⨁"
+      }
+    },
+    "bigotimes": {
+      "sem": {
+        "kind": "nary",
+        "text": "⨂"
+      }
+    },
+    "bigplus": {
+      "sem": {
+        "kind": "nary",
+        "text": "⨁"
+      }
+    },
+    "bigr": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "bigsqcup": {
+      "sem": {
+        "kind": "nary",
+        "text": "⨆"
+      }
+    },
+    "bigtimes": {
+      "sem": {
+        "kind": "nary",
+        "text": "⨉"
+      }
+    },
+    "biguplus": {
+      "sem": {
+        "kind": "nary",
+        "text": "⨄"
+      }
+    },
+    "bigvee": {
+      "sem": {
+        "kind": "nary",
+        "text": "⋁"
+      }
+    },
+    "bigwedge": {
+      "sem": {
+        "kind": "nary",
+        "text": "⋀"
+      }
+    },
+    "binom": {
+      "sem": {
+        "kind": "frac",
+        "style": "binom"
+      }
+    },
+    "bm": {
+      "sem": {
+        "kind": "style",
+        "variant": "bold-italic"
+      }
+    },
+    "bmatrix": {
+      "sem": {
+        "kind": "env",
+        "layout": "matrix",
+        "delims": [
+          "[",
+          "]"
+        ]
+      }
+    },
+    "bmod": {
+      "sem": {
+        "kind": "func",
+        "name": "mod"
+      }
+    },
+    "bold": {
+      "sem": {
+        "kind": "style",
+        "variant": "bold"
+      }
+    },
+    "boldsymbol": {
+      "sem": {
+        "kind": "style",
+        "variant": "bold-italic"
+      }
+    },
+    "bot": {
+      "sem": {
+        "kind": "sym",
+        "text": "⊥"
+      }
+    },
+    "bottomrule": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "boxed": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "bra": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "brace": {
+      "sem": {
+        "kind": "frac",
+        "style": "binom"
+      }
+    },
+    "brack": {
+      "sem": {
+        "kind": "frac",
+        "style": "binom"
+      }
+    },
+    "braket": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "breve": {
+      "sem": {
+        "kind": "accent",
+        "text": "̆"
+      }
+    },
+    "bullet": {
+      "sem": {
+        "kind": "sym",
+        "text": "∙"
+      }
+    },
+    "cal": {
+      "sem": {
+        "kind": "style",
+        "variant": "script"
+      }
+    },
+    "cancel": {
+      "sem": {
+        "kind": "cancel"
+      }
+    },
+    "cap": {
+      "sem": {
+        "kind": "sym",
+        "text": "∩"
+      }
+    },
+    "caption": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "cases": {
+      "sem": {
+        "kind": "env",
+        "layout": "cases"
+      }
+    },
+    "cdot": {
+      "sem": {
+        "kind": "sym",
+        "text": "⋅"
+      }
+    },
+    "cdots": {
+      "sem": {
+        "kind": "sym",
+        "text": "⋯"
+      }
+    },
+    "centering": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "cfrac": {
+      "sem": {
+        "kind": "frac",
+        "style": "continued"
+      }
+    },
+    "ch": {
+      "sem": {
+        "kind": "func",
+        "name": "ch"
+      }
+    },
+    "check": {
+      "sem": {
+        "kind": "accent",
+        "text": "̌"
+      }
+    },
+    "choose": {
+      "sem": {
+        "kind": "frac",
+        "style": "binom"
+      }
+    },
+    "circ": {
+      "sem": {
+        "kind": "sym",
+        "text": "∘"
+      }
+    },
+    "circledast": {
+      "sem": {
+        "kind": "sym",
+        "text": "⊛"
+      }
+    },
+    "circledcirc": {
+      "sem": {
+        "kind": "sym",
+        "text": "⊚"
+      }
+    },
+    "circleddash": {
+      "sem": {
+        "kind": "sym",
+        "text": "⊝"
+      }
+    },
+    "cite": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "cline": {
+      "sem": {
+        "kind": "ignore"
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "fixed-len",
+              "len": 1
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "colonapprox": {
+      "sem": {
+        "kind": "sym",
+        "text": ":≈"
+      }
+    },
+    "coloncolonapprox": {
+      "sem": {
+        "kind": "sym",
+        "text": "∷≈"
+      }
+    },
+    "coloncolonsim": {
+      "sem": {
+        "kind": "sym",
+        "text": "∷∼"
+      }
+    },
+    "colonsim": {
+      "sem": {
+        "kind": "sym",
+        "text": ":∼"
+      }
+    },
+    "color": {
+      "sem": {
+        "kind": "color"
+      }
+    },
+    "colorbox": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "coprod": {
+      "sem": {
+        "kind": "nary",
+        "text": "∐"
+      }
+    },
+    "copyright": {
+      "sem": {
+        "kind": "sym",
+        "text": "©"
+      }
+    },
+    "cos": {
+      "sem": {
+        "kind": "func",
+        "name": "cos"
+      }
+    },
+    "cosec": {
+      "sem": {
+        "kind": "func",
+        "name": "cosec"
+      }
+    },
+    "cosh": {
+      "sem": {
+        "kind": "func",
+        "name": "cosh"
+      }
+    },
+    "cot": {
+      "sem": {
+        "kind": "func",
+        "name": "cot"
+      }
+    },
+    "cotg": {
+      "sem": {
+        "kind": "func",
+        "name": "cotg"
+      }
+    },
+    "coth": {
+      "sem": {
+        "kind": "func",
+        "name": "coth"
+      }
+    },
+    "cr": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "csc": {
+      "sem": {
+        "kind": "func",
+        "name": "csc"
+      }
+    },
+    "ctg": {
+      "sem": {
+        "kind": "func",
+        "name": "ctg"
+      }
+    },
+    "cth": {
+      "sem": {
+        "kind": "func",
+        "name": "cth"
+      }
+    },
+    "dag": {
+      "sem": {
+        "kind": "sym",
+        "text": "†"
+      }
+    },
+    "dagger": {
+      "sem": {
+        "kind": "sym",
+        "text": "†"
+      }
+    },
+    "dashleftarrow": {
+      "sem": {
+        "kind": "sym",
+        "text": "⇠"
+      }
+    },
+    "dashrightarrow": {
+      "sem": {
+        "kind": "sym",
+        "text": "⇢"
+      }
+    },
+    "dbinom": {
+      "sem": {
+        "kind": "frac",
+        "style": "binom"
+      }
+    },
+    "ddag": {
+      "sem": {
+        "kind": "sym",
+        "text": "‡"
+      }
+    },
+    "ddagger": {
+      "sem": {
+        "kind": "sym",
+        "text": "‡"
+      }
+    },
+    "ddddot": {
+      "sem": {
+        "kind": "accent",
+        "text": "⃜"
+      }
+    },
+    "dddot": {
+      "sem": {
+        "kind": "accent",
+        "text": "⃛"
+      }
+    },
+    "ddot": {
+      "sem": {
+        "kind": "accent",
+        "text": "̈"
+      }
+    },
+    "ddots": {
+      "sem": {
+        "kind": "sym",
+        "text": "⋱"
+      }
+    },
+    "def": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "deg": {
+      "sem": {
+        "kind": "func",
+        "name": "deg"
+      }
+    },
+    "degree": {
+      "sem": {
+        "kind": "sym",
+        "text": "°"
+      }
+    },
+    "det": {
+      "sem": {
+        "kind": "func",
+        "name": "det"
+      }
+    },
+    "dfrac": {
+      "sem": {
+        "kind": "frac",
+        "style": "display"
+      }
+    },
+    "dim": {
+      "sem": {
+        "kind": "func",
+        "name": "dim"
+      }
+    },
+    "displaystyle": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "div": {
+      "sem": {
+        "kind": "sym",
+        "text": "÷"
+      }
+    },
+    "dot": {
+      "sem": {
+        "kind": "accent",
+        "text": "̇"
+      }
+    },
+    "dots": {
+      "sem": {
+        "kind": "sym",
+        "text": "…"
+      }
+    },
+    "dotsb": {
+      "sem": {
+        "kind": "sym",
+        "text": "⋯"
+      }
+    },
+    "dotsc": {
+      "sem": {
+        "kind": "sym",
+        "text": "…"
+      }
+    },
+    "dotsi": {
+      "sem": {
+        "kind": "sym",
+        "text": "⋯"
+      }
+    },
+    "dotsm": {
+      "sem": {
+        "kind": "sym",
+        "text": "⋯"
+      }
+    },
+    "dotso": {
+      "sem": {
+        "kind": "sym",
+        "text": "…"
+      }
+    },
+    "doublecap": {
+      "sem": {
+        "kind": "sym",
+        "text": "⋒"
+      }
+    },
+    "emph": {
+      "sem": {
+        "kind": "text",
+        "variant": "italic"
+      }
+    },
+    "emptyset": {
+      "sem": {
+        "kind": "sym",
+        "text": "∅"
+      }
+    },
+    "enspace": {
+      "sem": {
+        "kind": "space",
+        "em": 0.5
+      }
+    },
+    "enumerate": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "eqnarray": {
+      "sem": {
+        "kind": "env",
+        "layout": "aligned"
+      },
+      "parse": {
+        "Env": {
+          "args": {
+            "kind": "none"
+          },
+          "ctx_feature": {
+            "kind": "is-math"
+          },
+          "alias": null
+        }
+      }
+    },
+    "eqnarray*": {
+      "sem": {
+        "kind": "env",
+        "layout": "aligned"
+      },
+      "parse": {
+        "Env": {
+          "args": {
+            "kind": "none"
+          },
+          "ctx_feature": {
+            "kind": "is-math"
+          },
+          "alias": null
+        }
+      }
+    },
+    "eqref": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "equation": {
+      "sem": {
+        "kind": "env",
+        "layout": "aligned"
+      }
+    },
+    "equation*": {
+      "sem": {
+        "kind": "env",
+        "layout": "aligned"
+      }
+    },
+    "exp": {
+      "sem": {
+        "kind": "func",
+        "name": "exp"
+      }
+    },
+    "expandafter": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "fbox": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "figure": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "footnote": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "footnotesize": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "frac": {
+      "sem": {
+        "kind": "frac",
+        "style": "bar"
+      }
+    },
+    "frak": {
+      "sem": {
+        "kind": "style",
+        "variant": "fraktur"
+      }
+    },
+    "gather": {
+      "sem": {
+        "kind": "env",
+        "layout": "gathered"
+      }
+    },
+    "gather*": {
+      "sem": {
+        "kind": "env",
+        "layout": "gathered"
+      },
+      "parse": {
+        "Env": {
+          "args": {
+            "kind": "none"
+          },
+          "ctx_feature": {
+            "kind": "is-math"
+          },
+          "alias": null
+        }
+      }
+    },
+    "gathered": {
+      "sem": {
+        "kind": "env",
+        "layout": "gathered"
+      }
+    },
+    "gcd": {
+      "sem": {
+        "kind": "func",
+        "name": "gcd"
+      }
+    },
+    "ge": {
+      "sem": {
+        "kind": "sym",
+        "text": "≥"
+      }
+    },
+    "geq": {
+      "sem": {
+        "kind": "sym",
+        "text": "≥"
+      }
+    },
+    "gets": {
+      "sem": {
+        "kind": "sym",
+        "text": "←"
+      }
+    },
+    "grave": {
+      "sem": {
+        "kind": "accent",
+        "text": "̀"
+      }
+    },
+    "hat": {
+      "sem": {
+        "kind": "accent",
+        "text": "̂"
+      }
+    },
+    "hbar": {
+      "sem": {
+        "kind": "sym",
+        "text": "ħ"
+      }
+    },
+    "hbox": {
+      "sem": {
+        "kind": "text",
+        "variant": "roman"
+      }
+    },
+    "hline": {
+      "sem": {
+        "kind": "ignore"
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "none"
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "hom": {
+      "sem": {
+        "kind": "func",
+        "name": "hom"
+      }
+    },
+    "hphantom": {
+      "sem": {
+        "kind": "phantom",
+        "h": true,
+        "v": false
+      }
+    },
+    "hskip": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "hslash": {
+      "sem": {
+        "kind": "sym",
+        "text": "ℏ"
+      }
+    },
+    "hspace": {
+      "sem": {
+        "kind": "space",
+        "em": 0.5
+      }
+    },
+    "hspace*": {
+      "sem": {
+        "kind": "space",
+        "em": 0.5
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "fixed-len",
+              "len": 1
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "huge": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "idotsint": {
+      "sem": {
+        "kind": "nary",
+        "text": "∫⋯∫"
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "none"
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "iff": {
+      "sem": {
+        "kind": "sym",
+        "text": "⟺"
+      }
+    },
+    "ignorespaces": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "ignorespacesafterend": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "iiiint": {
+      "sem": {
+        "kind": "nary",
+        "text": "⨌"
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "none"
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "iiint": {
+      "sem": {
+        "kind": "nary",
+        "text": "∭"
+      }
+    },
+    "iint": {
+      "sem": {
+        "kind": "nary",
+        "text": "∬"
+      }
+    },
+    "impliedby": {
+      "sem": {
+        "kind": "sym",
+        "text": "⟸"
+      }
+    },
+    "implies": {
+      "sem": {
+        "kind": "sym",
+        "text": "⟹"
+      }
+    },
+    "includegraphics": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "inf": {
+      "sem": {
+        "kind": "func",
+        "name": "inf",
+        "limits": "und-ovr"
+      }
+    },
+    "infty": {
+      "sem": {
+        "kind": "sym",
+        "text": "∞"
+      }
+    },
+    "injlim": {
+      "sem": {
+        "kind": "func",
+        "name": "proj lim",
+        "limits": "und-ovr"
+      }
+    },
+    "int": {
+      "sem": {
+        "kind": "nary",
+        "text": "∫"
+      }
+    },
+    "intop": {
+      "sem": {
+        "kind": "nary",
+        "text": "∫"
+      }
+    },
+    "it": {
+      "sem": {
+        "kind": "style",
+        "variant": "italic"
+      }
+    },
+    "itemize": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "ker": {
+      "sem": {
+        "kind": "func",
+        "name": "ker"
+      }
+    },
+    "kern": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "ket": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "lVert": {
+      "sem": {
+        "kind": "sym",
+        "text": "‖"
+      }
+    },
+    "label": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "land": {
+      "sem": {
+        "kind": "sym",
+        "text": "∧"
+      }
+    },
+    "lang": {
+      "sem": {
+        "kind": "sym",
+        "text": "⟨"
+      }
+    },
+    "langle": {
+      "sem": {
+        "kind": "sym",
+        "text": "⟨"
+      }
+    },
+    "large": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "lbrace": {
+      "sem": {
+        "kind": "sym",
+        "text": "{"
+      }
+    },
+    "lbrack": {
+      "sem": {
+        "kind": "sym",
+        "text": "["
+      }
+    },
+    "lceil": {
+      "sem": {
+        "kind": "sym",
+        "text": "⌈"
+      }
+    },
+    "lcm": {
+      "sem": {
+        "kind": "func",
+        "name": "lcm",
+        "limits": "und-ovr"
+      }
+    },
+    "ldots": {
+      "sem": {
+        "kind": "sym",
+        "text": "…"
+      }
+    },
+    "le": {
+      "sem": {
+        "kind": "sym",
+        "text": "≤"
+      }
+    },
+    "leftarrow": {
+      "sem": {
+        "kind": "sym",
+        "text": "←"
+      }
+    },
+    "leq": {
+      "sem": {
+        "kind": "sym",
+        "text": "≤"
+      }
+    },
+    "lfloor": {
+      "sem": {
+        "kind": "sym",
+        "text": "⌊"
+      }
+    },
+    "lg": {
+      "sem": {
+        "kind": "func",
+        "name": "lg"
+      }
+    },
+    "lgroup": {
+      "sem": {
+        "kind": "sym",
+        "text": "⟮"
+      }
+    },
+    "lim": {
+      "sem": {
+        "kind": "func",
+        "name": "lim",
+        "limits": "und-ovr"
+      }
+    },
+    "liminf": {
+      "sem": {
+        "kind": "func",
+        "name": "liminf",
+        "limits": "und-ovr"
+      }
+    },
+    "limits": {
+      "sem": {
+        "kind": "scripts",
+        "which": "limits"
+      }
+    },
+    "limsup": {
+      "sem": {
+        "kind": "func",
+        "name": "limsup",
+        "limits": "und-ovr"
+      }
+    },
+    "llbracket": {
+      "sem": {
+        "kind": "sym",
+        "text": "⟦"
+      }
+    },
+    "llcorner": {
+      "sem": {
+        "kind": "sym",
+        "text": "⌞"
+      }
+    },
+    "lmoustache": {
+      "sem": {
+        "kind": "sym",
+        "text": "⎰"
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "none"
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "ln": {
+      "sem": {
+        "kind": "func",
+        "name": "ln"
+      }
+    },
+    "lnot": {
+      "sem": {
+        "kind": "sym",
+        "text": "¬"
+      }
+    },
+    "log": {
+      "sem": {
+        "kind": "func",
+        "name": "log"
+      }
+    },
+    "lor": {
+      "sem": {
+        "kind": "sym",
+        "text": "∨"
+      }
+    },
+    "lrcorner": {
+      "sem": {
+        "kind": "sym",
+        "text": "⌟"
+      }
+    },
+    "lvert": {
+      "sem": {
+        "kind": "sym",
+        "text": "|"
+      }
+    },
+    "mapsto": {
+      "sem": {
+        "kind": "sym",
+        "text": "↦"
+      }
+    },
+    "mathbb": {
+      "sem": {
+        "kind": "style",
+        "variant": "double-struck"
+      }
+    },
+    "mathbf": {
+      "sem": {
+        "kind": "style",
+        "variant": "bold"
+      }
+    },
+    "mathbin": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "mathbold": {
+      "sem": {
+        "kind": "style",
+        "variant": "bold"
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "none"
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "mathcal": {
+      "sem": {
+        "kind": "style",
+        "variant": "script"
+      }
+    },
+    "mathclap": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "mathclose": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "mathfrak": {
+      "sem": {
+        "kind": "style",
+        "variant": "fraktur"
+      }
+    },
+    "mathinner": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "mathit": {
+      "sem": {
+        "kind": "style",
+        "variant": "italic"
+      }
+    },
+    "mathnormal": {
+      "sem": {
+        "kind": "style",
+        "variant": "italic"
+      }
+    },
+    "mathop": {
+      "sem": {
+        "kind": "style",
+        "variant": "roman"
+      }
+    },
+    "mathopen": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "mathord": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "mathpunct": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "mathrel": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "mathring": {
+      "sem": {
+        "kind": "accent",
+        "text": "̊"
+      }
+    },
+    "mathrm": {
+      "sem": {
+        "kind": "style",
+        "variant": "roman"
+      }
+    },
+    "mathscr": {
+      "sem": {
+        "kind": "style",
+        "variant": "script"
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "fixed-len",
+              "len": 1
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "mathsf": {
+      "sem": {
+        "kind": "style",
+        "variant": "sans"
+      }
+    },
+    "mathstrut": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "mathtt": {
+      "sem": {
+        "kind": "style",
+        "variant": "mono"
+      }
+    },
+    "matrix": {
+      "sem": {
+        "kind": "env",
+        "layout": "matrix"
+      }
+    },
+    "max": {
+      "sem": {
+        "kind": "func",
+        "name": "max",
+        "limits": "und-ovr"
+      }
+    },
+    "mbox": {
+      "sem": {
+        "kind": "text",
+        "variant": "roman"
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "fixed-len",
+              "len": 1
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "medspace": {
+      "sem": {
+        "kind": "space",
+        "em": 0.2222
+      }
+    },
+    "mho": {
+      "sem": {
+        "kind": "sym",
+        "text": "℧"
+      }
+    },
+    "mid": {
+      "sem": {
+        "kind": "sym",
+        "text": "∣"
+      }
+    },
+    "middle": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "midrule": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "min": {
+      "sem": {
+        "kind": "func",
+        "name": "min",
+        "limits": "und-ovr"
+      }
+    },
+    "mkern": {
+      "sem": {
+        "kind": "space",
+        "em": 0.5
+      }
+    },
+    "mod": {
+      "sem": {
+        "kind": "func",
+        "name": "mod"
+      }
+    },
+    "mskip": {
+      "sem": {
+        "kind": "space",
+        "em": 0.5
+      }
+    },
+    "mspace": {
+      "sem": {
+        "kind": "space",
+        "em": 0.5
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "fixed-len",
+              "len": 1
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "multline": {
+      "sem": {
+        "kind": "env",
+        "layout": "gathered"
+      },
+      "parse": {
+        "Env": {
+          "args": {
+            "kind": "none"
+          },
+          "ctx_feature": {
+            "kind": "is-math"
+          },
+          "alias": null
+        }
+      }
+    },
+    "multline*": {
+      "sem": {
+        "kind": "env",
+        "layout": "gathered"
+      },
+      "parse": {
+        "Env": {
+          "args": {
+            "kind": "none"
+          },
+          "ctx_feature": {
+            "kind": "is-math"
+          },
+          "alias": null
+        }
+      }
+    },
+    "nabla": {
+      "sem": {
+        "kind": "sym",
+        "text": "∇"
+      }
+    },
+    "ne": {
+      "sem": {
+        "kind": "sym",
+        "text": "≠"
+      }
+    },
+    "neg": {
+      "sem": {
+        "kind": "sym",
+        "text": "¬"
+      }
+    },
+    "negmedspace": {
+      "sem": {
+        "kind": "space",
+        "em": -0.2222
+      }
+    },
+    "negthickspace": {
+      "sem": {
+        "kind": "space",
+        "em": -0.2778
+      }
+    },
+    "negthinmedspace": {
+      "sem": {
+        "kind": "space",
+        "em": -0.1667
+      }
+    },
+    "negthinspace": {
+      "sem": {
+        "kind": "space",
+        "em": -0.1667
+      }
+    },
+    "neq": {
+      "sem": {
+        "kind": "sym",
+        "text": "≠"
+      }
+    },
+    "newcommand": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "newcommand*": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "newenvironment": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "newenvironment*": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "nobreak": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "noexpand": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "nolimits": {
+      "sem": {
+        "kind": "scripts",
+        "which": "no-limits"
+      }
+    },
+    "nonumber": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "normalsize": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "not": {
+      "sem": {
+        "kind": "not"
+      }
+    },
+    "notag": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "odot": {
+      "sem": {
+        "kind": "sym",
+        "text": "⊙"
+      }
+    },
+    "oiiint": {
+      "sem": {
+        "kind": "nary",
+        "text": "∰"
+      }
+    },
+    "oiint": {
+      "sem": {
+        "kind": "nary",
+        "text": "∯"
+      }
+    },
+    "oint": {
+      "sem": {
+        "kind": "nary",
+        "text": "∮"
+      }
+    },
+    "ominus": {
+      "sem": {
+        "kind": "sym",
+        "text": "⊖"
+      }
+    },
+    "operatorname": {
+      "sem": {
+        "kind": "text",
+        "variant": "roman"
+      }
+    },
+    "operatorname*": {
+      "sem": {
+        "kind": "text",
+        "variant": "roman"
+      }
+    },
+    "operatornamewithlimits": {
+      "sem": {
+        "kind": "text",
+        "variant": "roman"
+      }
+    },
+    "oplus": {
+      "sem": {
+        "kind": "sym",
+        "text": "⊕"
+      }
+    },
+    "otimes": {
+      "sem": {
+        "kind": "sym",
+        "text": "⊗"
+      }
+    },
+    "over": {
+      "sem": {
+        "kind": "frac",
+        "style": "bar"
+      }
+    },
+    "overbrace": {
+      "sem": {
+        "kind": "group-chr",
+        "text": "⏞",
+        "pos": "top"
+      }
+    },
+    "overbracket": {
+      "sem": {
+        "kind": "group-chr",
+        "text": "⎴",
+        "pos": "top"
+      }
+    },
+    "overgroup": {
+      "sem": {
+        "kind": "group-chr",
+        "text": "⏞",
+        "pos": "top"
+      }
+    },
+    "overleftarrow": {
+      "sem": {
+        "kind": "accent",
+        "text": "⃖"
+      }
+    },
+    "overleftharpoon": {
+      "sem": {
+        "kind": "accent",
+        "text": "⃐"
+      }
+    },
+    "overleftrightarrow": {
+      "sem": {
+        "kind": "accent",
+        "text": "⃡"
+      }
+    },
+    "overline": {
+      "sem": {
+        "kind": "bar",
+        "pos": "top"
+      }
+    },
+    "overlinesegment": {
+      "sem": {
+        "kind": "bar",
+        "pos": "top"
+      }
+    },
+    "overrightarrow": {
+      "sem": {
+        "kind": "accent",
+        "text": "⃗"
+      }
+    },
+    "overrightharpoon": {
+      "sem": {
+        "kind": "accent",
+        "text": "⃑"
+      }
+    },
+    "overset": {
+      "sem": {
+        "kind": "lim-pos",
+        "pos": "top"
+      }
+    },
+    "partial": {
+      "sem": {
+        "kind": "sym",
+        "text": "∂"
+      }
+    },
+    "phantom": {
+      "sem": {
+        "kind": "phantom",
+        "h": true,
+        "v": true
+      }
+    },
+    "plim": {
+      "sem": {
+        "kind": "func",
+        "name": "plim",
+        "limits": "und-ovr"
+      }
+    },
+    "pmatrix": {
+      "sem": {
+        "kind": "env",
+        "layout": "matrix",
+        "delims": [
+          "(",
+          ")"
+        ]
+      }
+    },
+    "pmb": {
+      "sem": {
+        "kind": "style",
+        "variant": "bold-italic"
+      }
+    },
+    "pmod": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "pod": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "pounds": {
+      "sem": {
+        "kind": "sym",
+        "text": "£"
+      }
+    },
+    "prime": {
+      "sem": {
+        "kind": "sym",
+        "text": "′"
+      }
+    },
+    "prod": {
+      "sem": {
+        "kind": "nary",
+        "text": "∏"
+      }
+    },
+    "projlim": {
+      "sem": {
+        "kind": "func",
+        "name": "proj lim",
+        "limits": "und-ovr"
+      }
+    },
+    "providecommand": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "providecommand*": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "qquad": {
+      "sem": {
+        "kind": "space",
+        "em": 2.0
+      }
+    },
+    "quad": {
+      "sem": {
+        "kind": "space",
+        "em": 1.0
+      }
+    },
+    "quote": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "r": {
+      "sem": {
+        "kind": "accent",
+        "text": "̊"
+      }
+    },
+    "rVert": {
+      "sem": {
+        "kind": "sym",
+        "text": "‖"
+      }
+    },
+    "raisebox": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "rang": {
+      "sem": {
+        "kind": "sym",
+        "text": "⟩"
+      }
+    },
+    "rangle": {
+      "sem": {
+        "kind": "sym",
+        "text": "⟩"
+      }
+    },
+    "rbrace": {
+      "sem": {
+        "kind": "sym",
+        "text": "}"
+      }
+    },
+    "rbrack": {
+      "sem": {
+        "kind": "sym",
+        "text": "]"
+      }
+    },
+    "rcases": {
+      "sem": {
+        "kind": "env",
+        "layout": "rcases"
+      }
+    },
+    "rceil": {
+      "sem": {
+        "kind": "sym",
+        "text": "⌉"
+      }
+    },
+    "ref": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "relax": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "renewcommand": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "renewcommand*": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "renewenvironment": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "renewenvironment*": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "rfloor": {
+      "sem": {
+        "kind": "sym",
+        "text": "⌋"
+      }
+    },
+    "rgroup": {
+      "sem": {
+        "kind": "sym",
+        "text": "⟯"
+      }
+    },
+    "rightarrow": {
+      "sem": {
+        "kind": "sym",
+        "text": "→"
+      }
+    },
+    "rm": {
+      "sem": {
+        "kind": "style",
+        "variant": "roman"
+      }
+    },
+    "rmoustache": {
+      "sem": {
+        "kind": "sym",
+        "text": "⎱"
+      }
+    },
+    "rrbracket": {
+      "sem": {
+        "kind": "sym",
+        "text": "⟧"
+      }
+    },
+    "rvert": {
+      "sem": {
+        "kind": "sym",
+        "text": "|"
+      }
+    },
+    "scriptscriptstyle": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "scriptsize": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "scriptstyle": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "sec": {
+      "sem": {
+        "kind": "func",
+        "name": "sec"
+      }
+    },
+    "section": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "set": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "setminus": {
+      "sem": {
+        "kind": "sym",
+        "text": "∖"
+      }
+    },
+    "sf": {
+      "sem": {
+        "kind": "style",
+        "variant": "sans"
+      }
+    },
+    "sh": {
+      "sem": {
+        "kind": "func",
+        "name": "sh"
+      }
+    },
+    "simcolon": {
+      "sem": {
+        "kind": "sym",
+        "text": "∼:"
+      }
+    },
+    "simcoloncolon": {
+      "sem": {
+        "kind": "sym",
+        "text": "∼∷"
+      }
+    },
+    "sin": {
+      "sem": {
+        "kind": "func",
+        "name": "sin"
+      }
+    },
+    "sinh": {
+      "sem": {
+        "kind": "func",
+        "name": "sinh"
+      }
+    },
+    "small": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "smallint": {
+      "sem": {
+        "kind": "nary",
+        "text": "∫"
+      }
+    },
+    "smallmatrix": {
+      "sem": {
+        "kind": "env",
+        "layout": "matrix"
+      }
+    },
+    "sout": {
+      "sem": {
+        "kind": "cancel"
+      }
+    },
+    "split": {
+      "sem": {
+        "kind": "env",
+        "layout": "aligned"
+      }
+    },
+    "sqcap": {
+      "sem": {
+        "kind": "sym",
+        "text": "⊓"
+      }
+    },
+    "sqrt": {
+      "sem": {
+        "kind": "sqrt"
+      }
+    },
+    "stackrel": {
+      "sem": {
+        "kind": "lim-pos",
+        "pos": "top"
+      }
+    },
+    "subarray": {
+      "sem": {
+        "kind": "env",
+        "layout": "matrix",
+        "cols_from_arg": true
+      }
+    },
+    "subsection": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "substack": {
+      "sem": {
+        "kind": "env",
+        "layout": "gathered"
+      }
+    },
+    "subsubsection": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "sum": {
+      "sem": {
+        "kind": "nary",
+        "text": "∑"
+      }
+    },
+    "sup": {
+      "sem": {
+        "kind": "func",
+        "name": "sup",
+        "limits": "und-ovr"
+      }
+    },
+    "table": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "tabular": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "tag": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "tan": {
+      "sem": {
+        "kind": "func",
+        "name": "tan"
+      }
+    },
+    "tanh": {
+      "sem": {
+        "kind": "func",
+        "name": "tanh"
+      }
+    },
+    "tbinom": {
+      "sem": {
+        "kind": "frac",
+        "style": "binom"
+      }
+    },
+    "text": {
+      "sem": {
+        "kind": "text",
+        "variant": "roman"
+      }
+    },
+    "textbf": {
+      "sem": {
+        "kind": "text",
+        "variant": "bold"
+      }
+    },
+    "textcolor": {
+      "sem": {
+        "kind": "color"
+      }
+    },
+    "textit": {
+      "sem": {
+        "kind": "text",
+        "variant": "italic"
+      }
+    },
+    "textmd": {
+      "sem": {
+        "kind": "text",
+        "variant": "roman"
+      }
+    },
+    "textnormal": {
+      "sem": {
+        "kind": "text",
+        "variant": "roman"
+      }
+    },
+    "textrm": {
+      "sem": {
+        "kind": "text",
+        "variant": "roman"
+      }
+    },
+    "textsf": {
+      "sem": {
+        "kind": "text",
+        "variant": "sans"
+      }
+    },
+    "textstyle": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "texttt": {
+      "sem": {
+        "kind": "text",
+        "variant": "mono"
+      }
+    },
+    "textup": {
+      "sem": {
+        "kind": "text",
+        "variant": "roman"
+      }
+    },
+    "tfrac": {
+      "sem": {
+        "kind": "frac",
+        "style": "text"
+      }
+    },
+    "tg": {
+      "sem": {
+        "kind": "func",
+        "name": "tg"
+      }
+    },
+    "th": {
+      "sem": {
+        "kind": "func",
+        "name": "th"
+      }
+    },
+    "thickapprox": {
+      "sem": {
+        "kind": "sym",
+        "text": "≈"
+      }
+    },
+    "thicksim": {
+      "sem": {
+        "kind": "sym",
+        "text": "∼"
+      }
+    },
+    "thickspace": {
+      "sem": {
+        "kind": "space",
+        "em": 0.2778
+      }
+    },
+    "thinspace": {
+      "sem": {
+        "kind": "space",
+        "em": 0.1667
+      }
+    },
+    "tilde": {
+      "sem": {
+        "kind": "accent",
+        "text": "̃"
+      }
+    },
+    "times": {
+      "sem": {
+        "kind": "sym",
+        "text": "×"
+      }
+    },
+    "tiny": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "to": {
+      "sem": {
+        "kind": "sym",
+        "text": "→"
+      }
+    },
+    "top": {
+      "sem": {
+        "kind": "sym",
+        "text": "⊤"
+      }
+    },
+    "toprule": {
+      "sem": {
+        "kind": "unsupported",
+        "why": "document-level or text-mode command; not math"
+      }
+    },
+    "tt": {
+      "sem": {
+        "kind": "style",
+        "variant": "mono"
+      }
+    },
+    "u": {
+      "sem": {
+        "kind": "accent",
+        "text": "̆"
+      }
+    },
+    "ulcorner": {
+      "sem": {
+        "kind": "sym",
+        "text": "⌜"
+      }
+    },
+    "underbar": {
+      "sem": {
+        "kind": "bar",
+        "pos": "bot"
+      }
+    },
+    "underbrace": {
+      "sem": {
+        "kind": "group-chr",
+        "text": "⏟",
+        "pos": "bot"
+      }
+    },
+    "underbracket": {
+      "sem": {
+        "kind": "group-chr",
+        "text": "⎵",
+        "pos": "bot"
+      }
+    },
+    "undergroup": {
+      "sem": {
+        "kind": "group-chr",
+        "text": "⏟",
+        "pos": "bot"
+      }
+    },
+    "underline": {
+      "sem": {
+        "kind": "bar",
+        "pos": "bot"
+      }
+    },
+    "underset": {
+      "sem": {
+        "kind": "lim-pos",
+        "pos": "bot"
+      }
+    },
+    "urcorner": {
+      "sem": {
+        "kind": "sym",
+        "text": "⌝"
+      }
+    },
+    "v": {
+      "sem": {
+        "kind": "accent",
+        "text": "̌"
+      }
+    },
+    "varDelta": {
+      "sem": {
+        "kind": "sym",
+        "text": "𝛥"
+      }
+    },
+    "varGamma": {
+      "sem": {
+        "kind": "sym",
+        "text": "𝛤"
+      }
+    },
+    "varLambda": {
+      "sem": {
+        "kind": "sym",
+        "text": "𝛬"
+      }
+    },
+    "varOmega": {
+      "sem": {
+        "kind": "sym",
+        "text": "𝛺"
+      }
+    },
+    "varPhi": {
+      "sem": {
+        "kind": "sym",
+        "text": "𝛷"
+      }
+    },
+    "varPi": {
+      "sem": {
+        "kind": "sym",
+        "text": "𝛱"
+      }
+    },
+    "varPsi": {
+      "sem": {
+        "kind": "sym",
+        "text": "𝛹"
+      }
+    },
+    "varSigma": {
+      "sem": {
+        "kind": "sym",
+        "text": "𝛴"
+      }
+    },
+    "varTheta": {
+      "sem": {
+        "kind": "sym",
+        "text": "𝛩"
+      }
+    },
+    "varUpsilon": {
+      "sem": {
+        "kind": "sym",
+        "text": "𝛶"
+      }
+    },
+    "varXi": {
+      "sem": {
+        "kind": "sym",
+        "text": "𝛯"
+      }
+    },
+    "varnothing": {
+      "sem": {
+        "kind": "sym",
+        "text": "∅"
+      }
+    },
+    "vdots": {
+      "sem": {
+        "kind": "sym",
+        "text": "⋮"
+      }
+    },
+    "vec": {
+      "sem": {
+        "kind": "accent",
+        "text": "⃗"
+      }
+    },
+    "vee": {
+      "sem": {
+        "kind": "sym",
+        "text": "∨"
+      }
+    },
+    "vert": {
+      "sem": {
+        "kind": "sym",
+        "text": "|"
+      }
+    },
+    "vmatrix": {
+      "sem": {
+        "kind": "env",
+        "layout": "matrix",
+        "delims": [
+          "|",
+          "|"
+        ]
+      }
+    },
+    "vphantom": {
+      "sem": {
+        "kind": "phantom",
+        "h": false,
+        "v": true
+      }
+    },
+    "vspace": {
+      "sem": {
+        "kind": "ignore"
+      }
+    },
+    "wedge": {
+      "sem": {
+        "kind": "sym",
+        "text": "∧"
+      }
+    },
+    "widecheck": {
+      "sem": {
+        "kind": "accent",
+        "text": "̌"
+      }
+    },
+    "widehat": {
+      "sem": {
+        "kind": "accent",
+        "text": "̂"
+      }
+    },
+    "widetilde": {
+      "sem": {
+        "kind": "accent",
+        "text": "̃"
+      }
+    },
+    "xLeftarrow": {
+      "sem": {
+        "kind": "x-arrow",
+        "text": "⇐"
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "glob",
+              "pattern": "{,b}t"
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "xLeftrightarrow": {
+      "sem": {
+        "kind": "x-arrow",
+        "text": "⇔"
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "glob",
+              "pattern": "{,b}t"
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "xRightarrow": {
+      "sem": {
+        "kind": "x-arrow",
+        "text": "⇒"
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "glob",
+              "pattern": "{,b}t"
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "xcancel": {
+      "sem": {
+        "kind": "cancel"
+      }
+    },
+    "xhookleftarrow": {
+      "sem": {
+        "kind": "x-arrow",
+        "text": "↩"
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "glob",
+              "pattern": "{,b}t"
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "xhookrightarrow": {
+      "sem": {
+        "kind": "x-arrow",
+        "text": "↪"
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "glob",
+              "pattern": "{,b}t"
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "xleftarrow": {
+      "sem": {
+        "kind": "x-arrow",
+        "text": "←"
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "glob",
+              "pattern": "{,b}t"
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "xleftharpoondown": {
+      "sem": {
+        "kind": "x-arrow",
+        "text": "↽"
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "glob",
+              "pattern": "{,b}t"
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "xleftharpoonup": {
+      "sem": {
+        "kind": "x-arrow",
+        "text": "↼"
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "glob",
+              "pattern": "{,b}t"
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "xleftrightarrow": {
+      "sem": {
+        "kind": "x-arrow",
+        "text": "↔"
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "glob",
+              "pattern": "{,b}t"
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "xleftrightharpoons": {
+      "sem": {
+        "kind": "x-arrow",
+        "text": "⇋"
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "glob",
+              "pattern": "{,b}t"
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "xlongequal": {
+      "sem": {
+        "kind": "x-arrow",
+        "text": "="
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "glob",
+              "pattern": "{,b}t"
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "xmapsto": {
+      "sem": {
+        "kind": "x-arrow",
+        "text": "↦"
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "glob",
+              "pattern": "{,b}t"
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "xrightarrow": {
+      "sem": {
+        "kind": "x-arrow",
+        "text": "→"
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "glob",
+              "pattern": "{,b}t"
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "xrightharpoondown": {
+      "sem": {
+        "kind": "x-arrow",
+        "text": "⇁"
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "glob",
+              "pattern": "{,b}t"
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "xrightharpoonup": {
+      "sem": {
+        "kind": "x-arrow",
+        "text": "⇀"
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "glob",
+              "pattern": "{,b}t"
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "xrightleftharpoons": {
+      "sem": {
+        "kind": "x-arrow",
+        "text": "⇌"
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "glob",
+              "pattern": "{,b}t"
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "xtofrom": {
+      "sem": {
+        "kind": "x-arrow",
+        "text": "⇄"
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "glob",
+              "pattern": "{,b}t"
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "xtwoheadleftarrow": {
+      "sem": {
+        "kind": "x-arrow",
+        "text": "↞"
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "glob",
+              "pattern": "{,b}t"
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "xtwoheadrightarrow": {
+      "sem": {
+        "kind": "x-arrow",
+        "text": "↠"
+      },
+      "parse": {
+        "Cmd": {
+          "args": {
+            "kind": "right",
+            "pattern": {
+              "kind": "glob",
+              "pattern": "{,b}t"
+            }
+          },
+          "alias": null
+        }
+      }
+    },
+    "{": {
+      "sem": {
+        "kind": "sym",
+        "text": "{"
+      }
+    },
+    "|": {
+      "sem": {
+        "kind": "sym",
+        "text": "‖"
+      }
+    },
+    "}": {
+      "sem": {
+        "kind": "sym",
+        "text": "}"
+      }
+    }
+  }
+}

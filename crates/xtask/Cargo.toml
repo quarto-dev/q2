@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = { workspace = true }
+quarto-math = { path = "../quarto-math", features = ["spec-gen"] }
 clap = { workspace = true }
 nodejs-semver = "5"
 proc-macro2 = { workspace = true }

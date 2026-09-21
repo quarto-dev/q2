@@ -1,0 +1,7 @@
+---
+source: crates/quarto-math/tests/integration/spec.rs
+expression: "rendered.join(\"\\n\")"
+---
+document-level or text-mode command; not math (34): Bra Braket Ket Set abstract bottomrule bra braket caption cite colorbox enumerate eqref figure footnote includegraphics itemize ket label mathstrut midrule pmod pod quote raisebox ref section set subsection subsubsection table tabular tag toprule
+no semantics assigned (2):  textwidth
+no typst alias (51): * @ifstar AtBeginDocument AtEndDocument AtEndOfClass AtEndOfPackage CheckCommand CheckCommand* CurrentOption DeclareOption DeclareOption* DeclareRobustCommand DeclareRobustCommand* DeclareTextCommand DeclareTextCommandDefault ExecuteOptions IfFileExists InputIfFileExists LoadClass LoadClassWithOptions PassOptionsToClass PassOptionsToPackage ProcessOptions ProvideTextCommand ProvideTextCommandDefault ProvidesClass ProvidesFile RequirePackage RequirePackageWithOptions documentclass if ifdim iffalse ifhbox ifhmode ifinner ifmmode ifnum ifodd iftrue ifvbox ifvmode ifvoid ifx item newcounter newfont newlength newsavebox newtheorem vline

@@ -4,3 +4,4 @@
 pub mod fixture_corpus;
 pub mod omml_schema;
 pub mod reader;
+pub mod spec;

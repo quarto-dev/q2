@@ -14,9 +14,23 @@ mitex-parser = { path = "vendor/mitex-parser" }
 mitex-spec = { path = "vendor/mitex-spec" }
 
 rowan = "0.15"
+rustc-hash = "2"
+serde = { workspace = true }
 serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+# `spec-gen` only: resolves Typst symbol names to Unicode when generating
+# spec/commands.json (`cargo xtask gen-math-spec`); not needed at runtime.
+codex = { version = "0.3", optional = true }
+
+[features]
+default = []
+spec-gen = ["dep:codex"]
 
 [dev-dependencies]
+# The integration tests regenerate the spec through the same code xtask uses.
+quarto-math = { path = ".", features = ["spec-gen"] }
+insta = { workspace = true }
 
 [lints]
 workspace = true
