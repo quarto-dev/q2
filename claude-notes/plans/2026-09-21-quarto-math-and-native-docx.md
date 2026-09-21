@@ -177,7 +177,9 @@ emitter from ECMA-376 Part 1 §22.1 is bounded work.
 - [x] Crate skeleton `crates/quarto-math` created with the corpus (Cargo.toml,
       empty `lib.rs` with the crate contract in its doc comment, integration
       test binary). The Phase 1 skeleton item now only needs the spec embed.
-- [ ] pampa: `Inline::Math` text mapping — record `SourceInfo::substring` /
+- [x] pampa: `Inline::Math` text mapping (done 2026-09-21 as `Math.text_source`,
+      strand bd-ieldbghj, commit f6c3b1a50 on its own branch off `main`, merged
+      here as 1578c4a59; PR pending push approval) — record `SourceInfo::substring` /
       `concat` for the math *text* (bd-q6ed / bd-qpa2 touch the same code;
       coordinate). **Decision 5:** done as its own strand (bd-ieldbghj) and PR against
       `main` (worktree under `.worktrees/`), then merged into this branch
