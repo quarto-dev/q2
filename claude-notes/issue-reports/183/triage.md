@@ -241,7 +241,7 @@ cargo run --bin pampa -- claude-notes/issue-reports/183/expected-output.qmd
 - **bd-oxsr** — beads issue filed from this triage. Carries the fix-scope description and TDD plan.
 - GitHub #174 — loose-bullet-list writer drops looseness when a nested sublist is present. Related symptom (round-trip failure caused by writer output), independent code path.
 - GitHub #180 — Figure-then-Para spacing bug. CLOSED. Same family ("writer emits qmd the reader rejects"), independent code path.
-- `crates/pampa/CLAUDE.md` — mandatory TDD checklist for any fix in this crate.
+- `crates/pampa/AGENTS.md` — mandatory TDD checklist for any fix in this crate.
 - `crates/pampa/src/writers/qmd.rs:937` — `write_list_table` (target of the fix).
 - `crates/pampa/src/writers/qmd.rs:1124-1128` — incremental-writer coupling note: tables are always fully rewritten, so the fix does not need to handle incremental splicing.
 - Reporter-cited quarto-web usages (real-world hits):

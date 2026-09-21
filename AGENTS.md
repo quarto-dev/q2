@@ -321,7 +321,7 @@ When fixing ANY bug:
 - `quarto-treesitter-ast`: generic tree-sitter AST traversal utilities
 
 **WASM:**
-- `wasm-qmd-parser`: WASM module with entry points from `pampa` (see [crates/wasm-qmd-parser/CLAUDE.md](crates/wasm-qmd-parser/CLAUDE.md) for build instructions)
+- `wasm-qmd-parser`: WASM module with entry points from `pampa` (see [crates/wasm-qmd-parser/AGENTS.md](crates/wasm-qmd-parser/AGENTS.md) for build instructions)
 
 ### `hub-client/` - Quarto Hub web client
 

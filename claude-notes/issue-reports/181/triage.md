@@ -121,7 +121,7 @@ Two viable approaches, both at the grammar layer:
 
 Either way: also verify `pandoc_math` (inline `$...$`) does not have a similar latent issue when an inline-math span gets soft-broken across a `> ` boundary. (Not investigated here — flagging for the implementor.)
 
-Once a fix lands, a round-trip regression test belongs in `crates/pampa/tests/roundtrip_tests/qmd-json-qmd` (per `crates/pampa/CLAUDE.md`) using `repro.qmd` as the input.
+Once a fix lands, a round-trip regression test belongs in `crates/pampa/tests/roundtrip_tests/qmd-json-qmd` (per `crates/pampa/AGENTS.md`) using `repro.qmd` as the input.
 
 ## Fix applied (this session)
 

@@ -267,5 +267,5 @@ Grammar crates are **ready to use as-is** — follow the tree-sitter-qmd pattern
 - LazyLock usage: Line 30, 114 (docs), 135 (docs)
 - AtomicUsize usage: Lines 175, 300, 534, 905
 - tree-sitter-qmd (working example): `/Users/cscheid/repos/github/quarto-dev/q2/crates/tree-sitter-qmd/`
-- wasm-qmd-parser (proven WASM build): `/Users/cscheid/repos/github/quarto-dev/q2/crates/wasm-qmd-parser/CLAUDE.md`
+- wasm-qmd-parser (proven WASM build): `/Users/cscheid/repos/github/quarto-dev/q2/crates/wasm-qmd-parser/AGENTS.md`
 - Current hub-client WASM size: ~17 MB (uncompressed)

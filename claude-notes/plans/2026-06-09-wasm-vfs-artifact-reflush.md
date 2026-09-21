@@ -359,7 +359,7 @@ All five design questions are now settled. Next step: Phase 0
 
 ## Risks / tradeoffs (draft)
 
-- **Phase-9 VFS contract** (`crates/wasm-quarto-hub-client/CLAUDE.md`): the VFS
+- **Phase-9 VFS contract** (`crates/wasm-quarto-hub-client/AGENTS.md`): the VFS
   is load-bearing across renders; skipping byte-identical writes is contract-
   preserving by construction, but any test that asserts "write happened"
   (rather than "bytes present") could need updating.

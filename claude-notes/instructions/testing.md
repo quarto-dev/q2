@@ -15,7 +15,7 @@ library functions.
 
 WASM-specific code paths (restricted Lua stdlib, synthetic io/os modules) are tested by
 dedicated smoke tests in `crates/pampa/tests/wasm_lua.rs` that run on the real
-`wasm32-unknown-unknown` target in CI. See `crates/pampa/CLAUDE.md` for details on when
+`wasm32-unknown-unknown` target in CI. See `crates/pampa/AGENTS.md` for details on when
 to add WASM tests.
 
 **Never add `test` to the `#[cfg(target_arch = "wasm32")]` guard.** This was a prior pattern

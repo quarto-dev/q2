@@ -475,7 +475,7 @@ post-processor needs.
 1. Doc-comment on `vfs_clear` (`crates/wasm-quarto-hub-client/src/lib.rs:407`)
    spelling out "this is for session teardown only, not between
    renders" with a one-sentence pointer to this plan.
-2. A short note in `crates/wasm-quarto-hub-client/CLAUDE.md`
+2. A short note in `crates/wasm-quarto-hub-client/AGENTS.md`
    (the per-crate dev doc) on the VFS state contract — what's
    in `/.quarto/project-artifacts/`, why it must persist across
    renders, and which APIs are safe to call when.
@@ -985,7 +985,7 @@ it interactively or a future session can script it):
 - [x] Decision 7 footgun guards in place:
       - Doc-comment on `vfs_clear` spelling out the
         session-teardown-only contract.
-      - `crates/wasm-quarto-hub-client/CLAUDE.md` documenting
+      - `crates/wasm-quarto-hub-client/AGENTS.md` documenting
         the VFS state contract + render entry points.
 - [x] Snapshot files: zero added/modified/removed (this phase
       didn't touch the existing snapshot suites).

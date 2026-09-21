@@ -140,5 +140,5 @@ cargo run --bin pampa -- -v /tmp/q236-bare.qmd 2>&1 | head -40
 
 - bd-7l1u — Q-2-35 (issue #184). Cited as template by the user; in practice Q-2-36 diverges (see *Approach*). Still the right reference for error-corpus mechanics, Merr `(state, sym)` mapping, and `widen_diagnostic_to_line` usage.
 - bd-f3pl — Q-2-152-tables (closed via #154). The first half of issue #152.
-- `crates/pampa/CLAUDE.md` — error-corpus authoring conventions.
+- `crates/pampa/AGENTS.md` — error-corpus authoring conventions.
 - `crates/tree-sitter-qmd/tree-sitter-markdown/CONTRIBUTING.md` — Known Limitations entries (precedent: Q-2-32 / Q-2-35).

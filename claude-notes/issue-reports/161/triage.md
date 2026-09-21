@@ -109,7 +109,7 @@ does not need to change.
 
 A regression test belongs at
 `tests/roundtrip_tests/qmd-json-qmd/` (per
-`crates/pampa/CLAUDE.md` § "When fixing roundtripping bugs"). Cover at
+`crates/pampa/AGENTS.md` § "When fixing roundtripping bugs"). Cover at
 least:
 1. `data-foo="\[1,2\]"` (the reported case — round-trips to
    `data-foo="[1,2]"`, then stable),
@@ -132,4 +132,4 @@ it fails, then change `extract_quoted_text`.
 ## Outcome
 
 Filed as **bd-tpjg** (priority 1, bug). Implementation TBD by whoever
-picks it up — TDD per `crates/pampa/CLAUDE.md`.
+picks it up — TDD per `crates/pampa/AGENTS.md`.

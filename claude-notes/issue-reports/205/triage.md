@@ -219,5 +219,5 @@ cargo build --bin pampa
 - `claude-notes/plans/2026-05-15-issue-201-apostrophe-escape.md` —
   sibling plan; this issue's fix should follow the same TDD shape
   (fixture first, then writer change).
-- `crates/pampa/CLAUDE.md` — the mandatory test-first checklist that
+- `crates/pampa/AGENTS.md` — the mandatory test-first checklist that
   governs the fix.
