@@ -19,6 +19,9 @@ env:
   # Deno version provisioned for the QUARTO_CI assertion test in ts_process.rs.
   # Must provide `Deno.Command`/`Deno.stdin.isTerminal()` (available since Deno 1.40+).
   DENO_VERSION: "2.9.0"
+  # Typst — the Pandoc-hybrid typst leg's `L`-tier tests (typst_compile.rs)
+  # require a real `typst` binary on PATH (TYPST_VERSION_FLOOR is 0.8+).
+  TYPST_VERSION: "0.15.1"
 
 jobs:
   test-suite:
@@ -93,6 +96,21 @@ jobs:
         run: |
           curl -LO "https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-arm64-macOS.pkg"
           sudo installer -pkg "pandoc-${PANDOC_VERSION}-arm64-macOS.pkg" -target /
+        shell: bash
+
+      # Typst setup — the docx/pptx Pandoc-hybrid leg also has a typst
+      # backend whose `L`-tier tests require a real binary (see TYPST_VERSION above).
+      - name: Set up Typst (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          curl -LO "https://github.com/typst/typst/releases/download/v${TYPST_VERSION}/typst-x86_64-unknown-linux-musl.tar.xz"
+          tar -xf "typst-x86_64-unknown-linux-musl.tar.xz"
+          sudo mv "typst-x86_64-unknown-linux-musl/typst" /usr/local/bin/typst
+        shell: bash
+
+      - name: Set up Typst (macOS)
+        if: runner.os == 'macOS'
+        run: brew install typst
         shell: bash
 
       # tree-sitter setup
