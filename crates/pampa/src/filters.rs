@@ -1392,6 +1392,7 @@ mod tests {
             math_type: MathType::InlineMath,
             text: "x^2".to_string(),
             source_info: si(),
+            text_source: None,
         });
         let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
         assert_eq!(result.len(), 1);

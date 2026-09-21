@@ -718,6 +718,7 @@ mod tests {
             math_type: quarto_pandoc_types::inline::MathType::InlineMath,
             text: "E=mc^2".to_string(),
             source_info: dummy_source_info(),
+            text_source: None,
         })];
         let text = inlines_to_plain_text(&inlines);
         assert_eq!(text, "E=mc^2");

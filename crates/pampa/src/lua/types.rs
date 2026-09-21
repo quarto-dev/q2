@@ -694,6 +694,10 @@ impl LuaInline {
             // Math
             (Inline::Math(m), "text") => {
                 m.text = String::from_lua(val, lua)?;
+                // The text no longer comes from the source bytes the
+                // reader mapped; drop the mapping rather than keep a stale
+                // one (bd-ieldbghj).
+                m.text_source = None;
                 Ok(())
             }
             (Inline::Math(m), "mathtype") => {
@@ -3753,6 +3757,7 @@ mod tests {
             math_type: MathType::InlineMath,
             text: "x^2".into(),
             source_info: si(),
+            text_source: None,
         });
         assert_eq!(LuaInline::new(inline).tag_name(), "Math");
     }
@@ -3988,6 +3993,7 @@ mod tests {
             math_type: MathType::DisplayMath,
             text: "E=mc^2".into(),
             source_info: si(),
+            text_source: None,
         });
         assert_eq!(
             LuaInline::new(inline).field_names(),

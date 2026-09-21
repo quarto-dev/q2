@@ -15,6 +15,7 @@
  * - Elements with attributes add `a: AttrSourceInfo` for attribute source tracking
  *   (renamed from `attrS` in Plan 7f Phase 5)
  * - Elements with targets add `targetS: TargetSourceInfo` for target source tracking
+ * - Math adds an optional `textS: number` for the provenance of its text
  *
  * This design ensures that quarto-markdown-pandoc JSON output is valid Pandoc JSON
  * and can be processed by the standard Pandoc toolchain.
@@ -462,6 +463,12 @@ export interface Annotated_Inline_Math {
   t: "Math";
   c: [MathType, string];
   s: number;
+  /**
+   * Source ID for the math *text* itself (provenance of `c[1]`, whose
+   * length equals the text length), distinct from the node span in `s`.
+   * Absent when the text did not come from the reader (bd-ieldbghj).
+   */
+  textS?: number;
 }
 
 export interface Annotated_Inline_RawInline {

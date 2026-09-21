@@ -43,6 +43,7 @@ use crate::pandoc::treesitter_utils::text_helpers::*;
 use crate::pandoc::treesitter_utils::thematic_break::process_thematic_break;
 use crate::pandoc::treesitter_utils::uri_autolink::process_uri_autolink;
 use quarto_error_reporting::DiagnosticMessageBuilder;
+use quarto_source_map::ProvenanceBuilder;
 
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::attr::AttrSourceInfo;
@@ -52,7 +53,9 @@ use crate::pandoc::inline::{
     RawInline, SoftBreak, Space, Str, Strikeout, Strong, Subscript, Superscript,
 };
 use crate::pandoc::list::{ListAttributes, ListNumberDelim, ListNumberStyle};
-use crate::pandoc::location::{node_location, node_source_info_with_context};
+use crate::pandoc::location::{
+    node_location, node_source_info_with_context, provenance_builder_with_context,
+};
 use crate::pandoc::pandoc::Pandoc;
 use core::panic;
 use once_cell::sync::Lazy;
@@ -471,29 +474,59 @@ fn block_continuation_column(node: &tree_sitter::Node) -> usize {
 /// The first piece (between the opening `$$` and the first `\n`) is
 /// content right after the delimiter, never a continuation line, and is
 /// always left untouched.
-fn strip_continuation_prefix(content: &str, start_col: usize) -> String {
+///
+/// Provenance: every kept byte is recorded on `builder` as `verbatim` and
+/// every stripped gutter as a zero-length `replacement` (a deletion), so
+/// `builder.finish()` yields a `SourceInfo` for the returned string whose
+/// offsets map byte-for-byte into the source (`Math.text_source`,
+/// bd-ieldbghj). `content_start` is the byte offset of `content[0]` in the
+/// builder's coordinate space (the node offset of the byte after `$$`).
+fn strip_continuation_prefix(
+    content: &str,
+    content_start: usize,
+    start_col: usize,
+    builder: &mut ProvenanceBuilder,
+) -> String {
     if start_col == 0 {
+        builder.verbatim(content_start..content_start + content.len());
         return content.to_string();
     }
     let mut result = String::with_capacity(content.len());
     let mut first = true;
+    // Byte offset of `line`'s first byte, in the same coordinates as
+    // `content_start`.
+    let mut pos = content_start;
     for line in content.split('\n') {
         if first {
             result.push_str(line);
+            builder.verbatim(pos..pos + line.len());
             first = false;
+            pos += line.len() + 1;
             continue;
         }
+        // The `\n` separator that `split` consumed sits at `pos - 1` and is
+        // kept as-is.
         result.push('\n');
+        builder.verbatim(pos - 1..pos);
         let line_bytes = line.as_bytes();
         let strip_n = std::cmp::min(start_col, line_bytes.len());
         let prefix_is_continuation = line_bytes[..strip_n]
             .iter()
             .all(|b| matches!(*b, b'>' | b' ' | b'\t'));
         if prefix_is_continuation {
+            // The gutter is a deletion: source bytes with no content bytes.
+            if strip_n > 0 {
+                builder.replacement(pos..pos + strip_n, 0);
+            }
             result.push_str(&line[strip_n..]);
+            if strip_n < line.len() {
+                builder.verbatim(pos + strip_n..pos + line.len());
+            }
         } else {
             result.push_str(line);
+            builder.verbatim(pos..pos + line.len());
         }
+        pos += line.len() + 1;
     }
     result
 }
@@ -507,7 +540,17 @@ fn strip_continuation_prefix(content: &str, start_col: usize) -> String {
 /// blockquotes, the indent for list items). Pandoc preserves the literal `\n`
 /// in `Math InlineMath` text and strips the gutter, so we replace each
 /// soft_break range with `\n` and append the text segments verbatim.
-fn extract_inline_math_text(node: &tree_sitter::Node, input_bytes: &[u8]) -> String {
+///
+/// Returns the text together with its provenance (`Math.text_source`,
+/// bd-ieldbghj): text segments are `verbatim` pieces; a soft break whose
+/// source bytes are exactly `\n` is verbatim too, any other soft break (one
+/// that swallowed a gutter, or a CRLF) is a `replacement` of its whole range
+/// by the one `\n` it folds to, so that byte maps to the source line ending.
+fn extract_inline_math_text(
+    node: &tree_sitter::Node,
+    input_bytes: &[u8],
+    context: &ASTContext,
+) -> (String, quarto_source_map::SourceInfo) {
     let start = node.start_byte();
     let end = node.end_byte();
     // Strip the opening / closing `$` (each is exactly 1 byte).
@@ -515,12 +558,15 @@ fn extract_inline_math_text(node: &tree_sitter::Node, input_bytes: &[u8]) -> Str
     let body_end = end - 1;
     debug_assert!(body_start <= body_end);
 
+    let mut builder = provenance_builder_with_context(context, body_start);
     let mut text = String::new();
     let mut cursor = node.walk();
     if !cursor.goto_first_child() {
         // No structural children — single-line math.
         let bytes = &input_bytes[body_start..body_end];
-        return std::str::from_utf8(bytes).unwrap().to_string();
+        text.push_str(std::str::from_utf8(bytes).unwrap());
+        builder.verbatim(body_start..body_end);
+        return (text, builder.finish());
     }
     let mut byte_cursor = body_start;
     loop {
@@ -530,8 +576,15 @@ fn extract_inline_math_text(node: &tree_sitter::Node, input_bytes: &[u8]) -> Str
             if child.start_byte() > byte_cursor {
                 let bytes = &input_bytes[byte_cursor..child.start_byte()];
                 text.push_str(std::str::from_utf8(bytes).unwrap());
+                builder.verbatim(byte_cursor..child.start_byte());
             }
             text.push('\n');
+            let break_range = child.start_byte()..child.end_byte();
+            if &input_bytes[break_range.clone()] == b"\n" {
+                builder.verbatim(break_range);
+            } else {
+                builder.replacement(break_range, 1);
+            }
             byte_cursor = child.end_byte();
         }
         // Other kinds — including anonymous `$` delimiter tokens — are
@@ -545,8 +598,9 @@ fn extract_inline_math_text(node: &tree_sitter::Node, input_bytes: &[u8]) -> Str
     if byte_cursor < body_end {
         let bytes = &input_bytes[byte_cursor..body_end];
         text.push_str(std::str::from_utf8(bytes).unwrap());
+        builder.verbatim(byte_cursor..body_end);
     }
-    text
+    (text, builder.finish())
 }
 
 /// Detect whether a list item's tree-sitter node contains a blank line between
@@ -746,12 +800,13 @@ fn native_visitor<T: Write>(
             // blockquotes, the indent for list items). Pandoc preserves the
             // literal `\n` in the math text and strips the gutter, so we
             // collapse each pandoc_soft_break range to a single `\n`.
-            let text = extract_inline_math_text(node, input_bytes);
+            let (text, text_source) = extract_inline_math_text(node, input_bytes, context);
 
             PandocNativeIntermediate::IntermediateInline(Inline::Math(Math {
                 math_type: MathType::InlineMath,
                 text,
                 source_info: node_source_info_with_context(node, context),
+                text_source: Some(text_source),
             }))
         }
         "pandoc_display_math" => {
@@ -771,12 +826,16 @@ fn native_visitor<T: Write>(
             // on the opening line (e.g. `_`, `[`, `**`) don't shift the
             // column away from the true continuation prefix width (bd-qpa2).
             let start_col = block_continuation_column(node);
-            let text = strip_continuation_prefix(content, start_col);
+            // `content` starts right after the opening `$$`.
+            let content_start = node.start_byte() + 2;
+            let mut builder = provenance_builder_with_context(context, content_start);
+            let text = strip_continuation_prefix(content, content_start, start_col, &mut builder);
 
             PandocNativeIntermediate::IntermediateInline(Inline::Math(Math {
                 math_type: MathType::DisplayMath,
                 text,
                 source_info: node_source_info_with_context(node, context),
+                text_source: Some(builder.finish()),
             }))
         }
         "pandoc_str" => {

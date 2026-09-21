@@ -445,11 +445,13 @@ mod tests {
             math_type: quarto_pandoc_types::MathType::InlineMath,
             text: "x^2".to_string(),
             source_info: dummy_source(),
+            text_source: None,
         });
         let b = Inline::Math(quarto_pandoc_types::Math {
             math_type: quarto_pandoc_types::MathType::InlineMath,
             text: "x^2".to_string(),
             source_info: other_source(),
+            text_source: None,
         });
         assert!(inline_eq(&a, &b));
     }

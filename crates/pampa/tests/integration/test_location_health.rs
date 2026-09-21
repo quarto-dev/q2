@@ -325,6 +325,9 @@ fn collect_source_info_from_inline(inline: &Inline, source_infos: &mut Vec<Sourc
         }
         Inline::Math(math) => {
             source_infos.push(math.source_info.clone());
+            if let Some(text_source) = &math.text_source {
+                source_infos.push(text_source.clone());
+            }
         }
         Inline::RawInline(raw) => {
             source_infos.push(raw.source_info.clone());

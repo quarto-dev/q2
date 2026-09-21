@@ -181,7 +181,7 @@ function collectViolations() {
   const violations = {};
   for (const rule of RULES) violations[rule.id] = {};
   for (const path of walkCss(SRC_DIR)) {
-    const file = relative(SRC_DIR, path);
+    const file = relative(SRC_DIR, path).split('\\').join('/');
     const raw = readFileSync(path, 'utf8');
     const text = stripComments(raw);
     const decls = parseDeclarations(text);

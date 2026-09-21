@@ -792,12 +792,16 @@ fn write_inline(inline: &Inline, ctx: &mut JsonWriterContext) -> Value {
                 crate::pandoc::MathType::InlineMath => json!({"t": "InlineMath"}),
                 crate::pandoc::MathType::DisplayMath => json!({"t": "DisplayMath"}),
             };
-            node_with_source(
-                "Math",
-                Some(json!([math_type, m.text])),
-                &m.source_info,
-            ctx,
-            )
+            let mut obj = serde_json::Map::new();
+            obj.insert("t".to_string(), json!("Math"));
+            obj.insert("c".to_string(), json!([math_type, m.text]));
+            ctx.serializer.add_source_info(&mut obj, &m.source_info);
+            // `textS`: provenance of the math text itself (bd-ieldbghj), a
+            // sidecar like `a` / `targetS`. Omitted when unknown.
+            if let Some(text_source) = &m.text_source {
+                obj.insert("textS".to_string(), ctx.serializer.to_json_ref(text_source));
+            }
+            Value::Object(obj)
         }
         Inline::Underline(u) => node_with_source(
             "Underline",
@@ -2815,26 +2819,40 @@ fn stream_write_inline<W: io::Write>(
                 Ok(())
             })
         }
-        Inline::Math(m) => stream_write_simple_node(
-            w,
-            "Math",
-            &m.source_info,
-            ctx,
-            |w: &mut JsonStreamWriter<W>, _ctx: &mut JsonWriterContext| {
-                use crate::pandoc::MathType;
-                w.begin_array()?;
-                w.begin_object()?;
-                w.key("t")?;
-                w.str_value(match m.math_type {
-                    MathType::InlineMath => "InlineMath",
-                    MathType::DisplayMath => "DisplayMath",
-                })?;
-                w.end_object()?;
-                w.str_value(&m.text)?;
-                w.end_array()?;
-                Ok(())
-            },
-        ),
+        Inline::Math(m) => {
+            // Same shape as `stream_write_simple_node`, plus the optional
+            // `textS` sidecar (provenance of the math text, bd-ieldbghj)
+            // after `t`, where the sorted-key non-streaming writer puts it.
+            use crate::pandoc::MathType;
+            let s_id = ctx.serializer.intern(&m.source_info);
+            ctx.maybe_record_attribution_for(&m.source_info, s_id);
+            w.begin_object()?;
+            w.key("c")?;
+            w.begin_array()?;
+            w.begin_object()?;
+            w.key("t")?;
+            w.str_value(match m.math_type {
+                MathType::InlineMath => "InlineMath",
+                MathType::DisplayMath => "DisplayMath",
+            })?;
+            w.end_object()?;
+            w.str_value(&m.text)?;
+            w.end_array()?;
+            if ctx.serializer.config.include_inline_locations {
+                let ast_context = ctx.serializer.context;
+                stream_write_location_key_if_mapped(w, "l", &m.source_info, ast_context)?;
+            }
+            w.key("s")?;
+            w.u64_value(s_id as u64)?;
+            w.key("t")?;
+            w.str_value("Math")?;
+            if let Some(text_source) = &m.text_source {
+                w.key("textS")?;
+                stream_source_ref(w, ctx, text_source)?;
+            }
+            w.end_object()?;
+            Ok(())
+        }
         Inline::Underline(u) => stream_write_simple_node(
             w,
             "Underline",
