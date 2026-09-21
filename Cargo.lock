@@ -5582,6 +5582,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "quarto-math"
+version = "0.32.0"
+
+[[package]]
 name = "quarto-mcp-launcher"
 version = "0.32.0"
 dependencies = [
