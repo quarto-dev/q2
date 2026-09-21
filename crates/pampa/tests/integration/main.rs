@@ -59,6 +59,7 @@ pub mod json_location_test;
 pub mod json_reader_smoke_tests;
 pub mod lua_conformance;
 pub mod lua_differential;
+pub mod math_text_source;
 pub mod nesting_cursor_roundtrip_tests;
 pub mod node_edit_tests;
 pub mod qmd_writer_source_info;

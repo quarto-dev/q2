@@ -921,10 +921,17 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 .as_str()
                 .ok_or_else(|| JsonReadError::InvalidType("Math text must be string".to_string()))?
                 .to_string();
+            // `textS` sidecar: provenance of the math text (bd-ieldbghj).
+            // Absent or null in JSON produced by anything but pampa.
+            let text_source = match obj.get("textS") {
+                Some(v) if !v.is_null() => Some(deserializer.from_json_ref(v)?),
+                _ => None,
+            };
             Ok(Inline::Math(Math {
                 math_type,
                 text,
                 source_info,
+                text_source,
             }))
         }
         "Underline" => {

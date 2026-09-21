@@ -608,6 +608,7 @@ fn remove_location_fields(json: &mut serde_json::Value) {
         obj.remove("headS");
         obj.remove("rowsS");
         obj.remove("targetS");
+        obj.remove("textS"); // Math text provenance (bd-ieldbghj)
         for value in obj.values_mut() {
             remove_location_fields(value);
         }

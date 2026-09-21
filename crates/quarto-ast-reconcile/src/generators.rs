@@ -559,6 +559,7 @@ fn gen_math() -> impl Strategy<Value = Inline> {
             math_type,
             text,
             source_info: dummy_source(),
+            text_source: None,
         })
     })
 }

@@ -1136,6 +1136,7 @@ mod tests {
             math_type: MathType::InlineMath,
             text: "x^2".to_string(),
             source_info: si(),
+            text_source: None,
         })];
         assert_eq!(inlines_to_text(&inlines), "x^2");
     }

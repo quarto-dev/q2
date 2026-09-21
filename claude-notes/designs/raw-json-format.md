@@ -71,7 +71,7 @@ What is explicitly promised and not promised:
 ## Node vocabulary (delta over the Pandoc-superset format)
 
 Everything the `-t json` format emits is unchanged (same `t`/`c` tags,
-same `s`/`a`/`targetS` sidecars, same pool codes — see
+same `s`/`a`/`targetS`/`textS` sidecars, same pool codes — see
 `wire-format-source-info-codes.md`, which raw-json shares). Raw mode adds:
 
 | Tag | Shape | AST type |

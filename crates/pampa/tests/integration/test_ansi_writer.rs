@@ -731,6 +731,7 @@ fn test_inline_math() {
                 math_type: pampa::pandoc::MathType::InlineMath,
                 text: "E=mc^2".to_string(),
                 source_info: empty_source(),
+                text_source: None,
             })],
             source_info: empty_source(),
         })],
