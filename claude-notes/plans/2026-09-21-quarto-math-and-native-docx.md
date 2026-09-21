@@ -305,6 +305,143 @@ markup for a fixture plus, for OMML, an `xmllint --schema` pass.
 - [ ] Out of scope for this epic; the Typst format writer (whichever leg
       lands) consumes `quarto_math::convert(_, Target::Typst)`.
 
+## Phase 1 design: spec semantics and `MathAst` (written 2026-09-21)
+
+Written after the reader landed and before the normalization tests, so the
+node vocabulary below is the contract the tests snapshot.
+
+### `spec/commands.json` (q2-owned) and how it is produced
+
+One JSON object `{"commands": {name: row}}`. Each row is
+`{"args": <mitex ArgShape | EnvShape>, "sem": <Semantics>, "typst": <alias or null>}`:
+`args` is the parser half (unchanged mitex JSON, so `Spec` can hand mitex a
+`CommandSpec` by projection), `sem` is the writer half, `typst` the
+Typst-writer alias. `Semantics` is a serde-tagged enum:
+
+| `sem.kind` | payload | covers |
+| --- | --- | --- |
+| `sym` | `{"text": "α"}` | ordinary symbols, Greek, relations, arrows, delimiters usable in `\left…\right` |
+| `nary` | `{"text": "∑", "limits": "undOvr" \| "subSup"}` | `\sum \prod \int \oint \bigcup …` |
+| `func` | `{"name": "sin"}` | `\sin \log \lim \max …` (`\lim`/`\max` get `"limits": "undOvr"` in display) |
+| `frac` | `{"style": "bar" \| "nobar" \| "display" \| "text" \| "continued"}` | `\frac \dfrac \tfrac \cfrac \over \binom`(nobar, wrapped in `()`) |
+| `sqrt` | – | `\sqrt` (glob `{,b}t`: optional `[degree]` then body) |
+| `accent` | `{"text": "̂"}` (combining char) | `\hat \vec \tilde \dot \ddot \bar \check \breve \acute \grave \mathring \widehat \widetilde` |
+| `bar` | `{"pos": "top" \| "bot"}` | `\overline \underline` |
+| `groupchr` | `{"text": "⏞", "pos": "top" \| "bot"}` | `\overbrace \underbrace \overrightarrow \overleftarrow` |
+| `limpos` | `{"pos": "top" \| "bot"}` | `\overset \underset \stackrel` (2 args: annotation, base) |
+| `style` | `{"variant": "bold" \| "italic" \| "bold-italic" \| "double-struck" \| "script" \| "fraktur" \| "sans" \| "mono" \| "roman"}` | `\mathbf \mathit \boldsymbol \bm \mathbb \mathcal \mathscr \mathfrak \mathsf \mathtt \mathrm`, old-style `\bf \rm \it` |
+| `text` | `{"variant": …}` | `\text \textbf \textit \mbox \textrm \operatorname`(roman) |
+| `space` | `{"em": 0.1667}` | `\, \: \; \! \quad \qquad \  ~ \enspace \hspace`(arg parsed, em from the value when it is `Nem`) |
+| `phantom` | `{"h": bool, "v": bool}` | `\phantom \hphantom \vphantom` |
+| `cancel` | – | `\cancel` (OMML `borderBox` strike) |
+| `not` | – | `\not` (next symbol gets U+0338) |
+| `color` | `{"arg": "first"}` | `\color \textcolor` |
+| `scripts` | `{"which": "sup" \| "sub" \| "limits" \| "nolimits"}` | the four `left1` operators |
+| `env` | `{"layout": "matrix" \| "cases" \| "aligned" \| "gathered" \| "eqarr", "delims": ["(", ")"] or null, "cols": "from-arg" for `array`}` | all 27 environments |
+| `ignore` | – | `\displaystyle \textstyle \limits`(handled by `scripts`) `\nonumber \left \right`(parser-level) `\middle`(resolved in LR) |
+| `unsupported` | `{"why": "…"}` | rows mitex knows but no writer can render (theorem machinery, `\newtheorem`, `\label`) → warning + verbatim fallback |
+
+**Production.** `cargo xtask gen-math-spec` reads
+`spec/upstream/mitex-default-spec.json` and `spec/overrides.json` (hand
+written, ~150 rows: every non-`sym` kind above, plus `sym` rows whose Typst
+alias `codex` cannot resolve) and writes `spec/commands.json`:
+
+1. every upstream entry gets `args` verbatim;
+2. a zero-argument command whose alias resolves through `codex`
+   (`ROOT.get(path)` walking dotted names, `Symbol::get(modifiers)`) becomes
+   `sym` with that text; `null` alias means "same name as the command";
+3. an `overrides.json` row replaces or adds `sem`/`typst` wholesale;
+4. anything left is `unsupported` with `why: "no semantics assigned"`, so a
+   gap is visible in the JSON rather than silent.
+
+A test asserts the committed `commands.json` equals a regeneration (no
+drift), every row's `sym`/`accent`/`nary` text is valid Unicode, and every
+upstream name is present. `Spec::builtin()` embeds `commands.json`.
+
+### `MathAst`
+
+`Node { kind: NodeKind, span: Option<Range<usize>> }`, span in math-text
+bytes (a `SourceInfo::substring` of the text's `SourceInfo` at the pampa
+seam). `NodeKind`:
+
+```
+Row(Vec<Node>)                         sequence; the root is a Row
+Run(String)                            a run of math-mode characters, coarse (mitex words)
+Sym { text: String }                   resolved command symbol (α, ≤, →) or bare delimiter
+Space { em: f32 }
+Frac { style, num: Box<Node>, den: Box<Node> }
+Sqrt { degree: Option<Box<Node>>, body: Box<Node> }
+Scripts { base: Box<Node>, sub: Option<Box<Node>>, sup: Option<Box<Node>>, limits: LimLoc }
+Nary { text: String, sub, sup, limits: LimLoc }          body deliberately empty (see below)
+Func { name: String, limits: LimLoc }
+Delimited { left: Option<String>, right: Option<String>, parts: Vec<Node> }   parts split at \middle
+Accent { text: String, body: Box<Node> }
+Bar { pos, body } · GroupChr { text, pos, body } · LimPos { pos, annotation, body }
+Style { variant, body: Box<Node> }
+Text { variant, text: String }
+Phantom { h, v, body } · Cancel { body } · Color { color: String, body }
+Matrix { layout, delims, rows: Vec<Vec<Node>> }          cells are Rows; `&` and `\\` consumed
+Break                                                    `\\` outside an environment
+Error { message: String, verbatim: String }              unknown command / env, unbalanced input
+```
+
+Normalization rules, each with a fixture snapshot:
+
+- **Attachments.** mitex nests `ItemAttachComponent` left-associatively;
+  consecutive `_`/`^` on the same base fold into one `Scripts`; a second
+  `_` (or `^`) on the same base is an `Error` ("double subscript") that keeps
+  the first. `\limits`/`\nolimits` (a `left1` command whose argument is
+  the base) set `LimLoc` on the base's `Nary`/`Func`, otherwise ignored with
+  a warning. Default `LimLoc`: `undOvr` for `nary`/`func` in display math,
+  `subSup` inline.
+- **Big operators carry no body.** TeX has no scope for a summand, so
+  `Nary` is emitted with an empty `m:e` and the summand stays a sibling;
+  Word renders that correctly. Inventing a scope (to the next relation, say)
+  would be a guess the source does not license.
+- **`\left…\right`.** `ItemLR` → `Delimited`; `.` → `None`; `\middle` splits
+  `parts`. Unbalanced `\left` → `Error` spanning the clause.
+- **Environments.** `ItemEnv` body flattened; split at `\\` (rows) then `&`
+  (cells); a trailing `\\` does not add a row; ragged rows are padded with
+  empty cells and noted in a warning. `array` reads its column spec from the
+  first argument (alignment only; `|` rules are dropped with a warning).
+  `equation`/`align`/`align*` at top level behave as `aligned`/`gathered`
+  (numbering is Quarto's job, not the writer's).
+- **Words stay coarse** (`Run("i=1")`); the splitting pass
+  (identifier / number / operator, spans partition the run) is behind a flag
+  for the MathML follow-up (bd-9z83tcv0) and is not applied for OMML.
+- **Spans** are the union of the node's leaf spans extended over the
+  dropped syntax mitex omits (`\begin{…}`, `\end{…}`, argument-preceding
+  whitespace), computed from the reader's side table; a node whose only leaf
+  is a synthesized error token takes its parent's span.
+- **Errors never abort.** Unknown command, unknown environment, arity
+  mismatch, unbalanced delimiters/braces and the expansion budget become
+  `Error` nodes plus a diagnostic; the pampa seam decides whether to emit
+  the partial tree or the verbatim-TeX fallback (v1: fallback whenever any
+  `Error` exists, so a document never ships half-converted math).
+
+### Writer conventions (OMML)
+
+`m:oMath` for inline, `m:oMathPara` > `m:oMath` for display. `Run`/`Sym`
+→ `m:r` > `m:t`; `Text` → `m:r` with `m:rPr` > `m:nor`; `Style` folds into
+`m:sty`/`m:scr` on the runs it contains; `Frac` → `m:f` (`m:fPr` > `m:type`
+`noBar` for `binom`, wrapped in `m:d`); `Sqrt` → `m:rad` (`m:degHide` when
+no degree); `Scripts` → `m:sSub`/`m:sSup`/`m:sSubSup`; `Nary` → `m:nary`
+with `m:chr`, `m:limLoc`, `m:subHide`/`m:supHide` and empty `m:e`; `Func` →
+`m:func` with `m:fName` and empty `m:e`, limits as `m:limLow` on the name;
+`Delimited` → `m:d` with `m:begChr`/`m:endChr`/`m:sepChr`; `Accent` →
+`m:acc`; `Bar` → `m:bar`; `GroupChr` → `m:groupChr`; `LimPos` →
+`m:limUpp`/`m:limLow`; `Matrix` → `m:m` (with `m:mcs` column props) inside
+`m:d` for delimited layouts, `m:eqArr` for `aligned`/`gathered`/`cases`
+(cases = `m:d` with `{` and empty end char around an `m:eqArr`; alignment
+points are literal `&` in `m:t`, per ECMA-376 §22.1.2.34); `Break` → the
+whole expression becomes an `m:eqArr`; `Phantom` → `m:phant`; `Cancel` →
+`m:borderBox` with `m:strikeBLTR`; `Color` → `w:color` in `m:rPr`;
+`Space` → an `m:r` whose text is the Unicode space of the closest width
+(U+2009 thin, U+2005 four-per-em, U+2004 three-per-em, U+2003 em, U+00A0
+for `~`, negative spaces dropped with a note). Every element's children
+are emitted in schema order by construction (typed structs), and every
+writer test validates against `tests/schemas/ooxml/shared-math.xsd`.
+
 ## Findings while building the reader (2026-09-21)
 
 Three properties of mitex's tree that the plan's "rowan is lossless" line
