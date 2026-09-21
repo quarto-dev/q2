@@ -197,7 +197,7 @@ emitter from ECMA-376 Part 1 §22.1 is bounded work.
       `external-sources/mitex`, so the symbol rows can be generated without
       the Typst build step. (`typst` is now installed locally too, so
       `typst query` regeneration is a fallback.)
-- [ ] Vendor the OMML schema under `crates/quarto-math/tests/schemas/`:
+- [x] (done 2026-09-21: `shared-math.xsd` is not self-contained, it imports `wml.xsd` and `shared-commonSimpleTypes.xsd`, so the whole 12-file transitional closure (~500 KB) lives at `crates/quarto-math/tests/schemas/ooxml/` and Phase 2 validates `document.xml` from the same directory; helper + guard tests in `tests/integration/omml_schema.rs`) Vendor the OMML schema under `crates/quarto-math/tests/schemas/`:
       `shared-math.xsd`, `shared-commonSimpleTypes.xsd` and W3C's `xml.xsd`,
       taken from `external-sources/python-docx/ref/xsd/` (MIT notice kept),
       with the one-line import patch (`schemaLocation="xml.xsd"` on the
