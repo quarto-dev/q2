@@ -1657,5 +1657,96 @@
     "message_template": "A brand color that would recolor a hephaestus plot (`background`, `foreground` or `primary`) is not a hex color, so the plot keeps its own color for that slot. The other brand colors still apply.",
     "docs_url": "https://quarto.org/docs/errors/image/Q-19-4",
     "since_version": "99.9.9"
+  },
+  "Q-22-1": {
+    "subsystem": "math",
+    "title": "Unknown Math Command",
+    "message_template": "A `\\command` in a math expression is not a known LaTeX math command and was not defined with `\\newcommand` earlier in the same expression, so no writer can render it.",
+    "docs_url": "https://quarto.org/docs/errors/math/Q-22-1",
+    "since_version": "99.9.9"
+  },
+  "Q-22-2": {
+    "subsystem": "math",
+    "title": "Unknown Math Environment",
+    "message_template": "A `\\begin{name}` in a math expression names an environment quarto-math does not know.",
+    "docs_url": "https://quarto.org/docs/errors/math/Q-22-2",
+    "since_version": "99.9.9"
+  },
+  "Q-22-3": {
+    "subsystem": "math",
+    "title": "Mismatched Math Environment",
+    "message_template": "A math environment is closed by the wrong `\\end{…}`, is never closed, or an `\\end{…}` appears without its `\\begin{…}`.",
+    "docs_url": "https://quarto.org/docs/errors/math/Q-22-3",
+    "since_version": "99.9.9"
+  },
+  "Q-22-4": {
+    "subsystem": "math",
+    "title": "Math Command Missing An Argument",
+    "message_template": "A math command was used with fewer arguments than it takes (`\\frac{a}` has one, needs two), or a macro was called with the wrong number of arguments.",
+    "docs_url": "https://quarto.org/docs/errors/math/Q-22-4",
+    "since_version": "99.9.9"
+  },
+  "Q-22-5": {
+    "subsystem": "math",
+    "title": "Unbalanced Brace In Math",
+    "message_template": "A `{` in a math expression is never closed, or a `}` has no matching `{`.",
+    "docs_url": "https://quarto.org/docs/errors/math/Q-22-5",
+    "since_version": "99.9.9"
+  },
+  "Q-22-6": {
+    "subsystem": "math",
+    "title": "Unbalanced Left And Right Delimiters",
+    "message_template": "A `\\left` has no matching `\\right`, or a `\\right` has no matching `\\left`, in the same math expression.",
+    "docs_url": "https://quarto.org/docs/errors/math/Q-22-6",
+    "since_version": "99.9.9"
+  },
+  "Q-22-7": {
+    "subsystem": "math",
+    "title": "Double Subscript Or Superscript",
+    "message_template": "A base has two superscripts (`x^2^3`) or two subscripts (`x_1_2`) in a row.",
+    "docs_url": "https://quarto.org/docs/errors/math/Q-22-7",
+    "since_version": "99.9.9"
+  },
+  "Q-22-8": {
+    "subsystem": "math",
+    "title": "Math Macro Expansion Limit Exceeded",
+    "message_template": "Expanding the `\\newcommand` macros in a math expression produced more tokens than the limit allows, which almost always means a macro refers to itself.",
+    "docs_url": "https://quarto.org/docs/errors/math/Q-22-8",
+    "since_version": "99.9.9"
+  },
+  "Q-22-9": {
+    "subsystem": "math",
+    "title": "Unsupported Math Command",
+    "message_template": "A math command is recognized but has no rendering in the target format, or is a document-level command that has no meaning inside math.",
+    "docs_url": "https://quarto.org/docs/errors/math/Q-22-9",
+    "since_version": "99.9.9"
+  },
+  "Q-22-10": {
+    "subsystem": "math",
+    "title": "Ragged Rows In Math Environment",
+    "message_template": "The rows of a math environment (`pmatrix`, `aligned`, `cases`, …) do not all have the same number of `&`-separated cells.",
+    "docs_url": "https://quarto.org/docs/errors/math/Q-22-10",
+    "since_version": "99.9.9"
+  },
+  "Q-22-11": {
+    "subsystem": "math",
+    "title": "Limits Command Ignored",
+    "message_template": "`\\limits` or `\\nolimits` was applied to something other than a big operator or a function name, so it has no effect.",
+    "docs_url": "https://quarto.org/docs/errors/math/Q-22-11",
+    "since_version": "99.9.9"
+  },
+  "Q-22-12": {
+    "subsystem": "math",
+    "title": "Math Construct Dropped",
+    "message_template": "A construct with no equivalent in the target's math model was dropped from the output; the rest of the expression is unaffected.",
+    "docs_url": "https://quarto.org/docs/errors/math/Q-22-12",
+    "since_version": "99.9.9"
+  },
+  "Q-22-13": {
+    "subsystem": "math",
+    "title": "Math Syntax Error",
+    "message_template": "The math expression contains a construct the parser could not interpret: an alignment `&` outside an environment, a stray `\\begin`/`\\end`, or another malformed piece of syntax.",
+    "docs_url": "https://quarto.org/docs/errors/math/Q-22-13",
+    "since_version": "99.9.9"
   }
 }

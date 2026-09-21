@@ -1,0 +1,34 @@
+---
+title: "Unknown Math Command"
+description: "A `\\command` in a math expression is not a known LaTeX math command and was not defined with `\\newcommand` earlier in the same expression, so no writer can render it."
+code: Q-22-1
+subsystem: math
+status: stub
+since: "99.9.9"
+categories:
+  - math
+---
+
+# `Q-22-1` — Unknown Math Command
+
+> A `\command` in a math expression is not a known LaTeX math command and was not defined with `\newcommand` earlier in the same expression, so no writer can render it.
+
+## What this means
+
+Math is written in LaTeX syntax, and every `\name` must be a command quarto-math knows (the standard LaTeX and amsmath math commands, plus the macros the expression defines with `\newcommand`). This error fires when a command is neither. The diagnostic underlines the command; the rest of the expression is still parsed, but the whole equation is emitted verbatim as source text in formats that need a conversion (Word), because half-converted math would be worse than none.
+
+## Why this happens
+
+Common causes: a typo (`\aplha`), a command from a LaTeX package that has no math meaning (`\textsuperscript`), a document-level macro defined in a LaTeX preamble that this expression cannot see, or a control sequence that is not standard at all (`\R` for the reals).
+
+## How to fix it
+
+Fix the spelling, replace the command with its standard equivalent (`\mathbb{R}`), or define it in the expression: `\newcommand{\R}{\mathbb{R}} x \in \R`. HTML output through MathJax or KaTeX may still render an unknown macro if that engine defines it; this error is about the converters Quarto runs itself.
+
+## Where it is reported
+
+Math diagnostics point into the `.qmd` at the exact characters inside the
+`$…$` or `$$…$$` block, including math that spans several lines or sits
+inside a block quote or list item. When a `\newcommand` macro is involved,
+a problem inside the macro body points at the definition and a problem in
+a macro argument points at the use.

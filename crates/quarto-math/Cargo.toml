@@ -13,6 +13,8 @@ mitex-lexer = { path = "vendor/mitex-lexer" }
 mitex-parser = { path = "vendor/mitex-parser" }
 mitex-spec = { path = "vendor/mitex-spec" }
 
+quarto-error-reporting = { workspace = true }
+quarto-source-map = { workspace = true }
 rowan = "0.15"
 rustc-hash = "2"
 serde = { workspace = true }
@@ -31,6 +33,8 @@ spec-gen = ["dep:codex"]
 # The integration tests regenerate the spec through the same code xtask uses.
 quarto-math = { path = ".", features = ["spec-gen"] }
 insta = { workspace = true }
+# The diagnostics test checks every Q-22 code against the live catalog.
+quarto-error-catalog = { path = "../quarto-error-catalog" }
 
 [lints]
 workspace = true

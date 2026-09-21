@@ -249,7 +249,7 @@ markup for a fixture plus, for OMML, an `xmllint --schema` pass.
       cells, resolve `ItemLR` delimiters, attach `SourceInfo` to every node
       (`substring` of the math text info; node span = union of leaves).
       Test: snapshot `MathAst` for every fixture.
-- [ ] **Diagnostics**: unknown command, arity mismatch, unbalanced
+- [x] (done 2026-09-21: `quarto_math::diagnostics` maps the 13 `ProblemKind`s to `Q-22-1`…`Q-22-13` (subsystem `math`; 9 errors, 4 warnings), catalog entries + `docs/errors/math/` pages + sidebar section in the same commit; location = problem span as a `substring` of the math text's `SourceInfo`) **Diagnostics**: unknown command, arity mismatch, unbalanced
       delimiters, unknown environment → `quarto-error-reporting` diagnostics
       with the node's `SourceInfo`. New `Q-` codes need catalog entries **and**
       pages under `docs/errors/<subsystem>/` **and** sidebar entries in the

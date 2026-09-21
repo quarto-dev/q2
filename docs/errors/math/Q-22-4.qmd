@@ -1,0 +1,34 @@
+---
+title: "Math Command Missing An Argument"
+description: "A math command was used with fewer arguments than it takes (`\\frac{a}` has one, needs two), or a macro was called with the wrong number of arguments."
+code: Q-22-4
+subsystem: math
+status: stub
+since: "99.9.9"
+categories:
+  - math
+---
+
+# `Q-22-4` — Math Command Missing An Argument
+
+> A math command was used with fewer arguments than it takes (`\frac{a}` has one, needs two), or a macro was called with the wrong number of arguments.
+
+## What this means
+
+Commands such as `\frac`, `\sqrt`, `\overset` and `\binom` take a fixed number of brace-delimited arguments, and a macro takes the number declared in its `\newcommand`. When an argument is missing, the command is emitted as an error at its position and the equation falls back to verbatim source in formats that need a conversion.
+
+## Why this happens
+
+Common causes: an unfinished edit (`\frac{a}` with the denominator still to write), a brace typed as a parenthesis (`\frac(a)(b)`), or a macro used with the wrong count (`\newcommand{\pr}[2]{…} \pr{x}`).
+
+## How to fix it
+
+Supply every argument in braces. Single characters may be given bare (`\frac12`), but anything longer needs `{…}`.
+
+## Where it is reported
+
+Math diagnostics point into the `.qmd` at the exact characters inside the
+`$…$` or `$$…$$` block, including math that spans several lines or sits
+inside a block quote or list item. When a `\newcommand` macro is involved,
+a problem inside the macro body points at the definition and a problem in
+a macro argument points at the use.
