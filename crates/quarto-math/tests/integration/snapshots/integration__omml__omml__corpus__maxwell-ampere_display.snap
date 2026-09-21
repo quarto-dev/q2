@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/omml.rs
+expression: to_omml(&n)
+---
+<m:oMathPara><m:oMath><m:r><m:t>∇</m:t></m:r><m:r><m:t>×</m:t></m:r><m:acc><m:accPr><m:chr m:val="⃗"/></m:accPr><m:e><m:r><m:t>B</m:t></m:r></m:e></m:acc><m:r><m:t>=</m:t></m:r><m:sSub><m:e><m:r><m:t>μ</m:t></m:r></m:e><m:sub><m:r><m:t>0</m:t></m:r></m:sub></m:sSub><m:acc><m:accPr><m:chr m:val="⃗"/></m:accPr><m:e><m:r><m:t>J</m:t></m:r></m:e></m:acc><m:r><m:t>+</m:t></m:r><m:sSub><m:e><m:r><m:t>μ</m:t></m:r></m:e><m:sub><m:r><m:t>0</m:t></m:r></m:sub></m:sSub><m:sSub><m:e><m:r><m:t>ϵ</m:t></m:r></m:e><m:sub><m:r><m:t>0</m:t></m:r></m:sub></m:sSub><m:f><m:num><m:r><m:t>∂</m:t></m:r><m:acc><m:accPr><m:chr m:val="⃗"/></m:accPr><m:e><m:r><m:t>E</m:t></m:r></m:e></m:acc></m:num><m:den><m:r><m:t>∂</m:t></m:r><m:r><m:t>t</m:t></m:r></m:den></m:f></m:oMath></m:oMathPara>

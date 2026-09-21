@@ -4,6 +4,7 @@
 pub mod diagnostics;
 pub mod fixture_corpus;
 pub mod normalize;
+pub mod omml;
 pub mod omml_schema;
 pub mod reader;
 pub mod spec;

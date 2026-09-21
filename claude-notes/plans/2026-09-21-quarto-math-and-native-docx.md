@@ -254,7 +254,7 @@ markup for a fixture plus, for OMML, an `xmllint --schema` pass.
       with the node's `SourceInfo`. New `Q-` codes need catalog entries **and**
       pages under `docs/errors/<subsystem>/` **and** sidebar entries in the
       same commit (`cargo xtask lint` enforces both).
-- [ ] **OMML writer** `MathAst -> String` (`m:oMath` / `m:oMathPara` for
+- [x] (done 2026-09-21: `quarto_math::omml::{to_omml, to_omml_document}`; total writer, Error nodes become literal runs and the seam decides the fallback; 263 per-fixture snapshots, every fixture validates against `shared-math.xsd`, 15 structural tests; text-mode weight/slant go through `w:b`/`w:i` because the schema makes `m:nor` exclusive with `m:sty`/`m:scr`) **OMML writer** `MathAst -> String` (`m:oMath` / `m:oMathPara` for
       display). Test: snapshots + `xmllint` against the vendored schema.
 - [ ] **Typst writer** `MathAst -> String` emitting plain Typst math (no
       mitex prelude). Test: snapshots; optional compile check when `typst` is

@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/omml.rs
+expression: to_omml(&n)
+---
+<m:oMath><m:r><m:t>α</m:t></m:r><m:r><m:t>β</m:t></m:r><m:r><m:t>γ</m:t></m:r><m:r><m:t>δ</m:t></m:r><m:r><m:t>ϵ</m:t></m:r><m:r><m:t>ε</m:t></m:r><m:r><m:t>ζ</m:t></m:r><m:r><m:t>η</m:t></m:r><m:r><m:t>θ</m:t></m:r><m:r><m:t>ϑ</m:t></m:r><m:r><m:t>ι</m:t></m:r><m:r><m:t>κ</m:t></m:r><m:r><m:t>λ</m:t></m:r><m:r><m:t>μ</m:t></m:r><m:r><m:t>ν</m:t></m:r><m:r><m:t>ξ</m:t></m:r><m:r><m:t>π</m:t></m:r><m:r><m:t>ϖ</m:t></m:r><m:r><m:t>ρ</m:t></m:r><m:r><m:t>ϱ</m:t></m:r><m:r><m:t>σ</m:t></m:r><m:r><m:t>ς</m:t></m:r><m:r><m:t>τ</m:t></m:r><m:r><m:t>υ</m:t></m:r><m:r><m:t>ϕ</m:t></m:r><m:r><m:t>φ</m:t></m:r><m:r><m:t>χ</m:t></m:r><m:r><m:t>ψ</m:t></m:r><m:r><m:t>ω</m:t></m:r></m:oMath>

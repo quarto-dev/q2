@@ -21,5 +21,6 @@
 pub mod ast;
 pub mod diagnostics;
 pub mod normalize;
+pub mod omml;
 pub mod reader;
 pub mod spec;

@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/omml.rs
+expression: to_omml(&n)
+---
+<m:oMath><m:r><m:t>∞</m:t></m:r><m:r><m:t>∂</m:t></m:r><m:r><m:t>∇</m:t></m:r><m:r><m:t>∀</m:t></m:r><m:r><m:t>∃</m:t></m:r><m:r><m:t>∅</m:t></m:r><m:r><m:t>∅</m:t></m:r><m:r><m:t>⊤</m:t></m:r><m:r><m:t>⊥</m:t></m:r><m:r><m:t>ℑ</m:t></m:r><m:r><m:t>ℜ</m:t></m:r><m:r><m:t>א</m:t></m:r><m:r><m:t>ħ</m:t></m:r><m:r><m:t>ℓ</m:t></m:r><m:r><m:t>℘</m:t></m:r><m:r><m:t>′</m:t></m:r><m:r><m:t>∠</m:t></m:r><m:r><m:t>△</m:t></m:r><m:r><m:t>□</m:t></m:r></m:oMath>
