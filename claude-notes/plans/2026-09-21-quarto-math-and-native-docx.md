@@ -163,17 +163,23 @@ emitter from ECMA-376 Part 1 §22.1 is bounded work.
 
 ### Phase 0 — prerequisites and fixtures (TDD spine)
 
-- [ ] Math fixture corpus under `crates/quarto-math/tests/fixtures/`: one
-      `.tex` snippet per construct we must support (fractions, roots with
-      index, sub/sup incl. nested and `\limits`, `\left…\right` incl. `.`,
-      `\text`, `\mathrm`/`\mathbf`/`\mathbb`, `\operatorname`, big operators
-      with limits, accents, `\binom`, `aligned`/`cases`/`pmatrix`/`bmatrix`,
-      `\newcommand` with and without args, spacing commands, Unicode input,
-      unknown command, unbalanced braces) plus the math actually used in
-      `docs/` and the Q1 test corpus (grep `$` in `.qmd` fixtures).
+- [x] Math fixture corpus under `crates/quarto-math/tests/fixtures/`
+      (done 2026-09-21: 263 fixtures in 14 groups; conventions and provenance
+      in `tests/fixtures/README.md`; loader + guard test in
+      `tests/integration/fixture_corpus.rs`; `.display.tex` marks display
+      math). Covers every construct listed in the plan plus `corpus/`, 26
+      expressions copied verbatim from `docs/`, the Q1 test corpus and
+      quarto-web (mined 2026-09-21: `\frac` 49, `\mathrm` 37, `\partial` 24,
+      `\left`/`\right` 8, `\int` 8, `\sqrt` 5, `\vec` 5, `\lim` 3, `\cancel`
+      2; only `aligned` among environments). mitex's standard spec already
+      has an arg-shape entry for every command the corpora use, so the
+      hand-written spec rows are OMML semantics only.
+- [x] Crate skeleton `crates/quarto-math` created with the corpus (Cargo.toml,
+      empty `lib.rs` with the crate contract in its doc comment, integration
+      test binary). The Phase 1 skeleton item now only needs the spec embed.
 - [ ] pampa: `Inline::Math` text mapping — record `SourceInfo::substring` /
       `concat` for the math *text* (bd-q6ed / bd-qpa2 touch the same code;
-      coordinate). **Decision 5:** done as its own strand and PR against
+      coordinate). **Decision 5:** done as its own strand (bd-ieldbghj) and PR against
       `main` (worktree under `.worktrees/`), then merged into this branch
       locally so both the native and pandoc-hybrid legs get it. Test: for
       every fixture in `crates/pampa/tests/…` with math, mapping `text`

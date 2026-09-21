@@ -1,0 +1,15 @@
+[package]
+name = "quarto-math"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "TeX math front end (mitex parser + source maps) with OMML and Typst writers for Quarto."
+
+[dependencies]
+
+[dev-dependencies]
+
+[lints]
+workspace = true
