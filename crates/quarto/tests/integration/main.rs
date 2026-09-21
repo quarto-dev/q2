@@ -7,6 +7,7 @@ pub mod brand_font_weight;
 pub mod build_ts_extension_e2e;
 pub mod coalesced_diagnostics;
 pub mod conditional_content_cli;
+pub mod conditional_content_pandoc_e2e;
 pub mod create;
 pub mod diagnostic_render_panic_boundary;
 pub mod docs_llms_cli;
