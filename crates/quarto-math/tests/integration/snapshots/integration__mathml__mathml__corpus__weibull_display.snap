@@ -1,0 +1,8 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msub><mi>f</mi><mi>X</mi></msub><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo><mo>=</mo><mrow><mo stretchy="true">(</mo><mfrac><mi>α</mi><mi>β</mi></mfrac><mo stretchy="true">)</mo></mrow><msup><mrow><mo stretchy="true">(</mo><mfrac><mi>x</mi><mi>β</mi></mfrac><mo stretchy="true">)</mo></mrow><mrow><mi>α</mi><mo>−</mo><mn>1</mn></mrow></msup><msup><mi>e</mi><mrow><mo>−</mo><msup><mrow><mo stretchy="true">(</mo><mfrac><mi>x</mi><mi>β</mi></mfrac><mo stretchy="true">)</mo></mrow><mi>α</mi></msup></mrow></msup><mo>;</mo><mi>α</mi><mo>,</mo><mi>β</mi><mo>,</mo><mi>x</mi><mo>&gt;</mo><mn>0</mn><mo>.</mo></mrow><annotation encoding="application/x-tex">f_{X}(x) = \left(\frac{\alpha}{\beta}\right)
+  \left(\frac{x}{\beta}\right)^{\alpha-1}
+  e^{-\left(\frac{x}{\beta}\right)^{\alpha}}; 
+  \alpha,\beta,x &gt; 0 .</annotation></semantics></math>

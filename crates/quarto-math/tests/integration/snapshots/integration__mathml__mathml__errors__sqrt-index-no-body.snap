@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><merror><mtext>\sqrt[3]</mtext></merror></mrow><annotation encoding="application/x-tex">\sqrt[3]</annotation></semantics></math>

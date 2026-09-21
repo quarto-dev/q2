@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mover><mo>=</mo><mo>!</mo></mover><munder><mrow><mi>max</mi><mo>⁡</mo></mrow><mi>n</mi></munder></mrow><annotation encoding="application/x-tex">\overset{!}{=} \underset{n}{\max}</annotation></semantics></math>

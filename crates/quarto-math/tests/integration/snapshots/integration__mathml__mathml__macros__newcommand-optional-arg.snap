@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false">‖</mo><mrow><msub><mo stretchy="false">‖</mo><mo stretchy="false">‖</mo></msub><merror><mtext>\|_{#1}</mtext></merror></mrow><mrow><mi>x</mi></mrow><mo stretchy="false">[</mo><mn>1</mn><mo stretchy="false">]</mo><mrow><mi>y</mi></mrow></mrow><annotation encoding="application/x-tex">\newcommand{\norm}[2][2]{\|#2\|_{#1}} \norm{x} \norm[1]{y}</annotation></semantics></math>

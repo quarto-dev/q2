@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>𝐱</mi><mo>⊤</mo></msup><mi>𝐲</mi></mrow><annotation encoding="application/x-tex">\mathbf{x}^\top \mathbf{y}</annotation></semantics></math>

@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>𝒫</mi><mo stretchy="false">(</mo><mi>ℕ</mi><mo stretchy="false">)</mo><mo>≠</mo><mo>∅</mo></mrow><annotation encoding="application/x-tex">\mathcal P (\mathbb N) ≠ \varnothing</annotation></semantics></math>

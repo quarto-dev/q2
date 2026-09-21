@@ -1,0 +1,7 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>log</mi><mo>⁡</mo><mo stretchy="false">(</mo><msub><mi>μ</mi><mi>i</mi></msub><mo stretchy="false">)</mo><mspace width="1em"></mspace><mo>=</mo><mspace width="1em"></mspace><msubsup><mi>x</mi><mi>i</mi><mo>⊤</mo></msubsup><mi>β</mi><mo>,</mo><mspace width="1em"></mspace><msub><mi>y</mi><mi>i</mi></msub><mo>∼</mo><mrow><mi mathvariant="normal">P</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">s</mi></mrow><mo stretchy="false">(</mo><msub><mi>μ</mi><mi>i</mi></msub><mo stretchy="false">)</mo><mo>,</mo><mspace width="1em"></mspace><mi>E</mi><mo stretchy="false">[</mo><msub><mi>y</mi><mi>i</mi></msub><mspace width="0.1667em"></mspace><mo stretchy="false">|</mo><mspace width="0.1667em"></mspace><msub><mi>x</mi><mi>i</mi></msub><mo stretchy="false">]</mo><mo>=</mo><msub><mi>μ</mi><mi>i</mi></msub></mrow><annotation encoding="application/x-tex">\log(\mu_i) \quad = \quad x_i^\top \beta,
+\quad y_i \sim \mathrm{Pois}(\mu_i),
+\quad E[y_i \, | \, x_i] = \mu_i</annotation></semantics></math>

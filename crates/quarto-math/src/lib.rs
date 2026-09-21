@@ -7,8 +7,8 @@
 //!
 //! One reader (a vendored copy of mitex's LaTeX lexer + parser, under
 //! `vendor/`), a q2-owned command spec, a normalization pass to a small
-//! `MathAst`, and one writer per target (OMML for docx, Typst; MathML is a
-//! follow-up, bd-9z83tcv0). Every node carries a `SourceInfo` derived from
+//! `MathAst`, and one writer per target (OMML for docx, Typst, and MathML
+//! Core for HTML). Every node carries a `SourceInfo` derived from
 //! the math text's own `SourceInfo`, so diagnostics point into the `.qmd`.
 //!
 //! The crate deliberately does **not** depend on `quarto-pandoc-types`: the
@@ -21,6 +21,7 @@
 pub mod ast;
 pub mod convert;
 pub mod diagnostics;
+pub mod mathml;
 pub mod normalize;
 pub mod omml;
 pub mod reader;

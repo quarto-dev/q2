@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>∮</mo><mover accent="true"><mi>E</mi><mo>→</mo></mover><mo>⋅</mo><mi>d</mi><mover accent="true"><mi>A</mi><mo>→</mo></mover></mrow><annotation encoding="application/x-tex">\oint \vec{E} \cdot d\vec{A}</annotation></semantics></math>

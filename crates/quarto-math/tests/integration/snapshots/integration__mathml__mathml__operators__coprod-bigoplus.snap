@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mo>∐</mo><mi>i</mi></msub><msub><mi>X</mi><mi>i</mi></msub><mo>⊕</mo><msub><mo>⨁</mo><mi>j</mi></msub><msub><mi>Y</mi><mi>j</mi></msub></mrow><annotation encoding="application/x-tex">\coprod_i X_i \oplus \bigoplus_j Y_j</annotation></semantics></math>

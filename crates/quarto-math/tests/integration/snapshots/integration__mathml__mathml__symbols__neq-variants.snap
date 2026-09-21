@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>a</mi><mo>≠</mo><mi>b</mi><mo>≠</mo><mi>c</mi><mo>≢</mo><mi>d</mi></mrow><annotation encoding="application/x-tex">a \neq b \ne c \not\equiv d</annotation></semantics></math>

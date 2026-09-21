@@ -675,3 +675,92 @@ fn macros_expand_before_normalization() {
     assert!(saw, "{}", n.root);
     assert!(n.problems.is_empty(), "{}", rendered(&n));
 }
+
+// ---------------------------------------------------------------------------
+// Primes (bd-9z83tcv0 found the normalizer dropping them)
+// ---------------------------------------------------------------------------
+
+fn scripts(node: &Node) -> (&Node, Option<&Node>, Option<&Node>) {
+    match &node.kind {
+        NodeKind::Scripts { base, sub, sup, .. } => (base, sub.as_deref(), sup.as_deref()),
+        other => panic!("expected Scripts, got {other:?}"),
+    }
+}
+
+fn sym(node: &Node) -> &str {
+    match &node.kind {
+        NodeKind::Sym(t) => t,
+        NodeKind::Row(items) if items.len() == 1 => sym(&items[0]),
+        other => panic!("expected a Sym, got {other:?}"),
+    }
+}
+
+/// mitex parses `f'` as an attachment without a `^`/`_` operator; the
+/// prime is a superscript, as TeX defines it (`f'` ≡ `f^{\prime}`).
+#[test]
+fn a_prime_is_a_superscript_prime_symbol() {
+    let n = norm("f'");
+    let (base, sub, sup) = scripts(only(&n));
+    assert_eq!(run(base), "f");
+    assert!(sub.is_none());
+    let sup = sup.expect("prime becomes the superscript");
+    assert_eq!(sym(sup), "′");
+    assert_eq!(sup.span, Some(1..2), "the prime's span is the apostrophe");
+    assert!(n.problems.is_empty(), "{:?}", n.problems);
+}
+
+#[test]
+fn repeated_primes_merge_into_one_symbol() {
+    let n = norm("f''");
+    let (_, _, sup) = scripts(only(&n));
+    assert_eq!(sym(sup.unwrap()), "″");
+    assert_eq!(sup.unwrap().span, Some(1..3));
+    let n = norm("f'''");
+    let (_, _, sup) = scripts(only(&n));
+    assert_eq!(sym(sup.unwrap()), "‴");
+    assert!(n.problems.is_empty());
+}
+
+/// `x'^2` is `x^{\prime 2}` in TeX, not a double superscript.
+#[test]
+fn a_prime_followed_by_a_superscript_shares_the_slot() {
+    let n = norm("x'^2");
+    let (base, sub, sup) = scripts(only(&n));
+    assert_eq!(run(base), "x");
+    assert!(sub.is_none());
+    let sup = sup.expect("superscript");
+    let NodeKind::Row(items) = &sup.kind else {
+        panic!("expected a Row of prime + script, got {sup}");
+    };
+    assert_eq!(items.len(), 2);
+    assert_eq!(sym(&items[0]), "′");
+    assert_eq!(run(&items[1]), "2");
+    assert!(n.problems.is_empty(), "{:?}", n.problems);
+}
+
+#[test]
+fn a_prime_and_a_subscript_fill_both_slots() {
+    let n = norm("f'_a");
+    let (base, sub, sup) = scripts(only(&n));
+    assert_eq!(run(base), "f");
+    assert_eq!(run(sub.unwrap()), "a");
+    assert_eq!(sym(sup.unwrap()), "′");
+    assert!(n.problems.is_empty(), "{:?}", n.problems);
+}
+
+#[test]
+fn primes_survive_inside_a_sequence() {
+    let n = norm("f'(x) = f''(x)");
+    let primes: Vec<&str> = {
+        let mut out = Vec::new();
+        n.root.walk(&mut |node| {
+            if let NodeKind::Sym(t) = &node.kind
+                && (t.starts_with('′') || t.starts_with('″'))
+            {
+                out.push(t.as_str());
+            }
+        });
+        out
+    };
+    assert_eq!(primes, vec!["′", "″"]);
+}

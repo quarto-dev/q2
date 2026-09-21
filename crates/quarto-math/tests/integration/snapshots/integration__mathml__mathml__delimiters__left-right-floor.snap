@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mrow><mo stretchy="true">⌊</mo><mfrac><mi>n</mi><mn>2</mn></mfrac><mo stretchy="true">⌋</mo></mrow></mrow><annotation encoding="application/x-tex">\left\lfloor \frac{n}{2} \right\rfloor</annotation></semantics></math>

@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msubsup><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>2</mn></mrow><mo>∞</mo></msubsup><mo stretchy="false">{</mo><msubsup><mi>α</mi><mi>i</mi><mi>β</mi></msubsup><mo stretchy="false">}</mo></mrow><annotation encoding="application/x-tex">\sum_{i = 2}^\infty\{\alpha_i^\beta\}</annotation></semantics></math>
