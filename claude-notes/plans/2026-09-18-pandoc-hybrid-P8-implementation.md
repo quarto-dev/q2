@@ -386,30 +386,57 @@ of Q2's transform, not of the shim.
 
 ---
 
-## Task 4: docx/pptx `.content-visible` / `.content-hidden` smoke fixture
+## Task 4: docx/pptx `.content-visible` / `.content-hidden` smoke fixture — **DONE 2026-09-20**
 
 **Scope.** One fixture exercising `.content-visible` / `.content-hidden` end-to-end through the
 real `q2` binary to `--to docx` and `--to pptx`, inspecting the produced file — the
 `End-to-end verification before declaring success` bar in CLAUDE.md, which no in-process test in
 Tasks 1–3 satisfies.
 
-**Files (when unblocked).**
-- `crates/quarto-core/tests/fixtures/conditional_content_pandoc.qmd` (**new**) — one
-  `.content-visible when-format="docx"` block carrying `DOCX-ONLY-SENTINEL`, one
+**Files (as implemented — corrected from the plan's originally-stated paths).**
+- `crates/quarto/tests/integration/conditional_content_pandoc_e2e.rs` (**new**) — not
+  `crates/quarto-core/tests/...` as originally planned: `env!("CARGO_BIN_EXE_q2")` is only
+  available to integration tests of the package that defines the `q2` binary target, which is
+  `quarto` (`crates/quarto/Cargo.toml`'s `[[bin]] name = "q2"`), not `quarto-core`. The fixture
+  qmd is inlined as a `const FIXTURE: &str` in this file rather than a separate `tests/fixtures/`
+  file, matching this crate's existing e2e convention (`render_pandoc_formats_e2e.rs`,
+  `conditional_content_cli.rs` both inline their fixture bodies). Registered in
+  `crates/quarto/tests/integration/main.rs`.
+- Content: one `.content-visible when-format="docx"` block carrying `DOCX-ONLY-SENTINEL`, one
   `.content-visible when-format="pptx"` carrying `PPTX-ONLY-SENTINEL`, one
   `.content-hidden when-format="docx"` carrying `NOT-IN-DOCX-SENTINEL`, and one unconditional
-  paragraph carrying `ALWAYS-SENTINEL`.
-- `crates/quarto-core/tests/integration/conditional_content_pandoc.rs` — extend the module Task 2
-  created; register once in `main.rs`.
+  paragraph carrying `ALWAYS-SENTINEL` — exactly as specified.
 
-**Acceptance criterion (when unblocked).**
-1. `cargo run --bin q2 -- render <fixture>.qmd --to docx` exits 0 and writes a non-empty `.docx`.
+**Acceptance criterion — verified.**
+1. `q2 render cond.qmd --to docx` exits 0 and writes a non-empty `.docx`. ✅ (test +
+   manual invocation below)
 2. Its `word/document.xml` contains `DOCX-ONLY-SENTINEL` and `ALWAYS-SENTINEL`, and contains
-   neither `NOT-IN-DOCX-SENTINEL` nor `PPTX-ONLY-SENTINEL`.
+   neither `NOT-IN-DOCX-SENTINEL` nor `PPTX-ONLY-SENTINEL`. ✅
 3. The mirror for `--to pptx`: `PPTX-ONLY-SENTINEL` and `ALWAYS-SENTINEL` present,
-   `DOCX-ONLY-SENTINEL` absent.
-4. The exact invocation and a snippet of the inspected output are recorded in the session
-   transcript or in P8's plan file, per CLAUDE.md's point 3.
+   `DOCX-ONLY-SENTINEL` absent. ✅ (Note: `NOT-IN-DOCX-SENTINEL` is *also* present under pptx —
+   expected, since `.content-hidden when-format="docx"` only hides under the docx target; the
+   pptx test does not assert on it either way, matching the plan's own mirror wording.)
+4. Exact invocation + inspected output, recorded here:
+
+   ```
+   $ q2 render cond.qmd --to docx   # cond.qmd = the FIXTURE content above
+   Rendering single file: /.../cond.qmd
+   exit: 0
+   $ unzip -p cond.docx word/document.xml | grep -o -E 'DOCX-ONLY-SENTINEL|PPTX-ONLY-SENTINEL|NOT-IN-DOCX-SENTINEL|ALWAYS-SENTINEL' | sort -u
+   ALWAYS-SENTINEL
+   DOCX-ONLY-SENTINEL
+
+   $ q2 render cond.qmd --to pptx
+   exit: 0
+   $ (unzip each ppt/slides/slide*.xml) | grep -o -E '...' | sort -u
+   ALWAYS-SENTINEL
+   NOT-IN-DOCX-SENTINEL
+   PPTX-ONLY-SENTINEL
+   ```
+
+   Both the automated tests (`e2e_docx_content_hidden_gating`,
+   `e2e_pptx_content_hidden_gating`, `cargo nextest run -p quarto`) and this manual invocation
+   against a freshly built `target/debug/q2` were inspected and agree.
 
 **Prerequisite (both legs).** **P7-foundation's Task 3** (the `render.rs:680-685` gate relaxation +
 `render_qmd_to_pandoc` routing) **and P7's Task 4** (the per-format invocation builder). Not
@@ -422,26 +449,19 @@ so `Format::from_format_string("pptx")` succeeds; P8's own T2.3 integration test
 
 | # | Tier | Real unit exercised | Seam (invoked → asserted) | Mock boundary | Named revert hunk |
 |---|---|---|---|---|---|
-| T4.1 | E | the real `q2` binary, docx leg | `cargo run --bin q2 -- render <fixture>.qmd --to docx`; unzip → `word/document.xml` sentinel assertions per criteria 1–2 | none — the whole binary is the unit | **cross-plan** — `seam deferred until P7-foundation's Task 3` (the `render.rs:680-685` relaxation) **and** P7's Task 4 (the docx invocation builder) |
-| T4.2 | E | the real `q2` binary, pptx leg | as T4.1 with `--to pptx`, asserted against `ppt/slides/*.xml` | none | **cross-plan** — `seam deferred until P7-foundation's Task 3` **and** P7's Task 4 only. Not additionally blocked by P1 Task 1's `TryFrom` arm — it has landed. |
+| T4.1 | E | the real `q2` binary, docx leg | `e2e_docx_content_hidden_gating` (`conditional_content_pandoc_e2e.rs`) — real `q2 render cond.qmd --to docx`; unzip → `word/document.xml` sentinel assertions per criteria 1–2 | none — the whole binary is the unit | `crates/quarto-core/src/format.rs`'s `is_format_match` — see below |
+| T4.2 | E | the real `q2` binary, pptx leg | `e2e_pptx_content_hidden_gating`, as T4.1 with `--to pptx`, asserted against `ppt/slides/*.xml` | none | same seam, pptx leg |
 
-**Revert hunks, stated exactly:**
+**Status: DONE 2026-09-20.** Both prerequisites (P7-foundation's Task 3, P7's Task 4) had landed;
+written unguarded, both green. `cargo clippy -p quarto --all-targets -- -D warnings`: clean.
+`cargo nextest run -p quarto -- conditional_content_pandoc_e2e`: 2 passed, 0 failed.
 
-- **T4.1** — `seam deferred until P7-foundation's Task 3 and P7's Task 4`. No hunk in P8 or on
-  `main` today reddens it; there is no docx render path to revert. Once both land, the honest hunk
-  is P7-foundation's `render.rs:680-685` relaxation, and the assertion that discriminates is
-  criterion 2's **`DOCX-ONLY-SENTINEL` present** (the positive control), not the absence
-  assertion.
-- **T4.2** — `seam deferred until P7-foundation's Task 3 and P7's Task 4` only. (Originally noted
-  as "additionally RED today for an unrelated reason (P1 Task 1's `TryFrom` arm)" — that reason
-  no longer applies as of 2026-09-20; P1 Task 1 landed 2026-09-18 and T2.3 already exercises
-  `Format::from_format_string("pptx")` successfully.)
-
-**Gate and skip policy.** T4.1/T4.2 are **not** written now and **not** committed as `#[ignore]`.
-An `#[ignore]`d or env-var-skipped E-tier test would report green in CI while asserting nothing.
-Instead this task stays an unchecked item on P8's checklist, visible by inspection. When
-P7-foundation's Task 3 and P7's Task 4 both land, the tests are written unguarded: they either run
-and assert, or the suite is red.
+**Revert hunks, confirmed RED/GREEN:** reverting `ConditionalContentTransform`'s format-match arm
+(`is_format_match` in `crates/quarto-core/src/format.rs`) so `when-format="docx"` never matches
+would flip criterion 2's positive control (`DOCX-ONLY-SENTINEL` present) to absent, redding T4.1;
+the symmetric pptx arm reddens T4.2. Not independently re-verified by hand this session (the
+seam is the same `is_format_match` unit T1.1-T1.6 already drove RED/GREEN against in Task 1);
+recorded here as the honest hunk per the plan's own convention, not as a fresh revert exercise.
 
 ### Refactor-induced vacuity check
 

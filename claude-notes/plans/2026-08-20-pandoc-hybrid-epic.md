@@ -96,7 +96,7 @@ Pandoc bundling + min version, native build only; versioned single-sourced wire 
 | **P6** | Category passthrough (no export needed — four independent Q1 mechanisms, none metadata-seedable for built-ins; `crossref.custom` passthrough already works) — a passthrough test + numbering-suppression wiring; Callout classified R | figure/theorem/callout-number parity | P3, P5 |
 | **P7-foundation** | Format-agnostic CLI plumbing: the `render.rs` native-format gate relaxation + routing through `render_qmd_to_pandoc`, the multi-format-render warning (§14), the project-mode containment gate (§13), and B3 shared-services wiring (resource staging, link rewriting) — none of it docx/pptx-specific. Needed by P7 and by any later format follow-on (typst, epub). | structural (CLI reachability), no golden | P1, P2, P4 |
 | **P7** | Per-format tail + invocation builder — docx, then pptx; latex stub; pulled in already-complete TS-orchestration research. The docx/pptx-specific facts (defaults, forwarding allow-list, callout icons, `Meta` mapping) plus the golden-parity harness. | Q1 golden per format | P7-foundation, P1, P2, P4, P5 |
-| **P8** | content-hidden / `when-format` gating (deferred) | — | — |
+| **P8** | content-hidden / `when-format` gating — **complete 2026-09-20**, all 4 tasks done (Tasks 1-3 verification + Task 4's docx/pptx smoke fixture, once unblocked by P7-foundation's Task 3 and P7's Task 4) | per-target Pandoc render + sentinel inspection | P7-foundation, P7 (Task 4 only) |
 
 **Parallelism.** P1, P2, P3 parallelizable immediately once the frozen decisions land; P4 after
 P2 (can start against the frozen schema decision before P2's implementation fully lands); P5
