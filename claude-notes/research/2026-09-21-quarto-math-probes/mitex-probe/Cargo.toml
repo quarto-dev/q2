@@ -1,0 +1,11 @@
+[package]
+name = "mitex-probe"
+version = "0.0.0"
+edition = "2021"
+[workspace]
+[dependencies]
+mitex-parser = { path = "../../../../external-sources/mitex/crates/mitex-parser" }
+mitex-spec-gen = { path = "../../../../external-sources/mitex/crates/mitex-spec-gen", features = ["prebuilt"] }
+mitex = { path = "../../../../external-sources/mitex/crates/mitex" }
+rowan = "0.15.15"
+mitex-lexer = { path = "../../../../external-sources/mitex/crates/mitex-lexer" }
