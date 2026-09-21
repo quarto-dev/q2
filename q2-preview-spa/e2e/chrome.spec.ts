@@ -25,7 +25,7 @@
  *   7. Favicon `<link rel="icon">` lands in the iframe's
  *      `document.head`.
  *
- * Per CLAUDE.md "End-to-end verification before declaring
+ * Per AGENTS.md "End-to-end verification before declaring
  * success": these specs spawn the real `q2 preview` binary
  * against the canonical fixture set, so they exercise the full
  * pipeline (Rust pass-1/pass-2, WASM bridge, samod sync, SPA

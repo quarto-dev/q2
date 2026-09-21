@@ -137,7 +137,7 @@ pub fn run(args: &[String]) -> Result<i32> {
         bail!(
             "this q2 binary was built without the hub MCP bundle.\n\
              Run `cargo xtask build-hub-mcp-bundle`, then rebuild the q2 binary\n\
-             (`cargo build --bin q2`). See CLAUDE.md § hub MCP bundle."
+             (`cargo build --bin q2`). See AGENTS.md § hub MCP bundle."
         );
     }
 
@@ -171,7 +171,7 @@ fn cache_root() -> Result<PathBuf> {
 }
 
 /// Diagnostic blob for `q2 mcp --launcher-info`: which bundle is
-/// embedded (the stale-embed tripwire — see CLAUDE.md), where it
+/// embedded (the stale-embed tripwire — see AGENTS.md), where it
 /// extracts, and which node would run it.
 fn launcher_info() -> Result<String> {
     let mut out = String::new();

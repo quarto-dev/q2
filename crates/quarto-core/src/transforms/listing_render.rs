@@ -144,7 +144,7 @@ impl AstTransform for ListingRenderTransform {
 
 /// Bytes for the vendored `list.min.js` (third-party MIT) and
 /// `quarto-listing.js` (Q1-owned glue) — copied locally per
-/// CLAUDE.md §"External Sources Policy". The SCSS is *not* shipped
+/// AGENTS.md §"External Sources Policy". The SCSS is *not* shipped
 /// here; per L3 D5 the SCSS needs proper SassLayer integration with
 /// the existing theme-CSS pipeline, which is filed as a follow-up
 /// rather than wired in this commit.

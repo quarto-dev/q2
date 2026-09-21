@@ -5,7 +5,7 @@
 //! then inspects the produced theme CSS for brand-derived rules.
 //!
 //! This is the test that would have caught the
-//! `CompileThemeCssStage`-doesn't-fire incident (see CLAUDE.md
+//! `CompileThemeCssStage`-doesn't-fire incident (see AGENTS.md
 //! "End-to-end verification") for brand. Pure unit tests in
 //! `quarto-sass` can't see whether the pipeline actually wired
 //! `ThemeConfig::resolve` correctly; this test can.
@@ -139,7 +139,7 @@ fn brand_only_no_theme_key_still_renders_brand_layer() {
 /// Q1 auto-discovers `_brand.yml` from the project root; Q2 doesn't.
 /// The reasoning is that an unstyled page is a worse failure mode
 /// than a clear "you asked for brand but didn't say where it is"
-/// diagnostic — see CLAUDE.md "Debugging Approach" / "End-to-end
+/// diagnostic — see AGENTS.md "Debugging Approach" / "End-to-end
 /// verification". We can revisit auto-discovery once we have proper
 /// source-location diagnostics that point at the offending YAML.
 #[test]

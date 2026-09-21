@@ -36,7 +36,7 @@
 //! Q1 builds this banner in a **DOM postprocessor**
 //! (`format-html.ts:902`, keying off the `quarto:status` meta tag it
 //! wrote earlier). Q2 has no post-Pandoc DOM stage and must not grow one
-//! (see `CLAUDE.md`), and an AST transform cannot help either: the banner
+//! (see `AGENTS.md`), and an AST transform cannot help either: the banner
 //! sits *outside* `#quarto-content`, where document blocks land. So the
 //! template owns the markup and this transform owns the decision plus the
 //! one piece of text that needs computing. The split also keeps the

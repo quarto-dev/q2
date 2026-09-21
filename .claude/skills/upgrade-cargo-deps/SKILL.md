@@ -397,7 +397,7 @@ braid syncs the skein automatically on every command — the strands filed in st
 - The plan doc path.
 - The list of strands filed.
 - The verification status.
-- A reminder: **do not push without explicit approval** (per CLAUDE.md GIT PUSH POLICY).
+- A reminder: **do not push without explicit approval** (per AGENTS.md GIT PUSH POLICY).
 
 ### 15. Stop
 
@@ -424,6 +424,6 @@ Hand the worktree back to the user. They review the lockfile diff, merge or disc
 - **`.claude/skills/upgrade-cargo-deps/PINS.md`** — every deliberate pin and known transitive incompatibility, with a removal condition the skill re-checks every run. Read this before listing the "Skipped" section of the survey plan.
 - Design plan: `claude-notes/plans/2026-05-04-cargo-dependency-upgrade-skill.md`
 - Braid epic: bd-hb8h
-- `CLAUDE.md` GIT PUSH POLICY (the skill must not push)
-- `CLAUDE.md` "Full Project Verification" (`cargo xtask verify` semantics)
+- `AGENTS.md` GIT PUSH POLICY (the skill must not push)
+- `AGENTS.md` "Full Project Verification" (`cargo xtask verify` semantics)
 - `.claude/rules/worktrees.md` (worktree convention)

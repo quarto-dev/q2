@@ -7,7 +7,7 @@
 >
 > **Do NOT run `br` write commands here** (`br create`/`update`/`close`/`sync`).
 > Use **braid** instead — run `braid agents-info` or the `/braid` skill for
-> usage, and see `CLAUDE.md` § WORK TRACKING.
+> usage, and see `AGENTS.md` § WORK TRACKING.
 >
 > Migration record: `claude-notes/plans/2026-06-08-braid-migration.md`.
 > The `.beads/issues.jsonl` in this directory is the frozen final beads state;

@@ -7,7 +7,7 @@ binary is fully self-contained and **rendered sites work offline** — the runti
 is embedded at compile time via `include_str!` (see
 `crates/quarto-core/src/transforms/mermaid.rs`) and written into the rendered
 site as an ordinary project asset. This follows the repo's External Sources
-Policy (see root `CLAUDE.md`) and mirrors `resources/revealjs/`.
+Policy (see root `AGENTS.md`) and mirrors `resources/revealjs/`.
 
 ## Source & version
 

@@ -11,7 +11,7 @@ Provenance:
 - `use-brand/{basic-brand,multi-file-brand,nested-brand}/` ←
   `tests/smoke/use-brand/`
 
-Per Q2's External Sources Policy (`CLAUDE.md`), the original location
+Per Q2's External Sources Policy (`AGENTS.md`), the original location
 is reading-only reference material; the build and test process must
 not read from `external-sources/`. If a fixture needs to be refreshed
 to track a Q1 brand-schema change, re-copy the relevant files in a
