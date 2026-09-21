@@ -579,7 +579,7 @@ impl PipelineStage for PandocWriteStage {
         // document-relative `Path` value is rebased against, since this
         // `Command` inherits the process cwd rather than setting its own.
         let doc_dir = doc.path.parent().unwrap_or_else(|| Path::new("."));
-        let forwarded_args = build_forwarded_args(self.name(), doc_dir, &doc.ast.meta, to_format)?;
+        let forwarded_args = build_forwarded_args(self.name(), doc_dir, &doc.ast.meta, &to_format)?;
 
         // Body-content `Image`/`Link` targets (e.g. `img/thinker.jpg`)
         // reach pandoc as literal, unrebased strings from the AST — unlike
@@ -797,6 +797,7 @@ mod tests {
     use quarto_error_reporting::DiagnosticKind;
     use quarto_pandoc_types::{Block, BlockQuote, ConfigValue, Div, Header};
     use quarto_source_map::SourceInfo;
+    use yaml_rust2::Yaml;
 
     fn header(level: usize) -> Block {
         Block::Header(Header {
@@ -826,7 +827,10 @@ mod tests {
     #[test]
     fn test_shift_absent_when_top_level_h1_present() {
         let blocks = vec![header(1), header(2)];
-        assert_eq!(shift_heading_level_by_for(&blocks), None);
+        assert_eq!(
+            shift_heading_level_by_for(&blocks, &meta_with_number_sections(None)),
+            None
+        );
     }
 
     /// No heading at all in the document → shift by -1, same as "no
@@ -837,7 +841,10 @@ mod tests {
             content: vec![],
             source_info: SourceInfo::for_test(),
         })];
-        assert_eq!(shift_heading_level_by_for(&blocks), Some(-1));
+        assert_eq!(
+            shift_heading_level_by_for(&blocks, &meta_with_number_sections(None)),
+            Some(-1)
+        );
     }
 
     /// Only a level-2 heading at top level → shift by -1.
@@ -847,7 +854,10 @@ mod tests {
     #[test]
     fn test_shift_applied_when_only_h2_present() {
         let blocks = vec![header(2), header(3)];
-        assert_eq!(shift_heading_level_by_for(&blocks), Some(-1));
+        assert_eq!(
+            shift_heading_level_by_for(&blocks, &meta_with_number_sections(None)),
+            Some(-1)
+        );
     }
 
     /// A level-1 heading emitted by executed code can land nested
@@ -860,7 +870,10 @@ mod tests {
     #[test]
     fn test_shift_absent_when_h1_nested_inside_div() {
         let blocks = vec![div(vec![header(1)])];
-        assert_eq!(shift_heading_level_by_for(&blocks), None);
+        assert_eq!(
+            shift_heading_level_by_for(&blocks, &meta_with_number_sections(None)),
+            None
+        );
     }
 
     /// Nesting two levels deep (`Div` inside `BlockQuote`) must still be
@@ -871,7 +884,30 @@ mod tests {
             content: vec![div(vec![header(1)])],
             source_info: SourceInfo::for_test(),
         })];
-        assert_eq!(shift_heading_level_by_for(&blocks), None);
+        assert_eq!(
+            shift_heading_level_by_for(&blocks, &meta_with_number_sections(None)),
+            None
+        );
+    }
+
+    /// bd-pandoc-hybrid fold (p7 + typst): a document that lacks an H1
+    /// would normally get the auto `-1` shift, but an explicit
+    /// `shift-heading-level-by:` in front matter must win — matching Q1's
+    /// `format-typst.ts:99-105`, which checks the key's absence before
+    /// applying its own default. Without the `meta.get(...).is_some()`
+    /// guard, this would return `Some(-1)` and `build_forwarded_args`'s
+    /// separate, generic forwarding of the user's explicit value would
+    /// emit `--shift-heading-level-by` twice for the same pandoc
+    /// invocation.
+    #[test]
+    fn test_shift_absent_when_explicitly_set_even_without_h1() {
+        let blocks = vec![header(2)];
+        let mut meta = ConfigValue::new_map(vec![], SourceInfo::for_test());
+        meta.insert_path(
+            &["shift-heading-level-by"],
+            ConfigValue::new_scalar(Yaml::Integer(2), SourceInfo::for_test()),
+        );
+        assert_eq!(shift_heading_level_by_for(&blocks, &meta), None);
     }
 
     fn meta_with_number_sections(value: Option<bool>) -> ConfigValue {
