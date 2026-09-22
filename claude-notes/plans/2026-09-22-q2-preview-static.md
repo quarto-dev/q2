@@ -1,11 +1,13 @@
 # `q2 preview --static`: render to disk, serve statically, watch and re-render
 
 **Strand:** bd-sl79jjiq
-**Status:** design reviewed 2026-09-22 (all nine decisions confirmed; lazy
-code execution added as Phase 3b at the user's request); implementation in
-progress on branch `braid/bd-sl79jjiq-*`. Open questions Q1–Q6 were not
-answered explicitly and the proposed defaults were taken (see § Open
-questions).
+**Status:** implemented 2026-09-22 on branch
+`braid/bd-sl79jjiq-q2-preview-static-full` (Phases 0–5; commits 69fc263,
+193f9af, 5fd99a4, 0e67a44, 74b26e0, a02df5b). Verified in a real browser
+on `docs/` (§ End-to-end verification log) and with Jupyter-gated e2e
+tests. Not pushed; awaiting the user's go-ahead. Open questions Q1–Q6
+were not answered explicitly and the proposed defaults were taken (see
+§ Open questions); the seven § Deferred items are filed as strands.
 **Related:** bd-kw93 (the closed `q2 preview` epic; its plan is
 `2026-05-11-q2-preview-epic.md`), bd-w59hlv0s (engine-written figure files
 are not served in the hub preview; static mode sidesteps it by construction),
@@ -707,8 +709,14 @@ Commit at each clean phase boundary per `CLAUDE.md` § Git Workflow.
 - [x] File the § Deferred items as strands linked `discovered-from`
   bd-sl79jjiq (2026-09-22, seven strands, priority 4). bd-sl79jjiq stays
   open until the branch is merged.
-- [ ] `cargo xtask verify --skip-hub-build` at minimum (Rust-only change),
-  then ask before pushing.
+- [x] `cargo xtask verify --skip-hub-build` at minimum (Rust-only change),
+  then ask before pushing. (Full `cargo xtask verify`, hub-client and WASM
+  legs included because `quarto-core` changed, passed on 2026-09-22 —
+  on the second run. The first run failed in step 6, the ts-packages
+  build, because this checkout had never run `npm install` after
+  `hephaestus-svg-wasm` was added to `preview-renderer` on 2026-09-18;
+  unrelated to this branch, fixed by `npm install` from the repo root.
+  Not pushed.)
 
 ## End-to-end verification log
 
