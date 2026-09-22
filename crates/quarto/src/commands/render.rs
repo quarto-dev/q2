@@ -1513,7 +1513,7 @@ fn print_render_diagnostics_text(
 }
 
 /// Resolve format string to Format (without metadata)
-fn resolve_format(format_str: &str) -> Result<Format> {
+pub(crate) fn resolve_format(format_str: &str) -> Result<Format> {
     Format::from_format_string(format_str).map_err(|e| anyhow::anyhow!("{}", e))
 }
 

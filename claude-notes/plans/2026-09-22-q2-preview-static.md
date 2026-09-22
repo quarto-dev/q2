@@ -531,7 +531,7 @@ Commit at each clean phase boundary per `CLAUDE.md` § Git Workflow.
 
 ### Phase 0: CLI surface (pins the contract)
 
-- [ ] Tests in `crates/quarto/tests/integration/preview_cli.rs`:
+- [x] Tests in `crates/quarto/tests/integration/preview_cli.rs`:
   - `--help` advertises `--static`, `--no-watch`, `--no-navigate`, `--to`.
   - `--static --join X`, `--static --share`, `--static --allow-edit`,
     `--static --ui editor`, `--static --no-project`, `--static --data-dir`,
@@ -539,9 +539,9 @@ Commit at each clean phase boundary per `CLAUDE.md` § Git Workflow.
   - `--no-watch` / `--no-navigate` / `--to` without `--static` exit 2.
   - `--static --to typst <fixture>` exits 1 with "not supported with
     --static" (no server started).
-- [ ] Add the flags to `Commands::Preview` in `crates/quarto/src/main.rs`
+- [x] Add the flags to `Commands::Preview` in `crates/quarto/src/main.rs`
   and a `StaticArgs` struct; dispatch to `preview_static::execute` (a stub
-  that returns `NotImplemented` until Phase 3).
+  that returns `NotImplemented` until Phase 3). (2026-09-22)
 
 ### Phase 1: `render_once` refactor (no behaviour change to `q2 render`)
 
