@@ -1354,6 +1354,9 @@ fn main() -> Result<()> {
             strict,
             no_render_scripts,
             profile,
+            // `q2 render` always executes; only `q2 preview --static`
+            // narrows this (bd-sl79jjiq).
+            execution_policy: quarto_core::engine::ExecutionPolicy::All,
         }),
         Commands::Preview {
             path,

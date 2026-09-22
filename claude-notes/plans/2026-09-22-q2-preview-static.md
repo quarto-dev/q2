@@ -638,7 +638,8 @@ Commit at each clean phase boundary per `CLAUDE.md` § Git Workflow.
 
 ### Phase 3b: lazy code execution (§ Lazy code execution)
 
-- [ ] `quarto-core` tests first:
+- [x] `quarto-core` tests first (`tests/integration/execution_policy.rs`,
+  driven with a `FixtureEngine` so no Python is needed):
   - `ExecutionPolicy::None` on a fixture with a `{python}` cell renders the
     cell as inert source, produces **no** diagnostics, and reports
     `execution_skipped == true`; a markdown-only document under `None`
@@ -647,11 +648,17 @@ Commit at each clean phase boundary per `CLAUDE.md` § Git Workflow.
     `a.qmd` (output contains the cell result) and skips `b.qmd`.
   - `ExecutionPolicy::All` is byte-identical to today (an existing engine
     fixture's snapshot must not change).
-- [ ] Add `ExecutionPolicy` to `RenderToFileOptions` / `RenderConfig`,
+- [x] Add `ExecutionPolicy` to `RenderToFileOptions` / `RenderConfig`,
   plumb onto `StageContext`, honour it in `EngineExecutionStage`, surface
   `execution_skipped` through `RenderOutput` → `RenderToFileResult` →
-  `RenderReport.unexecuted_inputs`.
-- [ ] Driver tests (extend `preview_static_e2e.rs` with a fixture that
+  `RenderReport.unexecuted_inputs`. (As built: `quarto_core::engine::
+  ExecutionPolicy`; plumbed `RenderToFileOptions` → `HtmlRenderConfig` →
+  `RenderContext` → `StageContext`, the exact path the registry override
+  takes; the stage decides right after the pure resolver, before any
+  engine implementation is touched, so a skipped page never loads an
+  engine or warns about a missing runtime. `RenderArgs.execution_policy`
+  is the CLI-crate seam; `q2 render` passes `All`.)
+- [x] Driver tests (extend `preview_static_e2e.rs` with a fixture that
   has a `{python}` page; gate on `python3` + `jupyter` being on PATH like
   the existing engine e2e tests do):
   1. boot serves the Jupyter page with inert cells and no warning;
@@ -660,29 +667,46 @@ Commit at each clean phase boundary per `CLAUDE.md` § Git Workflow.
   3. a config edit re-renders Full and the viewed page is *still*
      executed (E is respected on Full);
   4. `preview.engine: off` ⇒ a `GET` never triggers execution.
-- [ ] Implement the `PageRequested` channel, the E set, and the policy
-  selection table in `preview_static.rs`.
-- [ ] Record the end-to-end run in § Verification log.
+- [x] Implement the `PageRequested` channel, the E set, and the policy
+  selection table in `preview_static.rs`. (`StaticServerConfig::
+  page_requests` reports every 200 HTML page view that is not a HEAD or
+  a `fetch()`; the driver keeps `executed` and a `LastRender` snapshot
+  and renders `Only(executed)`; `preview.engine: off` short-circuits
+  page views entirely.)
+- [x] Record the end-to-end run in § Verification log. (The Jupyter
+  e2e tests are the record: `lazy_execution_boots_inert_and_executes_on_
+  first_view` observed an inert boot page, a `reload` targeting the page
+  after its first view, the executed output surviving a `_quarto.yml`
+  re-render; `preview_engine_off_never_executes` observed silence on
+  view. Both passed against a real kernel on 2026-09-22.)
 
 ### Phase 4: `_quarto.yml` `project: preview:` defaults
 
-- [ ] Tests: fixture with `project: preview: {port: 4321, browser: false,
+- [x] Tests: fixture with `project: preview: {port: 4321, browser: false,
   navigate: false}` → the printed URL uses 4321 and no `target` is sent on
   reload; CLI `--port` overrides; `timeout:` / `serve:` produce one
-  warning line each and are otherwise ignored.
-- [ ] Implement in `crates/quarto-preview/src/config.rs` next to
-  `read_engine_policy_from_project`.
+  warning line each and are otherwise ignored. (Unit tests in
+  `quarto-preview/src/config.rs` read every key; two e2e tests pin the
+  port default, `navigate: false`, `watch-inputs: false`, the `--port 0`
+  override, and the `timeout` warning. `browser: false` is not
+  observable in a test and is covered by the reader's unit test.)
+- [x] Implement in `crates/quarto-preview/src/config.rs` next to
+  `read_engine_policy_from_project` (`StaticPreviewDefaults`,
+  `read_static_preview_defaults[_from_project]`). Static mode only (Q4's
+  default): the hub-mode preview still ignores these keys.
 
 ### Phase 5: docs and follow-ups
 
-- [ ] New page `docs/guides/projects/preview.qmd` ("Previewing") describing
+- [x] New page `docs/guides/projects/preview.qmd` ("Previewing") describing
   both modes, when to use which, the flags, and the `project: preview:`
   keys; sidebar entry in `docs/_quarto.yml`. Render with
-  `cargo run --bin q2 -- render docs/` (never Q1).
-- [ ] One sentence in `docs/guides/projects/scripts.qmd` (§ preview) that
+  `cargo run --bin q2 -- render docs/` (never Q1). (Rendered 2026-09-22:
+  296 of 296 pages, the same 33 pre-existing warnings, no new ones.)
+- [x] One sentence in `docs/guides/projects/scripts.qmd` (§ preview) that
   `--static` runs pre/post-render scripts on every re-render.
-- [ ] File the § Deferred items as strands linked `discovered-from`
-  bd-sl79jjiq; close bd-sl79jjiq.
+- [x] File the § Deferred items as strands linked `discovered-from`
+  bd-sl79jjiq (2026-09-22, seven strands, priority 4). bd-sl79jjiq stays
+  open until the branch is merged.
 - [ ] `cargo xtask verify --skip-hub-build` at minimum (Rust-only change),
   then ask before pushing.
 

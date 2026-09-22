@@ -106,6 +106,10 @@ pub struct RenderArgs {
     /// (bd-fu16z22k). See
     /// [`quarto_core::project::project_profile::cli_selection`].
     pub profile: Vec<String>,
+    /// Which documents may execute code (bd-sl79jjiq). `q2 render`
+    /// always uses the default (`All`); `q2 preview --static` narrows
+    /// it to the pages being viewed. Not a CLI flag.
+    pub execution_policy: quarto_core::engine::ExecutionPolicy,
 }
 
 /// What to render after argument classification.
@@ -723,6 +727,18 @@ impl RenderReport {
         self.summary.diagnostic_counts()
     }
 
+    /// Inputs that resolved to a code-executing engine but rendered
+    /// with their cells inert because the `ExecutionPolicy` excluded
+    /// them (bd-sl79jjiq Phase 3b).
+    pub fn unexecuted_inputs(&self) -> std::collections::BTreeSet<PathBuf> {
+        self.summary
+            .outputs
+            .iter()
+            .filter(|o| o.render_output.execution_skipped)
+            .map(|o| o.input_path.clone())
+            .collect()
+    }
+
     /// The diagnostics exactly as `q2 render` prints them (per-page
     /// diagnostics included, i.e. the non-`--quiet` form). With
     /// `color: false` the text carries no ANSI escapes and no OSC 8
@@ -957,6 +973,7 @@ pub fn render_once(
         quiet: args.quiet,
         replay_captures,
         engine_registry_override: None,
+        execution_policy: args.execution_policy.clone(),
         // Phase 3c: CLI override-only for v1 (YAML reading is deferred
         // until project YAML schema work; the resolver matrix is still
         // exercised end-to-end by Phase 0 test #9b).

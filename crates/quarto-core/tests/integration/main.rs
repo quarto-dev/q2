@@ -34,6 +34,7 @@ pub mod engine_merge;
 pub mod engine_output_parity;
 pub mod engine_registry_build;
 pub mod engine_visibility;
+pub mod execution_policy;
 pub mod extension_metadata;
 pub mod fail_fast;
 pub mod footnotes_dedup;

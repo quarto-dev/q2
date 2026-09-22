@@ -125,6 +125,9 @@ pub struct HtmlRenderConfig {
     /// [`crate::engine::EngineRegistry::with_replay`] from a
     /// [`quarto_trace::EngineCapture`] loaded from a trace file.
     pub engine_registry: Option<std::sync::Arc<crate::engine::EngineRegistry>>,
+    /// Which documents may execute code (bd-sl79jjiq). Threaded onto
+    /// `RenderContext` next to `engine_registry`.
+    pub execution_policy: crate::engine::ExecutionPolicy,
 
     /// Server-recorded engine captures to splice into the HTML render
     /// (bd-uy4uygha). When non-empty, a [`crate::stage::CaptureSpliceStage`]
@@ -145,6 +148,7 @@ impl HtmlRenderConfig {
         Self {
             resolver: Some(resolver),
             engine_registry: None,
+            execution_policy: crate::engine::ExecutionPolicy::default(),
             captures: Vec::new(),
         }
     }
@@ -175,6 +179,11 @@ pub struct RenderOutput {
     pub diagnostics: Vec<DiagnosticMessage>,
     /// Source context for mapping locations in diagnostics.
     pub source_context: SourceContext,
+    /// True when the document resolved to a code-executing engine but
+    /// the render's `ExecutionPolicy` excluded it, so its cells were
+    /// passed through inert (bd-sl79jjiq). Never true for a document
+    /// with nothing to execute.
+    pub execution_skipped: bool,
 }
 
 pub struct AstOutput {
@@ -795,6 +804,7 @@ pub async fn run_pipeline(
     if let Some(override_reg) = &ctx.engine_registry_override {
         stage_ctx.registry = override_reg.clone();
     }
+    stage_ctx.execution_policy = ctx.execution_policy.clone();
 
     // Create input from content
     let input = PipelineData::LoadedSource(LoadedSource::new(
@@ -826,6 +836,7 @@ pub async fn run_pipeline(
     // (bd-0rsk07il) so response builders can read it after a full
     // render. `None` for pipelines that stop before the unwrap stage.
     ctx.document_profile = stage_ctx.document_profile;
+    ctx.execution_skipped = stage_ctx.execution_skipped;
 
     // Apply the `diagnostics:` suppression policy resolved by
     // `MetadataMergeStage`. This is deliberately the *only* place
@@ -967,6 +978,7 @@ pub async fn render_qmd_to_html(
     // after `StageContext::new()` populates the default project registry.
     // Cloning the Arc is cheap; `HtmlRenderConfig` is borrowed `&`.
     ctx.engine_registry_override = config.engine_registry.clone();
+    ctx.execution_policy = config.execution_policy.clone();
     let apply_config = config
         .resolver
         .clone()
@@ -998,6 +1010,7 @@ pub async fn render_qmd_to_html(
         html: rendered.content,
         diagnostics,
         source_context: rendered.source_context,
+        execution_skipped: ctx.execution_skipped,
     })
 }
 

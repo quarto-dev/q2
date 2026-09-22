@@ -17,6 +17,14 @@
 //! `render-stop` (with the plain-text diagnostics on failure) and, on
 //! success, `reload` — with the changed page as the navigation target
 //! when exactly one input changed and `--no-navigate` is not set.
+//!
+//! Code execution is lazy (plan § Lazy code execution): every render
+//! runs with `ExecutionPolicy::Only(executed)`, the set of pages the
+//! user has viewed. The server reports each page view; the first view
+//! of a page the last render left inert adds it to the set and
+//! re-renders it, so the browser shows the inert page, the badge, then
+//! the executed page. `preview.engine: off` in `_quarto.yml` disables
+//! execution entirely.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -24,8 +32,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
+use quarto_core::engine::ExecutionPolicy;
 use quarto_core::format::FormatIdentifier;
 use quarto_hub::watch::{FileWatcher, WatchConfig, WatchEvent, WatchFilter};
+use quarto_preview::EnginePolicy;
+use quarto_preview::config::{
+    read_engine_policy_from_project, read_static_preview_defaults_from_project,
+};
 use quarto_preview::static_mode::{
     Action, ReloadEvent, ReloadHub, StaticServerConfig, WatchContext, build_router, classify,
     is_config_like, is_input_extension, serve,
@@ -130,9 +143,24 @@ async fn render_blocking(args: RenderArgs) -> RenderOutcome {
     }
 }
 
+/// The execution policy for the next render: nothing when the project
+/// says `preview.engine: off`, otherwise exactly the pages viewed so far.
+fn policy_for(executed: &BTreeSet<PathBuf>, engine_off: bool) -> ExecutionPolicy {
+    if engine_off {
+        ExecutionPolicy::None
+    } else {
+        ExecutionPolicy::Only(executed.clone())
+    }
+}
+
 /// `RenderArgs` for one pass of the loop: the whole target for a full
 /// render, the changed inputs for a subset render.
-fn render_args_for(action: &Action, full_input: &Path, to: Option<&str>) -> RenderArgs {
+fn render_args_for(
+    action: &Action,
+    full_input: &Path,
+    to: Option<&str>,
+    execution_policy: ExecutionPolicy,
+) -> RenderArgs {
     let inputs = match action {
         Action::Subset(paths) => paths
             .iter()
@@ -143,7 +171,36 @@ fn render_args_for(action: &Action, full_input: &Path, to: Option<&str>) -> Rend
     RenderArgs {
         inputs,
         to: to.map(str::to_string),
+        execution_policy,
         ..RenderArgs::default()
+    }
+}
+
+/// What the loop remembers from the last finished render.
+struct LastRender {
+    ctx: WatchContext,
+    /// `(input, output)` pairs, for mapping a viewed page back to its
+    /// source.
+    outputs: Vec<(PathBuf, PathBuf)>,
+    /// Inputs rendered inert because the policy excluded them.
+    unexecuted: BTreeSet<PathBuf>,
+}
+
+impl LastRender {
+    fn from_report(report: &RenderReport) -> Self {
+        Self {
+            ctx: watch_context(report),
+            outputs: report.outputs(),
+            unexecuted: report.unexecuted_inputs(),
+        }
+    }
+
+    /// The input whose output is `output`, if the last render wrote it.
+    fn input_for_output(&self, output: &Path) -> Option<PathBuf> {
+        self.outputs
+            .iter()
+            .find(|(_, o)| o == output)
+            .map(|(i, _)| i.clone())
     }
 }
 
@@ -225,7 +282,6 @@ impl ShutdownSignal {
 }
 
 async fn run(args: StaticArgs) -> Result<()> {
-    let host = args.host.clone().unwrap_or_else(|| "127.0.0.1".to_string());
     let raw = args
         .path
         .clone()
@@ -257,14 +313,60 @@ async fn run(args: StaticArgs) -> Result<()> {
         _ => path.clone(),
     };
 
+    // `preview.engine: off` (the hub preview's knob, shared here) turns
+    // lazy execution off entirely: code cells stay inert.
+    let policy_root = if full_input.is_dir() {
+        full_input.clone()
+    } else {
+        full_input
+            .parent()
+            .map_or_else(|| full_input.clone(), Path::to_path_buf)
+    };
+    let engine_off = matches!(
+        read_engine_policy_from_project(&policy_root, &NativeRuntime::new()),
+        EnginePolicy::Off
+    );
+    // Q1's `project: preview:` keys are the defaults; CLI flags win
+    // (plan Phase 4). `--no-watch` / `--no-navigate` / `--no-browser`
+    // only ever turn things off, so a config `false` cannot be undone
+    // from the command line — the same shape as Q1's flags.
+    let defaults = read_static_preview_defaults_from_project(&policy_root, &NativeRuntime::new());
+    for key in &defaults.unsupported {
+        eprintln!(
+            "warning: `project.preview.{key}` in _quarto.yml is not supported by \
+             q2 preview --static and was ignored"
+        );
+    }
+    let host = args
+        .host
+        .clone()
+        .or_else(|| defaults.host.clone())
+        .unwrap_or_else(|| "127.0.0.1".to_string());
+    let open_browser =
+        !args.no_browser && (args.browser.is_some() || defaults.browser.unwrap_or(true));
+    let watching = !args.no_watch && defaults.watch_inputs.unwrap_or(true);
+    let navigate = !args.no_navigate && defaults.navigate.unwrap_or(true);
+    // Pages the user has viewed; the only ones that execute code.
+    let mut executed: BTreeSet<PathBuf> = BTreeSet::new();
+
     // ── Boot render ────────────────────────────────────────────────
-    let boot_args = render_args_for(&Action::Full, &full_input, args.to.as_deref());
+    let boot_args = render_args_for(
+        &Action::Full,
+        &full_input,
+        args.to.as_deref(),
+        policy_for(&executed, engine_off),
+    );
     let report = match render_blocking(boot_args).await {
         RenderOutcome::Report(report) => *report,
         RenderOutcome::Abort(abort) => {
             // Fails the way `q2 render` would: structured errors print
             // and exit 1, the rest surface through `main`.
-            let args_for_exit = render_args_for(&Action::Full, &full_input, args.to.as_deref());
+            let args_for_exit = render_args_for(
+                &Action::Full,
+                &full_input,
+                args.to.as_deref(),
+                policy_for(&executed, engine_off),
+            );
             return Err(exit_with_abort(abort, &args_for_exit));
         }
         RenderOutcome::Panicked(message) => anyhow::bail!("render panicked: {message}"),
@@ -281,7 +383,6 @@ async fn run(args: StaticArgs) -> Result<()> {
     // moment the port is up may edit a file at once, and macOS FSEvents
     // only reports changes made after the stream exists; likewise a
     // Ctrl-C right after connecting must find its handler installed.
-    let watching = !args.no_watch;
     let mut watcher = if watching {
         Some(start_watcher(&report)?)
     } else {
@@ -293,7 +394,7 @@ async fn run(args: StaticArgs) -> Result<()> {
     // Bind first, print second: the listener is ours, so there is no
     // probe-then-rebind gap for another process to slip into (the
     // hub-mode preview has to probe because the hub binds internally).
-    let requested_port = args.port.unwrap_or(0);
+    let requested_port = args.port.or(defaults.port).unwrap_or(0);
     let listener = match tokio::net::TcpListener::bind((host.as_str(), requested_port)).await {
         Ok(listener) => listener,
         Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => anyhow::bail!(
@@ -320,10 +421,12 @@ async fn run(args: StaticArgs) -> Result<()> {
         .and_then(|(_, o)| output_rel(&report, o));
     let default_file = requested_page.clone().or(first_output);
     let hub = ReloadHub::new();
+    let (page_tx, mut page_rx) = tokio::sync::mpsc::channel::<PathBuf>(64);
     let router = build_router(
         StaticServerConfig {
             root: report.output_dir.clone(),
             default_file,
+            page_requests: Some(page_tx),
         },
         hub.clone(),
     );
@@ -348,7 +451,7 @@ async fn run(args: StaticArgs) -> Result<()> {
         println!("  --no-watch: serving this render as is (Ctrl-C to stop)");
     }
     println!();
-    if !args.no_browser {
+    if open_browser {
         spawn_browser_open_when_ready(host.clone(), port, url.clone(), args.browser.clone());
     }
 
@@ -358,16 +461,62 @@ async fn run(args: StaticArgs) -> Result<()> {
     }));
 
     // ── Loop ───────────────────────────────────────────────────────
-    let navigate = !args.no_navigate;
     let to = args.to.clone();
-    let mut ctx = watch_context(&report);
+    let mut last = LastRender::from_report(&report);
     let mut pending = Action::Ignore;
     let mut in_flight: Option<Action> = None;
     let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<(Action, RenderOutcome)>(1);
 
+    // The page the browser opens on counts as viewed before it loads:
+    // when it has code, its execution starts now, and the browser
+    // either gets the executed page or an inert one plus a reload.
+    if !engine_off
+        && let Some(page) = &requested_page
+        && let Some(input) = last.input_for_output(&report.output_dir.join(page))
+        && last.unexecuted.contains(&input)
+    {
+        executed.insert(input.clone());
+        pending = Action::Subset(BTreeSet::from([input]));
+    }
+    if pending != Action::Ignore {
+        start_render(
+            &mut pending,
+            &mut in_flight,
+            &full_input,
+            to.as_deref(),
+            policy_for(&executed, engine_off),
+            &hub,
+            &done_tx,
+        );
+    }
+
     loop {
         tokio::select! {
             _ = shutdown.wait() => break,
+            Some(output) = page_rx.recv() => {
+                // First view of a page the last render left inert: it
+                // joins the executed set and re-renders. Anything else
+                // (no code, already executed, unknown output) is free.
+                let Some(input) = last.input_for_output(&output) else { continue };
+                if engine_off || !last.unexecuted.contains(&input) {
+                    continue;
+                }
+                info!(page = %input.display(), "first view of a page with code; executing it");
+                executed.insert(input.clone());
+                pending = std::mem::replace(&mut pending, Action::Ignore)
+                    .merge(Action::Subset(BTreeSet::from([input])));
+                if in_flight.is_none() {
+                    start_render(
+                        &mut pending,
+                        &mut in_flight,
+                        &full_input,
+                        to.as_deref(),
+                        policy_for(&executed, engine_off),
+                        &hub,
+                        &done_tx,
+                    );
+                }
+            }
             event = watcher_recv(&mut watcher) => {
                 let Some(WatchEvent::Modified(changed)) = event else {
                     // The watcher stopped; keep serving without it.
@@ -375,7 +524,7 @@ async fn run(args: StaticArgs) -> Result<()> {
                     watcher = None;
                     continue;
                 };
-                let action = classify(&changed, &ctx);
+                let action = classify(&changed, &last.ctx);
                 if action == Action::Ignore {
                     continue;
                 }
@@ -385,7 +534,7 @@ async fn run(args: StaticArgs) -> Result<()> {
                 // place). Inputs and config are never dropped.
                 if in_flight.is_some()
                     && action == Action::Full
-                    && !ctx.inputs.contains(&changed)
+                    && !last.ctx.inputs.contains(&changed)
                     && !is_input_extension(&changed)
                     && !is_config_like(&changed)
                 {
@@ -395,14 +544,30 @@ async fn run(args: StaticArgs) -> Result<()> {
                 debug!(path = %changed.display(), ?action, "change classified");
                 pending = std::mem::replace(&mut pending, Action::Ignore).merge(action);
                 if in_flight.is_none() {
-                    start_render(&mut pending, &mut in_flight, &full_input, to.as_deref(), &hub, &done_tx);
+                    start_render(
+                        &mut pending,
+                        &mut in_flight,
+                        &full_input,
+                        to.as_deref(),
+                        policy_for(&executed, engine_off),
+                        &hub,
+                        &done_tx,
+                    );
                 }
             }
             Some((ran, outcome)) = done_rx.recv() => {
                 in_flight = None;
-                finish_render(&ran, outcome, navigate, &hub, &mut ctx);
+                finish_render(&ran, outcome, navigate, &hub, &mut last);
                 if pending != Action::Ignore {
-                    start_render(&mut pending, &mut in_flight, &full_input, to.as_deref(), &hub, &done_tx);
+                    start_render(
+                        &mut pending,
+                        &mut in_flight,
+                        &full_input,
+                        to.as_deref(),
+                        policy_for(&executed, engine_off),
+                        &hub,
+                        &done_tx,
+                    );
                 }
             }
         }
@@ -469,11 +634,12 @@ fn start_render(
     in_flight: &mut Option<Action>,
     full_input: &Path,
     to: Option<&str>,
+    execution_policy: ExecutionPolicy,
     hub: &ReloadHub,
     done_tx: &tokio::sync::mpsc::Sender<(Action, RenderOutcome)>,
 ) {
     let action = std::mem::replace(pending, Action::Ignore);
-    let args = render_args_for(&action, full_input, to);
+    let args = render_args_for(&action, full_input, to, execution_policy);
     match &action {
         Action::Subset(paths) => {
             let names: BTreeSet<String> = paths
@@ -498,13 +664,14 @@ fn start_render(
     });
 }
 
-/// Broadcast a finished render's result and refresh the watch snapshot.
+/// Broadcast a finished render's result and refresh the loop's
+/// snapshot of the last render.
 fn finish_render(
     ran: &Action,
     outcome: RenderOutcome,
     navigate: bool,
     hub: &ReloadHub,
-    ctx: &mut WatchContext,
+    last: &mut LastRender,
 ) {
     match outcome {
         RenderOutcome::Report(report) => {
@@ -526,7 +693,7 @@ fn finish_render(
                 };
                 hub.send(ReloadEvent::Reload { target });
             }
-            *ctx = watch_context(&report);
+            *last = LastRender::from_report(&report);
         }
         RenderOutcome::Abort(abort) => {
             let message = abort.user_message();
@@ -583,11 +750,28 @@ mod tests {
         let a = PathBuf::from("/p/a.qmd");
         let b = PathBuf::from("/p/b.qmd");
         let subset = Action::Subset([a.clone(), b.clone()].into_iter().collect());
-        let args = render_args_for(&subset, Path::new("/p"), Some("html"));
+        let args = render_args_for(&subset, Path::new("/p"), Some("html"), ExecutionPolicy::All);
         assert_eq!(args.inputs, vec!["/p/a.qmd", "/p/b.qmd"]);
         assert_eq!(args.to.as_deref(), Some("html"));
-        let args = render_args_for(&Action::Full, Path::new("/p"), None);
+        assert_eq!(args.execution_policy, ExecutionPolicy::All);
+        let args = render_args_for(&Action::Full, Path::new("/p"), None, ExecutionPolicy::None);
         assert_eq!(args.inputs, vec!["/p"]);
         assert_eq!(args.to, None);
+        assert_eq!(args.execution_policy, ExecutionPolicy::None);
+    }
+
+    #[test]
+    fn policy_is_the_viewed_set_unless_the_project_turns_execution_off() {
+        let viewed: BTreeSet<PathBuf> = BTreeSet::from([PathBuf::from("/p/a.qmd")]);
+        assert_eq!(
+            policy_for(&viewed, false),
+            ExecutionPolicy::Only(viewed.clone())
+        );
+        assert_eq!(policy_for(&viewed, true), ExecutionPolicy::None);
+        assert_eq!(
+            policy_for(&BTreeSet::new(), false),
+            ExecutionPolicy::Only(BTreeSet::new()),
+            "nothing viewed yet: nothing executes"
+        );
     }
 }

@@ -555,3 +555,179 @@ fn sigint_exits_cleanly() {
         "shutdown line printed; got:\n{rest}"
     );
 }
+
+// ── Phase 3b: lazy code execution ────────────────────────────────────
+
+/// Same gate as the quarto-core engine tests: skip when no Jupyter
+/// kernel can run.
+fn jupyter_available() -> bool {
+    quarto_core::engine::EngineRegistry::default()
+        .get("jupyter")
+        .is_some_and(|e| e.is_available())
+}
+
+const JUPYTER_PAGE: &str = "---\ntitle: Notebook page\nengine: jupyter\n---\n\nText before.\n\n```{python}\nprint(\"LAZY-EXEC-OUTPUT\")\n```\n";
+
+/// A page with no code never costs a render when viewed.
+#[test]
+fn viewing_a_page_without_code_triggers_no_render() {
+    let temp = TempDir::new().unwrap();
+    let dir = minimal_site(&temp);
+    let server = Server::spawn(&dir, &[dir.to_str().unwrap()]);
+    let mut sse = server.sse();
+    assert_eq!(server.get("/about.html").status, 200);
+    assert!(
+        sse.is_quiet_for(Duration::from_secs(2)),
+        "a markdown-only page view must not start a render"
+    );
+}
+
+#[test]
+fn lazy_execution_boots_inert_and_executes_on_first_view() {
+    if !jupyter_available() {
+        eprintln!("skipping: jupyter engine not available");
+        return;
+    }
+    let temp = TempDir::new().unwrap();
+    let dir = minimal_site(&temp);
+    write(&dir.join("nb.qmd"), JUPYTER_PAGE);
+    let server = Server::spawn(&dir, &[dir.to_str().unwrap()]);
+
+    let mut sse = server.sse();
+    let first = server.get("/nb.html");
+    assert_eq!(first.status, 200);
+    let html = first.text();
+    // The inert page still shows the cell *source* (which contains the
+    // marker inside `print(...)`); execution is visible as a cell
+    // output block.
+    assert!(
+        !html.contains("cell-output"),
+        "boot must not execute an unviewed page: {html}"
+    );
+    assert!(html.contains("print("), "cell source kept: {html}");
+    assert!(html.contains("Text before."), "{html}");
+    assert!(
+        !server.stderr().contains("not available"),
+        "an inert page is silent, not a missing-engine warning; stderr:\n{}",
+        server.stderr()
+    );
+
+    // The view itself triggers the execution.
+    let reload = sse.wait_for("reload");
+    assert_eq!(reload, r#"{"type":"reload","target":"/nb.html"}"#);
+    let html = server.get("/nb.html").text();
+    assert!(html.contains("cell-output"), "executed after view: {html}");
+    assert!(html.contains("LAZY-EXEC-OUTPUT"), "{html}");
+
+    // A later full re-render keeps the viewed page executed.
+    let config = dir.join("_quarto.yml");
+    let renamed = std::fs::read_to_string(&config)
+        .unwrap()
+        .replace("Minimal Website", "Renamed Site");
+    std::fs::write(&config, renamed).unwrap();
+    let reload = sse.wait_for("reload");
+    assert_eq!(reload, r#"{"type":"reload","target":null}"#);
+    let html = server.get("/nb.html").text();
+    assert!(html.contains("Renamed Site"), "{html}");
+    assert!(
+        html.contains("cell-output"),
+        "viewed pages stay executed across a full re-render: {html}"
+    );
+}
+
+#[test]
+fn preview_engine_off_never_executes() {
+    if !jupyter_available() {
+        eprintln!("skipping: jupyter engine not available");
+        return;
+    }
+    let temp = TempDir::new().unwrap();
+    let dir = minimal_site(&temp);
+    write(&dir.join("nb.qmd"), JUPYTER_PAGE);
+    append(&dir.join("_quarto.yml"), "\npreview:\n  engine: off\n");
+    let server = Server::spawn(&dir, &[dir.to_str().unwrap()]);
+    let mut sse = server.sse();
+    let html = server.get("/nb.html").text();
+    assert!(!html.contains("cell-output"), "{html}");
+    assert!(
+        sse.is_quiet_for(Duration::from_secs(3)),
+        "preview.engine: off must not execute on view"
+    );
+    assert!(!server.get("/nb.html").text().contains("cell-output"));
+}
+
+// ── Phase 4: `project: preview:` defaults from _quarto.yml ───────────
+
+/// A free port, chosen the same way the OS would.
+fn free_port() -> u16 {
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    l.local_addr().unwrap().port()
+}
+
+#[test]
+fn project_preview_keys_set_the_defaults_and_unsupported_keys_warn() {
+    let temp = TempDir::new().unwrap();
+    let dir = minimal_site(&temp);
+    let port = free_port();
+    // `preview:` sits under `project:`, the fixture's first block.
+    let config = std::fs::read_to_string(dir.join("_quarto.yml")).unwrap();
+    let config = config.replacen(
+        "project:\n  type: website\n",
+        &format!("project:\n  type: website\n  preview:\n    port: {port}\n    navigate: false\n    timeout: 300\n"),
+        1,
+    );
+    std::fs::write(dir.join("_quarto.yml"), config).unwrap();
+
+    let server = Server::spawn(&dir, &[dir.to_str().unwrap()]);
+    assert!(
+        server.base.ends_with(&format!(":{port}")),
+        "project.preview.port is the default port: {}",
+        server.base
+    );
+    assert!(
+        server.stderr().contains("timeout") && server.stderr().contains("not supported"),
+        "unsupported key warned about once; stderr:\n{}",
+        server.stderr()
+    );
+    let mut sse = server.sse();
+    append(&dir.join("about.qmd"), "\n\nEDIT-MARKER-FOUR\n");
+    let reload = sse.wait_for("reload");
+    assert_eq!(
+        reload, r#"{"type":"reload","target":null}"#,
+        "project.preview.navigate: false reloads in place"
+    );
+}
+
+#[test]
+fn cli_flags_override_project_preview_keys() {
+    let temp = TempDir::new().unwrap();
+    let dir = minimal_site(&temp);
+    let port = free_port();
+    let config = std::fs::read_to_string(dir.join("_quarto.yml"))
+        .unwrap()
+        .replacen(
+            "project:\n  type: website\n",
+            &format!(
+                "project:\n  type: website\n  preview:\n    port: {port}\n    watch-inputs: false\n"
+            ),
+            1,
+        );
+    std::fs::write(dir.join("_quarto.yml"), config).unwrap();
+
+    // `--port 0` asks for an OS-assigned port even though the config
+    // names one.
+    let server = Server::spawn(&dir, &["--port", "0", dir.to_str().unwrap()]);
+    assert!(
+        !server.base.ends_with(&format!(":{port}")),
+        "--port 0 overrides project.preview.port: {}",
+        server.base
+    );
+    // `watch-inputs: false` from the config is honoured (no CLI flag
+    // turns watching back on).
+    let mut sse = server.sse();
+    append(&dir.join("about.qmd"), "\n\nEDIT-MARKER-FIVE\n");
+    assert!(
+        sse.is_quiet_for(Duration::from_secs(3)),
+        "project.preview.watch-inputs: false disables the watcher"
+    );
+}

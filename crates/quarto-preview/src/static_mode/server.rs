@@ -22,6 +22,10 @@
 //!   (`sec-fetch-mode: cors`), whose caller wants the raw bytes.
 //! - HEAD gets the GET headers, including the injected length, and no
 //!   body. Other methods are 405.
+//! - Every HTML page actually *viewed* (a 200 GET that is not a CORS
+//!   fetch) is reported on `StaticServerConfig::page_requests`, which
+//!   is how lazy code execution learns what the user is looking at
+//!   (plan Phase 3b).
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -78,6 +82,10 @@ pub struct StaticServerConfig {
     /// initial page (project mode) or of the document (single-file
     /// mode), relative to `root` with forward slashes.
     pub default_file: Option<String>,
+    /// Receives the absolute path of every HTML file served as a page
+    /// view. `None` when nobody needs to know. Sends never block: a
+    /// full channel drops the report (the next view sends again).
+    pub page_requests: Option<tokio::sync::mpsc::Sender<PathBuf>>,
 }
 
 #[derive(Clone)]
@@ -85,6 +93,23 @@ struct StaticState {
     root: Arc<Path>,
     default_file: Option<Arc<str>>,
     hub: ReloadHub,
+    page_requests: Option<tokio::sync::mpsc::Sender<PathBuf>>,
+}
+
+impl StaticState {
+    /// Report a page view: an HTML file about to be served with 200 to
+    /// a navigation (not HEAD, not a `fetch()`).
+    fn note_page_view(&self, path: &Path, is_head: bool, is_cors_fetch: bool) {
+        if is_head || is_cors_fetch {
+            return;
+        }
+        if !path.extension().is_some_and(|e| e == "html") {
+            return;
+        }
+        if let Some(tx) = &self.page_requests {
+            let _ = tx.try_send(path.to_path_buf());
+        }
+    }
 }
 
 /// Build the router: the SSE endpoint plus a fallback that serves
@@ -94,6 +119,7 @@ pub fn build_router(config: StaticServerConfig, hub: ReloadHub) -> Router {
         root: Arc::from(config.root),
         default_file: config.default_file.map(Into::into),
         hub,
+        page_requests: config.page_requests,
     };
     Router::new()
         .route(EVENTS_PATH, get(events))
@@ -168,12 +194,18 @@ async fn serve_path(State(state): State<StaticState>, req: Request) -> Response 
             }
             let index = full.join("index.html");
             match tokio::fs::read(&index).await {
-                Ok(bytes) => file_response(&index, bytes, StatusCode::OK, is_cors_fetch, is_head),
+                Ok(bytes) => {
+                    state.note_page_view(&index, is_head, is_cors_fetch);
+                    file_response(&index, bytes, StatusCode::OK, is_cors_fetch, is_head)
+                }
                 Err(_) => not_found(&state, is_head).await,
             }
         }
         Ok(meta) if meta.is_file() => match tokio::fs::read(&full).await {
-            Ok(bytes) => file_response(&full, bytes, StatusCode::OK, is_cors_fetch, is_head),
+            Ok(bytes) => {
+                state.note_page_view(&full, is_head, is_cors_fetch);
+                file_response(&full, bytes, StatusCode::OK, is_cors_fetch, is_head)
+            }
             Err(_) => not_found(&state, is_head).await,
         },
         _ => not_found(&state, is_head).await,
@@ -204,6 +236,7 @@ fn decode_segments(raw_path: &str) -> Option<Vec<String>> {
 async fn serve_root(state: &StaticState, is_head: bool) -> Response {
     let index = state.root.join("index.html");
     if let Ok(bytes) = tokio::fs::read(&index).await {
+        state.note_page_view(&index, is_head, false);
         return file_response(&index, bytes, StatusCode::OK, false, is_head);
     }
     if let Some(default_file) = &state.default_file

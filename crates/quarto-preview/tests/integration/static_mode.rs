@@ -60,10 +60,26 @@ fn router(root: PathBuf, default_file: Option<&str>) -> (Router, ReloadHub) {
         StaticServerConfig {
             root,
             default_file: default_file.map(str::to_string),
+            page_requests: None,
         },
         hub.clone(),
     );
     (app, hub)
+}
+
+/// A router that reports every served HTML page on a channel
+/// (`q2 preview --static`'s lazy-execution hook, plan Phase 3b).
+fn router_with_page_requests(root: PathBuf) -> (Router, tokio::sync::mpsc::Receiver<PathBuf>) {
+    let (tx, rx) = tokio::sync::mpsc::channel(16);
+    let app = build_router(
+        StaticServerConfig {
+            root,
+            default_file: None,
+            page_requests: Some(tx),
+        },
+        ReloadHub::new(),
+    );
+    (app, rx)
 }
 
 async fn request(
@@ -452,5 +468,51 @@ async fn sse_streams_end_when_the_hub_shuts_down() {
     assert!(
         end.is_none(),
         "stream must end (no more frames) after shutdown"
+    );
+}
+
+#[tokio::test]
+async fn served_html_pages_are_reported_on_the_page_request_channel() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let root = full_site(&temp);
+    let (app, mut rx) = router_with_page_requests(root.clone());
+
+    assert_eq!(get(&app, "/about.html").await.0, StatusCode::OK);
+    assert_eq!(rx.try_recv().unwrap(), root.join("about.html"));
+
+    assert_eq!(get(&app, "/sub/").await.0, StatusCode::OK);
+    assert_eq!(rx.try_recv().unwrap(), root.join("sub").join("index.html"));
+
+    assert_eq!(get(&app, "/").await.0, StatusCode::OK);
+    assert_eq!(rx.try_recv().unwrap(), root.join("index.html"));
+    assert!(rx.try_recv().is_err(), "one report per page view");
+}
+
+#[tokio::test]
+async fn non_page_views_are_not_reported() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let root = full_site(&temp);
+    let (app, mut rx) = router_with_page_requests(root);
+
+    assert_eq!(get(&app, "/style.css").await.0, StatusCode::OK);
+    assert_eq!(get(&app, "/nope.html").await.0, StatusCode::NOT_FOUND);
+    assert_eq!(
+        request(&app, Method::HEAD, "/about.html", &[]).await.0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        request(
+            &app,
+            Method::GET,
+            "/about.html",
+            &[("sec-fetch-mode", "cors")]
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    assert!(
+        rx.try_recv().is_err(),
+        "a stylesheet, a 404, a HEAD, and a fetch() are not page views"
     );
 }

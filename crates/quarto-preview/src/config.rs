@@ -74,6 +74,92 @@ fn parse_policy_str(s: &str) -> EnginePolicy {
     }
 }
 
+/// Quarto 1's `project: preview:` keys (its schema's `project-preview`
+/// object), read as defaults for `q2 preview --static`; the CLI flags
+/// override them (bd-sl79jjiq Phase 4). `None` means "not set".
+///
+/// `timeout` and `serve` are Q1 keys this mode does not implement;
+/// they are listed in [`Self::unsupported`] so the driver can warn
+/// once instead of silently ignoring a project's configuration.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct StaticPreviewDefaults {
+    pub port: Option<u16>,
+    pub host: Option<String>,
+    pub browser: Option<bool>,
+    pub watch_inputs: Option<bool>,
+    pub navigate: Option<bool>,
+    /// Q1 keys present in the block that `--static` ignores, in the
+    /// order they appear.
+    pub unsupported: Vec<String>,
+}
+
+/// A boolean from YAML `true`/`false` or the plain text of one (the
+/// front-matter path stores bare scalars as inlines).
+fn bool_lenient(value: &ConfigValue) -> Option<bool> {
+    value.as_bool().or_else(
+        || match value.as_plain_text()?.trim().to_ascii_lowercase().as_str() {
+            "true" | "yes" | "on" => Some(true),
+            "false" | "no" | "off" => Some(false),
+            _ => None,
+        },
+    )
+}
+
+/// Read `project.preview.*` from resolved metadata. Missing or
+/// unparseable values are `None`, never an error.
+pub fn read_static_preview_defaults(meta: &ConfigValue) -> StaticPreviewDefaults {
+    let Some(block) = meta.get_path(&["project", "preview"]) else {
+        return StaticPreviewDefaults::default();
+    };
+    let port = block
+        .get("port")
+        .and_then(ConfigValue::as_int_lenient)
+        .and_then(|p| u16::try_from(p).ok());
+    let host = block
+        .get("host")
+        .and_then(ConfigValue::as_plain_text)
+        .map(|h| h.trim().to_string())
+        .filter(|h| !h.is_empty());
+    let browser = block.get("browser").and_then(bool_lenient);
+    let watch_inputs = block.get("watch-inputs").and_then(bool_lenient);
+    let navigate = block.get("navigate").and_then(bool_lenient);
+    let unsupported = block
+        .as_map_entries()
+        .map(|entries| {
+            entries
+                .iter()
+                .map(|e| e.key.as_str())
+                .filter(|k| matches!(*k, "timeout" | "serve"))
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
+    StaticPreviewDefaults {
+        port,
+        host,
+        browser,
+        watch_inputs,
+        navigate,
+        unsupported,
+    }
+}
+
+/// [`read_static_preview_defaults`] against the project rooted at
+/// `project_root` (`_quarto.yml` and its overlays). No project, or no
+/// config: all `None`.
+pub fn read_static_preview_defaults_from_project(
+    project_root: &std::path::Path,
+    runtime: &dyn SystemRuntime,
+) -> StaticPreviewDefaults {
+    let Ok(project) = quarto_core::project::ProjectContext::discover(project_root, runtime) else {
+        return StaticPreviewDefaults::default();
+    };
+    let Some(meta) = project.config.metadata.as_ref() else {
+        return StaticPreviewDefaults::default();
+    };
+    read_static_preview_defaults(meta)
+}
+
 /// Read the engine policy from the project's `_quarto.yml` (if any).
 ///
 /// Discovers the project context rooted at `project_root` using
@@ -995,5 +1081,85 @@ mod tests {
             .find(|(r, _)| r == "examples/d/slides_files/revealjs/reveal.js")
             .unwrap();
         assert_eq!(std::fs::read_to_string(&js.1).unwrap(), "/*js*/");
+    }
+}
+
+/// Phase 4 of `q2 preview --static` (bd-sl79jjiq): Quarto 1's
+/// `project: preview:` keys as defaults the CLI flags override.
+#[cfg(test)]
+mod static_preview_defaults_tests {
+    use super::*;
+
+    use quarto_pandoc_types::ConfigMapEntry;
+    use quarto_source_map::{By, SourceInfo};
+
+    fn map(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
+        let si = SourceInfo::generated(By::programmatic_config());
+        ConfigValue::new_map(
+            entries
+                .into_iter()
+                .map(|(key, value)| ConfigMapEntry {
+                    key: key.to_string(),
+                    key_source: si.clone(),
+                    value,
+                })
+                .collect(),
+            si,
+        )
+    }
+
+    /// `project: { preview: { <key>: <value>, … } }` with string
+    /// scalars, which is how bare front-matter values arrive.
+    fn meta(pairs: &[(&str, &str)]) -> ConfigValue {
+        let preview = map(pairs
+            .iter()
+            .map(|(k, v)| (*k, ConfigValue::from_path(&[], v)))
+            .collect());
+        map(vec![("project", map(vec![("preview", preview)]))])
+    }
+
+    #[test]
+    fn absent_block_yields_all_none_and_nothing_ignored() {
+        let d = read_static_preview_defaults(&ConfigValue::from_path(&["title"], "t"));
+        assert_eq!(d, StaticPreviewDefaults::default());
+        assert!(d.unsupported.is_empty());
+    }
+
+    #[test]
+    fn every_supported_key_is_read() {
+        let d = read_static_preview_defaults(&meta(&[
+            ("port", "4321"),
+            ("host", "0.0.0.0"),
+            ("browser", "false"),
+            ("watch-inputs", "false"),
+            ("navigate", "false"),
+        ]));
+        assert_eq!(d.port, Some(4321));
+        assert_eq!(d.host.as_deref(), Some("0.0.0.0"));
+        assert_eq!(d.browser, Some(false));
+        assert_eq!(d.watch_inputs, Some(false));
+        assert_eq!(d.navigate, Some(false));
+        assert!(d.unsupported.is_empty());
+    }
+
+    #[test]
+    fn unsupported_q1_keys_are_reported_by_name() {
+        let d = read_static_preview_defaults(&meta(&[("timeout", "300"), ("port", "1")]));
+        assert_eq!(d.unsupported, vec!["timeout".to_string()]);
+        let serve = map(vec![("cmd", ConfigValue::from_path(&[], "npm run dev"))]);
+        let preview = map(vec![
+            ("port", ConfigValue::from_path(&[], "1")),
+            ("serve", serve),
+        ]);
+        let m = map(vec![("project", map(vec![("preview", preview)]))]);
+        let d = read_static_preview_defaults(&m);
+        assert_eq!(d.unsupported, vec!["serve".to_string()]);
+    }
+
+    #[test]
+    fn unparseable_values_are_ignored_not_fatal() {
+        let d = read_static_preview_defaults(&meta(&[("port", "lots"), ("browser", "maybe")]));
+        assert_eq!(d.port, None);
+        assert_eq!(d.browser, None);
     }
 }

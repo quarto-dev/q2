@@ -414,6 +414,16 @@ pub struct RenderContext<'a> {
     /// `project_index` and `resource_resolver` are threaded.
     pub engine_registry_override: Option<Arc<crate::engine::EngineRegistry>>,
 
+    /// Which documents may execute code (bd-sl79jjiq). Threaded onto
+    /// `StageContext` by `run_pipeline` the same way the registry
+    /// override is. Default `All`.
+    pub execution_policy: crate::engine::ExecutionPolicy,
+
+    /// Bridged back from `StageContext::execution_skipped` by
+    /// `run_pipeline`: the policy excluded this document although it
+    /// resolved to a code-executing engine.
+    pub execution_skipped: bool,
+
     /// The document's Pass-1 [`DocumentProfile`], bridged back from
     /// `StageContext::document_profile` by `run_pipeline` after the
     /// pipeline finishes (bd-0rsk07il). `None` before a render, and
@@ -477,6 +487,8 @@ impl<'a> RenderContext<'a> {
             attribution_data: None,
             format_options: FormatOptions::default(),
             engine_registry_override: None,
+            execution_policy: crate::engine::ExecutionPolicy::default(),
+            execution_skipped: false,
             document_profile: None,
         }
     }
