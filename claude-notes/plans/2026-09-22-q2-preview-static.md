@@ -545,21 +545,30 @@ Commit at each clean phase boundary per `CLAUDE.md` § Git Workflow.
 
 ### Phase 1: `render_once` refactor (no behaviour change to `q2 render`)
 
-- [ ] Baseline: run `render_exit_codes`, `render_cli_e2e`,
+- [x] Baseline: run `render_exit_codes`, `render_cli_e2e`,
   `render_scripts_cli`, `diagnostic_render_panic_boundary` and record pass.
-- [ ] Unit tests (in `render.rs`): `render_once` on a fixture returns a
+  (All green in the 2026-09-22 workspace run, 14402 tests.)
+- [x] Unit tests (in `render.rs`): `render_once` on a fixture returns a
   `RenderReport` with `outputs` mapping each input to its output path and
   `output_dir == <fixture>/_site`; a fixture with a broken page returns
   `Ok` with `failed_inputs` non-empty and `exit_nonzero == true`; a fixture
   with a broken `_quarto.yml` returns `Err(RenderAbort::Parse)`; the
   process is still alive afterwards (the whole point).
-- [ ] Extract `render_once` from `execute` / `execute_single_doc` /
+- [x] Extract `render_once` from `execute` / `execute_single_doc` /
   `execute_project`; make `print_render_diagnostics_text` produce a
   `String` with a `color` parameter; keep every `process::exit` in
-  `execute`.
-- [ ] Re-run the baseline suites; diff stderr of `q2 render` on three
+  `execute`. (Shape as built: `render_once(args, present)` where the
+  `present` callback runs once with the finished report, after the
+  pipeline and before post-render scripts, so `execute`'s stderr order
+  is unchanged. `color: false` also disables OSC 8 hyperlinks and
+  strips ANSI escapes, because `quarto-error-reporting` 0.2.2 has no
+  color switch — upstream follow-up bd-6d9ew2up.)
+- [x] Re-run the baseline suites; diff stderr of `q2 render` on three
   fixtures (clean, warnings, errors) before/after to confirm byte-identical
-  output.
+  output. (Done 2026-09-22: byte-identical on all three, exit codes
+  0/0/1 unchanged. One known non-default difference: under `-v`, the
+  `Output: …` tracing lines now print after the `--fail-fast` note
+  instead of before it, because the formatter no longer logs.)
 
 ### Phase 2: static-mode library pieces (`crates/quarto-preview/src/static_mode/`)
 
