@@ -220,10 +220,20 @@ fn transform_block(block: &mut Block, reg: &RefTypeRegistry) {
 
 /// Classify a Div's attributes: if its id is a crossref target, return the
 /// matching [`RefTypeDef`].
+///
+/// A div carrying the `section` class is never a float target: that's the
+/// wrapper `SectionizeTransform` puts around every section, and the `sec`
+/// prefix match on it was accidental — it produced bottom-up,
+/// caption-stealing `@sec-` registration (book-projects P0, Amendment A).
+/// Section headers are registered by `CrossrefIndexTransform` directly.
+/// Bare `::: {#sec-x}` divs *without* the class keep the float path.
 fn classify_div<'r>(
     attr: &Attr,
     reg: &'r RefTypeRegistry,
 ) -> Option<&'r crate::crossref::RefTypeDef> {
+    if attr.1.iter().any(|c| c == "section") {
+        return None;
+    }
     let id = attr.0.as_str();
     reg.classify_cite_id(id)
 }
@@ -522,6 +532,79 @@ mod tests {
             }
             other => panic!("caption first block should be Plain, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn section_div_is_not_sugared() {
+        // Book-projects P0 (Amendment A): a `Div#sec-*.section` — the wrapper
+        // SectionizeTransform puts around every section — is not a float.
+        // The `sec` prefix match on sectionized divs was accidental and
+        // produced bottom-up, caption-stealing registration; section headers
+        // are registered by CrossrefIndexTransform directly instead.
+        let reg = RefTypeRegistry::builtin();
+        let div = Block::Div(Div {
+            attr: (
+                "sec-x".to_string(),
+                vec!["section".to_string(), "level1".to_string()],
+                LinkedHashMap::new(),
+            ),
+            content: vec![para("body")],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let out = run_transform(vec![div], &reg);
+        let Block::Div(d) = &out[0] else {
+            panic!("section div must stay a Div, got {:?}", out[0]);
+        };
+        assert_eq!(d.attr.0, "sec-x");
+        assert!(d.attr.1.contains(&"section".to_string()));
+    }
+
+    #[test]
+    fn floats_inside_section_divs_still_sugar() {
+        // Excluding `.section` divs must not shield their contents: a figure
+        // div nested inside a section is still a crossref target.
+        let reg = RefTypeRegistry::builtin();
+        let div = Block::Div(Div {
+            attr: (
+                "sec-x".to_string(),
+                vec!["section".to_string()],
+                LinkedHashMap::new(),
+            ),
+            content: vec![Block::Div(Div {
+                attr: attr_id("fig-inner"),
+                content: vec![code("python", "1+1"), para("Inner cap")],
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+            })],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let out = run_transform(vec![div], &reg);
+        let Block::Div(section) = &out[0] else {
+            panic!("section div must stay a Div, got {:?}", out[0]);
+        };
+        let view =
+            crossref_target_view(&section.content[0]).expect("inner figure is a float target");
+        assert_eq!(view.identifier, "fig-inner");
+        assert_eq!(view.ref_type, "fig");
+    }
+
+    #[test]
+    fn bare_sec_div_without_section_class_still_sugars() {
+        // Conservative scope: a bare `::: {#sec-x}` div *without* the
+        // `section` class keeps today's float-path behavior. Q1's treatment
+        // of that shape is its own question, not P0's.
+        let reg = RefTypeRegistry::builtin();
+        let div = Block::Div(Div {
+            attr: attr_id("sec-x"),
+            content: vec![para("body")],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let out = run_transform(vec![div], &reg);
+        let view = crossref_target_view(&out[0]).expect("bare sec div is a target");
+        assert_eq!(view.ref_type, "sec");
     }
 
     /// Assert the target's `caption_long` starts with a `Plain` whose first

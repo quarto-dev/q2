@@ -9,11 +9,21 @@
         "content": "Blocks"
       },
       "plain_data": {
-        "type": { "required": true },
-        "appearance": { "required": true },
-        "collapse": { "required": true },
-        "collapse_starts_collapsed": { "required": true },
-        "icon": { "required": true },
+        "type": {
+          "required": true
+        },
+        "appearance": {
+          "required": true
+        },
+        "collapse": {
+          "required": true
+        },
+        "collapse_starts_collapsed": {
+          "required": true
+        },
+        "icon": {
+          "required": true
+        },
         "ref_type": {
           "required": false,
           "when": "the Div has a non-empty id that the crossref registry classifies via `classify_cite_id` (callout.rs:288-296)"
@@ -41,9 +51,15 @@
         "content-{i}": "Blocks"
       },
       "plain_data": {
-        "level": { "required": true },
-        "tab_count": { "required": true },
-        "actives": { "required": true },
+        "level": {
+          "required": true
+        },
+        "tab_count": {
+          "required": true
+        },
+        "actives": {
+          "required": true
+        },
         "group": {
           "required": false,
           "when": "the Div's attr carries a `group=` key (panel_tabset.rs:272,279-283)"
@@ -58,9 +74,15 @@
         "caption_short": "Inlines"
       },
       "plain_data": {
-        "ref_type": { "required": true },
-        "kind": { "required": true },
-        "identifier": { "required": true },
+        "ref_type": {
+          "required": true
+        },
+        "kind": {
+          "required": true
+        },
+        "identifier": {
+          "required": true
+        },
         "order": {
           "required": false,
           "when": "crossref-index assigns an order iff the identifier is non-empty and not a duplicate id — crossref_index.rs:252-254 early-returns on an empty identifier, and :262-270 skips duplicates",
@@ -76,9 +98,15 @@
         "title": "Inlines"
       },
       "plain_data": {
-        "ref_type": { "required": true },
-        "kind": { "required": true },
-        "identifier": { "required": true },
+        "ref_type": {
+          "required": true
+        },
+        "kind": {
+          "required": true
+        },
+        "identifier": {
+          "required": true
+        },
         "order": {
           "required": false,
           "when": "crossref-index assigns an order iff the identifier is non-empty and not a duplicate id — crossref_index.rs:252-254 early-returns on an empty identifier, and :262-270 skips duplicates",
@@ -94,8 +122,12 @@
         "title": "Inlines"
       },
       "plain_data": {
-        "kind": { "required": true },
-        "type": { "required": true }
+        "kind": {
+          "required": true
+        },
+        "type": {
+          "required": true
+        }
       }
     },
     "Equation": {
@@ -104,9 +136,15 @@
         "content": "Inlines"
       },
       "plain_data": {
-        "ref_type": { "required": true },
-        "kind": { "required": true },
-        "identifier": { "required": true },
+        "ref_type": {
+          "required": true
+        },
+        "kind": {
+          "required": true
+        },
+        "identifier": {
+          "required": true
+        },
         "order": {
           "required": false,
           "when": "crossref-index assigns an order iff the identifier is non-empty and not a duplicate id — crossref_index.rs:252-254 early-returns on an empty identifier, and :262-270 skips duplicates",
@@ -122,18 +160,38 @@
         "cite_prefix": "Inlines"
       },
       "plain_data": {
-        "identifier": { "required": true },
-        "ref_type": { "required": true },
-        "kind": { "required": true },
-        "resolved": { "required": true },
-        "kind_source": { "required": true },
-        "cite_mode": { "required": true },
-        "label_upper": { "required": true },
+        "identifier": {
+          "required": true
+        },
+        "ref_type": {
+          "required": true
+        },
+        "kind": {
+          "required": true
+        },
+        "resolved": {
+          "required": true
+        },
+        "kind_source": {
+          "required": true
+        },
+        "cite_mode": {
+          "required": true
+        },
+        "label_upper": {
+          "required": true
+        },
         "order": {
           "required": false,
           "when": "crossref-resolve inserts an order iff a matching CrossrefEntry was found for the identifier (crossref_resolve.rs:314-319); absent when the reference didn't resolve to a registered id",
           "producer": "crossref-resolve (post-construction)",
           "shape": "{\"section\": [int], \"order\": int}"
+        },
+        "in_appendix": {
+          "required": false,
+          "when": "crossref-resolve inserts in_appendix iff a matching CrossrefEntry was found for the identifier (same condition as order); absent when the reference did not resolve to a registered id",
+          "producer": "crossref-resolve (post-construction)",
+          "shape": "bool"
         }
       }
     }

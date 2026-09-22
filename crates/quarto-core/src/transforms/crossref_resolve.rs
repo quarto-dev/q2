@@ -376,6 +376,10 @@ fn build_resolved_ref(
             "order".into(),
             json!({ "section": e.order.section, "order": e.order.order }),
         );
+        // The render side needs the per-file appendix flag for `sec`
+        // presentation (letter-formatted numbers, "Appendix" prefix) —
+        // book-projects P0.
+        data.insert("in_appendix".into(), json!(e.in_appendix));
     }
     node.plain_data = serde_json::Value::Object(data);
 
@@ -503,6 +507,35 @@ mod tests {
         assert_eq!(node.plain_data["kind"], "Figure");
         assert_eq!(node.plain_data["resolved"], true);
         assert_eq!(node.plain_data["order"]["order"], 1);
+    }
+
+    #[test]
+    fn in_appendix_flows_into_plain_data() {
+        // Book-projects P0: the render side needs the entry's appendix flag
+        // (letter-formatted numbers, "Appendix" prefix) — resolve passes it
+        // through `plain_data` (plain_data is contractually AST-free, so a
+        // bool field is the channel).
+        let reg = RefTypeRegistry::builtin();
+        let mut idx = CrossrefIndex::new(FileId(0));
+        idx.insert(CrossrefEntry {
+            identifier: "sec-app".to_string(),
+            ref_type: "sec".to_string(),
+            parent: None,
+            order: Order {
+                section: vec![1],
+                order: 1,
+            },
+            caption: None,
+            in_appendix: true,
+            source_info: si(),
+        });
+        let mut inline = make_cite("sec-app");
+        let diags = resolve(&mut inline, &reg, Some(&idx));
+        assert!(diags.is_empty());
+        let Inline::Custom(node) = inline else {
+            panic!("expected resolved CustomNode");
+        };
+        assert_eq!(node.plain_data["in_appendix"], true);
     }
 
     #[test]

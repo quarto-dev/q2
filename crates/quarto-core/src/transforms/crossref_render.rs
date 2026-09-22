@@ -38,16 +38,17 @@
 //! a format-specific pipeline.
 
 use quarto_pandoc_types::attr::{Attr, AttrSourceInfo, TargetSourceInfo};
-use quarto_pandoc_types::block::{Block, Blocks, Div, Figure};
+use quarto_pandoc_types::block::{Block, Blocks, Div, Figure, Header};
 use quarto_pandoc_types::caption::Caption;
 use quarto_pandoc_types::custom::{CustomNode, Slot};
-use quarto_pandoc_types::inline::{Inline, Inlines, Link, Span, Str};
+use quarto_pandoc_types::inline::{Inline, Inlines, Link, Math, Space, Span, Str};
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_source_map::SourceInfo;
 
 use crate::Result;
 use crate::crossref::{
     CROSSREF_RESOLVED_REF, EQ_NUMBER_ATTR, EQUATION, FLOAT_REF_TARGET, PROOF, THEOREM,
+    format_section_number,
 };
 use crate::language::LanguageTerms;
 use crate::render::RenderContext;
@@ -86,9 +87,19 @@ impl AstTransform for CrossrefRenderTransform {
         // when the LanguageResolveStage hasn't run (direct unit tests) —
         // the node's `kind` / English defaults apply then.
         let terms = LanguageTerms::from_meta(&ast.meta);
+        let chapters = ast
+            .meta
+            .get("crossref")
+            .and_then(|c| c.get("chapters"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let max_heading = ctx.crossref_index.as_ref().map_or(7, |i| i.max_heading);
         let mut fs = FloatState {
             html_float_dom: ctx.format.identifier.is_html_based(),
             used_ids: collect_document_ids(&ast.blocks),
+            chapters,
+            max_heading,
+            appendix: ctx.chapter_seed.as_ref().is_some_and(|s| s.is_appendix),
         };
         render_blocks(&mut ast.blocks, terms.as_ref(), &mut fs);
         Ok(())
@@ -140,7 +151,10 @@ fn render_block(block: &mut Block, terms: Option<&LanguageTerms>, fs: &mut Float
                 render_inlines(line, terms, fs);
             }
         }
-        Block::Header(h) => render_inlines(&mut h.content, terms, fs),
+        Block::Header(h) => {
+            render_inlines(&mut h.content, terms, fs);
+            inject_header_number(h, terms, fs);
+        }
         Block::Custom(node) => {
             // Recurse into slots first so nested resolved refs are rendered.
             for (_k, slot) in node.slots.iter_mut() {
@@ -194,6 +208,58 @@ fn render_block(block: &mut Block, terms: Option<&LanguageTerms>, fs: &mut Float
             *block = wrap_standalone_figure(f);
         }
     }
+}
+
+/// Book-projects P0 / sections.lua's content-prepend: a header carrying
+/// the index transform's `number` kv (stashed only under
+/// `number-sections`/`number-depth`) gets that number prepended as
+/// `Span(Str(number), class="header-section-number")` + Space — inert
+/// wherever the kv wasn't stashed. A level-1 heading in an appendix
+/// chapter gets Q1's "Appendix A —" shape instead of a bare number
+/// (`appendix-title`/`appendix-delim` crossref options; hardcoded English
+/// defaults, no crossref-option indirection per the plan).
+fn inject_header_number(h: &mut Header, terms: Option<&LanguageTerms>, fs: &FloatState) {
+    let Some(number) = h.attr.2.get("number").cloned() else {
+        return;
+    };
+    let source_info = h.source_info.clone();
+    let number_span = Inline::Span(Span {
+        attr: (
+            String::new(),
+            vec!["header-section-number".to_string()],
+            hashlink::LinkedHashMap::new(),
+        ),
+        content: vec![Inline::Str(Str {
+            text: number,
+            source_info: source_info.clone(),
+        })],
+        source_info: source_info.clone(),
+        attr_source: AttrSourceInfo::empty(),
+    });
+    let mut prefix = if h.level == 1 && fs.appendix {
+        let title = terms
+            .and_then(|t| t.crossref_prefix("apx"))
+            .map_or_else(|| "Appendix".to_string(), str::to_string);
+        vec![
+            Inline::Str(Str {
+                text: title,
+                source_info: source_info.clone(),
+            }),
+            Inline::Space(Space {
+                source_info: source_info.clone(),
+            }),
+            number_span,
+            Inline::Str(Str {
+                text: " —".to_string(),
+                source_info: source_info.clone(),
+            }),
+            Inline::Space(Space { source_info }),
+        ]
+    } else {
+        vec![number_span, Inline::Space(Space { source_info })]
+    };
+    prefix.append(&mut h.content);
+    h.content = prefix;
 }
 
 /// Q1 `renderHtmlFigure` for a non-crossref figure: move the id to a
@@ -285,7 +351,7 @@ fn render_inline(inline: &mut Inline, terms: Option<&LanguageTerms>, fs: &mut Fl
 
     if let Inline::Custom(node) = inline {
         if node.type_name == CROSSREF_RESOLVED_REF {
-            *inline = render_resolved_ref(take_custom_node(node), terms);
+            *inline = render_resolved_ref(take_custom_node(node), terms, fs);
         } else if node.type_name == EQUATION {
             *inline = render_equation(take_custom_node(node));
         }
@@ -301,6 +367,19 @@ struct FloatState {
     /// ids (`<float-id>-caption`, disambiguated only on real collision —
     /// replaces Q1's uuid suffix). Generated ids are inserted as chosen.
     used_ids: std::collections::HashSet<String>,
+    /// `crossref.chapters` from document metadata — config, not state; it
+    /// rides along here because it's consulted by `render_resolved_ref`
+    /// deep in the walk (book-projects P0).
+    chapters: bool,
+    /// The document's `CrossrefIndex::max_heading` (Q1's maxHeading);
+    /// config for the same reason as `chapters`. Defaults to 7 when no
+    /// index ran (direct unit tests).
+    max_heading: u32,
+    /// Per-file appendix state from the chapter seed (book-projects P0),
+    /// mirroring `chapters`/`max_heading` above — consulted by the header
+    /// number injection to pick the "Appendix A —" shape for a level-1
+    /// heading.
+    appendix: bool,
 }
 
 /// Collect every element id in the document (block and inline attrs).
@@ -636,7 +715,9 @@ fn render_float_ref_target(node: CustomNode, fs: &mut FloatState) -> Block {
         // so the writer emits bare inlines inside <figcaption>.
         let final_caption = if is_uncaptioned {
             let label = match number {
-                Some(n) => format!("{kind} {n}"),
+                // `\u{a0}` between kind and number, matching Q1's
+                // titlePrefix (`nbspString()` before the number).
+                Some(n) => format!("{kind}\u{a0}{n}"),
                 None => kind.clone(),
             };
             vec![Block::Plain(quarto_pandoc_types::block::Plain {
@@ -1100,7 +1181,7 @@ fn render_equation(node: CustomNode) -> Inline {
 /// Link text is `"<Kind> <N>"` when the ref is resolved, or the literal
 /// `"?id?"` (wrapped visibly) for unresolved refs so the failure is
 /// obvious in the rendered document.
-fn render_resolved_ref(node: CustomNode, terms: Option<&LanguageTerms>) -> Inline {
+fn render_resolved_ref(node: CustomNode, terms: Option<&LanguageTerms>, fs: &FloatState) -> Inline {
     let identifier = node
         .plain_data
         .get("identifier")
@@ -1146,9 +1227,15 @@ fn render_resolved_ref(node: CustomNode, terms: Option<&LanguageTerms>) -> Inlin
     // `refs.lua`. Applies uniformly to all crossref categories (Theorem,
     // Figure, Table, Equation, …) — Q1 does the same.
     let text = if resolved {
-        match number {
-            Some(n) => format!("{kind}\u{a0}{n}"),
-            None => kind.clone(),
+        if ref_type == "sec" {
+            // `sec` numbers are the target's *section path*, not the
+            // per-type counter (Q1 refs.lua + format.lua; book-projects P0).
+            sec_ref_text(&node, &kind, terms, fs)
+        } else {
+            match number {
+                Some(n) => format!("{kind}\u{a0}{n}"),
+                None => kind.clone(),
+            }
         }
     } else {
         format!("?{identifier}?")
@@ -1181,6 +1268,65 @@ fn render_resolved_ref(node: CustomNode, terms: Option<&LanguageTerms>) -> Inlin
     })
 }
 
+/// Build the link text for a resolved `sec` ref: "Section 1.2" by default,
+/// "Chapter N" / "Appendix A" for a chapter-level heading under
+/// `crossref.chapters` (Q1 refs.lua's `isChapterRef` prefix swap; the
+/// number itself is Q1's `sectionNumber`, ported as
+/// [`format_section_number`]).
+///
+/// `kind` is the already-resolved `sec` prefix (language-term or registry
+/// display name); it is overridden only for the ch/apx swap, whose fallback
+/// when no language table is loaded (unit tests) is hardcoded English —
+/// there is no registry entry for "ch"/"apx" to fall back to.
+fn sec_ref_text(
+    node: &CustomNode,
+    kind: &str,
+    terms: Option<&LanguageTerms>,
+    fs: &FloatState,
+) -> String {
+    let section: Vec<u32> = node
+        .plain_data
+        .get("order")
+        .and_then(|v| v.get("section"))
+        .and_then(|v| v.as_array())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_u64().map(|n| n as u32))
+                .collect()
+        })
+        .unwrap_or_default();
+    if section.is_empty() {
+        return kind.to_string();
+    }
+    let in_appendix = node
+        .plain_data
+        .get("in_appendix")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    // Q1's isChapterRef: no nonzero components below the top. For header
+    // targets (whose own path always ends >= 1) this is exactly
+    // `section.len() == 1`, but we port the literal predicate.
+    let is_chapter_ref = fs.chapters && section[1..].iter().all(|&c| c == 0);
+    let kind = if is_chapter_ref {
+        let (prefix_type, fallback) = if in_appendix {
+            ("apx", "Appendix")
+        } else {
+            ("ch", "Chapter")
+        };
+        terms
+            .and_then(|t| t.crossref_prefix(prefix_type))
+            .map_or_else(|| fallback.to_string(), str::to_string)
+    } else {
+        kind.to_string()
+    };
+    let num = format_section_number(&section, fs.max_heading, in_appendix);
+    if num.is_empty() {
+        kind
+    } else {
+        format!("{kind}\u{a0}{num}")
+    }
+}
+
 /// Prepend a numbered prefix onto the first block of a caption block list,
 /// returning a fresh Blocks. No-op if the kind is empty or the caption is
 /// empty.
@@ -1198,8 +1344,13 @@ fn prefix_caption(caption: Blocks, kind: &str, number: Option<u32>) -> Blocks {
     if kind.is_empty() || caption.is_empty() {
         return caption;
     }
+    // Q1's titlePrefix joins kind and number with a non-breaking space
+    // (`nbspString()`, format.lua), then title-delim + a regular space:
+    // "Figure\u{a0}1: ". The docx writer (via the vendored Lua filters)
+    // already emits that shape; matching it keeps the native HTML and
+    // pandoc-hybrid legs byte-identical (pandoc_goldens).
     let prefix_text = match number {
-        Some(n) => format!("{kind} {n}: "),
+        Some(n) => format!("{kind}\u{a0}{n}: "),
         None => format!("{kind}: "),
     };
     let mut out = caption;
@@ -1370,6 +1521,107 @@ mod tests {
         })
     }
 
+    fn header(level: usize, id: &str, text: &str) -> Block {
+        Block::Header(quarto_pandoc_types::block::Header {
+            level,
+            attr: attr_id(id),
+            content: vec![str_inline(text)],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        })
+    }
+
+    /// `crossref: {chapters: <v>}` document metadata.
+    fn meta_with_chapters(v: bool) -> quarto_pandoc_types::ConfigValue {
+        use quarto_pandoc_types::{ConfigMapEntry, ConfigValue};
+        let entry = |key: &str, value: ConfigValue| ConfigMapEntry {
+            key: key.to_string(),
+            key_source: si(),
+            value,
+        };
+        ConfigValue::new_map(
+            vec![entry(
+                "crossref",
+                ConfigValue::new_map(
+                    vec![entry("chapters", ConfigValue::new_bool(v, si()))],
+                    si(),
+                ),
+            )],
+            si(),
+        )
+    }
+
+    /// Same pipeline as [`run_full`], with document metadata and an optional
+    /// chapter seed (book-projects P0: `crossref.chapters` and appendix
+    /// state both arrive this way).
+    async fn run_full_opts(
+        blocks: Vec<Block>,
+        meta: quarto_pandoc_types::ConfigValue,
+        seed: Option<crate::render::ChapterSeed>,
+    ) -> Pandoc {
+        use crate::format::Format;
+        use crate::project::{DocumentInfo, ProjectConfig, ProjectContext};
+        use crate::render::{BinaryDependencies, RenderContext};
+        use std::path::PathBuf;
+        let project = ProjectContext {
+            dir: PathBuf::from("/p"),
+            config: ProjectConfig::default(),
+            is_single_file: true,
+            files: vec![],
+            output_dir: PathBuf::from("/p"),
+
+            ..Default::default()
+        };
+        let doc = DocumentInfo::from_path("/p/t.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        ctx.ref_type_registry = Some(RefTypeRegistry::builtin());
+        ctx.chapter_seed = seed;
+
+        let mut ast = Pandoc { meta, blocks };
+        TheoremSugarTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        ProofSugarTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        FloatRefTargetSugarTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        EquationLabelTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        CrossrefIndexTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        CrossrefResolveTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        CrossrefRenderTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        ast
+    }
+
+    /// Extract the link text of the rendered ref at `content[idx]`.
+    fn ref_link_text(content: &[Inline], idx: usize) -> String {
+        let Inline::Link(link) = &content[idx] else {
+            panic!("expected Link, got {:?}", content[idx]);
+        };
+        let Inline::Str(s) = &link.content[0] else {
+            panic!("expected Str link text, got {:?}", link.content[0]);
+        };
+        s.text.clone()
+    }
+
     #[tokio::test]
     async fn figure_target_renders_to_pandoc_figure() {
         // bd-hcp8m3ve: the Figure now sits inside the Q1-shape outer div;
@@ -1385,7 +1637,7 @@ mod tests {
         let Inline::Str(s) = &p.content[0] else {
             panic!();
         };
-        assert_eq!(s.text, "Figure 1: ");
+        assert_eq!(s.text, "Figure\u{a0}1: ");
         // Followed by the original caption inline.
         let Inline::Str(s) = &p.content[1] else {
             panic!();
@@ -1449,7 +1701,7 @@ mod tests {
         let Inline::Str(s) = &p.content[0] else {
             panic!()
         };
-        assert_eq!(s.text, "Table 1: ");
+        assert_eq!(s.text, "Table\u{a0}1: ");
     }
 
     // ─── Q1-verbatim float DOM shape (bd-hcp8m3ve) ──────────────────────────
@@ -1527,7 +1779,7 @@ mod tests {
         let Inline::Str(s) = &p.content[0] else {
             panic!()
         };
-        assert_eq!(s.text, "Figure 1: ");
+        assert_eq!(s.text, "Figure\u{a0}1: ");
     }
 
     #[tokio::test]
@@ -1648,7 +1900,7 @@ mod tests {
         let Inline::Str(s) = &p.content[0] else {
             panic!()
         };
-        assert_eq!(s.text, "Table 1: ");
+        assert_eq!(s.text, "Table\u{a0}1: ");
     }
 
     /// bd-4m2n6qf1: when a table float's caption comes from the Table's own
@@ -1788,13 +2040,15 @@ mod tests {
 
     #[tokio::test]
     async fn section_ref_target_is_not_float_wrapped() {
-        // `## Heading {#sec-x}` sections also become FloatRefTarget nodes
-        // (the sugar transform keys on registered id prefixes), but only
-        // genuine float kinds (fig/tbl/lst) get the Q1 float DOM — a section
-        // must pass through as a plain section Div, never grow a figure
-        // wrapper or a figcaption. (Caught by e2e render of the kitchen-sink
-        // fixture: sections were being swallowed into `quarto-float-sec`
-        // figures.)
+        // Section divs never become FloatRefTarget nodes at all:
+        // `classify_div` excludes any div carrying the `section` class from
+        // float sugaring (book-projects P0, Amendment A), so a section
+        // passes through the whole pipeline as a plain section Div — never
+        // grows a figure wrapper or a figcaption. (The assertions predate
+        // the exclusion: they once held via the render-side non-float-kind
+        // pass-through, after the kitchen-sink fixture caught sections being
+        // swallowed into `quarto-float-sec` figures. They now hold for the
+        // stronger reason that the misclassification never happens.)
         let blocks = vec![Block::Div(Div {
             attr: (
                 "sec-x".to_string(),
@@ -1881,7 +2135,7 @@ mod tests {
         let Inline::Str(s) = &p.content[0] else {
             panic!()
         };
-        assert_eq!(s.text, "Figure 1");
+        assert_eq!(s.text, "Figure\u{a0}1");
     }
 
     #[tokio::test]
@@ -1946,6 +2200,215 @@ mod tests {
         );
     }
 
+    // ── P0: `@sec-` reference presentation ─────────────────────────
+    //
+    // Q1 ports (crossref/refs.lua + format.lua): a `sec` ref renders its
+    // *section path* (not a per-type counter) as the number; a chapter-level
+    // heading under `crossref.chapters: true` takes the ch/apx prefix.
+
+    #[tokio::test]
+    async fn sec_ref_on_level_2_heading_resolves_to_section_number() {
+        // H1-led doc, no `chapters` key: the top component is included
+        // (maxHeading semantics — pinned empirically against Q1 2026-09-23).
+        let ast = run_full(vec![
+            header(1, "sec-intro", "Intro"),
+            header(2, "sec-a", "A"),
+            header(2, "sec-b", "B"),
+            Block::Paragraph(Paragraph {
+                content: vec![str_inline("see "), cite("sec-b")],
+                source_info: si(),
+            }),
+        ])
+        .await;
+        let Block::Paragraph(p) = &ast.blocks[3] else {
+            panic!();
+        };
+        assert_eq!(ref_link_text(&p.content, 1), "Section\u{a0}1.2");
+    }
+
+    #[tokio::test]
+    async fn chapter_ref_resolves_when_chapters_enabled() {
+        // `crossref.chapters: true` + level-1 heading target → "Chapter N",
+        // no numeric section address (Q1's isChapterRef prefix swap).
+        let ast = run_full_opts(
+            vec![
+                header(1, "sec-one", "One"),
+                header(1, "sec-two", "Two"),
+                Block::Paragraph(Paragraph {
+                    content: vec![str_inline("see "), cite("sec-two")],
+                    source_info: si(),
+                }),
+            ],
+            meta_with_chapters(true),
+            None,
+        )
+        .await;
+        let Block::Paragraph(p) = &ast.blocks[2] else {
+            panic!();
+        };
+        assert_eq!(ref_link_text(&p.content, 1), "Chapter\u{a0}2");
+    }
+
+    #[tokio::test]
+    async fn appendix_chapter_ref_resolves_to_letter() {
+        // An appendix chapter (per-file seed: appendix-local number 1 → "A")
+        // resolves to "Appendix A", letter instead of numeral (Q1's
+        // formatChapterIndex via file.bookItemNumber).
+        let ast = run_full_opts(
+            vec![
+                header(1, "sec-app", "Appendix"),
+                Block::Paragraph(Paragraph {
+                    content: vec![str_inline("see "), cite("sec-app")],
+                    source_info: si(),
+                }),
+            ],
+            meta_with_chapters(true),
+            Some(crate::render::ChapterSeed {
+                chapter_number: 1,
+                is_appendix: true,
+            }),
+        )
+        .await;
+        let Block::Paragraph(p) = &ast.blocks[1] else {
+            panic!();
+        };
+        assert_eq!(ref_link_text(&p.content, 1), "Appendix\u{a0}A");
+    }
+
+    #[tokio::test]
+    async fn h2_led_document_numbers_sections_relatively() {
+        // Port of Q1's maxHeading (normalize/flags.lua): with no H1 and no
+        // `chapters`, sections number relative to the shallowest heading —
+        // first H2 is "1", its first H3 child "1.1".
+        let ast = run_full(vec![
+            header(2, "sec-a", "A"),
+            header(3, "sec-b", "B"),
+            Block::Paragraph(Paragraph {
+                content: vec![
+                    str_inline("a: "),
+                    cite("sec-a"),
+                    str_inline(" b: "),
+                    cite("sec-b"),
+                ],
+                source_info: si(),
+            }),
+        ])
+        .await;
+        let Block::Paragraph(p) = &ast.blocks[2] else {
+            panic!();
+        };
+        assert_eq!(ref_link_text(&p.content, 1), "Section\u{a0}1");
+        assert_eq!(ref_link_text(&p.content, 3), "Section\u{a0}1.1");
+    }
+
+    // ── P0: visible number injection (sections.lua port) ───────────
+    //
+    // The index transform stashes a `number` kv on numbered headers (gated
+    // on `number-sections`); this transform prepends
+    // `Span(Str(number), class="header-section-number")` + Space wherever
+    // the kv is present — so injection is automatically inert wherever the
+    // stash didn't run.
+
+    fn number_sections_meta() -> quarto_pandoc_types::ConfigValue {
+        use quarto_pandoc_types::{ConfigMapEntry, ConfigValue};
+        ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "number-sections".to_string(),
+                key_source: si(),
+                value: ConfigValue::new_bool(true, si()),
+            }],
+            si(),
+        )
+    }
+
+    /// The header-section-number span the injection prepends.
+    fn assert_number_span(inline: &Inline, number: &str) {
+        let Inline::Span(span) = inline else {
+            panic!("expected Span, got {:?}", inline);
+        };
+        assert!(
+            span.attr.1.contains(&"header-section-number".to_string()),
+            "span class: {:?}",
+            span.attr.1
+        );
+        let Inline::Str(s) = &span.content[0] else {
+            panic!()
+        };
+        assert_eq!(s.text, number);
+    }
+
+    #[tokio::test]
+    async fn header_section_number_injected_when_stashed() {
+        let ast = run_full_opts(
+            vec![header(1, "sec-a", "Alpha"), header(2, "sec-b", "Beta")],
+            number_sections_meta(),
+            None,
+        )
+        .await;
+        let Block::Header(h1) = &ast.blocks[0] else {
+            panic!()
+        };
+        assert_number_span(&h1.content[0], "1");
+        assert!(matches!(h1.content[1], Inline::Space(_)));
+        let Inline::Str(s) = &h1.content[2] else {
+            panic!()
+        };
+        assert_eq!(s.text, "Alpha");
+        let Block::Header(h2) = &ast.blocks[1] else {
+            panic!()
+        };
+        assert_number_span(&h2.content[0], "1.1");
+    }
+
+    #[tokio::test]
+    async fn appendix_level1_header_gets_appendix_title_shape() {
+        // sections.lua: a level-1 appendix heading's content ends as
+        // [Str("Appendix"), Space, Span(number), Str(" —"), Space, ...].
+        let ast = run_full_opts(
+            vec![header(1, "sec-app", "Extra bits")],
+            number_sections_meta(),
+            Some(crate::render::ChapterSeed {
+                chapter_number: 1,
+                is_appendix: true,
+            }),
+        )
+        .await;
+        let Block::Header(h) = &ast.blocks[0] else {
+            panic!()
+        };
+        let Inline::Str(title) = &h.content[0] else {
+            panic!("appendix-title first: {:?}", h.content)
+        };
+        assert_eq!(title.text, "Appendix");
+        assert!(matches!(h.content[1], Inline::Space(_)));
+        assert_number_span(&h.content[2], "A");
+        let Inline::Str(delim) = &h.content[3] else {
+            panic!("appendix-delim: {:?}", h.content)
+        };
+        assert_eq!(delim.text, " —");
+        assert!(matches!(h.content[4], Inline::Space(_)));
+        let Inline::Str(rest) = &h.content[5] else {
+            panic!()
+        };
+        assert_eq!(rest.text, "Extra bits");
+    }
+
+    #[tokio::test]
+    async fn no_injection_without_number_sections() {
+        // Regression: no number kv stashed → no injection; the header
+        // content is byte-identical to the pre-feature pipeline.
+        let ast = run_full(vec![header(1, "sec-a", "Alpha")]).await;
+        let Block::Header(h) = &ast.blocks[0] else {
+            panic!()
+        };
+        assert!(h.attr.2.get("number").is_none());
+        assert_eq!(h.content.len(), 1);
+        let Inline::Str(s) = &h.content[0] else {
+            panic!()
+        };
+        assert_eq!(s.text, "Alpha");
+    }
+
     #[tokio::test]
     async fn float_ref_target_with_no_caption_renders_figure_with_empty_caption() {
         let blocks = vec![Block::Div(Div {
@@ -1981,7 +2444,7 @@ mod tests {
         let Inline::Str(s) = &p.content[0] else {
             panic!();
         };
-        assert_eq!(s.text, "Figure 3: ");
+        assert_eq!(s.text, "Figure\u{a0}3: ");
     }
 
     #[test]
@@ -2018,7 +2481,7 @@ mod tests {
         let Inline::Str(s) = &p.content[0] else {
             panic!();
         };
-        assert_eq!(s.text, "Figure 3: ");
+        assert_eq!(s.text, "Figure\u{a0}3: ");
         let Inline::Str(s) = &p.content[1] else {
             panic!();
         };
@@ -2045,7 +2508,7 @@ mod tests {
         let Inline::Str(s) = &p.content[0] else {
             panic!();
         };
-        assert_eq!(s.text, "Figure 3: ");
+        assert_eq!(s.text, "Figure\u{a0}3: ");
         assert!(matches!(out[1], Block::CodeBlock(_)));
     }
 
@@ -2105,7 +2568,7 @@ mod tests {
         let Inline::Str(s) = &inlines[0] else {
             panic!("expected prefix Str, got {:?}", inlines[0]);
         };
-        assert_eq!(s.text, "Figure 2: ");
+        assert_eq!(s.text, "Figure\u{a0}2: ");
         let Inline::Str(s) = &inlines[1] else {
             panic!();
         };
@@ -2158,7 +2621,7 @@ mod tests {
         let Inline::Str(s) = &inlines[0] else {
             panic!("expected prefix Str, got {:?}", inlines[0]);
         };
-        assert_eq!(s.text, "Table 1: ");
+        assert_eq!(s.text, "Table\u{a0}1: ");
         let Inline::Str(s) = &inlines[1] else {
             panic!();
         };
@@ -2181,6 +2644,9 @@ mod tests {
         let mut fs = FloatState {
             html_float_dom: true,
             used_ids: std::collections::HashSet::new(),
+            chapters: false,
+            max_heading: 7,
+            appendix: false,
         };
         render_block(&mut block, None, &mut fs);
         match block {

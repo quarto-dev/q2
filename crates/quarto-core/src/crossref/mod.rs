@@ -39,6 +39,7 @@ pub mod codeblock_shorthand;
 pub mod index;
 pub mod metadata;
 pub mod registry;
+pub mod section_number;
 pub mod target;
 
 #[cfg(test)]
@@ -47,6 +48,7 @@ mod roundtrip_tests;
 pub use index::{CrossrefEntry, CrossrefIndex, HeadingRecord, Order, PromisedId, PromisedIdSource};
 pub use metadata::{CrossrefMetadata, MetadataError};
 pub use registry::{RefTypeDef, RefTypeRegistry, RefTypeSource};
+pub use section_number::format_section_number;
 pub use target::{
     CrossrefTargetView, crossref_target_view, crossref_target_view_inline, identifier_of,
     ref_type_of,

@@ -436,6 +436,34 @@ pub struct RenderContext<'a> {
     ///
     /// [`DocumentProfile`]: crate::document_profile::DocumentProfile
     pub document_profile: Option<crate::document_profile::DocumentProfile>,
+
+    /// Book chapter seed for this document: the 1-based chapter number
+    /// (appendix-local for appendix chapters) the section counter should
+    /// start from, plus whether this chapter is an appendix (which switches
+    /// `Chapter N`/section-number presentation to `Appendix <letter>`).
+    ///
+    /// `None` for ordinary (non-book, or unseeded) renders — the section
+    /// counter then starts at zero, today's behavior. Book mode (P4) sets
+    /// one seed per chapter via `RenderToFileOptions`; P0 builds the
+    /// mechanism itself and P4 is its first real consumer. See
+    /// `claude-notes/plans/2026-09-21-book-projects-P0-number-sections.md`.
+    pub chapter_seed: Option<ChapterSeed>,
+}
+
+/// Seed for a book chapter's section numbering: render this document as if
+/// all chapters before it had already advanced the top-level section
+/// counter. See [`RenderContext::chapter_seed`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ChapterSeed {
+    /// 1-based chapter number this document should start numbering from
+    /// (its own first level-1 heading becomes this number). For appendix
+    /// chapters this is the 1-based *appendix-local* number (1 → "A").
+    pub chapter_number: u32,
+
+    /// Whether this chapter is an appendix. Switches the level-1 heading's
+    /// presentation from "Chapter N" to "Appendix <letter>" and formats the
+    /// top level of section addresses as a letter (`A.1`, not `N.1`).
+    pub is_appendix: bool,
 }
 
 /// Options for rendering
@@ -490,6 +518,7 @@ impl<'a> RenderContext<'a> {
             execution_policy: crate::engine::ExecutionPolicy::default(),
             execution_skipped: false,
             document_profile: None,
+            chapter_seed: None,
         }
     }
 
@@ -519,6 +548,18 @@ impl<'a> RenderContext<'a> {
     /// Create with custom options
     pub fn with_options(mut self, options: RenderOptions) -> Self {
         self.options = options;
+        self
+    }
+
+    /// Attach a book [`ChapterSeed`] to this context.
+    ///
+    /// Book mode (P4) calls this with the chapter's computed number before
+    /// rendering; the crossref index transform reads it to seed the section
+    /// counter and to switch level-1-heading presentation between
+    /// "Chapter N" and "Appendix <letter>". Matches the
+    /// [`with_project_index`](Self::with_project_index) builder idiom.
+    pub fn with_chapter_seed(mut self, seed: ChapterSeed) -> Self {
+        self.chapter_seed = Some(seed);
         self
     }
 

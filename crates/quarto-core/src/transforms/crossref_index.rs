@@ -44,7 +44,9 @@ use quarto_pandoc_types::pandoc::Pandoc;
 use serde_json::json;
 
 use crate::Result;
-use crate::crossref::{CrossrefEntry, CrossrefIndex, Order, TRACE_KIND_CROSSREF_INDEX};
+use crate::crossref::{
+    CrossrefEntry, CrossrefIndex, Order, TRACE_KIND_CROSSREF_INDEX, format_section_number,
+};
 use crate::render::RenderContext;
 use crate::transform::{AstTransform, TransformPhase};
 
@@ -81,9 +83,59 @@ impl AstTransform for CrossrefIndexTransform {
         }
         let mut index = ctx.crossref_index.take().unwrap();
 
+        // Book-projects P0: a chapter rendered standalone seeds the section
+        // counter with its chapter number (`sections = [n-1]`, so the first
+        // H1 becomes `n`), reproducing Q1's per-file section offsets. Guard
+        // on an untouched stack so a pre-seeded index is never clobbered.
+        if let Some(seed) = &ctx.chapter_seed
+            && index.sections.is_empty()
+            && seed.chapter_number > 1
+        {
+            index.sections = vec![seed.chapter_number - 1];
+        }
+
+        // Q1's `crossref.maxHeading` (options.lua + normalize/flags.lua):
+        // 1 when `crossref.chapters` is set, 7 otherwise, then the minimum
+        // over every header's level (unnumbered headers included — flags.lua
+        // doesn't discriminate). Pre-scanned so the number stash (visible
+        // numbering) and `format_section_number` see the final value.
+        let chapters = ast
+            .meta
+            .get("crossref")
+            .and_then(|c| c.get("chapters"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        index.max_heading = compute_max_heading(&ast.blocks, chapters);
+
+        // sections.lua: the visible-number stash is gated on `number-sections`
+        // (default off) and `number-depth` (default 6) — independent of the
+        // `sec`-target registration above, which is unconditional.
+        let number_sections = ast
+            .meta
+            .get("number-sections")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let number_depth = ast
+            .meta
+            .get("number-depth")
+            .and_then(|v| v.as_int_lenient())
+            .map_or(6, |n| n.max(0) as u32);
+
         let mut walker = Walker {
             index: &mut index,
             diagnostics: Vec::new(),
+            registry: ctx.ref_type_registry.clone(),
+            // sec-target registration is native-HTML-only: the pandoc-hybrid
+            // pipeline also runs this transform, and registering there would
+            // let crossref-resolve consume `@sec-` cites before the vendored
+            // refs.lua sees them.
+            html: ctx.format.identifier.is_html_based(),
+            // Q1 marks every entry with the per-file appendix state; with
+            // per-file seeds the whole file shares it.
+            appendix: ctx.chapter_seed.as_ref().is_some_and(|s| s.is_appendix),
+            section_ids: Vec::new(),
+            number_sections,
+            number_depth,
         };
         walker.visit_blocks(&mut ast.blocks);
         let diagnostics = walker.diagnostics;
@@ -110,6 +162,26 @@ impl AstTransform for CrossrefIndexTransform {
 struct Walker<'a> {
     index: &'a mut CrossrefIndex,
     diagnostics: Vec<DiagnosticMessage>,
+    /// The document's ref-type registry; used to recognize `sec`-classifying
+    /// header ids. `None` only in contexts that never installed one.
+    registry: Option<crate::crossref::RefTypeRegistry>,
+    /// Native-HTML-family render (see `transform` for why registration is
+    /// gated on this).
+    html: bool,
+    /// Per-file appendix state from the chapter seed (Q1's
+    /// `currentFileMetadataState().appendix`).
+    appendix: bool,
+    /// Ids of enclosing `Div.section` wrappers, innermost last.
+    /// `SectionizeTransform` (Normalization phase) moves each header's id
+    /// onto its section div and empties the header's own id, so
+    /// `visit_header` recovers its target id from here when it has none.
+    section_ids: Vec<String>,
+    /// `number-sections` document metadata (default off) — gates the
+    /// visible `number` kv stash, independent of `sec`-target registration.
+    number_sections: bool,
+    /// `number-depth` document metadata (default 6) — a header deeper than
+    /// this never gets the visible `number` kv, even with `number-sections`.
+    number_depth: u32,
 }
 
 impl<'a> Walker<'a> {
@@ -132,7 +204,17 @@ impl<'a> Walker<'a> {
                     self.visit_inlines(line);
                 }
             }
-            Block::Div(div) => self.visit_blocks(&mut div.content),
+            Block::Div(div) => {
+                // Track section-div ids while descending so a header whose
+                // id sectionize moved onto its wrapper can still register.
+                if div.attr.1.iter().any(|c| c == "section") {
+                    self.section_ids.push(div.attr.0.clone());
+                    self.visit_blocks(&mut div.content);
+                    self.section_ids.pop();
+                } else {
+                    self.visit_blocks(&mut div.content);
+                }
+            }
             Block::BlockQuote(bq) => self.visit_blocks(&mut bq.content),
             Block::OrderedList(ol) => {
                 for item in &mut ol.content {
@@ -209,20 +291,71 @@ impl<'a> Walker<'a> {
         }
     }
 
-    fn visit_header(&mut self, header: &Header) {
-        advance_sections(&mut self.index.sections, header.level);
+    fn visit_header(&mut self, header: &mut Header) {
+        // Port of sections.lua's Header handler, in its exact order:
+        // index the heading unconditionally, THEN early-return on
+        // `.unnumbered` before any counter or registration logic.
+        let unnumbered = header.attr.1.iter().any(|c| c == "unnumbered");
+        if !unnumbered {
+            advance_sections(&mut self.index.sections, header.level);
+        }
         // Record the heading; needed for cross-file book fixup in future
-        // phases, and cheap to collect here.
+        // phases, and cheap to collect here. Numbered headings get their
+        // own (post-advance) path; unnumbered ones the enclosing path.
+        // The header's own id wins when present (pandoc-hybrid pipeline,
+        // where sectionize doesn't run; blockquoted headers, which
+        // sectionize doesn't descend into); otherwise fall back to the
+        // innermost enclosing section div's id — sound because sectionize
+        // makes every header it touches the first child of its own section
+        // div with an empty id.
+        let identifier = if !header.attr.0.is_empty() {
+            Some(header.attr.0.clone())
+        } else {
+            self.section_ids
+                .iter()
+                .rev()
+                .find(|id| !id.is_empty())
+                .cloned()
+        };
         self.index.headings.push(crate::crossref::HeadingRecord {
-            identifier: if header.attr.0.is_empty() {
-                None
-            } else {
-                Some(header.attr.0.clone())
-            },
+            identifier: identifier.clone(),
             level: header.level as u8,
             section: self.index.sections.clone(),
             source_info: header.source_info.clone(),
         });
+        if unnumbered || !self.html {
+            return;
+        }
+        // Book-projects P0 / sections.lua: stash the visible section number
+        // as a `number` kv (the HTML writer emits it as `data-number` for
+        // free) — gated only on `number-sections`/`number-depth`, and
+        // deliberately placed before the identifier/`sec`-target checks
+        // below, since Q1 stashes this for every numbered header regardless
+        // of whether it's also an `@sec-` target.
+        if self.number_sections && (header.level as u32) <= self.number_depth {
+            header.attr.2.insert(
+                "number".to_string(),
+                format_section_number(&self.index.sections, self.index.max_heading, self.appendix),
+            );
+        }
+        // Register `sec`-classifying ids as crossref targets — this, not
+        // `number-sections`, is what makes `@sec-` refs resolve (Q1
+        // registers unconditionally; only visible numbering is gated).
+        let Some(identifier) = identifier else { return };
+        let is_sec = self
+            .registry
+            .as_ref()
+            .and_then(|r| r.classify_cite_id(&identifier))
+            .is_some_and(|def| def.ref_type == "sec");
+        if !is_sec {
+            return;
+        }
+        self.index_target(
+            identifier,
+            "sec".to_string(),
+            Some(header.content.clone()),
+            &header.source_info,
+        );
     }
 
     fn visit_custom(&mut self, node: &mut CustomNode) {
@@ -258,27 +391,10 @@ impl<'a> Walker<'a> {
             None => return,
         };
 
-        // Duplicate id check: skip numbering the duplicate.
-        if self.index.entries.contains_key(&identifier) {
-            let existing_src = self.index.entries[&identifier].source_info.clone();
-            self.diagnostics.push(duplicate_id_diagnostic(
-                &identifier,
-                &existing_src,
-                &node.source_info,
-            ));
-            return;
-        }
-
-        // Increment the per-ref-type counter.
-        let order_num = {
-            let counter = self.index.next_order.entry(ref_type.clone()).or_insert(0);
-            *counter += 1;
-            *counter
-        };
-
-        let order = Order {
-            section: self.index.sections.clone(),
-            order: order_num,
+        let caption = extract_caption_inlines(node);
+        let source_info = node.source_info.clone();
+        let Some(order) = self.index_target(identifier, ref_type, caption, &source_info) else {
+            return; // duplicate id; diagnostic already emitted
         };
 
         // Write the order back into the node so renderers don't need to
@@ -293,21 +409,56 @@ impl<'a> Walker<'a> {
                 }),
             );
         }
+    }
 
-        // Extract caption inlines for the index entry (for link text).
-        // Flatten the caption_long slot's first paragraph, if any.
-        let caption = extract_caption_inlines(node);
+    /// Shared registration path for every crossref target kind (float
+    /// custom nodes, theorem nodes, and — book-projects P0 — `sec`-typed
+    /// headers). Duplicate-id check (first occurrence wins, Q-15-1
+    /// diagnostic), per-ref-type counter advance, `CrossrefEntry`
+    /// construction and insert. Returns the assigned [`Order`] so callers
+    /// with a node can write it back into `plain_data`; `None` on a
+    /// duplicate.
+    fn index_target(
+        &mut self,
+        identifier: String,
+        ref_type: String,
+        caption: Option<Inlines>,
+        source_info: &quarto_source_map::SourceInfo,
+    ) -> Option<Order> {
+        // Duplicate id check: skip numbering the duplicate.
+        if self.index.entries.contains_key(&identifier) {
+            let existing_src = self.index.entries[&identifier].source_info.clone();
+            self.diagnostics.push(duplicate_id_diagnostic(
+                &identifier,
+                &existing_src,
+                source_info,
+            ));
+            return None;
+        }
+
+        // Increment the per-ref-type counter.
+        let order_num = {
+            let counter = self.index.next_order.entry(ref_type.clone()).or_insert(0);
+            *counter += 1;
+            *counter
+        };
+
+        let order = Order {
+            section: self.index.sections.clone(),
+            order: order_num,
+        };
 
         let entry = CrossrefEntry {
             identifier: identifier.clone(),
             ref_type,
             parent: None, // subfloats deferred
-            order,
+            order: order.clone(),
             caption,
-            in_appendix: false, // deferred
-            source_info: node.source_info.clone(),
+            in_appendix: self.appendix,
+            source_info: source_info.clone(),
         };
         self.index.insert(entry);
+        Some(order)
     }
 }
 
@@ -342,6 +493,57 @@ fn advance_sections(sections: &mut Vec<u32>, level: usize) {
     }
     if let Some(last) = sections.last_mut() {
         *last += 1;
+    }
+}
+
+/// Q1's `crossref.maxHeading` (options.lua + normalize/flags.lua): 1 when
+/// `crossref.chapters` is set, 7 otherwise, then the minimum over every
+/// header's level anywhere in the document.
+fn compute_max_heading(blocks: &Blocks, chapters: bool) -> u32 {
+    let mut max = if chapters { 1 } else { 7 };
+    scan_min_header_level(blocks, &mut max);
+    max
+}
+
+fn scan_min_header_level(blocks: &Blocks, min: &mut u32) {
+    for block in blocks.iter() {
+        scan_block(block, min);
+    }
+}
+
+fn scan_block(block: &Block, min: &mut u32) {
+    match block {
+        Block::Header(h) => *min = (*min).min(h.level as u32),
+        Block::Div(d) => scan_min_header_level(&d.content, min),
+        Block::BlockQuote(bq) => scan_min_header_level(&bq.content, min),
+        Block::OrderedList(ol) => {
+            for item in &ol.content {
+                scan_min_header_level(item, min);
+            }
+        }
+        Block::BulletList(bl) => {
+            for item in &bl.content {
+                scan_min_header_level(item, min);
+            }
+        }
+        Block::DefinitionList(dl) => {
+            for (_term, defs) in &dl.content {
+                for def in defs {
+                    scan_min_header_level(def, min);
+                }
+            }
+        }
+        Block::Figure(fig) => scan_min_header_level(&fig.content, min),
+        Block::Custom(node) => {
+            for (_name, slot) in node.slots.iter() {
+                match slot {
+                    Slot::Block(b) => scan_block(b, min),
+                    Slot::Blocks(bs) => scan_min_header_level(bs, min),
+                    _ => {}
+                }
+            }
+        }
+        _ => {}
     }
 }
 
@@ -429,6 +631,23 @@ mod tests {
         })
     }
 
+    fn header_with_class(level: usize, id: &str, class: &str, text: &str) -> Block {
+        Block::Header(Header {
+            level,
+            attr: (
+                id.to_string(),
+                vec![class.to_string()],
+                LinkedHashMap::new(),
+            ),
+            content: vec![Inline::Str(Str {
+                text: text.to_string(),
+                source_info: si(),
+            })],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        })
+    }
+
     fn fig_div(id: &str, caption: &str) -> Block {
         Block::Div(Div {
             attr: attr_id(id),
@@ -447,6 +666,32 @@ mod tests {
                     source_info: si(),
                 }),
             ],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        })
+    }
+
+    fn para(text: &str) -> Block {
+        Block::Paragraph(Paragraph {
+            content: vec![Inline::Str(Str {
+                text: text.into(),
+                source_info: si(),
+            })],
+            source_info: si(),
+        })
+    }
+
+    /// The shape `SectionizeTransform` produces: a `Div#id.section.levelN`
+    /// whose first child is the header with its id moved onto the div (the
+    /// header's own id is empty).
+    fn section_div(id: &str, level: usize, children: Vec<Block>) -> Block {
+        Block::Div(Div {
+            attr: (
+                id.to_string(),
+                vec!["section".to_string(), format!("level{level}")],
+                LinkedHashMap::new(),
+            ),
+            content: children,
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         })
@@ -491,6 +736,420 @@ mod tests {
             .unwrap();
 
         (ast, ctx.crossref_index.unwrap(), ctx.diagnostics)
+    }
+
+    /// Like `run`, but with an explicit `ChapterSeed` (book-projects P0:
+    /// chapters seed the section counter and mark entries `in_appendix`).
+    async fn run_with_seed(
+        blocks: Vec<Block>,
+        seed: crate::render::ChapterSeed,
+    ) -> (Pandoc, CrossrefIndex, Vec<DiagnosticMessage>) {
+        use crate::format::Format;
+        use crate::project::{DocumentInfo, ProjectConfig, ProjectContext};
+        use crate::render::{BinaryDependencies, RenderContext};
+        use std::path::PathBuf;
+
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: ProjectConfig::default(),
+            is_single_file: true,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        ctx.ref_type_registry = Some(RefTypeRegistry::builtin());
+        ctx.crossref_index = Some(CrossrefIndex::new(FileId(0)));
+        ctx.chapter_seed = Some(seed);
+
+        let mut ast = Pandoc {
+            meta: quarto_pandoc_types::ConfigValue::default(),
+            blocks,
+        };
+
+        FloatRefTargetSugarTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        CrossrefIndexTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+
+        (ast, ctx.crossref_index.unwrap(), ctx.diagnostics)
+    }
+
+    /// Like `run`, but with an explicit output format — used to pin the
+    /// HTML-only gating of sec-target registration (the pandoc-hybrid
+    /// pipeline also runs crossref-index, and registering there would let
+    /// resolve consume `@sec-` cites before the vendored Lua sees them).
+    async fn run_with_format(
+        blocks: Vec<Block>,
+        format: crate::format::Format,
+    ) -> (Pandoc, CrossrefIndex, Vec<DiagnosticMessage>) {
+        run_with_format_and_meta(blocks, format, quarto_pandoc_types::ConfigValue::default()).await
+    }
+
+    /// `run_with_format` with explicit document metadata (P0's
+    /// number-sections gating tests need both knobs at once).
+    async fn run_with_format_and_meta(
+        blocks: Vec<Block>,
+        format: crate::format::Format,
+        meta: quarto_pandoc_types::ConfigValue,
+    ) -> (Pandoc, CrossrefIndex, Vec<DiagnosticMessage>) {
+        use crate::project::{DocumentInfo, ProjectConfig, ProjectContext};
+        use crate::render::{BinaryDependencies, RenderContext};
+        use std::path::PathBuf;
+
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: ProjectConfig::default(),
+            is_single_file: true,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        ctx.ref_type_registry = Some(RefTypeRegistry::builtin());
+        ctx.crossref_index = Some(CrossrefIndex::new(FileId(0)));
+
+        let mut ast = Pandoc { meta, blocks };
+
+        FloatRefTargetSugarTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        CrossrefIndexTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+
+        (ast, ctx.crossref_index.unwrap(), ctx.diagnostics)
+    }
+
+    /// Like `run`, but with explicit document metadata — used to pin the
+    /// `crossref.chapters` effect on `max_heading` (book-projects P0).
+    async fn run_with_meta(
+        blocks: Vec<Block>,
+        meta: quarto_pandoc_types::ConfigValue,
+    ) -> (Pandoc, CrossrefIndex, Vec<DiagnosticMessage>) {
+        use crate::format::Format;
+        use crate::project::{DocumentInfo, ProjectConfig, ProjectContext};
+        use crate::render::{BinaryDependencies, RenderContext};
+        use std::path::PathBuf;
+
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: ProjectConfig::default(),
+            is_single_file: true,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        ctx.ref_type_registry = Some(RefTypeRegistry::builtin());
+        ctx.crossref_index = Some(CrossrefIndex::new(FileId(0)));
+
+        let mut ast = Pandoc { meta, blocks };
+
+        FloatRefTargetSugarTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        CrossrefIndexTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+
+        (ast, ctx.crossref_index.unwrap(), ctx.diagnostics)
+    }
+
+    fn chapters_meta(v: bool) -> quarto_pandoc_types::ConfigValue {
+        use quarto_pandoc_types::{ConfigMapEntry, ConfigValue};
+        let entry = |key: &str, value: ConfigValue| ConfigMapEntry {
+            key: key.to_string(),
+            key_source: si(),
+            value,
+        };
+        ConfigValue::new_map(
+            vec![entry(
+                "crossref",
+                ConfigValue::new_map(
+                    vec![entry("chapters", ConfigValue::new_bool(v, si()))],
+                    si(),
+                ),
+            )],
+            si(),
+        )
+    }
+
+    // ── P0: headers register as `sec` crossref targets ──────────────
+    //
+    // sections.lua registers every numbered (non-`.unnumbered`) header
+    // whose id classifies as `sec`, regardless of `number-sections` —
+    // registration is what makes `@sec-` refs resolve; only the *visible*
+    // numbering is gated on the option.
+
+    /// `number-sections: <v>` document metadata (top-level key).
+    fn number_sections_meta(v: bool) -> quarto_pandoc_types::ConfigValue {
+        use quarto_pandoc_types::{ConfigMapEntry, ConfigValue};
+        ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "number-sections".to_string(),
+                key_source: si(),
+                value: ConfigValue::new_bool(v, si()),
+            }],
+            si(),
+        )
+    }
+
+    #[tokio::test]
+    async fn number_attr_stashed_only_with_number_sections() {
+        // sections.lua: with `number-sections` on (and level within
+        // number-depth), every numbered header carries a `number` kv the
+        // HTML writer emits as `data-number`. Off by default.
+        let blocks = || vec![header(1, "sec-a", "A"), header(2, "sec-b", "B")];
+
+        let (ast, _idx, _d) = run_with_meta(blocks(), number_sections_meta(true)).await;
+        let Block::Header(h1) = &ast.blocks[0] else {
+            panic!()
+        };
+        assert_eq!(h1.attr.2.get("number").map(String::as_str), Some("1"));
+        let Block::Header(h2) = &ast.blocks[1] else {
+            panic!()
+        };
+        assert_eq!(h2.attr.2.get("number").map(String::as_str), Some("1.1"));
+
+        let (ast, _idx, _d) = run(blocks()).await;
+        let Block::Header(h1) = &ast.blocks[0] else {
+            panic!()
+        };
+        assert!(
+            h1.attr.2.get("number").is_none(),
+            "no number kv without number-sections"
+        );
+    }
+
+    #[tokio::test]
+    async fn number_attr_skips_unnumbered_and_non_html() {
+        // Unnumbered headers never get a number (the early-return precedes
+        // the stash, as in sections.lua).
+        let (ast, _idx, _d) = run_with_meta(
+            vec![
+                header_with_class(1, "sec-u", "unnumbered", "U"),
+                header(1, "sec-a", "A"),
+            ],
+            number_sections_meta(true),
+        )
+        .await;
+        let Block::Header(u) = &ast.blocks[0] else {
+            panic!()
+        };
+        assert!(u.attr.2.get("number").is_none());
+        let Block::Header(a) = &ast.blocks[1] else {
+            panic!()
+        };
+        assert_eq!(a.attr.2.get("number").map(String::as_str), Some("1"));
+
+        // Pandoc-hybrid formats never get the stash — their numbering is
+        // the vendored Lua filters' job (or the writer's).
+        let (ast, _idx, _d) = run_with_format_and_meta(
+            vec![header(1, "sec-a", "A")],
+            crate::format::Format::pdf(),
+            number_sections_meta(true),
+        )
+        .await;
+        let Block::Header(h) = &ast.blocks[0] else {
+            panic!()
+        };
+        assert!(
+            h.attr.2.get("number").is_none(),
+            "number stash is native-HTML-only"
+        );
+    }
+
+    #[tokio::test]
+    async fn headers_register_as_sec_targets() {
+        let (_ast, idx, diags) = run(vec![
+            header(1, "sec-intro", "Intro"),
+            header(2, "sec-deep", "Deep"),
+            header(1, "sec-next", "Next"),
+            header(1, "introduction", "No prefix"),
+        ])
+        .await;
+        assert!(diags.is_empty(), "diagnostics: {diags:?}");
+        let intro = idx.get("sec-intro").expect("sec-intro registered");
+        assert_eq!(intro.ref_type, "sec");
+        assert_eq!(intro.order.section, vec![1]);
+        assert_eq!(intro.order.order, 1);
+        let deep = idx.get("sec-deep").expect("sec-deep registered");
+        assert_eq!(deep.order.section, vec![1, 1]);
+        let next = idx.get("sec-next").expect("sec-next registered");
+        assert_eq!(next.order.section, vec![2]);
+        assert!(
+            idx.get("introduction").is_none(),
+            "ids that don't classify as sec are not registered"
+        );
+        // The header's content inlines become the entry's caption (link
+        // text source for cross-file refs, P5).
+        let caption = intro.caption.as_ref().expect("caption from header");
+        assert!(
+            matches!(&caption[0], Inline::Str(s) if s.text == "Intro"),
+            "caption: {caption:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn sectionized_headers_register_with_section_div_ids() {
+        // Amendment A: in the real native-HTML pipeline, SectionizeTransform
+        // has moved every header id onto its `Div.section` wrapper by the
+        // time this transform runs — the header's own id is empty. The
+        // walker recovers the id from the innermost enclosing section div,
+        // and numbering follows document order across nesting.
+        let (ast, idx, diags) = run(vec![
+            section_div(
+                "sec-intro",
+                1,
+                vec![
+                    header(1, "", "Intro"),
+                    para("body"),
+                    section_div("sec-deep", 2, vec![header(2, "", "Deep")]),
+                ],
+            ),
+            section_div("sec-next", 1, vec![header(1, "", "Next")]),
+        ])
+        .await;
+        assert!(diags.is_empty(), "diagnostics: {diags:?}");
+        assert_eq!(idx.get("sec-intro").unwrap().order.section, vec![1]);
+        assert_eq!(idx.get("sec-deep").unwrap().order.section, vec![1, 1]);
+        assert_eq!(idx.get("sec-next").unwrap().order.section, vec![2]);
+        // The section divs survive sugaring as Divs (never FloatRefTargets).
+        assert!(
+            matches!(&ast.blocks[0], Block::Div(d) if d.attr.0 == "sec-intro"),
+            "section div stays a Div: {:?}",
+            ast.blocks[0]
+        );
+        // The recovered ids also land on the headings records (P4/P5's
+        // cross-file link fixup keys off them).
+        assert!(
+            idx.headings
+                .iter()
+                .any(|h| h.identifier.as_deref() == Some("sec-deep")),
+            "heading recorded with its section div's id: {:?}",
+            idx.headings
+        );
+    }
+
+    #[tokio::test]
+    async fn unnumbered_header_skips_numbering_but_is_recorded() {
+        // sections.lua's order of operations: indexAddHeading runs
+        // unconditionally, THEN the .unnumbered early-return skips the
+        // counter advance and sec registration.
+        let (_ast, idx, diags) = run(vec![
+            header(1, "sec-first", "First"),
+            header_with_class(1, "sec-unnum", "unnumbered", "Unnumbered"),
+            header(1, "sec-second", "Second"),
+        ])
+        .await;
+        assert!(diags.is_empty(), "diagnostics: {diags:?}");
+        assert!(
+            idx.get("sec-unnum").is_none(),
+            "unnumbered headings are not registered as sec targets"
+        );
+        assert_eq!(
+            idx.get("sec-second").unwrap().order.section,
+            vec![2],
+            "the unnumbered heading must not advance the section counter"
+        );
+        assert!(
+            idx.headings
+                .iter()
+                .any(|h| h.identifier.as_deref() == Some("sec-unnum")),
+            "unnumbered headings are still recorded in index.headings \
+             (cross-file link fixup needs every chapter's heading)"
+        );
+    }
+
+    #[tokio::test]
+    async fn chapter_seed_offsets_section_numbering() {
+        // The P4 contract: a chapter rendered standalone starts its
+        // counter at its chapter number (seed sections = [n-1]).
+        let (_ast, idx, diags) = run_with_seed(
+            vec![header(1, "sec-a", "A"), header(2, "sec-b", "B")],
+            crate::render::ChapterSeed {
+                chapter_number: 2,
+                is_appendix: false,
+            },
+        )
+        .await;
+        assert!(diags.is_empty(), "diagnostics: {diags:?}");
+        assert_eq!(idx.get("sec-a").unwrap().order.section, vec![2]);
+        assert_eq!(idx.get("sec-b").unwrap().order.section, vec![2, 1]);
+    }
+
+    #[tokio::test]
+    async fn appendix_seed_marks_entries_in_appendix() {
+        let (_ast, idx, diags) = run_with_seed(
+            vec![header(1, "sec-app", "Appendix")],
+            crate::render::ChapterSeed {
+                chapter_number: 1,
+                is_appendix: true,
+            },
+        )
+        .await;
+        assert!(diags.is_empty(), "diagnostics: {diags:?}");
+        assert!(
+            idx.get("sec-app").unwrap().in_appendix,
+            "entries registered under an appendix seed are marked in_appendix"
+        );
+        // Ordinary (unseeded) documents never mark entries in_appendix.
+        let (_ast, idx, _) = run(vec![header(1, "sec-plain", "Plain")]).await;
+        assert!(!idx.get("sec-plain").unwrap().in_appendix);
+    }
+
+    #[tokio::test]
+    async fn sec_registration_is_html_only() {
+        let (_ast, idx, _diags) =
+            run_with_format(vec![header(1, "sec-a", "A")], crate::format::Format::pdf()).await;
+        assert!(
+            idx.get("sec-a").is_none(),
+            "pandoc-hybrid formats keep Lua-native @sec- resolution; \
+             crossref-index must not register sec targets for them"
+        );
+        // The section counter still advances for every format — floats get
+        // section-relative numbers from it.
+        let (_ast, idx, _diags) = run_with_format(
+            vec![header(1, "intro", "Intro"), fig_div("fig-x", "cap")],
+            crate::format::Format::pdf(),
+        )
+        .await;
+        assert_eq!(idx.get("fig-x").unwrap().order.section, vec![1]);
+    }
+
+    #[tokio::test]
+    async fn max_heading_tracks_shallowest_header_level() {
+        // Port of Q1's maxHeading (crossref/options.lua +
+        // normalize/flags.lua): min(7, min header level), forced to 1 when
+        // `crossref.chapters` is set.
+        let (_a, idx, _d) = run(vec![header(2, "sec-a", "A"), header(3, "sec-b", "B")]).await;
+        assert_eq!(idx.max_heading, 2, "H2-led document");
+        let (_a, idx, _d) = run(vec![header(2, "sec-a", "A"), header(1, "sec-b", "B")]).await;
+        assert_eq!(idx.max_heading, 1, "a later H1 still lowers the scan");
+        let (_a, idx, _d) = run_with_meta(vec![header(2, "sec-a", "A")], chapters_meta(true)).await;
+        assert_eq!(idx.max_heading, 1, "chapters forces 1");
+        let (_a, idx, _d) = run(vec![para("no headers")]).await;
+        assert_eq!(idx.max_heading, 7, "headerless document keeps the cap");
     }
 
     #[tokio::test]

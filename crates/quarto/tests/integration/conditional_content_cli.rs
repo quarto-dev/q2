@@ -194,7 +194,7 @@ fn hidden_float_does_not_consume_a_crossref_number() {
                 See @fig-second.\n";
     let html = render(body, "", &["--profile", "prod"]);
     assert!(
-        html.contains("Figure&nbsp;1") || html.contains("Figure 1"),
+        html.contains("Figure\u{a0}1"),
         "the only visible figure must be number 1: {html}"
     );
     assert!(!html.contains("Hidden caption"), "{html}");
