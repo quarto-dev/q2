@@ -59,7 +59,10 @@ struct Server {
 
 impl Server {
     fn spawn(cwd: &Path, args: &[&str]) -> Server {
+        // `-v` so the driver's own log lines (which render ran, why)
+        // land in the captured stderr for a failure's diagnosis.
         let mut child = Command::new(Q2_BIN)
+            .arg("-v")
             .arg("preview")
             .arg("--static")
             .arg("--no-browser")
@@ -280,6 +283,36 @@ impl SseReader {
         }
     }
 
+    /// The names of every event that arrives within `window`.
+    fn events_within(&mut self, window: Duration) -> Vec<String> {
+        self.reader
+            .get_ref()
+            .set_read_timeout(Some(window))
+            .unwrap();
+        let mut names = Vec::new();
+        let mut line = String::new();
+        loop {
+            line.clear();
+            match self.reader.read_line(&mut line) {
+                Ok(0) => return names,
+                Ok(_) => {
+                    if let Some(name) = line.trim_end().strip_prefix("event: ") {
+                        names.push(name.to_string());
+                    }
+                }
+                Err(e)
+                    if matches!(
+                        e.kind(),
+                        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                    ) =>
+                {
+                    return names;
+                }
+                Err(e) => panic!("SSE read error: {e}"),
+            }
+        }
+    }
+
     /// True when no `event:` line at all arrives within `window`.
     fn is_quiet_for(&mut self, window: Duration) -> bool {
         self.reader
@@ -435,9 +468,15 @@ fn a_failing_rerender_reports_diagnostics_and_does_not_reload() {
         !stop.contains("\\u001b"),
         "no ANSI escapes in the browser text: {stop}"
     );
+    // Only the *reload* must be absent. A second render cycle for the
+    // same save can legitimately follow (Linux inotify may spread one
+    // save over two debounce windows); it fails the same way and is
+    // equally not a reload.
+    let later = sse.events_within(Duration::from_secs(2));
     assert!(
-        sse.is_quiet_for(Duration::from_secs(2)),
-        "a failed render must not send a reload"
+        !later.iter().any(|e| e == "reload"),
+        "a failed render must not send a reload; saw {later:?}; stderr:\n{}",
+        server.stderr()
     );
     assert!(
         server.stderr().contains("Q-0-99"),
