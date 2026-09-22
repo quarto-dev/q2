@@ -270,7 +270,14 @@ function App() {
     enabled: !bootLinksProjectSet,
     createProjectSet: projectSetActions.createProjectSet,
     migrateProjects: projectSetActions.migrateProjects,
-    onFreshRoot: bootIsInvite || ephemeralHub ? undefined : seedExamples,
+    // E2E builds skip seeding: every Playwright test boots a fresh profile,
+    // and four surprise projects break fixtures that assume an empty start
+    // (and add connect load that stalls CI). A future e2e test for seeding
+    // itself should opt in explicitly rather than un-gate this.
+    onFreshRoot:
+      bootIsInvite || ephemeralHub || import.meta.env.VITE_E2E === '1'
+        ? undefined
+        : seedExamples,
   });
 
   // `q2 preview` session config (bd-ov4gqk3m): when the serving server
