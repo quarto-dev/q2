@@ -8,7 +8,7 @@
 
 use axum::response::sse::Event;
 use serde::Serialize;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, watch};
 
 /// What the render loop tells the browser. Serialized as the SSE
 /// `data:` line (JSON, tagged by `type`); the SSE `event:` name is
@@ -61,6 +61,11 @@ const CHANNEL_CAPACITY: usize = 64;
 #[derive(Clone, Debug)]
 pub struct ReloadHub {
     tx: broadcast::Sender<ReloadEvent>,
+    /// Flips to `true` once on [`Self::shutdown`]; every open SSE stream
+    /// ends when it does, which is what lets the server's graceful
+    /// shutdown finish (an `EventSource` connection never closes on
+    /// its own).
+    closing: watch::Sender<bool>,
 }
 
 impl Default for ReloadHub {
@@ -72,7 +77,19 @@ impl Default for ReloadHub {
 impl ReloadHub {
     pub fn new() -> Self {
         let (tx, _rx) = broadcast::channel(CHANNEL_CAPACITY);
-        Self { tx }
+        let (closing, _) = watch::channel(false);
+        Self { tx, closing }
+    }
+
+    /// End every open SSE stream. Idempotent.
+    pub fn shutdown(&self) {
+        let _ = self.closing.send(true);
+    }
+
+    /// A stream of the closing flag: its current value first, then
+    /// every change. Yields `true` once [`Self::shutdown`] runs.
+    pub(super) fn closing_stream(&self) -> tokio_stream::wrappers::WatchStream<bool> {
+        tokio_stream::wrappers::WatchStream::new(self.closing.subscribe())
     }
 
     /// Broadcast to every current subscriber. Returns how many there

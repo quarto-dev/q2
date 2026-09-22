@@ -35,7 +35,8 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use percent_encoding::{AsciiSet, CONTROLS, percent_decode_str, utf8_percent_encode};
 use tokio_stream::StreamExt;
-use tokio_stream::wrappers::BroadcastStream;
+use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
+use tokio_stream::wrappers::{BroadcastStream, WatchStream};
 
 use super::reload::ReloadHub;
 
@@ -96,7 +97,7 @@ pub fn build_router(config: StaticServerConfig, hub: ReloadHub) -> Router {
     };
     Router::new()
         .route(EVENTS_PATH, get(events))
-        .fallback(serve)
+        .fallback(serve_path)
         .with_state(state)
 }
 
@@ -104,14 +105,41 @@ pub fn build_router(config: StaticServerConfig, hub: ReloadHub) -> Router {
 /// subscriber (more than the channel capacity behind) skips what it
 /// missed; the next event it does see is still a reload.
 async fn events(State(state): State<StaticState>) -> impl IntoResponse {
-    let stream = BroadcastStream::new(state.hub.subscribe()).filter_map(|item| match item {
-        Ok(event) => Some(Ok::<_, std::convert::Infallible>(event.to_sse())),
-        Err(_lagged) => None,
-    });
+    // The event stream and the hub's closing flag are merged so the
+    // stream ends the moment `ReloadHub::shutdown` runs, even with no
+    // event in flight.
+    enum Item {
+        Event(Result<super::reload::ReloadEvent, BroadcastStreamRecvError>),
+        Closing(bool),
+    }
+    let events = BroadcastStream::new(state.hub.subscribe()).map(Item::Event);
+    let closing: WatchStream<bool> = state.hub.closing_stream();
+    let stream = events
+        .merge(closing.map(Item::Closing))
+        .take_while(|item| !matches!(item, Item::Closing(true)))
+        .filter_map(|item| match item {
+            Item::Event(Ok(event)) => Some(Ok::<_, std::convert::Infallible>(event.to_sse())),
+            // A lagged subscriber skips what it missed; the next event
+            // it does see is still a reload.
+            Item::Event(Err(_)) | Item::Closing(_) => None,
+        });
     Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
-async fn serve(State(state): State<StaticState>, req: Request) -> Response {
+/// Serve `router` on `listener` until `shutdown` resolves, then finish
+/// gracefully. Callers must also call [`ReloadHub::shutdown`] so the
+/// open SSE streams end; otherwise the graceful drain waits on them.
+pub async fn serve(
+    router: Router,
+    listener: tokio::net::TcpListener,
+    shutdown: impl std::future::Future<Output = ()> + Send + 'static,
+) -> std::io::Result<()> {
+    axum::serve(listener, router)
+        .with_graceful_shutdown(shutdown)
+        .await
+}
+
+async fn serve_path(State(state): State<StaticState>, req: Request) -> Response {
     let is_head = match *req.method() {
         Method::GET => false,
         Method::HEAD => true,

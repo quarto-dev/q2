@@ -597,7 +597,7 @@ Commit at each clean phase boundary per `CLAUDE.md` § Git Workflow.
 
 ### Phase 3: the driver (`crates/quarto/src/commands/preview_static.rs`)
 
-- [ ] End-to-end test in `crates/quarto/tests/integration/preview_static_e2e.rs`
+- [x] End-to-end test in `crates/quarto/tests/integration/preview_static_e2e.rs`
   (spawns `CARGO_BIN_EXE_q2`, like `preview_cli.rs`; uses `reqwest`
   blocking, already a dev-dep of `quarto-preview`):
   1. copy `examples/websites/01-minimal` to a tempdir, run
@@ -616,13 +616,25 @@ Commit at each clean phase boundary per `CLAUDE.md` § Git Workflow.
   6. single file outside a project: `q2 preview --static doc.qmd`, `/`
      redirects to `/doc.html`, edit → reload.
   7. SIGINT exits 0 (unix-gated helper per `.claude/rules/cross-platform.md`).
-- [ ] Implement the loop: `render_once` → `build_router` → bind/print/
+- [x] Implement the loop: `render_once` → `build_router` → bind/print/
   open browser → `FileWatcher` → classify/coalesce → `spawn_blocking`
   re-render (holding `kernel_scope()` for the session) → broadcast.
-- [ ] Verify end-to-end by hand per `CLAUDE.md` § End-to-end verification:
+  (Startup order as built: boot render → watcher → signal handlers →
+  bind → print URL → serve → loop. The watcher and the handlers must
+  exist before the port opens: macOS FSEvents only reports changes
+  made after the stream starts, and a Ctrl-C the instant a client can
+  connect must find its handler. The listener is bound directly on the
+  requested port (0 = OS-assigned) and the real port printed, so there
+  is no probe-then-rebind race between concurrent previews. A file
+  inside a project boots a *project* render opened on that page, as Q1
+  does. `watch_policy::is_config_like` decides which mid-render `Full`
+  events are kept.)
+- [x] Verify end-to-end by hand per `CLAUDE.md` § End-to-end verification:
   `cargo run --bin q2 -- preview --static docs/` in a browser, edit a page,
   edit `_quarto.yml`, break a page, fix it; record the invocation and
-  observed output in this plan.
+  observed output in this plan. (2026-09-22, see § End-to-end verification
+  log. The `_quarto.yml` case is covered by the e2e test
+  `editing_the_project_config_rerenders_every_page` rather than by hand.)
 
 ### Phase 3b: lazy code execution (§ Lazy code execution)
 
@@ -676,4 +688,47 @@ Commit at each clean phase boundary per `CLAUDE.md` § Git Workflow.
 
 ## End-to-end verification log
 
-(Filled in during Phase 3.)
+**2026-09-22, Phase 3, debug build, real Chrome (chrome-devtools MCP).**
+
+Invocation, from the repo root:
+
+```
+./target/debug/q2 preview --static --no-browser --port 47321 docs/
+```
+
+stdout:
+
+```
+  q2 preview --static
+  → http://127.0.0.1:47321/
+  Serving /Users/cscheid/rooms/room-3/q2/docs/_site
+  Watching /Users/cscheid/rooms/room-3/q2/docs for changes (Ctrl-C to stop)
+```
+
+stderr ended with `Rendered 295 of 295 files to …/docs/_site — 33 warnings`
+(the same warnings `q2 render docs/` prints). `curl` of `/` → `200
+text/html; charset=utf-8`.
+
+Browser at `/guides/projects/scripts.html`, checked with `evaluate_script`:
+
+1. Page injected: `window.__q2PreviewStatic === true`, exactly one
+   `<script>` containing `EventSource("/__q2-preview/events")`, no badge
+   showing.
+2. Appended a paragraph `STATIC-PREVIEW-MARKER-ALPHA …` to
+   `docs/guides/projects/scripts.qmd`. Without touching the browser, the
+   page reloaded and the paragraph was the last node of `main` (the
+   accessibility snapshot listed it as `uid=1_281`).
+3. Overwrote the file with a broken front matter (`title: [unclosed`).
+   Within a few seconds the page showed the diagnostics panel — title
+   `Render failed (1 error)`, body starting `Error: [Q-0-99] Failed to
+   parse YAML frontmatter …` with the Ariadne snippet and **no** ANSI
+   escapes — while the page content underneath was still the marker
+   version (no reload on failure). Screenshot inspected.
+4. `git checkout -- docs/guides/projects/scripts.qmd`. The page reloaded
+   to the original content: panel gone, marker gone, no "Broken on
+   purpose" text.
+5. `kill -INT`: stdout printed `Received Ctrl-C, shutting down the static
+   preview` and the process exited; `git status` of `docs/` clean.
+
+The output was inspected at each step, not inferred from the absence of
+errors.

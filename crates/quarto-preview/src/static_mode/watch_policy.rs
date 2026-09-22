@@ -84,6 +84,11 @@ pub fn classify(path: &Path, ctx: &WatchContext) -> Action {
     let Ok(rel) = path.strip_prefix(&ctx.project_dir) else {
         return Action::Ignore;
     };
+    if rel.as_os_str().is_empty() {
+        // A directory-level event on the root itself (macOS FSEvents
+        // reports one when `_site/` or `.quarto/` is created).
+        return Action::Ignore;
+    }
     if ctx.output_dir != ctx.project_dir && path.starts_with(&ctx.output_dir) {
         return Action::Ignore;
     }
@@ -136,6 +141,26 @@ pub fn is_input_extension(path: &Path) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
         .is_some_and(|e| INPUT_EXTENSIONS.contains(&e))
+}
+
+/// Config the render reads regardless of which page is rendering:
+/// `_quarto*.yml` (and its profile / `.local` overlays), `_metadata.yml`,
+/// `_brand.yml`, `_variables.yml`, `.env*`, and anything under
+/// `_extensions/`. The driver never drops a change to one of these,
+/// even while a render is in flight; other `Full`-classified paths
+/// that appear mid-render are presumed to be the render's own writes.
+pub fn is_config_like(path: &Path) -> bool {
+    let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+        return false;
+    };
+    if ["_quarto", "_metadata", "_brand", "_variables", ".env"]
+        .iter()
+        .any(|prefix| name.starts_with(prefix))
+    {
+        return true;
+    }
+    path.components()
+        .any(|c| c.as_os_str().to_str() == Some("_extensions"))
 }
 
 #[cfg(test)]
@@ -289,6 +314,33 @@ mod tests {
         let c = ctx(&temp, true);
         let outside = c.project_dir.parent().unwrap().join("elsewhere.qmd");
         assert_eq!(classify(&outside, &c), Action::Ignore);
+    }
+
+    #[test]
+    fn the_project_root_itself_is_ignored() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let c = ctx(&temp, true);
+        assert_eq!(classify(&c.project_dir, &c), Action::Ignore);
+    }
+
+    #[test]
+    fn config_like_paths_are_recognised() {
+        for rel in [
+            "_quarto.yml",
+            "_quarto-preview.yml",
+            "_quarto.yml.local",
+            "posts/_metadata.yml",
+            "_brand.yml",
+            "_variables.yml",
+            ".env",
+            ".env.production",
+            "_extensions/acme/filter.lua",
+        ] {
+            assert!(is_config_like(Path::new(rel)), "{rel}");
+        }
+        for rel in ["styles.scss", "images/logo.png", "index.qmd", "data/x.csv"] {
+            assert!(!is_config_like(Path::new(rel)), "{rel}");
+        }
     }
 
     #[test]

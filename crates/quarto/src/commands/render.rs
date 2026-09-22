@@ -445,7 +445,7 @@ fn classify_no_inputs(
 /// (parsing-free, `path_exists`-only). `classify_no_inputs` uses it
 /// to gate the expensive directory walk that `ProjectContext::discover`
 /// would otherwise perform on a project-less cwd.
-fn find_project_root_upward(
+pub(crate) fn find_project_root_upward(
     start: &Path,
     runtime: &dyn SystemRuntime,
 ) -> std::result::Result<Option<PathBuf>, DispatchError> {
@@ -682,6 +682,10 @@ pub struct RenderReport {
     /// "Rendered N of M"). `None` for a single-document render, which
     /// prints no such line.
     pub total_files: Option<usize>,
+    /// Every input the project considers (its render-list-filtered
+    /// file list), whether or not this render touched it. A
+    /// single-document render lists just the document.
+    pub inputs: Vec<PathBuf>,
     /// The orchestrator's summary: outputs, failures, diagnostics.
     pub summary: quarto_core::project::orchestrator::ProjectRenderSummary,
     /// Config files whose bytes restore config-anchored source
@@ -752,16 +756,29 @@ pub enum RenderAbort {
     Other(anyhow::Error),
 }
 
-pub fn execute(args: RenderArgs) -> Result<()> {
-    let mut present = |report: &RenderReport| present_report(report, &args);
-    match render_once(&args, &mut present) {
-        Ok(report) => {
-            if report.exit_nonzero {
-                std::process::exit(1);
-            }
-            Ok(())
+impl RenderAbort {
+    /// What `q2 render` prints for this abort in text mode. Parse
+    /// diagnostics carry their own `Error: [Q-N-M]` header; the rest
+    /// get the `Error:` prefix `main` would have added.
+    pub fn user_message(&self) -> String {
+        match self {
+            RenderAbort::Dispatch(DispatchError::DiscoverParse(pe)) => pe.to_string(),
+            RenderAbort::Dispatch(e) => format!("Error: {e}"),
+            RenderAbort::Parse { error, .. } => error.to_string(),
+            RenderAbort::Scripts(pe) => pe.to_string(),
+            RenderAbort::Other(e) => format!("Error: {e:#}"),
         }
-        Err(RenderAbort::Dispatch(e)) => {
+    }
+}
+
+/// The CLI's handling of a [`RenderAbort`], unchanged from before the
+/// [`render_once`] split: the structured cases print themselves (text
+/// or `--json-errors`) and exit 1; the rest come back as the error for
+/// `main` to print. `q2 preview --static` uses it for its boot render,
+/// which fails exactly the way `q2 render` would.
+pub(crate) fn exit_with_abort(abort: RenderAbort, args: &RenderArgs) -> anyhow::Error {
+    match abort {
+        RenderAbort::Dispatch(e) => {
             // Under --json-errors, surface the structured DispatchError
             // as a JsonDiagnostic on stderr before exiting so machine
             // consumers can discriminate by code (Q-7-2..8).
@@ -778,9 +795,9 @@ pub fn execute(args: RenderArgs) -> Result<()> {
                 eprintln!("{pe}");
                 std::process::exit(1);
             }
-            Err(anyhow::anyhow!("{}", e))
+            anyhow::anyhow!("{}", e)
         }
-        Err(RenderAbort::Parse { error, input }) => {
+        RenderAbort::Parse { error, input } => {
             if args.json_errors {
                 emit_parse_error_json(&error, input.as_deref());
             } else {
@@ -788,8 +805,21 @@ pub fn execute(args: RenderArgs) -> Result<()> {
             }
             std::process::exit(1);
         }
-        Err(RenderAbort::Scripts(parse_error)) => exit_with_parse_error(parse_error, &args),
-        Err(RenderAbort::Other(e)) => Err(e),
+        RenderAbort::Scripts(parse_error) => exit_with_parse_error(parse_error, args),
+        RenderAbort::Other(e) => e,
+    }
+}
+
+pub fn execute(args: RenderArgs) -> Result<()> {
+    let mut present = |report: &RenderReport| present_report(report, &args);
+    match render_once(&args, &mut present) {
+        Ok(report) => {
+            if report.exit_nonzero {
+                std::process::exit(1);
+            }
+            Ok(())
+        }
+        Err(abort) => Err(exit_with_abort(abort, &args)),
     }
 }
 
@@ -798,7 +828,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
 /// counts clause. Runs from inside [`render_once`], after the pipeline
 /// and before post-render scripts, so stderr ordering is unchanged
 /// from before the split.
-fn present_report(report: &RenderReport, args: &RenderArgs) {
+pub(crate) fn present_report(report: &RenderReport, args: &RenderArgs) {
     print_render_diagnostics(&report.summary, args, &report.config_sources);
     match report.total_files {
         Some(total_files) => {
@@ -1043,11 +1073,12 @@ fn render_single_doc(
     let exit_nonzero = should_exit_nonzero(&summary, args.strict);
 
     let report = RenderReport {
-        target: RenderTarget::SingleDoc(input),
+        target: RenderTarget::SingleDoc(input.clone()),
         project_dir: project.dir.clone(),
         output_dir: project.output_dir.clone(),
         format_str,
         total_files: None,
+        inputs: vec![input],
         summary,
         config_sources,
         exit_nonzero,
@@ -1192,6 +1223,7 @@ fn render_project(
 
     let project_type = project_type_for(&project);
     let total_files = project.files.len();
+    let inputs: Vec<PathBuf> = project.files.iter().map(|f| f.input.clone()).collect();
 
     let mut pipeline = ProjectPipeline::new(
         &mut project,
@@ -1239,6 +1271,7 @@ fn render_project(
         output_dir: project.output_dir.clone(),
         format_str: format_str.to_string(),
         total_files: Some(total_files),
+        inputs,
         summary,
         config_sources,
         exit_nonzero,
@@ -1745,7 +1778,7 @@ fn format_render_diagnostics_text(
 /// SGR color codes) and OSC (`ESC ] … BEL` or `ESC ] … ESC \`, the OSC 8
 /// hyperlinks). Any other two-byte escape is dropped with its
 /// introducer. Text outside escapes is untouched.
-fn strip_ansi_escapes(s: &str) -> String {
+pub(crate) fn strip_ansi_escapes(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut chars = s.chars();
     while let Some(c) = chars.next() {
@@ -1812,7 +1845,7 @@ fn read_single_input_content(inputs: &[String]) -> Option<String> {
 ///
 /// Shared with the project pipeline's per-document format resolution so
 /// the single-file and project paths agree on how `format:` is read.
-fn detect_single_input_format(inputs: &[String]) -> Option<String> {
+pub(crate) fn detect_single_input_format(inputs: &[String]) -> Option<String> {
     let content = read_single_input_content(inputs)?;
     quarto_core::format::format_key_from_frontmatter(&content)
 }

@@ -429,3 +429,28 @@ async fn sse_never_replays_events_sent_before_subscription() {
         "{frame:?}"
     );
 }
+
+#[tokio::test]
+async fn sse_streams_end_when_the_hub_shuts_down() {
+    let temp = tempfile::TempDir::new().unwrap();
+    let (app, hub) = router(full_site(&temp), None);
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/__q2-preview/events")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let mut body = response.into_body();
+    hub.shutdown();
+    let end = tokio::time::timeout(Duration::from_secs(5), body.frame())
+        .await
+        .expect("stream ends within timeout");
+    assert!(
+        end.is_none(),
+        "stream must end (no more frames) after shutdown"
+    );
+}
