@@ -572,23 +572,28 @@ Commit at each clean phase boundary per `CLAUDE.md` § Git Workflow.
 
 ### Phase 2: static-mode library pieces (`crates/quarto-preview/src/static_mode/`)
 
-- [ ] `WatchFilter::All` in `crates/quarto-hub/src/watch.rs` + unit test.
-- [ ] `watch_policy.rs` with one unit test per rule in § Watch policy plus
-  the coalescing merge (`Full` absorbs, `Subset ∪ Subset`).
-- [ ] `reload.rs`: broadcast hub; test that a subscriber created after an
+- [x] `WatchFilter::All` in `crates/quarto-hub/src/watch.rs` + unit test.
+- [x] `watch_policy.rs` with one unit test per rule in § Watch policy plus
+  the coalescing merge (`Full` absorbs, `Subset ∪ Subset`). (As built,
+  `WatchContext` carries `outputs` — the last render's output paths — so
+  a render beside the sources never re-triggers itself; there is no
+  `config_files` set because every non-input, non-ignored path is `Full`
+  anyway.)
+- [x] `reload.rs`: broadcast hub; test that a subscriber created after an
   event does not receive it and one created before does; SSE handler
   formats `event:`/`data:` lines correctly (oneshot request, read the first
   frame).
-- [ ] `server.rs`: tests for every bullet in § Static server (`/` →
+- [x] `server.rs`: tests for every bullet in § Static server (`/` →
   index.html; `/` without index → redirect to default file; directory
   redirect; `404.html` served with injection; plain 404; traversal
   `/../Cargo.toml` → 404; `no-store` header; `.png` content type; HTML
   injection before `</body>`; no injection on `sec-fetch-mode: cors`;
   no injection on non-HTML; HEAD returns headers only).
-- [ ] `client.js` embedded via `include_str!`; a test asserts the served
+- [x] `client.js` embedded via `include_str!`; a test asserts the served
   HTML contains the `EventSource("/__q2-preview/events")` line so a rename
   of the endpoint cannot drift from the script.
-- [ ] Add `mime_guess` to `quarto-preview` (workspace dep).
+- [x] Add `mime_guess` to `quarto-preview` (plus `tokio-stream` for the
+  SSE stream and `percent-encoding` for path decoding; crate-local deps).
 
 ### Phase 3: the driver (`crates/quarto/src/commands/preview_static.rs`)
 
