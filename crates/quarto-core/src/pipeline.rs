@@ -1914,6 +1914,10 @@ const PANDOC_TRANSFORM_EXCLUDED: &[&str] = &[
     // shapes — HTML-only rendering of custom nodes and HTML decoration.
     "crossref-render",
     "mermaid-render",
+    // `.hep` plot → SVG artifact is an HTML-family answer (self-gated at
+    // runtime today; excluding here means the no-op never runs). A future
+    // PDF branch would need to leave this list and be reclassified.
+    "hephaestus-render",
     "code-block-render",
     "table-bootstrap-class",
     // B2: HTML scaffolding / website chrome producers with no Pandoc-writer
@@ -2136,6 +2140,13 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     // shim would have nothing left to route.
     ("crossref-render", Bucket::B4),
     ("mermaid-render", Bucket::B4),
+    // The `.hep` analog of `mermaid-render`: swaps a plot document's
+    // `Image` for a rendered SVG artifact under `figure-html/`. Self-gates
+    // to the HTML family ("SVG in an <img> is an HTML-family answer" — a
+    // PDF branch is a future, explicitly-anticipated change that would
+    // also require reclassification) and excluded at the Pandoc cut like
+    // every other B4 presentation transform.
+    ("hephaestus-render", Bucket::B4),
     ("code-block-render", Bucket::B4),
     ("table-bootstrap-class", Bucket::B4),
     // Swaps a `.hep` plot-document reference for a rendered SVG artifact —
