@@ -5,7 +5,8 @@
 `braid/bd-sl79jjiq-q2-preview-static-full` (Phases 0–5; commits 69fc263,
 193f9af, 5fd99a4, 0e67a44, 74b26e0, a02df5b). Verified in a real browser
 on `docs/` (§ End-to-end verification log) and with Jupyter-gated e2e
-tests. Not pushed; awaiting the user's go-ahead. Open questions Q1–Q6
+tests. PR #712 (https://github.com/quarto-dev/q2/pull/712), opened
+2026-09-22 to see CI. Open questions Q1–Q6
 were not answered explicitly and the proposed defaults were taken (see
 § Open questions); the seven § Deferred items are filed as strands.
 **Related:** bd-kw93 (the closed `q2 preview` epic; its plan is
