@@ -3,6 +3,7 @@ import { renderChildren, dataLocProps } from '../../framework';
 import type { DivBlock, NodeArgs } from '../../framework';
 import { IncrementalContext } from '../IncrementalContext';
 import { PreviewContext } from '../PreviewContext';
+import { useCommentAnchorRef } from '../commentAnchor';
 import { ASIDE, NOTES, SECTION } from '../quartoClasses';
 
 /**
@@ -28,6 +29,7 @@ function cssStringToObject(css: string): CSSProperties {
 
 export const Div = (args: NodeArgs<DivBlock>) => {
     const ctx = useContext(PreviewContext);
+    const anchorRef = useCommentAnchorRef(args.node);
     const poolId = (args.node as any).s as string | number | undefined;
 
     const [[id, classes, kvs]] = args.node.c;
@@ -73,13 +75,13 @@ export const Div = (args: NodeArgs<DivBlock>) => {
     // `q2 render` and `q2 preview`.
     const locProps = dataLocProps(args.node);
     if (classes.includes(SECTION)) {
-        return <section {...props} {...locProps}>{wrap(renderChildren(args))}</section>;
+        return <section ref={anchorRef} {...props} {...locProps}>{wrap(renderChildren(args))}</section>;
     }
     // Revealjs speaker notes / asides — mirror the native writer's
     // `.notes` / `.aside` → <aside>. reveal.css hides `aside.notes`;
     // quarto-reveal.css styles `aside.aside` (bottom of slide, muted).
     if (classes.includes(NOTES) || classes.includes(ASIDE)) {
-        return <aside {...props} {...locProps}>{wrap(renderChildren(args))}</aside>;
+        return <aside ref={anchorRef} {...props} {...locProps}>{wrap(renderChildren(args))}</aside>;
     }
     const resolved = ctx?.resolveSource ? ctx.resolveSource(args.node) : null;
     const isEditable = resolved != null && resolved.reachabilityClass !== 'Opaque' && poolId !== undefined;
@@ -87,5 +89,5 @@ export const Div = (args: NodeArgs<DivBlock>) => {
         props['data-block-pool-id'] = String(poolId);
         props.tabIndex = -1;
     }
-    return <div {...props} {...locProps}>{wrap(renderChildren(args))}</div>;
+    return <div ref={anchorRef} {...props} {...locProps}>{wrap(renderChildren(args))}</div>;
 };

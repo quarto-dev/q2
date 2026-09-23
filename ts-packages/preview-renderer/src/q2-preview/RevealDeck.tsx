@@ -313,7 +313,8 @@ export function RevealNavSync(props: {
 
 /**
  * Broadcasts reveal's slide scale to interested chrome (the comment
- * bubbles counter-scale themselves with it). Published as a window
+ * bubbles live outside the `.slides` transform and re-solve their layout
+ * on every publish — bd-q2wqj24c). Published as a window
  * CustomEvent to avoid coupling; fires once the deck is ready and on
  * every reveal re-layout (viewport resize), and resets to 1 when the
  * deck unmounts. Renders null; must sit inside `<Deck>` so

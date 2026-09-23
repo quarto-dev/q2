@@ -15,11 +15,15 @@ _quarto:
       noErrors: true
       ensureHtmlElements:
         - [
-            "body > header#title-block-header div.quarto-title-banner",
+            "header#title-block-header div.quarto-title-banner",
             "main.content.quarto-banner-title-block",
           ]
       ensureFileRegexMatches:
         - [
+            # Banner header first in the body, above #quarto-content (P5);
+            # pinned here rather than with a `body >` DOM selector, which the
+            # live preview (mounted into div#root) cannot satisfy (bd-xiz1a2go).
+            '<body[^>]*>\s*<header id="title-block-header"',
             "background-image: url\\(banner\\.png\\);",
             "background-size: cover;",
           ]

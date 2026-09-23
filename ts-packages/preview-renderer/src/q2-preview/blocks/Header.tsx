@@ -2,12 +2,14 @@ import { useContext } from 'react';
 import { renderChildren, dataLocProps } from '../../framework';
 import type { HeaderBlock, NodeArgs } from '../../framework';
 import { PreviewContext } from '../PreviewContext';
+import { useCommentAnchorRef } from '../commentAnchor';
 
 const headerTags = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] as const;
 
 export const Header = (args: NodeArgs<HeaderBlock>) => {
     const [level, [id, classes, kvs]] = args.node.c;
     const ctx = useContext(PreviewContext);
+    const anchorRef = useCommentAnchorRef(args.node);
     const poolId = (args.node as any).s as string | number | undefined;
     const resolved = ctx?.resolveSource ? ctx.resolveSource(args.node) : null;
 
@@ -28,5 +30,5 @@ export const Header = (args: NodeArgs<HeaderBlock>) => {
     }
     const Tag = headerTags[Math.min(Math.max(level, 1), 6) - 1];
 
-    return <Tag {...domProps} {...dataLocProps(args.node)}>{renderChildren(args)}</Tag>;
+    return <Tag ref={anchorRef} {...domProps} {...dataLocProps(args.node)}>{renderChildren(args)}</Tag>;
 };

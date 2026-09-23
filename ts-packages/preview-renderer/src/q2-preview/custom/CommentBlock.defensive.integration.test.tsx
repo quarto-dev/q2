@@ -16,7 +16,7 @@
 // @vitest-environment jsdom
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { render, cleanup } from '@testing-library/react';
+import { render, cleanup, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { Ast } from '../../framework';
 import { previewRegistry } from '../registry';
@@ -89,11 +89,15 @@ describe('CommentBlock defensiveness against malformed ResolvedSource', () => {
         };
         const { container } = mountWithResolveSource(wellFormed);
         expect(container.textContent).toContain('hello world');
-        // Chrome marker: the CommentWrapper's relative-positioned host div
-        // wraps the paragraph when the block is commentable.
+        // Chrome marker: hovering the (right half of the) paragraph shows
+        // the `+` bubble in the overlay layer. The paragraph itself stays
+        // a direct child of its container (bd-q2wqj24c).
         const para = container.querySelector('p');
         expect(para).not.toBeNull();
-        const host = para!.parentElement as HTMLElement;
-        expect(host.style.position).toBe('relative');
+        fireEvent.mouseMove(para!, { clientX: 10, clientY: 5 });
+        const bubble = document.body.querySelector('[data-q2-comment-layer] .q2-comment-bubble');
+        expect(bubble).not.toBeNull();
+        expect(bubble!.textContent).toBe('+');
+        expect(para!.parentElement).toBe(container.querySelector('main#quarto-document-content'));
     });
 });

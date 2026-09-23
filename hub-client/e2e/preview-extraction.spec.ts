@@ -47,8 +47,9 @@ test.describe('Preview Extraction', () => {
     const localId = await seedProjectInBrowser(page, indexDocId, serverUrl);
     await page.goto(`/#/p/${localId}/file/index.qmd`);
 
-    // Wait for render
-    await waitForPreviewRender(page);
+    // Wait for render. The fixture has no `format:` key, so hub-client
+    // mounts the q2-preview iframe (the default renderer, bd-kltzdhle).
+    await waitForPreviewRender(page, { kind: 'q2-preview' });
 
     // Extract and verify HTML (content has data-sid/data-loc spans)
     const html = await getPreviewHtml(page, 'index.qmd');
