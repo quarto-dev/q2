@@ -33,7 +33,7 @@ use tempfile::TempDir;
 use quarto_core::format::Format;
 use quarto_core::project::ProjectContext;
 use quarto_core::project::orchestrator::{ProjectPipeline, project_type_for};
-use quarto_core::render_to_file::{RenderToFileOptions, render_to_file};
+use quarto_core::render_to_file::{RenderToFileOptions, render_document_to_file, render_to_file};
 use quarto_core::stage::stages::{DEFAULT_KATEX_URL_BASE, DEFAULT_MATHJAX_URL};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
@@ -66,6 +66,59 @@ const MATHJAX_CONFIG_SENTINEL: &str = "window.MathJax";
 const KATEX_AUTO_RENDER_SENTINEL: &str = "renderMathInElement";
 
 // ── Single-doc tests ────────────────────────────────────────────────────
+
+/// `html-math-method` is an HTML option. A document that selects `mathml`
+/// and is rendered to docx (a common shape: the key sits in shared
+/// metadata of a project that renders both) must reach pandoc with its
+/// `Inline::Math` intact and come out with a native OMML equation,
+/// numbered by the vendored `crossref/equations.lua`. Before `MathMlStage`
+/// was gated on the format it converted the math to a `RawInline` on the
+/// Pandoc leg too, and that Lua filter crashed on it (pandoc exit 83).
+/// Requires a real `pandoc` on `PATH`, like every Pandoc-leg test.
+#[test]
+fn mathml_method_is_ignored_for_docx() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = temp.path().canonicalize().unwrap();
+    let qmd_path = project_dir.join("doc.qmd");
+    write_file(
+        &qmd_path,
+        "---\ntitle: Math\nhtml-math-method: mathml\n---\n\n$$\nE = mc^2\n$$ {#eq-e}\n\nSee @eq-e.\n",
+    );
+
+    let result = render_document_to_file(
+        &qmd_path,
+        "docx",
+        &RenderToFileOptions::default(),
+        None,
+        runtime_arc(),
+        None,
+        None,
+        Some("docx"),
+    )
+    .expect("docx render must succeed with html-math-method: mathml");
+    let bytes = std::fs::read(&result.output_path).unwrap();
+    let extraction = quarto_ooxml_extract::extract_docx(&bytes).expect("extract docx");
+
+    assert_eq!(
+        extraction.math.len(),
+        1,
+        "exactly one OMML equation expected; got {extraction}"
+    );
+    let math = &extraction.math[0];
+    assert!(
+        math.contains("mc") && math.contains("(1)"),
+        "the equation must be native OMML, numbered by the vendored Lua: {math:?}"
+    );
+    let body: String = extraction
+        .paragraphs
+        .iter()
+        .map(|p| p.text.as_str())
+        .collect();
+    assert!(
+        !body.contains("<math"),
+        "no MathML may leak into the docx body: {body}"
+    );
+}
 
 /// Default config + a doc with inline math → both the MathJax inline
 /// config block and the CDN loader land in the rendered HTML.

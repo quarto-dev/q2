@@ -35,6 +35,16 @@
 //!
 //! Excluded from the q2-preview pipeline, which renders `Inline::Math`
 //! client-side with KaTeX.
+//!
+//! **HTML-based formats only.** `html-math-method` is an HTML option, and
+//! it commonly sits in shared metadata of a project that also renders
+//! docx or typst. On the Pandoc leg the stage is a no-op (and `math-ml`
+//! is on `PANDOC_STAGE_EXCLUDED`), matching Quarto 1, which forwards the
+//! key to pandoc, whose non-HTML writers ignore it, and matching
+//! `EquationNumberStage`'s `Writer` encoding. Converting there would
+//! hand a `RawInline` to the vendored `crossref/equations.lua`, which
+//! crashes on it (pandoc exit 83, Q-20-3). No diagnostic is raised: the
+//! `html-` prefix is exactly what makes the key safe to share.
 
 use async_trait::async_trait;
 
@@ -46,6 +56,7 @@ use quarto_pandoc_types::attr::AttrSourceInfo;
 use quarto_pandoc_types::inline::{Inline, Math, MathType, RawInline, Span};
 
 use crate::ast_walk::for_each_inline_mut;
+use crate::format::Format;
 use crate::math_method::{MathMethod, MathMethodConfig};
 use crate::stage::{
     EventLevel, PipelineData, PipelineDataKind, PipelineError, PipelineStage, StageContext,
@@ -94,7 +105,8 @@ impl PipelineStage for MathMlStage {
             ));
         };
 
-        if MathMethodConfig::from_meta(&doc.ast.meta).method != MathMethod::MathMl {
+        let method = MathMethodConfig::from_meta(&doc.ast.meta).method;
+        if !applies_to(&ctx.format, &method) {
             return Ok(PipelineData::DocumentAst(doc));
         }
 
@@ -112,6 +124,14 @@ impl PipelineStage for MathMlStage {
 
         Ok(PipelineData::DocumentAst(doc))
     }
+}
+
+/// Whether the stage converts anything for a document rendered to
+/// `format` with `method`: only an HTML-based format that selected
+/// `html-math-method: mathml`. Every other format ignores the option (see
+/// the module docs).
+pub fn applies_to(format: &Format, method: &MathMethod) -> bool {
+    format.identifier.is_html_based() && *method == MathMethod::MathMl
 }
 
 /// What one pass over a document did.
@@ -368,5 +388,31 @@ mod tests {
         });
         seen.sort_unstable();
         assert_eq!(seen, vec!["c", "h", "n"]);
+    }
+
+    /// `html-math-method` is an HTML option: the stage runs for html and
+    /// revealjs with `mathml`, and for nothing else.
+    #[test]
+    fn applies_only_to_html_based_formats_with_mathml() {
+        use crate::format::FormatIdentifier;
+        let format = |identifier| Format {
+            identifier,
+            ..Format::html()
+        };
+        for id in [FormatIdentifier::Html, FormatIdentifier::Revealjs] {
+            assert!(applies_to(&format(id), &MathMethod::MathMl), "{id:?}");
+            assert!(!applies_to(&format(id), &MathMethod::Mathjax), "{id:?}");
+        }
+        for id in [
+            FormatIdentifier::Docx,
+            FormatIdentifier::Pptx,
+            FormatIdentifier::Typst,
+            FormatIdentifier::Pdf,
+        ] {
+            assert!(
+                !applies_to(&format(id), &MathMethod::MathMl),
+                "{id:?} must ignore html-math-method"
+            );
+        }
     }
 }

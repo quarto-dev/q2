@@ -526,6 +526,10 @@ const PANDOC_STAGE_EXCLUDED: &[&str] = &[
     "tabsets-js",
     "code-highlight",
     "math-js",
+    // `html-math-method` is an HTML option; MathMlStage is a no-op for
+    // every other format (see its module docs) and is excluded here so
+    // the Pandoc leg never hands a converted RawInline to pandoc.
+    "math-ml",
     "render-html-body",
     "apply-template",
 ];
@@ -5202,6 +5206,7 @@ mod tests {
                 "ast-transforms",
                 "user-filters-post",
                 "resource-report",
+                "equation-number",
                 "pandoc-write",
             ]
         );
