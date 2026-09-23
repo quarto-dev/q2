@@ -151,6 +151,41 @@ it never mentions `revealjs`, only phases.
 
 ---
 
+## The post-filter presentation slot (stages, not transforms)
+
+Every Finalization transform runs inside `AstTransformsStage`, which the
+HTML stage list places **between** `UserFiltersStage::pre` and
+`UserFiltersStage::post`. So a Finalization transform, however late, runs
+*before* any user post filter. That is the right place for most
+presentation work, but not for a step whose intermediate representation is
+part of the filter-author contract.
+
+The concrete case is equation numbering (bd-vlhi2zkj). `crossref-render`
+numbers an equation but does not choose how the number is typeset: `\tag{N}`
+is an `amsmath` command only MathJax and KaTeX read, so a MathML converter
+(or no engine at all) needs ` \qquad(N)` or a label outside the math. The
+transform records the number on the reserved span attribute
+`quarto-eq-number` and leaves the TeX alone; `EquationNumberStage` picks the
+encoding from the format and `html-math-method` and removes the attribute.
+Had that stage been a Finalization transform, a Lua post filter could never
+see the attribute: it would already be gone. As a stage after
+`UserFiltersStage::post` it can be read, rewritten or deleted from Lua
+(`el.attributes["quarto-eq-number"]`), which is the escape hatch we want.
+
+**Rule:** a format-specific step that consumes crossref output belongs in
+`Finalization` (the author rule above) **unless** its input is a reserved
+attribute or node that user post filters are meant to see; then it is a
+*stage* between `UserFiltersStage::post` and `RenderHtmlBodyStage`, next to
+`CodeHighlightStage` (AST-level annotation, same slot, same reason) and
+`EquationNumberStage`. Such a stage still satisfies the invariant's intent:
+it runs after every transform, so all crossref structure is final. It is
+not covered by the transform ordering test; document the placement at the
+`stages.push` site and cover it with an end-to-end test that runs a post
+filter against the attribute (see
+`crates/quarto-core/tests/integration/equation_numbering_pipeline.rs`).
+
+---
+
 ## The preview-pipeline shape contract (the anti-recurrence rule)
 
 The bug had a deeper enabler worth stating as its own rule.

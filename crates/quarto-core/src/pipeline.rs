@@ -64,11 +64,11 @@ use crate::stage::stages::PandocWriteStage;
 use crate::stage::stages::TypstCompileStage;
 use crate::stage::{
     ApplyTemplateStage, AstTransformsStage, AttributionGenerateStage, CompileThemeCssStage,
-    DocumentProfileStage, EngineExecutionStage, IncludeExpansionStage, IncludeResolveStage,
-    LanguageResolveStage, LinkResolutionStage, ListingItemInfoStage, LoadedSource, MathJsStage,
-    MetadataMergeStage, ParseDocumentStage, Pipeline, PipelineData, PipelineStage,
-    PreEngineSugaringStage, RenderHtmlBodyStage, ResourceReportStage, SourceConversionStage,
-    StageContext, UnwrapProfileStage, UserFiltersStage,
+    DocumentProfileStage, EngineExecutionStage, EquationNumberStage, IncludeExpansionStage,
+    IncludeResolveStage, LanguageResolveStage, LinkResolutionStage, ListingItemInfoStage,
+    LoadedSource, MathJsStage, MetadataMergeStage, ParseDocumentStage, Pipeline, PipelineData,
+    PipelineStage, PreEngineSugaringStage, RenderHtmlBodyStage, ResourceReportStage,
+    SourceConversionStage, StageContext, UnwrapProfileStage, UserFiltersStage,
 };
 use crate::transform::TransformPipeline;
 use crate::transforms::{
@@ -367,6 +367,15 @@ pub fn build_html_pipeline_stages_with_options(
     // bd-o8pr Phase 3: finalize the per-doc resource report
     // (defends against filters that mutate `meta.resources`).
     stages.push(Box::new(ResourceReportStage::new()));
+    // Equation-number encoding (bd-vlhi2zkj). Crossref-render left each
+    // numbered equation's number on the reserved `quarto-eq-number`
+    // attribute; this stage turns it into `\tag{N}` (MathJax/KaTeX),
+    // ` \qquad(N)` (no engine reads `\tag`) or a sibling label (MathML)
+    // and removes the attribute. It sits *after* `UserFiltersStage::post`
+    // on purpose: a Lua post filter may rewrite or delete the attribute,
+    // and this stage honours the result. A no-op in q2-preview, where
+    // crossref-render is excluded and `Equation.tsx` numbers client-side.
+    stages.push(Box::new(EquationNumberStage::new()));
     stages.push(Box::new(CodeHighlightStage::new()));
     // Math-mode (bd-w5ov): walk the post-transform AST and, when math
     // is present, populate `meta.math` with the engine's config + loader
@@ -2591,9 +2600,9 @@ mod tests {
         // Merged pipeline: SourceConversionStage at [0] (branch) plus two
         // stages main added — LanguageResolveStage after metadata-merge
         // (bd-llhlzd7p) and TabsetsJsStage in the JS block
-        // (bd-toc-tabset-titles-zq93gjvf) — so the length is 25, not the 24
-        // either side had alone.
-        assert_eq!(stages.len(), 25);
+        // (bd-toc-tabset-titles-zq93gjvf) — plus EquationNumberStage after
+        // the post filters (bd-vlhi2zkj): 26.
+        assert_eq!(stages.len(), 26);
         // Pre-parse file-claim/convert (Task 10).
         assert_eq!(stages[0].name(), "source-conversion");
         assert_eq!(stages[1].name(), "parse-document");
@@ -2642,22 +2651,27 @@ mod tests {
         assert_eq!(stages[19].name(), "user-filters-post");
         // bd-o8pr Phase 3: finalize per-doc resource report.
         assert_eq!(stages[20].name(), "resource-report");
-        assert_eq!(stages[21].name(), "code-highlight");
+        // Equation-number encoding (bd-vlhi2zkj) must follow
+        // user-filters-post: a Lua post filter may rewrite or delete the
+        // reserved `quarto-eq-number` attribute the stage consumes.
+        assert_eq!(stages[21].name(), "equation-number");
+        assert_eq!(stages[22].name(), "code-highlight");
         // Math-mode (bd-w5ov) walks the post-transform AST and
         // populates meta.math when math is present. Sits just before
         // render-html-body so any late-introduced math (sugar, user
-        // filters, crossref `\tag{N}`) is visible.
-        assert_eq!(stages[22].name(), "math-js");
-        assert_eq!(stages[23].name(), "render-html-body");
-        assert_eq!(stages[24].name(), "apply-template");
+        // filters, the `\tag{N}` equation-number encoding) is visible.
+        assert_eq!(stages[23].name(), "math-js");
+        assert_eq!(stages[24].name(), "render-html-body");
+        assert_eq!(stages[25].name(), "apply-template");
     }
 
     #[test]
     fn test_build_html_pipeline() {
         let pipeline = build_html_pipeline();
         // Merged pipeline carries both SourceConversionStage (Task 10, branch)
-        // LanguageResolveStage and TabsetsJsStage (main) → 25 stages.
-        assert_eq!(pipeline.len(), 25);
+        // LanguageResolveStage and TabsetsJsStage (main), plus
+        // EquationNumberStage (bd-vlhi2zkj) → 26 stages.
+        assert_eq!(pipeline.len(), 26);
     }
 
     #[test]
@@ -5177,6 +5191,10 @@ mod tests {
                 "ast-transforms",
                 "user-filters-post",
                 "resource-report",
+                // Survives on purpose: NumberEncoding::Writer is a no-op for
+                // every non-HTML format, and the stage still strips the
+                // quarto-eq-number attribute before pandoc sees it.
+                "equation-number",
                 "pandoc-write",
             ]
         );
