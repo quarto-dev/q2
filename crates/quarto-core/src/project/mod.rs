@@ -24,6 +24,7 @@
 //! - [`discovery`]: multi-file project file-list expansion.
 
 pub mod aliases;
+pub mod book;
 pub mod cache_key;
 pub mod dependency_graph;
 pub mod discovery;
@@ -64,14 +65,19 @@ use crate::render::BinaryDependencies;
 /// - **Website** projects default to `dir/_site` — this matches Q1
 ///   and means file discovery naturally excludes previously-rendered
 ///   output (see discovery rule §"excludes the output directory").
-/// - All other projects (default / book / manuscript) emit beside
-///   the project root. Phase-1 book / manuscript land in default
-///   since they fall back to `DefaultProjectType` (see
-///   `crate::project::orchestrator::project_type_for`). Their real
-///   defaults will be set when those project kinds are implemented.
+/// - **Book** projects default to `dir/_book` (Q1's `book.ts`
+///   `outputDir: "_book"`).
+/// - All other projects (default / manuscript) emit beside
+///   the project root. Phase-1 manuscript lands in default
+///   since it falls back to `DefaultProjectType` (see
+///   `crate::project::orchestrator::project_type_for`). Its real
+///   default will be set when that project kind is implemented.
 fn default_output_dir(dir: &Path, config: Option<&ProjectConfig>) -> PathBuf {
     match config.map(|c| c.project_kind) {
         Some(ProjectKind::Website) => dir.join("_site"),
+        // Book projects output to `_book/` (Q1's `book.ts` `outputDir`),
+        // distinct from website's `_site`.
+        Some(ProjectKind::Book) => dir.join("_book"),
         _ => dir.to_path_buf(),
     }
 }
@@ -342,8 +348,8 @@ impl TryFrom<&str> for ProjectKind {
 
 /// Advisory diagnostics about the parsed project kind (bd-ad7i1pc6).
 ///
-/// `book` and `manuscript` parse successfully but currently render
-/// with default-project behavior (`project_type_for` maps them to
+/// `manuscript` parses successfully but currently renders with
+/// default-project behavior (`project_type_for` maps it to
 /// `DefaultProjectType`). That surprise used to be silent; this
 /// returns the **Q-5-18** warning CLI drivers print next to the
 /// `underscore_typo_diagnostics` check. Span-less, mirroring Q-5-11:
@@ -354,7 +360,7 @@ pub fn project_kind_diagnostics(
     use quarto_error_reporting::DiagnosticMessageBuilder;
 
     let kind = config.project_kind;
-    if !matches!(kind, ProjectKind::Book | ProjectKind::Manuscript) {
+    if !matches!(kind, ProjectKind::Manuscript) {
         return Vec::new();
     }
     let config_name = config
@@ -1814,6 +1820,13 @@ pub struct ProjectContext {
     /// deliberately given a table" when deciding whether a fall-through is
     /// actionable. Empty when the project has no `engines:` key (default).
     pub tabled_engines: std::collections::HashSet<String>,
+
+    /// The book's ordered chapter/part/appendix render list (book-projects
+    /// epic P1), computed by [`book::BookProjectType`]'s `pre_render` from
+    /// `book.chapters`/`appendices`/`references`. `Some` only for
+    /// `ProjectKind::Book` projects after `pre_render` has run; P2/P4's
+    /// book render modes read it for merge order and numbering.
+    pub book_render_items: Option<Vec<book::BookRenderItem>>,
 }
 
 /// What [`ProjectContext::apply_project_profiles`] resolved: the
@@ -2080,6 +2093,7 @@ impl ProjectContext {
             extensions,
             binary_dependencies,
             tabled_engines,
+            book_render_items: None,
         })
     }
 
@@ -2124,6 +2138,7 @@ impl ProjectContext {
             // No project config for a single-file pseudo-project → no
             // `engines:` key to read.
             tabled_engines: std::collections::HashSet::new(),
+            book_render_items: None,
         })
     }
 

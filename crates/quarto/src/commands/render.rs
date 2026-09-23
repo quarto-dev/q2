@@ -1063,7 +1063,7 @@ fn render_single_doc(
     // destructors — the scope must close before any exit.
     let run_result = {
         let _kernel_scope = quarto_core::engine::jupyter::kernel_scope();
-        pollster::block_on(pipeline.run())
+        pollster::block_on(pipeline.run_with_book_support())
     };
     let mut summary = match run_result {
         Ok(s) => s,
@@ -1256,7 +1256,7 @@ fn render_project(
     // `std::process::exit` afterwards, which skips destructors.
     let run_result = {
         let _kernel_scope = quarto_core::engine::jupyter::kernel_scope();
-        pollster::block_on(pipeline.run())
+        pollster::block_on(pipeline.run_with_book_support())
     };
     let mut summary = match run_result {
         Ok(s) => s,

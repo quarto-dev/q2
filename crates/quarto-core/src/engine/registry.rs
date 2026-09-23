@@ -12,6 +12,7 @@
 //! registering only the engines available in each environment.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use quarto_error_reporting::DiagnosticMessage;
@@ -68,6 +69,13 @@ pub struct EngineRegistry {
     /// followed by Reorder hints, in declared order. Consumed by resolution's auto-promotion
     /// (candidate_engines). Empty for a built-ins-only registry.
     pub(crate) contribution_order: Vec<String>,
+    /// How many times [`shutdown_all`](Self::shutdown_all) has been
+    /// called on this registry. Observability hook for the
+    /// book-render teardown-parity regression test (P1 of the
+    /// book-projects epic): `run_with_book_support` must call it
+    /// exactly once on both its book and non-book branches, matching
+    /// `run()`.
+    shutdown_all_calls: Arc<AtomicUsize>,
 }
 
 impl EngineRegistry {
@@ -83,6 +91,7 @@ impl EngineRegistry {
             aliases: Arc::new(Mutex::new(HashMap::new())),
             diagnostics: Arc::new(Mutex::new(Vec::new())),
             contribution_order: Vec::new(),
+            shutdown_all_calls: Arc::new(AtomicUsize::new(0)),
         };
 
         // Always register markdown engine
@@ -105,6 +114,7 @@ impl EngineRegistry {
             aliases: Arc::new(Mutex::new(HashMap::new())),
             diagnostics: Arc::new(Mutex::new(Vec::new())),
             contribution_order: Vec::new(),
+            shutdown_all_calls: Arc::new(AtomicUsize::new(0)),
         }
     }
 
@@ -314,6 +324,7 @@ impl EngineRegistry {
             aliases: Arc::new(Mutex::new(HashMap::new())),
             diagnostics: Arc::new(Mutex::new(Vec::new())),
             contribution_order: Vec::new(),
+            shutdown_all_calls: Arc::new(AtomicUsize::new(0)),
         };
         // Start from the default engine set, then overlay replay engines.
         registry.register(Arc::new(MarkdownEngine::new()));
@@ -346,6 +357,7 @@ impl EngineRegistry {
     /// engines even if one errors, returning the first error encountered (the caller logs and
     /// continues — the host's Drop backstop reaps anything left). Idempotent.
     pub fn shutdown_all(&self) -> Result<(), ExecutionError> {
+        self.shutdown_all_calls.fetch_add(1, Ordering::Relaxed);
         let mut first_err = None;
         for engine in self.engines.values() {
             if let Err(e) = engine.shutdown()
@@ -358,6 +370,13 @@ impl EngineRegistry {
             Some(e) => Err(e),
             None => Ok(()),
         }
+    }
+
+    /// Number of [`shutdown_all`](Self::shutdown_all) calls so far.
+    /// Test hook for teardown parity between `run()` and
+    /// `run_with_book_support()`.
+    pub fn shutdown_all_call_count(&self) -> usize {
+        self.shutdown_all_calls.load(Ordering::Relaxed)
     }
 }
 

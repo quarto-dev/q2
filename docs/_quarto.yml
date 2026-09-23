@@ -307,6 +307,10 @@ website:
             - errors/project/Q-5-30.qmd
             - errors/project/Q-5-31.qmd
             - errors/project/Q-5-32.qmd
+            - errors/project/Q-5-33.qmd
+            - errors/project/Q-5-34.qmd
+            - errors/project/Q-5-35.qmd
+            - errors/project/Q-5-36.qmd
         - section: "include"
           contents:
             - errors/include/Q-17-1.qmd
