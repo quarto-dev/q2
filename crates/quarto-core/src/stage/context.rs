@@ -212,6 +212,15 @@ pub struct StageContext {
     /// registry for testing, set from `HtmlRenderConfig.engine_registry`).
     pub registry: Arc<EngineRegistry>,
 
+    /// Which documents may execute code (bd-sl79jjiq); threaded from
+    /// `RenderContext::execution_policy` by `run_pipeline`. Consulted by
+    /// `EngineExecutionStage` after engine resolution.
+    pub execution_policy: crate::engine::ExecutionPolicy,
+
+    /// Set by `EngineExecutionStage` when the policy excluded this
+    /// document although it resolved to a code-executing engine.
+    pub execution_skipped: bool,
+
     /// Set by `SourceConversionStage` (Task 10) when an engine claims a
     /// non-QMD file; consumed by `resolve_engines` (Task 9) to
     /// short-circuit to the single claiming engine. `None` for `.qmd`.
@@ -347,6 +356,8 @@ impl StageContext {
             engine_resolution: None,
             document_profile: None,
             registry,
+            execution_policy: crate::engine::ExecutionPolicy::default(),
+            execution_skipped: false,
             claimed_engine_name: None,
             resource_resolver: None,
             observer: Arc::new(NoopObserver),

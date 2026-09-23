@@ -345,6 +345,24 @@ impl PipelineStage for EngineExecutionStage {
             return Ok(PipelineData::DocumentAst(doc_ast));
         }
 
+        // bd-sl79jjiq: the render's `ExecutionPolicy` may exclude this
+        // document. Decided here, after the *pure* resolver and before
+        // Step 2 touches engine implementations, so a skipped document
+        // never loads an engine, never warns about a missing runtime,
+        // and never executes. Documents that resolve to markdown only
+        // have nothing to skip and are not marked.
+        if !ctx.execution_policy.allows(&ctx.document.input)
+            && resolution.sequence.iter().any(|e| !e.is_markdown())
+        {
+            ctx.execution_skipped = true;
+            trace_event!(
+                ctx,
+                EventLevel::Debug,
+                "execution policy excludes this document — code cells passed through inert"
+            );
+            return Ok(PipelineData::DocumentAst(doc_ast));
+        }
+
         // Resolve the execute.timeout tri-state from metadata.
         let execute_timeout = resolve_execute_timeout(&doc_ast.ast.meta);
 

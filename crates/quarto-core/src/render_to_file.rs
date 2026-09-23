@@ -111,6 +111,9 @@ pub struct RenderToFileOptions {
     /// than a synthetic context). Production callers should prefer
     /// `replay_captures`.
     pub engine_registry_override: Option<std::sync::Arc<crate::engine::EngineRegistry>>,
+    /// Which documents may execute code (bd-sl79jjiq). Default `All`;
+    /// `q2 preview --static` narrows it to the pages being viewed.
+    pub execution_policy: crate::engine::ExecutionPolicy,
 
     /// Resolved attribution mode (CLI override merged with YAML).
     /// `Some(AttributionMode::Git)` installs a [`GitBlameProvider`]
@@ -374,6 +377,10 @@ pub fn render_document_to_file(
     // must honor the same engine-registry override / replay-capture
     // seam as the HTML leg.
     ctx.engine_registry_override = config.engine_registry.clone();
+    // Same two-branch replication for the execution policy
+    // (bd-sl79jjiq): both legs run `EngineExecutionStage`.
+    config.execution_policy = options.execution_policy.clone();
+    ctx.execution_policy = options.execution_policy.clone();
 
     // Run the render pipeline
     let mut render_output = if render_format.identifier.is_native() {
@@ -401,6 +408,7 @@ pub fn render_document_to_file(
             html: String::new(),
             diagnostics,
             source_context: rendered.source_context,
+            execution_skipped: ctx.execution_skipped,
         }
     };
 
