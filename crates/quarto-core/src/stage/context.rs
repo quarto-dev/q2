@@ -304,7 +304,8 @@ impl StageContext {
         project: ProjectContext,
         document: DocumentInfo,
     ) -> Result<Self, PipelineError> {
-        let builtin_ext_path = builtin_extensions_path(runtime.as_ref());
+        let builtin_roots = all_builtin_extension_roots(runtime.as_ref());
+        let builtin_root_refs: Vec<&Path> = builtin_roots.iter().map(|p| p.as_path()).collect();
         let (extensions, mut startup_diagnostics) = crate::extension::discover_extensions(
             &document.input,
             if project.is_single_file {
@@ -312,7 +313,7 @@ impl StageContext {
             } else {
                 Some(&project.dir)
             },
-            builtin_ext_path.as_deref(),
+            &builtin_root_refs,
             runtime.as_ref(),
         );
 
@@ -959,4 +960,4 @@ fn load_project_variables(
     }
 }
 
-use crate::extension::builtin_extensions_path;
+use crate::extension::all_builtin_extension_roots;

@@ -62,6 +62,8 @@ fn get_runtime_arc() -> &'static Arc<WasmRuntime> {
 /// This makes the following available in the VFS:
 /// - Bootstrap 5.3.1 SCSS files under `/__quarto_resources__/bootstrap/scss/`
 /// - Built-in extensions under `/__quarto_resources__/extensions/`
+/// - Vendored extension-subtree payloads under
+///   `/__quarto_resources__/extension-subtrees/`
 fn populate_vfs_with_embedded_resources(runtime: &WasmRuntime) {
     // Bootstrap SCSS resources
     let prefix = format!("{}/bootstrap/scss", RESOURCE_PATH_PREFIX);
@@ -74,6 +76,12 @@ fn populate_vfs_with_embedded_resources(runtime: &WasmRuntime) {
 
     // Built-in extensions
     populate_builtin_extensions(runtime);
+
+    // Vendored extension-subtree payloads (bd-13gnwplg's extension-subtree
+    // infrastructure) — empty beyond a README placeholder until a real
+    // subtree is vendored, but the VFS path must exist so
+    // `builtin_extension_subtree_roots` finds it.
+    populate_extension_subtrees(runtime);
 }
 
 /// Populate the VFS with built-in extensions from the embedded directory.
@@ -84,6 +92,21 @@ fn populate_builtin_extensions(runtime: &WasmRuntime) {
 
     let prefix = format!("{}/extensions", RESOURCE_PATH_PREFIX);
     populate_dir_recursive(runtime, &EXTENSIONS_DIR, &prefix);
+}
+
+/// Populate the VFS with vendored extension-subtree payloads from the
+/// embedded directory. Mirrors [`populate_builtin_extensions`]; see
+/// `resources/extension-subtrees/README.md` for why the whole vendored
+/// repo isn't embedded here (only `_extensions/` per subtree would be,
+/// once a real subtree is registered).
+fn populate_extension_subtrees(runtime: &WasmRuntime) {
+    use include_dir::{Dir, include_dir};
+
+    static EXTENSION_SUBTREES_DIR: Dir =
+        include_dir!("$CARGO_MANIFEST_DIR/../../resources/extension-subtrees");
+
+    let prefix = format!("{}/extension-subtrees", RESOURCE_PATH_PREFIX);
+    populate_dir_recursive(runtime, &EXTENSION_SUBTREES_DIR, &prefix);
 }
 
 /// Recursively add all files from an embedded directory to the VFS.
