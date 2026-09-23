@@ -1,0 +1,36 @@
+/*-- scss:rules --*/
+
+// Layout for an equation number placed *outside* the math.
+//
+// `EquationNumberStage` (`crates/quarto-core/src/stage/stages/equation_number.rs`)
+// uses this encoding when the math renderer cannot typeset the number
+// itself — `html-math-method: mathml`, whose `<math>` has no room for
+// `\tag{N}` — and emits
+//
+//   <span id="eq-x" class="quarto-math-with-attribute quarto-eq-sibling-number">
+//     <span class="math display">…</span>
+//     <span class="quarto-eq-number">(1)</span>
+//   </span>
+//
+// The equation span becomes a row: the math is centered in the remaining
+// width and the label sits at the right edge, which is where MathJax and
+// KaTeX put a `\tag`. Shared by the HTML path (`compile_*` in
+// `quarto-sass/src/compile.rs`) and the revealjs path
+// (`assemble_reveal_scss` in `bundle.rs`), like `copy-code.scss`, so
+// both formats honor the encoding with one source of truth. Included as a
+// built-in user layer, so a theme can restyle `.quarto-eq-number`.
+
+.quarto-eq-sibling-number {
+  display: flex;
+  align-items: center;
+
+  > .math.display {
+    flex: 1 1 auto;
+    text-align: center;
+  }
+
+  > .quarto-eq-number {
+    flex: 0 0 auto;
+    margin-left: 1em;
+  }
+}

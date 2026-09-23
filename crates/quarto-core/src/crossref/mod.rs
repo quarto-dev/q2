@@ -83,6 +83,22 @@ pub const PROOF: &str = "Proof";
 /// `plain_data.order` (set by the indexer); the id prefix is always `"eq"`.
 pub const EQUATION: &str = "Equation";
 
+/// The reserved attribute `CrossrefRenderTransform` writes on a rendered
+/// equation span (`Span#eq-… .quarto-math-with-attribute`) to carry the
+/// equation's number, as text (`"1"`).
+///
+/// This is the hand-off between format-agnostic numbering and
+/// format-specific *encoding* of the number: crossref-render leaves the
+/// `Math` text byte-identical to the source and records the number here;
+/// `EquationNumberStage` (which runs after user post filters) turns it into
+/// `\tag{N}` for MathJax/KaTeX, ` \qquad(N)` for engines that only read
+/// math, or a sibling label for MathML, and removes the attribute. Between
+/// the two, a Lua post filter can read, rewrite or delete
+/// `el.attributes["quarto-eq-number"]` — the supported way to customize
+/// equation numbers from a filter. Plan:
+/// `claude-notes/plans/2026-09-21-equation-numbering-and-mathml.md`.
+pub const EQ_NUMBER_ATTR: &str = "quarto-eq-number";
+
 /// The `type_name` used on `CustomNode` for resolved crossref references in
 /// the front-end AST.
 ///

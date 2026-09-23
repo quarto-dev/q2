@@ -41,12 +41,14 @@ use quarto_pandoc_types::attr::{Attr, AttrSourceInfo, TargetSourceInfo};
 use quarto_pandoc_types::block::{Block, Blocks, Div, Figure};
 use quarto_pandoc_types::caption::Caption;
 use quarto_pandoc_types::custom::{CustomNode, Slot};
-use quarto_pandoc_types::inline::{Inline, Inlines, Link, Math, Span, Str};
+use quarto_pandoc_types::inline::{Inline, Inlines, Link, Span, Str};
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_source_map::SourceInfo;
 
 use crate::Result;
-use crate::crossref::{CROSSREF_RESOLVED_REF, EQUATION, FLOAT_REF_TARGET, PROOF, THEOREM};
+use crate::crossref::{
+    CROSSREF_RESOLVED_REF, EQ_NUMBER_ATTR, EQUATION, FLOAT_REF_TARGET, PROOF, THEOREM,
+};
 use crate::language::LanguageTerms;
 use crate::render::RenderContext;
 use crate::transform::{AstTransform, TransformPhase};
@@ -568,42 +570,33 @@ fn render_float_ref_target(node: CustomNode, fs: &mut FloatState) -> Block {
     // set when the crossref.custom float category lands.
     let is_float_kind = matches!(ref_type.as_str(), "fig" | "tbl" | "lst");
 
-    // bd-4m2n6qf1: a table float's caption is hoisted into the numbered
-    // caption this function surfaces separately (as a synthesized
-    // `<figcaption>` on the HTML float DOM path below, or as a trailing
-    // caption paragraph on the Pandoc-tail / non-HTML path) — but the
-    // Table node itself keeps its own `caption` field, so whichever
-    // writer runs would emit the text twice: once via its native
-    // `<table><caption>` (HTML) or docx/pptx table-caption rendering, and
-    // once via this transform's own numbered caption. Elide the Table's
-    // copy, matching Q1, which does the same at float-parse time
-    // (`quarto-pre/parsefiguredivs.lua`: `table.caption =
-    // pandoc.Caption{}` at L280 for the div-wrapped form, `el.caption.long
-    // = pandoc.Blocks({})` at L544 for the caption-attr form) —
-    // unconditionally, regardless of output format. Q2 builds the float
-    // DOM in this Finalization-phase transform, so the elision happens
-    // here, and must run on **both** branches below (`fs.html_float_dom`
-    // and not), not only the HTML one: a docx/pptx render duplicated the
-    // caption for exactly this reason before this fix (measured via
-    // `cargo run --bin q2 -- render <table-with-caption> --to docx`,
-    // which double-emitted "My Caption" — once correctly numbered, once
-    // as a bare native table-caption paragraph).
-    //
-    // Scoped to top-level Tables in the float content — the ones whose
-    // caption became the float caption. Skipped when the float is
-    // uncaptioned, since then nothing was hoisted and the Table's caption
-    // is the only copy of that text.
-    let mut content = content;
-    if is_float_kind && !is_uncaptioned {
-        for block in content.iter_mut() {
-            if let Block::Table(t) = block {
-                t.caption.long = None;
-                t.caption.short = None;
+    if fs.html_float_dom && is_float_kind {
+        let mut content = content;
+
+        // bd-4m2n6qf1: a table float's caption is hoisted into the
+        // synthesized `<figcaption>`, but the Table node keeps its own
+        // `caption` — so both writers would emit the text twice, as
+        // `<table><caption>` *and* as `<figcaption>`. Elide the Table's copy,
+        // matching Q1, which does the same at float-parse time
+        // (`quarto-pre/parsefiguredivs.lua`: `table.caption =
+        // pandoc.Caption{}` at L280 for the div-wrapped form,
+        // `el.caption.long = pandoc.Blocks({})` at L544 for the
+        // caption-attr form). Q2 builds the float DOM in this
+        // Finalization-phase transform, so the elision happens here.
+        //
+        // Scoped to top-level Tables in the float content — the ones whose
+        // caption became the float caption. Skipped when the float is
+        // uncaptioned, since then nothing was hoisted and the Table's
+        // caption is the only copy of that text.
+        if !is_uncaptioned {
+            for block in content.iter_mut() {
+                if let Block::Table(t) = block {
+                    t.caption.long = None;
+                    t.caption.short = None;
+                }
             }
         }
-    }
 
-    if fs.html_float_dom && is_float_kind {
         // Q1 `get_figure_attributes`: alignment/style/forwardable classes
         // come from the first contained image (never inside a table).
         let harvested = if !matches!(content.first(), Some(Block::Table(_))) {
@@ -1054,18 +1047,24 @@ fn render_proof(node: CustomNode, terms: Option<&LanguageTerms>) -> Block {
 }
 
 /// Convert an Equation custom node into a `Span(id=...)` containing the
-/// original `Math(DisplayMath, ...)` with `\tag{N}` appended for MathJax
-/// numbering.
+/// original `Math(DisplayMath, ...)`, byte-identical to the source, with
+/// the equation's number on the reserved [`EQ_NUMBER_ATTR`]
+/// (`quarto-eq-number`) attribute.
 ///
 /// Output shape:
 ///
 /// ```html
-/// <span id="eq-einstein">$$e = mc^2\tag{1}$$</span>
+/// <span id="eq-einstein" quarto-eq-number="1">$$e = mc^2$$</span>
 /// ```
 ///
-/// The `\tag{}` command tells MathJax/KaTeX to display the equation number
-/// in the right margin, matching Q1's approach. The Span wrapper carries
-/// the id for anchor linking from `@eq-xxx` references.
+/// How the number is *typeset* is not decided here: `\tag{N}` is an
+/// `amsmath` command only MathJax and KaTeX understand, while a converter
+/// that reads math alone needs ` \qquad(N)` or a label outside the math.
+/// That choice depends on the format and `html-math-method`, so it is made
+/// by `EquationNumberStage`, which runs after user post filters (so a Lua
+/// filter can rewrite or delete the attribute) and removes the attribute.
+/// The Span wrapper carries the id for anchor linking from `@eq-xxx`
+/// references.
 fn render_equation(node: CustomNode) -> Inline {
     let number = node
         .plain_data
@@ -1075,56 +1074,22 @@ fn render_equation(node: CustomNode) -> Inline {
         .map(|n| n as u32);
 
     let source_info = node.source_info.clone();
-    let attr = node.attr.clone();
+    let mut attr = node.attr.clone();
+    if let Some(n) = number {
+        attr.2.insert(EQ_NUMBER_ATTR.to_string(), n.to_string());
+    }
 
-    // Extract the math inline from the content slot.
+    // Extract the math inline from the content slot. The math text is
+    // passed through untouched (see the doc comment).
     let mut slots = node.slots;
-    let math_inline = match slots.remove("content") {
-        Some(Slot::Inlines(mut is)) if !is.is_empty() => is.remove(0),
-        _ => {
-            // Fallback: no content slot — return an empty Span.
-            return Inline::Span(Span {
-                attr,
-                content: vec![],
-                source_info,
-                attr_source: AttrSourceInfo::empty(),
-            });
-        }
-    };
-
-    // If we have a number, append \tag{N} to the math text.
-    let content_inline = if let Some(n) = number {
-        match math_inline {
-            Inline::Math(math) => {
-                let tag = format!("\\tag{{{}}}", n);
-                let tagged_text = format!("{}{}", math.text, tag);
-                // Extend the text mapping rather than drop it: the original
-                // text keeps its byte-for-byte provenance and the appended
-                // tag becomes a synthesized piece (zero source bytes) anchored
-                // at the end of the node, the same shape ProvenanceBuilder
-                // uses for content with no source byte (bd-ieldbghj).
-                let text_source = math.text_source.map(|ts| {
-                    let node_len = math.source_info.length();
-                    let synthesized =
-                        SourceInfo::substring(math.source_info.clone(), node_len, node_len);
-                    SourceInfo::concat(vec![(ts, math.text.len()), (synthesized, tag.len())])
-                });
-                Inline::Math(Math {
-                    math_type: math.math_type,
-                    text: tagged_text,
-                    source_info: math.source_info,
-                    text_source,
-                })
-            }
-            other => other,
-        }
-    } else {
-        math_inline
+    let content = match slots.remove("content") {
+        Some(Slot::Inlines(mut is)) if !is.is_empty() => vec![is.remove(0)],
+        _ => vec![],
     };
 
     Inline::Span(Span {
         attr,
-        content: vec![content_inline],
+        content,
         source_info,
         attr_source: AttrSourceInfo::empty(),
     })
@@ -1350,67 +1315,6 @@ mod tests {
         };
         let doc = DocumentInfo::from_path("/p/t.qmd");
         let format = Format::html();
-        let binaries = BinaryDependencies::new();
-        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
-        ctx.ref_type_registry = Some(RefTypeRegistry::builtin());
-
-        let mut ast = Pandoc {
-            meta: quarto_pandoc_types::ConfigValue::default(),
-            blocks,
-        };
-        TheoremSugarTransform::new()
-            .transform(&mut ast, &mut ctx)
-            .await
-            .unwrap();
-        ProofSugarTransform::new()
-            .transform(&mut ast, &mut ctx)
-            .await
-            .unwrap();
-        FloatRefTargetSugarTransform::new()
-            .transform(&mut ast, &mut ctx)
-            .await
-            .unwrap();
-        EquationLabelTransform::new()
-            .transform(&mut ast, &mut ctx)
-            .await
-            .unwrap();
-        CrossrefIndexTransform::new()
-            .transform(&mut ast, &mut ctx)
-            .await
-            .unwrap();
-        CrossrefResolveTransform::new()
-            .transform(&mut ast, &mut ctx)
-            .await
-            .unwrap();
-        CrossrefRenderTransform::new()
-            .transform(&mut ast, &mut ctx)
-            .await
-            .unwrap();
-        ast
-    }
-
-    /// Same pipeline as [`run_full`], parameterized on `format_str` (e.g.
-    /// `"docx"`) instead of hardcoding HTML — for tests that need
-    /// `FloatState::html_float_dom == false` (`Format::identifier
-    /// .is_html_based()` is false for every Pandoc-tail format).
-    /// Duplicated rather than adding a parameter to `run_full` itself,
-    /// which has 24 existing call sites all implicitly relying on HTML.
-    async fn run_full_pandoc(blocks: Vec<Block>, format_str: &str) -> Pandoc {
-        use crate::format::Format;
-        use crate::project::{DocumentInfo, ProjectConfig, ProjectContext};
-        use crate::render::{BinaryDependencies, RenderContext};
-        use std::path::PathBuf;
-        let project = ProjectContext {
-            dir: PathBuf::from("/p"),
-            config: ProjectConfig::default(),
-            is_single_file: true,
-            files: vec![],
-            output_dir: PathBuf::from("/p"),
-
-            ..Default::default()
-        };
-        let doc = DocumentInfo::from_path("/p/t.qmd");
-        let format = Format::from_format_string(format_str).unwrap();
         let binaries = BinaryDependencies::new();
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
         ctx.ref_type_registry = Some(RefTypeRegistry::builtin());
@@ -1823,88 +1727,6 @@ mod tests {
             "the table's own caption must be cleared once hoisted into the \
              figcaption, else it renders twice: {:?}",
             t.caption.long
-        );
-    }
-
-    /// Same fixture as [`table_float_clears_the_tables_own_caption`], but
-    /// through the **non-HTML** (`html_float_dom == false`) branch —
-    /// `render_float_ref_target`'s `else` arm, which every Pandoc-tail
-    /// format (docx/pptx, and non-HTML writers generally) takes. Before
-    /// this fix, the caption-elision only ran inside the
-    /// `fs.html_float_dom && is_float_kind` branch, so a docx/pptx render
-    /// duplicated the caption: once via the Table's own (never-cleared)
-    /// `caption` field, once via this transform's separately-appended
-    /// numbered-caption paragraph. Measured via `cargo run --bin q2 --
-    /// render <table-with-caption> --to docx`, which produced two "My
-    /// Caption" paragraphs in the output `word/document.xml`.
-    #[tokio::test]
-    async fn table_float_clears_the_tables_own_caption_on_the_pandoc_tail_too() {
-        use quarto_pandoc_types::table::{Table, TableBody, TableFoot, TableHead};
-        let table = Block::Table(Table {
-            attr: (String::new(), Vec::new(), LinkedHashMap::new()),
-            caption: Caption {
-                short: None,
-                long: Some(vec![para("Cap")]),
-                source_info: si(),
-            },
-            colspec: vec![],
-            head: TableHead {
-                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
-                rows: vec![],
-                source_info: si(),
-                attr_source: AttrSourceInfo::empty(),
-            },
-            bodies: vec![TableBody {
-                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
-                rowhead_columns: 0,
-                head: vec![],
-                body: vec![],
-                source_info: si(),
-                attr_source: AttrSourceInfo::empty(),
-            }],
-            foot: TableFoot {
-                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
-                rows: vec![],
-                source_info: si(),
-                attr_source: AttrSourceInfo::empty(),
-            },
-            source_info: si(),
-            attr_source: AttrSourceInfo::empty(),
-        });
-        let blocks = vec![Block::Div(Div {
-            attr: attr_id("tbl-one"),
-            content: vec![table],
-            source_info: si(),
-            attr_source: AttrSourceInfo::empty(),
-        })];
-        let ast = run_full_pandoc(blocks, "docx").await;
-
-        let Block::Div(outer) = &ast.blocks[0] else {
-            panic!(
-                "expected the non-HTML branch's Div wrapper, got {:?}",
-                ast.blocks[0]
-            );
-        };
-        let Block::Table(t) = &outer.content[0] else {
-            panic!(
-                "expected the table as the div's first block, got {:?}",
-                outer.content[0]
-            );
-        };
-        assert!(
-            t.caption.long.as_ref().is_none_or(|b| b.is_empty()),
-            "the table's own caption must be cleared on the non-HTML branch too, \
-             else it renders twice via pandoc's own table-caption writer: {:?}",
-            t.caption.long
-        );
-
-        // The numbered caption must still be present somewhere in the
-        // div's content (as the trailing paragraph this branch appends) —
-        // clearing the Table's copy must not also drop the only copy.
-        let rest_text = format!("{:?}", &outer.content[1..]);
-        assert!(
-            rest_text.contains("Cap"),
-            "expected the numbered caption paragraph to survive as a sibling block: {rest_text}"
         );
     }
 
@@ -2625,36 +2447,75 @@ mod tests {
         })
     }
 
+    /// After rendering, the equation CustomNode becomes a Span carrying
+    /// the number as the reserved `quarto-eq-number` attribute. The math
+    /// text is left byte-identical: the number's *encoding* (`\tag{N}`,
+    /// `\qquad(N)`, a sibling label) is a format decision that
+    /// `EquationNumberStage` makes later, after user post filters.
     #[tokio::test]
-    async fn equation_renders_to_span_with_tag() {
+    async fn equation_renders_to_span_with_number_attribute() {
         let ast = run_full(vec![eq_para("eq-einstein", "e = mc^2")]).await;
         let Block::Paragraph(p) = &ast.blocks[0] else {
             panic!("expected Paragraph, got {:?}", ast.blocks[0]);
         };
-        // After rendering, the equation CustomNode becomes a Span with the
-        // original DisplayMath but with \tag{1} appended.
         let Inline::Span(span) = &p.content[0] else {
             panic!("expected Span, got {:?}", p.content[0]);
         };
         assert_eq!(span.attr.0, "eq-einstein");
+        assert_eq!(
+            span.attr.2.get(EQ_NUMBER_ATTR).map(String::as_str),
+            Some("1"),
+            "the number rides on the reserved attribute; attrs: {:?}",
+            span.attr.2
+        );
         assert_eq!(span.content.len(), 1);
         let Inline::Math(math) = &span.content[0] else {
             panic!("expected Math, got {:?}", span.content[0]);
         };
         assert_eq!(math.math_type, MathType::DisplayMath);
-        assert!(
-            math.text.contains("\\tag{1}"),
-            "expected \\tag{{1}} in math text, got: {}",
-            math.text
-        );
+        assert_eq!(math.text, "e = mc^2", "the math text is untouched");
     }
 
-    /// The `\tag{N}` append must not throw away the reader's byte-for-byte
-    /// mapping of the math text (bd-ieldbghj): the original text keeps its
-    /// provenance and the tag becomes a synthesized, zero-source piece.
+    /// A custom node without an `order` (nothing numbered it) renders to
+    /// a span with no `quarto-eq-number` attribute and untouched math.
+    #[test]
+    fn unnumbered_equation_gets_no_attribute() {
+        let mut slots = LinkedHashMap::new();
+        slots.insert(
+            "content".to_string(),
+            Slot::Inlines(vec![Inline::Math(Math {
+                math_type: MathType::DisplayMath,
+                text: "x".to_string(),
+                source_info: si(),
+                text_source: None,
+            })]),
+        );
+        let node = CustomNode {
+            type_name: EQUATION.to_string(),
+            slots,
+            plain_data: serde_json::json!({}),
+            attr: (
+                "eq-plain".to_string(),
+                vec!["quarto-math-with-attribute".to_string()],
+                LinkedHashMap::new(),
+            ),
+            source_info: si(),
+        };
+        let Inline::Span(span) = render_equation(node) else {
+            panic!("expected Span");
+        };
+        assert!(!span.attr.2.contains_key(EQ_NUMBER_ATTR));
+        let Inline::Math(math) = &span.content[0] else {
+            panic!("expected Math");
+        };
+        assert_eq!(math.text, "x");
+    }
+
+    /// The math text and its byte-for-byte mapping (bd-ieldbghj) pass
+    /// through untouched; the encoding that appends to the text (and
+    /// extends the mapping) is `EquationNumberStage`'s, tested there.
     #[tokio::test]
-    async fn equation_tag_extends_text_source_instead_of_dropping_it() {
-        // Source: `$$e = mc^2$$` at file offsets 0..12; text at 2..10.
+    async fn equation_keeps_text_and_text_source_untouched() {
         let node = SourceInfo::original(FileId(0), 0, 12);
         let text = SourceInfo::original(FileId(0), 2, 10);
         let block = Block::Paragraph(Paragraph {
@@ -2668,7 +2529,7 @@ mod tests {
                     math_type: MathType::DisplayMath,
                     text: "e = mc^2".to_string(),
                     source_info: node.clone(),
-                    text_source: Some(text),
+                    text_source: Some(text.clone()),
                 })],
                 source_info: node.clone(),
                 attr_source: AttrSourceInfo::empty(),
@@ -2682,25 +2543,15 @@ mod tests {
         let Inline::Span(span) = &p.content[0] else {
             panic!("expected Span, got {:?}", p.content[0]);
         };
+        assert_eq!(
+            span.attr.2.get(EQ_NUMBER_ATTR).map(String::as_str),
+            Some("1")
+        );
         let Inline::Math(math) = &span.content[0] else {
             panic!("expected Math, got {:?}", span.content[0]);
         };
-        assert_eq!(math.text, "e = mc^2\\tag{1}");
-        let ts = math
-            .text_source
-            .as_ref()
-            .expect("tagging keeps the text mapping");
-        assert_eq!(ts.length(), math.text.len());
-        let SourceInfo::Concat { pieces } = ts else {
-            panic!("expected a Concat of [original text, synthesized tag], got {ts:?}");
-        };
-        assert_eq!(pieces.len(), 2);
-        assert_eq!(pieces[0].length, "e = mc^2".len());
-        assert_eq!(pieces[0].source_info.preimage_in(FileId(0)), Some(2..10));
-        assert_eq!(pieces[1].offset_in_concat, "e = mc^2".len());
-        assert_eq!(pieces[1].length, "\\tag{1}".len());
-        // The tag has no source bytes: a zero-width piece at the node's end.
-        assert_eq!(pieces[1].source_info.preimage_in(FileId(0)), Some(12..12));
+        assert_eq!(math.text, "e = mc^2");
+        assert_eq!(math.text_source.as_ref(), Some(&text));
     }
 
     #[tokio::test]
@@ -2744,12 +2595,15 @@ mod tests {
             let Inline::Math(math) = &span.content[0] else {
                 panic!();
             };
-            let expected_tag = format!("\\tag{{{}}}", i + 1);
+            assert_eq!(
+                span.attr.2.get(EQ_NUMBER_ATTR).map(String::as_str),
+                Some((i + 1).to_string().as_str()),
+                "eq #{i}: attrs {:?}",
+                span.attr.2
+            );
             assert!(
-                math.text.contains(&expected_tag),
-                "eq #{}: expected {} in '{}' ",
-                i,
-                expected_tag,
+                !math.text.contains("\\tag"),
+                "eq #{i}: crossref-render must not encode the number; got '{}'",
                 math.text
             );
         }

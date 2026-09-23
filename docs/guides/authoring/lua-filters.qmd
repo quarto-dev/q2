@@ -198,6 +198,31 @@ function Meta(meta)
 end
 ```
 
+## Equation numbers: the `quarto-eq-number` attribute
+
+A labelled display equation (`$$…$$ {#eq-name}`) reaches your filters as a
+`Span` whose `identifier` is the label and whose `attributes` carry the
+equation's number under the reserved key `quarto-eq-number`. Quarto writes
+the number into the page only after your filters have run, in the form the
+selected math renderer understands (`\tag{N}` for MathJax and KaTeX, for
+example). So a filter can change what is displayed by editing the
+attribute, without touching the TeX:
+
+``` lua
+function Span(el)
+  local n = el.attributes["quarto-eq-number"]
+  if n then
+    el.attributes["quarto-eq-number"] = "S" .. n   -- shows as (S1), (S2), …
+    return el
+  end
+end
+```
+
+Delete the attribute (`el.attributes["quarto-eq-number"] = nil`) to leave
+an equation unnumbered. The attribute exists only once cross-references
+have been resolved, so list the filter *after* the `quarto` entry in
+`filters:`; a filter listed before it runs too early to see the number.
+
 ## Attaching scripts and stylesheets: `quarto.doc.add_html_dependency`
 
 A filter that needs JavaScript or CSS in the rendered page registers an

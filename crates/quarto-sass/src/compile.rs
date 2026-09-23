@@ -75,8 +75,8 @@ pub fn assemble_theme_scss(
     context: &ThemeContext<'_>,
 ) -> Result<(String, Vec<PathBuf>), SassError> {
     use crate::bundle::{
-        load_copy_code_layer, load_embed_example_layer, load_highlight_layer, load_listing_layer,
-        load_title_block_layer,
+        load_copy_code_layer, load_embed_example_layer, load_equation_number_layer,
+        load_highlight_layer, load_listing_layer, load_title_block_layer,
     };
 
     // Process theme specs into layers
@@ -90,6 +90,7 @@ pub fn assemble_theme_scss(
         load_highlight_layer(config.highlight_style.as_ref().map(|h| h.name.as_str()))?;
     let embed_example_layer = load_embed_example_layer()?;
     let copy_code_layer = load_copy_code_layer()?;
+    let equation_number_layer = load_equation_number_layer()?;
     let listing_layer = load_listing_layer()?;
     let mut user_layers = Vec::new();
     // `title-block-style: plain|none` drops the title-block layer
@@ -101,6 +102,7 @@ pub fn assemble_theme_scss(
         highlight_layer,
         embed_example_layer,
         copy_code_layer,
+        equation_number_layer,
         listing_layer,
     ]);
     user_layers.extend(result.layers);
@@ -209,8 +211,8 @@ pub fn compile_with_doc_vars(
     doc_vars: &crate::SassLayer,
 ) -> Result<SassOutput, SassError> {
     use crate::bundle::{
-        load_copy_code_layer, load_embed_example_layer, load_highlight_layer, load_listing_layer,
-        load_title_block_layer,
+        load_copy_code_layer, load_embed_example_layer, load_equation_number_layer,
+        load_highlight_layer, load_listing_layer, load_title_block_layer,
     };
     use crate::themes::process_theme_specs;
     use quarto_system_runtime::sass_native::compile_scss_with_embedded;
@@ -246,6 +248,7 @@ pub fn compile_with_doc_vars(
         load_highlight_layer(config.highlight_style.as_ref().map(|h| h.name.as_str()))?;
     let embed_example_layer = load_embed_example_layer()?;
     let copy_code_layer = load_copy_code_layer()?;
+    let equation_number_layer = load_equation_number_layer()?;
     let listing_layer = load_listing_layer()?;
     let mut user_layers = Vec::new();
     if config.title_block_layer {
@@ -255,6 +258,7 @@ pub fn compile_with_doc_vars(
         highlight_layer,
         embed_example_layer,
         copy_code_layer,
+        equation_number_layer,
         listing_layer,
     ]);
 
@@ -370,8 +374,8 @@ pub fn compile_default_css(
     minified: bool,
 ) -> Result<String, SassError> {
     use crate::bundle::{
-        load_copy_code_layer, load_embed_example_layer, load_highlight_layer, load_listing_layer,
-        load_title_block_layer,
+        load_copy_code_layer, load_embed_example_layer, load_equation_number_layer,
+        load_highlight_layer, load_listing_layer, load_title_block_layer,
     };
     use quarto_system_runtime::sass_native::compile_scss_with_embedded;
 
@@ -386,6 +390,7 @@ pub fn compile_default_css(
     let highlight_layer = load_highlight_layer(None)?;
     let embed_example_layer = load_embed_example_layer()?;
     let copy_code_layer = load_copy_code_layer()?;
+    let equation_number_layer = load_equation_number_layer()?;
     let listing_layer = load_listing_layer()?;
 
     // Assemble SCSS: Bootstrap + Quarto + title block + highlight +
@@ -395,6 +400,7 @@ pub fn compile_default_css(
         highlight_layer,
         embed_example_layer,
         copy_code_layer,
+        equation_number_layer,
         listing_layer,
     ])?;
 
@@ -516,8 +522,8 @@ pub async fn compile_with_doc_vars(
     doc_vars: &crate::SassLayer,
 ) -> Result<SassOutput, SassError> {
     use crate::bundle::{
-        load_copy_code_layer, load_embed_example_layer, load_highlight_layer, load_listing_layer,
-        load_title_block_layer,
+        load_copy_code_layer, load_embed_example_layer, load_equation_number_layer,
+        load_highlight_layer, load_listing_layer, load_title_block_layer,
     };
     use crate::themes::process_theme_specs;
 
@@ -544,6 +550,7 @@ pub async fn compile_with_doc_vars(
         load_highlight_layer(config.highlight_style.as_ref().map(|h| h.name.as_str()))?;
     let embed_example_layer = load_embed_example_layer()?;
     let copy_code_layer = load_copy_code_layer()?;
+    let equation_number_layer = load_equation_number_layer()?;
     let listing_layer = load_listing_layer()?;
     let mut user_layers = Vec::new();
     if config.title_block_layer {
@@ -553,6 +560,7 @@ pub async fn compile_with_doc_vars(
         highlight_layer,
         embed_example_layer,
         copy_code_layer,
+        equation_number_layer,
         listing_layer,
     ]);
 
@@ -622,8 +630,8 @@ pub async fn compile_default_css(
     minified: bool,
 ) -> Result<String, SassError> {
     use crate::bundle::{
-        load_copy_code_layer, load_embed_example_layer, load_highlight_layer, load_listing_layer,
-        load_title_block_layer,
+        load_copy_code_layer, load_embed_example_layer, load_equation_number_layer,
+        load_highlight_layer, load_listing_layer, load_title_block_layer,
     };
 
     // Return cached version if available (only for minified, matching
@@ -644,6 +652,7 @@ pub async fn compile_default_css(
     let highlight_layer = load_highlight_layer(None)?;
     let embed_example_layer = load_embed_example_layer()?;
     let copy_code_layer = load_copy_code_layer()?;
+    let equation_number_layer = load_equation_number_layer()?;
     let listing_layer = load_listing_layer()?;
 
     // Assemble SCSS: Bootstrap + Quarto + title block + highlight +
@@ -653,6 +662,7 @@ pub async fn compile_default_css(
         highlight_layer,
         embed_example_layer,
         copy_code_layer,
+        equation_number_layer,
         listing_layer,
     ])?;
 
@@ -1211,6 +1221,21 @@ mod tests {
             "Should contain the .code-copy-outer-scaffold positioning context"
         );
 
+        // Should have the equation-number layout from the shared
+        // equation-number.scss layer (bd-vlhi2zkj): the `Sibling` encoding
+        // of `EquationNumberStage` (html-math-method: mathml) puts the
+        // number in a `span.quarto-eq-number` after the math, and this
+        // rule lays the two out as one row.
+        assert!(
+            css.contains(".quarto-eq-sibling-number"),
+            "Should contain the .quarto-eq-sibling-number row rule from equation-number.scss"
+        );
+        assert!(
+            css.contains(".quarto-eq-sibling-number>.quarto-eq-number")
+                || css.contains(".quarto-eq-sibling-number > .quarto-eq-number"),
+            "Should contain the .quarto-eq-number label rule from equation-number.scss"
+        );
+
         // Should have Quarto page-footer layout rules (ported from Q1).
         assert!(
             css.contains(".nav-footer"),
@@ -1281,6 +1306,20 @@ mod tests {
         assert!(
             css.contains(".code-copy-outer-scaffold"),
             "reveal theme CSS must contain the .code-copy-outer-scaffold scaffold rule"
+        );
+    }
+
+    /// `format: revealjs` is HTML-based, so `EquationNumberStage` applies
+    /// the same `Sibling` encoding under `html-math-method: mathml`; the
+    /// deck must bundle `equation-number.scss` like the HTML path does
+    /// (bd-vlhi2zkj), or the label lands unstyled after the math.
+    #[test]
+    fn test_compile_reveal_theme_includes_equation_number_rules() {
+        let runtime = NativeRuntime::new();
+        let css = compile_reveal_theme_css(&runtime, true, &[], &[]).unwrap();
+        assert!(
+            css.contains(".quarto-eq-sibling-number"),
+            "reveal theme CSS must contain .quarto-eq-sibling-number from equation-number.scss"
         );
     }
 
