@@ -113,6 +113,7 @@ pub mod shortcode_config_pipeline;
 pub mod shortcode_text_contexts;
 pub mod sidebar_pipeline;
 pub mod synth_engines_e2e;
+pub mod synth_extension_subtree_e2e;
 pub mod tabset_pipeline;
 pub mod theme_light_dark;
 pub mod title_block_pipeline;

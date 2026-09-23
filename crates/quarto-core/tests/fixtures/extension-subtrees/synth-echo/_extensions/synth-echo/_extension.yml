@@ -1,0 +1,13 @@
+title: Synth Echo (subtree fixture)
+author: Test
+version: 0.1.0
+contributes:
+  engines:
+    - path: dist/synth-echo.js
+      name: synth-echo
+      claims:
+        synthsub:
+          kind: primary
+          priority: 1
+      file-extensions: []
+      claims-files: []
