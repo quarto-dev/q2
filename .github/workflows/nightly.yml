@@ -146,6 +146,11 @@ jobs:
     env:
       EXPECTED: ${{ needs.gate.outputs.version }}
       RAW_BASE: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}
+      # The installers' release lookup reads the GitHub API. Anonymous,
+      # that shares a 60/hour budget per runner IP, which GitHub's macOS
+      # fleet routinely exhausts (bd-n9yh30c8); with the job token it
+      # counts against the repo's own 1000/hour instead.
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Install minisign (the installer requires it)
         if: runner.os != 'Windows'

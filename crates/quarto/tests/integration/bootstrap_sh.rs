@@ -127,6 +127,17 @@ impl Sandbox {
         // a shimmed-platform install can still verify signatures.
         format!("{}:{}", shim.display(), default_sandbox_path())
     }
+
+    /// Replace `sleep` (in the same shim dir `uname_shim` puts first on
+    /// PATH) with `body`, so the nightly lookup's retry backoff costs no
+    /// wall time and a test can change the fake API between attempts.
+    fn sleep_shim(&self, body: &str) {
+        let shim = self.tmp.path().join("shim");
+        fs::create_dir_all(&shim).unwrap();
+        let sleep = shim.join("sleep");
+        fs::write(&sleep, format!("#!/bin/sh\n{body}\n")).unwrap();
+        fs::set_permissions(&sleep, fs::Permissions::from_mode(0o755)).unwrap();
+    }
 }
 
 fn stdout(out: &Output) -> String {
@@ -1096,6 +1107,7 @@ fn make_nightly_fixture(dir: &Path, platforms: &[&str]) -> NightlyFixture {
 /// Run the installer in nightly mode against `fx` on the shimmed platform.
 fn run_nightly(sb: &Sandbox, fx: &NightlyFixture, os: &str, arch: &str, extra: &[&str]) -> Output {
     let path = sb.uname_shim(os, arch);
+    sb.sleep_shim("exit 0");
     let mut args = vec!["--nightly", "--minisign-pubkey", &fx.pub_key, "--dest"];
     let dest = dest_arg(sb);
     args.push(&dest);
@@ -1223,14 +1235,66 @@ fn nightly_dies_cleanly_when_no_nightly_release_exists() {
     let empty_api = sb.tmp.path().join("empty-api");
     fs::create_dir_all(&empty_api).unwrap();
     let path = sb.uname_shim("Linux", "x86_64");
+    sb.sleep_shim("exit 0");
     let api_base = format!("file://{}", empty_api.display());
     let out = sb.run_env(
         &["--nightly", "--dest", &dest_arg(&sb)],
         &[("PATH", &path), ("Q2_RELEASES_API_BASE", &api_base)],
     );
     assert_failure(&out);
-    assert!(stderr(&out).contains("nightly"), "stderr: {}", stderr(&out));
+    let err = stderr(&out);
+    assert!(
+        err.contains("could not resolve the nightly release"),
+        "stderr: {err}"
+    );
+    // Bounded: every attempt is used, then it gives up.
+    assert!(err.contains("(5/5)"), "stderr: {err}");
     assert!(!sb.installed_binary().exists());
+}
+
+#[test]
+fn nightly_retries_while_the_release_is_being_replaced() {
+    // The Nightly workflow deletes last night's release and publishes a
+    // new one; for a few seconds after, the API can serve a release that
+    // lists no assets yet (bd-n9yh30c8). The installer must retry, not
+    // die. Here the first read sees an asset-less release, and the fake
+    // `sleep` between attempts "finishes publishing" it.
+    let sb = Sandbox::new();
+    let fx = make_nightly_fixture(sb.tmp.path(), &["linux_amd64"]);
+    let tag = sb.tmp.path().join("api/releases/tags/nightly");
+    let full = sb.tmp.path().join("nightly.full");
+    fs::rename(&tag, &full).unwrap();
+    fs::write(
+        &tag,
+        r#"{"tag_name":"nightly","prerelease":true,"assets":[]}"#,
+    )
+    .unwrap();
+
+    let path = sb.uname_shim("Linux", "x86_64");
+    sb.sleep_shim(&format!("cp '{}' '{}'", full.display(), tag.display()));
+    let dest = dest_arg(&sb);
+    let out = sb.run_env(
+        &[
+            "--nightly",
+            "--minisign-pubkey",
+            &fx.pub_key,
+            "--dest",
+            &dest,
+        ],
+        &[
+            ("PATH", &path),
+            ("Q2_RELEASES_API_BASE", &fx.api_base),
+            // A token must not disturb a non-api.github.com lookup.
+            ("GH_TOKEN", "not-a-real-token"),
+        ],
+    );
+    assert_success(&out);
+    let err = stderr(&out);
+    assert!(
+        err.contains("lists no linux_amd64 archive; retrying"),
+        "stderr: {err}"
+    );
+    assert!(sb.installed_binary().exists());
 }
 
 #[test]
