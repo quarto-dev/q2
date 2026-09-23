@@ -6017,6 +6017,7 @@ dependencies = [
  "quarto-error-catalog",
  "quarto-error-reporting",
  "quarto-highlight",
+ "quarto-math",
  "quarto-navigation",
  "quarto-ooxml-extract",
  "quarto-pandoc-types",

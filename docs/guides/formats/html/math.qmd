@@ -1,0 +1,66 @@
+---
+title: HTML Math
+---
+
+## Overview
+
+Math in Quarto documents is written in LaTeX syntax, inline between `$…$`
+and as display math between `$$…$$`. For HTML output the
+`html-math-method` option chooses how the browser renders it:
+
+``` yaml
+format:
+  html:
+    html-math-method: mathjax
+```
+
+| Method    | How the math is rendered                                                   |
+|-----------|----------------------------------------------------------------------------|
+| `mathjax` | MathJax typesets the TeX in the browser (the default).                     |
+| `katex`   | KaTeX typesets the TeX in the browser.                                     |
+| `mathml`  | Quarto converts the TeX to MathML when it renders; no JavaScript is loaded.|
+| `plain`   | The TeX is left as written, with no renderer.                              |
+
+`mathjax` and `katex` also accept an object form to point at your own copy
+of the library:
+
+``` yaml
+format:
+  html:
+    html-math-method:
+      method: katex
+      url: https://example.org/katex/
+```
+
+## Native MathML
+
+With `html-math-method: mathml`, every expression is converted to
+[MathML Core](https://www.w3.org/TR/mathml-core/) at render time and
+written into the page as a `<math>` element. Every current browser
+renders MathML Core natively, so the page loads no math library and the
+math is part of the document rather than something a script draws after
+the page loads. The converted element also carries the original TeX in an
+annotation, so copying an equation still gives you its source.
+
+A few things to know:
+
+- **Fallback.** If an expression uses a command the converter does not
+  know, that expression is left as TeX and MathJax is loaded for the
+  page so it still renders. Quarto reports a `Q-22-*` warning that points
+  at the command in your `.qmd`; fixing it (or defining the macro in the
+  expression with `\newcommand`) removes the dependency on MathJax. See
+  [Q-22-1](../../../errors/math/Q-22-1.qmd) for the most common case.
+- **Equation numbers.** Numbered equations (`$$…$$ {#eq-name}`) show
+  their number as a label to the right of the equation, outside the math.
+- **Fonts.** Browsers lay out MathML with a math font when one is
+  installed (Windows ships Cambria Math; Firefox bundles STIX). Without
+  one, the browser falls back to the page font and some constructs, such
+  as large operators and stretchy delimiters, look less refined than with
+  MathJax or KaTeX. Quarto does not ship a math font.
+- **`\cancel`.** The strike-through is drawn by Firefox but not by
+  Chrome, which shows the content without the line.
+
+## Unsupported methods
+
+Quarto 1's `webtex` and `gladtex` methods are not available. They are
+treated like `plain`: the TeX stays in the page unrendered.

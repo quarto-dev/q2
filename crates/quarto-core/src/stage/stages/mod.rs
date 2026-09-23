@@ -61,6 +61,10 @@ mod source_conversion;
 // when the document contains Math elements. Included on both native
 // and WASM pipelines (math display is safe under iframe reinit).
 mod math_js;
+// Native MathML (bd-3evfzwal): converts every `Inline::Math` with
+// quarto-math when `html-math-method: mathml`; leftovers fall back to
+// MathJax via math_js. Included on native and WASM.
+mod math_ml;
 mod metadata_merge;
 // Pandoc-hybrid leg's writer stage: shells out to a real `pandoc`
 // subprocess via `std::process::Command` and materializes the vendored
@@ -119,6 +123,7 @@ pub use language_resolve::LanguageResolveStage;
 pub use link_resolution::LinkResolutionStage;
 pub use listing_item_info::ListingItemInfoStage;
 pub use math_js::{DEFAULT_KATEX_URL_BASE, DEFAULT_MATHJAX_URL, MathEngine, MathJsStage};
+pub use math_ml::MathMlStage;
 pub use metadata_merge::MetadataMergeStage;
 #[cfg(not(target_arch = "wasm32"))]
 pub use pandoc_write::{

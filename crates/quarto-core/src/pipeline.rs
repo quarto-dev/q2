@@ -66,8 +66,8 @@ use crate::stage::{
     ApplyTemplateStage, AstTransformsStage, AttributionGenerateStage, CompileThemeCssStage,
     DocumentProfileStage, EngineExecutionStage, EquationNumberStage, IncludeExpansionStage,
     IncludeResolveStage, LanguageResolveStage, LinkResolutionStage, ListingItemInfoStage,
-    LoadedSource, MathJsStage, MetadataMergeStage, ParseDocumentStage, Pipeline, PipelineData,
-    PipelineStage, PreEngineSugaringStage, RenderHtmlBodyStage, ResourceReportStage,
+    LoadedSource, MathJsStage, MathMlStage, MetadataMergeStage, ParseDocumentStage, Pipeline,
+    PipelineData, PipelineStage, PreEngineSugaringStage, RenderHtmlBodyStage, ResourceReportStage,
     SourceConversionStage, StageContext, UnwrapProfileStage, UserFiltersStage,
 };
 use crate::transform::TransformPipeline;
@@ -376,6 +376,12 @@ pub fn build_html_pipeline_stages_with_options(
     // and this stage honours the result. A no-op in q2-preview, where
     // crossref-render is excluded and `Equation.tsx` numbers client-side.
     stages.push(Box::new(EquationNumberStage::new()));
+    // Native MathML (bd-3evfzwal): under `html-math-method: mathml`,
+    // convert every `Inline::Math` to `<math>` with quarto-math. Runs
+    // after equation-number (the number is already a sibling label, so
+    // the TeX is the author's) and before math-js, which loads MathJax
+    // only for the expressions this stage had to leave as TeX.
+    stages.push(Box::new(MathMlStage::new()));
     stages.push(Box::new(CodeHighlightStage::new()));
     // Math-mode (bd-w5ov): walk the post-transform AST and, when math
     // is present, populate `meta.math` with the engine's config + loader
@@ -453,7 +459,8 @@ pub async fn render_qmd_to_pandoc(
 /// (`q2_preview_stage_excluded_names_exist_in_html_pipeline`)
 /// fails the test suite if any name here is not an actual stage in
 /// the full HTML pipeline (typo / rename guard).
-const Q2_PREVIEW_STAGE_EXCLUDED: &[&str] = &["math-js", "render-html-body", "apply-template"];
+const Q2_PREVIEW_STAGE_EXCLUDED: &[&str] =
+    &["math-ml", "math-js", "render-html-body", "apply-template"];
 
 /// Build the q2-preview pipeline stages (Plan 1).
 ///
@@ -519,6 +526,10 @@ const PANDOC_STAGE_EXCLUDED: &[&str] = &[
     "tabsets-js",
     "code-highlight",
     "math-js",
+    // `html-math-method` is an HTML option; MathMlStage is a no-op for
+    // every other format (see its module docs) and is excluded here so
+    // the Pandoc leg never hands a converted RawInline to pandoc.
+    "math-ml",
     "render-html-body",
     "apply-template",
 ];
@@ -2600,9 +2611,9 @@ mod tests {
         // Merged pipeline: SourceConversionStage at [0] (branch) plus two
         // stages main added — LanguageResolveStage after metadata-merge
         // (bd-llhlzd7p) and TabsetsJsStage in the JS block
-        // (bd-toc-tabset-titles-zq93gjvf) — plus EquationNumberStage after
-        // the post filters (bd-vlhi2zkj): 26.
-        assert_eq!(stages.len(), 26);
+        // (bd-toc-tabset-titles-zq93gjvf) — plus EquationNumberStage and
+        // MathMlStage after the post filters (bd-vlhi2zkj, bd-3evfzwal): 27.
+        assert_eq!(stages.len(), 27);
         // Pre-parse file-claim/convert (Task 10).
         assert_eq!(stages[0].name(), "source-conversion");
         assert_eq!(stages[1].name(), "parse-document");
@@ -2655,14 +2666,18 @@ mod tests {
         // user-filters-post: a Lua post filter may rewrite or delete the
         // reserved `quarto-eq-number` attribute the stage consumes.
         assert_eq!(stages[21].name(), "equation-number");
-        assert_eq!(stages[22].name(), "code-highlight");
+        // Native MathML (bd-3evfzwal) follows equation-number (the TeX it
+        // converts carries no `\tag`) and precedes math-js (which loads
+        // MathJax only for what this stage left as TeX).
+        assert_eq!(stages[22].name(), "math-ml");
+        assert_eq!(stages[23].name(), "code-highlight");
         // Math-mode (bd-w5ov) walks the post-transform AST and
         // populates meta.math when math is present. Sits just before
         // render-html-body so any late-introduced math (sugar, user
         // filters, the `\tag{N}` equation-number encoding) is visible.
-        assert_eq!(stages[23].name(), "math-js");
-        assert_eq!(stages[24].name(), "render-html-body");
-        assert_eq!(stages[25].name(), "apply-template");
+        assert_eq!(stages[24].name(), "math-js");
+        assert_eq!(stages[25].name(), "render-html-body");
+        assert_eq!(stages[26].name(), "apply-template");
     }
 
     #[test]
@@ -2670,8 +2685,8 @@ mod tests {
         let pipeline = build_html_pipeline();
         // Merged pipeline carries both SourceConversionStage (Task 10, branch)
         // LanguageResolveStage and TabsetsJsStage (main), plus
-        // EquationNumberStage (bd-vlhi2zkj) → 26 stages.
-        assert_eq!(pipeline.len(), 26);
+        // EquationNumberStage and MathMlStage → 27 stages.
+        assert_eq!(pipeline.len(), 27);
     }
 
     #[test]

@@ -23,7 +23,7 @@ Common causes: a typo (`\aplha`), a command from a LaTeX package that has no mat
 
 ## How to fix it
 
-Fix the spelling, replace the command with its standard equivalent (`\mathbb{R}`), or define it in the expression: `\newcommand{\R}{\mathbb{R}} x \in \R`. HTML output through MathJax or KaTeX may still render an unknown macro if that engine defines it; this error is about the converters Quarto runs itself.
+Fix the spelling, replace the command with its standard equivalent (`\mathbb{R}`), or define it in the expression: `\newcommand{\R}{\mathbb{R}} x \in \R`. HTML output through MathJax or KaTeX may still render an unknown macro if that engine defines it; this error is about the converters Quarto runs itself. Under [`html-math-method: mathml`](../../guides/formats/html/math.qmd) it is reported as a warning: the expression is left as TeX and MathJax is loaded for the page so it still renders.
 
 ## Where it is reported
 

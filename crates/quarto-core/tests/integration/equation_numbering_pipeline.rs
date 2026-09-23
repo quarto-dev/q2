@@ -135,15 +135,17 @@ fn unknown_method_encodes_qquad_inside_tex() {
     assert!(html.contains("\\[E = mc^2 \\qquad(1)\\]"), "got:\n{html}");
 }
 
-/// `mathml`: the TeX is untouched (the MathML stage, bd-3evfzwal, will
-/// convert it later) and the number is a sibling label outside the math,
+/// `mathml`: the TeX is untouched (the MathML stage, bd-3evfzwal, converts
+/// it next) and the number is a sibling label outside the math,
 /// with a modifier class on the equation span for the CSS that lays the
 /// two out.
 #[test]
 fn mathml_method_places_number_as_sibling_label() {
     let html = render(&labelled_doc("html-math-method: mathml\n"), "html");
+    // The MathML stage (bd-3evfzwal) converts the math; the annotation
+    // carries the author's TeX, untouched (no `\tag`).
     assert!(
-        html.contains("\\[E = mc^2\\]"),
+        html.contains(r#"<annotation encoding="application/x-tex">E = mc^2</annotation>"#),
         "the math text must be untouched; got:\n{html}"
     );
     assert!(
@@ -164,7 +166,7 @@ fn mathml_method_places_number_as_sibling_label() {
 fn mathml_sibling_label_is_inside_the_equation_span() {
     let html = render(&labelled_doc("html-math-method: mathml\n"), "html");
     let start = html.find("id=\"eq-einstein\"").expect("equation span");
-    let math_end = html[start..].find("\\]</span>").expect("math span end") + start;
+    let math_end = html[start..].find("</math></span>").expect("math span end") + start;
     let label = html[start..].find("quarto-eq-number\">(1)").expect("label") + start;
     assert!(
         label > math_end,
@@ -193,10 +195,13 @@ fn unlabelled_display_math_is_untouched() {
             &format!("---\ntitle: Unlabelled\n{method}---\n\n$$x^2$$\n"),
             "html",
         );
-        assert!(
-            html.contains("\\[x^2\\]"),
-            "method {method:?}: got:\n{html}"
-        );
+        let untouched = if method.contains("mathml") {
+            // Converted to MathML; the annotation carries the TeX.
+            r#"<annotation encoding="application/x-tex">x^2</annotation>"#
+        } else {
+            "\\[x^2\\]"
+        };
+        assert!(html.contains(untouched), "method {method:?}: got:\n{html}");
         assert!(!html.contains("\\tag{"));
         assert!(!html.contains("qquad"));
         assert!(!html.contains("quarto-eq-number"));
