@@ -396,6 +396,32 @@ mod tests {
         SourceInfo::original(FileId(0), 0, 0)
     }
 
+    /// T12.1: pins `THEOREM_CLASSES`'s exact contents so the `algorithm`/
+    /// `alg` gap's eventual closure (or widening) is a visible, reviewed
+    /// change — see P7 Task 12 (`claude-notes/plans/2026-09-18-pandoc-hybrid-P7-implementation.md`)
+    /// and `crates/quarto-core/tests/fixtures/pandoc-goldens/README.md`.
+    #[test]
+    fn test_theorem_classes_pinned_no_algorithm() {
+        assert_eq!(
+            THEOREM_CLASSES,
+            &[
+                ("theorem", "thm", "Theorem"),
+                ("lemma", "lem", "Lemma"),
+                ("corollary", "cor", "Corollary"),
+                ("proposition", "prp", "Proposition"),
+                ("conjecture", "cnj", "Conjecture"),
+                ("definition", "def", "Definition"),
+                ("example", "exm", "Example"),
+                ("exercise", "exr", "Exercise"),
+            ]
+        );
+        assert!(
+            !THEOREM_CLASSES
+                .iter()
+                .any(|(class, rt, _)| *class == "algorithm" || *rt == "alg")
+        );
+    }
+
     fn attr_id_classes(id: &str, classes: &[&str]) -> Attr {
         (
             id.to_string(),

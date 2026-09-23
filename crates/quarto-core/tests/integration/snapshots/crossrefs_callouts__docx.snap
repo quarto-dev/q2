@@ -1,0 +1,20 @@
+---
+source: crates/xtask/src/capture_pandoc_goldens.rs
+expression: extraction.to_string()
+---
+core_props:
+  title: Crossrefs in Callouts
+paragraphs:
+  [Title] Crossrefs in Callouts
+  [Compact] 
+  [ImageCaption] Figure 1: It’s an ele bro
+  [BodyText]  
+  [BodyText] response
+  [BodyText] some text
+  [Compact] 
+  [ImageCaption] Figure 2: Another ele
+  
+media: ["rId13.jpg", "rId9.jpg"]
+image_relationships: ["media/rId13.jpg", "media/rId9.jpg"]
+drawing_count: 2
+page_break_count: 0

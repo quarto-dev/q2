@@ -1,0 +1,44 @@
+---
+source: crates/xtask/src/capture_pandoc_goldens.rs
+expression: extraction.to_string()
+---
+core_props:
+  title: Hello Callout!
+slide 1:
+  Hello Callout!
+slide 2:
+  Overview of callouts
+  Warning
+  Callouts provide a simple way to attract attention, for example, to this warning.
+  This is Important
+  Danger, callouts will really improve your writing.
+  Note
+  Note that there are five types of callouts, including: note, tip, warning, caution, and important.
+  Tip With Caption
+  This is an example of a callout with a caption.
+slide 3:
+  Callout with markup
+  Caption with formatted text, like function_name()
+  This is an example of a callout with a caption containing special formatting and characters.
+  Expand To Learn About Collapse
+  This is an example of a ‘collapsed’ caution callout that can be expanded by the user. You can use collapse=true to collapse it by default or collapse=false to make a collapsible callout that is expanded by default.
+  Exercise
+  You can also use a plain callout class to get a simple callout treatment.
+slide 4:
+  Callout Appearance
+  Caution
+  A simple callout with no title
+  Caution
+  A default callout with no title
+  Caution
+  A default callout with no title or icon
+  Caution
+  A simple callout with no title or icon
+slide 5:
+  Minimal
+  Caution
+  A minimal callout with no title
+media: []
+image_relationships: []
+drawing_count: 0
+page_break_count: 0

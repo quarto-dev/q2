@@ -112,6 +112,8 @@ pub use traits::PipelineStage;
 pub use stages::BootstrapJsStage;
 pub use stages::CodeHighlightStage;
 #[cfg(not(target_arch = "wasm32"))]
+pub use stages::PandocWriteStage;
+#[cfg(not(target_arch = "wasm32"))]
 pub use stages::TabsetsJsStage;
 pub use stages::{
     ApplyTemplateStage, AstTransformsStage, AttributionGenerateStage, CaptureSpliceStage,

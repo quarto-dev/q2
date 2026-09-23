@@ -1,0 +1,17 @@
+---
+source: crates/xtask/src/capture_pandoc_goldens.rs
+expression: extraction.to_string()
+---
+core_props:
+  title: Tabset Subfloat Test
+slide 1:
+  Tabset Subfloat Test
+slide 2:
+  Tab A
+  See Table 1.
+  Tab B
+  Some other content, no float.
+media: []
+image_relationships: []
+drawing_count: 0
+page_break_count: 0

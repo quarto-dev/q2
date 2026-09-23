@@ -1,0 +1,41 @@
+---
+title: "Typst Compile Failed"
+description: "The typst compile subprocess exited with a nonzero status."
+code: Q-21-3
+subsystem: typst
+status: stub
+since: "99.9.9"
+categories:
+  - typst
+---
+
+# `Q-21-3` — Typst Compile Failed
+
+> The `typst compile` subprocess exited with a nonzero status. Its
+> stderr is reproduced verbatim below, including typst's own diagnostic
+> (file/line, if any).
+
+## What this means
+
+Pandoc successfully wrote a `.typ` file, but the subsequent `typst
+compile` step failed to turn it into a PDF.
+
+## Why this happens
+
+- A construct in the document produces Typst source typst's compiler
+  rejects (a malformed raw Typst block, an unsupported property value).
+- A referenced image file is missing or not decodable by typst.
+- A referenced Typst package (beyond the ones Quarto vendors) could not
+  be resolved.
+
+## How to fix
+
+Read typst's own error message, reproduced verbatim in the diagnostic —
+it names the offending file and line inside the intermediate `.typ`
+source. Setting `keep-typ: true` retains that intermediate file so it
+can be inspected directly.
+
+## Related errors
+
+- [`Q-21-1`](Q-21-1.qmd) — typst could not be found at all.
+- [`Q-21-2`](Q-21-2.qmd) — typst was found, but its version is too old.

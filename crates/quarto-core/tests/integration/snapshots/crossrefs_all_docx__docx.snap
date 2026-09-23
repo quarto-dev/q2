@@ -1,0 +1,38 @@
+---
+source: crates/xtask/src/capture_pandoc_goldens.rs
+expression: extraction.to_string()
+---
+core_props:
+  title: Crossref Test
+paragraphs:
+  [Title] Crossref Test
+  [Heading2] Simple Figure
+  [Compact] 
+  [ImageCaption] Figure 1: Elephant
+  [BodyText] See Figure 1 for an illustration
+  [Heading2] Simple Crossref Table
+  [ImageCaption] Table 1: My Caption
+  [Compact] Col1
+  [Compact] Col2
+  [Compact] Col3
+  [Compact] A
+  [Compact] B
+  [Compact] C
+  [Compact] E
+  [Compact] F
+  [Compact] G
+  [Compact] A
+  [Compact] G
+  [Compact] G
+  
+  [BodyText] See Table 1.
+  [Heading2] Math
+  [FirstParagraph] Theorem 1 (Line) The equation of any straight line, called a linear equation, can be written as:
+  [BodyText] 
+  [FirstParagraph] See Theorem 1.
+math:
+  y=mx+b
+media: ["rId9.jpg"]
+image_relationships: ["media/rId9.jpg"]
+drawing_count: 1
+page_break_count: 0

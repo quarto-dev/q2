@@ -1,0 +1,5 @@
+::: {#nte-outer .callout-note}
+Outer callout text.
+
+![Inner caption.](img.png){#fig-inner}
+:::

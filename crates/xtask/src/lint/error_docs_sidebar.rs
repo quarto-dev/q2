@@ -595,4 +595,22 @@ mod tests {
         // `- id: errors` is the third line of the fixture config.
         assert_eq!(violations[0].line, 3);
     }
+
+    /// T1.5 (P7-foundation Task 1): the real tree must be clean — this is
+    /// the regression test that keeps a new error page from shipping
+    /// without a sidebar entry.
+    #[test]
+    fn the_real_config_and_docs_tree_agree() {
+        let root = super::super::find_workspace_root().expect("workspace root");
+        let violations = check(&root).expect("check runs");
+        assert!(
+            violations.is_empty(),
+            "sidebar and docs/errors/ have drifted:\n{}",
+            violations
+                .iter()
+                .map(|v| v.to_string())
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+    }
 }

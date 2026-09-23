@@ -16,5 +16,6 @@ pub mod render_scripts_boot;
 pub mod share;
 pub mod smoke;
 pub mod staleness;
+pub mod static_mode;
 
 fn main() {}

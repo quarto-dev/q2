@@ -25,8 +25,12 @@ import { makeSlotSetter } from '../utils';
  * No classes added by the wrapper — the user's authored attr passes
  * through unchanged.
  *
- * `plain_data` (writer: `transforms/float_ref_target.rs:292-295`):
+ * `plain_data` (writer: `transforms/float_ref_target.rs:292-295`; keys
+ * mirrored from `crates/quarto-pandoc-types/resources/custom-node-schema.json`):
  *   - `ref_type`, `kind`, `identifier`, optional `order: { section, order }`.
+ *
+ * The key array below is asserted against the schema (both directions)
+ * by `schemaConformance.test.ts`'s T4.3.
  *
  * **Caption prefix format** (mirrors `prefix_caption` at
  * `crossref_render.rs:721-742`):
@@ -41,12 +45,9 @@ import { makeSlotSetter } from '../utils';
  *     silently. Match Rust behavior.
  */
 
-interface FloatRefTargetPlainData {
-    ref_type?: string;
-    kind?: string;
-    identifier?: string;
-    order?: { section?: number[]; order?: number };
-}
+export const FLOAT_REF_TARGET_PLAIN_DATA_KEYS = ['ref_type', 'kind', 'identifier', 'order'] as const;
+
+type FloatRefTargetPlainData = { [K in (typeof FLOAT_REF_TARGET_PLAIN_DATA_KEYS)[number]]?: unknown };
 
 export const FloatRefTarget = ({
     node,
@@ -60,9 +61,10 @@ export const FloatRefTarget = ({
     const affordanceAttr = isEditable ? { 'data-block-pool-id': poolId, tabIndex: -1 } : {};
 
     const plain = (node.plain_data ?? {}) as FloatRefTargetPlainData;
-    const refType = plain.ref_type ?? '';
-    const kind = plain.kind ?? '';
-    const number = plain.order?.order;
+    const refType = (plain.ref_type as string | undefined) ?? '';
+    const kind = (plain.kind as string | undefined) ?? '';
+    const order = plain.order as { section?: number[]; order?: number } | undefined;
+    const number = order?.order;
 
     const id = node.attr[0];
     const setSlot = makeSlotSetter(node, setLocalAst);

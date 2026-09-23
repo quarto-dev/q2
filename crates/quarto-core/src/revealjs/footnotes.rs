@@ -11,7 +11,9 @@
 //!
 //! ## Where this runs
 //!
-//! This transform runs **after** [`FootnotesTransform`], consuming its
+//! This transform runs **after** [`crate::transforms::FootnotesResolveTransform`]
+//! (the HTML-chrome half of the footnotes split — see that transform and its
+//! sibling [`crate::transforms::FootnotesTransform`]), consuming its
 //! *resolved* output rather than the raw `Inline::Note` / `NoteReference` /
 //! `NoteDefinition*` representation. By that point:
 //!
@@ -39,8 +41,8 @@
 //! Each in-text reference is replaced by a plain `Superscript([Str(N)])`
 //! renumbered **per slide** (1, 2, …), and the trailing `Div#footnotes` is
 //! deleted. `OrderedList` has no class slot, so `aside-footnotes` rides a
-//! wrapping `Div` — the same trick [`FootnotesTransform`] uses for the
-//! document-level list.
+//! wrapping `Div` — the same trick [`crate::transforms::FootnotesResolveTransform`]
+//! uses for the document-level list.
 //!
 //! ## Gating (Q1-faithful)
 //!

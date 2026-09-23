@@ -1,0 +1,3 @@
+::: {#thm-p .theorem name="My Special Title"}
+This is a theorem statement.
+:::

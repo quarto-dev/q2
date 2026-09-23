@@ -46,7 +46,7 @@ const ms = (c: string) => ({ t: 'MetaString', c });
 const mb = (c: boolean) => ({ t: 'MetaBool', c });
 const mm = (entries: Record<string, unknown>) => ({
     t: 'MetaMap',
-    c: Object.entries(entries).map(([key, value]) => ({ key, value })),
+    c: entries,
 });
 
 // Snapshot body.className so other tests in the suite aren't observed
@@ -132,25 +132,7 @@ describe('PreviewDocument body container', () => {
         // appended — same as the Rust template
         // (`test_full_template_toc_present_yields_empty_body_class`).
         mount({
-            rendered: {
-                t: 'MetaMap',
-                c: [
-                    {
-                        key: 'navigation',
-                        key_source: null,
-                        value: {
-                            t: 'MetaMap',
-                            c: [
-                                {
-                                    key: 'toc',
-                                    key_source: null,
-                                    value: { t: 'MetaString', c: '<nav id="TOC"></nav>' },
-                                },
-                            ],
-                        },
-                    },
-                ],
-            },
+            rendered: renderedNavigation({ toc: '<nav id="TOC"></nav>' }),
         });
         expect(document.body.className).toBe('quarto-light');
     });
@@ -408,14 +390,15 @@ describe('PreviewDocument iframe document.title wiring', () => {
 // Phase F.2 (bd-kw93.15): chrome HTML-injection slots
 // ──────────────────────────────────────────────────────────────────
 
-/** Build a `MetaMap` value carrying `entries`. Mirrors the JSON
- *  shape from `crates/pampa/src/writers/json.rs::write_config_value`
- *  (with `key_source: null`). */
+/** Build a `MetaMap` value carrying `entries`. `c` is a plain object
+ *  keyed by metadata key — the `JsonConfig { raw: false }` shape
+ *  `write_config_value` emits (see `getMetaPath`'s doc comment in
+ *  `framework/meta.ts`), not the `{key, key_source, value}`-triple
+ *  array shape, which `getMetaPath` explicitly rejects. */
 function metaMap(entries: Array<{ key: string; value: unknown }>): unknown {
-    return {
-        t: 'MetaMap',
-        c: entries.map((e) => ({ key: e.key, key_source: null, value: e.value })),
-    };
+    const c: Record<string, unknown> = {};
+    for (const e of entries) c[e.key] = e.value;
+    return { t: 'MetaMap', c };
 }
 
 /** Convenience: shape the `meta.rendered.navigation.<key>: html`
