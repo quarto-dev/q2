@@ -258,6 +258,84 @@ Decisions:
       fresh browser against a local hub (needs Andrew's browser; the
       sandbox cannot drive a Bash-side hub); changelog two-commit.
 
+## Follow-up design: a tree-shaped New menu driven by a per-choice path (2026-09-23)
+
+Problem (Andrew, screenshot of the New menu on PR #700): the four seeded
+examples appear in the flat New menu next to the project types, so the menu
+lists "Website" twice and eight entries in one column. Carlos's suggestion:
+give each template an array of strings as its hierarchical path and let
+that same array turn the menu into a deep tree.
+
+### Two kinds of entry (Andrew's definitions)
+
+- **Template**: a skeleton. Sparse, but with enough structure to get going.
+  Today: Default, Website, Blog. Wanted: at least a Presentation skeleton
+  (a `format: revealjs` deck with a title slide and two or three empty
+  slides). Templates interpolate `$title$`.
+- **Example** (working name; alternatives below): a populated document with
+  instructive content that *shows* what people do in that format. Today: the
+  four seeded examples, plus Carlos's "Welcome to the Quarto-Hub preview"
+  tour. Examples carry fixed content; the typed name is not interpolated.
+
+### Mechanism
+
+- `ProjectChoice.path: Vec<String>` (serde default empty = top level),
+  builder `.in_path(["Templates"])`. The registry stays the single source
+  of truth; ids stay flat and unique, so `q2 create project <id>` and the
+  colon form are untouched.
+- `get_project_choices` adds `path: string[]`; TS `ProjectChoice.path?`.
+- `seed` stays a separate flag. "Is seeded on first run" and "sits under
+  Examples" are different questions (an example may exist without being
+  seeded, and the welcome tour is Carlos's call).
+- **Hub menu** (`ProjectsHome.tsx`): build a tree from `path`, render each
+  node as `MenuSubmenu` and each leaf as `MenuItem`. `MenuSubmenu` already
+  exists in `Menu.tsx` with APG keyboard behavior (ArrowRight/ArrowLeft,
+  focus management) and is used in production for "Move to collection", so
+  the menu work is a grouping function plus a recursive render. Depth is
+  unlimited by construction; two levels is what we ship.
+- **Classic selector** (`ProjectSelector.tsx`, the `<select>`): group with
+  `<optgroup label={path.join(' / ')}>`.
+- **CLI `--list`**: group by path with indentation; unchanged ids.
+- Ordering: registry order within a node; node order = first appearance.
+
+### Proposed registry
+
+```
+Templates/
+  Default        A minimal Quarto project
+  Website        A Quarto website with navigation
+  Blog           A blog using the Quarto blog template
+  Presentation   A reveal.js deck                      (new skeleton, CLI + hub)
+Examples/
+  Welcome to the Quarto-Hub preview                     (Carlos's tour, hub-only)
+  Meeting Notes  …                                       (hub-only, seed)
+  Website        …                                       (hub-only, seed)
+  Article        …                                       (hub-only, seed)
+  Presentation   …                                       (hub-only, seed)
+```
+
+Naming for the second group, to decide: "Examples" (short, matches the
+seeded collection "Examples / Templates"), "Worked examples", "Guided
+examples", "Show me". Recommendation: **Examples**, and rename the seeded
+collection to match whatever is chosen so the menu and the home agree.
+
+### Tests first
+
+- `choices.rs`: `path` defaults empty; templates under `["Templates"]`,
+  examples under `["Examples"]`; a helper `choices_tree(surface)` returns
+  the grouped structure in registry order; serde round trip.
+- WASM test: `path` present in JSON for every choice.
+- `ProjectsHome` integration test: two submenus with the expected labels
+  and items; the duplicate-name case (two "Website") lands in different
+  submenus.
+- CLI integration: `--list` output grouped.
+- New `presentation` template: scaffold path list; `$title$` substituted
+  into `_quarto.yml`/`index.qmd`; `q2 create project presentation d` works.
+
+Not in this PR (#700): keep #700 as the seeding mechanism plus content;
+land the tree menu and the Presentation template as a follow-up PR on top,
+so each stays reviewable.
+
 ## Work items
 
 ### Phase 1: content (can start now, no code)
