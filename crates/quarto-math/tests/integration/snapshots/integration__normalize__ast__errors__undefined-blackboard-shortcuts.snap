@@ -1,0 +1,12 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..14
+  sym "ℝ" @0..2
+  sym "ℕ" @3..5
+  sym "ℤ" @6..8
+  sym "ℚ" @9..11
+  error "unknown command `\\C`" "\\C" @12..14
+-- problems --
+UnknownCommand @12..14 unknown command `\C`

@@ -143,6 +143,6 @@ ls crates/pampa/tests/roundtrip_tests/qmd-json-qmd/ | grep -i -E 'code|fence'
 ## Cross-references
 
 - `crates/pampa/src/writers/qmd.rs:628-634` — the buggy conditional.
-- `crates/pampa/CLAUDE.md` — TDD round-trip workflow that the fix should follow.
+- `crates/pampa/AGENTS.md` — TDD round-trip workflow that the fix should follow.
 - `claude-notes/research/commonmark-spec/` (on `main`) — CommonMark spec lookup scaffolding produced during this triage (index, examples-index, and two helper scripts).
 - `external-sources/commonmark/spec.txt:1934-2359` — Fenced code blocks section consulted for the AST-shape question.

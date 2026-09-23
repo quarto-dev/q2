@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/typst.rs
+expression: to_typst(&n)
+---
+log ( μ_(i) ) quad = quad x_(i)^(⊤) β , quad y_(i) ∼ upright(P o i s) ( μ_(i) ) , quad E [ y_(i) thin | thin x_(i) ] = μ_(i)

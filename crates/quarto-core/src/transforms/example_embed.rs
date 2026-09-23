@@ -70,6 +70,7 @@ use quarto_source_map::SourceInfo;
 use serde_json::{Value, json};
 
 use crate::Result;
+use crate::format::PipelineProfile;
 use crate::render::RenderContext;
 use crate::resource_resolver::ResourceResolverContext;
 use crate::transform::{AstTransform, TransformPhase};
@@ -251,6 +252,7 @@ fn sugar_embed(div: &Div, diags: &mut Vec<DiagnosticMessage>) -> CustomNode {
 struct Resolve<'a> {
     source: &'a str,
     resolver: Option<&'a ResourceResolverContext>,
+    pipeline_profile: &'a PipelineProfile,
 }
 
 /// Render transform: `CustomNode("ExampleEmbed")` → final markup.
@@ -283,6 +285,7 @@ impl AstTransform for ExampleEmbedRenderTransform {
         let resolve = Resolve {
             source: &source,
             resolver: ctx.resource_resolver.as_ref(),
+            pipeline_profile: &ctx.pipeline_profile,
         };
         render_blocks(&mut ast.blocks, resolve);
         Ok(())
@@ -323,10 +326,22 @@ fn render_embed(node: &mut CustomNode, resolve: Resolve) -> Div {
         _ => Vec::new(),
     };
 
-    // Order: snippet (if any) → iframe → caption.
+    // Order: snippet (if any) → iframe → caption. The iframe is HTML-only
+    // markup; Pandoc-writer targets (docx, pptx, …) get the snippet and
+    // caption but skip the iframe itself, since there is no way to render
+    // an iframe as one of Pandoc's own document formats.
     let mut content: Vec<Block> = Vec::new();
     content.extend(snippet);
-    if let Some(file) = file {
+    let iframe_capable = matches!(
+        resolve.pipeline_profile,
+        PipelineProfile::HtmlRender
+            | PipelineProfile::HtmlPreview
+            | PipelineProfile::RevealjsRender
+            | PipelineProfile::RevealjsPreview
+    );
+    if let Some(file) = file
+        && iframe_capable
+    {
         content.push(iframe_block(file, node, &source_info, resolve));
     }
 
@@ -717,6 +732,20 @@ mod tests {
         doc_path: &str,
         output_href: Option<&str>,
     ) -> Pandoc {
+        run_sugar_then_render_with_format(blocks, order, doc_path, output_href, &Format::html())
+            .await
+    }
+
+    /// Same as [`run_sugar_then_render`], but lets the caller pick the
+    /// output format (and therefore the derived `PipelineProfile`) rather
+    /// than defaulting to HTML.
+    async fn run_sugar_then_render_with_format(
+        blocks: Vec<Block>,
+        order: Option<u64>,
+        doc_path: &str,
+        output_href: Option<&str>,
+        format: &Format,
+    ) -> Pandoc {
         let (mut ast, _) = run_sugar(blocks).await;
         if let Some(n) = order {
             // Find the first ExampleEmbed node and stamp plain_data.order,
@@ -733,9 +762,8 @@ mod tests {
             ..Default::default()
         };
         let doc = DocumentInfo::from_path(doc_path);
-        let format = Format::html();
         let binaries = BinaryDependencies::new();
-        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        let mut ctx = RenderContext::new(&project, &doc, format, &binaries);
         if let Some(href) = output_href {
             let page_output = format!("/project/_site/{}", href);
             let stem = std::path::Path::new(href)
@@ -787,6 +815,21 @@ mod tests {
         }
         go(block, &mut out);
         out
+    }
+
+    /// Count `Block::RawBlock { format: "html", .. }` nodes anywhere under
+    /// `block`.
+    fn count_html_rawblocks(block: &Block) -> usize {
+        fn go(block: &Block, count: &mut usize) {
+            match block {
+                Block::RawBlock(r) if r.format == "html" => *count += 1,
+                Block::Div(d) => d.content.iter().for_each(|b| go(b, count)),
+                _ => {}
+            }
+        }
+        let mut count = 0;
+        go(block, &mut count);
+        count
     }
 
     fn collect_text(block: &Block) -> String {
@@ -1117,6 +1160,81 @@ mod tests {
         assert!(
             collect_text(&ast.blocks[0]).contains("Demo\u{a0}2"),
             "numbered demo keeps a visible label even without caption text"
+        );
+    }
+
+    // ---- format-parameterized render (bd-13gnwplg / pandoc-hybrid P1 task 4) ----
+
+    /// T4.1: under a Pandoc-writer profile, the iframe is dropped but the
+    /// snippet and caption survive.
+    #[tokio::test]
+    async fn render_pandoc_skips_iframe_but_keeps_snippet() {
+        let ast = run_sugar_then_render_with_format(
+            vec![placeholder_with_snippet(
+                "demo-frag",
+                &[("file", "/examples/x/slides.html")],
+                vec![
+                    code_block("## Slide"),
+                    source_link("View source", "https://github.com/q/x"),
+                ],
+            )],
+            None,
+            "/project/doc.qmd",
+            None,
+            &Format::docx(),
+        )
+        .await;
+        assert_eq!(
+            count_html_rawblocks(&ast.blocks[0]),
+            0,
+            "a Pandoc-writer target must not emit the HTML iframe"
+        );
+        assert_eq!(
+            container_block_kinds(&ast.blocks[0]),
+            vec!["code", "source"],
+            "snippet and caption survive even though the iframe is dropped"
+        );
+    }
+
+    /// T4.2: over-application counterweight to T4.1 — HtmlRender must still
+    /// get exactly one iframe RawBlock, byte-identical to today.
+    #[tokio::test]
+    async fn render_html_still_emits_exactly_one_iframe() {
+        let ast = run_sugar_then_render(
+            vec![placeholder("", &[("file", "/examples/x/slides.html")])],
+            None,
+            "/project/doc.qmd",
+            None,
+        )
+        .await;
+        assert_eq!(
+            count_html_rawblocks(&ast.blocks[0]),
+            1,
+            "HtmlRender must still emit exactly one iframe RawBlock"
+        );
+        assert!(collect_raw_html(&ast.blocks[0]).contains("<iframe"));
+    }
+
+    /// T4.3: content-loss counterweight — the `Demo N:` caption label must
+    /// survive under a Pandoc-writer profile too, not just the absence of
+    /// an iframe.
+    #[tokio::test]
+    async fn render_pandoc_keeps_demo_label_in_caption() {
+        let ast = run_sugar_then_render_with_format(
+            vec![placeholder(
+                "demo-frag",
+                &[("file", "/examples/x/slides.html")],
+            )],
+            Some(2),
+            "/project/doc.qmd",
+            None,
+            &Format::docx(),
+        )
+        .await;
+        let text = collect_text(&ast.blocks[0]);
+        assert!(
+            text.contains("Demo\u{a0}2:"),
+            "Demo N: label must survive under Pandoc profiles too; got {text:?}"
         );
     }
 

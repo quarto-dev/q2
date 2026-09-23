@@ -9,14 +9,19 @@ import { Node } from '../../framework';
 import { makeSlotSetter } from '../utils';
 
 /**
- * Equation — q2-preview port of `render_equation` at
- * `crates/quarto-core/src/transforms/crossref_render.rs:601-650`.
+ * Equation — q2-preview counterpart of `render_equation`
+ * (`crates/quarto-core/src/transforms/crossref_render.rs`) plus the
+ * `TexTag` encoding of `EquationNumberStage`
+ * (`crates/quarto-core/src/stage/stages/equation_number.rs`).
  *
  * `CrossrefRenderTransform` is excluded from q2-preview's pipeline
- * (see `Q2_PREVIEW_TRANSFORM_EXCLUDED` at `pipeline.rs:1071`), so the
- * `Equation` CustomNode wrapper survives into the iframe. q2-preview
- * ports the `\tag{N}` append from Rust into JS so KaTeX can render
- * the equation number natively.
+ * (see `Q2_PREVIEW_TRANSFORM_EXCLUDED` in `pipeline.rs`), so the
+ * `Equation` CustomNode wrapper survives into the iframe. In the native
+ * render path crossref-render records the number on the reserved
+ * `quarto-eq-number` span attribute and `EquationNumberStage` later
+ * encodes it per math engine (`\tag{N}` for MathJax/KaTeX, ` \qquad(N)`
+ * otherwise, a sibling label for MathML). The preview always typesets
+ * with KaTeX, so it applies the `\tag{N}` encoding directly here.
  *
  * Output: `<span id="{identifier}">{Math (with \tag{N} appended)}</span>`.
  *
@@ -33,12 +38,11 @@ import { makeSlotSetter } from '../utils';
  *      flowing inline text and absurd inside `Math(InlineMath)`).
  */
 
-interface EquationPlainData {
-    ref_type?: string;
-    kind?: string;
-    identifier?: string;
-    order?: { section?: number[]; order?: number };
-}
+// Keys mirrored from `crates/quarto-pandoc-types/resources/custom-node-schema.json`,
+// asserted against the schema (both directions) by `schemaConformance.test.ts`'s T4.3.
+export const EQUATION_PLAIN_DATA_KEYS = ['ref_type', 'kind', 'identifier', 'order'] as const;
+
+type EquationPlainData = { [K in (typeof EQUATION_PLAIN_DATA_KEYS)[number]]?: unknown };
 
 function isCanonicalDisplayMath(inl: InlineNode): inl is MathInline {
     if (inl.t !== 'Math') return false;
@@ -59,7 +63,8 @@ export const Equation = ({
     setLocalAst,
 }: NodeArgs<CustomInlineNode>) => {
     const plain = (node.plain_data ?? {}) as EquationPlainData;
-    const number = plain.order?.order;
+    const order = plain.order as { section?: number[]; order?: number } | undefined;
+    const number = order?.order;
 
     const id = node.attr[0];
     const setSlot = makeSlotSetter(node, setLocalAst);

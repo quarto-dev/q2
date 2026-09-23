@@ -75,7 +75,7 @@ export function parseUntransformed(qmd: string): RustQmdJson {
 
 // ---- semantic comparison ---------------------------------------------------
 
-const STRIP_KEYS = new Set(['s', 'a', 'l', 'targetS']);
+const STRIP_KEYS = new Set(['s', 'a', 'l', 'targetS', 'textS']);
 const VOLATILE_CITE_KEYS = new Set(['citationHash', 'citationNoteNum', 'citationIdS']);
 
 function stripObj(value: unknown): unknown {

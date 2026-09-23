@@ -1,0 +1,42 @@
+[package]
+name = "quarto-math"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "TeX math front end (mitex parser + source maps) with OMML and Typst writers for Quarto."
+
+[dependencies]
+# Vendored mitex front end (Apache-2.0); see vendor/VENDORED.md.
+mitex-lexer = { path = "vendor/mitex-lexer" }
+mitex-parser = { path = "vendor/mitex-parser" }
+mitex-spec = { path = "vendor/mitex-spec" }
+
+quarto-error-reporting = { workspace = true }
+quarto-source-map = { workspace = true }
+rowan = "0.15"
+rustc-hash = "2"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+# `spec-gen` only: resolves Typst symbol names to Unicode when generating
+# spec/commands.json (`cargo xtask gen-math-spec`); not needed at runtime.
+codex = { version = "0.3", optional = true }
+
+[features]
+default = []
+spec-gen = ["dep:codex"]
+
+[dev-dependencies]
+# The integration tests regenerate the spec through the same code xtask uses.
+quarto-math = { path = ".", features = ["spec-gen"] }
+insta = { workspace = true }
+# The MathML validity test parses every fixture's output.
+quick-xml = { workspace = true }
+# The diagnostics test checks every Q-22 code against the live catalog.
+quarto-error-catalog = { path = "../quarto-error-catalog" }
+
+[lints]
+workspace = true

@@ -1,0 +1,14 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..28
+  scripts Auto @0..23
+    func "argmax" Auto @0..21
+    sub:
+      run "x" @22..23
+  run "f" @24..25
+  run "(" @25..26
+  run "x" @26..27
+  run ")" @27..28
+-- problems --

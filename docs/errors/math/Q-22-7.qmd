@@ -1,0 +1,34 @@
+---
+title: "Double Subscript Or Superscript"
+description: "A base has two superscripts (`x^2^3`) or two subscripts (`x_1_2`) in a row."
+code: Q-22-7
+subsystem: math
+status: stub
+since: "99.9.9"
+categories:
+  - math
+---
+
+# `Q-22-7` — Double Subscript Or Superscript
+
+> A base has two superscripts (`x^2^3`) or two subscripts (`x_1_2`) in a row.
+
+## What this means
+
+A base takes at most one `^` and one `_`. TeX rejects a second one outright; quarto-math keeps the first script, reports the second, and falls back to verbatim source in formats that need a conversion.
+
+## Why this happens
+
+Common causes: a missing brace group (`x^2^3` when `x^{2^3}` or `{x^2}^3` was meant), or a macro that expands to a script applied to something that already has one.
+
+## How to fix it
+
+Group the intended structure with braces: `x^{2^3}` for a tower, `{x^2}^3` for a script on a scripted base.
+
+## Where it is reported
+
+Math diagnostics point into the `.qmd` at the exact characters inside the
+`$…$` or `$$…$$` block, including math that spans several lines or sits
+inside a block quote or list item. When a `\newcommand` macro is involved,
+a problem inside the macro body points at the definition and a problem in
+a macro argument points at the use.

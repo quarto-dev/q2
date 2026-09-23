@@ -125,4 +125,4 @@ The repo includes VS Code configuration in `.vscode/`:
 
 ## AI-Assisted Development
 
-This repo includes a `CLAUDE.md` with project-specific instructions for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). See that file for workspace structure, build commands, testing conventions, and coding guidelines.
+This repo includes an `AGENTS.md` with project-specific instructions for AI coding assistants (including [Claude Code](https://docs.anthropic.com/en/docs/claude-code)). See that file for workspace structure, build commands, testing conventions, and coding guidelines.

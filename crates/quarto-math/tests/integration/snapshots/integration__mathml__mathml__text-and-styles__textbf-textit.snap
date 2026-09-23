@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mtext>𝐛𝐨𝐥𝐝</mtext><mtext>𝑖𝑡</mtext></mrow><annotation encoding="application/x-tex">\textbf{bold} \textit{it}</annotation></semantics></math>

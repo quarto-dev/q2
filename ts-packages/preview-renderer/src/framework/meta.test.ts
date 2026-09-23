@@ -188,53 +188,38 @@ describe('extractMetaStringList', () => {
 
 describe('getMetaPath', () => {
     // Top-level meta is a plain object; each subsequent step traverses
-    // a `MetaMap` whose `.c` is `[{key, key_source, value}, ...]`.
-    // Mirrors the JSON shape emitted by `crates/pampa/src/writers/json.rs`.
+    // a `MetaMap` whose `.c` is a genuine JSON object (`{key: value, ...}`).
+    // Mirrors the Pandoc-superset JSON shape emitted by
+    // `crates/pampa/src/writers/json.rs` under `JsonConfig { raw: false }`
+    // (bf8cd45dc taught `stream_write_config_value`'s Map arm to branch on
+    // `raw` like every other variant — the old `{key, key_source, value}`
+    // -triple array was pampa's own `raw: true` round-trip shape, never
+    // what q2-preview's AST JSON actually carries; bd-6zrmjidd).
     const navbarHtml = '<nav class="navbar">…</nav>';
     const fixture = {
         title: { t: 'MetaString', c: 'My Doc' },
         rendered: {
             t: 'MetaMap',
-            c: [
-                {
-                    key: 'navigation',
-                    key_source: null,
-                    value: {
-                        t: 'MetaMap',
-                        c: [
-                            {
-                                key: 'navbar',
-                                key_source: null,
-                                value: { t: 'MetaString', c: navbarHtml },
-                            },
-                            {
-                                key: 'body-classes',
-                                key_source: null,
-                                value: { t: 'MetaString', c: 'nav-sidebar floating' },
-                            },
-                        ],
+            c: {
+                navigation: {
+                    t: 'MetaMap',
+                    c: {
+                        navbar: { t: 'MetaString', c: navbarHtml },
+                        'body-classes': { t: 'MetaString', c: 'nav-sidebar floating' },
                     },
                 },
-                {
-                    key: 'includes',
-                    key_source: null,
-                    value: {
-                        t: 'MetaMap',
-                        c: [
-                            {
-                                key: 'header',
-                                key_source: null,
-                                value: {
-                                    t: 'MetaList',
-                                    c: [
-                                        { t: 'MetaString', c: '<link rel="icon" href="favicon.ico">' },
-                                    ],
-                                },
-                            },
-                        ],
+                includes: {
+                    t: 'MetaMap',
+                    c: {
+                        header: {
+                            t: 'MetaList',
+                            c: [
+                                { t: 'MetaString', c: '<link rel="icon" href="favicon.ico">' },
+                            ],
+                        },
                     },
                 },
-            ],
+            },
         },
     };
 

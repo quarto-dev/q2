@@ -1,0 +1,229 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..399
+  matrix Aligned - @0..399
+    row 0:
+      row @16..31
+        frac Bar @16..31
+          row @21..27
+            scripts Auto @22..26
+              run "dS" @22..24
+              sub:
+                run "1" @25..26
+          row @27..31
+            run "dt" @28..30
+      row @33..85
+        run "=" @33..34
+        run "-" @35..36
+        frac Bar @36..85
+          row @41..82
+            sym "ρ" @42..46
+            sym "β" @47..52
+            scripts Auto @53..56
+              run "S" @53..54
+              sub:
+                run "1" @55..56
+            run "(" @56..57
+            scripts Auto @57..63
+              run "c" @57..58
+              sub:
+                row @59..63
+                  run "11" @60..62
+            scripts Auto @64..67
+              run "I" @64..65
+              sub:
+                run "1" @66..67
+            scripts Auto @68..76
+              row @68..71
+                run "+" @68..69
+                run "c" @70..71
+              sub:
+                row @72..76
+                  run "12" @73..75
+            scripts Auto @77..80
+              run "I" @77..78
+              sub:
+                run "2" @79..80
+            run ")" @80..81
+          row @82..85
+            run "N" @83..84
+    row 1:
+      row @89..104
+        frac Bar @89..104
+          row @94..100
+            scripts Auto @95..99
+              run "dS" @95..97
+              sub:
+                run "2" @98..99
+          row @100..104
+            run "dt" @101..103
+      row @106..153
+        run "=" @106..107
+        run "-" @108..109
+        frac Bar @109..153
+          row @114..150
+            sym "β" @115..120
+            scripts Auto @121..124
+              run "S" @121..122
+              sub:
+                run "2" @123..124
+            run "(" @124..125
+            scripts Auto @125..131
+              run "c" @125..126
+              sub:
+                row @127..131
+                  run "12" @128..130
+            scripts Auto @132..135
+              run "I" @132..133
+              sub:
+                run "1" @134..135
+            scripts Auto @136..144
+              row @136..139
+                run "+" @136..137
+                run "c" @138..139
+              sub:
+                row @140..144
+                  run "22" @141..143
+            scripts Auto @145..148
+              run "I" @145..146
+              sub:
+                run "2" @147..148
+            run ")" @148..149
+          row @150..153
+            run "N" @151..152
+    row 2:
+      row @157..172
+        frac Bar @157..172
+          row @162..168
+            scripts Auto @163..167
+              run "dI" @163..165
+              sub:
+                run "1" @166..167
+          row @168..172
+            run "dt" @169..171
+      row @174..239
+        run "=" @174..175
+        frac Bar @176..226
+          row @181..223
+            sym "ρ" @183..187
+            sym "β" @188..193
+            scripts Auto @194..197
+              run "S" @194..195
+              sub:
+                run "1" @196..197
+            run "(" @197..198
+            scripts Auto @198..204
+              run "c" @198..199
+              sub:
+                row @200..204
+                  run "11" @201..203
+            scripts Auto @205..208
+              run "I" @205..206
+              sub:
+                run "1" @207..208
+            scripts Auto @209..217
+              row @209..212
+                run "+" @209..210
+                run "c" @211..212
+              sub:
+                row @213..217
+                  run "12" @214..216
+            scripts Auto @218..221
+              run "I" @218..219
+              sub:
+                run "2" @220..221
+            run ")" @221..222
+          row @223..226
+            run "N" @224..225
+        run "-" @227..228
+        sym "γ" @229..235
+        scripts Auto @236..239
+          run "I" @236..237
+          sub:
+            run "1" @238..239
+    row 3:
+      row @243..258
+        frac Bar @243..258
+          row @248..254
+            scripts Auto @249..253
+              run "dI" @249..251
+              sub:
+                run "2" @252..253
+          row @254..258
+            run "dt" @255..257
+      row @260..319
+        run "=" @260..261
+        frac Bar @262..306
+          row @267..303
+            sym "β" @268..273
+            scripts Auto @274..277
+              run "S" @274..275
+              sub:
+                run "2" @276..277
+            run "(" @277..278
+            scripts Auto @278..284
+              run "c" @278..279
+              sub:
+                row @280..284
+                  run "12" @281..283
+            scripts Auto @285..288
+              run "I" @285..286
+              sub:
+                run "1" @287..288
+            scripts Auto @289..297
+              row @289..292
+                run "+" @289..290
+                run "c" @291..292
+              sub:
+                row @293..297
+                  run "22" @294..296
+            scripts Auto @298..301
+              run "I" @298..299
+              sub:
+                run "2" @300..301
+            run ")" @301..302
+          row @303..306
+            run "N" @304..305
+        run "-" @307..308
+        sym "γ" @309..315
+        scripts Auto @316..319
+          run "I" @316..317
+          sub:
+            run "2" @318..319
+    row 4:
+      row @323..338
+        frac Bar @323..338
+          row @328..334
+            scripts Auto @329..333
+              run "dR" @329..331
+              sub:
+                run "1" @332..333
+          row @334..338
+            run "dt" @335..337
+      row @340..352
+        run "=" @340..341
+        sym "γ" @342..348
+        scripts Auto @349..352
+          run "I" @349..350
+          sub:
+            run "1" @351..352
+    row 5:
+      row @356..371
+        frac Bar @356..371
+          row @361..367
+            scripts Auto @362..366
+              run "dR" @362..364
+              sub:
+                run "2" @365..366
+          row @367..371
+            run "dt" @368..370
+      row @373..385
+        run "=" @373..374
+        sym "γ" @375..381
+        scripts Auto @382..385
+          run "I" @382..383
+          sub:
+            run "2" @384..385
+-- problems --

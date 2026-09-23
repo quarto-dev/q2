@@ -1,0 +1,76 @@
+---
+title: EPUB format
+---
+
+Quarto can render a document to an EPUB e-book (`.epub`) by passing the
+rendered document through Pandoc's own EPUB writer. Add `epub` to a
+document's `format:`, or render directly from the command line:
+
+```bash
+quarto render book.qmd --to epub
+```
+
+Or in front matter / `_quarto.yml`:
+
+```yaml
+format:
+  epub:
+    toc: true
+```
+
+The output is a standard EPUB 3 file — chapters are plain XHTML, math
+renders as MathML, and the file opens in any e-reader or e-reader
+preview app.
+
+## Splitting into chapters
+
+Pandoc splits the document into separate chapter files at each
+top-level (level-1) heading by default. Use `epub-chapter-level` to
+split at a deeper heading level instead — for example, to also break
+out level-2 sections into their own chapter files:
+
+```yaml
+format:
+  epub:
+    epub-chapter-level: 2
+```
+
+## Cover image and metadata
+
+```yaml
+format:
+  epub:
+    epub-cover-image: cover.png
+    epub-metadata: metadata.xml
+```
+
+- `epub-cover-image` sets the book's cover image (a path relative to
+  the document, or to the project root when it starts with `/`).
+- `epub-metadata` points at an XML file of additional
+  [EPUB metadata](https://pandoc.org/MANUAL.html#epub-metadata)
+  (identifier, additional contributors, series information, and so
+  on) to merge into the generated `content.opf`.
+
+## Fonts and styling
+
+```yaml
+format:
+  epub:
+    epub-embed-font: fonts/MyFont.ttf
+    css: style.css
+```
+
+- `epub-embed-font` embeds a font file directly in the EPUB container
+  so it's available even on readers that don't have it installed. It
+  can be repeated to embed more than one font.
+- `css` links an additional stylesheet into every chapter, on top of
+  Quarto's own callout and layout styles, which are always included.
+
+## Known limitation: tabsets
+
+Tabbed content (`::: {.panel-tabset}`) renders in EPUB using the same
+interactive tab markup as HTML output. Most EPUB readers don't run the
+JavaScript that hides the inactive tabs, so **all tab panels appear
+expanded, one after another**, rather than as a single active tab.
+The content itself is unaffected — nothing is dropped — but the
+tabbed presentation doesn't collapse the way it does in a browser.

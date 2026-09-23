@@ -1,0 +1,21 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..52
+  matrix Cases - @0..52
+    row 0:
+      row @14..15
+        run "x" @14..15
+      row @18..26
+        run "x" @18..19
+        sym "≥" @20..24
+        run "0" @25..26
+    row 1:
+      row @30..32
+        run "-x" @30..32
+      row @35..40
+        run "x" @35..36
+        run "<" @37..38
+        run "0" @39..40
+-- problems --

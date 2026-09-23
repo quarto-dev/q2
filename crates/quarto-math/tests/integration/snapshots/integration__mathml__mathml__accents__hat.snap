@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mover accent="true"><mi>β</mi><mo>ˆ</mo></mover><mn>0</mn></msub></mrow><annotation encoding="application/x-tex">\hat{\beta}_0</annotation></semantics></math>

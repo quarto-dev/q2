@@ -56,7 +56,7 @@ const mi = (...inlines: any[]) => ({ t: 'MetaInlines', c: inlines });
 const mb = (c: boolean) => ({ t: 'MetaBool', c });
 const mm = (entries: Record<string, unknown>) => ({
     t: 'MetaMap',
-    c: Object.entries(entries).map(([key, value]) => ({ key, value })),
+    c: entries,
 });
 
 /** Normalized `by-author` entry list, as `AuthorsNormalizeTransform` writes it. */

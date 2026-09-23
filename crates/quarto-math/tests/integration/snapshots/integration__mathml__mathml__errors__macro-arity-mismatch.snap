@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><merror><mtext>invalid number of arguments</mtext></merror></mrow><annotation encoding="application/x-tex">\newcommand{\pr}[2]{P(#1|#2)} \pr{x}</annotation></semantics></math>

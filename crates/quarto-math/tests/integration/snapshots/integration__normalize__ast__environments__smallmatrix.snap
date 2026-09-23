@@ -1,0 +1,19 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..65
+  delimited "(" ")" @0..65
+    row @6..58
+      matrix Matrix - @6..58
+        row 0:
+          row @26..27
+            run "a" @26..27
+          row @30..31
+            run "b" @30..31
+        row 1:
+          row @35..36
+            run "c" @35..36
+          row @39..40
+            run "d" @39..40
+-- problems --

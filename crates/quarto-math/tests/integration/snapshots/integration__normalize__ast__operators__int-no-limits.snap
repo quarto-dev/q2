@@ -1,0 +1,8 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..6
+  nary "∫" Auto @0..4
+  run "f" @5..6
+-- problems --

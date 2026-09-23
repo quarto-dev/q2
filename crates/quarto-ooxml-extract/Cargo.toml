@@ -1,0 +1,15 @@
+[package]
+name = "quarto-ooxml-extract"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Shared semantic extraction of docx/pptx (OOXML) content for Q1-parity golden tests"
+
+[dependencies]
+zip.workspace = true
+quick-xml.workspace = true
+
+[lints]
+workspace = true

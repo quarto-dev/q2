@@ -30,6 +30,7 @@ website:
           contents:
             - guides/authoring/index.qmd
             - guides/projects/create.qmd
+            - guides/projects/preview.qmd
             - guides/projects/paths.qmd
             - guides/projects/listings.qmd
             - guides/projects/listing-templates.qmd
@@ -45,6 +46,8 @@ website:
             - guides/projects/environment.qmd
             - guides/projects/profiles.qmd
             - guides/publishing/index.qmd
+            - guides/formats/epub/index.qmd
+            - guides/formats/typst/index.qmd
     - id: Authoring
       collapse-level: 1
       contents:
@@ -298,6 +301,7 @@ website:
             - errors/project/Q-5-27.qmd
             - errors/project/Q-5-28.qmd
             - errors/project/Q-5-29.qmd
+            - errors/project/Q-5-30.qmd
         - section: "include"
           contents:
             - errors/include/Q-17-1.qmd
@@ -356,6 +360,36 @@ website:
             - errors/image/Q-19-2.qmd
             - errors/image/Q-19-3.qmd
             - errors/image/Q-19-4.qmd
+        - section: "pandoc"
+          contents:
+            - errors/pandoc/Q-20-1.qmd
+            - errors/pandoc/Q-20-2.qmd
+            - errors/pandoc/Q-20-3.qmd
+            - errors/pandoc/Q-20-4.qmd
+            - errors/pandoc/Q-20-5.qmd
+            - errors/pandoc/Q-20-6.qmd
+            - errors/pandoc/Q-20-7.qmd
+            - errors/pandoc/Q-20-8.qmd
+        - section: "typst"
+          contents:
+            - errors/typst/Q-21-1.qmd
+            - errors/typst/Q-21-2.qmd
+            - errors/typst/Q-21-3.qmd
+        - section: "math"
+          contents:
+            - errors/math/Q-22-1.qmd
+            - errors/math/Q-22-2.qmd
+            - errors/math/Q-22-3.qmd
+            - errors/math/Q-22-4.qmd
+            - errors/math/Q-22-5.qmd
+            - errors/math/Q-22-6.qmd
+            - errors/math/Q-22-7.qmd
+            - errors/math/Q-22-8.qmd
+            - errors/math/Q-22-9.qmd
+            - errors/math/Q-22-10.qmd
+            - errors/math/Q-22-11.qmd
+            - errors/math/Q-22-12.qmd
+            - errors/math/Q-22-13.qmd
 
 format:
   html:

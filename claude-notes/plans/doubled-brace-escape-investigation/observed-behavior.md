@@ -30,7 +30,7 @@ All four fixtures in this directory were run through
 - Adding cases to `Q-2-41.json` (or a new sibling `Q-*.json`) and running
   `crates/pampa/scripts/build_error_table.ts` regenerates the table; the
   script runs the parser on each case and records the error state
-  automatically (see `crates/pampa/CLAUDE.md` § Error messages).
+  automatically (see `crates/pampa/AGENTS.md` § Error messages).
 
 ## External repro
 

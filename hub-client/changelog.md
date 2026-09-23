@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-09-22
+
+- [`0ca6449`](https://github.com/quarto-dev/q2/commits/0ca6449): Upgrade KaTeX to 0.18.5 in the preview and rendered output
+
 ### 2026-09-19
 
 - [`32a96ec6`](https://github.com/quarto-dev/q2/commits/32a96ec6): New users now start with an "Examples / Templates" collection: four example projects (Meeting Notes, Website, Article, Presentation) are created on first run as your own editable copies, each ending with a link to the getting started guide.

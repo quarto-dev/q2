@@ -1222,6 +1222,7 @@ fn register_inline_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
                 math_type: mt,
                 text,
                 source_info: filter_source_info(lua),
+                text_source: None,
             })))
         })?,
     )?;

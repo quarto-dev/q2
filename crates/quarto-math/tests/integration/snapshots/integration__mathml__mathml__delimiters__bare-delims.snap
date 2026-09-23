@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false">{</mo><mi>x</mi><mo stretchy="false">}</mo><mo stretchy="false">⟨</mo><mi>y</mi><mo stretchy="false">⟩</mo><mo stretchy="false">|</mo><mi>z</mi><mo stretchy="false">|</mo></mrow><annotation encoding="application/x-tex">\{ x \} \langle y \rangle |z|</annotation></semantics></math>

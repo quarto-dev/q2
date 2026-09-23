@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mphantom><mi>x</mi></mphantom><mi>y</mi></mrow><annotation encoding="application/x-tex">\phantom{x} y</annotation></semantics></math>

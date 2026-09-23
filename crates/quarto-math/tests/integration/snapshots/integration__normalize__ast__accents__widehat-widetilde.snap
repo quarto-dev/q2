@@ -1,0 +1,12 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..29
+  accent "\u{302}" @0..13
+    row @8..13
+      run "abc" @9..12
+  accent "\u{303}" @14..29
+    row @24..29
+      run "xyz" @25..28
+-- problems --

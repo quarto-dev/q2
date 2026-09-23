@@ -212,7 +212,7 @@ All 12 steps must pass. The verify rebuilds the WASM + the q2-preview SPA bundle
 
 ### E2E browser verification
 
-Tests passing alone is NECESSARY BUT NOT SUFFICIENT — CLAUDE.md mandates real-binary check for CLI / UI features. After verify:
+Tests passing alone is NECESSARY BUT NOT SUFFICIENT — AGENTS.md mandates real-binary check for CLI / UI features. After verify:
 
 ```bash
 cargo build --bin q2 --release          # picks up the freshly-built SPA
@@ -233,7 +233,7 @@ braid close <id> --reason "Fixed: <one-line>"
 git add <component> <test>
 git commit -m "...(bd-<id>)"
 
-# Push (only after explicit user OK, per CLAUDE.md GIT PUSH POLICY) and open a PR
+# Push (only after explicit user OK, per AGENTS.md GIT PUSH POLICY) and open a PR
 # against main — no integration branch to merge into (see worktrees.md § Pushing for PR)
 git push -u origin braid/<id>-<slug>:feature/<id>-<slug>
 ```

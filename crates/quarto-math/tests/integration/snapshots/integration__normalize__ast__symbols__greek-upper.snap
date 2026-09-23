@@ -1,0 +1,17 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..69
+  sym "Γ" @0..6
+  sym "Δ" @7..13
+  sym "Θ" @14..20
+  sym "Λ" @21..28
+  sym "Ξ" @29..32
+  sym "Π" @33..36
+  sym "Σ" @37..43
+  sym "Υ" @44..52
+  sym "Φ" @53..57
+  sym "Ψ" @58..62
+  sym "Ω" @63..69
+-- problems --

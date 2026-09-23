@@ -1,0 +1,10 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..23
+  row @0..23
+    error "unknown environment `foo`" "\\begin{foo} x \\end{foo}" @7..10
+    run "x" @12..13
+-- problems --
+UnknownEnvironment @7..10 unknown environment `foo`

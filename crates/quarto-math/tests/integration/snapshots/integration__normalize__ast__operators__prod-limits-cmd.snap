@@ -1,0 +1,15 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..20
+  scripts UndOvr @0..16
+    nary "∏" UndOvr @0..12
+    sub:
+      row @13..16
+        run "i" @14..15
+  scripts Auto @17..20
+    run "x" @17..18
+    sub:
+      run "i" @19..20
+-- problems --

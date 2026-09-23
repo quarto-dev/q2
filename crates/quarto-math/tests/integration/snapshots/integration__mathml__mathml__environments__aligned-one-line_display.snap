@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtable columnalign="right left"><mtr><mtd><mi>a</mi></mtd><mtd><mrow><mo>=</mo><mi>b</mi></mrow></mtd></mtr><mtr><mtd><mi>c</mi></mtd><mtd><mrow><mo>=</mo><mi>d</mi></mrow></mtd></mtr></mtable></mrow><annotation encoding="application/x-tex">\begin{aligned} a &amp;= b \\ c &amp;= d \end{aligned}</annotation></semantics></math>

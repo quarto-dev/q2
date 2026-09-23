@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>g</mi><mo>=</mo><mrow><mo stretchy="true">(</mo><menclose notation="updiagonalstrike"><mfrac><mrow><mo>∂</mo><mi>v</mi></mrow><mrow><mo>∂</mo><mi>z</mi></mrow></mfrac></menclose><mo stretchy="true">)</mo></mrow></mrow><annotation encoding="application/x-tex">g = \left(\cancel{\frac{\partial v}{\partial z}}\right)</annotation></semantics></math>

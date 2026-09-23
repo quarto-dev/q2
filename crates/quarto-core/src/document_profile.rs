@@ -324,7 +324,7 @@ pub struct ListingItemInfo {
     /// does **not** change when keys are added/removed, so no
     /// `profile_version` bump is required for `extra` mutations.
     /// `BTreeMap` over `HashMap` for deterministic serialization
-    /// (see CLAUDE.md §"HashMap and Determinism").
+    /// (see AGENTS.md §"HashMap and Determinism").
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub extra: BTreeMap<String, ConfigValue>,
 }
@@ -1103,7 +1103,7 @@ fn extract_u32_field(meta: &ConfigValue, key: &str) -> Option<u32> {
 /// type coercion. Custom listing templates handle typed access at
 /// render time via `quarto-doctemplate`'s `TemplateValue` conversion.
 /// `BTreeMap` over `HashMap` for deterministic serialization (see
-/// CLAUDE.md §"HashMap and Determinism").
+/// AGENTS.md §"HashMap and Determinism").
 fn extract_listing_item_extra(li: &ConfigValue) -> BTreeMap<String, ConfigValue> {
     let Some(extra) = li.get("extra") else {
         return BTreeMap::new();

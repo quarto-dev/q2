@@ -144,7 +144,7 @@ export async function startHubServer(options: StartOptions): Promise<ServerHandl
 /**
  * Path to the TypeScript reference sync server. It lives in
  * `external-sources/`, which is NOT version-controlled — see the External
- * Sources Policy in CLAUDE.md. Tests that need it must skip when it is
+ * Sources Policy in AGENTS.md. Tests that need it must skip when it is
  * absent rather than fail, so the suite is CI-able (GH #250).
  */
 const TS_SYNC_SERVER_DIR = path.join(

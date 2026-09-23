@@ -38,6 +38,7 @@
 
 pub mod artifact;
 pub mod artifact_flush;
+pub mod ast_walk;
 pub mod attribution;
 pub mod brand_fonts;
 pub mod cell_options;
@@ -55,8 +56,11 @@ pub mod format;
 pub mod get_config;
 pub mod glob;
 pub mod language;
+pub mod math_method;
 pub mod metadata;
 pub mod output_sink;
+pub mod pandoc_filters;
+pub mod pandoc_formats;
 pub mod pipeline;
 pub mod project;
 pub mod project_resources;

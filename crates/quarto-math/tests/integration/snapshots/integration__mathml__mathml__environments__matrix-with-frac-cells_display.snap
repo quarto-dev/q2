@@ -1,0 +1,8 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mrow><mo stretchy="true">(</mo><mtable><mtr><mtd><mfrac><mn>1</mn><mn>2</mn></mfrac></mtd><mtd><mn>0</mn></mtd></mtr><mtr><mtd><mn>0</mn></mtd><mtd><mfrac><mn>1</mn><mn>2</mn></mfrac></mtd></mtr></mtable><mo stretchy="true">)</mo></mrow></mrow><annotation encoding="application/x-tex">\begin{pmatrix}
+\frac{1}{2} &amp; 0 \\
+0 &amp; \frac{1}{2}
+\end{pmatrix}</annotation></semantics></math>

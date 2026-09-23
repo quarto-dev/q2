@@ -1,0 +1,14 @@
+---
+title: Plain Document
+---
+
+# Hello World
+
+This is a paragraph with **bold** and *italic* text.
+
+- item one
+- item two
+
+::: {.my-plain-div}
+Some content inside a plain div.
+:::

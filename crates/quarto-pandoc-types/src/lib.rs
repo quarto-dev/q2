@@ -16,6 +16,7 @@ pub mod block;
 pub mod caption;
 pub mod config_value;
 pub mod custom;
+pub mod custom_node_schema;
 pub mod inline;
 pub mod list;
 pub mod meta;
@@ -33,6 +34,7 @@ pub use block::{
 };
 pub use caption::Caption;
 pub use custom::{CustomNode, Slot};
+pub use custom_node_schema::{PlainDataField, Route, Schema, SlotKind, TypeEntry, load};
 pub use inline::{
     AsInline, Citation, CitationMode, Cite, Code, Delete, EditComment, Emph, Highlight, Image,
     Inline, InlineAttr, Inlines, Insert, LineBreak, Link, Math, MathType, Note, NoteReference,

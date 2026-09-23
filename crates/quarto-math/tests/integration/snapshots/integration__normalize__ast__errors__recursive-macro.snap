@@ -1,0 +1,8 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..31
+  error "macro expansion limit exceeded" "macro expansion limit exceeded" @-
+-- problems --
+ExpansionLimit @- macro expansion limit exceeded

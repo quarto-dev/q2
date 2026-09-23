@@ -55,7 +55,8 @@ import { makeSlotSetter, renderSlot } from '../utils';
  *        .callout-icon-container?    (when icon=true)
  *        .callout-body-container
  *
- * `plain_data` (writer: `transforms/callout.rs`):
+ * `plain_data` (writer: `transforms/callout.rs`; keys mirrored from
+ * `crates/quarto-pandoc-types/resources/custom-node-schema.json`):
  *   - `type` (string): `note | warning | tip | important | caution`.
  *   - `appearance` (string): `default | simple | minimal` — minimal
  *     is normalized to `simple` + `icon=false` here, mirroring the
@@ -66,20 +67,29 @@ import { makeSlotSetter, renderSlot } from '../utils';
  *   - `collapse_starts_collapsed` (bool): when `collapse=true`, true
  *     means start collapsed. Cosmetic in preview (no toggle).
  *   - `icon` (bool): controls `.callout-icon-container` subtree.
+ *   - `ref_type`, `kind`, `identifier`: set when the Div's id
+ *     classifies as crossref-eligible (`callout.rs:288-296`).
+ *   - `order`: set by crossref-index post-construction when `ref_type`
+ *     is present and the id isn't a duplicate (`crossref_index.rs:256-270`).
+ *
+ * The key array below is asserted against the schema (both directions)
+ * by `schemaConformance.test.ts`'s T4.3, so the interface cannot drift
+ * from the schema by construction.
  */
 
-interface CalloutPlainData {
-    type?: string;
-    appearance?: string;
-    collapse?: boolean;
-    collapse_starts_collapsed?: boolean;
-    icon?: boolean;
-    // Set by CalloutTransform when the user's id (e.g. `tip-foo`)
-    // classifies as a crossref-eligible callout (`callout.rs:236-241`).
-    // Presence suppresses the screen-reader callout-type span — the
-    // crossref-rendered prefix announces the type on its own.
-    ref_type?: string;
-}
+export const CALLOUT_PLAIN_DATA_KEYS = [
+    'type',
+    'appearance',
+    'collapse',
+    'collapse_starts_collapsed',
+    'icon',
+    'ref_type',
+    'kind',
+    'identifier',
+    'order',
+] as const;
+
+type CalloutPlainData = { [K in (typeof CALLOUT_PLAIN_DATA_KEYS)[number]]?: unknown };
 
 const DEFAULT_TITLES: Record<string, string> = {
     note: 'Note',
@@ -127,8 +137,8 @@ export const Callout = ({ node, onNavigateToDocument, setLocalAst }: NodeArgs<Cu
     const contentsClass = `${calloutId}-contents`;
 
     const plain = (node.plain_data ?? {}) as CalloutPlainData;
-    const calloutType = plain.type ?? 'note';
-    const rawAppearance = plain.appearance ?? 'default';
+    const calloutType = (plain.type as string | undefined) ?? 'note';
+    const rawAppearance = (plain.appearance as string | undefined) ?? 'default';
     const rawIcon = plain.icon !== false; // undefined defaults to icon-on
     // Defense-in-depth normalization: minimal → simple + icon=false.
     const appearance = rawAppearance === 'minimal' ? 'simple' : rawAppearance;

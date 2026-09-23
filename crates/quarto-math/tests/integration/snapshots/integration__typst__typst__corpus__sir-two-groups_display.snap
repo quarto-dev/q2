@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/typst.rs
+expression: to_typst(&n)
+---
+(d S_(1))/(d t) & = - (ρ β S_(1) ( c_(11) I_(1) (+ c)_(12) I_(2) ))/(N) \ (d S_(2))/(d t) & = - (β S_(2) ( c_(12) I_(1) (+ c)_(22) I_(2) ))/(N) \ (d I_(1))/(d t) & = (ρ β S_(1) ( c_(11) I_(1) (+ c)_(12) I_(2) ))/(N) - γ I_(1) \ (d I_(2))/(d t) & = (β S_(2) ( c_(12) I_(1) (+ c)_(22) I_(2) ))/(N) - γ I_(2) \ (d R_(1))/(d t) & = γ I_(1) \ (d R_(2))/(d t) & = γ I_(2)

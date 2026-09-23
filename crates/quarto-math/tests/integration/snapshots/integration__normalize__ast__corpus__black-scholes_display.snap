@@ -1,0 +1,68 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..232
+  frac Bar @0..47
+    row @5..25
+      sym "∂" @6..14
+      style Roman @15..24
+        run "C" @23..24
+    row @25..47
+      sym "∂" @27..35
+      style Roman @36..45
+        run "t" @44..45
+  run "+" @48..49
+  frac Bar @50..61
+    row @55..58
+      run "1" @56..57
+    row @58..61
+      run "2" @59..60
+  scripts Auto @61..71
+    sym "σ" @61..67
+    sup:
+      row @68..71
+        run "2" @69..70
+  scripts Auto @72..85
+    style Roman @72..81
+      run "S" @80..81
+    sup:
+      row @82..85
+        run "2" @83..84
+  frac Bar @86..137
+    row @91..115
+      scripts Auto @92..104
+        sym "∂" @92..100
+        sup:
+          row @101..104
+            run "2" @102..103
+      style Roman @105..114
+        run "C" @113..114
+    row @115..137
+      sym "∂" @116..124
+      scripts Auto @125..136
+        style Roman @125..134
+          run "C" @133..134
+        sup:
+          run "2" @135..136
+  run "+" @140..141
+  style Roman @142..151
+    run "r" @150..151
+  style Roman @152..161
+    run "S" @160..161
+  frac Bar @162..207
+    row @167..187
+      sym "∂" @168..176
+      style Roman @177..186
+        run "C" @185..186
+    row @187..207
+      sym "∂" @188..196
+      style Roman @197..206
+        run "S" @205..206
+  space 0.3333em @207..208
+  run "=" @209..210
+  style Roman @213..222
+    run "r" @221..222
+  style Roman @223..232
+    run "C" @231..232
+-- problems --

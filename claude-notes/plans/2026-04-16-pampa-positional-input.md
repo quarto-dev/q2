@@ -24,7 +24,7 @@ read stdin or open the file.
 
 ### Where `-i` is used today
 
-- `crates/pampa/CLAUDE.md` — documents the `-i` flag in the "Binary usage"
+- `crates/pampa/AGENTS.md` — documents the `-i` flag in the "Binary usage"
   section and in example commands.
 - `crates/pampa/tools/pandoc-diff/server.ts:59` — invokes pampa with
   `-i "${tmpFile.name}"`. Would continue to work unchanged.
@@ -72,7 +72,7 @@ issue if someone needs it).
 - [x] Run `cargo nextest run --workspace` to catch regressions in downstream
       crates (per CLAUDE.md's monorepo rule). (7268 passed, 197 skipped.)
 - [x] Run `cargo fmt` on `main.rs`.
-- [x] Update `crates/pampa/CLAUDE.md` "Binary usage" section to document the
+- [x] Update `crates/pampa/AGENTS.md` "Binary usage" section to document the
       positional form alongside `-i`. Also fixed a stale reference
       (`quarto-markdown-pandoc` → `pampa`) caught while editing.
 

@@ -61,6 +61,8 @@ pampa = { workspace = true, features = ["lua-filter", "json-filter"] }
 # `quarto-highlight` crate itself to avoid compiling wasmtime for the
 # wasm32-unknown-unknown target.
 quarto-highlight.workspace = true
+# `MathMlStage` (html-math-method: mathml) converts math at render time.
+quarto-math = { path = "../quarto-math" }
 
 # Used by the listings module's `b64_encode_unicode` helper (mirroring
 # Q1's `b64EncodeUnicode` for the categories click handler). Available
@@ -136,6 +138,11 @@ jupyter-protocol = "2.0"
 tokio = { version = "1", features = ["sync", "time", "rt-multi-thread", "process", "fs", "net", "io-util"] }
 uuid.workspace = true
 
+# `typst-gather` stages @preview packages a document references beyond
+# Quarto's 5 vendored ones (pandoc-hybrid-typst Phase 2). Native-only:
+# `TypstCompileStage` (which calls it) is itself WASM-gated.
+typst-gather.workspace = true
+
 # hephaestus's text stack (parley → fontique) enumerates system fonts
 # through fontconfig on Linux, and by default *links* libfontconfig at
 # build time (pkg-config), which would make `libfontconfig1-dev` a
@@ -151,6 +158,9 @@ fontique = { version = "0.9", default-features = false, features = ["fontconfig-
 [dev-dependencies]
 insta.workspace = true
 quarto-error-catalog = { workspace = true }
+# P7 Task 11: the shared docx/pptx semantic extractor + pandoc-goldens
+# fixture manifest, also used by `cargo xtask capture-pandoc-goldens`.
+quarto-ooxml-extract = { path = "../quarto-ooxml-extract" }
 # Enables `quarto_config::span_assert` for tests that assert *where* a
 # diagnostic points, not just which code it carries (bd-9yh3pzfu).
 quarto-config = { workspace = true, features = ["span-assert"] }
@@ -159,6 +169,11 @@ walkdir.workspace = true
 tokio = { version = "1", features = ["rt", "macros"] }
 tracing-subscriber.workspace = true
 socket2 = "0.6"
+# T11.1: reading back the docx a real `pandoc` subprocess produces, to
+# assert `word/document.xml` is extractable — not writing archives, so
+# only the deflate read codec is needed (same minimal feature set as
+# quarto-source-fetch, which already vendors this at the same version).
+zip = { version = "6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [lints]
 workspace = true

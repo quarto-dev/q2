@@ -46,6 +46,11 @@ mod code_highlight;
 mod compile_theme_css;
 mod document_profile;
 mod engine_execution;
+// Equation-number encoding (bd-vlhi2zkj): turns the reserved
+// `quarto-eq-number` attribute into `\tag{N}` / ` \qquad(N)` / a sibling
+// label for the selected math renderer. Runs after user post filters so
+// Lua can rewrite the attribute first. Included on native and WASM.
+mod equation_number;
 mod include_expansion;
 mod include_resolve;
 mod language_resolve;
@@ -56,7 +61,18 @@ mod source_conversion;
 // when the document contains Math elements. Included on both native
 // and WASM pipelines (math display is safe under iframe reinit).
 mod math_js;
+// Native MathML (bd-3evfzwal): converts every `Inline::Math` with
+// quarto-math when `html-math-method: mathml`; leftovers fall back to
+// MathJax via math_js. Included on native and WASM.
+mod math_ml;
 mod metadata_merge;
+// Pandoc-hybrid leg's writer stage: shells out to a real `pandoc`
+// subprocess via `std::process::Command` and materializes the vendored
+// filter tree via `crate::pandoc_filters::bundle::extract_share_tree`
+// (`tempfile`-backed). Same WASM-exclusion reasoning as `bootstrap_js`
+// and `crate::pandoc_filters::{bundle, harness}`.
+#[cfg(not(target_arch = "wasm32"))]
+mod pandoc_write;
 mod parse_document;
 mod pre_engine_sugaring;
 mod render_html;
@@ -66,6 +82,12 @@ mod resource_report;
 // Bootstrap is active. Same WASM-exclusion reasoning as `bootstrap_js`.
 #[cfg(not(target_arch = "wasm32"))]
 mod tabsets_js;
+// pandoc-hybrid-typst Phase 2: compiles PandocWriteStage's intermediate
+// `.typ` output to PDF via a real `typst compile` subprocess. Native-only
+// for the same reason as `pandoc_write`: shells out to a real binary, no
+// WASM equivalent.
+#[cfg(not(target_arch = "wasm32"))]
+mod typst_compile;
 mod unwrap_profile;
 mod user_filters;
 
@@ -90,6 +112,9 @@ pub use compile_theme_css::{
 };
 pub use document_profile::DocumentProfileStage;
 pub use engine_execution::{ENGINE_CAPTURE_KIND, EngineExecutionStage};
+pub use equation_number::{
+    EQ_NUMBER_LABEL_CLASS, EQ_SIBLING_NUMBER_CLASS, EquationNumberStage, NumberEncoding,
+};
 pub use include_expansion::{
     IncludeExpansionStage, collect_include_paths, expand_document_includes, extract_include_path,
 };
@@ -98,7 +123,12 @@ pub use language_resolve::LanguageResolveStage;
 pub use link_resolution::LinkResolutionStage;
 pub use listing_item_info::ListingItemInfoStage;
 pub use math_js::{DEFAULT_KATEX_URL_BASE, DEFAULT_MATHJAX_URL, MathEngine, MathJsStage};
+pub use math_ml::MathMlStage;
 pub use metadata_merge::MetadataMergeStage;
+#[cfg(not(target_arch = "wasm32"))]
+pub use pandoc_write::{
+    PandocWriteStage, classify_pandoc_completion, retain_temp_json_unless_success,
+};
 pub use parse_document::ParseDocumentStage;
 pub use pre_engine_sugaring::PreEngineSugaringStage;
 pub use render_html::RenderHtmlBodyStage;
@@ -106,5 +136,7 @@ pub use resource_report::ResourceReportStage;
 pub use source_conversion::SourceConversionStage;
 #[cfg(not(target_arch = "wasm32"))]
 pub use tabsets_js::TabsetsJsStage;
+#[cfg(not(target_arch = "wasm32"))]
+pub use typst_compile::TypstCompileStage;
 pub use unwrap_profile::UnwrapProfileStage;
 pub use user_filters::UserFiltersStage;

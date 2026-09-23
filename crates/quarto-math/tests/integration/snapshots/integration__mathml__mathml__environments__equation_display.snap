@@ -1,0 +1,7 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtable columnalign="right"><mtr><mtd><msup><mrow><mi>E</mi><mo>=</mo><mi>m</mi><mi>c</mi></mrow><mn>2</mn></msup></mtd></mtr></mtable></mrow><annotation encoding="application/x-tex">\begin{equation}
+E = mc^2
+\end{equation}</annotation></semantics></math>

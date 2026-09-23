@@ -1,0 +1,21 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..58
+  sym "‖" @25..27
+  row @25..36
+    scripts Auto @25..36
+      sym "‖" @25..27
+      sub:
+        sym "‖" @29..31
+    error "double subscript" "\\|_{#1}" @29..36
+  row @32..45
+    run "x" @44..45
+  run "[" @52..53
+  run "1" @53..54
+  run "]" @54..55
+  row @55..58
+    run "y" @56..57
+-- problems --
+DoubleScript @29..36 double subscript

@@ -1,0 +1,17 @@
+---
+source: crates/xtask/src/capture_pandoc_goldens.rs
+expression: extraction.to_string()
+---
+core_props:
+  title: Theorem Test
+paragraphs:
+  [Title] Theorem Test
+  [FirstParagraph] Theorem 1 (Line) The equation of any straight line, called a linear equation, can be written as:
+  [BodyText] 
+  [FirstParagraph] See Theorem 1.
+math:
+  y=mx+b
+media: []
+image_relationships: []
+drawing_count: 0
+page_break_count: 0

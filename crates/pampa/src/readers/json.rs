@@ -921,10 +921,17 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 .as_str()
                 .ok_or_else(|| JsonReadError::InvalidType("Math text must be string".to_string()))?
                 .to_string();
+            // `textS` sidecar: provenance of the math text (bd-ieldbghj).
+            // Absent or null in JSON produced by anything but pampa.
+            let text_source = match obj.get("textS") {
+                Some(v) if !v.is_null() => Some(deserializer.from_json_ref(v)?),
+                _ => None,
+            };
             Ok(Inline::Math(Math {
                 math_type,
                 text,
                 source_info,
+                text_source,
             }))
         }
         "Underline" => {
@@ -2643,6 +2650,14 @@ fn read_config_value_top_level(
 
     let mut entries = Vec::new();
     for (key, val) in obj {
+        // `quarto_pandoc_reader_opts` is a write-only sentinel for the
+        // vendored Q1 Lua (Task 7, P2) — it never existed in the user's
+        // document metadata and must not be reconstructed into Q2's own
+        // `ConfigValue::Map`, or it would round-trip back out into qmd
+        // front matter on the next write.
+        if key == "quarto_pandoc_reader_opts" {
+            continue;
+        }
         // Look up key_source from the provided map using deserializer
         let key_source = if let Some(sources) = key_sources {
             if let Some(sources_obj) = sources.as_object() {
@@ -2775,6 +2790,27 @@ fn read_config_value(value: &Value, deserializer: &SourceInfoDeserializer) -> Re
             let c = obj
                 .get("c")
                 .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
+            // Pandoc-superset shape (`JsonConfig { raw: false, .. }`,
+            // matching real Pandoc's own `MetaMap` encoding): `c` is a
+            // genuine JSON object mapping key to MetaValue, with no
+            // `key_source` sidecar. Checked before the array case below,
+            // which is pampa's own raw round-trip shape.
+            if let Some(map_obj) = c.as_object() {
+                let mut entries = Vec::new();
+                for (key, value) in map_obj {
+                    let value = read_config_value(value, deserializer)?;
+                    entries.push(ConfigMapEntry {
+                        key: key.clone(),
+                        key_source: quarto_source_map::SourceInfo::default(),
+                        value,
+                    });
+                }
+                return Ok(ConfigValue {
+                    value: ConfigValueKind::Map(entries),
+                    source_info,
+                    merge_op,
+                });
+            }
             let arr = c.as_array().ok_or_else(|| {
                 JsonReadError::InvalidType("MetaMap content must be array".to_string())
             })?;

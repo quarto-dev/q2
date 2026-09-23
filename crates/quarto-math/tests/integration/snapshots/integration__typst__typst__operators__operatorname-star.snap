@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/typst.rs
+expression: to_typst(&n)
+---
+op("argmax", limits: #true)_(x) f ( x )

@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/typst.rs
+expression: to_typst(&n)
+---
+p r i c e = hat(β)_(0) + hat(β)_(1) × a r e a + ϵ

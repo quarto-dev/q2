@@ -1,0 +1,13 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..19
+  scripts Auto @0..19
+    groupchr "⏞" Top @0..15
+      row @10..15
+        run "a+b" @11..14
+    sup:
+      row @16..19
+        run "n" @17..18
+-- problems --

@@ -1,0 +1,8 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..25
+  text Bold "bold" @0..13
+  text Italic "it" @14..25
+-- problems --

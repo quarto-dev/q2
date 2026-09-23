@@ -1,0 +1,18 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..19
+  func "sin" Auto @0..4
+  run "(" @4..5
+  run "x" @5..6
+  run ")" @6..7
+  run "+" @8..9
+  scripts Auto @10..16
+    func "cos" Auto @10..14
+    sup:
+      run "2" @15..16
+  run "(" @16..17
+  run "x" @17..18
+  run ")" @18..19
+-- problems --

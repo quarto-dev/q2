@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/typst.rs
+expression: to_typst(&n)
+---
+root(n + 1, x^(2) + y^(2))

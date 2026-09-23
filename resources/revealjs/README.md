@@ -5,7 +5,7 @@ render `format: revealjs` presentations. They are vendored here (not referenced
 from `node_modules/` or `external-sources/`) so the `q2` binary is fully
 self-contained — the files are embedded at compile time via `include_str!`
 (see `crates/quarto-core/src/revealjs/`). This follows the repo's External
-Sources Policy (see root `CLAUDE.md`).
+Sources Policy (see root `AGENTS.md`).
 
 ## Source & version
 

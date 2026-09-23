@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/omml.rs
+expression: to_omml(&n)
+---
+<m:oMath><m:r><m:t>a</m:t></m:r><m:limUpp><m:e><m:r><m:t>→</m:t></m:r></m:e><m:lim><m:r><m:t>f</m:t></m:r></m:lim></m:limUpp><m:r><m:t>b</m:t></m:r><m:limUpp><m:e><m:r><m:t>←</m:t></m:r></m:e><m:lim><m:r><m:t>[</m:t></m:r></m:lim></m:limUpp><m:r><m:t>g</m:t></m:r><m:r><m:t>]</m:t></m:r><m:r><m:t>h</m:t></m:r><m:r><m:t>c</m:t></m:r></m:oMath>

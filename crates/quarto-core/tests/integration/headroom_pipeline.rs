@@ -12,7 +12,7 @@
 //! Same harness shape as `secondary_nav_pipeline.rs`: write a small
 //! website fixture to a temp dir, drive it through the real
 //! `ProjectPipeline`, inspect the rendered HTML and the `site_libs/`
-//! payloads on disk. Per `CLAUDE.md`'s end-to-end rule, these tests
+//! payloads on disk. Per `AGENTS.md`'s end-to-end rule, these tests
 //! exist because the unit tests (template partial, transform
 //! predicate) each check one seam — only a real render proves the
 //! seams meet: header classes in the HTML, body class composed, both

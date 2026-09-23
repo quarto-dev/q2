@@ -1,0 +1,8 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..32
+  error "`\\frac` is missing an argument" "\\frac{a}" @18..26
+-- problems --
+ArityMismatch @18..26 `\frac` is missing an argument

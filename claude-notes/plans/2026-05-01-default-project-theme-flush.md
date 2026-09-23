@@ -84,7 +84,7 @@ per-doc fallback. WASM dropped it.
 
 ### Why the cross-render persistence makes the bug intermittent
 
-Per `crates/wasm-quarto-hub-client/CLAUDE.md`, the synthetic VFS
+Per `crates/wasm-quarto-hub-client/AGENTS.md`, the synthetic VFS
 at `/.quarto/project-artifacts/...` is "load-bearing across renders"
 — `flush_site_libs` writes there, the iframe post-processor reads
 from there, and `vfs_clear` is explicitly **not** called between

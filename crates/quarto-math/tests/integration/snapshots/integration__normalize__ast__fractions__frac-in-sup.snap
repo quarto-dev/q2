@@ -1,0 +1,15 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..15
+  scripts Auto @0..15
+    run "e" @0..1
+    sup:
+      row @2..15
+        frac Bar @3..14
+          row @8..11
+            run "1" @9..10
+          row @11..14
+            run "2" @12..13
+-- problems --

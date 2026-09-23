@@ -1,0 +1,9 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..10
+  style BoldItalic @0..10
+    row @3..10
+      sym "β" @4..9
+-- problems --

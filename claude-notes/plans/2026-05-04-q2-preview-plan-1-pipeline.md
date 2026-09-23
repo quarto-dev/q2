@@ -831,7 +831,7 @@ a localized swap to `if ctx.format.pipeline_kind == Some("preview")`.
 q2-preview shares Pass-1 with the HTML render path because the
 divergence is purely in the transform pipeline, which runs in
 Pass-2. The IndexedDB-backed `cache_get`/`cache_set` infra
-(`wasm-quarto-hub-client/CLAUDE.md` §"VFS state contract") is
+(`wasm-quarto-hub-client/AGENTS.md` §"VFS state contract") is
 unaffected; cache hit-rate is preserved.
 
 The same CLAUDE.md says **"Do not call `vfs_clear` between

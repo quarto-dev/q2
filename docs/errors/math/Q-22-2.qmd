@@ -1,0 +1,34 @@
+---
+title: "Unknown Math Environment"
+description: "A `\\begin{name}` in a math expression names an environment quarto-math does not know."
+code: Q-22-2
+subsystem: math
+status: stub
+since: "99.9.9"
+categories:
+  - math
+---
+
+# `Q-22-2` — Unknown Math Environment
+
+> A `\begin{name}` in a math expression names an environment quarto-math does not know.
+
+## What this means
+
+Math environments (`aligned`, `cases`, `pmatrix`, `array`, …) lay out rows and cells. This error fires when `name` is not one of the supported environments. The body is kept as ordinary content so nothing is lost, but the layout the environment would have given it is not applied, and formats that need a conversion fall back to the verbatim source.
+
+## Why this happens
+
+Common causes: a typo (`\begin{alinged}`), a text-mode environment used inside math (`\begin{center}`), or an environment from a package that has no math meaning.
+
+## How to fix it
+
+Use one of the supported environments: `aligned`, `align`, `align*`, `alignedat`, `split`, `gathered`, `gather`, `multline`, `cases`, `rcases`, `matrix`, `pmatrix`, `bmatrix`, `Bmatrix`, `vmatrix`, `Vmatrix`, `smallmatrix`, `array`, `subarray`, `equation`.
+
+## Where it is reported
+
+Math diagnostics point into the `.qmd` at the exact characters inside the
+`$…$` or `$$…$$` block, including math that spans several lines or sits
+inside a block quote or list item. When a `\newcommand` macro is involved,
+a problem inside the macro body points at the definition and a problem in
+a macro argument points at the use.

@@ -168,4 +168,4 @@ word), then apply the corpus fix + regenerate, then confirm it PASSES.
 - `crates/quarto-parse-errors/src/error_generation.rs:159-228` — note resolution + trim logic
 - `crates/pampa/scripts/build_error_table.ts` — corpus → `_autogen-table.json` builder
 - `crates/pampa/resources/error-corpus/_autogen-table.json` — generated table (do not hand-edit)
-- `crates/pampa/CLAUDE.md` — "Error messages" / corpus regeneration instructions
+- `crates/pampa/AGENTS.md` — "Error messages" / corpus regeneration instructions

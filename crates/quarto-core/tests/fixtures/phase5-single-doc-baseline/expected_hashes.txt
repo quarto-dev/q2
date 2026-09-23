@@ -410,5 +410,17 @@
 # and deliberately NOT unified with these — the two treatments differ in kind.
 # doc.html hash unchanged: CSS-only change, and a single-doc render has no
 # footer at all, so the new selectors match nothing in the fixture's body.
+# Re-captured 2026-09-21 (bd-vlhi2zkj, format-specific equation numbering):
+# doc_files/styles.css hash updated because a new built-in SCSS layer
+# `equation-number.scss` (`load_equation_number_layer`, bundled at every
+# HTML compile site and in `assemble_reveal_scss`, like `copy-code.scss`)
+# ships the three `.quarto-eq-sibling-number…` rules that lay out an
+# equation number placed OUTSIDE the math (the `Sibling` encoding
+# `EquationNumberStage` uses under `html-math-method: mathml`). The layer
+# is purely additive; no existing rule changed. doc.html hash unchanged:
+# the fixture has no labelled equation, so no `quarto-eq-*` class appears
+# in its body, and the encoding change itself (crossref-render now records
+# `quarto-eq-number` and the stage appends `\tag{N}` for MathJax) is
+# byte-neutral for a document without numbered equations.
 doc.html a0540297514ad41734a23e91c9511134b1fa469281ec470339571ffd5d404494
-doc_files/styles.css a184a29137e14e4b35c4c791156314888268503c3d313889e94177295f0c5c2d
+doc_files/styles.css adf15c061a67cfbd61915e5d6fa9ce70956c24e3119254f99a53a382fe326d08

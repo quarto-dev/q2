@@ -683,7 +683,7 @@ fn parse_editor_boot(body: &[u8]) -> Option<quarto_preview::EditorBootInfo> {
 
 /// Bind `host:0`, read the OS-assigned port, drop the listener.
 /// Returns the port number so the caller can pre-print the URL.
-fn probe_free_port(host: &str) -> Result<u16> {
+pub(crate) fn probe_free_port(host: &str) -> Result<u16> {
     let listener =
         StdTcpListener::bind((host, 0)).with_context(|| format!("probing free port on {host}"))?;
     let port = listener
@@ -698,7 +698,7 @@ fn probe_free_port(host: &str) -> Result<u16> {
 /// clean "port N already in use" error instead of the raw bind
 /// failure from inside `quarto_hub::server::run_server_with`. The
 /// returned error message names `--port 0` as the escape hatch.
-fn validate_explicit_port(host: &str, port: u16) -> Result<()> {
+pub(crate) fn validate_explicit_port(host: &str, port: u16) -> Result<()> {
     match StdTcpListener::bind((host, port)) {
         Ok(listener) => {
             drop(listener);
@@ -754,7 +754,12 @@ fn open_browser_or_log(url: &str, browser: Option<&str>) {
 /// but opening anyway (rather than never) preserves the old behavior
 /// as a floor, and the warning gives the slow start visibility instead
 /// of leaving it silent.
-fn spawn_browser_open_when_ready(host: String, port: u16, url: String, browser: Option<String>) {
+pub(crate) fn spawn_browser_open_when_ready(
+    host: String,
+    port: u16,
+    url: String,
+    browser: Option<String>,
+) {
     tokio::spawn(async move {
         const READY_TIMEOUT: Duration = Duration::from_secs(10);
         if wait_until_accepting(&host, port, READY_TIMEOUT).await {

@@ -144,7 +144,7 @@ The RawInline branch needs the same leading_ws/trailing_ws → `IntermediateInli
 
 **Filed as bd-nkx4** for the reader-side fix. Scope (recommended for the implementer, not part of triage):
 
-1. **Test first** (per `crates/pampa/CLAUDE.md` TDD rule):
+1. **Test first** (per `crates/pampa/AGENTS.md` TDD rule):
    - Add `crates/pampa/tests/roundtrip_tests/qmd-json-qmd/code_space_html_inline.qmd` (or similar) containing `` See `func()` <a href="x">link</a> done. `` to lock in the round-trip.
    - Add a focused AST test asserting that `Code` followed by an `html_element` separated by whitespace produces `Code, Space, RawInline` (mirror of an existing anchor-branch test).
    - Verify both fail before any code change.
@@ -186,4 +186,4 @@ cargo run --bin pampa -- -v < claude-notes/issue-reports/182/repro-with-space.qm
 - `crates/pampa/src/pandoc/treesitter.rs:1076` — `"html_element"` arm (bug site).
 - `crates/pampa/src/pandoc/treesitter.rs:1084-1162` — anchor branch (working model to copy).
 - `crates/pampa/src/pandoc/treesitter_utils/code_span_helpers.rs:43-57, 109-113` — code span side, also a working model; note line 45 comment confirming the closing delimiter never carries trailing whitespace (so the html_element is the right place to emit the post-Code space).
-- `crates/pampa/CLAUDE.md` — TDD-first rule for parser fixes.
+- `crates/pampa/AGENTS.md` — TDD-first rule for parser fixes.

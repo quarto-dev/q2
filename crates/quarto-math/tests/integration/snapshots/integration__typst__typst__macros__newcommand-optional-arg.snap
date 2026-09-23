@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/typst.rs
+expression: to_typst(&n)
+---
+‖ ‖_(‖) "\\|_{#1}" x [ 1 ] y

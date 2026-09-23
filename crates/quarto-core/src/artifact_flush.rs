@@ -52,7 +52,7 @@
 //! images, …) so the iframe post-processor can read them back at the
 //! resolver's matching path (`/.quarto/project-artifacts/...` — the
 //! Phase 9 "VFS is load-bearing across renders" contract; see
-//! `crates/wasm-quarto-hub-client/CLAUDE.md`).
+//! `crates/wasm-quarto-hub-client/AGENTS.md`).
 //!
 //! Before bd-q3bxnq2e this loop lived inline (twice) in
 //! `wasm-quarto-hub-client/src/lib.rs` and unconditionally

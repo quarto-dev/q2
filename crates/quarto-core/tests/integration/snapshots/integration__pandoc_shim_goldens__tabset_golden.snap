@@ -1,0 +1,22 @@
+---
+source: crates/quarto-core/tests/integration/pandoc_shim_goldens.rs
+assertion_line: 213
+expression: "render_and_project(\"tabset-basic.qmd\")"
+---
+Div Some(("", ["panel-tabset"]))
+  Header[2] Some(("", ["active"]))
+    Str "Tab"
+    Space
+    Str "Alpha"
+  Para
+    Str "Alpha"
+    Space
+    Str "content."
+  Header[2] Some(("", []))
+    Str "Tab"
+    Space
+    Str "Beta"
+  Para
+    Str "Beta"
+    Space
+    Str "content."

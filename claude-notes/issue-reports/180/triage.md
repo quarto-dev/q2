@@ -141,7 +141,7 @@ if let Some(image) = match_implicit_figure_shape(figure) {
 }
 ```
 
-Test coverage to add (TDD-first per `crates/pampa/CLAUDE.md`):
+Test coverage to add (TDD-first per `crates/pampa/AGENTS.md`):
 
 1. `tests/roundtrip_tests/qmd-json-qmd/figure_implicit_then_para.qmd` — bug A.
 2. `tests/roundtrip_tests/qmd-json-qmd/layout_div_subfigures.qmd` — bug B.
@@ -177,7 +177,7 @@ br show bd-emr4 --json                      # confirmed scope differs
 
 - Related (different code path, not a duplicate): bd-emr4 — qmd writer/reader: explicit Figure shapes don't round-trip.
 - Writer contract: `crates/pampa/src/writers/qmd.rs` — `write_paragraph` (`:2197`), `write_plain` (`:2209`), `write_div` (`:442`), `write_impl` (`:2325`).
-- TDD rule for roundtrip fixes: `crates/pampa/CLAUDE.md` — "When fixing roundtripping bugs: FIRST add the failing test to `tests/roundtrip_tests/qmd-json-qmd`."
+- TDD rule for roundtrip fixes: `crates/pampa/AGENTS.md` — "When fixing roundtripping bugs: FIRST add the failing test to `tests/roundtrip_tests/qmd-json-qmd`."
 
 ## Pre-flight note
 

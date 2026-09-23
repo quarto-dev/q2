@@ -1,0 +1,8 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mfrac><mrow><mo>∂</mo><mi mathvariant="normal">C</mi></mrow><mrow><mo>∂</mo><mi mathvariant="normal">t</mi></mrow></mfrac><mo>+</mo><mfrac><mn>1</mn><mn>2</mn></mfrac><msup><mi>σ</mi><mn>2</mn></msup><msup><mi mathvariant="normal">S</mi><mn>2</mn></msup><mfrac><mrow><msup><mo>∂</mo><mn>2</mn></msup><mi mathvariant="normal">C</mi></mrow><mrow><mo>∂</mo><msup><mi mathvariant="normal">C</mi><mn>2</mn></msup></mrow></mfrac><mo>+</mo><mi mathvariant="normal">r</mi><mi mathvariant="normal">S</mi><mfrac><mrow><mo>∂</mo><mi mathvariant="normal">C</mi></mrow><mrow><mo>∂</mo><mi mathvariant="normal">S</mi></mrow></mfrac><mspace width="0.3333em"></mspace><mo>=</mo><mi mathvariant="normal">r</mi><mi mathvariant="normal">C</mi></mrow><annotation encoding="application/x-tex">\frac{\partial \mathrm C}{ \partial \mathrm t } + \frac{1}{2}\sigma^{2} \mathrm S^{2}
+\frac{\partial^{2} \mathrm C}{\partial \mathrm C^2}
+  + \mathrm r \mathrm S \frac{\partial \mathrm C}{\partial \mathrm S}\ =
+  \mathrm r \mathrm C</annotation></semantics></math>

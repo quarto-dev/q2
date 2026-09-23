@@ -14,7 +14,8 @@
 //! - [`CalloutResolveTransform`] - Resolves Callout CustomNodes to standard Div structure
 //! - [`FooterGenerateTransform`] - Resolves `page-footer:` YAML into `navigation.footer`
 //! - [`FooterRenderTransform`] - Renders `navigation.footer` to HTML
-//! - [`FootnotesTransform`] - Extracts footnotes and creates footnotes section
+//! - [`FootnotesTransform`] - Resolves footnote refs/defs into native `Inline::Note`s
+//! - [`FootnotesResolveTransform`] - Resolves `Inline::Note`s into HTML footnote chrome
 //! - [`MetadataNormalizeTransform`] - Normalizes document metadata (adds pagetitle, etc.)
 //! - [`NavbarGenerateTransform`] - Resolves `navbar:` YAML into `navigation.navbar`
 //! - [`NavbarRenderTransform`] - Renders `navigation.navbar` to HTML
@@ -27,6 +28,25 @@
 //!
 //! These transforms implement [`AstTransform`](crate::transform::AstTransform) and
 //! can be added to a [`TransformPipeline`](crate::transform::TransformPipeline).
+
+/// `RawBlock` format tag [`FootnotesTransform`] uses to mark the first block
+/// of a resolved named-reference `Inline::Note`'s content with the original
+/// `[^id]` string, so [`FootnotesResolveTransform`] can dedupe repeated
+/// references to the same id into one shared footnote entry — matching the
+/// pre-split transform's `resolve_reference` dedup — without a
+/// `RenderContext` sideband: the id rides inside the `Inline::Note` AST node
+/// itself, the one thing the two halves are allowed to communicate through.
+///
+/// Not a real pandoc writer format, so any writer that doesn't recognize it
+/// (every one, by construction) drops it silently — the same convention
+/// `ExampleEmbedRenderTransform`'s `RawBlock("html", ...)` iframe relies on
+/// for non-HTML profiles (see `claude-notes/designs/pandoc-hybrid-architecture.md`
+/// line ~588). Under `Pandoc(_)` profiles, where `FootnotesResolveTransform`
+/// never runs to strip it, this RawBlock survives into the `Note`'s content
+/// fed to pandoc's own writer and is silently dropped there — the visible
+/// docx/pptx output is unaffected; only inline `^[...]` notes (which carry no
+/// id and are never deduped) skip this marker entirely.
+pub(crate) const FOOTNOTE_REF_ID_MARKER_FORMAT: &str = "quarto-internal-footnote-ref-id";
 
 mod appendix;
 mod attribution_generate;
@@ -53,6 +73,7 @@ mod float_ref_target;
 mod footer_generate;
 mod footer_render;
 mod footnotes;
+mod footnotes_resolve;
 mod format_css;
 mod link_rewrite;
 mod listing_generate;
@@ -137,6 +158,7 @@ pub use float_ref_target::FloatRefTargetSugarTransform;
 pub use footer_generate::FooterGenerateTransform;
 pub use footer_render::FooterRenderTransform;
 pub use footnotes::FootnotesTransform;
+pub use footnotes_resolve::FootnotesResolveTransform;
 pub use format_css::FormatCssTransform;
 pub(crate) use format_css::user_css_urls;
 #[cfg(not(target_arch = "wasm32"))]

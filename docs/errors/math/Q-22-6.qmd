@@ -1,0 +1,34 @@
+---
+title: "Unbalanced Left And Right Delimiters"
+description: "A `\\left` has no matching `\\right`, or a `\\right` has no matching `\\left`, in the same math expression."
+code: Q-22-6
+subsystem: math
+status: stub
+since: "99.9.9"
+categories:
+  - math
+---
+
+# `Q-22-6` — Unbalanced Left And Right Delimiters
+
+> A `\left` has no matching `\right`, or a `\right` has no matching `\left`, in the same math expression.
+
+## What this means
+
+`\left( … \right)` produces delimiters that grow with their content; the two must pair up within one expression (and within one environment cell). When one is missing the group's extent is unknown, so the expression is reported and emitted verbatim in formats that need a conversion.
+
+## Why this happens
+
+Common causes: a `\right` deleted by mistake, a `\left` and its `\right` split across two cells of an `aligned` environment by an `&` or `\\`, or a `\right.` (invisible delimiter) forgotten after `\left.`.
+
+## How to fix it
+
+Add the missing side. Use `\left.` or `\right.` for an invisible delimiter, and keep both sides in the same cell of an environment.
+
+## Where it is reported
+
+Math diagnostics point into the `.qmd` at the exact characters inside the
+`$…$` or `$$…$$` block, including math that spans several lines or sits
+inside a block quote or list item. When a `\newcommand` macro is involved,
+a problem inside the macro body points at the definition and a problem in
+a macro argument points at the use.

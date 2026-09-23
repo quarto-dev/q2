@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mover accent="true"><mi>a</mi><mo>ˇ</mo></mover><mover accent="true"><mi>b</mi><mo>˘</mo></mover><mover accent="true"><mi>c</mi><mo>´</mo></mover><mover accent="true"><mi>d</mi><mo>`</mo></mover></mrow><annotation encoding="application/x-tex">\check{a} \breve{b} \acute{c} \grave{d}</annotation></semantics></math>

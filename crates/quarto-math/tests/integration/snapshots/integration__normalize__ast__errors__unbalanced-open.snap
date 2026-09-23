@@ -1,0 +1,13 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..10
+  frac Bar @0..10
+    row @5..8
+      run "a" @6..7
+    row @8..10
+      run "b" @9..10
+      error "unclosed `{`" "{b" @8..10
+-- problems --
+UnbalancedBrace @8..10 unclosed `{`

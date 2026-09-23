@@ -1,0 +1,44 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..110
+  matrix Matrix "(" ")" @0..110
+    row 0:
+      row @16..22
+        scripts Auto @16..22
+          run "a" @16..17
+          sub:
+            row @18..22
+              run "11" @19..21
+      row @25..31
+        sym "⋯" @25..31
+      row @34..40
+        scripts Auto @34..40
+          run "a" @34..35
+          sub:
+            row @36..40
+              run "1n" @37..39
+    row 1:
+      row @44..50
+        sym "⋮" @44..50
+      row @53..59
+        sym "⋱" @53..59
+      row @62..68
+        sym "⋮" @62..68
+    row 2:
+      row @72..78
+        scripts Auto @72..78
+          run "a" @72..73
+          sub:
+            row @74..78
+              run "m1" @75..77
+      row @81..87
+        sym "⋯" @81..87
+      row @90..96
+        scripts Auto @90..96
+          run "a" @90..91
+          sub:
+            row @92..96
+              run "mn" @93..95
+-- problems --

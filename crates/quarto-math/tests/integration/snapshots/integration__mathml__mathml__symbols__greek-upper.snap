@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi mathvariant="normal">Γ</mi><mi mathvariant="normal">Δ</mi><mi mathvariant="normal">Θ</mi><mi mathvariant="normal">Λ</mi><mi mathvariant="normal">Ξ</mi><mi mathvariant="normal">Π</mi><mi mathvariant="normal">Σ</mi><mi mathvariant="normal">Υ</mi><mi mathvariant="normal">Φ</mi><mi mathvariant="normal">Ψ</mi><mi mathvariant="normal">Ω</mi></mrow><annotation encoding="application/x-tex">\Gamma \Delta \Theta \Lambda \Xi \Pi \Sigma \Upsilon \Phi \Psi \Omega</annotation></semantics></math>

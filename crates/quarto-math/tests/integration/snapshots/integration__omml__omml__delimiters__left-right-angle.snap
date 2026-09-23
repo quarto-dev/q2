@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/omml.rs
+expression: to_omml(&n)
+---
+<m:oMath><m:d><m:dPr><m:begChr m:val="⟨"/><m:endChr m:val="⟩"/></m:dPr><m:e><m:r><m:t>x</m:t></m:r></m:e></m:d></m:oMath>

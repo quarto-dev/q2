@@ -1,0 +1,5 @@
+::: {#nte-setup .callout-note}
+## Setup
+
+Some setup instructions.
+:::

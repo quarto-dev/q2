@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mrow><msub><mo>∑</mo><mi>i</mi></msub><msub><mi>x</mi><mi>i</mi></msub></mrow></mrow><annotation encoding="application/x-tex">\displaystyle \sum_i x_i</annotation></semantics></math>

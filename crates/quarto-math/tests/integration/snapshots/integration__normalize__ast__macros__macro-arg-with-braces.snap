@@ -1,0 +1,14 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..43
+  run "P" @20..21
+  run "(" @21..22
+  frac Bar @31..42
+    row @36..39
+      run "a" @37..38
+    row @39..42
+      run "b" @40..41
+  run ")" @24..25
+-- problems --

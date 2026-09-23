@@ -224,7 +224,7 @@ fn config_anchored_warning_shows_config_snippet() {
 /// (`None` where `Some(path)` is expected) before the fix and passes
 /// after.
 ///
-/// This test is kept anyway as the CLAUDE.md-mandated end-to-end
+/// This test is kept anyway as the AGENTS.md-mandated end-to-end
 /// check: it drives the real binary and inspects real stderr for the
 /// corrected caret position *and* a rendered snippet together, and it
 /// guards against a future regression in `MetadataMergeStage`'s

@@ -1,0 +1,101 @@
+---
+title: "Previewing"
+---
+
+`q2 preview` opens your document or website in a browser and keeps it
+up to date as you edit. It has two modes.
+
+| | `q2 preview` (default) | `q2 preview --static` |
+|---|---|---|
+| What runs | A live session: pages render in the browser as you type | A real `q2 render` to disk, served by a plain static server |
+| On save | The page updates in place; open menus, scroll position and math survive | The changed page re-renders; the browser reloads |
+| What you see | The page being edited | Exactly what `q2 render` produces, including the sitemap, listings, search index and scripts |
+| Code cells | Executed on the server, re-executed on request | Executed only for pages you open (see below) |
+| Best for | Writing and editing | Checking the finished site, or a workflow like Quarto 1's `quarto preview` |
+
+## The default preview
+
+``` {.bash filename="Terminal"}
+q2 preview                # the project in the current directory
+q2 preview posts/one.qmd  # open on a specific page
+q2 preview notes.qmd      # a document outside any project
+```
+
+The browser opens automatically. Edits appear within a fraction of a
+second without rebuilding the page, so JavaScript state is preserved
+across edits. See the `--help` text for the flags that control the
+port, the browser, and live sharing.
+
+## Static preview
+
+``` {.bash filename="Terminal"}
+q2 preview --static                # render the project, serve it, watch for changes
+q2 preview --static posts/one.qmd  # the whole project, opened on that page
+q2 preview --static notes.qmd      # a lone document
+```
+
+`--static` first renders everything to disk, exactly as `q2 render`
+does, then serves the output directory (`_site` for a website) on a
+local port and opens the browser. It then watches your files:
+
+- Saving a page re-renders that page (and any page that depends on it,
+  such as a listing that includes it) and reloads the browser, opening
+  the page you changed.
+- Saving `_quarto.yml`, a `_metadata.yml`, a stylesheet, an image, an
+  extension file, or anything else that is not a page re-renders the
+  whole project and reloads the browser in place.
+- A save that fails to render leaves the previous output in place and
+  shows the error in a panel at the bottom of the page. Fix the file and
+  the page reloads.
+
+Each re-render is a real render: pre-render and post-render scripts
+run, and the output directory is what you would publish.
+
+### Flags
+
+| Flag | Meaning |
+|---|---|
+| `--no-watch` | Render once and serve; never re-render |
+| `--no-navigate` | After a re-render, reload the current page instead of opening the page that changed |
+| `--to FORMAT` | The output format, as `q2 render --to`. Only `html` and `revealjs` can be served |
+| `--port N`, `--host H` | Where to listen. Default: a free port on `127.0.0.1` |
+| `--no-browser`, `--browser APP` | Do not open a browser, or open a specific one |
+
+The live-session flags (`--share`, `--allow-edit`, `--ui`, `--join`)
+do not apply to static mode.
+
+### Code execution
+
+A static preview does not execute every page's code up front: a site
+with many Jupyter or knitr pages would take a long time to start. Pages
+whose code has not run are served with their code cells shown as
+source, and the first time you open such a page it is executed and
+reloaded. Pages you have opened stay executed through later re-renders.
+
+To never execute code in a preview, set this in `_quarto.yml`:
+
+``` {.yaml filename="_quarto.yml"}
+preview:
+  engine: off
+```
+
+This is the same key the default preview uses.
+
+### Defaults in `_quarto.yml`
+
+Quarto 1's `project: preview:` keys set the defaults for static mode;
+command-line flags override them.
+
+``` {.yaml filename="_quarto.yml"}
+project:
+  type: website
+  preview:
+    port: 4321
+    host: 127.0.0.1
+    browser: false
+    watch-inputs: false
+    navigate: false
+```
+
+The `timeout` and `serve` keys from Quarto 1 are not supported. They are
+reported once at startup and otherwise ignored.

@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>a</mi><mo>→</mo><mi>b</mi><mo>→</mo><mi>c</mi><mo>=&gt;</mo><mi>d</mi><mo>&lt;-&gt;</mo><mi>e</mi><mo>↦</mo><mi>f</mi><mo>←</mo><mi>g</mi><mo>&lt;=&gt;</mo><mi>h</mi></mrow><annotation encoding="application/x-tex">a \to b \rightarrow c \Rightarrow d \leftrightarrow e \mapsto f \leftarrow g \Leftrightarrow h</annotation></semantics></math>

@@ -1,0 +1,14 @@
+---
+source: crates/xtask/src/capture_pandoc_goldens.rs
+expression: extraction.to_string()
+---
+core_props:
+paragraphs:
+  [Heading3] Tab A
+  [FirstParagraph] Content for Tab A
+  [Heading3] Tab B
+  [FirstParagraph] Content for Tab B
+media: []
+image_relationships: []
+drawing_count: 0
+page_break_count: 0

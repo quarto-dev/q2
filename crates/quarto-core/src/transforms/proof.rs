@@ -147,8 +147,13 @@ fn convert_div(mut div: Div) -> CustomNode {
     let mut node = CustomNode::new(PROOF, div.attr, div.source_info);
     // Intentionally no `ref_type` / `kind` — proofs are unnumbered and
     // shouldn't be picked up by the indexer or resolver.
+    // `type` mirrors Q1's `proof.lua` constructor field, which
+    // `proof_types[proof_tbl.type:lower()]` indexes unconditionally — a
+    // missing `type` crashes the Lua renderer. Scope is `.proof` only
+    // today (see the module doc), so the value is always `"proof"`.
     node.plain_data = json!({
         "kind": "Proof",
+        "type": "proof",
     });
     node.slots
         .insert("content".into(), Slot::Blocks(div.content));

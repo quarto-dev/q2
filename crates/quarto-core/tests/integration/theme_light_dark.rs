@@ -8,7 +8,7 @@
 //! variant carries a `color-scheme` declaration derived from its
 //! `$body-bg` darkness (plan D1a).
 //!
-//! Drives the real `render_to_file` API (see CLAUDE.md "End-to-end
+//! Drives the real `render_to_file` API (see AGENTS.md "End-to-end
 //! verification") against tempdir-based projects, then inspects both
 //! the produced CSS and the render diagnostics.
 

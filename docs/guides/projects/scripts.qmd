@@ -110,6 +110,11 @@ restart the preview to re-run them. Post-render scripts never run in
 preview. A script failure at preview boot is reported but the preview
 keeps serving.
 
+`q2 preview --static` is different: every re-render it performs is a
+real `q2 render`, so pre-render *and* post-render scripts run on each
+one, exactly as they would from the command line. See
+[Previewing](preview.qmd) for when to choose each mode.
+
 In the browser-based Quarto Hub preview, scripts cannot run at all; a
 one-time warning is shown and pages render without them.
 
@@ -125,7 +130,8 @@ If you are porting a project from Quarto 1:
 - **`.lua` scripts** are no longer special-cased (Quarto 1 ran them as
   Pandoc Lua filters). Use an explicit interpreter if you need them.
 - **Preview cadence**: Quarto 1 re-ran scripts on every preview
-  re-render; Quarto 2 runs pre-render scripts at preview boot only.
+  re-render; Quarto 2's default preview runs pre-render scripts at boot
+  only (`q2 preview --static` keeps the Quarto 1 cadence).
 - **`QUARTO_PROJECT_OUTPUT_FILES` is computed fresh** after the render
   from the actual outputs (in Quarto 1 the shared environment was
   computed once before the render and could be stale).

@@ -32,6 +32,7 @@ pub mod diagnostics;
 pub mod join_frontend;
 pub mod re_execute;
 pub mod share;
+pub mod static_mode;
 
 pub use asset_manifest::{
     AssetMode, AssetsBlock, EmbeddedManifests, TunnelReason, decide_asset_mode, embedded_manifest,

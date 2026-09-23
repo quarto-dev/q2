@@ -1,0 +1,34 @@
+---
+title: "Limits Command Ignored"
+description: "`\\limits` or `\\nolimits` was applied to something other than a big operator or a function name, so it has no effect."
+code: Q-22-11
+subsystem: math
+status: stub
+since: "99.9.9"
+categories:
+  - math
+---
+
+# `Q-22-11` — Limits Command Ignored
+
+> `\limits` or `\nolimits` was applied to something other than a big operator or a function name, so it has no effect.
+
+## What this means
+
+`\limits` and `\nolimits` choose whether the scripts of an operator such as `\sum` or `\lim` sit above and below it or beside it. Applied to an ordinary symbol they do nothing; quarto-math drops the command and reports it.
+
+## Why this happens
+
+Common causes: `x\limits_1` where `x` is a plain variable, or the command placed before the operator instead of after it.
+
+## How to fix it
+
+Place `\limits` right after the operator it modifies: `\sum\limits_{i=1}^{n}`.
+
+## Where it is reported
+
+Math diagnostics point into the `.qmd` at the exact characters inside the
+`$…$` or `$$…$$` block, including math that spans several lines or sits
+inside a block quote or list item. When a `\newcommand` macro is involved,
+a problem inside the macro body points at the definition and a problem in
+a macro argument points at the use.

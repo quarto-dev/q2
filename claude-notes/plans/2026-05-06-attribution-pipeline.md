@@ -1059,7 +1059,7 @@ matters, revisit then.
   — see Open Questions § #3 for the locked-in rationale.
   
 - [ ] Document Option A's parameter in
-  `crates/wasm-quarto-hub-client/CLAUDE.md`. **The q2-debug entry point
+  `crates/wasm-quarto-hub-client/AGENTS.md`. **The q2-debug entry point
   is `parse_qmd_to_ast` (`crates/wasm-quarto-hub-client/src/lib.rs:855`,
   signature `pub async fn parse_qmd_to_ast(content: &str) -> String`),
   not `render_qmd` (line 1005).** `render_qmd` is the HTML preview path,

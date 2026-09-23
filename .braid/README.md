@@ -27,7 +27,7 @@ recoverable. It is committed to whatever work branch you are on.
   "cross-branch contamination" — which is expected and harmless, because the
   file is not the truth.)
 
-See `CLAUDE.md` § Snapshot backup policy and
+See `AGENTS.md` § Snapshot backup policy and
 `claude-notes/plans/2026-06-08-braid-migration.md` for the full rationale.
 
 ## Not in this directory

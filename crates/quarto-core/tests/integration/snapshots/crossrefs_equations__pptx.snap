@@ -1,0 +1,17 @@
+---
+source: crates/xtask/src/capture_pandoc_goldens.rs
+expression: extraction.to_string()
+---
+core_props:
+  title: Equations Test
+slide 1:
+  Equations Test
+slide 2:
+  Black-Scholes (Equation 1) is a mathematical model that seeks to explain the behavior of financial derivatives, most commonly options:
+  
+math:
+  ∂C∂t+12σ2S2∂2C∂C2+rS∂C∂S =rC  (1)
+media: []
+image_relationships: []
+drawing_count: 0
+page_break_count: 0
