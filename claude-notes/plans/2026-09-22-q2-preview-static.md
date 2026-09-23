@@ -341,6 +341,19 @@ Rules, in order (each a unit test):
    not includes or resources, so Full is the correct answer today; a
    "resource → affected pages" refinement is a follow-up strand.
 
+**Events are not edits (added after PR #712's first CI round).** The
+watcher reports filesystem *events*; on Linux `notify`'s inotify backend
+subscribes to `OPEN`, so every file a render reads raises one, and a
+re-render that reads its own input re-triggers itself forever (observed
+as an hour of back-to-back renders on the ubuntu leg after one save;
+invisible on macOS, whose FSEvents do not report reads). The driver
+therefore keeps a `ContentTracker` — a SHA-256 per path — seeded with the
+boot render's inputs and config sources, and acts on an event only when
+the bytes differ from the last time the path was seen (or a tracked file
+is gone). This is Q1's own guard (`watch.ts:134-140` compares md5s
+against the last render) and also absorbs editors that touch files
+without changing them.
+
 Coalescing: the driver holds `pending: Option<Action>`. Events that arrive
 while a render is running are merged (`Full` absorbs everything; two
 `Subset`s become `Subset` of the union, hence `Action::Subset` is really a

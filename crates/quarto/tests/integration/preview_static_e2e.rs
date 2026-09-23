@@ -283,15 +283,23 @@ impl SseReader {
         }
     }
 
-    /// The names of every event that arrives within `window`.
+    /// The names of every event that arrives within `window`. Bounded
+    /// by wall clock, not by silence: a server that keeps emitting
+    /// (PR #712's Linux re-render loop) must end the window, not
+    /// extend it.
     fn events_within(&mut self, window: Duration) -> Vec<String> {
-        self.reader
-            .get_ref()
-            .set_read_timeout(Some(window))
-            .unwrap();
+        let deadline = Instant::now() + window;
         let mut names = Vec::new();
         let mut line = String::new();
         loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return names;
+            }
+            self.reader
+                .get_ref()
+                .set_read_timeout(Some(remaining))
+                .unwrap();
             line.clear();
             match self.reader.read_line(&mut line) {
                 Ok(0) => return names,
@@ -472,10 +480,16 @@ fn a_failing_rerender_reports_diagnostics_and_does_not_reload() {
     // same save can legitimately follow (Linux inotify may spread one
     // save over two debounce windows); it fails the same way and is
     // equally not a reload.
-    let later = sse.events_within(Duration::from_secs(2));
+    let later = sse.events_within(Duration::from_secs(3));
     assert!(
         !later.iter().any(|e| e == "reload"),
         "a failed render must not send a reload; saw {later:?}; stderr:\n{}",
+        server.stderr()
+    );
+    assert!(
+        later.is_empty(),
+        "one save is one render: no further cycles may follow (a render's own \
+         reads must not re-trigger it); saw {later:?}; stderr:\n{}",
         server.stderr()
     );
     assert!(

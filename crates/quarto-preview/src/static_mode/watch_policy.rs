@@ -9,8 +9,10 @@
 //! It never touches the filesystem beyond an existence check, so every
 //! rule is a unit test.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
+
+use sha2::{Digest, Sha256};
 
 /// A snapshot of the last render, as far as classification needs it.
 /// All paths are absolute.
@@ -132,6 +134,54 @@ fn is_editor_temporary(name: &str) -> bool {
         || name.ends_with(".swx")
         || name.starts_with(".#")
         || name == "4913"
+}
+
+/// Remembers the content hash of every path it has been asked about,
+/// so a filesystem event counts as a change only when the bytes differ.
+///
+/// Why this exists: the watcher reports *events*, not edits. On Linux
+/// `notify`'s inotify backend subscribes to `OPEN`, so every file the
+/// render itself reads comes back as an event — and a re-render that
+/// re-triggers itself never stops (observed on PR #712's ubuntu leg:
+/// an hour of back-to-back renders after one save). Editors that touch
+/// metadata or rewrite identical bytes produce the same false positive
+/// on every platform. Quarto 1 guards the same way, comparing md5s
+/// against the last render (`project/serve/watch.ts:134-140`).
+#[derive(Debug, Default)]
+pub struct ContentTracker {
+    hashes: BTreeMap<PathBuf, [u8; 32]>,
+}
+
+impl ContentTracker {
+    /// Record the current content of `paths` without reporting a
+    /// change. Unreadable paths (missing, a directory) are skipped.
+    pub fn seed(&mut self, paths: impl IntoIterator<Item = PathBuf>) {
+        for path in paths {
+            if let Some(hash) = hash_file(&path) {
+                self.hashes.insert(path, hash);
+            }
+        }
+    }
+
+    /// True when `path`'s bytes differ from the last time it was seen,
+    /// when it is a readable file seen for the first time, or when a
+    /// tracked file is gone. False for a rewrite with identical bytes,
+    /// for a mere open/read, for a directory, and for an unknown path
+    /// that cannot be read. Records the new state either way.
+    pub fn changed(&mut self, path: &Path) -> bool {
+        match hash_file(path) {
+            Some(hash) => match self.hashes.insert(path.to_path_buf(), hash) {
+                Some(previous) => previous != hash,
+                None => true,
+            },
+            None => self.hashes.remove(path).is_some(),
+        }
+    }
+}
+
+fn hash_file(path: &Path) -> Option<[u8; 32]> {
+    let bytes = std::fs::read(path).ok()?;
+    Some(Sha256::digest(&bytes).into())
 }
 
 /// Extensions the project discovery treats as inputs. A *new* file with
@@ -341,6 +391,43 @@ mod tests {
         for rel in ["styles.scss", "images/logo.png", "index.qmd", "data/x.csv"] {
             assert!(!is_config_like(Path::new(rel)), "{rel}");
         }
+    }
+
+    #[test]
+    fn tracker_reports_only_real_content_changes() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let dir = temp.path().canonicalize().unwrap();
+        let a = dir.join("a.qmd");
+        std::fs::write(&a, "one").unwrap();
+        let mut t = ContentTracker::default();
+        t.seed([a.clone()]);
+
+        assert!(!t.changed(&a), "seeded and untouched");
+        // A read (what a render does) or an identical rewrite is not a change.
+        let _ = std::fs::read(&a).unwrap();
+        std::fs::write(&a, "one").unwrap();
+        assert!(!t.changed(&a), "identical bytes rewritten");
+
+        std::fs::write(&a, "two").unwrap();
+        assert!(t.changed(&a), "bytes changed");
+        assert!(!t.changed(&a), "…and only reported once");
+
+        std::fs::remove_file(&a).unwrap();
+        assert!(t.changed(&a), "a tracked file disappearing is a change");
+        assert!(!t.changed(&a), "…reported once");
+    }
+
+    #[test]
+    fn tracker_first_sight_of_a_readable_file_is_a_change_but_directories_are_not() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let dir = temp.path().canonicalize().unwrap();
+        let b = dir.join("b.png");
+        std::fs::write(&b, "img").unwrap();
+        let mut t = ContentTracker::default();
+        assert!(t.changed(&b), "never seen before");
+        assert!(!t.changed(&b));
+        assert!(!t.changed(&dir), "a directory event carries no content");
+        assert!(!t.changed(&dir.join("never-existed.qmd")));
     }
 
     #[test]

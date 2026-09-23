@@ -40,8 +40,8 @@ use quarto_preview::config::{
     read_engine_policy_from_project, read_static_preview_defaults_from_project,
 };
 use quarto_preview::static_mode::{
-    Action, ReloadEvent, ReloadHub, StaticServerConfig, WatchContext, build_router, classify,
-    is_config_like, is_input_extension, serve,
+    Action, ContentTracker, ReloadEvent, ReloadHub, StaticServerConfig, WatchContext, build_router,
+    classify, is_config_like, is_input_extension, serve,
 };
 use quarto_system_runtime::NativeRuntime;
 use tracing::{debug, info, warn};
@@ -463,6 +463,18 @@ async fn run(args: StaticArgs) -> Result<()> {
     // ── Loop ───────────────────────────────────────────────────────
     let to = args.to.clone();
     let mut last = LastRender::from_report(&report);
+    // Events are not edits: a render reading a file raises one on Linux
+    // (`notify` subscribes to inotify OPEN), and editors touch files
+    // without changing them. Seed with what the boot render read so its
+    // own reads never trigger the first re-render.
+    let mut tracker = ContentTracker::default();
+    tracker.seed(
+        report
+            .inputs
+            .iter()
+            .chain(report.config_sources.iter())
+            .cloned(),
+    );
     let mut pending = Action::Ignore;
     let mut in_flight: Option<Action> = None;
     let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<(Action, RenderOutcome)>(1);
@@ -526,6 +538,10 @@ async fn run(args: StaticArgs) -> Result<()> {
                 };
                 let action = classify(&changed, &last.ctx);
                 if action == Action::Ignore {
+                    continue;
+                }
+                if !tracker.changed(&changed) {
+                    debug!(path = %changed.display(), "event without a content change; ignored");
                     continue;
                 }
                 // Mid-render, a `Full` from a path that is neither an
