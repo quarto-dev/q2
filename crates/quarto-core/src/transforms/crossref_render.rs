@@ -1096,11 +1096,24 @@ fn render_equation(node: CustomNode) -> Inline {
     let content_inline = if let Some(n) = number {
         match math_inline {
             Inline::Math(math) => {
-                let tagged_text = format!("{}\\tag{{{}}}", math.text, n);
+                let tag = format!("\\tag{{{}}}", n);
+                let tagged_text = format!("{}{}", math.text, tag);
+                // Extend the text mapping rather than drop it: the original
+                // text keeps its byte-for-byte provenance and the appended
+                // tag becomes a synthesized piece (zero source bytes) anchored
+                // at the end of the node, the same shape ProvenanceBuilder
+                // uses for content with no source byte (bd-ieldbghj).
+                let text_source = math.text_source.map(|ts| {
+                    let node_len = math.source_info.length();
+                    let synthesized =
+                        SourceInfo::substring(math.source_info.clone(), node_len, node_len);
+                    SourceInfo::concat(vec![(ts, math.text.len()), (synthesized, tag.len())])
+                });
                 Inline::Math(Math {
                     math_type: math.math_type,
                     text: tagged_text,
                     source_info: math.source_info,
+                    text_source,
                 })
             }
             other => other,
@@ -2603,6 +2616,7 @@ mod tests {
                     math_type: MathType::DisplayMath,
                     text: math_text.to_string(),
                     source_info: si(),
+                    text_source: None,
                 })],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
@@ -2633,6 +2647,60 @@ mod tests {
             "expected \\tag{{1}} in math text, got: {}",
             math.text
         );
+    }
+
+    /// The `\tag{N}` append must not throw away the reader's byte-for-byte
+    /// mapping of the math text (bd-ieldbghj): the original text keeps its
+    /// provenance and the tag becomes a synthesized, zero-source piece.
+    #[tokio::test]
+    async fn equation_tag_extends_text_source_instead_of_dropping_it() {
+        // Source: `$$e = mc^2$$` at file offsets 0..12; text at 2..10.
+        let node = SourceInfo::original(FileId(0), 0, 12);
+        let text = SourceInfo::original(FileId(0), 2, 10);
+        let block = Block::Paragraph(Paragraph {
+            content: vec![Inline::Span(Span {
+                attr: (
+                    "eq-einstein".to_string(),
+                    vec!["quarto-math-with-attribute".to_string()],
+                    LinkedHashMap::new(),
+                ),
+                content: vec![Inline::Math(Math {
+                    math_type: MathType::DisplayMath,
+                    text: "e = mc^2".to_string(),
+                    source_info: node.clone(),
+                    text_source: Some(text),
+                })],
+                source_info: node.clone(),
+                attr_source: AttrSourceInfo::empty(),
+            })],
+            source_info: node,
+        });
+        let ast = run_full(vec![block]).await;
+        let Block::Paragraph(p) = &ast.blocks[0] else {
+            panic!("expected Paragraph, got {:?}", ast.blocks[0]);
+        };
+        let Inline::Span(span) = &p.content[0] else {
+            panic!("expected Span, got {:?}", p.content[0]);
+        };
+        let Inline::Math(math) = &span.content[0] else {
+            panic!("expected Math, got {:?}", span.content[0]);
+        };
+        assert_eq!(math.text, "e = mc^2\\tag{1}");
+        let ts = math
+            .text_source
+            .as_ref()
+            .expect("tagging keeps the text mapping");
+        assert_eq!(ts.length(), math.text.len());
+        let SourceInfo::Concat { pieces } = ts else {
+            panic!("expected a Concat of [original text, synthesized tag], got {ts:?}");
+        };
+        assert_eq!(pieces.len(), 2);
+        assert_eq!(pieces[0].length, "e = mc^2".len());
+        assert_eq!(pieces[0].source_info.preimage_in(FileId(0)), Some(2..10));
+        assert_eq!(pieces[1].offset_in_concat, "e = mc^2".len());
+        assert_eq!(pieces[1].length, "\\tag{1}".len());
+        // The tag has no source bytes: a zero-width piece at the node's end.
+        assert_eq!(pieces[1].source_info.preimage_in(FileId(0)), Some(12..12));
     }
 
     #[tokio::test]

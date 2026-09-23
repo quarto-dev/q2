@@ -571,6 +571,7 @@ mod tests {
             math_type: MathType::InlineMath,
             text: text.to_string(),
             source_info: SourceInfo::for_test(),
+            text_source: None,
         })
     }
 
@@ -579,6 +580,7 @@ mod tests {
             math_type: MathType::DisplayMath,
             text: text.to_string(),
             source_info: SourceInfo::for_test(),
+            text_source: None,
         })
     }
 

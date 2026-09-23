@@ -1476,7 +1476,8 @@ mod unit_tests {
             inline_tag(&Inline::Math(Math {
                 math_type: MathType::InlineMath,
                 text: String::new(),
-                source_info: source_info.clone()
+                source_info: source_info.clone(),
+                text_source: None,
             })),
             "Math"
         );

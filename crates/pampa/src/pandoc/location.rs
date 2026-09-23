@@ -321,6 +321,30 @@ pub fn node_source_info_with_options(
     }
 }
 
+/// A [`ProvenanceBuilder`] rooted the way [`node_source_info_with_context`]
+/// roots node spans: as `Substring` pieces over the parent `SourceInfo` when
+/// this parse is a re-parse of an embedded string, and as `Original` pieces
+/// in the current file otherwise. In both cases the byte ranges fed to the
+/// builder are tree-sitter node offsets, exactly the coordinates
+/// `node_source_info_with_context` uses.
+///
+/// Use it whenever a reader decodes a node's bytes into text that is not a
+/// plain substring of the node (folded soft breaks, stripped continuation
+/// gutters, collapsed escapes) and wants a `SourceInfo` for the decoded
+/// text (e.g. `Math.text_source`, bd-ieldbghj).
+///
+/// `anchor` is the node-offset the empty-piece case falls back to; see
+/// [`ProvenanceBuilder::in_file`].
+pub fn provenance_builder_with_context(
+    context: &ASTContext,
+    anchor: usize,
+) -> quarto_source_map::ProvenanceBuilder {
+    match &context.parent_source_info {
+        Some(parent) => quarto_source_map::ProvenanceBuilder::in_parent(parent.clone(), anchor),
+        None => quarto_source_map::ProvenanceBuilder::in_file(context.current_file_id(), anchor),
+    }
+}
+
 /// Convert a Range to SourceInfo using the context's primary file ID.
 ///
 /// # Arguments

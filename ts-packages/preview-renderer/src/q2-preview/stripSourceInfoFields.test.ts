@@ -143,6 +143,27 @@ describe('sidecar keys beyond s/a (bare pool indices on specific nodes)', () => 
         expect((result as any).c[0].c[2]).toEqual(['https://example.com', '']);
     });
 
+    test('strips textS from Math (bd-ieldbghj)', () => {
+        // textS is a bare pool index: the provenance of the math text
+        // itself, distinct from the node span in `s`.
+        const block = {
+            t: 'Para',
+            s: 1,
+            c: [{
+                t: 'Math',
+                s: 2,
+                textS: 3,
+                c: [{ t: 'InlineMath' }, 'x^2'],
+            }],
+        };
+        const result = stripSourceInfoFields(block);
+        const json = JSON.stringify(result);
+        expect(json).not.toMatch(/"textS":/);
+        expect(json).not.toMatch(/"s":/);
+        // The math type and text must survive.
+        expect((result as any).c[0].c).toEqual([{ t: 'InlineMath' }, 'x^2']);
+    });
+
     test('strips targetS from Image', () => {
         const block = {
             t: 'Para',

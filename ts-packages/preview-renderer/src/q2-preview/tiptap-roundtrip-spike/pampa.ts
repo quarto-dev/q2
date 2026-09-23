@@ -35,6 +35,7 @@ export interface AstNode {
   a?: unknown;
   l?: unknown;
   targetS?: unknown;
+  textS?: unknown;
   [k: string]: unknown;
 }
 
