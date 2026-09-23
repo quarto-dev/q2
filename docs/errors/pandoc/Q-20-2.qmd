@@ -1,0 +1,43 @@
+---
+title: "Pandoc Version Too Old"
+description: "The pandoc binary found on PATH reports a version older than the minimum this Quarto version requires."
+code: Q-20-2
+subsystem: pandoc
+status: stub
+since: "99.9.9"
+categories:
+  - pandoc
+---
+
+# `Q-20-2` — Pandoc Version Too Old
+
+> The `pandoc` binary found on `PATH` reports a version older than the
+> minimum this Quarto version requires.
+
+## What this means
+
+Quarto found a `pandoc` binary, but its reported version is below the
+floor this Quarto release requires for the docx/pptx Pandoc-hybrid render
+path. Older pandoc releases don't ship the Lua filter APIs (or bug fixes)
+this path depends on, so rendering does not proceed.
+
+## Why this happens
+
+- Pandoc was installed some time ago and has not been upgraded since.
+- A system package manager ships an older pandoc than the one this Quarto
+  release was tested against.
+- Multiple `pandoc` binaries exist on the machine, and `PATH` resolves to
+  an older one.
+
+## How to fix
+
+Upgrade pandoc to the required version or newer — see
+[pandoc.org](https://pandoc.org/installing.html) for platform-specific
+install instructions. If multiple pandoc installations exist, check which
+one `PATH` resolves to (`which pandoc` on macOS/Linux, `where pandoc` on
+Windows) and either update `PATH` or set `QUARTO_PANDOC` to the newer
+binary's path.
+
+## Related errors
+
+- [`Q-20-1`](Q-20-1.qmd) — no pandoc binary was found at all.

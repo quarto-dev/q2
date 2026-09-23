@@ -30,20 +30,34 @@ import { QUARTO_XREF } from '../quartoClasses';
  * inlines render through the registry, but writes from the suffix
  * cannot mutate the AST (atomic gate).
  *
- * `plain_data` (writer: `transforms/crossref_resolve.rs:316`):
+ * `plain_data` (writer: `transforms/crossref_resolve.rs:316`; keys
+ * mirrored from `crates/quarto-pandoc-types/resources/custom-node-schema.json`):
  *  - `identifier`, `ref_type`, `kind`, `resolved` (bool),
- *    `kind_source` (unused in render),
+ *    `kind_source` (unused in render), `cite_mode`, `label_upper` (bool)
+ *    (both unused in render — see the P2 wire-schema plan),
  *    optional `order: { section, order }`.
+ *
+ * NOTE: `cite_prefix` is a **slot** (`node.slots.cite_prefix`), not a
+ * `plain_data` field — it is deliberately absent from the key array below.
+ *
+ * The key array is asserted against the schema (both directions) by
+ * `schemaConformance.test.ts`'s T4.3.
  */
 
-interface CrossrefResolvedRefPlainData {
-    identifier?: string;
-    ref_type?: string;
-    kind?: string;
-    resolved?: boolean;
-    kind_source?: string;
-    order?: { section?: number[]; order?: number };
-}
+export const CROSSREF_RESOLVED_REF_PLAIN_DATA_KEYS = [
+    'identifier',
+    'ref_type',
+    'kind',
+    'resolved',
+    'kind_source',
+    'cite_mode',
+    'label_upper',
+    'order',
+] as const;
+
+type CrossrefResolvedRefPlainData = {
+    [K in (typeof CROSSREF_RESOLVED_REF_PLAIN_DATA_KEYS)[number]]?: unknown;
+};
 
 export const CrossrefResolvedRef = ({
     node,
@@ -51,10 +65,11 @@ export const CrossrefResolvedRef = ({
     setLocalAst,
 }: NodeArgs<CustomInlineNode>) => {
     const plain = (node.plain_data ?? {}) as CrossrefResolvedRefPlainData;
-    const identifier = plain.identifier ?? '';
-    const kind = plain.kind ?? '';
+    const identifier = (plain.identifier as string | undefined) ?? '';
+    const kind = (plain.kind as string | undefined) ?? '';
     const resolved = plain.resolved === true;
-    const number = plain.order?.order;
+    const order = plain.order as { section?: number[]; order?: number } | undefined;
+    const number = order?.order;
 
     let linkText: string;
     if (!resolved) {

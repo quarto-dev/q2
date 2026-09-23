@@ -1217,28 +1217,40 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
         let resolver = self.renderer.build_project_resolver(self.project, &lib_dir);
 
         let mut project_diagnostics: Vec<DiagnosticMessage> = initial_diagnostics;
-        self.project_type
-            .post_render(
-                self.project,
-                &index,
-                &output_paths,
-                &self.project_artifacts,
-                &resolver,
-                self.runtime.as_ref(),
-                &mut project_diagnostics,
-            )
-            .await
-            // A hook that already produced structured diagnostics
-            // passes through intact. Wrapping it in `other` would
-            // flatten Ariadne spans into a string the caller can no
-            // longer inspect, re-render, or serialize — the CLI would
-            // print pre-rendered ANSI inside a generic message, and
-            // `--to json` would lose the diagnostics entirely.
-            // Opaque errors still get the context prefix.
-            .map_err(|e| match e {
-                QuartoError::Parse(_) => e,
-                other => QuartoError::other(format!("post_render failed: {other}")),
-            })?;
+        // P7-foundation Task 2 (design doc §13, bd-bgeet2mw): the
+        // project-mode containment gate. `post_render`'s hook sequence
+        // (sitemap, robots.txt, alias redirects, ...) assumes HTML
+        // outputs exist; a Pandoc-target render (docx, pptx, ...) has
+        // none, so running it unconditionally would either write bogus
+        // artifacts pointing at files that were never produced, or
+        // hard-fail in `write_alias_redirects` on an HTML-specific
+        // diagnostic. Matches Q1's own `websiteProjectType.postRender`,
+        // which filters `outputFiles` to HTML-only before running this
+        // logic.
+        if self.format.identifier.is_html_based() {
+            self.project_type
+                .post_render(
+                    self.project,
+                    &index,
+                    &output_paths,
+                    &self.project_artifacts,
+                    &resolver,
+                    self.runtime.as_ref(),
+                    &mut project_diagnostics,
+                )
+                .await
+                // A hook that already produced structured diagnostics
+                // passes through intact. Wrapping it in `other` would
+                // flatten Ariadne spans into a string the caller can no
+                // longer inspect, re-render, or serialize — the CLI would
+                // print pre-rendered ANSI inside a generic message, and
+                // `--to json` would lose the diagnostics entirely.
+                // Opaque errors still get the context prefix.
+                .map_err(|e| match e {
+                    QuartoError::Parse(_) => e,
+                    other => QuartoError::other(format!("post_render failed: {other}")),
+                })?;
+        }
 
         // bd-o8pr Phases 1 + 2: copy resources to the output dir.
         // - Phase 1 (static channel): project- and document-level

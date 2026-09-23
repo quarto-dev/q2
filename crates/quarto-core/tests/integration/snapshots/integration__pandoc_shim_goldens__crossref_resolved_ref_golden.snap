@@ -1,0 +1,33 @@
+---
+source: crates/quarto-core/tests/integration/pandoc_shim_goldens.rs
+assertion_line: 274
+expression: "render_and_project(\"ref-figure.qmd\")"
+---
+Para
+  Str "See"
+  Space
+  Link Some(("", ["quarto-xref"])) -> "#fig-x"
+    Str "Figure"
+    Str "\u{a0}"
+    Str "1"
+  Str "."
+Table
+  AlignCenter
+  ColWidth
+  AlignDefault
+  Div Some(("fig-x", []))
+    Plain
+      Image Some(("", [])) -> "img.png"
+        Str "A"
+        Space
+        Str "caption."
+    Para
+      RawInline[openxml] "<w:pPr>\n<w:jc w:val=\"left\"/>\n<w:spacing w:before=\"200\" />\n<w:pStyle w:val=\"ImageCaption\" />\n</w:pPr>\n"
+      Str "Figure"
+      Str "\u{a0}"
+      Str "1"
+      Str ":"
+      Space
+      Str "A"
+      Space
+      Str "caption."

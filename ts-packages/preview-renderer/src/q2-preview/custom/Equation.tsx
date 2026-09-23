@@ -33,12 +33,11 @@ import { makeSlotSetter } from '../utils';
  *      flowing inline text and absurd inside `Math(InlineMath)`).
  */
 
-interface EquationPlainData {
-    ref_type?: string;
-    kind?: string;
-    identifier?: string;
-    order?: { section?: number[]; order?: number };
-}
+// Keys mirrored from `crates/quarto-pandoc-types/resources/custom-node-schema.json`,
+// asserted against the schema (both directions) by `schemaConformance.test.ts`'s T4.3.
+export const EQUATION_PLAIN_DATA_KEYS = ['ref_type', 'kind', 'identifier', 'order'] as const;
+
+type EquationPlainData = { [K in (typeof EQUATION_PLAIN_DATA_KEYS)[number]]?: unknown };
 
 function isCanonicalDisplayMath(inl: InlineNode): inl is MathInline {
     if (inl.t !== 'Math') return false;
@@ -59,7 +58,8 @@ export const Equation = ({
     setLocalAst,
 }: NodeArgs<CustomInlineNode>) => {
     const plain = (node.plain_data ?? {}) as EquationPlainData;
-    const number = plain.order?.order;
+    const order = plain.order as { section?: number[]; order?: number } | undefined;
+    const number = order?.order;
 
     const id = node.attr[0];
     const setSlot = makeSlotSetter(node, setLocalAst);

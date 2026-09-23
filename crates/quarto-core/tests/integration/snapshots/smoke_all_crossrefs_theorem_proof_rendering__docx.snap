@@ -1,0 +1,20 @@
+---
+source: crates/xtask/src/capture_pandoc_goldens.rs
+expression: extraction.to_string()
+---
+core_props:
+  title: Proof rendering
+paragraphs:
+  [Title] Proof rendering
+  [Heading2] Proof with content
+  [FirstParagraph] Proof. This is a proof with content.
+  [Heading2] Named proof
+  [FirstParagraph] Proof (Of the main theorem). Named proof body.
+  [Heading2] Empty proof
+  [FirstParagraph] Proof. 
+  [Heading2] Remark
+  [FirstParagraph] Remark. This is a remark.
+media: []
+image_relationships: []
+drawing_count: 0
+page_break_count: 0

@@ -4054,7 +4054,21 @@ fn stream_write_config_value<W: io::Write>(
                 Ok(())
             })
         }
-        ConfigValueKind::Map(entries) => {
+        // Raw mode preserves pampa's own extended shape (an array of
+        // `{key, key_source, value}` triples) so key source-location and
+        // key order round-trip losslessly back through pampa's own reader.
+        // Pandoc-superset mode must instead match real Pandoc's `MetaMap`
+        // shape exactly -- a genuine JSON object mapping key to MetaValue,
+        // with `key_source` dropped (nothing downstream of a real `pandoc`
+        // subprocess needs it). This is the one `ConfigValueKind` arm in
+        // this function that didn't already branch on `raw` the way every
+        // scalar variant above does -- undetected until the pandoc-hybrid
+        // epic's P4 Task 9 fed this writer's non-raw output through a real
+        // `pandoc` JSON reader for the first time: any document reaching a
+        // nested metadata map (e.g. `authors_normalize`'s `labels`, present
+        // on every title-block-eligible render) failed pandoc's reader with
+        // "expected Object, but encountered Array".
+        ConfigValueKind::Map(entries) if raw => {
             stream_write_meta_node(w, "MetaMap", value, ctx, |w, ctx| {
                 w.begin_array()?;
                 for entry in entries {
@@ -4068,6 +4082,17 @@ fn stream_write_config_value<W: io::Write>(
                     w.end_object()?;
                 }
                 w.end_array()?;
+                Ok(())
+            })
+        }
+        ConfigValueKind::Map(entries) => {
+            stream_write_meta_node(w, "MetaMap", value, ctx, |w, ctx| {
+                w.begin_object()?;
+                for entry in entries {
+                    w.key(&entry.key)?;
+                    stream_write_config_value(w, &entry.value, ctx)?;
+                }
+                w.end_object()?;
                 Ok(())
             })
         }
@@ -4091,6 +4116,28 @@ fn stream_write_config_value_as_meta<W: io::Write>(
                 w.key(&entry.key)?;
                 stream_write_config_value(w, &entry.value, ctx)?;
             }
+            // `quarto_pandoc_reader_opts`: not document metadata. The
+            // vendored Q1 Lua (`normalize/capturereaderstate.lua`) indexes
+            // this key unconditionally and crashes pandoc (exit 83) if it
+            // is missing; an empty `MetaMap` is the correct value (pandoc's
+            // `ReaderOptions` defaults then apply). Emitted unconditionally,
+            // independent of `entries`, so it is present even for a
+            // document with no front matter at all. `s` uses the
+            // `config-default` sentinel (no real source bytes exist for a
+            // synthesized key), matching every other node's `{c, s, t}`
+            // shape so the round-trip reader can resolve it.
+            let synthetic_source_info = SourceInfo::generated(By::config_default());
+            let synthetic_s_id = ctx.serializer.intern(&synthetic_source_info);
+            w.key("quarto_pandoc_reader_opts")?;
+            w.begin_object()?;
+            w.key("c")?;
+            w.begin_object()?;
+            w.end_object()?;
+            w.key("s")?;
+            w.u64_value(synthetic_s_id as u64)?;
+            w.key("t")?;
+            w.str_value("MetaMap")?;
+            w.end_object()?;
             w.end_object()?;
             Ok(())
         }
@@ -4846,6 +4893,95 @@ mod tests {
         }
     }
 
+    /// A nested metadata `Map` (a `ConfigValueKind::Map` value found
+    /// *inside* `meta`, not the top-level meta map itself — e.g.
+    /// `quarto-core`'s `authors_normalize` transform's `meta.labels`)
+    /// must serialize its `MetaMap.c` field as a genuine JSON object under
+    /// `JsonConfig { raw: false, .. }` (the Pandoc-superset shape real
+    /// `pandoc` reads), not pampa's own `{key, key_source, value}`-triple
+    /// array shape. Before this fix, `ConfigValueKind::Map` was the one
+    /// variant in `stream_write_config_value` that didn't branch on `raw`
+    /// the way every scalar variant already does — undetected until the
+    /// pandoc-hybrid epic fed this writer's non-raw output through a real
+    /// `pandoc` JSON reader for the first time, where it failed with
+    /// "expected Object, but encountered Array".
+    #[test]
+    fn test_nested_meta_map_is_pandoc_object_shape_when_not_raw() {
+        use crate::readers::json as json_reader;
+
+        let nested_map = quarto_pandoc_types::ConfigValue::new_map(
+            vec![
+                quarto_pandoc_types::ConfigMapEntry {
+                    key: "authors".to_string(),
+                    key_source: SourceInfo::for_test(),
+                    value: quarto_pandoc_types::ConfigValue::new_string(
+                        "Author",
+                        SourceInfo::for_test(),
+                    ),
+                },
+                quarto_pandoc_types::ConfigMapEntry {
+                    key: "affiliations".to_string(),
+                    key_source: SourceInfo::for_test(),
+                    value: quarto_pandoc_types::ConfigValue::new_string(
+                        "Affiliation",
+                        SourceInfo::for_test(),
+                    ),
+                },
+            ],
+            SourceInfo::for_test(),
+        );
+        let mut meta_entries = std::collections::HashMap::new();
+        meta_entries.insert("labels".to_string(), nested_map);
+        let meta = quarto_pandoc_types::ConfigValue::new_map(
+            meta_entries
+                .into_iter()
+                .map(|(key, value)| quarto_pandoc_types::ConfigMapEntry {
+                    key,
+                    key_source: SourceInfo::for_test(),
+                    value,
+                })
+                .collect(),
+            SourceInfo::for_test(),
+        );
+        let pandoc = crate::pandoc::Pandoc {
+            meta,
+            blocks: vec![],
+        };
+
+        let context = make_test_context();
+        let mut output = Vec::new();
+        write_with_config(
+            &pandoc,
+            &context,
+            &mut output,
+            &JsonConfig {
+                raw: false,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let json_str = String::from_utf8(output.clone()).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+
+        let labels_c = &parsed["meta"]["labels"]["c"];
+        assert!(
+            labels_c.is_object(),
+            "expected meta.labels.c to be a JSON object, got: {labels_c}"
+        );
+        assert_eq!(labels_c["authors"]["c"], "Author");
+
+        // Round-trips back through pampa's own reader too.
+        let (read_pandoc, _) = json_reader::read(&mut output.as_slice()).unwrap();
+        let labels = read_pandoc
+            .meta
+            .get("labels")
+            .expect("labels key should round-trip");
+        assert_eq!(
+            labels.get("authors").and_then(|v| v.as_plain_text()),
+            Some("Author".to_string())
+        );
+    }
+
     #[test]
     fn test_custom_inline_json_roundtrip() {
         use crate::pandoc::attr::empty_attr;
@@ -5511,5 +5647,74 @@ mod tests {
             serialize_anchor_role(&AnchorRole::Other("ext/foo/bar".to_string())),
             "other:ext/foo/bar"
         );
+    }
+
+    // `quarto_pandoc_reader_opts` (Task 7, P2): the vendored Q1 Lua
+    // (`normalize/capturereaderstate.lua`) indexes this Meta key
+    // unconditionally and crashes pandoc (exit 83) if it is absent. It
+    // exists solely for that Lua's benefit — it is not document metadata,
+    // and an empty `MetaMap` is deliberately the correct value (pandoc's
+    // `ReaderOptions` defaults apply). Do not remove it as "dead" or
+    // "always empty": removing it reintroduces the crash.
+
+    fn parse_qmd_to_pandoc(input: &str) -> (Pandoc, ASTContext) {
+        let (pandoc, context, _warnings) = crate::readers::qmd::read(
+            input.as_bytes(),
+            false,
+            "test.qmd",
+            &mut std::io::sink(),
+            true,
+            None,
+        )
+        .expect("failed to parse qmd fixture");
+        (pandoc, context)
+    }
+
+    /// Assert `meta.quarto_pandoc_reader_opts` is the Pandoc-typed empty
+    /// `MetaMap` shape: `t == "MetaMap"` and `c == {}` exactly (not a bare
+    /// `{}`, which is indistinguishable from "nothing was emitted", and not
+    /// `null`, which an `Option<MetaMap>` serializer would produce and the
+    /// Lua would still crash on). Every node in this writer also carries an
+    /// `s` source-info ref; we only assert it is present, not its value,
+    /// since interned ids aren't stable across fixtures.
+    fn assert_empty_meta_map_shape(meta: &Value) {
+        let entry = meta
+            .get("quarto_pandoc_reader_opts")
+            .expect("quarto_pandoc_reader_opts key present in meta");
+        assert_eq!(entry.get("t"), Some(&json!("MetaMap")));
+        assert_eq!(entry.get("c"), Some(&json!({})));
+        assert!(
+            entry.get("s").and_then(|v| v.as_u64()).is_some(),
+            "expected a numeric source-info ref 's', got {:?}",
+            entry.get("s")
+        );
+    }
+
+    /// T7.1: a document WITH front matter still gets the key, and its
+    /// value is the Pandoc-typed empty `MetaMap` shape.
+    #[test]
+    fn test_quarto_pandoc_reader_opts_present_with_front_matter() {
+        let (pandoc, context) =
+            parse_qmd_to_pandoc("---\ntitle: Test Document\n---\n\nHello world.\n");
+        let mut output = Vec::new();
+        write(&pandoc, &context, &mut output).expect("write should succeed");
+        let doc: Value = serde_json::from_slice(&output).expect("valid JSON");
+        let meta = doc.get("meta").expect("meta key present");
+        assert_empty_meta_map_shape(meta);
+    }
+
+    /// T7.2: a document with NO front matter at all must still carry the
+    /// key. This is the discriminating case: the natural implementation
+    /// might plausibly (but wrongly) put the emission inside a branch that
+    /// only runs when there is real metadata to emit — which a
+    /// no-front-matter document skips.
+    #[test]
+    fn test_quarto_pandoc_reader_opts_present_without_front_matter() {
+        let (pandoc, context) = parse_qmd_to_pandoc("Hello world.\n");
+        let mut output = Vec::new();
+        write(&pandoc, &context, &mut output).expect("write should succeed");
+        let doc: Value = serde_json::from_slice(&output).expect("valid JSON");
+        let meta = doc.get("meta").expect("meta key present");
+        assert_empty_meta_map_shape(meta);
     }
 }

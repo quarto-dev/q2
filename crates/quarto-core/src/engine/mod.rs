@@ -147,6 +147,9 @@ pub(crate) use resolution::explicitly_declared_engines;
 pub use resolution::{EngineResolution, ResolutionNote, resolve_engines, resolve_engines_pass1};
 pub use traits::ExecutionEngine;
 
+pub mod execution_policy;
+pub use execution_policy::ExecutionPolicy;
+
 // Re-export native-only engines
 #[cfg(not(target_arch = "wasm32"))]
 pub use jupyter::JupyterEngine;

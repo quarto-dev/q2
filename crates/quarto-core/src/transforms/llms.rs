@@ -1506,4 +1506,59 @@ mod tests {
             "link-format must be scrubbed from the HTML-bound AST"
         );
     }
+
+    /// T3.2 (P8): `llms_view_active` returns `false` for a docx `Format`,
+    /// even with `project_kind == Website` and `website.llms-txt: true` —
+    /// the format conjunct, not the config conjunct, is what makes it
+    /// false. This is P8's mechanical answer to checklist item 4 (the
+    /// llms two-view path is orthogonal to the Pandoc tail).
+    #[test]
+    fn llms_view_inactive_for_docx_target_even_with_llms_txt_enabled() {
+        use crate::format::Format;
+        use crate::project::{DocumentInfo, ProjectConfig, ProjectContext};
+        use crate::render::BinaryDependencies;
+        use quarto_pandoc_types::ConfigMapEntry;
+        use quarto_source_map::SourceInfo;
+
+        let meta = ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "website".to_string(),
+                key_source: SourceInfo::for_test(),
+                value: ConfigValue::new_map(
+                    vec![ConfigMapEntry {
+                        key: "llms-txt".to_string(),
+                        key_source: SourceInfo::for_test(),
+                        value: ConfigValue::new_bool(true, SourceInfo::for_test()),
+                    }],
+                    SourceInfo::for_test(),
+                ),
+            }],
+            SourceInfo::for_test(),
+        );
+
+        let project = ProjectContext {
+            dir: std::path::PathBuf::from("/project"),
+            config: ProjectConfig {
+                project_kind: ProjectKind::Website,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let binaries = BinaryDependencies::new();
+
+        let docx_format = Format::from_format_string("docx").unwrap();
+        let docx_ctx = RenderContext::new(&project, &doc, &docx_format, &binaries);
+        assert!(
+            !llms_view_active(&meta, &docx_ctx),
+            "docx target: llms view must be inactive even though the site has llms-txt: true"
+        );
+
+        let html_format = Format::html();
+        let html_ctx = RenderContext::new(&project, &doc, &html_format, &binaries);
+        assert!(
+            llms_view_active(&meta, &html_ctx),
+            "html target, same config: llms view active (control)"
+        );
+    }
 }
