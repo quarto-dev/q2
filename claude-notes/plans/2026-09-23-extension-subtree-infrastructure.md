@@ -1,6 +1,6 @@
 # Extension-subtree infrastructure: `xtask pull-extension-subtree` + bundled-payload discovery
 
-**Status:** Phase 2 done. **Unblocked** — deliberately independent of the two
+**Status:** All three phases done. **Unblocked** — deliberately independent of the two
 external PRs ([quarto-dev/quarto-cli#14936](https://github.com/quarto-dev/quarto-cli/pull/14936),
 [PumasAI/quarto-julia-engine#15](https://github.com/PumasAI/quarto-julia-engine/pull/15)).
 **Parent:** [2026-09-03-julia-engine-static-declarations-epic.md](2026-09-03-julia-engine-static-declarations-epic.md)
@@ -206,39 +206,57 @@ dependency (xtask knows the repo root via `create_worktree::repo_root()`).
 
 ### Phase 3 — fake-extension end-to-end
 
-- [ ] Fixture `crates/quarto-core/tests/fixtures/extension-subtrees/synth-echo/`
+- [x] Fixture `crates/quarto-core/tests/fixtures/extension-subtrees/synth-echo/`
       shaped like a vendored repo: `_extensions/synth-echo/_extension.yml` +
-      `src/synth-echo.ts`, modeled on the `echo-engine` fixture, claiming a
-      `synthsub` language (`kind: primary`). Note `HERMETIC_FIXTURES` /
-      `ensure_bundle` are keyed to `tests/fixtures/extensions/` — extend
-      `engine_fixture_build.rs` with a path-aware variant (or a second fixture
-      root) so the subtree fixture's `dist/` also regenerates hermetically at
-      test time.
-- [ ] **Tests first**, registered in `tests/integration/main.rs`:
-  - discovery: with `QUARTO_EXTENSION_SUBTREES_DIR=<fixture root>`,
-    `discover_extensions` finds `synth-echo` with **zero** `_extensions/`
-    install;
-  - e2e: a doc with a ` ```{synthsub} ` cell renders through the real path
-    (`render_to_file` → discovery → resolution → Deno engine host, the
-    `synth_engines_e2e.rs` shape) and the output contains the executed result
-    — gated on `deno_available()` like its siblings. Run this **as a
-    single-file render** (no `_quarto.yml`), so it exercises
-    `discover_extensions_and_build_registry` (`project/mod.rs:1759`) — the
-    other caller of `discover_extensions_only`, distinct from the
-    project-mode path Phase 2's unit tests already cover at `:1954` — closing
-    the loop on the WASM-branch fix from Phase 2;
-  - D4 verification: the rendered document's template metadata contains no
-    trace of the bundled engine (no `engines` key introduced by
-    extension-contributed engines).
-- [ ] Implement whatever the tests surface (expected: nothing beyond Phases
-      1–2; this phase is the proof).
-- [ ] Docs: short `claude-notes/instructions/extension-subtrees.md` (or a
-      section in an existing note) — how to add a real subtree: one
-      `SUBTREES` row, run `cargo xtask pull-extension-subtree <name>`, one
-      `include_dir!` payload static + registration. This is the runbook the
-      epic's Step 4 will follow for julia.
-- [ ] Gate: workspace `cargo nextest run` + full `cargo xtask verify`
-      (pre-commit checklist), report pass/skip delta vs live baseline.
+      `_extensions/synth-echo/src/synth-echo.ts` (the extension itself lives
+      one level down, at `synth-echo/_extensions/synth-echo/`, exactly
+      mirroring how a real vendored repo like the eventual julia-engine has
+      its own `_extensions/<name>/` at its checkout root — "shaped like a
+      vendored repo" per the plan's own framing), modeled on the simpler
+      `alpha` fixture structurally (not `echo-engine`'s many accumulated
+      test-sentinel branches) with `echo-engine`'s echo-the-input-back
+      behavior, claiming a `synthsub` language (`kind: primary`).
+      `HERMETIC_FIXTURES`/`ensure_bundle` in `engine_fixture_build.rs` turned
+      out to need **no path-aware variant** — `ensure_bundle`/`build_bundle`
+      already take an explicit `ext_dir: &Path` and never assume where it
+      lives; only `HERMETIC_FIXTURES` (a flat name list) needed
+      `"synth-echo"` added, with the new test file computing its own
+      fixture-source path under `tests/fixtures/extension-subtrees/`
+      (the "second fixture root" the plan anticipated, as a small
+      test-local helper rather than a `engine_fixture_build.rs` change).
+- [x] **Tests first**, registered in `tests/integration/main.rs`, both green
+      on the first run: `synth_extension_subtree_e2e.rs`'s
+      `discovers_synth_echo_via_subtree_root_env_var_with_zero_extensions_install`
+      (discovery via `QUARTO_EXTENSION_SUBTREES_DIR` + `all_builtin_extension_roots`,
+      confirms zero `_extensions/` install) and
+      `e2e_single_file_render_executes_synthsub_via_subtree_root` (single-file
+      `render_to_file` render of a ` ```{synthsub} ` cell through the real
+      Deno engine host — confirmed genuinely executed, not skipped, since
+      `deno` was available; also carries the D4 assertion: the engine's own
+      name `"synth-echo"` never appears in the rendered HTML, confirming no
+      Q1-style `filterBundledSubtreeEngines` leak).
+- [x] Implement whatever the tests surface: nothing beyond Phases 1–2 was
+      needed — both tests passed against the existing implementation,
+      confirming the design.
+- [x] Docs: `claude-notes/instructions/extension-subtrees.md` — the runbook
+      for adding a real subtree (one `SUBTREES` row, `cargo xtask
+      pull-extension-subtree <name>`, one `include_dir!` payload static +
+      registration in `EXTENSION_SUBTREE_PAYLOADS`), plus the
+      `QUARTO_EXTENSION_SUBTREES_DIR` dev/test seam and why the fake fixture
+      lives outside `resources/`.
+- [x] Gate: workspace `cargo nextest run` green — 14485 passed, 0 failed, 200
+      skipped (+2 over Phase 2's 14483, exactly the two new tests; no
+      stray/duplicated tests). Full `cargo xtask verify` green on the second
+      attempt — the first attempt failed on an unrelated pre-existing flake
+      in `ts-packages/quarto-sync-client`'s `doc-inventory.test.ts`
+      ("reports index, text, and binary docs with states and heads"), which
+      passed cleanly 6/6 when re-run in isolation immediately after
+      (`npx vitest run src/doc-inventory.test.ts`) — confirming a timing
+      issue unrelated to this plan's changes (Phase 3 touched only
+      `quarto-core` test fixtures/tests and a docs file, nothing in
+      `ts-packages/` or `hub-client/`). The full re-run reported "All
+      verification steps passed!" with the same 14485/0/200 workspace
+      totals.
 
 ## Explicitly out of scope
 
