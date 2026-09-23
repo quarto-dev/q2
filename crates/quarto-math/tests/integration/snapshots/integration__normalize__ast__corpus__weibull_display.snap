@@ -1,0 +1,59 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..156
+  scripts Auto @0..5
+    run "f" @0..1
+    sub:
+      row @2..5
+        run "X" @3..4
+  run "(" @5..6
+  run "x" @6..7
+  run ")" @7..8
+  run "=" @9..10
+  delimited "(" ")" @11..44
+    row @17..37
+      frac Bar @17..37
+        row @22..30
+          sym "α" @23..29
+        row @30..37
+          sym "β" @31..36
+  scripts Auto @47..86
+    delimited "(" ")" @47..75
+      row @53..68
+        frac Bar @53..68
+          row @58..61
+            run "x" @59..60
+          row @61..68
+            sym "β" @62..67
+    sup:
+      row @76..86
+        sym "α" @77..83
+        run "-1" @83..85
+  scripts Auto @89..131
+    run "e" @89..90
+    sup:
+      row @91..131
+        run "-" @92..93
+        scripts Auto @93..130
+          delimited "(" ")" @93..121
+            row @99..114
+              frac Bar @99..114
+                row @104..107
+                  run "x" @105..106
+                row @107..114
+                  sym "β" @108..113
+          sup:
+            row @122..130
+              sym "α" @123..129
+  run ";" @131..132
+  sym "α" @136..142
+  run "," @142..143
+  sym "β" @143..148
+  run "," @148..149
+  run "x" @149..150
+  run ">" @151..152
+  run "0" @153..154
+  run "." @155..156
+-- problems --

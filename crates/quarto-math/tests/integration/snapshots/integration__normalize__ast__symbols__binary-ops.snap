@@ -1,0 +1,33 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..105
+  run "a" @0..1
+  sym "±" @2..5
+  run "b" @6..7
+  sym "∓" @8..11
+  run "c" @12..13
+  sym "×" @14..20
+  run "d" @21..22
+  sym "÷" @23..27
+  run "e" @28..29
+  sym "⋅" @30..35
+  run "f" @36..37
+  sym "∘" @38..43
+  run "g" @44..45
+  sym "∗" @46..50
+  run "h" @51..52
+  sym "⊕" @53..59
+  run "i" @60..61
+  sym "⊗" @62..69
+  run "j" @70..71
+  sym "∧" @72..78
+  run "k" @79..80
+  sym "∨" @81..85
+  run "l" @86..87
+  sym "⋆" @88..93
+  run "m" @94..95
+  sym "∙" @96..103
+  run "n" @104..105
+-- problems --

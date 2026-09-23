@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/typst.rs
+expression: to_typst(&n)
+---
+(∂ upright(C))/(∂ upright(t)) + (1)/(2) σ^(2) upright(S)^(2) (∂^(2) upright(C))/(∂ upright(C)^(2)) + upright(r) upright(S) (∂ upright(C))/(∂ upright(S)) #h(0.3333em) = upright(r) upright(C)

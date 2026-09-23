@@ -375,6 +375,21 @@ website:
             - errors/typst/Q-21-1.qmd
             - errors/typst/Q-21-2.qmd
             - errors/typst/Q-21-3.qmd
+        - section: "math"
+          contents:
+            - errors/math/Q-22-1.qmd
+            - errors/math/Q-22-2.qmd
+            - errors/math/Q-22-3.qmd
+            - errors/math/Q-22-4.qmd
+            - errors/math/Q-22-5.qmd
+            - errors/math/Q-22-6.qmd
+            - errors/math/Q-22-7.qmd
+            - errors/math/Q-22-8.qmd
+            - errors/math/Q-22-9.qmd
+            - errors/math/Q-22-10.qmd
+            - errors/math/Q-22-11.qmd
+            - errors/math/Q-22-12.qmd
+            - errors/math/Q-22-13.qmd
 
 format:
   html:

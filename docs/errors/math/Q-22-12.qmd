@@ -1,0 +1,34 @@
+---
+title: "Math Construct Dropped"
+description: "A construct with no equivalent in the target's math model was dropped from the output; the rest of the expression is unaffected."
+code: Q-22-12
+subsystem: math
+status: stub
+since: "99.9.9"
+categories:
+  - math
+---
+
+# `Q-22-12` — Math Construct Dropped
+
+> A construct with no equivalent in the target's math model was dropped from the output; the rest of the expression is unaffected.
+
+## What this means
+
+Some LaTeX constructs are typesetting instructions rather than mathematics (`\hline` between the rows of an `array`). When the target cannot represent them, quarto-math omits them and reports what was dropped so the omission is not silent.
+
+## Why this happens
+
+Common causes: table rules (`\hline`, `\cline`) inside an `array` environment.
+
+## How to fix it
+
+If the rule matters, consider a table outside the math; otherwise the warning can be ignored.
+
+## Where it is reported
+
+Math diagnostics point into the `.qmd` at the exact characters inside the
+`$…$` or `$$…$$` block, including math that spans several lines or sits
+inside a block quote or list item. When a `\newcommand` macro is involved,
+a problem inside the macro body points at the definition and a problem in
+a macro argument points at the use.

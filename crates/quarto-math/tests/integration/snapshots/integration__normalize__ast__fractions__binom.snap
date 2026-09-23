@@ -1,0 +1,11 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..12
+  frac Binom @0..12
+    row @6..9
+      run "n" @7..8
+    row @9..12
+      run "k" @10..11
+-- problems --

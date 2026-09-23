@@ -1,0 +1,13 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..23
+  run "x" @0..1
+  run "=" @2..3
+  run "1" @4..5
+  text Roman " if " @6..17
+  run "y" @18..19
+  run ">" @20..21
+  run "0" @22..23
+-- problems --

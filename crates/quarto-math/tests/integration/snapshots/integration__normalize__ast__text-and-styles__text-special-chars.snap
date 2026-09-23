@@ -1,0 +1,7 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..18
+  text Roman "50\\% of \\$x" @0..18
+-- problems --

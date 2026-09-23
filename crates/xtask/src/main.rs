@@ -33,6 +33,7 @@ mod build_trace_viewer;
 mod capture_pandoc_goldens;
 mod create_worktree;
 mod dev_setup;
+mod gen_math_spec;
 mod lint;
 mod node_version;
 mod pandoc_check;
@@ -59,6 +60,14 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Regenerate crates/quarto-math/spec/commands.json from mitex's spec
+    /// dump plus spec/overrides.json (or verify it is current with --check).
+    GenMathSpec {
+        /// Only compare; exit non-zero when the committed file is stale.
+        #[arg(long)]
+        check: bool,
+    },
+
     /// Install required development tools.
     ///
     /// Checks for cargo-nextest and wasm-bindgen-cli (pinned version), installing any that are missing.
@@ -391,6 +400,7 @@ fn main() -> Result<()> {
 
     match cli.command {
         Command::DevSetup {} => dev_setup::run(),
+        Command::GenMathSpec { check } => gen_math_spec::run(check),
         Command::Lint { verbose, quiet } => {
             let config = lint::LintConfig { verbose, quiet };
             lint::run(&config)

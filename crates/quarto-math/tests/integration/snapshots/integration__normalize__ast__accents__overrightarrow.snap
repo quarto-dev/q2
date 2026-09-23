@@ -1,0 +1,9 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..19
+  accent "\u{20d7}" @0..19
+    row @15..19
+      run "AB" @16..18
+-- problems --

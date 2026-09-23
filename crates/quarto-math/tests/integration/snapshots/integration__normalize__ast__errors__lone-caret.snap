@@ -1,0 +1,10 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..2
+  scripts Auto @0..2
+    row @-
+    sup:
+      run "2" @1..2
+-- problems --

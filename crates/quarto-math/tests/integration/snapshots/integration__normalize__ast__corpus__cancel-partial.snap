@@ -1,0 +1,19 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..55
+  run "g" @0..1
+  run "=" @2..3
+  delimited "(" ")" @4..55
+    row @10..48
+      cancel @10..48
+        row @17..48
+          frac Bar @18..47
+            row @23..35
+              sym "∂" @24..32
+              run "v" @33..34
+            row @35..47
+              sym "∂" @36..44
+              run "z" @45..46
+-- problems --

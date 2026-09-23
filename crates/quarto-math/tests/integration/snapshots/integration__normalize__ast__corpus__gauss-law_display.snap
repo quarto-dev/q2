@@ -1,0 +1,24 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..51
+  nary "∮" Auto @0..5
+  accent "\u{20d7}" @6..13
+    row @10..13
+      run "E" @11..12
+  sym "⋅" @14..19
+  run "d" @20..21
+  accent "\u{20d7}" @21..28
+    row @25..28
+      run "A" @26..27
+  run "=" @29..30
+  frac Bar @31..51
+    row @36..39
+      run "Q" @37..38
+    row @39..51
+      scripts Auto @40..50
+        sym "ϵ" @40..48
+        sub:
+          run "0" @49..50
+-- problems --

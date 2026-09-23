@@ -1,0 +1,10 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..5
+  run "a" @0..1
+  error "alignment `&` outside an environment" "&" @2..3
+  run "b" @4..5
+-- problems --
+Syntax @2..3 alignment `&` outside an environment

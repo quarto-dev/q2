@@ -1,0 +1,10 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..8
+  run "x" @0..1
+  error "unknown command `\\foo`" "\\foo" @2..6
+  run "y" @7..8
+-- problems --
+UnknownCommand @2..6 unknown command `\foo`

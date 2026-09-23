@@ -1,0 +1,9 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..15
+  run "x" @0..1
+  error "unknown command `\\ligned`" "aligned" @7..14
+-- problems --
+UnknownCommand @7..14 unknown command `\ligned`

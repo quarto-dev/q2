@@ -1,0 +1,30 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..106
+  matrix Cases - @0..106
+    row 0:
+      row @14..60
+        matrix Aligned - @14..60
+          row 0:
+            row @30..31
+              run "a" @30..31
+            row @33..36
+              run "=" @33..34
+              run "b" @35..36
+          row 1:
+            row @40..41
+              run "c" @40..41
+            row @43..46
+              run "=" @43..44
+              run "d" @45..46
+      row @63..75
+        text Roman "if " @63..73
+        run "x" @74..75
+    row 1:
+      row @79..80
+        run "0" @79..80
+      row @83..94
+        text Roman "else" @83..94
+-- problems --

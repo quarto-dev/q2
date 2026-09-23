@@ -1,0 +1,8 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..8
+  error "`\\sqrt` is missing an argument" "\\sqrt[3]" @0..8
+-- problems --
+ArityMismatch @0..8 `\sqrt` is missing an argument

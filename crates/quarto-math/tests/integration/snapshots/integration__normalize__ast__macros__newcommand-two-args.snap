@@ -1,0 +1,11 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..59
+  sym "⟨" @23..30
+  run "u" @54..55
+  run "," @33..34
+  run "v" @57..58
+  sym "⟩" @38..45
+-- problems --

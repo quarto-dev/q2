@@ -1,0 +1,28 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..48
+  scripts Auto @0..23
+    nary "∫" Auto @0..4
+    sub:
+      row @5..14
+        run "-" @6..7
+        sym "∞" @7..13
+    sup:
+      row @15..23
+        sym "∞" @16..22
+  scripts Auto @24..32
+    run "e" @24..25
+    sup:
+      row @26..32
+        scripts Auto @27..31
+          run "-x" @27..29
+          sup:
+            run "2" @30..31
+  run "dx" @33..35
+  run "=" @36..37
+  sqrt @38..48
+    row @43..48
+      sym "π" @44..47
+-- problems --

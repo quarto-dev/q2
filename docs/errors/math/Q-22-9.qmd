@@ -1,0 +1,34 @@
+---
+title: "Unsupported Math Command"
+description: "A math command is recognized but has no rendering in the target format, or is a document-level command that has no meaning inside math."
+code: Q-22-9
+subsystem: math
+status: stub
+since: "99.9.9"
+categories:
+  - math
+---
+
+# `Q-22-9` — Unsupported Math Command
+
+> A math command is recognized but has no rendering in the target format, or is a document-level command that has no meaning inside math.
+
+## What this means
+
+quarto-math knows the command (so this is not a typo) but cannot convert it: either the target format has no equivalent construct, or the command is not math at all (`\cite`, `\label`, `\includegraphics` inside `$…$`). The command is reported and the expression is emitted verbatim in formats that need a conversion.
+
+## Why this happens
+
+Common causes: document commands pasted into an equation, LaTeX-only typesetting commands such as `\raisebox`, or bra-ket notation from the `braket` package.
+
+## How to fix it
+
+Move document-level commands outside the math, or replace the construct with one the target supports. The diagnostic names the command and the reason.
+
+## Where it is reported
+
+Math diagnostics point into the `.qmd` at the exact characters inside the
+`$…$` or `$$…$$` block, including math that spans several lines or sits
+inside a block quote or list item. When a `\newcommand` macro is involved,
+a problem inside the macro body points at the definition and a problem in
+a macro argument points at the use.

@@ -1,0 +1,34 @@
+---
+title: "Unbalanced Brace In Math"
+description: "A `{` in a math expression is never closed, or a `}` has no matching `{`."
+code: Q-22-5
+subsystem: math
+status: stub
+since: "99.9.9"
+categories:
+  - math
+---
+
+# `Q-22-5` — Unbalanced Brace In Math
+
+> A `{` in a math expression is never closed, or a `}` has no matching `{`.
+
+## What this means
+
+Braces group arguments and sub-expressions. An unclosed `{` is closed at the end of the expression, which usually swallows more than intended; a stray `}` has nothing to close. Either way the intended structure is unknown, so the expression is reported and emitted verbatim in formats that need a conversion.
+
+## Why this happens
+
+Common causes: a missing `}` after editing an argument, an escaped brace typed as a plain one (`\{ x }` when `\{ x \}` was meant), or a `}` left behind after removing a group.
+
+## How to fix it
+
+Balance the braces. To typeset a literal brace, write `\{` and `\}`.
+
+## Where it is reported
+
+Math diagnostics point into the `.qmd` at the exact characters inside the
+`$…$` or `$$…$$` block, including math that spans several lines or sits
+inside a block quote or list item. When a `\newcommand` macro is involved,
+a problem inside the macro body points at the definition and a problem in
+a macro argument points at the use.

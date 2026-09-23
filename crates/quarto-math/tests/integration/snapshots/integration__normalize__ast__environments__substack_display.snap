@@ -1,0 +1,22 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..35
+  scripts Auto @0..28
+    nary "∑" Auto @0..4
+    sub:
+      row @5..28
+        matrix Gathered - @6..27
+          row 0:
+            row @16..19
+              run "i<j" @16..19
+          row 1:
+            row @23..26
+              run "j<k" @23..26
+  scripts Auto @29..35
+    run "a" @29..30
+    sub:
+      row @31..35
+        run "ij" @32..34
+-- problems --

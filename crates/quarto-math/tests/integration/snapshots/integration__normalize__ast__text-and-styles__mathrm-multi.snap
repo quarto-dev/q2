@@ -1,0 +1,12 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..18
+  style Roman @0..13
+    row @7..13
+      run "Pois" @8..12
+  run "(" @13..14
+  sym "μ" @14..17
+  run ")" @17..18
+-- problems --

@@ -1,0 +1,34 @@
+---
+title: "Mismatched Math Environment"
+description: "A math environment is closed by the wrong `\\end{…}`, is never closed, or an `\\end{…}` appears without its `\\begin{…}`."
+code: Q-22-3
+subsystem: math
+status: stub
+since: "99.9.9"
+categories:
+  - math
+---
+
+# `Q-22-3` — Mismatched Math Environment
+
+> A math environment is closed by the wrong `\end{…}`, is never closed, or an `\end{…}` appears without its `\begin{…}`.
+
+## What this means
+
+`\begin{name}` and `\end{name}` must pair up exactly. When they do not, the extent of the environment is a guess, so quarto-math keeps the whole span verbatim rather than pick a layout that might be wrong, and reports the mismatch at the environment.
+
+## Why this happens
+
+Common causes: `\begin{aligned} … \end{align}` after editing one of the two, a missing `\end{…}` at the end of a display equation, or a stray `\end{…}` left behind after deleting a `\begin{…}`.
+
+## How to fix it
+
+Make the `\begin` and `\end` names identical and make sure every `\begin` has an `\end` inside the same `$$ … $$` block.
+
+## Where it is reported
+
+Math diagnostics point into the `.qmd` at the exact characters inside the
+`$…$` or `$$…$$` block, including math that spans several lines or sits
+inside a block quote or list item. When a `\newcommand` macro is involved,
+a problem inside the macro body points at the definition and a problem in
+a macro argument points at the use.

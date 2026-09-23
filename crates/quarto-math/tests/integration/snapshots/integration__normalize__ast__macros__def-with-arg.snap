@@ -1,0 +1,21 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..23
+  row @-
+  error "unknown command `\\pr`" "\\pr" @4..7
+  run "#" @7..8
+  run "1" @8..9
+  row @9..16
+    run "P" @10..11
+    run "(" @11..12
+    run "#" @12..13
+    run "1" @13..14
+    run ")" @14..15
+  error "unknown command `\\pr`" "\\pr" @17..20
+  row @20..23
+    run "x" @21..22
+-- problems --
+UnknownCommand @4..7 unknown command `\pr`
+UnknownCommand @17..20 unknown command `\pr`

@@ -1,0 +1,12 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..35
+  sym "§" @0..2
+  sym "¶" @3..5
+  sym "†" @6..10
+  sym "‡" @11..16
+  sym "©" @17..27
+  sym "£" @28..35
+-- problems --

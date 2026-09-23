@@ -1,0 +1,34 @@
+---
+title: "Math Macro Expansion Limit Exceeded"
+description: "Expanding the `\\newcommand` macros in a math expression produced more tokens than the limit allows, which almost always means a macro refers to itself."
+code: Q-22-8
+subsystem: math
+status: stub
+since: "99.9.9"
+categories:
+  - math
+---
+
+# `Q-22-8` — Math Macro Expansion Limit Exceeded
+
+> Expanding the `\newcommand` macros in a math expression produced more tokens than the limit allows, which almost always means a macro refers to itself.
+
+## What this means
+
+Macros are expanded before the expression is converted. A definition such as `\newcommand{\loop}{\loop}` never stops expanding; TeX would hang, quarto-math stops after a fixed budget, reports the expression, and emits it verbatim in formats that need a conversion.
+
+## Why this happens
+
+Common causes: a macro that uses itself directly or through another macro, or a macro argument that reintroduces the macro.
+
+## How to fix it
+
+Remove the self-reference. If a legitimately large expansion hits the limit, split the expression or simplify the macros.
+
+## Where it is reported
+
+Math diagnostics point into the `.qmd` at the exact characters inside the
+`$…$` or `$$…$$` block, including math that spans several lines or sits
+inside a block quote or list item. When a `\newcommand` macro is involved,
+a problem inside the macro body points at the definition and a problem in
+a macro argument points at the use.

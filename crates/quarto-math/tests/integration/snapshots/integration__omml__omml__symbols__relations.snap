@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/omml.rs
+expression: to_omml(&n)
+---
+<m:oMath><m:r><m:t>a</m:t></m:r><m:r><m:t>≤</m:t></m:r><m:r><m:t>b</m:t></m:r><m:r><m:t>≥</m:t></m:r><m:r><m:t>c</m:t></m:r><m:r><m:t>≈</m:t></m:r><m:r><m:t>d</m:t></m:r><m:r><m:t>≡</m:t></m:r><m:r><m:t>e</m:t></m:r><m:r><m:t>∼</m:t></m:r><m:r><m:t>f</m:t></m:r><m:r><m:t>∝</m:t></m:r><m:r><m:t>g</m:t></m:r><m:r><m:t>∈</m:t></m:r><m:r><m:t>h</m:t></m:r><m:r><m:t>⊂</m:t></m:r><m:r><m:t>i</m:t></m:r><m:r><m:t>⊆</m:t></m:r><m:r><m:t>j</m:t></m:r><m:r><m:t>≪</m:t></m:r><m:r><m:t>k</m:t></m:r><m:r><m:t>≫</m:t></m:r><m:r><m:t>l</m:t></m:r><m:r><m:t>≃</m:t></m:r><m:r><m:t>m</m:t></m:r><m:r><m:t>≅</m:t></m:r><m:r><m:t>n</m:t></m:r><m:r><m:t>⟂</m:t></m:r><m:r><m:t>o</m:t></m:r><m:r><m:t>∥</m:t></m:r><m:r><m:t>p</m:t></m:r></m:oMath>

@@ -1,0 +1,23 @@
+# Vendored from mitex (https://github.com/mitex-rs/mitex) at 985d8e7 (2026-07-07),
+# Apache-2.0; see ../VENDORED.md for the local patch list.
+[package]
+name = "mitex-parser"
+description = "Parser for MiTeX"
+version = "0.2.7"
+edition = "2021"
+license = "Apache-2.0"
+homepage = "https://github.com/mitex-rs/mitex"
+repository = "https://github.com/mitex-rs/mitex"
+publish = false
+
+[dependencies]
+mitex-glob = { path = "../mitex-glob" }
+mitex-lexer = { path = "../mitex-lexer" }
+mitex-spec = { path = "../mitex-spec" }
+
+rowan = "0.15.15"
+
+[dev-dependencies]
+once_cell = "1"
+insta = "1"
+serde_json = "1"

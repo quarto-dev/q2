@@ -1,0 +1,8 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..36
+  error "invalid number of arguments" "invalid number of arguments" @-
+-- problems --
+ArityMismatch @- invalid number of arguments

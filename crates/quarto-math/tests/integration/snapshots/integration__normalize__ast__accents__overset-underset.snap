@@ -1,0 +1,18 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..33
+  limpos Top @0..14
+    annotation:
+      row @8..11
+        run "!" @9..10
+    row @11..14
+      run "=" @12..13
+  limpos Bot @15..33
+    annotation:
+      row @24..27
+        run "n" @25..26
+    row @27..33
+      func "max" UndOvr @28..32
+-- problems --

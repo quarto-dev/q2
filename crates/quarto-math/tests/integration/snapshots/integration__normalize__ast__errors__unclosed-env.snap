@@ -1,0 +1,8 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..17
+  error "`\\begin{aligned}` without `\\end{aligned}`" "\\begin{aligned} x" @0..17
+-- problems --
+EnvironmentMismatch @0..17 `\begin{aligned}` without `\end{aligned}`

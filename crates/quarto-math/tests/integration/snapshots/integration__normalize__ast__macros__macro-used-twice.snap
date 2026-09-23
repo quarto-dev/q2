@@ -1,0 +1,15 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..42
+  run "P" @20..21
+  run "(" @21..22
+  run "A" @31..32
+  run ")" @24..25
+  run "+" @34..35
+  run "P" @20..21
+  run "(" @21..22
+  run "B" @40..41
+  run ")" @24..25
+-- problems --

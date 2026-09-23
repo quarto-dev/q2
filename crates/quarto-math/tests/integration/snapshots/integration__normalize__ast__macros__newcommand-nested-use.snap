@@ -1,0 +1,14 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..60
+  run "x" @51..52
+  sym "∈" @53..56
+  scripts Auto @16..49
+    style DoubleStruck @16..26
+      row @23..26
+        run "R" @24..25
+    sup:
+      run "n" @48..49
+-- problems --

@@ -1,0 +1,34 @@
+---
+title: "Ragged Rows In Math Environment"
+description: "The rows of a math environment (`pmatrix`, `aligned`, `cases`, …) do not all have the same number of `&`-separated cells."
+code: Q-22-10
+subsystem: math
+status: stub
+since: "99.9.9"
+categories:
+  - math
+---
+
+# `Q-22-10` — Ragged Rows In Math Environment
+
+> The rows of a math environment (`pmatrix`, `aligned`, `cases`, …) do not all have the same number of `&`-separated cells.
+
+## What this means
+
+Matrices and alignments are grids; a short row is padded with empty cells so the grid stays rectangular, and the padding is reported here. The output is usually what was intended, but the padding may hide a missing `&`.
+
+## Why this happens
+
+Common causes: a forgotten `&` in one row, a `\\` that ended a row early, or an extra `&` in one row.
+
+## How to fix it
+
+Give every row the same number of cells, using empty cells (`a & & c`) where a position should stay blank.
+
+## Where it is reported
+
+Math diagnostics point into the `.qmd` at the exact characters inside the
+`$…$` or `$$…$$` block, including math that spans several lines or sits
+inside a block quote or list item. When a `\newcommand` macro is involved,
+a problem inside the macro body points at the definition and a problem in
+a macro argument points at the use.

@@ -1,0 +1,20 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..31
+  scripts Auto @0..3
+    run "p" @0..1
+    sub:
+      run "e" @2..3
+  run "=" @4..5
+  run "1-" @6..8
+  scripts Auto @8..31
+    style Roman @8..18
+      row @15..18
+        run "e" @16..17
+    sup:
+      row @19..31
+        run "-t" @20..22
+        sym "λ" @23..30
+-- problems --

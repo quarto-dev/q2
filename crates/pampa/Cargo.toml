@@ -96,6 +96,9 @@ quarto-config = { path = "../quarto-config", features = ["span-assert"] }
 # compile for wasm32-unknown-unknown; insta/tempfile/tokio are native-only too)
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 insta = { version = "1.46", features = ["json", "redactions"] }
+# Seam test only (tests/integration/quarto_math_seam.rs) until the docx /
+# Typst writers consume quarto-math at runtime.
+quarto-math = { path = "../quarto-math" }
 proptest = "1.10"
 tempfile = "3.24"
 tokio = { workspace = true }

@@ -1,0 +1,7 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..22
+  text Roman "if $x > 0$ then" @0..22
+-- problems --

@@ -1,0 +1,19 @@
+---
+source: crates/quarto-math/tests/integration/normalize.rs
+expression: rendered(&n)
+---
+row @0..19
+  sqrt @0..19
+    degree:
+      row @5..10
+        run "n+1" @6..9
+    row @10..19
+      scripts Auto @11..14
+        run "x" @11..12
+        sup:
+          run "2" @13..14
+      scripts Auto @14..18
+        run "+y" @14..16
+        sup:
+          run "2" @17..18
+-- problems --
