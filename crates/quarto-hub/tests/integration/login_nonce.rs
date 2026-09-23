@@ -12,10 +12,7 @@
 //! within the submitted token's validity. That is an accepted boundary,
 //! not an oversight; see the plan.
 //!
-//! A nonce-less token is temporarily accepted for old SPA compatibility;
-//! `bd-mc00s2ws` tracks restoring universal nonce enforcement.
-//!
-//! Every secure-hub test uses a **secure** hub:
+//! Every enforcement test runs on a **secure** hub:
 //! `--allow-insecure-auth` deliberately skips the check, because the
 //! `SameSite=None; Secure` cookie the flow needs cannot work over plain
 //! HTTP. `insecure_mode_skips_enforcement_with_a_warning` covers that.
@@ -349,9 +346,8 @@ async fn callback_with_a_nonce_from_another_login_is_rejected() {
 }
 
 #[tokio::test]
-async fn a_nonceless_token_is_accepted_even_with_a_login_cookie() {
-    // A pre-H2 client can carry a leftover login-state cookie from a prior
-    // attempt. Its missing token nonce is still the compatibility signal.
+async fn callback_with_a_token_carrying_no_nonce_is_rejected() {
+    // A pre-H2 client, or a token minted for some other relying party.
     let (provider, hub) = secure_google_setup().await;
     let (_nonce, blob) = fetch_nonce(hub, LOGIN_STATE_COOKIE_SECURE).await;
     let google = provider.sign(
@@ -361,12 +357,7 @@ async fn a_nonceless_token_is_accepted_even_with_a_login_cookie() {
     );
 
     let resp = post_callback(hub, &google, Some((LOGIN_STATE_COOKIE_SECURE, &blob))).await;
-    assert!(resp.status().is_redirection());
-    assert_eq!(resp.headers().get("location").unwrap(), "/");
-    assert!(
-        TestHub::find_set_cookie(&resp, AUTH_COOKIE_NAME_SECURE).is_some(),
-        "session cookie minted for old SPA login"
-    );
+    assert_auth_error(&resp, "restart");
 }
 
 #[tokio::test]
@@ -447,11 +438,16 @@ async fn callback_with_a_blob_sealed_under_a_foreign_secret_is_rejected() {
 
 // ── which cookie-absent reading? (E0) ─────────────────────────────
 
-/// A deployed pre-nonce SPA does not fetch `/auth/nonce` or return an ID-token
-/// nonce. It must remain able to complete login until every deployed SPA has
-/// moved to the nonce-aware flow.
+/// A cookie-absent callback has two readings, and they want opposite
+/// remedies — reload the app, or fix cookie delivery. The token's own
+/// `nonce` claim is what tells them apart, so the check must look at it
+/// rather than returning a single blanket class.
+///
+/// Nonce-less: no current client can produce this. `GoogleAuthProvider`
+/// renders nothing until it holds a nonce, so the token came from a
+/// stale bundle or from something driving GIS outside the app.
 #[tokio::test]
-async fn a_nonceless_token_without_a_cookie_mints_a_session_for_an_old_spa() {
+async fn a_nonceless_token_without_a_cookie_audits_as_stale_client() {
     let (provider, hub) = secure_google_setup().await;
     let google = provider.sign(
         &ClaimsBuilder::from_provider(provider)
@@ -460,18 +456,11 @@ async fn a_nonceless_token_without_a_cookie_mints_a_session_for_an_old_spa() {
     );
 
     let resp = post_callback(hub, &google, None).await;
-    assert!(resp.status().is_redirection());
-    assert_eq!(resp.headers().get("location").unwrap(), "/");
-    let (token, _) = TestHub::find_set_cookie(&resp, AUTH_COOKIE_NAME_SECURE)
-        .expect("session cookie minted for old SPA login");
-    let verified = quarto_hub::session::verify_session(
-        &test_keys(),
-        SessionLifetimes::default(),
-        &token,
-        epoch_now(),
-    )
-    .unwrap();
-    assert_eq!(verified.claims.sub, "nonce-stale-client-sub");
+    assert_auth_error(&resp, "stale_client");
+    assert_eq!(
+        auth_fail_detail_for("nonce-stale-client-sub"),
+        "login_state_stale_client"
+    );
 }
 
 /// Nonce-bearing: a login attempt that really did do the pre-flight but
