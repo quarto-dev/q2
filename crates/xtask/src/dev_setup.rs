@@ -279,7 +279,28 @@ fn wasm_opt_install_hints() -> &'static [&'static str] {
     }
 }
 
+/// The pandoc-hybrid (docx/pptx) leg's floor — a distinct, stricter
+/// requirement from the `3.6` pampa-comparison floor below, since it
+/// exercises Lua filter APIs pampa's own tests don't touch. Named (not an
+/// inline literal) so `cargo xtask lint`'s `pandoc-pin-agreement` rule can
+/// reconcile it against `PANDOC_PIN` in
+/// `crates/quarto-core/src/pandoc_filters/mod.rs` and the CI workflows'
+/// `PANDOC_VERSION` — see
+/// `claude-notes/plans/2026-09-18-pandoc-hybrid-P4-implementation.md`
+/// Task 7 / Findings for Gordon, item 11(b).
+pub(crate) const PANDOC_HYBRID_MIN_VERSION: (u32, u32) = (3, 11);
+
 /// Check for Pandoc 3.6+ (optional — needed only for pampa comparison tests).
+///
+/// Also advises (still warn-only) on the separate, stricter
+/// [`PANDOC_HYBRID_MIN_VERSION`] floor the docx/pptx Pandoc-hybrid leg
+/// requires — that leg's own `L`-tier tests hard-panic on that floor
+/// directly (`quarto_core::pandoc_filters::harness::assert_pandoc_available`),
+/// so this stays advisory rather than promoted to a hard failure: most
+/// `cargo xtask dev-setup` runs are not working on that leg, and a hard
+/// failure here would block unrelated setup steps (cargo-nextest,
+/// wasm-bindgen-cli, ...) for every contributor whose local pandoc happens
+/// to be between 3.6 and 3.11.
 fn check_pandoc() {
     let output = Command::new("pandoc").arg("--version").output();
 
@@ -293,15 +314,24 @@ fn check_pandoc() {
 
     let version_str = String::from_utf8_lossy(&output.stdout);
     let is_good = pandoc_version_at_least(&version_str, 3, 6);
+    let first_line = version_str.lines().next().unwrap_or("unknown version");
 
     if is_good {
         println!("\n  pandoc — suitable version detected");
     } else {
-        // Extract first line for display (e.g. "pandoc 3.1.3")
-        let first_line = version_str.lines().next().unwrap_or("unknown version");
         println!(
             "\n  Warning: {first_line} detected — pampa comparison tests require 3.6+.\n  \
              Four tests will fail. Update from https://pandoc.org/installing.html"
+        );
+    }
+
+    let (hybrid_major, hybrid_minor) = PANDOC_HYBRID_MIN_VERSION;
+    if !pandoc_version_at_least(&version_str, hybrid_major, hybrid_minor) {
+        println!(
+            "\n  Note: {first_line} detected — the Pandoc-hybrid docx/pptx render leg \
+             requires {hybrid_major}.{hybrid_minor}+.\n  \
+             Only relevant if you're working on that leg; its own tests will panic naming \
+             this floor. Update from https://pandoc.org/installing.html"
         );
     }
 }
@@ -354,7 +384,11 @@ pub(crate) fn parse_pandoc_version(version_output: &str) -> (u32, u32) {
 }
 
 /// Check if a parsed pandoc `--version` output is at least `major.minor`.
-fn pandoc_version_at_least(version_output: &str, min_major: u32, min_minor: u32) -> bool {
+pub(crate) fn pandoc_version_at_least(
+    version_output: &str,
+    min_major: u32,
+    min_minor: u32,
+) -> bool {
     parse_pandoc_version(version_output) >= (min_major, min_minor)
 }
 

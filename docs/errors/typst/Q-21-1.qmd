@@ -1,0 +1,38 @@
+---
+title: "Typst Not Found"
+description: "The typst binary could not be found on PATH, and QUARTO_TYPST is not set."
+code: Q-21-1
+subsystem: typst
+status: stub
+since: "99.9.9"
+categories:
+  - typst
+---
+
+# `Q-21-1` — Typst Not Found
+
+> The `typst` binary could not be found on `PATH`, and `QUARTO_TYPST` is
+> not set.
+
+## What this means
+
+Typst output is produced by rendering to Pandoc's own Typst writer and
+then compiling the result to PDF with a real `typst` binary. Quarto
+looked for `typst` on `PATH` and did not find it, and no `QUARTO_TYPST`
+environment variable pointed at an explicit location.
+
+## Why this happens
+
+- Typst is not installed on this machine.
+- Typst is installed but not on the shell's `PATH`.
+- `QUARTO_TYPST` is set to a path that does not exist.
+
+## How to fix
+
+Install typst from [typst.app](https://typst.app), or — if it is already
+installed somewhere not on `PATH` — set the `QUARTO_TYPST` environment
+variable to the full path of the `typst` binary.
+
+## Related errors
+
+- [`Q-21-2`](Q-21-2.qmd) — typst was found, but its version is too old.

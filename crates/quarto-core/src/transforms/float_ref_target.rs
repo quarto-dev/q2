@@ -339,14 +339,32 @@ fn convert_div(div: Div, def: &crate::crossref::RefTypeDef) -> CustomNode {
             (fig.content, caption_long, caption_short)
         }
         [Block::Table(_)] => {
-            // Table keeps its own caption for rendering convenience, but we
-            // also surface the caption on the target so resolvers can use
-            // it as link text.
-            let Block::Table(table) = content_blocks.remove(0) else {
+            // Surface the table's caption onto the target (numbered
+            // rendering, resolver link text), then clear the Table's own
+            // copy — matching Q1, which does the same at parse time
+            // (`quarto-pre/parsefiguredivs.lua`: `table.caption =
+            // pandoc.Caption{}` at L280, `el.caption.long =
+            // pandoc.Blocks({})` at L544).
+            //
+            // This must happen here, at construction time, not only in
+            // `crossref_render.rs`'s later HTML-DOM elision: the
+            // `Bucket::B4` classification means `crossref-render` does
+            // not survive to the Pandoc cut at all, so a docx/pptx
+            // render's FloatRefTarget content reaches the vendored Lua
+            // filters with whatever caption state it had *here* —
+            // uncleared, it duplicated the caption in the rendered docx
+            // (once via the Table's own native caption, once via the
+            // Lua filter's numbered rendering). Measured via `cargo run
+            // --bin q2 -- render <table-with-caption> --to docx`, which
+            // produced two "My Caption" paragraphs in the output
+            // `word/document.xml`.
+            let Block::Table(mut table) = content_blocks.remove(0) else {
                 unreachable!()
             };
             let caption_long = table.caption.long.clone().unwrap_or_default();
             let caption_short = table.caption.short.clone();
+            table.caption.long = None;
+            table.caption.short = None;
             (vec![Block::Table(table)], caption_long, caption_short)
         }
         _ => {
@@ -606,6 +624,85 @@ mod tests {
         };
         // A Paragraph caption on a native Figure is canonicalized to Plain too.
         assert_plain_caption(node, "Caption from Figure.");
+    }
+
+    /// A `Div(#tbl-..) > Table` float must surface the Table's caption
+    /// onto the target *and* clear the Table's own copy — otherwise a
+    /// docx/pptx render duplicates it, since `crossref-render`
+    /// (`Bucket::B4`) never runs for the Pandoc-tail and can't elide it
+    /// downstream the way it does for the HTML float DOM. Measured via
+    /// `cargo run --bin q2 -- render <table-with-caption> --to docx`,
+    /// which produced two "My Caption" paragraphs in the output
+    /// `word/document.xml` before this fix.
+    #[test]
+    fn div_over_table_clears_the_tables_own_caption() {
+        use quarto_pandoc_types::table::{Table, TableBody, TableFoot, TableHead};
+        let table = Block::Table(Table {
+            attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+            caption: Caption {
+                short: None,
+                long: Some(vec![para("My Caption")]),
+                source_info: si(),
+            },
+            colspec: vec![],
+            head: TableHead {
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                rows: vec![],
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+            },
+            bodies: vec![TableBody {
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                rowhead_columns: 0,
+                head: vec![],
+                body: vec![],
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+            }],
+            foot: TableFoot {
+                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
+                rows: vec![],
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+            },
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let reg = RefTypeRegistry::builtin();
+        let div = Block::Div(Div {
+            attr: attr_id("tbl-one"),
+            content: vec![table],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let out = run_transform(vec![div], &reg);
+        let Block::Custom(node) = &out[0] else {
+            panic!("expected custom node");
+        };
+
+        // The target's own caption still carries the text (unchanged
+        // behavior — resolvers/numbering still need it).
+        let Slot::Blocks(cap) = node.slots.get("caption_long").unwrap() else {
+            panic!("caption_long slot not a Blocks");
+        };
+        assert!(
+            format!("{cap:?}").contains("My Caption"),
+            "target's caption_long should carry the text: {cap:?}"
+        );
+
+        // ...but the Table inside "content" must no longer carry it.
+        let Slot::Blocks(content) = node.slots.get("content").unwrap() else {
+            panic!("content slot not a Blocks");
+        };
+        let Block::Table(t) = &content[0] else {
+            panic!("expected the table in content");
+        };
+        assert!(
+            t.caption.long.as_ref().is_none_or(|b| b.is_empty()),
+            "the table's own caption must be cleared once surfaced onto the target, \
+             else a docx/pptx render duplicates it: {:?}",
+            t.caption.long
+        );
     }
 
     #[test]

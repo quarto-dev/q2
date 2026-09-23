@@ -214,7 +214,25 @@ pub struct Code {
 pub struct Math {
     pub math_type: MathType,
     pub text: String,
+    /// Span of the whole math node in the source, delimiters included
+    /// (`$…$` / `$$…$$`).
     pub source_info: quarto_source_map::SourceInfo,
+    /// Provenance of `text` itself: a `SourceInfo` whose length equals
+    /// `text.len()` and whose offsets map byte-for-byte into the source
+    /// (`SourceInfo::map_offset(i)` lands on the byte `text[i]` came from).
+    ///
+    /// `text` is not a plain substring of `source_info` once a math node
+    /// spans lines: the qmd reader folds each soft break to a literal `\n`
+    /// in inline math and strips the block-continuation gutter (`> `,
+    /// list indentation) from the interior lines of display math. This
+    /// field records that decode so consumers that parse `text` further
+    /// (`quarto-math`) can attach exact source locations to sub-expressions.
+    ///
+    /// `None` means no mapping finer than `source_info` is known: the node
+    /// came from a filter (`pandoc.Math(...)` in Lua, JSON without `textS`),
+    /// or its `text` was rewritten (a Lua filter assigned `.text`). The
+    /// reader always sets it. See bd-ieldbghj.
+    pub text_source: Option<quarto_source_map::SourceInfo>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1257,6 +1275,7 @@ mod tests {
             math_type: MathType::DisplayMath,
             text: "E = mc^2".to_string(),
             source_info: dummy_source_info(),
+            text_source: None,
         };
         assert_eq!(math.text, "E = mc^2");
         assert_eq!(math.math_type, MathType::DisplayMath);

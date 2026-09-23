@@ -1,0 +1,16 @@
+---
+source: crates/quarto-core/tests/integration/pandoc_shim_goldens.rs
+assertion_line: 242
+expression: "render_and_project(\"proof-basic.qmd\")"
+---
+Div Some(("", ["proof"]))
+  Para
+    Span Some(("", ["proof-title"]))
+      Emph
+        Str "Proof"
+      Str ". "
+    Str "QED"
+    Space
+    Str "style"
+    Space
+    Str "content."

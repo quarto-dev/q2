@@ -1,0 +1,44 @@
+---
+title: "Pandoc Exited With An Error"
+description: "The pandoc subprocess exited with a nonzero status while producing this document."
+code: Q-20-3
+subsystem: pandoc
+status: stub
+since: "99.9.9"
+categories:
+  - pandoc
+---
+
+# `Q-20-3` — Pandoc Exited With An Error
+
+> The `pandoc` subprocess exited with a nonzero status. Its stderr is
+> reproduced verbatim below, including any Lua filter traceback.
+
+## What this means
+
+Quarto shelled out to `pandoc` to produce this document, and the `pandoc`
+process itself failed — it did not exit successfully, so no output file was
+written. Quarto reproduces the pandoc process's own stderr output verbatim
+in this diagnostic, because that text (often a Lua stack traceback) is the
+most direct description of what actually went wrong.
+
+## Why this happens
+
+- A Lua filter crashed while processing the document — the traceback in the
+  stderr text usually names the failing filter file and line.
+- The document's Pandoc-JSON representation is malformed in a way pandoc's
+  reader rejects.
+- A required filter parameter was missing or malformed, and a Lua filter
+  indexed it unconditionally.
+
+## How to fix
+
+Read the reproduced stderr text closely — it names the failing Lua file and
+line, which usually identifies the cause directly. If the traceback points
+into Quarto's own vendored filter tree rather than your document, this is
+likely a Quarto bug; please file an issue with the full diagnostic text.
+
+## Related errors
+
+- [`Q-20-4`](Q-20-4.qmd) — a specific cause of a nonzero pandoc exit: the
+  filter params payload exceeded a platform limit before pandoc even ran.

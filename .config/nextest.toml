@@ -51,6 +51,15 @@ julia-shared-transport = { max-threads = 1 }
 filter = "package(quarto-preview) & binary(integration) & test(/^(staleness|eager_capture|boot)::/)"
 test-group = "quarto-preview-fs-watcher"
 
+# `q2 preview --static` end-to-end tests (bd-sl79jjiq) each spawn the
+# binary with its own recursive FSEvents watcher and wait on the
+# reload channel; they pass in parallel on a quiet machine but share
+# the FSEvents starvation risk above (bd-9brz), so they queue behind
+# the same group.
+[[profile.default.overrides]]
+filter = "package(quarto) & binary(integration) & test(/^preview_static_e2e::/)"
+test-group = "quarto-preview-fs-watcher"
+
 [[profile.default.overrides]]
 filter = "package(quarto-core) & binary(integration) & test(/^julia_engine_e2e::/)"
 test-group = "julia-shared-transport"

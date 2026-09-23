@@ -1590,12 +1590,14 @@ mod tests {
             math_type: MathType::InlineMath,
             text: "x^2".to_string(),
             source_info: dummy_source(),
+            text_source: None,
         });
 
         let math2 = Inline::Math(Math {
             math_type: MathType::DisplayMath,
             text: "x^2".to_string(),
             source_info: dummy_source(),
+            text_source: None,
         });
 
         // Different math type -> different hash
@@ -2078,18 +2080,21 @@ mod tests {
             math_type: MathType::InlineMath,
             text: "x".to_string(),
             source_info: dummy_source(),
+            text_source: None,
         });
 
         let m2 = Inline::Math(Math {
             math_type: MathType::InlineMath,
             text: "x".to_string(),
             source_info: other_source(),
+            text_source: None,
         });
 
         let m3 = Inline::Math(Math {
             math_type: MathType::DisplayMath,
             text: "x".to_string(),
             source_info: dummy_source(),
+            text_source: None,
         });
 
         assert!(structural_eq_inline(&m1, &m2));

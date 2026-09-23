@@ -1,0 +1,22 @@
+---
+source: crates/xtask/src/capture_pandoc_goldens.rs
+expression: extraction.to_string()
+---
+core_props:
+  title: Tabset Subfloat Test
+paragraphs:
+  [Title] Tabset Subfloat Test
+  [Heading2] Tab A
+  [ImageCaption] Table 1: A table nested inside a tab
+  [Compact] Col1
+  [Compact] Col2
+  [Compact] A
+  [Compact] B
+  
+  [BodyText] See Table 1.
+  [Heading2] Tab B
+  [FirstParagraph] Some other content, no float.
+media: []
+image_relationships: []
+drawing_count: 0
+page_break_count: 0

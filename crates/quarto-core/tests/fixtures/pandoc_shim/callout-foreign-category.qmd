@@ -1,0 +1,3 @@
+::: {#thm-x .callout-note}
+A callout wearing a theorem-shaped identifier.
+:::

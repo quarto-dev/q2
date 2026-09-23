@@ -156,3 +156,116 @@ fn preview_prints_shutdown_message_on_ctrl_c() {
         "missing the Ctrl-C shutdown line; got:\n{rest}"
     );
 }
+
+// ──────────────────────────────────────────────────────────────────
+// `--static` mode (bd-sl79jjiq, plan
+// `claude-notes/plans/2026-09-22-q2-preview-static.md` Phase 0).
+// These pin the clap surface: the flags exist, the hub-mode flags
+// are rejected alongside `--static`, and the static-only flags are
+// rejected without it.
+// ──────────────────────────────────────────────────────────────────
+
+fn preview_output(args: &[&str], cwd: &std::path::Path) -> std::process::Output {
+    Command::new(Q2_BIN)
+        .arg("preview")
+        .args(args)
+        .current_dir(cwd)
+        .output()
+        .expect("spawn q2 preview")
+}
+
+#[test]
+fn preview_help_advertises_static_flags() {
+    let output = Command::new(Q2_BIN)
+        .args(["preview", "--help"])
+        .output()
+        .expect("spawn q2 preview --help");
+    let help = String::from_utf8(output.stdout).expect("help is UTF-8");
+    for flag in ["--static", "--no-watch", "--no-navigate", "--to"] {
+        assert!(
+            help.contains(flag),
+            "`q2 preview --help` did not advertise {flag}; got:\n{help}"
+        );
+    }
+}
+
+/// Every hub-mode flag is meaningless without the hub, so clap must
+/// reject each one next to `--static` (exit 2 = usage error) rather
+/// than letting the static server silently ignore it.
+#[test]
+fn preview_static_rejects_hub_mode_flags() {
+    let temp = tempfile::TempDir::new().expect("tempdir");
+    let dir = temp.path().to_str().expect("utf-8 tempdir");
+    let cases: &[&[&str]] = &[
+        &["--static", "--join", "q2previewticket"],
+        &["--static", "--share"],
+        &["--static", "--allow-edit"],
+        &["--static", "--ui", "editor"],
+        &["--static", "--no-project"],
+        &["--static", "--data-dir", dir],
+        &["--static", "--preview-dir", dir],
+    ];
+    for args in cases {
+        let output = preview_output(args, temp.path());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(
+            output.status.code(),
+            Some(2),
+            "{args:?} should be a clap usage error (exit 2); stderr:\n{stderr}"
+        );
+        assert!(
+            stderr.contains("cannot be used with"),
+            "{args:?} should report a flag conflict; stderr:\n{stderr}"
+        );
+    }
+}
+
+/// The static-only flags require `--static`; without it they are a
+/// usage error, not a silent no-op.
+#[test]
+fn preview_static_only_flags_require_static() {
+    let temp = tempfile::TempDir::new().expect("tempdir");
+    let cases: &[&[&str]] = &[&["--no-watch"], &["--no-navigate"], &["--to", "html"]];
+    for args in cases {
+        let output = preview_output(args, temp.path());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(
+            output.status.code(),
+            Some(2),
+            "{args:?} without --static should be a clap usage error (exit 2); stderr:\n{stderr}"
+        );
+        assert!(
+            stderr.contains("--static"),
+            "{args:?} should name the missing --static flag; stderr:\n{stderr}"
+        );
+    }
+}
+
+/// Only formats a static server can show are accepted. `typst`
+/// renders (to a PDF via pandoc) but there is nothing to serve, so the
+/// command refuses before starting anything — exit 1 with a message
+/// naming the flag.
+#[test]
+fn preview_static_rejects_unservable_format() {
+    let temp = tempfile::TempDir::new().expect("tempdir");
+    std::fs::write(
+        temp.path().join("doc.qmd"),
+        "---\ntitle: T\n---\n\nHello.\n",
+    )
+    .expect("write fixture");
+    let output = preview_output(&["--static", "--to", "typst", "doc.qmd"], temp.path());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "--static --to typst should exit 1; stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("not supported with --static"),
+        "stderr should say the format is not supported with --static; got:\n{stderr}"
+    );
+    assert!(
+        !temp.path().join("doc.pdf").exists() && !temp.path().join("doc.typ").exists(),
+        "no render must happen before the format check"
+    );
+}

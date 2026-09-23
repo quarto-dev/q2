@@ -728,6 +728,7 @@ mod tests {
             math_type: MathType::InlineMath,
             text: "E = mc^2".to_string(),
             source_info: dummy_source_info(),
+            text_source: None,
         })];
         let (result, diags) = inlines_to_string(&inlines);
         assert_eq!(result, "E = mc^2");

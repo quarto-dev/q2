@@ -1,0 +1,49 @@
+---
+title: "Theorem Has No Registered Theorem Type For Its Identifier"
+description: "A theorem-family block's identifier prefix is a recognized cross-reference type, but not one registered as a theorem type."
+code: Q-20-7
+subsystem: pandoc
+status: stub
+since: "99.9.9"
+categories:
+  - pandoc
+---
+
+# `Q-20-7` — Theorem Has No Registered Theorem Type For Its Identifier
+
+> A theorem-family block's identifier prefix is a recognized
+> cross-reference type, but not one registered as a theorem type.
+
+## What this means
+
+A theorem, lemma, corollary, or similar block's identifier (e.g.
+`#fig-x`) starts with a prefix Quarto recognizes as a cross-reference
+type in general, but that prefix does not belong to the theorem-type
+family the block's class implies. Quarto 1 would abort the whole render
+in this situation; the pandoc-leg shim instead renders the block as a
+plain, unstyled div without theorem numbering, so the document still
+builds. Any `@ref` to that block will not resolve to a number, since
+none was assigned.
+
+## Why this happens
+
+- A theorem-family div's identifier accidentally used another
+  cross-reference family's prefix (for example a figure prefix like
+  `fig-`) instead of a theorem prefix.
+- The block's class (`.theorem`, `.lemma`, `.corollary`, and similar)
+  does not match the cross-reference family its identifier's prefix
+  actually belongs to.
+
+## How to fix
+
+Give the block an identifier prefix registered as a theorem type (for
+example `thm-`, `lem-`, `cor-`, `def-`, `exm-`, `exr-`), matching the
+theorem-family class you used, or change the class to match whichever
+cross-reference family the identifier's prefix actually belongs to.
+
+## Related errors
+
+- [`Q-20-6`](Q-20-6.qmd) — the same shape of fallback for a callout
+  whose identifier prefix is not a registered numbering category,
+  rather than a theorem block whose identifier does not match a
+  theorem type.

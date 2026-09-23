@@ -15,6 +15,7 @@
  * - `a`           — AttrSourceInfo (attr-bearing nodes; `id`/`classes`/`kvs`
  *                   values are pool indices)
  * - `targetS`     — Link/Image `[urlRef, titleRef]`
+ * - `textS`       — Math text provenance ref (a bare pool index; bd-ieldbghj)
  * - `captionS`    — Table/Figure caption ref (a bare pool index)
  * - `citationIdS` — citation id ref on Cite citation objects (bare index)
  *
@@ -25,7 +26,7 @@
  * deferred until table editing is actually supported.
  */
 
-const STRIPPED_KEYS = new Set(['s', 'a', 'targetS', 'captionS', 'citationIdS']);
+const STRIPPED_KEYS = new Set(['s', 'a', 'targetS', 'textS', 'captionS', 'citationIdS']);
 
 export function stripSourceInfoFields<T>(block: T): T {
     return JSON.parse(JSON.stringify(block, (key, value) =>

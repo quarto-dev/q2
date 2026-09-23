@@ -2438,6 +2438,7 @@ mod tests {
                     math_type: MathType::DisplayMath,
                     text: math_text.to_string(),
                     source_info: si(),
+                    text_source: None,
                 })],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),
@@ -2486,6 +2487,7 @@ mod tests {
                 math_type: MathType::DisplayMath,
                 text: "x".to_string(),
                 source_info: si(),
+                text_source: None,
             })]),
         );
         let node = CustomNode {
@@ -2507,6 +2509,49 @@ mod tests {
             panic!("expected Math");
         };
         assert_eq!(math.text, "x");
+    }
+
+    /// The math text and its byte-for-byte mapping (bd-ieldbghj) pass
+    /// through untouched; the encoding that appends to the text (and
+    /// extends the mapping) is `EquationNumberStage`'s, tested there.
+    #[tokio::test]
+    async fn equation_keeps_text_and_text_source_untouched() {
+        let node = SourceInfo::original(FileId(0), 0, 12);
+        let text = SourceInfo::original(FileId(0), 2, 10);
+        let block = Block::Paragraph(Paragraph {
+            content: vec![Inline::Span(Span {
+                attr: (
+                    "eq-einstein".to_string(),
+                    vec!["quarto-math-with-attribute".to_string()],
+                    LinkedHashMap::new(),
+                ),
+                content: vec![Inline::Math(Math {
+                    math_type: MathType::DisplayMath,
+                    text: "e = mc^2".to_string(),
+                    source_info: node.clone(),
+                    text_source: Some(text.clone()),
+                })],
+                source_info: node.clone(),
+                attr_source: AttrSourceInfo::empty(),
+            })],
+            source_info: node,
+        });
+        let ast = run_full(vec![block]).await;
+        let Block::Paragraph(p) = &ast.blocks[0] else {
+            panic!("expected Paragraph, got {:?}", ast.blocks[0]);
+        };
+        let Inline::Span(span) = &p.content[0] else {
+            panic!("expected Span, got {:?}", p.content[0]);
+        };
+        assert_eq!(
+            span.attr.2.get(EQ_NUMBER_ATTR).map(String::as_str),
+            Some("1")
+        );
+        let Inline::Math(math) = &span.content[0] else {
+            panic!("expected Math, got {:?}", span.content[0]);
+        };
+        assert_eq!(math.text, "e = mc^2");
+        assert_eq!(math.text_source.as_ref(), Some(&text));
     }
 
     #[tokio::test]

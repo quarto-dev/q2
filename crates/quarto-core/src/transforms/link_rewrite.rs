@@ -919,6 +919,43 @@ mod tests {
         assert!(diags.is_empty(), "static rebasing must not diagnose");
     }
 
+    /// T4.2 (P7-foundation Task 4): the same root-absolute rebasing as
+    /// [`image_rewrite_root_absolute_rebases_at_depth`] above, but with a
+    /// `Format::docx()` context instead of `Format::html()`.
+    /// `LinkRewriteTransform` carries no format branch — it is reused
+    /// verbatim for the Pandoc leg (design doc §6, bucket B3) — so this
+    /// is a binding test that the transform runs identically for a
+    /// Pandoc-target render, not a fix.
+    #[tokio::test]
+    async fn image_rewrite_runs_identically_for_a_pandoc_profile() {
+        let project = make_project();
+        let input_path = "/project/deep/deeper/index.qmd";
+        let doc = DocumentInfo::from_path(input_path);
+        let format = Format::docx();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        ctx.resource_resolver = Some(ResourceResolverContext::website(
+            "/project/_site",
+            "/project/_site/deep/deeper/index.docx",
+            "site_libs",
+            "index",
+        ));
+        let mut ast = Pandoc {
+            meta: empty_meta(),
+            blocks: vec![para(vec![image_inline("/images/x.svg", "x")])],
+        };
+        LinkRewriteTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        assert_eq!(
+            image_urls(&ast.blocks),
+            vec!["../../images/x.svg"],
+            "a docx-target render must rebase a root-absolute image target \
+             the same way an html-target render does"
+        );
+    }
+
     /// Relative image targets stay correct: `..`-laden paths
     /// normalize, plain relative paths round-trip unchanged
     /// (decision 2: all targets route through the resolver, and

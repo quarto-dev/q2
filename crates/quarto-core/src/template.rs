@@ -2096,6 +2096,7 @@ mod tests {
             math_type: MathType::InlineMath,
             text: "x^2".to_string(),
             source_info: dummy_source_info(),
+            text_source: None,
         })];
         let text = inlines_to_text(&inlines);
         assert_eq!(text, "x^2");

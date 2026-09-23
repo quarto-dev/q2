@@ -727,6 +727,7 @@ mod tests {
                     math_type: MathType::DisplayMath,
                     text: math_text.to_string(),
                     source_info: si(),
+                    text_source: None,
                 })],
                 source_info: si(),
                 attr_source: AttrSourceInfo::empty(),

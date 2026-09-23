@@ -6,7 +6,7 @@
 import type { AstNode } from './pampa';
 
 // Source-tracking / volatile fields that must not affect equivalence.
-const STRIP_KEYS = new Set(['s', 'a', 'l', 'targetS']);
+const STRIP_KEYS = new Set(['s', 'a', 'l', 'targetS', 'textS']);
 const VOLATILE_CITE_KEYS = new Set(['citationHash', 'citationNoteNum', 'citationIdS']);
 
 function stripObj(value: unknown): unknown {

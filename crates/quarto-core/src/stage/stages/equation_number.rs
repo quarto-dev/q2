@@ -44,7 +44,8 @@ use async_trait::async_trait;
 use quarto_pandoc_types::attr::AttrSourceInfo;
 use quarto_pandoc_types::block::Block;
 use quarto_pandoc_types::custom::Slot;
-use quarto_pandoc_types::inline::{Inline, Inlines, MathType, Span, Str};
+use quarto_pandoc_types::inline::{Inline, Inlines, Math, MathType, Span, Str};
+use quarto_source_map::SourceInfo;
 
 use crate::crossref::EQ_NUMBER_ATTR;
 use crate::format::Format;
@@ -172,8 +173,8 @@ pub fn encode_number(span: &mut Span, number: &str, encoding: NumberEncoding) ->
         return false;
     }
     match encoding {
-        NumberEncoding::TexTag => math.text.push_str(&format!("\\tag{{{number}}}")),
-        NumberEncoding::Qquad => math.text.push_str(&format!(" \\qquad({number})")),
+        NumberEncoding::TexTag => append_to_tex(math, &format!("\\tag{{{number}}}")),
+        NumberEncoding::Qquad => append_to_tex(math, &format!(" \\qquad({number})")),
         NumberEncoding::Sibling => {
             let source_info = span.source_info.clone();
             span.attr.1.push(EQ_SIBLING_NUMBER_CLASS.to_string());
@@ -197,6 +198,20 @@ pub fn encode_number(span: &mut Span, number: &str, encoding: NumberEncoding) ->
         NumberEncoding::Writer => {}
     }
     true
+}
+
+/// Append `suffix` to the math text without losing the reader's
+/// byte-for-byte mapping of the original text (`Math.text_source`,
+/// bd-ieldbghj): the original keeps its provenance and the suffix becomes
+/// a synthesized, zero-source piece anchored at the end of the node, the
+/// same shape `ProvenanceBuilder` uses for content with no source byte.
+fn append_to_tex(math: &mut Math, suffix: &str) {
+    math.text_source = math.text_source.take().map(|ts| {
+        let node_len = math.source_info.length();
+        let synthesized = SourceInfo::substring(math.source_info.clone(), node_len, node_len);
+        SourceInfo::concat(vec![(ts, math.text.len()), (synthesized, suffix.len())])
+    });
+    math.text.push_str(suffix);
 }
 
 fn visit_block(block: &mut Block, encoding: NumberEncoding, out: &mut Outcome) {
@@ -347,6 +362,7 @@ mod tests {
     use crate::format::FormatIdentifier;
     use hashlink::LinkedHashMap;
     use quarto_pandoc_types::inline::Math;
+    use quarto_source_map::FileId;
     use quarto_source_map::SourceInfo;
 
     fn si() -> SourceInfo {
@@ -358,6 +374,7 @@ mod tests {
             math_type,
             text: text.to_string(),
             source_info: si(),
+            text_source: None,
         })
     }
 
@@ -441,6 +458,45 @@ mod tests {
         assert!(matches!(&span.content[0], Inline::Math(_)));
         assert!(matches!(&span.content[1], Inline::Span(l) if l.attr.1 == [EQ_NUMBER_LABEL_CLASS]));
         assert!(matches!(&span.content[2], Inline::Str(s) if s.text == "trailing"));
+    }
+
+    /// The appended encoding must not throw away the reader's byte-for-byte
+    /// mapping of the math text (bd-ieldbghj): the original keeps its
+    /// provenance and the suffix is a synthesized, zero-source piece.
+    #[test]
+    fn tex_tag_extends_text_source_instead_of_dropping_it() {
+        // Source: `$$e = mc^2$$` at file offsets 0..12; text at 2..10.
+        let node = SourceInfo::original(FileId(0), 0, 12);
+        let text = SourceInfo::original(FileId(0), 2, 10);
+        let mut span = numbered_span(
+            "1",
+            vec![Inline::Math(Math {
+                math_type: MathType::DisplayMath,
+                text: "e = mc^2".to_string(),
+                source_info: node,
+                text_source: Some(text),
+            })],
+        );
+        assert!(encode_number(&mut span, "1", NumberEncoding::TexTag));
+        let Inline::Math(math) = &span.content[0] else {
+            panic!()
+        };
+        assert_eq!(math.text, "e = mc^2\\tag{1}");
+        let ts = math
+            .text_source
+            .as_ref()
+            .expect("tagging keeps the mapping");
+        assert_eq!(ts.length(), math.text.len());
+        let SourceInfo::Concat { pieces } = ts else {
+            panic!("expected a Concat of [original text, synthesized tag], got {ts:?}");
+        };
+        assert_eq!(pieces.len(), 2);
+        assert_eq!(pieces[0].length, "e = mc^2".len());
+        assert_eq!(pieces[0].source_info.preimage_in(FileId(0)), Some(2..10));
+        assert_eq!(pieces[1].offset_in_concat, "e = mc^2".len());
+        assert_eq!(pieces[1].length, "\\tag{1}".len());
+        // The tag has no source bytes: a zero-width piece at the node's end.
+        assert_eq!(pieces[1].source_info.preimage_in(FileId(0)), Some(12..12));
     }
 
     #[test]

@@ -32,7 +32,7 @@ import {
 const metaString = (c: string) => ({ t: 'MetaString', c });
 const metaMap = (entries: Record<string, unknown>) => ({
     t: 'MetaMap',
-    c: Object.entries(entries).map(([key, value]) => ({ key, value })),
+    c: entries,
 });
 
 /** Top-level meta carrying `rendered.reveal.{footer,logo}` slots. */

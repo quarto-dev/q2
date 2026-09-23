@@ -50,6 +50,13 @@ pub enum WatchFilter {
     /// `_extensions/**` is intentionally *not* expanded yet — see
     /// `claude-notes/plans/2026-05-13-q2-preview-phase-b.md` Q-B1.
     PreviewBroad,
+    /// Every path surfaces. For consumers that classify changes
+    /// themselves against state the watcher cannot see — `q2 preview
+    /// --static` (bd-sl79jjiq) decides "ignore / subset / full" from the
+    /// last render's inputs and outputs, so filtering here would only
+    /// hide the events it needs. The generated-directory exclusions
+    /// (`_site/`, `.quarto/`, `*_files/`) live in its policy, not here.
+    All,
 }
 
 impl WatchFilter {
@@ -58,6 +65,7 @@ impl WatchFilter {
         match self {
             Self::SourcesOnly => is_source_file(path),
             Self::PreviewBroad => is_preview_relevant(path),
+            Self::All => true,
         }
     }
 }
@@ -637,5 +645,35 @@ mod tests {
             Ok(None) => panic!("Watcher stopped unexpectedly"),
             Err(_) => panic!("Timeout waiting for included-dep change event"),
         }
+    }
+}
+
+#[cfg(test)]
+mod all_filter_tests {
+    use super::*;
+
+    /// `q2 preview --static` classifies changes itself (its policy needs
+    /// the last render's snapshot), so its watcher must surface every
+    /// path and filter nothing.
+    #[test]
+    fn all_filter_accepts_every_path() {
+        for p in [
+            "a.qmd",
+            "_quarto.yml",
+            "img.png",
+            "styles.scss",
+            "_extensions/x/filter.lua",
+            "data.csv",
+            "no-extension",
+            "_site/index.html",
+        ] {
+            assert!(WatchFilter::All.accepts(Path::new(p)), "{p}");
+        }
+    }
+
+    #[test]
+    fn narrower_filters_still_reject_what_all_accepts() {
+        assert!(!WatchFilter::SourcesOnly.accepts(Path::new("data.csv")));
+        assert!(!WatchFilter::PreviewBroad.accepts(Path::new("data.csv")));
     }
 }

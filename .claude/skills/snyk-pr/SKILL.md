@@ -111,7 +111,8 @@ Every hit must end up naming the new version (or be justified as unrelated).
 
 ### 5. Apply the package playbook
 
-- katex → `references/katex.md` (four coupled surfaces + committed bundle).
+- katex → `references/katex.md` (three coupled surfaces; the committed bundle
+  was removed in `5684cfead`).
 - react/react-dom → `references/paired-packages.md`.
 - unknown package → bump all copies found in step 4; run a root `npm install`;
   rebuild any committed artifact that embeds the package.
