@@ -182,6 +182,14 @@ socket2 = "0.6"
 # only the deflate read codec is needed (same minimal feature set as
 # quarto-source-fetch, which already vendors this at the same version).
 zip = { version = "6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+# book-projects P2 item 49: pure-Rust PDF text extraction for hermetic
+# inspection of a real compiled Typst PDF's rendered figure numbers.
+# CI (main's test-suite.yml) provisions `typst` but not `pdftotext`
+# (poppler-utils); `typst query` resolves numbering *patterns*, not the
+# actual counter value at a given figure, and Typst's SVG output renders
+# text as vector paths (not `<text>` nodes), so neither is greppable.
+# `pdf-extract` needs no external binary.
+pdf-extract = "0.7"
 
 [lints]
 workspace = true

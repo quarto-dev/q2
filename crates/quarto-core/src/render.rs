@@ -448,6 +448,19 @@ pub struct RenderContext<'a> {
     /// mechanism itself and P4 is its first real consumer. See
     /// `claude-notes/plans/2026-09-21-book-projects-P0-number-sections.md`.
     pub chapter_seed: Option<ChapterSeed>,
+
+    /// Defer citeproc out of this render's `UserFiltersStage::pre()`.
+    ///
+    /// `false` (the default) runs citeproc normally when `"citeproc"`
+    /// appears in `meta["filters"]`. `true` makes the stage strip the
+    /// entry before filter resolution reads it — the caller takes
+    /// responsibility for running citeproc itself, later. book-projects
+    /// P2's single-file merge sets this on every per-chapter paused
+    /// render and runs `pampa::citeproc_filter::apply_citeproc_filter`
+    /// once on the merged document, so the book gets one deduplicated
+    /// bibliography and one citation-numbering pass instead of N
+    /// per-chapter ones.
+    pub defer_citeproc: bool,
 }
 
 /// Seed for a book chapter's section numbering: render this document as if
@@ -519,6 +532,7 @@ impl<'a> RenderContext<'a> {
             execution_skipped: false,
             document_profile: None,
             chapter_seed: None,
+            defer_citeproc: false,
         }
     }
 

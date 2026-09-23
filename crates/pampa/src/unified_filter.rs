@@ -13,7 +13,7 @@
  * allowing interleaving of different filter types.
  */
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use quarto_error_reporting::DiagnosticMessage;
@@ -209,6 +209,12 @@ impl std::error::Error for CiteprocFilterError {}
 /// The `attribution` handle is forwarded to Lua filters — see
 /// [`crate::lua::apply_lua_filter`] for the contract. Non-Lua
 /// filters (Citeproc, JSON) ignore the handle.
+///
+/// `base_dir` is the directory the citeproc filter resolves relative
+/// `bibliography`/`csl` paths against (bd-oqoozmtr) — the caller must
+/// pass the declaration site's directory (the document's directory for a
+/// single-file render, the merged document's anchor directory for a
+/// book). Filters that never touch the filesystem ignore it.
 pub async fn apply_filter(
     pandoc: Pandoc,
     context: ASTContext,
@@ -216,11 +222,17 @@ pub async fn apply_filter(
     target_format: &str,
     runtime: Arc<dyn SystemRuntime>,
     attribution: Option<Arc<dyn AttributionLookup>>,
+    base_dir: &Path,
 ) -> Result<FilterOutput, FilterError> {
     match filter {
         FilterSpec::Citeproc => {
             let (new_pandoc, new_context, diagnostics) =
-                crate::citeproc_filter::apply_citeproc_filter(pandoc, context, target_format)?;
+                crate::citeproc_filter::apply_citeproc_filter(
+                    pandoc,
+                    context,
+                    target_format,
+                    base_dir,
+                )?;
             Ok(FilterOutput {
                 pandoc: new_pandoc,
                 context: new_context,
@@ -303,6 +315,7 @@ pub async fn apply_filters(
     target_format: &str,
     runtime: Arc<dyn SystemRuntime>,
     attribution: Option<Arc<dyn AttributionLookup>>,
+    base_dir: &Path,
 ) -> Result<FilterOutput, FilterError> {
     let mut current_pandoc = pandoc;
     let mut current_context = context;
@@ -322,6 +335,7 @@ pub async fn apply_filters(
             target_format,
             runtime.clone(),
             attribution.clone(),
+            base_dir,
         )
         .await?;
         current_pandoc = output.pandoc;

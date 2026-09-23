@@ -53,6 +53,7 @@ export const CROSSREF_RESOLVED_REF_PLAIN_DATA_KEYS = [
     'cite_mode',
     'label_upper',
     'order',
+    'in_appendix',
 ] as const;
 
 type CrossrefResolvedRefPlainData = {

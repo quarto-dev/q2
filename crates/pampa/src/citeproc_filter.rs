@@ -9,7 +9,7 @@
  * appending a bibliography section.
  */
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use quarto_citeproc::{Citation, CitationItem, Processor, Reference};
 use quarto_csl::parse_csl;
@@ -66,10 +66,18 @@ impl Default for CiteprocConfig {
 /// 2. Loads the CSL style and bibliography references
 /// 3. Processes all Cite inlines in the document
 /// 4. Appends a bibliography section (unless suppressed)
+///
+/// `base_dir` is the directory relative `bibliography`/`csl` declarations
+/// resolve against (bd-oqoozmtr): the caller must pass the *declaration
+/// site's* directory — the document's own directory for a single-file
+/// render, the merged document's anchor directory for a book. Resolving
+/// against the process CWD here (the historical behavior) broke any render
+/// whose CWD wasn't the declaration site.
 pub fn apply_citeproc_filter(
     pandoc: Pandoc,
     context: ASTContext,
     _target_format: &str,
+    base_dir: &Path,
 ) -> Result<(Pandoc, ASTContext, Vec<DiagnosticMessage>), CiteprocFilterError> {
     // Extract configuration from document metadata
     let config = extract_config(&pandoc);
@@ -80,7 +88,7 @@ pub fn apply_citeproc_filter(
     }
 
     // Load CSL style
-    let style = load_csl_style(&config)?;
+    let style = load_csl_style(&config, base_dir)?;
 
     // Create processor
     let mut processor = Processor::new(style);
@@ -92,7 +100,7 @@ pub fn apply_citeproc_filter(
 
     // Load bibliography references from files
     for bib_path in &config.bibliography {
-        let references = load_bibliography(bib_path)?;
+        let references = load_bibliography(bib_path, base_dir)?;
         processor.add_references(references);
     }
 
@@ -128,12 +136,27 @@ pub fn apply_citeproc_filter(
     Ok((pandoc, context, vec![]))
 }
 
+/// Resolve a declared `bibliography`/`csl` path against `base_dir`
+/// (bd-oqoozmtr). `quarto_util::is_rooted`, not `is_absolute`: a leading `/`
+/// means the *project root* on native and the VFS root on wasm32, so rooted
+/// paths are left untouched; only genuinely relative paths are anchored.
+fn resolve_against_base(base_dir: &Path, declared: &str) -> PathBuf {
+    let path = Path::new(declared);
+    if quarto_util::is_rooted(path) {
+        path.to_path_buf()
+    } else {
+        base_dir.join(path)
+    }
+}
+
 /// Load the CSL style from file or use the default.
-fn load_csl_style(config: &CiteprocConfig) -> Result<quarto_csl::Style, CiteprocFilterError> {
+fn load_csl_style(
+    config: &CiteprocConfig,
+    base_dir: &Path,
+) -> Result<quarto_csl::Style, CiteprocFilterError> {
     let csl_content = if let Some(ref csl_path) = config.csl {
-        let path = Path::new(csl_path);
-        std::fs::read_to_string(path)
-            .map_err(|e| CiteprocFilterError::StyleNotFound(path.to_owned(), e))?
+        let path = resolve_against_base(base_dir, csl_path);
+        std::fs::read_to_string(&path).map_err(|e| CiteprocFilterError::StyleNotFound(path, e))?
     } else {
         DEFAULT_CSL_STYLE.to_string()
     };
@@ -148,14 +171,14 @@ fn load_csl_style(config: &CiteprocConfig) -> Result<quarto_csl::Style, Citeproc
 }
 
 /// Load bibliography references from a CSL-JSON file.
-fn load_bibliography(path: &str) -> Result<Vec<Reference>, CiteprocFilterError> {
-    let path = Path::new(path);
-    let content = std::fs::read_to_string(path)
-        .map_err(|e| CiteprocFilterError::BibliographyNotFound(path.to_owned(), e))?;
+fn load_bibliography(path: &str, base_dir: &Path) -> Result<Vec<Reference>, CiteprocFilterError> {
+    let path = resolve_against_base(base_dir, path);
+    let content = std::fs::read_to_string(&path)
+        .map_err(|e| CiteprocFilterError::BibliographyNotFound(path.clone(), e))?;
 
     // Parse as JSON array of references
     let references: Vec<Reference> = serde_json::from_str(&content)
-        .map_err(|e| CiteprocFilterError::BibliographyParseError(path.to_owned(), e.to_string()))?;
+        .map_err(|e| CiteprocFilterError::BibliographyParseError(path, e.to_string()))?;
 
     Ok(references)
 }
@@ -3036,7 +3059,7 @@ mod tests {
         };
         let context = ASTContext::new();
 
-        let result = apply_citeproc_filter(pandoc.clone(), context, "html");
+        let result = apply_citeproc_filter(pandoc.clone(), context, "html", Path::new("."));
         assert!(result.is_ok());
         let (result_pandoc, _, _) = result.unwrap();
         // Should pass through unchanged since no bibliography
@@ -3097,7 +3120,7 @@ mod tests {
         };
         let context = ASTContext::new();
 
-        let result = apply_citeproc_filter(pandoc, context, "html");
+        let result = apply_citeproc_filter(pandoc, context, "html", Path::new("."));
         assert!(result.is_ok());
         let (result_pandoc, _, _) = result.unwrap();
 
@@ -3113,7 +3136,7 @@ mod tests {
     #[test]
     fn test_load_csl_style_default() {
         let config = CiteprocConfig::default();
-        let result = load_csl_style(&config);
+        let result = load_csl_style(&config, Path::new("."));
         assert!(result.is_ok());
     }
 
@@ -3123,7 +3146,7 @@ mod tests {
             csl: Some("/nonexistent/path/style.csl".to_string()),
             ..Default::default()
         };
-        let result = load_csl_style(&config);
+        let result = load_csl_style(&config, Path::new("."));
         assert!(result.is_err());
     }
 

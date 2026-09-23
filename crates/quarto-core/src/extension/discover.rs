@@ -334,6 +334,29 @@ pub fn parse_format_descriptor(format: &str) -> FormatDescriptor {
     }
 }
 
+/// The bundled extension Q1 auto-loads for a Typst **book** target with no
+/// explicit format extension named (`render-contexts.ts`
+/// `readExtensionFormat`, quarto-dev/quarto-cli): `orange-book`.
+///
+/// Q2 mirrors that single zero-config outcome (book-projects epic P2;
+/// `claude-notes/designs/book-projects-architecture.md` §5) — hard-coded to
+/// the `book` + `typst` pairing, not a general extension-dispatch
+/// mechanism. The extension itself is vendored under
+/// `resources/extensions/`, so the ordinary built-in discovery path finds
+/// it with no new infrastructure.
+pub const TYPST_BOOK_DEFAULT_EXTENSION: &str = "orange-book";
+
+/// Apply the Typst-book default extension to a parsed format descriptor: a
+/// book project targeting bare `typst` (no explicit extension prefix)
+/// resolves to [`TYPST_BOOK_DEFAULT_EXTENSION`]; everything else passes
+/// through unchanged.
+pub fn with_typst_book_default(mut desc: FormatDescriptor, is_book: bool) -> FormatDescriptor {
+    if is_book && desc.extension_name.is_none() && desc.base_format == "typst" {
+        desc.extension_name = Some(TYPST_BOOK_DEFAULT_EXTENSION.to_string());
+    }
+    desc
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1093,5 +1116,45 @@ contributes:
             assert_eq!(bare.extension_name, None, "bare {bare_name}");
             assert_eq!(bare.base_format, bare_name, "bare {bare_name}");
         }
+    }
+
+    // === Typst-book default extension tests (book-projects P2) ===
+
+    #[test]
+    fn test_typst_book_default_applies_for_book_typst() {
+        let desc = with_typst_book_default(parse_format_descriptor("typst"), true);
+        assert_eq!(
+            desc.extension_name.as_deref(),
+            Some(TYPST_BOOK_DEFAULT_EXTENSION)
+        );
+        assert_eq!(desc.base_format, "typst");
+    }
+
+    #[test]
+    fn test_typst_book_default_respects_explicit_extension() {
+        // A book project that names its own Typst extension keeps it.
+        let desc = with_typst_book_default(parse_format_descriptor("acm-typst"), true);
+        assert_eq!(desc.extension_name.as_deref(), Some("acm"));
+        assert_eq!(desc.base_format, "typst");
+    }
+
+    #[test]
+    fn test_typst_book_default_ignores_other_formats() {
+        // The default is hard-coded to the book + typst pairing only.
+        for format in ["html", "pdf", "epub", "docx"] {
+            let desc = with_typst_book_default(parse_format_descriptor(format), true);
+            assert!(
+                desc.extension_name.is_none(),
+                "book + {} must not gain a default extension",
+                format
+            );
+        }
+    }
+
+    #[test]
+    fn test_typst_book_default_ignores_non_book() {
+        let desc = with_typst_book_default(parse_format_descriptor("typst"), false);
+        assert!(desc.extension_name.is_none());
+        assert_eq!(desc.base_format, "typst");
     }
 }

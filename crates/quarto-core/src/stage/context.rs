@@ -292,6 +292,13 @@ pub struct StageContext {
     ///   forwards highlight requests to JS callbacks backed by
     ///   `web-tree-sitter`. See `crates/wasm-quarto-hub-client/src/lib.rs`.
     pub user_grammar_provider: Option<Rc<RefCell<dyn quarto_highlight::UserGrammarProvider>>>,
+
+    /// Defer citeproc out of this render's `UserFiltersStage::pre()`.
+    /// Bridged one-way from [`crate::render::RenderContext::defer_citeproc`]
+    /// by `run_pipeline` — see that field for semantics. `false` by
+    /// default (citeproc runs when `"citeproc"` appears in
+    /// `meta["filters"]`).
+    pub defer_citeproc: bool,
 }
 
 impl StageContext {
@@ -376,6 +383,7 @@ impl StageContext {
             attribution_data: None,
             format_options: crate::render::FormatOptions::default(),
             user_grammar_provider: None,
+            defer_citeproc: false,
         })
     }
 

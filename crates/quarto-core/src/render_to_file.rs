@@ -383,7 +383,7 @@ pub fn render_document_to_file(
     ctx.execution_policy = options.execution_policy.clone();
 
     // Run the render pipeline
-    let mut render_output = if render_format.identifier.is_native() {
+    let render_output = if render_format.identifier.is_native() {
         pollster::block_on(render_qmd_to_html(
             &input_bytes,
             &input_path.to_string_lossy(),
@@ -412,6 +412,51 @@ pub fn render_document_to_file(
         }
     };
 
+    finalize_rendered_output(
+        input_path,
+        output_path,
+        resource_paths.resource_dir,
+        render_output,
+        &mut ctx,
+        &resolver,
+        project_type.as_ref(),
+        project_artifacts,
+        &runtime,
+        render_format.identifier.is_native(),
+    )
+}
+
+/// Flush artifacts, resource copies, and (for native/HTML formats) the
+/// rendered content itself through the shared [`OutputSink`], then
+/// assemble the [`RenderToFileResult`].
+///
+/// Extracted from [`render_document_to_file`] (book-projects P2) so the
+/// book single-file-merge driver — which builds its own `RenderContext`
+/// and drives its own pipeline dispatch (`run_pipeline_from_ast` over a
+/// merged multi-chapter document, not `render_qmd_to_html`/
+/// `render_qmd_to_pandoc` over one document's raw bytes) — can reuse
+/// exactly this tail instead of duplicating the sink/artifact-routing
+/// dance. Pure Extract Method: the existing single-document caller's
+/// behavior is unchanged.
+///
+/// `is_native` mirrors `render_format.identifier.is_native()`: `true`
+/// writes `render_output.html` through the sink (the HTML leg);
+/// `false` skips it because the Pandoc-hybrid leg's `PandocWriteStage`
+/// already wrote `output_path` directly (P7-foundation Task 3, Finding 3).
+#[cfg(not(target_arch = "wasm32"))]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn finalize_rendered_output(
+    input_path: &Path,
+    output_path: PathBuf,
+    resources_dir: PathBuf,
+    mut render_output: RenderOutput,
+    ctx: &mut RenderContext<'_>,
+    resolver: &ResourceResolverContext,
+    project_type: &dyn crate::project::orchestrator::ProjectType,
+    project_artifacts: Option<&mut ArtifactStore>,
+    runtime: &Arc<dyn SystemRuntime>,
+    is_native: bool,
+) -> Result<RenderToFileResult> {
     // bd-cfl67: one sink per render owns every destructive write.
     // Construct it from the resolver's declared output roots so
     // any escape (e.g. an absolute artifact path that bypassed
@@ -430,7 +475,7 @@ pub fn render_document_to_file(
     //   no orchestrator is involved, or the orchestrator's
     //   project type has no shared lib dir, e.g. default
     //   single-doc / loose-directory projects).
-    enqueue_artifacts(&ctx.artifacts, &resolver, ArtifactScope::Page, &mut sink)?;
+    enqueue_artifacts(&ctx.artifacts, resolver, ArtifactScope::Page, &mut sink)?;
     let drained = ctx.artifacts.drain_project_scoped();
 
     // Shared with both Pass-2 renderers (bd-gdhk). Project-scope
@@ -443,7 +488,7 @@ pub fn render_document_to_file(
         drained,
         project_artifacts,
         has_shared_lib,
-        &resolver,
+        resolver,
         &mut sink,
         input_path,
     )?;
@@ -474,7 +519,7 @@ pub fn render_document_to_file(
     // already wrote `output_path` directly (`render_output.html` is
     // empty for that branch, per Finding 3) — enqueuing it here would
     // overwrite the real pandoc output with a zero-byte file.
-    if render_format.identifier.is_native() {
+    if is_native {
         sink.write(output_path.clone(), render_output.html.as_bytes().to_vec())
             .map_err(QuartoError::from)?;
     }
@@ -494,7 +539,7 @@ pub fn render_document_to_file(
     Ok(RenderToFileResult {
         input_path: input_path.to_path_buf(),
         output_path,
-        resources_dir: resource_paths.resource_dir,
+        resources_dir,
         render_output,
         resource_report,
     })
@@ -506,7 +551,12 @@ pub fn render_document_to_file(
 ///
 /// Preserves the input's subdirectory under `project_dir` so
 /// `docs/api.qmd` in a website project renders to `_site/docs/api.html`.
-fn apply_project_output_dir_to_options(
+///
+/// `pub(crate)`: book-projects P2's single-file-merge driver reuses this
+/// (and [`determine_output_paths`] below) against a synthetic input path
+/// carrying the book's own output stem, rather than duplicating the
+/// output-dir-fallback policy.
+pub(crate) fn apply_project_output_dir_to_options(
     options: &RenderToFileOptions,
     project: &ProjectContext,
     input_path: &Path,
@@ -530,7 +580,9 @@ fn apply_project_output_dir_to_options(
 }
 
 /// Determine output paths from input path and options.
-fn determine_output_paths(
+///
+/// `pub(crate)`: see [`apply_project_output_dir_to_options`].
+pub(crate) fn determine_output_paths(
     input_path: &Path,
     format: &str,
     options: &RenderToFileOptions,
