@@ -152,6 +152,11 @@ pub struct ProjectChoice {
     /// Surfaces this choice is offered on. Defaults to every surface.
     #[serde(default = "Surface::all")]
     pub surfaces: Vec<Surface>,
+
+    /// Whether the hub seeds this choice into a new user's "Examples /
+    /// Templates" collection on first run (bd-3fwtdhil). Defaults to false.
+    #[serde(default)]
+    pub seed: bool,
 }
 
 impl ProjectChoice {
@@ -169,7 +174,15 @@ impl ProjectChoice {
             target,
             implemented: true,
             surfaces: Surface::all(),
+            seed: false,
         }
+    }
+
+    /// Seed this choice into a new user's "Examples / Templates"
+    /// collection on first run. Only meaningful for hub choices.
+    pub fn seed(mut self) -> Self {
+        self.seed = true;
+        self
     }
 
     /// Mark this choice as not yet implemented.
@@ -239,7 +252,52 @@ pub fn available_choices() -> Vec<ProjectChoice> {
             ProjectTypeWithTemplate::with_template(ProjectType::Website, "hub-placeholder"),
         )
         .hub_only(),
+        // The four example projects a new user finds in the "Examples /
+        // Templates" collection (bd-3fwtdhil). Hub-only, and seeded in this
+        // order. Each is a short instructional project with fixed content;
+        // the name the user types is not interpolated.
+        ProjectChoice::new(
+            "example-meeting-notes",
+            "Meeting Notes",
+            "One page per meeting, written together during the call",
+            ProjectTypeWithTemplate::with_template(ProjectType::Default, "example-meeting-notes"),
+        )
+        .hub_only()
+        .seed(),
+        ProjectChoice::new(
+            "example-website",
+            "Website",
+            "A few pages with shared navigation and a tour of page features",
+            ProjectTypeWithTemplate::with_template(ProjectType::Website, "example-website"),
+        )
+        .hub_only()
+        .seed(),
+        ProjectChoice::new(
+            "example-article",
+            "Article",
+            "A short article with citations, equations, figures, and cross-references",
+            ProjectTypeWithTemplate::with_template(ProjectType::Default, "example-article"),
+        )
+        .hub_only()
+        .seed(),
+        ProjectChoice::new(
+            "example-presentation",
+            "Presentation",
+            "A short reveal.js deck with a custom theme",
+            ProjectTypeWithTemplate::with_template(ProjectType::Default, "example-presentation"),
+        )
+        .hub_only()
+        .seed(),
     ]
+}
+
+/// The choices the hub seeds into a new user's "Examples / Templates"
+/// collection on first run, in the order they are seeded (bd-3fwtdhil).
+pub fn seed_choices() -> Vec<ProjectChoice> {
+    implemented_choices()
+        .into_iter()
+        .filter(|c| c.seed)
+        .collect()
 }
 
 /// Get only the implemented project choices.
@@ -398,10 +456,86 @@ mod tests {
         let hub_only = hub_only_choices();
         assert_eq!(
             hub_only.len(),
-            1,
-            "expected exactly one hub-only choice (the placeholder), got {:?}",
+            5,
+            "expected the placeholder plus the four seeded examples, got {:?}",
             hub_only.iter().map(|c| &c.id).collect::<Vec<_>>()
         );
+    }
+
+    // ----------------------------------------------------------------
+    // Seeded example projects (bd-3fwtdhil)
+    // ----------------------------------------------------------------
+
+    const EXAMPLE_IDS: [&str; 4] = [
+        "example-meeting-notes",
+        "example-website",
+        "example-article",
+        "example-presentation",
+    ];
+
+    #[test]
+    fn seed_choices_are_the_four_examples_in_registry_order() {
+        let ids: Vec<String> = seed_choices().into_iter().map(|c| c.id).collect();
+        assert_eq!(ids, EXAMPLE_IDS);
+    }
+
+    #[test]
+    fn seed_choices_are_implemented_and_hub_only() {
+        for c in seed_choices() {
+            assert!(c.seed, "{} must carry the seed flag", c.id);
+            assert!(c.implemented, "{} must be implemented", c.id);
+            assert!(c.available_on(Surface::Hub), "{} must be on the hub", c.id);
+            assert!(
+                !c.available_on(Surface::Cli),
+                "{} must not be on the CLI",
+                c.id
+            );
+        }
+    }
+
+    #[test]
+    fn example_names_are_the_collection_labels() {
+        let names: Vec<String> = seed_choices().into_iter().map(|c| c.name).collect();
+        assert_eq!(
+            names,
+            ["Meeting Notes", "Website", "Article", "Presentation"]
+        );
+    }
+
+    #[test]
+    fn non_example_choices_are_not_seeded() {
+        for id in [
+            "default",
+            "website",
+            "blog",
+            "manuscript",
+            "book",
+            "hub-placeholder",
+        ] {
+            let c = find_choice(id).unwrap_or_else(|| panic!("missing {id}"));
+            assert!(!c.seed, "{id} must not be seeded");
+        }
+    }
+
+    #[test]
+    fn choice_json_without_seed_field_deserializes_as_not_seeded() {
+        let json = r#"{"id":"x","name":"X","description":"d","target":{"project_type":"website"},"implemented":true}"#;
+        let c: ProjectChoice = serde_json::from_str(json).unwrap();
+        assert!(!c.seed);
+    }
+
+    #[test]
+    fn seeded_choice_serializes_seed_true() {
+        let c = ProjectChoice::new(
+            "x",
+            "X",
+            "d",
+            ProjectTypeWithTemplate::new(ProjectType::Default),
+        )
+        .hub_only()
+        .seed();
+        let v: serde_json::Value = serde_json::to_value(&c).unwrap();
+        assert_eq!(v["seed"], serde_json::json!(true));
     }
 
     #[test]

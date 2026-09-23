@@ -1,0 +1,30 @@
+---
+template-name: "Team meeting"
+title: "Team Meeting"
+format: q2-preview
+---
+
+## 2026-MM-DD
+
+### Attendees
+
+* Name
+* Name
+* Name
+
+### Status
+
+- \[who\] what
+
+### Discussions
+
+* Topic
+    - notes
+
+### Questions and feedback
+
+* Question
+
+### Social
+
+- \[who\] something not about work

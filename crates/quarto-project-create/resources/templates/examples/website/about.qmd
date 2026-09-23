@@ -1,0 +1,15 @@
+---
+title: "About"
+---
+
+## The team
+
+| Name  | Role     | Focus               |
+|-------|----------|---------------------|
+| Name  | Editor   | Structure and voice |
+| Name  | Reviewer | Accuracy            |
+| Name  | Author   | Product pages       |
+
+## Contact
+
+Replace this page with your own. A short paragraph on who maintains the site and how to reach them is enough.

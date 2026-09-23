@@ -109,3 +109,75 @@ pub mod website {
     /// Static starter stylesheet for website projects.
     pub const STYLES_CSS: &str = include_str!("../resources/templates/website/styles.css");
 }
+
+/// The four example projects seeded into a new user's "Examples /
+/// Templates" collection (bd-3fwtdhil). All static: each example is a short
+/// instructional project whose documents carry fixed titles, so nothing here
+/// interpolates the project name. Content was authored live on
+/// quarto-hub.com and copied in verbatim; the plan records the source
+/// project ids.
+pub mod examples {
+    /// Meeting Notes: a home page listing dated meeting pages, one
+    /// in-progress meeting, and a file template for the New File dialog.
+    pub mod meeting_notes {
+        pub const QUARTO_YML: &str =
+            include_str!("../resources/templates/examples/meeting-notes/_quarto.yml");
+        pub const INDEX_QMD: &str =
+            include_str!("../resources/templates/examples/meeting-notes/index.qmd");
+        pub const TWEAKS_SCSS: &str =
+            include_str!("../resources/templates/examples/meeting-notes/tweaks.scss");
+        pub const MEETING_2026_09_17_QMD: &str =
+            include_str!("../resources/templates/examples/meeting-notes/team-sync/2026-09-17.qmd");
+        pub const TEAM_MEETING_TEMPLATE_QMD: &str = include_str!(
+            "../resources/templates/examples/meeting-notes/_quarto-hub-templates/team-meeting.qmd"
+        );
+    }
+
+    /// Website: three pages with a navbar; the home page carries the
+    /// editorial-marks review demo and Features tours page-level features.
+    pub mod website {
+        pub const QUARTO_YML: &str =
+            include_str!("../resources/templates/examples/website/_quarto.yml");
+        pub const INDEX_QMD: &str =
+            include_str!("../resources/templates/examples/website/index.qmd");
+        pub const FEATURES_QMD: &str =
+            include_str!("../resources/templates/examples/website/features.qmd");
+        pub const ABOUT_QMD: &str =
+            include_str!("../resources/templates/examples/website/about.qmd");
+        pub const STYLES_CSS: &str =
+            include_str!("../resources/templates/examples/website/styles.css");
+        pub const FORK_ICON_SVG: &str =
+            include_str!("../resources/templates/examples/website/fork-icon.svg");
+    }
+
+    /// Article: one document with a title block, citations (inline
+    /// references), an equation, a theorem, a figure, a table, and
+    /// cross-references.
+    pub mod article {
+        pub const QUARTO_YML: &str =
+            include_str!("../resources/templates/examples/article/_quarto.yml");
+        pub const INDEX_QMD: &str =
+            include_str!("../resources/templates/examples/article/index.qmd");
+        pub const FIGURE_1_SVG: &str =
+            include_str!("../resources/templates/examples/article/figure-1.svg");
+        pub const FORK_ICON_SVG: &str =
+            include_str!("../resources/templates/examples/article/fork-icon.svg");
+    }
+
+    /// Presentation: a short reveal.js deck with a custom SCSS theme, a
+    /// footer logo, and a sample chart.
+    pub mod presentation {
+        pub const QUARTO_YML: &str =
+            include_str!("../resources/templates/examples/presentation/_quarto.yml");
+        pub const INDEX_QMD: &str =
+            include_str!("../resources/templates/examples/presentation/index.qmd");
+        pub const STYLES_SCSS: &str =
+            include_str!("../resources/templates/examples/presentation/styles.scss");
+        pub const QUARTO_ICON_SVG: &str =
+            include_str!("../resources/templates/examples/presentation/quarto-icon.svg");
+        pub const SAMPLE_CHART_SVG: &str =
+            include_str!("../resources/templates/examples/presentation/sample-chart.svg");
+        pub const FORK_ICON_SVG: &str =
+            include_str!("../resources/templates/examples/presentation/fork-icon.svg");
+    }
+}

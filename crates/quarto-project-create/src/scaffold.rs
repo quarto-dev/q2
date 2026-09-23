@@ -197,17 +197,81 @@ pub fn get_scaffold(target: &ProjectTypeWithTemplate) -> Option<ProjectScaffold>
     use crate::templates;
 
     match target.project_type {
-        ProjectType::Default => Some(
-            ProjectScaffold::new(ProjectType::Default)
-                .add_file(ScaffoldFileDef::template(
-                    "_quarto.yml",
-                    templates::default::QUARTO_YML,
-                ))
-                .add_file(ScaffoldFileDef::template(
-                    "index.qmd",
-                    templates::default::INDEX_QMD,
-                )),
-        ),
+        ProjectType::Default => match target.template.as_deref() {
+            None => Some(
+                ProjectScaffold::new(ProjectType::Default)
+                    .add_file(ScaffoldFileDef::template(
+                        "_quarto.yml",
+                        templates::default::QUARTO_YML,
+                    ))
+                    .add_file(ScaffoldFileDef::template(
+                        "index.qmd",
+                        templates::default::INDEX_QMD,
+                    )),
+            ),
+            // Seeded examples (bd-3fwtdhil): fixed content, nothing interpolates.
+            Some("example-meeting-notes") => {
+                use templates::examples::meeting_notes as t;
+                Some(
+                    ProjectScaffold::with_template(ProjectType::Default, "example-meeting-notes")
+                        .add_file(ScaffoldFileDef::static_text("_quarto.yml", t::QUARTO_YML))
+                        .add_file(ScaffoldFileDef::static_text("index.qmd", t::INDEX_QMD))
+                        .add_file(ScaffoldFileDef::static_text("tweaks.scss", t::TWEAKS_SCSS))
+                        .add_file(
+                            ScaffoldFileDef::static_text(
+                                "2026-09-17.qmd",
+                                t::MEETING_2026_09_17_QMD,
+                            )
+                            .in_subdirectory("team-sync"),
+                        )
+                        .add_file(
+                            ScaffoldFileDef::static_text(
+                                "team-meeting.qmd",
+                                t::TEAM_MEETING_TEMPLATE_QMD,
+                            )
+                            .in_subdirectory("_quarto-hub-templates"),
+                        ),
+                )
+            }
+            Some("example-article") => {
+                use templates::examples::article as t;
+                Some(
+                    ProjectScaffold::with_template(ProjectType::Default, "example-article")
+                        .add_file(ScaffoldFileDef::static_text("_quarto.yml", t::QUARTO_YML))
+                        .add_file(ScaffoldFileDef::static_text("index.qmd", t::INDEX_QMD))
+                        .add_file(ScaffoldFileDef::static_text(
+                            "figure-1.svg",
+                            t::FIGURE_1_SVG,
+                        ))
+                        .add_file(ScaffoldFileDef::static_text(
+                            "fork-icon.svg",
+                            t::FORK_ICON_SVG,
+                        )),
+                )
+            }
+            Some("example-presentation") => {
+                use templates::examples::presentation as t;
+                Some(
+                    ProjectScaffold::with_template(ProjectType::Default, "example-presentation")
+                        .add_file(ScaffoldFileDef::static_text("_quarto.yml", t::QUARTO_YML))
+                        .add_file(ScaffoldFileDef::static_text("index.qmd", t::INDEX_QMD))
+                        .add_file(ScaffoldFileDef::static_text("styles.scss", t::STYLES_SCSS))
+                        .add_file(ScaffoldFileDef::static_text(
+                            "quarto-icon.svg",
+                            t::QUARTO_ICON_SVG,
+                        ))
+                        .add_file(ScaffoldFileDef::static_text(
+                            "sample-chart.svg",
+                            t::SAMPLE_CHART_SVG,
+                        ))
+                        .add_file(ScaffoldFileDef::static_text(
+                            "fork-icon.svg",
+                            t::FORK_ICON_SVG,
+                        )),
+                )
+            }
+            Some(_) => None, // Unknown template
+        },
         ProjectType::Website => {
             match target.template.as_deref() {
                 None => Some(
@@ -297,6 +361,25 @@ pub fn get_scaffold(target: &ProjectTypeWithTemplate) -> Option<ProjectScaffold>
                             templates::hub_placeholder::QMD_CHANGES_QMD,
                         )),
                 ),
+                // Seeded example (bd-3fwtdhil): fixed content, nothing interpolates.
+                Some("example-website") => {
+                    use templates::examples::website as t;
+                    Some(
+                        ProjectScaffold::with_template(ProjectType::Website, "example-website")
+                            .add_file(ScaffoldFileDef::static_text("_quarto.yml", t::QUARTO_YML))
+                            .add_file(ScaffoldFileDef::static_text("index.qmd", t::INDEX_QMD))
+                            .add_file(ScaffoldFileDef::static_text(
+                                "features.qmd",
+                                t::FEATURES_QMD,
+                            ))
+                            .add_file(ScaffoldFileDef::static_text("about.qmd", t::ABOUT_QMD))
+                            .add_file(ScaffoldFileDef::static_text("styles.css", t::STYLES_CSS))
+                            .add_file(ScaffoldFileDef::static_text(
+                                "fork-icon.svg",
+                                t::FORK_ICON_SVG,
+                            )),
+                    )
+                }
                 Some(_) => None, // Unknown template
             }
         }
@@ -444,6 +527,81 @@ mod tests {
     fn test_get_scaffold_unknown_template() {
         let target = ProjectTypeWithTemplate::with_template(ProjectType::Website, "nonexistent");
         assert!(get_scaffold(&target).is_none());
+    }
+
+    #[test]
+    fn test_get_scaffold_default_unknown_template_is_none() {
+        // The Default arm gained templates for the examples (bd-3fwtdhil);
+        // an unknown one must fall through like it does for Website.
+        let target = ProjectTypeWithTemplate::with_template(ProjectType::Default, "nonexistent");
+        assert!(get_scaffold(&target).is_none());
+    }
+
+    #[test]
+    fn test_get_scaffold_examples_are_static_and_complete() {
+        // The four seeded examples (bd-3fwtdhil). Every file is static text:
+        // the content carries its own titles, so nothing interpolates.
+        let cases: [(ProjectType, &str, &[&str]); 4] = [
+            (
+                ProjectType::Default,
+                "example-meeting-notes",
+                &[
+                    "_quarto.yml",
+                    "index.qmd",
+                    "tweaks.scss",
+                    "team-sync/2026-09-17.qmd",
+                    "_quarto-hub-templates/team-meeting.qmd",
+                ],
+            ),
+            (
+                ProjectType::Website,
+                "example-website",
+                &[
+                    "_quarto.yml",
+                    "index.qmd",
+                    "features.qmd",
+                    "about.qmd",
+                    "styles.css",
+                    "fork-icon.svg",
+                ],
+            ),
+            (
+                ProjectType::Default,
+                "example-article",
+                &["_quarto.yml", "index.qmd", "figure-1.svg", "fork-icon.svg"],
+            ),
+            (
+                ProjectType::Default,
+                "example-presentation",
+                &[
+                    "_quarto.yml",
+                    "index.qmd",
+                    "styles.scss",
+                    "quarto-icon.svg",
+                    "sample-chart.svg",
+                    "fork-icon.svg",
+                ],
+            ),
+        ];
+        for (project_type, template, expected) in cases {
+            let target = ProjectTypeWithTemplate::with_template(project_type, template);
+            let scaffold =
+                get_scaffold(&target).unwrap_or_else(|| panic!("no scaffold for {template}"));
+            assert_eq!(scaffold.target.project_type, project_type, "{template}");
+            let paths: Vec<_> = scaffold
+                .files
+                .iter()
+                .map(|f| f.full_path().to_str().unwrap().replace('\\', "/"))
+                .collect();
+            assert_eq!(paths, expected, "{template}");
+            for f in &scaffold.files {
+                assert!(
+                    matches!(f.content, ScaffoldContent::StaticText(_)),
+                    "{template}: {} must be static text",
+                    f.path
+                );
+            }
+        }
     }
 
     #[test]

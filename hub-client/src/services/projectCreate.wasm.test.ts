@@ -22,7 +22,7 @@ interface WasmModule {
 
 interface ProjectChoicesResponse {
   success: boolean;
-  choices: Array<{ id: string; name: string; description: string }>;
+  choices: Array<{ id: string; name: string; description: string; seed?: boolean }>;
 }
 
 interface CreateProjectResponse {
@@ -102,6 +102,74 @@ describe('create_project with a hub-only choice (bd-d147nkqx)', () => {
       expect(file.content).not.toContain('Hub Only Title');
       expect(file.content).not.toContain('$title$');
     }
+  });
+});
+
+/**
+ * The four example projects seeded into a new user's "Examples /
+ * Templates" collection (bd-3fwtdhil), in registry order. The client
+ * reads the `seed` flag rather than this list; the list pins the order.
+ */
+const SEED_CHOICE_IDS = [
+  'example-meeting-notes',
+  'example-website',
+  'example-article',
+  'example-presentation',
+];
+
+describe('seeded example choices (bd-3fwtdhil)', () => {
+  it('flags exactly the four examples as seed, in registry order', () => {
+    const response = JSON.parse(wasm.get_project_choices()) as ProjectChoicesResponse;
+    const seeded = response.choices.filter((c) => c.seed === true).map((c) => c.id);
+    expect(seeded).toEqual(SEED_CHOICE_IDS);
+    expect(response.choices.find((c) => c.id === 'default')!.seed).toBe(false);
+    expect(response.choices.find((c) => c.id === HUB_ONLY_CHOICE_ID)!.seed).toBe(false);
+  });
+
+  it('names the examples as the collection will label them', () => {
+    const response = JSON.parse(wasm.get_project_choices()) as ProjectChoicesResponse;
+    const names = response.choices.filter((c) => c.seed === true).map((c) => c.name);
+    expect(names).toEqual(['Meeting Notes', 'Website', 'Article', 'Presentation']);
+  });
+
+  it('scaffolds each example as static text files, ignoring the typed name', () => {
+    for (const id of SEED_CHOICE_IDS) {
+      const response = JSON.parse(wasm.create_project(id, 'Typed Name')) as CreateProjectResponse;
+      expect(response.success, id).toBe(true);
+      const paths = response.files!.map((f) => f.path);
+      expect(paths, id).toContain('_quarto.yml');
+      expect(paths, id).toContain('index.qmd');
+      for (const f of response.files!) {
+        expect(f.content_type, `${id}: ${f.path}`).toBe('text');
+        expect(f.content, `${id}: ${f.path}`).not.toContain('Typed Name');
+        expect(f.content, `${id}: ${f.path}`).not.toContain('$title$');
+      }
+    }
+  });
+
+  it('ships the presentation with its theme, logo, chart, and fork icon', () => {
+    const deck = JSON.parse(wasm.create_project('example-presentation', 'x')) as CreateProjectResponse;
+    expect(deck.files!.map((f) => f.path).sort()).toEqual([
+      '_quarto.yml',
+      'fork-icon.svg',
+      'index.qmd',
+      'quarto-icon.svg',
+      'sample-chart.svg',
+      'styles.scss',
+    ]);
+    expect(deck.files!.find((f) => f.path === 'index.qmd')!.content).toContain('logo: quarto-icon.svg');
+  });
+
+  it('ships the meeting notes with the file template the home page points at', () => {
+    const notes = JSON.parse(wasm.create_project('example-meeting-notes', 'x')) as CreateProjectResponse;
+    const paths = notes.files!.map((f) => f.path).sort();
+    expect(paths).toEqual([
+      '_quarto-hub-templates/team-meeting.qmd',
+      '_quarto.yml',
+      'index.qmd',
+      'team-sync/2026-09-17.qmd',
+      'tweaks.scss',
+    ]);
   });
 });
 

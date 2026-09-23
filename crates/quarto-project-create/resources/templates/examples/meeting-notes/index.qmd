@@ -1,0 +1,39 @@
+---
+title: "Meeting Notes"
+format:
+  html:
+    theme:
+      - cosmo
+      - tweaks.scss
+---
+
+One page per meeting, written together during the call. Newest first.
+
+::: {.columns}
+::: {.column width="50%"}
+### Meetings
+
+- [2026-09-17](team-sync/2026-09-17.qmd)
+:::
+
+::: {.column width="50%"}
+### Team resources
+
+- Roadmap
+- Issue tracker
+- Team calendar
+
+Replace these with links your team reaches for during meetings.
+:::
+:::
+
+### Adding a meeting
+
+1. Click **New** in the file sidebar and choose the **Team meeting** template.
+2. Name the file `team-sync/2026-MM-DD.qmd`.
+3. Add a link to it at the top of the Meetings list above.
+4. Share the project link before the call, then type together.
+
+The template lives in `_quarto-hub-templates/team-meeting.qmd`. Change the attendee list and the sections there to fit your team.
+
+For an initial walkthrough of Quarto Hub itself, start with the [getting started guide](https://quarto-dev.github.io/quarto-hub/get-started.html).

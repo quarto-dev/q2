@@ -31,7 +31,7 @@ mod types;
 
 pub use choices::{
     ProjectChoice, ProjectTypeWithTemplate, Surface, available_choices, choices_for, find_choice,
-    find_choice_by_target, find_implemented_choice, implemented_choices,
+    find_choice_by_target, find_implemented_choice, implemented_choices, seed_choices,
 };
 pub use scaffold::{
     ProjectScaffold, ScaffoldContent, ScaffoldFileDef, ScaffoldedFile, get_scaffold,
@@ -720,13 +720,88 @@ mod render_tests {
             let files =
                 create_project_from_choice(CreateFromChoiceOptions::new(&choice.id, "Hub Title"))
                     .unwrap_or_else(|e| panic!("hub-only choice '{}' failed: {e}", choice.id));
-            let yml = file_content(&files, "_quarto.yml");
-            assert!(
-                yml.contains("type: website"),
-                "{}: _quarto.yml: {yml}",
-                choice.id
-            );
+            let paths: Vec<String> = files
+                .iter()
+                .map(|f| f.path().to_string_lossy().into_owned())
+                .collect();
+            for required in ["_quarto.yml", "index.qmd"] {
+                assert!(
+                    paths.iter().any(|p| p == required),
+                    "{}: missing {required} in {paths:?}",
+                    choice.id
+                );
+            }
         }
+    }
+
+    // ----------------------------------------------------------------
+    // Seeded example projects (bd-3fwtdhil)
+    // ----------------------------------------------------------------
+
+    #[test]
+    fn example_scaffolds_keep_their_own_titles_and_ship_their_files() {
+        // The examples are instructional content with fixed titles; the
+        // name the user typed never appears, and no template residue does.
+        for choice in seed_choices() {
+            let files =
+                create_project_from_choice(CreateFromChoiceOptions::new(&choice.id, "Typed Name"))
+                    .unwrap_or_else(|e| panic!("{} failed: {e}", choice.id));
+            for f in &files {
+                if let ScaffoldedFile::Text { content, path } = f {
+                    assert!(
+                        !content.contains("Typed Name"),
+                        "{}: name leaked into {}",
+                        choice.id,
+                        path.display()
+                    );
+                    assert!(
+                        !content.contains("$title$"),
+                        "{}: template residue in {}",
+                        choice.id,
+                        path.display()
+                    );
+                } else {
+                    panic!("{}: examples are text only, got {:?}", choice.id, f.path());
+                }
+            }
+        }
+
+        // Every file an example links to ships with it.
+        let notes =
+            create_project_from_choice(CreateFromChoiceOptions::new("example-meeting-notes", "x"))
+                .unwrap();
+        assert!(file_content(&notes, "index.qmd").contains("(team-sync/2026-09-17.qmd)"));
+        assert!(file_content(&notes, "index.qmd").contains("tweaks.scss"));
+        assert!(
+            file_content(&notes, "_quarto-hub-templates/team-meeting.qmd")
+                .contains("template-name: \"Team meeting\"")
+        );
+
+        let site = create_project_from_choice(CreateFromChoiceOptions::new("example-website", "x"))
+            .unwrap();
+        let site_yml = file_content(&site, "_quarto.yml");
+        assert!(site_yml.contains("type: website"), "{site_yml}");
+        assert!(site_yml.contains("- features.qmd"), "{site_yml}");
+        assert!(site_yml.contains("- about.qmd"), "{site_yml}");
+        assert!(file_content(&site, "index.qmd").contains("(fork-icon.svg)"));
+
+        let article =
+            create_project_from_choice(CreateFromChoiceOptions::new("example-article", "x"))
+                .unwrap();
+        let article_qmd = file_content(&article, "index.qmd");
+        assert!(article_qmd.contains("(figure-1.svg)"), "{article_qmd}");
+        assert!(article_qmd.contains("filters: [quarto, citeproc]"));
+        assert!(article_qmd.contains("{#eq-copies}"));
+
+        let deck =
+            create_project_from_choice(CreateFromChoiceOptions::new("example-presentation", "x"))
+                .unwrap();
+        let deck_qmd = file_content(&deck, "index.qmd");
+        assert!(deck_qmd.contains("  revealjs:\n"), "{deck_qmd}");
+        assert!(deck_qmd.contains("theme: [default, styles.scss]"));
+        assert!(deck_qmd.contains("logo: quarto-icon.svg"));
+        assert!(deck_qmd.contains("(sample-chart.svg)"));
+        assert!(deck_qmd.contains("(fork-icon.svg)"));
     }
 
     #[test]

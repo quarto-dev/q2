@@ -1,0 +1,44 @@
+---
+title: "Team Meeting"
+format: q2-preview
+---
+
+## 2026-09-17
+
+Notes in progress. This is what a page looks like mid-call: half finished, with suggestions and questions still in the text.
+
+### Attendees
+
+* Editor
+* Author
+* Reviewer
+
+### Status
+
+- \[Editor\] Autumn newsletter goes out [-- October 3][++ October 10]. [>> does the printer still have us for that week?]
+- \[Author\] Newsletter draft is [!! still missing the events calendar]. The rest reads well.
+- \[Reviewer\] Volunteer sign-up sheet started.
+
+### Discussions
+
+* Events calendar
+    - Who owns it? [>> the reviewer volunteered, confirm next week]
+
+### Marks you can use while taking notes
+
+| Mark        | Meaning            |
+|-------------|--------------------|
+| `[++ text]` | proposed insertion |
+| `[-- text]` | proposed deletion  |
+| `[!! text]` | highlight          |
+| `[>> text]` | comment            |
+
+Hover to the right of a paragraph in the preview and click the plus sign to add a comment without typing the brackets.
+
+::: {.callout-note}
+These are suggestions, not tracked changes. To accept an insertion or keep text marked for deletion, remove the brackets. To reject an insertion or accept a deletion, delete the marked text.
+:::
+
+### Social
+
+- \[Editor\] Finally fixed the squeaky office chair. Productivity up 400%.

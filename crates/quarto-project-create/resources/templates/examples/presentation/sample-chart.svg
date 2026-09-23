@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 300" width="720" height="300" font-family="Inter, Helvetica, Arial, sans-serif">
+  <text x="32" y="44" font-size="20" font-weight="600" fill="#12324b">Documents written together, by month</text>
+  <g stroke="#e6dfd3" stroke-width="1">
+    <line x1="32" y1="240" x2="688" y2="240"/>
+    <line x1="32" y1="180" x2="688" y2="180"/>
+    <line x1="32" y1="120" x2="688" y2="120"/>
+  </g>
+  <g fill="#12324b">
+    <rect x="72" y="196" width="56" height="44" rx="4"/>
+    <rect x="176" y="172" width="56" height="68" rx="4"/>
+    <rect x="280" y="150" width="56" height="90" rx="4"/>
+    <rect x="384" y="132" width="56" height="108" rx="4"/>
+    <rect x="488" y="104" width="56" height="136" rx="4"/>
+  </g>
+  <rect x="592" y="72" width="56" height="168" rx="4" fill="#c8552c"/>
+  <g font-size="15" fill="#5b6b7c" text-anchor="middle">
+    <text x="100" y="266">Apr</text>
+    <text x="204" y="266">May</text>
+    <text x="308" y="266">Jun</text>
+    <text x="412" y="266">Jul</text>
+    <text x="516" y="266">Aug</text>
+    <text x="620" y="266">Sep</text>
+  </g>
+  <text x="620" y="62" font-size="15" font-weight="600" fill="#c8552c" text-anchor="middle">this month</text>
+</svg>

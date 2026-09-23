@@ -23,6 +23,13 @@
  *
  * `enabled: false` hands setup to someone else — the `#/link-project-set`
  * boot route, whose handler links the other browser's set as the root.
+ *
+ * `onFreshRoot` (bd-3fwtdhil) runs once, when a `needs-setup` boot has
+ * created its root and reached `connected`. That is the one moment a
+ * brand-new browser exists with an empty root — where the "Examples /
+ * Templates" collection gets seeded. It never runs for a migration (the
+ * user already has projects), a returning browser, or a setup that ended
+ * in `error`; like the setup itself it re-arms through `loading`.
  */
 
 import { useEffect, useRef } from 'react';
@@ -35,6 +42,8 @@ export interface AutoEstablishRootOptions {
   enabled: boolean;
   createProjectSet: (syncServer: string) => Promise<void>;
   migrateProjects: (syncServer: string) => Promise<void>;
+  /** Fired once after a fresh root (from `needs-setup`) becomes connected. */
+  onFreshRoot?: () => Promise<void> | void;
 }
 
 export function useAutoEstablishRoot({
@@ -42,17 +51,34 @@ export function useAutoEstablishRoot({
   enabled,
   createProjectSet,
   migrateProjects,
+  onFreshRoot,
 }: AutoEstablishRootOptions): void {
   const firedRef = useRef(false);
+  // Set when this cycle's root was created from `needs-setup`; cleared once
+  // `onFreshRoot` has run (or the cycle re-arms through `loading`).
+  const freshRootPendingRef = useRef(false);
 
   useEffect(() => {
     if (status === 'loading') {
       firedRef.current = false;
+      freshRootPendingRef.current = false;
       return;
     }
-    if (!enabled || firedRef.current) return;
+    if (!enabled) return;
+    if (status === 'connected' && freshRootPendingRef.current) {
+      freshRootPendingRef.current = false;
+      void onFreshRoot?.();
+      return;
+    }
+    if (status === 'error') {
+      // A failed setup never seeds; a retry re-arms through `loading`.
+      freshRootPendingRef.current = false;
+      return;
+    }
+    if (firedRef.current) return;
     if (status === 'needs-setup') {
       firedRef.current = true;
+      freshRootPendingRef.current = true;
       void createProjectSet(DEFAULT_SYNC_SERVER);
     } else if (status === 'needs-migration') {
       firedRef.current = true;

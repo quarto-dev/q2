@@ -127,6 +127,8 @@ declare module 'wasm-quarto-hub-client' {
     id: string;
     name: string;
     description: string;
+    /** True for the seeded example projects (bd-3fwtdhil). */
+    seed?: boolean;
   }
 
   export interface ProjectChoicesResponse {
