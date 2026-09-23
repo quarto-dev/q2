@@ -227,7 +227,10 @@ pub fn lookup_static_claim<S: ::std::hash::BuildHasher>(
     language: &str,
     first_class: Option<&str>,
 ) -> crate::engine::LanguageClaim {
-    match claims.get(language) {
+    // F5 (julia epic Step 3): `parse_claims_map` normalizes keys to
+    // lowercase at parse time; lowercase `language` to match, mirroring
+    // dynamic claiming's own `language.toLowerCase()` comparison.
+    match claims.get(&language.to_lowercase()) {
         None => crate::engine::LanguageClaim::None,
         Some(claim_vec) => combine_claims(claim_vec, first_class),
     }
@@ -539,6 +542,28 @@ mod tests {
         assert_eq!(
             lookup_static_claim(&claims, "python", Some("python")),
             crate::engine::LanguageClaim::None
+        );
+    }
+
+    /// F5 (julia epic Step 3): dynamic claiming lowercases the language
+    /// (`claimsLanguage: (language) => language.toLowerCase() === "julia"`),
+    /// but `lookup_static_claim` did an exact `claims.get(language)` with no
+    /// normalization -- so a `{Julia}` cell claimed dynamically but missed
+    /// the static (zero-load) resolution path entirely. `parse_claims_map`
+    /// now normalizes claim keys to lowercase at parse time (see
+    /// `read.rs::parse_claims_map_lowercases_language_keys`); this is the
+    /// matching lookup-side half -- the map is keyed lowercase, the language
+    /// arrives mixed-case, and the two must still match.
+    #[test]
+    fn lookup_static_claim_is_case_insensitive() {
+        let mut claims = HashMap::new();
+        claims.insert(
+            "julia".to_string(),
+            vec![make_claim(ClaimKind::Primary, None, None)],
+        );
+        assert_eq!(
+            lookup_static_claim(&claims, "Julia", None),
+            crate::engine::LanguageClaim::Primary(1)
         );
     }
 
