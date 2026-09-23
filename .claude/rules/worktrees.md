@@ -170,7 +170,7 @@ create/update/close operations produce **nothing to commit** — they converge
 through the CRDT on every command, from any worktree, automatically. (This is
 the big simplification over beads' "edit in the worktree, but commit `.beads/`
 from the main repo" rule.) The only git-tracked braid artifact is the
-backup-only `.braid/snapshot.jsonl` (see the snapshot policy in `CLAUDE.md`),
+backup-only `.braid/snapshot.jsonl` (see the snapshot policy in `AGENTS.md`),
 which is regenerated from the skein and never hand-edited or re-imported.
 
 ## Pushing for PR

@@ -39,7 +39,7 @@
 //! re-inserts it at section level. **We deliberately do not port that pattern.**
 //! Q2 emits HTML directly from the AST and has no DOM-mutation stage; the
 //! structural fix belongs here, in the AST, not in a new postprocessor. (See
-//! the no-DOM-postprocessor rule in `CLAUDE.md` → Architecture Notes.)
+//! the no-DOM-postprocessor rule in `AGENTS.md` → Architecture Notes.)
 //!
 //! A captioned `Figure` (markdown `![caption](x)`) is hoisted the same way: the
 //! `Figure` is replaced by a `Plain[Image]` (figure `id` transferred onto the

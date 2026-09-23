@@ -201,7 +201,7 @@ grep -n "BulletList\|list_table\|list-table" crates/pampa/src/writers/qmd.rs
   `write_orderedlist` (L504), `write_list_table` (L986).
 - `crates/pampa/tests/roundtrip_tests/qmd-json-qmd/empty_list_item.qmd`
   — existing coverage for `[Plain []]`, **not** for `[]`.
-- `crates/pampa/CLAUDE.md` — round-trip test workflow (test first, fail
+- `crates/pampa/AGENTS.md` — round-trip test workflow (test first, fail
   first, then fix).
 - In-the-wild instance cited by the reporter:
   https://github.com/quarto-dev/quarto-web/blob/baeab38627fcc3f3a9ea3ca3ea689ece413df65d/docs/extensions/lua-api.qmd#L322

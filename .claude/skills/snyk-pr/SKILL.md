@@ -22,9 +22,9 @@ the checks.
 - **`npm install` only from the repo root** (npm workspaces), never from
   `hub-client/`. Sub-project installs (e.g. `quarto-hub-sandboxed-preview`) are
   driven by their own scripts (`npm run build:sandboxed`).
-- **Push only with explicit user approval** (GIT PUSH POLICY in CLAUDE.md).
+- **Push only with explicit user approval** (GIT PUSH POLICY in AGENTS.md).
   Merging the PR is always a human decision.
-- **hub-client changes require the changelog two-commit workflow** (CLAUDE.md,
+- **hub-client changes require the changelog two-commit workflow** (AGENTS.md,
   "hub-client Commit Instructions"). A regenerated committed bundle under
   `hub-client/` counts.
 
@@ -119,7 +119,7 @@ Every hit must end up naming the new version (or be justified as unrelated).
 
 ### 6. Verify
 
-Scale to what changed, per CLAUDE.md:
+Scale to what changed, per AGENTS.md:
 
 ```bash
 # targeted guard first (fast signal)

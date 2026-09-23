@@ -106,7 +106,7 @@ enum Command {
     /// The braid skein (CRDT) is the source of truth; this committed snapshot
     /// is for grep/diff/recovery only. It is STRICTLY ONE-DIRECTIONAL —
     /// never `braid import` it back, and on a git conflict regenerate rather
-    /// than hand-merge. See CLAUDE.md § Snapshot backup policy.
+    /// than hand-merge. See AGENTS.md § Snapshot backup policy.
     BraidSnapshot {},
 
     /// Switch the current worktree to a new sub-task branch (no new worktree).

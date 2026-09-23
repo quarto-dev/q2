@@ -22,7 +22,7 @@ Decision (externally reviewed, fresh context): keep these tests **native** — t
 
 ## Global Constraints
 
-- Test-first is mandatory (`crates/pampa/CLAUDE.md`): write test, confirm it fails, then fix.
+- Test-first is mandatory (`crates/pampa/AGENTS.md`): write test, confirm it fails, then fix.
 - Use `cargo nextest run`, never `cargo test`; never pipe nextest through `tail`.
 - **Manifest:** `quarto-util` is currently a **dev-dependency only** of `pampa` (`crates/pampa/Cargo.toml:83`). Production code may not use it until Task 2 promotes it to `[dependencies]`. (Promotion is free for the WASM build: `quarto-core` — which `wasm-quarto-hub-client` depends on — already declares `quarto-util` as a normal dependency, so it is already compiled for wasm32.)
 - Both `io_wasm.rs` and `dofile_wasm.rs` already `use std::path::Path;`.

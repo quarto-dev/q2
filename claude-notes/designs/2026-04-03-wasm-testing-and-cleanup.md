@@ -175,7 +175,7 @@ concern testing Rust code on the wasm32 target.
 
 | File | Audience | Content |
 |------|----------|---------|
-| `crates/pampa/CLAUDE.md` | AI assistants | WASM test convention: when/where to add, how to run |
+| `crates/pampa/AGENTS.md` | AI assistants | WASM test convention: when/where to add, how to run |
 | `.claude/rules/wasm.md` | AI assistants | Never add `test` to wasm32 cfg guard; verify WASM tests when editing io_wasm/os_wasm |
 | `dev-docs/wasm.md` | Developers | Single source of truth for WASM architecture, build, and testing |
 | `claude-notes/instructions/testing.md` | AI assistants | Brief pointer to pampa CLAUDE.md for WASM details |

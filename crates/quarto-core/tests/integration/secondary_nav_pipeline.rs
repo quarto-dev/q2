@@ -13,7 +13,7 @@
 //! `ProjectPipeline`, inspect the rendered HTML.
 //!
 //! These drive the real project pipeline rather than
-//! `render_qmd_to_html`, per `CLAUDE.md`'s end-to-end rule — the
+//! `render_qmd_to_html`, per `AGENTS.md`'s end-to-end rule — the
 //! secondary nav only exists on website renders with a sidebar, which
 //! a bare document render never exercises.
 //!

@@ -45,5 +45,5 @@ The exact `gh`, `cargo`, etc. commands you ran, so a future reader can re-do the
 
 - bd-XXXX entries
 - related claude-notes/ documents
-- relevant `CLAUDE.md` rules
+- relevant `AGENTS.md` rules
 ```

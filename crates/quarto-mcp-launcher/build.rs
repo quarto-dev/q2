@@ -14,7 +14,7 @@
 //! The chosen path is exposed as `QUARTO_HUB_MCP_EMBED_DIR` via
 //! `cargo:rustc-env`, consumed by `src/bundle.rs`.
 //!
-//! Stale-embed warning (see CLAUDE.md and the 2026-05-20 preview-SPA
+//! Stale-embed warning (see AGENTS.md and the 2026-05-20 preview-SPA
 //! incident): a plain `cargo build` re-embeds whatever dist-bundle/
 //! was last produced. The per-file rerun-if-changed entries below make
 //! the *Rust* side rebuild when the bundle changes, but nothing makes

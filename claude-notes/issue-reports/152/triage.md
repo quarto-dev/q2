@@ -78,7 +78,7 @@ The existing `write_attr` helper in `qmd.rs` (line 396) already handles the form
 
 ## Suggested fix scope
 
-1. **Test first** (per `crates/pampa/CLAUDE.md`): add a failing round-trip fixture under `tests/roundtrip_tests/qmd-json-qmd/`. Candidate files (split per CLAUDE.md "many small fixtures" guidance):
+1. **Test first** (per `crates/pampa/AGENTS.md`): add a failing round-trip fixture under `tests/roundtrip_tests/qmd-json-qmd/`. Candidate files (split per CLAUDE.md "many small fixtures" guidance):
    - `table-caption-with-keyval.qmd` — `: cap {tbl-colwidths="[30,70]"}`
    - `table-caption-with-id.qmd` — `: cap {#tbl-foo}`
    - `table-caption-with-classes.qmd` — `: cap {.striped .hover}`
@@ -136,4 +136,4 @@ Both confirmed at branch `issue-152` HEAD `132c13c8`.
 - bd-7giz — `cargo xtask setup` for fresh-worktree bootstrap (discovered while preparing this triage).
 - `docs/syntax/desugaring/table-captions.qmd` — defines the read-side desugaring contract this writer should reverse.
 - `crates/pampa/tests/snapshots/json/table-caption-attr.qmd` — existing parser-side snapshot covering this fixture.
-- `crates/pampa/CLAUDE.md` — TDD workflow for round-trip bug fixes (`tests/roundtrip_tests/qmd-json-qmd`).
+- `crates/pampa/AGENTS.md` — TDD workflow for round-trip bug fixes (`tests/roundtrip_tests/qmd-json-qmd`).

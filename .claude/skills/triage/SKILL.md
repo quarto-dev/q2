@@ -78,7 +78,7 @@ Create `claude-notes/issue-reports/<N>/` and put inside it:
 - Any side-by-side comparison fixtures you generate while investigating. Name them descriptively (`exp-prefix.qmd`, `exp-suffix.qmd`, etc.).
 - `triage.md` — see `references/triage-doc-template.md` for the template.
 
-For diagnosing the actual bug (root cause, code locations, fix scope), this skill defers to the per-crate `CLAUDE.md` files (e.g. `crates/pampa/CLAUDE.md` for the TDD round-trip workflow). Do whatever investigation the issue calls for and capture the conclusions in the triage doc — but the skill itself is silent on *how* to diagnose.
+For diagnosing the actual bug (root cause, code locations, fix scope), this skill defers to the per-crate `AGENTS.md` files (e.g. `crates/pampa/AGENTS.md` for the TDD round-trip workflow). Do whatever investigation the issue calls for and capture the conclusions in the triage doc — but the skill itself is silent on *how* to diagnose.
 
 ### 6. Outcomes that don't get a braid strand
 

@@ -190,7 +190,7 @@ pages (`admin/security`, `branding`, `email`) are all lone-bracket cases and
 would **not** be caught by this diagnostic.
 
 **Implemented as a render-pipeline transform, not a parse error.** The
-error-corpus / `build_error_table.ts` machinery in `crates/pampa/CLAUDE.md`
+error-corpus / `build_error_table.ts` machinery in `crates/pampa/AGENTS.md`
 maps *parse states* to messages — but these documents parse fine, so there is
 no error state to key off. The in-tree precedent for a shape-detected,
 non-parse-error code is **Q-2-30**, which has a catalog entry and no

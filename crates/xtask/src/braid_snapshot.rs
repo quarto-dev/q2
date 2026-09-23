@@ -9,7 +9,7 @@
 //! automerge → file. It is **never** an import or sync source back into the
 //! skein. Never run `braid import .braid/snapshot.jsonl`. On a git conflict,
 //! do not hand-merge — regenerate with `cargo xtask braid-snapshot` (the live
-//! skein is authoritative; the file is a photograph). See CLAUDE.md
+//! skein is authoritative; the file is a photograph). See AGENTS.md
 //! § Snapshot backup policy.
 
 use anyhow::{Context, Result};

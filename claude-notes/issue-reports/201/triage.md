@@ -94,7 +94,7 @@ Filed beads issue with the fix scope below. No GH comment needed yet — issue i
 
 **Fix scope (for the beads issue):**
 
-1. **Test first (TDD per `crates/pampa/CLAUDE.md`)**:
+1. **Test first (TDD per `crates/pampa/AGENTS.md`)**:
    - Add `crates/pampa/tests/roundtrip_tests/qmd-json-qmd/apostrophe_before_space.qmd` containing `reveal.js\' jump-to-slide.` (or similar). Confirm the round-trip test fails at HEAD.
 2. **Implement**: Extend `write_str` (or the surrounding `write_inline` driver) to detect a trailing `letter + '` at the end of a `Str` whose **next** inline is `Space`/`SoftBreak`/etc., and emit `\'` instead of `'`. The minimal correct rule is: escape ASCII `'` in a `Str` body iff the char immediately to its left is a Unicode letter AND the next byte the writer would emit is ASCII whitespace.
 3. **Verify**: Round-trip test passes; `cargo nextest run --workspace` clean; the two quarto-web fixtures from the issue round-trip cleanly through `pampa -t qmd | pampa`.

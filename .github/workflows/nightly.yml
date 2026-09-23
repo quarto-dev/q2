@@ -16,7 +16,7 @@
 # - `install-smoke` then runs the README one-liners with the nightly
 #   flag on linux, macOS and Windows against the just-published release
 #   and asserts `q2 --version` reports the gate's version: the
-#   end-to-end check the CLAUDE.md rule asks for, every night, and the
+#   end-to-end check the AGENTS.md rule asks for, every night, and the
 #   only CI that exercises install.sh/install.ps1 against a real release.
 #
 # Stable installs are unaffected: releases/latest never returns a

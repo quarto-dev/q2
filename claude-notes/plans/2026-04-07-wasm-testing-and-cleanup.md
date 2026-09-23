@@ -38,7 +38,7 @@
 - `hub-client/README.md` — remove wasm-pack prerequisite
 - `crates/wasm-quarto-hub-client/README.md` — remove wasm-pack references
 - `dev-docs/wasm.md` — full rewrite as WASM single source of truth
-- `crates/pampa/CLAUDE.md` — add WASM test convention
+- `crates/pampa/AGENTS.md` — add WASM test convention
 - `claude-notes/instructions/testing.md` — update WASM section to reflect new approach
 
 ---
@@ -243,7 +243,7 @@ Three references to `wasm-qmd-parser` need updating after the crate is deleted.
 
 Line 231 lists `wasm-qmd-parser` under the WASM section of workspace structure. Remove the entry:
 ```markdown
-- `wasm-qmd-parser`: WASM module with entry points from `pampa` (see [crates/wasm-qmd-parser/CLAUDE.md](crates/wasm-qmd-parser/CLAUDE.md) for build instructions)
+- `wasm-qmd-parser`: WASM module with entry points from `pampa` (see [crates/wasm-qmd-parser/AGENTS.md](crates/wasm-qmd-parser/AGENTS.md) for build instructions)
 ```
 
 - [ ] **Step 2: Update hub-client description**
@@ -873,16 +873,16 @@ ls hub-client/scripts/build-wasm.js crates/wasm-quarto-hub-client/.cargo/config.
 
 ---
 
-### Task 21: Update pampa/CLAUDE.md
+### Task 21: Update pampa/AGENTS.md
 
 **Files:**
-- Modify: `crates/pampa/CLAUDE.md`
+- Modify: `crates/pampa/AGENTS.md`
 
 Add a section about WASM tests so AI assistants know when and how to add them.
 
 - [ ] **Step 1: Append WASM testing section**
 
-Add at the end of `crates/pampa/CLAUDE.md`:
+Add at the end of `crates/pampa/AGENTS.md`:
 
 ```markdown
 
@@ -973,7 +973,7 @@ library functions.
 
 WASM-specific code paths (restricted Lua stdlib, synthetic io/os modules) are tested by
 dedicated smoke tests in `crates/pampa/tests/wasm_lua.rs` that run on the real
-`wasm32-unknown-unknown` target in CI. See `crates/pampa/CLAUDE.md` for details on when
+`wasm32-unknown-unknown` target in CI. See `crates/pampa/AGENTS.md` for details on when
 to add WASM tests.
 
 **Never add `test` to the `#[cfg(target_arch = "wasm32")]` guard.** This was a prior pattern
@@ -987,7 +987,7 @@ that caused Windows test failures. WASM coverage is provided by the real WASM te
 - [ ] **Step 1: Stage and commit**
 
 ```bash
-git add dev-docs/wasm.md crates/pampa/CLAUDE.md .claude/rules/wasm.md claude-notes/instructions/testing.md
+git add dev-docs/wasm.md crates/pampa/AGENTS.md .claude/rules/wasm.md claude-notes/instructions/testing.md
 git commit -m "$(cat <<'EOF'
 Document WASM testing convention and architecture
 
@@ -995,7 +995,7 @@ Rewrite dev-docs/wasm.md as single source of truth for WASM in this
 project: architecture, build pipeline, testing strategy, and C toolchain
 requirements.
 
-Add WASM testing guidance to pampa/CLAUDE.md and .claude/rules/wasm.md
+Add WASM testing guidance to pampa/AGENTS.md and .claude/rules/wasm.md
 to prevent regression of the cfg test proxy pattern.
 
 Update testing.md to reflect the new native vs WASM testing approach.
@@ -1017,7 +1017,7 @@ don't resolve. Use `$PWD` in local docs and `${{ github.workspace }}` in CI.
 - [x] Update `.github/workflows/test-suite.yml` — absolute path via `${{ github.workspace }}`
 - [x] Update `dev-docs/wasm.md` — `$PWD` in local run instructions
 - [x] Update `crates/pampa/tests/wasm_lua.rs` — `$PWD` in doc comment
-- [x] Update `crates/pampa/CLAUDE.md` — `$PWD` in WASM test instructions
+- [x] Update `crates/pampa/AGENTS.md` — `$PWD` in WASM test instructions
 - [x] Document why `-fno-builtin` is needed for tests but not production (debug vs release)
 
 ### Task 28: Gate wasm-incompatible dev-dependencies

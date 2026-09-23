@@ -119,7 +119,7 @@ The grammar treats shortcodes as inline only — a standalone `{{< video ... >}}
 
 ### Phase 1 — Failing tests (TDD)
 
-Per `crates/pampa/CLAUDE.md`: write tests first, run, see them fail, *then* implement.
+Per `crates/pampa/AGENTS.md`: write tests first, run, see them fail, *then* implement.
 
 - [x] Add a **direct qmd → qmd writer** test (the existing qmd-json-qmd suite does not exercise `write_shortcode`). New fixtures under `tests/snapshots/qmd/shortcode-*.qmd` covered by `unit_test_snapshots_qmd` (`tests/test.rs:293`):
   - [x] `shortcode-name-only.qmd` — `{{< meta >}}`

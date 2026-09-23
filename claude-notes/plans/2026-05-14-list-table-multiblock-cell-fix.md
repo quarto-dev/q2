@@ -15,7 +15,7 @@
 
 The canonical valid shape — first `Plain`/`Paragraph` inline with the marker, blank line, then subsequent blocks at indent-4 — round-trips cleanly (`claude-notes/issue-reports/183/expected-output.qmd`).
 
-## TDD ground rules (from `crates/pampa/CLAUDE.md`)
+## TDD ground rules (from `crates/pampa/AGENTS.md`)
 
 1. Write the failing test.
 2. Confirm it fails as expected.
