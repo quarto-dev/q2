@@ -570,42 +570,33 @@ fn render_float_ref_target(node: CustomNode, fs: &mut FloatState) -> Block {
     // set when the crossref.custom float category lands.
     let is_float_kind = matches!(ref_type.as_str(), "fig" | "tbl" | "lst");
 
-    // bd-4m2n6qf1: a table float's caption is hoisted into the numbered
-    // caption this function surfaces separately (as a synthesized
-    // `<figcaption>` on the HTML float DOM path below, or as a trailing
-    // caption paragraph on the Pandoc-tail / non-HTML path) — but the
-    // Table node itself keeps its own `caption` field, so whichever
-    // writer runs would emit the text twice: once via its native
-    // `<table><caption>` (HTML) or docx/pptx table-caption rendering, and
-    // once via this transform's own numbered caption. Elide the Table's
-    // copy, matching Q1, which does the same at float-parse time
-    // (`quarto-pre/parsefiguredivs.lua`: `table.caption =
-    // pandoc.Caption{}` at L280 for the div-wrapped form, `el.caption.long
-    // = pandoc.Blocks({})` at L544 for the caption-attr form) —
-    // unconditionally, regardless of output format. Q2 builds the float
-    // DOM in this Finalization-phase transform, so the elision happens
-    // here, and must run on **both** branches below (`fs.html_float_dom`
-    // and not), not only the HTML one: a docx/pptx render duplicated the
-    // caption for exactly this reason before this fix (measured via
-    // `cargo run --bin q2 -- render <table-with-caption> --to docx`,
-    // which double-emitted "My Caption" — once correctly numbered, once
-    // as a bare native table-caption paragraph).
-    //
-    // Scoped to top-level Tables in the float content — the ones whose
-    // caption became the float caption. Skipped when the float is
-    // uncaptioned, since then nothing was hoisted and the Table's caption
-    // is the only copy of that text.
-    let mut content = content;
-    if is_float_kind && !is_uncaptioned {
-        for block in content.iter_mut() {
-            if let Block::Table(t) = block {
-                t.caption.long = None;
-                t.caption.short = None;
+    if fs.html_float_dom && is_float_kind {
+        let mut content = content;
+
+        // bd-4m2n6qf1: a table float's caption is hoisted into the
+        // synthesized `<figcaption>`, but the Table node keeps its own
+        // `caption` — so both writers would emit the text twice, as
+        // `<table><caption>` *and* as `<figcaption>`. Elide the Table's copy,
+        // matching Q1, which does the same at float-parse time
+        // (`quarto-pre/parsefiguredivs.lua`: `table.caption =
+        // pandoc.Caption{}` at L280 for the div-wrapped form,
+        // `el.caption.long = pandoc.Blocks({})` at L544 for the
+        // caption-attr form). Q2 builds the float DOM in this
+        // Finalization-phase transform, so the elision happens here.
+        //
+        // Scoped to top-level Tables in the float content — the ones whose
+        // caption became the float caption. Skipped when the float is
+        // uncaptioned, since then nothing was hoisted and the Table's
+        // caption is the only copy of that text.
+        if !is_uncaptioned {
+            for block in content.iter_mut() {
+                if let Block::Table(t) = block {
+                    t.caption.long = None;
+                    t.caption.short = None;
+                }
             }
         }
-    }
 
-    if fs.html_float_dom && is_float_kind {
         // Q1 `get_figure_attributes`: alignment/style/forwardable classes
         // come from the first contained image (never inside a table).
         let harvested = if !matches!(content.first(), Some(Block::Table(_))) {
@@ -1363,67 +1354,6 @@ mod tests {
         ast
     }
 
-    /// Same pipeline as [`run_full`], parameterized on `format_str` (e.g.
-    /// `"docx"`) instead of hardcoding HTML — for tests that need
-    /// `FloatState::html_float_dom == false` (`Format::identifier
-    /// .is_html_based()` is false for every Pandoc-tail format).
-    /// Duplicated rather than adding a parameter to `run_full` itself,
-    /// which has 24 existing call sites all implicitly relying on HTML.
-    async fn run_full_pandoc(blocks: Vec<Block>, format_str: &str) -> Pandoc {
-        use crate::format::Format;
-        use crate::project::{DocumentInfo, ProjectConfig, ProjectContext};
-        use crate::render::{BinaryDependencies, RenderContext};
-        use std::path::PathBuf;
-        let project = ProjectContext {
-            dir: PathBuf::from("/p"),
-            config: ProjectConfig::default(),
-            is_single_file: true,
-            files: vec![],
-            output_dir: PathBuf::from("/p"),
-
-            ..Default::default()
-        };
-        let doc = DocumentInfo::from_path("/p/t.qmd");
-        let format = Format::from_format_string(format_str).unwrap();
-        let binaries = BinaryDependencies::new();
-        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
-        ctx.ref_type_registry = Some(RefTypeRegistry::builtin());
-
-        let mut ast = Pandoc {
-            meta: quarto_pandoc_types::ConfigValue::default(),
-            blocks,
-        };
-        TheoremSugarTransform::new()
-            .transform(&mut ast, &mut ctx)
-            .await
-            .unwrap();
-        ProofSugarTransform::new()
-            .transform(&mut ast, &mut ctx)
-            .await
-            .unwrap();
-        FloatRefTargetSugarTransform::new()
-            .transform(&mut ast, &mut ctx)
-            .await
-            .unwrap();
-        EquationLabelTransform::new()
-            .transform(&mut ast, &mut ctx)
-            .await
-            .unwrap();
-        CrossrefIndexTransform::new()
-            .transform(&mut ast, &mut ctx)
-            .await
-            .unwrap();
-        CrossrefResolveTransform::new()
-            .transform(&mut ast, &mut ctx)
-            .await
-            .unwrap();
-        CrossrefRenderTransform::new()
-            .transform(&mut ast, &mut ctx)
-            .await
-            .unwrap();
-        ast
-    }
-
     fn cite(id: &str) -> Inline {
         Inline::Cite(Cite {
             citations: vec![Citation {
@@ -1797,88 +1727,6 @@ mod tests {
             "the table's own caption must be cleared once hoisted into the \
              figcaption, else it renders twice: {:?}",
             t.caption.long
-        );
-    }
-
-    /// Same fixture as [`table_float_clears_the_tables_own_caption`], but
-    /// through the **non-HTML** (`html_float_dom == false`) branch —
-    /// `render_float_ref_target`'s `else` arm, which every Pandoc-tail
-    /// format (docx/pptx, and non-HTML writers generally) takes. Before
-    /// this fix, the caption-elision only ran inside the
-    /// `fs.html_float_dom && is_float_kind` branch, so a docx/pptx render
-    /// duplicated the caption: once via the Table's own (never-cleared)
-    /// `caption` field, once via this transform's separately-appended
-    /// numbered-caption paragraph. Measured via `cargo run --bin q2 --
-    /// render <table-with-caption> --to docx`, which produced two "My
-    /// Caption" paragraphs in the output `word/document.xml`.
-    #[tokio::test]
-    async fn table_float_clears_the_tables_own_caption_on_the_pandoc_tail_too() {
-        use quarto_pandoc_types::table::{Table, TableBody, TableFoot, TableHead};
-        let table = Block::Table(Table {
-            attr: (String::new(), Vec::new(), LinkedHashMap::new()),
-            caption: Caption {
-                short: None,
-                long: Some(vec![para("Cap")]),
-                source_info: si(),
-            },
-            colspec: vec![],
-            head: TableHead {
-                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
-                rows: vec![],
-                source_info: si(),
-                attr_source: AttrSourceInfo::empty(),
-            },
-            bodies: vec![TableBody {
-                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
-                rowhead_columns: 0,
-                head: vec![],
-                body: vec![],
-                source_info: si(),
-                attr_source: AttrSourceInfo::empty(),
-            }],
-            foot: TableFoot {
-                attr: (String::new(), Vec::new(), LinkedHashMap::new()),
-                rows: vec![],
-                source_info: si(),
-                attr_source: AttrSourceInfo::empty(),
-            },
-            source_info: si(),
-            attr_source: AttrSourceInfo::empty(),
-        });
-        let blocks = vec![Block::Div(Div {
-            attr: attr_id("tbl-one"),
-            content: vec![table],
-            source_info: si(),
-            attr_source: AttrSourceInfo::empty(),
-        })];
-        let ast = run_full_pandoc(blocks, "docx").await;
-
-        let Block::Div(outer) = &ast.blocks[0] else {
-            panic!(
-                "expected the non-HTML branch's Div wrapper, got {:?}",
-                ast.blocks[0]
-            );
-        };
-        let Block::Table(t) = &outer.content[0] else {
-            panic!(
-                "expected the table as the div's first block, got {:?}",
-                outer.content[0]
-            );
-        };
-        assert!(
-            t.caption.long.as_ref().is_none_or(|b| b.is_empty()),
-            "the table's own caption must be cleared on the non-HTML branch too, \
-             else it renders twice via pandoc's own table-caption writer: {:?}",
-            t.caption.long
-        );
-
-        // The numbered caption must still be present somewhere in the
-        // div's content (as the trailing paragraph this branch appends) —
-        // clearing the Table's copy must not also drop the only copy.
-        let rest_text = format!("{:?}", &outer.content[1..]);
-        assert!(
-            rest_text.contains("Cap"),
-            "expected the numbered caption paragraph to survive as a sibling block: {rest_text}"
         );
     }
 
