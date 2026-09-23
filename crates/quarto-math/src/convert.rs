@@ -21,7 +21,7 @@ use crate::ast::Node;
 use crate::diagnostics::diagnostics;
 use crate::normalize::{Mode, Normalized, normalize};
 use crate::spec::Spec;
-use crate::{omml, typst};
+use crate::{mathml, omml, typst};
 
 /// Output language.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,6 +30,8 @@ pub enum Target {
     Omml,
     /// Plain Typst math, the inside of a `$ … $` block.
     Typst,
+    /// MathML Core, a complete `<math>` element (bd-9z83tcv0).
+    MathMl,
 }
 
 /// Result of [`convert`].
@@ -79,6 +81,7 @@ pub fn render(tree: &Normalized, target: Target) -> String {
     match target {
         Target::Omml => omml::to_omml(tree),
         Target::Typst => typst::to_typst(tree),
+        Target::MathMl => mathml::to_mathml(tree),
     }
 }
 

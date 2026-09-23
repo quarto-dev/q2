@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mrow><msup><mi>x</mi><mn>2</mn></msup><merror><mtext>3</mtext></merror></mrow></mrow><annotation encoding="application/x-tex">x^2^3</annotation></semantics></math>

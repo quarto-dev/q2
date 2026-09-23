@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi><mo>∧</mo><mi>q</mi><mo>∨</mo><mo>¬</mo><mi>r</mi><mo>⟹</mo><mi>s</mi><mo>⟺</mo><mi>t</mi><mo>⊢</mo><mi>u</mi><mo>⊧</mo><mi>v</mi></mrow><annotation encoding="application/x-tex">p \land q \lor \neg r \implies s \iff t \vdash u \models v</annotation></semantics></math>

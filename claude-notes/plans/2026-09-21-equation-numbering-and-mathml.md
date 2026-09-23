@@ -1,7 +1,9 @@
 # Format-specific equation numbering and `html-math-method: mathml`
 
 **Status:** approved 2026-09-21 (all five open decisions settled with the
-user, each as recommended); executing Phase 1.
+user, each as recommended). Phases 1–3 implemented the same day. PRs: #708 (Phase 1,
+against `main`), #709 (Phase 2, stacked on #706) and #710 (Phase 3, stacked
+on #709), the last two linked into the GitHub stack #705 → #706 → #709 → #710.
 **Strands:** bd-vlhi2zkj (Phase 1, equation numbering; branch
 `braid/bd-vlhi2zkj-equation-numbering` off `main`), bd-9z83tcv0 (Phase 2,
 MathML writer, p2), bd-3evfzwal (Phase 3, `MathMlStage`; blocked on the
@@ -225,13 +227,13 @@ branch when it rebases.
 Mirrors `typst.rs`: one file, one snapshot per fixture, a corpus-wide
 validity check standing in for the compile check Typst has.
 
-- [ ] **Validity test** (`tests/integration/mathml.rs`): every fixture's
+- [x] (2026-09-21; `every_fixture_is_valid_mathml_core`, a quick-xml walk checking element allowlist, fixed child counts for `mfrac`/`msub`/…/`munderover`, and `mathvariant`) **Validity test** (`tests/integration/mathml.rs`): every fixture's
       output parses with `quick-xml`, uses only MathML Core elements
       (`math mrow mi mn mo mtext mspace ms msub msup msubsup munder mover
       munderover mfrac msqrt mroot mtable mtr mtd mstyle mpadded mphantom
       merror semantics annotation`, plus `menclose`, see decisions), and
       the only `mathvariant` value is `normal`. Snapshot per fixture.
-- [ ] **Structural tests**: `Run` splits to `mi`/`mn`/`mo` via
+- [x] (2026-09-21; 13 structural tests) **Structural tests**: `Run` splits to `mi`/`mn`/`mo` via
       `split::split_run` with a single-letter `mi` italic by default;
       `Nary` + `Scripts` → `munderover` in display / `msubsup` inline
       (`LimLoc` rules identical to OMML); `Func` → `mi` + U+2061 function
@@ -247,22 +249,33 @@ validity check standing in for the compile check Typst has.
       `mspace width="…em"` (negative widths allowed in Core);
       `Phantom` → `mphantom` (+ `mpadded` for `h`/`v` only);
       `Color` → `mstyle mathcolor`; `Text` → `mtext`.
-- [ ] **Style variants**: `Style { variant }` maps each letter and digit of
+- [x] (2026-09-21; `styled_char` + unit test over every variant and hole) **Style variants**: `Style { variant }` maps each letter and digit of
       its body into the Mathematical Alphanumeric Symbols block
       (`U+1D400…`), with the reserved-codepoint holes table (`ℎ ℬ ℰ ℱ ℋ ℐ
       ℒ ℳ ℛ ℂ ℍ ℕ ℙ ℚ ℝ ℤ ℭ ℌ ℑ ℜ ℨ`, plus the `Roman` variant which is
       `mathvariant="normal"` on a single-letter `mi`). Unit test the table
       against the Unicode chart for one letter per variant and every hole.
-- [ ] **Escaping**: `<`, `&`, `>` in `mo`/`mi`/`mtext`/`annotation`.
-- [ ] Implement `crates/quarto-math/src/mathml.rs`, `Target::MathMl` in
+- [x] (2026-09-21) **Escaping**: `<`, `&`, `>` in `mo`/`mi`/`mtext`/`annotation`.
+- [x] (2026-09-21; `Normalized` gained a `text` field so the writer can emit the `<annotation>`; `-` in runs is emitted as U+2212) Implement `crates/quarto-math/src/mathml.rs`, `Target::MathMl` in
       `convert.rs`, `render()` arm, crate docs. Runs `split_run` on every
       `Run` (the pass the parent plan reserved for this).
-- [ ] `cargo xtask verify --skip-hub-build` (quarto-math only), then the
+- [x] (2026-09-21: `cargo xtask verify --skip-hub-build` green; `cargo check --target wasm32-unknown-unknown -p quarto-math` clean) `cargo xtask verify --skip-hub-build` (quarto-math only), then the
       full verify once Phase 3 touches `quarto-core`.
+
+**Found while snapshotting (2026-09-21):** the normalizer dropped primes
+(`f'` → `f`; the committed Typst snapshot for `basic/prime` read
+`f ( x ) = f ( x )`). mitex parses `f'` as an attachment with no `^`/`_`
+operator and `attach` returned only the base. Fixed under TDD in this
+phase (5 tests in `normalize.rs`): a prime is a superscript `Sym`, repeated
+primes merge into `″`/`‴`/`⁗`, and `x'^2` shares the superscript slot
+instead of raising a double-superscript error. Six snapshots changed
+(`basic/prime`, `scripts/prime-with-sup` × normalize/OMML/Typst). The
+same fixture exposes a separate mitex quirk, `f''` after `=` taking `= f`
+as its base, filed as bd-0mzhnxft.
 
 ### Phase 3 — `MathMlStage` for `format: html` (new strand, stacked on #706 + Phase 1)
 
-- [ ] **End-to-end tests in `math_mode_pipeline.rs`**: `html-math-method:
+- [x] (2026-09-21; 5 tests appended to `math_mode_pipeline.rs`) **End-to-end tests in `math_mode_pipeline.rs`**: `html-math-method:
       mathml` with inline + display + numbered math → `<math` present, the
       `\(`/`\[` delimiters absent, no MathJax/KaTeX loader, the numbered
       equation carries its sibling label; an expression with an unknown
@@ -270,33 +283,68 @@ validity check standing in for the compile check Typst has.
       render diagnostics, and (hybrid, see decisions) the MathJax loader
       present; a math-free document → no `<math`, no loader; a website with
       one mathml page and one math-free page.
-- [ ] **Stage unit tests**: converts `Inline::Math` inside paragraphs,
+- [x] (2026-09-21; 5 tests in `math_ml.rs`; the walker is now the shared `crate::ast_walk::for_each_inline_mut`, which `EquationNumberStage` uses too) **Stage unit tests**: converts `Inline::Math` inside paragraphs,
       headers, list items, table cells and `CustomNode` slots (reuse the
       walker shape of `doc_has_math`); passes `Math.text_source` (falling
       back to `source_info`) so diagnostics point into the `.qmd`; leaves
       failed expressions as `Inline::Math`.
-- [ ] **`MathJsStage` hybrid test**: for method `mathml`, injection happens
+- [x] (2026-09-21) **`MathJsStage` hybrid test**: for method `mathml`, injection happens
       iff an `Inline::Math` survives the MathML stage.
-- [ ] Implement `crates/quarto-core/src/stage/stages/math_ml.rs`, registered
+- [x] (2026-09-21; conversion errors are downgraded to warnings since the page still renders via MathJax; quarto-core now depends on quarto-math) Implement `crates/quarto-core/src/stage/stages/math_ml.rs`, registered
       right after `EquationNumberStage`, gated on `MathMethod::MathMl`, using
       `quarto_math::convert(text, mode, Target::MathMl, &text_source,
       Spec::builtin())`, `ctx.add_diagnostics` for every conversion.
       Add `"math-ml"` to `Q2_PREVIEW_STAGE_EXCLUDED` (the preview renders
       `Inline::Math` with KaTeX client-side).
-- [ ] `MathEngine::from_meta` (via `MathMethod`): `MathMl` maps to the
+- [x] (2026-09-21) `MathEngine::from_meta` (via `MathMethod`): `MathMl` maps to the
       MathJax default engine when leftovers exist, `None` otherwise.
-- [ ] Docs: new `docs/guides/formats/html/math.qmd` documenting
+- [x] (2026-09-21; linked from `Q-22-1`'s page; the HTML format guides are not in the docs sidebar today, same as `themes.qmd`) Docs: new `docs/guides/formats/html/math.qmd` documenting
       `html-math-method` (`mathjax` default, `katex`, `mathml` and its
       browser/font caveats, the hybrid fallback and the `Q-22-*` warnings);
       link `Q-22-1`'s page to it.
-- [ ] **End-to-end browser verification** (required by CLAUDE.md): render
+- [x] (2026-09-21, see below) **End-to-end browser verification** (required by CLAUDE.md): render
       the probe document with `cargo run --bin q2 -- render`, open it in a
       real browser (Chrome MCP, or the headless Playwright fallback), confirm
       `document.querySelector('math')` has a non-zero box and the label sits
       on the right of the numbered equation; screenshot. Record invocation
       and output snippet here.
-- [ ] Full `cargo xtask verify` (quarto-core changed; hub-client WASM leg
+- [x] (2026-09-21: full `cargo xtask verify` green — 14248 Rust tests, ts-packages, hub-client build incl. the WASM leg with quarto-math linked in, hub-client tests) Full `cargo xtask verify` (quarto-core changed; hub-client WASM leg
       picks up the new quarto-math code path).
+
+**End-to-end verification (2026-09-21, real binary + headless Chromium,
+output inspected).** Probe document with `html-math-method: mathml`:
+inline `$x^2 + \frac{a}{b}$` and `$\alpha \leq \beta$`, a numbered
+display equation (`\sum … \int …` with `{#eq-one}`), a display block with
+`pmatrix` + `cases`, an `@eq-one` reference, and one deliberately
+unconvertible `$x + \bogus y$`. `cargo run --bin q2 -- render doc.qmd`
+prints exactly one diagnostic:
+
+```
+Warning: [Q-22-1] Unknown Math Command
+   ╭─[ doc.qmd:20:40 ]
+20 │ See @eq-one. This one falls back: $x + \bogus y$.
+   │                                        ───┬──
+   │                                           ╰──── unknown command `\bogus`
+```
+
+The HTML has four `<math xmlns=…>` elements (two `display="block"`), the
+numbered equation as
+`…</math></span><span class="quarto-eq-number">(1)</span></span>`, the
+leftover as `<span class="math inline">\(x + \bogus y\)</span>`, and one
+MathJax config whose `skipHtmlTags` now lists `annotation`. Headless
+Chromium (Playwright, MathJax allowed to load from the CDN) reports: the
+four native `<math>` boxes have heights 22/16/27/39 px; exactly one
+MathJax-typeset element exists (`x+\bogus y`); the `(1)` label sits to
+the right of the equation, flush with the row's right edge, vertically
+centred on it. Screenshot reviewed: fractions, the sum with under/over
+limits, the integral with side limits, the fenced matrix and the cases
+brace all render natively.
+
+The first browser pass caught a real bug: q2's MathJax config overrode
+MathJax's default `skipHtmlTags`, dropping `annotation`, so the fallback
+loader re-typeset the `\begin{pmatrix}`/`\begin{cases}` text inside the
+converted math's annotations (zero-size assistive MathML in the DOM).
+Fixed with a unit test on the config and an end-to-end assertion.
 
 ## Decisions (all settled 2026-09-21, each as recommended)
 

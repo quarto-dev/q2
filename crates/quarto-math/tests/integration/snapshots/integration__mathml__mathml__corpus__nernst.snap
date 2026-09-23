@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>E</mi><mrow><mi>c</mi><mi>e</mi><mi>l</mi><mi>l</mi></mrow></msub><msub><msup><mrow><mo>=</mo><mi>E</mi></mrow><mo>∘</mo></msup><mrow><mi>c</mi><mi>e</mi><mi>l</mi><mi>l</mi></mrow></msub><mo>−</mo><mfrac><mrow><mi>R</mi><mi>T</mi></mrow><mrow><mi>n</mi><mi>ℑ</mi></mrow></mfrac><mi>ln</mi><mo>⁡</mo><msub><msup><mrow><mi>Q</mi><mo>=</mo><mi>E</mi></mrow><mo>∘</mo></msup><mrow><mi>c</mi><mi>e</mi><mi>l</mi><mi>l</mi></mrow></msub><mo>−</mo><mfrac><mn>0.0592</mn><mi>n</mi></mfrac><mi>log</mi><mo>⁡</mo><mi>Q</mi></mrow><annotation encoding="application/x-tex">E_{cell} = E^\circ _{cell} - \frac{{RT}}{{n\Im }}\ln Q = E^\circ _{cell} - \frac{{0.0592}}{n}\log Q</annotation></semantics></math>

@@ -4,6 +4,7 @@
 pub mod convert;
 pub mod diagnostics;
 pub mod fixture_corpus;
+pub mod mathml;
 pub mod normalize;
 pub mod omml;
 pub mod omml_schema;

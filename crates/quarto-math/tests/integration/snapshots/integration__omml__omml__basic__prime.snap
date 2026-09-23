@@ -2,4 +2,4 @@
 source: crates/quarto-math/tests/integration/omml.rs
 expression: to_omml(&n)
 ---
-<m:oMath><m:r><m:t>f</m:t></m:r><m:r><m:t>(</m:t></m:r><m:r><m:t>x</m:t></m:r><m:r><m:t>)</m:t></m:r><m:r><m:t>=</m:t></m:r><m:r><m:t>f</m:t></m:r><m:r><m:t>(</m:t></m:r><m:r><m:t>x</m:t></m:r><m:r><m:t>)</m:t></m:r></m:oMath>
+<m:oMath><m:sSup><m:e><m:r><m:t>f</m:t></m:r></m:e><m:sup><m:r><m:t>′</m:t></m:r></m:sup></m:sSup><m:r><m:t>(</m:t></m:r><m:r><m:t>x</m:t></m:r><m:r><m:t>)</m:t></m:r><m:sSup><m:e><m:r><m:t>=</m:t></m:r><m:r><m:t>f</m:t></m:r></m:e><m:sup><m:r><m:t>″</m:t></m:r></m:sup></m:sSup><m:r><m:t>(</m:t></m:r><m:r><m:t>x</m:t></m:r><m:r><m:t>)</m:t></m:r></m:oMath>

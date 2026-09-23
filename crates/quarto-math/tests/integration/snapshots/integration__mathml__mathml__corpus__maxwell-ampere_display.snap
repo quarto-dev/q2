@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mo>∇</mo><mo>×</mo><mover accent="true"><mi>B</mi><mo>→</mo></mover><mo>=</mo><msub><mi>μ</mi><mn>0</mn></msub><mover accent="true"><mi>J</mi><mo>→</mo></mover><mo>+</mo><msub><mi>μ</mi><mn>0</mn></msub><msub><mi>ϵ</mi><mn>0</mn></msub><mfrac><mrow><mo>∂</mo><mover accent="true"><mi>E</mi><mo>→</mo></mover></mrow><mrow><mo>∂</mo><mi>t</mi></mrow></mfrac></mrow><annotation encoding="application/x-tex">\nabla \times \vec{B} = \mu_0 \vec{J} + \mu_0 \epsilon_0 \frac{\partial \vec{E}}{\partial t}</annotation></semantics></math>

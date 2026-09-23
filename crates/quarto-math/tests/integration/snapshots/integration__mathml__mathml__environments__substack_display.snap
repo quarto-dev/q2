@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><munder><mo>∑</mo><mtable><mtr><mtd><mrow><mi>i</mi><mo>&lt;</mo><mi>j</mi></mrow></mtd></mtr><mtr><mtd><mrow><mi>j</mi><mo>&lt;</mo><mi>k</mi></mrow></mtd></mtr></mtable></munder><msub><mi>a</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub></mrow><annotation encoding="application/x-tex">\sum_{\substack{i&lt;j \\ j&lt;k}} a_{ij}</annotation></semantics></math>

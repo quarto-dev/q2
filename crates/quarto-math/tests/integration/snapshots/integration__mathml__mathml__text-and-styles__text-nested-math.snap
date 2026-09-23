@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mtext>if $x &gt; 0$ then</mtext></mrow><annotation encoding="application/x-tex">\text{if $x &gt; 0$ then}</annotation></semantics></math>

@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mstyle displaystyle="true"><mfrac><mi>a</mi><mi>b</mi></mfrac></mstyle><mo>+</mo><mstyle displaystyle="false"><mfrac><mi>c</mi><mi>d</mi></mfrac></mstyle></mrow><annotation encoding="application/x-tex">\dfrac{a}{b} + \tfrac{c}{d}</annotation></semantics></math>

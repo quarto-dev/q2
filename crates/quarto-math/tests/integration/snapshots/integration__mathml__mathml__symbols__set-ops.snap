@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>A</mi><mo>∪</mo><mi>B</mi><mo>∩</mo><mi>C</mi><mo>∖</mo><mi>D</mi><mo>⊂</mo><mi>E</mi><mo>⊃</mo><mi>F</mi><mo>∉</mo><mi>G</mi><mo>∋</mo><mi>H</mi></mrow><annotation encoding="application/x-tex">A \cup B \cap C \setminus D \subset E \supset F \notin G \ni H</annotation></semantics></math>

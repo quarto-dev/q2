@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><munder><mi>max</mi><mi>i</mi></munder><mo>⁡</mo><msub><mi>a</mi><mi>i</mi></msub><mo>+</mo><munder><mi>min</mi><mi>j</mi></munder><mo>⁡</mo><msub><mi>b</mi><mi>j</mi></msub></mrow><annotation encoding="application/x-tex">\max_{i} a_i + \min_{j} b_j</annotation></semantics></math>

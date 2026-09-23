@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi mathvariant="normal">r</mi><mi mathvariant="normal">S</mi></mrow><annotation encoding="application/x-tex">\mathrm r \mathrm S</annotation></semantics></math>

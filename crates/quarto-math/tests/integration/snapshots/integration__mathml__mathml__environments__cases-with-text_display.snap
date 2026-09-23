@@ -1,0 +1,8 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>f</mi><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo><mo>=</mo><mrow><mo stretchy="true">{</mo><mtable columnalign="left"><mtr><mtd><mn>1</mn></mtd><mtd><mrow><mtext>if </mtext><mi>x</mi><mo>∈</mo><mi>A</mi></mrow></mtd></mtr><mtr><mtd><mn>0</mn></mtd><mtd><mtext>otherwise</mtext></mtd></mtr></mtable></mrow></mrow><annotation encoding="application/x-tex">f(x) = \begin{cases}
+1 &amp; \text{if } x \in A \\
+0 &amp; \text{otherwise}
+\end{cases}</annotation></semantics></math>

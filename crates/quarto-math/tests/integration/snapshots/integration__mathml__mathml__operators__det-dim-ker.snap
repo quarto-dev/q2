@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>det</mi><mo>⁡</mo><mi>A</mi><mo>+</mo><mi>dim</mi><mo>⁡</mo><mi>V</mi><mo>+</mo><mi>ker</mi><mo>⁡</mo><mi>T</mi></mrow><annotation encoding="application/x-tex">\det A + \dim V + \ker T</annotation></semantics></math>

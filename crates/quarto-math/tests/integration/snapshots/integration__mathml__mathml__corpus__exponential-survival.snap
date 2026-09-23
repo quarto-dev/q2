@@ -1,0 +1,5 @@
+---
+source: crates/quarto-math/tests/integration/mathml.rs
+expression: to_mathml(&n)
+---
+<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>p</mi><mi>e</mi></msub><mo>=</mo><mn>1</mn><mo>−</mo><msup><mi mathvariant="normal">e</mi><mrow><mo>−</mo><mi>t</mi><mi>λ</mi></mrow></msup></mrow><annotation encoding="application/x-tex">p_e = 1-\mathrm{e}^{-t \lambda}</annotation></semantics></math>
