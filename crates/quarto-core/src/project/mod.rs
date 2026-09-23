@@ -1673,19 +1673,17 @@ fn discover_extensions_only(
     Vec<Extension>,
     Vec<quarto_error_reporting::DiagnosticMessage>,
 ) {
-    // Builtin extensions dir — present on native, irrelevant on WASM (VFS path).
-    #[cfg(not(target_arch = "wasm32"))]
-    let builtin_dir = crate::extension::BUILTIN_EXTENSIONS
-        .path()
-        .ok()
-        .map(|p| p.to_path_buf());
-    #[cfg(target_arch = "wasm32")]
-    let builtin_dir: Option<PathBuf> = None;
+    // All builtin roots (regular extensions dir + vendored extension-subtree
+    // payloads), correct on every target — previously this hardcoded `None`
+    // on WASM even though `stage/context.rs` gave WASM its built-ins via
+    // `builtin_extensions_path`.
+    let builtin_roots = crate::extension::all_builtin_extension_roots(runtime);
+    let builtin_root_refs: Vec<&Path> = builtin_roots.iter().map(|p| p.as_path()).collect();
 
     crate::extension::discover_extensions(
         discovery_anchor,
         project_dir,
-        builtin_dir.as_deref(),
+        &builtin_root_refs,
         runtime,
     )
 }
@@ -2203,12 +2201,10 @@ impl ProjectContext {
         // per-document discovery in `StageContext::new` re-reports
         // them on every render.
         let config_dir = path.parent().unwrap_or(Path::new("."));
-        let builtin_dir = crate::extension::builtin_extensions_path(runtime);
-        let (extensions, load_diagnostics) = crate::extension::discover_project_extensions(
-            config_dir,
-            builtin_dir.as_deref(),
-            runtime,
-        );
+        let builtin_roots = crate::extension::all_builtin_extension_roots(runtime);
+        let builtin_root_refs: Vec<&Path> = builtin_roots.iter().map(|p| p.as_path()).collect();
+        let (extensions, load_diagnostics) =
+            crate::extension::discover_project_extensions(config_dir, &builtin_root_refs, runtime);
 
         // Resolve `project.type` (bd-ad7i1pc6). Built-in names parse
         // directly; a custom name resolves against the discovered

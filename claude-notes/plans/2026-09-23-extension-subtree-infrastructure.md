@@ -1,6 +1,6 @@
 # Extension-subtree infrastructure: `xtask pull-extension-subtree` + bundled-payload discovery
 
-**Status:** Phase 1 done. **Unblocked** — deliberately independent of the two
+**Status:** Phase 2 done. **Unblocked** — deliberately independent of the two
 external PRs ([quarto-dev/quarto-cli#14936](https://github.com/quarto-dev/quarto-cli/pull/14936),
 [PumasAI/quarto-julia-engine#15](https://github.com/PumasAI/quarto-julia-engine/pull/15)).
 **Parent:** [2026-09-03-julia-engine-static-declarations-epic.md](2026-09-03-julia-engine-static-declarations-epic.md)
@@ -137,47 +137,72 @@ dependency (xtask knows the repo root via `create_worktree::repo_root()`).
 
 ### Phase 2 — multi-root builtin discovery + subtree roots plumbing
 
-- [ ] **Tests first** (`extension/discover.rs` unit tests, following the
+- [x] **Tests first** (`extension/discover.rs` unit tests, following the
       existing temp-builtin-dir tests at lines 660/700/746):
-  - two builtin roots both scanned, in order, before user extensions;
-  - user `_extensions/` still overrides a subtree-bundled extension of the
-    same name (last-match-wins preserved across the new root boundary);
-  - roots function: env override honored; empty/missing embedded dir → empty
-    list, discovery proceeds with user extensions only (current `None`
-    behavior generalized).
-- [ ] `extension/mod.rs`: `builtin_extension_subtree_roots(runtime) ->
+  - [x] two builtin roots both scanned, in order, before user extensions
+    (`test_multiple_builtin_roots_scanned_in_order_before_user`);
+  - [x] user `_extensions/` still overrides a subtree-bundled extension of the
+    same name (last-match-wins preserved across the new root boundary)
+    (`test_user_extension_overrides_subtree_bundled_extension`);
+  - [x] roots function: env override honored; empty/missing embedded dir →
+    empty list, discovery proceeds with user extensions only (current `None`
+    behavior generalized) — `extension::tests::builtin_extension_subtree_roots_honors_env_override`
+    and `..._empty_when_no_subtrees_registered` in `extension/mod.rs`.
+    (Caught a real bug while writing the first two: the fixture `_extension.yml`s
+    lacked a `contributes:` key, which `read_extension` requires — every
+    extension silently failed to load and both new tests failed with 0 found.
+    Fixed by adding a minimal `contributes.shortcodes` block, matching the
+    existing passing fixtures' shape.)
+- [x] `extension/mod.rs`: `builtin_extension_subtree_roots(runtime) ->
       Vec<PathBuf>` — env override (`QUARTO_EXTENSION_SUBTREES_DIR`, same
       name as D3 and the Phase 3 tests) → per-subtree embedded payloads
       (native `ResourceBundle`; none registered yet beyond the placeholder,
       so this list is empty in production until a real subtree is added) →
-      WASM VFS path under `RESOURCE_PATH_PREFIX`.
-- [ ] Pluralize `discover_extensions` / `discover_project_extensions` builtin
-      parameter (`Option<&Path>` → `&[&Path]`, or add list-taking siblings and
-      keep the old ones as wrappers — pick whichever touches less test code);
-      update the three direct call sites `project/mod.rs:1685` (inside
-      `discover_extensions_only`), `project/mod.rs:2207`,
-      `stage/context.rs:299`.
-- [ ] Fix the WASM inconsistency noticed in passing: `project/mod.rs:1677-1684`
-      (inside `discover_extensions_only`, called from both
-      `discover_extensions_and_build_registry` at `:1759` —
-      `ProjectContext::single_file`'s path — and `ProjectContext::discover` at
-      `:1954`) gives WASM **no** built-ins while `stage/context.rs` and
-      `ProjectConfig::parse_config` use `builtin_extensions_path` — align them
-      (one helper, `builtin_extension_subtree_roots`-adjacent, that returns
-      all builtin roots on every target, used by every call site including
-      both `discover_extensions_only` callers). Because the fix lives inside
-      `discover_extensions_only`, neither of its callers needs its own edit —
-      but Phase 3's e2e test should confirm the fix reaches the single-file
-      path (`:1759`), not just the project path (`:1954`); see the Phase 3
-      item below.
-- [ ] `resources/extension-subtrees/README.md` placeholder explaining the
-      directory's purpose (so `include_dir!` has something to embed).
-- [ ] WASM parallel: `wasm-quarto-hub-client/src/lib.rs` gains
-      `populate_extension_subtrees` mirroring `populate_builtin_extensions`
-      (lines 80-88), embedded from `resources/extension-subtrees/`.
-- [ ] Gate: clippy + `cargo nextest run -p quarto-core`; **full `cargo xtask
-      verify`** before commit (wasm-quarto-hub-client is touched — the
-      `--skip-hub-build` shortcut does not apply).
+      WASM VFS path under `RESOURCE_PATH_PREFIX` (via `quarto_sass::RESOURCE_PATH_PREFIX`,
+      already a quarto-core dependency). Also added `all_builtin_extension_roots`,
+      the combined helper the plan's next item calls for.
+- [x] Pluralize `discover_extensions` / `discover_project_extensions` builtin
+      parameter (`Option<&Path>` → `&[&Path]`, chosen directly — the 3
+      production call sites needed rewriting regardless, since none of them
+      could keep a single-root signature once both the regular builtin dir
+      and subtree roots must be scanned); updated the three direct call sites
+      `project/mod.rs` (inside `discover_extensions_only`), `project/mod.rs`
+      (`ProjectConfig::parse_config`), `stage/context.rs` (`StageContext::new`),
+      plus all 13 existing test call sites in `discover.rs` itself.
+- [x] Fixed the WASM inconsistency: `discover_extensions_only` now calls
+      `all_builtin_extension_roots(runtime)` unconditionally (native and WASM
+      alike) instead of hardcoding `None` on WASM — the `#[cfg(...)]` split
+      that gave WASM no built-ins is gone entirely. Because the fix lives
+      inside `discover_extensions_only`, neither of its two callers
+      (`discover_extensions_and_build_registry` / `ProjectContext::discover`)
+      needed its own edit. Phase 3's e2e test (single-file render) will
+      confirm the fix reaches that specific path.
+- [x] `resources/extension-subtrees/README.md` placeholder explaining the
+      directory's purpose (so `include_dir!` has something to embed — git
+      does not track empty directories, and both the native and WASM
+      `include_dir!` call sites require the directory to exist at compile
+      time).
+- [x] WASM parallel: `wasm-quarto-hub-client/src/lib.rs` gains
+      `populate_extension_subtrees` mirroring `populate_builtin_extensions`,
+      embedded from `resources/extension-subtrees/` and wired into
+      `populate_vfs_with_embedded_resources`.
+- [x] Gate: clippy clean; `cargo nextest run -p quarto-core` green (4825
+      passed, 0 failed, 31 skipped — includes the 4 new tests above). Full
+      `cargo xtask verify` green: workspace nextest 14483 passed, 0 failed,
+      200 skipped (+4 over the Phase 1 baseline of 14479, matching exactly
+      the 4 new tests — no stray/duplicated tests crept in). Aside,
+      unrelated to this plan: this worktree's `node_modules` was stale
+      (dated from before the 2026-09-23 branch repurpose) and hit the
+      documented `@esbuild/<platform>` lockfile bug (CLAUDE.md's hub-client
+      section) on the first hub-client build attempt; fixed locally by
+      installing the missing optional package directly rather than
+      regenerating `package-lock.json` (regeneration didn't actually restore
+      the platform entries — a deeper pre-existing npm/monorepo quirk, out
+      of scope here). `package-lock.json` is untouched by this plan.
+      `crates/wasm-quarto-hub-client/Cargo.lock` *did* pick up a large,
+      legitimate diff — that crate's lockfile had never been resolved fresh
+      in this worktree before; kept as-is since it reflects what the
+      successful build actually used.
 
 ### Phase 3 — fake-extension end-to-end
 
