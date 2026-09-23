@@ -9,10 +9,108 @@
 > release timelines. Nothing here should be treated as settled, and no part of
 > it has been started. **Review before acting on any of it.**
 
-**Status:** preliminary draft — research done, not scoped into tasks, not started.
+**Status:** preliminary draft — research done, not scoped into tasks. **In progress
+as of 2026-09-22/23** — see "Developments" below.
 **Author context:** written 2026-09-03 off the back of the worker-leak
-investigation (`0f243f64c` on `julia-orphan-triage`). Nothing here is committed
-to upstream yet.
+investigation (`0f243f64c` on `julia-orphan-triage`).
+
+## Developments (2026-09-22/23)
+
+- **Upstream released v0.2.2 (2026-09-08, PR #14):** Julius merged his own
+  minimal version of the oneShot-worker leak fix — a plain `close` on the error
+  path plus a smoke test — explicitly crediting q2#655 ("Found and fixed by
+  @gordonwoodhull… This is the same fix against our source"). He had the full
+  `errorRunClose` orchestration in front of him and chose the simple one, so
+  **Step 2a is closed as superseded**: our `q2-close-busy-fix` /
+  `worker-busy-recovery` work (busy-worker `forceclose` recovery, non-fatal
+  post-run close, stdio→devnull, worker-close.ts extraction + unit tests) is
+  **not being offered upstream**. The stdio→devnull fix in particular was
+  judged not of general use (likely a troubleshooting artifact). q2's fixture
+  keeps the hardened version, so q2 loses nothing. The branches survive on
+  `gordonwoodhull/quarto-julia-engine-scratch` (the pre-fork repo, renamed —
+  see below).
+- **Step 2c/2b filed as [PumasAI/quarto-julia-engine#15](https://github.com/PumasAI/quarto-julia-engine/pull/15)
+  (2026-09-23):** branch `q2-static-declarations` off upstream `main` (v0.2.2),
+  one commit (`7d72bda`) adding `name:`/`claims:`/`file-extensions:` to
+  `_extension.yml` (values identical to q2's fixture) + CHANGELOG. The PR leads
+  with the **ask: a `q2` branch on PumasAI's repo** (we can't create the target
+  branch ourselves), and explains the accept-and-ignore path to `main`. Filed
+  as a normal PR, not a draft. Its CI is expected to fail on the Q1 schema
+  rejection — that failure is the demonstration of the blocker (F1 re-verified
+  against the dev build during prep).
+- **Step 1 filed as [quarto-dev/quarto-cli#14936](https://github.com/quarto-dev/quarto-cli/pull/14936)
+  (2026-09-23):** branch `external-engine-static-declarations` off Q1 `main`
+  (`e24bcbd1f`), pushed to the `gordonwoodhull/quarto-cli` fork (local remote
+  `history`). Types the four static-declaration keys (`name`, `claims`,
+  `file-extensions`, `claims-files`) in `external-engine` as **accepted and
+  ignored** by Q1, plus the new `external-engine-language-claim` definition;
+  regenerated artifacts + two self-validating schema fixtures; changelog entry
+  in `news/changelog-1.11.md` (new `## Extensions` section). PR body carries
+  the F2 jupyter-over-julia reasoning (`jupyter.ts:113-117` citation) and the
+  empirical before/after (before: all three keys rejected at manifest
+  validation; after: render succeeds, Julia executes `1 + 1` → `2`). Linked
+  back from PumasAI/quarto-julia-engine#15 as promised there. **Now blocked on
+  upstream review.**
+  - **Amended same-day (force-push):** `claims-files` entries also accept an
+    optional `processor:` (bare name `spin` | map `{ name, language?, comment? }`,
+    `name` required) — the TS-engines epic's unexecuted Plan 7b/7c surface for
+    static claiming of files *by content* (percent/spin/ipynb sniff+convert,
+    run natively in q2). Typing follows 7b Phase 1's spec: open bare-name
+    union (not an enum — the registry is name-keyed and 7c adds `ipynb` later),
+    params permissive since Q1 ignores them. Fixtures exercise all forms.
+  - **`gh pr edit` gotcha:** `gh pr edit --body(-file)` fails on this repo with
+    a spurious `Projects (classic) is being deprecated` GraphQL error and
+    silently does NOT update the body. Workaround:
+    `jq -Rs '{body: .}' file | gh api repos/OWNER/REPO/pulls/N -X PATCH --input -`.
+- **Step 4 infrastructure pulled out of the gated sequence (2026-09-23, per
+  Gordon):** the vendoring/discovery machinery — `cargo xtask
+  pull-extension-subtree`, multi-root builtin discovery, WASM plumbing — is
+  **unblocked** and now lives in
+  [2026-09-23-extension-subtree-infrastructure.md](2026-09-23-extension-subtree-infrastructure.md),
+  tested end-to-end with a **fake extension** (the synth-fixture pattern), not
+  julia. Step 4 below shrinks to the julia-specific remainder (one `SUBTREES`
+  row + payload registration + fixture convergence + Q9), still gated on Step
+  2c. Q7/Q8 scoped into the infra plan as D1/D2; the
+  `filterBundledSubtreeEngines` question is resolved there (D4: no analogue
+  needed — q2's extension-contributed engines are registry-only).
+- **Step 3 done (2026-09-23, q2 branch `extension-subtree-infra`):** F5 fixed
+  in q2 — `parse_claims_map` now lowercases claim keys at parse time (both the
+  map-entry and list-shorthand forms, mirroring `normalize_ext`'s
+  file-extensions precedent) and `lookup_static_claim` lowercases the language
+  at lookup, so a `{Julia}` cell hits the static/zero-load resolution path it
+  already claimed dynamically. TDD: three new tests
+  (`parse_claims_map_lowercases_language_keys`,
+  `parse_claims_map_lowercases_list_shorthand_language`,
+  `lookup_static_claim_is_case_insensitive`), RED before the fix, GREEN after;
+  clippy and full workspace nextest green (+3 tests over the
+  extension-subtree-infra Phase 3 baseline, no regressions). Q6 (is `{Julia}`
+  reachable in practice) stays open — the fix is correct either way.
+- **Step 0 has effectively begun asynchronously:** q2#655 floated the q2-branch
+  idea and attached this plan; Julius responded by shipping #14 without
+  engaging on the rest. #15 is now the conversation venue.
+- **Fork-network gotcha (cost a session some time):**
+  `gordonwoodhull/quarto-julia-engine` was a *standalone* repo, not a GitHub
+  fork, so cross-repo PRs failed ("Head sha can't be blank…"). Fixed by
+  renaming it to `quarto-julia-engine-scratch` (old branches/stashes intact;
+  local clone has a `scratch` remote) and forking properly. **Check
+  `isFork: true` before pushing PR branches anywhere.**
+- **Local test-env gotcha:** the extension's smoke suite asserts
+  `julia_server_log.txt` doesn't exist; a leftover in
+  `~/Library/Caches/quarto/julia/` from earlier runs fails that step. Clean
+  stale state before running `tests/run-tests.sh`.
+- **q2 fixture is now drifting from upstream:** fixture = v0.2.1 + our full
+  worker-close version; upstream = v0.2.2 + minimal fix. Convergence is the
+  Step 5 fixture item; keep the deviation deliberate.
+- **quarto-cli dev-checkout gotchas (cost real time this session):** (a) the
+  `quarto` on PATH (`99.9.9`) is `~/src/quarto-cli-scratch-13353`, **not**
+  `~/src/quarto-cli` — always invoke
+  `~/src/quarto-cli/package/dist/bin/quarto` explicitly; an earlier
+  `dev-call build-artifacts` silently ran in the wrong tree. (b) Schema tests
+  read the **generated** `yaml-intelligence-resources.json` bundle, not
+  `definitions.yml` — after editing the DSL you must re-run
+  `dev-call build-artifacts` *before* the tests or you get stale-schema
+  failures. (c) The dev checkout is a shallow clone (depth 1); no history.
+  (d) `run-tests.sh` exits 0 even when tests FAIL — grep the log for FAILED.
 
 ## Overview
 
@@ -207,6 +305,13 @@ on how q2 surfaces `engines` in metadata — not traced.
 
 ## Proposed sequence
 
+> **2026-09-23 restructure:** Steps 1 and 2 are **filed** (see Developments).
+> Step 4's *infrastructure* half has been **pulled out of this gated sequence**
+> into [2026-09-23-extension-subtree-infrastructure.md](2026-09-23-extension-subtree-infrastructure.md)
+> — the vendoring/discovery machinery is unblocked and proceeds now against a
+> fake extension; what remains below in Step 4 is only the julia-specific
+> vendoring, still gated on Step 2c.
+
 ### Step 0 — talk to Julius first
 
 Before any of the below: **discuss with Julius Krumbiegel / PumasAI.** Steps 1
@@ -220,6 +325,11 @@ and 2b add Quarto-2-only surface to *their* extension and constrain *their*
 
 This gates 2b entirely and may change its shape. Do it early — it is cheap and
 it is the step most likely to invalidate the rest of the plan.
+
+*(2026-09-23 update: this began asynchronously — q2#655 floated the q2-branch
+idea with this plan attached; #14/v0.2.2 landed without engaging on it; the
+q2-branch ask is now on the table as PumasAI/quarto-julia-engine#15, awaiting
+an answer.)*
 
 ### Step 1 — quarto-cli: loosen the `external-engine` schema
 
@@ -243,18 +353,15 @@ why Step 2c exists.
 
 ### Step 2 — quarto-julia-engine
 
-**(a) The bug fix — ready now, no dependencies.** Three commits currently on
-`q2-close-busy-fix` (rebased onto upstream v0.2.1, bundle verified in sync):
-
-- `b881e69` redirect the detached server's stdio to devnull
-- `f7c9bfc` recover from a busy/failed oneShot worker close
-- `4e6bc27` close the oneShot worker when the run fails (the leak)
-
-Fully Q1-compatible; no schema dependency; independent of everything else above
-and below. Needs a CHANGELOG entry (enforced by `EnforceChangelog.yml`).
-
-*Open: one PR or three?* They are independently reviewable and the leak fix is
-the one with hard evidence.
+**(a) The bug fix — CLOSED, superseded (see Developments).** Upstream shipped
+its own minimal leak fix as v0.2.2 (PR #14). Our three commits
+(`b881e69` stdio→devnull, `f7c9bfc` busy recovery, `4e6bc27` leak fix) were
+**not** offered upstream — #14's author saw the elaborate version in q2#655 and
+chose the simple one, and the stdio redirect was judged a troubleshooting
+artifact rather than generally useful. The hardened version lives on in q2's
+fixture. If the busy-worker failure mode ever bites upstream users, the
+`worker-busy-recovery` branch (on `gordonwoodhull/quarto-julia-engine-scratch`)
+is ready to mine.
 
 **(b) The static declarations — gated on Step 1 shipping in a stable release.**
 Adds the `name:`/`claims:`/`file-extensions:` block, and must additionally:
@@ -264,10 +371,11 @@ Adds the `name:`/`claims:`/`file-extensions:` block, and must additionally:
 - explain F2 (accept-and-ignore, not a Q1 behavior change) and F3
   (`file-extensions` != `validExtensions`) in the PR body.
 
-**(c) Offer a q2 branch on `PumasAI/quarto-julia-engine` — the unblocker.**
-Because 2b waits on a release cycle, offer to maintain a **branch** on the
-upstream repo (name TBD, e.g. `q2`) carrying the static declarations, so people
-who want to try **Julia in Quarto 2 before it ships** can point at it. This:
+**(c) Offer a q2 branch on `PumasAI/quarto-julia-engine` — FILED as
+[PumasAI/quarto-julia-engine#15](https://github.com/PumasAI/quarto-julia-engine/pull/15)
+(2026-09-23), awaiting Julius.** The PR carries the declarations on
+`q2-static-declarations` and leads with the q2-branch ask. Because 2b waits on
+a release cycle, this branch is the unblocker. It:
 
 - gives early adopters a real, upstream-hosted path with no prerelease
   `quarto-required` and no fork of record,
@@ -284,7 +392,8 @@ Step 0 conversation.*
 
 ### Step 3 — q2: fix the static-claim case sensitivity (F5)
 
-Independent of upstream; can land any time. Options:
+**DONE (2026-09-23)** — option 1 implemented; see Developments. The options
+considered were:
 
 1. Lowercase claim keys at parse in `parse_claims_map` **and** lowercase the
    language at lookup in `lookup_static_claim` (mirrors how `file-extensions`
@@ -301,27 +410,24 @@ registry, RED before the fix.
 
 **Goal:** `q2` ships with Julia support built in — no separate extension
 install. Gated on Step 2c (a stable branch to subtree from). See **F8** for the
-research; the headline is that q2 **already has the discovery + embedding
-machinery**, so this is mostly maintenance tooling, not a port.
+research.
+
+> **2026-09-23: the infrastructure half of this step moved to
+> [2026-09-23-extension-subtree-infrastructure.md](2026-09-23-extension-subtree-infrastructure.md)
+> (unblocked; fake extension).** Once that lands, what remains here is only:
 
 Work items (first pass, not scoped):
 
-- **Vendor the subtree.** `git subtree add --squash` the Step 2c branch into
-  `resources/extension-subtrees/julia-engine/`, mirroring Q1's layout. Decide
-  the git-history cost first (14M — see F8 open question).
-- **Embed only the payload.** Point a second `include_dir!` at
-  `resources/extension-subtrees/julia-engine/_extensions` (68K), not at the
-  subtree root, and expose it through the existing `ResourceBundle` /
-  `builtin_extensions_path()` path. *Open: does `builtin_extensions_path`
-  return one dir (requiring the subtree payload to be merged into the existing
-  bundle) or should discovery accept a list of builtin roots, mirroring Q1's
-  two separate roots?* — this is the main design decision in Step 5.
-- **Port the maintenance command** as `cargo xtask pull-extension-subtree`
-  (Q1: `src/command/dev-call/pull-git-subtree/cmd.ts`): a `SUBTREES` table, last-split
-  detection via `git log --grep="git-subtree-dir: <prefix>$"`, `subtree add`
-  when the prefix is new, `subtree pull --squash` otherwise, no-op when there
-  are no new commits. Drop the `QUARTO_ROOT` env dependency — xtask already
-  knows the repo root.
+- **Add the julia row** to the infra plan's `SUBTREES` table
+  (`PumasAI/quarto-julia-engine`, the Step 2c branch) and run
+  `cargo xtask pull-extension-subtree julia-engine`, vendoring into
+  `resources/extension-subtrees/julia-engine/`. Decide the git-history cost
+  first (14M — F8's open question; the infra plan's D2 sets the "whole repo,
+  embed only `_extensions/`" precedent but does not sign off the size).
+- **Register the payload.** One `include_dir!` static pointing at
+  `resources/extension-subtrees/julia-engine/_extensions` (68K) +
+  registration in the subtree-roots helper, following the infra plan's
+  runbook.
 - **Decide the fixture's future.** If the bundled copy carries the static
   declarations, the hand-maintained fixture fork may be replaceable by (or
   derivable from) the bundled copy — which would retire the drift item in
@@ -330,9 +436,11 @@ Work items (first pass, not scoped):
 - **Runtime prerequisites.** Bundling ships the engine, not Julia itself:
   QuartoNotebookRunner still instantiates on first use (network), and the
   engine host still needs Deno. Worth an explicit UX decision about what
-  `q2` does on a machine with no Julia.
-- *Not investigated:* whether q2 needs an analogue of
-  `filterBundledSubtreeEngines` (F8).
+  `q2` does on a machine with no Julia (Q9).
+- ~~*Not investigated:* whether q2 needs an analogue of
+  `filterBundledSubtreeEngines` (F8).~~ **Resolved by the infra plan's D4:
+  no** — q2's extension-contributed engines are registry-only and never enter
+  pandoc metadata; verification test included there.
 
 ### Step 5 — what else belongs (candidates, not yet decided)
 
@@ -344,8 +452,10 @@ Work items (first pass, not scoped):
   Nothing checks fixture-bundle ≡ fixture-TS (upstream CI does; q2 has no
   equivalent), and nothing tracks fixture-vs-upstream drift. Candidate: a
   documented refresh procedure, optionally an `xtask lint` rule.
-- **Plan 7a (`content-pattern`)** to make `.jl` percent-script input zero-load
-  too (F4) — the other half of "pass-1 happy".
+- **Plan 7b (`processor:` on `claims-files`)** to make `.jl` percent-script
+  input zero-load too (F4) — the other half of "pass-1 happy". *(2026-09-23:
+  7a was tombstoned; 7b/7c own this now, and the Q1 schema side shipped in
+  quarto-cli#14936 — `processor:` is accepted-and-ignored there.)*
 - **Long-term home for the declarations if upstream declines.** q2's fixture
   stays a fork indefinitely; alternatively the design doc's author-side
   document-level `engines: [{julia: {claims: ...}}]` table could carry them
@@ -354,29 +464,36 @@ Work items (first pass, not scoped):
   none; a local stash adds `PumasAI`. Trivial, but pick one.
 - **Housekeeping:** `~/src/quarto-julia-engine` has `stash@{0}` holding
   `.gitignore` + a `q2-test-unknown-key: hello` probe (that probe's question is
-  now answered by F1 — unknown keys are rejected). Drop or apply.
+  now answered by F1 — unknown keys are rejected; re-demonstrated with the dev
+  build while preparing #15). Drop or apply. *(2026-09-23: the GitHub repo was
+  renamed to `quarto-julia-engine-scratch` and replaced by a real fork — see
+  Developments; the stash and old branches are unaffected locally, and the
+  branches also live on the scratch remote.)*
 
 ## Open questions
 
-- **Q1.** Should the quarto-cli schema change *type* the new keys (full
-  property schemas) or just stop being `closed`? Typing them documents the
-  contract and gives good errors, but invites the question "what does Quarto 1
-  do with these?" — to which the answer is "nothing" (F2).
+- **Q1.** ~~Should the quarto-cli schema change *type* the new keys (full
+  property schemas) or just stop being `closed`?~~ *(Resolved 2026-09-23:
+  **typed** — that's what quarto-cli#14936 files; the descriptions answer
+  "what does Quarto 1 do with these?" with "accepts and ignores" inline.)*
 - **Q2.** *(Resolved in this revision — target a stable release, not a
   prerelease.)* Remaining: how long is that cycle, and does it change what we
   do in the meantime beyond Step 2c?
 - **Q3.** Step 0: what does Julius say? Everything in Step 2 is contingent on
   it. Specifically: q2-only keys in `main` or only on a branch; who hosts the
   Step 2c branch; and are they willing to bump `quarto-required` at all.
-- **Q7.** Step 4 layout: one builtin-extensions root (merge the subtree payload
-  into the existing embedded bundle) or teach discovery a **list** of builtin
-  roots (mirroring Q1's separate `extensions` / `extension-subtrees` roots)?
+- **Q7.** ~~Step 4 layout: one builtin-extensions root or a list?~~ *(Moved to
+  the infra plan, 2026-09-23 — resolved there as **D1: list of roots**,
+  mirroring Q1.)*
 - **Q8.** Is 14M of vendored repo acceptable in q2's git history for the sake of
   `git subtree`'s merge tracking, or do we vendor a curated 68K copy and accept
-  manual syncing?
+  manual syncing? *(Scoped 2026-09-23: the infra plan's **D2** sets the
+  whole-repo/merge-tracking precedent with the KB-sized fake; the julia-size
+  sign-off stays here, owned by Step 4.)*
 - **Q9.** Once Julia is bundled, what is the story on a machine without Julia
   installed — silent fallback to jupyter, or a diagnostic?
-- **Q4.** PR 2a: one PR or three?
+- **Q4.** ~~PR 2a: one PR or three?~~ *(Moot as of 2026-09-23 — 2a was
+  superseded by upstream's own v0.2.2 fix; nothing was filed.)*
 - **Q5.** Does q2 want the fixture to track upstream mechanically (refresh
   script + drift lint) or stay a hand-maintained fork?
 - **Q6.** Is `{Julia}` (non-lowercase language) actually reachable in practice,

@@ -472,7 +472,7 @@ pub(crate) fn parse_claims_map(cv: &ConfigValue) -> HashMap<String, Vec<StaticLa
             // `_extension.yml`, which never produces `PandocInlines` here.
             if let Some(lang) = item.as_plain_text() {
                 map.insert(
-                    lang,
+                    lang.to_lowercase(),
                     vec![StaticLanguageClaim {
                         kind: ClaimKind::Primary,
                         priority: None,
@@ -490,7 +490,14 @@ pub(crate) fn parse_claims_map(cv: &ConfigValue) -> HashMap<String, Vec<StaticLa
     for entry in entries {
         let claims = parse_static_language_claims(&entry.key, &entry.value);
         if !claims.is_empty() {
-            map.insert(entry.key.clone(), claims);
+            // F5 (julia epic Step 3): normalize to lowercase, mirroring
+            // `normalize_ext`'s file-extensions precedent. Dynamic claiming
+            // lowercases the language (`claimsLanguage: (language) =>
+            // language.toLowerCase() === "julia"`); without this, a
+            // `{Julia}` cell claims dynamically but silently misses static
+            // (zero-load) resolution. See `lookup_static_claim`'s matching
+            // lowercase lookup.
+            map.insert(entry.key.to_lowercase(), claims);
         }
     }
     map
@@ -2343,6 +2350,82 @@ contributes:
                 assert!(
                     claims.get("x").is_none(),
                     "unrecognized bare kind string must be dropped, not panic"
+                );
+            }
+            other => panic!("expected External, got {:?}", other),
+        }
+    }
+
+    /// F5 (julia epic Step 3): dynamic claiming lowercases the language
+    /// (`claimsLanguage: (language) => language.toLowerCase() === "julia"`),
+    /// so a `{Julia}` cell claims dynamically -- but static claim keys were
+    /// never normalized, so the same cell would silently miss the pass-1
+    /// static resolution `claims:` exists to provide. Mirrors how
+    /// `file-extensions` already normalizes (undotted, lowercase) at parse
+    /// via `normalize_ext` -- claim keys get the same treatment here, both
+    /// for the per-language map form and the top-level list-shorthand form.
+    #[test]
+    fn parse_claims_map_lowercases_language_keys() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/my-ext");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+title: Engine Extension
+author: Author
+contributes:
+  engines:
+    - path: engine.js
+      claims:
+        Julia: primary
+"#,
+        );
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        match &ext.contributes.engines[0] {
+            EngineContribution::External { claims, .. } => {
+                let claims = claims.as_ref().unwrap();
+                assert!(
+                    claims.get("julia").is_some(),
+                    "map-form claim key 'Julia' should be normalized to lowercase 'julia'"
+                );
+                assert!(
+                    claims.get("Julia").is_none(),
+                    "the original-case key should not survive as a separate entry"
+                );
+            }
+            other => panic!("expected External, got {:?}", other),
+        }
+    }
+
+    /// F5, list-shorthand form (`claims: [Julia]`, sugar for
+    /// `claims: {Julia: primary}`): same normalization requirement as the
+    /// map form above.
+    #[test]
+    fn parse_claims_map_lowercases_list_shorthand_language() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/my-ext");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+title: Engine Extension
+author: Author
+contributes:
+  engines:
+    - path: engine.js
+      claims: [Julia]
+"#,
+        );
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+
+        match &ext.contributes.engines[0] {
+            EngineContribution::External { claims, .. } => {
+                let claims = claims.as_ref().unwrap();
+                assert!(
+                    claims.get("julia").is_some(),
+                    "list-shorthand claim 'Julia' should be normalized to lowercase 'julia'"
                 );
             }
             other => panic!("expected External, got {:?}", other),
