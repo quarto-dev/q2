@@ -57,8 +57,16 @@ export function extractMetaBool(meta: unknown): boolean | undefined {
  * Walk a dotted path through a nested Pandoc Meta value and return
  * the leaf node. `meta` is the *top-level* meta object (a plain
  * `Record<string, MetaValue>`); subsequent steps drop into
- * `MetaMap.c` arrays (`{key, key_source, value}` entries — see
- * `crates/pampa/src/writers/json.rs::write_config_value`).
+ * `MetaMap.c`, which is a genuine JSON object (`{key: value, ...}`) —
+ * the Pandoc-superset shape `crates/pampa/src/writers/json.rs`'s
+ * `stream_write_config_value` emits under `JsonConfig { raw: false }`
+ * (which is what q2-preview's AST JSON always uses). Pampa's own
+ * `{key, key_source, value}`-triple array is a separate, `raw: true`
+ * round-trip shape that never reaches this consumer. That writer-side
+ * shape switch landed in bf8cd45dc (to satisfy real `pandoc`'s JSON
+ * reader for the new Pandoc-writer-hybrid path) without updating this
+ * consumer, silently breaking every nested-path lookup — e.g.
+ * `rendered.has-title-block` — until fixed here (bd-6zrmjidd).
  *
  * Returns `undefined` when any segment is missing or the shape
  * doesn't match. The caller is expected to coerce the leaf via
@@ -81,15 +89,20 @@ export function getMetaPath(
             // First step: top-level meta is a plain object.
             cursor = (cursor as Record<string, unknown>)[segment];
         } else {
-            // Subsequent steps: cursor is a MetaMap whose `c` is the
-            // entries array. (`MetaMap` is the only nested-object
-            // variant emitted by the JSON writer.)
+            // Subsequent steps: cursor is a MetaMap whose `c` is a
+            // plain object keyed by the metadata key. (`MetaMap` is
+            // the only nested-object variant emitted by the JSON
+            // writer.)
             const m = cursor as { t?: string; c?: unknown };
-            if (m.t !== 'MetaMap' || !Array.isArray(m.c)) return undefined;
-            const entries = m.c as Array<{ key: string; value: unknown }>;
-            const found = entries.find((e) => e.key === segment);
-            if (!found) return undefined;
-            cursor = found.value;
+            if (
+                m.t !== 'MetaMap' ||
+                !m.c ||
+                typeof m.c !== 'object' ||
+                Array.isArray(m.c)
+            ) {
+                return undefined;
+            }
+            cursor = (m.c as Record<string, unknown>)[segment];
         }
     }
     return cursor;

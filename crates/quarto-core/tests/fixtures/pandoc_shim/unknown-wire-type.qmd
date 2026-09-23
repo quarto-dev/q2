@@ -1,0 +1,3 @@
+::: {.theorem .my-custom-highlight name="My Title"}
+Some unrecognized-type content.
+:::

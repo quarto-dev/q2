@@ -2,68 +2,67 @@
  * footnotes.rs
  * Copyright (c) 2025 Posit, PBC
  *
- * Transform that extracts inline footnotes and creates a footnotes section.
+ * Transform that resolves footnote references/definitions into native
+ * Pandoc `Note` inlines.
  */
 
-//! Footnotes transform for HTML rendering.
+//! Footnotes resolution transform (the "B1" half).
 //!
-//! This transform extracts inline footnotes from the AST and creates a consolidated
-//! footnotes section at the end of the document. It runs in the **normalization phase**
-//! of the pipeline, so user Lua filters see the normalized footnote structure.
+//! This is the semantic half of the footnotes split (see
+//! `claude-notes/designs/pandoc-hybrid-architecture.md` §6). It collects
+//! `[^id]: ...` definitions and resolves `Inline::NoteReference` (and the
+//! pampa-lowered `Span.quarto-note-reference` form) into native
+//! `Inline::Note` inlines — the same primitive pandoc's own markdown reader
+//! produces for `^[...]` inline notes. It runs for **every** output format,
+//! including `Pandoc(_)` (docx, pptx, …), so pandoc's own writers can number
+//! and place footnotes themselves.
+//!
+//! The HTML-specific chrome (`Span#fnrefN` superscript links + the trailing
+//! `Div#footnotes` section with backlinks) is a **separate** transform,
+//! [`crate::transforms::FootnotesResolveTransform`] (`name() ==
+//! "footnotes-resolve"`), registered immediately after this one and excluded
+//! for `Pandoc(_)` profiles. The two communicate only through the
+//! `Inline::Note` AST node: this transform produces it, that one consumes and
+//! destroys it into HTML chrome. Under `HtmlRender`/`RevealjsRender`, running
+//! both back-to-back is byte-identical to the pre-split single-transform
+//! behavior.
 //!
 //! ## Input AST Elements
 //!
-//! - `Inline::Note` - Inline footnote with block content (e.g., `^[footnote text]`)
-//! - `Inline::NoteReference` - Reference to a defined note (e.g., `[^1]`)
-//! - `Block::NoteDefinitionPara` - Single-paragraph note definition
-//! - `Block::NoteDefinitionFencedBlock` - Multi-paragraph note definition
-//!
-//! ## Output Structure
-//!
-//! For `reference-location: document` (default), produces:
-//!
-//! ```html
-//! <p>Text<sup id="fnref1"><a href="#fn1" class="footnote-ref" role="doc-noteref">1</a></sup></p>
-//!
-//! <section id="footnotes" class="footnotes" role="doc-endnotes">
-//!   <hr>
-//!   <ol>
-//!     <li id="fn1">
-//!       <p>Footnote content.<a href="#fnref1" class="footnote-back" role="doc-backlink">↩︎</a></p>
-//!     </li>
-//!   </ol>
-//! </section>
-//! ```
+//! - `Inline::Note` - Inline footnote with block content (e.g., `^[footnote text]`) — left untouched
+//! - `Inline::NoteReference` - Reference to a defined note (e.g., `[^1]`) — resolved into `Inline::Note`
+//! - `Block::NoteDefinitionPara` - Single-paragraph note definition — collected, removed from the AST
+//! - `Block::NoteDefinitionFencedBlock` - Multi-paragraph note definition — collected, removed from the AST
 //!
 //! ## Configuration
 //!
-//! - `reference-location`: Controls footnote placement
-//!   - `document` (default): Footnotes section at end of document
-//!   - `margin`: Convert to margin notes (no section created)
-//!   - `block`/`section`: Handled by Pandoc, transform is a no-op
+//! - `reference-location: block` / `section`: handled by Pandoc itself; this
+//!   transform (and its `-resolve` sibling) is a no-op, under every profile.
 
 use std::collections::HashMap;
 
-use hashlink::LinkedHashMap;
-use quarto_pandoc_types::attr::AttrSourceInfo;
-use quarto_pandoc_types::block::{Block, Div, OrderedList, Paragraph};
-use quarto_pandoc_types::inline::{Inline, Link, Span, Str, Superscript};
+use quarto_pandoc_types::block::{Block, Paragraph, RawBlock};
+use quarto_pandoc_types::inline::{Inline, Note};
 use quarto_pandoc_types::pandoc::Pandoc;
-use quarto_pandoc_types::{Blocks, Inlines, ListNumberDelim, ListNumberStyle};
-use quarto_source_map::{By, SourceInfo};
+use quarto_pandoc_types::{Blocks, Inlines};
+use quarto_source_map::SourceInfo;
+
+use crate::transforms::FOOTNOTE_REF_ID_MARKER_FORMAT;
 
 use quarto_pandoc_types::ConfigValue;
 
 use crate::Result;
+use crate::format::PipelineProfile;
 use crate::render::RenderContext;
 use crate::transform::{AstTransform, TransformPhase};
 use crate::transforms::ReferenceLocation;
 
-/// Transform that extracts footnotes and creates a footnotes section.
+/// Transform that resolves footnote references/definitions into native
+/// `Inline::Note` inlines.
 ///
-/// This transform is part of the **normalization phase** and runs early in the
-/// pipeline. It converts Quarto's footnote syntax into a standard structure
-/// that the HTML writer can render.
+/// This transform is part of the **normalization phase**. It runs for every
+/// output format (including `Pandoc(_)`), unlike its HTML-chrome sibling
+/// [`crate::transforms::FootnotesResolveTransform`].
 pub struct FootnotesTransform;
 
 impl FootnotesTransform {
@@ -101,10 +100,15 @@ impl AstTransform for FootnotesTransform {
         TransformPhase::Normalization
     }
 
-    async fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
+    async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
         let reference_location = Self::get_reference_location(&ast.meta);
 
-        // For block/section placement, Pandoc handles this - no-op
+        // For block/section placement, Pandoc handles this - no-op. This
+        // gate is deliberately duplicated in `FootnotesResolveTransform`
+        // (rather than left only there): if only the resolve half kept it,
+        // this half would still rewrite `NoteReference` -> `Note` under
+        // `reference-location: block`, corrupting the (now-skipped) chrome
+        // step's input.
         if matches!(
             reference_location,
             ReferenceLocation::Block | ReferenceLocation::Section
@@ -116,31 +120,28 @@ impl AstTransform for FootnotesTransform {
         let mut note_definitions: HashMap<String, NoteContent> = HashMap::new();
         collect_note_definitions(&mut ast.blocks, &mut note_definitions);
 
-        // Process the document, extracting inline notes and resolving references
-        let mut footnote_collector = FootnoteCollector::new(
-            note_definitions,
-            reference_location == ReferenceLocation::Margin,
-        );
-        process_blocks(&mut ast.blocks, &mut footnote_collector);
+        // Resolve references (and the pampa-lowered Span form) into native
+        // `Inline::Note`s. An existing `Inline::Note` (from `^[...]`
+        // syntax) is left untouched.
+        process_blocks(&mut ast.blocks, &note_definitions);
 
-        // Create footnotes section only for document location
-        if reference_location == ReferenceLocation::Document
-            && !footnote_collector.footnotes.is_empty()
-        {
-            let footnotes_section = create_footnotes_section(&footnote_collector.footnotes);
-            ast.blocks.push(footnotes_section);
+        // Under `Pandoc(_)` profiles, `FootnotesResolveTransform` (which
+        // owns `extract_and_strip_ref_id`) never runs, so nothing else
+        // strips the ref-id marker `mark_with_ref_id` just prepended to
+        // every resolved named reference's content. The marker's only
+        // purpose is letting that transform dedupe repeated references —
+        // for the Pandoc leg it has already served no purpose, and must
+        // not reach pandoc's own wire format (see
+        // `FOOTNOTE_REF_ID_MARKER_FORMAT`'s doc comment).
+        if matches!(ctx.pipeline_profile, PipelineProfile::Pandoc(_)) {
+            strip_ref_id_markers(&mut ast.blocks);
         }
-
-        // For margin location:
-        // - Footnote references are created with "margin-note" class
-        // - No footnotes section is created
-        // - Full margin content placement is handled by CSS/layout or future enhancement
 
         Ok(())
     }
 }
 
-/// Content of a footnote (either inline content or block content).
+/// Content of a footnote definition (either inline content or block content).
 #[derive(Debug, Clone)]
 enum NoteContent {
     /// Single paragraph of inline content
@@ -149,84 +150,161 @@ enum NoteContent {
     Blocks(Blocks),
 }
 
-/// Collected footnote with its ID and content.
-#[derive(Debug, Clone)]
-struct CollectedFootnote {
-    /// The footnote ID (e.g., "1", "2", or user-defined like "fn-custom")
-    id: String,
-    /// The footnote number (1-based, for display)
-    number: usize,
-    /// The footnote content
-    content: NoteContent,
-    /// Source info for the footnote
-    source_info: SourceInfo,
-}
-
-/// State for collecting footnotes during AST traversal.
-struct FootnoteCollector {
-    /// Pre-defined note definitions (from [^id]: syntax)
-    definitions: HashMap<String, NoteContent>,
-    /// Collected footnotes in order of appearance
-    footnotes: Vec<CollectedFootnote>,
-    /// Counter for auto-generated footnote IDs
-    counter: usize,
-    /// Whether we're in margin mode (affects ref class)
-    is_margin: bool,
-}
-
-impl FootnoteCollector {
-    fn new(definitions: HashMap<String, NoteContent>, is_margin: bool) -> Self {
-        Self {
-            definitions,
-            footnotes: Vec::new(),
-            counter: 0,
-            is_margin,
+impl NoteContent {
+    /// Convert to `Note`'s `Blocks` shape. A single-paragraph definition
+    /// (`NoteDefinitionPara`) is wrapped in a `Paragraph` using the
+    /// reference occurrence's `source_info` — matching what the pre-split
+    /// transform's `create_footnote_item` produced for the same content.
+    fn into_blocks(self, source_info: &SourceInfo) -> Blocks {
+        match self {
+            NoteContent::Inlines(inlines) => vec![Block::Paragraph(Paragraph {
+                content: inlines,
+                source_info: source_info.clone(),
+            })],
+            NoteContent::Blocks(blocks) => blocks,
         }
     }
+}
 
-    /// Add an inline note and return its assigned number.
-    fn add_inline_note(&mut self, content: Blocks, source_info: SourceInfo) -> usize {
-        self.counter += 1;
-        let number = self.counter;
-        let id = number.to_string();
+/// Prepend a hidden marker block carrying `ref_id` to a resolved named
+/// reference's content, so [`crate::transforms::FootnotesResolveTransform`]
+/// can dedupe repeated references to the same id into one shared footnote
+/// entry — matching the pre-split transform's `resolve_reference` behavior —
+/// without a side channel: the id travels inside the `Inline::Note`'s own
+/// `content`, the one thing the two halves communicate through.
+///
+/// Applied uniformly to every resolved named reference (first occurrence and
+/// repeats alike) so `FootnotesTransform` stays stateless — all the "have I
+/// seen this id before" bookkeeping lives in the resolve half, which is the
+/// side of the cut that actually needs to decide whether to share an entry.
+///
+/// A `RawBlock` with an unrecognized format is dropped silently by every
+/// pandoc writer (the same convention `ExampleEmbedRenderTransform`'s
+/// `RawBlock("html", ...)` iframe relies on for non-HTML profiles), so under
+/// `Pandoc(_)` profiles — where nothing ever strips this marker — it is
+/// inert: pandoc's own writer ignores it and renders the real content that
+/// follows.
+fn mark_with_ref_id(mut blocks: Blocks, ref_id: &str, source_info: &SourceInfo) -> Blocks {
+    blocks.insert(
+        0,
+        Block::RawBlock(RawBlock {
+            format: FOOTNOTE_REF_ID_MARKER_FORMAT.to_string(),
+            text: ref_id.to_string(),
+            source_info: source_info.clone(),
+        }),
+    );
+    blocks
+}
 
-        self.footnotes.push(CollectedFootnote {
-            id,
-            number,
-            content: NoteContent::Blocks(content),
-            source_info,
-        });
-
-        number
+/// Strip the ref-id marker block [`mark_with_ref_id`] prepends, from every
+/// `Inline::Note` reachable in `blocks`. Mirrors
+/// [`crate::transforms::FootnotesResolveTransform`]'s
+/// `extract_and_strip_ref_id` stripping logic; used only under `Pandoc(_)`
+/// profiles, where that transform never runs to do this itself.
+fn strip_ref_id_markers(blocks: &mut [Block]) {
+    for block in blocks.iter_mut() {
+        strip_ref_id_markers_in_block(block);
     }
+}
 
-    /// Resolve a note reference and return its number, or None if not found.
-    fn resolve_reference(&mut self, ref_id: &str, source_info: SourceInfo) -> Option<usize> {
-        // Check if we've already resolved this reference
-        for footnote in &self.footnotes {
-            if footnote.id == ref_id {
-                return Some(footnote.number);
+/// Single-block counterpart of [`strip_ref_id_markers`], mirroring
+/// `process_block`'s traversal shape.
+fn strip_ref_id_markers_in_block(block: &mut Block) {
+    match block {
+        Block::Paragraph(para) => strip_ref_id_markers_in_inlines(&mut para.content),
+        Block::Plain(plain) => strip_ref_id_markers_in_inlines(&mut plain.content),
+        Block::Header(header) => strip_ref_id_markers_in_inlines(&mut header.content),
+        Block::BlockQuote(bq) => strip_ref_id_markers(&mut bq.content),
+        Block::OrderedList(ol) => {
+            for item in &mut ol.content {
+                strip_ref_id_markers(item);
             }
         }
-
-        // Look up in definitions
-        if let Some(content) = self.definitions.remove(ref_id) {
-            self.counter += 1;
-            let number = self.counter;
-
-            self.footnotes.push(CollectedFootnote {
-                id: ref_id.to_string(),
-                number,
-                content,
-                source_info,
-            });
-
-            Some(number)
-        } else {
-            // Reference to undefined note - leave as-is (will produce broken link)
-            // TODO: Consider emitting a warning
-            None
+        Block::BulletList(bl) => {
+            for item in &mut bl.content {
+                strip_ref_id_markers(item);
+            }
         }
+        Block::DefinitionList(dl) => {
+            for (term, defs) in &mut dl.content {
+                strip_ref_id_markers_in_inlines(term);
+                for def in defs {
+                    strip_ref_id_markers(def);
+                }
+            }
+        }
+        Block::Div(div) => strip_ref_id_markers(&mut div.content),
+        Block::Figure(fig) => {
+            strip_ref_id_markers(&mut fig.content);
+            if let Some(ref mut blocks) = fig.caption.long {
+                strip_ref_id_markers(blocks);
+            }
+        }
+        Block::Table(table) => {
+            if let Some(ref mut blocks) = table.caption.long {
+                strip_ref_id_markers(blocks);
+            }
+            for body in &mut table.bodies {
+                for row in &mut body.body {
+                    for cell in &mut row.cells {
+                        strip_ref_id_markers(&mut cell.content);
+                    }
+                }
+            }
+            for row in &mut table.head.rows {
+                for cell in &mut row.cells {
+                    strip_ref_id_markers(&mut cell.content);
+                }
+            }
+            for row in &mut table.foot.rows {
+                for cell in &mut row.cells {
+                    strip_ref_id_markers(&mut cell.content);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Inlines counterpart of [`strip_ref_id_markers`], mirroring
+/// `process_inlines`'s traversal shape.
+fn strip_ref_id_markers_in_inlines(inlines: &mut [Inline]) {
+    for inline in inlines.iter_mut() {
+        strip_ref_id_markers_in_inline(inline);
+    }
+}
+
+/// Single-inline counterpart of [`strip_ref_id_markers`], mirroring
+/// `process_inline`'s traversal shape. Does **not** recurse into an
+/// `Inline::Note`'s own content — matching `process_inline`'s existing
+/// behavior of never recursing into a `Note`'s content — since the marker,
+/// when present, is always the note's own first content block.
+fn strip_ref_id_markers_in_inline(inline: &mut Inline) {
+    match inline {
+        Inline::Note(note) => {
+            let is_marker = matches!(
+                note.content.first(),
+                Some(Block::RawBlock(rb)) if rb.format == FOOTNOTE_REF_ID_MARKER_FORMAT
+            );
+            if is_marker {
+                note.content.remove(0);
+            }
+        }
+        Inline::Emph(emph) => strip_ref_id_markers_in_inlines(&mut emph.content),
+        Inline::Strong(strong) => strip_ref_id_markers_in_inlines(&mut strong.content),
+        Inline::Strikeout(s) => strip_ref_id_markers_in_inlines(&mut s.content),
+        Inline::Superscript(sup) => strip_ref_id_markers_in_inlines(&mut sup.content),
+        Inline::Subscript(sub) => strip_ref_id_markers_in_inlines(&mut sub.content),
+        Inline::SmallCaps(sc) => strip_ref_id_markers_in_inlines(&mut sc.content),
+        Inline::Quoted(q) => strip_ref_id_markers_in_inlines(&mut q.content),
+        Inline::Cite(cite) => strip_ref_id_markers_in_inlines(&mut cite.content),
+        Inline::Link(link) => strip_ref_id_markers_in_inlines(&mut link.content),
+        Inline::Span(span) => strip_ref_id_markers_in_inlines(&mut span.content),
+        Inline::Underline(u) => strip_ref_id_markers_in_inlines(&mut u.content),
+        Inline::Delete(d) => strip_ref_id_markers_in_inlines(&mut d.content),
+        Inline::Insert(i) => strip_ref_id_markers_in_inlines(&mut i.content),
+        Inline::Highlight(h) => strip_ref_id_markers_in_inlines(&mut h.content),
+        _ => {}
     }
 }
 
@@ -289,78 +367,78 @@ fn collect_note_definitions(
     });
 }
 
-/// Process blocks, extracting footnotes and replacing inline notes/references.
-fn process_blocks(blocks: &mut Vec<Block>, collector: &mut FootnoteCollector) {
+/// Process blocks, resolving note references into native `Inline::Note`s.
+fn process_blocks(blocks: &mut [Block], definitions: &HashMap<String, NoteContent>) {
     for block in blocks.iter_mut() {
-        process_block(block, collector);
+        process_block(block, definitions);
     }
 }
 
 /// Process a single block.
-fn process_block(block: &mut Block, collector: &mut FootnoteCollector) {
+fn process_block(block: &mut Block, definitions: &HashMap<String, NoteContent>) {
     match block {
         Block::Paragraph(para) => {
-            process_inlines(&mut para.content, collector);
+            process_inlines(&mut para.content, definitions);
         }
         Block::Plain(plain) => {
-            process_inlines(&mut plain.content, collector);
+            process_inlines(&mut plain.content, definitions);
         }
         Block::Header(header) => {
-            process_inlines(&mut header.content, collector);
+            process_inlines(&mut header.content, definitions);
         }
         Block::BlockQuote(bq) => {
-            process_blocks(&mut bq.content, collector);
+            process_blocks(&mut bq.content, definitions);
         }
         Block::OrderedList(ol) => {
             for item in &mut ol.content {
-                process_blocks(item, collector);
+                process_blocks(item, definitions);
             }
         }
         Block::BulletList(bl) => {
             for item in &mut bl.content {
-                process_blocks(item, collector);
+                process_blocks(item, definitions);
             }
         }
         Block::DefinitionList(dl) => {
             for (term, defs) in &mut dl.content {
-                process_inlines(term, collector);
+                process_inlines(term, definitions);
                 for def in defs {
-                    process_blocks(def, collector);
+                    process_blocks(def, definitions);
                 }
             }
         }
         Block::Div(div) => {
-            process_blocks(&mut div.content, collector);
+            process_blocks(&mut div.content, definitions);
         }
         Block::Figure(fig) => {
-            process_blocks(&mut fig.content, collector);
+            process_blocks(&mut fig.content, definitions);
             // Caption has short: Option<Inlines> and long: Option<Blocks>
             if let Some(ref mut blocks) = fig.caption.long {
-                process_blocks(blocks, collector);
+                process_blocks(blocks, definitions);
             }
         }
         Block::Table(table) => {
             // Process table caption
             // Caption has short: Option<Inlines> and long: Option<Blocks>
             if let Some(ref mut blocks) = table.caption.long {
-                process_blocks(blocks, collector);
+                process_blocks(blocks, definitions);
             }
             // Process table cells
             for body in &mut table.bodies {
                 for row in &mut body.body {
                     for cell in &mut row.cells {
-                        process_blocks(&mut cell.content, collector);
+                        process_blocks(&mut cell.content, definitions);
                     }
                 }
             }
             for row in &mut table.head.rows {
                 for cell in &mut row.cells {
-                    process_blocks(&mut cell.content, collector);
+                    process_blocks(&mut cell.content, definitions);
                 }
             }
             for row in &mut table.foot.rows {
                 for cell in &mut row.cells {
-                    process_blocks(&mut cell.content, collector);
+                    process_blocks(&mut cell.content, definitions);
                 }
             }
         }
@@ -368,58 +446,63 @@ fn process_block(block: &mut Block, collector: &mut FootnoteCollector) {
     }
 }
 
-/// Process inlines, replacing Note and NoteReference with superscript links.
-fn process_inlines(inlines: &mut Vec<Inline>, collector: &mut FootnoteCollector) {
+/// Process inlines, resolving `NoteReference`/note-reference `Span`s.
+fn process_inlines(inlines: &mut [Inline], definitions: &HashMap<String, NoteContent>) {
     for inline in inlines.iter_mut() {
-        process_inline(inline, collector);
+        process_inline(inline, definitions);
     }
 }
 
-/// Process a single inline, potentially replacing it.
-fn process_inline(inline: &mut Inline, collector: &mut FootnoteCollector) {
+/// Process a single inline, potentially replacing it with a native `Note`.
+fn process_inline(inline: &mut Inline, definitions: &HashMap<String, NoteContent>) {
     match inline {
-        Inline::Note(note) => {
-            let source_info = note.source_info.clone();
-            let content = std::mem::take(&mut note.content);
-            let number = collector.add_inline_note(content, source_info.clone());
-
-            // Replace with superscript reference
-            *inline = create_footnote_ref(number, &source_info, collector.is_margin);
+        Inline::Note(_) => {
+            // Already the target shape (`^[...]` inline note) - leave as-is.
+            // Note: nested notes/references inside its content are NOT
+            // recursively resolved, matching the pre-split transform's
+            // behavior (it never recursed into a Note's own content either).
         }
         Inline::NoteReference(note_ref) => {
-            let source_info = note_ref.source_info.clone();
-            if let Some(number) = collector.resolve_reference(&note_ref.id, source_info.clone()) {
-                *inline = create_footnote_ref(number, &source_info, collector.is_margin);
+            if let Some(content) = definitions.get(&note_ref.id).cloned() {
+                let source_info = note_ref.source_info.clone();
+                *inline = Inline::Note(Note {
+                    content: mark_with_ref_id(
+                        content.into_blocks(&source_info),
+                        &note_ref.id,
+                        &source_info,
+                    ),
+                    source_info,
+                });
             }
-            // If not resolved, leave as-is (broken reference)
+            // If not resolved, leave as-is (broken reference).
         }
         // Recursively process inlines that contain other inlines
         Inline::Emph(emph) => {
-            process_inlines(&mut emph.content, collector);
+            process_inlines(&mut emph.content, definitions);
         }
         Inline::Strong(strong) => {
-            process_inlines(&mut strong.content, collector);
+            process_inlines(&mut strong.content, definitions);
         }
         Inline::Strikeout(s) => {
-            process_inlines(&mut s.content, collector);
+            process_inlines(&mut s.content, definitions);
         }
         Inline::Superscript(sup) => {
-            process_inlines(&mut sup.content, collector);
+            process_inlines(&mut sup.content, definitions);
         }
         Inline::Subscript(sub) => {
-            process_inlines(&mut sub.content, collector);
+            process_inlines(&mut sub.content, definitions);
         }
         Inline::SmallCaps(sc) => {
-            process_inlines(&mut sc.content, collector);
+            process_inlines(&mut sc.content, definitions);
         }
         Inline::Quoted(q) => {
-            process_inlines(&mut q.content, collector);
+            process_inlines(&mut q.content, definitions);
         }
         Inline::Cite(cite) => {
-            process_inlines(&mut cite.content, collector);
+            process_inlines(&mut cite.content, definitions);
         }
         Inline::Link(link) => {
-            process_inlines(&mut link.content, collector);
+            process_inlines(&mut link.content, definitions);
         }
         Inline::Span(span) => {
             // bd-po3gn41h: pampa's postprocess lowers a named footnote
@@ -430,206 +513,45 @@ fn process_inline(inline: &mut Inline, collector: &mut FootnoteCollector) {
             // the `.with_note_reference` filter). The typed
             // `Inline::NoteReference` is already gone by this point, so we
             // resolve the Span form here exactly like the NoteReference arm
-            // above: look up the definition, replace with the standard
-            // `fnref` superscript, or leave the span untouched if the
-            // reference is undefined (broken reference).
+            // above: look up the definition and replace with a native
+            // `Inline::Note`, or leave the span untouched if the reference
+            // is undefined (broken reference).
             let reference_id = if span.attr.1.iter().any(|c| c == "quarto-note-reference") {
                 span.attr.2.get("reference-id").cloned()
             } else {
                 None
             };
             if let Some(ref_id) = reference_id {
-                let source_info = span.source_info.clone();
-                if let Some(number) = collector.resolve_reference(&ref_id, source_info.clone()) {
-                    *inline = create_footnote_ref(number, &source_info, collector.is_margin);
+                if let Some(content) = definitions.get(&ref_id).cloned() {
+                    let source_info = span.source_info.clone();
+                    *inline = Inline::Note(Note {
+                        content: mark_with_ref_id(
+                            content.into_blocks(&source_info),
+                            &ref_id,
+                            &source_info,
+                        ),
+                        source_info,
+                    });
                 }
                 // If not resolved, leave as-is (broken reference).
             } else {
-                process_inlines(&mut span.content, collector);
+                process_inlines(&mut span.content, definitions);
             }
         }
         Inline::Underline(u) => {
-            process_inlines(&mut u.content, collector);
+            process_inlines(&mut u.content, definitions);
         }
         Inline::Delete(d) => {
-            process_inlines(&mut d.content, collector);
+            process_inlines(&mut d.content, definitions);
         }
         Inline::Insert(i) => {
-            process_inlines(&mut i.content, collector);
+            process_inlines(&mut i.content, definitions);
         }
         Inline::Highlight(h) => {
-            process_inlines(&mut h.content, collector);
+            process_inlines(&mut h.content, definitions);
         }
         _ => {}
     }
-}
-
-/// Create a footnote reference inline (superscript link).
-///
-/// Produces: `<span id="fnref{N}"><sup><a href="#fn{N}" class="footnote-ref" role="doc-noteref">{N}</a></sup></span>`
-///
-/// When `is_margin` is true, adds "margin-note" class to the outer span.
-fn create_footnote_ref(number: usize, source_info: &SourceInfo, is_margin: bool) -> Inline {
-    let fn_id = format!("fn{}", number);
-    let fnref_id = format!("fnref{}", number);
-
-    // The link inside the superscript
-    // Target is a tuple: (url, title)
-    let link = Inline::Link(Link {
-        attr: (
-            String::new(),
-            vec!["footnote-ref".to_string()],
-            LinkedHashMap::from_iter([("role".to_string(), "doc-noteref".to_string())]),
-        ),
-        content: vec![Inline::Str(Str {
-            text: number.to_string(),
-            source_info: source_info.clone(),
-        })],
-        target: (format!("#{}", fn_id), String::new()),
-        source_info: source_info.clone(),
-        attr_source: AttrSourceInfo::empty(),
-        target_source: quarto_pandoc_types::attr::TargetSourceInfo::empty(),
-    });
-
-    // Build the class list for the outer span
-    let classes = if is_margin {
-        vec!["margin-note".to_string()]
-    } else {
-        Vec::new()
-    };
-
-    // Wrap in a Span with the fnref ID, then in Superscript
-    // Actually, Pandoc puts the ID on the superscript, but we don't have that field.
-    // Let's use a Span wrapper.
-    Inline::Span(Span {
-        attr: (fnref_id, classes, LinkedHashMap::new()),
-        content: vec![Inline::Superscript(Superscript {
-            content: vec![link],
-            source_info: source_info.clone(),
-        })],
-        source_info: source_info.clone(),
-        attr_source: AttrSourceInfo::empty(),
-    })
-}
-
-/// Create the footnotes section block.
-///
-/// Produces:
-/// ```html
-/// <section id="footnotes" class="footnotes" role="doc-endnotes">
-///   <hr>
-///   <ol>
-///     <li id="fn1"><p>Content<a href="#fnref1" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
-///   </ol>
-/// </section>
-/// ```
-fn create_footnotes_section(footnotes: &[CollectedFootnote]) -> Block {
-    // The synthesized container chrome (section Div, embedded <hr>, and the
-    // OrderedList wrapping the footnote items) is pure synthesis: it
-    // corresponds to no source bytes. The footnote content inside (created
-    // by `create_footnote_item`) retains the original Note's source_info.
-    let source_info = SourceInfo::generated(By::footnotes());
-
-    // Create list items for each footnote
-    let list_items: Vec<Blocks> = footnotes.iter().map(create_footnote_item).collect();
-
-    // Create the ordered list
-    let ordered_list = Block::OrderedList(OrderedList {
-        attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
-        content: list_items,
-        source_info: source_info.clone(),
-    });
-
-    // Wrap in a section Div with appropriate attributes
-    // Note: We use a Div with class "section" so the HTML writer emits <section>
-    Block::Div(Div {
-        attr: (
-            "footnotes".to_string(),
-            vec!["footnotes".to_string(), "section".to_string()],
-            LinkedHashMap::from_iter([("role".to_string(), "doc-endnotes".to_string())]),
-        ),
-        content: vec![
-            Block::HorizontalRule(quarto_pandoc_types::block::HorizontalRule {
-                source_info: source_info.clone(),
-            }),
-            ordered_list,
-        ],
-        source_info,
-        attr_source: AttrSourceInfo::empty(),
-    })
-}
-
-/// Create a single footnote list item.
-fn create_footnote_item(footnote: &CollectedFootnote) -> Blocks {
-    let source_info = &footnote.source_info;
-    let fn_id = format!("fn{}", footnote.number);
-    let fnref_id = format!("fnref{}", footnote.number);
-
-    // Create the backlink
-    // Target is a tuple: (url, title)
-    let backlink = Inline::Link(Link {
-        attr: (
-            String::new(),
-            vec!["footnote-back".to_string()],
-            LinkedHashMap::from_iter([("role".to_string(), "doc-backlink".to_string())]),
-        ),
-        content: vec![Inline::Str(Str {
-            text: "↩︎".to_string(),
-            source_info: source_info.clone(),
-        })],
-        target: (format!("#{}", fnref_id), String::new()),
-        source_info: source_info.clone(),
-        attr_source: AttrSourceInfo::empty(),
-        target_source: quarto_pandoc_types::attr::TargetSourceInfo::empty(),
-    });
-
-    // Convert content to blocks and append backlink to last paragraph
-    let mut content_blocks = match &footnote.content {
-        NoteContent::Inlines(inlines) => {
-            vec![Block::Paragraph(Paragraph {
-                content: inlines.clone(),
-                source_info: source_info.clone(),
-            })]
-        }
-        NoteContent::Blocks(blocks) => blocks.clone(),
-    };
-
-    // Append backlink to the last paragraph (or create one)
-    if let Some(last_block) = content_blocks.last_mut() {
-        match last_block {
-            Block::Paragraph(para) => {
-                para.content.push(backlink);
-            }
-            Block::Plain(plain) => {
-                plain.content.push(backlink);
-            }
-            _ => {
-                // Append a new paragraph with just the backlink
-                content_blocks.push(Block::Paragraph(Paragraph {
-                    content: vec![backlink],
-                    source_info: source_info.clone(),
-                }));
-            }
-        }
-    } else {
-        // Empty content, create paragraph with just backlink
-        content_blocks.push(Block::Paragraph(Paragraph {
-            content: vec![backlink],
-            source_info: source_info.clone(),
-        }));
-    }
-
-    // Wrap in a Div with the footnote ID
-    // Note: In Pandoc's output, each <li> has the ID directly, but we can't do that
-    // with OrderedList. So we wrap content in a Div with ID.
-    // Actually, looking at Pandoc output more carefully, the ID is on the <li>.
-    // Our OrderedList doesn't support per-item IDs, so we'll wrap in a Div.
-    vec![Block::Div(Div {
-        attr: (fn_id, Vec::new(), LinkedHashMap::new()),
-        content: content_blocks,
-        source_info: source_info.clone(),
-        attr_source: AttrSourceInfo::empty(),
-    })]
 }
 
 #[cfg(test)]
@@ -637,13 +559,15 @@ mod tests {
     use super::*;
     use quarto_pandoc_types::ConfigMapEntry;
     use quarto_pandoc_types::NoteDefinitionPara;
+    use quarto_pandoc_types::attr::AttrSourceInfo;
     use quarto_pandoc_types::block::Plain;
-    use quarto_pandoc_types::inline::Note;
+    use quarto_pandoc_types::inline::Span;
     use quarto_source_map::{FileId, Location, Range};
 
     use crate::format::Format;
     use crate::project::{DocumentInfo, ProjectConfig, ProjectContext};
     use crate::render::BinaryDependencies;
+    use crate::transforms::FootnotesResolveTransform;
 
     fn dummy_source_info() -> SourceInfo {
         SourceInfo::from_range(
@@ -676,7 +600,7 @@ mod tests {
     }
 
     fn make_str(text: &str) -> Inline {
-        Inline::Str(Str {
+        Inline::Str(quarto_pandoc_types::inline::Str {
             text: text.to_string(),
             source_info: dummy_source_info(),
         })
@@ -692,6 +616,26 @@ mod tests {
             key_source: dummy_source_info(),
             value,
         }
+    }
+
+    fn make_ctx_pair<'a>(
+        project: &'a ProjectContext,
+        doc: &'a DocumentInfo,
+        format: &'a Format,
+        binaries: &'a BinaryDependencies,
+    ) -> RenderContext<'a> {
+        RenderContext::new(project, doc, format, binaries)
+    }
+
+    /// Run both halves in sequence, mirroring how they're spliced into the
+    /// real HTML/revealjs pipeline (`footnotes` immediately followed by
+    /// `footnotes-resolve`).
+    async fn run_both_halves(ast: &mut Pandoc, ctx: &mut RenderContext<'_>) {
+        FootnotesTransform::new().transform(ast, ctx).await.unwrap();
+        FootnotesResolveTransform::new()
+            .transform(ast, ctx)
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
@@ -724,10 +668,9 @@ mod tests {
         let doc = DocumentInfo::from_path("/project/doc.qmd");
         let format = Format::html();
         let binaries = BinaryDependencies::new();
-        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        let mut ctx = make_ctx_pair(&project, &doc, &format, &binaries);
 
-        let transform = FootnotesTransform::new();
-        transform.transform(&mut ast, &mut ctx).await.unwrap();
+        run_both_halves(&mut ast, &mut ctx).await;
 
         // Should have original paragraph + footnotes section
         assert_eq!(ast.blocks.len(), 2);
@@ -804,10 +747,9 @@ mod tests {
         let doc = DocumentInfo::from_path("/project/doc.qmd");
         let format = Format::html();
         let binaries = BinaryDependencies::new();
-        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        let mut ctx = make_ctx_pair(&project, &doc, &format, &binaries);
 
-        let transform = FootnotesTransform::new();
-        transform.transform(&mut ast, &mut ctx).await.unwrap();
+        run_both_halves(&mut ast, &mut ctx).await;
 
         // Should have 2 footnotes in the section
         if let Block::Div(div) = &ast.blocks[1] {
@@ -849,10 +791,9 @@ mod tests {
         let doc = DocumentInfo::from_path("/project/doc.qmd");
         let format = Format::html();
         let binaries = BinaryDependencies::new();
-        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        let mut ctx = make_ctx_pair(&project, &doc, &format, &binaries);
 
-        let transform = FootnotesTransform::new();
-        transform.transform(&mut ast, &mut ctx).await.unwrap();
+        run_both_halves(&mut ast, &mut ctx).await;
 
         // Note definition should be removed, leaving paragraph + footnotes section
         assert_eq!(ast.blocks.len(), 2);
@@ -864,17 +805,65 @@ mod tests {
         assert!(matches!(ast.blocks[1], Block::Div(_)));
     }
 
+    /// After just the B1 half, a `NoteReference` resolves into a native
+    /// `Inline::Note` — the seam `FootnotesResolveTransform` consumes.
+    #[tokio::test]
+    async fn test_note_reference_resolves_to_native_note_after_b1_only() {
+        let mut ast = Pandoc {
+            meta: quarto_pandoc_types::ConfigValue::default(),
+            blocks: vec![
+                Block::NoteDefinitionPara(NoteDefinitionPara {
+                    id: "myfoot".to_string(),
+                    content: vec![make_str("Defined footnote content")],
+                    source_info: dummy_source_info(),
+                }),
+                Block::Paragraph(Paragraph {
+                    content: vec![
+                        make_str("See note"),
+                        Inline::NoteReference(quarto_pandoc_types::inline::NoteReference {
+                            id: "myfoot".to_string(),
+                            source_info: dummy_source_info(),
+                        }),
+                    ],
+                    source_info: dummy_source_info(),
+                }),
+            ],
+        };
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = make_ctx_pair(&project, &doc, &format, &binaries);
+
+        FootnotesTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+
+        // The definition block is gone; no chrome (Span#fnref / Div#footnotes)
+        // has been produced yet — only B1 ran.
+        assert_eq!(ast.blocks.len(), 1);
+        if let Block::Paragraph(para) = &ast.blocks[0] {
+            assert!(
+                matches!(&para.content[1], Inline::Note(_)),
+                "expected NoteReference resolved to native Inline::Note by B1 alone, got: {:?}",
+                para.content[1]
+            );
+        } else {
+            panic!("expected Paragraph");
+        }
+    }
+
     /// bd-po3gn41h: a named/reference-style footnote `[^id]` is lowered by
     /// pampa's postprocess into an *empty* `Inline::Span` with class
     /// `quarto-note-reference` and a `reference-id` kv (NOT an
     /// `Inline::NoteReference` — that variant is already gone by the time this
     /// transform runs). `FootnotesTransform` must resolve that Span form the
-    /// same way it resolves `Inline::NoteReference`: replace it with the
-    /// standard `fnref` superscript link and emit a footnotes section that
-    /// carries the definition's content.
+    /// same way it resolves `Inline::NoteReference`.
     #[tokio::test]
     async fn test_span_note_reference_resolves() {
-        let mut reference_kv = LinkedHashMap::new();
+        let mut reference_kv = hashlink::LinkedHashMap::new();
         reference_kv.insert("reference-id".to_string(), "bk".to_string());
 
         let mut ast = Pandoc {
@@ -913,10 +902,9 @@ mod tests {
         let doc = DocumentInfo::from_path("/project/doc.qmd");
         let format = Format::html();
         let binaries = BinaryDependencies::new();
-        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        let mut ctx = make_ctx_pair(&project, &doc, &format, &binaries);
 
-        let transform = FootnotesTransform::new();
-        transform.transform(&mut ast, &mut ctx).await.unwrap();
+        run_both_halves(&mut ast, &mut ctx).await;
 
         // Definition block removed; paragraph + footnotes section remain.
         assert_eq!(ast.blocks.len(), 2, "blocks: {:#?}", ast.blocks);
@@ -971,10 +959,9 @@ mod tests {
         let doc = DocumentInfo::from_path("/project/doc.qmd");
         let format = Format::html();
         let binaries = BinaryDependencies::new();
-        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        let mut ctx = make_ctx_pair(&project, &doc, &format, &binaries);
 
-        let transform = FootnotesTransform::new();
-        transform.transform(&mut ast, &mut ctx).await.unwrap();
+        run_both_halves(&mut ast, &mut ctx).await;
 
         // Should not add footnotes section
         assert_eq!(ast.blocks.len(), 1);
@@ -1034,10 +1021,9 @@ mod tests {
         let doc = DocumentInfo::from_path("/project/doc.qmd");
         let format = Format::html();
         let binaries = BinaryDependencies::new();
-        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        let mut ctx = make_ctx_pair(&project, &doc, &format, &binaries);
 
-        let transform = FootnotesTransform::new();
-        transform.transform(&mut ast, &mut ctx).await.unwrap();
+        run_both_halves(&mut ast, &mut ctx).await;
 
         // Should have paragraph + footnotes section
         assert_eq!(ast.blocks.len(), 2);
@@ -1069,10 +1055,9 @@ mod tests {
         let doc = DocumentInfo::from_path("/project/doc.qmd");
         let format = Format::html();
         let binaries = BinaryDependencies::new();
-        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        let mut ctx = make_ctx_pair(&project, &doc, &format, &binaries);
 
-        let transform = FootnotesTransform::new();
-        transform.transform(&mut ast, &mut ctx).await.unwrap();
+        run_both_halves(&mut ast, &mut ctx).await;
 
         // Should only have the paragraph - NO footnotes section
         assert_eq!(ast.blocks.len(), 1);
@@ -1122,10 +1107,9 @@ mod tests {
             let doc = DocumentInfo::from_path("/project/doc.qmd");
             let format = Format::html();
             let binaries = BinaryDependencies::new();
-            let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+            let mut ctx = make_ctx_pair(&project, &doc, &format, &binaries);
 
-            let transform = FootnotesTransform::new();
-            transform.transform(&mut ast, &mut ctx).await.unwrap();
+            run_both_halves(&mut ast, &mut ctx).await;
 
             // Should be unchanged - still have the Note inline
             assert_eq!(ast.blocks.len(), 1);
@@ -1135,6 +1119,81 @@ mod tests {
                     "Note should be unchanged for mode: {}",
                     mode
                 );
+            }
+        }
+    }
+
+    /// T5.3: `reference-location: block`/`section` must remain a no-op under
+    /// **every** profile, including `Pandoc("docx")` — both halves must keep
+    /// the early-return gate independently (H5c). Revert either half's gate
+    /// and this goes RED.
+    ///
+    /// Uses a `NoteReference` + `NoteDefinitionPara` fixture rather than a
+    /// bare `Inline::Note`: a pre-existing `Note` is already B1's target
+    /// shape, so B1 leaves it untouched regardless of its own gate — that
+    /// fixture cannot discriminate "B1's gate is present" from "B1's gate
+    /// was deleted, but there was nothing for it to do anyway". A
+    /// `NoteReference` + definition pair does discriminate: without the
+    /// gate, B1 would collect the definition (removing its block) and
+    /// resolve the reference into a `Note`, both visible AST changes.
+    #[tokio::test]
+    async fn test_reference_location_block_section_noop_under_every_profile() {
+        for mode in ["block", "section"] {
+            for format in [Format::html(), Format::docx()] {
+                let mut ast = Pandoc {
+                    meta: make_meta(vec![meta_entry(
+                        "reference-location",
+                        ConfigValue::new_string(mode, dummy_source_info()),
+                    )]),
+                    blocks: vec![
+                        Block::NoteDefinitionPara(NoteDefinitionPara {
+                            id: "1".to_string(),
+                            content: vec![make_str("note content")],
+                            source_info: dummy_source_info(),
+                        }),
+                        Block::Paragraph(Paragraph {
+                            content: vec![
+                                make_str("Text"),
+                                Inline::NoteReference(quarto_pandoc_types::inline::NoteReference {
+                                    id: "1".to_string(),
+                                    source_info: dummy_source_info(),
+                                }),
+                            ],
+                            source_info: dummy_source_info(),
+                        }),
+                    ],
+                };
+
+                let project = make_test_project();
+                let doc = DocumentInfo::from_path("/project/doc.qmd");
+                let binaries = BinaryDependencies::new();
+                let mut ctx = make_ctx_pair(&project, &doc, &format, &binaries);
+
+                run_both_halves(&mut ast, &mut ctx).await;
+
+                assert_eq!(
+                    ast.blocks.len(),
+                    2,
+                    "mode {mode}, format {:?}: AST must be unchanged — the note definition \
+                     block must survive (not collected)",
+                    format.target_format
+                );
+                assert!(
+                    matches!(ast.blocks[0], Block::NoteDefinitionPara(_)),
+                    "mode {mode}, format {:?}: NoteDefinitionPara must survive untouched",
+                    format.target_format
+                );
+                if let Block::Paragraph(para) = &ast.blocks[1] {
+                    assert!(
+                        matches!(&para.content[1], Inline::NoteReference(_)),
+                        "mode {mode}, format {:?}: NoteReference must be left unresolved by \
+                         both halves; got {:?}",
+                        format.target_format,
+                        para.content[1]
+                    );
+                } else {
+                    panic!("expected Paragraph");
+                }
             }
         }
     }
@@ -1165,10 +1224,9 @@ mod tests {
         let doc = DocumentInfo::from_path("/project/doc.qmd");
         let format = Format::html();
         let binaries = BinaryDependencies::new();
-        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        let mut ctx = make_ctx_pair(&project, &doc, &format, &binaries);
 
-        let transform = FootnotesTransform::new();
-        transform.transform(&mut ast, &mut ctx).await.unwrap();
+        run_both_halves(&mut ast, &mut ctx).await;
 
         // Should have paragraph + footnotes section
         assert_eq!(ast.blocks.len(), 2);
@@ -1188,31 +1246,5 @@ mod tests {
 
         // Check footnotes section exists
         assert!(matches!(ast.blocks[1], Block::Div(_)));
-    }
-
-    #[test]
-    fn test_create_footnotes_section_has_generated_provenance() {
-        // Plan 6: the synthesized footnotes container Div (and its embedded
-        // chrome — HorizontalRule, OrderedList) carry
-        // Generated { by: footnotes(), from: [] }. The footnote *items*
-        // inside retain the original Note's source_info via
-        // create_footnote_item.
-        let block = create_footnotes_section(&[]);
-        let Block::Div(div) = &block else {
-            panic!("Expected Div");
-        };
-        match &div.source_info {
-            SourceInfo::Generated(g) => {
-                let quarto_source_map::Generated { by, from } = &**g;
-                assert_eq!(by.kind, "footnotes");
-                assert!(from.is_empty());
-            }
-            other => panic!("Expected Generated, got {:?}", other),
-        }
-        // The embedded HorizontalRule chrome carries the same shape.
-        let Block::HorizontalRule(hr) = &div.content[0] else {
-            panic!("Expected HorizontalRule");
-        };
-        assert!(matches!(&hr.source_info, SourceInfo::Generated(g) if g.by.kind == "footnotes"));
     }
 }

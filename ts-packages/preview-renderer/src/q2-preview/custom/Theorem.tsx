@@ -33,8 +33,12 @@ import { makeSlotSetter } from '../utils';
  *  - whole label sits inside one Strong; label is then wrapped in
  *    Span(class="theorem-title") with a trailing Str(" ") outside.
  *
- * `plain_data` (writer: `transforms/theorem.rs:282`):
+ * `plain_data` (writer: `transforms/theorem.rs:282`; keys mirrored from
+ * `crates/quarto-pandoc-types/resources/custom-node-schema.json`):
  *  - `ref_type`, `kind`, `identifier`, optional `order: { section, order }`.
+ *
+ * The key array below is asserted against the schema (both directions)
+ * by `schemaConformance.test.ts`'s T4.3.
  *
  * Env-class rule (`crossref_render.rs:346-352`):
  *  - always include `theorem`,
@@ -49,12 +53,9 @@ import { makeSlotSetter } from '../utils';
  * callbacks that thread back through the content slot.
  */
 
-interface TheoremPlainData {
-    ref_type?: string;
-    kind?: string;
-    identifier?: string;
-    order?: { section?: number[]; order?: number };
-}
+export const THEOREM_PLAIN_DATA_KEYS = ['ref_type', 'kind', 'identifier', 'order'] as const;
+
+type TheoremPlainData = { [K in (typeof THEOREM_PLAIN_DATA_KEYS)[number]]?: unknown };
 
 export const Theorem = ({ node, onNavigateToDocument, setLocalAst }: NodeArgs<CustomBlockNode>) => {
     const ctx = useContext(PreviewContext);
@@ -64,9 +65,10 @@ export const Theorem = ({ node, onNavigateToDocument, setLocalAst }: NodeArgs<Cu
     const affordanceAttr = isEditable ? { 'data-block-pool-id': poolId, tabIndex: -1 } : {};
 
     const plain = (node.plain_data ?? {}) as TheoremPlainData;
-    const refType = plain.ref_type ?? '';
-    const kind = plain.kind ?? '';
-    const number = plain.order?.order;
+    const refType = (plain.ref_type as string | undefined) ?? '';
+    const kind = (plain.kind as string | undefined) ?? '';
+    const order = plain.order as { section?: number[]; order?: number } | undefined;
+    const number = order?.order;
 
     const titleSlot = node.slots.title;
     const titleInlines: InlineNode[] | undefined =

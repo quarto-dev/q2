@@ -563,6 +563,24 @@ impl Walker<'_> {
             Inline::Link(i) => self.filter_inlines(&mut i.content),
             Inline::Image(i) => self.filter_inlines(&mut i.content),
             Inline::Note(note) => self.filter_blocks(&mut note.content),
+            Inline::Custom(custom) => {
+                for (_name, slot) in &mut custom.slots {
+                    use quarto_pandoc_types::custom::Slot;
+                    match slot {
+                        Slot::Block(b) => {
+                            // A slot holds exactly one block; neither
+                            // removal nor splicing is representable,
+                            // so only recurse.
+                            let _ = self.keep_block(b);
+                        }
+                        Slot::Blocks(bs) => self.filter_blocks(bs),
+                        Slot::Inline(i) => {
+                            let _ = self.keep_inline(i);
+                        }
+                        Slot::Inlines(is) => self.filter_inlines(is),
+                    }
+                }
+            }
             _ => {}
         }
         true
@@ -985,6 +1003,585 @@ mod tests {
         assert!(
             !text.contains("quarto-llms-"),
             "no markers without the llms view"
+        );
+    }
+
+    // ── P8 Task 1: `when-format`/`unless-format` against genuine Pandoc
+    // format strings ─────────────────────────────────────────────────
+
+    /// T1.2: the four-quadrant matrix (design doc's discriminating
+    /// fixture) under `target_format = "docx"`. Quadrants 2 and 3 are
+    /// load-bearing: their expected value inverts between "the format
+    /// string reached the predicate" and "it did not."
+    #[test]
+    fn when_format_docx_four_quadrant_matrix() {
+        let meta = empty_meta();
+
+        // Quadrant 1: .content-visible when-format="docx" survives under docx.
+        let mut blocks = vec![div(&["content-visible"], &[("when-format", "docx")], "Q1")];
+        run(&mut blocks, "docx", &[], &meta);
+        assert_eq!(blocks.len(), 1, "quadrant 1: kept");
+
+        // Quadrant 2: .content-visible when-format="html" dropped under docx.
+        let mut blocks = vec![div(&["content-visible"], &[("when-format", "html")], "Q2")];
+        run(&mut blocks, "docx", &[], &meta);
+        assert!(blocks.is_empty(), "quadrant 2: dropped");
+
+        // Quadrant 3: .content-hidden when-format="docx" dropped under docx.
+        let mut blocks = vec![div(&["content-hidden"], &[("when-format", "docx")], "Q3")];
+        run(&mut blocks, "docx", &[], &meta);
+        assert!(blocks.is_empty(), "quadrant 3: dropped");
+
+        // Quadrant 4: .content-hidden when-format="html" survives under docx.
+        let mut blocks = vec![div(&["content-hidden"], &[("when-format", "html")], "Q4")];
+        run(&mut blocks, "docx", &[], &meta);
+        assert_eq!(blocks.len(), 1, "quadrant 4: kept");
+    }
+
+    /// T1.3: `unless-format` inverts `when-format` on the same inputs.
+    #[test]
+    fn unless_format_inverts_when_format_under_docx() {
+        let meta = empty_meta();
+
+        let mut blocks = vec![div(&["content-visible"], &[("unless-format", "docx")], "X")];
+        run(&mut blocks, "docx", &[], &meta);
+        assert!(blocks.is_empty(), "unless-format=docx drops under docx");
+
+        let mut blocks = vec![div(&["content-visible"], &[("unless-format", "html")], "X")];
+        run(&mut blocks, "docx", &[], &meta);
+        assert_eq!(blocks.len(), 1, "unless-format=html survives under docx");
+    }
+
+    /// T1.4: drive `ConditionalContentTransform::transform` itself — not
+    /// the `Walker`/`run` test helper, which bypasses `lua_format_for`
+    /// entirely — with a real `Format::from_format_string("docx")`. This
+    /// is the only test in the plan that would notice `conditional_content.rs:142`
+    /// being hardcoded to `"html"`.
+    #[test]
+    fn transform_uses_real_format_via_lua_format_for() {
+        use crate::project::{DocumentInfo, ProjectContext};
+        use crate::render::BinaryDependencies;
+
+        let project = ProjectContext {
+            dir: std::path::PathBuf::from("/project"),
+            ..Default::default()
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = crate::format::Format::from_format_string("docx").unwrap();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let mut ast = Pandoc {
+            meta: empty_meta(),
+            blocks: vec![
+                div(
+                    &["content-visible"],
+                    &[("when-format", "docx")],
+                    "DOCX-VISIBLE",
+                ),
+                div(
+                    &["content-visible"],
+                    &[("when-format", "html")],
+                    "HTML-VISIBLE",
+                ),
+            ],
+        };
+
+        let transform = ConditionalContentTransform::new();
+        pollster::block_on(transform.transform(&mut ast, &mut ctx)).unwrap();
+
+        let text = texts(&ast.blocks);
+        assert!(
+            text.contains("DOCX-VISIBLE"),
+            "when-format=docx content kept under a real docx Format: {text}"
+        );
+        assert!(
+            !text.contains("HTML-VISIBLE"),
+            "when-format=html content dropped under a real docx Format: {text}"
+        );
+    }
+
+    /// T1.5: the same four-quadrant matrix as T1.2, for `pptx`.
+    #[test]
+    fn when_format_pptx_four_quadrant_matrix() {
+        let meta = empty_meta();
+
+        let mut blocks = vec![div(&["content-visible"], &[("when-format", "pptx")], "Q1")];
+        run(&mut blocks, "pptx", &[], &meta);
+        assert_eq!(blocks.len(), 1, "quadrant 1: kept");
+
+        let mut blocks = vec![div(&["content-visible"], &[("when-format", "html")], "Q2")];
+        run(&mut blocks, "pptx", &[], &meta);
+        assert!(blocks.is_empty(), "quadrant 2: dropped");
+
+        let mut blocks = vec![div(&["content-hidden"], &[("when-format", "pptx")], "Q3")];
+        run(&mut blocks, "pptx", &[], &meta);
+        assert!(blocks.is_empty(), "quadrant 3: dropped");
+
+        let mut blocks = vec![div(&["content-hidden"], &[("when-format", "html")], "Q4")];
+        run(&mut blocks, "pptx", &[], &meta);
+        assert_eq!(blocks.len(), 1, "quadrant 4: kept");
+    }
+
+    /// T1.6: `when-format` naming a format q2 doesn't know drops the
+    /// content, silently (Q1-parity: `isFormat`'s own closed world ends
+    /// in `else return false`). The zero-diagnostic half has no revert
+    /// hunk anywhere in the tree (`accepted-untested` in the companion
+    /// doc's Missing-test pass) — it is a change-detector on a
+    /// deliberate choice, not a bound assertion.
+    #[test]
+    fn unknown_when_format_value_drops_silently() {
+        let meta = empty_meta();
+        let mut blocks = vec![div(&["content-visible"], &[("when-format", "docs")], "X")];
+        let diags = run(&mut blocks, "docx", &[], &meta);
+        assert!(
+            blocks.is_empty(),
+            "unrecognized when-format value drops content"
+        );
+        assert!(
+            diags.is_empty(),
+            "unrecognized when-format value: no diagnostic (unbound half)"
+        );
+    }
+
+    // ── P8 Task 2: resolved-Div unwrapping is format-independent ──────
+
+    /// T2.1: the same bare-wrapper fixture, run under three different
+    /// target formats, produces the identical resolved shape —
+    /// `is_bare_wrapper` never sees a format, so it cannot depend on one.
+    #[test]
+    fn bare_wrapper_unwrapping_is_format_independent() {
+        let meta = empty_meta();
+        for fmt in ["html", "docx", "pptx"] {
+            let mut blocks = vec![div(&["content-visible"], &[("when-format", fmt)], "X")];
+            run(&mut blocks, fmt, &[], &meta);
+            assert_eq!(blocks.len(), 1, "format {fmt}: content survives");
+            assert!(
+                !matches!(blocks[0], Block::Div(_)),
+                "format {fmt}: bare wrapper spliced away"
+            );
+            assert!(texts(&blocks).contains('X'), "format {fmt}: text present");
+        }
+    }
+
+    // ── P8 Task 3: cut-boundary invariants ─────────────────────────────
+
+    /// T3.1: no `.content-visible`/`.content-hidden` class and no
+    /// `when-*`/`unless-*` attribute survives the transform, across all
+    /// five marker carriers (Div, Span, CodeBlock, and a `.content-visible`
+    /// Div nested inside a `Block::Custom` slot). This is the single
+    /// highest-value new test in P8: it is the assertion P5's
+    /// shim-positioning "no-op over an empty set" argument depends on,
+    /// and it did not exist anywhere in the tree before this file.
+    #[test]
+    fn no_marker_class_or_condition_attr_survives_any_carrier() {
+        use quarto_pandoc_types::block::CodeBlock;
+        use quarto_pandoc_types::custom::{CustomNode, Slot};
+        use quarto_pandoc_types::inline::Span;
+
+        let meta = empty_meta();
+
+        let hidden_div = div(
+            &["content-hidden"],
+            &[("when-format", "docx")],
+            "HIDDEN-DIV",
+        );
+        let visible_div = div(
+            &["content-visible"],
+            &[("when-format", "docx")],
+            "VISIBLE-DIV",
+        );
+        let visible_span = Block::Paragraph(quarto_pandoc_types::block::Paragraph {
+            content: vec![Inline::Span(Span {
+                attr: attr(&["content-visible"], &[("when-format", "docx")]),
+                content: vec![Inline::Str(quarto_pandoc_types::inline::Str {
+                    text: "VISIBLE-SPAN".to_string(),
+                    source_info: quarto_source_map::SourceInfo::generated(
+                        quarto_source_map::By::unknown(),
+                    ),
+                })],
+                source_info: quarto_source_map::SourceInfo::generated(
+                    quarto_source_map::By::unknown(),
+                ),
+                attr_source: AttrSourceInfo::empty(),
+            })],
+            source_info: quarto_source_map::SourceInfo::generated(quarto_source_map::By::unknown()),
+        });
+        let hidden_codeblock = Block::CodeBlock(CodeBlock {
+            attr: attr(&["content-hidden"], &[("when-format", "docx")]),
+            text: "HIDDEN-CODEBLOCK".to_string(),
+            source_info: quarto_source_map::SourceInfo::generated(quarto_source_map::By::unknown()),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let nested_in_custom = Block::Custom(
+            CustomNode::new(
+                "test-custom",
+                attr(&[], &[]),
+                quarto_source_map::SourceInfo::generated(quarto_source_map::By::unknown()),
+            )
+            .with_slot(
+                "body",
+                Slot::Block(Box::new(div(
+                    &["content-visible"],
+                    &[("when-format", "docx")],
+                    "VISIBLE-IN-CUSTOM",
+                ))),
+            ),
+        );
+
+        let mut blocks = vec![
+            hidden_div,
+            visible_div,
+            visible_span,
+            hidden_codeblock,
+            nested_in_custom,
+        ];
+        run(&mut blocks, "docx", &[], &meta);
+
+        let text = texts(&blocks);
+        assert!(!text.contains("HIDDEN-DIV"), "hidden Div's text is gone");
+        assert!(text.contains("VISIBLE-DIV"), "visible Div's text present");
+        assert!(text.contains("VISIBLE-SPAN"), "visible Span survives");
+        assert!(
+            !text.contains("HIDDEN-CODEBLOCK"),
+            "hidden CodeBlock is gone"
+        );
+        assert!(
+            text.contains("VISIBLE-IN-CUSTOM"),
+            "visible Div nested in a Block::Custom slot present"
+        );
+
+        assert!(
+            !text.contains("content-visible") && !text.contains("content-hidden"),
+            "no marker class survives anywhere: {text}"
+        );
+        assert!(
+            !text.contains("when-format") && !text.contains("unless-format"),
+            "no condition attribute survives anywhere: {text}"
+        );
+    }
+
+    /// T3.3: with `target_format = "docx"` and the llms view inactive,
+    /// `when-format="llms"` is inert — no `.quarto-llms-*` marker class
+    /// appears anywhere. The Pandoc-target instance of the same contract
+    /// `llms_conditions_inert_without_llms_view` already asserts for html.
+    #[test]
+    fn llms_when_format_inert_under_docx_without_llms_view() {
+        let mut blocks = vec![
+            div(&["content-visible"], &[("when-format", "llms")], "LLMSONLY"),
+            div(&["content-hidden"], &[("when-format", "llms")], "HTMLONLY"),
+        ];
+        let meta = empty_meta();
+        run(&mut blocks, "docx", &[], &meta);
+        let text = texts(&blocks);
+        assert!(!text.contains("LLMSONLY"), "visible-when-llms removed");
+        assert!(text.contains("HTMLONLY"), "hidden-when-llms kept");
+        assert!(
+            !text.contains("quarto-llms-"),
+            "no markers without the llms view, under docx"
+        );
+    }
+
+    // ── `Inline::Custom` recursion ──────────────────────────────────
+    //
+    // `keep_block`'s `Block::Custom` arm recurses into every slot kind
+    // (`Slot::Block`, `Slot::Blocks`, `Slot::Inline`, `Slot::Inlines`).
+    // `keep_inline` has no matching `Custom` arm at all -- a marker Span
+    // planted inside an *inline* custom node's slot falls through
+    // `keep_inline`'s `_ => {}` and is never visited, so it survives
+    // downstream with its `.content-hidden`/`.content-visible` class and
+    // condition attributes intact. This is reachable through a node
+    // shape this codebase already constructs today: `Inline::Custom`
+    // carrying `slots["content"] = Slot::Inlines([..])`, exactly
+    // `equation_label.rs:215-226`'s `Equation` node shape (`crossref::
+    // EQUATION`). These tests are written against the *fixed* behavior;
+    // until `keep_inline` gains a `Custom` arm mirroring `keep_block`'s,
+    // they are the RED half of the TDD cycle CLAUDE.md requires.
+
+    use quarto_pandoc_types::block::Paragraph;
+    use quarto_pandoc_types::custom::{CustomNode, Slot};
+    use quarto_pandoc_types::inline::{Span, Str};
+
+    fn texts_of(inlines: &[Inline]) -> String {
+        format!("{inlines:?}")
+    }
+
+    fn inline_span(classes: &[&str], kvs: &[(&str, &str)], text: &str) -> Inline {
+        Inline::Span(Span {
+            attr: attr(classes, kvs),
+            content: vec![Inline::Str(Str {
+                text: text.to_string(),
+                source_info: SourceInfo::generated(By::unknown()),
+            })],
+            source_info: SourceInfo::generated(By::unknown()),
+            attr_source: AttrSourceInfo::empty(),
+        })
+    }
+
+    fn inline_str(text: &str) -> Inline {
+        Inline::Str(Str {
+            text: text.to_string(),
+            source_info: SourceInfo::generated(By::unknown()),
+        })
+    }
+
+    /// `Inline::Custom` with a single `Slot::Inlines("content")`, the
+    /// real shape `EquationLabelTransform` constructs
+    /// (`equation_label.rs:226`). Using the real shape rather than an
+    /// invented one proves the gap is reachable through a node type this
+    /// codebase already builds, not just a hypothetical future one.
+    fn equation_shaped_custom(content: Vec<Inline>) -> Inline {
+        let mut node = CustomNode::new(
+            crate::crossref::EQUATION,
+            attr(&[], &[]),
+            SourceInfo::generated(By::unknown()),
+        );
+        node.slots.insert("content".into(), Slot::Inlines(content));
+        Inline::Custom(node)
+    }
+
+    /// `Inline::Custom` with a single `Slot::Inline` (the *singular*,
+    /// boxed variant -- distinct code path from `Slot::Inlines` in both
+    /// `keep_block`'s existing `Block::Custom` arm and the `Custom` arm
+    /// `keep_inline` needs). No real Q2 node happens to use this slot
+    /// shape for an *inline* custom node today, so the type name here is
+    /// synthetic -- it exists to pin the second slot-matching arm, not to
+    /// mirror a specific production type.
+    fn single_slot_custom(inline: Inline) -> Inline {
+        let mut node = CustomNode::new(
+            "TestInlineCustom",
+            attr(&[], &[]),
+            SourceInfo::generated(By::unknown()),
+        );
+        node.slots
+            .insert("content".into(), Slot::Inline(Box::new(inline)));
+        Inline::Custom(node)
+    }
+
+    fn paragraph(content: Vec<Inline>) -> Block {
+        Block::Paragraph(Paragraph {
+            content,
+            source_info: SourceInfo::generated(By::unknown()),
+        })
+    }
+
+    /// Reach into `paragraph(vec![inline_custom])`'s sole `Inline::Custom`
+    /// and return its `"content"` slot's inlines, panicking loudly if the
+    /// shape isn't what the test built (so a future refactor that changes
+    /// this helper's own assumptions fails fast, not silently).
+    fn custom_slot_inlines(block: &Block) -> &[Inline] {
+        let Block::Paragraph(p) = block else {
+            panic!("expected a Paragraph wrapper, got {block:?}")
+        };
+        let Inline::Custom(node) = &p.content[0] else {
+            panic!(
+                "expected the sole inline to be Custom, got {:?}",
+                p.content[0]
+            )
+        };
+        match node.slots.get("content") {
+            Some(Slot::Inlines(inlines)) => inlines,
+            other => panic!("expected Slot::Inlines(\"content\"), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn inline_custom_hidden_marker_is_removed_from_its_slot() {
+        // Bare `.content-hidden` -- always hidden, mirrors `bare_markers`
+        // above but one level deeper: inside an `Inline::Custom`'s slot
+        // instead of directly in the block list.
+        let mut blocks = vec![paragraph(vec![equation_shaped_custom(vec![
+            inline_span(&["content-hidden"], &[], "SECRET"),
+            inline_str("visible-sibling"),
+        ])])];
+        let meta = empty_meta();
+        run(&mut blocks, "html", &[], &meta);
+
+        // Positive-and-negative pairing (the vacuity-check discipline this
+        // plan family uses throughout): the unconditional sibling inline
+        // in the *same* slot must survive, so a fix that dropped the whole
+        // slot -- or the whole Custom node -- wouldn't pass by accident.
+        let survivors = custom_slot_inlines(&blocks[0]);
+        let text = texts_of(survivors);
+        assert!(
+            !text.contains("SECRET"),
+            "hidden marker's content must not survive inside the slot: {text}"
+        );
+        assert!(
+            text.contains("visible-sibling"),
+            "the unconditional sibling inline in the same slot must survive: {text}"
+        );
+    }
+
+    #[test]
+    fn inline_custom_visible_marker_survives_with_attrs_stripped() {
+        // Unconditional `.content-visible` -- always kept, but the marker
+        // class and condition attrs must be stripped on the way out
+        // (`strip_condition_attrs`), exactly as they are for a top-level
+        // Span (`keep_inline`'s `Inline::Span` arm). A fix that merely
+        // *recurses* without routing through the same `verdict`/strip
+        // logic the Span arm already has would pass a bare
+        // presence-only test but fail this one.
+        let mut blocks = vec![paragraph(vec![equation_shaped_custom(vec![inline_span(
+            &["content-visible"],
+            &[("when-format", "html")],
+            "KEPT",
+        )])])];
+        let meta = empty_meta();
+        run(&mut blocks, "html", &[], &meta);
+
+        let survivors = custom_slot_inlines(&blocks[0]);
+        assert_eq!(survivors.len(), 1, "the Span survives: {survivors:?}");
+        let Inline::Span(span) = &survivors[0] else {
+            panic!(
+                "expected the survivor to still be a Span, got {:?}",
+                survivors[0]
+            )
+        };
+        assert!(
+            !span.attr.1.iter().any(|c| c == "content-visible"),
+            "marker class must be stripped: {:?}",
+            span.attr
+        );
+        assert!(
+            span.attr
+                .2
+                .keys()
+                .all(|k| !k.starts_with("when-") && !k.starts_with("unless-")),
+            "condition attrs must be stripped: {:?}",
+            span.attr
+        );
+    }
+
+    #[test]
+    fn inline_custom_llms_marker_tagged_when_nested() {
+        // Same four-quadrant semantics as `llms_view_tags_view_specific_content`
+        // above (visible in html, hidden in llms -> tagged omit), but the
+        // marker Span lives inside an `Inline::Custom`'s slot instead of
+        // being a top-level block. The llms-view tagging path
+        // (`Verdict::KeepTargetOnly`/`KeepLlmsOnly`) is easy to miss when
+        // writing the `Custom` arm if an implementer copies only the
+        // `Remove`/`Keep` half of `Inline::Span`'s match.
+        use crate::transforms::llms::LLMS_OMIT_CLASS;
+
+        let mut blocks = vec![paragraph(vec![equation_shaped_custom(vec![inline_span(
+            &["content-hidden"],
+            &[("when-format", "llms")],
+            "HTMLONLY",
+        )])])];
+        let meta = empty_meta();
+        let diags = run_with_llms(&mut blocks, "html", &[], &meta, true);
+        assert!(diags.is_empty(), "no diagnostics expected: {diags:?}");
+
+        let survivors = custom_slot_inlines(&blocks[0]);
+        assert_eq!(
+            survivors.len(),
+            1,
+            "survives, tagged not removed: {survivors:?}"
+        );
+        let Inline::Span(span) = &survivors[0] else {
+            panic!("expected a Span, got {:?}", survivors[0])
+        };
+        assert!(
+            span.attr.1.iter().any(|c| c == LLMS_OMIT_CLASS),
+            "must be tagged omit (visible in html, hidden in llms): {:?}",
+            span.attr
+        );
+    }
+
+    #[test]
+    fn inline_custom_singular_slot_variant_is_also_reached() {
+        // `Slot::Inline` (singular, boxed) is a distinct match arm from
+        // `Slot::Inlines` in `keep_block`'s existing `Block::Custom` code
+        // -- a fix that only handles the plural `Vec` shape (e.g. by
+        // pattern-matching just `Slot::Inlines` and leaving `Slot::Inline`
+        // on the `_` fallthrough) would pass every test above and still
+        // be half-broken.
+        //
+        // The fixture uses a `Keep` verdict (`.content-visible` whose
+        // condition matches), not `Remove`: `Verdict::Remove` returns
+        // early *without* stripping anything (it only signals "drop me"
+        // to the caller, `keep_inline`'s `bool` return) -- for this slot
+        // shape there is no list to shrink, so a `Remove` fixture would
+        // leave the marker completely untouched whether or not the arm
+        // exists, and the test would pass for the wrong reason. `Keep`
+        // is the verdict whose effect (`strip_condition_attrs`, which
+        // also drops the marker class -- see `:611-614`) is actually
+        // observable regardless of slot shape.
+        let mut blocks = vec![paragraph(vec![single_slot_custom(inline_span(
+            &["content-visible"],
+            &[("when-format", "html")],
+            "KEPT",
+        ))])];
+        let meta = empty_meta();
+        run(&mut blocks, "html", &[], &meta);
+
+        let Block::Paragraph(p) = &blocks[0] else {
+            panic!("expected a Paragraph wrapper")
+        };
+        let Inline::Custom(node) = &p.content[0] else {
+            panic!("expected the sole inline to be Custom")
+        };
+        match node.slots.get("content") {
+            Some(Slot::Inline(inline)) => {
+                let Inline::Span(span) = inline.as_ref() else {
+                    panic!("expected a Span, got {inline:?}")
+                };
+                assert!(
+                    !span.attr.1.iter().any(|c| c == "content-visible"),
+                    "marker class must be stripped, proving the transform \
+                     visited the singular Slot::Inline: {:?}",
+                    span.attr
+                );
+                assert!(
+                    span.attr
+                        .2
+                        .keys()
+                        .all(|k| !k.starts_with("when-") && !k.starts_with("unless-")),
+                    "condition attrs must be stripped: {:?}",
+                    span.attr
+                );
+            }
+            other => panic!("expected Slot::Inline(\"content\"), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn nested_block_and_inline_custom_recursion_reaches_the_marker() {
+        // Depth check: a `Block::Custom` (the "Tabset" shape, already
+        // handled correctly today) whose `Slot::Inlines` holds an
+        // `Inline::Custom` (the "Equation" shape, currently un-handled),
+        // which itself holds the hidden marker. Proves the fix composes
+        // through both levels rather than only handling a top-level
+        // `Inline::Custom` reached directly from a block's own inline
+        // list.
+        let mut outer = CustomNode::new(
+            "Tabset",
+            attr(&[], &[]),
+            SourceInfo::generated(By::unknown()),
+        );
+        outer.slots.insert(
+            "content".into(),
+            Slot::Inlines(vec![equation_shaped_custom(vec![inline_span(
+                &["content-hidden"],
+                &[],
+                "SECRET",
+            )])]),
+        );
+        let mut blocks = vec![Block::Custom(outer)];
+        let meta = empty_meta();
+        run(&mut blocks, "html", &[], &meta);
+
+        let Block::Custom(outer) = &blocks[0] else {
+            panic!("expected the outer Custom node to survive")
+        };
+        let Some(Slot::Inlines(outer_content)) = outer.slots.get("content") else {
+            panic!("expected the outer Slot::Inlines(\"content\")")
+        };
+        let text = format!("{outer_content:?}");
+        assert!(
+            !text.contains("SECRET"),
+            "the doubly-nested hidden marker must not survive: {text}"
         );
     }
 }

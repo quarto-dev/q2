@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-09-22
+
+- [`0ca6449`](https://github.com/quarto-dev/q2/commits/0ca6449): Upgrade KaTeX to 0.18.5 in the preview and rendered output
+
 ### 2026-09-18
 
 - [`0c0fcde`](https://github.com/quarto-dev/q2/commits/0c0fcde): Hephaestus plot documents (`.hep`) render live in q2-preview documents and revealjs decks, laid out at the width they get and re-flowing on resize (bd-sxiv2tio)

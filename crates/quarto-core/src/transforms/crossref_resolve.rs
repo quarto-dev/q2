@@ -28,6 +28,13 @@
 //!   `Cite` untouched and record a diagnostic so the user knows the
 //!   crossref wasn't resolved. Q1 has the same limitation — crossrefs
 //!   aren't intermixed with citations in the same bracket.
+//! - `@Fig-foo` → crossref, same as `@fig-foo` (the id is lowercased
+//!   before the registry lookup — see [`classify_cite`]); the original
+//!   case is preserved separately as `plain_data.label_upper` (Q1's
+//!   `refs.lua:31` capitalization signal). The crossref *index*, however,
+//!   is keyed by the target's authored (lowercase) identifier, so an
+//!   uppercase-led reference to a lowercase target still comes back
+//!   unresolved — see [`classify_cite`]'s doc comment.
 //!
 //! ## Unresolved refs
 //!
@@ -41,7 +48,7 @@ use quarto_analysis::AnalysisContext;
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_pandoc_types::block::{Block, Blocks};
 use quarto_pandoc_types::custom::{CustomNode, Slot};
-use quarto_pandoc_types::inline::{Cite, Inline, Inlines};
+use quarto_pandoc_types::inline::{CitationMode, Cite, Inline, Inlines};
 use quarto_pandoc_types::pandoc::Pandoc;
 use serde_json::json;
 
@@ -229,6 +236,14 @@ fn resolve_inline(
 /// If `cite`'s first citation is classified as a crossref, produce the
 /// replacement custom node. Emits diagnostics for mixed-citation bundles
 /// and unresolved crossrefs.
+///
+/// Classification lowercases the id before the registry lookup (so
+/// `@Fig-alpha` and `@fig-alpha` classify identically), but the index
+/// lookup below still uses the *raw* id. Targets are indexed under their
+/// authored (lowercase) identifier, so an uppercase-led reference against
+/// a lowercase-authored target classifies as a crossref yet still comes
+/// back `resolved: false` — `build_resolved_ref` is called regardless, so
+/// the unresolved node still carries the correct `label_upper`.
 fn classify_cite(
     cite: &Cite,
     reg: &RefTypeRegistry,
@@ -236,7 +251,14 @@ fn classify_cite(
     diags: &mut Vec<DiagnosticMessage>,
 ) -> Option<CustomNode> {
     let first = cite.citations.first()?;
-    let def = reg.classify_cite_id(&first.id)?;
+    // The registry's ref-type keys are registered lowercase; lowercase the
+    // id before classifying so `@Fig-alpha` matches the same `"fig"` entry
+    // as `@fig-alpha` (Q1's refs.lua treats the leading-uppercase form as
+    // the *same* crossref, just with a capitalized label — see
+    // `label_upper` below). `classify_cite_id` itself stays case-sensitive;
+    // this lowercasing is local to Cite classification, not a general
+    // change to the registry.
+    let def = reg.classify_cite_id(&first.id.to_lowercase())?;
 
     // If there are multiple citations and any of them *aren't* classified
     // as the same ref-type (i.e., look like a bibliographic citation),
@@ -248,7 +270,7 @@ fn classify_cite(
             .citations
             .iter()
             .skip(1)
-            .all(|c| reg.classify_cite_id(&c.id).is_some());
+            .all(|c| reg.classify_cite_id(&c.id.to_lowercase()).is_some());
         if !all_same_kind {
             diags.push(DiagnosticMessage::warning(format!(
                 "crossref `@{id}` appears in a `Cite` with bibliographic citations; \
@@ -257,6 +279,20 @@ fn classify_cite(
             )));
             return None;
         }
+
+        // All citations classify as the same ref-type (e.g. `[@fig-a; @fig-b]`).
+        // We currently resolve only the first and silently drop the rest
+        // (Phase 1 scope: single-id crossref cites; multi-crossref ranges
+        // like "Figures 1-3" are deferred). Flag the drop so it's
+        // diagnosable rather than silent.
+        let dropped: Vec<&str> = cite.citations[1..].iter().map(|c| c.id.as_str()).collect();
+        diags.push(DiagnosticMessage::warning(format!(
+            "crossref `@{first}` is part of a multi-id citation `[@{first}; ...]`; \
+             only the first id is resolved and the rest ({dropped}) are dropped. \
+             Use separate `@{first}` references if you need to cite each one.",
+            first = first.id,
+            dropped = dropped.join(", @")
+        )));
     }
 
     // Ensure the resolved reference carries the empty suffix expected
@@ -311,6 +347,30 @@ fn build_resolved_ref(
             RefTypeSource::Promised => "promised",
         }),
     );
+    // Q1's `refs.lua:56` branches on `cite.mode ~= pandoc.SuppressAuthor`;
+    // carry the mode through so renderers can make the same distinction
+    // (e.g. suppressing the "Figure"/"Table" label text).
+    data.insert(
+        "cite_mode".into(),
+        json!(match original.citations[0].mode {
+            CitationMode::AuthorInText => "author_in_text",
+            CitationMode::SuppressAuthor => "suppress_author",
+            CitationMode::NormalCitation => "normal_citation",
+        }),
+    );
+    // Q1's `refs.lua:31`: `not not string.match(cite.id, "^[A-Z]")` — true
+    // iff the *original* (non-lowercased) id starts with an ASCII
+    // uppercase letter, independent of the lowercased id used above only
+    // for the registry lookup.
+    data.insert(
+        "label_upper".into(),
+        json!(
+            identifier
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_uppercase())
+        ),
+    );
     if let Some(e) = entry {
         data.insert(
             "order".into(),
@@ -320,14 +380,21 @@ fn build_resolved_ref(
     node.plain_data = serde_json::Value::Object(data);
 
     // Keep the original Cite's suffix as a slot so renderers can carry it
-    // over — e.g. `[@fig-foo, p. 12]` often carries a page hint. The
-    // prefix is dropped because crossref references usually don't carry
-    // a leading textual prefix (unlike citations where a prefix is
-    // meaningful for citeproc).
+    // over — e.g. `[@fig-foo, p. 12]` often carries a page hint.
     if !original.citations[0].suffix.is_empty() {
         node.slots.insert(
             "suffix".into(),
             Slot::Inlines(original.citations[0].suffix.clone()),
+        );
+    }
+    // Likewise for the prefix — e.g. `[see @fig-foo]` — which must be a
+    // slot (Inlines) rather than a `plain_data` field: `plain_data` is
+    // contractually AST-free (`quarto-pandoc-types/src/custom.rs`), and
+    // stringifying inline markup here would silently drop it.
+    if !original.citations[0].prefix.is_empty() {
+        node.slots.insert(
+            "cite_prefix".into(),
+            Slot::Inlines(original.citations[0].prefix.clone()),
         );
     }
     node
@@ -338,6 +405,7 @@ mod tests {
     use super::*;
     use crate::crossref::{CrossrefEntry, CrossrefIndex, Order, RefTypeRegistry};
     use hashlink::LinkedHashMap;
+    use quarto_error_reporting::DiagnosticKind;
     use quarto_pandoc_types::attr::{Attr, AttrSourceInfo};
     use quarto_pandoc_types::block::{Block, Paragraph};
     use quarto_pandoc_types::inline::{Citation, CitationMode, Str};
@@ -488,16 +556,34 @@ mod tests {
         // `@fig-a; @fig-b` — both crossrefs. We currently resolve to the
         // first; the second is dropped. (Phase 1 scope: single-id
         // crossref cites. Multi-crossref ranges like "Figures 1-3" are
-        // deferred.)
+        // deferred.) Flagged, not fixed (bd-h1ub8f8z's sibling triage,
+        // P7 Task 8): the drop is diagnosed rather than silent.
         let reg = RefTypeRegistry::builtin();
         let idx = make_index_with(&[("fig-a", "fig"), ("fig-b", "fig")]);
         let mut inline = make_multi_cite(&["fig-a", "fig-b"]);
         let diags = resolve(&mut inline, &reg, Some(&idx));
-        assert!(diags.is_empty());
+        assert_eq!(diags.len(), 1);
+        assert!(diags[0].title.contains("fig-a"));
+        assert!(diags[0].title.contains("fig-b"));
         let Inline::Custom(node) = inline else {
             panic!();
         };
         assert_eq!(node.plain_data["identifier"], "fig-a");
+    }
+
+    #[test]
+    fn test_multi_crossref_drop_is_diagnosed() {
+        // T8.1 (flag branch): `[@fig-a; @fig-b; @fig-c]`, all same ref-type.
+        // Exactly one diagnostic is emitted, and it names every dropped id.
+        let reg = RefTypeRegistry::builtin();
+        let idx = make_index_with(&[("fig-a", "fig"), ("fig-b", "fig"), ("fig-c", "fig")]);
+        let mut inline = make_multi_cite(&["fig-a", "fig-b", "fig-c"]);
+        let diags = resolve(&mut inline, &reg, Some(&idx));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].kind, DiagnosticKind::Warning);
+        assert!(diags[0].title.contains("fig-a"));
+        assert!(diags[0].title.contains("fig-b"));
+        assert!(diags[0].title.contains("fig-c"));
     }
 
     #[test]

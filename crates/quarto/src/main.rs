@@ -316,6 +316,37 @@ enum Commands {
             conflicts_with_all = ["path", "share", "no_project", "allow_edit", "data_dir", "preview_dir", "ui"]
         )]
         join: Option<String>,
+
+        /// Quarto-1-style preview: render the document or project to
+        /// disk exactly as `q2 render` does, serve the output directory
+        /// over a plain static HTTP server, and (unless --no-watch)
+        /// watch the source files, re-render what changed, and reload
+        /// the browser.
+        ///
+        /// Uses none of the live-editing machinery, so --share,
+        /// --allow-edit, --ui, --join, --no-project, --data-dir and
+        /// --preview-dir don't combine with it. Only `html` and
+        /// `revealjs` output can be served this way.
+        #[arg(
+            long = "static",
+            conflicts_with_all = ["join", "share", "no_project", "allow_edit", "data_dir", "preview_dir", "ui"]
+        )]
+        static_mode: bool,
+
+        /// With --static: render once and serve, without watching the
+        /// filesystem or re-rendering.
+        #[arg(long, requires = "static_mode")]
+        no_watch: bool,
+
+        /// With --static: after a re-render, reload the page the browser
+        /// is on instead of navigating to the page that changed.
+        #[arg(long, requires = "static_mode")]
+        no_navigate: bool,
+
+        /// With --static: the output format to render, as `q2 render
+        /// --to`. Defaults to the document's `format:`, else `html`.
+        #[arg(long, value_name = "FORMAT", requires = "static_mode")]
+        to: Option<String>,
     },
 
     /// Serve a Shiny interactive document
@@ -1323,6 +1354,9 @@ fn main() -> Result<()> {
             strict,
             no_render_scripts,
             profile,
+            // `q2 render` always executes; only `q2 preview --static`
+            // narrows this (bd-sl79jjiq).
+            execution_policy: quarto_core::engine::ExecutionPolicy::All,
         }),
         Commands::Preview {
             path,
@@ -1338,11 +1372,28 @@ fn main() -> Result<()> {
             ui,
             print_asset_manifest_hashes,
             join,
+            static_mode,
+            no_watch,
+            no_navigate,
+            to,
         } => {
             if print_asset_manifest_hashes {
                 // Binary diagnostic (release CI drift check); answers
                 // without starting anything, in either mode.
                 commands::preview::print_asset_manifest_hashes()
+            } else if static_mode {
+                // Q1-style static preview (bd-sl79jjiq): clap has already
+                // rejected every hub-mode flag via conflicts_with_all.
+                commands::preview_static::execute(commands::preview_static::StaticArgs {
+                    path,
+                    port,
+                    host,
+                    no_browser,
+                    browser,
+                    no_watch,
+                    no_navigate,
+                    to,
+                })
             } else if let Some(ticket) = join {
                 // Guest mode (live-share plan Phase 3): clap has already
                 // rejected every host-mode flag via conflicts_with_all.

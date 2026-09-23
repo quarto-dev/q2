@@ -1,0 +1,41 @@
+---
+source: crates/xtask/src/capture_pandoc_goldens.rs
+expression: extraction.to_string()
+---
+core_props:
+  title: Theorem Test
+paragraphs:
+  [Title] Theorem Test
+  [FirstParagraph] Lemma 1 (Lemma) This is a lemma
+  [BodyText] 
+  [FirstParagraph] See Lemma 1.
+  [BodyText] Corollary 1 (Corollary) This is a corollary
+  [BodyText] 
+  [FirstParagraph] See Corollary 1.
+  [BodyText] Proposition 1 (Proposition) This is a proposition
+  [BodyText] 
+  [FirstParagraph] See Proposition 1.
+  [BodyText] Conjecture 1 (Conjecture) This is a conjecture
+  [BodyText] 
+  [FirstParagraph] See Conjecture 1.
+  [BodyText] Definition 1 (Definition) This is a definition
+  [BodyText] 
+  [FirstParagraph] See Definition 1.
+  [BodyText] Example 1 (Example) This is an example
+  [BodyText] 
+  [FirstParagraph] See Example 1.
+  [BodyText] Exercise 1 (Exercise) This is an exercise
+  [BodyText] 
+  [FirstParagraph] See Exercise 1.
+math:
+  y=mx+b
+  y=mx+b
+  y=mx+b
+  y=mx+b
+  y=mx+b
+  y=mx+b
+  y=mx+b
+media: []
+image_relationships: []
+drawing_count: 0
+page_break_count: 0

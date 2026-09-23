@@ -66,6 +66,13 @@ mod math_js;
 // MathJax via math_js. Included on native and WASM.
 mod math_ml;
 mod metadata_merge;
+// Pandoc-hybrid leg's writer stage: shells out to a real `pandoc`
+// subprocess via `std::process::Command` and materializes the vendored
+// filter tree via `crate::pandoc_filters::bundle::extract_share_tree`
+// (`tempfile`-backed). Same WASM-exclusion reasoning as `bootstrap_js`
+// and `crate::pandoc_filters::{bundle, harness}`.
+#[cfg(not(target_arch = "wasm32"))]
+mod pandoc_write;
 mod parse_document;
 mod pre_engine_sugaring;
 mod render_html;
@@ -75,6 +82,12 @@ mod resource_report;
 // Bootstrap is active. Same WASM-exclusion reasoning as `bootstrap_js`.
 #[cfg(not(target_arch = "wasm32"))]
 mod tabsets_js;
+// pandoc-hybrid-typst Phase 2: compiles PandocWriteStage's intermediate
+// `.typ` output to PDF via a real `typst compile` subprocess. Native-only
+// for the same reason as `pandoc_write`: shells out to a real binary, no
+// WASM equivalent.
+#[cfg(not(target_arch = "wasm32"))]
+mod typst_compile;
 mod unwrap_profile;
 mod user_filters;
 
@@ -112,6 +125,10 @@ pub use listing_item_info::ListingItemInfoStage;
 pub use math_js::{DEFAULT_KATEX_URL_BASE, DEFAULT_MATHJAX_URL, MathEngine, MathJsStage};
 pub use math_ml::MathMlStage;
 pub use metadata_merge::MetadataMergeStage;
+#[cfg(not(target_arch = "wasm32"))]
+pub use pandoc_write::{
+    PandocWriteStage, classify_pandoc_completion, retain_temp_json_unless_success,
+};
 pub use parse_document::ParseDocumentStage;
 pub use pre_engine_sugaring::PreEngineSugaringStage;
 pub use render_html::RenderHtmlBodyStage;
@@ -119,5 +136,7 @@ pub use resource_report::ResourceReportStage;
 pub use source_conversion::SourceConversionStage;
 #[cfg(not(target_arch = "wasm32"))]
 pub use tabsets_js::TabsetsJsStage;
+#[cfg(not(target_arch = "wasm32"))]
+pub use typst_compile::TypstCompileStage;
 pub use unwrap_profile::UnwrapProfileStage;
 pub use user_filters::UserFiltersStage;

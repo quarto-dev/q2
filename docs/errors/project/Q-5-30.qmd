@@ -1,0 +1,62 @@
+---
+title: "Pandoc Path Option Not Found"
+description: "A `reference-doc` or `template` entry names a file that does not exist, so pandoc cannot use it."
+code: Q-5-30
+subsystem: project
+status: complete
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-30` — Pandoc Path Option Not Found
+
+> A `reference-doc` or `template` entry names a file that does not
+> exist, so pandoc cannot use it. Resolved relative to the file that
+> declared it (a leading `/` anchors at the project root). The
+> render stops here — there is nothing sensible pandoc can produce
+> without the named file.
+
+## What this means
+
+Formats that pass through pandoc directly — `docx`, `pptx`, and
+others — can point at a custom Word/PowerPoint template or a pandoc
+document template with `reference-doc` and `template`:
+
+```yaml
+format:
+  docx:
+    reference-doc: custom-reference.docx
+```
+
+Quarto resolves the path **relative to the file that declares
+it** — a value in `_quarto.yml` resolves against the project root,
+a value in a directory's `_metadata.yml` against that directory, and
+a value in a document's front matter against the document's own
+directory. A leading `/` always anchors at the project root,
+regardless of which file declares the entry.
+
+Unlike `css` (`Q-5-29`), a missing `reference-doc` or `template` is
+**fatal**, not a warning: pandoc cannot render the document without
+the file the option names, so the render stops here with a
+diagnostic pointing at the offending YAML entry, rather than handing
+pandoc a path it cannot open.
+
+## Common causes
+
+- **A typo in the path**, or a file that was moved or renamed
+  without updating the `reference-doc`/`template` entry.
+- **A path written relative to the wrong anchor** — for example, a
+  document in `posts/2026/` declaring `reference-doc: ref.docx` for
+  a file that actually lives at the project root. Write `/ref.docx`
+  (or the correct relative path) instead.
+- **A reference document that exists on one machine but was never
+  committed to the project.**
+
+## How to fix it
+
+Check the path in the `reference-doc`/`template` entry against the
+anchor of the file that declares it, or add the missing file. If the
+template belongs to the project as a whole, declaring it once in
+`_quarto.yml` (project-root-relative) is usually clearer than
+repeating it per document.

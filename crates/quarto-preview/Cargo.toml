@@ -40,6 +40,13 @@ spa-manifest.workspace = true
 tar.workspace = true
 zstd.workspace = true
 
+# `q2 preview --static` (bd-sl79jjiq): SSE reload channel over a
+# broadcast receiver, content types for a rendered site, and URL path
+# decoding for the static router.
+tokio-stream = { version = "0.1", features = ["sync"] }
+mime_guess = "2"
+percent-encoding = "2"
+
 [build-dependencies]
 # Writes the editor embed's spa-manifest.json over the post-dedupe,
 # post-resolution file view (live-share plan Phase 2, design decision

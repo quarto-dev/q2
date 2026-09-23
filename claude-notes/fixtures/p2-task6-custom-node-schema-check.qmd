@@ -1,0 +1,23 @@
+---
+title: "P2 Task 6: custom-node wire schema live-payload check"
+format: q2-preview
+---
+
+Manual/binary-level verification fixture for P2 Task 6 (T6.2). Not
+wired into any automated runner. See the P2 implementation plan,
+Task 6 Test Seam Spec. Exercises a callout, a captioned figure, a
+theorem, and an `@fig-` crossref in one small document so the live
+`q2 preview` payload can be grepped for the custom-node schema
+`data-custom-data` keys (`order`, `cite_mode`, `label_upper`).
+
+::: {.callout-note}
+A note callout, exercising the Callout `plain_data` field.
+:::
+
+![A minimal figure.](https://placehold.co/1x1.png){#fig-tiny width=1}
+
+::: {#thm-trivial .theorem}
+Every number equals itself.
+:::
+
+See @fig-tiny for the figure and @thm-trivial for the theorem.

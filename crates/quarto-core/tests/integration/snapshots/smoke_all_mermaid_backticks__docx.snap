@@ -1,0 +1,17 @@
+---
+source: crates/xtask/src/capture_pandoc_goldens.rs
+expression: extraction.to_string()
+---
+core_props:
+  title: mermaid backtick test
+paragraphs:
+  [Title] mermaid backtick test
+  [FirstParagraph] It’s not important right now whether this syntax is correct for mermaid; the relevant aspect is that our pandoc codegen wasn’t taking the inner number of backticks into account. This test checks for that.
+  [SourceCode] ```This would have been a problem.```
+  [FirstParagraph] 
+  [BodyText] 
+  [BodyText] 
+media: ["rId9.png"]
+image_relationships: ["media/rId9.png"]
+drawing_count: 1
+page_break_count: 0
