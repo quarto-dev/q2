@@ -5191,6 +5191,10 @@ mod tests {
                 "ast-transforms",
                 "user-filters-post",
                 "resource-report",
+                // Survives on purpose: NumberEncoding::Writer is a no-op for
+                // every non-HTML format, and the stage still strips the
+                // quarto-eq-number attribute before pandoc sees it.
+                "equation-number",
                 "pandoc-write",
             ]
         );
