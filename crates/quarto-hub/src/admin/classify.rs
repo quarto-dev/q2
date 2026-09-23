@@ -87,7 +87,7 @@ pub fn classify(doc: &Automerge) -> DocKind {
             .get(ROOT, "mimeType")
             .ok()
             .flatten()
-            .and_then(|(value, _)| value.to_str().map(str::to_string));
+            .and_then(|(value, _)| value.as_str().map(str::to_string));
         return if mime.as_deref() == Some(CAPTURE_MIME_TYPE) {
             DocKind::EngineCapture
         } else {
@@ -156,7 +156,7 @@ pub fn referenced_doc_ids(doc: &Automerge) -> Vec<String> {
 
 fn read_str(doc: &Automerge, obj: &automerge::ObjId, key: &str) -> Option<String> {
     let (value, _) = doc.get(obj, key).ok().flatten()?;
-    value.to_str().map(str::to_string)
+    value.as_str().map(str::to_string)
 }
 
 fn normalize_id(id: &str) -> String {

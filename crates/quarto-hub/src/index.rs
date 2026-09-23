@@ -323,14 +323,14 @@ impl IndexDocument {
 /// hub-client (`@automerge/automerge` 3.x, via `automerge-repo`) stores plain
 /// string map-values — including the file-document ids in the `files` map — as
 /// `Text` objects, not scalar strings (a `doc.files[path] = id` assignment
-/// becomes a collaborative `Text`). A Rust reader using `Value::to_str()` alone
+/// becomes a collaborative `Text`). A Rust reader using `Value::as_str()` alone
 /// silently drops the `Text` form, so a project *created in hub-client* reads as
 /// having **zero files** — which broke `q2 provide-hub` materialization
 /// (bd-bm0vaetl). Rust-authored docs (project-mode hub) keep using the scalar
 /// form; this accepts both. Same class of bug as the `metadata-as-str` lint.
 fn read_str_or_text<D: ReadDoc>(doc: &D, obj: &automerge::ObjId, key: &str) -> Option<String> {
     let (value, id) = doc.get(obj, key).ok().flatten()?;
-    if let Some(s) = value.to_str() {
+    if let Some(s) = value.as_str() {
         return Some(s.to_string());
     }
     if matches!(value, automerge::Value::Object(ObjType::Text)) {
@@ -347,25 +347,25 @@ fn read_capture_entry<D: ReadDoc>(doc: &D, entry_obj: &automerge::ObjId) -> Opti
         .get(entry_obj, capture_field::CAPTURE_DOC_ID)
         .ok()
         .flatten()?;
-    let capture_doc_id = capture_doc_id_val.to_str()?.to_string();
+    let capture_doc_id = capture_doc_id_val.as_str()?.to_string();
 
     let staleness = doc
         .get(entry_obj, capture_field::STALENESS)
         .ok()
         .flatten()
-        .and_then(|(v, _)| v.to_bool());
+        .and_then(|(v, _)| v.as_bool());
 
     let state = doc
         .get(entry_obj, capture_field::STATE)
         .ok()
         .flatten()
-        .and_then(|(v, _)| v.to_str().and_then(CaptureState::from_str));
+        .and_then(|(v, _)| v.as_str().and_then(CaptureState::from_str));
 
     let last_error = doc
         .get(entry_obj, capture_field::LAST_ERROR)
         .ok()
         .flatten()
-        .and_then(|(v, _)| v.to_str().map(|s| s.to_string()));
+        .and_then(|(v, _)| v.as_str().map(|s| s.to_string()));
 
     Some(CaptureRef {
         capture_doc_id,

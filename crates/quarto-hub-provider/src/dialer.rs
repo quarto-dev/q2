@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use futures::future::BoxFuture;
 use futures::{SinkExt, StreamExt};
-use samod::{Dialer, Transport};
+use samod::{DialError, Dialer, Transport};
 use tungstenite::Message;
 use tungstenite::client::IntoClientRequest;
 use tungstenite::handshake::client::Request;
@@ -71,23 +71,30 @@ pub(crate) fn outbound_to_ws(bytes: Vec<u8>) -> Message {
 }
 
 impl Dialer for BearerDialer {
+    // samod 0.13 treated every connect error as retryable; keep that behavior
+    // by reporting all failures as transient (a fresh token is fetched per
+    // attempt, so even an auth rejection can clear on retry).
+    type Error = std::convert::Infallible;
+
     fn url(&self) -> Url {
         self.url.clone()
     }
 
-    fn connect(
-        &self,
-    ) -> BoxFuture<'static, Result<Transport, Box<dyn std::error::Error + Send + Sync + 'static>>>
-    {
+    fn connect(&self) -> BoxFuture<'static, Result<Transport, DialError<Self::Error>>> {
         let url = self.url.clone();
         let token_source = self.token_source.clone();
         Box::pin(async move {
             // Fresh token per (re)connect — the auth bridge may have refreshed
             // it since the last attempt.
-            let bearer = token_source.fresh_bearer().await?;
-            let request = build_auth_request(&url, &bearer)?;
+            let bearer = token_source
+                .fresh_bearer()
+                .await
+                .map_err(DialError::transient)?;
+            let request = build_auth_request(&url, &bearer).map_err(DialError::transient)?;
 
-            let (ws, _response) = tokio_tungstenite::connect_async(request).await?;
+            let (ws, _response) = tokio_tungstenite::connect_async(request)
+                .await
+                .map_err(DialError::transient)?;
             let (write, read) = ws.split();
 
             // Inbound: tungstenite frames -> sync bytes (dropping control frames).
