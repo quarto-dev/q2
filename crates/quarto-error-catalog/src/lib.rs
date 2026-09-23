@@ -331,6 +331,49 @@ mod tests {
         );
     }
 
+    /// T6.9 (P5 Task 6): the wire-format shim's two new warning codes exist,
+    /// carry `subsystem == "pandoc"` (the same subsystem P4 Task 6
+    /// established for `Q-20-1..4`), and follow the canonical
+    /// `https://quarto.org/docs/errors/pandoc/<code>` docs_url shape.
+    ///
+    /// Revert hunk: changing either entry's `subsystem` to something else
+    /// (e.g. `"lua"`) makes the corresponding `assert_eq!` RED.
+    #[test]
+    fn test_pandoc_shim_codes() {
+        for code in ["Q-20-5", "Q-20-6", "Q-20-7"] {
+            let info = ERROR_CATALOG
+                .get(code)
+                .unwrap_or_else(|| panic!("{code} must be in the catalog"));
+            assert_eq!(info.subsystem, "pandoc");
+            assert!(
+                info.docs_url
+                    .as_deref()
+                    .is_some_and(|u| u == format!("https://quarto.org/docs/errors/pandoc/{code}")),
+                "{code} docs_url must be the canonical pandoc-subsystem shape; got: {:?}",
+                info.docs_url
+            );
+        }
+    }
+
+    /// T1.6 (P7-foundation Task 1): the multi-format render warning's code
+    /// exists, carries `subsystem == "pandoc"`, and follows the canonical
+    /// `https://quarto.org/docs/errors/pandoc/<code>` docs_url shape.
+    ///
+    /// Revert hunk: changing the entry's `docs_url` to another subsystem's
+    /// URL shape (e.g. the `lua` subsystem's) makes the `assert!` RED.
+    #[test]
+    fn test_multi_format_warning_catalog_entry() {
+        let code = "Q-20-8";
+        let info = ERROR_CATALOG
+            .get(code)
+            .unwrap_or_else(|| panic!("{code} must be in the catalog"));
+        assert_eq!(info.subsystem, "pandoc");
+        assert_eq!(
+            info.docs_url.as_deref(),
+            Some("https://quarto.org/docs/errors/pandoc/Q-20-8")
+        );
+    }
+
     // ─── Integration: install() wires this catalog into quarto-error-reporting ─
     //
     // These exercise the installed-global delegation path end-to-end. Each calls

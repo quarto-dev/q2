@@ -58,6 +58,10 @@ use crate::stage::stages::ApplyTemplateConfig;
 use crate::stage::stages::BootstrapJsStage;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::stage::stages::ClipboardJsStage;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::stage::stages::PandocWriteStage;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::stage::stages::TypstCompileStage;
 use crate::stage::{
     ApplyTemplateStage, AstTransformsStage, AttributionGenerateStage, CompileThemeCssStage,
     DocumentProfileStage, EngineExecutionStage, IncludeExpansionStage, IncludeResolveStage,
@@ -75,15 +79,16 @@ use crate::transforms::{
     CrossrefRenderTransform, CrossrefResolveTransform, DateNormalizeTransform, DraftAlertTransform,
     EquationLabelTransform, ExampleEmbedRenderTransform, ExampleEmbedTransform,
     FloatRefTargetSugarTransform, FooterGenerateTransform, FooterRenderTransform,
-    FootnotesTransform, LinkRewriteTransform, ListingGenerateTransform, ListingRenderTransform,
-    MermaidRenderTransform, MetadataNormalizeTransform, NavbarGenerateTransform,
-    NavbarRenderTransform, PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
-    ReferenceLinkDiagnosticsTransform, RepoActionsRenderTransform, ResourceCollectorTransform,
-    ResponsiveImageTransform, SectionizeTransform, ShortcodeResolveTransform,
-    SidebarGenerateTransform, SidebarRenderTransform, TableBootstrapClassTransform,
-    TheoremSugarTransform, TitleBannerTransform, TitleBlockTransform, TocGenerateTransform,
-    TocLocationTransform, TocRenderTransform, WebsiteBootstrapIconsTransform,
-    WebsiteCanonicalUrlTransform, WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
+    FootnotesResolveTransform, FootnotesTransform, LinkRewriteTransform, ListingGenerateTransform,
+    ListingRenderTransform, MermaidRenderTransform, MetadataNormalizeTransform,
+    NavbarGenerateTransform, NavbarRenderTransform, PageNavGenerateTransform,
+    PageNavRenderTransform, ProofSugarTransform, ReferenceLinkDiagnosticsTransform,
+    RepoActionsRenderTransform, ResourceCollectorTransform, ResponsiveImageTransform,
+    SectionizeTransform, ShortcodeResolveTransform, SidebarGenerateTransform,
+    SidebarRenderTransform, TableBootstrapClassTransform, TheoremSugarTransform,
+    TitleBannerTransform, TitleBlockTransform, TocGenerateTransform, TocLocationTransform,
+    TocRenderTransform, WebsiteBootstrapIconsTransform, WebsiteCanonicalUrlTransform,
+    WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -120,6 +125,9 @@ pub struct HtmlRenderConfig {
     /// [`crate::engine::EngineRegistry::with_replay`] from a
     /// [`quarto_trace::EngineCapture`] loaded from a trace file.
     pub engine_registry: Option<std::sync::Arc<crate::engine::EngineRegistry>>,
+    /// Which documents may execute code (bd-sl79jjiq). Threaded onto
+    /// `RenderContext` next to `engine_registry`.
+    pub execution_policy: crate::engine::ExecutionPolicy,
 
     /// Server-recorded engine captures to splice into the HTML render
     /// (bd-uy4uygha). When non-empty, a [`crate::stage::CaptureSpliceStage`]
@@ -140,6 +148,7 @@ impl HtmlRenderConfig {
         Self {
             resolver: Some(resolver),
             engine_registry: None,
+            execution_policy: crate::engine::ExecutionPolicy::default(),
             captures: Vec::new(),
         }
     }
@@ -170,6 +179,11 @@ pub struct RenderOutput {
     pub diagnostics: Vec<DiagnosticMessage>,
     /// Source context for mapping locations in diagnostics.
     pub source_context: SourceContext,
+    /// True when the document resolved to a code-executing engine but
+    /// the render's `ExecutionPolicy` excluded it, so its cells were
+    /// passed through inert (bd-sl79jjiq). Never true for a document
+    /// with nothing to execute.
+    pub execution_skipped: bool,
 }
 
 pub struct AstOutput {
@@ -370,6 +384,44 @@ pub fn build_html_pipeline_stages_with_options(
     stages
 }
 
+/// Render QMD content through the Pandoc-hybrid leg (docx/pptx today).
+///
+/// Sibling of [`render_qmd_to_html`], using [`build_pandoc_pipeline_stages`]
+/// instead of the HTML stage list. The pandoc subprocess writes the output
+/// file directly; the returned [`RenderedOutput::content`] is always empty
+/// (Finding 3's explicit decision — no binary bytes travel through
+/// `PipelineData`).
+///
+/// Returns the pipeline's diagnostics alongside the rendered output —
+/// P7-foundation Task 3's first real caller (`render_document_to_file`)
+/// needs `PandocWriteStage`'s classified pandoc-stderr warnings (e.g.
+/// `Q-11-1` "Could not fetch resource") to actually reach the CLI's
+/// printed diagnostics, not be dropped on the floor.
+///
+/// Native-only: the Pandoc-hybrid leg shells out to a real `pandoc`
+/// binary, which has no WASM equivalent.
+///
+/// # Errors
+///
+/// Returns an error if parsing, transforms, or the `pandoc` subprocess
+/// fail.
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn render_qmd_to_pandoc(
+    content: &[u8],
+    source_name: &str,
+    ctx: &mut RenderContext<'_>,
+    runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
+) -> Result<(crate::stage::RenderedOutput, Vec<DiagnosticMessage>)> {
+    let stages = build_pandoc_pipeline_stages(ctx.format.identifier);
+    let (output, diagnostics) = run_pipeline(content, source_name, ctx, runtime, stages).await?;
+    let rendered = output.into_rendered_output().ok_or_else(|| {
+        crate::error::QuartoError::Other(
+            "Pandoc pipeline did not produce RenderedOutput".to_string(),
+        )
+    })?;
+    Ok((rendered, diagnostics))
+}
+
 /// Names of stages in [`build_html_pipeline_stages_with_options`]
 /// that the q2-preview pipeline drops. All three turn the AST into
 /// an HTML string (or wrap one); q2-preview returns the AST itself
@@ -401,9 +453,9 @@ const Q2_PREVIEW_STAGE_EXCLUDED: &[&str] = &["math-js", "render-html-body", "app
 /// preserved.
 ///
 /// `AstTransformsStage` runs in both pipelines; it dispatches at
-/// run-time on `ctx.format.pipeline_kind` between
-/// `build_transform_pipeline` (HTML) and
-/// `build_q2_preview_transform_pipeline` (q2-preview).
+/// run-time on the [`crate::format::PipelineProfile`] derived from
+/// `ctx.format.target_format` between `build_transform_pipeline` (render)
+/// and `build_q2_preview_transform_pipeline` (preview).
 ///
 /// **bd-lucp:** an optional `capture` slot inserts a
 /// [`CaptureSpliceStage`](crate::stage::CaptureSpliceStage) between
@@ -426,6 +478,71 @@ pub fn build_q2_preview_pipeline_stages(
     let mut stages = build_html_pipeline_stages_with_options(None);
     stages.retain(|s| !Q2_PREVIEW_STAGE_EXCLUDED.contains(&s.name()));
     insert_capture_splice_stage(&mut stages, captures);
+    stages
+}
+
+/// Names of stages in [`build_html_pipeline_stages_with_options`] that a
+/// Pandoc-writer output format (`PipelineProfile::Pandoc(_)` — docx, pptx,
+/// …) drops. This is a **stage**-level exclude-list — a separate mechanism
+/// from [`PANDOC_TRANSFORM_EXCLUDED`], which excludes individual
+/// `AstTransform`s. Stages are the coarser, macro-level render steps
+/// (theme CSS compilation, JS artifact injection, syntax highlighting,
+/// HTML body rendering, template application); none of these has a
+/// Pandoc-writer analog, since Pandoc's own writer produces the final
+/// document directly from the AST with no HTML chrome to decorate.
+///
+/// **Jointly owned with the P4 plan.** This list is P1's half of the
+/// contract — the const plus its two validators
+/// (`pandoc_stage_excluded_names_exist_in_html_pipeline`,
+/// `t6_2_pandoc_stage_list_produces_exact_surviving_name_list`). P4 owns
+/// inserting `PandocWriteStage` and deciding the final stage composition
+/// for a real Pandoc-writer render; this list is not necessarily final.
+///
+/// The unknown-name validator
+/// (`pandoc_stage_excluded_names_exist_in_html_pipeline`) fails the test
+/// suite if any name here is not an actual stage in the full HTML pipeline
+/// (typo / rename guard) — same rationale as [`Q2_PREVIEW_STAGE_EXCLUDED`]'s
+/// validator.
+const PANDOC_STAGE_EXCLUDED: &[&str] = &[
+    "compile-theme-css",
+    "bootstrap-js",
+    "clipboard-js",
+    "tabsets-js",
+    "code-highlight",
+    "math-js",
+    "render-html-body",
+    "apply-template",
+];
+
+/// Build the stage list for a `PipelineProfile::Pandoc(_)` render (docx,
+/// pptx, typst, …): [`build_html_pipeline_stages_with_options`] with the
+/// names in [`PANDOC_STAGE_EXCLUDED`] removed, plus [`PandocWriteStage`]
+/// appended as the tail (P4 Task 9) — the stage that serializes the
+/// wire-format AST and shells out to a real `pandoc` subprocess. Order is
+/// preserved for the retained prefix.
+///
+/// `format_identifier` decides whether a further tail stage is needed:
+/// typst is the one Pandoc-hybrid format where `PandocWriteStage`'s output
+/// (`.typ` source) is not the final artifact — pandoc-hybrid-typst Phase 2
+/// appends [`TypstCompileStage`] after it, which compiles that intermediate
+/// file to the real PDF. docx/pptx get no further stage: pandoc's own
+/// output there already is the final artifact.
+///
+/// The AST-transform exclude-list *within* `AstTransformsStage` (which
+/// individual transforms should not run for a `Pandoc(fmt)` profile) is a
+/// separate mechanism from this stage-level list and is `seam deferred
+/// until P1's PipelineProfile work` — this function owns only which
+/// **stages** run.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn build_pandoc_pipeline_stages(
+    format_identifier: crate::format::FormatIdentifier,
+) -> Vec<Box<dyn PipelineStage>> {
+    let mut stages = build_html_pipeline_stages_with_options(None);
+    stages.retain(|s| !PANDOC_STAGE_EXCLUDED.contains(&s.name()));
+    stages.push(Box::new(PandocWriteStage::new()));
+    if format_identifier == crate::format::FormatIdentifier::Typst {
+        stages.push(Box::new(TypstCompileStage::new()));
+    }
     stages
 }
 
@@ -566,8 +683,8 @@ pub fn build_html_pipeline_with_stages(
 ///   `{{< meta key >}}` resolution is handled by the lightweight
 ///   `quarto_analysis::MetaShortcodeTransform` in `quarto-lsp-core`.
 /// - `MetadataNormalizeTransform`, `TitleBlockTransform`, `SectionizeTransform`,
-///   `FootnotesTransform` — render-shape transforms that don't affect the
-///   outline.
+///   `FootnotesTransform`, `FootnotesResolveTransform` — render-shape
+///   transforms that don't affect the outline.
 /// - `CalloutResolveTransform` — converts callout custom nodes back into
 ///   render-visible Divs; the outline walker wants the custom-node form.
 /// - `CrossrefResolveTransform` — rewrites `@fig-1` citations; not needed
@@ -687,6 +804,7 @@ pub async fn run_pipeline(
     if let Some(override_reg) = &ctx.engine_registry_override {
         stage_ctx.registry = override_reg.clone();
     }
+    stage_ctx.execution_policy = ctx.execution_policy.clone();
 
     // Create input from content
     let input = PipelineData::LoadedSource(LoadedSource::new(
@@ -718,6 +836,7 @@ pub async fn run_pipeline(
     // (bd-0rsk07il) so response builders can read it after a full
     // render. `None` for pipelines that stop before the unwrap stage.
     ctx.document_profile = stage_ctx.document_profile;
+    ctx.execution_skipped = stage_ctx.execution_skipped;
 
     // Apply the `diagnostics:` suppression policy resolved by
     // `MetadataMergeStage`. This is deliberately the *only* place
@@ -859,6 +978,7 @@ pub async fn render_qmd_to_html(
     // after `StageContext::new()` populates the default project registry.
     // Cloning the Arc is cheap; `HtmlRenderConfig` is borrowed `&`.
     ctx.engine_registry_override = config.engine_registry.clone();
+    ctx.execution_policy = config.execution_policy.clone();
     let apply_config = config
         .resolver
         .clone()
@@ -890,6 +1010,7 @@ pub async fn render_qmd_to_html(
         html: rendered.content,
         diagnostics,
         source_context: rendered.source_context,
+        execution_skipped: ctx.execution_skipped,
     })
 }
 
@@ -1064,7 +1185,9 @@ fn capture_untransformed_ast_json(content: &[u8], source_name: &str) -> Option<S
 ///     (bd-draft-banner-missing-hgx1gkqm)
 /// 5. `TitleBlockTransform` - Add title header from metadata if not present
 /// 6. `SectionizeTransform` - Wrap headers in section Divs (for HTML semantic structure)
-/// 7. `FootnotesTransform` - Extract footnotes and create footnotes section
+/// 7. `FootnotesTransform` - Resolve footnote refs/defs into native `Inline::Note`s
+/// 7a. `FootnotesResolveTransform` - Resolve `Inline::Note`s into HTML footnote chrome
+///     (excluded for `Pandoc(_)` profiles — pandoc's own writer numbers/places `Note`s)
 /// 8. `FloatRefTargetSugarTransform` - Wrap float crossref Divs / Figures in canonical CustomNode
 ///
 /// ## Navigation Phase
@@ -1146,15 +1269,21 @@ pub fn build_transform_pipeline(
     extensions: Vec<crate::extension::types::Extension>,
     runtime: std::sync::Arc<dyn quarto_system_runtime::SystemRuntime>,
     target_format: String,
+    pipeline_profile: crate::format::PipelineProfile,
     variables: Option<quarto_pandoc_types::ConfigValue>,
     project_env: hashlink::LinkedHashMap<String, String>,
     quarto_profile: Option<String>,
 ) -> TransformPipeline {
     let mut pipeline: TransformPipeline = TransformPipeline::new();
 
-    // Computed before `target_format` is moved into the shortcode transform.
-    // True for `revealjs` (native render) and `q2-slides` (preview).
-    let is_revealjs = crate::format::is_revealjs_target(&target_format);
+    // Family axis, from the single derivation point (`PipelineProfile`):
+    // true for `RevealjsRender` (native render) and `RevealjsPreview`
+    // (`q2-slides`).
+    let is_revealjs = matches!(
+        pipeline_profile,
+        crate::format::PipelineProfile::RevealjsRender
+            | crate::format::PipelineProfile::RevealjsPreview
+    );
 
     // The Lua engines (shortcodes, user filters) see the *canonical* Pandoc
     // format as their `FORMAT` global, not q2's preview pseudo-format. Under
@@ -1276,8 +1405,13 @@ pub fn build_transform_pipeline(
         pipeline.push(Box::new(SectionizeTransform::new()));
     }
     pipeline.push(Box::new(FootnotesTransform::new()));
+    // Immediately after: the HTML-chrome half consuming the `Inline::Note`s
+    // this produces. Excluded for `Pandoc(_)` profiles below (a Pandoc
+    // writer numbers/places `Note`s itself) — `FootnotesTransform` is not,
+    // so its `Inline::Note`s survive to pandoc's own writer.
+    pipeline.push(Box::new(FootnotesResolveTransform::new()));
     if is_revealjs {
-        // Per-slide footnote/aside coalescing consumes FootnotesTransform's
+        // Per-slide footnote/aside coalescing consumes FootnotesResolveTransform's
         // resolved output (refs = `Span#fnrefN`, defs in the trailing
         // `Div#footnotes`), so it must run *after* it. Pure AST → benefits
         // render and preview alike. See `revealjs::footnotes`. This is a
@@ -1565,6 +1699,26 @@ pub fn build_transform_pipeline(
     // `rendered.includes.*` and binds hover via React props).
     pipeline.push(Box::new(AttributionViewerTransform::new()));
 
+    // Format-profile exclude-list application: the same `retain_excluding`
+    // seam used by `build_q2_preview_transform_pipeline`, applied here so
+    // `build_transform_pipeline` itself is total over `PipelineProfile` —
+    // `HtmlRender`/`RevealjsRender` (native renders) keep every transform;
+    // `HtmlPreview`/`RevealjsPreview` drop `Q2_PREVIEW_TRANSFORM_EXCLUDED`;
+    // `Pandoc(_)` (docx, pptx, gfm, …) drops `PANDOC_TRANSFORM_EXCLUDED`,
+    // since a Pandoc writer has no HTML chrome/decoration to consume those
+    // transforms' output.
+    match &pipeline_profile {
+        crate::format::PipelineProfile::Pandoc(_) => {
+            pipeline.retain_excluding(PANDOC_TRANSFORM_EXCLUDED);
+        }
+        crate::format::PipelineProfile::HtmlPreview
+        | crate::format::PipelineProfile::RevealjsPreview => {
+            pipeline.retain_excluding(Q2_PREVIEW_TRANSFORM_EXCLUDED);
+        }
+        crate::format::PipelineProfile::HtmlRender
+        | crate::format::PipelineProfile::RevealjsRender => {}
+    }
+
     pipeline
 }
 
@@ -1657,21 +1811,288 @@ const Q2_PREVIEW_TRANSFORM_EXCLUDED: &[&str] = &[
     "panel-tabset-resolve",
 ];
 
+/// Names of transforms in [`build_transform_pipeline`] that a Pandoc-writer
+/// output format (`PipelineProfile::Pandoc(_)` — docx, pptx, gfm, …) drops.
+///
+/// Pandoc's own writer produces the final document from the wire format's
+/// custom nodes and Pandoc primitives; the excluded transforms here are the
+/// ones whose job is HTML-specific *presentation* (chrome rendering,
+/// HTML-only decoration) rather than format-agnostic semantic structure.
+/// Unlike [`Q2_PREVIEW_TRANSFORM_EXCLUDED`] (a small, deliberate carve-out
+/// from an otherwise-included-by-default HTML pipeline), this list drops the
+/// entire Navigation phase plus every HTML-render-only presentation
+/// transform, since a Pandoc writer has no navbar/sidebar/TOC/footer chrome
+/// and no HTML markup to decorate.
+///
+/// `panel-tabset` (the sugar transform, as opposed to
+/// `panel-tabset-resolve`) is deliberately **not** here — Pandoc's own
+/// writers can render nested Divs, and P5's Route-R Tabset path relies on
+/// the sugared structure surviving to a later stage. Adding it here would
+/// pass every absence-shaped test while breaking that path; see the
+/// "exclude-list superset trap" note on the exact-list validator below.
+///
+/// The unknown-name validator
+/// (`pandoc_transform_excluded_names_exist_in_html_pipeline`) fails the test
+/// suite if any name here is not an actual transform in the full HTML
+/// pipeline (typo / rename guard) — same rationale as
+/// [`Q2_PREVIEW_TRANSFORM_EXCLUDED`]'s validator.
+const PANDOC_TRANSFORM_EXCLUDED: &[&str] = &[
+    // B4: format-specific presentation that consumes rendered/semantic
+    // shapes — HTML-only rendering of custom nodes and HTML decoration.
+    "crossref-render",
+    "mermaid-render",
+    "code-block-render",
+    "table-bootstrap-class",
+    // B2: HTML scaffolding / website chrome producers with no Pandoc-writer
+    // analog.
+    "title-block",
+    "sectionize",
+    "title-banner",
+    "website-title-prefix",
+    "website-favicon",
+    "website-bootstrap-icons",
+    "website-canonical-url",
+    // Navigation phase, twenty: chrome generate + render (TOC, navbar,
+    // sidebar, page-nav, footer, listings) has no Pandoc-writer output slot.
+    "navbar-generate",
+    "navbar-render",
+    "sidebar-generate",
+    "sidebar-render",
+    "secondary-nav-render",
+    "breadcrumbs-render",
+    "quarto-nav-js",
+    "page-nav-generate",
+    "page-nav-render",
+    "toc-generate",
+    "toc-render",
+    "toc-location",
+    "footer-generate",
+    "footer-render",
+    "listing-generate",
+    "listing-render",
+    "listing-feed-stage",
+    "listing-feed-link",
+    "categories-sidebar",
+    "repo-actions-render",
+    // B4-adjacent / previously unclassified: HTML-only presentation and
+    // decoration with no Pandoc-writer analog.
+    "attribution-viewer",
+    "attribution-render",
+    "draft-alert",
+    "format-css",
+    "responsive-image",
+    // Swaps a `.hep` plot-document reference for a rendered SVG artifact;
+    // no Pandoc-writer analog exists yet (bd-3qych45b covers HTML only).
+    "hephaestus-render",
+    // Design-doc-table corrections: resolve-halves whose job is producing
+    // the writer-visible HTML shape.
+    "callout-resolve",
+    "panel-tabset-resolve",
+    // Task 5: the HTML-chrome half of the footnotes split (Span#fnrefN +
+    // Div#footnotes). `"footnotes"` (the semantic half, resolving refs/defs
+    // into native `Inline::Note`) is deliberately NOT here — it must keep
+    // running so pandoc's own writers get `Note`s to number and place.
+    "footnotes-resolve",
+];
+
+/// The four-bucket taxonomy every transform in [`build_transform_pipeline`]
+/// is classified into, per §6 of
+/// `claude-notes/designs/pandoc-hybrid-architecture.md` (Decision 1, frozen).
+///
+/// **Litmus:** a transform is format-specific ([`Bucket::B2`] / [`Bucket::B4`])
+/// if it bakes one format's *presentation* of semantics captured neutrally
+/// elsewhere, re-expressed per-format downstream by the Pandoc
+/// template/writer.
+///
+/// The pandoc-hybrid invariant follows directly: `B1 | B3` survive to the
+/// Pandoc cut, `B2 | B4` must not. See
+/// [`BUCKETS`] and `neutral_core_invariant_no_b2_b4_survives_the_pandoc_cut`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Bucket {
+    /// **B1 — format-neutral semantic core.** Pre-cut, shared by every
+    /// format; this is the wire-format content itself. Survives the cut.
+    B1,
+    /// **B2 — format-family scaffolding.** Pre-cut, per-family (HTML,
+    /// revealjs); must not touch semantics. Dropped at the cut.
+    B2,
+    /// **B3 — shared post-core service.** Crosses the cut and runs for
+    /// Pandoc too (resource staging, link rewriting, appendix structure).
+    B3,
+    /// **B4 — format presentation.** The renderer tail: the HTML writer's
+    /// own copy of the renderer trinity, plus website/navigation chrome.
+    /// Dropped at the cut; Pandoc's writer (and the vendored Q1 Lua
+    /// filters) re-express the same semantics for their own format.
+    B4,
+}
+
+impl Bucket {
+    /// Whether a transform in this bucket must still be running when the
+    /// AST reaches the Pandoc cut. True for `B1`/`B3`, false for `B2`/`B4`.
+    pub fn survives_pandoc_cut(self) -> bool {
+        matches!(self, Bucket::B1 | Bucket::B3)
+    }
+}
+
+/// The **authoritative** bucket classification of every transform registered
+/// in [`build_transform_pipeline`], per the frozen §6 taxonomy (see
+/// [`Bucket`]). The design doc's §6 table is the prose mirror of this const;
+/// where the two disagree, this const is correct and the table is stale.
+///
+/// Two tests keep it honest, both built from the *real* pipeline rather than
+/// from a hand-copied name list:
+///
+/// - `bucket_classification_is_total_over_the_html_pipeline` — every member of
+///   `build_transform_pipeline(HtmlRender)` appears here exactly once, and
+///   nothing here names a transform that is no longer registered.
+/// - `neutral_core_invariant_no_b2_b4_survives_the_pandoc_cut` — every
+///   transform surviving `build_transform_pipeline(Pandoc(_))` is `B1` or `B3`.
+///
+/// The totality test exists because hand-classification failed three
+/// consecutive review rounds: `breadcrumbs-render`, `quarto-nav-js`,
+/// `repo-actions-render`, `attribution-viewer` were missed in the first;
+/// `secondary-nav-render`, `listing-feed-stage`, `listing-feed-link` in the
+/// second; `config-markdown`, `reference-link-diagnostics`, `draft-alert`,
+/// `format-css`, `responsive-image`, `llms-capture` in the third. **When you
+/// add a transform to `build_transform_pipeline`, add its bucket here in the
+/// same commit.**
+///
+/// Scope: the `HtmlRender` pipeline. The reveal-family scaffolding transforms
+/// (`reveal-slides`, `reveal-columns`, …) are `B2`/`B4` by §6 but are not
+/// registered for `HtmlRender`, so they are deliberately absent — the totality
+/// test's "no stale entries" half would otherwise reject them.
+pub const BUCKETS: &[(&str, Bucket)] = &[
+    // --- B1: format-neutral semantic core ---------------------------------
+    ("conditional-content", Bucket::B1),
+    // Read-only diagnostic over the document as authored; no format in its
+    // predicate, so a docx render warns about `[label][ref]` exactly as an
+    // HTML one does.
+    ("reference-link-diagnostics", Bucket::B1),
+    // Sugar halves only. Each `*-resolve` sibling is B4 (see below).
+    ("callout", Bucket::B1),
+    ("panel-tabset", Bucket::B1),
+    // Markdown-parses blessed config scalars into inlines so the shortcode
+    // walk sees live nodes. A metadata *parse*, not presentation — the keys
+    // it targets happen to be website ones, but nothing about the rewrite is
+    // HTML-shaped.
+    ("config-markdown", Bucket::B1),
+    // Format-*parameterized*, not format-specific: `lua_format_for()` hands
+    // Lua the canonical Pandoc format string.
+    ("shortcode-resolve", Bucket::B1),
+    ("metadata-normalize", Bucket::B1),
+    ("date-normalize", Bucket::B1),
+    ("authors-normalize", Bucket::B1),
+    // Output is a `RenderContext` sideband; it does not cross the cut, but
+    // the transform itself is format-neutral and must run.
+    ("code-block-generate", Bucket::B1),
+    // The semantic half of the Task 5 split: refs/defs → native
+    // `Inline::Note`, which Pandoc's own writers number and place.
+    ("footnotes", Bucket::B1),
+    ("example-embed", Bucket::B1),
+    ("theorem-sugar", Bucket::B1),
+    ("proof-sugar", Bucket::B1),
+    ("float-ref-target-sugar", Bucket::B1),
+    ("equation-label", Bucket::B1),
+    ("crossref-index", Bucket::B1),
+    ("crossref-resolve", Bucket::B1),
+    // Reclassified from B4 on 2026-09-17: format-parameterized like
+    // `shortcode-resolve`. The iframe is emitted only for iframe-capable
+    // profiles; a Pandoc profile gets the snippet + numbered caption.
+    ("example-embed-render", Bucket::B1),
+    // --- B2: format-family scaffolding ------------------------------------
+    ("title-banner", Bucket::B2),
+    ("website-title-prefix", Bucket::B2),
+    ("website-favicon", Bucket::B2),
+    ("website-bootstrap-icons", Bucket::B2),
+    ("website-canonical-url", Bucket::B2),
+    // Copies `css:` files into the output tree and rewrites the entries to
+    // per-page hrefs — a stylesheet plumbing step with no Pandoc analog.
+    ("format-css", Bucket::B2),
+    // Writes `rendered.draft-alert-text` + a `quarto:status` header include
+    // for the HTML template; sibling of `title-banner`.
+    ("draft-alert", Bucket::B2),
+    // Synthesizes an HTML title-block container from Meta; Pandoc's own
+    // templates build the equivalent from the same Meta.
+    ("title-block", Bucket::B2),
+    // `--section-divs` is an HTML-writer concern.
+    ("sectionize", Bucket::B2),
+    // --- B3: shared post-core services ------------------------------------
+    ("link-rewrite", Bucket::B3),
+    ("appendix-structure", Bucket::B3),
+    ("resource-collector", Bucket::B3),
+    // Captures the markdown companion for llms.txt. A service, not
+    // presentation of the current format; self-gates on `llms_view_active`
+    // (website + `llms-txt: true` + an `html` target), so it is inert for a
+    // Pandoc profile. It runs for Pandoc anyway because it is the only thing
+    // that clears the marker classes `conditional-content` plants under the
+    // identical predicate — the two must stay on the same side of the cut.
+    ("llms-capture", Bucket::B3),
+    // --- B4: format presentation (the renderer tail) -----------------------
+    // Resolve halves: each destroys a CustomNode into Bootstrap-specific DOM.
+    ("callout-resolve", Bucket::B4),
+    ("panel-tabset-resolve", Bucket::B4),
+    // HTML chrome half of the Task 5 footnotes split: `Span#fnrefN` refs and
+    // a trailing `Div#footnotes` with backlinks.
+    ("footnotes-resolve", Bucket::B4),
+    // Navigation phase, in registration order: website chrome with no
+    // Pandoc-writer output slot. T2.2 derives this set from `phase()`, so a
+    // 21st Navigation transform cannot land unexcluded — but it can still
+    // land unclassified here, which is what the totality test catches.
+    ("toc-generate", Bucket::B4),
+    ("navbar-generate", Bucket::B4),
+    ("sidebar-generate", Bucket::B4),
+    ("page-nav-generate", Bucket::B4),
+    ("footer-generate", Bucket::B4),
+    ("listing-generate", Bucket::B4),
+    ("listing-render", Bucket::B4),
+    ("categories-sidebar", Bucket::B4),
+    ("listing-feed-stage", Bucket::B4),
+    ("listing-feed-link", Bucket::B4),
+    ("toc-render", Bucket::B4),
+    ("toc-location", Bucket::B4),
+    ("repo-actions-render", Bucket::B4),
+    ("navbar-render", Bucket::B4),
+    ("sidebar-render", Bucket::B4),
+    ("breadcrumbs-render", Bucket::B4),
+    ("secondary-nav-render", Bucket::B4),
+    ("quarto-nav-js", Bucket::B4),
+    ("page-nav-render", Bucket::B4),
+    ("footer-render", Bucket::B4),
+    // The HTML writer's copy of the renderer trinity. `crossref-render` is
+    // the load-bearing member: it destroys every numbered `CustomNode` into
+    // raw HTML `Figure`/`Div` structure, so if it ran before the cut P5's
+    // shim would have nothing left to route.
+    ("crossref-render", Bucket::B4),
+    ("mermaid-render", Bucket::B4),
+    ("code-block-render", Bucket::B4),
+    ("table-bootstrap-class", Bucket::B4),
+    // Swaps a `.hep` plot-document reference for a rendered SVG artifact —
+    // an HTML-only presentation decision (sibling of `responsive-image`,
+    // which it runs immediately before). No Pandoc-writer analog exists yet.
+    ("hephaestus-render", Bucket::B4),
+    ("responsive-image", Bucket::B4),
+    // Both bake per-node attribution onto `ctx.format_options` fields that
+    // only the HTML/JSON writers read.
+    ("attribution-render", Bucket::B4),
+    ("attribution-viewer", Bucket::B4),
+];
+
 /// Build the q2-preview transform pipeline (Plan 1).
 ///
 /// Constructed as [`build_transform_pipeline`] with the names in
 /// [`Q2_PREVIEW_TRANSFORM_EXCLUDED`] removed. Order is preserved.
 /// Constructor args (notably `shortcode_paths`, `extensions`,
-/// `runtime`, `target_format`) are forwarded verbatim so
-/// shortcode-and-Lua semantics match the HTML pipeline.
+/// `runtime`, `target_format`, `pipeline_profile`) are forwarded
+/// verbatim so shortcode-and-Lua semantics match the HTML pipeline.
 ///
 /// `AstTransformsStage::run()` dispatches between this and
-/// `build_transform_pipeline` based on `ctx.format.pipeline_kind`.
+/// `build_transform_pipeline` based on the [`crate::format::PipelineProfile`]
+/// derived for the render.
 pub fn build_q2_preview_transform_pipeline(
     shortcode_paths: Vec<std::path::PathBuf>,
     extensions: Vec<crate::extension::types::Extension>,
     runtime: std::sync::Arc<dyn quarto_system_runtime::SystemRuntime>,
     target_format: String,
+    pipeline_profile: crate::format::PipelineProfile,
     variables: Option<quarto_pandoc_types::ConfigValue>,
     project_env: hashlink::LinkedHashMap<String, String>,
     quarto_profile: Option<String>,
@@ -1681,6 +2102,7 @@ pub fn build_q2_preview_transform_pipeline(
         extensions,
         runtime,
         target_format,
+        pipeline_profile,
         variables,
         project_env,
         quarto_profile,
@@ -2874,6 +3296,7 @@ mod tests {
             vec![],
             runtime,
             "html".to_string(),
+            crate::format::PipelineProfile::HtmlRender,
             None,
             Default::default(),
             None,
@@ -3595,6 +4018,7 @@ mod tests {
             vec![],
             runtime,
             "q2-preview".to_string(),
+            crate::format::PipelineProfile::HtmlPreview,
             None,
             Default::default(),
             None,
@@ -3620,6 +4044,7 @@ mod tests {
             vec![],
             runtime,
             "q2-preview".to_string(),
+            crate::format::PipelineProfile::HtmlPreview,
             None,
             Default::default(),
             None,
@@ -3674,6 +4099,7 @@ mod tests {
             vec![],
             runtime,
             "html".to_string(),
+            crate::format::PipelineProfile::HtmlRender,
             None,
             Default::default(),
             None,
@@ -3731,6 +4157,7 @@ mod tests {
             vec![],
             runtime,
             "html".to_string(),
+            crate::format::PipelineProfile::HtmlRender,
             None,
             Default::default(),
             None,
@@ -3763,6 +4190,7 @@ mod tests {
             vec![],
             runtime,
             "html".to_string(),
+            crate::format::PipelineProfile::HtmlRender,
             None,
             Default::default(),
             None,
@@ -3804,6 +4232,7 @@ mod tests {
             vec![],
             runtime,
             "html".to_string(),
+            crate::format::PipelineProfile::HtmlRender,
             None,
             Default::default(),
             None,
@@ -3843,20 +4272,44 @@ mod tests {
     /// `typst`, `pdf`, …) is covered the moment its transforms are classified,
     /// without editing this test.
     ///
+    /// # What the Pandoc/preview profiles add here — and what they do not
+    ///
+    /// Task 7 (T7.3) widened the loop from `["html", "revealjs"]` to a format
+    /// string per [`crate::format::PipelineProfile`] variant. **Only
+    /// assertion (1), exhaustiveness, gains discriminating power from that.**
+    /// It is genuinely load-bearing: if P4/P7 ever splices a Pandoc-only
+    /// transform into the pipeline without a `phase()` override, this is what
+    /// catches it.
+    ///
+    /// Assertion (2), monotonicity, is **vacuous for every non-`*Render`
+    /// profile, by construction.** Those pipelines are the `HtmlRender` /
+    /// `RevealjsRender` pipeline with names removed (`retain_excluding`), and
+    /// a subsequence of a non-decreasing sequence is always non-decreasing —
+    /// so no regression the Pandoc work could introduce can make it fail.
+    /// Do not read a green run here as evidence that the Pandoc profile's
+    /// transform set is correct. The real discriminators for that are T2.3's
+    /// exact surviving-name list
+    /// (`t2_3_pandoc_docx_profile_produces_exact_surviving_name_list`) and
+    /// T7.1's bucket check
+    /// (`neutral_core_invariant_no_b2_b4_survives_the_pandoc_cut`).
+    ///
     /// See `claude-notes/designs/transform-pipeline-phases.md`.
     #[test]
     fn test_build_transform_pipeline_phase_ordering() {
         use crate::transform::TransformPhase;
 
-        // Add new render format strings here as they land; the invariant then
-        // covers them automatically.
-        for format in ["html", "revealjs"] {
+        // One format string per `PipelineProfile` variant: HtmlRender,
+        // RevealjsRender, HtmlPreview, RevealjsPreview, Pandoc(_). Add new
+        // format strings here as they land; the invariant then covers them
+        // automatically.
+        for format in ["html", "revealjs", "q2-preview", "q2-slides", "docx"] {
             let runtime = make_test_runtime();
             let pipeline = build_transform_pipeline(
                 vec![],
                 vec![],
                 runtime,
                 format.to_string(),
+                crate::format::PipelineProfile::from_format(format),
                 None,
                 Default::default(),
                 None,
@@ -3905,6 +4358,7 @@ mod tests {
             vec![],
             make_test_runtime(),
             "html".to_string(),
+            crate::format::PipelineProfile::HtmlRender,
             None,
             Default::default(),
             None,
@@ -3943,6 +4397,7 @@ mod tests {
             vec![],
             runtime,
             "q2-preview".to_string(),
+            crate::format::PipelineProfile::HtmlPreview,
             None,
             Default::default(),
             None,
@@ -3970,6 +4425,7 @@ mod tests {
                 vec![],
                 runtime,
                 format.to_string(),
+                crate::format::PipelineProfile::from_format(format),
                 None,
                 Default::default(),
                 None,
@@ -3990,6 +4446,94 @@ mod tests {
         }
     }
 
+    /// Task 5 (T5.6): the two footnotes-split halves must be registered
+    /// **immediately adjacent**, `"footnotes"` then `"footnotes-resolve"`, in
+    /// `HtmlRender` — not just both present somewhere. If another transform
+    /// could be spliced between them it could consume/rewrite the
+    /// `Inline::Note`s `"footnotes"` produces before `"footnotes-resolve"`
+    /// ever saw them, and none of the footnotes snapshot tests would catch
+    /// that (verified in Task 7's vacuity note). Also asserts the
+    /// `Pandoc("docx")` half of the split: `"footnotes"` survives (pandoc's
+    /// own writer needs native `Note`s) but `"footnotes-resolve"` does not
+    /// (no HTML chrome to build for a Pandoc writer).
+    #[test]
+    fn t5_6_footnotes_halves_are_adjacent_and_split_correctly_by_profile() {
+        let html_pipeline = build_transform_pipeline(
+            vec![],
+            vec![],
+            make_test_runtime(),
+            "html".to_string(),
+            crate::format::PipelineProfile::HtmlRender,
+            None,
+            Default::default(),
+            None,
+        );
+        let html_names: Vec<&str> = html_pipeline.iter().map(|t| t.name()).collect();
+        let footnotes_pos = html_names.iter().position(|&n| n == "footnotes");
+        let resolve_pos = html_names.iter().position(|&n| n == "footnotes-resolve");
+        assert_eq!(
+            footnotes_pos.map(|p| p + 1),
+            resolve_pos,
+            "[HtmlRender] \"footnotes-resolve\" must be registered immediately after \
+             \"footnotes\"; got: {html_names:?}",
+        );
+
+        let docx_pipeline = build_transform_pipeline(
+            vec![],
+            vec![],
+            make_test_runtime(),
+            "docx".to_string(),
+            crate::format::PipelineProfile::Pandoc("docx".to_string()),
+            None,
+            Default::default(),
+            None,
+        );
+        let docx_names: Vec<&str> = docx_pipeline.iter().map(|t| t.name()).collect();
+        assert!(
+            docx_names.contains(&"footnotes"),
+            "[Pandoc(\"docx\")] \"footnotes\" must survive so pandoc's own writer gets native \
+             Note inlines; got: {docx_names:?}",
+        );
+        assert!(
+            !docx_names.contains(&"footnotes-resolve"),
+            "[Pandoc(\"docx\")] \"footnotes-resolve\" must NOT survive — a Pandoc writer has no \
+             HTML chrome to build; got: {docx_names:?}",
+        );
+    }
+
+    /// T4.1 (P7-foundation Task 4): the two B3 shared post-core services —
+    /// `resource-collector` (mediabag/resource staging) and `link-rewrite`
+    /// (body link/image rewriting) — are present in the `Pandoc("docx")`
+    /// transform list, i.e. neither is on `PANDOC_TRANSFORM_EXCLUDED`. A
+    /// presence check alone is not a substitute for exercising the real
+    /// path end-to-end (see the E-tier `pandoc_b3_services` tests, which
+    /// drive a real `q2 render --to docx` and inspect `word/media/`) — this
+    /// row only guards the exclude-list itself.
+    #[test]
+    fn t4_1_pandoc_docx_pipeline_includes_b3_shared_services() {
+        let docx_pipeline = build_transform_pipeline(
+            vec![],
+            vec![],
+            make_test_runtime(),
+            "docx".to_string(),
+            crate::format::PipelineProfile::Pandoc("docx".to_string()),
+            None,
+            Default::default(),
+            None,
+        );
+        let docx_names: Vec<&str> = docx_pipeline.iter().map(|t| t.name()).collect();
+        assert!(
+            docx_names.contains(&"resource-collector"),
+            "[Pandoc(\"docx\")] \"resource-collector\" must survive — B3 shared service; \
+             got: {docx_names:?}",
+        );
+        assert!(
+            docx_names.contains(&"link-rewrite"),
+            "[Pandoc(\"docx\")] \"link-rewrite\" must survive — B3 shared service; \
+             got: {docx_names:?}",
+        );
+    }
+
     /// bd-5m4ga0s1: in `q2 preview` / hub-client the raw `CodeBlock`
     /// with class `mermaid` must survive to the React layer (the
     /// built-in mermaid component in ts-packages/preview-renderer owns
@@ -4004,6 +4548,7 @@ mod tests {
                 vec![],
                 runtime,
                 format.to_string(),
+                crate::format::PipelineProfile::from_format(format),
                 None,
                 Default::default(),
                 None,
@@ -4015,6 +4560,544 @@ mod tests {
                  mermaid component consumes the raw CodeBlock; got: {names:?}",
             );
         }
+    }
+
+    /// Task 1 seam (T1.4): `build_transform_pipeline(HtmlRender)` must
+    /// produce a byte-identical ordered transform-name list to today's
+    /// `"html"` pipeline — this is the no-regression bar for replacing the
+    /// inline `is_revealjs` family check with a `PipelineProfile` match.
+    #[test]
+    fn t1_4_html_render_profile_produces_todays_exact_name_list() {
+        let pipeline = build_transform_pipeline(
+            vec![],
+            vec![],
+            make_test_runtime(),
+            "html".to_string(),
+            crate::format::PipelineProfile::HtmlRender,
+            None,
+            Default::default(),
+            None,
+        );
+        let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
+        assert_eq!(
+            names,
+            [
+                "conditional-content",
+                "reference-link-diagnostics",
+                "callout",
+                "callout-resolve",
+                "panel-tabset",
+                "panel-tabset-resolve",
+                "config-markdown",
+                "shortcode-resolve",
+                "metadata-normalize",
+                "date-normalize",
+                "authors-normalize",
+                "title-banner",
+                "code-block-generate",
+                "website-title-prefix",
+                "website-favicon",
+                "website-bootstrap-icons",
+                "website-canonical-url",
+                "format-css",
+                "draft-alert",
+                "title-block",
+                "sectionize",
+                "footnotes",
+                "footnotes-resolve",
+                "example-embed",
+                "theorem-sugar",
+                "proof-sugar",
+                "float-ref-target-sugar",
+                "equation-label",
+                "crossref-index",
+                "crossref-resolve",
+                "toc-generate",
+                "navbar-generate",
+                "sidebar-generate",
+                "page-nav-generate",
+                "footer-generate",
+                "listing-generate",
+                "listing-render",
+                "categories-sidebar",
+                "listing-feed-stage",
+                "listing-feed-link",
+                "toc-render",
+                "toc-location",
+                "repo-actions-render",
+                "navbar-render",
+                "sidebar-render",
+                "breadcrumbs-render",
+                "secondary-nav-render",
+                "quarto-nav-js",
+                "page-nav-render",
+                "footer-render",
+                "link-rewrite",
+                "appendix-structure",
+                "crossref-render",
+                "example-embed-render",
+                "mermaid-render",
+                "code-block-render",
+                "resource-collector",
+                "hephaestus-render",
+                "table-bootstrap-class",
+                "responsive-image",
+                "llms-capture",
+                "attribution-render",
+                "attribution-viewer",
+            ]
+        );
+    }
+
+    /// Task 1 seam (T1.5): `build_transform_pipeline(RevealjsRender)` must
+    /// produce a byte-identical ordered transform-name list to today's
+    /// `"revealjs"` pipeline — the reveal-family sibling of T1.4.
+    #[test]
+    fn t1_5_revealjs_render_profile_produces_todays_exact_name_list() {
+        let pipeline = build_transform_pipeline(
+            vec![],
+            vec![],
+            make_test_runtime(),
+            "revealjs".to_string(),
+            crate::format::PipelineProfile::RevealjsRender,
+            None,
+            Default::default(),
+            None,
+        );
+        let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
+        assert_eq!(
+            names,
+            [
+                "conditional-content",
+                "reference-link-diagnostics",
+                "callout",
+                "callout-resolve",
+                "panel-tabset",
+                "panel-tabset-resolve",
+                "config-markdown",
+                "shortcode-resolve",
+                "metadata-normalize",
+                "date-normalize",
+                "authors-normalize",
+                "title-banner",
+                "code-block-generate",
+                "website-title-prefix",
+                "website-favicon",
+                "website-bootstrap-icons",
+                "website-canonical-url",
+                "format-css",
+                "draft-alert",
+                "reveal-columns",
+                "reveal-slides",
+                "reveal-footer-alias",
+                "footnotes",
+                "footnotes-resolve",
+                "reveal-footnotes",
+                "example-embed",
+                "theorem-sugar",
+                "proof-sugar",
+                "float-ref-target-sugar",
+                "equation-label",
+                "crossref-index",
+                "crossref-resolve",
+                "toc-generate",
+                "navbar-generate",
+                "sidebar-generate",
+                "page-nav-generate",
+                "footer-generate",
+                "listing-generate",
+                "listing-render",
+                "categories-sidebar",
+                "listing-feed-stage",
+                "listing-feed-link",
+                "toc-render",
+                "toc-location",
+                "repo-actions-render",
+                "navbar-render",
+                "sidebar-render",
+                "breadcrumbs-render",
+                "secondary-nav-render",
+                "quarto-nav-js",
+                "page-nav-render",
+                "reveal-footer-logo",
+                "link-rewrite",
+                "appendix-structure",
+                "crossref-render",
+                "example-embed-render",
+                "reveal-auto-stretch",
+                "mermaid-render",
+                "code-block-render",
+                "resource-collector",
+                "hephaestus-render",
+                "table-bootstrap-class",
+                "responsive-image",
+                "llms-capture",
+                "attribution-render",
+                "attribution-viewer",
+            ]
+        );
+
+        // Discriminator (T1.5's Test Seam Spec wording): the reveal-family
+        // arm must actually replace the HTML-family one, not just append to
+        // it — the HTML-only scaffolding transforms must be absent.
+        assert!(!names.contains(&"title-block"));
+        assert!(!names.contains(&"sectionize"));
+    }
+
+    /// Task 2 (T2.1): verify every name in [`PANDOC_TRANSFORM_EXCLUDED`] is
+    /// an actual transform in the full HTML pipeline. Same drift-mode guard
+    /// as `q2_preview_transform_excluded_names_exist_in_html_pipeline`: a
+    /// renamed/typo'd transform silently no-ops in `retain_excluding`
+    /// (`TransformPipeline::retain_excluding` has no unknown-name
+    /// diagnostic), which would leak the "excluded" transform straight into
+    /// Pandoc-writer output.
+    #[test]
+    fn pandoc_transform_excluded_names_exist_in_html_pipeline() {
+        let runtime = make_test_runtime();
+        let html = build_transform_pipeline(
+            vec![],
+            vec![],
+            runtime,
+            "html".to_string(),
+            crate::format::PipelineProfile::HtmlRender,
+            None,
+            Default::default(),
+            None,
+        );
+        let html_names: Vec<&str> = html.iter().map(|t| t.name()).collect();
+
+        let unknown: Vec<&&str> = PANDOC_TRANSFORM_EXCLUDED
+            .iter()
+            .filter(|n| !html_names.contains(n))
+            .collect();
+        assert!(
+            unknown.is_empty(),
+            "PANDOC_TRANSFORM_EXCLUDED contains names not in build_transform_pipeline: \
+             {unknown:?}. Likely a typo or a rename — update the const in pipeline.rs. \
+             Full HTML transform list: {html_names:?}",
+        );
+    }
+
+    /// Task 2 (T2.2): `PANDOC_TRANSFORM_EXCLUDED` must contain **every**
+    /// transform in the `HtmlRender` pipeline whose `phase()` is
+    /// `TransformPhase::Navigation` — derived by querying `phase()` rather
+    /// than hand-enumerating, so a 21st Navigation transform can never land
+    /// silently omitted from the Pandoc exclude-list (the exact drift mode
+    /// that recurred three consecutive review rounds: 18 → 20 Navigation
+    /// members). The `20` here is a tripwire on *pipeline growth*: both
+    /// sides are derived from `build_transform_pipeline` + `phase()`, never
+    /// from a hand-list, so it cannot go vacuous the way a
+    /// hand-list-vs-hand-list comparison would.
+    #[test]
+    fn pandoc_transform_excluded_contains_every_navigation_phase_transform() {
+        use crate::transform::TransformPhase;
+
+        let runtime = make_test_runtime();
+        let html = build_transform_pipeline(
+            vec![],
+            vec![],
+            runtime,
+            "html".to_string(),
+            crate::format::PipelineProfile::HtmlRender,
+            None,
+            Default::default(),
+            None,
+        );
+        let nav_names: Vec<&str> = html
+            .iter()
+            .filter(|t| t.phase() == TransformPhase::Navigation)
+            .map(|t| t.name())
+            .collect();
+
+        assert_eq!(
+            nav_names.len(),
+            20,
+            "expected exactly 20 Navigation-phase transforms in the HTML pipeline; got: \
+             {nav_names:?}",
+        );
+        assert!(
+            nav_names
+                .iter()
+                .all(|n| PANDOC_TRANSFORM_EXCLUDED.contains(n)),
+            "PANDOC_TRANSFORM_EXCLUDED is missing a Navigation-phase transform: \
+             Navigation names = {nav_names:?}, exclude-list = {PANDOC_TRANSFORM_EXCLUDED:?}",
+        );
+    }
+
+    /// Task 2 (T2.3): `build_transform_pipeline(Pandoc("docx"))`'s surviving
+    /// ordered name list, pinned exactly. This is the counterweight to the
+    /// T2.2 subset check: T2.2 catches *omissions* from the exclude-list;
+    /// this catches *over-exclusion* (e.g. wrongly adding `"panel-tabset"`,
+    /// which would break P5's Route-R Tabset path while every
+    /// absence-shaped assertion kept passing) and *under-application* (the
+    /// `retain_excluding` call itself being missing from the `Pandoc(_)`
+    /// arm). An exact, ordered `assert_eq!` is the only shape that pins
+    /// both directions in one assertion.
+    #[test]
+    fn t2_3_pandoc_docx_profile_produces_exact_surviving_name_list() {
+        let pipeline = build_transform_pipeline(
+            vec![],
+            vec![],
+            make_test_runtime(),
+            "docx".to_string(),
+            crate::format::PipelineProfile::Pandoc("docx".to_string()),
+            None,
+            Default::default(),
+            None,
+        );
+        let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
+        assert_eq!(
+            names,
+            [
+                "conditional-content",
+                "reference-link-diagnostics",
+                "callout",
+                "panel-tabset",
+                "config-markdown",
+                "shortcode-resolve",
+                "metadata-normalize",
+                "date-normalize",
+                "authors-normalize",
+                "code-block-generate",
+                "footnotes",
+                "example-embed",
+                "theorem-sugar",
+                "proof-sugar",
+                "float-ref-target-sugar",
+                "equation-label",
+                "crossref-index",
+                "crossref-resolve",
+                "link-rewrite",
+                "appendix-structure",
+                "example-embed-render",
+                "resource-collector",
+                "llms-capture",
+            ]
+        );
+
+        for excluded in PANDOC_TRANSFORM_EXCLUDED {
+            assert!(
+                !names.contains(excluded),
+                "`{excluded}` is on PANDOC_TRANSFORM_EXCLUDED but survived in the Pandoc(docx) \
+                 pipeline; got: {names:?}",
+            );
+        }
+    }
+
+    /// Task 7 (T7.2): [`BUCKETS`] must classify **every** member of
+    /// `build_transform_pipeline(HtmlRender)` exactly once, and must name
+    /// nothing that is not a member.
+    ///
+    /// Both sides are derived from the real pipeline, so this cannot go
+    /// vacuous the way a hand-list-vs-hand-list comparison would. It is the
+    /// test whose absence let thirteen transforms go unclassified across
+    /// three consecutive review rounds — see the doc comment on [`BUCKETS`]
+    /// for the roll-call. Declaring `BUCKETS` in the module proper rather
+    /// than in this test module is what keeps the check non-circular: a
+    /// `#[cfg(test)]` const would make this assert a test fixture against the
+    /// pipeline while the classification the design doc mirrors drifted.
+    #[test]
+    fn bucket_classification_is_total_over_the_html_pipeline() {
+        let pipeline = build_transform_pipeline(
+            vec![],
+            vec![],
+            make_test_runtime(),
+            "html".to_string(),
+            crate::format::PipelineProfile::HtmlRender,
+            None,
+            Default::default(),
+            None,
+        );
+        let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
+
+        let unbucketed: Vec<&&str> = names
+            .iter()
+            .filter(|n| !BUCKETS.iter().any(|(b, _)| b == *n))
+            .collect();
+        assert!(
+            unbucketed.is_empty(),
+            "these transforms are registered in build_transform_pipeline but have no \
+             entry in BUCKETS: {unbucketed:?}. Classify each per §6 of \
+             claude-notes/designs/pandoc-hybrid-architecture.md and add it to the const \
+             in pipeline.rs.",
+        );
+
+        let stale: Vec<&&str> = BUCKETS
+            .iter()
+            .map(|(n, _)| n)
+            .filter(|n| !names.contains(n))
+            .collect();
+        assert!(
+            stale.is_empty(),
+            "BUCKETS names transforms that are not members of \
+             build_transform_pipeline(HtmlRender): {stale:?}. Likely a rename or a \
+             removed transform — drop the stale entries. Full HTML transform list: \
+             {names:?}",
+        );
+
+        let mut sorted: Vec<&str> = BUCKETS.iter().map(|(n, _)| *n).collect();
+        sorted.sort_unstable();
+        let duplicated: Vec<&str> = sorted
+            .windows(2)
+            .filter(|pair| pair[0] == pair[1])
+            .map(|pair| pair[0])
+            .collect();
+        assert!(
+            duplicated.is_empty(),
+            "BUCKETS has duplicate entries (a transform must have exactly one bucket): \
+             {duplicated:?}",
+        );
+    }
+
+    /// Task 7 (T7.1): the epic's central correctness invariant — **no `B2` or
+    /// `B4` transform survives to the Pandoc cut.**
+    ///
+    /// `crossref-render` is the load-bearing case: it destroys every numbered
+    /// `CustomNode` into raw HTML `Figure`/`Div` structure, so if it ran
+    /// before the cut, P5's shim would have nothing left to route. Dropping it
+    /// from [`PANDOC_TRANSFORM_EXCLUDED`] reddens this test.
+    ///
+    /// Complements T2.3's exact surviving-name list: that pins *which* names
+    /// survive, this pins *why* they are allowed to.
+    #[test]
+    fn neutral_core_invariant_no_b2_b4_survives_the_pandoc_cut() {
+        let pipeline = build_transform_pipeline(
+            vec![],
+            vec![],
+            make_test_runtime(),
+            "docx".to_string(),
+            crate::format::PipelineProfile::Pandoc("docx".to_string()),
+            None,
+            Default::default(),
+            None,
+        );
+
+        let mut bad: Vec<(&str, Bucket)> = Vec::new();
+        let mut unbucketed: Vec<&str> = Vec::new();
+        for name in pipeline.iter().map(|t| t.name()) {
+            match BUCKETS.iter().find(|(n, _)| *n == name) {
+                Some((_, bucket)) if !bucket.survives_pandoc_cut() => bad.push((name, *bucket)),
+                Some(_) => {}
+                None => unbucketed.push(name),
+            }
+        }
+
+        assert!(
+            unbucketed.is_empty(),
+            "these Pandoc(docx) survivors have no BUCKETS entry, so the invariant below \
+             cannot be checked for them: {unbucketed:?}",
+        );
+        assert!(
+            bad.is_empty(),
+            "B2/B4 transforms survive to the Pandoc cut: {bad:?}. Only B1 (neutral \
+             semantic core) and B3 (shared services) may reach a Pandoc writer — a B2/B4 \
+             transform bakes HTML presentation over semantics the Pandoc writer needs \
+             intact. Either add the name to PANDOC_TRANSFORM_EXCLUDED or, if the \
+             classification is wrong, correct BUCKETS and §6 of \
+             claude-notes/designs/pandoc-hybrid-architecture.md together.",
+        );
+    }
+
+    /// Task 2 (T2.5): `build_transform_pipeline(HtmlPreview)`'s surviving
+    /// name list must equal `build_q2_preview_transform_pipeline`'s output,
+    /// captured here as a literal pre-refactor — the preview-parity gate for
+    /// "one mechanism (the `PipelineProfile` match in
+    /// `build_transform_pipeline`) serves both Preview and Pandoc". Calling
+    /// `build_transform_pipeline` directly with `HtmlPreview` must already
+    /// apply `Q2_PREVIEW_TRANSFORM_EXCLUDED`, not just the
+    /// `build_q2_preview_transform_pipeline` wrapper.
+    #[test]
+    fn t2_5_html_preview_profile_produces_todays_preview_exact_name_list() {
+        let pipeline = build_transform_pipeline(
+            vec![],
+            vec![],
+            make_test_runtime(),
+            "q2-preview".to_string(),
+            crate::format::PipelineProfile::HtmlPreview,
+            None,
+            Default::default(),
+            None,
+        );
+        let names: Vec<&str> = pipeline.iter().map(|t| t.name()).collect();
+
+        let preview_pipeline = build_q2_preview_transform_pipeline(
+            vec![],
+            vec![],
+            make_test_runtime(),
+            "q2-preview".to_string(),
+            crate::format::PipelineProfile::HtmlPreview,
+            None,
+            Default::default(),
+            None,
+        );
+        let preview_names: Vec<&str> = preview_pipeline.iter().map(|t| t.name()).collect();
+
+        assert_eq!(
+            names, preview_names,
+            "build_transform_pipeline(HtmlPreview) must match \
+             build_q2_preview_transform_pipeline's surviving name list exactly",
+        );
+
+        assert_eq!(
+            names,
+            [
+                "conditional-content",
+                "reference-link-diagnostics",
+                "callout",
+                "config-markdown",
+                "shortcode-resolve",
+                "metadata-normalize",
+                "date-normalize",
+                "authors-normalize",
+                "title-banner",
+                "code-block-generate",
+                "website-title-prefix",
+                "website-favicon",
+                "website-bootstrap-icons",
+                "website-canonical-url",
+                "format-css",
+                "draft-alert",
+                "sectionize",
+                "footnotes",
+                "footnotes-resolve",
+                "example-embed",
+                "theorem-sugar",
+                "proof-sugar",
+                "float-ref-target-sugar",
+                "equation-label",
+                "crossref-index",
+                "crossref-resolve",
+                "toc-generate",
+                "navbar-generate",
+                "sidebar-generate",
+                "page-nav-generate",
+                "footer-generate",
+                "listing-generate",
+                "listing-render",
+                "categories-sidebar",
+                "listing-feed-stage",
+                "listing-feed-link",
+                "toc-render",
+                "toc-location",
+                "repo-actions-render",
+                "navbar-render",
+                "sidebar-render",
+                "breadcrumbs-render",
+                "secondary-nav-render",
+                "quarto-nav-js",
+                "page-nav-render",
+                "footer-render",
+                "link-rewrite",
+                "appendix-structure",
+                "example-embed-render",
+                "code-block-render",
+                "resource-collector",
+                "table-bootstrap-class",
+                "responsive-image",
+                "llms-capture",
+                "attribution-render",
+            ]
+        );
     }
 
     /// Verify every name in [`Q2_PREVIEW_STAGE_EXCLUDED`] is an
@@ -4036,6 +5119,133 @@ mod tests {
             "Q2_PREVIEW_STAGE_EXCLUDED contains names not in build_html_pipeline_stages: \
              {unknown:?}. Likely a typo or a rename — update the const in pipeline.rs. \
              Full HTML stage list: {html_names:?}",
+        );
+    }
+
+    /// Task 6 (T6.1): verify every name in [`PANDOC_STAGE_EXCLUDED`] is an
+    /// actual stage in the full HTML pipeline. Same drift-mode guard as
+    /// `q2_preview_stage_excluded_names_exist_in_html_pipeline`: a
+    /// renamed/typo'd stage silently no-ops in `retain`, which would leak
+    /// the "excluded" stage straight into a Pandoc-writer render.
+    #[test]
+    fn pandoc_stage_excluded_names_exist_in_html_pipeline() {
+        let html_stages = build_html_pipeline_stages_with_options(None);
+        let html_names: Vec<&str> = html_stages.iter().map(|s| s.name()).collect();
+
+        let unknown: Vec<&&str> = PANDOC_STAGE_EXCLUDED
+            .iter()
+            .filter(|n| !html_names.contains(n))
+            .collect();
+        assert!(
+            unknown.is_empty(),
+            "PANDOC_STAGE_EXCLUDED contains names not in build_html_pipeline_stages: \
+             {unknown:?}. Likely a typo or a rename — update the const in pipeline.rs. \
+             Full HTML stage list: {html_names:?}",
+        );
+    }
+
+    /// Task 6 (T6.2): `build_pandoc_pipeline_stages()`'s surviving ordered
+    /// stage-name list, pinned exactly. Built via the real profile-selecting
+    /// entry point (not a hand-filtered literal in the test body), so this
+    /// both catches under-application (the `retain` call missing or
+    /// misapplied) and over-exclusion (e.g. wrongly dropping
+    /// `engine-execution`, which would silently skip code execution for a
+    /// docx render — see the plan's 2026-04-20 `CodeHighlightStage`
+    /// incident).
+    #[test]
+    fn t6_2_pandoc_stage_list_produces_exact_surviving_name_list() {
+        let stages = build_pandoc_pipeline_stages(crate::format::FormatIdentifier::Docx);
+        let names: Vec<&str> = stages.iter().map(|s| s.name()).collect();
+
+        assert_eq!(
+            names,
+            [
+                "source-conversion",
+                "parse-document",
+                "metadata-merge",
+                "language-resolve",
+                "include-expansion",
+                "include-resolve",
+                "listing-item-info",
+                "document-profile",
+                "link-resolution",
+                "unwrap-profile",
+                "pre-engine-sugaring",
+                "engine-execution",
+                "attribution-generate",
+                "user-filters-pre",
+                "ast-transforms",
+                "user-filters-post",
+                "resource-report",
+                "pandoc-write",
+            ]
+        );
+
+        for excluded in PANDOC_STAGE_EXCLUDED {
+            assert!(
+                !names.contains(excluded),
+                "`{excluded}` is on PANDOC_STAGE_EXCLUDED but survived in the Pandoc stage \
+                 list; got: {names:?}",
+            );
+        }
+    }
+
+    /// pandoc-hybrid-typst Phase 2: typst's stage list appends
+    /// `typst-compile` after `pandoc-write` — pandoc's own `.typ` output
+    /// is not the final artifact for typst the way it is for docx/pptx.
+    ///
+    /// Revert hunk: removing the `if format_identifier == ... Typst`
+    /// branch in `build_pandoc_pipeline_stages` makes this RED (the tail
+    /// would just be `"pandoc-write"`).
+    #[test]
+    fn typst_stage_list_appends_typst_compile_after_pandoc_write() {
+        let stages = build_pandoc_pipeline_stages(crate::format::FormatIdentifier::Typst);
+        let names: Vec<&str> = stages.iter().map(|s| s.name()).collect();
+        assert_eq!(
+            &names[names.len() - 2..],
+            ["pandoc-write", "typst-compile"],
+            "got: {names:?}"
+        );
+    }
+
+    /// Task 6 (T6.3): `"attribution-generate"` is a real stage name but is
+    /// **not** a member of `build_transform_pipeline(HtmlRender)`. This
+    /// pins the structural fact behind the plan's round-4 correction (2):
+    /// `AttributionGenerateStage` and `AttributionGenerateTransform` share a
+    /// `name()`, but only the stage is a pipeline member — the transform is
+    /// never pushed into `build_transform_pipeline` (it runs from inside
+    /// `AstTransformsStage`). It has no revert hunk of its own: it asserts
+    /// an existing structural fact rather than new behavior, and guards
+    /// against `"attribution-generate"` ever being wrongly added to
+    /// [`PANDOC_TRANSFORM_EXCLUDED`] (which would make T2.1's
+    /// `unknown.is_empty()` go red for that reason, with this test staying
+    /// green and naming why).
+    #[test]
+    fn t6_3_attribution_generate_is_stage_only_not_a_transform_pipeline_member() {
+        let html_stages = build_html_pipeline_stages_with_options(None);
+        let stage_names: Vec<&str> = html_stages.iter().map(|s| s.name()).collect();
+        assert!(
+            stage_names.contains(&"attribution-generate"),
+            "expected `attribution-generate` to be a real stage name; got: {stage_names:?}",
+        );
+
+        let runtime = make_test_runtime();
+        let html_transforms = build_transform_pipeline(
+            vec![],
+            vec![],
+            runtime,
+            "html".to_string(),
+            crate::format::PipelineProfile::HtmlRender,
+            None,
+            Default::default(),
+            None,
+        );
+        let transform_names: Vec<&str> = html_transforms.iter().map(|t| t.name()).collect();
+        assert!(
+            !transform_names.contains(&"attribution-generate"),
+            "expected `attribution-generate` to NOT be a member of \
+             build_transform_pipeline(HtmlRender) — AttributionGenerateTransform is never \
+             pushed into the transform pipeline; got: {transform_names:?}",
         );
     }
 

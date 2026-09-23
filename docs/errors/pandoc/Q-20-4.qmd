@@ -1,0 +1,42 @@
+---
+title: "Filter Params Blob Too Large"
+description: "The QUARTO_FILTER_PARAMS payload passed to pandoc's Lua filters exceeds the platform's environment-block size limit."
+code: Q-20-4
+subsystem: pandoc
+status: stub
+since: "99.9.9"
+categories:
+  - pandoc
+---
+
+# `Q-20-4` — Filter Params Blob Too Large
+
+> The `QUARTO_FILTER_PARAMS` payload passed to pandoc's Lua filters exceeds
+> the platform's environment-block size limit.
+
+## What this means
+
+Quarto passes configuration to pandoc's Lua filters through a single
+environment variable, `QUARTO_FILTER_PARAMS`, carrying a base64-encoded JSON
+payload. Some platforms (Windows, via `CreateProcess`) reject an entire
+environment block larger than 32,767 characters. When the built payload
+would exceed that limit, the subprocess cannot even be started with the
+parameters it needs.
+
+## Why this happens
+
+The most common cause is a large `include-in-header` (or similar) file
+whose full text gets inlined into the params payload rather than referenced
+by path.
+
+## How to fix
+
+Reduce the size of whatever content is being inlined into filter params —
+most commonly, shrink or split a large `include-in-header` file. There is
+currently no automatic fallback to a temp-file-based transport for
+oversized payloads.
+
+## Related errors
+
+- [`Q-20-3`](Q-20-3.qmd) — the general nonzero-exit diagnostic this failure
+  mode also surfaces through, once pandoc itself is invoked.

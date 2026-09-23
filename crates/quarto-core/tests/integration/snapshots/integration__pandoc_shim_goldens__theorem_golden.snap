@@ -1,0 +1,26 @@
+---
+source: crates/quarto-core/tests/integration/pandoc_shim_goldens.rs
+assertion_line: 228
+expression: "render_and_project(\"theorem-basic.qmd\")"
+---
+Div Some(("thm-p", ["theorem"]))
+  Para
+    Span Some(("", ["theorem-title"]))
+      Strong
+        Str "Theorem"
+        Space
+        Str "1"
+        Space
+        Str "("
+        Str "My Special Title"
+        Str ")"
+    Space
+    Str "This"
+    Space
+    Str "is"
+    Space
+    Str "a"
+    Space
+    Str "theorem"
+    Space
+    Str "statement."

@@ -27,6 +27,8 @@ pub enum FormatIdentifier {
     Pdf,
     /// Word document (requires Pandoc)
     Docx,
+    /// PowerPoint presentation (requires Pandoc)
+    Pptx,
     /// EPUB (requires Pandoc)
     Epub,
     /// Typst (requires typst binary)
@@ -46,6 +48,7 @@ impl FormatIdentifier {
             FormatIdentifier::Html => "html",
             FormatIdentifier::Pdf => "pdf",
             FormatIdentifier::Docx => "docx",
+            FormatIdentifier::Pptx => "pptx",
             FormatIdentifier::Epub => "epub",
             FormatIdentifier::Typst => "typst",
             FormatIdentifier::Revealjs => "revealjs",
@@ -86,6 +89,7 @@ impl TryFrom<&str> for FormatIdentifier {
             "html" => Ok(FormatIdentifier::Html),
             "pdf" => Ok(FormatIdentifier::Pdf),
             "docx" => Ok(FormatIdentifier::Docx),
+            "pptx" => Ok(FormatIdentifier::Pptx),
             "epub" => Ok(FormatIdentifier::Epub),
             "typst" => Ok(FormatIdentifier::Typst),
             "revealjs" => Ok(FormatIdentifier::Revealjs),
@@ -138,6 +142,90 @@ pub fn is_revealjs_target(target_format: &str) -> bool {
     matches!(target_format, "revealjs" | "q2-slides")
 }
 
+/// The pipeline-composition axis: which family of transforms
+/// (HTML-scaffolding, revealjs-scaffolding, or none) a render runs, and
+/// whether it's the full render or the render/preview kind.
+///
+/// This is the single derivation point replacing two previously-independent
+/// ad-hoc checks: the inline `is_revealjs` family check in
+/// `build_transform_pipeline`, and the `pipeline_kind: Option<&'static str>`
+/// kind check in `AstTransformsStage::run()`. `RevealjsRender` is the native
+/// `revealjs` render; `RevealjsPreview` is `q2-slides` — the two must stay
+/// distinct cells (not collapsed into one "reveal" variant) because their
+/// surviving transform lists differ once a preview exclude-list applies.
+/// `Pandoc(fmt)` carries the raw `target_format` string (e.g. `"docx"`,
+/// `"pptx"`) since Pandoc has no bounded enum of destination formats here.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PipelineProfile {
+    /// Native HTML render (`html`, extension-style HTML formats, `q2-debug`).
+    HtmlRender,
+    /// HTML preview (`q2-preview`, `q2-sandboxed-preview`).
+    HtmlPreview,
+    /// Native revealjs render (`revealjs`).
+    RevealjsRender,
+    /// Revealjs preview (`q2-slides`).
+    RevealjsPreview,
+    /// A Pandoc-writer output format, carrying its raw format string
+    /// (e.g. `"docx"`, `"pptx"`, `"gfm"`).
+    Pandoc(String),
+}
+
+impl PipelineProfile {
+    /// Derive the pipeline profile from a `target_format` string.
+    ///
+    /// Reproduces [`is_revealjs_target`] and [`builtin_pseudo_format`]
+    /// exactly, deriving family from the raw string (never from a resolved
+    /// [`Format::identifier`]) — `q2-slides`'s *output writer* base is
+    /// `"html"`, so deriving family from the identifier would misclassify it
+    /// as `HtmlPreview`, losing its reveal-ness.
+    pub fn from_format(target_format: &str) -> PipelineProfile {
+        // Reveal family is resolved by the string itself, not by any
+        // downstream identifier: covers "revealjs" (Render) and
+        // "q2-slides" (Preview).
+        if is_revealjs_target(target_format) {
+            return if target_format == "q2-slides" {
+                PipelineProfile::RevealjsPreview
+            } else {
+                PipelineProfile::RevealjsRender
+            };
+        }
+
+        // Builtin pseudo-formats resolve to an HTML base with an optional
+        // "preview" pipeline_kind (q2-preview, q2-debug, q2-sandboxed-preview).
+        if let Some((_, pipeline_kind)) = builtin_pseudo_format(target_format) {
+            return if pipeline_kind == Some("preview") {
+                PipelineProfile::HtmlPreview
+            } else {
+                PipelineProfile::HtmlRender
+            };
+        }
+
+        // Known base format, e.g. "html", "docx", "pptx", "gfm".
+        if let Ok(identifier) = FormatIdentifier::try_from(target_format) {
+            return match identifier {
+                FormatIdentifier::Html => PipelineProfile::HtmlRender,
+                FormatIdentifier::Revealjs => PipelineProfile::RevealjsRender,
+                _ => PipelineProfile::Pandoc(target_format.to_string()),
+            };
+        }
+
+        // Extension-style formats, e.g. "acm-html" -> base "html".
+        let desc = parse_format_descriptor(target_format);
+        if let Ok(identifier) = FormatIdentifier::try_from(desc.base_format.as_str()) {
+            return match identifier {
+                FormatIdentifier::Html => PipelineProfile::HtmlRender,
+                FormatIdentifier::Revealjs => PipelineProfile::RevealjsRender,
+                _ => PipelineProfile::Pandoc(desc.base_format),
+            };
+        }
+
+        // Unknown format string: treat as a Pandoc writer name verbatim.
+        // `Format::from_format_string` is the authority on whether the
+        // string actually resolves; this function is total.
+        PipelineProfile::Pandoc(target_format.to_string())
+    }
+}
+
 /// The canonical Pandoc output format a Lua filter or shortcode should see as
 /// its `FORMAT` global, given the pipeline's `target_format`.
 ///
@@ -187,6 +275,72 @@ pub fn format_key_from_frontmatter(content: &str) -> Option<String> {
         serde_yaml::Value::Mapping(m) => m.keys().find_map(|k| k.as_str().map(str::to_string)),
         _ => None,
     }
+}
+
+/// Extract every key a document's leading YAML front-matter `format:`
+/// declares, in declaration order: the scalar wrapped as a single-element
+/// vec, or every key when it is a map (e.g. `format: {docx: default, html:
+/// default}` → `["docx", "html"]`). Returns an empty vec when there is no
+/// front matter or no `format:` key.
+///
+/// The counterpart to [`format_key_from_frontmatter`], which returns only
+/// the single key that reduction picks; this returns the full declaration so
+/// [`multi_format_diagnostics`] can name what else was skipped.
+pub fn format_keys_from_frontmatter(content: &str) -> Vec<String> {
+    let Some(yaml) = extract_yaml_frontmatter(content) else {
+        return Vec::new();
+    };
+    let Ok(value) = serde_yaml::from_str::<serde_yaml::Value>(&yaml) else {
+        return Vec::new();
+    };
+    match value.get("format") {
+        Some(serde_yaml::Value::String(s)) => vec![s.clone()],
+        Some(serde_yaml::Value::Mapping(m)) => m
+            .keys()
+            .filter_map(|k| k.as_str().map(str::to_string))
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// Warn when a document's `format:` declares more than one key but only one
+/// is actually rendered — a signal `render.rs`'s blanket non-native-format
+/// refusal used to provide as a side effect before P7-foundation relaxed it
+/// to admit `Docx`/`Pptx` (design doc §14). Returns an empty vec when
+/// `all_keys` has zero or one entries, or when every declared key besides
+/// `used_key` has already been accounted for.
+///
+/// Modeled on [`crate::project::project_kind_diagnostics`]'s shape: a pure
+/// function over already-resolved data, returning `Vec<DiagnosticMessage>`
+/// for the caller to print.
+pub fn multi_format_diagnostics(
+    all_keys: &[String],
+    used_key: &str,
+) -> Vec<quarto_error_reporting::DiagnosticMessage> {
+    use quarto_error_reporting::DiagnosticMessageBuilder;
+
+    if all_keys.len() <= 1 {
+        return Vec::new();
+    }
+    let skipped: Vec<&str> = all_keys
+        .iter()
+        .map(String::as_str)
+        .filter(|k| *k != used_key)
+        .collect();
+    if skipped.is_empty() {
+        return Vec::new();
+    }
+    vec![
+        DiagnosticMessageBuilder::warning(
+            "`format:` declares more than one format; only one is rendered",
+        )
+        .with_code("Q-20-8")
+        .problem(format!(
+            "rendered `{used_key}`; skipped `{}`.",
+            skipped.join("`, `")
+        ))
+        .build(),
+    ]
 }
 
 /// Return the text of the leading YAML front-matter block (between the opening
@@ -281,6 +435,7 @@ fn output_extension_for(id: FormatIdentifier) -> String {
         FormatIdentifier::Html => "html",
         FormatIdentifier::Pdf => "pdf",
         FormatIdentifier::Docx => "docx",
+        FormatIdentifier::Pptx => "pptx",
         FormatIdentifier::Epub => "epub",
         FormatIdentifier::Typst => "pdf",
         FormatIdentifier::Revealjs => "html",
@@ -288,6 +443,57 @@ fn output_extension_for(id: FormatIdentifier) -> String {
         FormatIdentifier::CommonMark => "md",
     }
     .to_string()
+}
+
+/// The pandoc **writer** name to pass as `-t` for a `PipelineProfile::Pandoc`
+/// render — distinct from [`output_extension_for`], which names the file
+/// extension of the *final* user-facing artifact.
+///
+/// For every format currently routed through `PandocWriteStage` except
+/// typst, the two coincide (`docx` writes `.docx`, `pptx` writes `.pptx`,
+/// …), which is why nothing needed this distinction before. Typst breaks
+/// that: pandoc's typst *writer* is invoked with `-t typst`, but the
+/// user-facing output is a compiled PDF (`output_extension_for` correctly
+/// says `"pdf"`) — there is no direct `-t pdf` path through pandoc's typst
+/// writer, and passing the final extension here would skip the writer, the
+/// vendored Lua filters, and the template entirely. Compiling the `.typ`
+/// pandoc produces into that PDF is `TypstCompileStage`'s job (pandoc-hybrid
+/// Phase 2), not this stage's.
+fn pandoc_writer_name_for(id: FormatIdentifier) -> String {
+    match id {
+        FormatIdentifier::Typst => "typst".to_string(),
+        other => output_extension_for(other),
+    }
+}
+
+/// Extra pandoc CLI flags `PandocWriteStage` should append for a
+/// `PipelineProfile::Pandoc` render, beyond the shared `-f json -t
+/// <writer> -o <output>` invocation every format gets.
+///
+/// Only typst needs any (`format-typst.ts`'s `pandoc.standalone = true`,
+/// `wrap: none`, `default-image-extension: svg`) — every other
+/// Pandoc-hybrid format keeps the pre-existing bare invocation unchanged.
+/// `citeproc: false` from the same registration needs no entry here: Q2
+/// never passes `--citeproc` to pandoc for *any* Pandoc-hybrid format
+/// (citations are resolved upstream of this stage), so "false" is the
+/// already-existing default, not a flag to add. The opt-in `-citations`
+/// variant (Q1 auto-adds a target-format variant when the user asks for
+/// pandoc's native citeproc) is deferred — there is no existing
+/// pseudo-format-variant seam to model it on (see
+/// `builtin_pseudo_format` above, which only maps whole-format aliases,
+/// not opt-in suffixes on a base format), so it needs its own design
+/// decision rather than a guess here.
+fn pandoc_invocation_args_for(id: FormatIdentifier) -> Vec<String> {
+    match id {
+        FormatIdentifier::Typst => vec![
+            "--standalone".to_string(),
+            "--wrap".to_string(),
+            "none".to_string(),
+            "--default-image-extension".to_string(),
+            "svg".to_string(),
+        ],
+        _ => Vec::new(),
+    }
 }
 
 /// A complete format specification
@@ -447,6 +653,20 @@ impl Format {
 
         // 4. Unknown format
         Err(format!("Unknown format: {}", format_str))
+    }
+
+    /// The pandoc writer name `PandocWriteStage` should pass as `-t` for a
+    /// `PipelineProfile::Pandoc` render. See [`pandoc_writer_name_for`] for
+    /// why this differs from [`Self::output_extension`] for typst.
+    pub fn pandoc_writer_name(&self) -> String {
+        pandoc_writer_name_for(self.identifier)
+    }
+
+    /// Extra pandoc CLI flags this format needs beyond the shared
+    /// invocation. See [`pandoc_invocation_args_for`] for why only typst
+    /// needs any today.
+    pub fn pandoc_invocation_args(&self) -> Vec<String> {
+        pandoc_invocation_args_for(self.identifier)
     }
 
     /// Check if this format is HTML-based
@@ -647,6 +867,13 @@ mod tests {
         // Non-HTML formats
         assert!(!FormatIdentifier::Pdf.is_html_based());
         assert!(!FormatIdentifier::Docx.is_html_based());
+        // T2.6 (P7-foundation Task 2): `Pptx` must read as non-HTML too.
+        // `is_html_based()` and `is_native()` return the same value for
+        // every variant that existed before P1 added `Pptx`, so a future
+        // regression that routes this gate through `is_native()` instead
+        // would be invisible to any test that only checks outcomes —
+        // this pins the predicate's own table.
+        assert!(!FormatIdentifier::Pptx.is_html_based());
         assert!(!FormatIdentifier::Epub.is_html_based());
         assert!(!FormatIdentifier::Typst.is_html_based());
         assert!(!FormatIdentifier::Gfm.is_html_based());
@@ -894,7 +1121,9 @@ mod tests {
 
     #[test]
     fn test_lua_format_for_passes_through_real_formats() {
-        for f in ["html", "revealjs", "latex", "pdf", "gfm", "typst", "docx"] {
+        for f in [
+            "html", "revealjs", "latex", "pdf", "gfm", "typst", "docx", "pptx", "beamer",
+        ] {
             assert_eq!(lua_format_for(f), f, "real format {f} must pass through");
         }
     }
@@ -959,6 +1188,97 @@ mod tests {
         assert_eq!(f.output_extension, "pdf");
     }
 
+    /// The pandoc writer name (`-t` argument) must stay `"typst"` even
+    /// though the final user-facing `output_extension` is `"pdf"` — see
+    /// `pandoc_writer_name_for`'s doc comment.
+    #[test]
+    fn test_typst_pandoc_writer_name_differs_from_output_extension() {
+        let f = Format::from_format_string("typst").unwrap();
+        assert_eq!(f.output_extension, "pdf");
+        assert_eq!(f.pandoc_writer_name(), "typst");
+    }
+
+    /// For every other Pandoc-routed format, the writer name and the
+    /// output extension still coincide (no behavior change for docx/pptx).
+    #[test]
+    fn test_pandoc_writer_name_matches_output_extension_for_non_typst() {
+        for fmt in ["docx", "pptx", "epub", "gfm", "commonmark"] {
+            let f = Format::from_format_string(fmt).unwrap();
+            assert_eq!(
+                f.pandoc_writer_name(),
+                f.output_extension,
+                "writer name should match output_extension for {fmt}"
+            );
+        }
+    }
+
+    /// pandoc-hybrid-typst Phase 1 invocation builder: typst needs
+    /// `--standalone`, `--wrap none`, and `--default-image-extension svg`
+    /// (`format-typst.ts`'s `pandoc.standalone = true` / `wrap: none` /
+    /// `default-image-extension: svg`) — none of which any other
+    /// Pandoc-hybrid format passes today.
+    ///
+    /// Revert hunk: emptying `pandoc_invocation_args_for`'s `Typst` arm
+    /// makes this RED (the expected flags go missing).
+    #[test]
+    fn test_typst_invocation_args_include_standalone_wrap_and_image_extension() {
+        let f = Format::from_format_string("typst").unwrap();
+        let args = f.pandoc_invocation_args();
+        assert!(
+            args.iter().any(|a| a == "--standalone"),
+            "expected --standalone, got {args:?}"
+        );
+        assert_eq!(
+            windowed_pair(&args, "--wrap"),
+            Some("none".to_string()),
+            "expected --wrap none, got {args:?}"
+        );
+        assert_eq!(
+            windowed_pair(&args, "--default-image-extension"),
+            Some("svg".to_string()),
+            "expected --default-image-extension svg, got {args:?}"
+        );
+    }
+
+    /// `citeproc: false` in Q1's typst registration means "don't ask
+    /// pandoc's own citeproc to run" — Q2 never asks pandoc for citeproc on
+    /// any Pandoc-hybrid format (citations are resolved upstream), so this
+    /// is a non-emission, not a flag. Confirms the invocation builder
+    /// doesn't regress that default by accidentally emitting `--citeproc`.
+    #[test]
+    fn test_typst_invocation_args_omit_citeproc_by_default() {
+        let f = Format::from_format_string("typst").unwrap();
+        let args = f.pandoc_invocation_args();
+        assert!(
+            !args.iter().any(|a| a == "--citeproc"),
+            "typst must not pass --citeproc by default, got {args:?}"
+        );
+    }
+
+    /// Every other Pandoc-hybrid format gets no extra invocation args —
+    /// this bullet is typst-only (no behavior change for docx/pptx/epub).
+    #[test]
+    fn test_non_typst_formats_get_no_extra_invocation_args() {
+        for fmt in ["docx", "pptx", "epub", "gfm", "commonmark"] {
+            let f = Format::from_format_string(fmt).unwrap();
+            assert!(
+                f.pandoc_invocation_args().is_empty(),
+                "expected no extra invocation args for {fmt}, got {:?}",
+                f.pandoc_invocation_args()
+            );
+        }
+    }
+
+    /// Test helper: returns the value immediately following `flag` in
+    /// `args`, if `flag` appears. Used to assert `--wrap none`-shaped
+    /// two-token pairs without depending on exact adjacent indices.
+    fn windowed_pair(args: &[String], flag: &str) -> Option<String> {
+        args.iter()
+            .position(|a| a == flag)
+            .and_then(|i| args.get(i + 1))
+            .cloned()
+    }
+
     #[test]
     fn test_from_format_string_revealjs() {
         let f = Format::from_format_string("revealjs").unwrap();
@@ -1004,6 +1324,79 @@ mod tests {
     #[test]
     fn test_from_format_string_leading_hyphen() {
         assert!(Format::from_format_string("-html").is_err());
+    }
+
+    // === pptx resolvability (Task 1 seam, T1.2) ===
+
+    #[test]
+    fn test_from_format_string_pptx() {
+        let f = Format::from_format_string("pptx").unwrap();
+        assert_eq!(f.identifier, FormatIdentifier::Pptx);
+        assert_eq!(f.output_extension, "pptx");
+        assert!(!f.native_pipeline);
+    }
+
+    // === PipelineProfile tests (Task 1 seam, T1.1) ===
+
+    #[test]
+    fn test_pipeline_profile_from_format() {
+        assert_eq!(
+            PipelineProfile::from_format("html"),
+            PipelineProfile::HtmlRender
+        );
+        assert_eq!(
+            PipelineProfile::from_format("q2-debug"),
+            PipelineProfile::HtmlRender
+        );
+        assert_eq!(
+            PipelineProfile::from_format("acm-html"),
+            PipelineProfile::HtmlRender
+        );
+        assert_eq!(
+            PipelineProfile::from_format("q2-preview"),
+            PipelineProfile::HtmlPreview
+        );
+        assert_eq!(
+            PipelineProfile::from_format("q2-sandboxed-preview"),
+            PipelineProfile::HtmlPreview
+        );
+        assert_eq!(
+            PipelineProfile::from_format("revealjs"),
+            PipelineProfile::RevealjsRender
+        );
+        assert_eq!(
+            PipelineProfile::from_format("q2-slides"),
+            PipelineProfile::RevealjsPreview
+        );
+        assert_eq!(
+            PipelineProfile::from_format("docx"),
+            PipelineProfile::Pandoc("docx".to_string())
+        );
+        assert_eq!(
+            PipelineProfile::from_format("pptx"),
+            PipelineProfile::Pandoc("pptx".to_string())
+        );
+        assert_eq!(
+            PipelineProfile::from_format("gfm"),
+            PipelineProfile::Pandoc("gfm".to_string())
+        );
+    }
+
+    /// Refactor-induced-vacuity guard: a four-variant `PipelineProfile` (no
+    /// slot for reveal+preview) would map `q2-slides` to `RevealjsRender`,
+    /// silently running the full reveal-render pipeline for the preview leg.
+    /// This asserts the `RevealjsPreview` cell by name AND by distinctness
+    /// from `RevealjsRender` — the only surface the two differ on.
+    #[test]
+    fn test_pipeline_profile_q2_slides_is_revealjs_preview_not_render() {
+        assert_ne!(
+            PipelineProfile::from_format("q2-slides"),
+            PipelineProfile::RevealjsRender
+        );
+        assert_eq!(
+            PipelineProfile::from_format("q2-slides"),
+            PipelineProfile::RevealjsPreview
+        );
     }
 
     // === is_minimal_html tests ===
@@ -1091,5 +1484,78 @@ mod tests {
             entry("theme", ConfigValue::new_string("cosmo", si())),
         ]);
         assert!(is_minimal_html(&meta));
+    }
+
+    // === multi_format_diagnostics tests (P7-foundation Task 1, T1.1-T1.3) ===
+
+    fn keys(strs: &[&str]) -> Vec<String> {
+        strs.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// T1.1: a 2-key `format:` map names the used key and the skipped key in
+    /// their own clauses — not a whole-message equality assertion, which
+    /// would be brittle against wording edits and non-discriminating about
+    /// which key landed in which clause.
+    #[test]
+    fn test_multi_format_names_skipped_key() {
+        let diags = multi_format_diagnostics(&keys(&["docx", "html"]), "docx");
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].code.as_deref(), Some("Q-20-8"));
+        let text = diags[0].to_text(None);
+        assert!(
+            text.contains("docx") && !text.split("skipped").next().unwrap().contains("html"),
+            "used clause must name docx, not html: {text}"
+        );
+        assert!(
+            text.contains("html"),
+            "skipped clause must name html: {text}"
+        );
+    }
+
+    /// T1.2: the skipped list preserves declaration order. Pinned to a
+    /// non-alphabetical declaration (`docx, pptx, html`) so a regression to a
+    /// sorted/`BTreeSet` collection reddens this test instead of passing by
+    /// accident (an alphabetical fixture would make sorted and
+    /// declaration-order output indistinguishable).
+    #[test]
+    fn test_multi_format_skipped_order() {
+        let diags = multi_format_diagnostics(&keys(&["docx", "pptx", "html"]), "docx");
+        assert_eq!(diags.len(), 1);
+        let text = diags[0].to_text(None);
+        let pptx_pos = text.find("pptx").expect("pptx named");
+        let html_pos = text.find("html").expect("html named");
+        assert!(
+            pptx_pos < html_pos,
+            "skipped keys must appear in declaration order (pptx before html): {text}"
+        );
+    }
+
+    /// T1.3: a single-key map, a scalar `format:`, and no declared keys at
+    /// all all produce no warning.
+    #[test]
+    fn test_single_format_no_warning() {
+        assert!(multi_format_diagnostics(&keys(&["html"]), "html").is_empty());
+        assert!(multi_format_diagnostics(&[], "html").is_empty());
+    }
+
+    #[test]
+    fn test_format_keys_from_frontmatter_map_preserves_order() {
+        let content =
+            "---\nformat:\n  docx: default\n  pptx: default\n  html: default\n---\nbody\n";
+        assert_eq!(
+            format_keys_from_frontmatter(content),
+            vec!["docx", "pptx", "html"]
+        );
+    }
+
+    #[test]
+    fn test_format_keys_from_frontmatter_scalar() {
+        let content = "---\nformat: html\n---\nbody\n";
+        assert_eq!(format_keys_from_frontmatter(content), vec!["html"]);
+    }
+
+    #[test]
+    fn test_format_keys_from_frontmatter_absent() {
+        assert!(format_keys_from_frontmatter("no front matter here").is_empty());
     }
 }

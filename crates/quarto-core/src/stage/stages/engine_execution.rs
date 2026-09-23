@@ -345,6 +345,24 @@ impl PipelineStage for EngineExecutionStage {
             return Ok(PipelineData::DocumentAst(doc_ast));
         }
 
+        // bd-sl79jjiq: the render's `ExecutionPolicy` may exclude this
+        // document. Decided here, after the *pure* resolver and before
+        // Step 2 touches engine implementations, so a skipped document
+        // never loads an engine, never warns about a missing runtime,
+        // and never executes. Documents that resolve to markdown only
+        // have nothing to skip and are not marked.
+        if !ctx.execution_policy.allows(&ctx.document.input)
+            && resolution.sequence.iter().any(|e| !e.is_markdown())
+        {
+            ctx.execution_skipped = true;
+            trace_event!(
+                ctx,
+                EventLevel::Debug,
+                "execution policy excludes this document — code cells passed through inert"
+            );
+            return Ok(PipelineData::DocumentAst(doc_ast));
+        }
+
         // Resolve the execute.timeout tri-state from metadata.
         let execute_timeout = resolve_execute_timeout(&doc_ast.ast.meta);
 
@@ -477,8 +495,17 @@ impl PipelineStage for EngineExecutionStage {
             // AST being serialized *this* iteration, so a second engine
             // in a sequence sees the front matter of the input it is
             // actually given, exactly as the jupyter engine's old
-            // front-matter re-parse did.
-            .with_execute_scope(ast.meta.get("execute").cloned())
+            // front-matter re-parse did. P7 Task 5: the per-format
+            // `execute` defaults (pptx's `echo: false`/`warning: false`,
+            // both formats' fig sizes) are merged in **under** the
+            // document's own scope here — document wins on any key both
+            // declare — so `ExecuteConfig::with_defaults()`'s own base
+            // values (`format.rs`) are overridden correctly regardless of
+            // which engine runs.
+            .with_execute_scope(merge_execute_scope(
+                &ctx.format.output_extension,
+                ast.meta.get("execute").cloned(),
+            ))
             .with_source_info(qmd_source_info, source_context_arc.clone())
             .with_handled_languages(handled_languages)
             .with_cancellation(ctx.cancellation.clone())
@@ -828,6 +855,73 @@ fn resolve_execute_timeout(meta: &quarto_pandoc_types::ConfigValue) -> Option<Du
     }
     // Unknown value type: fall back to default.
     Some(DEFAULT_EXECUTE_TIMEOUT)
+}
+
+/// The per-format `execute:` defaults table (P7 Task 5, values from
+/// `v1.11.3:src/format/formats.ts:315-331` and `formats-shared.ts:170-186`).
+/// `None` means "this format has no opinion" (html/base) — the document's
+/// own `execute:` scope, if any, is used unchanged.
+///
+/// `default-image-extension: png` is deliberately **not** here — it is a
+/// pandoc default (Task 4's `format_pandoc_defaults`), not an `execute`
+/// one.
+fn format_execute_defaults(base_format: &str) -> Option<Vec<(&'static str, yaml_rust2::Yaml)>> {
+    match base_format {
+        "docx" | "odt" => Some(vec![
+            ("fig-width", yaml_rust2::Yaml::Real("5".to_string())),
+            ("fig-height", yaml_rust2::Yaml::Real("4".to_string())),
+        ]),
+        "pptx" => Some(vec![
+            ("fig-width", yaml_rust2::Yaml::Real("11".to_string())),
+            ("fig-height", yaml_rust2::Yaml::Real("5.5".to_string())),
+            ("echo", yaml_rust2::Yaml::Boolean(false)),
+            ("warning", yaml_rust2::Yaml::Boolean(false)),
+        ]),
+        _ => None,
+    }
+}
+
+/// Merge the per-format `execute:` defaults **under** the document's own
+/// `execute:` scope — the document wins on any key both sides declare
+/// (P7 Task 5's acceptance criterion). Returns `None` only when there are
+/// no defaults for this format **and** no document scope, preserving the
+/// pre-Task-5 behavior exactly (a bare `ast.meta.get("execute").cloned()`)
+/// for every non-docx/pptx format.
+fn merge_execute_scope(
+    base_format: &str,
+    document_scope: Option<quarto_pandoc_types::ConfigValue>,
+) -> Option<quarto_pandoc_types::ConfigValue> {
+    use quarto_pandoc_types::{ConfigMapEntry, ConfigValue};
+
+    let Some(defaults) = format_execute_defaults(base_format) else {
+        return document_scope;
+    };
+
+    let synthetic_source =
+        quarto_source_map::SourceInfo::generated(quarto_source_map::By::unknown());
+    let mut entries: Vec<ConfigMapEntry> = defaults
+        .into_iter()
+        .map(|(key, yaml)| ConfigMapEntry {
+            key: key.to_string(),
+            key_source: synthetic_source.clone(),
+            value: ConfigValue::new_scalar(yaml, synthetic_source.clone()),
+        })
+        .collect();
+
+    if let Some(doc_scope) = &document_scope
+        && let Some(doc_entries) = doc_scope.as_map_entries()
+    {
+        for doc_entry in doc_entries {
+            if let Some(existing) = entries.iter_mut().find(|e| e.key == doc_entry.key) {
+                existing.value = doc_entry.value.clone();
+                existing.key_source = doc_entry.key_source.clone();
+            } else {
+                entries.push(doc_entry.clone());
+            }
+        }
+    }
+
+    Some(ConfigValue::new_map(entries, synthetic_source))
 }
 
 #[cfg(test)]
@@ -3159,6 +3253,83 @@ mod tests {
             300,
             "DEFAULT_EXECUTE_TIMEOUT must be 300 s"
         );
+    }
+
+    // === P7 Task 5: per-format `execute` defaults ===
+
+    /// T5.1: the per-format defaults table.
+    #[test]
+    fn test_format_execute_defaults_table() {
+        let docx = format_execute_defaults("docx").expect("docx has defaults");
+        assert_eq!(
+            docx,
+            vec![
+                ("fig-width", yaml_rust2::Yaml::Real("5".to_string())),
+                ("fig-height", yaml_rust2::Yaml::Real("4".to_string())),
+            ]
+        );
+
+        let pptx = format_execute_defaults("pptx").expect("pptx has defaults");
+        assert_eq!(
+            pptx,
+            vec![
+                ("fig-width", yaml_rust2::Yaml::Real("11".to_string())),
+                ("fig-height", yaml_rust2::Yaml::Real("5.5".to_string())),
+                ("echo", yaml_rust2::Yaml::Boolean(false)),
+                ("warning", yaml_rust2::Yaml::Boolean(false)),
+            ]
+        );
+
+        assert_eq!(
+            format_execute_defaults("html"),
+            None,
+            "html must have no format-level execute defaults"
+        );
+    }
+
+    /// `merge_execute_scope`'s "no defaults, no document scope" case must
+    /// return `None` exactly — the pre-Task-5 behavior for every
+    /// non-docx/pptx format.
+    #[test]
+    fn test_merge_execute_scope_html_no_document_scope_is_none() {
+        assert_eq!(merge_execute_scope("html", None), None);
+    }
+
+    /// A pptx merge with no document scope surfaces the format defaults
+    /// verbatim.
+    #[test]
+    fn test_merge_execute_scope_pptx_defaults_only() {
+        let merged = merge_execute_scope("pptx", None).expect("pptx must produce a scope");
+        assert_eq!(merged.get("echo").and_then(|v| v.as_bool()), Some(false));
+        assert_eq!(merged.get("warning").and_then(|v| v.as_bool()), Some(false));
+    }
+
+    /// The document's own `execute: {echo: true}` must win over pptx's
+    /// `echo: false` default — the row that fails if a future edit
+    /// "fixes" the merge by making the format authoritative.
+    #[test]
+    fn test_merge_execute_scope_document_wins_over_format_default() {
+        use quarto_pandoc_types::ConfigMapEntry;
+        use quarto_source_map::SourceInfo;
+
+        let document_scope = quarto_pandoc_types::ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "echo".to_string(),
+                key_source: SourceInfo::for_test(),
+                value: quarto_pandoc_types::ConfigValue::new_bool(true, SourceInfo::for_test()),
+            }],
+            SourceInfo::for_test(),
+        );
+
+        let merged = merge_execute_scope("pptx", Some(document_scope))
+            .expect("pptx + document scope must produce a scope");
+        assert_eq!(
+            merged.get("echo").and_then(|v| v.as_bool()),
+            Some(true),
+            "document's execute:{{echo: true}} must win over pptx's echo:false default"
+        );
+        // The default that the document scope did NOT mention must survive.
+        assert_eq!(merged.get("warning").and_then(|v| v.as_bool()), Some(false));
     }
 
     // ──────────────────────────────────────────────────────────────

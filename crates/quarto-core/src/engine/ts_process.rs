@@ -585,7 +585,13 @@ pub fn spawn_into_tcp(
 /// real bundle's `connectControl` (`control-transport.ts`). It leaves three
 /// bindings in scope for the per-test body: the connected socket `conn`, a
 /// `TextDecoder dec`, and a `TextEncoder enc`.
-#[cfg(test)]
+///
+/// The only callers are Unix-gated: `proc_tests` is gated because two tests
+/// use `kill -0` or assert a SIGKILL exit code, while
+/// `registry::tests::test_shutdown_all_kills_ts_engine` currently uses the
+/// same gate. Keep this constant's gate aligned with its callers; otherwise,
+/// `-D warnings` reports it as dead code on Windows.
+#[cfg(all(test, unix))]
 const DIALBACK_PREAMBLE: &str = r#"
 const args = Deno.args;
 let control = null;
@@ -613,7 +619,7 @@ await conn.write(enc.encode(token + "\n"));
 /// exits 0 when the socket read side closes (the host's `shutdown()` half-close,
 /// or `Drop`) — the loopback-TCP equivalent of the old `sh -c 'cat >/dev/null'`
 /// liveness child.
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub(crate) const DIALBACK_READ_UNTIL_EOF: &str = r#"
 const rbuf = new Uint8Array(4096);
 while (true) { const n = await conn.read(rbuf); if (n === null) break; }
@@ -629,7 +635,7 @@ Deno.exit(0);
 /// caller binds it (`let (cmd, _script) = ...`) for the duration of the test.
 /// `start_with_command` appends the `--control 127.0.0.1:<port>` argument, so
 /// callers must NOT add it themselves.
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub(crate) fn deno_dialback_child(body: &str) -> (Command, tempfile::NamedTempFile) {
     use std::io::Write as _;
     let script = format!("{DIALBACK_PREAMBLE}\n{body}\n");
@@ -3849,8 +3855,14 @@ mod tests {
 }
 
 // ============================================================================
-// Proc-tier tests (real child process, Unix-only — uses /bin/sleep, sh -c,
-// signals; watchdog-wrapped).
+// Proc-tier tests (real child process; watchdog-wrapped). The mod is gated
+// `unix`-only for two of its seven tests: `test_drop_reaps_no_hang` uses a
+// `kill -0` PID-liveness probe, and `test_real_crash_reaps_and_reports`
+// asserts `ExitStatus::code() == None` after a self-SIGKILL, which is a
+// unix-only outcome. The other five tests (and the loopback-TCP dial-back
+// mechanism they all drive) are portable; see bd-cdh0gk47 for making this
+// mod per-test-gated instead of whole-mod-gated, so those five actually
+// run on Windows.
 // ============================================================================
 
 #[cfg(all(test, unix))]

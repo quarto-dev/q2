@@ -263,7 +263,7 @@ impl KnitrFormatConfig {
                 from: Some("markdown".to_string()),
                 ..Default::default()
             },
-            execute: ExecuteConfig::with_defaults(),
+            execute: ExecuteConfig::with_defaults_for_format(output_format),
             render: RenderConfig::default(),
             identifier: None,
             metadata: None,
@@ -273,6 +273,26 @@ impl KnitrFormatConfig {
 }
 
 impl ExecuteConfig {
+    /// Create execution config with format-aware defaults.
+    ///
+    /// `default-image-extension` (`format-typst.ts`'s
+    /// `default-image-extension: svg`) is the only pandoc-hybrid-typst
+    /// Phase 1 execute default with a real knitr-side effect: knitr's R
+    /// plotting device picks the image extension when a chunk executes,
+    /// so it must be resolved *before* execution, not patched onto the
+    /// output afterward. `wrap: none` (the other format-typst.ts
+    /// default in the same registration) has no knitr consumer — nothing
+    /// in `execute.R`/`hooks.R` reads `format$pandoc$wrap` — so it stays
+    /// out of this config; it is handled entirely by the pandoc
+    /// invocation builder (`Format::pandoc_invocation_args`).
+    pub fn with_defaults_for_format(output_format: &str) -> Self {
+        let mut config = Self::with_defaults();
+        if output_format == "typst" {
+            config.fig_format = Some("svg".to_string());
+        }
+        config
+    }
+
     /// Create execution config with sensible defaults.
     ///
     /// These defaults match knitr's defaults and Quarto's conventions.
@@ -514,6 +534,35 @@ mod tests {
         assert!(json.contains("\"pandoc\""));
         assert!(json.contains("\"to\":\"html\""));
         assert!(json.contains("\"from\":\"markdown\""));
+    }
+
+    /// pandoc-hybrid-typst Phase 1 execute defaults: typst's
+    /// `default-image-extension: svg` (`format-typst.ts`) must reach
+    /// knitr's `fig_format` *before* code execution — knitr's R plotting
+    /// device picks the image extension at chunk-execution time, so this
+    /// can't be patched in afterward the way a Lua post-filter could.
+    /// Every other format keeps the pre-existing `"png"` default
+    /// unchanged.
+    ///
+    /// Revert hunk: reverting `with_defaults` to call
+    /// `ExecuteConfig::with_defaults()` unconditionally (dropping the
+    /// format-aware `with_defaults_for_format`) makes the typst half RED.
+    #[test]
+    fn test_typst_format_defaults_to_svg_figures() {
+        let config = KnitrFormatConfig::with_defaults("typst");
+        assert_eq!(config.execute.fig_format, Some("svg".to_string()));
+    }
+
+    #[test]
+    fn test_non_typst_formats_keep_png_figures() {
+        for fmt in ["html", "pdf", "docx", "pptx"] {
+            let config = KnitrFormatConfig::with_defaults(fmt);
+            assert_eq!(
+                config.execute.fig_format,
+                Some("png".to_string()),
+                "expected png fig-format default for {fmt}"
+            );
+        }
     }
 
     #[test]

@@ -1,0 +1,3 @@
+::: {.proof}
+QED style content.
+:::

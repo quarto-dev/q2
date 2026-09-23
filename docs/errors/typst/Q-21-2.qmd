@@ -1,0 +1,35 @@
+---
+title: "Typst Version Too Old"
+description: "The typst binary found on PATH reports a version older than the minimum this Quarto version requires."
+code: Q-21-2
+subsystem: typst
+status: stub
+since: "99.9.9"
+categories:
+  - typst
+---
+
+# `Q-21-2` — Typst Version Too Old
+
+> The `typst` binary found on `PATH` reports a version older than the
+> minimum this Quarto version requires.
+
+## What this means
+
+Quarto found a `typst` binary, but its reported version is below the
+minimum Quarto's typst support requires (currently `0.8`).
+
+## Why this happens
+
+- The `typst` on `PATH` (or pointed at by `QUARTO_TYPST`) is an older
+  release, predating a feature or fix Quarto's vendored template/filters
+  depend on.
+
+## How to fix
+
+Upgrade typst to a version at least as new as the minimum required —
+see [typst.app](https://typst.app) for install/upgrade instructions.
+
+## Related errors
+
+- [`Q-21-1`](Q-21-1.qmd) — typst could not be found at all.

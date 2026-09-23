@@ -165,6 +165,16 @@ impl RefTypeRegistry {
         self.entries.get(ref_type)
     }
 
+    /// Iterate over every registered ref-type's `(prefix, def)` pair, in
+    /// unspecified order. Added for the pandoc-hybrid epic's
+    /// `crossref-<type>-title`/`-prefix` param family (P4 Task 5), which
+    /// must generalize to every registered type, not a hardcoded builtin
+    /// list — see `claude-notes/plans/2026-09-18-pandoc-hybrid-P4-implementation.md`
+    /// Findings for Gordon, item 7.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &RefTypeDef)> {
+        self.entries.iter().map(|(k, v)| (k.as_str(), v))
+    }
+
     /// Classify an identifier (Cite id, element id, ...). Returns `Some` if
     /// the id has the shape `"<prefix>-<rest>"` and `<prefix>` is registered.
     ///
@@ -281,6 +291,41 @@ mod tests {
 
     fn dummy_source_info() -> SourceInfo {
         SourceInfo::original(FileId(0), 0, 0)
+    }
+
+    /// T12.1: pins `BUILTINS`'s exact contents so the `algorithm`/`alg`
+    /// gap's eventual closure (or widening) is a visible, reviewed change —
+    /// see P7 Task 12 (`claude-notes/plans/2026-09-18-pandoc-hybrid-P7-implementation.md`)
+    /// and `crates/quarto-core/tests/fixtures/pandoc-goldens/README.md`.
+    #[test]
+    fn test_builtins_pinned_no_alg() {
+        assert_eq!(
+            BUILTINS,
+            &[
+                ("fig", "Figure"),
+                ("tbl", "Table"),
+                ("lst", "Listing"),
+                ("eq", "Equation"),
+                ("sec", "Section"),
+                ("thm", "Theorem"),
+                ("lem", "Lemma"),
+                ("cor", "Corollary"),
+                ("prp", "Proposition"),
+                ("cnj", "Conjecture"),
+                ("def", "Definition"),
+                ("exm", "Example"),
+                ("exr", "Exercise"),
+                ("sol", "Solution"),
+                ("rem", "Remark"),
+                ("nte", "Note"),
+                ("wrn", "Warning"),
+                ("tip", "Tip"),
+                ("imp", "Important"),
+                ("cau", "Caution"),
+                ("demo", "Demo"),
+            ]
+        );
+        assert!(!BUILTINS.iter().any(|(rt, _)| *rt == "alg"));
     }
 
     #[test]

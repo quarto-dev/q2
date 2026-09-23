@@ -95,6 +95,10 @@ tempfile = "3"
 pampa.workspace = true
 sha2 = "0.11"
 walkdir.workspace = true
+# P7-foundation Task 3: reading back the docx/pptx a real `pandoc`
+# subprocess produces in the E2E CLI tests — same minimal read-only
+# feature set as quarto-core's own dev-dependency.
+zip = { version = "6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [lints]
 workspace = true
