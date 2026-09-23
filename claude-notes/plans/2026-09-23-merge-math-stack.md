@@ -46,20 +46,46 @@ Parent plans: `2026-09-21-quarto-math-and-native-docx.md`,
 
 ## Merge order and checklist
 
-- [ ] **#705** — merge main, regenerate the two artifacts, tests, push,
-      mark ready, merge when CI is green.
-- [ ] **#706** — retarget to main, merge main, union-resolve catalog +
-      sidebar, refresh `Cargo.lock`, build + tests + lint, push, merge.
-- [ ] **#708** — merge main, take #710's `crossref_render.rs`, fix the
-      module list, build + tests, push, merge.
-- [ ] **#709** — retarget to main, merge main, resolve plan doc, tests,
-      push, merge.
-- [ ] **#710** — retarget to main, merge main; gate `MathMlStage` on
-      `is_html_based()`, add `math-ml` to `PANDOC_STAGE_EXCLUDED`, update
-      `t6_2_pandoc_stage_list_produces_exact_surviving_name_list`, add an
-      end-to-end test (mathml-method document `--to docx` keeps its OMML
-      equation); build + tests; push; merge.
+- [x] **#705** — merged main (`cb0fccde`, artifacts regenerated), 9,803
+      pampa/quarto-core/pandoc-types tests green locally, CI green,
+      merged 2026-09-23 (`5fcafab3`).
+- [x] **#706** — merged the #705 tip (`c84dfcee`: catalog + sidebar
+      union, `Cargo.lock` refreshed from main), workspace build + lint +
+      9,723 tests green locally, CI green, merged 2026-09-23 (`e276f50c`).
+- [x] **#708** — merged the #705 tip taking #710's `crossref_render.rs`
+      (`1999946d`) and lifted `append_to_tex` into `equation_number.rs`;
+      the Pandoc exact stage-list assertion gains `equation-number`
+      (`d0cf22d6`). Clippy + 9,645 tests green locally, CI green, merged
+      2026-09-23 (`2bcd922a`).
+- [x] **#709** — GitHub's stack auto-rebased the branch onto main after
+      #706; merged main again after #708 (`cb8132ee`, plan doc from the
+      Phase 3 branch). Merged after CI.
+- [x] **#710 → re-opened as #714** — the stack refused a base change and
+      would have rebased this branch's merge history when #709 landed, so
+      the same branch was re-opened against `main`. Carries the
+      `MathMlStage` fix (`56b93af7`: `applies_to` gate, `math-ml` on
+      `PANDOC_STAGE_EXCLUDED`, docx end-to-end test) — the new tests were
+      confirmed failing without the fix, then 9,777 quarto-core /
+      quarto-math / pampa tests green with it. Merged after CI.
 
 ## Verification log
 
-(filled in as each PR lands)
+End-to-end through the real binary (`cargo run --bin q2 -- render`), at
+the #714 tip, fixture: a labelled display equation `$$E = mc^2$$ {#eq-e}`
+with `See @eq-e.`:
+
+- `--to docx` with `html-math-method: mathml` in front matter: renders;
+  `word/document.xml` has one `<m:oMath>` reading `E=mc2  (1)` (number
+  from the vendored `crossref/equations.lua`), no MathML in the body.
+  Before the fix this invocation failed with Q-20-3 / pandoc exit 83.
+- `--to typst`: PDF text shows the equation and `(1)`, unchanged from
+  main.
+- `--to html` with `mathml`: `<math xmlns=… display="block">` emitted,
+  the sibling `<span class="quarto-eq-number">(1)</span>` present, zero
+  references to MathJax in the page.
+- `--to docx` without the option: unchanged from main (`E=mc2  (1)`).
+
+Known non-blocker seen while checking output: the MathML writer nests
+`E = mc^2` as `<msup><mrow>E=mc</mrow><mn>2</mn></msup>` (superscript base
+is the whole run). Visually identical, semantically off; that is the mitex
+base-selection quirk already filed as bd-0mzhnxft.
