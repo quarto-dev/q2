@@ -35,6 +35,7 @@ use std::time::Duration;
 use crate::engine::{
     DEFAULT_EXECUTE_TIMEOUT, EngineRegistry, ExecutionContext, ExecutionEngine, resolve_engines,
 };
+use crate::format::FormatIdentifier;
 use crate::stage::{
     DocumentAst, EventLevel, PipelineData, PipelineDataKind, PipelineError, PipelineStage,
     SourceType, StageContext,
@@ -503,7 +504,7 @@ impl PipelineStage for EngineExecutionStage {
             // values (`format.rs`) are overridden correctly regardless of
             // which engine runs.
             .with_execute_scope(merge_execute_scope(
-                &ctx.format.output_extension,
+                ctx.format.identifier,
                 ast.meta.get("execute").cloned(),
             ))
             .with_source_info(qmd_source_info, source_context_arc.clone())
@@ -862,16 +863,24 @@ fn resolve_execute_timeout(meta: &quarto_pandoc_types::ConfigValue) -> Option<Du
 /// `None` means "this format has no opinion" (html/base) — the document's
 /// own `execute:` scope, if any, is used unchanged.
 ///
+/// Keyed by [`FormatIdentifier`], not the output-extension string
+/// (long-tail Phase 1 wrinkle 1: extension keys collide for the tail —
+/// `"xml"` would be both opendocument's and docbook's defaults, and Typst's
+/// extension is `"pdf"`, not `"typst"`). The old `"docx" | "odt"` arm's Odt
+/// half returns together with the `Odt` variant (long-tail Phase 2).
+///
 /// `default-image-extension: png` is deliberately **not** here — it is a
 /// pandoc default (Task 4's `format_pandoc_defaults`), not an `execute`
 /// one.
-fn format_execute_defaults(base_format: &str) -> Option<Vec<(&'static str, yaml_rust2::Yaml)>> {
+fn format_execute_defaults(
+    base_format: FormatIdentifier,
+) -> Option<Vec<(&'static str, yaml_rust2::Yaml)>> {
     match base_format {
-        "docx" | "odt" => Some(vec![
+        FormatIdentifier::Docx => Some(vec![
             ("fig-width", yaml_rust2::Yaml::Real("5".to_string())),
             ("fig-height", yaml_rust2::Yaml::Real("4".to_string())),
         ]),
-        "pptx" => Some(vec![
+        FormatIdentifier::Pptx => Some(vec![
             ("fig-width", yaml_rust2::Yaml::Real("11".to_string())),
             ("fig-height", yaml_rust2::Yaml::Real("5.5".to_string())),
             ("echo", yaml_rust2::Yaml::Boolean(false)),
@@ -888,7 +897,7 @@ fn format_execute_defaults(base_format: &str) -> Option<Vec<(&'static str, yaml_
 /// pre-Task-5 behavior exactly (a bare `ast.meta.get("execute").cloned()`)
 /// for every non-docx/pptx format.
 fn merge_execute_scope(
-    base_format: &str,
+    base_format: FormatIdentifier,
     document_scope: Option<quarto_pandoc_types::ConfigValue>,
 ) -> Option<quarto_pandoc_types::ConfigValue> {
     use quarto_pandoc_types::{ConfigMapEntry, ConfigValue};
@@ -927,6 +936,7 @@ fn merge_execute_scope(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::format::FormatIdentifier;
     use crate::stage::LoadedSource;
     use std::path::PathBuf;
 
@@ -3257,10 +3267,13 @@ mod tests {
 
     // === P7 Task 5: per-format `execute` defaults ===
 
-    /// T5.1: the per-format defaults table.
+    /// T5.1: the per-format defaults table, keyed by
+    /// [`FormatIdentifier`] (Phase 1 long-tail wrinkle 1: extension-string
+    /// keys collide for the tail — `xml` would be both opendocument's
+    /// wordprocessor defaults and docbook's plaintext defaults).
     #[test]
     fn test_format_execute_defaults_table() {
-        let docx = format_execute_defaults("docx").expect("docx has defaults");
+        let docx = format_execute_defaults(FormatIdentifier::Docx).expect("docx has defaults");
         assert_eq!(
             docx,
             vec![
@@ -3269,7 +3282,7 @@ mod tests {
             ]
         );
 
-        let pptx = format_execute_defaults("pptx").expect("pptx has defaults");
+        let pptx = format_execute_defaults(FormatIdentifier::Pptx).expect("pptx has defaults");
         assert_eq!(
             pptx,
             vec![
@@ -3281,9 +3294,14 @@ mod tests {
         );
 
         assert_eq!(
-            format_execute_defaults("html"),
+            format_execute_defaults(FormatIdentifier::Html),
             None,
             "html must have no format-level execute defaults"
+        );
+        assert_eq!(
+            format_execute_defaults(FormatIdentifier::Typst),
+            None,
+            "typst must have no format-level execute defaults"
         );
     }
 
@@ -3292,14 +3310,15 @@ mod tests {
     /// non-docx/pptx format.
     #[test]
     fn test_merge_execute_scope_html_no_document_scope_is_none() {
-        assert_eq!(merge_execute_scope("html", None), None);
+        assert_eq!(merge_execute_scope(FormatIdentifier::Html, None), None);
     }
 
     /// A pptx merge with no document scope surfaces the format defaults
     /// verbatim.
     #[test]
     fn test_merge_execute_scope_pptx_defaults_only() {
-        let merged = merge_execute_scope("pptx", None).expect("pptx must produce a scope");
+        let merged =
+            merge_execute_scope(FormatIdentifier::Pptx, None).expect("pptx must produce a scope");
         assert_eq!(merged.get("echo").and_then(|v| v.as_bool()), Some(false));
         assert_eq!(merged.get("warning").and_then(|v| v.as_bool()), Some(false));
     }
@@ -3321,7 +3340,7 @@ mod tests {
             SourceInfo::for_test(),
         );
 
-        let merged = merge_execute_scope("pptx", Some(document_scope))
+        let merged = merge_execute_scope(FormatIdentifier::Pptx, Some(document_scope))
             .expect("pptx + document scope must produce a scope");
         assert_eq!(
             merged.get("echo").and_then(|v| v.as_bool()),

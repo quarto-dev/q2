@@ -929,21 +929,14 @@ pub fn render_once(
         }
     }
 
-    // Native formats (HTML, revealjs) render in-process. Docx/Pptx/Epub/Typst
-    // route through Pandoc via `render_qmd_to_pandoc` (P7-foundation Task 3;
-    // epub added by the epub follow-on plan; typst added by
-    // pandoc-hybrid-typst Phase 2, once `TypstCompileStage` gives pandoc's
-    // `.typ` intermediate somewhere to go) — everything else (Pdf, Gfm,
-    // CommonMark) is still not yet supported.
-    if !format.identifier.is_native()
-        && !matches!(
-            format.identifier,
-            quarto_core::format::FormatIdentifier::Docx
-                | quarto_core::format::FormatIdentifier::Pptx
-                | quarto_core::format::FormatIdentifier::Epub
-                | quarto_core::format::FormatIdentifier::Typst
-        )
-    {
+    // Native formats (HTML, revealjs) render in-process. Every
+    // pandoc-hybrid format (`FormatIdentifier::is_pandoc_hybrid` — currently
+    // Docx/Pptx/Epub/Typst plus, since the long-tail Phase 1 gate change,
+    // Gfm/CommonMark) routes through Pandoc via `render_qmd_to_pandoc`.
+    // Only non-hybrid, non-native formats (Pdf for now — the latex/beamer
+    // epic owns it — and future enum additions that have not yet gained a
+    // `pandoc_writer_name_for` arm) are refused here.
+    if !format.identifier.is_native() && !format.identifier.is_pandoc_hybrid() {
         return Err(RenderAbort::Other(anyhow::anyhow!(
             "Format '{}' is not yet supported. Only HTML and revealjs are available in this version.",
             format.identifier
@@ -3461,8 +3454,12 @@ mod render_once_tests {
     fn unsupported_format_aborts_before_any_render() {
         let temp = TempDir::new().unwrap();
         let dir = website(&temp);
+        // `pdf` is the load-bearing example of a still-refused format
+        // (non-native, non-pandoc-hybrid). `gfm` used to sit here, but the
+        // long-tail Phase 1 gate change admits it — and `e2e_render_gfm`
+        // pins that it now *succeeds*.
         let args = RenderArgs {
-            to: Some("gfm".to_string()),
+            to: Some("pdf".to_string()),
             ..args_for(&dir)
         };
         let err = render_once(&args, &mut quiet_presenter()).expect_err("must abort");

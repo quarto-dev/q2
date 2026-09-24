@@ -62,6 +62,42 @@ impl FormatIdentifier {
         matches!(self, FormatIdentifier::Html | FormatIdentifier::Revealjs)
     }
 
+    /// Check if this format renders through the pandoc-hybrid path
+    /// ([`crate::stage::stages::PandocWriteStage`] with a real `pandoc`
+    /// `-t <writer>` invocation), as opposed to the native Rust pipeline.
+    ///
+    /// Every variant listed here **must** have an explicit arm in
+    /// [`pandoc_writer_name_for`] naming the pandoc writer Q1 uses —
+    /// admitting a variant through the render gate (render.rs's
+    /// `is_pandoc_hybrid()` check) without a writer arm would send pandoc
+    /// the output *extension* as `-t` instead, or fail to reach pandoc at
+    /// all. `Pdf` is deliberately absent: the latex/beamer epic owns it.
+    pub fn is_pandoc_hybrid(&self) -> bool {
+        matches!(
+            self,
+            FormatIdentifier::Docx
+                | FormatIdentifier::Pptx
+                | FormatIdentifier::Epub
+                | FormatIdentifier::Typst
+                | FormatIdentifier::Gfm
+                | FormatIdentifier::CommonMark
+        )
+    }
+
+    /// The canonical format *name*: what `format-identifier.base-format`
+    /// filter params carry, what `KNOWN_BASE_FORMATS` (extension
+    /// discovery) spells, and what `TryFrom<&str>` accepts. This is the
+    /// contract seam that must hold for every variant — **never** the
+    /// output *extension* (`output_extension`), which diverges for Typst
+    /// (`"typst"` vs `.pdf`) and the markdown writers (`"gfm"`/`"commonmark"`
+    /// vs `.md`). Long-tail Phase 1 wrinkle 2: the params builder used to
+    /// send the extension here, so a Typst render advertised base-format
+    /// `"pdf"` and downstream `format:` scoping in extensions could never
+    /// match it.
+    pub fn canonical_name(&self) -> &'static str {
+        self.as_str()
+    }
+
     /// Check if this is an HTML-based format
     pub fn is_html_based(&self) -> bool {
         matches!(self, FormatIdentifier::Html | FormatIdentifier::Revealjs)
@@ -457,19 +493,30 @@ fn output_extension_for(id: FormatIdentifier) -> String {
 /// render — distinct from [`output_extension_for`], which names the file
 /// extension of the *final* user-facing artifact.
 ///
-/// For every format currently routed through `PandocWriteStage` except
-/// typst, the two coincide (`docx` writes `.docx`, `pptx` writes `.pptx`,
-/// …), which is why nothing needed this distinction before. Typst breaks
-/// that: pandoc's typst *writer* is invoked with `-t typst`, but the
-/// user-facing output is a compiled PDF (`output_extension_for` correctly
-/// says `"pdf"`) — there is no direct `-t pdf` path through pandoc's typst
-/// writer, and passing the final extension here would skip the writer, the
-/// vendored Lua filters, and the template entirely. Compiling the `.typ`
-/// pandoc produces into that PDF is `TypstCompileStage`'s job (pandoc-hybrid
-/// Phase 2), not this stage's.
+/// The two coincide for docx/pptx/epub, which is why nothing needed this
+/// distinction before. It diverges for every format whose pandoc writer
+/// name is not its file extension:
+///
+/// - **Typst** — pandoc's typst *writer* is invoked with `-t typst`, but
+///   the user-facing output is a compiled PDF (`output_extension_for`
+///   correctly says `"pdf"`) — there is no direct `-t pdf` path through
+///   pandoc's typst writer, and passing the final extension here would
+///   skip the writer, the vendored Lua filters, and the template entirely.
+///   Compiling the `.typ` pandoc produces into that PDF is
+///   `TypstCompileStage`'s job (pandoc-hybrid Phase 2), not this stage's.
+/// - **Gfm / CommonMark** (long-tail Phase 1 wrinkle 4) — pandoc's writers
+///   are `-t gfm` / `-t commonmark`, but the output file is `.md`. Passing
+///   the extension (`-t md`) would silently select pandoc's *plain
+///   markdown* writer instead — wrong syntax (no GFM tables/task lists),
+///   wrong thing entirely.
+///
+/// Every `FormatIdentifier` variant for which [`FormatIdentifier::is_pandoc_hybrid`]
+/// is true must have an explicit arm here.
 fn pandoc_writer_name_for(id: FormatIdentifier) -> String {
     match id {
         FormatIdentifier::Typst => "typst".to_string(),
+        FormatIdentifier::Gfm => "gfm".to_string(),
+        FormatIdentifier::CommonMark => "commonmark".to_string(),
         other => output_extension_for(other),
     }
 }
@@ -665,7 +712,8 @@ impl Format {
 
     /// The pandoc writer name `PandocWriteStage` should pass as `-t` for a
     /// `PipelineProfile::Pandoc` render. See [`pandoc_writer_name_for`] for
-    /// why this differs from [`Self::output_extension`] for typst.
+    /// why this differs from [`Self::output_extension`] (typst, gfm,
+    /// commonmark).
     pub fn pandoc_writer_name(&self) -> String {
         pandoc_writer_name_for(self.identifier)
     }
@@ -1229,7 +1277,7 @@ mod tests {
 
     /// The pandoc writer name (`-t` argument) must stay `"typst"` even
     /// though the final user-facing `output_extension` is `"pdf"` — see
-    /// `pandoc_writer_name_for`'s doc comment.
+    /// [`pandoc_writer_name_for`]'s doc comment.
     #[test]
     fn test_typst_pandoc_writer_name_differs_from_output_extension() {
         let f = Format::from_format_string("typst").unwrap();
@@ -1237,11 +1285,67 @@ mod tests {
         assert_eq!(f.pandoc_writer_name(), "typst");
     }
 
-    /// For every other Pandoc-routed format, the writer name and the
-    /// output extension still coincide (no behavior change for docx/pptx).
+    /// Phase 1 (long-tail formats) wrinkle 4: gfm/commonmark need explicit
+    /// writer-name arms because the CLI gate admits them from Phase 1
+    /// onward — the fall-through default would send `-t md` (the output
+    /// extension), invoking pandoc's generic markdown writer instead of
+    /// gfm/commonmark.
+    #[test]
+    fn test_gfm_commonmark_writer_names_are_not_md() {
+        assert_eq!(
+            Format::from_format_string("gfm")
+                .unwrap()
+                .pandoc_writer_name(),
+            "gfm"
+        );
+        assert_eq!(
+            Format::from_format_string("commonmark")
+                .unwrap()
+                .pandoc_writer_name(),
+            "commonmark"
+        );
+    }
+
+    /// Phase 1 wrinkle 3: the CLI gate's predicate. True exactly for the
+    /// formats routed through `PandocWriteStage`; every variant listed here
+    /// must have an explicit `pandoc_writer_name_for` arm (see
+    /// `test_gfm_commonmark_writer_names_are_not_md`). Pdf stays refused
+    /// (latex/beamer epic); Html/Revealjs are native.
+    #[test]
+    fn test_is_pandoc_hybrid_predicate() {
+        use FormatIdentifier as F;
+        for id in [F::Docx, F::Pptx, F::Epub, F::Typst, F::Gfm, F::CommonMark] {
+            assert!(id.is_pandoc_hybrid(), "{id} must be pandoc-hybrid");
+        }
+        for id in [F::Html, F::Pdf, F::Revealjs] {
+            assert!(!id.is_pandoc_hybrid(), "{id} must not be pandoc-hybrid");
+        }
+    }
+
+    /// Phase 1 wrinkle 2: `canonical_name()` is the format key vendored Q1
+    /// Lua reads as `format-identifier.base-format` — never the output
+    /// extension. Typst's extension is `pdf` but its canonical name is
+    /// `typst` (the latent bug this plan fixes); gfm's is `gfm`, not `md`.
+    #[test]
+    fn test_canonical_name_is_not_the_extension() {
+        assert_eq!(FormatIdentifier::Typst.canonical_name(), "typst");
+        assert_ne!(
+            FormatIdentifier::Typst.canonical_name(),
+            output_extension_for(FormatIdentifier::Typst),
+            "typst's canonical name must not be its output extension"
+        );
+        assert_eq!(FormatIdentifier::Gfm.canonical_name(), "gfm");
+        assert_eq!(FormatIdentifier::Docx.canonical_name(), "docx");
+    }
+
+    /// For every Pandoc-routed format without a dedicated writer arm, the
+    /// writer name and the output extension still coincide (no behavior
+    /// change for docx/pptx/epub). Gfm/CommonMark now have dedicated arms
+    /// (`test_gfm_commonmark_writer_names_are_not_md`) and typst diverges
+    /// (`test_typst_pandoc_writer_name_differs_from_output_extension`).
     #[test]
     fn test_pandoc_writer_name_matches_output_extension_for_non_typst() {
-        for fmt in ["docx", "pptx", "epub", "gfm", "commonmark"] {
+        for fmt in ["docx", "pptx", "epub"] {
             let f = Format::from_format_string(fmt).unwrap();
             assert_eq!(
                 f.pandoc_writer_name(),
