@@ -187,3 +187,53 @@ fn html_execute_defaults_unchanged() {
         "html must not receive pptx's echo override: {scope:?}"
     );
 }
+
+// === long-tail Phase 2: Tier A bulk tail ===
+
+/// Long-tail Phase 2: an **odt** render (wordprocessor family) observes
+/// the fig 5×4 defaults through the real stage merge.
+#[test]
+fn odt_execute_defaults_reach_engine() {
+    let scope = observed_execute_scope(CELL_FIXTURE, "odt").expect("odt must produce a scope");
+    assert_eq!(
+        scope.get("fig-width").and_then(|v| v.as_f64_lenient()),
+        Some(5.0),
+        "odt's fig-width:5 default did not reach the engine"
+    );
+    assert_eq!(
+        scope.get("fig-height").and_then(|v| v.as_f64_lenient()),
+        Some(4.0),
+        "odt's fig-height:4 default did not reach the engine"
+    );
+}
+
+/// Long-tail Phase 2: **fb2** (ebook family) observes the same fig 5×4.
+#[test]
+fn fb2_execute_defaults_reach_engine() {
+    let scope = observed_execute_scope(CELL_FIXTURE, "fb2").expect("fb2 must produce a scope");
+    assert_eq!(
+        scope.get("fig-width").and_then(|v| v.as_f64_lenient()),
+        Some(5.0),
+        "fb2's fig-width:5 default did not reach the engine"
+    );
+    assert_eq!(
+        scope.get("fig-height").and_then(|v| v.as_f64_lenient()),
+        Some(4.0),
+        "fb2's fig-height:4 default did not reach the engine"
+    );
+}
+
+/// Long-tail Phase 2: **plain** (plaintext family) observes no figure
+/// defaults — Q1's `plaintextFormat` declares no `execute:` defaults, so
+/// the scope must stay free of them.
+#[test]
+fn plain_execute_defaults_absent() {
+    let scope = observed_execute_scope(CELL_FIXTURE, "plain");
+    let has_fig_defaults = scope
+        .as_ref()
+        .is_some_and(|s| s.get("fig-width").is_some() || s.get("fig-height").is_some());
+    assert!(
+        !has_fig_defaults,
+        "plain must not receive wordprocessor figure defaults: {scope:?}"
+    );
+}

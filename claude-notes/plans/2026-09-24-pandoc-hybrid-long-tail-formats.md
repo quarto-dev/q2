@@ -362,11 +362,10 @@ once per phase boundary.
       parent `c24355329` = the 8 new tests enumerated above plus the
       in-place gfm→pdf conversion of
       `unsupported_format_aborts_before_any_render`.)
-- [ ] Workspace nextest; commit.
 
 ### Phase 2 — Tier A bulk tail (25 variants)
 
-- [ ] **Test spec first:** one golden/smoke fixture per *family*
+- [x] **Test spec first:** one golden/smoke fixture per *family*
       (wordprocessor/ebook/plaintext) asserting defaults reach the right
       sinks (execute scope, params blob, CLI args); a parametrized
       per-variant render smoke test through `render_document_to_file`
@@ -375,18 +374,42 @@ once per phase boundary.
       that instead). Textile gets a *fresh-baseline* snapshot (no Q1
       parity claim). e2e test in `render_pandoc_formats_e2e.rs` driving
       `--to odt` through the real binary.
-- [ ] Enum variants + `TryFrom<&str>`/display names +
+- [x] Enum variants + `TryFrom<&str>`/display names +
       `output_extension_for` + `pandoc_writer_name_for` arms.
-- [ ] Defaults rows: `format_pandoc_defaults` (page-width/png — the
+- [x] Defaults rows: `format_pandoc_defaults` (page-width/png — the
       single sink for `--default-image-extension`; do **not** also put
       it in `pandoc_invocation_args_for`), `format_execute_defaults`
       (fig 5×4 wordprocessor/ebook), `pandoc_invocation_args_for`
       (`--standalone` for the plaintext family and rtf only).
-- [ ] `KNOWN_BASE_FORMATS`: add the Tier A bases.
-- [ ] E2E per CLAUDE.md: `cargo run --bin q2 -- render <fixture> --to
+- [x] `KNOWN_BASE_FORMATS`: add the Tier A bases.
+- [x] E2E per CLAUDE.md: `cargo run --bin q2 -- render <fixture> --to
       <fmt>` for at least one variant per family; inspect output bytes;
       record invocation + observed snippet in this file.
-- [ ] Workspace nextest; commit.
+
+      Recorded 2026-09-24, fixture `target/e2e-longtail/f.qmd`
+      (title `F`, `# Head`, `HelloLongTail _emph_ body.`, numbered
+      list), binary `./target/debug/q2` at branch tip:
+
+      - **odt** (wordprocessor): `./target/debug/q2 render
+        target/e2e-longtail/f.qmd --to odt` → `f.odt`. `unzip -p f.odt
+        mimetype` → `application/vnd.oasis.opendocument.text`;
+        `unzip -p f.odt content.xml | grep -o HelloLongTail` →
+        `HelloLongTail`.
+      - **fb2** (ebook): `… --to fb2` → `f.fb2`. `head -c 300` →
+        `<?xml version="1.0" encoding="UTF-8"?>` then
+        `<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0" …><description><title-info><genre>unrecognised</genre><book-title>F</book-title>…`
+      - **plain** (plaintext): `… --to plain` → `f.txt`, body:
+        `Head` / `HelloLongTail emph body.` / `1.  one` / `2.  two`.
+
+      All three outputs inspected by hand (not inferred from exit
+      codes). The initial fixture's `{python}` cell failed with the
+      expected jupyter-unavailable error — re-run without it.
+- [x] Workspace nextest; commit. (14,762 run / 14,762 passed / 200
+      skipped / 0 failed, measured 2026-09-24 on this branch; delta vs
+      parent `ccba0fb4c` = +22 tests: 20 `#[test]` in tracked diffs
+      (`format_defaults.rs`, `params.rs`, `pandoc_execute_defaults.rs`,
+      `discover.rs`, `engine_execution.rs`, e2e file) + 2 in the new
+      `pandoc_long_tail_formats.rs`.)
 
 ### Phase 3 — Tier B markdown family (7 new variants + gfm/commonmark completion)
 

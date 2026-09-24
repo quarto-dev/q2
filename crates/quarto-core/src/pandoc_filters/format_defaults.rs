@@ -71,6 +71,44 @@ pub fn format_pandoc_defaults(id: FormatIdentifier) -> FormatPandocDefaults {
             output_divs: Some(false),
             default_image_extension: Some("png"),
         },
+        // Long-tail Phase 2 (Tier A): the wordprocessor trio (Q1's
+        // `createWordprocessorFormat`; `rtfFormat()` shares the base) gets
+        // the docx-shaped 6.5-inch page + png; fb2 (Q1's
+        // `createEbookFormat`) is reflowable so no page-width, png only;
+        // the 21 `plaintextFormat` variants are png-only too.
+        FormatIdentifier::Odt | FormatIdentifier::Opendocument | FormatIdentifier::Rtf => {
+            FormatPandocDefaults {
+                page_width: Some(6.5),
+                output_divs: None,
+                default_image_extension: Some("png"),
+            }
+        }
+        FormatIdentifier::Fb2
+        | FormatIdentifier::Plain
+        | FormatIdentifier::Rst
+        | FormatIdentifier::Org
+        | FormatIdentifier::Muse
+        | FormatIdentifier::Ms
+        | FormatIdentifier::Man
+        | FormatIdentifier::Texinfo
+        | FormatIdentifier::Tei
+        | FormatIdentifier::Zimwiki
+        | FormatIdentifier::Dokuwiki
+        | FormatIdentifier::Haddock
+        | FormatIdentifier::Json
+        | FormatIdentifier::Native
+        | FormatIdentifier::Icml
+        | FormatIdentifier::Jira
+        | FormatIdentifier::Mediawiki
+        | FormatIdentifier::Xwiki
+        | FormatIdentifier::Textile
+        | FormatIdentifier::Docbook
+        | FormatIdentifier::Docbook4
+        | FormatIdentifier::Docbook5 => FormatPandocDefaults {
+            page_width: None,
+            output_divs: None,
+            default_image_extension: Some("png"),
+        },
         _ => FormatPandocDefaults::default(),
     }
 }
@@ -219,6 +257,7 @@ pub fn build_forwarded_args(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::format::Format;
     use quarto_source_map::SourceInfo;
 
     fn scalar_meta(entries: &[(&str, &str)]) -> ConfigValue {
@@ -534,5 +573,134 @@ mod tests {
         // if a future edit trims the other callers.
         let meta = bool_meta("toc", true);
         assert_eq!(meta.get("toc").and_then(|v| v.as_bool()), Some(true));
+    }
+
+    // === long-tail Phase 2: Tier A bulk tail ===
+
+    /// Deferred from Phase 1 wrinkle 1 as an explicit discrimination test:
+    /// `docbook` and `opendocument` share the `xml` output extension but
+    /// must get **different** defaults (plaintext `png`-only vs
+    /// wordprocessor 6.5-inch + `png`). Keyed by `FormatIdentifier`, the
+    /// table cannot collide; the old extension-keyed shape would.
+    #[test]
+    fn test_docbook_and_opendocument_share_extension_not_defaults() {
+        let docbook = Format::from_format_string("docbook").unwrap();
+        let opendocument = Format::from_format_string("opendocument").unwrap();
+        assert_eq!(docbook.output_extension, "xml");
+        assert_eq!(opendocument.output_extension, "xml");
+
+        let docbook_defaults = format_pandoc_defaults(docbook.identifier);
+        let opendocument_defaults = format_pandoc_defaults(opendocument.identifier);
+        assert_eq!(
+            opendocument_defaults.page_width,
+            Some(6.5),
+            "opendocument is a wordprocessor format"
+        );
+        assert_ne!(
+            docbook_defaults, opendocument_defaults,
+            "the shared .xml extension must not mean shared defaults"
+        );
+    }
+
+    /// The wordprocessor trio (odt/opendocument/rtf — Q1's
+    /// `createWordprocessorFormat` plus `rtfFormat()`'s base) gets
+    /// `page-width: 6.5` + `default-image-extension: png`.
+    #[test]
+    fn test_tier_a_wordprocessor_defaults() {
+        for name in ["odt", "opendocument", "rtf"] {
+            let f = Format::from_format_string(name).unwrap();
+            let defaults = format_pandoc_defaults(f.identifier);
+            assert_eq!(defaults.page_width, Some(6.5), "page-width for {name}");
+            assert_eq!(
+                defaults.default_image_extension,
+                Some("png"),
+                "image extension for {name}"
+            );
+            assert_eq!(
+                defaults.output_divs, None,
+                "{name} must not override output-divs"
+            );
+        }
+    }
+
+    /// fb2 (Q1's `createEbookFormat`) gets `png` but **no** page-width —
+    /// ebooks are reflowable, wordprocessors are not.
+    #[test]
+    fn test_tier_a_ebook_defaults() {
+        let fb2 = format_pandoc_defaults(FormatIdentifier::try_from("fb2").unwrap());
+        assert_eq!(fb2.default_image_extension, Some("png"));
+        assert_eq!(fb2.page_width, None);
+    }
+
+    /// The 21 plaintext variants get `png` and nothing else — Q1's
+    /// `plaintextFormat` sets `default-image-extension: png` and no
+    /// page-width/output-divs opinion.
+    #[test]
+    fn test_tier_a_plaintext_defaults() {
+        const PLAINTEXT: &[&str] = &[
+            "plain",
+            "rst",
+            "org",
+            "muse",
+            "ms",
+            "man",
+            "texinfo",
+            "tei",
+            "zimwiki",
+            "dokuwiki",
+            "haddock",
+            "json",
+            "native",
+            "icml",
+            "jira",
+            "mediawiki",
+            "xwiki",
+            "textile",
+            "docbook",
+            "docbook4",
+            "docbook5",
+        ];
+        for name in PLAINTEXT {
+            let f = Format::from_format_string(name)
+                .unwrap_or_else(|e| panic!("{name} must parse: {e}"));
+            let defaults = format_pandoc_defaults(f.identifier);
+            assert_eq!(
+                defaults,
+                FormatPandocDefaults {
+                    page_width: None,
+                    output_divs: None,
+                    default_image_extension: Some("png"),
+                },
+                "defaults for {name}"
+            );
+        }
+    }
+
+    /// The single `--default-image-extension` sink (D2): one per-family row
+    /// each of wordprocessor (odt), ebook (fb2), and plaintext (plain) gets
+    /// `--default-image-extension png` from `build_forwarded_args` with an
+    /// empty meta — and, for rtf, that `--standalone` does **not** come
+    /// from here (it is `pandoc_invocation_args_for`'s job).
+    #[test]
+    fn test_tier_a_forwarded_args_emit_image_extension() {
+        for name in ["odt", "fb2", "plain", "rtf"] {
+            let f = Format::from_format_string(name).unwrap();
+            let args = build_forwarded_args(
+                "pandoc-write",
+                Path::new("/doc/dir"),
+                &scalar_meta(&[]),
+                f.identifier,
+            )
+            .unwrap();
+            let joined: Vec<String> = args
+                .iter()
+                .map(|s| s.to_string_lossy().into_owned())
+                .collect();
+            assert_eq!(
+                joined,
+                vec!["--default-image-extension".to_string(), "png".to_string()],
+                "forwarded args for {name} with empty meta"
+            );
+        }
     }
 }
