@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-09-24
 
+- [`e4342b12`](https://github.com/quarto-dev/q2/commits/e4342b12): Submenus under ＋ New open to the left when they would otherwise run off the right edge of the window.
 - [`8af953fc`](https://github.com/quarto-dev/q2/commits/8af953fc): The ＋ New menu is now grouped into Templates (skeletons: Default, Website, Blog, and a new Presentation deck) and Examples (the welcome tour and the four seeded example projects), each in its own submenu.
 
 ### 2026-09-22
