@@ -116,7 +116,7 @@ The public `quarto-source-map` surface in play:
 `SourceContext`, `SourceFile`, `SourceInfo`, `FileId`, `Location`, `MappedLocation`,
 `map_offset`, `get_file`, `start_offset`/`end_offset`. This surface is general (it is
 not Quarto-specific in any way) — externalizing `quarto-source-map` is conceptually
-clean; the only cost is that ~26 q2 crates must now consume it as an external crate.
+clean; the only cost is that \~26 q2 crates must now consume it as an external crate.
 
 ## How `quarto-yaml-validation` couples to error reporting / the catalog
 
@@ -138,7 +138,7 @@ non-Quarto-specific in shape — it could move to the external library as-is.
   `Q-1-10` (missing required property), `Q-1-11` (type mismatch),
   `Q-1-12` (invalid enum), `Q-1-13`, `Q-1-14`, `Q-1-15`, `Q-1-16`, `Q-1-17`,
   `Q-1-18`, `Q-1-19`, `Q-1-20`, `Q-1-29`, `Q-1-99` (other).
-- These strings are looked up at render time in `quarto-error-reporting`'s
+- These strings are looked up at render time in `quarto-error-reporting`\'s
   **catalog**: `catalog.rs` loads `error_catalog.json` via `include_str!` into a
   `HashMap<String, ErrorCodeInfo>` where `ErrorCodeInfo { subsystem, title,
   message_template, docs_url, since_version }`. `DiagnosticMessage::docs_url()` does

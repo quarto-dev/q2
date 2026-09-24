@@ -84,7 +84,7 @@ Related: bd-ey6jg70f (hub-minted sliding sessions, out of scope here).
 - Probe three-way split maps directly onto `fetchAuthMe()`\'s contract:
   `AuthState` = valid, `null` = definitive 401/403, throw = network/5xx.
 - Strike-2 semantics: first 401 triggers renewal; only a second 401 on the
-  next probe cycle (~30 s later) clears auth. Avoids racing One Tap and
+  next probe cycle (\~30 s later) clears auth. Avoids racing One Tap and
   avoids relying on One Tap callbacks ever firing (they may not when GIS is
   blocked — the coalesced `isRefreshing` flag would otherwise wedge).
 - Cold-starting the app while fully offline still lands on login (mount-time

@@ -71,7 +71,7 @@ apps/lsp/
 - **LaTeX/Math completions** (`completion-latex.ts`)
   - LaTeX commands
   - Math symbols
-  - MathJax-based completions (~48KB JSON data)
+  - MathJax-based completions (\~48KB JSON data)
 
 - **Shortcode completions** (`completion-shortcode.ts`)
   - Quarto shortcodes (`{{< shortcode >}}`)
@@ -98,7 +98,7 @@ apps/lsp/
   - Link target preview
 
 - **Image hover** (`hover-image.ts`)
-  - Image preview (commented out due to size cap ~75KB)
+  - Image preview (commented out due to size cap \~75KB)
   - Currently handled client-side
 
 ### 4. **Go to Definition** (`textDocument/definition`)

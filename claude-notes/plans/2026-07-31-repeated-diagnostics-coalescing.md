@@ -196,7 +196,7 @@ warning once per rendered page when the underlying problem lives in a
 - [x] End-to-end on the testbed: re-rendered
   `external-sources/connect-docs/docs-quarto-2`
   (`cargo run --bin q2 -- render …`, output inspected). Q-13-2 went
-  **186 → 1**; stderr 2519 → ~1050 lines; exit code unchanged (1, from
+  **186 → 1**; stderr 2519 → \~1050 lines; exit code unchanged (1, from
   pre-existing Q-5-3 errors). All other repeated classes verified to be
   genuinely distinct locations (Q-12-7's 15 hits = 15 distinct files).
   Observed emission:
@@ -230,6 +230,6 @@ warning once per rendered page when the underlying problem lives in a
 3. Should Phase 4 cover only `_quarto.yml`, or also `_metadata.yml` /
    profile configs / `_variables.yml`? (Same mechanism; just a list of
    candidate paths.)
-4. Priority call: is `q2 preview`'s diagnostic surface in scope? (It
+4. Priority call: is `q2 preview`\'s diagnostic surface in scope? (It
    consumes per-page diagnostics through a different path; coalescing
    there is a UI concern, likely fine to leave per-page.)

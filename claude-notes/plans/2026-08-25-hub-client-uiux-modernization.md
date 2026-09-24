@@ -540,7 +540,7 @@ scroll, no clipped controls.
       `overflow: hidden` changes the span's baseline alignment, and the
       1280px baselines must stay pixel-identical). ≤480px: sidebar width
       floor 180px → 120px (rows/labels already truncate); MinimalHeader
-      wraps to two rows — previously `.header-left` collapsed to ~9px flex
+      wraps to two rows — previously `.header-left` collapsed to \~9px flex
       width while its icon buttons painted on, ending up *under*
       `.header-right` (later in paint order): an overlap no viewport-bounds
       assertion catches, pinned by asserting `.header-left`\'s own
@@ -561,7 +561,7 @@ value-preserving); build:all green. New 320/480px snapshots inspected
 visually (wrapped headers, single-column rows, internal dialog scroll all
 render correctly in both themes). **Trap recorded:** Playwright's
 `--update-snapshots` skips rewrites when the new capture is within the
-spec's `maxDiffPixelRatio` tolerance — the row-name fix (a ~0.5% pixel
+spec's `maxDiffPixelRatio` tolerance — the row-name fix (a \~0.5% pixel
 change) silently kept the stale capture; force-regenerate by deleting the
 PNG and running `--update-snapshots=missing`. **CI follow-up:** the new
 routes need `chromium-linux` baselines via the `recreate-all-snapshots`
@@ -652,7 +652,7 @@ commit, and can be individually approved, held, or reverted.
       into a kebab overflow menu ≤700px (Phase 1 Menu).
 - [x] Alignment pass: type scale (23d57bd78 — half-pixel sizes onto the
       scale, new `--text-2xs: 10px`; 7.5px facepile glyph documented
-      exception), radius scale (c5c5f23d0 — new xs/xl steps; ~70
+      exception), radius scale (c5c5f23d0 — new xs/xl steps; \~70
       declarations migrated; buttons 7→8, menus 9→8, cards 10→12),
       truncation + icons (ed09d1a3e — eight ad-hoc trios onto
       `.qh-truncate`; `.qh-btn` gains inline-flex for future icon+text).

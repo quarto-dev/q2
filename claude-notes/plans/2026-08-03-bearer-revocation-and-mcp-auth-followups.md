@@ -309,10 +309,10 @@ errors never do*):
 - [x] Tests first, hub-client (both observed failing pre-fix):
       `authService.test.ts` gains a `fetchAuthMe` mapping test
       (`exp` → `expiresAt` ms + `credential` passthrough);
-      `useAuth.test.tsx`'s two 1 h-fallback-pinned tests rewritten to
+      `useAuth.test.tsx`\'s two 1 h-fallback-pinned tests rewritten to
       schedule from an explicit server `expiresAt` (behavior coverage
       kept), plus a new spec: absent `exp` → zero re-checks across a
-      simulated week (the retired fallback would have fired ~168×).
+      simulated week (the retired fallback would have fired \~168×).
 - [x] Implemented: `AuthMeResponse.credential: &'static str`
       (`"session"`/`"bearer"`, mirroring the `AuthenticatedUser`
       variants) with `exp` re-documented as the presented credential's
@@ -372,7 +372,7 @@ E2E evidence per finding is recorded in each Work-items section above.
   `ReauthRequired`. Window is ≤1 s plus NTP-level skew; consequence is one
   re-run of `authenticate`. Documented here so nobody "fixes" it with a
   leeway that re-opens the revocation window.
-- **F3 back-compat:** additive field only; do not change `exp`'s presence on
+- **F3 back-compat:** additive field only; do not change `exp`\'s presence on
   either path.
 
 ## References

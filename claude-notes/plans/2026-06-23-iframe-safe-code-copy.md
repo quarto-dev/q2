@@ -73,7 +73,7 @@ Bootstrap tooltip (none in preview) — parity with native render v1.
   helper. Unit-testable without React.
 - **Edit** `ts-packages/preview-renderer/src/q2-preview/PreviewRoot.tsx` — one
   `useEffect(() => installCodeCopy(previewHostRef.current!), [])` (guarded for a
-  null ref). ~5 lines.
+  null ref). \~5 lines.
 
 ### Out of scope
 

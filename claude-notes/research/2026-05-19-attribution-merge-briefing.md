@@ -154,7 +154,7 @@ The framework barrel (`ts-packages/preview-renderer/src/framework/index.ts`) nee
 - `authorshipOn: boolean` — overlay toggle, owned by Editor.tsx.
 - `onAttributionGeneratingChange?: (generating: boolean) => void` — animation state callback.
 
-These props are destructured from `props` on line ~141 (main) and forwarded only to `<ReactPreview>` — `<Preview>` (the non-React iframe path) doesn't get them.
+These props are destructured from `props` on line \~141 (main) and forwarded only to `<ReactPreview>` — `<Preview>` (the non-React iframe path) doesn't get them.
 
 **Feature side** has the same router shape but with imports retargeted:
 - `import type { FileEntry } from '@quarto/preview-renderer/types/project';` (was `'../../types/project'`)

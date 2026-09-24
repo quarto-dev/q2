@@ -41,8 +41,8 @@ does not cover.
   vacuous engine passes, Rust doctests, `tree-sitter-doctemplate` corpus,
   `wasm-qmd-parser`, root `typecheck`, `q2-preview-spa` e2e) are **out of
   scope** — file strands in the Wrap-up, do not implement.
-- **Measured CI cost.** Task 4's eight suites total ~35 s; `quarto-hub-mcp` is
-  the heaviest single suite at ~32 s (its `bundle.test.ts` runs esbuild in
+- **Measured CI cost.** Task 4's eight suites total \~35 s; `quarto-hub-mcp` is
+  the heaviest single suite at \~32 s (its `bundle.test.ts` runs esbuild in
   `beforeAll`). The new job runs in parallel with the existing one, so its wall
   time is additive only if it becomes the critical path. Measure the real job
   before deciding anything is too slow; do not add caching speculatively.
@@ -125,7 +125,7 @@ The WASM package must exist or 26 unrelated files fail on
 120000) to `../crates/wasm-quarto-hub-client/pkg`. So the thing that must
 exist is `crates/wasm-quarto-hub-client/pkg/`; do not "fix" either path.
 
-If it is missing, build it first (~10 min):
+If it is missing, build it first (\~10 min):
 
 ```bash
 cd hub-client && npm run build:wasm && cd ..
@@ -274,7 +274,7 @@ workflow, which is what GH #250 is about."
 
 ---
 
-### Task 2: Make `sync-test-harness`'s `ts-sync-server` tier skip when `external-sources/` is absent
+### Task 2: Make `sync-test-harness`\'s `ts-sync-server` tier skip when `external-sources/` is absent
 
 `ts-packages/sync-test-harness/src/server-manager.ts:150` builds
 `serverDir = path.join(REPO_ROOT, 'external-sources', 'automerge-repo-sync-server')`
@@ -440,7 +440,7 @@ fi
 
 Expected in the else branch: the 3 `ts-sync-server` tests report as **failed**,
 not skipped. The stub's `console.log('Listening on port …')` satisfies
-`waitForOutput`'s `/Listening on port/` regex (`server-manager.ts:157`), so
+`waitForOutput`\'s `/Listening on port/` regex (`server-manager.ts:157`), so
 `beforeAll` succeeds and the tests then fail against a server that does nothing.
 Failed-instead-of-skipped is the whole observation: it proves the probe read the
 filesystem. (`external-sources/` is gitignored at `.gitignore:6`, so the stub
@@ -479,7 +479,7 @@ through the `"import": "./dist/index.js"` export condition:
 
 Build order does **not** matter — `crates/xtask/src/ts_packages.rs:11-12` states
 that types resolve via `src/`, so each package's `tsc` compiles without its
-dependencies' `dist/` present. A loop suffices; do not hand-order the list.
+dependencies\' `dist/` present. A loop suffices; do not hand-order the list.
 
 **Why a new job rather than appending to `test-suite`.** Ten of the eleven
 suites this plan gates need only Node, `npm ci` and these dists. Appending them
@@ -677,7 +677,7 @@ Two deliberate choices:
    (`["ts-packages/*","hub-client","trace-viewer","q2-preview-spa","q2-demos/*"]`).
 
 **Files:**
-- Modify: `.github/workflows/ts-test-suite.yml` (append to `workspace-ts-suites`'s `steps`)
+- Modify: `.github/workflows/ts-test-suite.yml` (append to `workspace-ts-suites`\'s `steps`)
 
 **Interfaces:**
 - Consumes: Task 3's job and its `npm ci`. (None of these eight need the dists;
@@ -792,12 +792,12 @@ Two go in the new job (they need Task 3's dists); one stays in `test-suite`
 | Package | Command | Tests | Job | Why there |
 | --- | --- | --- | --- | --- |
 | `ts-packages/quarto-sync-client` | `npm test` | 137 | `workspace-ts-suites` | needs Task 3's dists |
-| `ts-packages/quarto-hub-mcp` | `npm test` | 246 (+3 skip) | `workspace-ts-suites` | needs Task 3's dists; ~32 s, the heaviest suite |
+| `ts-packages/quarto-hub-mcp` | `npm test` | 246 (+3 skip) | `workspace-ts-suites` | needs Task 3's dists; \~32 s, the heaviest suite |
 | `ts-packages/preview-renderer` | `npm run test:integration` | 579 (+1 skip) | `test-suite` | imports the WASM package, built at line 154 |
 
 **On ordering:** within `workspace-ts-suites`, the dist build must precede the
 two dist-dependent suites — that is the one ordering constraint this plan's
-placement actually enforces. `preview-renderer`'s integration tier must sit
+placement actually enforces. `preview-renderer`\'s integration tier must sit
 below `Build WASM module`, which any position in `test-suite` after line 154
 satisfies; appending is the simplest such position.
 
@@ -920,7 +920,7 @@ plausible there. The census's "8 green tests" was measured against a warm local
 - `npm ci` at line 118, and an active `Swatinem/rust-cache` at line 87.
 
 It runs on push and PR to `main` with no path filter, so it is a real merge
-gate. Marginal cost is ~1 min. Trade-offs accepted deliberately: ubuntu-only
+gate. Marginal cost is \~1 min. Trade-offs accepted deliberately: ubuntu-only
 (the macOS gap is a filed strand), and one package's wiring lives in a second
 workflow.
 
@@ -1061,7 +1061,7 @@ Parsing rather than text-matching matters twice over:
 
 **Known limit, deliberate for v1:** the rule keys on `scripts.test` only. A
 package with `test:integration` or `test:e2e` but no `test` is invisible to it
-(`q2-preview-spa`'s 17 Playwright specs, for instance). Widening to any `test*`
+(`q2-preview-spa`\'s 17 Playwright specs, for instance). Widening to any `test*`
 script is a follow-up strand, not this task — but the limit must be written into
 the rule docs so nobody assumes coverage it doesn't have.
 
@@ -1580,7 +1580,7 @@ here would pass all 11 tests and fail CI.
 - [x] **Step 6: Wire the rule into the lint runner**
 
 The `mod ci_test_wiring;` declaration went in at Step 1. Now add the call. In
-`crates/xtask/src/lint/mod.rs`'s `run_check`, after the `error_docs_sidebar`
+`crates/xtask/src/lint/mod.rs`\'s `run_check`, after the `error_docs_sidebar`
 block (which is the last repo-level check; `workspace_root` is bound at line
 65):
 
@@ -1677,7 +1677,7 @@ annotated-qmd is the only EXCUSED entry, pending bd-1d6io."
 `ts-packages/annotated-qmd` is 154/156. The two failures are
 `div-attrs.json - Div with attributes conversion` and
 `substring invariant - links.qmd: inline code` (a one-byte-early start offset
-that captures the preceding space: got `' \`x = 5\`'`, expected `'\`x = 5\`'`).
+that captures the preceding space: got `' \`x = 5\`'`, expected `'\`x = 5\`\'`).
 
 **This is bd-1d6io, and it is being worked right now** — `.worktrees/workspace-2`
 is on `braid/bd-1d6io-annotated-qmd-source-tracking` with a commit *"Tighten
@@ -1725,7 +1725,7 @@ itself once the list is empty. (`const_is_empty` is `allow`ed in
 
 Accept, and note in the commit, that this leaves the `EXCUSED.iter().any(...)`
 branch uncovered — with an empty slice it is unreachable, so there is nothing
-meaningful to cover. The alternative (threading an excuse list through `check`'s
+meaningful to cover. The alternative (threading an excuse list through `check`\'s
 signature purely to keep a test alive) is not worth the API change.
 
 - [ ] **Step 4: Verify**

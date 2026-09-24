@@ -65,7 +65,7 @@ holds the design details; this list is the work-tracking surface.
   empty case is "no provenance" (not a bug); only populated-but-
   misaligned input is a bd-3aolj/bd-1e6a5 sync error.
 - [x] `pampa::pandoc::treesitter_utils::postprocess` synthetic Space
-  (~line 1348): emit `Generated { by: By::tree_sitter_postprocess(), from: [] }`.
+  (\~line 1348): emit `Generated { by: By::tree_sitter_postprocess(), from: [] }`.
 
 ### Tests
 - [x] Shortcode required-anchor invariant

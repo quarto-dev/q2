@@ -66,7 +66,7 @@ Inside web-payloads, `cargo xtask build-agents-docs` alone is 31 of the 40
 minutes (bd-9nf0ucdf tracks the recompile-per-example waste). The WASM build
 is 6 min. Earlier runs (v0.11–v0.26, before the docs embed existed) took
 25–35 min total. A nightly therefore costs roughly one hour of wall time and
-~2.5 runner-hours (one Ubuntu, one Ubuntu-ARM, two macOS, one Windows), on a
+\~2.5 runner-hours (one Ubuntu, one Ubuntu-ARM, two macOS, one Windows), on a
 public repo where hosted runners are free.
 
 **What the pipeline requires** (from `release.yml` and the runbook):
@@ -201,7 +201,7 @@ commit SHA goes in the release notes and title, not the version string
   events created with `GITHUB_TOKEN` never trigger workflows, but that is a
   trap for the next reader).
 
-The tag name `nightly` does not match `v*`, so `release.yml`'s trigger is
+The tag name `nightly` does not match `v*`, so `release.yml`\'s trigger is
 untouched either way.
 
 ### Decision 4 — "Unreleased changes" means: `main` HEAD is neither the newest `v*` tag nor the current `nightly` tag
@@ -383,7 +383,7 @@ release's caches warm.
       table through it; keep `cli_version_display()` returning `&'static
       str` for clap. Consumers rerouted: `quarto_core::version()`,
       `cache_key::quarto_build_id()`, the `version` template variable,
-      and `quarto-lsp`'s server info (new `quarto-util` dep). Compile-time
+      and `quarto-lsp`\'s server info (new `quarto-util` dep). Compile-time
       guard verified: `QUARTO_VERSION_OVERRIDE=v0.33.0 cargo check -p
       quarto-util` fails with the E0080 message naming the variable; the
       dated form checks clean.

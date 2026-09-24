@@ -517,7 +517,7 @@ oversold, each now pinned by a test in `tests/integration/reader.rs`:
    additive and gives the pandoc-hybrid leg the same mapping.
 6. **Vendor all four mitex front-end crates as crates.** Decided 2026-09-21
    (supersedes the "lexer + parser" wording of decision 2). Measured: lexer
-   1,987 / parser 1,482 / spec 705 / glob 2,170 source lines (~6,300 total).
+   1,987 / parser 1,482 / spec 705 / glob 2,170 source lines (\~6,300 total).
    `mitex-glob` is itself a vendored `glob-match` (MIT) used at one call site
    in the parser's argument matcher; keeping it beats reimplementing it.
    New third-party deps: `rowan`, `logos`, `ena`, `ecow`; `rkyv` is dropped.

@@ -278,7 +278,7 @@ Phase 1's audit covers all three, plus q2 and `quarto-yaml`.
 ## Design
 
 **What Phase 1 actually changes, in code** — the sections below explain *why*,
-and at ~700 lines they are not a prerequisite for starting:
+and at \~700 lines they are not a prerequisite for starting:
 
 ```
 quarto-source-map/src/file_info.rs  ~:122   Location{ offset } -> offset: safe_offset
@@ -292,7 +292,7 @@ quarto-source-map/src/source_info.rs :410   doc comment: locating, not copying
 **Which section gates which phase.** Phase 0 needs none of § Design. Phase 1
 needs § `SourceInfo::Concat` is already the right shape and § `preimage_in`
 composes affinely (the four fixes and the builder contract). Phase 2 needs
-§ How the pieces are derived, § The shared builder and § `quarto-yaml`'s API,
+§ How the pieces are derived, § The shared builder and § `quarto-yaml`\'s API,
 plus the fixtures note. § Reversed decisions is reference material — read an
 entry when you are about to propose the thing it retracts.
 
@@ -308,13 +308,13 @@ Verified against the `quarto-source-map` 0.1.1 checkout, so this is
 known-viable:
 
 - `SourceInfo::concat(Vec<(SourceInfo, usize)>)` is **public**
-  (`source_info.rs:203`); `SourcePiece`'s fields are all `pub`
+  (`source_info.rs:203`); `SourcePiece`\'s fields are all `pub`
   (`source_info.rs:130-138`). **No new enum variant, no upstream API
   change** — consistent with the ipynb design doc's finding that the closed
   `SourceInfo` enum need not change.
 - `concat()` assigns `offset_in_concat` cumulatively, so pieces tile
   contiguously by construction. This also disposes of a latent wrinkle where
-  `Concat::length()` sums piece lengths while `map_offset`'s exclusive-end
+  `Concat::length()` sums piece lengths while `map_offset`\'s exclusive-end
   branch tests `last.offset_in_concat + last.length`; they agree for anything
   built via `concat()`.
 - A piece is `(SourceInfo, content_length)`, and the two need not match.

@@ -43,7 +43,7 @@ reading source:
    `crate::glob::resolve_patterns`. Order of the *patterns* is preserved in
    `GlobResolution.globs`.
 2. **Matching** (`crates/quarto-core/src/transforms/listing_generate.rs`
-   ~lines 162–173): items are collected by iterating
+   \~lines 162–173): items are collected by iterating
    `ctx.project_index.profiles()` (Pass-1 insertion order — project input
    enumeration order) and testing each candidate against the compiled
    `PatternSet::matches`. **This is where declaration order is lost**: the
@@ -52,13 +52,13 @@ reading source:
    `sort.rs::apply_sort`): `sort: false` → `Some(vec![])` → `apply_sort`
    returns immediately (correct no-op), so the index order leaks through.
 
-Precedent already in-tree: `PatternSet::excluded` (`glob/matcher.rs` ~line
+Precedent already in-tree: `PatternSet::excluded` (`glob/matcher.rs` \~line
 171) exists precisely so `project.render` can walk its positive patterns in
 the author's listed order while keeping exclusions global. The listing fix
 can follow the same shape.
 
 Bonus per-pattern machinery already present: the Q-12-19 "matched nothing"
-diagnostic loop (`listing_generate.rs` ~lines 180–200) already compiles each
+diagnostic loop (`listing_generate.rs` \~lines 180–200) already compiles each
 positive pattern individually — first-matching-pattern-index computation can
 reuse (or share hoisted compiles with) that loop.
 

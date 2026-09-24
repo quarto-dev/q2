@@ -227,7 +227,7 @@ Pros: minimal surface, no new HTML, no JS.
 Cons: poor UX when the user is at 900 px and wants to navigate
 to a sibling page. Would also feel inconsistent with the
 hub-client preview, which most often opens at a half-width pane
-(~850 px) — exactly the broken band.
+(\~850 px) — exactly the broken band.
 
 ### B. Port Q1's `position: static` rollup pattern (full parity)
 
@@ -285,7 +285,7 @@ sidebar reappears as a collapsible stripe even in that view.
 { display: none }` has been *replaced* (not stacked on) by the full
 Decision-B rollup, in `bd-26bf3j1y`. Below `lg` the floating sidebar
 now leaves the grid (`position: static`) and becomes a Bootstrap
-collapse drawer opened by `nav.quarto-secondary-nav`'s toggle. See
+collapse drawer opened by `nav.quarto-secondary-nav`\'s toggle. See
 `claude-notes/plans/2026-08-17-website-secondary-nav-mobile.md`.
 
 What changed since Resolved Decision 2 said "B is not feasible yet":

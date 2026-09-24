@@ -116,7 +116,7 @@ alongside typst.
     logos to project-absolute paths (`:102-117`).
 
 - **Lua filters — corrected inventory (Rev 1 mis-attributed one file's contents entirely).**
-  **7 files, 2416 lines total** (Rev 1 said 6 files / ~2086 lines):
+  **7 files, 2416 lines total** (Rev 1 said 6 files / \~2086 lines):
   - **`filters/quarto-post/typst.lua` (330 lines)** — `render_typst()` (`:25`) and
     `render_typst_fixups()` (`:207`). **This is the file that does margin notes (via the
     `marginalia` package), `.block` div → `#block(...)`, citeproc-aware margin citations,
@@ -140,7 +140,7 @@ alongside typst.
     `typst-css-property-processing.lua` (337 lines) — brand.yaml → Typst typography/color
     mapping.
 - **What's template-level vs. Lua-level:** callouts, subfloats, and numbering are handled
-  at the **template level** — `definitions.typ`'s `callout()` function (`:162`),
+  at the **template level** — `definitions.typ`\'s `callout()` function (`:162`),
   `quartosubfloatcounter`/`quarto_super`, a callout-figure show rule. `definitions.typ` also
   does an **unconditional** `#import "@preview/marginalia:0.3.1"` (`:188`) — the marginalia
   package must be staged **regardless of whether the document uses margin notes**, because
@@ -149,7 +149,7 @@ alongside typst.
   `src/resources/formats/typst/pandoc/quarto/`: `template.typ` (the orchestrator, passed as
   `--template`) plus **7** partials it includes: `numbering.typ` (defines
   `equation-numbering`, `callout-numbering`, `subfloat-numbering`, `theorem-numbering`,
-  `theorem-render` — consumed directly by `crossref/equations.lua:129`'s
+  `theorem-render` — consumed directly by `crossref/equations.lua:129`\'s
   `numbering: equation-numbering` output), `definitions.typ` (largest — utility
   functions, callout/subfloat/code-block styling, the marginalia import), `typst-template.typ`
   (the `article()` function), `page.typ` (geometry/logo), `typst-show.typ`

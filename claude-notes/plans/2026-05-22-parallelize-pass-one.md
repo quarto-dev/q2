@@ -204,7 +204,7 @@ single-threaded). WASM working version is preserved verbatim.
    isolation we already have for `Err`, wrap each worker body in
    `std::panic::catch_unwind` and convert a caught panic to a
    `FileFailure` with a "internal error during Pass-1" message.
-4. **Stack size.** Rayon's default worker stack is ~2 MB. Tree-sitter
+4. **Stack size.** Rayon's default worker stack is \~2 MB. Tree-sitter
    on pathological inputs can recurse deeply. The sequential path uses
    the main-thread stack today, which is typically larger. If we see
    stack overflows in CI, `ThreadPoolBuilder::stack_size` is the knob.
@@ -219,7 +219,7 @@ single-threaded). WASM working version is preserved verbatim.
    doc either) — no regression. Documented for ops.
 7. **`available_parallelism()` can fail** (rare, e.g. cgroups with no
    info). Default to 4 on error.
-8. **Debug-build overhead.** Per-`par_iter` dispatch is ~10–100 µs in
+8. **Debug-build overhead.** Per-`par_iter` dispatch is \~10–100 µs in
    debug. Invisible for hundreds of docs; flag for tiny unit tests not
    to over-interpret debug-mode wall times.
 9. **Test isolation across binaries.** nextest already runs each
@@ -321,7 +321,7 @@ Per the perf-profiling playbook ("don't remove diagnostic counters"):
 
 - **Tempdir storm.** Each `StageContext::new` calls
   `runtime.temp_dir("quarto-pipeline")` (mkdtemp-style on native). N
-  workers in flight ⇒ N concurrent mkdtemps. `tempfile`'s `TempDir::new`
+  workers in flight ⇒ N concurrent mkdtemps. `tempfile`\'s `TempDir::new`
   is thread-safe and uses unique paths, so this is fine — but profile to
   confirm the inode-creation cost doesn't dominate.
 - **Tree-sitter logger memory.** Each parser allocates its own

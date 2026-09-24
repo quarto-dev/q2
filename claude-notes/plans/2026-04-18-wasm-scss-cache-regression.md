@@ -89,12 +89,12 @@ Make `CompileThemeCssStage`\'s no-theme path consult the same
 key is a fixed string (e.g. `"default"`) combined with the minified flag
 and `SCSS_RESOURCES_HASH`.
 
-This saves the ~300 ms cold-start compile on the first render per
+This saves the \~300 ms cold-start compile on the first render per
 session — meaningful, because in-memory cache doesn't survive tab open /
 page reload. The primary fix handles *within-session* keystroke cost;
 this one handles *between-session* cold-start cost.
 
-Cost: ~15 lines of stage code. Safe to land because items 3 and 4 bound
+Cost: \~15 lines of stage code. Safe to land because items 3 and 4 bound
 the IndexedDB growth this would otherwise create over time.
 
 ### 3. Generational purge on `SCSS_RESOURCES_HASH` mismatch
@@ -131,7 +131,7 @@ Bounding argument (addresses the growth concern):
 - Within a single `SCSS_RESOURCES_HASH` generation:
   - Default CSS contributes 1 key (minified flag is always true in
     practice).
-  - Built-in Bootswatch themes contribute ≤ ~24 keys.
+  - Built-in Bootswatch themes contribute ≤ \~24 keys.
   - Custom SCSS files contribute one key per (resolved path + content
     hash) — the only unbounded-in-principle source.
 - Across generations: item 3 resets to 0 when the hash changes.
@@ -155,25 +155,25 @@ on minified Bootstrap 5.3.1 + Quarto layer:
 | quartz             | 327 234 | 319 |
 | morph              | 332 916 | 325 |
 
-Typical entry ~**300 KB**; range 290–330 KB. Theme CSS sizes don't vary
+Typical entry \~**300 KB**; range 290–330 KB. Theme CSS sizes don't vary
 much because the Bootstrap core dominates; Bootswatch overlays add
 single-digit percentage.
 
 #### Cap-sizing math behind the 10 MB choice
 
-- **Headroom**: 10 MB ÷ ~305 KB ≈ **33 entries** before LRU evicts.
+- **Headroom**: 10 MB ÷ \~305 KB ≈ **33 entries** before LRU evicts.
 - **All Bootswatches fit**: 25 built-in themes × 305 KB ≈ 7.6 MB. A
-  user who cycles through every Bootswatch still has ~2.4 MB of slack
+  user who cycles through every Bootswatch still has \~2.4 MB of slack
   for the default entry and custom-theme churn before any eviction
   fires.
 - **Pathological custom-theme case**: a user saving one custom `.scss`
-  repeatedly (new content hash each time) hits the cap after ~33 saves.
+  repeatedly (new content hash each time) hits the cap after \~33 saves.
   Eviction is LRU, so their most recently used entries stay hot.
 
 Reasonable alternatives if we revisit:
-- 5 MB (~16 entries) — enough for typical single-project use; tighter
+- 5 MB (\~16 entries) — enough for typical single-project use; tighter
   bound. Breaks the "all Bootswatches fit" invariant.
-- 20 MB (~65 entries) — generous, accommodates multi-project power
+- 20 MB (\~65 entries) — generous, accommodates multi-project power
   users with many custom themes. Overhead is modest.
 
 Landing at 10 MB: big enough that normal use never evicts, small
@@ -217,7 +217,7 @@ production but not in tests.
 so it wouldn't skip work on subsequent renders.
 
 **Decision.** Drop memoization, call the helper every render. Cost is
-a single IndexedDB read for `sass:_version` per render (~1–5 ms on
+a single IndexedDB read for `sass:_version` per render (\~1–5 ms on
 WASM, sub-millisecond on native). That's dominated by other per-render
 work, and it's dwarfed by the 100–500 ms compile it prevents. The
 simplicity is worth the negligible cost.

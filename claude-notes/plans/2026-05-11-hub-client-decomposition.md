@@ -651,7 +651,7 @@ The lowest-risk moves. Pure data + pure functions; no React tree.
 
 *(Executed after Phase 5 — see §Phase ordering note.)*
 
-The biggest single move (~50 files including tests). Done in one
+The biggest single move (\~50 files including tests). Done in one
 phase so the q2-preview registry, dispatchers, and components stay
 internally consistent.
 
@@ -709,7 +709,7 @@ internally consistent.
       we keep the original path stable by recreating a one-line
       stub at `hub-client/src/components/render/q2-preview/entry.tsx`
       that simply re-imports from the workspace package. The
-      `parity.integration.test.tsx`'s dynamic `import('./q2-preview/entry')`
+      `parity.integration.test.tsx`\'s dynamic `import('./q2-preview/entry')`
       also goes through this stub.
 - [x] `parity.integration.test.tsx` **stays in hub-client** —
       compares the HTML iframe path (`Preview.tsx` — hub-client)
@@ -762,7 +762,7 @@ internally consistent.
       `preview-runtime/src/userGrammar/` (renamed: `Discovery.ts`,
       `Cache.ts`, `Highlight.ts`).
 - [x] Move colocated tests (Discovery.test, Cache.test,
-      Highlight.wasm.test). Updated `Highlight.wasm.test.ts`'s
+      Highlight.wasm.test). Updated `Highlight.wasm.test.ts`\'s
       `repoRoot` computation from `../../..` (relative to
       `hub-client/src/services/`) to `../../../..` (relative to
       `ts-packages/preview-runtime/src/userGrammar/`).

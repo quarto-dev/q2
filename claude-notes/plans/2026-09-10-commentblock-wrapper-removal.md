@@ -279,7 +279,7 @@ nothing.
   then `cargo build --bin q2` before any browser check.
 - **Node.** All npm/vitest commands must run under Node 24
   (`fnm exec --using=24 …`); the shell's default Node 26 fails the verify
-  preflight and breaks ~23 hub-client unit tests spuriously.
+  preflight and breaks \~23 hub-client unit tests spuriously.
 
 ## Verification record (2026-09-10)
 
@@ -305,7 +305,7 @@ deck font/size fix).
 
 - DOM: `blockquote > h4` and `blockquote > p` hold; `.callout-body-container.callout-body`
   has `p` as first child with computed `margin-top: 0px` and last child
-  `margin-bottom: 0px` — the same values `q2 render`'s output computes for
+  `margin-bottom: 0px` — the same values `q2 render`\'s output computes for
   the same document (checked in the browser on `doc.html`); 3 `li > p`;
   tight `<li>`s have no child elements; no `.q2-comment-bubble` and no
   `position: relative` div inside `main#quarto-document-content`.
@@ -342,7 +342,7 @@ deck font/size fix).
 - Read-only `q2 preview` (`--port 4323`, no `--ui editor`, `?page=doc.qmd`):
   the five existing comments render as bubbles in the body-level layer, none
   inside `main`; `blockquote > h4` computes `margin-top: 25.5px` — the same
-  as `q2 render`'s `doc.html` in the same browser; callout body margins 0/0
+  as `q2 render`\'s `doc.html` in the same browser; callout body margins 0/0
   as above; the chrome's `font-family` equals the body's.
 - Gotcha met on the way: after rebuilding the embed, the already-open tab
   kept a **browser-cached** `q2-preview.html` whose asset URL now fell

@@ -85,7 +85,7 @@ fn contained_join(project_root: &Path, rel: &str) -> Option<PathBuf>;
 **Do not reuse `quarto-core`'s `lexical_clean` (`output_sink.rs:444`).** It
 *normalizes* (`..` at the root is kept as a `ParentDir` component) whereas we
 need *reject-on-escape*; different semantics, and reaching across a crate
-boundary for a ~15-line pure function is not worth the coupling.
+boundary for a \~15-line pure function is not worth the coupling.
 
 Implementation rules (cross-platform — must use `std::path::Component`,
 never string `".."` matching, per `.claude/rules/cross-platform.md`):

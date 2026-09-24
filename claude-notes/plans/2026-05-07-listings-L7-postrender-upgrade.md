@@ -213,7 +213,7 @@ These are decisions, not open questions:
   User-confirmed 2026-05-07. Bracketing rule 1 ("single home").
   The reader is a private sub-module within the same file (or a
   sibling `reader.rs` inside `post_render_upgrade/` if the file
-  grows past ~600 LOC; the L7 author can split if needed but
+  grows past \~600 LOC; the L7 author can split if needed but
   must keep both files under `project/listing/post_render_upgrade*`).
 - **`scraper` is a target-gated dep.** User-confirmed 2026-05-07.
   `[target.'cfg(not(target_arch = "wasm32"))'.dependencies]

@@ -242,7 +242,7 @@ or token here` at the `<`.
 **Discovered downstream change** (not in the original plan):
 
 Tree-sitter chomps preceding whitespace into the external token's
-reported range (the block-level scan loop at `scanner.c` ~line 2160
+reported range (the block-level scan loop at `scanner.c` \~line 2160
 consumes indentation before dispatching to
 `parse_open_angle_brace`). This is the same behavior that the
 `html_element` and `autolink` handlers already split out into a

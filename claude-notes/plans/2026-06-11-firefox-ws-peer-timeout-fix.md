@@ -211,7 +211,7 @@ boot controller if extracted.
 suites missed** (vindicating the CLAUDE.md e2e policy):
 
 1. **Zombie adapters.** With the server dead, the SPA still made WS
-   attempts every ~3 s ("zero WS churn" check failed). Two causes,
+   attempts every \~3 s ("zero WS churn" check failed). Two causes,
    both fixed:
    - the boot controller abandoned in-flight attempts without
      tearing down their transport → new `teardown` option, called on
@@ -244,7 +244,7 @@ stale copies (now excluded from the build).
       - `verify-kill-restart.mjs`: render → SIGKILL server → banner
         "Reconnecting to the preview server…" with content retained →
         restart on same port (new doc id `35mH6uaQ…`) → banner
-        cleared ~1 s later, heading re-rendered, no reload. PASS.
+        cleared \~1 s later, heading re-rendered, no reload. PASS.
       - `verify-no-ws-churn.mjs`: 1 WS attempt at boot; **0** WS
         attempts during a 12 s window with the server dead (HTTP
         /health polling only). PASS.
@@ -292,7 +292,7 @@ stale copies (now excluded from the build).
   to cover the cold-start sync race already documented in
   `client.ts`.
 - **Not in scope:** patching/vendoring
-  `BrowserWebSocketClientAdapter`'s abandon-without-close retry
+  `BrowserWebSocketClientAdapter`\'s abandon-without-close retry
   behavior. Health-gating makes the SPA stop driving that loop;
   upstreaming a `socket.close()`-before-replace fix is a separate
   nice-to-have. Target for that PR: `automerge/automerge-repo` on

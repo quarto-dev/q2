@@ -61,11 +61,11 @@ Pre-existing failing test that is Phase 4's natural acceptance gate:
 2. Resolves capture precedence and longest-match.
 3. Produces the nested `HighlightStart` / `Source` / `HighlightEnd` event stream consumed by `collect_spans`.
 
-A full port is ~600 LOC of non-trivial logic that would need ongoing maintenance against upstream. For v1, we don't need it: our native user-grammar path already passes empty strings for injections and locals (`user_grammar.rs:151`), so the algorithmic gap is smaller than it looks. Using web-tree-sitter's `Query.captures()` + a sort by `(startIndex, -endIndex)` gives us correct nesting for the vast majority of real queries.
+A full port is \~600 LOC of non-trivial logic that would need ongoing maintenance against upstream. For v1, we don't need it: our native user-grammar path already passes empty strings for injections and locals (`user_grammar.rs:151`), so the algorithmic gap is smaller than it looks. Using web-tree-sitter's `Query.captures()` + a sort by `(startIndex, -endIndex)` gives us correct nesting for the vast majority of real queries.
 
 **Acceptance for the simplification**: a native-vs-browser parity test on the TOML fixture produces identical `data-hl-spans` JSON. If it does not, either (a) fix the divergence, or (b) record it as a known difference in this plan with an explicit list of affected capture patterns.
 
-**Deferred to Phase 5 or later**: if users demand parity with Rust `tree-sitter-highlight`'s precedence rules on complex queries, we port the algorithm then.
+**Deferred to Phase 5 or later**: if users demand parity with Rust `tree-sitter-highlight`\'s precedence rules on complex queries, we port the algorithm then.
 
 ### 2. Unify native + browser user-grammar paths behind a trait
 
@@ -156,7 +156,7 @@ Plan is to write failing tests **before** implementing each chunk. In order:
 
 4. **Browser: wasm-bindgen bridge (vitest)** — write a test that calls the new `JsUserGrammars::register` API with a callback that returns a fixed JSON. Assert the bridge invokes it and the output reaches the `data-hl-spans` attribute.
 
-5. **Browser: grammar-loader helper (vitest)** — write a test that `userGrammar.ts`'s `loadUserGrammar(name, wasmBytes, scm)` produces a `highlightFn` whose output matches the native golden for the TOML fixture.
+5. **Browser: grammar-loader helper (vitest)** — write a test that `userGrammar.ts`\'s `loadUserGrammar(name, wasmBytes, scm)` produces a `highlightFn` whose output matches the native golden for the TOML fixture.
 
 6. **Browser: discovery scan (vitest)** — write tests for `userGrammarDiscovery.ts` against fixture file trees: valid grammars, partially valid subdirs, unrelated directories. Only valid subdirs are returned.
 
@@ -208,7 +208,7 @@ Unit-level helper, used by both the bridge tests (4.3) and the discovery scan (4
 - [x] Loading helper landed in Phase 4.2 as `loadUserGrammar` in `hub-client/src/services/userGrammarHighlight.ts` — returns a `UserGrammarHighlighter` with `highlight(source)` + `dispose()`. The plan originally envisioned a separate `userGrammar.ts` loader + `userGrammarHighlight.ts` algorithm, but collapsing both into one module is cleaner — the loader owns the Parser/Query/Language lifetime, the highlighter call is a method on that handle.
 - [x] Bridge + loader tests already cover the full loading path (Phase 4.3's `userGrammarBridge.wasm.test.ts` + Phase 4.2's `userGrammarHighlight.wasm.test.ts`).
 - [x] **Native-vs-browser parity test** in `hub-client/src/services/userGrammarParity.wasm.test.ts` — 4 assertions on the TOML fixture: every native capture identity `(start, name)` appears in JS and vice versa; for shared identities, native end-byte is always >= JS end-byte (the enclosing-capture invariant documenting the divergence).
-- [x] **Documented known divergence**: native `collect_spans` uses tree-sitter-highlight's `HighlightEvent` cursor semantics. For same-start nested captures (e.g. `(bare_key) @type` + `(pair (bare_key)) @property`), tree-sitter-highlight emits both `HighlightStart`s with no intervening `Source`, so both spans get the outer capture's end byte. JS's `Query.captures()` gives node-exact ranges. Consequence: for rendered HTML, the inner `.hl-*` class covers a broader range on native than on browser. Both are semantically highlighted; browser is strictly more accurate. Documented in `userGrammarHighlight.ts`'s module doc comment and in the parity test. Fix tracked as **bd-98k6**, out of scope for Phase 4.
+- [x] **Documented known divergence**: native `collect_spans` uses tree-sitter-highlight's `HighlightEvent` cursor semantics. For same-start nested captures (e.g. `(bare_key) @type` + `(pair (bare_key)) @property`), tree-sitter-highlight emits both `HighlightStart`s with no intervening `Source`, so both spans get the outer capture's end byte. JS's `Query.captures()` gives node-exact ranges. Consequence: for rendered HTML, the inner `.hl-*` class covers a broader range on native than on browser. Both are semantically highlighted; browser is strictly more accurate. Documented in `userGrammarHighlight.ts`\'s module doc comment and in the parity test. Fix tracked as **bd-98k6**, out of scope for Phase 4.
 
 ### Phase 4.5 — Hub-client auto-discovery
 
@@ -220,7 +220,7 @@ The part that makes Phase 4 a real user workflow rather than a synthetic test pa
 - [x] `hub-client/src/services/userGrammarCache.test.ts`: 9 tests using an in-memory stub loader — first-load, unchanged-bytes reuses, changed-bytes-reloads-and-disposes, scm-only changes reload, removed-descriptor drops from cache, missing-binary reports failure, loader-throws reports failure, registerInto wires callbacks, disposeAll clears.
 - [x] Wired into `renderToHtml` in `hub-client/src/services/wasmRenderer.ts`: new optional `userGrammars?: UserGrammarDiscoveryContext` option on `RenderToHtmlOptions`; `prepareUserGrammarsHandle` helper instantiates a module-scoped cache on first use and returns a fresh `JsUserGrammars` handle per render. Graceful-degradation via `console.warn` for per-grammar failures.
 - [x] `WasmModuleExtended` interface grew `JsUserGrammars: new () => JsUserGrammarsHandle` so the renderer can construct the handle.
-- [x] Fixed `smokeAll.wasm.test.ts`'s fixture loader to route binary extensions (`.wasm`, `.png`, `.jpg`, `.pdf`, etc.) through `vfs_add_binary_file` instead of reading as UTF-8. `populateVfs` now returns the file list so the test can run discovery + load grammars via `loadUserGrammar` before calling `render_qmd` with a populated `JsUserGrammars` handle.
+- [x] Fixed `smokeAll.wasm.test.ts`\'s fixture loader to route binary extensions (`.wasm`, `.png`, `.jpg`, `.pdf`, etc.) through `vfs_add_binary_file` instead of reading as UTF-8. `populateVfs` now returns the file list so the test can run discovery + load grammars via `loadUserGrammar` before calling `render_qmd` with a populated `JsUserGrammars` handle.
 - [x] **Acceptance gate achieved**: `smokeAll.wasm.test.ts` → `highlighting/03-user-grammar/03-user-grammar-toml.qmd` now passes (was the pre-existing Phase-4.5 failure). 53 smokeAll fixtures pass, 0 fail.
 - [x] `cargo xtask verify` (full — Rust + WASM + hub-client + trace-viewer) fully green for the first time on this branch.
 
@@ -270,7 +270,7 @@ After this phase:
 
 3. **Are there any tree-sitter-highlight precedence rules our simplification provably breaks for common grammars?** Answerable only by running the parity test against all 14 built-ins (swap them over as a stress test, even though built-ins don't go through the user path). If the native golden output matches for all 14, the simplification is probably fine.
 
-4. **Which file-list is the right source for discovery?** Hub-client keeps files in Automerge; the FileSidebar renders from `App.tsx:69`'s `files: FileEntry[]` state (per the earlier uploader survey). The discovery service needs the same list, filtered to the `_quarto/grammars/` prefix. Confirm that `FileEntry` carries a `path` (yes, per `fileTree.ts`) — then the discovery is essentially a `files.filter(f => f.path.startsWith("_quarto/grammars/"))` plus grouping by subdirectory.
+4. **Which file-list is the right source for discovery?** Hub-client keeps files in Automerge; the FileSidebar renders from `App.tsx:69`\'s `files: FileEntry[]` state (per the earlier uploader survey). The discovery service needs the same list, filtered to the `_quarto/grammars/` prefix. Confirm that `FileEntry` carries a `path` (yes, per `fileTree.ts`) — then the discovery is essentially a `files.filter(f => f.path.startsWith("_quarto/grammars/"))` plus grouping by subdirectory.
 
 5. **Automerge binary-content access**: the discovery service needs the actual bytes of each `.wasm` and the text of each `.scm` to pass into `loadUserGrammar`. Confirm how hub-client reads binary/text contents out of Automerge (there must be an existing API for this, since images get displayed from Automerge-backed paths). Likely through `automergeSync` or a similar service.
 

@@ -248,7 +248,7 @@ overrides `--r-*` is forward-compatible across both versions.
   four vars; `league.scss`/`dracula.scss` are the elaborate ones. Theme
   resolution aliases `white→default`, `black→dark`.
 - **`quarto.scss` (1116 lines) is the heart**: defaults vocabulary + kebab→
-  camelCase mapping + ~850 lines of rules (title slide, code blocks,
+  camelCase mapping + \~850 lines of rules (title slide, code blocks,
   blockquotes, callouts, `.smaller` system, columns, panels, asides, task
   lists, kbd, light/dark sentinel).
 - **Split SCSS compilation + `exposer.scss` bridge** — Q1's load-bearing design
@@ -367,7 +367,7 @@ variable names**. Q1 maps these to reveal's vars in `quarto.scss`.
 
 **Option 1 — keep `$presentation-*` (CHOSEN).**
 - *Ongoing maintenance cost in Q2:* a single small mapping layer
-  (`$presentation-*`/`$body-*` → reveal-6 kebab vars), ~30–50 lines, that must be
+  (`$presentation-*`/`$body-*` → reveal-6 kebab vars), \~30–50 lines, that must be
   re-checked when we bump reveal.js (one checklist item on a reveal upgrade) and
   extended when we choose to surface a new reveal knob. This is the *same kind*
   of curation we already do for Bootstrap variables, so it is bounded, familiar,

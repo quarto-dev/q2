@@ -62,7 +62,7 @@ behavioral change to any existing format.**
   `pub pipeline_profile: PipelineProfile` field; derived inside `RenderContext::new`
   (`render.rs:442`), which already receives `&format`. **This is why the field is not a ripple:**
   266 `RenderContext::new(...)` call sites exist workspace-wide (including
-  `crates/quarto-lsp-core/src/analysis.rs:68` and ~40 integration-test helpers) and none needs to
+  `crates/quarto-lsp-core/src/analysis.rs:68` and \~40 integration-test helpers) and none needs to
   change if the derivation happens inside `new()`.
 - `crates/quarto-core/src/pipeline.rs:1144` (`build_transform_pipeline`) — takes the profile as an
   explicit parameter; the internal `let is_revealjs = crate::format::is_revealjs_target(...)`
@@ -239,7 +239,7 @@ invocation builder**; P1 can only assert the transform does not run.
 |---|---|---|---|---|---|
 | T2.1 | U | `PANDOC_TRANSFORM_EXCLUDED` ∩ `build_transform_pipeline` | build `HtmlRender` pipeline, collect `name()`s → every exclude-list entry is present in that set (`unknown.is_empty()`) | `make_test_runtime()` | the const's own entries (a typo'd/renamed entry is the failure this guards) |
 | T2.2 | U | `AstTransform::phase` + the const | build `HtmlRender`, filter `phase() == Navigation` → that set has len 20 **and** is a subset of `PANDOC_TRANSFORM_EXCLUDED` | same | any Navigation name deleted from the const |
-| T2.3 | U | `build_transform_pipeline` + `retain_excluding` | build `Pandoc("docx")` → `assert_eq!` the **exact** ordered surviving name list against a literal | same | the `retain_excluding(PANDOC_TRANSFORM_EXCLUDED)` application inside `build_transform_pipeline`'s `Pandoc(_)` arm |
+| T2.3 | U | `build_transform_pipeline` + `retain_excluding` | build `Pandoc("docx")` → `assert_eq!` the **exact** ordered surviving name list against a literal | same | the `retain_excluding(PANDOC_TRANSFORM_EXCLUDED)` application inside `build_transform_pipeline`\'s `Pandoc(_)` arm |
 | T2.5 | U | same, Preview axis | build `HtmlPreview` → `assert_eq!` exact ordered name list against the pre-refactor `build_q2_preview_transform_pipeline` capture | same | the `HtmlPreview`/`RevealjsPreview` arm that applies `Q2_PREVIEW_TRANSFORM_EXCLUDED` |
 
 **Revert hunks, stated exactly:**

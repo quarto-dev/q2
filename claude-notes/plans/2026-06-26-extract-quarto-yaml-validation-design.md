@@ -82,7 +82,7 @@ and `quarto-yaml`. Reading the code, it is not interchangeable:
   `JsonDiagnostic::SCHEMA_URL` (`https://quarto.org/schemas/v1/...`).
 - The catalog is reached as a **global static + free functions**
   (`ERROR_CATALOG`, `get_docs_url`, `get_error_info`, `get_subsystem`) called
-  from ~19 crates — not as an injected dependency.
+  from \~19 crates — not as an injected dependency.
 
 So "externalize `quarto-error-reporting`" is really two separable things welded
 together: a **catalog-agnostic reporting core** (reusable, belongs outside) and
@@ -111,7 +111,7 @@ q2 keeps / gains:
 | Crate (in q2) | Was | Role |
 |---|---|---|
 | `quarto-error-catalog` | **split** out of `quarto-error-reporting` | the `Q-*` `error_catalog.json`, quarto.org URLs, the audit, the `CatalogProvider` impl |
-| `quarto-error-reporting` (façade) | shrinks to a re-export shim | re-exports `error-reporting-core` + installs the q2 catalog, so the ~19 existing `use quarto_error_reporting::…` call sites keep compiling |
+| `quarto-error-reporting` (façade) | shrinks to a re-export shim | re-exports `error-reporting-core` + installs the q2 catalog, so the \~19 existing `use quarto_error_reporting::…` call sites keep compiling |
 
 **Rationale.** Option 1 is the only strategy that delivers the actual goal — a
 crate non-Quarto developers can `cargo add` without a Quarto identity. Options 2
@@ -128,7 +128,7 @@ crate non-Quarto developers can `cargo add` without a Quarto identity. Options 2
 YAML — now renders through an externally-owned `error-reporting-core`. Cross-repo
 coordination on the diagnostic builder/render is the standing tax. We mitigate
 it by keeping a thin `quarto-error-reporting` façade in q2 so day-to-day q2 code
-does not change its imports, and by making `error-reporting-core`'s surface
+does not change its imports, and by making `error-reporting-core`\'s surface
 deliberately small and slow-moving.
 
 > **Override point.** If that tax is judged too high right now, the fallback is
@@ -187,7 +187,7 @@ pub fn install() { error_reporting_core::install_catalog(Box::new(QuartoCatalog:
 
 **Rationale — why a global registry rather than threading the provider through
 every call site.** Today the catalog is a `Lazy<HashMap>` global reached by free
-functions from ~19 crates. Converting all of those to take a `&dyn
+functions from \~19 crates. Converting all of those to take a `&dyn
 CatalogProvider` parameter is a large, invasive churn with no behavioural payoff.
 A `OnceLock`-installed global keeps every existing call site (`get_docs_url(code)`)
 source-compatible; only the *initialization* changes (q2 calls
@@ -270,7 +270,7 @@ its own errors uses the same pattern (own ids → q2 remap table). That is a
 reusable architectural seam, not a one-off.
 
 **Migration safety net.** The existing `error_code()` (returning `Q-1-x`) and its
-~15 unit tests in `error.rs` are the regression oracle, but the check **splits**
+\~15 unit tests in `error.rs` are the regression oracle, but the check **splits**
 across the boundary once the crate leaves:
 
 - *Upstream (library):* a unit test pins `kind.code()` → origin-code string for

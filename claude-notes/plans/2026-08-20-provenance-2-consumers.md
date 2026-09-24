@@ -143,7 +143,7 @@ byte-identical, verified by hand-derivation twice).
 Phase 4 existed to demonstrate. Obligation 8 — the item with the worst failure mode in the epic
 — is discharged with an **injection experiment**, not the plan's reachability argument: wrapping
 diagnostic locations in a `Concat` corrupts `qmd-syntax-helper`'s output visibly (a splice at
-byte 0; a `replace_range` percent-encoding ~340 bytes), and 5 of 7 new tests catch it.
+byte 0; a `replace_range` percent-encoding \~340 bytes), and 5 of 7 new tests catch it.
 
 ### Corrections to this plan made in session 2 — READ THESE BEFORE CONTINUING
 
@@ -161,7 +161,7 @@ byte 0; a `replace_range` percent-encoding ~340 bytes), and 5 of 7 new tests cat
    the gate.
 2. **The desync warning lives in BOTH converters**, not only pampa's. `config_value_from_yaml`
    already takes a `diagnostics` collector, and this plan's own fallout list names
-   `convert.rs`'s hand-built fixtures — which reach only quarto-config's converter.
+   `convert.rs`\'s hand-built fixtures — which reach only quarto-config's converter.
 3. **"Fixing the hand-built fixtures is a fidelity gain" is WITHDRAWN as a rationale.**
    Attaching `SourceInfo::for_test()` as content provenance silences the warning at exactly the
    synthetic fidelity the argument criticized; in a real string scalar content provenance
@@ -191,7 +191,7 @@ byte 0; a `replace_range` percent-encoding ~340 bytes), and 5 of 7 new tests cat
    framing the `q_2_28` exposure below is invisible.
 7. **The TypeScript brief's central diagnosis was wrong, and its conclusion right for another
    reason.** Attribute values carry no `Substring` at all; but `Substring{parent: Concat}` does
-   reach `annotated-qmd`'s reader via **YAML block scalars**, where every inline inside the
+   reach `annotated-qmd`\'s reader via **YAML block scalars**, where every inline inside the
    scalar is a `Substring` of its `Concat`. The `Substring`-arm fix is justified on that basis.
 8. **The TS `Concat` arm was ALSO wrong** — the plan and both briefs asserted it was already
    correct. It derived the exclusive end as `map(len-1).index + 1`, and that `+1` assumes the
@@ -269,7 +269,7 @@ in one wave (see `final-fix-report.md` for the full accounting):
   `wasm-quarto-hub-client/Cargo.toml:20`) — 0.2.2 carries the char-boundary snap that turns a
   wrong byte offset into a wrong caret instead of a process abort, and the two versions differ
   only inside a private function with no public-API change, so a 0.2.1 resolution would have
-  compiled cleanly and silently reintroduced the abort. Also `wasm-quarto-hub-client/Cargo.toml:29`'s
+  compiled cleanly and silently reintroduced the abort. Also `wasm-quarto-hub-client/Cargo.toml:29`\'s
   stale `quarto-source-map = "0.1.0"` floor corrected to `0.1.3` (compile-caught, but misleading).
   Both lockfiles verified unchanged.
 - **FIX-2 (Important):** the fourth instance of the epic's own defect, at
@@ -291,7 +291,7 @@ in one wave (see `final-fix-report.md` for the full accounting):
   removed as FIX-5 supersedes it.
 
 **Out-of-plan finding filed as a braid strand:** **bd-rj2ikb0z** — `stage/context.rs:911`
-builds a fresh `DiagnosticCollector` for `_variables.yml`'s `yaml_to_config_value` call and
+builds a fresh `DiagnosticCollector` for `_variables.yml`\'s `yaml_to_config_value` call and
 drops it, discarding every diagnostic from that path, while the enclosing function already
 holds `diagnostics: &mut Vec<DiagnosticMessage>`. Pre-existing and unrelated to provenance; it
 surfaced only because this branch added a signal (the content-provenance desync warning) that

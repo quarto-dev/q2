@@ -196,7 +196,7 @@ Fix landed on this branch. Plan: `claude-notes/plans/2026-05-14-list-table-multi
 
 Summary of the change in `crates/pampa/src/writers/qmd.rs`:
 
-- Replaced the cell-emission block in `write_list_table` (~lines 1069-1116 of the pre-fix file) with a uniform three-shape algorithm: empty cell / first block is `Plain`/`Paragraph` / first block is anything else. Subsequent blocks (2nd … nth) within any cell are emitted as blank-line-separated 4-space-indented stanzas.
+- Replaced the cell-emission block in `write_list_table` (\~lines 1069-1116 of the pre-fix file) with a uniform three-shape algorithm: empty cell / first block is `Plain`/`Paragraph` / first block is anything else. Subsequent blocks (2nd … nth) within any cell are emitted as blank-line-separated 4-space-indented stanzas.
 - Added two helpers: `write_cell_block_on_marker_line` (for the first block when it is not `Plain`/`Paragraph` — puts its first line on the marker line, indents continuation lines) and `write_cell_block_indented` (for every subsequent block).
 
 One refinement vs. the triage's original fix sketch: the case where the first block is non-`Plain`/non-`Paragraph` (e.g. a `CodeBlock`-only cell) does **not** leave the marker line empty followed by a blank line — that shape introduced a phantom empty `Paragraph` in the reparsed AST. Instead the block's first line continues the marker line, mirroring how a regular CommonMark list item with non-`Plain` content looks. Verified by probing the reader before committing.

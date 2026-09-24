@@ -33,7 +33,7 @@ impl WasmStore {
 
 **WASM runtime**: **wasmtime** — a managed runtime (JIT + GC) bundled via the C API. Not a custom runtime; upstream-maintained by Bytecode Alliance.
 
-**Binary size cost**: wasmtime-c-api-impl is ~6–12 MB on Linux/macOS depending on profile. Cranelift codegen adds ~4–6 MB. For a ~50 MB native binary, this is 8–15% overhead. **Modest but measurable**.
+**Binary size cost**: wasmtime-c-api-impl is ~6–12 MB on Linux/macOS depending on profile. Cranelift codegen adds ~4–6 MB. For a \~50 MB native binary, this is 8–15% overhead. **Modest but measurable**.
 
 **Integration path in tree-sitter loader**:
 - `/crates/loader/src/loader.rs:2036–2037`: `use_wasm()` method initializes a WasmStore from an `Engine`.
@@ -77,7 +77,7 @@ This is **not** as efficient as native `tree-sitter-highlight` (no query caching
 
 **Alternative (not recommended)**: Embed `wasmi` (Rust WASM interpreter) inside a WASM binary.
 - **Status**: wasmi v0.32 (2024) is production-ready, used by Polkadot/Substrate, 5× faster than v0.1 due to register-based bytecode.
-- **Why not**: Adds ~2–4 MB to WASM bundle. Interpretation overhead makes startup slower than JS interop. No real benefit over delegating to web-tree-sitter, which is already in the browser.
+- **Why not**: Adds \~2–4 MB to WASM bundle. Interpretation overhead makes startup slower than JS interop. No real benefit over delegating to web-tree-sitter, which is already in the browser.
 
 ---
 
@@ -109,7 +109,7 @@ Takes a `Language` by value. Tree-sitter makes no distinction between statically
 - Grammar source (e.g., `tree-sitter-python` repo with `grammar.js`, `parser.c`, optional `scanner.c`).
 - wasi-sdk (automatically downloaded on first use since v0.26.1; no manual installation).
 
-**Output**: Single `.wasm` file (~50–200 KB for typical grammars, depending on complexity).
+**Output**: Single `.wasm` file (\~50–200 KB for typical grammars, depending on complexity).
 
 **Quarto user flow**:
 ```

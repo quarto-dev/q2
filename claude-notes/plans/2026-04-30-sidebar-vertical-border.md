@@ -241,7 +241,7 @@ Both were caused by missing Q1 rules. Tests + ports:
 - [x] Ported `.quarto-container { min-height: calc(100vh - 132px) }`
   from `quarto-cli/.../quarto-nav.scss:53-55` into
   `_bootstrap-rules.scss`. The 132px constant matches Q1's
-  navbar+footer composite (~64px navbar + 68px footer/margin).
+  navbar+footer composite (\~64px navbar + 68px footer/margin).
 - [x] Re-captured `phase5-single-doc-baseline` styles.css hash
   with a comment documenting why (the new rules don't match
   anything in a single-doc body so doc.html is unchanged).

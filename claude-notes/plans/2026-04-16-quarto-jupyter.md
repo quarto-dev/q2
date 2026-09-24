@@ -63,7 +63,7 @@ calls on its execute path, plus `widgetDependencyIncludes` — the producer the
 deferred-dependencies protocol (RTQ FC-2's `Dependencies` verb) requires. The
 core function
 `toMarkdown()` is the single most complex piece of the entire engine
-extension project (~1300 lines of logic), but it's conceptually
+extension project (\~1300 lines of logic), but it's conceptually
 straightforward: walk notebook cells, format outputs as markdown, handle
 figures and HTML preservation.
 
@@ -94,7 +94,7 @@ below):
 | `toMarkdown(nb, opts)` | Writing figure image files (base64 decode → `host.fs.writeFileSync`) |
 | `isPercentScript(file, exts)` | Reading the file to check for percent markers |
 | `percentScriptToMarkdown(file)` | Reading the source file |
-| `assets(input, to)` | `host.fs.ensureDir(figures_dir)` + `host.fs.walk(...)` to promote the supporting dir (Q1 `jupyter.ts:665-696` does `ensureDirSync` + `walkSync`) — creates the dir `toMarkdown`'s figures are written into |
+| `assets(input, to)` | `host.fs.ensureDir(figures_dir)` + `host.fs.walk(...)` to promote the supporting dir (Q1 `jupyter.ts:665-696` does `ensureDirSync` + `walkSync`) — creates the dir `toMarkdown`\'s figures are written into |
 | `resultIncludes(tempDir, deps)` | Materializes widget includes to disk via `host.fs.makeTempFile` + `host.fs.writeFileSync` (Q1 `widgets.ts:148-154` uses `Deno.makeTempFileSync`/`writeTextFileSync`) — Julia's **inline execute-path** widget materializer (`julia:256`) |
 | `widgetDependencyIncludes(deps, tempDir)` | Same temp-file machinery — Q1 `includesForJupyterWidgetDependencies` (`widgets.ts:73`) routes through `widgetTempFile` (`widgets.ts:148-152`: `makeTempFileSync` + `writeTextFileSync`). The **deferred-deps-path** sibling of `resultIncludes` (see the 7th-method note below) |
 
@@ -132,7 +132,7 @@ is bound once and threaded into every FS-touching method (including `assets`,
 each factory takes a **`Pick<PlatformHost, …>`** of the subset it uses, and
 `global: HostGlobalConfig` **only if** it reads process-stable config): one
 `make<Ns>(host[, global])` entry point per subpath, wired in
-`@quarto/engine-host-deno`'s `buildQuartoAPI(global, host)` (**note: `global`
+`@quarto/engine-host-deno`\'s `buildQuartoAPI(global, host)` (**note: `global`
 first**). Jupyter reads only `host.fs` (no `global`), so `makeJupyter(host)`
 takes one arg — unlike `makeSystem(host, global)`. (Optionally narrow to
 `makeJupyter(host: Pick<PlatformHost, "fs">)` to match the sibling `Pick`

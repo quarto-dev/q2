@@ -365,7 +365,7 @@ It needs to:
 - Skip footnote blocks for word-count (Q1 parity — footnote
   text doesn't count toward reading time).
 
-The block walker is small (~50 lines) and L1-specific. Don't
+The block walker is small (\~50 lines) and L1-specific. Don't
 try to reuse `metadata_normalize::blocks_to_plain_text`; its
 needs are different (full block-text rendering for metadata
 keys, with footnote inclusion).
@@ -676,7 +676,7 @@ success":
       noting L1 is the second consumer and pointing at
       `bd-zzke` for any future third consumer. **Do not**
       audit or consolidate the other five sites — that is
-      `bd-zzke`'s job, deliberately deferred.
+      `bd-zzke`\'s job, deliberately deferred.
 - [x] **`ConfigValue` mutation idioms — cleared 2026-05-06.**
       `ConfigValue::insert_path` (auto-creates intermediate
       maps), `contains_path`, `get_path`, `get_path_mut` are
@@ -694,7 +694,7 @@ success":
 - [ ] Add `ListingItemInfoStage` skeleton with a no-op
       `autofill_listing_item` so tests compile.
 - [ ] Write unit tests 1–16 in
-      `crates/quarto-core/src/stage/stages/listing_item_info.rs`'s
+      `crates/quarto-core/src/stage/stages/listing_item_info.rs`\'s
       test module. Run; observe expected failures.
 - [ ] Write stage trait tests 17–18.
 - [ ] Write integration tests 19–21 in

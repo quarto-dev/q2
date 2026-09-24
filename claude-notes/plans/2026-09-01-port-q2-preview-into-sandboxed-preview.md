@@ -50,7 +50,7 @@ places; everything else is already postMessage + pure React-over-AST-JSON:
     runtime deps (tiptap, reveal.js, `@babel/standalone`, morphdom, katex).
 - **Drop the single-file build; deploy the full multi-file `dist/`.**
   `vite-plugin-singlefile` would have to base64-inline tiptap, prosemirror,
-  Babel standalone, reveal CSS, Bootstrap and ~60 KaTeX fonts into one HTML
+  Babel standalone, reveal CSS, Bootstrap and \~60 KaTeX fonts into one HTML
   (tens of MB). GitHub Pages already serves a directory (it deploys
   `dist/` today — `index.html` + `serviceWorker.js`); a normal build with
   `/assets/*` chunks works cross-origin because they're same-origin *to the
@@ -68,7 +68,7 @@ places; everything else is already postMessage + pure React-over-AST-JSON:
   absent from `pipelineKindForFormat`
   (`ts-packages/preview-runtime/src/pipelineKind.ts:27-34`), so it gets a
   raw parse-only AST — no highlight spans, no chrome metadata, no theme
-  fingerprint. Both mappings change to match `q2-preview`'s
+  fingerprint. Both mappings change to match `q2-preview`\'s
   `Some("preview")`. (This touches shared files but only the
   sandboxed-format entries — q2-preview behavior unchanged.)
 
@@ -92,7 +92,7 @@ places; everything else is already postMessage + pure React-over-AST-JSON:
       (`test_from_format_string_q2_sandboxed_preview` in format.rs,
       pipelineKind.test.ts) — verified failing before the fix.
 - [x] Rust: `format.rs` `q2-sandboxed-preview` → `("html", Some("preview"))`;
-      `wasm-quarto-hub-client`'s `coerce_format_for_print` needs no change
+      `wasm-quarto-hub-client`\'s `coerce_format_for_print` needs no change
       (printable fallback to html stays correct).
 - [x] TS: add `q2-sandboxed-preview` to `pipelineKindForFormat`.
 - [x] `cargo nextest run --workspace` (39 pre-existing environmental
@@ -137,7 +137,7 @@ places; everything else is already postMessage + pure React-over-AST-JSON:
 Design refinement over the original sketch: instead of extension-guessing
 interception, proxied assets live in an explicit **page-relative namespace**
 `__q2_vfs__/<resolved VFS path>`. The parent resolves image targets against
-`currentFilePath` at manifest-build time (mirroring `assetWalker`'s
+`currentFilePath` at manifest-build time (mirroring `assetWalker`\'s
 resolution exactly), so the full resolved path rides in the URL — in-scope
 under `/q2/` on Pages, immune to basename collisions, and app assets
 (`assets/*`, fonts, the page) are never touched.

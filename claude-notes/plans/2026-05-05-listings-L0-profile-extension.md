@@ -694,7 +694,7 @@ pass.
       sub-plan.
 - [x] Added `listing-item` schema entry to
       `crates/pampa/test-fixtures/schemas/definitions.yml`
-      (~50 lines — slightly over the 30-line guidance, but
+      (\~50 lines — slightly over the 30-line guidance, but
       mechanical and contained in the test fixture; pampa
       tests still pass).
 
@@ -747,7 +747,7 @@ normalizing the input-stem-derived asset paths
 `diff` of the two raw outputs shows only the legitimate
 filename-prefix difference (line 8–9, asset-link `href`).
 Confirms: L0's new field doesn't affect rendering. Listings
-rendering is L3+'s job.
+rendering is L3+\'s job.
 
 **Baseline regression check.** Rendering the existing
 `phase5-single-doc-baseline` fixture (a richer document with
@@ -880,7 +880,7 @@ disagrees with any, push back before implementation starts.
   cross-link from each typed top-level field's doc comment
   ("see §Scoped feature surfaces for what listings get
   instead")? Probably overkill; one link from
-  `listing_item`'s doc comment back to the section is
+  `listing_item`\'s doc comment back to the section is
   sufficient.
 
 ## Filing reminder

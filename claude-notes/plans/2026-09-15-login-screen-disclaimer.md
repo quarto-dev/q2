@@ -205,7 +205,7 @@ a layout choice; see Decisions §3.)
 - [x] `npm run dev` in `hub-client`, open `#/dev/landing`,
   `#/dev/landing-expired`, `#/dev/landing-denied` in light and dark
   (the dev harness pages already exist). Check the card at a laptop
-  viewport height (~700px): the CTA must still be reachable without the
+  viewport height (\~700px): the CTA must still be reachable without the
   page feeling like a wall of text; if it is not, revisit Decisions §1–§4
   with the user rather than shrinking the type further.
 - [x] `npm run test:harness` (or the single spec) for the e2e geometry

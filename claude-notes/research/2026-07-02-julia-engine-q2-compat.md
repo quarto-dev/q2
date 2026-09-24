@@ -117,7 +117,7 @@ contributes:
         - .jl
 ```
 
-Exact text from the plan (Phase 4A, ~L79-87). `claims-files` deliberately
+Exact text from the plan (Phase 4A, \~L79-87). `claims-files` deliberately
 **not** declared — Julia's dynamic `claimsFile` is content-inspecting
 (`# %%` percent scripts), so leaving it undeclared keeps Pass-1 zero-spawn
 resolution intact (`file-extensions` is only a can-handle pre-filter).
@@ -155,7 +155,7 @@ inside _extensions/julia-engine.
 ```
 
 Neither failure is a `deno` error and neither is fixed by editing
-`julia-engine.ts` — both are `q2 build-ts-extension`'s own directory-
+`julia-engine.ts` — both are `q2 build-ts-extension`\'s own directory-
 resolution assumptions failing to match a real Q1 extension repo's shape.
 Per the brief, `crates/` source is out of scope for this task, so the
 build was made to work via a **local, non-committed, one-time symlink**:
@@ -164,7 +164,7 @@ build was made to work via a **local, non-committed, one-time symlink**:
 _extensions/julia-engine/src -> ../../src     # created only for the build, removed after
 ```
 
-This satisfies `find_entry_ts`'s convention without duplicating or moving
+This satisfies `find_entry_ts`\'s convention without duplicating or moving
 any committed file. `deno bundle` canonicalizes the symlinked entry path
 before resolving relative imports, so the emitted module-path banner
 comments read `src/julia-engine.ts` / `src/constants.ts` (the *real*

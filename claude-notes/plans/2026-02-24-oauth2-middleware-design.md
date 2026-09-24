@@ -733,13 +733,13 @@ When `VITE_GOOGLE_CLIENT_ID` is not set, auth is completely disabled — no logi
 7. **JWT validation on OAuth callback.** The production `auth_callback` handler validates the JWT (via `ctx.authenticate()`) before redirecting to the SPA. This prevents the redirect from injecting arbitrary data into the `?auth_credential=` URL parameter. (Defense-in-depth: subsequent WebSocket/REST calls validate again.)
 8. **Log redaction.** `RedactedMakeSpan` ensures the `TraceLayer` logs only `uri.path()`, never the query string (which may contain `id_token` for WebSocket upgrades).
 9. **Token in URL (WebSocket).** Encrypted by TLS in transit. Redacted from server logs (see above).
-10. **Short-lived tokens.** Google ID tokens expire in ~1 hour. The browser client schedules an exact `setTimeout` based on the token's `exp` claim to clear auth state precisely at expiry, with no polling gap.
+10. **Short-lived tokens.** Google ID tokens expire in \~1 hour. The browser client schedules an exact `setTimeout` based on the token's `exp` claim to clear auth state precisely at expiry, with no polling gap.
 11. **Minimal client errors.** Invalid/missing tokens return 401; allowlist rejections return 403. Neither includes user-identifying detail. Specific reasons logged server-side only.
 12. **Credential in redirect is URL-safe by construction.** JWTs are base64url-encoded segments separated by `.` — all unreserved URI characters per RFC 3986. Both `auth_callback` handlers document this invariant explicitly.
 13. **Case-insensitive Bearer matching.** The `bearer_token()` extractor matches the `Authorization` header scheme case-insensitively per RFC 7235 §2.1.
 14. **JWT structure validation (browser).** `decodeJwtPayload()` verifies the token has exactly 3 dot-separated segments before attempting base64 decode, preventing cryptic errors from malformed input.
 15. **Graceful JWKS initialization failure.** `build_router` propagates JWKS decoder initialization errors via `Result` rather than panicking, so operators get a clean error message if Google's JWKS endpoint is unreachable at startup.
-18. **Silent token refresh.** ~5 minutes before the ID token expires, the `useAuth` hook enables Google One Tap with `auto_select` via `useGoogleOneTapLogin` from `@react-oauth/google`. If the user has an active Google session (and the browser supports FedCM or third-party cookies), a fresh credential is returned silently — no UI, no redirect. If silent refresh fails, the hard expiry timer clears auth and the user sees the login screen. This keeps collaborative editing sessions alive across token boundaries in most environments.
+18. **Silent token refresh.** \~5 minutes before the ID token expires, the `useAuth` hook enables Google One Tap with `auto_select` via `useGoogleOneTapLogin` from `@react-oauth/google`. If the user has an active Google session (and the browser supports FedCM or third-party cookies), a fresh credential is returned silently — no UI, no redirect. If silent refresh fails, the hard expiry timer clears auth and the user sees the login screen. This keeps collaborative editing sessions alive across token boundaries in most environments.
 
 ### Deployment recommendations
 
@@ -748,7 +748,7 @@ When `VITE_GOOGLE_CLIENT_ID` is not set, auth is completely disabled — no logi
 
 ### Residual risks (accepted)
 
-1. **localStorage tokens (browser).** Accessible to XSS. Mitigated by short token lifetime (~1 hour), server-side validation, and the CSP deployment recommendation above.
+1. **localStorage tokens (browser).** Accessible to XSS. Mitigated by short token lifetime (\~1 hour), server-side validation, and the CSP deployment recommendation above.
 2. **Token in WebSocket URL.** Could appear in browser dev tools or reverse proxy logs. Mitigated by TLS, server-side log redaction, and the proxy logging recommendation above. A future iteration could add a short-lived ticket exchange endpoint (`POST /auth/ticket` → one-time ticket for WebSocket URL).
 3. **Credential in redirect URL.** The JWT appears briefly in the browser URL bar during the OAuth callback redirect. The `useAuth` hook clears it via `replaceState` on mount, but it may appear in browser history for a brief window. (Mitigated: the production `auth_callback` handler now validates the JWT before redirecting, so only valid Google-issued tokens reach the URL.)
 4. **WebSocket validated once at upgrade.** After the initial `authenticate()` call, the WebSocket connection lives until the client disconnects. If a user is removed from the allowlist or their token expires, already-established connections are not terminated. Clients naturally reconnect (and re-authenticate) when the frontend detects token expiry.
@@ -759,7 +759,7 @@ When `VITE_GOOGLE_CLIENT_ID` is not set, auth is completely disabled — no logi
 
 1. **No user database.** Cannot track users, audit access history, or implement per-user settings. Add if/when needed.
 
-2. **Silent refresh browser support.** The silent token refresh (hardening measure 18) depends on the browser supporting FedCM or third-party cookies. Browsers with strict tracking protection (e.g. Safari, Firefox with ETP) may block One Tap, in which case the user must manually re-authenticate when the token expires (~1 hour). This is a graceful degradation, not a failure.
+2. **Silent refresh browser support.** The silent token refresh (hardening measure 18) depends on the browser supporting FedCM or third-party cookies. Browsers with strict tracking protection (e.g. Safari, Firefox with ETP) may block One Tap, in which case the user must manually re-authenticate when the token expires (\~1 hour). This is a graceful degradation, not a failure.
 
 ---
 

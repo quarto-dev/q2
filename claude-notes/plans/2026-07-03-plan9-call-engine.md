@@ -66,7 +66,7 @@ esbuild 0.28.0 (engine-host bundle), vendored cliffy v1.0.0-rc.3 (MIT).
 
 | Path | Role |
 |---|---|
-| `ts-packages/quarto-engine-host-deno/vendor/cliffy/` (new, ~59 files) | vendored cliffy v1.0.0-rc.3 (`command/`, `flags/`, `table/`, `_utils/`) |
+| `ts-packages/quarto-engine-host-deno/vendor/cliffy/` (new, \~59 files) | vendored cliffy v1.0.0-rc.3 (`command/`, `flags/`, `table/`, `_utils/`) |
 | `ts-packages/quarto-engine-host-deno/vendor/deno-std/` (new, 6 files) | vendored std@0.196.0 leaves (fmt/colors, console/*, assert/*) |
 | `ts-packages/quarto-engine-host-deno/vendor/README.md`, `vendor/LICENSE-cliffy` (new) | provenance, patch list, MIT license |
 | `ts-packages/quarto-engine-host-deno/src/call-engine.ts` (new) | the one-shot mode (Q1 dispatcher port) |
@@ -314,7 +314,7 @@ deno check ts-packages/quarto-engine-host-deno/src/main.ts
 cargo xtask build-engine-host-bundle
 ```
 Expected: both succeed; `dist/engine-host-deno.js` grows by roughly the vendored
-cliffy size (~56 KB minified; spike-measured).
+cliffy size (\~56 KB minified; spike-measured).
 
 - [ ] **2.4 Manual smoke (end-to-end through the real bundle):**
 
@@ -545,7 +545,7 @@ Re-export in `engine/mod.rs` alongside the existing trait re-exports:
 in `ts_engine.rs`.
 
 - [ ] **6.1 Visibility bumps in `ts_process.rs`:** change
-  `fn extracted_bundle_path()` (line ~136) to `pub(crate) fn`; add to
+  `fn extracted_bundle_path()` (line \~136) to `pub(crate) fn`; add to
   `impl TsEngineHost` a config accessor:
 
 ```rust
@@ -686,7 +686,7 @@ Note: `julia-unknown-subcmd.txt` from the corpus contains a trailing
 expectation instead (`tail -1` check, then `sed -i '' '$d'`) so the oracle is
 pure output bytes. Verify with `tail -1`.
 
-- [ ] **7.2 Write the failing unit tests** (CE1, CE4) in `engine.rs`'s
+- [ ] **7.2 Write the failing unit tests** (CE1, CE4) in `engine.rs`\'s
   `#[cfg(test)]`:
 
 ```rust
@@ -1059,7 +1059,7 @@ Expected: 4 passed (or SKIP lines without deno).
 - [ ] **10.4** Reconcile THIS plan's checkboxes against reality (repo rule:
   verify each `[x]` actually landed); commit the updated plan.
 - [ ] **10.5** Point `claude-notes/plans/CURRENT.md` at this file (worktree
-  branch) and update `CLAUDE.local.md`'s Plan line; `braid comment bd-m1jeqhhz`
+  branch) and update `CLAUDE.local.md`\'s Plan line; `braid comment bd-m1jeqhhz`
   with the plan path + e2e evidence snippets. Do NOT close the strand until all
   seams are GREEN and reverts recorded.
 - [ ] **10.6** Stop. Merging to `feature/ts-engine-extensions` and any push wait

@@ -107,7 +107,7 @@ this guard once the writer-side round-trip lands.
   the TS `RenderResponse` type grows `astJson?: string` and consumers
   pick the right field based on format.
 - `ReactRenderer.tsx` routes `format === 'q2-preview'` through `AstIframe`
-  (alongside the existing `format === 'q2-debug'` branch at line ~141).
+  (alongside the existing `format === 'q2-debug'` branch at line \~141).
   Note: this is `ReactRenderer.tsx`, not `ReactPreview.tsx` — the latter
   passes `format` down but doesn't pick the renderer.
 - **`ReactPreview.tsx`'s `doRender` gains a temporary format switch**:
@@ -120,7 +120,7 @@ this guard once the writer-side round-trip lands.
   in **Plan 7** alongside the read-only-guard removal (see §"Multi-plan
   contract: cleanup owed to Plan 7"). Update the
   `format` prop's type comment in `ReactPreview.tsx` (`format: string;
-  // 'q2-slides' or 'q2-debug'` at line ~39 of that file) to include
+  // 'q2-slides' or 'q2-debug'` at line \~39 of that file) to include
   `'q2-preview'`.
 - **Read-only guard** in `ReactPreview.tsx::handleSetAst`. No-op the
   rewrite path and log a warning when `format === 'q2-preview'`:

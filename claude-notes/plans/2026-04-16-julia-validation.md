@@ -72,11 +72,11 @@ those changes back upstream is deferred (Gordon's call).
   `src/resources/extension-build/import-map.json` — `path`, `path/posix`,
   `log`, `log/`, `fs/`, `encoding/` → pinned jsr `@std` packages
   (`@std/path@1.0.8`, `@std/log@0.224.0`, `@std/fs@1.0.16`,
-  `@std/encoding@1.0.9`). This is what lets `julia-engine.ts`'s bare imports
+  `@std/encoding@1.0.9`). This is what lets `julia-engine.ts`\'s bare imports
   (`"path"`, `"fs/exists"`, `"encoding/base64"`) bundle **unchanged**. The q2
   port of the config dropped these aliases (apparent oversight — no recorded
   decision); note the parity restoration against plan1c's config spec
-  (plan1c lines ~421-446).
+  (plan1c lines \~421-446).
 - [x] Copy `~/src/quarto-julia-engine` into
   `crates/quarto-core/tests/fixtures/extensions/julia-engine/` (the
   established extension-fixture location, next to `echo-engine/`), preserving
@@ -300,11 +300,11 @@ The simplest possible Julia document.
   (`this should fail gracefully`) and ideally the cell's source location; q2
   itself must not panic and the Deno subprocess must not be left wedged
   (a subsequent render of the 4B document still works) — **confirmed, J4
-  GREEN, RED-proven via the named revert in `TsEngineHost::request`'s
+  GREEN, RED-proven via the named revert in `TsEngineHost::request`\'s
   `FromEngine::Error` arm (`ts_process.rs:~693`).** Note: the first draft of
   the test's error-message assertion (`contains("this should fail
   gracefully")` alone) turned out to be vacuous against this exact revert —
-  `TsEngine::execute`'s generic fallback error message still contains that
+  `TsEngine::execute`\'s generic fallback error message still contains that
   substring via its `{:?}` Debug dump. Strengthened before freezing (see the
   4CD task report and compat log §10 for the full RED/GREEN/named-revert
   trail, done twice — once exposing the vacuous assertion, once against the
@@ -390,7 +390,7 @@ specific logic, so this phase is a smoke test of the integration.
   `julia-website/`). `plot.qmd` uses the file-based-figure mechanism
   (`GKSwstype=100` + `savefig` + an `image/png`-only `PngFigure` wrapper —
   see the 4H task report §1; `fig-format: png` was investigated and rejected
-  as insufficient for Plots' `text/html`-showable default).
+  as insufficient for Plots\' `text/html`-showable default).
   ```
   crates/quarto-core/tests/fixtures/extensions/julia-website/
     _quarto.yml             # project.type: website

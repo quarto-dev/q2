@@ -221,7 +221,7 @@ the canonical tracker.
 - [x] Final `br sync --flush-only` + final `braid import` done (idempotent;
       synced the `bd-sjk4t` close). This was **the** final re-import — beads is
       now frozen, so braid-only edits are safe (no future import will overwrite).
-- [ ] `beads.db`/`beads.db-wal` (~28 MB WAL) left in place for now; harmless
+- [ ] `beads.db`/`beads.db-wal` (\~28 MB WAL) left in place for now; harmless
       (gitignored working files). Can be removed in a later cleanup.
 - [ ] CI / hooks that touch `.beads/`: none found writing to it; revisit if any
       surface. (The post-edit `cargo fmt` hook is unrelated.)

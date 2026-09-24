@@ -504,7 +504,7 @@ build break.
       though the source-map variant is gone, because the interim
       writer arm above still emits it). Verify with
       `git grep -n "SerializableSourceMapping::FilterProvenance" crates/pampa/`
-      — expect ~4 hits (writer's `to_json` arm, the interim `intern`
+      — expect \~4 hits (writer's `to_json` arm, the interim `intern`
       arm above, the streaming writer's two arms in
       `stream_write_source_info_pool`). All four go away in Phase 3+4.
 - [x] Confirm no on-disk JSON snapshots carry code-3 entries that the
@@ -738,7 +738,7 @@ the writer emits code 4.
       configurations). Hand-written cases (one per shape). See §Test
       plan.
 - [x] Concat-of-Generated round-trip case: a `Concat { pieces }` whose
-      pieces' `source_info` is `Generated`. Serialize → deserialize →
+      pieces\' `source_info` is `Generated`. Serialize → deserialize →
       assert structural equality. Closes a coverage gap — current
       production paths emit this shape (e.g. coalesced filter-emitted
       spans). Sits in the writer-side test module since it exercises
@@ -783,7 +783,7 @@ the writer emits code 4.
       `roundtrip_via_stream(ast) -> ast` that calls `stream_write_pandoc`
       into a `Vec<u8>`, reads back via `pampa::readers::json::read`,
       and asserts SourceInfo equality at chosen Generated nodes. The
-      streaming writer's match arms are independent of `to_json`'s;
+      streaming writer's match arms are independent of `to_json`\'s;
       without this coverage, a Phase-4 regression in
       `stream_write_source_info_pool` could slip through.
 - [x] AnchorRole round-trip test: build a `Generated` with each role
@@ -853,7 +853,7 @@ starting Plan 5:
 - **Phase boundary "compiles cleanly" semantics.** Plan 4 found that
   "each phase compiles cleanly" really means "the directly-touched
   crate compiles cleanly" — adding a new `SourceInfo` variant
-  immediately broke `match` exhaustiveness across ~10 crates, and the
+  immediately broke `match` exhaustiveness across \~10 crates, and the
   workspace stayed red between Plan-4 Phase 1 and Phase 5. Plan 5's
   Phase 1 → 2 → 3+4 ordering above explicitly avoids this trap (each
   phase leaves the workspace green); the *atomic* Phase 3+4 squash is

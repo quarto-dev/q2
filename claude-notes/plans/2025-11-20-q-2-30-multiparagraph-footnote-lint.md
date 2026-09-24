@@ -408,7 +408,7 @@ if let pandoc::Block::NoteDefinitionPara(note_id, _content, _si) = current {
 - **Testing**: 30 minutes
 - **Documentation**: 30 minutes
 
-**Total**: ~4 hours
+**Total**: \~4 hours
 
 ## Dependencies
 

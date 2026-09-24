@@ -222,7 +222,7 @@ docs feature, not resource-embedding.
   path flushes to the VFS, but confirm with a WASM build + a directly-previewed
   deck (separate from the embed/served work).
 - [x] **4 — Re-stage examples + verify.** DONE. `cargo xtask stage-doc-examples`
-  re-rendered the 8 decks (each now ~1.5 KB + a `slides_files/revealjs/`
+  re-rendered the 8 decks (each now \~1.5 KB + a `slides_files/revealjs/`
   sidecar; `copy_static_output` already copies `*.html` + `*_files/`, no change
   needed). `q2 render docs/` → 152 files; the deck is in
   `_site/examples/…/03-fragments/` (linked, libs copied) and the revealjs page
@@ -241,4 +241,4 @@ docs feature, not resource-embedding.
 
 - The embed-in-preview *served* fetch / service-worker work — **bd-kjrpya2d**.
 - reveal plugins, additional themes, transitions — later reveal-epic phases.
-- Any change to `format: html`'s existing dep machinery (we *consume* it).
+- Any change to `format: html`\'s existing dep machinery (we *consume* it).

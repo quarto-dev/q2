@@ -142,7 +142,7 @@ route?) and mergeability (`git merge-tree --write-tree` against `main`).
 **bd-hcp8m3ve — `braid/bd-hcp8m3ve-float-taxonomy`**
 
 - 4 commits, 2026-07-21, base `cbdf27ea`. `main` is 41 commits ahead.
-  ~1708 insertions.
+  \~1708 insertions.
 - Content: design doc (`claude-notes/designs/float-layout-class-taxonomy.md`,
   214 lines) + plan; Q1-verbatim float DOM in the pampa HTML writer (+115);
   a substantial `crossref_render.rs` rework (+924); `auto_stretch.rs`

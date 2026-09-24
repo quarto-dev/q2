@@ -53,7 +53,7 @@ scratchpad). "In CI" = gated by a push/PR workflow.
 | `q2-preview-spa` | `test:e2e` (Playwright) | 17 specs | — | not measured | no (verify `--e2e` only) |
 
 **Roughly 2,070 TypeScript assertions currently sit outside the merge gate**
-(~1,620 excluding `preview-renderer`\'s integration tier).
+(\~1,620 excluding `preview-renderer`\'s integration tier).
 
 ### 2.1 Build-order prerequisites (not test bugs)
 
@@ -70,11 +70,11 @@ outputs exist, because they resolve siblings through the `"import":
 - `@quarto/annotated-qmd` → needs `@quarto/pandoc-types` dist; cold it crashes
   with `ERR_MODULE_NOT_FOUND` mid-run.
 
-So CI must run the equivalent of `verify`'s step 6 (ts-packages build in
+So CI must run the equivalent of `verify`\'s step 6 (ts-packages build in
 dependency order) **before** these suites. This is #250's "a couple of deps not
 installed in my local checkout" — it is a build-order requirement, not flake.
 
-`@quarto/preview-renderer`'s integration tier additionally needs the **WASM**
+`@quarto/preview-renderer`\'s integration tier additionally needs the **WASM**
 package present (`wasm-quarto-hub-client`): 26 of its 27 file-level failures
 in a WASM-less tree are `Failed to resolve import "wasm-quarto-hub-client"`.
 With WASM built the tier reports **49 of 50 files, 578 passed / 1 failed / 1

@@ -407,7 +407,7 @@ only driver was eleven hand-written snippets in `tiling_phase3_tests.rs`, none
 containing a multi-kv attribute.
 
 `tests/integration/tiling_corpus_tests.rs` (added 2026-08-22, bd-1d6io) is that
-driver: it runs `audit_source_range_tiling` over ~170 real documents and asserts
+driver: it runs `audit_source_range_tiling` over \~170 real documents and asserts
 zero findings, with a `KNOWN` list that must cite a strand per entry. **When you
 add a corpus of documents or a new handler, that test is the safety net — prefer
 extending it over writing a bespoke check.**
@@ -421,7 +421,7 @@ Two lessons worth keeping:
   formulation (boundary bytes, containment, disjointness) is what makes it
   robust.
 - **The abbreviation NBSP substitution is excluded** from the tightness check
-  (`check_tightness`'s `own_text` parameter). Pandoc-parity abbreviation
+  (`check_tightness`\'s `own_text` parameter). Pandoc-parity abbreviation
   handling absorbs the `Space` after an abbreviation into the preceding `Str`
   as U+00A0 so it cannot be separated from its referent, so `e.g. ` gives
   `Str("e.g.\u{a0}")` a range over five source bytes that really are its own
@@ -451,7 +451,7 @@ Sibling leaf ranges are disjoint, and a parent's range contains its children's.
 No source byte is claimed by two sibling nodes, qualified by two refinements:
 
 1. **(Intra-node — NOT a sibling-disjointness exception) the `Concat` hull.**
-   A `Concat`'s pieces tile internally and the node presents as one unit to its
+   A `Concat`\'s pieces tile internally and the node presents as one unit to its
    siblings — exactly one claim, never two. A *contiguous* `Concat` presents
    its hull; a *non-contiguous* one makes no contiguous claim (`preimage_in`
    → `None`). Use `contiguous_hull_for_run` (in `postprocess.rs`) to produce

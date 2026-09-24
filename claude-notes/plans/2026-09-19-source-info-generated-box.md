@@ -150,7 +150,7 @@ construction gets a new `generated_with`, not a second argument.
 In q2: 114 `Generated {` sites in 19 non-test files (52 constructions,
 42 patterns), plus test files; the 228 existing `SourceInfo::generated(by)`
 calls need no change. Hand-built constructions become
-`SourceInfo::generated(by)` / `generated_with(by, from)`; the ~10 sites
+`SourceInfo::generated(by)` / `generated_with(by, from)`; the \~10 sites
 that mutate `from` in place use the crate's existing `append_anchor` or
 the new `as_generated_mut`; patterns become
 `SourceInfo::Generated(g)` with `g.by` / `g.from` (or
@@ -198,7 +198,7 @@ site.
       copy resolves. (Not needed once the two dependents re-release.)
       **Second gotcha:** `crates/wasm-quarto-hub-client` is its *own*
       cargo workspace with its own `Cargo.lock` and `[patch.crates-io]`,
-      and `cargo xtask verify`'s hub-client leg builds it. The root
+      and `cargo xtask verify`\'s hub-client leg builds it. The root
       patch does not reach it, so it silently keeps registry 0.1.4 and
       the WASM build fails on the migrated pampa. Add the same
       (uncommitted) patch line there, path `../../external-sources/quarto-source-map`,

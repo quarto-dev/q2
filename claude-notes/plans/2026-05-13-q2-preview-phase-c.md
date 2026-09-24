@@ -231,7 +231,7 @@ On every doc-content change (server-side), if a capture exists for that doc, com
 **Test plan:**
 
 1. Unit: the canonicalization function returns identical bytes for two equal QMDs; differing bytes for edits.
-2. Integration: load a fixture with an existing capture; edit a code cell on disk; assert `staleness: true` is written to the sidecar within the watcher debounce window (~600 ms after the edit).
+2. Integration: load a fixture with an existing capture; edit a code cell on disk; assert `staleness: true` is written to the sidecar within the watcher debounce window (\~600 ms after the edit).
 3. Integration: edit *prose* in a fixture with a capture. **Expected behaviour for v1 (per Q-C3):** `staleness: true` is also written, because we use whole-QMD byte-equality. Document this in the spec; a follow-up issue will refine.
 
 **Acceptance:** unit + both integration tests; the prose-staleness behaviour is documented as a known v1 limitation (see Q-C3).
@@ -377,7 +377,7 @@ Each sub-task lives on a `beads/<id>-<slug>` topic branch off `feature/q2-previe
 - **Shiny / observable / interactive runtimes.** Replay doesn't apply.
 - **PDF preview.** Q6 keeps Phase C HTML-only.
 - **Freeze integration.** Phase C captures live in samod + tempdir cache; honouring `freeze` is a future epic.
-- **Cross-doc capture invalidation.** A code-cell edit in `helper.qmd` doesn't currently invalidate `index.qmd`'s capture even if `index.qmd` includes `helper.qmd`. The dep-graph machinery for this exists (used by `q2 render` Phase 8) but isn't wired into Phase C's staleness check. Worth a Phase D follow-up; the simplest interpretation in v1 is "each doc's capture invalidates only on its own content changes."
+- **Cross-doc capture invalidation.** A code-cell edit in `helper.qmd` doesn't currently invalidate `index.qmd`\'s capture even if `index.qmd` includes `helper.qmd`. The dep-graph machinery for this exists (used by `q2 render` Phase 8) but isn't wired into Phase C's staleness check. Worth a Phase D follow-up; the simplest interpretation in v1 is "each doc's capture invalidates only on its own content changes."
 - **Phase D dep-graph filter for re-renders.** Tracked under bd-0mji from the Phase B follow-up. Independent of Phase C.
 
 ## Risks

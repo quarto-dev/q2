@@ -179,7 +179,7 @@ HTML block type 1 raw-text set — keep their content **verbatim** in pandoc.
 All four are in q2's `BLOCK_TAGS`. A blanket split would newly break them by
 parsing markdown inside a `<script>`. Every other tag probed (`title`,
 `iframe`, `noscript`, `svg`, `canvas`, `object`, `section`, `table`/`tr`/`td`,
-`div`, `details`) splits. So the ~60-tag whitelist partitions cleanly 4 / 56,
+`div`, `details`) splits. So the \~60-tag whitelist partitions cleanly 4 / 56,
 and the guard is a first-inline check — no state needed.
 
 **Test blast radius, whole workspace, both spikes applied:**

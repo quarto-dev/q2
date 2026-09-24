@@ -165,7 +165,7 @@ and a new Deno-only `control-transport.ts` (the new `connectControl` — **NOT**
    (`getReadyServerConnection` / `writeJuliaCommand`). 1.6 simply makes the
    q2↔host hop match the host↔julia hop the engine already uses. Direct
    in-repo precedent, inside the validation engine itself.
-2. **Diagnostics already avoid stdout.** ~20 `quarto.console.{info,warning,error}`
+2. **Diagnostics already avoid stdout.** \~20 `quarto.console.{info,warning,error}`
    sites; the harness routes them to **stderr** with level prefixes
    (`deno-host.ts:249-256`). Unchanged after 1.6 — but an accidental
    `console.log` / leaked banner stops being fatal.
@@ -232,7 +232,7 @@ before spawn has no race window. (`preview.rs:273-337` is a connect-*retry* prob
 whose doc comment documents this backlog property for tokio's bind; it is a
 weaker precedent than first cited — it does not itself bind an ephemeral
 listener — but the std guarantee is what we actually rely on.) Sequence, inside
-`ensure_started_inner`'s init closure so a failure leaves `write` unset and the
+`ensure_started_inner`\'s init closure so a failure leaves `write` unset and the
 existing retry contract holds (`ts_process.rs:636-637`):
 
 1. **Bind** `std::net::TcpListener` on the `127.0.0.1` **literal** `:0`

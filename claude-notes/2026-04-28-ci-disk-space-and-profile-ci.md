@@ -118,7 +118,7 @@ The previous CI never built benches anyway — plain `cargo build` excludes them
 
 1. **Compilation coverage matches what `cargo build` was producing.** `cargo nextest run --tests` builds the lib (both as unittest and as a non-test dep for bins/integration tests), all bins (also as unittests), and all integration tests. That is a strict superset of plain `cargo build`\'s default targets (lib + bins, non-test). Examples without `test = true` and benches were not built before either.
 2. **`-D warnings` still fires.** `RUSTFLAGS` is a rustc env var, applied to every rustc invocation regardless of which cargo subcommand drives the build. Nextest invokes `cargo test --no-run` internally, which picks up `RUSTFLAGS` exactly as `cargo build` would.
-3. **The redundancy that disappears:** `cargo build` and `cargo nextest run` share `target/debug/` (or in our case `target/ci/`) but **not artifacts** — library crates compiled with `--cfg test` have a different fingerprint and produce **separate `.rlib`s** alongside the dev-build ones. With ~35 crates, that duplication ran into multi-GB at peak disk.
+3. **The redundancy that disappears:** `cargo build` and `cargo nextest run` share `target/debug/` (or in our case `target/ci/`) but **not artifacts** — library crates compiled with `--cfg test` have a different fingerprint and produce **separate `.rlib`s** alongside the dev-build ones. With \~35 crates, that duplication ran into multi-GB at peak disk.
 
 #### Edge case to be aware of
 
@@ -151,7 +151,7 @@ Cargo always places the test binary in `target/<profile>/deps/`, so backing up t
 
 `assert_cmd::cargo::cargo_bin("q2")` is the idiomatic crate-based answer and does exactly the same thing internally (with friendlier error handling and Windows `.exe` suffix logic). We chose the stdlib version for this fix because:
 
-- The LSP test does **not** use any of `assert_cmd`'s value — no `.assert()`, no stdout/stderr matchers, no exit-code checks. It speaks JSON-RPC over stdio.
+- The LSP test does **not** use any of `assert_cmd`\'s value — no `.assert()`, no stdout/stderr matchers, no exit-code checks. It speaks JSON-RPC over stdio.
 - The only function we'd touch is `cargo_bin()`, replacing 4 lines of stdlib with one dev-dep.
 
 If a future test wants `cargo run --` style command-driving with output assertions, **switch to `assert_cmd` then** — `cargo_bin()` is its standard binary-discovery helper and pays for itself once `.assert()` joins the picture.
@@ -180,5 +180,5 @@ If a future test wants `cargo run --` style command-driving with output assertio
 - nextest: [How it works](https://nexte.st/docs/design/how-it-works/) — confirms nextest delegates compilation to `cargo test --no-run`.
 - Cargo book: [`cargo test` target selection](https://doc.rust-lang.org/cargo/commands/cargo-test.html#target-selection) — what gets built by default.
 - Cargo book: [Profiles](https://doc.rust-lang.org/cargo/reference/profiles.html) — `inherits`, `debug` levels, per-package overrides.
-- Kobzol, June 2025: [Reducing Cargo target directory size with `-Zno-embed-metadata`](https://kobzol.github.io/rust/rustc/2025/06/02/reduce-cargo-target-dir-size-with-z-no-embed-metadata.html) — measured ~2× target size from debuginfo on a comparable workspace.
+- Kobzol, June 2025: [Reducing Cargo target directory size with `-Zno-embed-metadata`](https://kobzol.github.io/rust/rustc/2025/06/02/reduce-cargo-target-dir-size-with-z-no-embed-metadata.html) — measured \~2× target size from debuginfo on a comparable workspace.
 - `endersonmenezes/free-disk-space` action documentation — option semantics for `tool_cache`, `swap_storage`, etc.

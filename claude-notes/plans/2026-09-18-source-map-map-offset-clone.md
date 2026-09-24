@@ -64,7 +64,7 @@ This matches the 2026-09-17 note (26 % of that document's CPU on the
 | 16,000 | 725 KB  | 1.54 s | 1.45 s | 2.3× |
 | 32,000 | 1.46 MB | 4.06 s | 3.88 s | **2.6×** |
 
-Doubling the input should ~double a linear pipeline; the ratio climbing past
+Doubling the input should \~double a linear pipeline; the ratio climbing past
 2 is the n² term (items × bytes) overtaking the linear part. Fixture
 generator and timings are in the session scratchpad; the generator is
 three lines of Python and is reproduced in "Verification" below.
@@ -107,7 +107,7 @@ O(file) cost per call.
 
 ### Who touches the relevant surface
 
-`quarto-source-map`'s public types involved: `SourceContext::get_file`,
+`quarto-source-map`\'s public types involved: `SourceContext::get_file`,
 `SourceFile { pub path, pub content: Option<String>, pub file_info, pub metadata }`,
 `FileInformation::offset_to_location(&self, usize, &str)`,
 `SourceInfo::map_offset / map_range`.
@@ -147,7 +147,7 @@ semantic change with zero API impact, and it ships as `quarto-source-map`
 q2 lockfile unifies `quarto-error-reporting`, `quarto-yaml`, and the
 workspace onto one version).
 
-**B is optional.** I'd hold it unless we want `map_offset`'s content
+**B is optional.** I'd hold it unless we want `map_offset`\'s content
 requirement gone on principle. If we do want it, do it in the same 0.1.4
 release (still non-breaking), and have `process_list` use it — but that is
 API design, not a perf need, so it should be a deliberate choice.

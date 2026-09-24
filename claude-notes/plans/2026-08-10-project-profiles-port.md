@@ -102,7 +102,7 @@ colons are NOT separators).
 
 Everything lands in `ProjectContext::parse_config`
 (`crates/quarto-core/src/project/mod.rs:1321`), between
-`yaml_to_config_value` (~line 1340) and `resolve_project_type`:
+`yaml_to_config_value` (\~line 1340) and `resolve_project_type`:
 
 1. Parse base `_quarto.yml` → `ConfigValue` (existing).
 2. Extract + strip `profile:` → typed `ProjectProfileConfig
@@ -115,7 +115,7 @@ Everything lands in `ProjectContext::parse_config`
    once PR #486's parser is on main).
 5. Read each active profile's `_quarto-<p>.yml`/`.yaml` →
    `ConfigValue` (strip+warn `profile:` keys).
-6. Merge with `quarto-config`'s `MergedConfig`: layers lowest-first =
+6. Merge with `quarto-config`\'s `MergedConfig`: layers lowest-first =
    `[base, profiles in reverse activation order, local]`;
    `materialize()` result becomes the `metadata` that steps 5–7 of
    `parse_config` already consume. **`MetadataMergeStage` needs zero
@@ -135,7 +135,7 @@ files, span integrity depends on registering those files everywhere
 - New `ProjectContext::discover_with_profile(path, runtime,
   Option<&[String]>)` (name TBD) carries an explicit CLI selection;
   `discover` delegates with `None`. CLI passes `--profile` values;
-  `Some` replaces the env var entirely (Q1 semantics). All ~15
+  `Some` replaces the env var entirely (Q1 semantics). All \~15
   existing `discover` call sites stay source-compatible.
 - Resolved state stored on `ProjectConfig`:
   `active_config_profiles: Vec<String>` (normalized, activation
@@ -176,7 +176,7 @@ QUARTO_PROFILE >}}` resolves.
 - Extend `bind_config_source` candidate lists: the convention is
   `config_path` + `extension_manifest_paths`
   (`commands/render.rs:752-757`); add `profile_config_paths`.
-- Extend `MetadataMergeStage`'s `register` closure
+- Extend `MetadataMergeStage`\'s `register` closure
   (`metadata_merge.rs:298-328`) so profile-file FileIds referenced by
   merged-config SourceInfos resolve in both document source contexts.
 - Profile resolution diagnostics go to

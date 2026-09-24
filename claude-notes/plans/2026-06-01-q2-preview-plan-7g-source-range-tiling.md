@@ -174,7 +174,7 @@ Two histories, one symptom:
   2025-10-30/31 inline-parser rewrite routed code spans through the
   whitespace-absorbing path. Was correct, broke.
 - **Attribute keys / citations are long-standing** (≥ 2025-08-06): never tight,
-  because the substring-invariant contract didn't exist until ~2025-10-26.
+  because the substring-invariant contract didn't exist until \~2025-10-26.
 
 The fix is **handler-enforced** (decision confirmed): the AST layer computes
 tight ranges. `range_to_source_info_with_context(range, ctx)` already exists to
@@ -215,7 +215,7 @@ earlier draft lumped both as "blessed same-preimage groups," which conflated an
 *intra-node* definition with an *inter-node* exception:
 
 1. **(Intra-node — NOT a sibling-disjointness exception) the `Concat` hull.** A
-   `Concat`'s *pieces* tile internally and the node presents as **one unit** to
+   `Concat`\'s *pieces* tile internally and the node presents as **one unit** to
    its siblings — exactly one claim, never two. A *contiguous* `Concat` presents
    its hull; a *non-contiguous* one makes no contiguous claim at all
    (`preimage_in` → `None`; see the semantic-ownership rule below for which of

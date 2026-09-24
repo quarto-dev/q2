@@ -130,14 +130,14 @@ Recommended (a) on minimum-scope grounds. Manifest migration is most valuable wh
 Slide leaves currently can't edit content. The framework's `NodeArgs<T>` type includes `setLocalAst`; q2-preview's leaves use it for live edits.
 
 - **(a) Read-only — pass `setLocalAst: () => {}`** *(Recommended for v1)*. Each q2-slides leaf accepts the framework's `NodeArgs` shape but doesn't wire writes back. Mirrors the slide renderer's current "read-only preview" semantics.
-- **(b) Wire `setLocalAst` per-leaf for parity with q2-preview.** Each leaf implements the spread-and-replace pattern (e.g. `Header` rewrites `node.c[2]` when its inlines change). Rote work: ~22 leaves × ~5 LOC of write-back per leaf. Enables future "edit slide titles in-place" without a structural follow-up.
+- **(b) Wire `setLocalAst` per-leaf for parity with q2-preview.** Each leaf implements the spread-and-replace pattern (e.g. `Header` rewrites `node.c[2]` when its inlines change). Rote work: \~22 leaves × \~5 LOC of write-back per leaf. Enables future "edit slide titles in-place" without a structural follow-up.
 
-Recommended (a). Slide editing is a feature, not a refactor concern. (b)'s plumbing inflates the plan ~110 LOC for a feature that has no consumer today; landing it as part of the slide-editing feature plan is cleaner.
+Recommended (a). Slide editing is a feature, not a refactor concern. (b)\'s plumbing inflates the plan \~110 LOC for a feature that has no consumer today; landing it as part of the slide-editing feature plan is cleaner.
 
 ### §6. Migration strategy — phased shim like 2pre, or single-shot?
 
 - **(a) 2pre-style shim** *(Recommended)*. Phase 1 builds `q2-slides/` additively while `ReactAstSlideRenderer.tsx` becomes a re-export barrel exposing `parseSlides`, `renderBlock`, `Slide`, `SlideAst` under their old names. Phase 2 migrates each consumer (ReactRenderer, RevealjsReactAstSlideRenderer first since it's adjacent, then useCursorToSlide and useSlideThumbnails) one commit at a time. Phase 3 deletes the shim. Tree green after every commit.
-- **(b) Single big-bang.** Create `q2-slides/`, retarget all four consumers in one commit, delete the old files. Faster (~5 commits vs ~12), harder to revert.
+- **(b) Single big-bang.** Create `q2-slides/`, retarget all four consumers in one commit, delete the old files. Faster (\~5 commits vs \~12), harder to revert.
 
 Recommended (a). 2pre's pattern worked; reusing it costs little and gives bisection / partial-revert affordance for a 1140-LOC migration touching four external consumers.
 
@@ -153,7 +153,7 @@ Recommended (a). 2pre's pattern worked; reusing it costs little and gives bisect
 ### Phase 10 — Build q2-slides directory behind a shim
 
 - [ ] **10.1** Create `q2-slides/` directory. Add `q2-slides/index.ts` as the barrel that re-exports public symbols (`SlideAst`, `RevealjsAst`, `parseSlides`, `Slide` type, `q2SlidesRegistry`, `revealjsRegistry`, `SlideContext`).
-- [ ] **10.2** Create `q2-slides/styles.ts`. Pull the inline-style constants out of `renderBlock`'s switch arms: `paraStyle` (margin/lineHeight), `headerStyles` (per-level fontSize), `codeBlockStyle`, `bulletListStyle`, etc. ~50 LOC of style constants moved verbatim from the switch.
+- [ ] **10.2** Create `q2-slides/styles.ts`. Pull the inline-style constants out of `renderBlock`'s switch arms: `paraStyle` (margin/lineHeight), `headerStyles` (per-level fontSize), `codeBlockStyle`, `bulletListStyle`, etc. \~50 LOC of style constants moved verbatim from the switch.
 - [ ] **10.3** Create `q2-slides/attributesToProps.ts`. Move `attributesToProps` (lines 441-510) and `parseStyleString` (lines 485-510). Drop the leading underscore prefix on locals where present. Keep the function signatures — leaves consume them as before.
 - [ ] **10.4** Create `q2-slides/parseSlides.ts`. Move `parseSlides`, `extractSections`, `splitByHeaders`, `flattenBlocks` (lines 203-345). Drop the local `extractMetaString` definition (lines 350-371) — replaced by the framework helper post-2D.
 - [ ] **10.5** Create `q2-slides/AspectRatioScaler.tsx`. Move from top-level `components/render/AspectRatioScaler.tsx`. Files are character-identical; only the path changes.

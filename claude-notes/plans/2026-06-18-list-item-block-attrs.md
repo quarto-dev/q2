@@ -168,7 +168,7 @@ project fears).
 - [x] React render path covered by vitest **integration** tests driving the real
       `Ast`/registry component tree, both the registry (non-incremental) and the
       `mountInDeck` incremental paths.
-- [~] **Live browser** `q2 preview` (WASM-served) revealjs session: NOT yet run.
+- [\~] **Live browser** `q2 preview` (WASM-served) revealjs session: NOT yet run.
       The JSON contract (Rust tests) + React reads (vitest) cover the chain
       piecewise; a live check is the final seal — see status note.
 - [x] Full `cargo xtask verify` — **all 14 steps passed (exit 0):** lints+clippy

@@ -98,7 +98,7 @@ carrying a `Marker`)? Answer: **no — hand-roll.**
 **dotenvy** (inspected from git `allan2/dotenvy`, scratchpad clone; released
 0.15.7 is 2023-03-22, git main is an unreleased 0.16 rework):
 
-- The parser (`dotenvy/src/parse.rs`, ~620 lines) is an internal
+- The parser (`dotenvy/src/parse.rs`, \~620 lines) is an internal
   **line-oriented** recursive-descent parser: `parse_line(&str, …) ->
   Option<(String, String)>`. Not event-based; there is no callback/visitor
   surface to intercept. The public API is an iterator of `(String, String)`
@@ -234,7 +234,7 @@ Q1 accepts them).
   spawn-tested (no R/jupyter in CI; replay bypasses spawning).
 - [x] Injection at all sites, real-env-wins preserved by pre-filtering with
   `env_for_subprocess` (children inherit the real env; we only add keys it
-  lacks): knitr `CallROptions::project_env` → `call_r`'s `Command::envs`;
+  lacks): knitr `CallROptions::project_env` → `call_r`\'s `Command::envs`;
   jupyter `JupyterDaemon::get_or_start_session(..., extra_env)` →
   `start_kernel` spawn (spawn-time input; session key unchanged — a reused
   session keeps its birth env, fine while a process serves one project);

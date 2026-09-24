@@ -280,7 +280,7 @@ serialized QMD — so the serializer must construct the provenance.
       pandoc: &Pandoc,
   ) -> Result<(Vec<u8>, SourceInfo), Vec<DiagnosticMessage>>
   ```
-  The existing `write(&Pandoc, &mut impl Write)` is unchanged. All ~19
+  The existing `write(&Pandoc, &mut impl Write)` is unchanged. All \~19
   other callsites are unaffected.
 
   The new function owns a `Vec<u8>` internally so it can read `buf.len()`
@@ -417,7 +417,7 @@ dependent integration tests are deferred to Phase 0A's commit.
   `Arc::new(doc_ast.source_context.clone())`. This is a one-time clone per
   pipeline run, not a hot path.
 
-  No changes to `DocumentAst`'s field types. No migration of downstream
+  No changes to `DocumentAst`\'s field types. No migration of downstream
   consumers.
 
   For TsEngine (subprocess engines), `TsEngine::execute()` extracts the
@@ -558,7 +558,7 @@ to "origin unknown" until that bug is fixed.
 
 1. **`ast_context.source_context`** — created by pampa's reader. Contains
    `FileInformation` (line break indices) that `map_offset()` needs for
-   byte-offset → line/column conversion. This is what AST nodes' `FileId`s
+   byte-offset → line/column conversion. This is what AST nodes\' `FileId`s
    resolve against.
 
 2. **`source_context` (top-level field)** — created by `ParseDocumentStage`.

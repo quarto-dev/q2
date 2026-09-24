@@ -341,7 +341,7 @@ must be pinned:
   `crates/quarto-source-map/src/source_info.rs:715-770` exercise
   `By::filter("foo.lua", 42)` extensively. They migrate to
   `By::filter()` + a Dispatch anchor; the path/line assertions move
-  to the anchor's `source_info`. Mechanical but ~10 test changes.
+  to the anchor's `source_info`. Mechanical but \~10 test changes.
 
 - **Plan 6's Lua post-walk shape (`enrich_or_create`).** Plan 6
   Phase 6's post-walk helper (per the diff in Plan 6 §"The post-walk
@@ -509,7 +509,7 @@ must be pinned:
   pattern (likely `Arc<Mutex<…>>` or `&mut` through the pipeline)
   must accommodate Lua-file additions mid-pipeline. Verify.
 
-- **Migration tests that touch `By::filter("foo.lua", 42)`.** ~10
+- **Migration tests that touch `By::filter("foo.lua", 42)`.** \~10
   unit tests in `source_info.rs` migrate mechanically; if any are
   missed during the signature change, the workspace fails to
   compile. Mitigation: the compiler is the safety net here — `cargo

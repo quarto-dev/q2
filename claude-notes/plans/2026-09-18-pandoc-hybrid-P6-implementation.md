@@ -75,7 +75,7 @@ discipline.
 
 | Anchor (identifier) | File | Line today | P6's citation | Verdict |
 |---|---|---|---|---|
-| `crossref.categories.all` literal | `mainstateinit.lua` | `categories` 32, `all` 33, closes ~118 | `32-119` | **OK** |
+| `crossref.categories.all` literal | `mainstateinit.lua` | `categories` 32, `all` 33, closes \~118 | `32-119` | **OK** |
 | `setup_crossref_category_indices()` / `add_crossref_category()` | `mainstateinit.lua` | 124 / 133 | (not cited) | added here |
 | `theorem_types` table (`alg` at 48-52) | `customnodes/theorem.lua` | 7-53 | `7-53` | **exact** |
 | `initialize_custom_crossref_categories(meta)` | `crossref/custom.lua` | 6; `add_crossref_category(obj_entry)` at 67; file is **157** lines | `6-158` | **drift (1 line over EOF)** |
@@ -102,7 +102,7 @@ Rust side (q2 proper, this worktree):
 | `pub fn read(meta, registry)` — "we map this **verbatim** to the Q1 schema" | `…/crossref/metadata.rs` | doc 14-16, fn 96 | `metadata.rs::read()` | **exact** |
 | `entries.retain(\|e\| e.key != "format")` — the only meta key filtered | `…/stage/stages/metadata_merge.rs` | **460** | `459-460` | **exact** |
 | `has_crossref_plain_data` (the `identifier`+`ref_type`+`kind` triple) | `…/transforms/crossref_index.rs` | 318-333 | by name | **exact** |
-| `index_custom_target` — per-ref-type counter, writes `plain_data.order = {section, order}` | `…/transforms/crossref_index.rs` | 250-311 (order write ~285-296) | by name | **exact** |
+| `index_custom_target` — per-ref-type counter, writes `plain_data.order = {section, order}` | `…/transforms/crossref_index.rs` | 250-311 (order write \~285-296) | by name | **exact** |
 | `parent: None, // subfloats deferred` / `in_appendix: false, // deferred` | `…/transforms/crossref_index.rs` | 304 / 307 | `in_appendix` "deferred" | **exact** — see Findings #2 |
 | `test_callout_with_crossref_id_gets_plain_data_triple` | `…/transforms/callout.rs` | 989 | by name | **exact** |
 | Callout's `plain_data` triple write | `…/transforms/callout.rs` | 277-300 (`ref_type` at 293) | `callout.rs` construction step | **exact** |
@@ -179,7 +179,7 @@ Things that do *not* discriminate, checked and rejected:
 - **`chapters`-scoped numbering / appendix** — Q2 hardcodes `in_appendix: false, // deferred`
   (`crossref_index.rs:307`) and never produces a chapter-scoped order, exactly as P6 Finding 5
   concluded. No live input.
-- **A `Proof`** — Q1's `crossref_theorems` does assign `proof.order`, but `proof.lua`'s renderer
+- **A `Proof`** — Q1's `crossref_theorems` does assign `proof.order`, but `proof.lua`\'s renderer
   never reads it (P3's audit, independently confirmed), so both states render identically.
 - **A duplicate id** — Q2 *skips* numbering the duplicate (`index_custom_target` returns before
   incrementing, `crossref_index.rs:262-271`) where Q1 would number it, so this genuinely
@@ -187,13 +187,13 @@ Things that do *not* discriminate, checked and rejected:
   asserting a diagnostic path as its numbering discriminator. Rejected as too indirect; recorded
   so it is not rediscovered.
 
-### D2 — the second, order-free discriminator: `sections.lua`'s collateral suppression
+### D2 — the second, order-free discriminator: `sections.lua`\'s collateral suppression
 
 Design doc §11/§12: under `crossref-numbering: external` the whole `quarto_crossref_filters`
 group is skipped, and `sections()` is inside it — so `number-sections: true` silently loses
 section numbers. **That loss is the cleanest available proof that the assign-group did not run**,
 because it involves **no order injection at all**: Q2 injects nothing for headers
-(`crossref_index.rs:212-214`'s `visit_header` only advances the counter stack; it never registers
+(`crossref_index.rs:212-214`\'s `visit_header` only advances the counter stack; it never registers
 the header as a target), so the surface changes on the suppression flag *alone*. Used by **T4.2**
 as a **labeled accepted-divergence golden** — the same pattern P7 already uses for mermaid. This
 does not fix, reopen, or relitigate §11; it captures the frozen loss as a reviewable artifact and
@@ -208,7 +208,7 @@ fallback does not fire for an unrelated reason. The guard's corrected predicate 
 strict superset (`refs.lua:198-212` adds every `theorem_types` key plus `"eq"` and `"sec"`).
 Required fixture properties, all three:
 
-1. **`ref_type` must be `nte`/`wrn`/`cau`/`tip`/`imp`** — one of `crossref.categories.all`'s
+1. **`ref_type` must be `nte`/`wrn`/`cau`/`tip`/`imp`** — one of `crossref.categories.all`\'s
    `kind = "Block"` entries, present in `by_ref_type`. `#nte-setup` is the canonical choice.
 2. **A `#thm-…` id on a callout is the trap, not the fixture.** Q2's `classify_cite_id`
    (`registry.rs:178`) splits on the first hyphen with no regard for the div's classes, so
@@ -230,7 +230,7 @@ Two P6 assertions are satisfied trivially by a broken render, and each needs a p
 - **Finding 3's deliberately-unnumbered Proof** (T5.4): "the Proof has no number" is satisfied by
   an empty document, a crashed filter chain, or a dropped node. Companion assertion: the proof's
   **body text** and its **`proof_types` label** ("Proof") are present in the output — the label is
-  produced only by `proof.lua`'s own renderer (`add_renderer("Proof", …)`, which P3 confirmed
+  produced only by `proof.lua`\'s own renderer (`add_renderer("Proof", …)`, which P3 confirmed
   never reads `.order`), so its presence proves the Route-R Proof node reached a real Q1 renderer.
 - **Every "prefix absent" row** (T4.2, T2.2): additionally assert the caption/heading **body text**
   is present, so an empty or failed render cannot pass. This is the same guard P3's companion
@@ -250,7 +250,7 @@ profile sets it). This is the hunk the rest of P6 discriminates against.
   Verified 2026-09-18: `grep -rn 'crossref-numbering' crates/` returns **zero hits**, and
   `grep -rn 'PipelineProfile' crates/` returns **zero hits** — both are introduced by predecessor
   plans (P1 Task 1 for the profile enum, P4 Task 4 for the builder).
-- No Lua changes. No vendored-tree changes. P3 already made `main.lua`'s
+- No Lua changes. No vendored-tree changes. P3 already made `main.lua`\'s
   `assignCrossrefNumbers` predicate read this param (P3 Task 2, anchor
   `if enableCrossRef then`, `main.lua:718`/`:719`-after-P4's-splice).
 
@@ -271,7 +271,7 @@ vendored tree**. Named by capability *and* task number because those companions 
 |---|---|---|---|---|---|
 | T1.1 | U | P4 Task 4's real params-blob builder function | build params for `PipelineProfile::Pandoc("docx")` → `assert_eq!(params["crossref-numbering"], "external")` | none — pure function over a profile value + a `Format` | the profile-gated insert added by this task |
 | T1.2 | U | same builder | build params for `HtmlRender` **and** `Preview` → `assert!(!params.contains_key("crossref-numbering"))` | none | the *gate* on that insert (as opposed to the insert) |
-| T1.3 | L | `PandocWriteStage` → P4's codec → a real `pandoc -L main.lua` run; the param is read by the vendored `main.lua`'s `assignCrossrefNumbers` | drive `render_qmd_to_pandoc` (or the `--to docx` CLI path) on a one-figure fixture → decode the `QUARTO_FILTER_PARAMS` the stage actually built → assert the key is present with value `external` | environment only: `QUARTO_SHARE_PATH`, `--data-dir`, the `pandoc` binary. No Lua and no builder is mocked. | the profile-gated insert, **plus** the fact that the builder is wired into the Pandoc stage at all |
+| T1.3 | L | `PandocWriteStage` → P4's codec → a real `pandoc -L main.lua` run; the param is read by the vendored `main.lua`\'s `assignCrossrefNumbers` | drive `render_qmd_to_pandoc` (or the `--to docx` CLI path) on a one-figure fixture → decode the `QUARTO_FILTER_PARAMS` the stage actually built → assert the key is present with value `external` | environment only: `QUARTO_SHARE_PATH`, `--data-dir`, the `pandoc` binary. No Lua and no builder is mocked. | the profile-gated insert, **plus** the fact that the builder is wired into the Pandoc stage at all |
 
 **Revert hunks, stated exactly:**
 

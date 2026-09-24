@@ -104,7 +104,7 @@ revocation store**, both on the credential path: review accordingly.
    - (b) the request passed **full validation including the allowlist
      re-check** (§5);
    - (c) the token is ≥ 1 h old (`now − iat ≥ 1 h`, bounding Set-Cookie
-     churn to ~1/h per session) **or was signed under a non-current `kid`**
+     churn to \~1/h per session) **or was signed under a non-current `kid`**
      (migrates sessions promptly during graceful rotation, §4);
    - (d) re-issue **never advances `auth_time`**.
 

@@ -20,11 +20,11 @@ Quarto project, or connect to one a collaborator shared").
 
 Two code paths already do exactly this, each behind its own gate:
 
-- **Collection/document invites** (bd-fxdcxbpq): `App.tsx` ~L349, an
+- **Collection/document invites** (bd-fxdcxbpq): `App.tsx` \~L349, an
   effect that fires `createProjectSet(DEFAULT_SYNC_SERVER)` on
   `needs-setup` (and `migrateProjects` on `needs-migration`) while an
   invite landing is showing.
-- **Ephemeral `q2 preview` boots** (bd-zf4ryvuq): `App.tsx` ~L451, the
+- **Ephemeral `q2 preview` boots** (bd-zf4ryvuq): `App.tsx` \~L451, the
   identical effect gated on `ephemeralHub`. Its plan
   (`2026-08-07-preview-editor-skip-project-setup.md`, decision 2)
   already argued for *silent auto-setup over a bare gate skip* so the
@@ -56,7 +56,7 @@ connect → "No projects yet".
    fires `createProjectSet(DEFAULT_SYNC_SERVER)` exactly once when
    status enters `needs-setup`. No screen. The home renders its
    skeleton during `connecting` (already implemented at
-   `ProjectsHome.tsx` ~L1105) and then the empty state.
+   `ProjectsHome.tsx` \~L1105) and then the empty state.
 2. **Boot-time exception: `#/link-project-set/…`.** If the boot URL is
    an inbound project-set link, the route handler owns setup (as
    today) and the auto-create must not fire — otherwise the linked set
@@ -98,7 +98,7 @@ connect → "No projects yet".
   local development. See Q2.
 - **The e2e build points the default at the local hub.** Set
   `VITE_DEFAULT_SYNC_SERVER=/ws` on the `test:e2e` / `test:e2e:ui`
-  scripts and in `.github/workflows/hub-client-e2e.yml`'s build env
+  scripts and in `.github/workflows/hub-client-e2e.yml`\'s build env
   (next to `VITE_E2E: '1'`). `resolveSyncServerUrl` expands `/ws` to
   the page origin (`ws://localhost:5174/ws`), and `vite preview`
   already proxies `/ws` (with `ws: true`) to the hub that
@@ -113,9 +113,9 @@ connect → "No projects yet".
   classic variant still waits for the "Your Projects" heading and the
   collections variant for the search box.
 - **No new `ProjectsHome` prop surface.** The retry card is a
-  standalone component (`ProjectSetError.tsx`, ~40 lines, reusing the
+  standalone component (`ProjectSetError.tsx`, \~40 lines, reusing the
   `.qh-error` / `.qh-btn` classes so it needs little or no new CSS);
-  it does not route through `ProjectsHome`'s `error`/`onRetry`, which
+  it does not route through `ProjectsHome`\'s `error`/`onRetry`, which
   are about *project* connection failures and assume a connected set.
 
 ## Resolved questions (Carlos, 2026-09-15)

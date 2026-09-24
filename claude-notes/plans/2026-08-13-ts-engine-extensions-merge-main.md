@@ -528,7 +528,7 @@ Keep both sides at each hunk.
 
 ## A8. Compile-landmine sweep
 
-Merge-tree flags only **textual** conflicts. The branch adds ~100k lines calling
+Merge-tree flags only **textual** conflicts. The branch adds \~100k lines calling
 `quarto-core` APIs that main changed underneath, so expect clean-merged-but-broken
 call sites.
 

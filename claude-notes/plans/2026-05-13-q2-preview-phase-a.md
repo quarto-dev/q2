@@ -281,14 +281,14 @@ the inspection.
 the real binary via Chrome DevTools — `# Hello, q2 preview!` +
 paragraph content render inside `<Q2PreviewIframe>` with the
 compiled Bootstrap theme applied; on-disk edits propagate to the
-iframe within ~2 s.
+iframe within \~2 s.
 
 The original A.5 work expanded once the binary was driven for the
 first time. Documented here for posterity (these surfaced gaps the
 plan didn't anticipate):
 
 - **A.5.4b — doc-id prefix.** `/health` returns the bare samod doc
-  id (e.g. `4ByAxLmG…`); `@quarto/preview-runtime`'s `connect()`
+  id (e.g. `4ByAxLmG…`); `@quarto/preview-runtime`\'s `connect()`
   expects automerge-repo's `automerge:<id>` form. PreviewApp's
   `fetchIndexDocId` now normalizes. Mirrors how hub-client's
   `App.tsx` normalizes `shareRoute.indexDocId` (App.tsx:287-290).
@@ -312,7 +312,7 @@ plan didn't anticipate):
 
 - **A.5.4d — cold-start peer race + multi-entry Vite build.**
   Two bugs uncovered together:
-  1. `quarto-sync-client.connect()`'s 1 ms `waitForPeer` is too
+  1. `quarto-sync-client.connect()`\'s 1 ms `waitForPeer` is too
      aggressive when there is no IndexedDB cache to fall back to.
      `findDoc()` then fired `handle.request()` before the samod
      handshake completed, the synchronizer saw `#peers` empty,
@@ -323,7 +323,7 @@ plan didn't anticipate):
      renderer host. The SPA's fallback was serving `index.html`
      for that path → recursive SPA load. Added a separate Vite
      rollup input + the matching `q2-preview.html` + entry stub,
-     mirroring `hub-client/vite.config.ts`'s pattern.
+     mirroring `hub-client/vite.config.ts`\'s pattern.
 
 - **A.5.4e — theme styling.** `Q2PreviewIframe` already owns the
   blob-URL + `UPDATE_THEME` plumbing for compiled theme CSS, but

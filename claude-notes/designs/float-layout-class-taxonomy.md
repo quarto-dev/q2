@@ -137,7 +137,7 @@ value rather than re-derive it).
 
 Both consumers implement the same small synthesis: the pampa HTML writer
 (`writers/html.rs` Figure arm) and the preview React renderer
-(`preview-renderer/src/q2-preview/blocks/Figure.tsx`). The synthesis is ~30
+(`preview-renderer/src/q2-preview/blocks/Figure.tsx`). The synthesis is \~30
 lines each and locked by parity tests (writer snapshot ↔ React render on the
 same AST).
 

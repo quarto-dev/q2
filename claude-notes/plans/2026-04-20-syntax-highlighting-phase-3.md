@@ -127,10 +127,10 @@ Reverted in `35eb3828`. A comment in `wasmRenderer.ts` (`5b79af69`) warns future
 
 ## Open follow-up: a safer warm path (deferred)
 
-We still pay a one-time ~500 ms SASS compile on the first render after a deploy that touches `CSS_BUILD_ID`. That's acceptable for interactive use, but if future telemetry shows it as a real pain point, the right shape for a warm hook is:
+We still pay a one-time \~500 ms SASS compile on the first render after a deploy that touches `CSS_BUILD_ID`. That's acceptable for interactive use, but if future telemetry shows it as a real pain point, the right shape for a warm hook is:
 
 1. **Wait until Monaco (and other critical-path JS chunks) are fully loaded.** The warm must not compete with dynamic imports on the critical path.
-2. **Trigger from an app-level idle signal, not from `initWasm()`.** Candidates: a React effect that fires once the first project's file list has mounted and the user has a file choice to make; or `requestIdleCallback` (with `setTimeout` fallback for Safari) with a minimum delay (~3 s) to let the critical path finish.
+2. **Trigger from an app-level idle signal, not from `initWasm()`.** Candidates: a React effect that fires once the first project's file list has mounted and the user has a file choice to make; or `requestIdleCallback` (with `setTimeout` fallback for Safari) with a minimum delay (\~3 s) to let the critical path finish.
 3. **Treat dart-sass import-triggering as a scheduling concern, not a free call.** Anything that indirectly causes `import("sass")` is potentially the same class of bug. The comment in `wasmRenderer.ts` (`5b79af69`) documents this.
 
 Track as a separate beads issue if the compile cost becomes visible; otherwise leave alone.

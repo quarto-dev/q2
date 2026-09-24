@@ -45,7 +45,7 @@ before any fix. Candidate suspects (check in order): sidecar write vs sync deliv
 sidecar's rel_path key, WASM replay rejecting on canonical `input_qmd` mismatch (staleness),
 `contentTick` effect not re-firing.
 
-## Bug C candidate — wire-frame corruption on the engine-host stdout (evidence 2026-07-02 ~17:11-17:14, user's live preview; RECORDED, NOT DIAGNOSED)
+## Bug C candidate — wire-frame corruption on the engine-host stdout (evidence 2026-07-02 \~17:11-17:14, user's live preview; RECORDED, NOT DIAGNOSED)
 
 Two `ERROR quarto_core::engine::ts_process: engine-host protocol error: non-JSON line on
 stdout` events from the same session:
@@ -120,7 +120,7 @@ All three reproduced deterministically:
   WORKS end to end — `onCapturesChange` fired (keys `["index.qmd"]`), activeFile key
   matches, `getBinaryDocById` returned the capture bytes (567 B), render effect re-fired
   (renderTicks=1) — yet the pane stayed inert. The break is INSIDE WASM
-  `render_page_for_preview`'s ReplayEngine splice; PRIMARY candidate: the canonical
+  `render_page_for_preview`\'s ReplayEngine splice; PRIMARY candidate: the canonical
   `input_qmd` staleness rejection (the "accepted-untested" item — P0 now implicates it;
   P2 adds its seam on confirmation). RULED OUT: sidecar-not-delivered, key mismatch,
   getBinaryDocById failure, contentTick not re-firing.
@@ -139,7 +139,7 @@ All three reproduced deterministically:
 - **PC2/PC4 decision rule ratified** (amended after P0 review): the rule applies to the
   **abandoned-worker** scenario (client vanished mid-run, worker stuck busy — the user's
   bug). P1 first confirms whether the QNR socket `close` command accepts a force flag
-  (julia-engine.ts CLI already calls `closeWorker(file, force)` ~:1002-1003). If YES →
+  (julia-engine.ts CLI already calls `closeWorker(file, force)` \~:1002-1003). If YES →
   recovery: pre-run close falls back to forced close on busy; frozen PC4 assertion = the
   fresh `record_capture` SUCCEEDS. If NO → actionable error naming the stale-server/
   transport-file remedy; frozen PC4 assertion = error contains the frozen remedy substring.

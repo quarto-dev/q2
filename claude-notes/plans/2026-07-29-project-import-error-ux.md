@@ -131,7 +131,7 @@ the suspected trigger, but the immediate goal is twofold:
 - [x] CI green: TS Test Suite (run 30569132769) and Test Suite
       (run 30569134654) both pass on PR head 65f52199 — run via
       `workflow_dispatch` because GitHub's webhook event delivery
-      for the repo stalled ~17:57Z on 2026-07-30 (PR open/reopen/
+      for the repo stalled \~17:57Z on 2026-07-30 (PR open/reopen/
       close/synchronize all unprocessed; status page claimed
       operational). The PR checks box shows only Snyk until the
       backlog clears; empty commit a6340044 pushed to fire
@@ -174,7 +174,7 @@ own rejection (`node_modules/@automerge/automerge-repo/dist/Repo.js:545`,
    to "reconnect and re-authenticate when the frontend detects token
    expiry" — the join screen has no such detection.
 3. **Slow/cold websocket at click time (transient race).** Same 1 s
-   forceReady mechanism: any handshake slower than ~1 s produces the
+   forceReady mechanism: any handshake slower than \~1 s produces the
    error even though the connection succeeds moments later. Matches the
    observed flakiness: the user's click on `Join Personal` failed;
    a retry seconds later (same window, same doc) succeeded.

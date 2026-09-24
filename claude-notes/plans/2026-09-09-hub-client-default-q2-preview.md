@@ -371,7 +371,7 @@ change) at each phase boundary; commit at each clean boundary.
       comments: rewrite "default html preview" wording to "`q2-html-render`
       / non-html fallback".
 - [x] Vitest tier green under the pinned Node 24 (`fnm exec --using=24`; Node 26
-      makes ~23 localStorage tests fail spuriously): unit 1102, integration 128,
+      makes \~23 localStorage tests fail spuriously): unit 1102, integration 128,
       WASM 140; typecheck clean; production build: see Phase 7 log.
 
 ### Phase 4 — e2e suite

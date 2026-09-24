@@ -36,7 +36,7 @@ So: **keep main's attribution wiring during this merge**. It's a no-op today and
 
 ## Conflict-by-conflict resolution
 
-### Conflict 1 (variable declarations, lines ~116–157)
+### Conflict 1 (variable declarations, lines \~116–157)
 
 The two sides declare independent things at the same spot. Both must live:
 
@@ -81,7 +81,7 @@ The two sides declare independent things at the same spot. Both must live:
     const attr = useAttributionHover();
 ```
 
-### Conflict 2 (non-minimal JSX top, lines ~200–229)
+### Conflict 2 (non-minimal JSX top, lines \~200–229)
 
 Structural overlap on the `<div id="quarto-content">` element. Both sides want to add things *to and around* it, in compatible-but-conflicting ways.
 
@@ -121,7 +121,7 @@ The two are orthogonal. Combine:
 
 **Why `{...attr.hostProps}` goes on `<div id="quarto-content">` and not on `<main>`:** that's where main put it, and it's the right host — `attr.hostProps` carries an `onMouseOver` delegation that should catch hover events across the whole document body, not just the `<main>` interior (which would miss hovers into the chrome). `attr.hostProps` is empty in inert form, so this spread is a no-op today; it lights up when attribution is on.
 
-### Conflict 3 (non-minimal JSX bottom, lines ~237–251)
+### Conflict 3 (non-minimal JSX bottom, lines \~237–251)
 
 Same shape as Conflict 2 — orthogonal additions trying to occupy the closing region.
 
@@ -152,7 +152,7 @@ Combine:
 
 ## Minimal-mode branch (already auto-merged — no conflict here)
 
-Worth noting that the minimal branch (lines ~165–198) was auto-merged correctly and demonstrates the design clearly: it conditionally introduces a host `<div>` *only when `attr.enabled`*, otherwise stays on the Fragment:
+Worth noting that the minimal branch (lines \~165–198) was auto-merged correctly and demonstrates the design clearly: it conditionally introduces a host `<div>` *only when `attr.enabled`*, otherwise stays on the Fragment:
 
 ```tsx
         if (attr.enabled) {

@@ -870,7 +870,7 @@ reasons (see Phase 2 Decision 6).
 ### `SidebarEntry::Link` sheds its `active` field
 - [ ] Remove the field; read `item.active` instead.
 - [ ] Update sidebar unit tests and integration tests to read
-      `item.active` (~7 tests in Phase 2 touched this).
+      `item.active` (\~7 tests in Phase 2 touched this).
 - [ ] Re-run Phase 2 sidebar tests; confirm no behavior change.
 
 ### Extract shared helpers
@@ -921,7 +921,7 @@ reasons (see Phase 2 Decision 6).
       diagnostics.
 - [x] `brand_title_fallback(meta)` extracted; returns
       `website.title ?? meta.title` (the `navbar.title` level is
-      already consumed by `navbar_to_html`'s own fallback handling
+      already consumed by `navbar_to_html`\'s own fallback handling
       since it passes the fallback only when the navbar title is
       `Default`).
 - [x] Tests 28–36 in navbar_render.rs. 14 navbar_render tests,

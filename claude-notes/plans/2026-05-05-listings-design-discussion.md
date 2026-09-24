@@ -902,7 +902,7 @@ markdown features work inside listing items.
 
 ### Why this is strictly better than EJS
 
-- **No JS runtime.** No QuickJS, no rquickjs, no ~1–2 MB binary
+- **No JS runtime.** No QuickJS, no rquickjs, no \~1–2 MB binary
   cost. Same renderer drives native and WASM.
 - **Hub-client safety.** A doctemplate template cannot execute
   arbitrary code; it can only interpolate values, branch on

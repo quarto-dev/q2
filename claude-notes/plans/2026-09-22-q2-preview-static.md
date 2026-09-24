@@ -286,7 +286,7 @@ pub enum ReloadEvent {
 ```
 
 SSE events are named `render-start`, `render-stop`, `reload`, data is JSON.
-The client (`client.js`, ~60 lines, no framework):
+The client (`client.js`, \~60 lines, no framework):
 
 - opens `new EventSource("/__q2-preview/events")`;
 - `render-start`: shows a small fixed-position "Rendering…" badge;
@@ -342,7 +342,7 @@ Rules, in order (each a unit test):
    "resource → affected pages" refinement is a follow-up strand.
 
 **Events are not edits (added after PR #712's first CI round).** The
-watcher reports filesystem *events*; on Linux `notify`'s inotify backend
+watcher reports filesystem *events*; on Linux `notify`\'s inotify backend
 subscribes to `OPEN`, so every file a render reads raises one, and a
 re-render that reads its own input re-triggers itself forever (observed
 as an hour of back-to-back renders on the ubuntu leg after one save;
@@ -575,7 +575,7 @@ Commit at each clean phase boundary per `CLAUDE.md` § Git Workflow.
   `String` with a `color` parameter; keep every `process::exit` in
   `execute`. (Shape as built: `render_once(args, present)` where the
   `present` callback runs once with the finished report, after the
-  pipeline and before post-render scripts, so `execute`'s stderr order
+  pipeline and before post-render scripts, so `execute`\'s stderr order
   is unchanged. `color: false` also disables OSC 8 hyperlinks and
   strips ANSI escapes, because `quarto-error-reporting` 0.2.2 has no
   color switch — upstream follow-up bd-6d9ew2up.)

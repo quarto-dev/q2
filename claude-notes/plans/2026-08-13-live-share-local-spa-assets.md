@@ -213,7 +213,7 @@ Findings beyond the byte list:
   `48a45e97…` (the drift the parent plan's operational note predicts —
   `build:preview-embed` re-ran `build:wasm` after the viewer dist was
   built), so today's editor embed carries its own 41.9 MB wasm copy
-  (post-dedupe embed dir: 124 files / 65,802,474 B vs ~23.9 MB when
+  (post-dedupe embed dir: 124 files / 65,802,474 B vs \~23.9 MB when
   aligned). Affects binary size only, not served bytes; Phase 1 rebuilds
   both dists anyway.
 
@@ -233,7 +233,7 @@ between browser and guest port (one shared downstream bucket — a real
 link is shared across Chromium's parallel connections). Theoretical
 floor at 10 Mbps for 54.67 MB is 43.7 s; the ~4.3 s above floor is RTT
 and queueing. Gate context for Phase 1: ≤ 5 s at 10 Mbps needs ≲ 6 MB
-delivered — brotli on the wasm alone (~3.5–4×) lands ~15 MB total, so
+delivered — brotli on the wasm alone (~3.5–4×) lands \~15 MB total, so
 compression likely closes most but not all of the gap; that is exactly
 the gate measurement Phase 1 re-runs.
 
@@ -337,7 +337,7 @@ Final: `lto = true, opt-level = "s", codegen-units = 1` in
 `crates/wasm-quarto-hub-client/Cargo.toml` + `wasm-opt -Oz` as
 `build:wasm` step 3 (wasm-pack order: bindgen first, then opt on the
 `*_bg.wasm`). Fat-over-thin buys 447 KB (1.6%) for ~15 s more build
-time (~80 s vs ~65 s for the profile rebuild) — worth it at these
+time (~80 s vs \~65 s for the profile rebuild) — worth it at these
 absolute sizes. `wasm-opt` is located by `build-wasm.js` (PATH, then
 the Homebrew binaryen prefix) and checked by `cargo dev-setup`.
 
@@ -359,7 +359,7 @@ Viewer dist: 35 files, 36,333,609 → 9,561,959 B (3.80×); editor dist:
 (−15.0 MB on the viewer WASM identity) and the editor-embed dedupe
 firing again (−26.9 MB: viewer/editor WASM builds realigned, sha256
 `f71de404…` both sides — fixing the drift Phase 0 recorded) more than
-pay for it. Total embedded SPA content: 117.7 MB → ~78 MB.
+pay for it. Total embedded SPA content: 117.7 MB → \~78 MB.
 
 **Serving:** `asset_response` now owns every asset-path header:
 Content-Type, the local-prod cache contract (`assets/*` → `public,
@@ -385,11 +385,11 @@ hit (0 wire bytes); the duplicate `meta-*.js` still re-downloaded — it
 races the app's first fetch early in boot, before the first response
 commits to the disk cache. The boot driver's byte totals count both
 duplicates (it reads `content-length`, which cache hits also carry);
-true wire is ~1.1 MB lower than reported on both Phase 1 legs.
+true wire is \~1.1 MB lower than reported on both Phase 1 legs.
 
 **Gate: Phases 2–3 proceed.** 10.0 s at 10 Mbps/100 ms is a 4.8×
 improvement but still 2× over the ≤ 5 s target. The floor at 10 Mbps
-for the remaining ~9.2–10.4 MB is 7.4–8.3 s — no encoding decision
+for the remaining \~9.2–10.4 MB is 7.4–8.3 s — no encoding decision
 closes that; only not sending the bytes (Phase 3's local serving)
 does.
 

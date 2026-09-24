@@ -56,7 +56,7 @@ does not mean "nothing to port beyond a CSS file." See Phase 1 below.
 - [x] Re-read this plan against the epic's actual landed shapes before starting — names, module
       locations, and other details may have shifted during implementation. **Confirmed**: line
       numbers in the Phase 1 bullets below have drifted slightly (render.rs gate is now at
-      ~692-706) but the referenced mechanisms are unchanged.
+      \~692-706) but the referenced mechanisms are unchanged.
 
 ### Phase 1 — Core writer wiring
 - [x] `FormatIdentifier::Epub` **already exists** (`crates/quarto-core/src/format.rs:31`,
@@ -89,7 +89,7 @@ does not mean "nothing to port beyond a CSS file." See Phase 1 below.
       (`default-image-extension: png`, `fig-width`/`fig-height` defaults, and
       **`merge-includes: false`**, needed to keep the two `include-in-header` CSS files below
       from colliding).
-      **Done**: `crates/quarto-core/src/stage/stages/pandoc_write.rs`'s new
+      **Done**: `crates/quarto-core/src/stage/stages/pandoc_write.rs`\'s new
       `epub_extra_args()` adds `--default-image-extension=png` and the two
       `--include-in-header` flags (below) when `ctx.format.identifier == Epub`.
       **Scope note**: `fig-width`/`fig-height` (5/4 in Q1) are `execute:`-block *engine*
@@ -100,7 +100,7 @@ does not mean "nothing to port beyond a CSS file." See Phase 1 below.
       place, so passing two separate flags already produces the "not merged" behavior Q1
       has to opt into.
 - [x] `html-math-method` switch: `webtex` for epub2, `mathml` for epub3 — port directly
-      from `format-epub.ts`'s logic. Math delivery is resolved: the epic's design doc
+      from `format-epub.ts`\'s logic. Math delivery is resolved: the epic's design doc
       (`pandoc-hybrid-architecture.md`, Route-L/R/N table) freezes `Equation` as Route N —
       "a plain filter that RawInline-wraps the existing `Math` inline." The wire cut hands
       Pandoc real unresolved `Math` inlines for the epub leg (as for typst), so
@@ -117,7 +117,7 @@ does not mean "nothing to port beyond a CSS file." See Phase 1 below.
 - [x] Meta-block mapping for EPUB-specific metadata: cover image, identifier, language,
       via Pandoc's `getEPUBMetadata`/`metadataFromMeta` conventions (`EPUB.hs:176,342`).
       **Resolved as a documentation/no-code item, not an implementation gap**: read
-      `EPUB.hs`'s `getEPUBMetadata` directly (`addIdentifier`/`addLanguage`/`addAuthor`/
+      `EPUB.hs`\'s `getEPUBMetadata` directly (`addIdentifier`/`addLanguage`/`addAuthor`/
       `fixDate`, `:176-230`) — Pandoc's own EPUB writer already synthesizes a random-UUID
       `identifier`, a `LANG`-env-derived `language`, and author/date from `docAuthors`/the
       current time when the JSON `meta` block doesn't supply them, and reads them straight
@@ -152,7 +152,7 @@ does not mean "nothing to port beyond a CSS file." See Phase 1 below.
       same reasoning as `include-in-header`). That merge-time pass already normalizes
       matching keys to a document-relative `ConfigValueKind::Path` for *every* format, not
       just epub (`css` was already in the table) — `epub_extra_args()` just reads the
-      now-normalized value with `as_plain_text()` and joins it against `doc.path`'s parent to
+      now-normalized value with `as_plain_text()` and joins it against `doc.path`\'s parent to
       hand pandoc an absolute path, regardless of pandoc's own subprocess cwd. This is the
       same contract docx/pptx image embedding relies on (`claude-notes/designs/path-resolution-model.md`),
       not a parallel one-off — avoids the exact "recurs key by key" bug class that document
@@ -219,7 +219,7 @@ does not mean "nothing to port beyond a CSS file." See Phase 1 below.
         **not a Q2 regression**, and not fixed here: `panel-tabset.lua` is shared with
         revealjs/latex/docx, so patching the branch order is a cross-cutting Lua change with
         its own blast radius, not a call to make unilaterally inside an epub-scoped plan.
-        Practical effect for readers: without JS, `tabbyTabs()`'s markup has no CSS hiding
+        Practical effect for readers: without JS, `tabbyTabs()`\'s markup has no CSS hiding
         inactive panes in an epub (Q2 ships none of Q1's app-level CSS to the epub leg), so
         **all tab content renders simultaneously and statically** — not broken, arguably
         fine for a non-interactive reader, just not what `render_tabset_with_l4_headings`

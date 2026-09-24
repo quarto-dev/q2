@@ -113,7 +113,7 @@ only") is accurate again now that the bypass is gone.
 ### Security posture restored
 
 Without the nonce binding, a captured Google ID token could be replayed to
-the callback for its full (~1 h) validity from a browser that never ran the
+the callback for its full (\~1 h) validity from a browser that never ran the
 pre-flight. The sealed-cookie nonce binding ties the token to *this*
 browser's login attempt.
 

@@ -390,8 +390,8 @@ bite a later reader:
 - The Pinned API block above places `ReactRenderer.tsx` under
   `ts-packages/preview-renderer/`. It is actually
   `hub-client/src/components/render/ReactRenderer.tsx` (its `onPreviewClick`
-  prop is declared ~line 138 and forwarded as `onClick={onPreviewClick}`
-  ~line 337). Prop *names* in that block are correct and frozen; only the
+  prop is declared \~line 138 and forwarded as `onClick={onPreviewClick}`
+  \~line 337). Prop *names* in that block are correct and frozen; only the
   path was wrong.
 - **Phase 4 is investigation-only in this pass.** Its producer-side option is a
   Rust + wire change, which would invalidate Phase 3's explicit "TypeScript-only,
@@ -400,7 +400,7 @@ bite a later reader:
   is blocked; D5's implementation becomes a follow-up.
 
 Out-of-plan defect found and filed separately (**braid bd-s36g9dav**): in this
-worktree `ts-packages/preview-renderer`'s
+worktree `ts-packages/preview-renderer`\'s
 `custom-components.integration.test.tsx > Equation > appends \tag{N}` fails.
 It is not a regression from this branch — root + sandboxed-preview `package.json`
 and the lockfile all pin katex exactly **0.18.1**, under which KaTeX no longer
@@ -431,7 +431,7 @@ stated basis for D4.** The spread *is* unconditional, but its input never exists
 - `dataLocProps` (`framework/sourceLoc.ts`) returns `{}` for any node with no `l`.
 - `crates/pampa/src/transforms/sectionize.rs` builds section Divs with
   `SourceInfo::Generated { by: By::sectionize(), from: smallvec![] }`.
-- `quarto-source-map`'s own docs name **"sectionize wrappers"** as the canonical
+- `quarto-source-map`\'s own docs name **"sectionize wrappers"** as the canonical
   example of pure synthesis with no source-side preimage, and its `map_offset`
   returns `None` for `Generated` unconditionally.
 - so `resolve_location` never emits an `l` for a section, and **no `<section>` in a
@@ -439,7 +439,7 @@ stated basis for D4.** The spread *is* unconditional, but its input never exists
   chain and by dumping a real ancestor chain in the live app
   (`section#callouts[data-loc=null]`).
 
-Consequence: `lineForClickTarget`'s `<section>` null case is **dead code under
+Consequence: `lineForClickTarget`\'s `<section>` null case is **dead code under
 q2-preview today**, and U1d exercises a situation that cannot currently occur. The
 guard is kept as defence-in-depth — one comparison, and correct if a future change
 ever gives sections a resolvable location — but read the D4 rationale as "the
@@ -482,7 +482,7 @@ argument for keeping it.
 then existing passed against a guard that returned `null` for every real click.
 
 **The reveal-then-overwrite race.** `revealEditorLine` did not set `isSyncingRef`, and
-by design it never takes focus — so *both* of `syncPreviewToEditor`'s feedback-loop
+by design it never takes focus — so *both* of `syncPreviewToEditor`\'s feedback-loop
 guards were unarmed after a reveal, and any real preview scroll within 50 ms
 overwrote the correct reveal with a scroll-ratio-derived position. Measured: Monaco
 correctly at 149-189 (containing the clicked line 171) at t=1 ms; a genuine 6 px
@@ -561,7 +561,7 @@ Full writeup: `.superpowers/sdd/2026-08-21-preview-click-to-editor-scroll/task-7
         (Phase 3), and not obviously smaller even as its own project.
       - **(b) client-side.** `files[fileId].name` (the *resolved* path) →
         scan the current file's source text for a `{{< include … >}}` line
-        whose raw path resolves (mirroring `resolve_include_target`'s
+        whose raw path resolves (mirroring `resolve_include_target`\'s
         leading-`/`-is-project-root rule) to the same name. No wire change;
         cost is duplicating that one path-resolution rule in TS.
 - [x] **Decision: route (b).** Reasoning (full version in the report §2):
@@ -569,7 +569,7 @@ Full writeup: `.superpowers/sdd/2026-08-21-preview-click-to-editor-scroll/task-7
       reason; (a) is a schema-level decision with cross-crate blast radius,
       not a small patch, and even fully built still needs the same
       "resolve to the nearest current-file anchor" logic for nested includes
-      that (b) needs anyway. (b)'s heuristic failure modes all degrade to
+      that (b) needs anyway. (b)\'s heuristic failure modes all degrade to
       **inert** — never to a wrong reveal — which is exactly the property
       that made D4's guards acceptable in Phase 2. Stated fallbacks (§1 of
       the report):

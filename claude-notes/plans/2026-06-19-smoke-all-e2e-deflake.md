@@ -60,7 +60,7 @@ Root cause (proven by boot-trace): sync client `connect()` →
 `loadFileDocuments()` loaded ~49 file docs **serially**, and `findDoc()`\'s
 `repo.find()` had **no deadline** → a single slow doc hung ~60s on
 automerge-repo's internal unavailable timeout → blew the 75s render budget →
-Editor/preview never mounted. (The extension fixtures share one ~49-file
+Editor/preview never mounted. (The extension fixtures share one \~49-file
 project because `extensions/_quarto.yml` roots them all there — more docs =
 higher odds of hitting a slow one, which is why they dominate the flaky list.)
 

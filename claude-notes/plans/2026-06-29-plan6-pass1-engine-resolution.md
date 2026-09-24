@@ -235,7 +235,7 @@ Ratified with Gordon 2026-07-02 through 2026-07-05:
 **2026-07-08b rebase onto the feature tip `0e5a13358`.** Feature advanced
 (4b Phase F finalization, a marimo multi-engine seam, preview fix). No design
 effect. Two cited files drifted and were re-checked in place: `resolution.rs`
-(marimo test added to `mod tests` at ~735 — production code, `candidate_engines`,
+(marimo test added to `mod tests` at \~735 — production code, `candidate_engines`,
 `MockEngine` at `613-627`, and all T1–T4 citations unchanged; only the
 test-area field-compare `752-765` shifted `+21` → `774-786`) and `ts_engine.rs`
 (three small `TsEngine` insertions, uniform `+7` on the `claims_language`
@@ -345,7 +345,7 @@ coordination note to 4b" item is already satisfied (note added `71cf07394`;
   (`:766-771`). There is no static surface that eliminates a claims-less
   engine from *language* contention — hence decision 7.
 - **`detect_engines` returns duplicates intact** (`detection.rs:206-227`);
-  only `detect_engine_sequence` dedups. So `resolve_engines_inner`'s
+  only `detect_engine_sequence` dedups. So `resolve_engines_inner`\'s
   `raw_explicit` sees both configs of a cross-layer duplicate, and the
   duplicate-config warning is emittable in the resolver (decision 3).
 - **`engines:` survives into merged metadata.** `resolve_format_config`
@@ -395,7 +395,7 @@ coordination note to 4b" item is already satisfied (note added `71cf07394`;
   project config only (`engine.ts:223`). q2 deliberately reads both from
   merged metadata (decision 3).
 - **Resolved upstream (2026-07-06, `4f55da534` on the epic branch):**
-  `registry.rs`'s `engines_in_order` had its own `BUILTIN_ORDER` with
+  `registry.rs`\'s `engines_in_order` had its own `BUILTIN_ORDER` with
   markdown first, diverging from `resolution.rs:63` while its docstring
   claimed parity. Behaviorally unobservable (markdown claims nothing and
   never co-occurs in a sequence), fixed by sharing the resolver's constant

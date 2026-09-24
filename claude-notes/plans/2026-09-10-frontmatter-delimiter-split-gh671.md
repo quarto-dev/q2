@@ -113,7 +113,7 @@ deliberate canonicalization.
 ## Why the reader re-scans text it already parsed
 
 `minus_metadata` is an **external token** (`grammar.js` externals list, line
-~1121), inherited from upstream tree-sitter-markdown, where `minus_metadata` /
+\~1121), inherited from upstream tree-sitter-markdown, where `minus_metadata` /
 `plus_metadata` are opaque leaves because a Markdown grammar has no business
 parsing YAML. External tokens cannot have children, so the tree hands pampa a
 single `metadata` node covering `---` … `---` with no inner structure. The

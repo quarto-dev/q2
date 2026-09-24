@@ -458,7 +458,7 @@ truth.
   `stderrFilter`; `respectStreams` is the two stream-passthrough ternaries at `:168,183`; `timeout` is
   `Promise.race` + `process.kill()` at `:32,55-59`). **Implement all four, not half:** under B2#3 the
   derived signature carries all six params regardless, so a "present but ignored" knob is a silent
-  no-op trap — and they all live in the *same* ~70-line function, so half-porting saves almost
+  no-op trap — and they all live in the *same* \~70-line function, so half-porting saves almost
   nothing. Do **not** flatten the knobs into `ExecProcessOptions`.
 - [x] **Types (Phase B / B2#3).** No change to the vendored `@quarto/types` `execProcess` — it is
   already Q1-shaped. Under B2#3 the runtime `SystemNamespace` *derives* from `QuartoAPI["system"]`, so
@@ -485,7 +485,7 @@ truth.
 
 Plan 1b's `buildQuartoAPI` assembles the §2aa namespaces and asserts the result with a
 broad **`as unknown as QuartoAPI`** cast (`quarto-engine-host-deno/src/quarto-api.ts:243`)
-because `@quarto/api`'s per-namespace interfaces (`SystemNamespace`, …) and the loosely-typed
+because `@quarto/api`\'s per-namespace interfaces (`SystemNamespace`, …) and the loosely-typed
 stubs **do not structurally conform** to the vendored `QuartoAPI` (`@quarto/types/src/quarto-api.ts`).
 The cast is correct today (the final 1b review verified it hides no mis-wiring) but it **suppresses
 compile-time checking on the whole assembly** — a future mis-wired namespace would not be caught.
@@ -517,7 +517,7 @@ the *remaining* divergences and deletes the cast:
   (it does file IO via `PlatformHost` — a natural Phase-A-style body when a consumer appears). This
   lets the harness drop its local stub.
 - [x] **Make conformance compiler-enforced (the durable fix — Fix B), split by namespace category.**
-  Have `@quarto/api`'s interfaces *derive from* the SDK contract instead of redefining it — but
+  Have `@quarto/api`\'s interfaces *derive from* the SDK contract instead of redefining it — but
   respect the two factory categories `index.ts` defines (a naive "derive everything from
   `QuartoAPI[ns]`" does **not** compile for the mostly-pure namespaces):
   - **Fully-host namespaces** (`console`, `system`) — the factory returns the *whole* namespace, so
@@ -686,7 +686,7 @@ This plan:
   two-tier seams green (fake-host wiring + deno-tier behavior).
 - [x] **B2 (QuartoAPI conformance — retires Plan 1b's cast):** `checkRender`/
   `runExternalPreviewServer` typed to their real returns + throw (no `...args: unknown[]`);
-  `text.postProcessRestorePreservedHtml` exported (real-typed stub); `@quarto/api`'s namespace
+  `text.postProcessRestorePreservedHtml` exported (real-typed stub); `@quarto/api`\'s namespace
   interfaces derive from `QuartoAPI['<ns>']` (conformance compiler-enforced); the harness's
   `as unknown as QuartoAPI` cast + local `postProcessRestorePreservedHtml` stub **deleted**
   (`buildQuartoAPI` typed `: QuartoAPI` with no cast, except the `jupyter` Proxy pending Plan 3);
