@@ -384,6 +384,19 @@ the Presentation skeleton is offered on the CLI as well as the hub.
       to the Quarto-Hub preview, Meeting Notes, Website, Article,
       Presentation; the seeded "Examples / Templates" collection is
       present; no page errors.
+- [x] Submenu placement (Andrew, trying the branch locally, 2026-09-24:
+      "Submenus always seem to be off the edge of the window"). The ＋ New
+      menu is pinned to the header's right edge and `MenuSubmenu` always
+      opened to the right, so every submenu left the viewport.
+      `MenuSubmenu` now measures itself in a layout effect on open and adds
+      `qh-submenu-left` (CSS: `inset-inline-end: calc(100% + 4px)`) when
+      the right side overflows and the left fits; if neither fits it stays
+      right. Test first: `Menu.submenu.integration.test.tsx` mocks
+      `getBoundingClientRect`/`innerWidth` (right when room, flip when
+      overflowing, stay right when neither fits); red 2/3, then green.
+      Local-prod rebuilt; Playwright at 1000px: Templates submenu has the
+      flip class and spans 488..679 of a 1000px window. Commits `e4342b12`
+      (code + test) and `43afbbd0` (changelog).
 
 ## Work items
 
