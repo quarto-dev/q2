@@ -435,7 +435,8 @@ the Presentation skeleton is offered on the CLI as well as the hub.
       submenu keeps it open with the hovered leaf tinted. Pre-existing
       eslint `react-hooks/refs` and `set-state-in-effect` errors in
       `Menu.tsx`/`ProjectsHome.tsx` are on main too and untouched.
-      Commit `d3a87667`.
+      Commit `d3a87667`. Follow-up ask: group labels bold like the
+      leaves (`MenuSubmenu strong`), next commit.
 
 ## Work items
 
