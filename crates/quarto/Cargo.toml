@@ -100,6 +100,11 @@ walkdir.workspace = true
 # feature set as quarto-core's own dev-dependency.
 zip = { version = "6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
+# Sending a console Ctrl-Break to a spawned `q2 preview` in the
+# shutdown e2e test (Windows has no per-process SIGINT).
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_Console", "Win32_System_Threading"] }
+
 [lints]
 workspace = true
 

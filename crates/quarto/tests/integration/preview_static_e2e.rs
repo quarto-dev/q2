@@ -61,7 +61,8 @@ impl Server {
     fn spawn(cwd: &Path, args: &[&str]) -> Server {
         // `-v` so the driver's own log lines (which render ran, why)
         // land in the captured stderr for a failure's diagnosis.
-        let mut child = Command::new(Q2_BIN)
+        let mut command = Command::new(Q2_BIN);
+        command
             .arg("-v")
             .arg("preview")
             .arg("--static")
@@ -69,9 +70,15 @@ impl Server {
             .args(args)
             .current_dir(cwd)
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .expect("spawn q2 preview --static");
+            .stderr(Stdio::piped());
+        // Own process group, so `send_interrupt` can target this child
+        // alone with a console Ctrl-Break.
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(windows_sys::Win32::System::Threading::CREATE_NEW_PROCESS_GROUP);
+        }
+        let mut child = command.spawn().expect("spawn q2 preview --static");
         let stderr = Arc::new(Mutex::new(String::new()));
         {
             let sink = Arc::clone(&stderr);
@@ -584,18 +591,39 @@ fn single_file_outside_a_project_redirects_root_to_the_document() {
     assert!(server.get("/doc.html").text().contains("SINGLE-MARKER"));
 }
 
-/// Ctrl-C (SIGINT) shuts the server down cleanly with a message.
+/// Interrupts the child the way a terminal user would: SIGINT on unix.
 #[cfg(unix)]
-#[test]
-fn sigint_exits_cleanly() {
-    let temp = TempDir::new().unwrap();
-    let dir = minimal_site(&temp);
-    let mut server = Server::spawn(&dir, &[dir.to_str().unwrap()]);
+fn send_interrupt(child: &Child) {
     let status = Command::new("kill")
-        .args(["-INT", &server.child.id().to_string()])
+        .args(["-INT", &child.id().to_string()])
         .status()
         .expect("run kill -INT");
     assert!(status.success());
+}
+
+/// Interrupts the child with a console Ctrl-Break. Ctrl-C can't be
+/// sent to a single process group on Windows, only to the whole
+/// console (which would include the test runner).
+#[cfg(windows)]
+fn send_interrupt(child: &Child) {
+    use windows_sys::Win32::System::Console::{CTRL_BREAK_EVENT, GenerateConsoleCtrlEvent};
+    // SAFETY: plain FFI call; the child was spawned with
+    // CREATE_NEW_PROCESS_GROUP, so its pid is its process-group id.
+    let ok = unsafe { GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, child.id()) };
+    assert!(
+        ok != 0,
+        "GenerateConsoleCtrlEvent failed: {}",
+        std::io::Error::last_os_error()
+    );
+}
+
+/// An interrupt shuts the server down cleanly with a message.
+#[test]
+fn interrupt_exits_cleanly() {
+    let temp = TempDir::new().unwrap();
+    let dir = minimal_site(&temp);
+    let mut server = Server::spawn(&dir, &[dir.to_str().unwrap()]);
+    send_interrupt(&server.child);
     let mut rest = String::new();
     server
         .stdout

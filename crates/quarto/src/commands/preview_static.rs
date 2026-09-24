@@ -235,10 +235,10 @@ fn watch_context(report: &RenderReport) -> WatchContext {
     }
 }
 
-/// Ctrl-C (and SIGTERM on unix). Installed with [`Self::install`]
-/// *before* the port opens, so a signal that arrives the instant a
-/// client can connect is caught rather than killing the process with
-/// the default disposition.
+/// Ctrl-C, plus SIGTERM on unix and Ctrl-Break on Windows. Installed
+/// with [`Self::install`] *before* the port opens, so a signal that
+/// arrives the instant a client can connect is caught rather than
+/// killing the process with the default disposition.
 struct ShutdownSignal {
     #[cfg(unix)]
     interrupt: tokio::signal::unix::Signal,
@@ -246,6 +246,8 @@ struct ShutdownSignal {
     terminate: tokio::signal::unix::Signal,
     #[cfg(windows)]
     ctrl_c: tokio::signal::windows::CtrlC,
+    #[cfg(windows)]
+    ctrl_break: tokio::signal::windows::CtrlBreak,
 }
 
 impl ShutdownSignal {
@@ -262,6 +264,8 @@ impl ShutdownSignal {
         {
             Ok(Self {
                 ctrl_c: tokio::signal::windows::ctrl_c().context("installing Ctrl-C handler")?,
+                ctrl_break: tokio::signal::windows::ctrl_break()
+                    .context("installing Ctrl-Break handler")?,
             })
         }
     }
@@ -276,7 +280,10 @@ impl ShutdownSignal {
         }
         #[cfg(windows)]
         {
-            let _ = self.ctrl_c.recv().await;
+            tokio::select! {
+                _ = self.ctrl_c.recv() => {}
+                _ = self.ctrl_break.recv() => {}
+            }
         }
     }
 }
