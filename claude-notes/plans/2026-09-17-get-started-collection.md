@@ -364,10 +364,26 @@ the Presentation skeleton is offered on the CLI as well as the hub.
       "START FROM"), `ProjectSelector` groups its `<select>` with
       `<optgroup>`, `ProjectChoice.path?` in the two `.d.ts` and
       `wasmRenderer.ts`.
-- [ ] Verify: `npm run build:wasm` + `test:wasm`, `cargo xtask verify`,
-      changelog two-commit, e2e in a fresh browser against local-prod
-      (New menu shows Templates ▸ and Examples ▸; the two "Website"
-      entries live in different submenus; `q2 create --list` grouped).
+- [x] Verify (2026-09-24): `cargo xtask verify` green (14727 Rust tests
+      passed, 200 skipped; hub-client test:ci 106 + 19 + 25 files; all
+      preview/MCP suites). Machine prerequisites found on the way: pandoc
+      3.11 (verify preflight) and a `typst` binary (quarto-core
+      typst_compile tests); both installed via brew.
+      CLI e2e, real `target/debug/q2` from an empty scratch dir, output
+      inspected: `q2 create --list` prints `project (Project)` then a
+      `  Templates` line with `default`, `website`, `blog`,
+      `presentation`, `manuscript (not yet implemented)`, `book (not yet
+      implemented)` indented beneath; `q2 create project presentation deck
+      "Team Update"` writes `_quarto.yml` + `index.qmd` with
+      `title: "Team Update"` and `format: revealjs`; `q2 render deck`
+      succeeds.
+      Hub e2e, local-prod rebuilt from this branch, fresh Playwright
+      profile against http://127.0.0.1:8080, DOM inspected: the ＋ New
+      menu lists exactly `Templates ▸` and `Examples ▸`; Templates opens
+      to Default, Website, Blog, Presentation; Examples opens to Welcome
+      to the Quarto-Hub preview, Meeting Notes, Website, Article,
+      Presentation; the seeded "Examples / Templates" collection is
+      present; no page errors.
 
 ## Work items
 
