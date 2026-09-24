@@ -302,6 +302,8 @@ website:
             - errors/project/Q-5-28.qmd
             - errors/project/Q-5-29.qmd
             - errors/project/Q-5-30.qmd
+            - errors/project/Q-5-31.qmd
+            - errors/project/Q-5-32.qmd
         - section: "include"
           contents:
             - errors/include/Q-17-1.qmd

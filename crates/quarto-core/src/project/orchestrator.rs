@@ -1106,6 +1106,13 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
             &self.project.config.render_patterns,
             &self.project.files,
         ));
+        // Nested projects the render list skipped or reached into
+        // (bd-nested-projects-xyb28wnl). Discovery stored the report
+        // on the config; reporting it here keeps it once per render.
+        initial_diagnostics.extend(crate::project::discovery::nested_project_diagnostics(
+            &self.project.dir,
+            &self.project.config.nested_projects,
+        ));
         // Project-config `css:` entries naming missing files warn once
         // per render here — not once per page in the merge, which is
         // where document-layer `css:` mistakes are diagnosed instead
