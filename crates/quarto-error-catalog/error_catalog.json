@@ -1595,6 +1595,13 @@
     "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-52",
     "since_version": "99.9.9"
   },
+  "Q-2-53": {
+    "subsystem": "markdown",
+    "title": "Fenced div info string starts with `-`",
+    "message_template": "A fenced div's opening line cannot continue with a word that starts with `-`. `::: --` followed by a space or the end of the line opens a block deletion mark; for a class, write `::: {.name}` or a name that starts with a letter, digit or `_`.",
+    "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-53",
+    "since_version": "99.9.9"
+  },
   "Q-5-27": {
     "subsystem": "project",
     "title": "Invalid `diagnostics:` Entry",

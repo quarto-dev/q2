@@ -639,13 +639,42 @@ fn html_writes_bare(text: &str) -> bool {
     is_html_comment(text) || round_trips_bare_html(text)
 }
 
+/// The decorated-syntax marker for an editorial-mark class, as written
+/// after `[` for spans (`[++ …]`) and after `::: ` for divs (`::: ++`).
+/// The reader desugars both forms to these classes.
+fn editorial_marker_for_class(class: &str) -> Option<&'static str> {
+    match class {
+        "quarto-highlight" => Some("!!"),
+        "quarto-insert" => Some("++"),
+        "quarto-delete" => Some("--"),
+        "quarto-edit-comment" => Some(">>"),
+        _ => None,
+    }
+}
+
 fn write_div(
     div: &crate::pandoc::Div,
     writer: &mut dyn std::io::Write,
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
-    write!(writer, "::: ")?;
-    write_attr(&div.attr, writer, ctx)?;
+    // A div whose first class is an editorial mark's is written with the
+    // block marker (`::: --`), the rest of its attributes following it.
+    // The reader puts the mark's class first, so this round-trips.
+    let (id, classes, keyvals) = &div.attr;
+    match classes.first().and_then(|c| editorial_marker_for_class(c)) {
+        Some(marker) => {
+            write!(writer, "::: {marker}")?;
+            let rest = (id.clone(), classes[1..].to_vec(), keyvals.clone());
+            if !is_empty_attr(&rest) {
+                write!(writer, " ")?;
+                write_attr(&rest, writer, ctx)?;
+            }
+        }
+        None => {
+            write!(writer, "::: ")?;
+            write_attr(&div.attr, writer, ctx)?;
+        }
+    }
     writeln!(writer)?;
 
     for block in div.content.iter() {
@@ -2177,24 +2206,18 @@ fn write_span(
 
     // Check if this is an editorial mark span that should use decorated syntax
     // These spans have exactly one class, no ID, and no key-value pairs
-    if id.is_empty() && classes.len() == 1 && keyvals.is_empty() {
-        let marker = match classes[0].as_str() {
-            "quarto-highlight" => Some("!! "),
-            "quarto-insert" => Some("++ "),
-            "quarto-delete" => Some("-- "),
-            "quarto-edit-comment" => Some(">> "),
-            _ => None,
-        };
-
-        if let Some(marker) = marker {
-            // Write using decorated syntax
-            write!(buf, "[{}", marker)?;
-            for inline in &span.content {
-                write_inline(inline, buf, ctx)?;
-            }
-            write!(buf, "]")?;
-            return Ok(());
+    if id.is_empty()
+        && classes.len() == 1
+        && keyvals.is_empty()
+        && let Some(marker) = editorial_marker_for_class(&classes[0])
+    {
+        // Write using decorated syntax
+        write!(buf, "[{} ", marker)?;
+        for inline in &span.content {
+            write_inline(inline, buf, ctx)?;
         }
+        write!(buf, "]")?;
+        return Ok(());
     }
 
     // Spans use bracket syntax: [content]{#id .class key=value}

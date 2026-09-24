@@ -65,6 +65,11 @@ typedef enum {
     FENCED_DIV_END,
     REF_ID_SPECIFIER,
     FENCED_DIV_NOTE_ID,
+    // block-level editorial marks: `::: ++`, `::: --`, `::: >>`, `::: !!`
+    FENCED_DIV_INSERT_MARKER,
+    FENCED_DIV_DELETE_MARKER,
+    FENCED_DIV_EDIT_COMMENT_MARKER,
+    FENCED_DIV_HIGHLIGHT_MARKER,
 
     // code span delimiters for parsing pipe table cells
     CODE_SPAN_START,
@@ -206,6 +211,10 @@ static char* token_names[] = {
     "FENCED_DIV_END",
     "REF_ID_SPECIFIER",
     "FENCED_DIV_NOTE_ID",
+    "FENCED_DIV_INSERT_MARKER",
+    "FENCED_DIV_DELETE_MARKER",
+    "FENCED_DIV_EDIT_COMMENT_MARKER",
+    "FENCED_DIV_HIGHLIGHT_MARKER",
     // code span delimiters for parsing pipe table cells
     "CODE_SPAN_START",
     "CODE_SPAN_CLOSE",
@@ -2503,7 +2512,8 @@ static bool parse_tilde(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
 
 // Fenced-div sigils: the token right after `::: ` that turns a fenced
 // div opener into a different construct (`::: ^id` is a note
-// definition). The parser makes a sigil token valid only in the state
+// definition; `::: ++`, `::: --`, `::: >>` and `::: !!` are block-level
+// editorial marks). The parser makes a sigil token valid only in the state
 // that follows `$._fenced_div_start $._whitespace`, which is where
 // `pandoc_div` expects its info string or attribute specifier; see
 // `fencedDivTail` in grammar.js for the part these constructs share.
@@ -2512,7 +2522,35 @@ static bool parse_tilde(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
 // in grammar.js that consumes the token after `$._fenced_div_start
 // $._whitespace`.
 static bool any_fenced_div_sigil_valid(const bool *valid_symbols) {
-    return valid_symbols[FENCED_DIV_NOTE_ID];
+    return valid_symbols[FENCED_DIV_NOTE_ID] ||
+           valid_symbols[FENCED_DIV_INSERT_MARKER] ||
+           valid_symbols[FENCED_DIV_DELETE_MARKER] ||
+           valid_symbols[FENCED_DIV_EDIT_COMMENT_MARKER] ||
+           valid_symbols[FENCED_DIV_HIGHLIGHT_MARKER];
+}
+
+// A block-level editorial marker is its character doubled (`++`, `--`,
+// `>>`, `!!`, as in the inline `[++ ...]` forms) followed by whitespace,
+// a line ending, EOF, or the `{` of an attribute specifier (as `:::{.x}`
+// is for plain divs). Anything else (`::: --foo`, `::: ---`, `::: -->`)
+// is not a marker; returning false hands the position back to the
+// internal lexer.
+static bool parse_fenced_div_editorial_marker(Scanner *s, TSLexer *lexer,
+                                              TokenType token) {
+    int32_t c = lexer->lookahead;
+    advance(s, lexer);
+    if (lexer->lookahead != c) {
+        return false;
+    }
+    advance(s, lexer);
+    if (!lexer->eof(lexer) &&
+        lexer->lookahead != ' ' && lexer->lookahead != '\t' &&
+        lexer->lookahead != '\n' && lexer->lookahead != '\r' &&
+        lexer->lookahead != '{') {
+        return false;
+    }
+    mark_end(s, lexer);
+    EMIT_TOKEN(token);
 }
 
 static bool parse_fenced_div_sigil(Scanner *s, TSLexer *lexer,
@@ -2521,6 +2559,26 @@ static bool parse_fenced_div_sigil(Scanner *s, TSLexer *lexer,
         case '^':
             if (valid_symbols[FENCED_DIV_NOTE_ID]) {
                 return parse_fenced_div_note_id(s, lexer, valid_symbols);
+            }
+            break;
+        case '+':
+            if (valid_symbols[FENCED_DIV_INSERT_MARKER]) {
+                return parse_fenced_div_editorial_marker(s, lexer, FENCED_DIV_INSERT_MARKER);
+            }
+            break;
+        case '-':
+            if (valid_symbols[FENCED_DIV_DELETE_MARKER]) {
+                return parse_fenced_div_editorial_marker(s, lexer, FENCED_DIV_DELETE_MARKER);
+            }
+            break;
+        case '>':
+            if (valid_symbols[FENCED_DIV_EDIT_COMMENT_MARKER]) {
+                return parse_fenced_div_editorial_marker(s, lexer, FENCED_DIV_EDIT_COMMENT_MARKER);
+            }
+            break;
+        case '!':
+            if (valid_symbols[FENCED_DIV_HIGHLIGHT_MARKER]) {
+                return parse_fenced_div_editorial_marker(s, lexer, FENCED_DIV_HIGHLIGHT_MARKER);
             }
             break;
     }

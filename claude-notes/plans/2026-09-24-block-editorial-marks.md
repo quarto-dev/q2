@@ -284,47 +284,124 @@ expectations.
     with `["foo\r"]` before the fix).
 
 ### Phase 2: new tokens + `editorial_div` rule
-- [ ] Add the 4 external tokens (grammar `externals` + scanner enum + name
+- [x] Add the 4 external tokens (grammar `externals` + scanner enum + name
       table, same order).
-- [ ] Add sigil cases for `++ -- >> !!` with the boundary rule.
-- [ ] Add the `editorial_div` rule with an optional attribute specifier;
-      register it in `_block_not_section`.
-- [ ] New corpus file `test/corpus/editorial_div.txt`: each marker; with
-      attrs; nested (`::: >>` inside `::: ++`, inside lists and block
-      quotes); inline marks inside a block mark; unclosed at EOF;
-      `::: ^id` unchanged; `::: -->` inside an HTML comment unchanged.
-- [ ] Update `queries/highlights.scm`.
+- [x] Add sigil cases for `++ -- >> !!` with the boundary rule. The marker
+      must be followed by whitespace, a line ending, EOF, **or `{`**, so
+      `::: ++{.x}` works like `:::{.x}` does for plain divs (`{` can't start
+      an info string, so this is unambiguous).
+- [x] Add the `editorial_div` rule with an optional attribute specifier;
+      register it in `_block_not_section`. It generated with no conflicts.
+- [x] Corpus tests live in `test/corpus/fenced_div_sigils.txt` (one file
+      for all sigil constructs, not `editorial_div.txt`): each marker; with
+      attrs, with and without a space before them; trailing whitespace; no
+      blank lines in the body; nested (`::: >>` inside `:::: ++`); inside a
+      list item and a block quote (the same structure as a plain div there,
+      checked by diffing against `::: {.x}`); inline marks inside a block
+      mark; unclosed at EOF; opener at EOF without a newline; `- item` /
+      `---` / `-@cite` right after the opener; `::: ^id` unchanged; `::: -->`
+      inside an HTML comment unchanged.
+- [x] `queries/highlights.scm`: block markers are captured as
+      `@punctuation.special`. Only the marker is captured, because the body
+      can hold code cells whose interior the query file must never cover.
 
 ### Phase 2b: forbid div info strings starting with `-`
-- [ ] `_commonmark_naked_value` is **shared** with code-block info strings
-      (`grammar.js:988`), so don't change it. Instead, give `pandoc_div`
-      its own token, e.g. `_div_info_string: /[A-Za-z0-9_][A-Za-z0-9_-]*/`,
-      aliased to `info_string` so the CST is unchanged.
-- [ ] Corpus: `::: --foo`, `::: -foo`, `::: ---` produce ERROR (new tests);
-      `::: foo-bar` is still a `pandoc_div` with an info string.
-- [ ] New error code (next free `Q-2-NN`): an error-corpus JSON + case
-      files, and an `error_catalog.json` entry. Title along the lines of
-      "Div info string cannot start with `-`"; the message suggests
-      `::: -- ` (block deletion) if that was intended, or `{.class}`
-      syntax otherwise. Follow
-      `claude-notes/instructions/error-message-system.md`.
+- [x] `pandoc_div` has its own `_div_info_string: /[A-Za-z0-9_][A-Za-z0-9_-]*/`
+      (aliased to `info_string`). `_commonmark_naked_value` is unchanged for
+      code blocks.
+- [x] Corpus: `::: --foo`, `::: ---`, `::: -x` are asserted with
+      tree-sitter's `:error` attribute (not a full ERROR tree, which is
+      recovery noise that would make the tests brittle). I checked that
+      `:error` is really enforced. `::: foo-bar` is still a `pandoc_div`.
+- [x] New error **Q-2-53** ("Fenced div info string starts with `-`"). Q-2-38
+      was taken; codes up to Q-2-52 are all used. Added:
+  - the corpus JSON, with one case per distinct LR state: top level (2800),
+    inside a list item or block quote (2808), and `:::--foo` with no space
+    (3205);
+  - `desynchronizes: true`, because without it a valid table after the bad
+    opener produced two cascade "Parse error"s;
+  - the catalog entry;
+  - `docs/errors/markdown/Q-2-53.qmd` (status complete);
+  - a sidebar entry in `docs/_quarto.yml`.
+
+  `cargo xtask lint` passes, including the error-docs rules.
+  Note: `{.--foo}` is **not** valid qmd (the class shorthand rejects a
+  leading `-` too), so the page points class-name users at
+  `{class="--foo"}` (verified).
 
 ### Phase 3: pampa reader + writer
-- [ ] `process_editorial_div` → `Block::Div` with `quarto-*` class + attrs.
-- [ ] qmd writer round-trip (`::: ++` ↔ Div).
-- [ ] Tests: native/JSON output snapshots, qmd round-trip, source-location
-      health (`test_location_health.rs`), plus a
-      `test_treesitter_coverage.rs` case.
-- [ ] Regenerate the error table (`scripts/build_error_table.ts`) and accept
-      the error-corpus snapshots, including the new Phase 2b code. Check
-      that no Q-code lost its mapping.
+- [x] `editorial_div.rs::process_editorial_div` → `Block::Div` whose first
+      class is the mark's `quarto-*` class, followed by the user's attrs. A
+      user duplicate of the mark class is dropped. `attr_source.classes`
+      stays aligned, and the synthesized class's source is the **marker
+      bytes** (`>>`).
+- [x] qmd writer: a Div whose *first* class is a mark class is written as
+      `::: <marker>` plus `{rest}`. `editorial_marker_for_class` is now
+      shared with the span writer. `::: {.quarto-delete .x}` is
+      canonicalized to `::: -- {.x}` (accepted in Decisions).
+- [x] Tests:
+  - `test_fenced_div_sigils.rs` (lowering, attrs + provenance, dedupe,
+    `++{`, CRLF, writer round-trip and canonicalization);
+  - native and qmd snapshots (`editorial-divs`);
+  - qmd→JSON→qmd round-trip fixture (`editorial_divs.qmd`);
+  - smoke fixture `030.qmd`, which feeds location-health, the tiling
+    auditor and the incremental-writer tests.
+
+  The existing smoke and coverage tests cover the reader paths, so no
+  `test_treesitter_coverage.rs` case was needed.
+- [x] Regenerated the error table twice (after Phase 2 and after 2b). All 34
+      codes kept the same number of mappings, and `test_error_corpus` passes.
+      The script touches `deno.lock` as a side effect; revert that each time.
 
 ### Phase 4: consumers + docs
-- [ ] `document_profile.rs`: block comments are extracted (with
-      author/date).
-- [ ] CSS check / block-specific styling for `div.quarto-*`.
-- [ ] User docs in `docs/` next to the inline editorial marks page.
-- [ ] `cargo xtask verify`.
+- [x] `document_profile.rs`: a `::: >>` Div is one comment (a leaf). Its text
+      is `blocks_to_string` of the body, with author/date/kvs from the
+      opener. The `quarto-edit-comment-container` Div is not a comment.
+      Tests added.
+- [x] CSS: I rendered a sample and screenshotted it (Playwright). Two
+      problems: text sat flush against the tint, with the last child's
+      margin inside it, and a block comment looked like a plain italic
+      paragraph. Added `div.quarto-*` padding plus `> :last-child`
+      margin reset, and a left rule on `div.quarto-edit-comment`. Test
+      added in `compile_all_themes_test.rs`.
+- [x] User docs: there was **no** editorial-marks section anywhere in
+      `docs/`. Added "Editorial marks" (inline + block forms, attributes) to
+      `docs/guides/authoring/markdown-basics.qmd`; it renders cleanly
+      (checked by screenshot). It deliberately does not use the page's
+      list-table layout for the rendered examples: inline marks inside a
+      list-table are broken (bd-9fy9p4zl, below).
+- [x] `cargo xtask verify`: all 14 steps green, including tree-sitter LF and
+      **CRLF** passes (647/647 each) and workspace clippy `-D warnings`.
+      The phase-5 single-doc byte-identity baseline (`styles.css` hash) was
+      re-captured for the new block CSS. I verified the only delta is the
+      three new rules. `preview_static_e2e::editing_the_project_config_rerenders_every_page`
+      timed out once under full parallel load and passes 3/3 in isolation.
+      That is a timing flake, not related to this work.
+
+### Pre-existing bugs found along the way
+- **Fixed here**, with regression tests written first:
+  - `::: ^id` at EOF hung the scanner, and CRLF leaked `\r` into note ids
+    (Phase 1).
+  - Inline editorial marks lowered to Spans dropped their attr sidecar
+    wholesale, so classes and sources were misaligned
+    (`AttrAlignmentSkipped`) and the user's attribute provenance was lost.
+    postprocess now keeps it and prepends `None` for the synthesized class.
+    The tiling corpus had no inline mark before `030.qmd`, which is why
+    this was never caught.
+  - **bd-2281lkrx**: an inline editorial mark inside a list-table
+    **panicked** pampa. `traverse_inline_nonterminal` had no arms for
+    `Insert/Delete/Highlight/EditComment`. It now traverses them like
+    `Span`.
+- **Filed, not fixed** (outside this feature's scope):
+  - **bd-9fy9p4zl** (P1): list-table / definition-list content is never
+    postprocessed. The rewrite returns `recurse=false` before the top-down
+    walk reaches the cells. So note refs, standalone attrs and editorial
+    marks in cells fail (Q-3-31/32/33). Fixing it needs care around
+    `with_table`'s caption heuristic.
+  - **bd-i4xrcdqx**: a whitespace-only blank line before `:::` in a list
+    item makes the list tight. The qmd writer emits exactly that shape,
+    so list items containing a div flip Para→Plain on round-trip. The
+    round-trip fixture leaves out its list-item case for this reason.
 
 ## Risks
 

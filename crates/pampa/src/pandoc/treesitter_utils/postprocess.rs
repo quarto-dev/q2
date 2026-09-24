@@ -372,6 +372,16 @@ fn empty_attr_source() -> AttrSourceInfo {
     AttrSourceInfo::empty()
 }
 
+/// The attr sidecar for an inline editorial mark lowered to a Span: the
+/// mark's `quarto-*` class is prepended to the user's classes, so a `None`
+/// source is prepended to keep `classes` aligned with `attr.1` (the
+/// marker bytes are not available here). The user's own id/class/kv
+/// sources are kept.
+fn with_synthesized_leading_class(mut attr_source: AttrSourceInfo) -> AttrSourceInfo {
+    attr_source.classes.insert(0, None);
+    attr_source
+}
+
 /// Transform a valid list-table div into a Table block.
 ///
 /// PRECONDITION: div must pass validate_list_table_div() check with Valid result.
@@ -1506,7 +1516,7 @@ pub fn postprocess(
                         attr: (insert.attr.0, classes, insert.attr.2),
                         content,
                         source_info: insert.source_info,
-                        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+                        attr_source: with_synthesized_leading_class(insert.attr_source),
                     })],
                     true,
                 )
@@ -1520,7 +1530,7 @@ pub fn postprocess(
                         attr: (delete.attr.0, classes, delete.attr.2),
                         content,
                         source_info: delete.source_info,
-                        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+                        attr_source: with_synthesized_leading_class(delete.attr_source),
                     })],
                     true,
                 )
@@ -1534,7 +1544,7 @@ pub fn postprocess(
                         attr: (highlight.attr.0, classes, highlight.attr.2),
                         content,
                         source_info: highlight.source_info,
-                        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+                        attr_source: with_synthesized_leading_class(highlight.attr_source),
                     })],
                     true,
                 )
@@ -1548,7 +1558,7 @@ pub fn postprocess(
                         attr: (edit_comment.attr.0, classes, edit_comment.attr.2),
                         content,
                         source_info: edit_comment.source_info,
-                        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+                        attr_source: with_synthesized_leading_class(edit_comment.attr_source),
                     })],
                     true,
                 )
