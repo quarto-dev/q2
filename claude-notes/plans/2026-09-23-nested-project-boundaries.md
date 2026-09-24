@@ -3,11 +3,11 @@
 **Date:** 2026-09-23
 **Braid:** bd-nested-projects-xyb28wnl (parent epic bd-uk8zgkha)
 **Branch:** `braid/bd-nested-projects-xyb28wnl-nested-project-boundaries` (topic branch in the main checkout, based on `main` at `9e5d519c`)
-**Status:** Investigation is done and the design direction is settled (option C, accepted by Carlos on 2026-09-23). The design questions below are still open. **Don't start implementing until they're answered.**
+**Status:** The design is settled (see "Design decisions"). Implementation is in progress on this branch.
 
 ## Triage verdict
 
-**Ready to design.** The strand comment fixes the spec (option C: prune the implicit walk, and warn on explicit reach-ins). The code map shows where each part goes. One structural finding changes how the spec should be implemented; see "Key finding" below. The questions left are rule-level ones, not direction.
+**Ready to implement.** (It was "ready to design" at investigation time. The design questions were answered on 2026-09-24.) The strand comment fixes the spec (option C: prune the implicit walk, and warn on explicit reach-ins). The code map shows where each part goes. One structural finding changes how the spec should be implemented; see "Key finding" below. The questions left are rule-level ones, not direction.
 
 ## Issue context
 
@@ -52,7 +52,7 @@ This keeps the default walk cheap. For claude-notes, the ~55 repro trees are nev
 | `find_project_root_above` | `quarto/src/commands/preview.rs:940` | **no**, incidental bug |
 | `find_project_config` | `quarto/src/commands/use_cmd/config.rs:93` | yes |
 
-These already implement nearest-project-wins, and nothing here should change. The shared question of what counts as a project marker (see Q3) should be answered by one predicate that the walk and these functions both use.
+These already implement nearest-project-wins, and nothing here should change. The shared question of what counts as a project marker (decision 3) should be answered by one predicate that the walk and these functions both use.
 
 ### Preview and hub parity
 
@@ -77,27 +77,26 @@ These already implement nearest-project-wins, and nothing here should change. Th
   - a nested `_quarto.yml` inside a `_`-dir is irrelevant, since it's already skipped;
   - `render sub` is unchanged (CLI-level test).
 - **Phase 1: Core walk.** Add a shared `is_project_marker(dir)` predicate. `walk_rec` stops at nested roots and records them. Thread `nested_roots` through `select_from_walk` and `unmatched_md_files`. Resolve explicit reach-ins as described under "Key finding".
-- **Phase 2: Diagnostics.** Add Q-5-31 and Q-5-32 to the catalog with `docs/errors/project/Q-5-3{1,2}.qmd`. Emit them from the discovery path. `render_pattern_diagnostics` is pure and only sees `selected`, so it either gains a `nested_roots` input or discovery returns a richer result (see Q5). Silencing rule per Q2.
-- **Phase 3: Preview/hub parity.** Scope per Q6:
+- **Phase 2: Diagnostics.** Add Q-5-31 and Q-5-32 to the catalog with `docs/errors/project/Q-5-3{1,2}.qmd`. Emit them from the discovery path. `render_pattern_diagnostics` is pure and only sees `selected`, so it either gains a `nested_roots` input or discovery returns a richer result (decision 5: a struct). Silencing is by negation only (decision 2).
+- **Phase 3: Preview/hub parity.** Split out to bd-smerrfma (decision 6). The original scope was:
   - the hub `ProjectFiles::discover` boundary;
   - `pickInitialPage`;
   - `is_config_like` / `is_preview_relevant` ignoring nested `_quarto.yml`.
 - **Phase 4: Docs and changelog.** Add a "Nested projects" section to `render-list.qmd`, including the Q1 divergence and a pointer to `_metadata.yml` for directory-scoped metadata. Add a changelog entry.
 - **Phase 5: Acceptance.** `q2 render claude-notes` (with bd-uk8zgkha's `_quarto.yml`) skips every nested repro project. Record before/after counts. Then run the full `cargo xtask verify`.
 
-## Open design questions for the user
+## Design decisions (Carlos, 2026-09-24)
 
-1. **What counts as "explicit"?** The spec names literal paths and non-recursive globs. Proposed precise rule: a pattern is explicit for nested root `N` if and only if its `literal_prefix` is `N` or lies below `N`. Examples:
-   - `sub/page.qmd`, `sub/*.qmd`, `sub/**/*.qmd` and a bare `sub` are all explicit, and each warns (Q-5-32) and renders.
-   - `**/*.qmd` and `*/page.qmd` are implicit, so they're pruned.
-
-   Do you accept this rule? Under it, `sub/**` counts as explicit even though it's recursive, because the author named the nested root. And `*/page.qmd` counts as pruned even though it isn't recursive, because nothing literal names `sub`.
-2. **Silencing Q-5-31.** The strand recommends that an explicit negation covering the nested root silences the warning, e.g. `!plans/**/repro/**`, or more generally any `!` pattern that matches the root directory. Should we also add a project option (say `project.nested-projects: ignore`)? Proposed answer: negation only, no new option, so the YAML schema stays unchanged.
-3. **Project markers.** Proposal: any `_quarto.yml` or `_quarto.yaml` is a boundary, even without a `project:` key, matching Q1 experiment E. A lone `_quarto-<profile>.yml` is **not** a boundary. Agree?
-4. **Q-5-31 cardinality and payload.** "One warning per render naming the roots": for claude-notes that's about 55 paths. Should we list them all, or cap the list (say 10, then "and N more"), with the full list only under `--json-errors`?
-5. **API shape.** Should `discover_project_files` return a struct (`files` plus `nested_roots` plus reach-ins) so the orchestrator emits the diagnostics? The alternative is to keep the `Vec<PathBuf>` return and re-derive in `render_pattern_diagnostics`, which would mean a second walk. Recommendation: return a struct.
-6. **Preview/hub parity scope.** Minimum: `pickInitialPage` must not land on a nested page, and `is_config_like` / `is_preview_relevant` should ignore nested markers. Should the **hub sync** (`ProjectFiles::discover`) also stop at nested roots? That would make nested files invisible and uneditable in hub-client. Recommendation: keep syncing them, since they're still files in the repo, and filter only at page-selection points. Could this parity phase be split into its own strand?
-7. **Incidental bug.** `preview.rs:940 find_project_root_above` ignores `_quarto.yaml`. Should it be fixed here, since we're introducing the shared marker predicate anyway, or filed separately?
+1. **What counts as "explicit": accepted.** A pattern is explicit for nested root `N` if and only if its literal prefix (the deepest directory before the first wildcard segment) is `N` or lies below `N`.
+   - `sub/page.qmd`, `sub/*.qmd`, `sub/**/*.qmd` and a bare `sub` are explicit. Each renders and warns (Q-5-32).
+   - `**/*.qmd` and `*/page.qmd` are implicit, so they're pruned (Q-5-31).
+   - **The docs must spell this out**, because migrating Q1 users will find it surprising.
+2. **Silencing Q-5-31: negation only.** A `!` pattern that matches the nested root directory (e.g. `!plans/**/repro/**` or `!sub`) silences the warning for that root. There's no new project option, and the YAML schema doesn't change.
+3. **Project markers: agreed.** Any `_quarto.yml` or `_quarto.yaml` is a boundary, with or without a `project:` key. A lone `_quarto-<profile>.yml` is not a boundary. Docs point at `_metadata.yml` for directory-scoped metadata.
+4. **Q-5-31 lists every pruned root, with no cap.** A loud warning reflects a project that needs attention, and a project can already silence a whole Q-code.
+5. **API shape: a struct.** `discover_project_files` returns a struct carrying `files`, `nested_roots` and the explicit reach-ins, and the orchestrator emits the diagnostics from it.
+6. **Preview/hub parity is split out** into **bd-smerrfma** (low priority; hub projects rarely nest). Hub sync keeps syncing nested files so they stay editable. That strand filters only at page-selection points.
+7. **Fix `preview.rs find_project_root_above` here**, in **its own commit**, for blame and review. (Filed as bd-nqj8gmrb; close it with that commit.)
 
 ## Risks and tradeoffs (draft)
 
