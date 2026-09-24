@@ -23,7 +23,7 @@ The new attributes (e.g., `status="todo"`) are silently lost.
 
 ## Root Cause
 
-The `coarsen` function in `incremental.rs` (line ~139) decides whether to use
+The `coarsen` function in `incremental.rs` (line \~139) decides whether to use
 InlineSplice for `RecurseIntoContainer` blocks. The decision checks:
 
 1. Does the block have an inline plan? (Yes — Header is an inline-content block)
@@ -33,7 +33,7 @@ InlineSplice for `RecurseIntoContainer` blocks. The decision checks:
 It does NOT check whether the block's attributes changed. When only attributes
 change, all three checks pass, and InlineSplice is used.
 
-`assemble_inline_splice` (line ~533) then:
+`assemble_inline_splice` (line \~533) then:
 - Computes `block_span` from the **original** block's source info
 - Extracts `prefix` = bytes before first inline (e.g., `## `)
 - Extracts `suffix` = bytes after last inline (e.g., ` {.feature created="2026-02-10"}\n`)

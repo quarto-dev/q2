@@ -236,7 +236,7 @@ q2-preview's eventual Figure (Plan 2B) reads `c[1][1]` and renders `<figcaption>
 
 ### Block/Inline naming consolidation
 
-Slide-side `ReactAstSlideRenderer.tsx` declares its block/inline unions as bare `Block` and `Inline`. Debug-side declares them as `BlockNode` and `InlineNode`. Plan 2pre consolidates on the `Node`-suffixed names: slide-side renames `Block → BlockNode` and `Inline → InlineNode` (~25 mechanical refs in `ReactAstSlideRenderer.tsx`), then drops its local declarations and imports the unions from `framework/types.ts`. Debug-side keeps its existing `BlockNode`/`InlineNode` (no churn).
+Slide-side `ReactAstSlideRenderer.tsx` declares its block/inline unions as bare `Block` and `Inline`. Debug-side declares them as `BlockNode` and `InlineNode`. Plan 2pre consolidates on the `Node`-suffixed names: slide-side renames `Block → BlockNode` and `Inline → InlineNode` (\~25 mechanical refs in `ReactAstSlideRenderer.tsx`), then drops its local declarations and imports the unions from `framework/types.ts`. Debug-side keeps its existing `BlockNode`/`InlineNode` (no churn).
 
 **Why this direction (rather than dropping the `Node` suffix):**
 

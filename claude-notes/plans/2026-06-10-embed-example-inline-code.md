@@ -287,7 +287,7 @@ under bd-oejuizi9, with consolidated design at
 1. **Styling home** → `docs/styles.css` (docs-scoped).
 3. **Number every example** → yes; all 8 get `#demo-…` ids and visible
    "Demo 1…8" captions.
-   (Aspiration: many small demos, one ~10-line teaching block each — see the
+   (Aspiration: many small demos, one \~10-line teaching block each — see the
    Direction note in Docs migration.)
 
 **Remaining (decide during execution / Phase C kickoff):**

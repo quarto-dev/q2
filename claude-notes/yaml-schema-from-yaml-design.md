@@ -32,7 +32,7 @@ Design for loading Quarto YAML schemas from YAML files (as used in quarto-cli) i
 **Implemented**: `quarto-yaml-validation` crate with:
 - `Schema` enum (12 variants: False, True, Boolean, Number, String, Null, Enum, Any, AnyOf, AllOf, Array, Object, Ref)
 - Validation against programmatic schemas
-- ~920 LOC in schema.rs, Phase 1 complete
+- \~920 LOC in schema.rs, Phase 1 complete
 - **TEMPORARY**: Uses serde deserialization (YAML 1.1) - must be replaced
 
 **Missing**: Ability to load schemas from YAML files using YAML 1.2

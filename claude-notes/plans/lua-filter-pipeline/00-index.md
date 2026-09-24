@@ -10,7 +10,7 @@
 
 **Analysis Status Legend**:
 - [ ] Not started
-- [~] Partial (reading code)
+- [\~] Partial (reading code)
 - [x] Complete
 
 ---
@@ -39,7 +39,7 @@ The filter pipeline is defined in `main.lua` and executes via `run_as_extended_a
 15. post-finalize       (user entry point)
 ```
 
-Total: ~78 internal stages + 8 user entry points
+Total: \~78 internal stages + 8 user entry points
 
 ---
 

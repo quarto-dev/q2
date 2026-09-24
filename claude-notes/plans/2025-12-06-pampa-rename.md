@@ -75,7 +75,7 @@ Files to update:
 - `crates/qmd-syntax-helper/src/conversions/grid_tables.rs`
 - `crates/qmd-syntax-helper/src/conversions/definition_lists.rs`
 - `crates/pampa/fuzz/fuzz_targets/hello_fuzz.rs`
-- ~20 test files in `crates/pampa/tests/` (will be automatically correct after directory rename since they use the crate name)
+- \~20 test files in `crates/pampa/tests/` (will be automatically correct after directory rename since they use the crate name)
 
 **Documentation files with code examples** (update examples):
 - `crates/quarto-error-reporting/README.md`

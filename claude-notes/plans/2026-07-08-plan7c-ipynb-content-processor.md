@@ -44,7 +44,7 @@ falsified. Both **remove** work:
 1. **No `SourceInfo::NotebookCell` variant.** The stub listed one as an
    additive enum arm. Cell identity is per-**file**, not per-**span**: with one
    ephemeral `SourceFile` per cell, the existing `Original`/`Substring`/`Concat`
-   compose fine. `SourceInfo` is a closed enum with ~8 upstream match sites
+   compose fine. `SourceInfo` is a closed enum with \~8 upstream match sites
    (`map_offset`, `map_range`, `resolve_byte_range`, `preimage_in`, `length`,
    `remap_file_ids`, `root_file_id`, `collect_file_ids`) — not touching it is a
    material saving.

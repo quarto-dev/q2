@@ -90,9 +90,9 @@ See detailed design: `claude-notes/plans/2025-11-28-multi-pass-rendering-archite
 - [ ] Further investigation: remaining tests fail due to other issues (title-case, quote handling, moving punctuation, etc.)
 
 **Expected impact**: Unlock 80-150 additional tests by fixing:
-- Delimiter bugs (~20-30 tests)
-- Substitute inheritance (~50-100 tests)
-- Year-suffix with multi-pass (~20-30 tests)
+- Delimiter bugs (\~20-30 tests)
+- Substitute inheritance (\~50-100 tests)
+- Year-suffix with multi-pass (\~20-30 tests)
 
 ### Phase 6: Locale Post-Processing Pipeline (NEW)
 
@@ -118,18 +118,18 @@ The reference implementation applies these transformations **after** rendering:
 
 **Implementation plan**:
 
-1. **Quote Localization** (~15-20 tests)
+1. **Quote Localization** (\~15-20 tests)
    - Add locale term lookup for: `open-quote`, `close-quote`, `open-inner-quote`, `close-inner-quote`
    - Track nesting depth to flip between outer/inner quotes
    - Currently: hardcoded `"` `"` `'` `'`
    - Test: `affix_CommaAfterQuote` - Expected `"quote"` got `'quote'`
 
-2. **Moving Punctuation** (~10-15 tests)
+2. **Moving Punctuation** (\~10-15 tests)
    - Parse `punctuation-in-quote` locale option
    - When true, move `,` `.` inside closing quotes
    - Test: `magic_StripPeriodsFalse` - Expected `"Article,"` got `"Article, "`
 
-3. **Display Attribute** (~30-40 tests) - See Phase 7
+3. **Display Attribute** (\~30-40 tests) - See Phase 7
    - Render `display` attribute as `<div class="csl-{value}">`
    - Values: `block`, `left-margin`, `right-inline`, `indent`
    - Many bibliography tests expect this HTML structure
@@ -155,7 +155,7 @@ The reference implementation applies these transformations **after** rendering:
 2. Add `DisplayStyle` enum: `Block`, `LeftMargin`, `RightInline`, `Indent`
 3. Render as `<div class="csl-{style}">` wrapper in CSL HTML output
 
-**Expected impact**: ~30-40 tests (bugreports, sort, other categories)
+**Expected impact**: \~30-40 tests (bugreports, sort, other categories)
 
 ## Files to Modify
 
@@ -245,9 +245,9 @@ Updated analysis of 478 remaining failing tests: `claude-notes/plans/2025-11-28-
    - ALL-CAPS words and words with internal caps preserved
 
 **Priority order for next implementations:**
-1. **Moving Punctuation** (~15-20 tests) - CSL punctuation exchange rules
-2. **Citation Position** (~15-20 tests) - ibid, near-note detection
-3. **Flip-Flop Formatting** (~15-20 tests) - Nested formatting flip
+1. **Moving Punctuation** (\~15-20 tests) - CSL punctuation exchange rules
+2. **Citation Position** (\~15-20 tests) - ibid, near-note detection
+3. **Flip-Flop Formatting** (\~15-20 tests) - Nested formatting flip
 
 | Issue | Priority | Tests Affected | Description |
 |-------|----------|----------------|-------------|

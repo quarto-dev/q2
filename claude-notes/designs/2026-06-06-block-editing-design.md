@@ -73,7 +73,7 @@ expensive AST-regeneration path stay entirely behind the Phase-3 flag (below).
 **Coincidence is a screen-extent property, not an AST child count.** It compares bounding rects on
 **all four edges** within a tight epsilon. (Measured against real Bootstrap + theme CSS: a chrome-less
 single-child div coincides with its child at *exactly* 0px, while the nearest deciding edge of any
-chrome-bearing container is ≥~12px. A 1px border counts as chrome and resolves to the leaf.) The
+chrome-bearing container is ≥\~12px. A 1px border counts as chrome and resolves to the leaf.) The
 comparison and the tile enumeration both **skip non-laid-out surfaces** (`offsetParent === null` /
 zero rect — e.g. a collapsed callout body), so a zero-rect never corrupts a comparison and an editor
 never opens on a block the user cannot see.

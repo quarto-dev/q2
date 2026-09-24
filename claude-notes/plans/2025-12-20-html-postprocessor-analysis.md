@@ -442,7 +442,7 @@ let matches: Vec<_> = elements.iter()
     .collect();
 ```
 
-This is exactly what `scraper` does - it implements `selectors::Element` for ego-tree nodes. Surprisingly, no existing crate provides this adapter for rcdom, so we'll need to write it ourselves. The implementation is straightforward (~100-200 lines) since it's just delegation to rcdom's existing node inspection methods.
+This is exactly what `scraper` does - it implements `selectors::Element` for ego-tree nodes. Surprisingly, no existing crate provides this adapter for rcdom, so we'll need to write it ourselves. The implementation is straightforward (\~100-200 lines) since it's just delegation to rcdom's existing node inspection methods.
 
 ### Proposed Rust Traits
 

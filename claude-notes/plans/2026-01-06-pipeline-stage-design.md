@@ -37,7 +37,7 @@ The current Rust implementation has `TransformPipeline` which represents a seque
 - **AST transforms**: Callouts, cross-references, layout, etc. (current `TransformPipeline`)
 - **After AST**: Output rendering (HTML/PDF/etc.), template application, postprocessing, DOM manipulation
 
-The TypeScript Quarto has 10 major stages with ~78 internal filter steps. We need an explicit abstraction that can represent all of these stages, validate stage sequences, and enable orchestration of different pipelines for different file types.
+The TypeScript Quarto has 10 major stages with \~78 internal filter steps. We need an explicit abstraction that can represent all of these stages, validate stage sequences, and enable orchestration of different pipelines for different file types.
 
 ## Goals
 

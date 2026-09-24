@@ -7,7 +7,7 @@ The Quarto LSP is currently implemented in TypeScript within the quarto monorepo
 ### Repository Structure
 
 - **Main monorepo**: `/external-sources/quarto/`
-  - `apps/lsp/`: The LSP server implementation (~6,300 LOC)
+  - `apps/lsp/`: The LSP server implementation (\~6,300 LOC)
   - `apps/vscode/`: VS Code extension that launches the LSP
   - `packages/quarto-core/`: Shared Quarto-specific functionality
   - `packages/editor-server/`: Editor-related server functionality
@@ -91,7 +91,7 @@ The LSP is in a separate monorepo from quarto-cli, but:
 ### 4. **TypeScript/Node Runtime**
 
 The LSP is written in TypeScript and runs in Node.js:
-- Bundled with VS Code extension (~6,300 LOC + dependencies)
+- Bundled with VS Code extension (\~6,300 LOC + dependencies)
 - Requires Node runtime
 - Separate from CLI (which is Deno/TypeScript)
 

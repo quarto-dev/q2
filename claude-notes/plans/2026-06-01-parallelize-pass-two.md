@@ -3,7 +3,7 @@
 ## Overview
 
 Pass 2 (qmd→HTML render-to-file) is a serial `for` loop at
-`crates/quarto-core/src/project/orchestrator.rs:1013` — ~98% of
+`crates/quarto-core/src/project/orchestrator.rs:1013` — \~98% of
 full-project render wall time. Pass 1 is already rayon-parallel
 (bd-m7x9s, plan `2026-05-22-parallelize-pass-one.md`). This plan
 parallelizes Pass 2 by **mirroring the established Pass-1 pattern**.
@@ -149,7 +149,7 @@ matches the "orchestrator is the only mutator" invariant). Chosen over
   quarto-core feed the WASM leg).
 - Expected: end-to-end `q2 render` of qmd-plans drops from ~3.5 s
   (serial, post-bd-2ercw) toward ~0.7–1.0 s on a 16-core box if Pass 2
-  scales like the parse experiment (7.1×) — Pass 2 is ~98% of wall, so
+  scales like the parse experiment (7.1×) — Pass 2 is \~98% of wall, so
   the project-level speedup tracks the per-doc render speedup minus the
   serial post-render tail (sitemap/favicon/site_libs flush).
 - Measure with the same median-of-5 methodology, `QUARTO_JOBS` ∈
@@ -193,7 +193,7 @@ wall from the `perf.pass2` gauge):
 | 16 |  500 ms |  446 ms | **7.3×** |
 
 Pass-2 itself: **3551 → 446 ms (≈8× on 16 threads)**. The total's
-diminishing return at 16 is the serial tail (Pass-1 ~20 ms + post_render
+diminishing return at 16 is the serial tail (Pass-1 \~20 ms + post_render
 sitemap/site_libs flush + resource copy) plus this box being 8-core /
 16-thread.
 

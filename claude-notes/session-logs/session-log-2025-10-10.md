@@ -31,7 +31,7 @@ Investigated the possibility of creating a native MCP (Model Context Protocol) s
 - Created Prompt templates (document creation, debugging, YAML fixing)
 
 ### 4. Implementation Planning
-- Created 4-phase timeline (~12-13 weeks total)
+- Created 4-phase timeline (\~12-13 weeks total)
 - Proposed 2-day spike to validate approach
 - Identified integration points with Kyoto infrastructure
 - Designed security model and performance considerations
@@ -40,14 +40,14 @@ Investigated the possibility of creating a native MCP (Model Context Protocol) s
 
 ### Primary Documents
 
-1. **quarto-mcp-server-plan.md** (~8KB)
+1. **quarto-mcp-server-plan.md** (\~8KB)
    - Executive summary and strategic value proposition
    - Complete architecture and capability specifications
    - 4-phase implementation plan with timelines
    - Risk analysis, success metrics, competitive positioning
    - Recommended next steps
 
-2. **quarto-mcp-technical-spec.md** (~18KB)
+2. **quarto-mcp-technical-spec.md** (\~18KB)
    - Detailed technical specifications
    - JSON schemas for all resources and tools
    - Rust code examples using rmcp SDK

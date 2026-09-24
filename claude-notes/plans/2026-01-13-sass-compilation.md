@@ -322,7 +322,7 @@ All 59 quarto-sass tests pass:
 **Phase 4: VFS Resource Embedding** - NATIVE COMPLETE (WASM VFS pre-population pending)
 
 1. **Created `EmbeddedResources` type** in `crates/quarto-sass/src/resources.rs`:
-   - Uses `include_dir!` to embed Bootstrap 5.3.1 SCSS (93 files, ~592KB)
+   - Uses `include_dir!` to embed Bootstrap 5.3.1 SCSS (93 files, \~592KB)
    - Provides `is_file()`, `is_dir()`, `read()` methods for file access
    - Supports multiple path formats (relative, prefixed, absolute with `/__quarto_resources__/`)
    - Lazy-initializes file/directory indexes via `OnceLock<HashSet<String>>`
@@ -391,7 +391,7 @@ All 32 quarto-sass tests pass:
 
 **Phase 3: WASM Runtime** - IMPLEMENTATION COMPLETE (needs browser testing)
 - Created JS bridge: `hub-client/src/wasm-js-bridge/sass.js`
-  - Lazy-loads dart-sass (~5MB) on first compilation to avoid blocking startup
+  - Lazy-loads dart-sass (\~5MB) on first compilation to avoid blocking startup
   - Implements custom VFS importer for reading files from the virtual filesystem
   - Handles SCSS partial resolution (_prefix, .scss extension, index files)
   - Suppresses deprecation warnings (same as TS Quarto)

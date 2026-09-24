@@ -93,7 +93,7 @@ L7 ships:
 - **Diagnostics with source spans.** The post-render step
   operates on rendered HTML, not source qmd; spans for
   Q-12-13 would require carrying the listing's source span
-  through the placeholder comment (~feasible, but L9 will
+  through the placeholder comment (\~feasible, but L9 will
   also want this and a separate pass to add it across all
   listing diagnostics is cleaner). Filed as a follow-up.
 

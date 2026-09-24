@@ -5,7 +5,7 @@
 `quarto-preview` embeds the viewer SPA (`q2-preview-spa/dist`) and the
 editor bundle (`hub-client/dist-preview-embed`, post-dedupe) via
 `include_dir!` — identity bytes **plus** per-file `.gz` siblings. That
-is ~107 MiB of the 181.8 MiB release binary (measured 2026-08-13:
+is \~107 MiB of the 181.8 MiB release binary (measured 2026-08-13:
 `__TEXT,__const` = 106.8 MiB).
 
 This plan swaps the embed format to **one tar.zst archive per bundle,
@@ -23,14 +23,14 @@ Measured on the real dists (2026-08-13, this machine):
 - Decompress + tar parse: **94 ms** (zstd), one time per process.
 - Worst-case lazy gzip: the 27 MB wasm, **1.53 s** at `-9` (0.47 s at
   `-6`), once per process per file.
-- Expected binary: 181.8 → ~95 MiB (before the separate
+- Expected binary: 181.8 → \~95 MiB (before the separate
   `strip = "symbols"` lever, −21.6 MiB more).
 
 ## Design decisions
 
 1. **Identity-only archive.** `.gz` siblings stay out of the binary.
    Runtime gzip is the price; the alternative (archive identity + gz)
-   costs ~26 MiB more for zero runtime CPU. Chosen per user direction
+   costs \~26 MiB more for zero runtime CPU. Chosen per user direction
    after reviewing the numbers above.
 2. **Lazy `OnceLock` decompression, per UI bundle.** `q2 render` never
    touches the preview code paths (verified: only

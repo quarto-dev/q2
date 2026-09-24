@@ -75,7 +75,7 @@ pub property_names: Option<Box<Schema>>,
 
 ## quarto-cli Parsing Pattern
 
-From `external-sources/quarto-cli/src/core/lib/yaml-schema/from-yaml.ts` (lines ~300-320):
+From `external-sources/quarto-cli/src/core/lib/yaml-schema/from-yaml.ts` (lines \~300-320):
 
 ```typescript
 if (schema.propertyNames !== undefined) {
@@ -335,7 +335,7 @@ So `propertyNames` and `namingConvention` are mutually exclusive.
 - Test with real schemas: 15 minutes
 - Documentation: 10 minutes
 
-**Total**: ~1.5-2 hours
+**Total**: \~1.5-2 hours
 
 ## Files to Modify
 
@@ -360,5 +360,5 @@ When implementing validation:
 ## References
 
 - JSON Schema spec: https://json-schema.org/understanding-json-schema/reference/object.html#property-names
-- quarto-cli from-yaml.ts: lines ~300-320
+- quarto-cli from-yaml.ts: lines \~300-320
 - Real examples: test-fixtures/schemas/definitions.yml and schema.yml

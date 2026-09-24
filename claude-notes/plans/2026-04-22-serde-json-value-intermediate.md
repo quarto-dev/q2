@@ -75,7 +75,7 @@ head docstring documents both the profile and sidecar formats.
 
 ## Findings
 
-### Wall time scales ~linearly in the driver
+### Wall time scales \~linearly in the driver
 
 | Size | JSON bytes | user CPU |  ratio |
 |------|-----------:|---------:|-------:|
@@ -84,7 +84,7 @@ head docstring documents both the profile and sidecar formats.
 | 4×   |  4,831,709 |   0.54 s |   2.35× |
 | 8×   |  9,826,609 |   1.37 s |   2.54× |
 
-Growth per doubling is ~2.1–2.5×. Slightly super-linear in the tail,
+Growth per doubling is \~2.1–2.5×. Slightly super-linear in the tail,
 consistent with allocator/cache effects as the output buffer grows
 past L2/L3 cache sizes. No quadratic pathology — the work is genuinely
 linear in AST node count, just with a high constant factor.

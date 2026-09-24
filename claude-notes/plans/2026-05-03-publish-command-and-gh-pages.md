@@ -545,7 +545,7 @@ without committing to building one.
    `Anonymous` variant; `Authorized`/`Environment` follow when a
    provider needs them.
 5. **Real git for tests.** Bare local remote in a temp dir. Worth
-   the ~1–2s per test for fidelity. Helper to set this up will live
+   the \~1–2s per test for fidelity. Helper to set this up will live
    under `quarto-publish/tests/common/` so future provider tests can
    reuse the rig pattern.
 6. **`.nojekyll` deploy poll is in Phase 1, gated by an option.**

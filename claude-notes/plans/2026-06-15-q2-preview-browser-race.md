@@ -59,7 +59,7 @@ starts" side of the boundary as the URL print.
 ### Where the server actually becomes reachable
 
 `quarto_preview::run` → `run_with_on_ready` → `quarto_hub::server::run_server_with`
-(`crates/quarto-hub/src/server.rs`, ~1161-1304):
+(`crates/quarto-hub/src/server.rs`, \~1161-1304):
 
 1. `~1181` `HubContext::new(storage, config).await` — **the expensive, size-dependent
    step**: samod repo init, project discovery (directory walk), index load, initial
@@ -121,7 +121,7 @@ attempts starts tight and decays to a 1s cap:
   visible instead of silent.
 
 Rationale for these numbers comes from the benchmark below: the common case is
-~250ms, so the tight early interval opens the tab with no perceptible delay; the 1s
+\~250ms, so the tight early interval opens the tab with no perceptible delay; the 1s
 cap bounds post-ready latency on a slow project to ≤1s; the 10s ceiling + warn turns
 "server eventually works but browser errored" into a logged, diagnosable event.
 

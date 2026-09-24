@@ -48,7 +48,7 @@
 
 ## Provenance — why this plan exists
 
-"Phase 1.6" is referenced ~50 times across the epic but was never a plan of
+"Phase 1.6" is referenced \~50 times across the epic but was never a plan of
 record. It is *defined* in exactly two prose design-notes, both verbatim
 "Deferred:" notes rather than actionable phases:
 

@@ -81,7 +81,7 @@ the source-location question (the hard part), and lays out a phased plan.
 |---|---|---|
 | "qmd files must exist on disk" (intermediate for engines) | False. `run_pipeline(content: &[u8], source_name)` is fully in-memory (`quarto-core/src/pipeline.rs`); the Q2 jupyter engine executes fenced blocks from the qmd *string* (`engine/jupyter/text_execute.rs`), no notebook or qmd intermediary on disk | **The entire sidecar-file mechanism is unnecessary.** Conversion can happen in-process, in front of the parser |
 | "SourceContext serialization is limited (PandocAST JSON only)" | False since the k-44 pool work: `SourceContext`/`SourceInfo` are plain serde types | No cross-process handoff problem to design around |
-| Needs new `SourceInfo::NotebookCell` variant carrying cell metadata + content file id per span | Cell identity is per-*file*, not per-*span*: with one ephemeral `SourceFile` per cell, existing `Original`/`Substring`/`Concat` compose fine | **No `SourceInfo` enum change needed** (the enum is closed, with ~8 match sites upstream — avoiding this is a big deal) |
+| Needs new `SourceInfo::NotebookCell` variant carrying cell metadata + content file id per span | Cell identity is per-*file*, not per-*span*: with one ephemeral `SourceFile` per cell, existing `Original`/`Substring`/`Concat` compose fine | **No `SourceInfo` enum change needed** (the enum is closed, with \~8 match sites upstream — avoiding this is a big deal) |
 | `FilterProvenance` variant exists | Extracted crate has `Generated { by: By, from: [Anchor] }` instead | Use `Generated` for synthesized scaffolding (fences etc.) |
 
 What *hasn't* changed: no converter infrastructure exists; `SourceType::Ipynb`

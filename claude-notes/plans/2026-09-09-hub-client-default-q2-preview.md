@@ -232,7 +232,7 @@ preview by default. See D6.
   `q2 render`"), instead of `console.error` + a frozen last-good view. This
   also improves the existing behaviour for `format: pdf`. *Alternative:*
   leave the SPA alone (pure scope discipline). Recommend the message: it is
-  ~20 lines and it is the first thing a user trying the new format name in
+  \~20 lines and it is the first thing a user trying the new format name in
   the CLI will hit.
 
 - **D6 (DECIDED 2026-09-09) — Keep `previewEditing` defaulting to ON.** That was the decision in
@@ -245,7 +245,7 @@ preview by default. See D6.
 - **D7 (DECIDED 2026-09-09) — Rename the e2e iframe kind `'html'` to `'q2-html-render'`.** The
   kind names the *renderer*, not the document format; after this change
   `'html'` would be actively misleading (an html document renders in the
-  q2-preview iframe). ~10 sites, mechanical.
+  q2-preview iframe). \~10 sites, mechanical.
 
 - **D8 (DECIDED 2026-09-09, as an intermediate step only) — e2e smoke fixtures whose `ensureHtmlElements` selectors fail on
   the q2-preview DOM are skip-listed with a strand, not rewritten.** The

@@ -162,7 +162,7 @@ additive.
    choice: render eagerly; measure if it becomes a problem.*
 
 2. **Wire size.** Each rendered text is typically 8-20 lines.
-   For a render with 5 warnings, the JSON response gains ~100
+   For a render with 5 warnings, the JSON response gains \~100
    lines of text. Not blocking but worth noting. The overlay
    only renders the expanded view on click, so transport cost
    doesn't translate to render cost until the user expands.

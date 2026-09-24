@@ -37,7 +37,7 @@ pandoc output: [ BulletList [ [ Para [ Str "a" ] ] , [ Para [ Str "b" ] ] ] ]
 2. Checks if next line is indented enough or starts with list marker
 3. Returns true/false to indicate if list continues
 
-**Code Location**: Added before `match()` function (~60 lines)
+**Code Location**: Added before `match()` function (\~60 lines)
 
 **Problem**: Fundamental catch-22 with tree-sitter lexer:
 - To determine if list continues, must look at content after blank lines

@@ -36,7 +36,7 @@ resolve the construct to one of:
 If the scanner walks to EOF / end-of-block without finding `>` or
 `}`, it returns `false` and emits no token at all. The grammar's
 internal `pandoc_str` regex
-(`crates/tree-sitter-qmd/tree-sitter-markdown/grammar.js`, ~line 80)
+(`crates/tree-sitter-qmd/tree-sitter-markdown/grammar.js`, \~line 80)
 also does **not** include `<` in any of its character classes (it
 explicitly excludes `<` from `PANDOC_VALID_MATH_SYMBOLS` and never
 adds it back). So `<` ends up lexed by nothing, the parser hits the
@@ -103,7 +103,7 @@ producing a `Q-2-9` warning — see "Risks" below.
 In `grammar.js`:
 
 - Declare `$._pandoc_lt_str` in the `externals` list (near
-  `$.html_element`, ~line 1046).
+  `$.html_element`, \~line 1046).
 - Add it as an alternative for `_inline_element`, aliased to
   `$.pandoc_str` (or as a distinct node-type that
   `pampa/src/pandoc/treesitter.rs` maps to `Str { text: "<" }`).

@@ -32,7 +32,7 @@ Fixing the key (bd-79c4do6g) should take the serial render from ~42 s to
 roughly 9 s and the parallel render from ~4 s to well under 2 s on this
 machine, with no other change. Three smaller findings fell out on the way:
 the LRU index loses updates under parallel Pass 2 and leaks orphan cache
-files (bd-ddahjqr1, 101 MB observed); peak RSS is ~1000× the source size
+files (bd-ddahjqr1, 101 MB observed); peak RSS is \~1000× the source size
 (bd-is4q72tt); and a single-page render inside the site re-renders all 16
 listing pages (bd-j0hmi3rx). After SCSS, the profile is the familiar
 AST-construction `memmove` + tree-sitter shape (bd-5yektmwt).
@@ -98,14 +98,14 @@ perf.sass hits=22 compiles=682 uncached=0
 ```
 
 Parallel: `perf.pass2 docs=352 threads_used=16 wall_ms=4149`,
-`perf.sass hits=20 compiles=684`. Pass 1 is ~30 ms and irrelevant. The
+`perf.sass hits=20 compiles=684`. Pass 1 is \~30 ms and irrelevant. The
 16-worker speed-up on Pass 2 is 10× (41.6 s → 4.1 s) at 1.5× the CPU
 (40 → 60 s user); lock waits (`__ulock_wait*`, `__psynch_cvwait`) are
-~1 % of parallel samples — the locale-lock pathology of bd-b7eb7 is
+\~1 % of parallel samples — the locale-lock pathology of bd-b7eb7 is
 still gone.
 
 The 30 s "warm serial" row is faster than the 42 s "cleared" row only
-because ~315 *orphaned* cache files from earlier runs were serving hits
+because \~315 *orphaned* cache files from earlier runs were serving hits
 (see finding 2) — the number that reflects the code is 42 s.
 
 ### Where the time goes (serial samply, 29,492 samples)
@@ -200,13 +200,13 @@ metadata merge keeps adjusting them (project root → document dir) for
 documents in subdirectories". So each page's merged metadata carries a
 *different* string for the same file (`../../_extensions/…/theme.scss`,
 `../../../_extensions/…`, …), `resolve_path` joins it onto a different
-`document_dir`, and the hash differs — 349 directories → ~349 × 2 keys
+`document_dir`, and the hash differs — 349 directories → \~349 × 2 keys
 for content that is byte-identical (the compiled CSS has exactly two
 distinct outputs per variant across the whole site; see below).
 
 The 10 MB LRU holds 31 entries of ~337 KB, so the miss rate is 97 %:
 `hits=22 compiles=682`. At ~48 ms per grass compile (small-doc run:
-34 compiles in 1.3 s) that is ~33 s of the 42 s serial render.
+34 compiles in 1.3 s) that is \~33 s of the 42 s serial render.
 
 Evidence chain: samply → `compile_theme_css` 78 % inclusive → cache dir
 inspection (315 files, 2 distinct sizes, all written today) → cleared
@@ -247,11 +247,11 @@ The project's cache dir held **315 files / 101 MB** before this session.
 Because `cache_get_lru` looks up by key on the backend (not via the
 index), orphans still serve hits — which is why the 30 s serial number
 looked better than the 42 s cleared-cache truth. Finding 1 makes this
-visible; without finding 1 the key space is ~4 and the leak is bounded.
+visible; without finding 1 the key space is \~4 and the leak is bounded.
 Still worth fixing (per-process in-memory index flushed once, or a mutex
 around the RMW, or reconcile index against directory on load).
 
-### 3. Memory: ~1000× the source (bd-is4q72tt, P2)
+### 3. Memory: \~1000× the source (bd-is4q72tt, P2)
 
 `api/index.qmd` (1.1 MB) alone peaks at 1.1 GB RSS; a small page at
 158 MB (that run also compiled SCSS 34 times, see 4); the full serial

@@ -42,7 +42,7 @@ merge surfaces all 23 once.
 
 `git config rerere.enabled false` is set in this worktree. **Leave it.**
 
-The repo's `.git/rr-cache` holds ~90 resolutions from 2026-06-05 and 2026-07-24.
+The repo's `.git/rr-cache` holds \~90 resolutions from 2026-06-05 and 2026-07-24.
 When rerere was enabled for a trial merge on 2026-08-13 it replayed 17 of the 23
 conflicts from that historical cache, and because those resolutions predate
 main's last 340 commits they **systematically reverted main's newer work**.

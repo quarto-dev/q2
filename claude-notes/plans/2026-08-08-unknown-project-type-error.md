@@ -60,7 +60,7 @@ design produces the symptom:
   are flushed to a per-document `<stem>_files/` dir.
 - No `output-dir` default, so output lands **next to the sources**.
 
-So each of the ~350 documents got its own copy of the bootstrap bundle,
+So each of the \~350 documents got its own copy of the bootstrap bundle,
 in-tree. `.md` vs `.qmd` is irrelevant.
 
 ### Verification (standalone repro)

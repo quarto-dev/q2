@@ -44,16 +44,16 @@ Screenshot: `claude-notes/scratch/image-drop-bug-repro.png`.
 
 `hub-client/src/components/Editor.tsx`:
 
-- `handleEditorDrop` (external-file branch, ~line 854): opens the asset
+- `handleEditorDrop` (external-file branch, \~line 854): opens the asset
   dialog with `setAssetDestination('')` — always project root, ignoring the
   current file's directory.
-- `handleUploadAsset` (~line 905): inserts
+- `handleUploadAsset` (\~line 905): inserts
   `` `![](${result.path})` `` where `result.path` is the final
   project-root-relative upload path returned by `createBinaryFile`
   (`CreateBinaryFileResult.path` — authoritative; it can differ from the
   requested path via hash-suffix rename on name conflict). No relativization
   against the current file's directory.
-- `handleEditorDrop` (internal sidebar-drag branch, ~line 814): same bug —
+- `handleEditorDrop` (internal sidebar-drag branch, \~line 814): same bug —
   `` `![](${path})` `` / `` `[${fileName}](${path})` `` insert the sidebar's
   project-root-relative path verbatim.
 

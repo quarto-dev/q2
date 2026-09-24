@@ -69,7 +69,7 @@ text with `code`    ->   Plain [ ... Code ... ]
 - [x] `test_warnings::test_block_level_html_elements` — asserts the split tags,
       not a changed diagnostic (see the correction above)
 - [x] `incremental_writer_tests::roundtrip_comment_in_blockquote`
-- [x] Snapshot review (expect ~1); report count + summary per CLAUDE.md
+- [x] Snapshot review (expect \~1); report count + summary per CLAUDE.md
 - [x] Document the `Plain`/`Para` and `native_divs` divergences
 
 ## Phase 5 — Verify

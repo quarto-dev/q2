@@ -58,14 +58,14 @@ generic catalog machinery (no Connect-specific anything).
 ## Current state (q2, at f7cf8322)
 
 - **Config reader** — `crates/quarto-sass/src/config.rs`:
-  - `parse_highlight_style` (~line 871): scalar + `{light, dark}` map forms;
+  - `parse_highlight_style` (\~line 871): scalar + `{light, dark}` map forms;
     each slot goes through `resolve_adaptive_highlight(name, dark)`.
-  - `ADAPTIVE_HIGHLIGHT_STYLES: &[&str] = &["a11y"]` (~line 832) — the only
+  - `ADAPTIVE_HIGHLIGHT_STYLES: &[&str] = &["a11y"]` (\~line 832) — the only
     adaptive name so far. Growing this list to Q1's 8 makes the map form
     resolve `github` → `github-light` / `arrow` → `arrow-dark` per slot,
     matching Q1's `textHighlightThemePath` (try `<name>-<style>.theme`
     first, then `<name>.theme`).
-  - `builtin_darkness` (~line 850): the item-(3) approximation for
+  - `builtin_darkness` (\~line 850): the item-(3) approximation for
     single-variant configs.
 - **Catalog + layer loader** — `crates/quarto-sass/src/bundle.rs`:
   - `KNOWN_HIGHLIGHT_PALETTES = ["default", "a11y-light", "a11y-dark"]`
@@ -78,7 +78,7 @@ generic catalog machinery (no Connect-specific anything).
   the hand-derived Pandoc-token → capture-group mapping table — the seed of
   the general translator's table.
 - **Warning** — `crates/quarto-core/src/stage/stages/compile_theme_css.rs`
-  ~line 399: one Q-14-5 per distinct unknown name, "Available palettes"
+  \~line 399: one Q-14-5 per distinct unknown name, "Available palettes"
   listed from `KNOWN_HIGHLIGHT_PALETTES`.
 - **Class emission** — `crates/pampa/src/writers/html.rs`
   `capture_to_class` (line 735): tree-sitter capture name, dots → hyphens,
@@ -107,7 +107,7 @@ From `external-sources/quarto-cli/src`:
   path relative to the input** (`highlight-style: custom.theme` is a
   supported Q1 feature); map form `{light, dark}` counts as adaptive.
 - **Translation is runtime, not codegen**: `generateThemeCssVars` /
-  `generateThemeCssClasses` (`src/command/render/pandoc-html.ts` ~line 380+)
+  `generateThemeCssClasses` (`src/command/render/pandoc-html.ts` \~line 380+)
   turn the JSON into CSS at render time via the skylighting abbreviation
   table `kAbbrevs` (`Keyword` → `.kw`, etc.).
 - **Item (2) exactly** (`resolveTextHighlightingLayer`,

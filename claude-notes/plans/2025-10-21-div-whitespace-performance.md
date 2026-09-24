@@ -170,7 +170,7 @@ Pre-computing line start offsets is the clear winner:
 
 **Before:**
 - For file with N lines and E errors: O(E × N) ≈ O(N²)
-- Example: 1000 lines, 10 errors = ~5,500 line iterations
+- Example: 1000 lines, 10 errors = \~5,500 line iterations
 
 **After:**
 - Pre-computation: O(N)
@@ -178,7 +178,7 @@ Pre-computing line start offsets is the clear winner:
 - Total: O(N + E) ≈ O(N)
 - Example: 1000 lines, 10 errors = 1000 + 10 = 1,010 operations
 
-**Speedup:** ~5.5x for small files, potentially 100x+ for large files with many errors.
+**Speedup:** \~5.5x for small files, potentially 100x+ for large files with many errors.
 
 ## Testing
 

@@ -126,14 +126,14 @@ referenced document does not exist on the hub (a "dangling entry"),
 **every client fails the entire project**:
 
 - `ts-packages/quarto-sync-client/src/client.ts`
-  - `loadFileDocuments` (~line 434): `for` loop, `await findDoc(...)`
+  - `loadFileDocuments` (\~line 434): `for` loop, `await findDoc(...)`
     per file, **no try/catch** — the first unavailable doc throws out
     of `connect()`. Cold opens of the project fail entirely.
-  - `syncWithFiles` (just below, ~line 448): same pattern in the
+  - `syncWithFiles` (just below, \~line 448): same pattern in the
     **index-change handler** — sessions with the project already open
     blow up when a dangling entry *appears* in the index (this is how
     already-open colleagues got hit on 2026-06-12).
-  - `findDoc` (~line 332): retries "unavailable" up to 3× (with an
+  - `findDoc` (\~line 332): retries "unavailable" up to 3× (with an
     early bail when `connectedPeers.size === 0` — see Gotchas), then
     throws `Document <id> is unavailable`.
 - Consumers of `connect()` that therefore hard-fail:

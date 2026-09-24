@@ -97,7 +97,7 @@ This directory contains comprehensive documentation of the Pandoc filter system,
 | Type | Execution | Communication | Performance | File |
 |------|-----------|---|---|---|
 | **JSON** | External process | stdin/stdout JSON | -35% overhead | src/Text/Pandoc/Filter/JSON.hs |
-| **Lua** | Embedded VM | Direct marshaling | ~2% overhead | pandoc-lua-engine/src/Text/Pandoc/Lua/Filter.hs |
+| **Lua** | Embedded VM | Direct marshaling | \~2% overhead | pandoc-lua-engine/src/Text/Pandoc/Lua/Filter.hs |
 | **Citeproc** | Built-in | Internal | Negligible | src/Text/Pandoc/Citeproc.hs |
 
 ### Filter Execution Model

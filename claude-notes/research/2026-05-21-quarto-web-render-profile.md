@@ -7,17 +7,17 @@
 ## TL;DR
 
 Wall time is 3.28s on a 573-doc website that ultimately errors out
-before producing any HTML. Two hotspots account for ~80 % of CPU on
+before producing any HTML. Two hotspots account for \~80 % of CPU on
 the main thread:
 
-1. **Per-document subprocess spawn to find `jupyter`** — ~37 % of
+1. **Per-document subprocess spawn to find `jupyter`** — \~37 % of
    main-thread CPU. `EngineRegistry::new()` is called inside
    `build_html_pipeline_stages_with_options`, *which runs once per
    document*. Each construction calls `JupyterEngine::new()`, which
    runs `sh -c "command -v jupyter"` via `std::process::Command`.
    573 docs × one spawn ≈ 573 subprocess invocations.
 2. **Tree-sitter logger callback formatting every lexer / parser
-   step** — ~45 % of CPU lives in the `snprintf` → `__vfprintf` →
+   step** — \~45 % of CPU lives in the `snprintf` → `__vfprintf` →
    `_platform_memmove` chain. `crates/pampa/src/readers/qmd.rs`
    attaches a `set_logger` callback unconditionally; tree-sitter
    formats the log message via `snprintf` for every state
@@ -99,7 +99,7 @@ Tiny generated docs, no theme failures (no error path):
 | 300  |    1.163 |         3.9  |
 | 573 (quarto-web) | 3.28 |   5.7  |
 
-Linear in N, with a ~20 ms baseline. quarto-web's higher per-doc
+Linear in N, with a \~20 ms baseline. quarto-web's higher per-doc
 (5.7 ms) is consistent with larger documents = more parse work.
 
 ### Self-time top symbols (1290 samples, 1 ms each)

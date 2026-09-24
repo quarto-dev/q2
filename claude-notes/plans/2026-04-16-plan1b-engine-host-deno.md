@@ -37,7 +37,7 @@ schema.
 (the deferred launch-context bodies plug into 1b's QuartoAPI assembly), Plan 3
 Phase 3E (wire jupyter into the harness), Plan 4 (Julia validation).
 **Estimated sessions:** 2–3 (the original "1" predates the parallel-Pass-2 /
-multiplexing rework, which expanded scope: 7 Phase-0 seams + ~12 contract tests,
+multiplexing rework, which expanded scope: 7 Phase-0 seams + \~12 contract tests,
 multiplexed dispatch, cooperative cancel + poison/re-launch, `framing.ts`, the
 `cargo xtask` bundle step, the staleness diagnostic, and the CI freshness check).
 

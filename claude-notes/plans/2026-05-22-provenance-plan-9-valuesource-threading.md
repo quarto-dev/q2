@@ -86,7 +86,7 @@ there are producers, the incremental writer correctly walks only the
   through the provenance-aware version.
 
 - `DocumentProfile` gains `title_source_info: Option<SourceInfo>`
-  (per bd-8pmq3's detailed plan: ~30–50 LOC including `extract`
+  (per bd-8pmq3's detailed plan: \~30–50 LOC including `extract`
   change + `Default` impl at `crates/quarto-core/src/document_profile.rs`).
   Uses `#[serde(default, skip_serializing_if = "Option::is_none")]`
   — same pattern as `order: Option<i32>`. **No

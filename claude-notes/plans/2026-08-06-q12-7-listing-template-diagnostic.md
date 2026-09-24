@@ -119,7 +119,7 @@ spans to offer. That is true of `MergedMap` itself and false of the system:
 
 So the fix is **additive accessors on `MergedMap`/`MergedCursor` plus
 rewiring the two synthesis sites in `materialize.rs`** — no redesign, and
-entirely inside `crates/quarto-config` (~1,200 lines across `merged.rs` and
+entirely inside `crates/quarto-config` (\~1,200 lines across `merged.rs` and
 `materialize.rs`).
 
 **No external-crate work is required.** quarto-yaml already emits correct

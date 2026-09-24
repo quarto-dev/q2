@@ -4,7 +4,7 @@
 
 Mapped-text is a fundamental data structure in Quarto that maintains source location tracking through text transformations. It's critical for error reporting, as it allows Quarto to report errors in terms of the original source file locations even after the text has been extracted, transformed, or processed.
 
-**Total Code Size**: ~8,600 LOC across mapped-text, YAML intelligence, YAML validation, and YAML schema modules.
+**Total Code Size**: \~8,600 LOC across mapped-text, YAML intelligence, YAML validation, and YAML schema modules.
 
 ## Core Concept
 
@@ -321,13 +321,13 @@ These should be ported to Rust as property tests.
 - Needs careful lifetime management (Rc/Arc)
 - Critical for correctness (errors must point to right place)
 
-### LOC Estimate: ~1,000 lines Rust
+### LOC Estimate: \~1,000 lines Rust
 
 **Breakdown**:
-- Core MappedString: ~300 lines
-- Operations (substring, concat, trim, etc.): ~400 lines
-- Index/line/column utilities: ~200 lines
-- Tests: ~100 lines (port existing tests)
+- Core MappedString: \~300 lines
+- Operations (substring, concat, trim, etc.): \~400 lines
+- Index/line/column utilities: \~200 lines
+- Tests: \~100 lines (port existing tests)
 
 ### Time Estimate: 1-2 weeks
 

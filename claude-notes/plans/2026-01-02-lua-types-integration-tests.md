@@ -219,12 +219,12 @@ Add tests to `lua/filter.rs` in the existing `#[cfg(test)]` module, grouped by p
 
 | Phase | Lines Covered | Estimated Improvement |
 |-------|---------------|----------------------|
-| 1-2   | ~200 lines    | +10% |
-| 3-4   | ~150 lines    | +7% |
-| 5     | ~80 lines     | +4% |
-| 6     | ~200 lines    | +10% |
-| 7     | ~50 lines     | +2% |
-| **Total** | ~680 lines | **+33%** (to ~78%) |
+| 1-2   | \~200 lines    | +10% |
+| 3-4   | \~150 lines    | +7% |
+| 5     | \~80 lines     | +4% |
+| 6     | \~200 lines    | +10% |
+| 7     | \~50 lines     | +2% |
+| **Total** | \~680 lines | **+33%** (to \~78%) |
 
 ## Questions for Review
 

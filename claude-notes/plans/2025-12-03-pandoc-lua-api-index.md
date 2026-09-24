@@ -81,13 +81,13 @@ Practical filter examples to study:
 
 | Example | Lines | Description |
 |---------|-------|-------------|
-| Macro substitution | ~480 | Simple text replacement |
-| Center images (HTML) | ~530 | Div wrapping |
-| Pagebreaks (LaTeX/HTML) | ~580 | RawBlock insertion |
-| Capitalizing headings | ~640 | text.upper usage |
-| Removing links | ~690 | Replace Link with content |
-| Removing links (preserve) | ~720 | pandoc.walk_inline |
-| Counting words | ~800 | Traverse and count |
+| Macro substitution | \~480 | Simple text replacement |
+| Center images (HTML) | \~530 | Div wrapping |
+| Pagebreaks (LaTeX/HTML) | \~580 | RawBlock insertion |
+| Capitalizing headings | \~640 | text.upper usage |
+| Removing links | \~690 | Replace Link with content |
+| Removing links (preserve) | \~720 | pandoc.walk_inline |
+| Counting words | \~800 | Traverse and count |
 
 ---
 

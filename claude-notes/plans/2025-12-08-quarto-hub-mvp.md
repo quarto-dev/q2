@@ -22,7 +22,7 @@ Create a new crate `quarto-hub` that:
 | Communication | **WebSocket + REST hybrid** |
 | Document scope | **Multiple documents per project** (all .qmd files) |
 | Automerge crate | **samod** (v0.6, JS-compatible replacement for automerge_repo) |
-| Persistence | **Save on every edit** (low concurrency ~tens of users) |
+| Persistence | **Save on every edit** (low concurrency \~tens of users) |
 | Auth (MVP) | **None** - local development, trust network |
 | Future sync | Eventually sync with remote source |
 

@@ -69,7 +69,7 @@ Location: `crates/quarto-markdown-pandoc/src/pandoc/treesitter.rs:531-542`
 - ✅ `pandoc_space` - whitespace
 
 ### What's Not Working Yet
-- Everything else (~100+ node types) - all commented out in `native_visitor`
+- Everything else (\~100+ node types) - all commented out in `native_visitor`
 - The main test suite still fails (expected during refactoring)
 - Only basic text in paragraphs works
 

@@ -23,7 +23,7 @@ bare-specifier aliases that `julia-engine.ts` relies on for its bare
 imports (`"path"`, `"fs/exists"`, `"encoding/base64"`). Added, matching
 Q1's `src/resources/extension-build/import-map.json` and plan1c's config
 spec (`claude-notes/plans/2026-04-16-plan1c-extension-integration.md`
-~L421-446) exactly:
+\~L421-446) exactly:
 
 ```jsonc
 "path":       "jsr:@std/path@1.0.8",

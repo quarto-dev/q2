@@ -18,7 +18,7 @@ An auth review surfaced three real gaps. This plan fixes them:
    ledger. Bans and `logout-everywhere` only affect session cookies — in a
    no-allowlist public deployment, a banned user keeps full MCP access
    indefinitely, and a stolen Google ID token survives `logout-everywhere`
-   for up to ~1 h. Already noted as future work ("`sub_denylist`") in
+   for up to \~1 h. Already noted as future work ("`sub_denylist`") in
    `2026-05-28-hub-mcp-loopback-pkce.md`; the ledger shipped since (C5), so
    the fix is now a wiring job, not a new store.
 2. **F2 (robustness, MCP client):** a 401/403 on the WS upgrade — or a
@@ -34,7 +34,7 @@ An auth review surfaced three real gaps. This plan fixes them:
    path, with nothing in the response distinguishing them
    (`server.rs:1268-1288`). Latent trap for any future Bearer caller; also
    the SPA still carries the dead pre-sliding `DEFAULT_SESSION_MS = 1 h`
-   fallback (`useAuth.ts:42`), which would mis-schedule (~168× too often) if
+   fallback (`useAuth.ts:42`), which would mis-schedule (\~168× too often) if
    it ever fired.
 
 Sequencing: **F1 → F2** (F2's end-to-end "banned mid-session" case and its

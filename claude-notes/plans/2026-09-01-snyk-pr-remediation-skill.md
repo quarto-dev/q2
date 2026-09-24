@@ -134,7 +134,7 @@ Verification for the katex case:
       origin/main (clean), bumped root pin + lockfile, bumped
       `DEFAULT_KATEX_URL_BASE` to 0.18.4, normalized the sub-project
       lockfile caret, regenerated `q2-sandboxed-preview.html`
-      (~19-line delta — real 0.18.3/0.18.4 KaTeX code changes plus minifier
+      (\~19-line delta — real 0.18.3/0.18.4 KaTeX code changes plus minifier
       renumbering, unlike the 2-byte 0.18.2 bump; lockfile diffs katex-only).
       Commits on the branch: `e4a72819` (alignment), `8d584e04` (changelog).
 - [x] Verification battery: guard test passes; `cargo nextest run

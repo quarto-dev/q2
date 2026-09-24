@@ -147,7 +147,7 @@ Q2 side:
     nothing like Q1's `.light-content` / `.dark-content` image pairing exists,
     and `preview-renderer` has no color-scheme plumbing of its own.
 16. **knitr's `fig-format` is passed straight through as `dev`**
-    (`engine/knitr/resources/rmd/hooks.R` ~L801). Whether a `.hep` device
+    (`engine/knitr/resources/rmd/hooks.R` \~L801). Whether a `.hep` device
     exists is the R package's business; Q2 needs nothing there for a
     hand-written `![](plot.hep)`, and only a `dev`-name pass-through once the
     R side ships.
@@ -224,7 +224,7 @@ served from the iframe's origin, like `web-tree-sitter.wasm` is.
 
 Alternative rejected: link hephaestus into `wasm-quarto-hub-client` and run
 transform A in the browser. It couples the R package's format version to the
-main wasm bundle, adds ~2.4 MB raw to it, and throws away what the JS client
+main wasm bundle, adds \~2.4 MB raw to it, and throws away what the JS client
 gives for free (reflow on resize, `setColorScheme`, picking).
 
 ### E. Progressive enhancement of rendered sites (future, optional)
@@ -232,7 +232,7 @@ gives for free (reflow on resize, `setColorScheme`, picking).
 Hephaestus's own first-paint story: the page ships the natively-rendered SVG
 (from A) *and* the `.hep` (copied by `resource-collector`), and a small
 after-body script mounts `PlotView` over the placeholder so the published
-plot reflows on resize and follows the site's dark toggle. Costs ~800 kB
+plot reflows on resize and follows the site's dark toggle. Costs \~800 kB
 brotli of wasm per page load and requires JS; strictly opt-in
 (`hephaestus: { live: true }` or similar), vendored like mermaid rather than
 CDN-loaded. Not part of the first cut; listed so that A's ordering decision

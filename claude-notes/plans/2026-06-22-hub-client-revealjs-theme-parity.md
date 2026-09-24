@@ -88,7 +88,7 @@ renderers, and the editor chose the legacy one for this format.
 
 Native / shared (correct):
 - `crates/quarto-core/src/revealjs/assemble.rs` — `reveal_config_json`
-  (~188-289) builds the reveal init from merged metadata; `register_reveal_assets`
+  (\~188-289) builds the reveal init from merged metadata; `register_reveal_assets`
   emits theme links in cascade order.
 - `crates/quarto-core/src/stage/stages/compile_theme_css.rs:275-343` — compiles
   the reveal theme, gated on `is_revealjs_target(...)` (true for both `revealjs`
@@ -255,7 +255,7 @@ click-to-edit on slides; attribution on slides.
 - [x] Routing test: `ReactRenderer` with `format: revealjs` renders
       `Q2PreviewIframe`, **not** `RevealjsSlideAst`. Added to
       `ReactRenderer.integration.test.tsx`; confirmed red, then green.
-- [~] `doRender` dispatch: `doRender` is module-private with no existing test
+- [\~] `doRender` dispatch: `doRender` is module-private with no existing test
       harness; covered instead by the routing test + the end-to-end browser
       verification below (calling `renderPageForPreview` is what makes the iframe
       receive a themed AST — observable as non-uppercase `<h2>`). A unit test

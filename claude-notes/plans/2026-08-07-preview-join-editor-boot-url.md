@@ -196,7 +196,7 @@ change.)
    health. Printing before the probe would print the wrong (root) URL
    for editor hosts; so the probe becomes sequential, the final URL
    prints once, and the browser opens inline. Common case adds one
-   tunnel roundtrip (~ms); worst case (host still booting) waits out
+   tunnel roundtrip (\~ms); worst case (host still booting) waits out
    the same 15 s budget the spawned probe had.
 4. **`EditorBootInfo` is defined in `quarto-preview`** with both
    `Serialize` and `Deserialize`; the guest (`quarto` crate) reuses

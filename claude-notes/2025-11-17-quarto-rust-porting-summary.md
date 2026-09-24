@@ -30,13 +30,13 @@ This Graphviz diagram represents the complete subsystem architecture across 7 la
 - **Node.js** - OJS parser execution
 
 #### Layer 1: Foundation Layer
-- **MappedString/SourceInfo** (~450 LOC)
+- **MappedString/SourceInfo** (\~450 LOC)
   - Tracks source positions through text transformations
   - Critical for error reporting with accurate line/column numbers
   - Port strategy: Enum-based mapping (1-2 weeks)
 
 - **quarto-markdown** (Rust parser)
-  - **Already implemented in Rust** (~11K LOC)
+  - **Already implemented in Rust** (\~11K LOC)
   - Converts QMD to typed Pandoc AST with full source tracking
   - Major advantage: parser already exists
 
@@ -47,11 +47,11 @@ This Graphviz diagram represents the complete subsystem architecture across 7 la
   - **Status:** ✅ Phase 1 Complete (quarto-error-reporting crate)
 
 #### Layer 2: Core Infrastructure
-- **YAML System** (~8,600 LOC total)
+- **YAML System** (\~8,600 LOC total)
   - Parser + validator + schemas
-  - YAML intelligence (IDE features): ~2,500 LOC
-  - YAML validation: ~1,500 LOC
-  - YAML schemas: ~4,000 LOC
+  - YAML intelligence (IDE features): \~2,500 LOC
+  - YAML validation: \~1,500 LOC
+  - YAML schemas: \~4,000 LOC
   - **Port plan:** 6-8 weeks across 6 phases
   - **Status:** ✅ Phase 1 Complete (quarto-yaml + quarto-yaml-validation crates)
 
@@ -84,17 +84,17 @@ This Graphviz diagram represents the complete subsystem architecture across 7 la
 #### Layer 5: Postprocessing
 - **HTML Postprocessing**
   - Port strategy: html5ever + scraper
-  - ~21 postprocessor files to port
+  - \~21 postprocessor files to port
   - Estimate: 4-6 weeks
 
 - **Templating**
   - Port strategy: tera (Jinja2-like)
-  - ~20 EJS templates to convert
+  - \~20 EJS templates to convert
   - Estimate: 2-3 weeks
 
 #### Layer 6: Tools & Services
 - **LSP** (Language Server)
-  - Current: TypeScript/Node (~6,300 LOC)
+  - Current: TypeScript/Node (\~6,300 LOC)
   - **Critical issue:** Runtime coupling with CLI (loads JS modules)
   - **When CLI → Rust, LSP breaks**
   - Port strategy: tower-lsp framework
@@ -115,7 +115,7 @@ This Graphviz diagram represents the complete subsystem architecture across 7 la
 **Files:** `lsp-architecture-findings.md`, `lsp-rust-port-summary.md`, `lsp-feature-catalog.md`
 
 **Current Implementation:**
-- TypeScript/Node: ~6,300 LOC
+- TypeScript/Node: \~6,300 LOC
 - Located in quarto monorepo at `apps/lsp/`
 - Provides completions, hover, diagnostics, symbols, etc.
 
@@ -155,7 +155,7 @@ Comprehensive analysis of 4 categories with porting strategies:
 - **Current:** Lodash template (EJS-like syntax)
 - **Rust solution:** tera (Jinja2-like)
 - **Effort:** 2-3 weeks
-- **Coverage:** ~20 EJS template files, 13 TypeScript files using renderEjs()
+- **Coverage:** \~20 EJS template files, 13 TypeScript files using renderEjs()
 - **Migration:** Automated syntax conversion possible
 
 #### C. Observable/OJS Compilation
@@ -183,14 +183,14 @@ Quarto extracts parts of source files (e.g., YAML frontmatter), processes them, 
 MappedString tracks how offsets in transformed strings map back to original source.
 
 **Current Implementation:**
-- TypeScript: ~450 LOC using closures
+- TypeScript: \~450 LOC using closures
 - Core concept: Composition through mapping functions
 - Critical for all error reporting
 
 **Rust Port Strategy:**
 - Use enum-based mapping (not closures)
 - More Rust-idiomatic, easier to debug
-- Estimated ~1,000 lines Rust
+- Estimated \~1,000 lines Rust
 - Timeline: 1-2 weeks
 
 **Design:**
@@ -212,24 +212,24 @@ pub enum MappingStrategy {
 
 **Files:** `yaml-validator-analysis.md`, `yaml-validation-rust-design.md`, `yaml-annotated-parse-rust-plan.md`
 
-**Massive Subsystem:** ~8,600 LOC total
+**Massive Subsystem:** \~8,600 LOC total
 
 **Components:**
-1. **YAML Intelligence** (~2,500 LOC)
+1. **YAML Intelligence** (\~2,500 LOC)
    - IDE features: completions, hover, diagnostics
    - Tree-sitter integration for error recovery
    - Cursor position navigation
 
-2. **YAML Validation** (~1,500 LOC)
+2. **YAML Validation** (\~1,500 LOC)
    - Schema-based validation
    - Detailed error messages with source locations
    - anyOf error pruning heuristics
 
-3. **YAML Schemas** (~4,000 LOC)
+3. **YAML Schemas** (\~4,000 LOC)
    - Frontmatter, project config, brand, etc.
    - JSON-Schema-like definitions
 
-4. **MappedString** (~450 LOC)
+4. **MappedString** (\~450 LOC)
    - Source location tracking
 
 **Dual Parser Strategy:**
@@ -248,7 +248,7 @@ pub enum MappingStrategy {
   - Schema enum (13 types)
   - ValidationContext with path tracking
   - All type-specific validators
-  - ~1,150 LOC, 12 tests passing
+  - \~1,150 LOC, 12 tests passing
 
 ### 5. Rendering Pipeline
 
@@ -369,7 +369,7 @@ pub struct Step {
 - ValidationContext with path tracking
 - Navigate function for error reporting
 - All type-specific validators implemented
-- ~1,150 LOC
+- \~1,150 LOC
 - 12 tests passing
 
 #### 5. quarto-error-reporting Crate (Phase 1)
@@ -446,7 +446,7 @@ Based on beads tasks and documentation:
 1. **Owned Data vs Lifetimes** (YAML)
    - Chose owned yaml-rust2::Yaml + parallel Children
    - Enables config merging across different lifetimes
-   - ~3x memory overhead acceptable for simplicity
+   - \~3x memory overhead acceptable for simplicity
 
 2. **Enum-based Mapping** (MappedString)
    - Explicit representation of mapping strategies
@@ -487,7 +487,7 @@ Based on beads tasks and documentation:
 **Core functionality:** 4-5 months (some parallel work possible)
 
 **Phased approach:**
-- Phase 1: Foundation (MappedString, YAML, Error Reporting) - ✅ ~60% Complete
+- Phase 1: Foundation (MappedString, YAML, Error Reporting) - ✅ \~60% Complete
 - Phase 2: Rendering Pipeline - 📋 Planned
 - Phase 3: LSP + CLI Integration - 📋 Planned
 - Phase 4: JavaScript Dependencies - 📋 Planned
@@ -527,7 +527,7 @@ LSP + CLI (tools)
 
 ### 4. Challenges
 
-1. **Large codebase** (~50,000+ LOC to port)
+1. **Large codebase** (\~50,000+ LOC to port)
 2. **Complex metadata merging** (intricate logic)
 3. **Testing** (must match TypeScript output exactly)
 4. **Ecosystem maturity** (some Rust crates less mature than JS equivalents)

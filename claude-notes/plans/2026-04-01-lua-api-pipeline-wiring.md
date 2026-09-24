@@ -132,7 +132,7 @@ it's in document metadata — no code path injects it programmatically.
 - [x] **1.3** Update test call sites in `filter_tests.rs`. Most tests
   call `apply_lua_filter(...).unwrap()` without destructuring — these
   need no change since the `.unwrap()` is transparent to the return
-  type. Only ~1 test destructures the tuple explicitly:
+  type. Only \~1 test destructures the tuple explicitly:
   ```rust
   let (_, _, diagnostics) = apply_lua_filters(...);
   ```
@@ -417,7 +417,7 @@ Benefits:
 - Self-documenting field names
 
 Most filter test sites call `.unwrap()` without destructuring and need
-no change. Only ~1 site explicitly destructures the tuple.
+no change. Only \~1 site explicitly destructures the tuple.
 
 ### Why artifacts for CSS/JS files, `PandocIncludes` for text
 
@@ -489,7 +489,7 @@ New `css:*` and `js:*` artifacts will be picked up automatically.
 |---|---|
 | `crates/pampa/src/lua/filter.rs` | Return `FilterOutput` instead of 3-tuple; stop discarding deps/includes |
 | `crates/pampa/src/lua/mod.rs` | Export `FilterOutput` |
-| `crates/pampa/src/lua/filter_tests.rs` | Update ~1 test site that destructures the tuple |
+| `crates/pampa/src/lua/filter_tests.rs` | Update \~1 test site that destructures the tuple |
 | `crates/pampa/src/unified_filter.rs` | Pass through `FilterOutput`; accumulate deps/includes |
 | `crates/quarto-core/src/render.rs` | Add `includes: PandocIncludes` field to `RenderContext` |
 | `crates/quarto-core/src/stage/context.rs` | Add `includes: PandocIncludes` field to `StageContext` |

@@ -102,7 +102,7 @@ pendingClickCoordsRef?: React.MutableRefObject<{ x: number; y: number } | null>;
 ```
 
 Allocate the ref in `PreviewRoot.tsx` (alongside `editDraftRef` etc.) and pass it
-into the context value (~`PreviewRoot.tsx:1502` block).
+into the context value (\~`PreviewRoot.tsx:1502` block).
 
 ### 2. Write the coords at the mouse activation site
 

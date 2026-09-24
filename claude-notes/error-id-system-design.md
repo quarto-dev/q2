@@ -21,7 +21,7 @@ This document proposes a TypeScript-inspired error ID system for Quarto, providi
 
 TypeScript uses a proven system:
 - **Format**: `TS####` (e.g., `TS2322`, `TS1005`)
-- **Registry**: Central `diagnosticMessages.json` file (~2000 entries)
+- **Registry**: Central `diagnosticMessages.json` file (\~2000 entries)
 - **Organization**: Code ranges by subsystem (1000s for syntax, 2000s for type checking, etc.)
 - **Documentation**: Each code can link to detailed explanations
 - **Generation**: Compiled into generated TypeScript code from JSON source

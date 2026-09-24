@@ -2,7 +2,7 @@
 
 **Status:** **Abandoned 2026-06-05.** No work to do; include round-trip is free
 under the node-edit architecture. This file is kept as a tombstone because
-~30 references to "Plan 8" remain across the q2-preview plan family
+\~30 references to "Plan 8" remain across the q2-preview plan family
 (Plans 1, 2a, 2b, 2c, 4, 6, 7g) and `research/2026-05-05-editable-custom-nodes.md`.
 Rather than sweep them all, this note explains what happened.
 

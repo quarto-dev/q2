@@ -80,10 +80,10 @@ Users can override by specifying alternate paths in `tree-sitter.json` (docs/src
 
 ## F. Performance
 
-Tree-sitter queries operate on pre-parsed trees. For a 100-line code block (~3–5 KB):
+Tree-sitter queries operate on pre-parsed trees. For a 100-line code block (\~3–5 KB):
 - Parsing: typically 0.5–2 ms (tree-sitter's C parser is fast)
-- Querying (highlights.scm): depends on query complexity; simple grammars ~1–5 ms
-- Total: ~2–10 ms for typical grammars (concrete benchmarks not published, but the system is used in GitHub's hot path)
+- Querying (highlights.scm): depends on query complexity; simple grammars \~1–5 ms
+- Total: \~2–10 ms for typical grammars (concrete benchmarks not published, but the system is used in GitHub's hot path)
 
 **Caching strategy:** Reuse `Highlighter` and `HighlightConfiguration` across documents; the parser pools cursors internally. For large files, consider processing in chunks.
 

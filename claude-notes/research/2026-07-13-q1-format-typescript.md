@@ -62,7 +62,7 @@ passes it straight into `quarto_global_state.active_filters`.
 `resolveFilters()` in `filters.ts`/`defaults.ts`), carrying `entryPoints` (user filters tagged
 with one of the 8 named positions). The actual pandoc `--lua-filter`/`filters:` surface for a
 Q1 render is almost always **one file** (`main.lua`) plus optionally the `citeproc` marker; all
-~138 built-ins and every user filter are statically `import()`-ed inside `main.lua` and spliced
+\~138 built-ins and every user filter are statically `import()`-ed inside `main.lua` and spliced
 into one internal table via `inject_user_filters_at_entry_points` driven by
 `quarto-filters.entryPoints`.
 

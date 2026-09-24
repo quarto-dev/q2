@@ -430,7 +430,7 @@ Time to convert MANUAL.txt to HTML:
 
 1. **No External Dependencies**: Lua 5.4 built into Pandoc
 2. **Direct AST Marshaling**: No JSON serialization
-3. **Better Performance**: ~3-35% faster than JSON filters
+3. **Better Performance**: \~3-35% faster than JSON filters
 4. **Richer Environment**: Access to pandoc module and utilities
 5. **Single Process**: No fork/pipe overhead
 

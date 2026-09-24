@@ -80,7 +80,7 @@ enum Children {
 - The `yaml` field provides fast, direct access to yaml-rust2's types
 - The `children` field enables source-tracked traversal
 - Downstream code can use yaml-rust2 methods directly
-- Yes, this duplicates data (~3x overhead), but it's the price of having both access patterns
+- Yes, this duplicates data (\~3x overhead), but it's the price of having both access patterns
 
 **Rejected Alternative**: Store only children, build Yaml on demand
 - Would require repeated Yaml construction (defeats "don't reconstruct" goal)

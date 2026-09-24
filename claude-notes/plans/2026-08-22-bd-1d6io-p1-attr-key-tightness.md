@@ -102,7 +102,7 @@ it skips the WASM build that `preview-runtime/src/wasmRenderer.ts` imports, so
 seven suites fail to resolve. Run `cd hub-client && npm run build:wasm` first
 when that leg matters.
 
-`npm install` in a fresh worktree rewrites `package-lock.json`, deleting ~468
+`npm install` in a fresh worktree rewrites `package-lock.json`, deleting \~468
 lines of other-platform optional `@esbuild`/rollup binaries. **Revert it** —
 committing it breaks Linux/Windows CI.
 

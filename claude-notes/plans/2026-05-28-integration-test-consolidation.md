@@ -19,8 +19,8 @@ failures) and resolved it by moving `tests/*.rs` into
 `tests/integration/*.rs` with a single `tests/integration/main.rs`
 declaring each former file as a `pub mod`. Reported wins:
 
-- Fresh `cargo clean` size: **8.1 GiB → 3.5 GiB** (~57% reduction)
-- Test-suite compile time on macOS: **88s → 52s** (~40% faster)
+- Fresh `cargo clean` size: **8.1 GiB → 3.5 GiB** (\~57% reduction)
+- Test-suite compile time on macOS: **88s → 52s** (\~40% faster)
 - Linux CI runner footprint: **15 GB → ~2 GB**
 
 This experiment measures the same change on Q2 from a macOS dev

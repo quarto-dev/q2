@@ -145,7 +145,7 @@ the surrounding facts it does not mention are the interesting ones.
    `#[cfg(not(target_arch = "wasm32"))]` with the reasoning spelled out: the
    hub-client reinitializes its iframe every render tick, so Bootstrap component
    state would be blown away. So in `q2 preview` the toggle would render and do
-   nothing — and the preview pane is *most often* at half-width (~850 px), i.e.
+   nothing — and the preview pane is *most often* at half-width (\~850 px), i.e.
    precisely the band this feature targets (`2026-05-01-website-sidebar-breakpoints.md`,
    "hub-client perspective"). Native `q2 render` output is fine.
 

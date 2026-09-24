@@ -60,7 +60,7 @@ base branch.
 Verified by reading each site (not a blanket replace). Line numbers are on
 `main` / the #265 base; re-confirm after switching branches.
 
-### SWITCH — real user-front-matter reads (~10 sites)
+### SWITCH — real user-front-matter reads (\~10 sites)
 
 | File | Line | Option | Notes |
 |------|------|--------|-------|

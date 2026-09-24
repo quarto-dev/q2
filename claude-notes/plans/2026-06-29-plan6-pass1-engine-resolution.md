@@ -96,7 +96,7 @@ Ratified with Gordon 2026-07-02 through 2026-07-05:
    - **No §3.3 validation for user tables.** The user is deliberately
      overruling the engine; the table is authoritative. The author-side
      `_extension.yml` hard-error validation in `TsEngine::ensure_loaded`
-     (`ts_engine.rs:242`, validation loop ~284-329) is untouched — while a
+     (`ts_engine.rs:242`, validation loop \~284-329) is untouched — while a
      user table shadows an engine, its own claims are simply never consulted,
      so there is no comparison moment. (A load-time "your table diverges from
      the engine's actual claims" advisory is future polish, not in scope.)

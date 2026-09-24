@@ -273,7 +273,7 @@ pub trait ProjectType {
 ```
 
 The trait is intentionally minimal for Phase 1. Q1's
-`ProjectType` interface has ~25 hooks; we'll grow into them only as
+`ProjectType` interface has \~25 hooks; we'll grow into them only as
 the phases actually need them. Growing a trait is easy; unwinding a
 premature design isn't.
 

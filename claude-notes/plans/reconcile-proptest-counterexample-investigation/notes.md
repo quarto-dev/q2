@@ -74,7 +74,7 @@ generator signature* (`before in gen_full_pandoc(), after in
 gen_full_pandoc()`) reproduces the exact failing inputs, but can print
 diagnostics instead of asserting. See `minimal-repro-test.rs.txt` (second
 test in the file) — it prints the plan's block alignments plus the first
-diverging block triple (before/result/after) at ~5k lines each.
+diverging block triple (before/result/after) at \~5k lines each.
 
 Debug dumps contain `source_info:`/`attr_source:` subtrees that legitimately
 differ (that's the whole point of reconciliation), so a naive diff is noise.

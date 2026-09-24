@@ -124,7 +124,7 @@ After analyzing TS Quarto's HTML postprocessors, we've adopted a **pure AST-firs
   - `ResourceCollectorTransform` - Resource collection
 
 **Major gaps** compared to TS Quarto:
-1. Limited AST transforms (only callouts, metadata, title block, resources - missing ~25 Lua filter equivalents)
+1. Limited AST transforms (only callouts, metadata, title block, resources - missing \~25 Lua filter equivalents)
 2. No HTML postprocessors (DOM manipulation for code buttons, anchors, etc.)
 3. Simplified HTML template (missing partials, dependencies)
 4. No JavaScript dependencies (quarto.js, tippy, popper, etc.)

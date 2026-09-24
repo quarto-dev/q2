@@ -100,7 +100,7 @@ platform-independent JS artifact. Not worth the worse UX.
 - [x] **Runbook**: documented in
       `claude-notes/instructions/release-runbook.md` ("What a release
       produces" + "Files involved").
-- [~] **Dry-run e2e verification**: done *locally* — built the universal
+- [\~] **Dry-run e2e verification**: done *locally* — built the universal
       bundle (all 9 keyring platforms; 8 fetched via `npm pack`), ran the
       exact YAML-dedented packaging script, extracted the tarball fresh, and
       confirmed `node index.mjs --help` exits 0 (keyring addon resolves on

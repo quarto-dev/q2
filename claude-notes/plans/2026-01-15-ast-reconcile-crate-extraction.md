@@ -6,7 +6,7 @@
 
 ## Summary
 
-Refactor the tree reconciliation code from `quarto-pandoc-types/src/reconcile/` into a new dedicated crate `quarto-ast-reconcile`. This algorithm has grown to ~9,000 lines and is fundamental to how Rust Quarto preserves source locations through code execution.
+Refactor the tree reconciliation code from `quarto-pandoc-types/src/reconcile/` into a new dedicated crate `quarto-ast-reconcile`. This algorithm has grown to \~9,000 lines and is fundamental to how Rust Quarto preserves source locations through code execution.
 
 ## Motivation
 
@@ -14,7 +14,7 @@ Refactor the tree reconciliation code from `quarto-pandoc-types/src/reconcile/` 
 2. **Clear boundaries**: The code has minimal dependencies and a well-defined API
 3. **Independent evolution**: Reconciliation algorithm changes shouldn't require releasing quarto-pandoc-types
 4. **Reusability**: Other tools may want to use reconciliation without pulling in all Pandoc types
-5. **Testing isolation**: Property-based tests (~2,000 lines of generators) can be scoped to this crate
+5. **Testing isolation**: Property-based tests (\~2,000 lines of generators) can be scoped to this crate
 
 ## Current State
 
@@ -218,7 +218,7 @@ Note: `quarto-pandoc-types` has NO dependency on `quarto-ast-reconcile`. The arr
 - `quarto-ast-reconcile` - Clear, specific, matches the main function name
 
 ### Test Organization
-Property-based test generators (~2,000 lines) stay in the crate under `#[cfg(test)]`. They're not compiled in release builds and don't need separate packaging.
+Property-based test generators (\~2,000 lines) stay in the crate under `#[cfg(test)]`. They're not compiled in release builds and don't need separate packaging.
 
 ### Module vs Flat Structure
 The new crate keeps the same module structure (`types.rs`, `compute.rs`, `apply.rs`, `hash.rs`) rather than flattening into one file. This preserves logical separation and makes the code easier to navigate.

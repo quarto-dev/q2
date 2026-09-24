@@ -144,7 +144,7 @@ prop/postMessage chain:
 
 1. `Q2PreviewIframe` (`ts-packages/preview-renderer/src/iframe/Q2PreviewIframe.tsx`)
    gains an `editingDisabled?: boolean` prop, forwarded in the `UPDATE_AST`
-   postMessage payload (~line 220).
+   postMessage payload (\~line 220).
 2. `entry.tsx`'s `PreviewRoot`
    (`ts-packages/preview-renderer/src/q2-preview/entry.tsx:372-585`) unpacks
    it and exposes `editingDisabled` on `PreviewContextValue`

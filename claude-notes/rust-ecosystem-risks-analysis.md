@@ -121,7 +121,7 @@ How it works:
 #### Rust 2024 (Released Feb 2025)
 **Changes**: RPIT capture rules, `gen` keyword, match ergonomics, `unsafe` on certain stdlib functions
 
-**Real-world Experience** (large codebase: ~400 crates, 1,500+ deps):
+**Real-world Experience** (large codebase: \~400 crates, 1,500+ deps):
 - ✅ Successfully migrated
 - **Recommended strategy**: Incremental, not "big bang"
   1. Update code generation tools first

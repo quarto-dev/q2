@@ -9,7 +9,7 @@
 
 ## Overview
 
-It has been ~3 months since the last whole-project time profile. This
+It has been \~3 months since the last whole-project time profile. This
 run re-characterizes where `q2 render` spends its time on a real,
 large-ish, *non-Quarto-team* project: the Posit Connect documentation
 at `~/repos/github/cscheid/q2-connect-docs/docs-quarto-2`.
@@ -54,7 +54,7 @@ CI. It is run-on-demand; durability comes from the written note.
       top-40 via `crates/perf-harness/scripts/analyze_profile.py`.
 - [x] Parallel profile (default jobs) → same table; check lock-wait
       share (`__ulock_wait2`, `os_unfair_lock`) vs the 2026-06-01
-      baseline of ~4.7 %.
+      baseline of \~4.7 %.
 - [x] ~~If any hot frame is an unsymbolicated system-library address, re-sample with macOS `sample`~~ — not needed; the hot frames were all in `q2` (grass), malloc addresses attributable via callers.
 
 ### Phase 3: per-document distribution
@@ -72,7 +72,7 @@ CI. It is run-on-demand; durability comes from the written note.
 - [x] One strand per actionable hotspot, linked
       `discovered-from:bd-fq44dlnm`.
 - [x] Compare against the 2026-06-01 bucket table (tree-sitter ~29 %,
-      memmove/AST ~13 %, fs ~14 %) — what moved?
+      memmove/AST ~13 %, fs \~14 %) — what moved?
 
 ## Findings
 
@@ -80,12 +80,12 @@ Full write-up: `claude-notes/research/2026-09-13-connect-docs-render-profile.md`
 
 - **78 % of serial render time is grass compiling Bootstrap SCSS** — the sass
   cache key hashes the document-relative theme path, so 349 directories →
-  ~698 keys for identical content; the 10 MB LRU thrashes.
+  \~698 keys for identical content; the 10 MB LRU thrashes.
   `perf.sass hits=22 compiles=682 uncached=0`. → **bd-79c4do6g (P1)**.
 - LRU index lost-updates under parallel Pass 2 leak orphan cache files
   (31 → 70 → 93 files across two parallel runs; 315 / 101 MB pre-existing).
   → **bd-ddahjqr1 (P2)**.
-- Peak RSS ~1000× source: 1.1 MB `api/index.qmd` → 1.1 GB; project 2.5 GB
+- Peak RSS \~1000× source: 1.1 MB `api/index.qmd` → 1.1 GB; project 2.5 GB
   serial / 3.6 GB parallel. → **bd-is4q72tt (P2)**.
 - Single-page render re-renders all 16 listing pages (17 docs for one page).
   → **bd-j0hmi3rx (question)**.

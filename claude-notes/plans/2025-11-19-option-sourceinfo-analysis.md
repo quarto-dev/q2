@@ -336,7 +336,7 @@ SourceInfo::substring(
 
 ## Call Site Update Effort
 
-Found ~18-20 call sites:
+Found \~18-20 call sites:
 - 17+ in qmd-syntax-helper (various conversion modules)
 - 1 in pico-quarto-render
 - 1 recursive call in meta.rs (the important one)
@@ -378,7 +378,7 @@ pub fn read_top_level<T: Write>(
 4. Simple contract: parent_source_info represents input_bytes
 
 **Caveats:**
-1. ~20 call sites to update (mechanical but tedious)
+1. \~20 call sites to update (mechanical but tedious)
 2. Must maintain contract: parent_source_info.length() == input_bytes.len()
 3. Small overhead: child SourceContext created but discarded
 4. Need comprehensive testing for nested cases

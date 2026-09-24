@@ -26,7 +26,7 @@ the project root '/Users/cscheid/rooms/room-1/q2/external-sources/quarto-web'.
 Project resources must live within the project directory.
 ```
 
-Time-to-error: ~4.8s (this is the same render run we will profile in
+Time-to-error: \~4.8s (this is the same render run we will profile in
 the third issue, see plan
 `2026-05-21-q2-render-website-profile.md`).
 

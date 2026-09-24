@@ -8,7 +8,7 @@
 ## Overview
 
 TS Quarto's `src/resources/formats/html/_quarto-rules.scss` (774 lines,
-~80 top-level selectors) is the HTML format's base rule layer. **Q2 has no
+\~80 top-level selectors) is the HTML format's base rule layer. **Q2 has no
 single counterpart layer.** Its rules were ported into Q2 piecemeal — into
 `resources/scss/bootstrap/_bootstrap-rules.scss` and
 `resources/scss/html/templates/title-block.scss` (and a few dedicated layers
@@ -39,7 +39,7 @@ features.
 
 ## Phase 1 — Audit (bd-eias3e39)
 
-For each of the ~80 top-level selectors in `_quarto-rules.scss`:
+For each of the \~80 top-level selectors in `_quarto-rules.scss`:
 
 - [x] Is the rule **already present** in Q2's SCSS? (grep
       `_bootstrap-rules.scss`, `title-block.scss`, `copy-code.scss`,

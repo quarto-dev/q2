@@ -28,7 +28,7 @@
    - Enabled 4 new tests
 
 ### Test Status
-- **Before session**: ~572 enabled tests
+- **Before session**: \~572 enabled tests
 - **After session**: 680 enabled tests (79.3% of 858 total)
 - All 680 tests pass
 

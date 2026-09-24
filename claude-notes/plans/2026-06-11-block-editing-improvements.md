@@ -49,7 +49,7 @@ The plan is reasoned a priori; these four assertions are load-bearing. All are v
   | 1. `Div` / 1 `p` | `0 / 0 / 0 / 0` | **coincide (exact)** | margin collapse; zero border-box gap |
   | 2. `BlockQuote` / `p` | `+25.25 / +10.62 / −21.25 / −10.63` | differ | 4px left rule + padding |
   | 3. `Div` / 3 `p` | up to `±85` top/bottom | differ | container spans all three |
-  | 4. `Callout` / body `p` | `+12.64 / +25.45 / −8.64 / −1` | differ | ~25px title bar + 5px left border |
+  | 4. `Callout` / body `p` | `+12.64 / +25.45 / −8.64 / −1` | differ | \~25px title bar + 5px left border |
   | 5. `ul` / `li` | `+34 / 0 / 0 / 0` | differ | 34px left marker gutter |
 
   The prediction that mattered most holds: **#1 coincides at 0px** (Bootstrap reboot adds no

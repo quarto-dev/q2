@@ -11,7 +11,7 @@
 ## Current Implementation Analysis
 
 ### Location
-`crates/quarto-core/src/engine/reconcile.rs` (~1023 lines)
+`crates/quarto-core/src/engine/reconcile.rs` (\~1023 lines)
 
 ### Algorithm: Linear Alignment with Limited Lookahead
 

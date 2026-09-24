@@ -103,8 +103,8 @@ Similarly `LuaAttributesProxy` and `LuaClassesProxy` carry the shared
 
 **Cons**
 
-- Touches `LuaBlock`/`LuaInline` internals. ~60 `LuaBlock(...)` and
-  ~86 `LuaInline(...)` constructor sites in `crates/pampa/src/`. Most
+- Touches `LuaBlock`/`LuaInline` internals. \~60 `LuaBlock(...)` and
+  \~86 `LuaInline(...)` constructor sites in `crates/pampa/src/`. Most
   are in `types.rs` itself and the pattern is mechanical
   (`LuaBlock(b)` → `LuaBlock(Rc::new(RefCell::new(b)))`). The
   `FromLua` impls already clone — switching them to clone the inner
@@ -370,7 +370,7 @@ highlighting in the docs.
 2. **Scope of Rc.** Only `LuaBlock` and `LuaInline` move to
    `Rc<RefCell<…>>`. `LuaAttr` carries either its own owned data or
    a handle back to the block/inline cell. Other Lua-exposed types
-   (`LuaMeta`, citations, captions, etc.) are untouched. ~150
+   (`LuaMeta`, citations, captions, etc.) are untouched. \~150
    constructor sites affected, mostly mechanical.
 3. **Ordering of phases 3 & 4.** Phase 3 first. Phase 4 without 3
    means `cb.attr.attributes[k]=v` still doesn't persist because

@@ -656,7 +656,7 @@ document may contain dozens of shortcodes — creating a Lua state per invocatio
 be expensive.
 
 The transform pipeline is also rebuilt per render (in `AstTransformsStage::run()`).
-This is negligible — it allocates a `Vec` of ~11 small structs. The shortcode transform's
+This is negligible — it allocates a `Vec` of \~11 small structs. The shortcode transform's
 `with_lua_support()` constructor stores only owned data; no Lua initialization happens
 until `transform()` is called.
 

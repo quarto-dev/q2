@@ -6,7 +6,7 @@
 **Parent Task**: k-192 (Phase 5: Write comprehensive tests for annotated Pandoc AST)
 
 ## Current Status
-- **74 tests passing** across 10 test files (~3200 lines of test code)
+- **74 tests passing** across 10 test files (\~3200 lines of test code)
 - **Good coverage**: Individual block types, inline types, metadata, source mapping
 - **Strong foundation**: Substring invariant, offset invariant, type safety
 

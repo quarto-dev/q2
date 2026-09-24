@@ -225,7 +225,7 @@ fn render_navbar(config: &WebsiteConfig) -> String {
 - Supports includes, loops, conditionals
 
 **Cons:**
-- Need to port all templates (~20 files)
+- Need to port all templates (\~20 files)
 - Different syntax (minor changes)
 - Additional dependency
 
@@ -316,7 +316,7 @@ impl EjsRenderer {
 - Well-maintained Rust bindings
 
 **Cons:**
-- Adds ~1-2MB to binary size
+- Adds \~1-2MB to binary size
 - JavaScript engine dependency
 - Need to bundle Lodash (or minimal subset)
 - Cross-language data marshaling overhead

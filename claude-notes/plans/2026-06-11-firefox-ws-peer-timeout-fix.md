@@ -29,7 +29,7 @@ connects seconds later.
    offline fallback). Hub-client's offline-first flow is intentional
    and stays.
 3. **No regression in other browsers.** Every change is pure
-   robustness: an indefinite peer wait resolves in ~60 ms when the
+   robustness: an indefinite peer wait resolves in \~60 ms when the
    handshake is fast (Chrome today, clean Firefox today); memory
    storage is strictly faster than IndexedDB; health-gated reconnects
    only kick in when the connection actually drops.
@@ -46,7 +46,7 @@ The adapter's silent retry interval (5 s) equals the SPA's peer budget
 (5 s), so any first-attempt failure is fatal by construction; raising
 the budget to 15 s only moves the cliff. The hung-slot condition can
 persist for minutes (a perpetually-retrying stale tab holds the slot
-~100 % of the time), so any finite WS deadline picks a wrong answer.
+\~100 % of the time), so any finite WS deadline picks a wrong answer.
 The right deadline lives on `/health`, not on the socket.
 
 ## Phases & work items

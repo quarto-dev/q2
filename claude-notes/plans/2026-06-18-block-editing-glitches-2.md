@@ -87,7 +87,7 @@ scratch on a clean worktree under TDD. Continues the glitch namespace of
 
 ### Symptom
 
-The G9 reland-fade — a ~0.1 s blur applied to the outgoing cell during the
+The G9 reland-fade — a \~0.1 s blur applied to the outgoing cell during the
 deterministic settle-gate gap on a **dirty nest-in / nest-out** — sometimes does
 **not** go away: a stale blur lingers, occasionally on a cell unrelated to the
 move.

@@ -28,7 +28,7 @@ User sees: "Error in document.qmd:15:7"
 
 ## Systems Overview
 
-### MappedString (~450 LOC core)
+### MappedString (\~450 LOC core)
 
 **What it does**: Tracks source positions through text transformations
 
@@ -43,7 +43,7 @@ User sees: "Error in document.qmd:15:7"
 
 **Dependents**: YAML, error formatting, code cell processing, LSP
 
-### YAML Intelligence (~2,500 LOC)
+### YAML Intelligence (\~2,500 LOC)
 
 **What it does**: IDE features (completions, hover, diagnostics)
 
@@ -55,7 +55,7 @@ User sees: "Error in document.qmd:15:7"
 
 **Dependencies**: MappedString, YAML validation, schemas
 
-### YAML Validation (~1,500 LOC)
+### YAML Validation (\~1,500 LOC)
 
 **What it does**: Validates YAML against schemas, creates detailed errors
 
@@ -67,7 +67,7 @@ User sees: "Error in document.qmd:15:7"
 
 **Dependencies**: MappedString, schemas
 
-### YAML Schemas (~4,000 LOC)
+### YAML Schemas (\~4,000 LOC)
 
 **What it does**: Defines structure of Quarto YAML (frontmatter, project config, etc.)
 

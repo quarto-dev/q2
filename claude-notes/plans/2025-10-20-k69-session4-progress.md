@@ -54,7 +54,7 @@ Updated macro to use these helpers instead of direct field access.
 
 ## Remaining Work (Created as Beads Tasks)
 
-### k-79: Update function signatures (~126 type errors)
+### k-79: Update function signatures (\~126 type errors)
 
 **Problem:** Helper functions still expect old `location::SourceInfo` type:
 - `make_span_inline(source_info: SourceInfo)` in inline.rs

@@ -35,7 +35,7 @@ pub struct Pandoc {
 }
 ```
 
-**Impact:** This single change will cause ~400 compilation errors across the codebase. That's expected and we fix them in subsequent subplans.
+**Impact:** This single change will cause \~400 compilation errors across the codebase. That's expected and we fix them in subsequent subplans.
 
 ### 2. `meta.rs` - Keep MetaValueWithSourceInfo Temporarily
 

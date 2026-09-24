@@ -16,7 +16,7 @@ Error: No input given and no `_quarto.yml` found at or above <cwd>
 …but only *after* walking the entire `cwd` looking for `.qmd` files.
 In an empty directory that error appears instantly. In a directory
 that contains a large tree (e.g. the q2 repo root, where `target/`
-has ~64k entries and a populated `external-sources/quarto-cli/` adds
+has \~64k entries and a populated `external-sources/quarto-cli/` adds
 tens of thousands more), the command appears to hang for many
 seconds before printing the error.
 

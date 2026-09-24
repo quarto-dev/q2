@@ -24,7 +24,7 @@ upstream.
 Real epub-conditional logic lives inside *shared* filters, not a dedicated epub file:
 `crossref/sections.lua:48` gates section-numbering on `isEpubOutput()`,
 `customnodes/callout.lua:139-141` registers a **dedicated Callout renderer** shared between
-epub and revealjs (~40 lines, not attribute cleanup), and `customnodes/panel-tabset.lua:264`
+epub and revealjs (\~40 lines, not attribute cleanup), and `customnodes/panel-tabset.lua:264`
 routes epub to `render_tabset_with_l4_headings`. epub is still the thinnest of the three
 formats researched — there's no template, no bundled packages, no compiler — but "thin"
 does not mean "nothing to port beyond a CSS file." See Phase 1 below.

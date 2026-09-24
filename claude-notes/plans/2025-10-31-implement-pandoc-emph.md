@@ -312,7 +312,7 @@ Following the TDD workflow from project instructions:
 - **Step 4** (run and debug): 10 minutes
 - **Step 5-6** (verification): 5 minutes
 
-**Total**: ~45 minutes
+**Total**: \~45 minutes
 
 ## Next Steps After Completion
 

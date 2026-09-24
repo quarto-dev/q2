@@ -6,7 +6,7 @@ Created: 2025-10-27
 
 From `external-sources/quarto-cli/src/core/lib/yaml-schema/from-yaml.ts`:
 
-### `ref` (line ~360)
+### `ref` (line \~360)
 ```typescript
 function convertFromRef(yaml: any): ConcreteSchema {
   return setBaseSchemaProperties(yaml, refS(yaml.ref, `be ${yaml.ref}`));
@@ -278,7 +278,7 @@ fn test_resolve_ref_eager() {
 - Add tests: 20 minutes
 - Test with existing schemas: 10 minutes
 
-**Total**: ~1 hour
+**Total**: \~1 hour
 
 ## Future Work
 

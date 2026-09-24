@@ -111,7 +111,7 @@ Each step has a TDD pair: write the test (or extend Phase 1's diag) → confirm 
 
 ### 2c. Authorship-aware click handler in `comment.tsx`
 
-Relies on the CRDT round-trip (see Decision log Q3): `setLocalAst` already writes back through `incrementalWriteQmd` → Automerge content → WASM reparse, so runtime-added spans get `s` + attribution within ~50–150ms. No session-local bookkeeping. Behaviour is also gated on the user-controlled Attribution toggle being **on** (per decision-log Q1, attribution stays opt-in this session).
+Relies on the CRDT round-trip (see Decision log Q3): `setLocalAst` already writes back through `incrementalWriteQmd` → Automerge content → WASM reparse, so runtime-added spans get `s` + attribution within \~50–150ms. No session-local bookkeeping. Behaviour is also gated on the user-controlled Attribution toggle being **on** (per decision-log Q1, attribution stays opt-in this session).
 
 - [x] Test: `addReaction` is invoked on bubble click and the diagnostic captures `{ me, attributionLookupNull, reactionSpansLen }` for the call. *Covered by `reactji bubble click invokes the Phase 2c addReaction handler` in the spec.*
 

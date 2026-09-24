@@ -131,7 +131,7 @@ With hash-based FileIds, including `sub.qmd`:
 
 The `remap_file_ids` call in `include_expansion.rs:206` becomes
 unnecessary. The `debug_assert_eq!` becomes a tautology and can be
-deleted. Net: ~30 lines simpler.
+deleted. Net: \~30 lines simpler.
 
 ### 4. Public-API impact
 

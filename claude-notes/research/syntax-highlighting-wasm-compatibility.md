@@ -23,7 +23,7 @@ without modification:
 1. **`LazyLock` is fine** — same story as `OnceLock`, which we already use in WASM.
 2. **`AtomicUsize` is fine** — load/store on `usize`-sized atomics is available on wasm32-unknown-unknown; ordering is vacuous in single-threaded mode, which is correct.
 3. **Grammar crates compile fine** — follow the proven tree-sitter-qmd pattern (cc + C parser).
-4. **Bundle size is acceptable** — ~17 MB for full hub-client with existing grammars; each additional grammar adds roughly 150–300 KB uncompressed, ≈ 30–70 KB compressed.
+4. **Bundle size is acceptable** — \~17 MB for full hub-client with existing grammars; each additional grammar adds roughly 150–300 KB uncompressed, ≈ 30–70 KB compressed.
 
 **Bottom line:** We can use tree-sitter-highlight + bundled grammar crates in `wasm-quarto-hub-client` without architectural compromise. The only real cost is **bundle size per bundled language grammar**. If that becomes a concern, the alternative is the separate `web-tree-sitter` JavaScript runtime which loads `.wasm` grammars dynamically on demand — but that's a different architecture and out of scope for v1.
 

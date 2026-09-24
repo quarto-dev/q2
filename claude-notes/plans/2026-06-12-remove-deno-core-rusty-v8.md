@@ -14,7 +14,7 @@ bd-kuxzj8su (commit `3a35de43`), `quarto-project-create` renders with
 quarto-doctemplate and the JS template path has **zero callers on every
 target**. The dependency costs:
 
-- v8 prebuilt archives are ~100MB downloads at build time;
+- v8 prebuilt archives are \~100MB downloads at build time;
 - rusty_v8 publishes no musl prebuilts — it blocked the static-musl
   release legs outright (both linux legs of the v0.1.0 dry-run 404'd; see
   run 27449454203 and PR #280, whose gnu fallback exists only because of

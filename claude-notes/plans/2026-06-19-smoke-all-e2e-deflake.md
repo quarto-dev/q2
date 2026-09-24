@@ -50,8 +50,8 @@ smoke-all, `retries:3`.
 - [x] Implement root-cause fix in sync client (6fc040e8): bound repo.find()
       with AbortSignal.timeout(5s) + load file docs concurrently (Promise.all)
 - [x] quarto-sync-client unit suite: 102 pass (no regression)
-- [x] no-contention smoke-all: 78/78, ~30% faster (2.4m vs 3.4m)
-- [x] heavy 10-hog contention (extension subset): ~all-fail → 2/15
+- [x] no-contention smoke-all: 78/78, \~30% faster (2.4m vs 3.4m)
+- [x] heavy 10-hog contention (extension subset): \~all-fail → 2/15
 - [ ] Confirm CI smoke-all green + fast; compare flake counts vs baseline
 
 ## Fix + measurements (commit 6fc040e8)

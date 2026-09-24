@@ -222,7 +222,7 @@ Given the constraints:
 **I recommend: Custom DAG executor using `DashMap` + `tokio::sync::OnceCell`**
 
 Here's why:
-1. **Simple to implement** (~200 lines of code)
+1. **Simple to implement** (\~200 lines of code)
 2. **Explicit DAG construction** (learning value)
 3. **Work sharing via OnceCell** (first caller computes, others wait)
 4. **Rayon for parallelism** (no async overhead)
@@ -339,7 +339,7 @@ let results: Vec<_> = graph.tasks.keys()
 - ✅ Parallel execution (Rayon)
 - ✅ Type-safe-ish (Box<dyn Any> + downcasting)
 - ✅ No async overhead (uses blocking OnceCell, not async)
-- ✅ ~200 lines of code (maintainable)
+- ✅ \~200 lines of code (maintainable)
 
 **Downsides:**
 - ❌ Type erasure (Box<dyn Any>)
@@ -395,7 +395,7 @@ graph.run().await;
 
 For qmd-syntax-helper:
 
-1. **If you want learning value:** Implement custom DAG executor (~200 lines)
+1. **If you want learning value:** Implement custom DAG executor (\~200 lines)
    - Good for understanding the pattern
    - Full control
    - Transfers to other projects

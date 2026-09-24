@@ -32,7 +32,7 @@ The two witnesses have different delivery paths:
 - `BEHAVE_LAUNCH_MARKER:1` is written by the fixture's `console.error`, flows
   through the child's **stderr pipe**, and is forwarded into `tracing` by the
   **background stderr-forwarding thread** (`ts_process.rs::stderr_loop`,
-  ~:1582). This path is fully decoupled from the request/response transport:
+  \~:1582). This path is fully decoupled from the request/response transport:
   execute-2 completing guarantees nothing about when (or whether yet) the
   marker line has been forwarded. On a loaded ubuntu runner the forwarder
   simply hadn't run when the bare `count_containing()` executed.
@@ -55,7 +55,7 @@ Convert every assertion in `behave_engine_e2e.rs` that counts an
 `count_containing()` (guarded only by a fixed 200 ms sleep) to
 `wait_for_count_containing(needle, expected, 10s)`:
 
-- F4 line ~681 (the CI failure): `BEHAVE_LAUNCH_MARKER:1` == 2 after
+- F4 line \~681 (the CI failure): `BEHAVE_LAUNCH_MARKER:1` == 2 after
   execute-2 — the mandatory fix.
 - F4 lines ~637/~644: crash marker == 1 and `BEHAVE_LAUNCH_MARKER:1` == 1
   before execute-2 (same class; replaces the fixed 200 ms sleep).
@@ -92,9 +92,9 @@ delay injection** in `stderr_loop` (sleep before forwarding lines containing
       CI failure exactly — panic at :681, `left: 1, right: 2`, identical
       captured-messages list, hardened pre-checks and the synchronous
       spawned == 2 witness all passing
-- [x] Fix: witness-2 (~:681) uses `wait_for_count_containing(_, 2, 10s)`;
+- [x] Fix: witness-2 (\~:681) uses `wait_for_count_containing(_, 2, 10s)`;
       full behave suite 6/6 green with the delay still injected
-- [x] Harden F3 pre-execute-2 check (~:468) the same way; remove the fixed sleeps
+- [x] Harden F3 pre-execute-2 check (\~:468) the same way; remove the fixed sleeps
 - [x] Remove the temporary delay injection (`git diff` clean on `src/`)
 - [x] Run the behave e2e suite normally (6/6) + F4 repetition loop (30/30)
 - [x] Full `cargo nextest run --workspace` (12907/12907 passed, 198 skipped)

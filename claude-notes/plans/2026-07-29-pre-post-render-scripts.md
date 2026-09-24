@@ -249,7 +249,7 @@ Export exactly Q1's variables (table above), with these fixes:
 - Paths relative to project dir, newline-separated, matching Q1 so existing
   user scripts port unchanged.
 
-Mechanism: extend nothing on `SystemRuntime` (avoids touching ~15 test
+Mechanism: extend nothing on `SystemRuntime` (avoids touching \~15 test
 stubs for a native-only feature); the runner module uses
 `std::process::Command` directly with `.current_dir(project_dir)` and
 `.envs(...)`, native-gated at module level like

@@ -5,7 +5,7 @@
 Source: `external-sources/quarto-cli/src/resources/formats/html/_quarto-rules.scss`
 (774 lines, 144 depth-0 rule blocks — full list at
 `claude-notes/plans/quarto-rules-scss-audit-investigation/top-level-selectors.tsv`).
-Rows below are **per family** (~29), per design discussion with Carlos; the TSV
+Rows below are **per family** (\~29), per design discussion with Carlos; the TSV
 is the per-selector appendix.
 
 ## Methodology

@@ -135,7 +135,7 @@ first. All in q2; no hub deployment required until rollout.
      against the `IndexDocument` schema (the hub does not keep a
      project registry; all docs are stored uniformly).
    - Runs **offline against a copy** of the data dir (the live store
-     is lock-guarded; `/mnt/hub-data` is ~20 MB, and DLM snapshots
+     is lock-guarded; `/mnt/hub-data` is \~20 MB, and DLM snapshots
      exist) — zero interaction with the running server. A live admin
      endpoint is a possible later convenience, not v1.
    - Immediate use once built: run against quarto-hub.com's storage

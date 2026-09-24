@@ -64,10 +64,10 @@ params.get("version").unwrap().parse::<usize>().unwrap()
 ```
 
 **Cost per call:**
-- 1 HashMap allocation (~96 bytes)
-- 6 String allocations for keys (~192 bytes)
-- 6 String allocations for values (~192 bytes)
-- HashMap bucket allocations (~128 bytes)
+- 1 HashMap allocation (\~96 bytes)
+- 6 String allocations for keys (\~192 bytes)
+- 6 String allocations for values (\~192 bytes)
+- HashMap bucket allocations (\~128 bytes)
 - Hash computations (6× insert + N× lookup)
 - **Total: ~608 bytes heap + hash overhead**
 

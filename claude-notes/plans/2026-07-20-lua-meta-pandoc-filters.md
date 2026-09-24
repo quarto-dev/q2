@@ -161,7 +161,7 @@ tests.
 
 The only semantic reader of `merge_op` is the merge algorithm
 (`quarto-config/src/merged.rs:302`), which runs in `MetadataMergeStage`
-(pipeline stage 2). `UserFiltersStage::pre()/post()` run at stages ~12/14 —
+(pipeline stage 2). `UserFiltersStage::pre()/post()` run at stages \~12/14 —
 **nothing downstream of the filter passes ever merges again**, so by filter
 time `merge_op` is spent. The two post-filter touchers are non-semantic:
 the JSON writer serializes it (`pampa/src/writers/json.rs:3921`) and

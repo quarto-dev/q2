@@ -524,7 +524,7 @@ Phases are ordered for TDD: each starts with tests, then implementation.
 
 ### Footer layout SCSS ported from Q1 (landed)
 
-- [x] Ported Q1's footer layout rules (three-region flex, responsive stacking, font sizes, border, backgrounds) from `src/resources/projects/website/navigation/quarto-nav.scss:806-926` into Q2's `resources/scss/bootstrap/_bootstrap-rules.scss` (~115 lines appended).
+- [x] Ported Q1's footer layout rules (three-region flex, responsive stacking, font sizes, border, backgrounds) from `src/resources/projects/website/navigation/quarto-nav.scss:806-926` into Q2's `resources/scss/bootstrap/_bootstrap-rules.scss` (\~115 lines appended).
 - [x] All variables (`$footer-bg`, `$footer-fg`, `$footer-border`, `$footer-*-font-size`) already exist in Q2's `_bootstrap-variables.scss` and the `theme-contrast` function is present in `_bootstrap-functions.scss` — no variable/function shims needed.
 - [x] Updated the footer HTML renderer (`quarto-navigation::render_html`) to emit `<ul class="nav footer-items">` on item regions so Q1's selectors match Q2's DOM without further template surgery.
 - [x] Assertions added to `test_compile_default_css` that the compiled default CSS ships `.nav-footer`, `.nav-footer-left`, `.footer-items`.
@@ -537,7 +537,7 @@ Phases are ordered for TDD: each starts with tests, then implementation.
 - [x] New field `ThemeConfig.suppress_bootstrap: bool`, set only when `theme:` literal string `none` is seen (case-insensitive). `theme: null` and missing `theme:` both hit the compile-default path.
 - [x] `compile_default` helper in the stage wraps `quarto_sass::compile_default_css` for native (sync) and WASM (async).
 - [x] 5 new tests (3 in stage, 2 in pipeline); 3 new tests in `quarto-sass::config`; existing `test_null_theme_uses_default_css` rewritten to assert the new semantics.
-- [x] Sample render now ships ~302 KB of Bootstrap 5.3.1 including `.navbar`, `.navbar-brand`, `.dropdown`, `.btn`, etc. Full workspace 7532 tests + `cargo xtask verify` green.
+- [x] Sample render now ships \~302 KB of Bootstrap 5.3.1 including `.navbar`, `.navbar-brand`, `.dropdown`, `.btn`, etc. Full workspace 7532 tests + `cargo xtask verify` green.
 - [ ] **Remaining behaviors blocked on `bd-ulgr`**: navbar dropdown and hamburger collapse still do nothing at runtime because Bootstrap JS is not shipped. Tracked in `bd-ulgr`; outline at `claude-notes/plans/2026-04-18-html-js-deps-design.md`.
 - [ ] **`theme: pandoc` sentinel**: Q1 also supports `theme: pandoc` (skip Quarto CSS entirely). Deferred; not requested in this session. File follow-up if users need it.
 

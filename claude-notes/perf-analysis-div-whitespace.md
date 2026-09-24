@@ -4,14 +4,14 @@
 **Profiling Tool:** samply + flamegraph
 **Build Mode:** Release with debug symbols (`CARGO_PROFILE_RELEASE_DEBUG=true`)
 **Test Corpus:** `external-sites/**/*.qmd` (509 files)
-**Total Runtime:** ~12 seconds
+**Total Runtime:** \~12 seconds
 **Total Samples:** 7,501
 
 ## Executive Summary
 
 The div-whitespace rule's performance is dominated by **parsing time** (tree-sitter), not by the offset calculation algorithm. The O(N²) bug fixed earlier only manifests when files have actual div-whitespace errors to process. Since the test corpus has zero files with div-whitespace issues, the performance is almost entirely spent in the parsing phase.
 
-**Key Finding:** ~95% of execution time is spent in `tree_sitter` parsing (`ts_parser_parse`), not in the div-whitespace detection logic itself.
+**Key Finding:** \~95% of execution time is spent in `tree_sitter` parsing (`ts_parser_parse`), not in the div-whitespace detection logic itself.
 
 ## Performance Breakdown
 
@@ -35,22 +35,22 @@ The div-whitespace rule's performance is dominated by **parsing time** (tree-sit
 
 ### Time Distribution by Phase
 
-1. **Parsing (tree-sitter):** ~75% of total time
+1. **Parsing (tree-sitter):** \~75% of total time
    - Tree-sitter core parsing: 5,611 samples (75%)
    - Logging overhead: 3,707 samples (49%)
    - Lexing: 274 samples (4%)
 
-2. **AST Conversion:** ~8% of total time
+2. **AST Conversion:** \~8% of total time
    - `treesitter_to_pandoc`: 611 samples (8%)
    - HashMap operations: 615 samples (8%)
 
-3. **String Formatting (logging):** ~12% of total time
+3. **String Formatting (logging):** \~12% of total time
    - `snprintf`/`vsnprintf`: 927+892 = 1,819 samples (24%)
    - Note: This is part of tree-sitter logging overhead
 
-4. **Memory Management:** ~4% of total time
+4. **Memory Management:** \~4% of total time
    - `_nanov2_free`: 272+204 = 476 samples (6%)
-   - Various malloc/realloc: ~200 samples (3%)
+   - Various malloc/realloc: \~200 samples (3%)
 
 5. **Div-Whitespace Logic:** <1% of total time
    - `find_div_whitespace_errors`: Negligible (not in top 50)

@@ -9,12 +9,12 @@ Every project-list export surface emits a flat, pre-collections (schemaVersion 4
 shape with no collection information:
 
 - **Projects home "Export list"** — `handleExportJson` in
-  `hub-client/src/components/ProjectsHome.tsx` (~line 894): exports the root
+  `hub-client/src/components/ProjectsHome.tsx` (\~line 894): exports the root
   set's entries only.
 - **Classic selector export** — `handleExport` in
-  `hub-client/src/components/ProjectSelector.tsx` (~line 491): same flat shape.
+  `hub-client/src/components/ProjectSelector.tsx` (\~line 491): same flat shape.
 - **IDB-level `exportData()`** — `hub-client/src/services/projectStorage.ts`
-  (~line 114): `projects` store + `userSettings`; never reads the
+  (\~line 114): `projects` store + `userSettings`; never reads the
   `collections` pointer array from the `projectSet` store.
 
 Consequence: an export → import round trip on a fresh browser restores projects

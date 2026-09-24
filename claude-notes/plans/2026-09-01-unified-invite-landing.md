@@ -31,7 +31,7 @@ seeded first-run samples, revocable/role-scoped links, sender UI redesign
 | Preview payload source (cached peeks) | `ProjectSetEntrySummary` (`ts-packages/quarto-automerge-schema/src/index.ts:138-147`); written `App.tsx:310-325`, `ProjectsHome.tsx:1178-1195`; read via `collectionItemsOf`/`peopleOn` `ProjectsHome.tsx:1254-1289` |
 | Sender URL builders | `buildInviteUrl` `ProjectsHome.tsx:1265-1273`; `buildShareableUrl` `routing.ts:433-451` (call sites `ProjectsHome.tsx:1144`, `Editor.tsx:849-855`) |
 | Identity | `src/services/userSettings.ts`; Google-name upgrade `App.tsx:222-235`; facepile/initials `ProjectsHome.tsx:162,1043-1062`, `src/utils/facepile.ts` |
-| Card CSS to reuse | `.qh-join-card` `ProjectsHome.css:452-521` (~90% of the card spec already); peek styles `.qh-peek*`; tokens in `theme.css` map 1:1 to the handoff hexes |
+| Card CSS to reuse | `.qh-join-card` `ProjectsHome.css:452-521` (\~90% of the card spec already); peek styles `.qh-peek*`; tokens in `theme.css` map 1:1 to the handoff hexes |
 | Dismissal pattern | keyed localStorage flag à la `MOVE_WARNING_KEY` (`ProjectsHome.tsx:126,572,2024`) |
 | Dev harness | `DEV_PAGES` registry `DevHarness.tsx:686`, route `#/dev/<page>` |
 

@@ -453,7 +453,7 @@ fn test_quarto_json_decode() {
 
 ### Phase 4: End-to-end validation
 
-- [~] **4.1** Test lipsum extension manually (PARTIAL — quarto.* API works, but lipsum
+- [\~] **4.1** Test lipsum extension manually (PARTIAL — quarto.* API works, but lipsum
   fails due to a separate issue: `pandoc.Para(string)` doesn't auto-convert strings to
   inlines. This is a `pandoc.Para` constructor compatibility issue, not a quarto API issue):
   ```bash

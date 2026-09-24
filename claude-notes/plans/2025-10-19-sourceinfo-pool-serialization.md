@@ -6,7 +6,7 @@
 
 ## Goal
 
-Reduce SourceInfo JSON serialization size from 25-55x blowup to ~2-5x blowup by using an interned pool with ID references instead of duplicating parent chains.
+Reduce SourceInfo JSON serialization size from 25-55x blowup to \~2-5x blowup by using an interned pool with ID references instead of duplicating parent chains.
 
 ## Implementation Tasks
 

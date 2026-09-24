@@ -10,7 +10,7 @@ Created comprehensive documentation of all JavaScript runtime dependencies in qu
 
 ### New Document Created
 
-**`js-runtime-dependencies.md`** (~500 lines)
+**`js-runtime-dependencies.md`** (\~500 lines)
 - Comprehensive analysis of 4 major categories of JS runtime dependencies
 - Detailed Rust porting strategies with code examples
 - Effort estimates and risk assessments
@@ -20,7 +20,7 @@ Created comprehensive documentation of all JavaScript runtime dependencies in qu
 
 ### 1. HTML/DOM Postprocessing
 - **Current**: deno-dom (HTML parser with DOM API)
-- **Scale**: 21 files, ~98 DOM operations across 7 HTML format files
+- **Scale**: 21 files, \~98 DOM operations across 7 HTML format files
 - **Purpose**:
   - Find file references in HTML (images, scripts, styles)
   - Manipulate rendered HTML output (navigation, code tools, Bootstrap components)
@@ -57,7 +57,7 @@ Created comprehensive documentation of all JavaScript runtime dependencies in qu
 
 ### 4. Browser Automation (Puppeteer)
 - **Current**: Puppeteer for Deno
-- **Scale**: ~400 LOC in puppeteer.ts
+- **Scale**: \~400 LOC in puppeteer.ts
 - **Purpose**:
   - Render Mermaid diagrams to PNG/SVG
   - Screenshot generation
@@ -143,7 +143,7 @@ We have now completed analysis of all major subsystems needed for the Rust port:
 - ✅ **YAML AnnotatedParse** (yaml-rust2 feasibility confirmed)
 - ✅ **JavaScript runtime dependencies** (9-14 week plan)
 
-**Total documented effort**: ~29-36 weeks across all major subsystems
+**Total documented effort**: \~29-36 weeks across all major subsystems
 
 The planning and understanding phase is essentially complete. All major architectural questions have been answered.
 

@@ -74,7 +74,7 @@ compute saving that does not exist. Rationale, from the consumer audit:
   identity plan *moves* the original nodes, exactly like the fallback —
   bit-identical results. (b) changes behavior only in the buggy
   deletion/reorder cases, which is the fix.
-- **Cost:** transient plan storage ~200-400 bytes per cell/caption/slot
+- **Cost:** transient plan storage \~200-400 bytes per cell/caption/slot
   (a pathological 10k-cell table → a few MB, per preview keystroke in WASM);
   apply does O(n) pointer moves instead of one wholesale Vec move. Assessed
   as negligible; no benchmark deemed necessary. If measurement ever says

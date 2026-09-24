@@ -74,7 +74,7 @@ projection — as future consumers).
 - **Self-heal effect** = `useLayoutEffect` on `[astJson, renderedContent, untransformedAstJson]`
   (`PreviewRoot.tsx:244-285`) calling `findReanchorCandidate`. **This is the integration point.**
 - **Hosts duplicate the handler:** `handleSetAst` in both `ReactPreview.tsx` and `PreviewApp.tsx`
-  (SPA ~no-op for file mode today). UPDATE_AST assembly is per-host ⇒ track-me parent logic must be a
+  (SPA \~no-op for file mode today). UPDATE_AST assembly is per-host ⇒ track-me parent logic must be a
   **shared helper** consumed by both (mirror `computeNestedEditBuffers`).
 - **The hash:** `quarto_ast_reconcile::compute_block_hash_fresh` (`crates/quarto-ast-reconcile/src/
   hash.rs:102`) — content-only, **excludes all source location**, per-subtree, deterministic

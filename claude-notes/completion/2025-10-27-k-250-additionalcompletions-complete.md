@@ -217,7 +217,7 @@ When implementing IDE completion support:
 - Analysis: 15 minutes (created analysis document)
 - Implementation: 45 minutes
 - Testing and debugging: 20 minutes
-- **Total**: ~1.5 hours (matched estimate)
+- **Total**: \~1.5 hours (matched estimate)
 
 ## Compatibility
 

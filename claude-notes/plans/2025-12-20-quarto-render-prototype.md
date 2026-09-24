@@ -1103,7 +1103,7 @@ Output:
 
 **Rationale**:
 - Core functionality in Rust enables native pipeline
-- ~31,600 LOC of Lua is too much to port all at once
+- \~31,600 LOC of Lua is too much to port all at once
 - Format-specific Lua (LaTeX, DOCX) stays with Pandoc path
 
 ### 3. Dependency Collector Pattern

@@ -79,20 +79,20 @@ The bd-fu1a5g6l suppression is lifted: reveal honors
 
 - **Suppression to lift:** `crates/quarto-core/src/transforms/code_block_generate.rs:223`
   (the `is_revealjs_target → CopyMode::Off` branch) + its test
-  `generate_omits_code_with_copy_class_for_revealjs` (~line 718).
+  `generate_omits_code_with_copy_class_for_revealjs` (\~line 718).
 - **Copy SCSS to extract:** `resources/scss/bootstrap/_bootstrap-rules.scss:1185-1261`
   (variables + scaffold + button + `.bi::before` states). HTML-feature-specific
   overrides at `:1421-1427` (`#quarto-embedded-source-code-modal`) and
   `:2310-2315` (`.code-annotated`) **stay** in `_bootstrap-rules.scss` — they
   are not reveal concerns.
 - **Layer-load precedent:** `crates/quarto-sass/src/bundle.rs:220` `load_highlight_layer()`;
-  reveal assembly `assemble_reveal_scss()` (~`:382`); HTML assembly
+  reveal assembly `assemble_reveal_scss()` (\~`:382`); HTML assembly
   `compile_default_css()` / `assemble_with_user_layers()` in `compile.rs`.
 - **Reveal CSS-content tests:** `crates/quarto-sass/src/compile.rs` —
   `test_compile_reveal_theme_includes_highlight_rules` (~`:660`) and
   `test_compile_default_css` (~`:599`) are the mirror templates.
 - **Reveal JS artifact registration:** `crates/quarto-core/src/revealjs/assemble.rs`
-  `reveal_assets()` / `register_reveal_assets()` (~`:98-171`) — where the
+  `reveal_assets()` / `register_reveal_assets()` (\~`:98-171`) — where the
   `js:revealjs:reveal` core asset is declared; add clipboard assets here.
 - **Clipboard JS source:** `crates/quarto-core/src/stage/stages/clipboard_js.rs`
   — `CLIPBOARD_JS`, `CODE_COPY_INIT_JS` consts (embedded

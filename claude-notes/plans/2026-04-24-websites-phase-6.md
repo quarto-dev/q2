@@ -501,7 +501,7 @@ We need a lossless walk-and-pop normalizer. Two options:
    workspace) — `pathdiff` doesn't normalize, only diffs;
    `path-clean` would be a new dep.
 
-Recommendation: **inline helper**, ~15 lines. Minimal dependency
+Recommendation: **inline helper**, \~15 lines. Minimal dependency
 footprint, exact semantics we control, easy to test.
 
 ```rust

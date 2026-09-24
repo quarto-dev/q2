@@ -1,7 +1,7 @@
 # Session: Workspace Setup and Initial Architecture
 
 **Date:** 2025-10-12
-**Duration:** ~2 hours
+**Duration:** \~2 hours
 **Focus:** Create Rust workspace skeleton, establish versioning strategy, design machine-readable I/O
 
 ## Summary

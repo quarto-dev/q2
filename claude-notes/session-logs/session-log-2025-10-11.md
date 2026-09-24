@@ -135,7 +135,7 @@ pub struct AnnotatedParse {
    - Structure: `src/cli/` with command modules
 
 3. **just** - Command runner by Casey Rodarmor
-   - ~70 modules, 11,000 LOC
+   - \~70 modules, 11,000 LOC
    - Pattern: Flat module structure with centralized imports
    - Structure: All modules in `src/`, clear compilation pipeline
    - Philosophy: Flat is easier to navigate than deep hierarchies
@@ -178,7 +178,7 @@ src/
 └── [feature modules]
 ```
 - Best for: Medium complexity, single developer/small team
-- Example: just (scales to ~70 modules)
+- Example: just (scales to \~70 modules)
 
 **Pattern 3: Workspace with Thin CLI Wrapper (Turborepo-Style)**
 ```
@@ -256,7 +256,7 @@ crates/
 
 **Investigation**:
 - Traced complete execution path for `quarto render doc.qmd`
-- Analyzed ~50+ TypeScript modules involved in rendering
+- Analyzed \~50+ TypeScript modules involved in rendering
 - Documented 10 major pipeline stages
 - Studied engine selection algorithm (jupyter, knitr, markdown, julia)
 - Examined metadata merging across 5 sources
@@ -670,11 +670,11 @@ Markdown
 
 - Configuration merging: 6-8 weeks
 - YAML tags: 3-4 weeks
-- Combined: ~10-12 weeks (some parallel work possible)
+- Combined: \~10-12 weeks (some parallel work possible)
 
 These integrate with the previously estimated YAML work:
 - MappedString + YAML: 6-8 weeks (from earlier analysis)
-- Total YAML system: ~16-20 weeks for complete implementation
+- Total YAML system: \~16-20 weeks for complete implementation
 
 ## Next Steps (When Work Resumes)
 

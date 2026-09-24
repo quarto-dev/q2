@@ -275,7 +275,7 @@ After running `build_error_table.ts`, we'll analyze:
 - Whether escaped shortcodes have different states than regular shortcodes
 - Duplicate state detection output
 
-**Expected**: Similar to Q-2-27, we should get ~16 unique parser states representing different contexts where the error can occur.
+**Expected**: Similar to Q-2-27, we should get \~16 unique parser states representing different contexts where the error can occur.
 
 ## Verification
 

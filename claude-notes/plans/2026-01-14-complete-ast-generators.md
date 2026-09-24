@@ -21,7 +21,7 @@ This plan is **NOT FINISHED** until:
 
 ## Problem Statement
 
-The original generators in `generators.rs` only covered ~10% of the AST:
+The original generators in `generators.rs` only covered \~10% of the AST:
 - 2/18 Block variants (Paragraph, BulletList)
 - 2/24+ Inline variants (Str, Space)
 

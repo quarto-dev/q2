@@ -8,7 +8,7 @@
 
 This document provides a comprehensive plan for implementing full quarto-cli YAML schema syntax support in Rust. After deep analysis of the quarto-cli codebase, particularly `from-yaml.ts`, the schema YAML files, and TypeScript type definitions, I've identified the exact patterns we need to support and how to port them to Rust.
 
-**Key Finding**: The current Rust `Schema::from_yaml()` implementation (~1300 lines) already exists but may not handle all quarto-cli syntax variations. We need to audit it against the patterns found in quarto-cli and ensure complete compatibility.
+**Key Finding**: The current Rust `Schema::from_yaml()` implementation (\~1300 lines) already exists but may not handle all quarto-cli syntax variations. We need to audit it against the patterns found in quarto-cli and ensure complete compatibility.
 
 ## Background: How quarto-cli Handles YAML Schemas
 
@@ -540,7 +540,7 @@ pub enum Description {
 
 ### What We Have
 
-**File**: `private-crates/quarto-yaml-validation/src/schema.rs` (~1300 lines)
+**File**: `private-crates/quarto-yaml-validation/src/schema.rs` (\~1300 lines)
 
 **Implemented**:
 - `Schema::from_yaml(yaml: &YamlWithSourceInfo) -> SchemaResult<Schema>` (line 288)

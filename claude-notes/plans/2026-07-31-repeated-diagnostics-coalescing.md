@@ -15,7 +15,7 @@ warning once per rendered page when the underlying problem lives in a
   'api/index.qmd'` — one identical copy per page, all anchored at the
   same `_quarto.yml` span.
 - Related shapes at smaller counts: `Q-12-7` (template/type fallback,
-  15×), listing `sort:` warnings (~10×), and unknown-shortcode warnings
+  15×), listing `sort:` warnings (\~10×), and unknown-shortcode warnings
   re-reported per includer when the shortcode lives in a shared include
   file (`{{< include ../include/_common.qmd >}}`).
 - (The bulk of the ~75 unknown-shortcode and ~88 `Q-2-9` warnings are

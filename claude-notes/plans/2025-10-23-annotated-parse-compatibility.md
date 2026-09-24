@@ -164,9 +164,9 @@ function validateArray(value: AnnotatedParse, schema: ArraySchema, context: Vali
 ### 3. Most Code Doesn't Access result Directly
 
 Analysis of all 32 files using AnnotatedParse:
-- ~60% only pass AnnotatedParse through the system
-- ~30% use result with proper type guards
-- ~10% assume specific result structures (all properly guarded)
+- \~60% only pass AnnotatedParse through the system
+- \~30% use result with proper type guards
+- \~10% assume specific result structures (all properly guarded)
 
 ## Test Files Examined
 

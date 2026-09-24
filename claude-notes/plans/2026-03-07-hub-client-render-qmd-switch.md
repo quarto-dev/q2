@@ -97,7 +97,7 @@ Automerge work consistently — no `/project/` prefix needed from TypeScript.
     - Serializes the whole object to YAML and calls `setRuntimeMetadata(yaml)`
     - This way multiple runtime settings can coexist without clobbering each other
 
-- [x] Update `RenderToHtmlOptions` interface (currently at line ~552 of `wasmRenderer.ts`)
+- [x] Update `RenderToHtmlOptions` interface (currently at line \~552 of `wasmRenderer.ts`)
   - Remove `sourceLocation?: boolean` (now handled via runtime metadata)
   - Make `documentPath` required (was optional, defaulted to `"input.qmd"`)
   - Current interface:
@@ -108,7 +108,7 @@ Automerge work consistently — no `/project/` prefix needed from TypeScript.
     }
     ```
 
-- [x] Update `renderToHtml` implementation (currently at line ~647 of `wasmRenderer.ts`)
+- [x] Update `renderToHtml` implementation (currently at line \~647 of `wasmRenderer.ts`)
   - Change signature: no longer takes `qmdContent` as first arg
   - Call `renderQmd(documentPath)` instead of `renderQmdContent(content)`
   - Remove the `renderQmdContentWithOptions` code path
@@ -122,7 +122,7 @@ Automerge work consistently — no `/project/` prefix needed from TypeScript.
 ### Phase 2: Component Updates
 
 - [x] Update `Preview.tsx`
-  - In `doRender()` (line ~208): stop passing `qmdContent` to `renderToHtml`
+  - In `doRender()` (line \~208): stop passing `qmdContent` to `renderToHtml`
   - Pass `documentPath` (required) — available as `currentFile?.path`
   - Remove `sourceLocation: options.scrollSyncEnabled` from render options
   - Instead, call `setScrollSyncEnabled()` when `scrollSyncEnabled` prop changes
@@ -131,7 +131,7 @@ Automerge work consistently — no `/project/` prefix needed from TypeScript.
     `onFileContent` callback fires, which triggers the render. So VFS is always
     up-to-date when `render_qmd` reads it.
 
-- [x] Update `AboutTab.tsx` (line ~84)
+- [x] Update `AboutTab.tsx` (line \~84)
   - Currently calls `renderToHtml(doc.markdown)` with no options
   - This must keep working — AboutTab renders static markdown (changelog, more-info)
     that has no project context
@@ -149,7 +149,7 @@ Automerge work consistently — no `/project/` prefix needed from TypeScript.
 
 - [x] Deprecate `render_qmd_content_with_options` code path
   - Remove `renderQmdContentWithOptions` from `wasmRenderer.ts`
-  - Remove `WasmRenderOptions` interface (line ~290, currently `{ sourceLocation?: boolean }`)
+  - Remove `WasmRenderOptions` interface (line \~290, currently `{ sourceLocation?: boolean }`)
   - Keep the Rust WASM function for now — remove in a follow-up
 
 - [x] Update mock WASM in `mockWasm.ts`

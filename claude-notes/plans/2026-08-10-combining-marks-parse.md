@@ -82,7 +82,7 @@ generated `parser.c` into the Rust crate).
       **Caveat:** three consecutive single-shot `cargo xtask verify` runs
       failed on *different*, unrelated network-dependent tests (quarto-hub
       auth, q2-preview listener, sync-client websocket), each passing in
-      isolation. Root cause is environmental: ~2,300 orphaned Jupyter
+      isolation. Root cause is environmental: \~2,300 orphaned Jupyter
       ipykernel processes (started 2026-08-06, PPID 1) hold 13,973 of the
       16,384 ephemeral ports, so parallel test bursts hit EADDRNOTAVAIL on
       loopback. Cleanup (`pkill -f ipykernel_launcher`) left to the user —

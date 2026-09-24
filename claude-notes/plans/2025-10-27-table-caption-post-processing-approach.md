@@ -53,7 +53,7 @@ Result: **Panics at line 195**: "Unexpected node in pipe_table: caption"
 2. Extract inlines from the `CaptionBlock` that `process_caption()` produces
 3. Store in existing `caption_inlines` variable
 
-**Code changes** (~5-10 lines):
+**Code changes** (\~5-10 lines):
 ```rust
 } else if node == "caption" {  // Changed from "table_caption"
     match child {
@@ -93,7 +93,7 @@ Result: **Panics at line 195**: "Unexpected node in pipe_table: caption"
 4. Extract that row, create Caption from its content
 5. Remove row from table body
 
-**Code changes** (~50-100 lines):
+**Code changes** (\~50-100 lines):
 ```rust
 // After processing all table rows, check if last row is actually a caption
 if let Some(last_row) = rows.last() {

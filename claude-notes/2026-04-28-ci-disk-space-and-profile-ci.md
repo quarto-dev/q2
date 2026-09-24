@@ -8,11 +8,11 @@ If you stumbled here from a `target/` directory growing unexpectedly, or wondere
 
 ## TL;DR
 
-- CI on `ubuntu-latest` has very little disk space (~14 GB free after the runner image, partially recovered by a cleanup action).
+- CI on `ubuntu-latest` has very little disk space (\~14 GB free after the runner image, partially recovered by a cleanup action).
 - The default `dev` profile emits full debuginfo, which roughly **doubles** `target/` size on a workspace this big.
 - We added a `[profile.ci]` profile (inherits from `dev`, strips most debuginfo) and the CI workflow uses it via `cargo nextest run --cargo-profile ci`.
 - We also removed the redundant `cargo build` step from CI — `cargo nextest run --tests` already builds everything `cargo build` does, plus the test artifacts. (We initially tried `--all-targets` but that pulls in `harness = false` benches which nextest can't enumerate as tests; `--tests` is the correct flag.)
-- We freed ~10 GB more on the runner by enabling `remove_tool_cache: true` on the existing free-disk-space step (no step uses `/opt/hostedtoolcache/`) and by pruning Docker images right after that step.
+- We freed \~10 GB more on the runner by enabling `remove_tool_cache: true` on the existing free-disk-space step (no step uses `/opt/hostedtoolcache/`) and by pruning Docker images right after that step.
 - **Locally, nothing changed.** `cargo build`, `cargo test`, and `cargo nextest run` (without `--cargo-profile ci`) still use the default `dev` profile with full debuginfo.
 
 ## What triggered this

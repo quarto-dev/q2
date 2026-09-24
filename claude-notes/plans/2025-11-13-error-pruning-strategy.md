@@ -83,8 +83,8 @@ The file `~/today/categorical-predictors.qmd` demonstrates the issue:
 5. Group diagnostics and keep highest-scoring per region
 
 **Expected Results**:
-- For test file: ERROR node 1 (1 byte) + ~35 inner nodes from ERROR node 2
-- Would reduce 49 → ~25-30 diagnostics
+- For test file: ERROR node 1 (1 byte) + \~35 inner nodes from ERROR node 2
+- Would reduce 49 → \~25-30 diagnostics
 
 **Pros**:
 - Balances between too few and too many errors

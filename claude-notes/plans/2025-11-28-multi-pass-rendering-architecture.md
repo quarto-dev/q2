@@ -424,9 +424,9 @@ pub fn disambiguate_citations(
 ## Expected Impact
 
 ### Tests Unlocked
-- **Delimiter bugs**: ~20-30 tests across categories
-- **Substitute inheritance**: ~50-100 tests (126 use substitute, 20 pass)
-- **Year-suffix**: ~20-30 tests (magic, disambiguation)
+- **Delimiter bugs**: \~20-30 tests across categories
+- **Substitute inheritance**: \~50-100 tests (126 use substitute, 20 pass)
+- **Year-suffix**: \~20-30 tests (magic, disambiguation)
 - **Total estimated**: 80-150 additional tests
 
 ### Architecture Benefits

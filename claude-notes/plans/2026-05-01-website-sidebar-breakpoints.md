@@ -13,7 +13,7 @@ Discovered while investigating bd-f5yi. Once the
 `nav[role="doc-toc"]` injection bug is fixed and the website
 sidebar appears in the hub-client preview, the *visual* state at
 common viewport widths is broken: at viewports between 768 and
-991 px, the sidebar collapses to an ~26 px-wide vertical bar with
+991 px, the sidebar collapses to an \~26 px-wide vertical bar with
 a scrollbar — present in the DOM, technically interactive, but
 unusable. The user verified the same defect on the **native
 renderer** (`localhost:8000/_site` of

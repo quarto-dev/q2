@@ -165,7 +165,7 @@ code paths that are compiled only for wasm32). `cargo nextest run
 
 Options considered for native unit coverage:
 - Extract `LuaThrow` sentinel to a new workspace crate
-  (`quarto-lua-panic-wasm`): over-engineered for ~15 lines of code.
+  (`quarto-lua-panic-wasm`): over-engineered for \~15 lines of code.
 - Add `rlib` to crate-type and fix the native build: unrelated large
   refactor.
 - Use `wasm-bindgen-test` harness: this crate has zero existing tests

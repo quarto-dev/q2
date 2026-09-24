@@ -25,7 +25,7 @@ stderr is consulted on **exactly one event — a whole-subprocess crash** (`hand
 Per-request failures return `FromEngine::Error{message,stack}` routed by id to one slot
 (`reader_loop` ~L820-828) and **never touch the ring** — so a single engine's failure already sees
 only its own structured error. A crash is global (every in-flight request fails at once); today each
-waiter gets an identical copy of the whole `recent_stderr` ring (~L395) stamped with its own engine
+waiter gets an identical copy of the whole `recent_stderr` ring (\~L395) stamped with its own engine
 name. Per-engine *partitioning* is impossible (lines are untagged) **and undesirable** (it would
 hide the culprit if it wasn't the engine you waited on).
 
@@ -45,7 +45,7 @@ The fix makes the shared-ness explicit so no single engine is falsely blamed. So
   harness and makes the ring un-assertable in a unit; `impl BufRead` lets the test feed a
   `Cursor<&[u8]>`. The `BufReader` wrap currently lives *inside* `stderr_loop` (`let reader =
   BufReader::new(stderr)`, ~L932); the refactor moves that one wrap to the call site
-  (`stderr_loop(BufReader::new(stderr), recent_stderr)`, ~L539) and drops it from the body — a
+  (`stderr_loop(BufReader::new(stderr), recent_stderr)`, \~L539) and drops it from the body — a
   one-line, behavior-identical production change. `BufRead`/`BufReader` are already imported (L26).
 
 *Residual pollution (accepted):* by default only WARN/ERROR reach stderr, so a chatty notebook's

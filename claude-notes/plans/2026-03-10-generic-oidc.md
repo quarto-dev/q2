@@ -78,7 +78,7 @@ For CSRF: Replace the Google-specific `g_csrf_token` with the existing `X-Reques
 **Decision**: Keep `auth_callback` as-is but mark it as **Google-frontend-specific**. It's tightly coupled to Google's Sign-In library (which controls the POST body and `g_csrf_token` cookie). Non-Google frontends should use `/auth/refresh` instead — it accepts a JWT via JSON POST, validates it through the full JWKS/issuer/allowlist pipeline, sets the HttpOnly cookie, and is protected by the standard `X-Requested-With` CSRF check. When the frontend is eventually updated to a generic OIDC library, `auth_callback` can be removed entirely.
 
 ### 6. JWT Cookie Size
-The raw JWT is stored as the cookie value. Google tokens are ~1KB, but other providers (e.g., Azure AD) can produce 2-4KB tokens. Browser cookie limits are typically 4096 bytes total (including name, attributes). If a token exceeds this, the browser silently drops the cookie and the user appears unauthenticated.
+The raw JWT is stored as the cookie value. Google tokens are \~1KB, but other providers (e.g., Azure AD) can produce 2-4KB tokens. Browser cookie limits are typically 4096 bytes total (including name, attributes). If a token exceeds this, the browser silently drops the cookie and the user appears unauthenticated.
 
 **Approach**: Log a warning at cookie-set time if the token exceeds 3800 bytes (leaving headroom for cookie metadata). This makes the failure mode visible in server logs rather than a silent auth mystery. If a provider's tokens are genuinely too large, the fix is server-side sessions — but that's a separate effort driven by actual need.
 

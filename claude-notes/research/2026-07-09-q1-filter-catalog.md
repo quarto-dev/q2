@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-09
 **Status:** Complete — all 138 built-in filters cataloged (11 stage groups), 10% evidence spot-check passed
-**Purpose:** Systematically map every built-in Quarto 1 Lua filter (~138 files across
+**Purpose:** Systematically map every built-in Quarto 1 Lua filter (\~138 files across
 8 stage dirs) onto its Quarto 2 (Rust) equivalent, to (a) find genuine porting gaps
 for the formats Q2 emits today (HTML + revealjs), and (b) surface where built-in work
 clusters into seams that might motivate **new user-filter injection points** in the Q2
@@ -15,7 +15,7 @@ synthesis; turning them into tracked work is a separate decision.
 
 ## The Q2 pipeline (three nested layers)
 
-Q2 does **not** have Q1's ~7 internal filter groups + 8 user entry points. It has:
+Q2 does **not** have Q1's \~7 internal filter groups + 8 user entry points. It has:
 
 ### Layer 1 — macro `PipelineStage`s (`quarto-core/src/pipeline.rs:277`, `build_html_pipeline_stages_with_options`)
 ```
@@ -72,7 +72,7 @@ of Crossref) is the highest-value single addition — see the synthesis.
 
 ### The reframe
 The 2026-03-16 extensions plan collapsed Q1's 8 **user entry points** → 2 positions.
-That was correct *for user/extension filters*. But the ~138 **built-in** filters map onto
+That was correct *for user/extension filters*. But the \~138 **built-in** filters map onto
 the much richer target above. Group-level correspondence:
 
 | Q1 group | Q2 target region |

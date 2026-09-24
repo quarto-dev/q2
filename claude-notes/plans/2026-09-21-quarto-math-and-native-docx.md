@@ -93,7 +93,7 @@ LibreOffice preservation is unverified against a current release.
   attribute declarations, 22 literal XML templates (inline picture, table
   skeleton, numbering). This is where Word's child-order strictness is written
   down.
-- `src/docx/opc/`: self-contained package layer (~600 lines: content types from
+- `src/docx/opc/`: self-contained package layer (\~600 lines: content types from
   parts, relationships, part naming, every reltype/content-type URI in
   `constants.py`).
 - `src/docx/templates/default.docx`: Word-generated, 160 styles (Heading 1–9,
@@ -215,7 +215,7 @@ emitter from ECMA-376 Part 1 §22.1 is bounded work.
       `external-sources/mitex`, so the symbol rows can be generated without
       the Typst build step. (`typst` is now installed locally too, so
       `typst query` regeneration is a fallback.)
-- [x] (done 2026-09-21: `shared-math.xsd` is not self-contained, it imports `wml.xsd` and `shared-commonSimpleTypes.xsd`, so the whole 12-file transitional closure (~500 KB) lives at `crates/quarto-math/tests/schemas/ooxml/` and Phase 2 validates `document.xml` from the same directory; helper + guard tests in `tests/integration/omml_schema.rs`) Vendor the OMML schema under `crates/quarto-math/tests/schemas/`:
+- [x] (done 2026-09-21: `shared-math.xsd` is not self-contained, it imports `wml.xsd` and `shared-commonSimpleTypes.xsd`, so the whole 12-file transitional closure (\~500 KB) lives at `crates/quarto-math/tests/schemas/ooxml/` and Phase 2 validates `document.xml` from the same directory; helper + guard tests in `tests/integration/omml_schema.rs`) Vendor the OMML schema under `crates/quarto-math/tests/schemas/`:
       `shared-math.xsd`, `shared-commonSimpleTypes.xsd` and W3C's `xml.xsd`,
       taken from `external-sources/python-docx/ref/xsd/` (MIT notice kept),
       with the one-line import patch (`schemaLocation="xml.xsd"` on the
@@ -235,7 +235,7 @@ markup for a fixture plus, for OMML, an `xmllint --schema` pass.
       arg shape (mitex's `ArgShape`/`ArgPattern` JSON form), semantic kind for
       OMML (`Frac`, `Rad`, `Nary{op}`, `Accent{char}`, `Func`, `Sym{codepoint}`,
       `Matrix{delims}`, `Text`, `Style{variant}`, …), Typst alias. Generate the
-      symbol rows from mitex's spec + `codex`; hand-write the ~150 structural
+      symbol rows from mitex's spec + `codex`; hand-write the \~150 structural
       rows. Test: every mitex spec entry has a row; every row's codepoint is a
       valid scalar.
 - [x] (done 2026-09-21: `quarto_math::reader::parse` → `Parsed { root, spans, leaves }`; side table recorded at the parser's `builder.token` sites, vendored patch #5; 10 tests in `tests/integration/reader.rs` incl. the corpus-wide leaf/tiling properties and the probe's two macro cases) **Reader**: `parse(text, &Spec) -> Cst` via mitex-parser with a
@@ -364,7 +364,7 @@ annotation over a stretchy arrow, and explicit `sym` overrides where codex
 
 **Production.** `cargo xtask gen-math-spec` reads
 `spec/upstream/mitex-default-spec.json` and `spec/overrides.json` (hand
-written, ~150 rows: every non-`sym` kind above, plus `sym` rows whose Typst
+written, \~150 rows: every non-`sym` kind above, plus `sym` rows whose Typst
 alias `codex` cannot resolve) and writes `spec/commands.json`:
 
 1. every upstream entry gets `args` verbatim;

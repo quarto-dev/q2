@@ -7,7 +7,7 @@
 
 ## Overview
 
-The hub-client has a solid foundation: ~110 CSS custom-property tokens with
+The hub-client has a solid foundation: \~110 CSS custom-property tokens with
 light/dark themes, a recent WCAG 2.2 pass (e71b1ac5), and a coherent visual
 language — white surfaces + hairlines in light, desaturated slate in dark,
 teal primary actions — introduced by the July 2026 projects-home rework

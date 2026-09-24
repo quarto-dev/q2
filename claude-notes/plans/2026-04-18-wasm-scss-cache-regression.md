@@ -73,7 +73,7 @@ One cache slot is enough.
 Why the existing comment deferring to JS caching is no longer the right
 call:
 - IndexedDB is async; reading it per keystroke still costs a frame.
-- A `OnceLock<String>` on the WASM heap is cheap (~300 KB compiled
+- A `OnceLock<String>` on the WASM heap is cheap (\~300 KB compiled
   Bootstrap CSS per session).
 - It doesn't conflict with IndexedDB: the JS-layer cache still persists
   across sessions; the `OnceLock` is just a first-level hot cache.

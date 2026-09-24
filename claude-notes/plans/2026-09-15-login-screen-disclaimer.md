@@ -129,7 +129,7 @@ a layout choice; see Decisions §3.)
    footnote type size two extra paragraph gaps add height for no gain in
    scannability; the bold run already anchors the eye. **Confirmed: leads run into their body paragraph.**
 4. **Type size.** The invite-only footnote sits at `--text-2xs` (10px),
-   which is too small for ~120 words of prose. Set the disclaimer at
+   which is too small for \~120 words of prose. Set the disclaimer at
    `--text-xs` (11px) with `--leading-base`, heading at `--text-sm`
    semibold; colors `--text-secondary` for body, `--text-primary` for the
    heading and leads. Share the footnote's hairline top border so the

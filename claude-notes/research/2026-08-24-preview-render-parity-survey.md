@@ -28,7 +28,7 @@ for each mismatch, and classified each fixture by status. Differences from
 the real runner that matter when reading the numbers: it did not honour
 `shouldError`, it keyed only on the literal `html` tests entry, and its
 "has math" detector was a crude `$` regex (two false positives on `$` in
-comments). Wall time: 126 fixtures rendered in ~16 s of a 22 s run.
+comments). Wall time: 126 fixtures rendered in \~16 s of a 22 s run.
 
 **Results (164 fixtures):**
 

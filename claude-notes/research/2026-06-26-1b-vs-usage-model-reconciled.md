@@ -39,7 +39,7 @@ elsewhere) and are recorded as such below, not as new work.
 ## Findings (reviewer-grounded)
 
 ### 1B-DEPS-1 — the fold omits the per-engine `dependencies` array jupyter reads (HIGH)
-- **Plan:** step 4 (`plan1b-engine-host-deno.md` ~L651-664) constructs
+- **Plan:** step 4 (`plan1b-engine-host-deno.md` \~L651-664) constructs
   `DependenciesOptions` with `target`/`format`/`output`/`resourceDir`/`tempDir`/`libDir`/
   `projectDir` — and **no `dependencies` field**.
 - **Q1 (verified):** Q1 passes engine deps to `dependencies()` *only* via that field —
@@ -133,7 +133,7 @@ elsewhere) and are recorded as such below, not as new work.
 - **jupyter-namespace assembly seam (EQ3):** a clean deferred-with-seam (Plan 3 wires it), not a
   rip-out. All three agents agree.
 - **denoHost / PlatformHost completeness (EQ4):** the plan's self-aware completeness note
-  (~L969-974) requires the *full* PlatformHost, not Julia's minimal I/O. Adequate at the spec level.
+  (\~L969-974) requires the *full* PlatformHost, not Julia's minimal I/O. Adequate at the spec level.
 
 ## Netted out — already captured elsewhere (NOT new 1b work)
 - **knitr's re-spawning `dependencies()` vs the execute-only daemon/poison model** (Opus-B
@@ -178,7 +178,7 @@ limitation); GAP-A persists in the revision; GAP-C is the Julia-shaped-test-doub
 
 ## What I read / how I verified
 - The three 1b agent recaps + grounded the deps-fold cluster against `plan1b-engine-host-deno.md`
-  step 4 (~L640-664), Q1 `execute/types.ts` (`DependenciesOptions:201-211`, `ExecuteResult.engineDependencies:174`),
+  step 4 (\~L640-664), Q1 `execute/types.ts` (`DependenciesOptions:201-211`, `ExecuteResult.engineDependencies:174`),
   `jupyter.ts:610`, `render.ts:91-103`.
 - Current epic state: `plan1a-host-bugs.md`, `plan5-engine-host-pooling.md`, RTQ (DQ-2, HOST-6, R5,
   the surface-audit extraction to `designs/engine-api-surface.md`), review-1c structure.

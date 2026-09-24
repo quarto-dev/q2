@@ -259,7 +259,7 @@ Note: `find_year_suffix_ambiguities` function can be removed or kept for other p
 2. Remove the name-based pre-grouping
 3. Test with `disambiguate_AddNamesSuccess` and `AndreaEg*` tests
 
-**Expected impact:** ~10-15 tests fixed
+**Expected impact:** \~10-15 tests fixed
 
 ### Phase 2: Fix Bug 2
 
@@ -267,7 +267,7 @@ Note: `find_year_suffix_ambiguities` function can be removed or kept for other p
 2. Use `ambiguities` variable instead of `find_year_suffix_ambiguities`
 3. Test with `YearSuffixMacroSameYear*` tests
 
-**Expected impact:** ~3-5 tests fixed
+**Expected impact:** \~3-5 tests fixed
 
 ### Phase 3: Cleanup and Edge Cases
 

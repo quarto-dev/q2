@@ -774,7 +774,7 @@ Migration table (Phase 3):
 | test `root_file_id` (apply_template.rs) | `info.root_file_id()` (delete local fn) |
 | test `walk_source_info` (engine_execution.rs) | `si.collect_file_ids(out)` (delete inner fn) |
 
-Net effect: ~60 LOC of duplicate walkers removed, two latent
+Net effect: \~60 LOC of duplicate walkers removed, two latent
 production bugs fixed (nested-Substring fall-through to FileId(0)),
 and the Generated arm is defined exactly once.
 
@@ -998,11 +998,11 @@ contiguity, lives in `quarto-source-map/src/source_info.rs`.
 
 - **Migration scope**: 15 files pattern-match `SourceInfo::FilterProvenance`
   (27 occurrences total — verified by grep against the worktree).
-  Phase 3's file-id-walker consolidation retires ~6 of those by
+  Phase 3's file-id-walker consolidation retires \~6 of those by
   replacing entire match expressions (the file-id-extraction sites in
   `diagnostic.rs`, `location.rs`, `pipe_table.rs`, `section.rs`,
   `apply_template.rs`, `engine_execution.rs`). Phase 5 sweeps the
-  ~21 remaining arms. Most are mechanical: the `Generated` arm
+  \~21 remaining arms. Most are mechanical: the `Generated` arm
   returns what `FilterProvenance` did today (`0`/`0`/`None` for
   offset/length accessors; delegates to `invocation_anchor()` for
   `resolve_byte_range`). File-id traversals are handled exactly once,

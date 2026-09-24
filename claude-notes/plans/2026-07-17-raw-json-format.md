@@ -59,7 +59,7 @@ be reused:
 - **Writer pool** — `SourceInfoSerializer` (`writers/json.rs:271-447`):
   interns `SourceInfo` into a flat topologically-ordered pool (`astContext.p`),
   dedups shared `Substring` parents / `Generated` anchors by `Arc::as_ptr`
-  (~93% size reduction), `perf.intern` gauge under `QUARTO_PERF_STATS=1`.
+  (\~93% size reduction), `perf.intern` gauge under `QUARTO_PERF_STATS=1`.
 - **Reader pool** — `SourceInfoDeserializer` (`readers/json.rs:102-480`):
   rebuilds each pool entry exactly once (forward-reference guard), children
   clone earlier entries — the clone shares the entry's *inner* Arcs, so the
@@ -75,7 +75,7 @@ be reused:
 
 ### The raw mode
 
-Rather than forking the ~8600 lines of writer+reader (or building a parallel
+Rather than forking the \~8600 lines of writer+reader (or building a parallel
 serde format), **add a mode to the existing code path**:
 
 - **Writer**: a `raw` flag on `JsonConfig` (or a sibling entry point

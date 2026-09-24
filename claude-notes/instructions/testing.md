@@ -119,13 +119,13 @@ Smoke-all test fixtures live in `crates/quarto/tests/smoke-all/`. Each `.qmd` fi
 ```bash
 cargo nextest run -p quarto --test integration smoke_all
 ```
-Fastest (~1s). Renders via `quarto-core` directly. Runs all assertion types including `ensureHtmlElements` (CSS selectors via `scraper`), `ensureCssRegexMatches`, `ensureFileRegexMatches`, etc.
+Fastest (\~1s). Renders via `quarto-core` directly. Runs all assertion types including `ensureHtmlElements` (CSS selectors via `scraper`), `ensureCssRegexMatches`, `ensureFileRegexMatches`, etc.
 
 ### 2. WASM Vitest (jsdom)
 ```bash
 cd hub-client && npm run test:wasm
 ```
-~3s. Renders via WASM module in Node.js with jsdom for HTML assertions. Runs the full smoke-all suite plus other WASM tests.
+\~3s. Renders via WASM module in Node.js with jsdom for HTML assertions. Runs the full smoke-all suite plus other WASM tests.
 
 ### 3. Playwright E2E (browser)
 ```bash

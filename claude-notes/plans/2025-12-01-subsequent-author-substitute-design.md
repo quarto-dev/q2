@@ -120,7 +120,7 @@ The Haskell implementation (`external-sources/citeproc/src/Citeproc/Eval.hs:323-
 
 ## Implementation Plan
 
-### Phase 1: CSL Parsing (~1 hour)
+### Phase 1: CSL Parsing (\~1 hour)
 
 **File: `crates/quarto-csl/src/types.rs`**
 
@@ -167,7 +167,7 @@ let subsequent_author_substitute_rule = get_optional_attr::<String>(node, "subse
     .unwrap_or_default();
 ```
 
-### Phase 2: Output Helper Methods (~1.5 hours)
+### Phase 2: Output Helper Methods (\~1.5 hours)
 
 **File: `crates/quarto-citeproc/src/output.rs`**
 
@@ -211,7 +211,7 @@ impl Output {
 }
 ```
 
-### Phase 3: Post-Processing Function (~2 hours)
+### Phase 3: Post-Processing Function (\~2 hours)
 
 **File: `crates/quarto-citeproc/src/output.rs` or new file**
 
@@ -265,7 +265,7 @@ fn should_substitute(
 }
 ```
 
-### Phase 4: Integration (~1 hour)
+### Phase 4: Integration (\~1 hour)
 
 **File: `crates/quarto-citeproc/src/types.rs`**
 
@@ -314,7 +314,7 @@ pub fn generate_bibliography(&mut self) -> Result<Vec<(String, String)>> {
 }
 ```
 
-### Phase 5: Testing (~1 hour)
+### Phase 5: Testing (\~1 hour)
 
 1. Enable the three unknown tests:
    - `name_SubsequentAuthorSubstituteSingleField`

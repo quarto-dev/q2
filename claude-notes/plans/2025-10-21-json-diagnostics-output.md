@@ -478,4 +478,4 @@ Could add levels to control what gets output:
 - Maintains consistency with parse error JSON format
 - Easy to test
 
-**Effort**: ~2-3 hours
+**Effort**: \~2-3 hours

@@ -411,7 +411,7 @@ string:
 - Test with real schemas: 15 minutes
 - Documentation: 10 minutes
 
-**Total**: ~1.5 hours
+**Total**: \~1.5 hours
 
 ## Important Notes
 

@@ -13,7 +13,7 @@ This document analyzes Quarto's Lua filter infrastructure and proposes a design 
 
 ### Overview
 
-The Lua filter infrastructure consists of ~2,500 lines across 8 core files:
+The Lua filter infrastructure consists of \~2,500 lines across 8 core files:
 
 | File | Lines | Purpose |
 |------|-------|---------|
@@ -609,13 +609,13 @@ Based on the Lua filter analysis, these are the most important custom nodes:
 
 ### Tier 1 - Critical (Implement First)
 
-1. **FloatRefTarget** (~1,080 LOC in Lua)
+1. **FloatRefTarget** (\~1,080 LOC in Lua)
    - Figures and tables with cross-reference support
    - Subfloat hierarchies
    - Caption locations (top, bottom, margin)
    - Multiple format renderers
 
-2. **Callout** (~427 LOC in Lua)
+2. **Callout** (\~427 LOC in Lua)
    - Note, warning, tip, caution, important
    - Collapsible, icon options
    - Bootstrap HTML, LaTeX tcolorbox renderers

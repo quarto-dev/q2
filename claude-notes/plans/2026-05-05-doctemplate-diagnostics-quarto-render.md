@@ -194,7 +194,7 @@ Per `CLAUDE.md` "End-to-end verification before declaring success":
 4. **Hub-client.** In scope. `wasm-quarto-hub-client` already routes
    structured diagnostics through `JsonDiagnostic` /
    `diagnostics_to_json` (`crates/wasm-quarto-hub-client/src/lib.rs`,
-   ~lines 600/756/952/1102/1225). Once template diagnostics land in
+   \~lines 600/756/952/1102/1225). Once template diagnostics land in
    `RenderOutput.diagnostics`, they ride those existing rails to
    Monaco markers and the in-app diagnostics panel — no shim needed,
    just the API update plus a hub-client smoke test.
@@ -238,7 +238,7 @@ $variable/left 20 "| "$
 ```
 
 (see `crates/tree-sitter-doctemplate/grammar/grammar.js`, the `pipe`
-rule and the `/` repetitions on lines ~84–86).
+rule and the `/` repetitions on lines \~84–86).
 
 `?` is currently unused as a sigil and would not collide with any
 existing pipe name (`pairs`, `first`, `last`, `rest`, `allbutlast`,

@@ -214,7 +214,7 @@ short-circuiting when their config is absent, all called from
 
 ### q2 has a structural advantage over Q1 here
 
-Q1's `updateAliases` spends ~60 of its ~120 lines on an incremental-render workaround: on
+Q1's `updateAliases` spends \~60 of its ~120 lines on an incremental-render workaround: on
 an incremental build it re-walks *every* project input, re-reads each one's `aliases`,
 and re-adds them to the map (with `allowNewAnchors=false`) so that a redirect file
 claimed by several pages isn't rewritten with only the subset's entries.

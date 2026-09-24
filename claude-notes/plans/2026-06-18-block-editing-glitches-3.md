@@ -89,7 +89,7 @@ line *plus* whitespace/gap fragments down to the sublist boundary:
 ```
 
 So the editor's `contentHeight` came out **32.57px** while the rendered leading
-line is **25.5px** (`= lineHeight = getClientRects()[0].height`). The extra ~7px
+line is **25.5px** (`= lineHeight = getClientRects()[0].height`). The extra \~7px
 is the inter-block gap the union swallowed. List items carry **0** vertical
 padding (the user's initial "inside padding" hypothesis was disproven by the
 probe) — it is purely a measurement artifact unique to the Range path.

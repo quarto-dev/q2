@@ -247,7 +247,7 @@ user an error. `DestinationNotFound` is removed from the error enum entirely.
     by function name — line numbers may drift).
   - `claude-notes/plans/2026-06-04-target-incremental-writes.md`: update three
     spots — data-flow diagram comment (~line 98), editability gate prose
-    (~lines 144–147), and Phase 2 checklist part (b) (~lines 211–218) — to
+    (~lines 144–147), and Phase 2 checklist part (b) (\~lines 211–218) — to
     document that property #2 is retired and `Generated` nodes now return `None`.
     Find by content rather than exact line number.
 - [x] **Change `apply_node_edit` step 3** from `.ok_or(DestinationNotFound)?`

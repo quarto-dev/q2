@@ -217,7 +217,7 @@ Test cases needed:
 - Phase 4 (imports): 2 minutes
 - Phase 5 (tests): 30 minutes
 - Phase 6 (verification): 5 minutes
-- **Total**: ~1 hour
+- **Total**: \~1 hour
 
 ## Notes
 

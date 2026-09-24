@@ -270,7 +270,7 @@ field added to the profile JSON, populated by a dedicated stage.
 
 #### Option C4 — Embed QuickJS, ship Q1-verbatim EJS
 
-The 2025-12-20 analysis covers this path. ~1–2 MB binary cost, full
+The 2025-12-20 analysis covers this path. \~1–2 MB binary cost, full
 template compatibility with Q1 templates as written. Pulls in a JS
 runtime alongside the Lua runtime we already have. Significant scope
 expansion.
@@ -520,7 +520,7 @@ Three smaller pieces, none architecturally novel given the above:
    Deno's path module. We'd want a deterministic, project-relative
    glob expander; there's likely already one in pampa or `quarto-core`
    for `_quarto.yml` `project.render`. Verify before committing.
-3. **Reading-time / word-count cost on Pass-1.** Cheap (~linear in
+3. **Reading-time / word-count cost on Pass-1.** Cheap (\~linear in
    AST size); already done during render. Adding it to the profile
    means doing it once per profile build. Acceptable.
 4. **Custom template path: do we punt or design now?** Recommendation

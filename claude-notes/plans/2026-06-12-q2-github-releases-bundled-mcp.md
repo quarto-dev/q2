@@ -224,7 +224,7 @@ Verified on this arm64 mac: `npm pack @napi-rs/keyring-darwin-x64@1.3.0`
 platform checks interfere. The loader package does full runtime
 platform/arch/musl detection, so co-staged platform packages coexist by
 design (`bundle.mjs` even documents multi-platform staging already).
-Platform packages are ~250–500 KB each (12 exist for v1.3.0).
+Platform packages are \~250–500 KB each (12 exist for v1.3.0).
 Per-target staging lists (also covers the Rosetta/libc mismatch cases —
 the addon must match the **user's node**, not the q2 binary):
   - linux_amd64 → `linux-x64-gnu,linux-x64-musl`

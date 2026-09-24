@@ -32,7 +32,7 @@ Two deliverables, one mechanism:
 
 - **Canonical implementation:** `src/core/lib/partition-cell-options.ts`.
   - `kLangCommentChars: Record<string, string | [string, string]>` — the
-    registry (~50 languages). Value is a line-comment prefix (`"#"`, `"//"`,
+    registry (\~50 languages). Value is a line-comment prefix (`"#"`, `"//"`,
     `"--"`, `"%"`, `"!"`, `"⍝"`, …) or a `[prefix, suffix]` pair for
     block-comment-only languages (`c`/`css`: `["/*","*/"]`, `ocaml`:
     `["(*","*)"]`, `sas`: `["*",";"]`). Unknown language ⇒ `"#"`.
@@ -56,7 +56,7 @@ Two deliverables, one mechanism:
   filters/modules/constants.lua) — precisely the duplication we should not
   reproduce. q2 gets **one** implementation.
 - **Error semantics** (resources/jupyter/notebook.py `cell_execute`,
-  ~L550): per-cell options are read before execution; `error: true` adds
+  \~L550): per-cell options are read before execution; `error: true` adds
   the `raises-exception` tag (execution continues, error is embedded);
   otherwise a raising cell aborts the run. Global default comes from
   document `execute.error` (default false). Q1 also **strips the option

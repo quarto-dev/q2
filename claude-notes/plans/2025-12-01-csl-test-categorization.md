@@ -370,21 +370,21 @@ Name suffix comma handling:
 ### Tier 1: Immediate (2 tests)
 Enable quick wins - no code changes needed.
 
-### Tier 2: Low-Hanging Fruit (~15-20 tests)
+### Tier 2: Low-Hanging Fruit (\~15-20 tests)
 1. **Names-delimiter inheritance** (4 tests) - attribute propagation
 2. **Locator en-dash normalization** (3 tests) - simple string replacement
 3. **Et-al subsequent** (2 tests) - check `et-al-subsequent-min/use-first`
 4. **Display block newlines** (1 test) - HTML formatting tweak
 5. **Container-title-short variable** (2-3 tests) - add variable resolution
 
-### Tier 3: Medium Effort (~20 tests)
+### Tier 3: Medium Effort (\~20 tests)
 - Collapse/delimiter handling (3 tests)
 - Group/variable suppression (3 tests)
 - Quote nesting (4-6 tests)
 - Sort particles (8 tests)
 - Term/label handling (4 tests)
 
-### Tier 4: Complex / Consider Deferring (~15-20 tests)
+### Tier 4: Complex / Consider Deferring (\~15-20 tests)
 - Citation sequence/incremental processing (6 tests)
 - Subsequent author substitute bugs (2 tests)
 - Complex disambiguation scenarios (4 tests)

@@ -288,7 +288,7 @@ New native flow:
 - [ ] **Artifact access**: `render_qmd_to_html` currently returns `RenderOutput`
   but artifacts live in `RenderContext`. Check how artifacts are returned.
   The `run_pipeline` function in `pipeline.rs` transfers artifacts back to
-  `RenderContext` (line ~262: `ctx.artifacts = stage_ctx.artifacts`). So after
+  `RenderContext` (line \~262: `ctx.artifacts = stage_ctx.artifacts`). So after
   `render_qmd_to_html`, artifacts should be accessible via `ctx.artifacts`.
   If `render_qmd_to_html` doesn't return the context, we may need to modify it
   to also return the artifact store (or return the full context).

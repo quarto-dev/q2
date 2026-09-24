@@ -65,7 +65,7 @@ The LSP is in a **separate monorepo** from the CLI but depends on CLI resources:
 Embed LSP in Rust CLI using `tower-lsp` framework.
 
 **Pros**: Single codebase, shared logic, no IPC overhead
-**Cons**: ~6,300 LOC to port, need Rust LSP expertise
+**Cons**: \~6,300 LOC to port, need Rust LSP expertise
 **Effort**: High (weeks to months)
 
 ### Option 2: Bridge Approach

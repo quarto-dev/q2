@@ -740,8 +740,8 @@ let yaml = YamlWithSourceInfo {
 ```
 
 **Rough overhead estimate**:
-- Small config (~50 keys): ~5KB raw YAML → ~15KB in memory (3x overhead)
-- Large config (~500 keys): ~50KB raw YAML → ~150KB in memory (3x overhead)
+- Small config (~50 keys): ~5KB raw YAML → \~15KB in memory (3x overhead)
+- Large config (~500 keys): ~50KB raw YAML → \~150KB in memory (3x overhead)
 
 **Is this acceptable?**
 - ✅ Yes for Quarto: Configs are typically <10KB, overhead is ~20-30KB per document
@@ -834,7 +834,7 @@ impl YamlWithSourceInfo {
 - ✅ Simple API, no lifetime complexity
 
 **Cons**:
-- ⚠️ Data duplication (~3x memory overhead)
+- ⚠️ Data duplication (\~3x memory overhead)
 
 **Verdict**: ⭐ **Best balance** for Quarto's requirements
 

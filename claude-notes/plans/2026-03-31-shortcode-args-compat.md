@@ -19,7 +19,7 @@ The shortcode engine lives in `crates/pampa/src/lua/shortcode.rs`. Key types:
   `keyword: Vec<(String, String)>`, `metadata: Vec<(String, String)>`.
 - Handler signature (Lua side): `function(args, kwargs, meta, raw_args, context)`
 
-### How handlers are called (current code, ~line 242-266)
+### How handlers are called (current code, \~line 242-266)
 `build_and_call()` constructs 5 arguments and calls the Lua handler:
 1. `lua_args` — built by `build_args_table()` (THIS IS BROKEN)
 2. `lua_kwargs` — built by `build_kwargs_table()`
@@ -35,7 +35,7 @@ The shortcode engine lives in `crates/pampa/src/lua/shortcode.rs`. Key types:
 - `quarto.*` API is registered in `crates/pampa/src/lua/quarto_api.rs` —
   includes `quarto.json`, `quarto.log`, `quarto.utils`. The `quarto.shortcode`
   sub-namespace is registered in `shortcode.rs` (function
-  `register_shortcode_api`, ~line 348).
+  `register_shortcode_api`, \~line 348).
 - Metatable infrastructure exists: `set_metatable()`, `__index` patterns are
   used in `io_wasm.rs`, `shortcode.rs:150`, `readwrite.rs`, `constructors.rs`.
 - `pandoc.Inlines({})` constructor is available (registered in
@@ -58,7 +58,7 @@ The shortcode engine lives in `crates/pampa/src/lua/shortcode.rs`. Key types:
 ### Reference: TS Quarto shortcode source
 The TypeScript Quarto shortcode handler is at
 `~/src/quarto-cli/src/resources/filters/customnodes/shortcodes.lua`
-(function `callShortcodeHandler`, ~line 373).
+(function `callShortcodeHandler`, \~line 373).
 
 ---
 
@@ -69,7 +69,7 @@ existing Lua extensions (e.g., lipsum). This causes extensions that call
 `pandoc.utils.stringify(args[1])` to get empty strings instead of the argument
 value.
 
-**Root cause:** `build_args_table` (shortcode.rs ~line 268) wraps each positional
+**Root cause:** `build_args_table` (shortcode.rs \~line 268) wraps each positional
 arg in a `{value = "string"}` table, but TS Quarto passes plain strings directly.
 
 ## How TS Quarto Does It
@@ -106,7 +106,7 @@ Key points:
 - **`context`**: string `"block"`, `"inline"`, or `"text"`.
 
 TS Quarto also provides `quarto.shortcode.read_arg(args, n)` (defined in
-`quarto-cli/src/resources/pandoc/datadir/init.lua` ~line 1003):
+`quarto-cli/src/resources/pandoc/datadir/init.lua` \~line 1003):
 ```lua
 quarto.shortcode.read_arg = function(args, n)
   local arg = args[n or 1]
@@ -120,7 +120,7 @@ end
 ```
 
 Where `inlinesToString` (in `quarto-cli/src/resources/filters/common/pandoc.lua`
-~line 76) wraps inlines in a `pandoc.Span` and calls `pandoc.utils.stringify`.
+\~line 76) wraps inlines in a `pandoc.Span` and calls `pandoc.utils.stringify`.
 
 ## Current q2 Behavior vs Expected
 
@@ -162,7 +162,7 @@ string key `"value"`, so `sequence_values` yields nothing → empty string.
 
 ### Phase 2: Implementation
 
-- [x]**2.1** Fix `build_args_table` (~shortcode.rs:268): pass positional args
+- [x]**2.1** Fix `build_args_table` (\~shortcode.rs:268): pass positional args
   as plain strings in a sequential table. Do NOT include keyword args.
 
   Current (broken):
@@ -193,7 +193,7 @@ string key `"value"`, so `sequence_values` yields nothing → empty string.
   }
   ```
 
-- [x]**2.2** Fix `build_kwargs_table` (~shortcode.rs:287): add `__index`
+- [x]**2.2** Fix `build_kwargs_table` (\~shortcode.rs:287): add `__index`
   metatable that returns empty `pandoc.Inlines({})` for missing keys.
 
   **Truthiness note:** This changes missing-key behavior from `nil` (falsy) to
@@ -292,7 +292,7 @@ returns `""` which doesn't match their expected values.
 
 ### `build_raw_args` is already correct
 
-The existing `build_raw_args` function (~shortcode.rs:303) already produces a
+The existing `build_raw_args` function (\~shortcode.rs:303) already produces a
 flat list of plain strings, matching TS Quarto's `raw_args`.
 
 ### `build_meta_table` may need a metatable too

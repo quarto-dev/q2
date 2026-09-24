@@ -128,7 +128,7 @@ Read before writing code:
   L1's job.
 - Pipeline assembly:
   `crates/quarto-core/src/pipeline.rs` — both
-  `build_html_pipeline_stages_with_apply_config` (line ~217)
+  `build_html_pipeline_stages_with_apply_config` (line \~217)
   and `build_wasm_html_pipeline` insert
   `IncludeExpansionStage` immediately before
   `DocumentProfileStage`. L1 inserts between them, in both

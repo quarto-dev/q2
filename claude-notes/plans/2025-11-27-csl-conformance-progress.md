@@ -43,7 +43,7 @@ All 60 locale XML files are now embedded and parsed via `rust_embed`.
 **Remaining work**: Month names are now accessible via `get_term("month-01", ...)` etc., but the date evaluation code in `eval.rs` doesn't yet use them for rendering dates with months.
 
 ### Priority 2: Fix Default Name Order ⬜ Not Started
-**Estimated Impact**: ~20-30 additional tests
+**Estimated Impact**: \~20-30 additional tests
 
 Current implementation outputs "Family, Given" but CSL default is "Given Family".
 The `name-as-sort-order` attribute controls this, but the default should be display order.

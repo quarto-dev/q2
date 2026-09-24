@@ -177,7 +177,7 @@ phases differ substantially between them.
 - **Phase 3 — Sweep the fallout** — snapshots, `quarto-ast-reconcile` hashing, `llms.rs`,
   `idempotence.rs`, anything asserting on section structure.
 - **Phase 4 — Re-measure against the port** — rerun the Connect-docs chrome sweep; expect the
-  `toc:N` bucket to go to ~0.
+  `toc:N` bucket to go to \~0.
 - **Phase 5 — Docs** if reader-facing behavior changes (direction C).
 
 ## Open design questions for the user

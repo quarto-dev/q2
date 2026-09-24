@@ -52,14 +52,14 @@ Write the new tests against the not-yet-existing API and confirm they fail
 ### Phase 2 — `quarto-hub` implementation (`crates/quarto-hub/src/storage.rs`)
 
 - [x] Add private `fn generate_secret() -> [u8; 32]` (dedupes the
-  `rand::rng().fill_bytes` boilerplate currently at ~lines 218-221 and
+  `rand::rng().fill_bytes` boilerplate currently at \~lines 218-221 and
   259-262).
 - [x] Add crate-private `enum SecretPolicy { Persist, Ephemeral }`.
 - [x] Add `fn resolve_ephemeral_secret(env_var: &str) -> Result<[u8; 32]>`:
   env var via `decode_secret_hex` if set, else `generate_secret()`; emit a
   value-free `debug!` noting non-persistence.
 - [x] Change `init` to take `secret_policy: SecretPolicy`; replace the two
-  resolve calls (~lines 481-484) with a `match`: `Persist` → existing
+  resolve calls (\~lines 481-484) with a `match`: `Persist` → existing
   functions; `Ephemeral` → `resolve_ephemeral_secret(
   "QUARTO_HUB_SERVER_SECRET")` / `("QUARTO_HUB_SESSION_SECRET")`.
 - [x] Existing constructors (`new`, `new_standalone`, `new_with_data_dir`)
@@ -86,7 +86,7 @@ Write the new tests against the not-yet-existing API and confirm they fail
 ### Phase 4 — Docs
 
 - [x] Short note in `dev-docs/quarto-hub/session-auth-operations.md`
-  (documents the multi-instance warning at ~line 146): embedded/short-lived
+  (documents the multi-instance warning at \~line 146): embedded/short-lived
   hubs use the `*_ephemeral` constructors; secrets are per-process, env
   vars still honored, nothing persisted or warned.
 
@@ -164,7 +164,7 @@ The multi-instance warning remains intact for actual hub servers.
    per-session by default; even with `--data-dir`, pinned secrets buy
    nothing (crash resilience is about the automerge store; actor IDs are
    opaque to automerge).
-4. **The two resolve functions keep their signatures** — their ~10 test
+4. **The two resolve functions keep their signatures** — their \~10 test
    call sites don't churn. The policy branch lives in `init`.
 
 ### Explicitly out of scope

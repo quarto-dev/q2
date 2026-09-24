@@ -24,7 +24,7 @@ User requested analysis of how to make rendering dependencies explicit in the Ky
 
 ### 3. Documents Created
 
-#### explicit-workflow-design.md (~13,000 words)
+#### explicit-workflow-design.md (\~13,000 words)
 Comprehensive technical design for DAG-based workflow system:
 - Core data structures: `Step`, `Artifact`, `Workflow`, `StepExecutor` trait
 - Workflow builder with cycle detection
@@ -33,7 +33,7 @@ Comprehensive technical design for DAG-based workflow system:
 - Caching infrastructure with content-based hashing
 - Reconfiguration support for user-specified pipeline order
 - Extension API for third-party modifications
-- 6 implementation phases over ~24 weeks
+- 6 implementation phases over \~24 weeks
 
 **Key Technical Decisions:**
 - DAG representation for explicit dependencies
@@ -42,7 +42,7 @@ Comprehensive technical design for DAG-based workflow system:
 - Content-based cache keys (blake3 hashing)
 - Static workflows (vs dynamic/mutable)
 
-#### explicit-dependencies-analysis.md (~8,000 words)
+#### explicit-dependencies-analysis.md (\~8,000 words)
 Strategic analysis and implementation roadmap:
 - Problem statement with concrete examples of implicit dependencies
 - Consequences: no parallelization, fixed order, poor debugging, no caching

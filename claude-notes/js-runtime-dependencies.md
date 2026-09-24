@@ -20,7 +20,7 @@ Each has different implications for a Rust port.
 ### Current Implementation
 
 **Core library**: `deno-dom` (HTML parser with DOM API)
-- Location: `src/core/deno-dom.ts` (~186 LOC)
+- Location: `src/core/deno-dom.ts` (\~186 LOC)
 - Provides: `DOMParser`, `HTMLDocument`, `Element`, `Node`
 - Two modes:
   - Native plugin (faster, FFI-based)
@@ -53,7 +53,7 @@ export interface HtmlPostProcessResult {
 - `processFileResourceRefs()` - Process file references with custom handlers
 
 **Format-specific** (`src/format/html/`):
-- **format-html-bootstrap.ts** (~1800 LOC):
+- **format-html-bootstrap.ts** (\~1800 LOC):
   - Code links rendering (GitHub repo links, etc.)
   - Bootstrap navigation components
   - Sidebar generation
@@ -73,7 +73,7 @@ export interface HtmlPostProcessResult {
 
 ### DOM Manipulation Patterns
 
-Common operations across ~98 uses in 7 HTML format files:
+Common operations across \~98 uses in 7 HTML format files:
 ```typescript
 // Query selectors
 doc.querySelectorAll("style")
@@ -428,7 +428,7 @@ fn parse_ojs(source: &str) -> Result<ParsedModule> {
 
 **Reasoning**:
 1. OJS is inherently JavaScript - keeping JS parser makes sense
-2. Parser is ~1-2% of quarto-cli functionality
+2. Parser is \~1-2% of quarto-cli functionality
 3. Can revisit later if needed
 4. Observable maintains the parser
 
@@ -441,7 +441,7 @@ fn parse_ojs(source: &str) -> Result<ParsedModule> {
 ### Current Implementation
 
 **Library**: Puppeteer (Deno port)
-- Location: `src/core/puppeteer.ts` (~400 LOC)
+- Location: `src/core/puppeteer.ts` (\~400 LOC)
 - Import: `import puppeteer from "https://deno.land/x/puppeteer@9.0.2/mod.ts"`
 
 **Uses**:

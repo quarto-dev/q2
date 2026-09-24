@@ -23,7 +23,7 @@ During code coverage investigation, discovered **8 dead code files** in `pampa/s
 | `raw_specifier.rs` | 22 | No imports found |
 | `setext_heading.rs` | 24 | No imports found |
 
-**Total Dead Lines Removed**: ~453 lines
+**Total Dead Lines Removed**: \~453 lines
 
 ## Investigation Method
 
@@ -51,7 +51,7 @@ Create a cleanup task to:
 3. Verify build still passes after removal
 
 This will:
-- Remove ~471 lines of unmaintained code
+- Remove \~471 lines of unmaintained code
 - Improve apparent coverage (eliminating artificial "uncovered" lines)
 - Reduce cognitive load when navigating the codebase
 

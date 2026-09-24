@@ -100,7 +100,7 @@ Plan 2a refactors Plan 1's interim `t==0 && d==0` gate onto `sourceNode`.)*
     `renderedContent?: string` to `ReactRendererProps`, destructure it, and
     forward to `Q2PreviewIframe`; `ReactPreview.tsx` passes
     `compound.renderedContent` down. `PreviewApp.tsx` renders `Q2PreviewIframe`
-    directly at line ~886 (no intermediate component) and passes
+    directly at line \~886 (no intermediate component) and passes
     `renderedContent={state.renderedContent}` directly.
 - [ ] `q2-preview/entry.tsx` — `UpdateAstPayload`/`updateAst`/`PreviewRoot` gain
   a `content` field; `PreviewRoot` **also owns the interactive edit state**

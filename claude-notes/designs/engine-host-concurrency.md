@@ -134,7 +134,7 @@ murders sibling documents). So:
    engine instance**; every other request engages no daemon and is just failed. Poison = invalidate the instance on both sides (harness drops
    its `instance` entry; `TsEngine` clears its cached launched-state — which is
    why that cache is a clearable `Mutex<Option<…>>`, not a `OnceLock`), so the
-   next instance request re-runs `LaunchEngine` (~0) and gets a fresh
+   next instance request re-runs `LaunchEngine` (\~0) and gets a fresh
    `ExecutionEngineInstance` re-discovering/restarting the detached daemon.
    Blast radius shrinks from "whole subprocess" to "one engine instance." *(Future
    opt-in: an engine that performs a real interrupt may carry `clean: true` on

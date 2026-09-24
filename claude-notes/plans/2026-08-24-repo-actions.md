@@ -21,7 +21,7 @@
 - **Q1 reference implementation:** `external-sources/quarto-cli/src/project/types/website/website-navigation.ts` — `handleRepoLinks` (line 647) and `repoActionLinks` (line 830); config helpers in `website-config.ts` (`websiteRepoInfo` 227, `websiteRepoBranch` 255, `repoUrlIcon` 263, `websiteConfigActions` 271). Read these before changing URL construction.
 - **Testing:** `cargo nextest run`, never `cargo test`. Never pipe nextest through `tail` — it hangs.
 - **Per-task gate:** `cargo clippy -p <crate> --all-targets -- -D warnings` and `cargo nextest run -p <crate>`.
-- **Per-phase gate:** `cargo nextest run --workspace` (~3 min) at each phase boundary and before any push. Report its pass/skip delta against the live baseline captured in Task 0.
+- **Per-phase gate:** `cargo nextest run --workspace` (\~3 min) at each phase boundary and before any push. Report its pass/skip delta against the live baseline captured in Task 0.
 - **Integration tests** go in `crates/<crate>/tests/integration/<name>.rs` and are registered in `tests/integration/main.rs` as `pub mod <name>;`, alphabetized. **Never** add a new top-level `tests/<name>.rs` — see `.claude/rules/integration-tests.md`.
 - **`as_plain_text()`, never `as_str()`** when reading document metadata. A bare YAML string in front-matter context is `ConfigValueKind::PandocInlines`, for which `as_str()` returns `None`. The `metadata-as-str` lint rule enforces this.
 - **Every new error code needs its docs page and sidebar entry in the same commit** — the `error-docs-page-missing` and `error-docs-sidebar-unlisted` lint rules both fail otherwise. Sidebar entries within a section must ascend by code number.

@@ -81,16 +81,16 @@ block**. Three plausible paths:
 Recommendation: option 1 (`rendered.includes.header` for inline,
 `js:mathjax` artifact for external). It reuses two existing rails
 without inventing a third. The "two halves" criticism is worth
-~5 lines of doc, not a refactor.
+\~5 lines of doc, not a refactor.
 
 ## Vendor vs CDN vs both?
 
 Bootstrap was tiny (80 KB), so vendoring was an easy call. MathJax
 is *much* bigger:
 
-- Full MathJax 3 distribution: ~70 MB unpacked (includes every font / output mode / extension).
-- Common components-only loader: ~1 MB.
-- Smallest bootstrap-loader: ~150 KB.
+- Full MathJax 3 distribution: \~70 MB unpacked (includes every font / output mode / extension).
+- Common components-only loader: \~1 MB.
+- Smallest bootstrap-loader: \~150 KB.
 
 Quarto 1 vendors the components-only build. The size delta vs Bootstrap
 is real — vendoring 1 MB into the CLI binary affects download size and

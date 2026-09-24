@@ -59,7 +59,7 @@ The infrastructure we need is largely in place:
 
 ### Why a new stage instead of folding into `CompileThemeCssStage`
 
-`CompileThemeCssStage` is single-responsibility ("compile SCSS to CSS"), heavily cached, fingerprinted, and already complex. Folding JS injection in there would muddy the cache key surface (does JS contribute to the fingerprint? It's static, so no — but the conceptual entanglement is bad). A separate stage is ~30 lines, trivially cheap, and gives us a clean attachment point for future expansion (see "Generic infra (deferred)" below).
+`CompileThemeCssStage` is single-responsibility ("compile SCSS to CSS"), heavily cached, fingerprinted, and already complex. Folding JS injection in there would muddy the cache key surface (does JS contribute to the fingerprint? It's static, so no — but the conceptual entanglement is bad). A separate stage is \~30 lines, trivially cheap, and gives us a clean attachment point for future expansion (see "Generic infra (deferred)" below).
 
 ### Hub-client opt-out
 
@@ -67,7 +67,7 @@ Just don't include `BootstrapJsStage` in `build_wasm_html_pipeline()`. **Reason:
 
 ### Generic infra (deferred — not building now)
 
-The user asked whether to build a richer "JS feature" abstraction for future cases. Decision: **no, not yet.** The artifact store already *is* the generic mechanism. The new stage is essentially `predicate → store js:* artifact`, ~30 lines. We extract a shared `JsFeature` helper *only* once a third concrete consumer arrives (Bootstrap is #1; KaTeX/MathJax — see note — would be #2 if we go that route; #3 is unknown). Premature abstraction here would just be ceremony.
+The user asked whether to build a richer "JS feature" abstraction for future cases. Decision: **no, not yet.** The artifact store already *is* the generic mechanism. The new stage is essentially `predicate → store js:* artifact`, \~30 lines. We extract a shared `JsFeature` helper *only* once a third concrete consumer arrives (Bootstrap is #1; KaTeX/MathJax — see note — would be #2 if we go that route; #3 is unknown). Premature abstraction here would just be ceremony.
 
 What we *will* do now: leave a one-paragraph comment at the top of `bootstrap_js.rs` describing the pattern ("predicate → register Project-scoped `js:*` artifact"), so the next implementer has a clear template to copy.
 
@@ -105,7 +105,7 @@ Quarto 1 delegates MathJax injection to Pandoc by setting `html-math-method: mat
 When that session starts, the relevant questions will be:
 
 - **Trigger:** "document contains math." This needs an AST scan during a stage that runs after engines/transforms but before template apply. Possibly during `RenderHtmlBodyStage` or as a sibling stage. Quarto 1 does this in pandoc itself, so we'll be designing fresh.
-- **Asset:** MathJax is *much* bigger than Bootstrap (~1MB+ for the full distribution), and is typically served from CDN even in production. Decision needed: vendor it, ship a stub loader, or default to CDN. Quarto 1 hosts it locally per-project — likely the right precedent.
+- **Asset:** MathJax is *much* bigger than Bootstrap (\~1MB+ for the full distribution), and is typically served from CDN even in production. Decision needed: vendor it, ship a stub loader, or default to CDN. Quarto 1 hosts it locally per-project — likely the right precedent.
 - **Injection shape:** MathJax wants a `<script>` *plus* a config `<script>` block (window.MathJax = {…}) — so it's *not* just a `js:` artifact, it also needs an inline configuration. This is the case where the simple `predicate → js: artifact` pattern starts to creak, and where a small `JsFeature` abstraction (predicate + assets + inline config) might pay for itself. Worth revisiting then, not now.
 - **Alternative engines:** KaTeX and `webtex` are listed in Quarto 1's options. Decide whether q2 supports the full menu or just MathJax v1.
 

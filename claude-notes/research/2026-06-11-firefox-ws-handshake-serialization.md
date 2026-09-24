@@ -29,7 +29,7 @@ Chromium does not serialize handshakes this way and is immune.
    0.5–8 ms. The Rust hub answers WS upgrades instantly.
 
 2. **Clean Firefox exonerated** (`firefox-repro.mjs`): 15/15 cold loads
-   of the preview SPA in a fresh Playwright Firefox connected in ~260 ms.
+   of the preview SPA in a fresh Playwright Firefox connected in \~260 ms.
    The bug does not reproduce in an idle browser → environmental trigger.
 
 3. **Reproduction** (`firefox-serialization-test.mjs` +

@@ -31,9 +31,9 @@ scope here.
   CPU on a single thread today; parallelizing across documents lets a
   modern laptop (8–10 performance cores) work them concurrently.
 
-Expected ceiling on quarto-web (574 files, ~2.3 s today):
-- 4 cores: ~0.6–0.8 s
-- 8 cores: ~0.4–0.5 s
+Expected ceiling on quarto-web (574 files, \~2.3 s today):
+- 4 cores: \~0.6–0.8 s
+- 8 cores: \~0.4–0.5 s
 - diminishing returns past that due to Amdahl (the cache write step,
   pre/post-render hooks, and Pass-2 are still serial).
 

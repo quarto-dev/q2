@@ -41,7 +41,7 @@ Mirror the table `rowsS` precedent: a sibling key on the list node, an array
 - **Key name:** `itemAttr` (decided; `rowsS`-style suffix doesn't fit since this
   is an attr, not source info).
 - **Emitted only when at least one item carries a non-empty attr** — so ordinary
-  lists are byte-for-byte unchanged (keeps the ~3900 existing tests inert).
+  lists are byte-for-byte unchanged (keeps the \~3900 existing tests inert).
 - **Key order:** alphabetical, matching the house convention
   (`stream_write_simple_node` emits `c`, then `l?`, `s`, `t`). `itemAttr` sorts
   between `c` and `l`.

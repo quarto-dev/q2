@@ -216,7 +216,7 @@ Rust tests live alongside the xtask. Per CLAUDE.md, write tests
    `cargo run -p xtask -- error-docs audit` against the real
    `error_catalog.json` and `docs/errors/` exits successfully
    when the seed page from bd-nvlxn is the only one present (it
-   should report ~132 missing, exit 0 because default fail-on is
+   should report \~132 missing, exit 0 because default fail-on is
    `none`).
 
 ## Out of scope

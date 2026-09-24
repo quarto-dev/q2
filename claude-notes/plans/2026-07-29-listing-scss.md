@@ -54,7 +54,7 @@ classes).
    to defaults — correct for custom themes, a visible gap for the dark
    built-ins. Since Sass `!default` also fires on *null* values, a
    later-band `$theme-name: "<name>" !default` emitted for built-in
-   themes activates the map. Implement if it stays a ~few-line change
+   themes activates the map. Implement if it stays a \~few-line change
    in the theme defaults; otherwise file a follow-up strand and ship
    without it.
 

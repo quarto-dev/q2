@@ -27,7 +27,7 @@ whether output is *correct* — that's P5–P7).
 
 ## `QUARTO_FILTER_PARAMS` re-derivation (the three deferred open questions — resolved)
 
-`filterParamsJson` (`filters.ts:128-201`) builds the whole blob by spreading ~15 contributor
+`filterParamsJson` (`filters.ts:128-201`) builds the whole blob by spreading \~15 contributor
 calls into one object, then adding a handful of top-level literal keys. Full enumeration,
 grouped by v1 (single-document docx/pptx, no `_quarto.yml` project) relevance:
 

@@ -91,7 +91,7 @@ Two gaps fall out of that design:
 - [x] Tests pass; `cargo nextest run -p quarto-mcp-launcher` (42/42)
 - [x] End-to-end through the real binary (see record below)
 - [x] README: add the `{command:q2,args:[mcp]}` stanza
-- [~] Full `cargo xtask verify` — see verification status below
+- [\~] Full `cargo xtask verify` — see verification status below
       (Rust legs green; hub/WASM legs blocked by pre-existing
       environmental state in this checkout, unrelated to this diff)
 

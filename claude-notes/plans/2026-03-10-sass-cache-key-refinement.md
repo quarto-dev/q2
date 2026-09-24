@@ -23,7 +23,7 @@ into `CompileThemeCssStage`, which was the right architectural move. However, th
 caching strategy changed in ways that were expedient rather than necessary:
 
 1. **Hash function**: SHA-256 → `DefaultHasher` (64-bit, unstable across Rust versions)
-2. **Hash input**: individual theme files → full assembled SCSS (~224KB)
+2. **Hash input**: individual theme files → full assembled SCSS (\~224KB)
 3. **LRU eviction**: present → absent (both WASM IndexedDB and native filesystem)
 
 These changes were not required by the new architecture. This plan restores SHA-256

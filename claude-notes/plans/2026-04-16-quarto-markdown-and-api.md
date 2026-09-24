@@ -3,7 +3,7 @@
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
 **Depends on:** Plan 2A — both the **foundation** (`@quarto/api` shell + `./config` + vendored `@quarto/types`) and **§2aa** (the runtime surface: the `text`/`markdownRegex`/`mappedString`/`format`/`path`/`system`/`console`/`crypto` namespaces + `@quarto/api/platform`), both implemented. **Phase A also depends on Plan 1b** (#8) — its `buildQuartoAPI(global, host)` assembly (`@quarto/engine-host-deno/src/quarto-api.ts`, landed) is the integration point that threads `Init { global }` into the factories Phase A gives bodies; Phase A lands the `global`-param seam Plan 1b already stubbed (the `_global` it accepts but ignores). Phase B (types) is otherwise independent. Phase A fills stubs that §2aa shipped, so it follows §2aa.
 **Blocks:** Plan 4 (Julia Validation) needs all of Plan 2.
-**Estimated sessions:** 2-3 (revised up from ~1 — Phase A's `global`+`fs` seam + ensureDir port + Model-1 comment cleanup, B1's full `core/process.ts` port + two-tier tests, B2's derive-all + onCleanup reconciliation + negative type test, and Phase B as the coherence gate are materially more than the original "fill the stubs" estimate).
+**Estimated sessions:** 2-3 (revised up from \~1 — Phase A's `global`+`fs` seam + ensureDir port + Model-1 comment cleanup, B1's full `core/process.ts` port + two-tier tests, B2's derive-all + onCleanup reconciliation + negative type test, and Phase B as the coherence gate are materially more than the original "fill the stubs" estimate).
 
 ## Scope (reconciled after §2aa landed)
 

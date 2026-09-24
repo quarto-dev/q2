@@ -3,7 +3,7 @@
 **Date**: 2025-10-27
 **Issue**: k-239 - bd-8 Phase 1: Audit existing Schema::from_yaml() implementation
 **Auditor**: Claude Code (Sonnet 4.5)
-**Files Audited**: `private-crates/quarto-yaml-validation/src/schema.rs` (~1300 lines)
+**Files Audited**: `private-crates/quarto-yaml-validation/src/schema.rs` (\~1300 lines)
 
 ## Executive Summary
 
@@ -760,11 +760,11 @@ if (yaml.completions) {
 ### P1 - High (Many quarto-cli schemas affected)
 1. **maybeArrayOf**: Common "value or array" pattern
    - **Why**: Used for flexible user input (single value or multiple)
-   - **Impact**: ~20+ schemas in quarto-cli use this
+   - **Impact**: \~20+ schemas in quarto-cli use this
 
 2. **record**: Dictionary/map type pattern
    - **Why**: Used for uniform key-value structures
-   - **Impact**: ~10+ schemas in quarto-cli
+   - **Impact**: \~10+ schemas in quarto-cli
 
 3. **schema** wrapper: Field-based schema pattern
    - **Why**: Used in all document-*.yml and cell-*.yml files
@@ -772,7 +772,7 @@ if (yaml.completions) {
 
 4. **required: "all"**: Common shorthand
    - **Why**: Frequently used in closed objects
-   - **Impact**: ~15+ schemas in quarto-cli
+   - **Impact**: \~15+ schemas in quarto-cli
 
 ### P2 - Medium (Completeness and correctness)
 1. **Nested property extraction**: Metadata loss
@@ -878,7 +878,7 @@ fn test_arrayof_simple() {
 ## Files to Modify in Phase 2
 
 1. **`schema.rs`**: Add missing pattern parsers
-   - Lines ~368-381: Add cases to `parse_object_form()`
+   - Lines \~368-381: Add cases to `parse_object_form()`
    - New functions: `parse_arrayof_schema()`, `parse_maybe_arrayof_schema()`, etc.
 
 2. **`schema.rs`**: Fix existing parsers

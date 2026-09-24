@@ -86,7 +86,7 @@ no UTF-8 plane to ask Monaco for.
 **Force UTF-8 on the JS side.** Every Automerge patch position,
 every Monaco cursor, and every `string[i]` would need byte
 translation per use. Cost moves from one conversion per payload
-(debounced at ~500 ms) to one conversion per editor interaction —
+(debounced at \~500 ms) to one conversion per editor interaction —
 many orders of magnitude more work, in the editor hot path rather
 than the producer's cold debounced path.
 

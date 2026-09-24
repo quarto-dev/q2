@@ -116,7 +116,7 @@ route?) and mergeability (`git merge-tree --write-tree` against `main`).
 **bd-g4uw7d8g — `beads/bd-g4uw7d8g-q2-preview-eager-sync`**
 
 - 3 commits, 2026-06-10, base `a64d94d3`. `main` is **486 commits ahead** of
-  the base. ~573 insertions.
+  the base. \~573 insertions.
 - Content: `POST /api/preview/sync-file` endpoint
   (`crates/quarto-preview/src/sync_file.rs`, 84 lines + 181 lines of
   integration tests); SPA eager-sync scheduler in `PreviewApp.tsx` (300 ms

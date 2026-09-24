@@ -77,7 +77,7 @@ Read these before starting implementation:
 | `hub-client/src/services/projectStorage.ts` | IndexedDB API for project entries (`addProject()`) |
 | `hub-client/src/types/project.ts` | `ProjectEntry` type definition |
 | `hub-client/src/utils/routing.ts` | URL scheme (`#/project/<id>/file/<path>`) |
-| `hub-client/src/components/DoubleBufferedIframe.tsx` | Render marker comment (line ~172) |
+| `hub-client/src/components/DoubleBufferedIframe.tsx` | Render marker comment (line \~172) |
 | `hub-client/src/utils/iframePostProcessor.ts` | CSS post-processing (link→data URI conversion) |
 | `hub-client/src/services/smokeAll.wasm.test.ts` | WASM smoke-all test — port assertions from here |
 | `hub-client/src/services/wasmRenderer.ts` | WASM renderer wrapper (VFS access, render API) |

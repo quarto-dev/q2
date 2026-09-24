@@ -65,7 +65,7 @@ partition** — annotate it `// not used by metadataAsFormat partition; present
 for parity` in `src/config/`.
 
 Note also that `kPandocDefaultsKeys` is **not purely symbol references** in Q1:
-it mixes imported symbols (`kFilters`, …) with ~30 inline string literals
+it mixes imported symbols (`kFilters`, …) with \~30 inline string literals
 (`"defaults"`, `"metadata"`, `"file-scope"`, `"trace"`, …). The transcription
 must capture the inline literals too — following only symbol imports would miss
 them.

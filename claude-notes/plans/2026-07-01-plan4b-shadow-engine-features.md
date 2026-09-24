@@ -42,7 +42,7 @@ Two failure modes motivate this plan:
 
 Plan 4b needs **no second heavyweight engine**. It uses two cheap mechanisms:
 
-- **A synthetic contending-engine fixture matrix** — a handful of ~50–100-line TS
+- **A synthetic contending-engine fixture matrix** — a handful of \~50–100-line TS
   test engines with *no daemon* (echo-engine-shaped: they transform cells in-process),
   declaring different `claims` kinds/priorities/languages. These make the tier model
   observable at pennies. They live beside the existing `echo-engine` / `echo-legacy`

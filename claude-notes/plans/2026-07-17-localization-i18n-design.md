@@ -13,7 +13,7 @@ rendered documents localize.** Localization is driven by:
 
 1. **`lang`** — a document/project option holding a BCP 47 tag (`fr`, `pt-BR`,
    `de-CH`). Flows to Pandoc-style `<html lang="…">` and selects the term set.
-2. **Shipped term files** — `_language.yml` (English defaults, ~111 keys) plus
+2. **Shipped term files** — `_language.yml` (English defaults, \~111 keys) plus
    `_language-<tag>.yml` per language (34 files in Q1), copied into this repo
    and embedded in the binary.
 3. **`language:`** — user-facing metadata key for overrides: an inline flat map

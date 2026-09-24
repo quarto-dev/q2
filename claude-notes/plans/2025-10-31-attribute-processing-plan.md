@@ -235,7 +235,7 @@ Create tests for:
 - Phase 3 (commonmark_specifier): 15 minutes
 - Phase 4 (attribute_specifier): 15 minutes
 - Phase 5 (testing): 45 minutes
-- **Total**: ~2 hours
+- **Total**: \~2 hours
 
 ## References
 

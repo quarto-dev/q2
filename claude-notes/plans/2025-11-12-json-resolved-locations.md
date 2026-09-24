@@ -183,7 +183,7 @@ fn write_inline(inline: &Inline, serializer: &mut SourceInfoSerializer) -> Value
 }
 ```
 
-**Problem**: This requires changing ~50+ match arms across write_inline, write_block, write_table_part, etc.
+**Problem**: This requires changing \~50+ match arms across write_inline, write_block, write_table_part, etc.
 
 **Better approach**: Create a helper macro or function to build node JSON with optional location:
 

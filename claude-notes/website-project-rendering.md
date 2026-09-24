@@ -1082,7 +1082,7 @@ Assume 100-file website project:
 | 11.5 Index Page | 10ms | Check/create redirect |
 | **Total** | **100-2000s** | Dominated by file rendering |
 
-**Bottleneck:** Individual file rendering (stages 2-10). For 100 files at 10s each = ~17 minutes.
+**Bottleneck:** Individual file rendering (stages 2-10). For 100 files at 10s each = \~17 minutes.
 
 **Optimization opportunities:**
 1. **Parallelize file rendering** (within constraints)

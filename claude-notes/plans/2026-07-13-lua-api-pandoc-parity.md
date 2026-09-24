@@ -38,7 +38,7 @@ Goals, in order:
   core fuzzy peekers. `peek_inline_fuzzy` / `peek_inlines_fuzzy` /
   `peek_block_fuzzy` / `peek_blocks_fuzzy` +
   `split_string_to_inlines` live in `crates/pampa/src/lua/types.rs`
-  (~L1608–1801) and are used by all content-bearing constructors. So
+  (\~L1608–1801) and are used by all content-bearing constructors. So
   `pandoc.Para("hello world")`, `pandoc.Div(pandoc.Para(...))`,
   `pandoc.Blocks("text")` etc. already work.
 - bd-195t (open) covers the attr-mutation proxy gap:
@@ -50,7 +50,7 @@ Goals, in order:
 | What | Where |
 |---|---|
 | Pandoc marshaling source of truth | `external-sources/pandoc-lua-marshal/src/Text/Pandoc/Lua/Marshal/*.hs` (cloned 2026-07-13) |
-| Pandoc's own Lua conformance tests | `external-sources/pandoc-lua-marshal/test/test-{inline,block,attr,pandoc,metavalue,table,cell,citation,listattributes,simpletable}.lua` — ~2,100 lines, tasty.lua-based |
+| Pandoc's own Lua conformance tests | `external-sources/pandoc-lua-marshal/test/test-{inline,block,attr,pandoc,metavalue,table,cell,citation,listattributes,simpletable}.lua` — \~2,100 lines, tasty.lua-based |
 | Documented contract | `external-sources/pandoc/doc/lua-filters.md` |
 | Oracle binary | system `pandoc` 3.9.0.2 with `+lua` (`/opt/homebrew/bin/pandoc`) |
 | Q2 implementation | `crates/pampa/src/lua/{constructors,types,list,filter}.rs` |

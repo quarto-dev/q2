@@ -22,7 +22,7 @@ The four items, by payoff-per-effort:
 | Item | What | Size | Closes |
 |------|------|------|--------|
 | H1 | Deregister `POST /auth/session` for Google deployments | S | Second token-replay mint sink (zero callers today) |
-| H2 | Server-verified `nonce` in the GIS login | M | The ~1 h ID-token replay-to-mint window — the audit's main in-place gap |
+| H2 | Server-verified `nonce` in the GIS login | M | The \~1 h ID-token replay-to-mint window — the audit's main in-place gap |
 | H3 | `__Host-` prefix on the session cookie | S | Subdomain cookie-tossing / session fixation |
 | H5 | Distinct login-mint audit event | S | Forensics gap: mints indistinguishable from per-request auth |
 

@@ -37,7 +37,7 @@ key context is above. Repo: `/Users/cscheid/rooms/room-1/q2`.
 ### D3 — footer / logo (new AST transform + SCSS)
 - Add a reveal transform (e.g. `crates/quarto-core/src/revealjs/footer_logo.rs`),
   register it in `pipeline.rs` `build_transform_pipeline` reveal branch
-  (~lines 1105-1121) **after `RevealSlidesTransform`** (so the slide `<section>`
+  (\~lines 1105-1121) **after `RevealSlidesTransform`** (so the slide `<section>`
   tree exists), export from `revealjs/mod.rs`.
 - Read `logo:` / `footer:` from `ast.meta`; inject `<img class="slide-logo">`
   and a `.footer` Div (Q1 emits `::: {.footer .footer-default}`). Q1 ref:
@@ -58,7 +58,7 @@ key context is above. Repo: `/Users/cscheid/rooms/room-1/q2`.
   `Image`, ignoring the heading), add class `r-stretch` to it. Default-ON with a
   `auto-stretch: false` opt-out (Q1 schema default is true). `.r-stretch` is a
   reveal-core CSS class — **no Quarto SCSS needed**. Q1 ref: `format-reveal.ts`
-  `applyStretch` (~949-1060). Skip slides with multiple blocks or images that
+  `applyStretch` (\~949-1060). Skip slides with multiple blocks or images that
   already carry explicit sizing / `.r-stretch`.
 
 ### D5 — docs (open a doc strand)
@@ -93,7 +93,7 @@ key context is above. Repo: `/Users/cscheid/rooms/room-1/q2`.
   the `q2-slides` preview SPA (it imports stock `white.css`). D3/D4 add *markup*
   via AST transforms — that markup WILL appear in preview if the transform also
   runs for `q2-slides`; check `pipeline.rs` `Q2_PREVIEW_TRANSFORM_EXCLUDED`
-  (~line 1314). The *styling* still won't be in preview. State this honestly when
+  (\~line 1314). The *styling* still won't be in preview. State this honestly when
   reporting "done".
 - **Git**: branch your continuation off `feature/revealjs-q1-themes`. When the
   remaining Stage D work is complete, merge `--no-ff` into `feature` and

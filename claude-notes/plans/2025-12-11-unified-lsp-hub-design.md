@@ -50,7 +50,7 @@ The Rust LSP will provide:
    - Folding ranges, selection ranges
    - Diagnostics (link validation, YAML)
 
-2. **Custom JSON-RPC Methods** (~50 total)
+2. **Custom JSON-RPC Methods** (\~50 total)
    - Pandoc integration, bibliography, citations
    - Crossref, Zotero, dictionary
    - Code view assistance
@@ -412,7 +412,7 @@ Periodic timer or file watcher triggers sync
    - `listen()` method processes `didOpen`, `didChange`, `didClose` notifications
    - Stores documents in `BTreeMap<Uri, FullTextDocument>`
    - **Limitation**: Only supports UTF-16 position encoding
-   - ~27K downloads/month, used by 5 crates
+   - \~27K downloads/month, used by 5 crates
 
 2. **[ropey](https://crates.io/crates/ropey)** - Rope data structure for efficient text manipulation
    - Recommended by rust-analyzer patterns

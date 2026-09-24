@@ -233,7 +233,7 @@ clean follow-up if we want to dedupe later.
       `<link>` to
       `…/.quarto/project-artifacts/quarto/quarto-theme-3a8b4a76bcc824ec.css`
       but no file exists at that path.
-- [~] §Test plan #2 (WASM-side test) — **subsumed** by §Test plan #1.
+- [\~] §Test plan #2 (WASM-side test) — **subsumed** by §Test plan #1.
       Per the comment at `crates/quarto-core/tests/render_page_in_project.rs:5-9`,
       that test file already exercises the *exact* code path the
       WASM `render_page_in_project` entry point drives

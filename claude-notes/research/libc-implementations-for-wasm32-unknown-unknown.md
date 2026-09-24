@@ -233,7 +233,7 @@ With the `mem` feature enabled:
 - Requires JavaScript host functions
 - Some functions are stubs (calloc, realloc, free)
 - Math uses WASM builtins (good!)
-- Only ~5,300 lines of code
+- Only \~5,300 lines of code
 
 **For Lua:** Interesting because it has `atof`, but requires JavaScript integration and has stub implementations.
 

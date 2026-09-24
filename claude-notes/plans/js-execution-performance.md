@@ -43,18 +43,18 @@ async fn render_ejs(&self, template: &str, data: &serde_json::Value) -> RuntimeR
 
 Each `render_ejs()` or `js_render_simple_template()` call:
 
-1. **Creates V8 isolate** (~15-25ms)
+1. **Creates V8 isolate** (\~15-25ms)
    - Allocates heap (lazy, but setup is not)
    - Initializes garbage collector
    - Creates built-in objects (Object, Array, Function, etc.)
    - Sets up JIT compilation infrastructure
 
-2. **Loads JS bundle** (~5-10ms)
-   - Parses JavaScript (~50KB for EJS bundle)
+2. **Loads JS bundle** (\~5-10ms)
+   - Parses JavaScript (\~50KB for EJS bundle)
    - Compiles to bytecode
    - Creates global `ejs` object
 
-3. **Renders template** (~1-5ms)
+3. **Renders template** (\~1-5ms)
    - The actual work - typically fast
 
 **Total: ~20-35ms per operation**

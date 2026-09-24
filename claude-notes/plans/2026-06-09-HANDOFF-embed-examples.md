@@ -87,7 +87,7 @@ and the inner doc has `.reveal .slides section`). Crossref ("Demo 1" caption +
 ## Key decisions / gotchas (so you don't relearn them)
 
 - **Option B, not A.** We do NOT copy resources into the VFS artifact tree per
-  render (A) — that would re-duplicate ~6 MB of decks into the VFS on *every*
+  render (A) — that would re-duplicate \~6 MB of decks into the VFS on *every*
   render (the artifact flush at `wasm-quarto-hub-client/src/lib.rs:1417` is
   per-render); in hub-client that tree is in the Automerge doc. B reads source
   bytes on demand. The CLI-only disk approach (a `vfs_root`-mode resolver branch
@@ -107,7 +107,7 @@ and the inner doc has `.reveal .slides section`). Crossref ("Demo 1" caption +
   Needed before `q2 render docs/` or any preview check shows live iframes.
 - **Verify gate:** `cargo xtask verify --skip-hub-build` (matches CI `-D
   warnings`) for Rust-only; full `cargo xtask verify` when the WASM leg is
-  affected. quarto-core suite is ~2250+ tests.
+  affected. quarto-core suite is \~2250+ tests.
 
 ## Commands you'll want
 

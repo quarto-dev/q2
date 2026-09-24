@@ -185,7 +185,7 @@ pub struct ProjectPipeline<'a> {
 
 **Implementation note (added during implementation):** an earlier
 draft put this field on `ProjectContext`. That would force a
-mechanical refactor of ~130 struct-literal sites across the
+mechanical refactor of \~130 struct-literal sites across the
 workspace. Putting it on `ProjectPipeline` is strictly better:
 - Workers (Pass-2 per-doc renders) never see the field, so they
   can't accidentally touch it. Reinforces Decision 2's
@@ -258,7 +258,7 @@ fn merge_into_project(
 **Memory bound.** Drain happens immediately as each Pass-2 render
 returns — peak extra memory ≈ (max parallelism) × (one doc's
 Project-scoped artifact bytes). For a website with a 200 KB theme
-CSS and 8 workers, that's ~1.6 MB held during the wave. Trivial.
+CSS and 8 workers, that's \~1.6 MB held during the wave. Trivial.
 
 ### Decision 3 — Dedupe policy: byte-equal content wins, mismatch is an error
 
@@ -281,7 +281,7 @@ incompatible versions of the same file under the same name).
 **Performance cost.** The check is a `Vec<u8>` `==` per drained
 Project artifact per doc. For a 100-doc website with a 200 KB
 theme CSS plus a few extension deps, worst case is ~100 × ~250 KB
-= ~25 MB of byte comparisons total across the entire build, all
+= \~25 MB of byte comparisons total across the entire build, all
 against already-hot cache lines. This is negligible relative to
 the engine execution and SCSS compilation that dominate render
 time. No pre-optimization warranted.

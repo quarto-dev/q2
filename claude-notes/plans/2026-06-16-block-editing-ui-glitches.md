@@ -85,7 +85,7 @@ can be fixed under TDD without re-litigating the design.
       `e.target === <ul>` → list) or a coordinate check — not a DOM-identity test.
       Pre-G8 behavior (tight item → item editor) is the current, correct state.
 - [x] **G9 — flash of stale content during the (now deterministic) reland gap.**
-      Fix: blur the cell we left (`q2-reland-fade`, ~0.1s ease-out) from the
+      Fix: blur the cell we left (`q2-reland-fade`, \~0.1s ease-out) from the
       editor-close render until the destination editor opens. *Implemented;
       T7 RED→GREEN; fadeSourceR0Ref + useLayoutEffect + clearRelandFade.*
 - [x] **G10 — editing a tight list item's text turns the list loose.** Regression
@@ -160,7 +160,7 @@ direction. Two coupled changes:
    legibility floor.** Today `MIN_GLYPH_W` (16px) doubles as both the "minimum
    legible width" (for counting slots / deciding when to ellipsize) *and* the
    actual rendered crumb width. Split them: introduce a comfortable target width
-   `CRUMB_W` (~24–28px — **tune live**, see Open tuning below) used to size the
+   `CRUMB_W` (\~24–28px — **tune live**, see Open tuning below) used to size the
    band; keep `MIN_GLYPH_W` only as the floor for the page-edge ellipsize
    decision.
 
@@ -230,7 +230,7 @@ const slots = surfaceLeft > 0 ? Math.floor(bandWidth / MIN_GLYPH_W) : crumbCount
 - **Update the now-stale doc comments** in `BreadcrumbChip.tsx`: the header
   "Layout model" block (lines ~31–48), the `ChipGeometry.chipLeft` /
   `.bandWidth` field docs (lines ~81–90), and the "Nothing but ◀ is ever in the
-  margin" comment (lines ~172–177) all describe the *old* gutter-only model and
+  margin" comment (lines \~172–177) all describe the *old* gutter-only model and
   must describe left-spill (crumbs **do** enter the margin for shallow/zero
   indent).
 

@@ -20,7 +20,7 @@ Original repro: `~/Desktop/daily-log/2026/08/07/test-qmd-parse-issue.qmd`
 ### Diagnosis
 
 `parse_open_angle_brace` in
-`crates/tree-sitter-qmd/tree-sitter-markdown/src/scanner.c` (~line 1821)
+`crates/tree-sitter-qmd/tree-sitter-markdown/src/scanner.c` (\~line 1821)
 handles every inline `<`. After consuming `<` it scans forward looking
 for a closing delimiter:
 

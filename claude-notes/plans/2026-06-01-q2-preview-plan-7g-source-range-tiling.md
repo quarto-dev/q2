@@ -53,7 +53,7 @@ tightness violation, and a newline in a `Concat` gap disqualifies the
 whitespace-only fast-path — its disposition then follows the #6 rule below);
 (#2) the auditor groups same-`Invocation`
 siblings with the **same `PartialEq`-on-anchor predicate the writer uses**
-(`incremental.rs` ~1357), sharing the helper; (#3) checks (a) non-overlap and (b)
+(`incremental.rs` \~1357), sharing the helper; (#3) checks (a) non-overlap and (b)
 containment run at **all** AST levels, tightness (c) at **inline-leaf only**, and
 `⊆` is **non-strict** (a same-`Invocation` child range may equal its parent's);
 (#6) the **semantic-ownership rule** sorts `None`-Concats — whitespace-only

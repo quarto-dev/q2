@@ -410,7 +410,7 @@ Once all error sites use DiagnosticCollector:
 - **Phase C** (Switch): 1-2 hours
 - **Testing**: 2-3 hours
 
-**Total for basic migration**: ~10-15 hours
+**Total for basic migration**: \~10-15 hours
 
 **Gradual enhancement**: Ongoing as features/bugs are addressed
 

@@ -123,7 +123,7 @@ per:
 ### `bd-fvuy` — Q-12-10 catalog title/message broaden (chore, p4)
 
 **Site:** `crates/quarto-error-reporting/error_catalog.json`,
-`Q-12-10` entry (line ~799–805).
+`Q-12-10` entry (line \~799–805).
 
 The current catalog title is *Listing Markdown Re-parse
 Diagnostics*, but the same code is emitted for two distinct
@@ -144,7 +144,7 @@ Two mechanical options:
 **Recommendation:** broaden, not split — splitting adds
 noise without changing user behavior, and Q2's diagnostic
 catalog policy isn't strict enough to require per-class codes
-yet. ~10-line change, no test churn.
+yet. \~10-line change, no test churn.
 
 ### `bd-varx` — Hoist two helpers to a shared util (task, p4)
 

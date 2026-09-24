@@ -31,7 +31,7 @@ issues, 1051 dependencies)** was performed and inspected:
 
 | check | result |
 |---|---|
-| `braid import` wall time | ~0.7s CPU (sync timeout dominates wall) |
+| `braid import` wall time | \~0.7s CPU (sync timeout dominates wall) |
 | whole automerge doc on disk | **460 KB** |
 | `braid list --all --json` | 1145 strands, sub-second |
 | dependencies preserved | **1051 / 1051** (all four types: `blocks`, `parent-child`, `discovered-from`, `related`) |

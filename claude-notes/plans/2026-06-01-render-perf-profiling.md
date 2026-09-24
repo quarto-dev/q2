@@ -16,8 +16,8 @@ unrelated (CI Playwright caching, a `render --help` wording trim).
 ## Fixture & baseline
 
 - 565 `.qmd` files, 9.4 MB of markdown → Cosmo-themed HTML website.
-- **Baseline: ~4.6 s wall** (`user 4.04 + sys 0.56 ≈ real 4.56`),
-  essentially single-threaded. ~8 ms/file.
+- **Baseline: \~4.6 s wall** (`user 4.04 + sys 0.56 ≈ real 4.56`),
+  essentially single-threaded. \~8 ms/file.
 - Profiled with samply at 1 kHz (`release-perf`), 5073 samples.
 
 ## Findings

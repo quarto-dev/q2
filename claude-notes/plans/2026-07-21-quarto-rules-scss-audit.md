@@ -105,7 +105,7 @@ categories.
 ## Proposed phases (draft)
 
 - **Phase 0 — Row extraction.** Turn `top-level-selectors.tsv` into the
-  inventory table skeleton, grouped into families (~25–30 rows at family
+  inventory table skeleton, grouped into families (\~25–30 rows at family
   granularity; see Q1). Include TS-Quarto line ranges per row.
 - **Phase 1 — SCSS-presence sweep.** For each row, grep Q2's SCSS layers;
   record present/partial/absent with file:line.
@@ -129,7 +129,7 @@ applies to each *port* strand it spawns, not to the inventory.
 ## Open design questions for the user
 
 1. **Row granularity.** Inventory rows per depth-0 selector (144 rows) or per
-   family (~25–30 rows, one verdict each, with the member selectors listed)?
+   family (\~25–30 rows, one verdict each, with the member selectors listed)?
    Family granularity matches how the port strands will be cut; I'd default to
    that, keeping the full 144-selector TSV as the appendix.
 2. **Destination layer for PORT-NOW rules.** Continue the piecemeal approach
@@ -142,7 +142,7 @@ applies to each *port* strand it spawns, not to the inventory.
    evidence that DOM isn't emitted, or do you want a rendered fixture attempt
    per feature (e.g. actually trying a layout panel, a `gt` table)? Grep-only
    is much cheaper; fixture-per-row is stronger.
-4. **Engine-output families.** The ANSI-color block (~36 selectors),
+4. **Engine-output families.** The ANSI-color block (\~36 selectors),
    `widget-subarea`, `knitsql-table`, and `gt_table` are all execution-engine
    *output* styling. File them as one "engine output styling" blocked strand,
    or one per engine surface?

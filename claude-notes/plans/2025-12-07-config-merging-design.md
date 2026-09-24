@@ -37,7 +37,7 @@ final configuration
 The current TypeScript implementation uses `mergeConfigs()` with lodash's `mergeWith`, which:
 1. Loses source location information after merge
 2. Uses hardcoded logic (arrays concatenate, scalars override)
-3. Accounts for ~15% of total runtime
+3. Accounts for \~15% of total runtime
 
 ### Goals for Rust Port
 

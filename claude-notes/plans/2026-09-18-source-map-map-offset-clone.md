@@ -18,7 +18,7 @@ entire file `String` on every call so it can pass `&content` to
 `process_list` calls `map_offset(length)` up to twice per list item for
 loose/tight detection, so parsing a document costs
 O(list items × file size). On the 1.1 MB, 15,763-item Connect
-`api/index.qmd` that is ~31k transient 1.1 MB clones, and that document is
+`api/index.qmd` that is \~31k transient 1.1 MB clones, and that document is
 the wall-clock critical path of the whole 352-document project render.
 
 The fix lives in the external crate. The question this plan settles first is

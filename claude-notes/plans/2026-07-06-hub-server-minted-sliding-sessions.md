@@ -26,7 +26,7 @@ independent failure modes follow:
    WS upgrade 401s and the SPA presents as permanently offline — the root cause
    of `bd-3o8zmz46`, which shipped only a tactical client-side mitigation.
 2. **Large IdP tokens can be silently dropped.** A token >3800 bytes may exceed
-   the ~4096-byte cookie limit and be dropped by the browser
+   the \~4096-byte cookie limit and be dropped by the browser
    (`server.rs:292-298`) — presenting, again, as "not logged in."
 
 **Goal:** validate the Google token **once** at login, then mint a
@@ -54,7 +54,7 @@ revocation store**, both on the credential path: review accordingly.
 ### Credential validation is centralized (change is additive)
 - One extractor: `extract_credential(&HeaderMap)` → `Credential::{Cookie|Bearer}(String)` (`server.rs:212`); both present → **400 conflicting** (`:241-246`).
 - One core validator: `authenticate_claims_for_kind(token, kind)` (`context.rs:538`); wrappers `authenticate_claims` (`:526`), `authenticate` (`:511`) delegate here.
-- ~6 call sites: `Authenticated` extractor → `:440`; `ws_handler` → `:938`; `auth_me` → `:770` (cookie-only); `auth_actor` → `:801` (cookie-only); `auth_callback` → `:717` (validates *incoming* Google token before cookie-ing); `auth_refresh` → `:868` (validates *new* Google token before re-cookie-ing).
+- \~6 call sites: `Authenticated` extractor → `:440`; `ws_handler` → `:938`; `auth_me` → `:770` (cookie-only); `auth_actor` → `:801` (cookie-only); `auth_callback` → `:717` (validates *incoming* Google token before cookie-ing); `auth_refresh` → `:868` (validates *new* Google token before re-cookie-ing).
 - `CredentialKind` enum (`server.rs:149`) already threaded through audit + CSRF/Origin gating (cookie-only CSRF `:569`, logout CSRF `:820`, WS-Origin `:930`). Bearer is the documented non-browser MCP path, exempt from CSRF/Origin (`:144-147`).
 - `AUTH_COOKIE_MAX_AGE = 3600` (`server.rs:133`) hard-binds cookie lifetime to Google's 1 h — sliding sessions decouple this.
 - **`ws_handler` validates once at upgrade and never re-checks** (`server.rs:894-900`) — expiry/revocation only take effect on reconnect. Sliding sessions inherit this trade-off; live-socket revocation is out of scope (would need periodic re-check).

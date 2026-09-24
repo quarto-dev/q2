@@ -21,9 +21,9 @@ roughly:
 | `wasm_quarto_hub_client_bg.wasm` | **32 MB** |
 | `automerge_wasm_bg.wasm` | 1.8 MB |
 | `web-tree-sitter.wasm` | 192 KB |
-| dart-sass dynamic-import bundle | ~5 MB |
-| Monaco editor chunks | ~3 MB |
-| Hundreds of small TS/JSX modules | ~5 MB total |
+| dart-sass dynamic-import bundle | \~5 MB |
+| Monaco editor chunks | \~3 MB |
+| Hundreds of small TS/JSX modules | \~5 MB total |
 
 Per fresh context, **~50 MB of bytes through `vite dev`**, served by a
 single-threaded dev server that also has to run its plugin pipeline on

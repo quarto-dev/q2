@@ -31,7 +31,7 @@ Diagnosis: **not a broken test.** The batch was already running at ~85–90%
 of its timeout on ubuntu runners; #438 added ~1s (bigger SCSS theme bundle
 per render), and normal runner-speed variance did the rest. Note the macOS
 column bouncing between 13s and 24s across *green* runs — shared-runner
-variance of 2–3× is normal and irreducible. Any timeout with less than ~2×
+variance of 2–3× is normal and irreducible. Any timeout with less than \~2×
 headroom over the observed max will eventually flake.
 
 Structural aggravator: the test renders *every* `smoke-all` fixture inside
@@ -90,7 +90,7 @@ expensive failure mode).
 
 1. Check headroom: pull recent durations for the test from green CI runs
    (`gh run view <id> --log | grep '<test name>'`). If the baseline is
-   above ~50% of the timeout, it's a threshold problem, not a code problem.
+   above \~50% of the timeout, it's a threshold problem, not a code problem.
 2. Bump the timeout to 5–10× typical (or make it scale with N). Don't
    tune it "just above" observed max — that schedules the next incident.
 3. If the test is a monolithic batch, consider whether this is the second

@@ -272,6 +272,6 @@ Or use a lazy_static/once_cell for the native runtime singleton.
 
 ## Estimated Scope
 
-- **Code changes**: ~100-150 lines modified
-- **New code**: ~20-30 lines (convenience constructors, error mapping)
+- **Code changes**: \~100-150 lines modified
+- **New code**: \~20-30 lines (convenience constructors, error mapping)
 - **Risk**: Low - using existing, well-tested abstractions

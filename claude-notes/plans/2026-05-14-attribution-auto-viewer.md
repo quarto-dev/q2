@@ -6,7 +6,7 @@ When a user runs `quarto render --attribution=git` (or sets `attribution: git`
 in YAML), Quarto emits per-node `data-attr-*` attributes on wrapping `<span>`s.
 Those attributes are inert: without CSS and JS to react to them, the rendered
 page is visually identical to one rendered without `--attribution=git`. The
-feature feels broken unless the user also copy-pastes the ~70-line snippet
+feature feels broken unless the user also copy-pastes the \~70-line snippet
 currently documented under "Adding a viewer overlay" in
 `docs/authoring/attribution.qmd`.
 
@@ -29,7 +29,7 @@ overriding theme-set body colours.
   theme assigns; only the hover badge is author-coloured. This minimizes
   visual interference with site themes.
 - **Inline `<style>` and `<script>`, not external files.** Total payload
-  ~2 KB; inlining keeps single-file HTML output single-file and avoids
+  \~2 KB; inlining keeps single-file HTML output single-file and avoids
   `resources:` ceremony.
 - **Asset source of truth: two compile-time files** under repo-root
   `resources/attribution/` (`viewer.css`, `viewer.js`), loaded from

@@ -8,16 +8,16 @@
 resolving all 14 merge conflicts correctly and leaving `cargo xtask verify`
 green.
 
-**Precondition (done separately — NOT part of this plan):** the ~515-commit
-branch has already been squashed **chronologically into a reasonable dozen (~12)
+**Precondition (done separately — NOT part of this plan):** the \~515-commit
+branch has already been squashed **chronologically into a reasonable dozen (\~12)
 commits** on top of the merge-base, using the executor's own technique
-(`git revise`). This plan starts from those ~12 commits and does **not** perform
+(`git revise`). This plan starts from those \~12 commits and does **not** perform
 any squash — but it imposes **one hard grouping constraint** on how they are
 drawn (see next).
 
 **REQUIRED grouping constraint (from the commit analysis):** the
 engine-registry/pipeline conflict cluster is **not** contiguous — it lives in
-**two tight clusters** in the replay order, ~116 unrelated commits apart:
+**two tight clusters** in the replay order, \~116 unrelated commits apart:
 
 - **Cluster A — the 06-24 day** (replay positions 74/78/86/87): the `Arc`
   migration + `TsEngineHost` transport + stage wiring. Of the hard files, this

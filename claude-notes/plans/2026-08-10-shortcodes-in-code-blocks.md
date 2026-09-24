@@ -79,7 +79,7 @@ substitution is a Pandoc-reader artifact q2 doesn't share — not ported.
 **Duplicate (subset) of bd-fz6gwfq0 — recommend consolidating there, and waiting for
 `feature/bd-shortcodes-in-metadata-bp06aub8` to merge before implementing.** This strand
 (filed 2026-08-10 15:48 from the connect-docs porting skein) covers exactly the
-CodeBlock/Code slice of bd-fz6gwfq0, filed ~1 hour earlier (14:50) as a discovery of the
+CodeBlock/Code slice of bd-fz6gwfq0, filed \~1 hour earlier (14:50) as a discovery of the
 bd-shortcodes-in-metadata-bp06aub8 investigation, which additionally covers
 RawBlock/RawInline/Math text, element attributes, image src, and link targets — the full
 set Q1's `apply_code_shortcode` handles. This strand adds unique value the other lacks:

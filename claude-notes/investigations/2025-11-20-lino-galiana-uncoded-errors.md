@@ -213,11 +213,11 @@ For each pattern:
 ## Beads Issues Created
 
 - **k-368**: Fix parser handling of multi-byte emoji characters (P1, bug)
-  - Impact: ~29+ errors across 3+ files
+  - Impact: \~29+ errors across 3+ files
   - **HIGHEST PRIORITY**
 
 - **k-367**: Add error diagnostic for indented footnote content (P1, task)
-  - Impact: ~5+ files
+  - Impact: \~5+ files
   - Note: Indented footnotes are **not supported** in qmd (we don't support pure-indentation blocks)
 
 - **k-369**: Add error diagnostic for inline code execution in image URLs (P2, task)

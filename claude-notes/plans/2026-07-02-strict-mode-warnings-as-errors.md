@@ -14,7 +14,7 @@ there, so the command *naturally* fails with what are now errors — and so
 zero per-call-site work**.
 
 **Verdict: feasible, and cheap.** The architecture already has the seam we
-need. The recommended design touches ~4 places, all policy-side (CLI +
+need. The recommended design touches \~4 places, all policy-side (CLI +
 summary type); the diagnostic engine stays policy-free, consistent with
 Decision D1 (bd-creo) and the config-error-handling decision of 2025-12-07
 ("the caller decides").
@@ -32,7 +32,7 @@ Decision D1 (bd-creo) and the config-error-handling decision of 2025-12-07
    into `StageContext.diagnostics` (`crates/quarto-core/src/stage/context.rs:94`),
    `RenderContext.diagnostics` (`crates/quarto-core/src/render.rs:233`),
    pampa's `DiagnosticCollector`
-   (`crates/pampa/src/utils/diagnostic_collector.rs`), and ~15 transforms
+   (`crates/pampa/src/utils/diagnostic_collector.rs`), and \~15 transforms
    that take a bare `&mut Vec<DiagnosticMessage>`. Lua `quarto.warn()` is
    harvested into real `DiagnosticMessage`s
    (`crates/pampa/src/lua/diagnostics.rs:354`), so filter warnings ride the

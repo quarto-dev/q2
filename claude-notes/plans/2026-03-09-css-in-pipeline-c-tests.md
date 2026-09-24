@@ -89,7 +89,7 @@ Parse → MetadataMerge → CompileThemeCss → AstTransforms → RenderHtmlBody
 `doc.ast.meta` has a top-level `theme` key (if any layer specified one).
 
 `CompileThemeCssStage` reads `theme` from `doc.ast.meta`, assembles SCSS
-(~240KB for a Bootswatch theme), and compiles via platform-specific path:
+(\~240KB for a Bootswatch theme), and compiles via platform-specific path:
 - **Native**: `compile_scss_with_embedded()` (grass compiler, sync)
 - **WASM**: `ctx.runtime.compile_sass()` → JS bridge → dart-sass
 
@@ -103,7 +103,7 @@ visible in WASM tests).
 - `crates/quarto-core/src/stage/stages/metadata_merge.rs` — metadata merge + unit tests
 - `crates/quarto-core/src/pipeline.rs` — pipeline builders, `DEFAULT_CSS_ARTIFACT_PATH`
 - `crates/quarto-core/src/render_to_file.rs` — native render entry point
-- `crates/wasm-quarto-hub-client/src/lib.rs` — WASM `render_qmd()` (line ~648)
+- `crates/wasm-quarto-hub-client/src/lib.rs` — WASM `render_qmd()` (line \~648)
 - `hub-client/src/services/smokeAll.wasm.test.ts` — WASM smoke-all runner
 - `hub-client/src/wasm-js-bridge/sass.js` — dart-sass JS bridge with VFS importer
 - `crates/quarto-sass/src/config.rs` — `ThemeConfig::from_config_value()`
