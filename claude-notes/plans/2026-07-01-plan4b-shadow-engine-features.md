@@ -109,6 +109,13 @@ The test substrate the rest of the plan builds on. Each mirrors `echo-engine`'s 
   static claim and falls back to the wire round-trip. (A *static* `content-pattern` alternative is
   Plan 7a; the `.jl` percent-script *conversion* is Plan 7. This fixture is NOT "the one genuine
   must-load case" — that framing was overturned by the 2026-07-07 content-pattern census.)
+  - **Relabelled 2026-09-24 (Plan 7b coordination):** read this fixture as the *dynamic residue*.
+    With Plan 7b's `processor:` schema landed, percent/spin content claims are static — native
+    sniff + convert, no engine launch — so no built-in engine needs the dynamic `claims_file`
+    round-trip at all. The generic path this fixture exercises is the **only surviving must-load
+    claim path**, and dynamic-claim files are excluded from Pass-1 discovery (Plan 7b decision 3,
+    gate 1: only a static `FileClaim` makes an extension renderable) while remaining
+    explicit-single-file renderable. The fixture is kept precisely to keep that fallback under test.
   - **Note on `claims-files` typing** — the typed-entry restructure landed in 1c.2 P4
     (`claims_files: Option<Vec<FileClaim>>`, `extension/types.rs:121`), but today `FileClaim`
     carries **only** `extension: String`; the additive `content_pattern` field is a **Plan 7a**

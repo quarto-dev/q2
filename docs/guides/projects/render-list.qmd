@@ -102,6 +102,43 @@ notebook stays out of the render list until you ask for it. And
 installing an extension never changes which files your project
 renders — only what Quarto can do with them once listed.
 
+### Listed scripts with a declared processor
+
+Once a script *is* listed, Quarto still has to turn it into a
+document. For the two script formats Quarto understands natively, that
+conversion happens in-process — no execution engine is launched to
+decide what the file is:
+
+- **Percent scripts** — cells delimited by comment lines such as
+  `# %%` (the format Jupytext and VS Code popularized), in Python,
+  Julia, R, and other `#`-comment languages.
+- **Spin scripts** — an R script whose `#'` lines are prose and whose
+  remaining code becomes executable chunks, in the style of knitr's
+  `spin()`.
+
+The built-in Jupyter and knitr engines declare these conversions
+statically, so a listed `.py`, `.jl`, or `.R` script is recognized and
+converted without launching anything — and an error in the rendered
+page points back at the original script's file, line, and column.
+
+An engine extension declares the same thing on a `claims-files` entry
+in its `_extension.yml`, with the `processor:` key:
+
+```yaml
+contributes:
+  engines:
+    - name: myengine
+      claims-files:
+        - extension: .jl
+          processor: { name: percent, language: julia }
+```
+
+`processor: spin` takes no parameters and may be written as a bare
+name. `percent` requires a `language` and accepts an optional
+`comment` marker (default `#`). An unknown processor name — or a
+`percent` with no `language` — is a hard error at project load, never
+a silently skipped file.
+
 ## Files that never render
 
 Some files are excluded from the render list even when a pattern
