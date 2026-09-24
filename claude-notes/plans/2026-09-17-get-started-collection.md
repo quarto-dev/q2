@@ -397,6 +397,45 @@ the Presentation skeleton is offered on the CLI as well as the hub.
       Local-prod rebuilt; Playwright at 1000px: Templates submenu has the
       flip class and spans 488..679 of a 1000px window. Commits `e4342b12`
       (code + test) and `43afbbd0` (changelog).
+- [x] Menu polish (Andrew, 2026-09-24, three asks after trying it): leaf
+      items should tint on hover and as the current item; the Templates
+      submenu stayed open when moving to Examples; the two groups need
+      subtext explaining the difference, like the per-item descriptions.
+      Tests first (`Menu.submenu.integration.test.tsx` siblings block,
+      `choiceTree.test.ts` descriptions, `ProjectsHome.newMenu` subtext,
+      `choices.rs` every group described, `projectCreate.wasm.test.ts`
+      `groups`); red observed on each, then:
+      - Registry: `path_description(path)` beside the registry, surfaced
+        on `ChoiceGroup.description`; WASM response gains `groups`
+        (`[{path, description}]`); runtime `getProjectChoiceGroups()`;
+        `buildChoiceTree(choices, groups)` attaches `description` to
+        nodes; `MenuSubmenu` gets `subtext`. Copy: Templates "Bare
+        skeletons with just enough structure to start writing", Examples
+        "Filled-in projects that show what each format can do". The CLI
+        `--list` output is unchanged.
+      - One open submenu per level: `SubmenuLevelContext` provided by
+        `Menu` and by each open submenu; `useSubmenuOpen(id)` derives
+        open state from the level, so hovering a sibling closes the open
+        one (even with focus inside) and nested groups never close their
+        parent. Standalone fallback keeps local state.
+      - Tint: `.qh-menu-item:focus` and `.qh-menu-item-inner:focus` share
+        the hover tint; `[aria-expanded="true"]` keeps the group tinted.
+      - Found by the browser probe: a hover-opened submenu closed when
+        the pointer crossed the 4px gap into it (mouseleave on the parent
+        with no focus inside). Fixed with a `::before` bridge over the
+        gap plus a 150ms close grace period (`SUBMENU_CLOSE_GRACE_MS`).
+      - The submenu is now `aria-labelledby` the label span only, so the
+        subtext does not join its accessible name; the viewport flip
+        toggles the class on the node in the layout effect (no state).
+      Verified: quarto-project-create 59 tests, CLI create 42, hub-client
+      unit 1243, integration menu files 11, WASM 151 (rebuilt package);
+      Playwright on local-prod at 1200px: subtext present, focused leaf
+      and parent tinted `rgba(68,112,153,0.08)`, Templates closes when
+      Examples is hovered, walking the pointer from Examples into its
+      submenu keeps it open with the hovered leaf tinted. Pre-existing
+      eslint `react-hooks/refs` and `set-state-in-effect` errors in
+      `Menu.tsx`/`ProjectsHome.tsx` are on main too and untouched.
+      Commit `d3a87667`.
 
 ## Work items
 
