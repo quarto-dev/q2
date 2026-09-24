@@ -107,7 +107,7 @@ promoted to `StageContext`: when a second peer-level consumer
 appears (`UserFiltersStage` alongside `AttributionRenderTransform`),
 the data's home moves to the LCA of the consumers. Putting the
 sidecar on `FilterContext` instead was considered and rejected —
-`FilterContext`'s purpose is scoped to filter diagnostics, and a
+`FilterContext`\'s purpose is scoped to filter diagnostics, and a
 future non-filter top-level stage might consume attribution too
 (sidebars, cross-doc links, document-profile enrichment).
 
@@ -125,7 +125,7 @@ a handle and passes it through to `apply_filters` as a new optional
 parameter. Pampa's Lua binding reads the handle when registering the
 `quarto.attribution.*` table. The two crates communicate through a
 small typed interface that's natural for the Lua boundary;
-`apply_filters`'s current signature already accepts a `runtime:
+`apply_filters`\'s current signature already accepts a `runtime:
 Arc<dyn SystemRuntime>` parameter — the attribution handle follows
 the same pattern.
 
@@ -290,7 +290,7 @@ call `lookup_range` directly with hand-computed offsets.
 - [x] Thread the handle through `apply_filters` as a new parameter:
   `apply_filters(pandoc, context, filters, target_format, runtime,
   attribution: Option<Arc<dyn AttributionLookup>>)`. Mirrors the
-  existing `runtime` parameter and keeps `FilterContext`'s purpose
+  existing `runtime` parameter and keeps `FilterContext`\'s purpose
   scoped to diagnostics.
 - [x] In `quarto-core::UserFiltersStage::run`, when
   `ctx.attribution_data.is_some()`, construct the handle and pass

@@ -45,7 +45,7 @@
 > undefined`), not a bare pass-through. (d) `displayDataLatexIsMath` is a
 > `string[]→bool` **predicate**; the `{=tex}`-vs-math routing is a separate
 > `displayDataWithMarkdownMath` (Test Row 3 rebound). (e) `./jupyter` must be
-> added to `@quarto/api`'s `exports` map (2A landed without it); `@quarto/types`
+> added to `@quarto/api`\'s `exports` map (2A landed without it); `@quarto/types`
 > stays a `devDependency` (type-only imports). (f) `cell-options.ts` given a
 > signature + the `JupyterCell→JupyterCellWithOptions` upgrade that must run
 > **before** `tags.*` in the walk. No design questions — one convention call

@@ -219,7 +219,7 @@ Ratified with Gordon 2026-07-02 through 2026-07-05:
 9. **Engine-extension `_extension.yml` bytes join the Pass-1 cache key.**
    The stamped `engine_resolution` is a function of the registry — which
    engine extensions exist and what claims they declare — and none of that
-   was in `pass1_key`'s hash domain (`cache_key.rs:141-178`;
+   was in `pass1_key`\'s hash domain (`cache_key.rs:141-178`;
    `extension_contributions` is passed empty at `orchestrator.rs:1639` with
    a format-extensions TODO). Without this, editing an extension's `claims:`
    (exactly what the decision-5 warning tells developers to do) would serve

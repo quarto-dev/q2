@@ -61,7 +61,7 @@ const scriptPath = join(currentDir, "command.py");
 ```
 
 `import.meta.url` resolves to the directory of the **loaded bundle** at
-runtime, i.e. wherever `_extension.yml`'s `path:` points once claimed. So
+runtime, i.e. wherever `_extension.yml`\'s `path:` points once claimed. So
 `extract.py`/`command.py` must sit next to the rebundled
 `marimo-engine.js`, inside `_extensions/marimo/` — exactly the pattern
 julia's `.jl` runtime files use relative to `julia-engine.js` (§7 of the
@@ -124,7 +124,7 @@ Differences from upstream, each an intentional adaptation (not a bug):
    to ask dynamically (mirrors `claimsLanguage` in `marimo-engine.ts`
    line-for-line — see §4 below). Bare `{python}` is intentionally
    **not** claimed (no claims entry for plain `python`), matching
-   `claimsLanguage`'s `return false` fallthrough for that case.
+   `claimsLanguage`\'s `return false` fallthrough for that case.
 3. **`filters:` (the `marimo-deprecated.lua` contribution) dropped.** Per
    the brief: the deprecation shim is irrelevant to a working-engine
    fixture and would need its own file copy for no purpose here.
@@ -142,7 +142,7 @@ Differences from upstream, each an intentional adaptation (not a bug):
 
 ## 4. `claimsLanguage` (dynamic, TS) vs. the fixture's static `claims:` map
 
-Cross-checked line-for-line against `marimo-engine.ts`'s
+Cross-checked line-for-line against `marimo-engine.ts`\'s
 `claimsLanguage` (lines 162-182):
 
 ```ts
@@ -183,7 +183,7 @@ before working around them (read `claude-notes/research/2026-07-02-julia-engine-
    Quarto-1 extension repo's layout — the same reason julia's `src/` lives
    at the fixture root instead of inside the shipped package dir).
 
-Note also a **third**, marimo-specific non-issue: `find_entry_ts`'s naming
+Note also a **third**, marimo-specific non-issue: `find_entry_ts`\'s naming
 convention is `<ext_dir_basename>.ts` (i.e. it would look for
 `_extensions/marimo/src/marimo.ts`, not `marimo-engine.ts`) — but the
 function falls back to "any `.ts` file in `src/`" when the exact-name
@@ -221,7 +221,7 @@ Config resolved via workspace auto-detection (tier 3 — `find_workspace_root`
 walked up from `_extensions/marimo/` to the repo root, which contains
 `ts-packages/quarto-api`), same as julia: `@quarto/types` from local
 workspace source, `@std/*` (`path`) from `jsr:` per
-`resources/extension-build/deno.json`'s existing aliases (no new alias
+`resources/extension-build/deno.json`\'s existing aliases (no new alias
 needed — julia's §1 import-map parity work already added everything
 marimo's imports use: `path` only, no `fs/`, `log`, or `encoding/`
 namespaces are imported by `marimo-engine.ts`).

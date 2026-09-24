@@ -700,7 +700,7 @@ When a container's hash changes because a child changed:
 
 The Div's hash changes (because children hashes changed), but we want to:
 1. Keep the Div's source location (it's the same Div structurally)
-2. Keep Para("foo")'s source location (it hasn't changed)
+2. Keep Para("foo")\'s source location (it hasn't changed)
 3. Use the executed CodeBlock (it changed)
 
 The `RecurseIntoContainer` alignment achieves this by:

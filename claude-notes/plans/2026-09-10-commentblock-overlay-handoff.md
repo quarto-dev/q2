@@ -1,4 +1,4 @@
-# Handoff: remove `CommentBlock`'s per-block wrapper (q2-preview comment chrome as an overlay layer)
+# Handoff: remove `CommentBlock`\'s per-block wrapper (q2-preview comment chrome as an overlay layer)
 
 **Strand:** bd-q2wqj24c (re-scoped 2026-09-10; `related` → bd-j3764r9a parity epic; discovered-from bd-kltzdhle)
 **Written:** 2026-09-10, for a fresh session. Everything below was verified in the

@@ -118,7 +118,7 @@ runs in q2-preview's React iframe). When `stem === ''` (i.e. the href
 is exactly `ARTIFACT_ROOT` ± `#anchor`), return
 `{ qmdCandidate: 'index.qmd', anchor }` directly. This matches the
 "directory URL = index" web convention; if `index.qmd` doesn't exist
-in the project, `PreviewApp`'s render attempt surfaces the existing
+in the project, `PreviewApp`\'s render attempt surfaces the existing
 missing-page error overlay — consistent with the docstring policy
 *"always intercept artifact-rooted hrefs"* on lines 16-20.
 

@@ -85,7 +85,7 @@ Parse → MetadataMerge → IncludeExpansion → DocumentProfileStage →
   RenderHtmlBody → ApplyTemplate
 ```
 
-`IncludeExpansion`'s position relative to `PreEngineSugaring` is
+`IncludeExpansion`\'s position relative to `PreEngineSugaring` is
 unchanged; the profile checkpoint sits between them, observing the
 post-include AST. See `claude-notes/designs/document-profile-contract.md`.
 

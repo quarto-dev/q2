@@ -18,7 +18,7 @@ Two gaps:
 Per-node line numbers already ride the wire: `renderPageInProject` emits
 `include_inline_locations: true`, so every node carries an `l` field
 (`{f, b:{o,l,c}, e:{o,l,c}}`). The q2-preview iframe is `allow-same-origin`,
-so the parent can reach `contentDocument` directly and reuse `MorphIframe`'s
+so the parent can reach `contentDocument` directly and reuse `MorphIframe`\'s
 exact scroll logic. **No Rust change, no new postMessage protocol.**
 
 Scope (confirmed with user): **block-level scroll sync only.** No inline

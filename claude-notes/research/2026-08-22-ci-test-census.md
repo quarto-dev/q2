@@ -53,7 +53,7 @@ scratchpad). "In CI" = gated by a push/PR workflow.
 | `q2-preview-spa` | `test:e2e` (Playwright) | 17 specs | — | not measured | no (verify `--e2e` only) |
 
 **Roughly 2,070 TypeScript assertions currently sit outside the merge gate**
-(~1,620 excluding `preview-renderer`'s integration tier).
+(~1,620 excluding `preview-renderer`\'s integration tier).
 
 ### 2.1 Build-order prerequisites (not test bugs)
 

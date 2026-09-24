@@ -71,7 +71,7 @@ pandoc_block_quote: {Node pandoc_block_quote (0, 0) - (3, 0)}
       $$: {Node $$ (2, 2) - (2, 4)}
 ```
 
-There is exactly **one** `block_quote_marker` token for the entire blockquote — only the first line. The continuation `> ` characters on lines 1 and 2 are never matched as `block_continuation`; they fall inside `pandoc_display_math`'s body span, which is the literal byte range `(0, 2) - (2, 4)`.
+There is exactly **one** `block_quote_marker` token for the entire blockquote — only the first line. The continuation `> ` characters on lines 1 and 2 are never matched as `block_continuation`; they fall inside `pandoc_display_math`\'s body span, which is the literal byte range `(0, 2) - (2, 4)`.
 
 ### Root cause in `grammar.js`
 

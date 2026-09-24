@@ -52,7 +52,7 @@ nonexistent.
    `quarto_yaml::file_id_for_filename` *for now* (DefaultHasher over the
    string), BUT: make the hash width stable across targets (u64-based,
    not `as usize` — the usize truncation to 32 bits on wasm32 plus
-   `add_file_with_id`'s panic-on-duplicate is a latent crash,
+   `add_file_with_id`\'s panic-on-duplicate is a latent crash,
    posit-dev/quarto-yaml#17 item Y4). This is a hash-recipe change on
    wasm32 only; coordinate the release with quarto-yaml re-exporting the
    new function (see migration below). Note `FileId(pub usize)` likely
@@ -80,7 +80,7 @@ nonexistent.
 7. **Renderer defense** (quarto-error-reporting, separate crate, same
    family): refuse to render an `Original` span whose offsets exceed the
    bound file's length (degrade span-less; today's clamp turns detectable
-   mis-binds into plausible spans), and drop the span when a `Concat`'s
+   mis-binds into plausible spans), and drop the span when a `Concat`\'s
    endpoints map into different files.
 8. **Deprecations:** `add_file_with_id` (replaced by `bind_path`; one
    release deprecated, then removed), raw-tuple `resolve_byte_range`
@@ -92,7 +92,7 @@ nonexistent.
 - Re-export `FileId::for_path` as `file_id_for_filename` (deprecated
   alias) so the documented stability contract holds through the
   transition; parse-side id minting switches to the source-map function.
-- `parse()`'s `FileId(0)` dummy → `FileId::UNKNOWN` (issue #17, Y2).
+- `parse()`\'s `FileId(0)` dummy → `FileId::UNKNOWN` (issue #17, Y2).
 - `parse_with_parent`: `debug_assert!(parent.length() == content.len())`
   in `parse_impl` + fix the wrong doc example (Y1 — the example passes a
   `0..1000` parent while narrating "extracted at offset 10-50").
@@ -108,7 +108,7 @@ nonexistent.
   `add-file-with-id` xtask lint to flag the deprecated API tree-wide.
 - quarto-xml: replace `ANONYMOUS_FILE_ID` with the upstream
   `FileId::UNKNOWN`.
-- Re-audit `span_assert.rs`'s `SuspiciousDefault` heuristic (the
+- Re-audit `span_assert.rs`\'s `SuspiciousDefault` heuristic (the
   `{0,0,0}` special case) against the new sentinel.
 
 ## Option C — the declared end-state (design RFC, not this release)

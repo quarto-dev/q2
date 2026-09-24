@@ -280,7 +280,7 @@ enough that repeat-pastes of the same content don't proliferate files.
 - **(F1) Content-hash name: `pasted-<hash8>.<ext>`** (ext from MIME).
   - Concurrent pastes of *different* images by two peers → different
     hashes → **different index keys → no CRDT conflict at all**. This is
-    the crucial property: `createBinaryFile`'s existence check is
+    the crucial property: `createBinaryFile`\'s existence check is
     check-then-act on the *local* replica, so two peers concurrently
     claiming the same path with different content would race to
     last-writer-wins on the index map key and one image would silently

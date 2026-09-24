@@ -23,7 +23,7 @@
 > `claude-notes/plans/2026-06-29-yaml-stack-extraction-handoff.md`** — it is the
 > up-to-date, self-contained plan: the YAML stack ships as **one repo
 > `posit-dev/quarto-yaml`, a workspace with two crates** (decided 2026-06-29; the
-> foundation crates' "one repo per crate" rule does *not* apply here), and the
+> foundation crates\' "one repo per crate" rule does *not* apply here), and the
 > foundation extraction it depends on is **done** (source-map + error-reporting
 > published, PRs #348/#349/#350). This design doc remains the rationale for the
 > error-code discipline applied to YAML.
@@ -54,7 +54,7 @@ YAML-specific application of that philosophy.
   embedders today — the YAML validator becomes the **proving ground** for the
   general cross-package philosophy rather than a forced q2 integration.
 - **"TypeScript" = the language/compiler, not TS Quarto.** The `Q-*` scheme was
-  inspired by the TypeScript *compiler*'s flat numeric `TSxxxx` catalog. That is a
+  inspired by the TypeScript *compiler*\'s flat numeric `TSxxxx` catalog. That is a
   good template for the *presentation* layer but offers nothing for the
   cross-package case (it is a monolith with a central allocator). The composable
   precedents are Clippy (`clippy::needless_return`) and ESLint plugin namespacing —

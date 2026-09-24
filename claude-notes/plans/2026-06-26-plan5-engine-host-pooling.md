@@ -89,7 +89,7 @@ jitter. Plan 5 keeps the host warm across re-computes.
     before reusing).
   - **Why field-level reset is NOT the lever** (see the reworded comment at `ts_engine.rs`
     `project:` field, 1c.2 P1): a launched instance holds its `EngineProjectContext` in its
-    closure behind **two** caches — Rust `ensure_launched`'s instance cache and the host's
+    closure behind **two** caches — Rust `ensure_launched`\'s instance cache and the host's
     `launchedByName` — so `set_project`-style writes can never reach it. Rebuilding the
     registry per re-compute (the session-owns-host model above) does **not** refresh instances
     either: the host cache keys by engine name and returns the old closure.

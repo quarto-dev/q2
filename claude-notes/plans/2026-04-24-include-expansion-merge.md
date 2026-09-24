@@ -76,7 +76,7 @@ Out of scope for this session:
 - Shortcode resolution beyond `include` — e.g. `{{< meta … >}}` or
   user-defined shortcodes in Lua — is intentionally not moved
   relative to the checkpoint. That remains
-  `ShortcodeResolveTransform`'s responsibility inside
+  `ShortcodeResolveTransform`\'s responsibility inside
   `AstTransformsStage`, well after the profile. If the user wants
   general shortcode resolution pre-profile later, it is a separate
   design conversation.

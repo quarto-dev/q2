@@ -89,7 +89,7 @@ recorded "**NOT verified:** live browser scroll interaction".
 | D1 | **Scroll only.** `revealLineInCenterIfOutsideViewport(line)`. No `setPosition`, no `setSelection`, no `focus()`. | In q2-preview the click *opens an inline editor in the preview*. Pulling focus to Monaco (what `useSelectionSync` does for the HTML preview) would break the gesture the same click just started. Deliberate divergence from the HTML preview. |
 | D2 | **New capture-phase `pointerup` path**, not an extension of `useSelectionSync`. | Works with the block-level `data-loc` q2-preview already stamps. Extending selection sync would require per-inline `<span data-loc>` in q2-preview, reopening the wrapper/theme-CSS parity decision bd-9kzfi deliberately closed. |
 | D3 | **HTML preview untouched.** Its click→ratio path stays, redundant but harmless. | It is the behaviour reported as working; changing it risks the one preview that currently syncs. Recorded as a finding, not a work item. |
-| D4 | **A click that does not resolve an editable block does nothing.** No reveal when the target is inside `#q2-active-edit-region`, when the nearest `[data-loc]` ancestor is a `<section>`, or when nothing resolves. | Without this, every caret-move click inside an open editor yanks Monaco to the enclosing section's heading — see the hazard below. Mirrors the existing active-region guard in `useBlockEditHover`'s `onPointerUp`. |
+| D4 | **A click that does not resolve an editable block does nothing.** No reveal when the target is inside `#q2-active-edit-region`, when the nearest `[data-loc]` ancestor is a `<section>`, or when nothing resolves. | Without this, every caret-move click inside an open editor yanks Monaco to the enclosing section's heading — see the hazard below. Mirrors the existing active-region guard in `useBlockEditHover`\'s `onPointerUp`. |
 | D5 | **Clicking included content scrolls to the `{{< include … >}}` shortcode's line in the current file.** Not a bogus current-file line; not a file switch. | Keeps the editor showing the file the user is editing, and points at the thing that *is* editable there. Feasibility + sequencing: see Phase 4. |
 
 ### The section hazard behind D4
@@ -122,7 +122,7 @@ followed by `BUBBLE pointerup (app activate): replacing node`.
 *ends*, so the reveal follows the user's final position rather than firing at the
 start of a drag; and it is the same event the app activates on, so the reveal
 coincides exactly with the editor opening. (An earlier draft justified this by
-`syncPreviewToEditor`'s focus gate — that reason does not survive D1's
+`syncPreviewToEditor`\'s focus gate — that reason does not survive D1's
 "not focus-gated", and a capture-phase `pointerdown` is equally before-detach.)
 
 **Why not focus-gated:** an explicit click in the preview is unambiguous user
@@ -198,7 +198,7 @@ Both packages run `*.test.ts` in the **node** environment
 | **U1d** | ↑ | ↑ | Target whose nearest `[data-loc]` is the `<section>` itself (inter-block whitespace) → `null` | ↑ | Delete the `<section>` check → RED |
 | **U1e** | ↑ | ↑ | `lineForClickTarget(document)` and `(null)` → `null`, no throw | ↑ | Drop the `instanceof Element` narrowing → throws → RED |
 | **U2a** | jsdom (`useScrollSync.test.ts`, `@vitest-environment jsdom` already present) | real `useScrollSync` | `renderHook`; `result.current.revealEditorLine(73)`; assert `revealLineInCenterIfOutsideViewport` called with **`73`** | Monaco fake (`makeEditor`) — **must be extended**, see below | Remove the reveal call → RED |
-| **U2b** | ↑ | ↑ | `setPosition`, `setSelection`, `focus` **never** called | ↑ | Add `setPosition`/`focus` to the reveal path (i.e. copy `useSelectionSync`'s semantics) → RED. Guards D1 |
+| **U2b** | ↑ | ↑ | `setPosition`, `setSelection`, `focus` **never** called | ↑ | Add `setPosition`/`focus` to the reveal path (i.e. copy `useSelectionSync`\'s semantics) → RED. Guards D1 |
 | **U2c** | ↑ | ↑ | **Harness must be `setup({focus: true})`**; reveal still happens | ↑ | Route `revealEditorLine` through `syncPreviewToEditor` (whose first statement is the focus gate) → RED |
 | **U2d** | ↑ | ↑ | No debounce: reveal happens **without** advancing timers | ↑ | Wrap the reveal in the 50 ms `editorDebounceRef` timer → RED |
 | **U3** | jsdom (`Q2PreviewIframe.integration.test.tsx`) | real `Q2PreviewIframe` | **New harness variant needed** — the existing `renderWithFingerprint` dispatches `IFRAME_READY` internally and exposes no handle on the iframe element. Need: render → wrap `iframe.contentDocument.addEventListener` with a spy → dispatch `IFRAME_READY`. Assert the registration tuple is `('pointerup', fn, true)`, then dispatch a `pointerup` on an injected `[data-loc]` node and assert `onClickAtLine` got `12` | iframe `contentWindow.postMessage` (already faked here) | Restore `doc.addEventListener('click', handleClick)`, or drop the `true` capture arg → RED |

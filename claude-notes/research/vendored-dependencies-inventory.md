@@ -65,7 +65,7 @@ should run, in order:
 
 6. **Sub-package `package.json`s outside `hub-client/`.** Some Rust
    crates have a private npm sub-package whose bundled output is
-   `include_str!`'d into Rust. Find them:
+   `include_str!`\'d into Rust. Find them:
    ```bash
    find . -name package.json -not -path '*/node_modules/*' -not -path '*/dist/*' \
      -not -path '*/target/*' -not -path '*/.worktrees/*'

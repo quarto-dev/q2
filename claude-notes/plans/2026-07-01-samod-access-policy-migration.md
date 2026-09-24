@@ -177,7 +177,7 @@ the Rust test suite cannot cover on its own.
       Phase-0 `automerge_dir` written by the OLD binary:
       `QUARTO_HUB_DATA_DIR=<copy> ./target/debug/hub -P 3988 -H 127.0.0.1 -v`.
       Log: `Loaded existing index document doc_id=2J1DWLvMjrSn3KdfZe3VQosnQ3Sw`
-      (the exact Phase-0 doc), and `hub.json`'s `index_document_id` unchanged. No
+      (the exact Phase-0 doc), and `hub.json`\'s `index_document_id` unchanged. No
       re-init, no corruption.
 - [x] **Live JS↔Rust wire interop verified (automated).** Ran the sync-client
       Rust-hub interop suite against the new binary from the worktree:
@@ -269,7 +269,7 @@ above landed as `bfcee64f`:
       unconditionally, so a single document open emitted 2–3 identical
       "Document accessed" lines. Restored once-per-`(peer, doc)` semantics with
       a dedup `HashSet` in `AuditAccessPolicy`, pruned per-peer on disconnect
-      via `forget_peer` (called from `server.rs`'s `ClientDisconnected` arm next
+      via `forget_peer` (called from `server.rs`\'s `ClientDisconnected` arm next
       to the existing `peer_emails` removal). Three tracing-capture tests cover
       dedup, per-doc distinctness, and re-log-after-forget. Full workspace green
       (9859 passed).

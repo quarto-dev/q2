@@ -87,7 +87,7 @@ directive path must emit the same diagnostic as JSON (matches the existing
   `hub-client/src/types/wasm-quarto-hub-client.d.ts` and
   `ts-packages/preview-runtime/src/wasm-quarto-hub-client.d.ts`.
 - `hub-client/src/components/ProjectsHome.tsx` — it already renders whatever
-  `getProjectChoices` returns. `App.tsx`'s `handleProjectCreated` receives the
+  `getProjectChoices` returns. `App.tsx`\'s `handleProjectCreated` receives the
   choice id as `_projectType` and does not persist it (verified 2026-09-15), so
   nothing downstream assumes the id is a CLI choice.
 - `get_scaffold` / `templates.rs` structure — a hub-only template is one more

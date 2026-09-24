@@ -53,7 +53,7 @@ once `native_divs` is off, which is precisely the configuration PR #646 put
 q2 into. Dropping `native_divs` alone was safe; dropping it *and* lifting
 verbatim was not.
 
-`syntax-notes.md`'s objection is specifically to *parsing HTML into AST
+`syntax-notes.md`\'s objection is specifically to *parsing HTML into AST
 structure* via backtracking parser combinators — i.e. `native_divs`. It does
 not speak to `markdown_in_html_blocks`. The strand is right that the
 constraint does not block this fix.

@@ -14,7 +14,7 @@ Audit notes (verified against source 2026-08-19):
 
 - **4.1.2 Name Role Value**: `NewFileDialog`, `NewAssetDialog`,
   `ShareDialog` render `.ph-dialog` divs with no `role="dialog"`,
-  `aria-modal`, or `aria-labelledby`. `ShareDialog`'s close button has
+  `aria-modal`, or `aria-labelledby`. `ShareDialog`\'s close button has
   no accessible name (only `&times;` text). The 8 inline dialogs in
   `ProjectsHome` have the same gap, and its action menus use
   `role="menu"` with plain `<button>` children (required-owned-elements

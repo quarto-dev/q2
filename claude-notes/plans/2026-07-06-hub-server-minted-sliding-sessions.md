@@ -65,7 +65,7 @@ revocation store**, both on the credential path: review accordingly.
 ## Design
 
 1. **Token format — hub-signed compact token.** HS256 JWT (reuse
-   `jsonwebtoken`'s `EncodingKey::from_secret`), signed with a dedicated
+   `jsonwebtoken`\'s `EncodingKey::from_secret`), signed with a dedicated
    **session** secret (§4). Payload:
    - `sub`; `email`, `email_verified`, `name`, `picture` — stamped from the
      Google claims validated at mint; consumed by `/auth/me` and the

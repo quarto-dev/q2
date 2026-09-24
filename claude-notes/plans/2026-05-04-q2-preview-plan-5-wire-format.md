@@ -96,7 +96,7 @@ hand-constructed tests in §"Test plan" run.
   `si_id` is the source-info pool reference — it points to another
   entry in the pool, typically an `Original` covering the source bytes
   the anchor describes. The name is deliberately distinct from
-  `Substring`'s `parent_id`: a Substring genuinely *has* a parent in
+  `Substring`\'s `parent_id`: a Substring genuinely *has* a parent in
   the chain (the slice's ancestor), but an anchor's reference is a
   sideways pointer, not a containment relationship. `si_id` reads as
   "source-info pool index" with no tree-structure overclaim. Multiple

@@ -47,7 +47,7 @@ lightly.
 ### Design
 
 - **Where:** the Bearer *credential* path only — i.e. the path reached from
-  `authenticate_credential`'s `Credential::Bearer` arm
+  `authenticate_credential`\'s `Credential::Bearer` arm
   (`context.rs:823-840`). **Not** the mint-time validation path:
   `auth_callback`/`auth_session` validate an incoming Google token through
   the same `authenticate_claims` machinery, and they must keep their existing

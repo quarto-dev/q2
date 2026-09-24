@@ -150,7 +150,7 @@ The epic says "byte-for-byte cell content vs last capture's `input_qmd`." Two fo
   - The whole serialized QMD (matches the input `EngineExecutionStage` already feeds to engines).
   - Just the code-cell content, ignoring prose changes.
 
-  The first matches `ReplayEngine`'s validation (byte-equality on input), but it makes *prose-only edits* appear to invalidate the engine capture. That's wrong — prose edits don't affect cell output, but they'd flip `staleness: true` and force the user to re-execute for no reason.
+  The first matches `ReplayEngine`\'s validation (byte-equality on input), but it makes *prose-only edits* appear to invalidate the engine capture. That's wrong — prose edits don't affect cell output, but they'd flip `staleness: true` and force the user to re-execute for no reason.
 
   The second requires a more careful parse-and-canonicalize step but matches the user's intuition.
 
@@ -178,7 +178,7 @@ C.1 wants the browser to show "Executing code…" while the server runs the firs
 
 The epic says "keyed by content hash." Open: hash what?
 
-- The full `input_qmd` bytes (matches `ReplayEngine`'s replay check).
+- The full `input_qmd` bytes (matches `ReplayEngine`\'s replay check).
 - A canonicalized "engine input" (would let prose-only edits keep using the cache without a re-execute prompt).
 
 **Recommendation:** **hash the full `input_qmd`** for v1, matching Q-C3's whole-QMD policy. Keep the cache key and the staleness check using the *same* canonicalization function so they never drift. Refinements come in a follow-up.

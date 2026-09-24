@@ -88,7 +88,7 @@ Both items previously carried as "Deferred in-plan questions" in this plan
    These are consumed by `EngineExecutionStage`, upstream of this plan's own per-format tail
    (`pipeline.rs:322` vs. the tail at the very end) — **this plan still owns stating the values**
    (it's the only plan that has the per-format facts), but applying them is a seam into
-   `EngineExecutionStage`'s own defaulting, not something P7's invocation builder does directly.
+   `EngineExecutionStage`\'s own defaulting, not something P7's invocation builder does directly.
    **Correction (2026-09-18, round 4 review, Reviewer C): "not something P7 does directly" left
    this seam with no owner at all** — no other plan mentions `EngineExecutionStage`, and this
    plan's own checklist folded the values back into the invocation-builder item, the same
@@ -113,11 +113,11 @@ Both items previously carried as "Deferred in-plan questions" in this plan
    consumers this repo's `CLAUDE.md` requires registering: neither is in
    `FORMAT_PATH_KEYS` (`crates/quarto-core/src/project/format_paths.rs:99-105`, currently 5
    entries: `css, theme, include-in-header, include-before-body, include-after-body`) or in
-   `claude-notes/designs/path-resolution-model.md`'s consumption inventory. Add both there when
+   `claude-notes/designs/path-resolution-model.md`\'s consumption inventory. Add both there when
    implementing (resolve relative to the declaring file, a leading `/` means project root — the
    same convention every other path key already follows), per the repo rule requiring a strand
    linked to `bd-oejuizi9` for any deliberate scope-out.
-3. **Multi-format render guardrail — see design doc §14.** Relaxing `render.rs:680-684`'s format
+3. **Multi-format render guardrail — see design doc §14.** Relaxing `render.rs:680-684`\'s format
    check removes the only existing signal that Q2 renders one format per invocation. Add a
    warning when `format:` declares more than one key and only one is rendered, naming which was
    used and which were skipped.
@@ -125,7 +125,7 @@ Both items previously carried as "Deferred in-plan questions" in this plan
    fixes to actually build, per a fresh implementation-feasibility review:**
    - **Insta mechanics.** `.snap` files are produced *by tests*, with filenames derived from
      `module_path!()` + snapshot name and a YAML header (`source:`, `expression:` —
-     `.claude/rules/integration-tests.md`'s `integration__<module>__<name>.snap` convention). An
+     `.claude/rules/integration-tests.md`\'s `integration__<module>__<name>.snap` convention). An
      **xtask** writing files a later test will match by name must either hand-author that
      convention exactly or use `insta::Settings` with an explicit snapshot path + name (simplest);
      getting this wrong yields "snapshot not found, created new" — a silent pass, not a build
@@ -164,7 +164,7 @@ Both items previously carried as "Deferred in-plan questions" in this plan
      `<w:drawing>`/`<w:br w:type="page"/>` element counts — cheap, version-stable, and turns "image
      silently missing" into a visible snapshot diff. **Also add `<m:oMath>` text content (or at
      minimum an `<m:oMath>` element count plus its flattened text)** (2026-09-18, round 4 review,
-     Reviewer B) — for docx/pptx, `renderEquation`'s fallback branch mutates the equation's TeX
+     Reviewer B) — for docx/pptx, `renderEquation`\'s fallback branch mutates the equation's TeX
      source itself before Pandoc's writer converts it to OMML, so a rendered equation number ends
      up inside `<m:oMath>`, not in the paragraph's `<w:t>` runs; without this, the extraction shows
      identical text whether the equation number is present, absent, or wrong — exactly the Route-N
@@ -233,7 +233,7 @@ P7-foundation has landed and builds the docx/pptx-specific work on top of it.
      one we own — per this repo's External Sources Policy, anything needed at test time must be a
      local, committed resource, not a read from `external-sources/`; fixtures drawn from
      quarto-cli get copied into our own `tests/fixtures/` directory once (mirroring
-     `resources/scss/`'s "copy in, track locally" pattern), not referenced from the sibling
+     `resources/scss/`\'s "copy in, track locally" pattern), not referenced from the sibling
      checkout at test time.
 - **Triage two pre-existing Q2 bugs before trusting any golden diff:** the nested-`<p>` bug from
   missing `ensureMetaInlines` block→inline coercion (`template.rs:221` /
@@ -315,7 +315,7 @@ P7-foundation has landed and builds the docx/pptx-specific work on top of it.
   green — exactly the "before trusting any golden diff" triage Task 8 established a precedent
   for, so fixed in this plan rather than filed as follow-on strands:**
   1. **Relatively-referenced images silently dropped from every real docx/pptx render.**
-     `PandocWriteStage`'s pandoc `Command` (`crates/quarto-core/src/stage/stages/pandoc_write.rs`)
+     `PandocWriteStage`\'s pandoc `Command` (`crates/quarto-core/src/stage/stages/pandoc_write.rs`)
      never set `--resource-path` (or a `current_dir`), so a body-content `Image` target like
      `img/thinker.jpg` — never rebased by anything upstream, unlike the `FORMAT_PATH_KEYS`
      config keys `build_forwarded_args` already rebases — resolved against pandoc's inherited
@@ -368,7 +368,7 @@ P7-foundation has landed and builds the docx/pptx-specific work on top of it.
   multi-id crossref drop is flagged (a diagnostic naming every dropped id, tests bound and
   RED/GREEN-verified). Bug A's docx-relevant half was already fixed by Task 6; its HTML-only
   `<p>`-in-`<p>` symptom is flagged via strand `bd-aoq12tv7`.
-- [x] `link_rewrite.rs:29`'s stale comment / behavior gap — **resolved 2026-09-17: no longer
+- [x] `link_rewrite.rs:29`\'s stale comment / behavior gap — **resolved 2026-09-17: no longer
   exists.** Read the file directly; the doc comment already correctly documents image rewriting
   matching Q1 (landed later via commit `1d17a9ce7`, after this plan's original claim was
   written). No fix needed; reuse the transform verbatim.

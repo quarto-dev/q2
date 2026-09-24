@@ -388,7 +388,7 @@ the engine's `populateCommand(command)` accepts it directly) with the descriptio
 Rust side: `commands/call/mod.rs` gains a `Some("engine")` arm → project/registry
 discovery (no Deno spawn; registry construction is static) → gate 1 Rust-side
 (`Unknown engine: <name>` + `Available engines: <list>`, exit 1) → dispatch through
-the Part-2 trait hook (§9.4). `TsEngine`'s override spawns the call-mode process,
+the Part-2 trait hook (§9.4). `TsEngine`\'s override spawns the call-mode process,
 passing the engine bundle path, engine name, `HostGlobalConfig` (the actions need
 `quarto.path.runtime("julia")`), and the raw args.
 

@@ -337,7 +337,7 @@ new tab; no auto-print.
       (`break-after: avoid-page`), orphans/widows, `break-inside: avoid` for
       figures/code/tables/`.cell-output`, and a white-background reset. This
       supplies the pandoc print basics q2's HTML template omits (Phase 0
-      finding). Wired into `buildPrintableHtml`'s non-slides branch; decks skip
+      finding). Wired into `buildPrintableHtml`\'s non-slides branch; decks skip
       it (reveal ships its own print CSS). The E2E wasm test now asserts
       `data-q2-print` present for docs / absent for decks.
 - Decision: injected **printable-only** in the JS glue (not the shared HTML

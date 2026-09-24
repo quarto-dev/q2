@@ -46,7 +46,7 @@ constructed, transported, and re-bound independently:
 5. **`resolve_byte_range()` returns `(usize, usize, usize)`**
    (`source_info.rs:388-408`) — it unwraps the newtype, so every consumer
    juggles a raw usize and re-wraps it (or forgets to, as in
-   `attribution_render.rs`'s `file_id != 0` gate).
+   `attribution_render.rs`\'s `file_id != 0` gate).
 6. **Content is (re)read from disk at render time.** `add_file(path, None)`
    reads for `FileInformation` at registration; the ariadne renderer
    (`quarto-error-reporting/src/diagnostic.rs:794-800`) and `map_offset`
@@ -100,7 +100,7 @@ excerpt from `root_file_id()` regardless. **[verified]**
   (`fid == 0`), register the config file at *dense index 0* — making a
   genuinely-dummy span render as a real location. `render.rs:1104-1115` is the
   only site whose hash-equality guard also rejects dummies.
-- `quarto_xml::parse`'s `FileId(0)` spans (N3′) are in production; if an XML
+- `quarto_xml::parse`\'s `FileId(0)` spans (N3′) are in production; if an XML
   diagnostic ever reaches a renderer with a populated context, it renders
   against the primary document.
 - Bare `quarto_yaml::parse()` (N3) is test-only in q2 today — one production
@@ -114,12 +114,12 @@ excerpt from `root_file_id()` regardless. **[verified]**
 
 | # | Finding |
 |---|---------|
-| Y1 | **`parse_with_parent`'s contract is unchecked** (`parser.rs:92-94`): the parent must describe exactly `content` (origin at byte 0 of `content`, length = `content.len()`), but nothing validates it, `SourceInfo::substring` stores offsets verbatim, and `resolve_byte_range` composes with **no clamp to the parent's end** (`source-map/source_info.rs:400-403`). A misaligned parent yields plausible in-file offsets at the wrong place. **The crate's own doc example violates the contract** (`parser.rs:69-87`: narrates "extracted at offset 10-50" while passing a `0..1000` parent; `rust,no_run` so never executed). q2's two call sites are correct by carefully-maintained convention: `cell_options/mod.rs:203-222` (parallel push loops, no length assertion), `jupyter/text_execute.rs:272-274` (sound only while engine input is byte-identical through the frontmatter). |
-| Y2 | **The `FileId(0)` dummy** (`parser.rs:357,373,483`) — see N3 above. Combined with `get_file`'s positional fallback this is the crate's contribution to the aliasing hazard. |
-| Y3 | `error.rs`: all variants carry `location: Option<SourceInfo>` but `Display` drops it and the only live error path (`From<ScanError>`, `:67-74`) sets `location: None` — so no wrong-file risk *and* no location at all. Trap for a future fix: `ScanError`'s index is a **character** index; the parser's own `byte_offset_of_char` (`parser.rs:264-298`) exists for this conversion. |
+| Y1 | **`parse_with_parent`\'s contract is unchecked** (`parser.rs:92-94`): the parent must describe exactly `content` (origin at byte 0 of `content`, length = `content.len()`), but nothing validates it, `SourceInfo::substring` stores offsets verbatim, and `resolve_byte_range` composes with **no clamp to the parent's end** (`source-map/source_info.rs:400-403`). A misaligned parent yields plausible in-file offsets at the wrong place. **The crate's own doc example violates the contract** (`parser.rs:69-87`: narrates "extracted at offset 10-50" while passing a `0..1000` parent; `rust,no_run` so never executed). q2's two call sites are correct by carefully-maintained convention: `cell_options/mod.rs:203-222` (parallel push loops, no length assertion), `jupyter/text_execute.rs:272-274` (sound only while engine input is byte-identical through the frontmatter). |
+| Y2 | **The `FileId(0)` dummy** (`parser.rs:357,373,483`) — see N3 above. Combined with `get_file`\'s positional fallback this is the crate's contribution to the aliasing hazard. |
+| Y3 | `error.rs`: all variants carry `location: Option<SourceInfo>` but `Display` drops it and the only live error path (`From<ScanError>`, `:67-74`) sets `location: None` — so no wrong-file risk *and* no location at all. Trap for a future fix: `ScanError`\'s index is a **character** index; the parser's own `byte_offset_of_char` (`parser.rs:264-298`) exists for this conversion. |
 | Y4 | `hasher.finish() as usize` truncates to 32 bits on wasm32. `add_file_with_id` **panics** on duplicate ids, so a birthday collision (~2^16 files) becomes a crash in the hub client. q2 guards at exactly one site (`metadata_merge.rs:305-312`). |
 | Y5 | Public constructors accept arbitrary span combinations with zero consistency checks: `YamlHashEntry::new` takes five independent spans (`yaml_with_source_info.rs:254-268`); `new_hash`/`new_array` accept children from other files; `with_tag` attaches any span to any node. In-parser use is safe; the API invites hand-assembled inconsistent trees. |
-| Y6 | `create_contiguous_span` (`parser.rs:159-201`): the same-file assert in the Original arm is unreachable today (single builder, fixed parent), but the Substring arm silently drops `end_info`'s parent — the arm that *would* mint a hybrid span if per-node parents ever appear. |
+| Y6 | `create_contiguous_span` (`parser.rs:159-201`): the same-file assert in the Original arm is unreachable today (single builder, fixed parent), but the Substring arm silently drops `end_info`\'s parent — the arm that *would* mint a hybrid span if per-node parents ever appear. |
 
 ### quarto-yaml-validation (latent for q2 — q2 does not depend on it; verified)
 

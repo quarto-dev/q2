@@ -67,7 +67,7 @@ raw text into the source QMD → re-parse → reconcile`. We abandoned it for th
   makes minimality structural (property 2). Splicing text + reparsing risks
   re-flow and duplicate-block cross-matching.
 - `preimage_in` is therefore **not** the frontend-facing edit-position bridge.
-  It retreats to (a) its existing internal role in `incremental_write`'s
+  It retreats to (a) its existing internal role in `incremental_write`\'s
   `InlineSplice` boundary math, and (b) a fallback in the node-lookup for
   `Generated` nodes (below). The frontend never calls it.
 
@@ -260,7 +260,7 @@ additive, zero backend change**.
   `onBlur`/Enter commits; `commitEdit(poolId, newText)` resolves the
   source_info from the pool and sends `PreviewNodeEditPayload` via `setAst`.
 - [x] `PreviewContext` extended with `pool` and `commitEdit` (provided by
-  `entry.tsx`'s `PreviewRoot`).
+  `entry.tsx`\'s `PreviewRoot`).
 - [x] Backend editability gate: blocks with no `s` (pool id) render read-only
   (the `isEditable` guard in Para.tsx / Header.tsx).
 - [x] `parseQmdContentSync` wrapper added to `wasmRenderer.ts`; parent frame

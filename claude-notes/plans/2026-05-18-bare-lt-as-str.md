@@ -246,7 +246,7 @@ reported range (the block-level scan loop at `scanner.c` ~line 2160
 consumes indentation before dispatching to
 `parse_open_angle_brace`). This is the same behavior that the
 `html_element` and `autolink` handlers already split out into a
-leading `Space` inline. Extended `treesitter.rs`'s `pandoc_str`
+leading `Space` inline. Extended `treesitter.rs`\'s `pandoc_str`
 branch to do the same:
 
 - If the `pandoc_str` text starts with ASCII whitespace, emit a

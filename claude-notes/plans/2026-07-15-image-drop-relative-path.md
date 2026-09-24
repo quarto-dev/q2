@@ -74,7 +74,7 @@ Two complementary changes:
    name" requirement.
 
 2. **UX default: destination = current file's directory.** For editor drops,
-   pre-fill the asset dialog destination with the current `.qmd`'s parent
+   pre-fill the asset dialog destination with the current `.qmd`\'s parent
    directory instead of `''`. The image then lands next to the document and
    the inserted path is the bare filename in the common case. (The sidebar
    drop path already does selection-based defaulting via

@@ -55,7 +55,7 @@ one.
   non-parameterized convention is the triple-quote `"""` raw/markdown block (keep constant).
 - Spin: **no portable converter exists.** Q1 does only the `#' ---` *detection* in TS;
   `markdownFromKnitrSpinScript` shells to R (`callR("spin", …)`). Native spin is a green-field
-  reimplementation of `knitr::spin`'s grammar (fully mapped below from `~/src/knitr/R/spin.R`), and
+  reimplementation of `knitr::spin`\'s grammar (fully mapped below from `~/src/knitr/R/spin.R`), and
   is *required* for A+ SourceInfo (the R path loses all provenance) **and** for a launch-free Pass-1.
 - `matchable` (knitr's "is this `#'`/`{{ }}` a real marker vs. text inside a multi-line string?"):
   reuse **`tree-sitter-r`**. q2 already depends on the published crates.io `tree-sitter-r = "1.2"` via
@@ -169,7 +169,7 @@ claim stage never branch on "built-in vs extension" — both read `FileClaim { e
 
 - **Data, not launch.** Discovery reads processor *names + params* (static data) and runs the
   processor's `sniff` natively. It **never** constructs an engine or spawns a subprocess.
-- **One conversion path.** `markdown_for_file`'s default trait impl dispatches to the named processor
+- **One conversion path.** `markdown_for_file`\'s default trait impl dispatches to the named processor
   natively. The wire `markdownForFile` / `ClaimsFile` verbs survive **only** as the residual dynamic
   fallback (no processor declared). TS `markdown_for_file` is native-first, wire-only-if-no-processor.
 - **One predicate, two sites** (migrated from 7a Stage 4). The *same* `sniff` decides Pass-1 discovery

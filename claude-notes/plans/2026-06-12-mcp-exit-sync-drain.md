@@ -24,7 +24,7 @@ parallel implementation alongside bd-vm5e5u10.
 - [x] Test hubs announce a `storageId` like the real samod hub does:
       give both `test-hub.ts` copies a `MemoryStorageAdapter`; add
       `hubHasDoc` to the hub-mcp copy. (Also: their `stop()` now
-      tolerates `repo.shutdown()`'s flush throwing "DocHandle is not
+      tolerates `repo.shutdown()`\'s flush throwing "DocHandle is not
       ready" — the half-delivered state these tests leave behind.)
 - [x] Red test 1 (sync-client `exit-drain.test.ts`):
       create-then-disconnect(drainMs) loses nothing; observed RED.

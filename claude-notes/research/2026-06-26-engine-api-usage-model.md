@@ -324,7 +324,7 @@ single-engine, then param-level).
 | `firstClass` 2nd arg | `claimsLanguage` | marimo | marimo:223 (Julia ignores it) |
 
 > **NOTE — params NO engine uses** (the safe-to-defer params of otherwise-needed
-> methods): `system.execProcess`'s `respectStreams` (5th) and `timeout` (6th) are
+> methods): `system.execProcess`\'s `respectStreams` (5th) and `timeout` (6th) are
 > declared (`types.ts:170-171`) but **passed by nobody**.
 
 ---

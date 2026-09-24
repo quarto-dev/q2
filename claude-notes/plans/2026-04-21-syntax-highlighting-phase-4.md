@@ -25,7 +25,7 @@ On native, user grammars are loaded via `tree_sitter::WasmStore` (wasmtime-backe
 - **Grammar-specific sync / transport concerns**: there aren't any. Grammar files live in the Automerge-backed project file tree like any other asset (images, etc.) and reach other peers through the same sync path as the rest of the project. No grammar-specific transport layer exists or is needed.
 - **Generic file-upload UX**: landed as of commit b0177b8d (bd-eity, plan `claude-notes/plans/2026-04-21-generic-file-uploader.md`). `NewAssetDialog` + the `components/fileUpload/` module (`validateProjectPath`, `resolveDefaultDestination`, `processAssetFiles`) give us the user-facing path for getting grammars into `_quarto/grammars/<lang>/`. No work required here, but Phase 4.6 verification uses this flow directly.
 - Language injections, locals — Phase 5 (also out of scope on native).
-- A full port of `tree-sitter-highlight`'s resolution algorithm (see Design decision 1 below).
+- A full port of `tree-sitter-highlight`\'s resolution algorithm (see Design decision 1 below).
 
 ## State of the ground (as of 2026-04-21, post-uploader)
 
@@ -54,7 +54,7 @@ Pre-existing failing test that is Phase 4's natural acceptance gate:
 
 ### 1. JS-side highlight algorithm: simplified, not full tree-sitter-highlight port
 
-**Decision (proposed)**: implement a simplified span emitter in TS. Do **not** port `tree-sitter-highlight`'s full algorithm.
+**Decision (proposed)**: implement a simplified span emitter in TS. Do **not** port `tree-sitter-highlight`\'s full algorithm.
 
 **Rationale**: the native Rust `tree-sitter-highlight` crate does three things web-tree-sitter does not:
 1. Combines highlights + locals + injections queries.

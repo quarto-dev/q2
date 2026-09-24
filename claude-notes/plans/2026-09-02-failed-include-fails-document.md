@@ -60,7 +60,7 @@ flagged the circular-include arm (`Q-17-1`) as a separate judgement. What
 settles it is internal consistency: leaving one arm non-fatal reintroduces
 exactly the inconsistency this change exists to remove, and `Q-17-1` is
 emitted from two sites (see D3), so its severity cannot be decided
-independently of `Q-17-2`'s.
+independently of `Q-17-2`\'s.
 
 Quarto 1 is only weak corroboration here, and the PR should not claim more.
 Measured against `~/bin/quarto` (99.9.9):

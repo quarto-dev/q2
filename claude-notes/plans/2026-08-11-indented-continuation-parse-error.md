@@ -23,7 +23,7 @@ absorb the whitespace); `block_continuation` rescues in-list cases only
 when the indent equals the content column exactly (zero residue).
 
 **Secondary defects (verified):**
-- `peek_ordered_marker`'s `indentation > 3` guard reads *raw* columns at
+- `peek_ordered_marker`\'s `indentation > 3` guard reads *raw* columns at
   gate 1 (pre-`match_line`), misjudging legitimate nested markers
   (`1. one` + 4-space `1. nested` must nest per pandoc; it errors).
 - `peek_dash_plus_opens_block` has no indent guard at all, so

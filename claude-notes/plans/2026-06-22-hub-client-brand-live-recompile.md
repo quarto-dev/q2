@@ -86,7 +86,7 @@ The fix is *only* the missing trigger; the rest of the chain is already correct:
    from already has the new brand bytes. (The agent's "sibling VFS sync" concern
    is moot — the live sync client does it; the only per-active-file `vfsAddFile`
    in `Editor.tsx:450-473` is the *replay* path, a separate mode.)
-2. **A re-render recompiles the theme.** `CompileThemeCssStage`'s cache key
+2. **A re-render recompiles the theme.** `CompileThemeCssStage`\'s cache key
    includes the resolved brand's YAML
    (`crates/quarto-core/src/stage/stages/compile_theme_css.rs:202-214`), so a
    brand change yields a **different `css:theme:<fp>` key** → cache miss →
@@ -102,7 +102,7 @@ So: trigger the re-render, and correct brand CSS follows automatically.
 
 ### Primary (recommended): parity with the HTML path
 
-Add `fileContents` to `ReactPreview`'s re-render effect dependency array
+Add `fileContents` to `ReactPreview`\'s re-render effect dependency array
 (`ReactPreview.tsx:650-657`), mirroring `Preview.tsx`:
 
 ```ts

@@ -45,7 +45,7 @@ the suspected trigger, but the immediate goal is twofold:
 - [x] Determine which failure mode the observed production error is
       (transient cold-ws race most consistent with observations;
       fix handles all modes regardless)
-- [x] Survey prior art: `quarto-sync-client`'s `findDoc` already
+- [x] Survey prior art: `quarto-sync-client`\'s `findDoc` already
       retries the cold-start unavailable race with peer-gating
       (bd-jit6pdwq) and locks friendlier per-surface messages
       (bd-vm5e5u10, 2026-06-12 incident). Mirror that pattern.
@@ -80,7 +80,7 @@ the suspected trigger, but the immediate goal is twofold:
       (a) race-fix: peer connects after forceReady → join succeeds;
       (b) not-found: connected, server lacks doc;
       (c) auth-expired: no peer, `/auth/me` 401 (auth enabled);
-      (c') auth-disabled builds map a 401 probe to sync-unreachable;
+      (c\') auth-disabled builds map a 401 probe to sync-unreachable;
       (d) offline: no peer, `/auth/me` network error;
       (e) sync-unreachable: no peer, `/auth/me` ok;
       (f) cache-hit works offline (no regression)

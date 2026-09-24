@@ -37,7 +37,7 @@ are unchanged. Return type widened from `boolean | number` to `boolean | number 
 
 **q2-core prerequisite (4c0):** static claims were previously **one claim per language key**. A single `sql`
 key needed to express *two* different claims simultaneously — primary-when-tagged AND interop-otherwise — so
-`_extension.yml`'s `claims:` values became a **Vec**:
+`_extension.yml`\'s `claims:` values became a **Vec**:
 
 ```yaml
 contributes:
@@ -84,7 +84,7 @@ winner is deterministic (verified 2026-07-03 against `resolution.rs`):
    explicit `engine:` list (its order feeds the candidate order), or preempt T3 entirely via a
    Fallback-claiming explicit engine (T2 — see the documented `[marimo, jupyter]` edge in the plan).
 
-## 2. Bare-sql execution gate (`cellOwnedByMarimo`, argv threading, `extract.py`'s `BARE_SQL_FENCE_REGEX`) — the `handledLanguages` leave-alone contract
+## 2. Bare-sql execution gate (`cellOwnedByMarimo`, argv threading, `extract.py`\'s `BARE_SQL_FENCE_REGEX`) — the `handledLanguages` leave-alone contract
 
 Claiming sql at resolution time isn't enough — the engine also has to *execute* the cell it now owns.
 Three upstream changes, in order:

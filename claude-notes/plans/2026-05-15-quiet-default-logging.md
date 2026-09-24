@@ -18,7 +18,7 @@ INFO quarto_hub::server: Periodic sync complete synced=3 no_changes=3 …
 The project uses `tracing` + `tracing_subscriber::EnvFilter`. There is
 no `-v` flag — verbosity is controlled only via `RUST_LOG`. The CLI's
 default filter is `"quarto=info"`, which (via
-`tracing-subscriber`'s `starts_with`-based target matching, see
+`tracing-subscriber`\'s `starts_with`-based target matching, see
 `directive.rs:246` in 0.3.23) catches all workspace crates whose name
 starts with `quarto`, including `quarto_hub` and `quarto_preview`.
 
@@ -74,7 +74,7 @@ a default `EnvFilter` directive:
 | 2 (`-vv`) | `quarto=debug,samod=info` |
 | 3+ (`-vvv`) | `quarto=trace,samod=debug,tower_http=debug` |
 
-Keep `RUST_LOG`'s precedence: if it's set, it wins (today's
+Keep `RUST_LOG`\'s precedence: if it's set, it wins (today's
 `try_from_default_env` path). Factor the count→directive mapping into
 a pure function (`fn verbose_to_filter(count: u8) -> &'static str`)
 that's table-tested.

@@ -46,7 +46,7 @@ Phases mirror the §"Estimated scope" Session A / Session B partitioning. Each i
 
 ### Phase 4 — (moved to Plan 2C)
 
-CustomNode components, full `quartoClasses.ts` taxonomy, registry assembly with `CustomNodeRegistryContext`, and the demo fork are all in Plan 2C. After 2B lands, CustomNode wrappers in the AST (Callout, Theorem, etc.) fall through to `dispatchers.tsx`'s "(not yet implemented)" muted-gray placeholder — same UX as the current Plan-2A state for those nodes. Pandoc base types render correctly.
+CustomNode components, full `quartoClasses.ts` taxonomy, registry assembly with `CustomNodeRegistryContext`, and the demo fork are all in Plan 2C. After 2B lands, CustomNode wrappers in the AST (Callout, Theorem, etc.) fall through to `dispatchers.tsx`\'s "(not yet implemented)" muted-gray placeholder — same UX as the current Plan-2A state for those nodes. Pandoc base types render correctly.
 
 ### Phase 5 — Verification (Session A scope only)
 

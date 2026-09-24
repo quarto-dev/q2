@@ -12,7 +12,7 @@ during conflict resolution. The WASM `Cargo.lock` was restored to
 origin/main's pre-merge state at the end (the merge re-resolution
 drifted it onto a wasm-bindgen 0.2.120 that conflicts with the
 locally-installed wasm-bindgen-cli 0.2.108 and the vendored
-`wasm-bindgen-futures-patch`'s `=0.2.108` pins).
+`wasm-bindgen-futures-patch`\'s `=0.2.108` pins).
 
 Final verification: `cargo xtask verify` (full, with hub-client +
 WASM + trace-viewer) passes on the merged main.

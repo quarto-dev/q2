@@ -158,7 +158,7 @@ successfully.
   their *resolved offsets* do when the underlying doc changes (local or
   remote). Without a re-render, decorations would stick at stale offsets
   until the next presence message arrived. Remote edits reach this path
-  via `automergeSync.ts`' `immediateFileChangeCallback`, which applies
+  via `automergeSync.ts`\' `immediateFileChangeCallback`, which applies
   remote diffs to Monaco and triggers `onDidChangeContent`, so the same
   bump covers both local and remote edits.
 
@@ -166,7 +166,7 @@ successfully.
 
 Today, `usePresence.ts` talks only to `presenceService.ts`. To resolve
 cursor strings it now needs the current Automerge doc, which lives on
-the handle returned by `automergeSync`'s `getFileHandle(path)`. Rather
+the handle returned by `automergeSync`\'s `getFileHandle(path)`. Rather
 than push resolution into `presenceService` (which would need to
 re-resolve whenever the doc changes, duplicating the `modelVersion`
 bump), add an import in `usePresence.ts`:
@@ -446,7 +446,7 @@ refactor can't quietly break it.
       by eye — specifically the scenarios PR #94 added: deleting in one
       paragraph while another peer has a cursor in a later paragraph.
 - [ ] **Performance check**: profile keystroke latency in the hub-client
-      dev server before and after the refactor, using Chrome devtools'
+      dev server before and after the refactor, using Chrome devtools\'
       Performance panel.
       - **Simulating peers**: open 3 browser tabs against the same
         project (two peers + one recorder). Move the cursor to different

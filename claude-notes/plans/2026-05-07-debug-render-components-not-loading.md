@@ -124,7 +124,7 @@ When the fix lands, regression-test against these (in order of priority):
 
 After the fix:
 1. Verify `elliot/index.qmd` shows the kanban widget (kanban's `Div` override applies). The other elliot files' overrides will still be silently swallowed by **bd-3day**, which is the next bug in the queue (Plan 2pre Phase 2.7 fixes it as part of the entry rewrite).
-2. Verify `gordon/tldraw-shortcode/example.qmd` renders the tldraw shortcode through `html.tsx`'s RawBlock override.
+2. Verify `gordon/tldraw-shortcode/example.qmd` renders the tldraw shortcode through `html.tsx`\'s RawBlock override.
 3. Verify `slides.qmd` and `cscheid/index.qmd` still render normally (no regression).
 
 ## Definitions of done

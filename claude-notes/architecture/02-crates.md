@@ -159,7 +159,7 @@ trace-viewer   → (standalone trace visualizer)
 ```
 
 **The Rust↔TS bridge.** The compiled `wasm-quarto-hub-client` `.wasm` is loaded
-by `@quarto/preview-runtime` (`wasmRenderer.ts`) and directly by `hub-client`'s
+by `@quarto/preview-runtime` (`wasmRenderer.ts`) and directly by `hub-client`\'s
 services. That is the seam where the Rust engine enters the browser; both the
 collaborative editor and the embedded `q2 preview` SPA render through it. See
 [diagram 3](./03-hub-client-automerge.md) (Automerge + WASM preview) and

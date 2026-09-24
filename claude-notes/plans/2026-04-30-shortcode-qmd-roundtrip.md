@@ -79,7 +79,7 @@ The parser strips quotes — `width="800"` and `width=800` both end up as `Short
 
 Concrete writer rule for a `ShortcodeArg::String(s)`:
 
-1. If `s` matches `shortcode_number`'s pattern, prefer to quote it (otherwise the round-trip would re-parse it as `ShortcodeArg::Number`, changing the AST type).
+1. If `s` matches `shortcode_number`\'s pattern, prefer to quote it (otherwise the round-trip would re-parse it as `ShortcodeArg::Number`, changing the AST type).
 2. Else if `s` is non-empty and every char is in the naked-string set (and there's no whitespace), emit naked.
 3. Otherwise emit double-quoted, escaping any embedded `"` as `\\"` and any `\\` as `\\\\`.
 
@@ -87,9 +87,9 @@ Edge cases worth a test: empty string (must quote: `""`), value containing `>` (
 
 For `ShortcodeArg::Number`, `f64::to_string` renders `800.0` as `"800"` — that's the round-trip we want. (`shortcode_number` accepts `800` as an integer literal.) Negative / scientific values still match the grammar regex.
 
-For `ShortcodeArg::Boolean`, emit `true` / `false` naked (both match `shortcode_name`'s pattern).
+For `ShortcodeArg::Boolean`, emit `true` / `false` naked (both match `shortcode_name`\'s pattern).
 
-For keyword arg keys: per `_key_specifier_token`, keys are emitted bare. Verify `_key_specifier_token`'s pattern during implementation and reject (panic? warn?) keys outside it — that's an invariant the parser already enforces, so any in-AST key violating it came from a non-parser source (e.g. Lua filter).
+For keyword arg keys: per `_key_specifier_token`, keys are emitted bare. Verify `_key_specifier_token`\'s pattern during implementation and reject (panic? warn?) keys outside it — that's an invariant the parser already enforces, so any in-AST key violating it came from a non-parser source (e.g. Lua filter).
 
 ### Q3. Should we use `source_info` to copy source verbatim? — RESOLVED: no
 

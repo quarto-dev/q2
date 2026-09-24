@@ -78,9 +78,9 @@ emits a citation token; the citation grammar then either matches an
 identifier (yielding a `Cite`) or fails. There is no "fallback"
 production in which a bare `@` inside `Str` content is legal. Therefore:
 
-- If a `Str`'s body contains `@` followed by alnum/`_`/`{`, the
+- If a `Str`\'s body contains `@` followed by alnum/`_`/`{`, the
   unescaped emit re-parses as a `Cite` (the original bug).
-- If a `Str`'s body contains `@` followed by anything else, the
+- If a `Str`\'s body contains `@` followed by anything else, the
   unescaped emit fails to parse at all.
 - Either way, the writer must escape every `@`.
 

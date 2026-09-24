@@ -223,7 +223,7 @@ Decisions:
 - Resources under `resources/templates/examples/<name>/`, all
   `static_text` (no `$title$`; the example content carries its own titles).
   Meeting Notes, Article and Presentation are `Default + template`;
-  `get_scaffold`'s `Default` arm gains a template match. Website is
+  `get_scaffold`\'s `Default` arm gains a template match. Website is
   `Website + template`. The deck's `fork_icon.png` becomes the text
   `fork-icon.svg` (the connector cannot fetch binaries); the same SVG is
   what the other three already use.

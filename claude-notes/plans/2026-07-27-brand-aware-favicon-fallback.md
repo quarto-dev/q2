@@ -250,7 +250,7 @@ and gives up — which is why the fallback is a small change once a resolved
 2. **Seam: option (b)** — add a resolved `Option<Brand>` (+ its `brand_dir`) to
    `ProjectContext`, populated in `ProjectContext::discover` (which already
    takes a `&dyn SystemRuntime`, `crates/quarto-core/src/project/mod.rs:443`),
-   and thread it through `website_config`'s readers. Derived data stays out of
+   and thread it through `website_config`\'s readers. Derived data stays out of
    the user's config tree, and bd-hp3tx (navbar logo) inherits the same seam.
 
 3. **Rebasing: a pure helper in `quarto-brand`, no directory fields on `Brand`.**
@@ -292,7 +292,7 @@ path-valued keys (`template`, `template-partials`, `shortcodes`, `filters`) from
 (`metadata_merge.rs:216-227`). That is the whole pattern, in production, today.
 
 **The blocker is upstream of the rebaser: `_brand.yml` never becomes a
-`ConfigValue`.** `quarto-brand`'s dependencies are `quarto-util`, `serde`,
+`ConfigValue`.** `quarto-brand`\'s dependencies are `quarto-util`, `serde`,
 `serde_yaml`, `thiserror` — no `quarto-pandoc-types`, no `quarto-source-map`.
 `Brand::from_yaml_str` is a bare `serde_yaml::from_str`
 (`crates/quarto-brand/src/lib.rs:27`). A `Brand` therefore carries **no
@@ -303,7 +303,7 @@ back down to a `serde_yaml::Value` via `config_value_to_yaml_value`
 
 So routing brand logo paths through the `!path` machinery means first parsing
 `_brand.yml` into a `ConfigValue` and marking `logo.*` path-valued, à la
-`mark_path_valued_keys` — a real change to `quarto-brand`'s shape, well beyond
+`mark_path_valued_keys` — a real change to `quarto-brand`\'s shape, well beyond
 this strand.
 
 **Two caveats on the "reasons about where it came from" framing.** First, the

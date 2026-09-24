@@ -92,7 +92,7 @@ Confirmed at HEAD (`8518ac79`); pre-flight `cargo xtask verify --skip-hub-build`
 
 Question: can `dotenvy` give us event-based parsing we could hang
 `quarto-source-map` annotations on (the way `quarto-yaml` builds
-`YamlWithSourceInfo` from `yaml-rust2`'s `MarkedEventReceiver` events, each
+`YamlWithSourceInfo` from `yaml-rust2`\'s `MarkedEventReceiver` events, each
 carrying a `Marker`)? Answer: **no — hand-roll.**
 
 **dotenvy** (inspected from git `allan2/dotenvy`, scratchpad clone; released

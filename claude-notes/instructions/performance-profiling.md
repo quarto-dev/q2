@@ -246,7 +246,7 @@ throwaway. The minimum is a single **driver** that overrides
 calls the hot function in a timed loop over scaled fixtures.
 
 If you also need to shim an ESM dep (e.g. to bypass
-`@automerge/automerge`'s `diff`), add three more pieces, and change the
+`@automerge/automerge`\'s `diff`), add three more pieces, and change the
 driver to import the code under test **dynamically** (`await
 import(...)`) — a static import would resolve before the register hook
 lands:
@@ -300,7 +300,7 @@ node hub-client/scripts/perf/analyze-cpuprofile.mjs \
   line-level hotspots, pre-transpile to `.js` with inline maps and
   profile that.
 - This is a *native proxy* in the Rust-playbook sense, with the same
-  limitation: anything you shim (e.g. `@automerge/automerge`'s `diff`)
+  limitation: anything you shim (e.g. `@automerge/automerge`\'s `diff`)
   disappears from the profile. Design your workload accordingly — if
   the real bottleneck is inside the shimmed dep, you'll need a
   browser profile to see it.

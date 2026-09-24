@@ -29,7 +29,7 @@ Confirmed at HEAD (`3ecabd28f`):
 - `.github/workflows/ts-test-suite.yml`, job `test-suite`, step `Lint hub-client CSS`: `npm run lint:css -w hub-client`, placed right after `npm ci` and before the WASM build, on both `ubuntu-latest` and `macos-latest`.
 - `hub-client/scripts/lint-css.mjs` is dependency-free Node; it walks `hub-client/src/**/*.css` and applies four rules (`no-hardcoded-color`, `no-bare-z-index`, `no-outline-none-without-focus-visible`, `no-physical-box-props`) against a grandfather list in `scripts/lint-css-exceptions.json`. Stale exceptions also fail.
 - Cost: `npm run lint:css -w hub-client` on main takes about 0.2 s wall clock and is clean.
-- `hub-client/design-system.md` names `lint:css` as the enforcement for its rules; `cargo xtask lint`'s `ci-test-suite-unwired` rule only reconciles `test` scripts against CI, so it cannot see this (its own header says so).
+- `hub-client/design-system.md` names `lint:css` as the enforcement for its rules; `cargo xtask lint`\'s `ci-test-suite-unwired` rule only reconciles `test` scripts against CI, so it cannot see this (its own header says so).
 
 ### Reproduction
 

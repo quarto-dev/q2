@@ -69,7 +69,7 @@ link to `quarto.org` as a placeholder.
 - [x] Add the landing copy to `strings.ts`.
 - [x] Shared URL constant: `links.quartoHub` in `strings.ts`, consumed by
       both `LoginScreen` and `InviteLanding`. `LEARN_MORE_URL` deleted.
-- [x] Rebuild `LoginScreen`'s markup: lockup, tagline, what-it-is,
+- [x] Rebuild `LoginScreen`\'s markup: lockup, tagline, what-it-is,
       invite-only footnote, status slot, sign-in button. Inline styles
       replaced by `LoginScreen.css` so `lint:css` can check them.
 - [x] Dev-harness pages `landing`, `landing-expired`, `landing-denied`,

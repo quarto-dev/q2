@@ -277,7 +277,7 @@ Tests first:
 
 Then implement:
 
-- [x] `tracing::warn!` in `resolve_session_secret`'s generate-and-persist
+- [x] `tracing::warn!` in `resolve_session_secret`\'s generate-and-persist
   branch (`crates/quarto-hub/src/storage.rs:247-253`; fn at `:236`), stating
   that the secret is now pinned to this data directory and that
   **multi-instance deployments must set `QUARTO_HUB_SESSION_SECRET`**. The
@@ -373,7 +373,7 @@ record of this leg showed the superseded sentence, so it was re-measured
 rather than edited. The `0` line is an added check — the old copy is absent,
 so no bundle carries both. The build's PWA leg reported **166 precache
 entries, 67138 KiB**, against the 63 MB recorded in
-`2026-07-30-hub-client-sw-precache-and-update.md`'s Measurements block.
+`2026-07-30-hub-client-sw-precache-and-update.md`\'s Measurements block.
 
 Note the default `npm run build` **omits** these strings entirely, and that
 is correct: `AUTH_ENABLED = !!import.meta.env.VITE_GOOGLE_CLIENT_ID`, so

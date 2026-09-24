@@ -130,7 +130,7 @@ Call chain: `App.tsx` → `hub-client/src/services/automergeSync.ts` (thin wrapp
 
 **Replay -- resolve own actor ID to "Me":**
 
-When entering replay mode, the current user's `actorId` (from `AuthState`) should be matched against the actor IDs in the document history. When the current user's hex actor ID matches a history actor, display "Me" instead of the raw hex value. This makes replay immediately legible -- you can tell which changes are yours vs others'.
+When entering replay mode, the current user's `actorId` (from `AuthState`) should be matched against the actor IDs in the document history. When the current user's hex actor ID matches a history actor, display "Me" instead of the raw hex value. This makes replay immediately legible -- you can tell which changes are yours vs others\'.
 
 The `useReplayMode` hook (`hub-client/src/hooks/useReplayMode.ts`) currently takes only `filePath` as a parameter. Actor metadata comes from `session.getMetadataAt(index).actor` via `@quarto/quarto-sync-client`. The "Me" resolution is a display concern in the rendering layer (`ReplayDrawer.tsx`), not in the hook itself.
 

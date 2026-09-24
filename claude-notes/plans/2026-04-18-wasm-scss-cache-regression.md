@@ -84,7 +84,7 @@ the default document on this path.
 
 ### 2. Route stage no-theme path through the runtime cache (cold-start fix)
 
-Make `CompileThemeCssStage`'s no-theme path consult the same
+Make `CompileThemeCssStage`\'s no-theme path consult the same
 `runtime.cache_get("sass", key)` that the themed path uses. The cache
 key is a fixed string (e.g. `"default"`) combined with the minified flag
 and `SCSS_RESOURCES_HASH`.

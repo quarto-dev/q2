@@ -135,7 +135,7 @@ before the transform in a separate pass):
   no new ordering constraint.
 - Once `[^id]` resolves to the standard `Span#fnref…` form, the reveal
   per-slide coalescing (bd-9aknlx1j) picks it up automatically with no
-  further reveal work, because it already consumes `FootnotesTransform`'s
+  further reveal work, because it already consumes `FootnotesTransform`\'s
   resolved output. This is the behavior bd-9aknlx1j is counting on.
 - Minimal blast radius: the only producer of `quarto-note-reference`
   spans is the pampa postprocess above, and nothing downstream consumes
@@ -143,7 +143,7 @@ before the transform in a separate pass):
   `quarto-note-reference` appears only at the producer and this one new
   consumer).
 
-The resolution must happen in `process_inline`'s `Inline::Span` arm:
+The resolution must happen in `process_inline`\'s `Inline::Span` arm:
 detect the marker class + `reference-id` kv **before** recursing into
 (empty) content, resolve via `collector.resolve_reference(id, …)`, and on
 success `*inline = create_footnote_ref(number, &source_info, is_margin)`.
@@ -182,7 +182,7 @@ broken-reference behavior — a later, separate improvement could warn).
 
 ### Phase 2 — Implementation
 
-- [x] In `process_inline`'s `Inline::Span` arm
+- [x] In `process_inline`\'s `Inline::Span` arm
       (`footnotes.rs:416-418`), detect
       `span.attr.1.contains("quarto-note-reference")` with a
       `reference-id` kv; resolve via `collector.resolve_reference` and

@@ -71,7 +71,7 @@ overlap), so Phase 5 writes them as distinct categories.
 **Correction discovered in the same review (the multi-token coalesce hole).** An
 earlier wording of the rule said "content gap → blessed `None`" and "hull only when
 the *stored* piece-gap is whitespace-only." Both break on the 3-token case:
-`coalesce_abbreviations`' `combine` keeps only the *first* and *last* tokens, so
+`coalesce_abbreviations`\' `combine` keeps only the *first* and *last* tokens, so
 `Dr. Smith Jr.` stores `Concat[Original[0,3) "Dr.", Original[10,13) "Jr."]` whose
 gap `[3,10)` = `" Smith "` holds real content the node *does* own. "Content gap →
 blessed" would false-negative it; "stored gap whitespace-only" would false-reject

@@ -218,7 +218,7 @@ Add to `_bootstrap-rules.scss`:
 ```
 
 Aligns the runtime behavior with the existing
-`page-columns-float-mid`'s author-stated intent ("No sidebar,
+`page-columns-float-mid`\'s author-stated intent ("No sidebar,
 only margins"). Restores the 768–991 range to "no sidebar at
 all", matching the <768 behavior. Cost: navigation is unreachable
 at those widths until the user resizes.

@@ -11,9 +11,9 @@ session, separate worktree).
 
 - Engine check semantics — when `checkInstallation` fires, what it verifies per
   engine, what success/failure looks like — must match Q1 exactly.
-- The engine section of `q2 check`'s report should mirror Q1's `quarto check`
+- The engine section of `q2 check`\'s report should mirror Q1's `quarto check`
   structure and wording as closely as q2's existing report format allows.
-- Where `q2 check`'s current output already diverges from Q1's overall report,
+- Where `q2 check`\'s current output already diverges from Q1's overall report,
   do **not** invent new UX to bridge it — document the divergence as an explicit,
   **numbered decision point** for Gordon. Deviations are ratified, never silent.
 - Part 2 (Rust-engine trait method) sits beneath this surface and must not

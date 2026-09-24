@@ -22,7 +22,7 @@ export const PreviewDocument = ({
 
 No `attribution` prop. The attribution surface enters via **React context** (`AttributionLookupContext`), which is provided by `framework/Ast.tsx` from the JSON's `astContext.attribution*` fields — i.e., from inside the AST payload itself. The hook PR #190 added (`useAttributionHover()`) reads that context.
 
-So the relationship to `render_page_for_preview`'s missing attribution params plays out like this:
+So the relationship to `render_page_for_preview`\'s missing attribution params plays out like this:
 
 1. **Today** (post-merge): `render_page_for_preview` does not install a `PreBuiltAttributionProvider`. The resulting AST JSON has empty `astContext.attribution` / `attributionActors`.
 2. `framework/Ast.tsx` builds a lookup map from those empty fields → `AttributionLookupContext` gets `null` (or an empty `Map`).

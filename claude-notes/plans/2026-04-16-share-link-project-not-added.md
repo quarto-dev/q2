@@ -125,7 +125,7 @@ We choose a reconciler over "enqueue-and-flush" because:
 
 - [x] Add a pure `computeReconcileAdds` function and a thin `reconcileIntoConnectedProjectSet` wrapper that wires it to the live services. Lives in `hub-client/src/services/projectSetReconciler.ts`.
 - [x] Wire the reconciler into `useProjectSet`: a `useEffect` that watches `status` and, whenever it is `connected`, runs the reconciler and refreshes the React state if anything was added. Lives in `hub-client/src/hooks/useProjectSet.ts` (around the old init effect).
-- [x] `handleConnectProject`: dedupe against IDB via `getProjectByIndexDocId` before inserting; when `useProjectSet` is truthy, also call the new `onAddProjectToSet` prop. Plumbed through `ProjectSelector`'s `Props` and wired up in `App.tsx` to `projectSetActions.addProject`.
+- [x] `handleConnectProject`: dedupe against IDB via `getProjectByIndexDocId` before inserting; when `useProjectSet` is truthy, also call the new `onAddProjectToSet` prop. Plumbed through `ProjectSelector`\'s `Props` and wired up in `App.tsx` to `projectSetActions.addProject`.
 - [x] Replace the blanket "may already exist" error with `err.message` (when available) or a generic "Failed to add project." since the happy path no longer hits the unique-index collision.
 - [x] Leave the share-route's one-shot `projectSetActions.addProject` call in place — harmless fast path, but no longer load-bearing because the reconciler handles the race miss.
 

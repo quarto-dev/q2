@@ -117,7 +117,7 @@ Relies on the CRDT round-trip (see Decision log Q3): `setLocalAst` already write
 
   **Implementation note (test scope pivot from count assertion → invocation assertion):** the original test ambition was the visible "fall-through to add" outcome: `click → bubble text "🤔2" → "🤔3"`. The offline e2e env's `setLocalAst → incrementalWriteQmd → Automerge content update → WASM reparse → iframe re-render` chain didn't reflect the new count within a 5-second budget — Playwright retried the locator 9 times and saw `"🤔2"` every time, even though `__COMMENT_DIAG__.addReactionCalls` confirmed the handler had run with the right `(emoji, me, attributionLookupNull)` triple. The pre-existing `q2-preview-render-components-write.spec.ts` works around the same offline-mode quirk by only asserting "no console.error". We pivoted to asserting the *invocation context* via `__COMMENT_DIAG__.addReactionCalls` — the strongest claim the offline env can reliably support. The actual count-change observation (and the "remove mine" branch) get verified manually in Phase 3 against an authenticated session.
 
-- [x] Implementation: in `comment.tsx`'s `CommentWrapper`, before legacy push:
+- [x] Implementation: in `comment.tsx`\'s `CommentWrapper`, before legacy push:
   1. `findMineSpan(emoji)` walks `reactionSpans` and returns the first span where `attributionLookup.get(span.s).actor === me`.
   2. If a match exists → `removeSpanByS(span.s)` rebuilds the block without that span, `setLocalAst(newBlock)`.
   3. Else → legacy push path. This fires when `me === null` (no auth) OR `attributionLookup === null` (Attribution toggle off). Both cases land in the test env, where the fall-through is the verified behaviour.

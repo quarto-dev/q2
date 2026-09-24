@@ -178,7 +178,7 @@ against.
    will overlap content.
 
 3. **Preview — skip entirely.** Suppress the secondary nav under
-   `target_arch = "wasm32"`, matching `bootstrap_js.rs`'s existing gate, and
+   `target_arch = "wasm32"`, matching `bootstrap_js.rs`\'s existing gate, and
    leave Decision A's `display: none` in force there. Carlos's rationale: the
    near-term goal is dogfooding q2 on Posit Connect's docs, and a period without
    mobile nav in preview is acceptable given q2's speed advantage over Q1. No

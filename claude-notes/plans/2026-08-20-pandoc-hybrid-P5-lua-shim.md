@@ -19,7 +19,7 @@ pass, same day: an implementation-feasibility review found the shim had no speci
 mechanism (resolved in P4), Route N was "mirror `refs.lua`" with no worked example or
 normative-source decision (resolved: call Q1's own functions directly), no error handling anywhere
 (three concrete cases resolved), and the order-assignment snippet mis-described
-`quarto.<AstName>()`'s actual two-return-value API. All four of this plan's originally-flagged
+`quarto.<AstName>()`\'s actual two-return-value API. All four of this plan's originally-flagged
 open design questions were already closed as of that pass.)
 **Status:** Shape draft
 **Design (authoritative):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md)  |  Epic: `2026-08-20-pandoc-hybrid-epic.md`  |  Depends on: P2, P4
@@ -103,7 +103,7 @@ unused data for the shim, not a gap to request from P2.
 tabset pair — `"panel-tabset"` (the sugar transform itself, not just its resolve step) and
 `"panel-tabset-resolve"` — are excluded from preview.** So a `Tabset` CustomNode is never even
 *created* for q2-preview; the `.panel-tabset` Div stays raw and renders as plain stacked
-headings. (Checking further, `ExampleEmbed`'s own "falls to Fallback" claim turned out wrong
+headings. (Checking further, `ExampleEmbed`\'s own "falls to Fallback" claim turned out wrong
 too, for a different reason: at the time this was written, `example-embed-render` wasn't
 excluded and destroyed the CustomNode before serialization; see P2's correction. **That's now
 moot** — as of 2026-09-17, `example-embed-render` is deliberately kept running for `Pandoc(fmt)`

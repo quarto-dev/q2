@@ -374,7 +374,7 @@ Scope:
 - Add `ConfigValue → TemplateValue` conversion. Likely shape:
   `impl From<&ConfigValue> for TemplateValue` in
   `quarto-core` (lives there because `quarto-doctemplate` does
-  not depend on `quarto-pandoc-types`'s `ConfigValue`).
+  not depend on `quarto-pandoc-types`\'s `ConfigValue`).
 - Add a project-scoped partial resolver flavor that combines
   `MemoryResolver` (for built-ins) with a `FileSystemResolver`
   rooted at the host-page directory (for custom templates).

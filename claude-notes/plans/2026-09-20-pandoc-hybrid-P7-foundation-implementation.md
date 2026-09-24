@@ -101,7 +101,7 @@ sidebar block). Without it this task has nowhere to put the code and both lint r
 | T1.3 | U | same | Call with a 1-key map, with a scalar `format: html`, and with `format:` absent → assert empty vec in all three | none | the `keys().count() > 1` guard |
 | T1.4 | X | `xtask::lint::error_docs::check(workspace_root)` | Run against the real `workspace_root` → zero violations | none | `docs/errors/pandoc/Q-18-<n>.qmd` deleted |
 | T1.5 | X | `xtask::lint::error_docs_sidebar::check(workspace_root)` | Run against the real `workspace_root` → zero violations | none | the new sidebar entry in `docs/_quarto.yml` |
-| T1.6 | U | `quarto-error-catalog`'s catalog data | Load → assert the new code's `subsystem == "pandoc"` and `docs_url == "https://quarto.org/docs/errors/pandoc/Q-18-<n>"` | none | the entry's `docs_url` field |
+| T1.6 | U | `quarto-error-catalog`\'s catalog data | Load → assert the new code's `subsystem == "pandoc"` and `docs_url == "https://quarto.org/docs/errors/pandoc/Q-18-<n>"` | none | the entry's `docs_url` field |
 
 **Revert hunks, stated exactly:**
 - T1.1 — Revert ⟨the skipped-keys `format!` argument to a constant string such as `"other formats"`⟩ → ⟨`assert!(msg.contains("html"))` in `test_multi_format_names_skipped_key`⟩ RED.

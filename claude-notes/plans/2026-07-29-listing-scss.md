@@ -68,7 +68,7 @@ classes).
       default-css path and (b) the themed/doc-vars path. One assertion
       per assembly path touched.
 - [x] T2 e2e integration test (brand_render.rs shape, using
-      `listing_pipeline.rs`'s `render_project` harness): render a
+      `listing_pipeline.rs`\'s `render_project` harness): render a
       website with a listing page → concatenated `.css` under the
       output tree contains `.quarto-listing` / `listing-category`
       selectors.
@@ -82,7 +82,7 @@ classes).
 - [x] I1 copy `external-sources/quarto-cli/src/resources/projects/
       website/listing/quarto-listing.scss` →
       `resources/scss/html/templates/quarto-listing.scss` (verbatim);
-      update `resources/scss/README.md`'s vendored list.
+      update `resources/scss/README.md`\'s vendored list.
 - [x] I2 `load_listing_layer()` in `quarto-sass/src/bundle.rs` next to
       `load_copy_code_layer`; push at the HTML assembly sites
       (`compile.rs:88-98`, `:226-243`, `:359-370`, wasm `:498-515` and

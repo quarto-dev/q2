@@ -1191,7 +1191,7 @@ since the absolute paths only resolve under Vite.
   command and in CI.
 
 Without these flags the binary inherits the wasm32 default of
-`panic=abort`, which makes `wasm-c-shim::rust_lua_protected_call`'s
+`panic=abort`, which makes `wasm-c-shim::rust_lua_protected_call`\'s
 `catch_unwind` a no-op. The first Lua throw during mlua initialization
 then aborts the wasm module rather than being caught.
 

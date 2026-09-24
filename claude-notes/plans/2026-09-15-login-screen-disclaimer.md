@@ -196,7 +196,7 @@ a layout choice; see Decisions §3.)
 - [x] `LoginScreen.css`: `.ls-disclaimer`, `.ls-disclaimer-heading`,
   `.ls-disclaimer p` — tokens only, logical properties only, opaque
   colors only (`.claude/rules/hub-client-theme.md`). Adjust
-  `.ls-footnote`'s bottom margin so footnote → disclaimer → CTA spacing is
+  `.ls-footnote`\'s bottom margin so footnote → disclaimer → CTA spacing is
   even; keep the CTA's own breathing room.
 - [x] Unit tests green (31/31 in the file, 1202/1202 suite-wide); `lint:css` clean.
 

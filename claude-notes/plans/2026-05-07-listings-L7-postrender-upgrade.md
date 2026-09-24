@@ -193,7 +193,7 @@ These are decisions, not open questions:
   templates) and the substitution.
 - **Empty-firstPara semantics: strip markers, keep L1, emit
   `Q-12-13`.** User-confirmed 2026-05-07. The warning surfaces
-  through the project diagnostics channel (`post_render`'s
+  through the project diagnostics channel (`post_render`\'s
   `&mut Vec<DiagnosticMessage>` arg, already wired to
   `ProjectRenderSummary.project_diagnostics`).
 - **No-preview-image cascade: listing.image-placeholder →

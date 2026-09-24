@@ -113,7 +113,7 @@ function renderSlot(slot, setSlot, ctx) {
 }
 ```
 
-Same body shape as `framework/dispatch.tsx`'s `renderChildrenRegistry['CustomBlock'|'CustomInline']` (Plan 2B item 1.3) — both build `<Node>` per slot value with copy-on-write `setLocalAst`. The duplication is intentional: `renderSlot` is the per-component named-slot helper (`renderSlot(slots.title, ...)`); the framework registry entry is the generic-walk fallback. Keeping them separate avoids coupling Fallback's walk to per-component naming conventions (Callout's `title`/`content` vs FloatRefTarget's `caption_long`/`caption_short`).
+Same body shape as `framework/dispatch.tsx`\'s `renderChildrenRegistry['CustomBlock'|'CustomInline']` (Plan 2B item 1.3) — both build `<Node>` per slot value with copy-on-write `setLocalAst`. The duplication is intentional: `renderSlot` is the per-component named-slot helper (`renderSlot(slots.title, ...)`); the framework registry entry is the generic-walk fallback. Keeping them separate avoids coupling Fallback's walk to per-component naming conventions (Callout's `title`/`content` vs FloatRefTarget's `caption_long`/`caption_short`).
 
 **setLocalAst plumbing — worked example (Callout):**
 

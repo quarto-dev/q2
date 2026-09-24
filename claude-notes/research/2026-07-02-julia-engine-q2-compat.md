@@ -84,7 +84,7 @@ forbids inventing a new one):
 No secrets found. `grep -ril "token|secret|api_key|apikey|password"`
 across the upstream tree hit only: bundled third-party JS
 (`bootstrap.min.js`, `clipboard.min.js` — excluded anyway via
-`example_files/`) and `src/julia-engine.ts`'s `secret: string` HMAC
+`example_files/`) and `src/julia-engine.ts`\'s `secret: string` HMAC
 parameter name (crypto-signing API, not an embedded credential) — no
 exclusion needed beyond the above.
 

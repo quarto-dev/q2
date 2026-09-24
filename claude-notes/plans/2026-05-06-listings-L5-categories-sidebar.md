@@ -202,7 +202,7 @@ These are decisions, not open questions:
   `data-category` + JS-attached handlers.** Mirrors Q1's
   idiom. Per-item chips are emitted inside the post body
   where the JS click delegate doesn't reach; sidebar pills
-  are picked up by `quarto-listing.js`'s
+  are picked up by `quarto-listing.js`\'s
   `querySelectorAll(".quarto-listing-category .category")`
   on page load.
 - **Cloud sizing formula:

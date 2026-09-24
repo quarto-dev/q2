@@ -94,11 +94,11 @@ assertions are limited to "pandoc exited 0, bytes exist, the env contract held".
 ## Task 1: Vendor the two Q1 source subtrees at tag `v1.11.3`, with an ours-vs-pinned README
 
 **Scope.** Create `resources/pandoc-filters/` holding two copies of upstream `v1.11.3` subtrees, plus
-a `README.md` mirroring `resources/scss/README.md`'s structure, plus the `include_dir!` statics that
+a `README.md` mirroring `resources/scss/README.md`\'s structure, plus the `include_dir!` statics that
 embed them. No materialization, no running — Task 2 owns that.
 
 **Files** (all *ours*, i.e. q2 proper unless marked):
-- `resources/pandoc-filters/README.md` — new. Mirror `resources/scss/README.md`'s headings, verified
+- `resources/pandoc-filters/README.md` — new. Mirror `resources/scss/README.md`\'s headings, verified
   today as: `# …` `:1`, `## Contents` `:5`, `## Source` `:16`, `## Updating` `:23`,
   `## Why Local Copy?` `:49`, `## License` `:58`. Add one **new** section the SCSS README has no
   need for: `## Ours vs. pinned` — an explicit file list of everything in the tree that is *not*
@@ -136,7 +136,7 @@ intra-tree module reference (tests below).
 |---|---|---|---|---|---|
 | T1.1 | U | `pandoc_filters::FILTERS_DIR` (`include_dir!`) | For every `import("./X")` line parsed out of the embedded `main.lua`, `FILTERS_DIR.get_file(X)` is `Some` → assert all 170 resolve, and assert the parsed count `== 170` | none (bytes are compiled in) | the `include_dir!("$CARGO_MANIFEST_DIR/../../resources/pandoc-filters/filters")` static, or any one copied subdirectory (`layout/`, `crossref/`, …) |
 | T1.2 | U | `pandoc_filters::DATADIR_DIR` | For every `require '<mod>'` in the embedded `init.lua` (`_format`, `_base64`, `_json`, `_utils`, `logging` — `init.lua:149-154`), `DATADIR_DIR.get_file("<mod>.lua")` is `Some` | none | the `include_dir!` for the datadir subtree, or deleting `_format.lua` from the copy |
-| T1.3 | U | `pandoc_filters::{QUARTO_CLI_PIN, PANDOC_PIN}` | Parse `resources/pandoc-filters/README.md`'s `## Source` section → assert the recorded quarto-cli tag `== QUARTO_CLI_PIN` and the recorded pandoc version `== PANDOC_PIN` | filesystem read of an in-repo file | the README's recorded tag line, or either constant |
+| T1.3 | U | `pandoc_filters::{QUARTO_CLI_PIN, PANDOC_PIN}` | Parse `resources/pandoc-filters/README.md`\'s `## Source` section → assert the recorded quarto-cli tag `== QUARTO_CLI_PIN` and the recorded pandoc version `== PANDOC_PIN` | filesystem read of an in-repo file | the README's recorded tag line, or either constant |
 | T1.4 | X | `xtask::lint::vendored_pandoc_filters::check(workspace_root)` | Rule run against a synthetic tree in which a file listed under the README's `## Ours vs. pinned` is absent → exactly one `Violation`, anchored at that README line | `tempfile` tree standing in for `workspace_root` (the *rule* is the unit under test and is not mocked) | the `check` fn's "for each ours-listed path, assert it exists" loop |
 | T1.5 | X | the same rule, positive direction | Rule run against the real `workspace_root` → zero violations | none | any ours-listed file actually deleted from the tree |
 

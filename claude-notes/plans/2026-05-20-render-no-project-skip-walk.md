@@ -78,14 +78,14 @@ does two things back-to-back when handed a directory:
    — a **recursive walk of the entire cwd** collecting `.qmd` files
    (`crates/quarto-core/src/project/discovery.rs:304`).
 
-`walk_qmd`'s `is_excluded_component` excludes `_*`, `.*`, and
+`walk_qmd`\'s `is_excluded_component` excludes `_*`, `.*`, and
 `node_modules`, but not `target/`, `external-sources/`, or any other
 large but legitimately-named directory. So in the q2 root we descend
 into `target/` and walk all 64k entries (and on machines with
 `external-sources/quarto-cli/` fully populated, tens of thousands
 more).
 
-The walk's output is then thrown away — `classify_no_inputs`'s very
+The walk's output is then thrown away — `classify_no_inputs`\'s very
 next line decides we have no project anyway and returns
 `NoInputAndNoProject`.
 

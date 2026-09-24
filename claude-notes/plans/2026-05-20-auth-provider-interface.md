@@ -4,7 +4,7 @@
 
 Before this refactor, `@react-oauth/google` was referenced directly in
 five production files (`main.tsx`, `LoginScreen.tsx`, `useAuth.ts`,
-`authService.ts`, plus `App.tsx`'s `AUTH_ENABLED` gate keyed off
+`authService.ts`, plus `App.tsx`\'s `AUTH_ENABLED` gate keyed off
 `VITE_GOOGLE_CLIENT_ID`). The refactor introduces a thin
 `AuthProvider` interface that mediates every IdP-specific call, and
 migrates the existing Google Identity Services (GIS) usage to a single

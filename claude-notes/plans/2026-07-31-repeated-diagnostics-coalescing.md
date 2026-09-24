@@ -55,7 +55,7 @@ warning once per rendered page when the underlying problem lives in a
    `_quarto.yml` values get their `FileId` from
    `quarto_yaml::file_id_for_filename` (a hash of the path), so the id
    is stable across all per-document `SourceContext`s.
-   `coalesce_by_source`'s `LocationKey` = `(file_id, start, end)` would
+   `coalesce_by_source`\'s `LocationKey` = `(file_id, start, end)` would
    collapse all 186 into one group.
 
 4. **Hazard: raw `file_id` in the key is unsafe across documents.**
@@ -148,7 +148,7 @@ warning once per rendered page when the underlying problem lives in a
 
 - [x] Integration test (`crates/quarto/tests/integration/` per the
   integration-test layout rule) driving the real binary or
-  `print_render_diagnostics_text`'s input path: 3-page website fixture
+  `print_render_diagnostics_text`\'s input path: 3-page website fixture
   with a broken navbar href → exactly **one** `Q-13-2` block on
   stderr, with an `Affected files:` tail naming 3 pages.
 - [x] Run new tests, verify they fail (red) before implementing.

@@ -149,7 +149,7 @@ discovery questions. The following are **immutable** for v1:
     — this is the live rule for every real Google token today;
   - if `aud` single-valued and `azp` absent: accept on `aud` alone.
 
-  `jsonwebtoken`'s `set_audience` only enforces `aud`; `azp` is a
+  `jsonwebtoken`\'s `set_audience` only enforces `aud`; `azp` is a
   custom post-decode check.
 - **Hub validator issuer/algorithm policy:** unchanged. Single issuer
   (`https://accounts.google.com`); algorithms from JWKS.

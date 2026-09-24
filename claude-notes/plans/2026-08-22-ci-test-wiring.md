@@ -9,7 +9,7 @@ and the `ts-packages` `dist/` outputs — no Rust, no WASM. They go in a **new
 parallel job** (`workspace-ts-suites`) in `ts-test-suite.yml`, so an unrelated
 failure in the existing job cannot mask them and they are not serialised behind
 an uncached WASM build. The two exceptions are placed where their prerequisites
-already exist: `preview-renderer`'s integration tier stays in the existing
+already exist: `preview-renderer`\'s integration tier stays in the existing
 `test-suite` job (it imports the WASM package), and `sync-test-harness` goes into
 `hub-client-e2e.yml` (its `hub` tier shells out to `cargo run --bin hub`, which
 only that workflow pre-builds). Suites run as explicit per-package steps rather

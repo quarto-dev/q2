@@ -83,7 +83,7 @@ Work items (live; reserved-`user_edit`-slot items excised with the reverted writ
 - [x] Rust: add `By::unknown()` constructor in `quarto-source-map` (`kind: "unknown"`, **non-atomic**).
 - [x] Rust: switch the five outside-world callers to `json::read_completing_source_info` with explicit placeholders per the per-caller table above:
   - `json_filter.rs:221` → `By::filter(filter_path.to_string_lossy(), 0)`. Atomic-kind is the correct semantic.
-  - `qmd-syntax-helper`'s `definition_lists.rs:182` and `grid_tables.rs:133` → `By::unknown()`. (Required adding `quarto-source-map` to `qmd-syntax-helper/Cargo.toml`.) Writer dispatch shifts from R1-empty to R5-synthesize for these nodes; new behavior is correct.
+  - `qmd-syntax-helper`\'s `definition_lists.rs:182` and `grid_tables.rs:133` → `By::unknown()`. (Required adding `quarto-source-map` to `qmd-syntax-helper/Cargo.toml`.) Writer dispatch shifts from R1-empty to R5-synthesize for these nodes; new behavior is correct.
   - `pampa/src/main.rs:290` → `By::unknown()`.
   - `pampa/src/lua/readwrite.rs:447` → `By::unknown()`.
 - [x] Rust: migrate reader tests that exercise hand-crafted JSON without `s:`. `json_reader_smoke_tests.rs` and `test_json_div_transforms.rs` route through `read_completing_source_info(By::unknown())`.

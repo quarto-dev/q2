@@ -11,7 +11,7 @@ Two touchpoints are **already tracked** and out of scope here except for
 cross-reference:
 
 - `quarto call engine …` → q2 **Plan 9**, strand `bd-m1jeqhhz`
-- `quarto check`'s engine section → q2 **Plan 10**, strand `bd-4qflzhwh`
+- `quarto check`\'s engine section → q2 **Plan 10**, strand `bd-4qflzhwh`
 
 This document covers **the rest**, plus the "remove julia" bug hunt.
 

@@ -6,7 +6,7 @@
 ## Overview
 
 A brand-new hub-client user (no collection pointer in IndexedDB, no
-legacy projects) currently lands on `ProjectSetSetup`'s "fresh" screen
+legacy projects) currently lands on `ProjectSetSetup`\'s "fresh" screen
 after signing in: a card with the tagline, a "Sync Server URL" input
 pre-filled with `DEFAULT_SYNC_SERVER`, and two buttons, **Create New
 Project Set** and **Link to Existing Project Set**. Every new user has

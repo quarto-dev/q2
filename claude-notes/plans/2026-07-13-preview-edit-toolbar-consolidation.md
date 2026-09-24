@@ -137,7 +137,7 @@ New:
   calls `setEditorMode` with the `editorModeSwitchRef` guard + mousedown-preventDefault
   (ported verbatim from `EditAffordance.choose`, `EditAffordance.tsx:29-40`) so a mode
   switch never blurs → commits/closes the session — the guard is consumed **unchanged**
-  by `RichTextEditor`'s commit + focusout handlers (`RichTextEditor.tsx:156,251`), which
+  by `RichTextEditor`\'s commit + focusout handlers (`RichTextEditor.tsx:156,251`), which
   this plan does not touch. **Final glyph (confirmed with user, superseding the initial
   `</>` proposal):** the **Markdown mark** as an inline SVG (`dcurtis/markdown-mark`),
   drawn in `currentColor` so it recolors with the button's hover/active state —
@@ -344,7 +344,7 @@ Deleted:
       props, `MIN_GLYPH_W` + band-width inline styles, the `ellipsis` `CrumbDisplayItem`
       kind (prop simplified to `crumbs: AncestorCrumb[]`), and the standalone-only CSS
       (`.q2-breadcrumb-chip`, `#quarto-content { position: relative }`, fixed-band /
-      ellipsis rules). Updated `EditTypeIndicator`'s call to the simplified signature.
+      ellipsis rules). Updated `EditTypeIndicator`\'s call to the simplified signature.
 
 ### Phase 6 — Verification & polish
 

@@ -426,7 +426,7 @@ Add (note: each disjunct repeats `e.key ===`; the `||` shorthand
 
 ```ts
 const isBareModifier =
-    e.key === 'Shift' || e.key === 'Control' || e.key === 'Alt' || e.key === 'Meta';
+    e.key === 'Shift' || e.key === 'Control' || e.key === 'Alt' || e.key === \'Meta';
 ```
 
 and extend the guard: `if (!isLeaveKey && !isBareModifier && !expanded)`. **Do not**
@@ -864,7 +864,7 @@ that calls `activate` → `ctx.setEditTarget`), *not* pointerdown. `setEditTarge
 to a `useState` setter (`PreviewRoot.tsx`, `setEditTargetRaw`), so the `<textarea>`
 mounts only on a **later** React render — it does **not exist in the DOM** at the
 moment the activating mousedown/mouseup are hit-tested. The browser therefore computes
-that activating `click`'s target from the original block subtree (down and up share the
+that activating `click`\'s target from the original block subtree (down and up share the
 *same* block target on a normal click), so the click lands on the **block**, never the
 textarea. (The earlier "pointerdown vs pointerup have *different* targets → common
 ancestor is the block wrapper" story was a misdiagnosis: same target, and the decisive

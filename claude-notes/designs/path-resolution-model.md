@@ -21,7 +21,7 @@ Quarto 2 interprets a path written in source (`.qmd` front matter,
    Concretely:
    - a path in `_quarto.yml` resolves against the project root,
    - a path in `docs/foo/_metadata.yml` resolves against `docs/foo/`,
-   - a path in `docs/foo/bar.qmd`'s front matter resolves against `docs/foo/`.
+   - a path in `docs/foo/bar.qmd`\'s front matter resolves against `docs/foo/`.
    Getting this right requires **provenance**: the resolver must know which
    file declared the value, not which document is consuming it. Provenance is
    captured either as `SourceInfo` retained through the merge, or by
@@ -93,13 +93,13 @@ sat in the carve-out for another release cycle.
 ## Blessed mechanisms (current state; convergence target below)
 
 Three provenance-correct mechanisms coexist today. New code should prefer
-(3)'s shape; the convergence work will fold them together.
+(3)\'s shape; the convergence work will fold them together.
 
 1. **`resolve_metadata_path`**
    (`crates/quarto-core/src/transforms/navigation_href.rs:583`) —
    `SourceInfo` → declaring file's dir → project-root-relative string, at
    Generate time. Used by navigation surfaces (sidebar/navbar/footer
-   generate transforms). Caveat: `_quarto.yml`'s FileId is usually not in
+   generate transforms). Caveat: `_quarto.yml`\'s FileId is usually not in
    the per-document `SourceContext`, so the helper degrades to the raw
    string — correct only for callers that treat input as
    project-root-relative.

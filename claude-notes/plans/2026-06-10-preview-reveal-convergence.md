@@ -92,7 +92,7 @@ reveal deck should render in a reveal-only CSS environment (as render does):
 
 ### Prong D — transitions
 
-Investigate why `@revealjs/react`'s `<Deck transition:'slide'>` doesn't animate
+Investigate why `@revealjs/react`\'s `<Deck transition:'slide'>` doesn't animate
 while native `Reveal.initialize` does. Hypotheses: the `<Deck>` re-creates/
 re-syncs on every preview re-render (preview re-renders on each edit), resetting
 transition state; or a config/lifecycle nuance of `@revealjs/react`; or it needs

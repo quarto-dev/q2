@@ -79,7 +79,7 @@ every registered type's display name via that param — P4's params-blob builder
 not passive inheritance from Q1's locale files. Q1's own static default is only ever load-bearing
 for a prefix Q2 doesn't register at all. This still confirms this finding's original point about
 *where* the field lives (not the constructor — `crossref-<type>-title` bypasses it entirely), so
-Theorem's `kind` still never goes through `theorem.lua`'s constructor — but it is not "redundant"
+Theorem's `kind` still never goes through `theorem.lua`\'s constructor — but it is not "redundant"
 in the sense of "Q2's opinion doesn't matter"; it matters via a different channel than the one
 this plan originally assumed (P5's field-map).
 
@@ -105,7 +105,7 @@ anything else is *removed*), **Q1's own `custom.lua` will register user-declared
 itself, reading the same source YAML Q2 already reads.** Problem C reduces from "build a
 Q2→Q1 registry export" to "confirm the passthrough holds and add a regression test for it" —
 a much smaller item than the design doc's prose implies. Field-shape parity is also already
-verified 1:1 by `crossref/metadata.rs`'s own tests (`key`→`ref_type`, `reference-prefix`→display
+verified 1:1 by `crossref/metadata.rs`\'s own tests (`key`→`ref_type`, `reference-prefix`→display
 name), so there's no new mapping code to write, only a golden confirming the Pandoc leg doesn't
 regress it.
 
@@ -113,7 +113,7 @@ regress it.
 have **no Q1 equivalent at all**: Q1 has no concept of "`crossref.ids`," so a Route-R node whose
 `ref_type` came from a `Promised` source has nothing in `valid_ref_types()` to match against.
 This was already true before this epic (it's a pre-existing Q2-only mechanism per the design
-plan D6/D7 cited in `registry.rs`'s doc comment) and isn't new scope for P6 — noting it here only
+plan D6/D7 cited in `registry.rs`\'s doc comment) and isn't new scope for P6 — noting it here only
 so a future reader doesn't mistake it for something Problem C needs to solve.
 
 ## Finding 3 — Default-category-set drift: audited, closed, no unexplained gaps
@@ -214,7 +214,7 @@ or an appendix-relocated float, landing on the same numbering machinery) against
   is the first strand for a deferral already on record twice in
   `claude-notes/plans/2026-04-15-crossref-design.md` (lines 77 and 405) with no strand until now.
   P5's own round-4 traversal sub-finding already names the fixture this needs
-  (`nested-float-in-callout.qmd`, a `FloatRefTarget` inside a `Callout`'s `content` slot) and P5's
+  (`nested-float-in-callout.qmd`, a `FloatRefTarget` inside a `Callout`\'s `content` slot) and P5's
   Layer-2 goldens own it; P6's own nesting coverage is its `test_all_three_injected_orders_*`
   pair in `crossref_external_mode_matrix.rs`, which asserts top-level numbers for all three types
   together, not subfloat lettering. No new checklist item needed — the gap is a feature request,
@@ -275,13 +275,13 @@ numbering.
       (commit `8e9e546b4`).
 - [x] Land the Callout-to-R change in the shim itself (P5's file — implementation, not the
       table update above) — **done in P5** (commit `4fb8b38e8`, "P5 Task 3: Route R for Callout
-      and Tabset"); confirmed by reading `resources/pandoc-filters/filters/quarto2-shim.lua`'s
+      and Tabset"); confirmed by reading `resources/pandoc-filters/filters/quarto2-shim.lua`\'s
       `route_callout`, and by P5's own test suite (`test_numbered_callout_gets_prefix`,
       `test_unnumbered_callout_has_no_prefix`, `test_callout_order_must_be_on_the_data_table`,
       `test_nested_wire_nodes_convert_inner_first`).
 - [x] Confirm `crossref.custom` passthrough into `Pandoc(fmt)` Meta with a regression test
       (Finding 2) — no new export code, just the test — **done**:
-      `crossref_custom_passthrough.rs`'s `test_crossref_custom_survives_into_wire_meta_verbatim`
+      `crossref_custom_passthrough.rs`\'s `test_crossref_custom_survives_into_wire_meta_verbatim`
       (T3.1, negative-space guard on `metadata_merge.rs:460`) and
       `test_crossref_custom_category_renders_its_declared_prefix` (T3.2, real Q1-side render of
       the same fixture, asserts `Diagram\u{a0}1:`).

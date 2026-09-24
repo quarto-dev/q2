@@ -57,7 +57,7 @@ Import preserving ids means **none of those references need editing**. The
 "force a specific id" capability the migration hinges on is really "import
 preserves ids" — note that `braid create` has *no* `--id` flag, and doesn't
 need one: with a CRDT, parallel workers never need to pre-agree on ids to
-avoid collision (beads' `create --id worker1-100` pattern becomes obsolete).
+avoid collision (beads\' `create --id worker1-100` pattern becomes obsolete).
 
 ---
 
@@ -142,7 +142,7 @@ is a known-good replay, not a one-off.
       sync server) — copied from `.braid.toml` without printing the secret
 - [x] Committed-marker mechanism: `.braid-project` (contents: `q2`) created;
       verified a clean dir with only the marker resolves to 1145 strands via
-      the user config (replaces beads' `.beads/redirect` entirely)
+      the user config (replaces beads\' `.beads/redirect` entirely)
 - [x] Final `br sync --flush-only`; `braid import .beads/issues.jsonl` →
       "imported 1145 strands (skipped 2 tombstones)"
 - [x] Re-ran assertions on the real skein: 1145 strands, 1053 deps, 0

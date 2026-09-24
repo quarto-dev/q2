@@ -44,8 +44,8 @@ Build-chain source: `hub-client/scripts/build-wasm.js`,
 
 One native executable that contains **two builds of the engine**:
 
-- **Native engine** — `quarto-core` + `pampa` compiled natively. Used by `q2 render` (and `q2 preview`'s server-side re-execution).
-- **Embedded SPA** — `q2-preview-spa/dist/` baked in via `include_dir!`, which bundles `wasm-quarto-hub-client_bg.wasm` = `quarto-core` + `pampa` compiled to `wasm32`. Used by `q2 preview`'s in-browser rendering.
+- **Native engine** — `quarto-core` + `pampa` compiled natively. Used by `q2 render` (and `q2 preview`\'s server-side re-execution).
+- **Embedded SPA** — `q2-preview-spa/dist/` baked in via `include_dir!`, which bundles `wasm-quarto-hub-client_bg.wasm` = `quarto-core` + `pampa` compiled to `wasm32`. Used by `q2 preview`\'s in-browser rendering.
 
 See Note ① for why this is two builds rather than one, and Note ② for the
 stale-WASM trap this creates.

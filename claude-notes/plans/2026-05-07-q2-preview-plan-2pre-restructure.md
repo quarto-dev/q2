@@ -254,15 +254,15 @@ The current renderer has a defensive fallback at four dispatcher sites and one p
 - `Block` (`ReactAstDebugRenderer.tsx:454`), `Inline` (`:533`), `Node` (`:579`), `renderNode` (`:323`) all read `const registry = registries?.registry ?? componentRegistry;`.
 - `Ast` (`:93`) has the prop default `registry = componentRegistry`.
 
-After the split, three of these sites land in framework (`Node`, `renderNode`, `Ast`'s prop default) and two land in q2-debug (`Block`, `Inline` dispatchers). The fallback drops at all five:
+After the split, three of these sites land in framework (`Node`, `renderNode`, `Ast`\'s prop default) and two land in q2-debug (`Block`, `Inline` dispatchers). The fallback drops at all five:
 
 - **Framework sites** *must* drop because `componentRegistry` doesn't exist in framework — it lives in q2-debug, and re-importing it would re-introduce the cross-format coupling 2pre exists to break.
 - **q2-debug sites** drop as redundant defensive code: `q2DebugRegistry` is in scope locally, but the `<Ast>` Provider is always set above the dispatchers in real flow, so `useContext(RegistryContext)` returns the registered registry — the `?? q2DebugRegistry` branch never executes.
 
 **Resolution:** drop all five.
 
-- Change `RegistryContext`'s default from `null` to `{ registry: {} }` in `framework/RegistryContext.tsx`. Dispatchers read `useContext(RegistryContext).registry` directly with no `??`.
-- Make `Ast`'s `registry` prop **required** (no default). Each format's entry passes its own registry: `q2-debug/entry.tsx` continues to pass `mergedRegistry` (typed `FormatRegistry`); q2-preview's entry (Plan 2A) will pass its own.
+- Change `RegistryContext`\'s default from `null` to `{ registry: {} }` in `framework/RegistryContext.tsx`. Dispatchers read `useContext(RegistryContext).registry` directly with no `??`.
+- Make `Ast`\'s `registry` prop **required** (no default). Each format's entry passes its own registry: `q2-debug/entry.tsx` continues to pass `mergedRegistry` (typed `FormatRegistry`); q2-preview's entry (Plan 2A) will pass its own.
 
 **No consumer breaks.** The fallbacks are dead code in every present and historical call site:
 
@@ -280,10 +280,10 @@ After fallback removal, if someone *did* mount a dispatcher outside an `<Ast>` a
 **History (for the curious / for anyone who asks why we removed it):**
 
 - `1e901f03` (2026-03-18, "Add `q2-debug` format with comment prototype") — the file's earliest version. Dispatch used hard-coded `BlockRegistry`/`InlineRegistry` constants imported directly. **No context, no fallback, no dispatcher functions.**
-- `d6eb0604` (2026-03-20, "Experimental q2-debug custom render components") — introduced `RegistryContext`, `<Ast>`'s `registry` prop default, and the first two fallback sites (`renderNode` and `Inline`) wholesale, alongside the entire pluggable-registry architecture for user TSX overrides.
+- `d6eb0604` (2026-03-20, "Experimental q2-debug custom render components") — introduced `RegistryContext`, `<Ast>`\'s `registry` prop default, and the first two fallback sites (`renderNode` and `Inline`) wholesale, alongside the entire pluggable-registry architecture for user TSX overrides.
 - `02721668` (2026-04-15, "Add support for slide render component") — added the `Block` dispatcher (promoted to registry-lookup form) and the new unified `Node`, with the same fallback pattern.
 
-The four fallback sites are character-for-character identical (`const registries = useContext(RegistryContext); const registry = registries?.registry ?? componentRegistry;`). No commit message explains the fallback or describes a standalone-mount use case. No PR exists for either commit. The pattern is defensive copy-paste from `<Ast>`'s prop default, propagated to dispatchers as new ones were added — never load-bearing, never explained.
+The four fallback sites are character-for-character identical (`const registries = useContext(RegistryContext); const registry = registries?.registry ?? componentRegistry;`). No commit message explains the fallback or describes a standalone-mount use case. No PR exists for either commit. The pattern is defensive copy-paste from `<Ast>`\'s prop default, propagated to dispatchers as new ones were added — never load-bearing, never explained.
 
 ### Renames
 

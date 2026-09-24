@@ -233,7 +233,7 @@ Entry:
    render.
 
 3. **`file_failure_from_error` did not need changes** — it already
-   extracts `QuartoError::Parse`'s diagnostics + source_context onto
+   extracts `QuartoError::Parse`\'s diagnostics + source_context onto
    `FileFailure`.
 
 ## Work items

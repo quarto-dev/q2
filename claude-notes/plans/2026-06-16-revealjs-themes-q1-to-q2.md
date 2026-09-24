@@ -220,7 +220,7 @@ overrides `--r-*` is forward-compatible across both versions.
 > `@use 'sass:color'` + `color.scale()`, namespaced `@use 'template/mixins' as
 > mixins` + `@include mixins.dark-bg-text-color()`, and `@import url(...)`
 > passthrough. Output was correct (`white` → `--r-main-color:#222`,
-> `--r-heading-text-transform:uppercase`, etc.). So `grass`'s module support is
+> `--r-heading-text-transform:uppercase`, etc.). So `grass`\'s module support is
 > sufficient for reveal 6; the migration cost is on the *content* of Q1's
 > themes, not on the build. (Probe deleted after recording; reproduce by
 > compiling `external-sources/reveal.js/css/theme/*.scss` with that dir as a

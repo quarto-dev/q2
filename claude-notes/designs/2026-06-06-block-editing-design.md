@@ -135,7 +135,7 @@ them:
   never find it. The wrapper is reachable only through a ref (`activeEditRegionRef`).
 - **The active editor's visibility must be judged from its wrapper, never the tile set.** "Did my
   block survive the edit?" is a *logic* question (pool + content); "is my block still visible?" is a
-  *DOM* question answered by `activeEditRegionRef`'s box, after the re-anchor remount. Conflating the
+  *DOM* question answered by `activeEditRegionRef`\'s box, after the re-anchor remount. Conflating the
   two — asking the tile set whether the active editor is visible — makes the answer permanently
   "hidden" (it is never a tile) and silently drops every keep.
 - **A textarea must not commit unless it is still the active target.** Because `onBlur` fires during

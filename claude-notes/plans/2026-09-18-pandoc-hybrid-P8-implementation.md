@@ -112,7 +112,7 @@ vacuous. The discriminating shape is the **four-quadrant matrix under a Pandoc t
 Quadrants 2 and 3 are load-bearing: they are the only two whose expected value *inverts* between
 "the Pandoc format string reached the predicate" and "it did not."
 
-**One more seam, easy to miss.** `conditional_content.rs`'s existing `mod tests` drives the
+**One more seam, easy to miss.** `conditional_content.rs`\'s existing `mod tests` drives the
 `Walker` directly through a `run(blocks, format, active, meta)` helper (`:670-697`) that pushes
 `format` straight into `ConditionEnv` — bypassing `lua_format_for` entirely. Every existing test,
 and any new four-quadrant test written with that helper, would survive replacing `:142` with

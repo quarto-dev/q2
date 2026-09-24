@@ -162,7 +162,7 @@ needed for types holding `Lua`, use `#[async_trait(?Send)]`.
   ```
   Implement `async fn fetch_url` in `NativeRuntime` (`src/native.rs`) using
   `reqwest::blocking::Client` wrapped in `tokio::task::spawn_blocking`, or
-  using `reqwest`'s async API directly.
+  using `reqwest`\'s async API directly.
 
   **Update:** the initial landing (`233c9c3c`) used reqwest's async API; this panicked with "there is no reactor running" because the native render pipeline is driven by `pollster::block_on`, not tokio. `59f2f011` / `d4bd7582` switched to bare `reqwest::blocking::get` (no `spawn_blocking` wrap — Lua filter execution already owns a dedicated thread). See the comment at `native.rs:276-296`.
 

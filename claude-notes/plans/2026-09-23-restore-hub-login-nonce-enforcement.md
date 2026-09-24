@@ -101,7 +101,7 @@ which stays.
 
 ### Behavior restored
 
-`check_login_nonce`'s cookie-absent branch again distinguishes the two
+`check_login_nonce`\'s cookie-absent branch again distinguishes the two
 readings using the signature-validated token's own `nonce` claim: nonce-less
 ⇒ `stale_client` (no current client produces this; a reload fixes it),
 nonce-bearing ⇒ `missing` (cookie lost in transit or replay). The

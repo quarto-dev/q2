@@ -32,7 +32,7 @@ discipline). The Spec is P6 + the design doc; where this file and the plan disag
 ### L-tier gate policy (stated once; referenced by every L row)
 
 **No silent skip — a silently-skipping test is a vacuous test.** Adopt the existing in-repo
-precedent verbatim: `crates/pampa/tests/integration/test.rs:160-180`'s
+precedent verbatim: `crates/pampa/tests/integration/test.rs:160-180`\'s
 `assert_good_pandoc_version()` **panics** with an actionable message when the local `pandoc` is
 outside its calibrated window (`PANDOC_ORACLE_MIN_VERSION = (3, 6)` /
 `PANDOC_ORACLE_MAX_VERSION = (3, 10)`, `test.rs:117-118`), with one deliberate escape hatch
@@ -83,7 +83,7 @@ discipline.
 | `title(type, default)` reading `param("crossref-"..type.."-title", default)` | `crossref/format.lua` | 4-7 | `4-7` | **exact** |
 | `crossref_callouts()` (`callout.order = add_crossref(...)` at 477) | `customnodes/callout.lua` | **469-482** | `467-480` | **drift (−2)** |
 | `decorate_callout_title_with_crossref` early return | `modules/callouts.lua` | fn 20, gate 22 | `22` | **exact** |
-| `callout_title_prefix`'s `fail("unknown callout prefix …")` | `modules/callouts.lua` | fn 6, `fail()` 9, `titlePrefix(...)` 17 | `6-11` (via P5) | **OK** |
+| `callout_title_prefix`\'s `fail("unknown callout prefix …")` | `modules/callouts.lua` | fn 6, `fail()` 9, `titlePrefix(...)` 17 | `6-11` (via P5) | **OK** |
 | `prependSubrefNumber(caption_content, float.order)` | `customnodes/floatreftarget.lua` | 221 (sibling at 275) | `221` | **exact** |
 | `local order = thm.order` in the Theorem renderer | `customnodes/theorem.lua` | **222** | `220` (P6 Finding 4) | **drift** — P5 already corrected this to 222; P6 still says 220 |
 | `if order == nil then return el end` | `customnodes/theorem.lua` | 278 | — (P3's) | **exact** |

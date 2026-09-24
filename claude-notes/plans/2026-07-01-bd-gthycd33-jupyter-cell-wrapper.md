@@ -19,7 +19,7 @@ the `{python}` cell still renders as source. The identical flow with
 
 The bug is **independent of the hub execution-provider feature** and exists on
 `main`: it affects any consumer of the capture-splice path, including `q2
-preview`'s own server-side capture recording (bd-lucp). Reproduced
+preview`\'s own server-side capture recording (bd-lucp). Reproduced
 mechanically on `main` in this worktree (2026-07-01, see below).
 
 ## Root cause (confirmed by reproduction)

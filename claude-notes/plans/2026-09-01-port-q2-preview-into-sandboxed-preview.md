@@ -8,7 +8,7 @@ format, which runs in a **cross-origin iframe** (GitHub Pages,
 service-worker asset proxy.
 
 **Hard constraint: q2-preview is not modified.** No behavior changes to
-`ts-packages/preview-renderer`'s q2-preview surface, `Q2PreviewIframe`,
+`ts-packages/preview-renderer`\'s q2-preview surface, `Q2PreviewIframe`,
 `q2-preview/entry.tsx`, or hub-client's q2-preview wiring. Everything the
 sandboxed path needs that can't be imported unmodified gets **copied into
 `hub-client/quarto-hub-sandboxed-preview/`** (iframe side) or into

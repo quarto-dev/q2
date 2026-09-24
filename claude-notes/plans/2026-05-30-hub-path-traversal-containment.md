@@ -55,7 +55,7 @@ client bypasses them entirely by mutating the CRDT directly, so validating
 there gives zero security value against the actual threat. And the server
 never produces an unsafe key itself: both non-test callers (`context.rs:607`,
 `context.rs:653`) pass paths from `project_files`, which are already
-`strip_prefix(project_root)`'d filesystem-walk paths. Validating `add_file`
+`strip_prefix(project_root)`\'d filesystem-walk paths. Validating `add_file`
 would guard a bug that cannot currently occur, at the cost of turning two
 infallible-in-practice methods fallible plus their own test matrix. Skip it.
 

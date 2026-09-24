@@ -191,7 +191,7 @@ The concurrency lives on the **Deno event loop**, surfaced to Rust through the
 **reader-thread demux**, not through async Rust. Rust workers are blocking
 rayon+`pollster` threads; each blocks on its own slot. There is no tokio on the
 Rust side, no `block_on` in the pipeline, no reactor to drive. So the
-`EngineTransport` trait and `TsEngine`'s calls remain **synchronous** — the
+`EngineTransport` trait and `TsEngine`\'s calls remain **synchronous** — the
 earlier "the Rust transport is sync" conclusion survives; only the "because the
 protocol is lockstep / async buys no concurrency" *justification* is retired.
 

@@ -137,7 +137,7 @@ step for this port).
       takes an optional event (upstream's handler is `() => void`);
       subclass + control-test comments updated for the upstream timer fix
 - [x] `hub-client` `projectSetService.findCollectionDoc`: the second
-      attempt classifies from `find()`'s rejection (unavailable →
+      attempt classifies from `find()`\'s rejection (unavailable →
       `not-found`, abort/timeout → `sync-unreachable`) instead of
       `allowableStates` + `handle.state`; dead `raceHandleReady` removed
 - [x] `hub-client` `presenceService`: guard `doc()` returning undefined

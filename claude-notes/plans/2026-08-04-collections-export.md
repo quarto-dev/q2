@@ -51,7 +51,7 @@ Notes:
   browser already has (or creates) its own root.
 - Import re-subscribes via the existing `subscribeCollection(docId, syncServer)`
   action (`useCollectionSets.ts` ~line 395), deduped by
-  `addCollectionPointer`'s existing same-docId check.
+  `addCollectionPointer`\'s existing same-docId check.
 - Old exports (schemaVersion 4 / no `collections` field) must import exactly as
   today. New exports importing into old builds degrade gracefully (unknown
   field ignored) — verified by shape, no code needed there.

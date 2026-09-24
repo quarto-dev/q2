@@ -7,7 +7,7 @@
 
 ## Triage verdict
 
-**Ready to design.** The mechanism is fully understood, Q1's target semantics are pinned from source, the fix site is localized to `ListingGenerateTransform`'s item-collection loop, and a minimal repro exists (copied into `listing-declared-order-investigation/repro/`). A handful of scope questions below need answers before implementation.
+**Ready to design.** The mechanism is fully understood, Q1's target semantics are pinned from source, the fix site is localized to `ListingGenerateTransform`\'s item-collection loop, and a minimal repro exists (copied into `listing-declared-order-investigation/repro/`). A handful of scope questions below need answers before implementation.
 
 ## Issue context
 

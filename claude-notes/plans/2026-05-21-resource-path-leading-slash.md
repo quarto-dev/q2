@@ -112,7 +112,7 @@ yet — that's expected and is what the profiling plan investigates.)
 
 - [x] Add the five tests above; confirmed tests (1)–(3) fail before
   the fix and (4)–(5) pass before the fix.
-- [x] Implement `strip_prefix('/')` normalization in `expand_one`'s
+- [x] Implement `strip_prefix('/')` normalization in `expand_one`\'s
   YAML entry point.
 - [x] Re-run all five tests; all five pass.
 - [x] `cargo nextest run -p quarto-core` clean (2080 tests pass).

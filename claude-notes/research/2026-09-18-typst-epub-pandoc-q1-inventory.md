@@ -42,7 +42,7 @@ alongside typst.
   `Text.DocLayout` pretty-printer. The cabal dependency on package `typst >= 0.11 && < 0.12`
   is only for math/highlighting-style helpers (`styleToTypst`), not the writer's AST.
 - **Mapping:** headings, emphasis/strong/strike/underline/sup/sub/smallcaps, lists, code
-  blocks (fenced or Skylighting-highlighted `#raw`), math (routed through `texmath`'s Typst
+  blocks (fenced or Skylighting-highlighted `#raw`), math (routed through `texmath`\'s Typst
   backend), images (`#image()`/`#box()`), tables (`#figure(table(...))` with explicit
   `columns:`/`align:`).
 - **Known gaps:**

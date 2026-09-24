@@ -11,7 +11,7 @@ and exit codes — via a one-shot `call-engine` mode in the Deno engine-host bun
 `ExecutionEngine`.
 
 **Architecture:** Rust does registry lookup and gate 1 (`Unknown engine:`), then
-dispatches through the new trait method. `TsEngine`'s override spawns
+dispatches through the new trait method. `TsEngine`\'s override spawns
 `deno run --allow-all <bundle> call-engine <config-json> <engine-path> <name> <args...>`
 with **inherited stdio** and propagates the exit code; the call-engine mode replicates
 Q1's `engine-cmd.ts` dispatcher verbatim (import engine → gate 2 → real cliffy
@@ -46,7 +46,7 @@ esbuild 0.28.0 (engine-host bundle), vendored cliffy v1.0.0-rc.3 (MIT).
   method sync (no async, matches existing trait style).
 - Integration tests go in `tests/integration/<name>.rs` + registration in `main.rs`
   (never top-level `tests/*.rs`).
-- **Runs after plan1c3, which refactors `Call`.** plan1c3 converts `main.rs`'s
+- **Runs after plan1c3, which refactors `Call`.** plan1c3 converts `main.rs`\'s
   `Call { function, args }` into a typed `Call { command: CallCommands }` group
   (variants `Test` + `build-ts-extension`). This plan therefore adds a **typed
   `Engine` variant to `CallCommands`**, not a bare clap string-dispatch arm — see

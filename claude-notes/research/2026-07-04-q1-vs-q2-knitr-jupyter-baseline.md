@@ -111,7 +111,7 @@ bundles its `.jl` scripts).
   notebook (collision-suffixed) via `quartoMdToJupyter`; kernelspec resolved
   from YAML/languages (`jupyterKernelspecFromMarkdown`).
 - `execute()`: recreate transient nb if missing; `ensureYamlKernelspec` can
-  rewrite an `.ipynb`'s kernelspec on disk; daemon decision (`execute.daemon`;
+  rewrite an `.ipynb`\'s kernelspec on disk; daemon decision (`execute.daemon`;
   default interactive&&!CI; forced off for shell-magic notebooks); oneshot vs
   keepalive; `notebookFiltered` (ipynb-filters, **real `.ipynb` sources
   only**); shinylive fixup; `jupyterAssets`; `toMarkdown`; deps inline or

@@ -39,7 +39,7 @@ Expected ceiling on quarto-web (574 files, \~2.3 s today):
 
 ## State audit (why Pass-1 is parallelizable)
 
-The body of `pass_one`'s loop is:
+The body of `pass_one`\'s loop is:
 
 ```rust
 for doc_info in &self.project.files {
@@ -83,7 +83,7 @@ Pipeline stages are `#[async_trait(?Send)]` (per `.claude/rules/wasm.md`)
 because `StageContext` carries `Option<Rc<RefCell<dyn UserGrammarProvider>>>`
 (`crates/quarto-core/src/stage/context.rs:198`) — needed by the
 hub-client's Pass-2 path. The trait bound is global; it makes
-`run_pipeline`'s future `!Send` even though Pass-1 stages don't actually
+`run_pipeline`\'s future `!Send` even though Pass-1 stages don't actually
 use the `!Send` fields. We can't multi-thread `tokio::spawn` it.
 
 This is a hard constraint we should not relax. Working around it (Option

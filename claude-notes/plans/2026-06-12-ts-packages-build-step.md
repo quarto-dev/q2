@@ -31,7 +31,7 @@ Observed tree state at diagnosis time (2026-06-12): 7 of 9 ts-packages had no
      `--if-present` covers packages without a `build` script
      (`sync-test-harness`, `wasm-js-bridge`). Build **order doesn't matter**:
      since types resolve via `src/`, each package's `tsc` compiles without its
-     dependencies' `dist/` present.
+     dependencies\' `dist/` present.
 2. **build-all**: new step between `npm install` and the hub-client build,
    with a `--skip-ts-packages-build` flag.
 3. **verify**: new step 6 (before the hub-client build; `TOTAL_STEPS` 12→13,

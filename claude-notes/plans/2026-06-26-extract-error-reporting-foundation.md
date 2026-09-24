@@ -71,7 +71,7 @@ deleting `validate-yaml` (step 2), wiring yaml validation into q2 config, the
 ## The split: what goes where
 
 Only **one** thing actually leaves `quarto-error-reporting`: the `Q-*` catalog
-*data*. Everything else stays in the (now catalog-agnostic) crate, so consumers'
+*data*. Everything else stays in the (now catalog-agnostic) crate, so consumers\'
 imports are unchanged.
 
 ```

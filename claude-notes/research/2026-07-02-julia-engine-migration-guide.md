@@ -84,7 +84,7 @@ not exhaustive — an engine that calls something like `quarto.pandoc.*` or
 **None stubbed for this engine.** All 6 `quarto.jupyter.*` members
 `julia-engine.ts` calls (`assets`, `isPercentScript`,
 `percentScriptToMarkdown`, `resultEngineDependencies`, `resultIncludes`,
-`toMarkdown`) are among `makeJupyter`'s 7 *implemented* methods — none hit
+`toMarkdown`) are among `makeJupyter`\'s 7 *implemented* methods — none hit
 the `NotImplemented` throwers that exist elsewhere in `@quarto/api` for
 methods no engine has needed yet (compat log §9).
 
@@ -142,7 +142,7 @@ repeated WARN log (`missing required 'author' field`). **Add `author: <name>`
 to the extension's `_extension.yml`** when porting to q2 (compat log §9,
 Failure 1).
 
-### 4b. `build-ts-extension`'s directory-resolution convention doesn't fit a real Q1 extension repo layout (build tooling)
+### 4b. `build-ts-extension`\'s directory-resolution convention doesn't fit a real Q1 extension repo layout (build tooling)
 
 The literal `q2 build-ts-extension <entry.ts>` invocation an author would
 reach for **does not work** against a real upstream Q1 extension repo layout
@@ -156,7 +156,7 @@ reach for **does not work** against a real upstream Q1 extension repo layout
    `_extensions/<name>/` package. That's true for q2's own synthetic flat
    echo-engine fixture, but **false for every real upstream Quarto-1
    extension repo**, where `src/` sits at the repo root, sibling to
-   `_extensions/` (exactly `~/src/quarto-julia-engine`'s own layout, which
+   `_extensions/` (exactly `~/src/quarto-julia-engine`\'s own layout, which
    the plan explicitly preserved rather than reshaping). `q2
    build-ts-extension _extensions/julia-engine` fails with "No TypeScript
    entry point found. Expected `src/julia-engine.ts` inside
@@ -230,7 +230,7 @@ directly and never exercises these paths):
   **Known residual gap, not fixed here:** Q1 additionally overrides
   `echo`/`warning` to `false` specifically for *presentation-family* output
   formats (revealjs, beamer, pptx, dashboard — confirmed by reading
-  `quarto-cli`'s `formats-shared.ts`/`formats.ts`/`format-pdf.ts`/
+  `quarto-cli`\'s `formats-shared.ts`/`formats.ts`/`format-pdf.ts`/
   `format-dashboard.ts`; **not** for plain HTML/PDF/LaTeX, contrary to an
   earlier, overstated note in this compat log — see §14). q2's defaults are
   target-format-agnostic, so a document targeting revealjs/beamer/pptx/
@@ -238,7 +238,7 @@ directly and never exercises these paths):
   Q1 hides it. Tracked as **bd-cymkcyaf**.
 - **Execute source map** (commit `6a5f80fc4`, compat log §9 Failure 2). q2's
   wire protocol sent an empty source map for every execute request — fine
-  for engines that never inspect provenance, but `julia-engine.ts`'s
+  for engines that never inspect provenance, but `julia-engine.ts`\'s
   `buildSourceRanges` maps every input line back to its origin, and an empty
   map made QuartoNotebookRunner crash (`maximum([])` over zero source
   ranges). Fixed by building a real per-line source map from the existing

@@ -1031,7 +1031,7 @@ time.
   integration test for the "page appears in two sidebars" ambiguity
   (first-match wins, document this loudly).
 - **Risk:** auto-expansion produces non-deterministic output due to
-  `ProjectIndex`'s internal `HashMap`. *Mitigation:* auto expansion
+  `ProjectIndex`\'s internal `HashMap`. *Mitigation:* auto expansion
   iterates `ProjectIndex::profiles()`, which preserves insertion
   order; sorting is explicit and deterministic (order then title).
 - **Risk:** active-state highlighting misses because hrefs differ in

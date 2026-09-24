@@ -464,7 +464,7 @@ main.
       `SourceInfo::generated(By::programmatic_config())`, **excluding the native
       set unconditionally**. Do **not** touch the `render_pattern_diagnostics`
       path.
-- [x] Update `Q-5-13`'s message text — it hard-codes "No renderable source file
+- [x] Update `Q-5-13`\'s message text — it hard-codes "No renderable source file
       (`.qmd` or `.md`) in the project matches this pattern", which becomes wrong
       once engine-claimed extensions are renderable
 - [x] Re-port the branch's T6/T6b/T7 tests against the new function names, and

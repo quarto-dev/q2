@@ -229,7 +229,7 @@ the **same commit as the gate** (Phase 4.5), never before it.~~
 > is ever wanted on editorial grounds, it is a separate change that must state
 > the llms.txt heading change as its intended effect.
 >
-> (`sidebar_heading`'s id fallback is a pre-existing wart — three of five docs
+> (`sidebar_heading`\'s id fallback is a pre-existing wart — three of five docs
 > sidebars are still headed by raw ids. Improving it belongs in its own
 > strand, not here.)
 

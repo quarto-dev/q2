@@ -688,7 +688,7 @@ reminder"). L3 leaves a `// TODO(bd-XXXX): no Lua hook
 between generate and render today` comment at three
 locations: this transform site, `navbar_generate.rs`
 (the precedent with the same latent assumption), and
-`pipeline.rs`'s navigation-phase comment block.
+`pipeline.rs`\'s navigation-phase comment block.
 
 ## Placeholder emission and the L1 fallback contract
 

@@ -24,7 +24,7 @@ blockquote gutter / continuation prefix. Concretely, for
 
 the `oh` `Plain`'s range is `[31,39]`, whose end byte (39) is the `2` of the
 **next** item — i.e. the range reaches past `oh`'s own content, across the blank
-`> ` continuation line, and into `dear`'s marker. The same happens for every
+`> ` continuation line, and into `dear`\'s marker. The same happens for every
 loose item inside a blockquote.
 
 This is invisible to most consumers but breaks anything that needs the *lines a
@@ -90,7 +90,7 @@ a **`>` gutter** — outside both of 7g's scope limits. This plan is the candida
   change (`SourceInfo` payload + TS wire-format + `profile_version`-style bump).
 - **B — tighten the trailing block range.** A new gutter-aware
   `SourceInfoOptions` trim ("trim trailing blockquote-continuation / blank-gutter
-  lines": consume trailing `\n` + `[ \t]*>[ \t]*` runs) applied to block handlers'
+  lines": consume trailing `\n` + `[ \t]*>[ \t]*` runs) applied to block handlers\'
   trailing extent so a block ends at its last content line. No new field; smallest
   surface. Creates **gaps** (the gutter owned by nobody) — which the 7g contract
   *already blesses* (P4 is non-overlap, not gap-free). Risk concentrated in the

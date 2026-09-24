@@ -490,7 +490,7 @@ Tracking: `bd-creo` (CLI strictness), `bd-mwtf` /
   Plan: `claude-notes/plans/2026-08-12-aliases-redirect-stubs.md`.
 
 - **2026-08-13 — v11 (`bd-toc-smart-quotes-6nro57ed`).** Changes
-  `outline`'s entry titles from `String` to `Inlines`
+  `outline`\'s entry titles from `String` to `Inlines`
   (`pampa::toc::TocEntry::title`).
 
   The flattened title was lossy in a way that produced a visible
@@ -525,7 +525,7 @@ Tracking: `bd-creo` (CLI strictness), `bd-mwtf` /
   per-document engine resolution, additive at the on-disk layer
   (`skip_serializing_if` keeps default profiles compact), stamped only
   when Pass-1 can resolve it without loading an engine
-  (`engine-resolution.md`'s needs-no-load predicate, §3.3/§7/§9.1).
+  (`engine-resolution.md`\'s needs-no-load predicate, §3.3/§7/§9.1).
   `None` means the doc falls through to Pass-2's existing resolution —
   not an error. Names only, no `ConfigValue` blobs: `sequence` is the
   resolved engine names in run order, `ownership` is the

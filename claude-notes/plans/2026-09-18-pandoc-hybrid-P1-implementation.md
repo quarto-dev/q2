@@ -4,7 +4,7 @@
 **Design (authoritative):** [`../designs/pandoc-hybrid-architecture.md`](../designs/pandoc-hybrid-architecture.md)
 **Epic:** [`2026-08-20-pandoc-hybrid-epic.md`](2026-08-20-pandoc-hybrid-epic.md)
 **Depends on:** nothing (per the epic's graph, P1/P2/P3 are parallel immediately). **Consumed by:**
-P5 (needs the `Pandoc`-kind exclude-list decision — specifically that `panel-tabset`'s sugar half
+P5 (needs the `Pandoc`-kind exclude-list decision — specifically that `panel-tabset`\'s sugar half
 stays enabled), P7 (needs the `PipelineProfile` seam), and P7-foundation (needs the B3
 shared-services segment).
 **Status:** Ready for subagent-driven execution. All nine tasks are dispatchable; none is blocked.

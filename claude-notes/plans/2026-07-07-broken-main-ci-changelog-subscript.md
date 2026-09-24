@@ -34,7 +34,7 @@ records both.
   `maximumFileSizeToCacheInBytes` at **35 MB** (comment: *"largest is
   ~32MB"*). Workbox globs the WASM into the precache manifest; when a
   globbed asset exceeds the size limit it emits a *warning*, and
-  `vite-plugin-pwa`'s `logWorkboxResult` **throws that warning as fatal**.
+  `vite-plugin-pwa`\'s `logWorkboxResult` **throws that warning as fatal**.
   #379 (`render_printable` + self-contained inliner) grew the WASM past 35 MB.
 - **Why macOS-only at first:** the margin was razor-thin. Local/ubuntu WASM
   = 36,689,700 B (≈10 KB *under* 35 MiB); macOS CI = 36,701,150 B (≈990 B

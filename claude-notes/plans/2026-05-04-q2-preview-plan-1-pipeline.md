@@ -21,7 +21,7 @@ type-specific React components for them; Plan 2A lands the iframe foundation
 and Plan 2B adds the framework recursion semantics, asset-manifest plumbing,
 and Pandoc-base leaves those components consume).
 
-Edit-back is **read-only** in v1 — `ReactPreview.tsx`'s `handleSetAst`
+Edit-back is **read-only** in v1 — `ReactPreview.tsx`\'s `handleSetAst`
 early-returns with a console warning for `q2-preview` format. Plan 7 removes
 this guard once the writer-side round-trip lands.
 
@@ -91,7 +91,7 @@ this guard once the writer-side round-trip lands.
   `render_project_active_page_to_preview_response`. Both new
   helpers live in `crates/wasm-quarto-hub-client/src/lib.rs`
   alongside their HTML siblings. Because `render_qmd`,
-  `render_qmd_content`, and `render_page_in_project`'s single-file
+  `render_qmd_content`, and `render_page_in_project`\'s single-file
   branch all delegate to the same single-doc helper after the prep
   refactor, **q2-preview routing is added at exactly two seams**
   (single-doc + project-active), not five. See §"Resolved decisions"

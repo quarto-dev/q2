@@ -67,7 +67,7 @@ cargo nextest run -p pampa <new test name>      # round-trip test fails
 - [x] T2.1 Added `CAPTION_START` to the externals enum in `scanner.c` (at the END of the enum, not in the middle — keeps preceding token IDs stable)
 - [x] T2.2 Added `"CAPTION_START"` to the token_names debug array
 - [x] T2.3 Added `$._caption_start` to the externals array in `grammar.js`
-- [x] T2.4 Added the emission in `parse_fenced_div_marker`'s `level < 3` branch
+- [x] T2.4 Added the emission in `parse_fenced_div_marker`\'s `level < 3` branch
 - [x] T2.5 Replaced `":"` with `$._caption_start` in the `caption` rule body
 - [x] T2.6 `tree-sitter generate` succeeded
 - [x] T2.7 (n/a — `cargo build` regenerates the C library via build.rs)

@@ -165,7 +165,7 @@ These are decisions, not open questions:
   treatment as L3 (`Q-12-2` already emitted at render time);
   no glob string available to add to the field, no edge added.
 - **Self-edges are dropped.** Already handled by
-  `ProjectDependencyGraph::build`'s `add_edge` closure.
+  `ProjectDependencyGraph::build`\'s `add_edge` closure.
 - **No new diagnostic codes in v1.** Empty-match globs produce
   no edges and no warning. L3 already handles "listing renders
   empty" at render time. Adding a graph-build-time diagnostic
@@ -764,7 +764,7 @@ watch pass.
 ### TDD phase 1 — `extract_content_globs`
 
 - [x] Write tests #1–8 in
-      `crates/quarto-core/src/project/listing/config.rs`'s
+      `crates/quarto-core/src/project/listing/config.rs`\'s
       test module (or a new submodule). Fail.
 - [x] Implement `pub fn extract_content_globs(meta:
       &ConfigValue) -> Vec<String>`. Tests pass. Implementation

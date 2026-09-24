@@ -110,13 +110,13 @@ That last clause is the key one — it confirms test-mode and non-test-mode rlib
 
 #### Why `--tests`, not `--all-targets`
 
-`--all-targets` is officially defined as `--lib --bins --tests --benches --examples`. We tried it first, but it caused CI to fail on `quarto-yaml`'s benches: `crates/quarto-yaml/benches/{memory_overhead,scaling_overhead}.rs` are declared `harness = false` and print prose reports rather than libtest output. Nextest enumerates each bench binary with `--list --format terse` and errors on the unrecognized output (`line "..." did not end with the string ": test" or ": benchmark"`).
+`--all-targets` is officially defined as `--lib --bins --tests --benches --examples`. We tried it first, but it caused CI to fail on `quarto-yaml`\'s benches: `crates/quarto-yaml/benches/{memory_overhead,scaling_overhead}.rs` are declared `harness = false` and print prose reports rather than libtest output. Nextest enumerates each bench binary with `--list --format terse` and errors on the unrecognized output (`line "..." did not end with the string ": test" or ": benchmark"`).
 
 The previous CI never built benches anyway — plain `cargo build` excludes them by default — so `--tests` matches the prior coverage exactly while still consolidating compilation into one nextest-driven step.
 
 #### Why this is safe (verified against Cargo docs)
 
-1. **Compilation coverage matches what `cargo build` was producing.** `cargo nextest run --tests` builds the lib (both as unittest and as a non-test dep for bins/integration tests), all bins (also as unittests), and all integration tests. That is a strict superset of plain `cargo build`'s default targets (lib + bins, non-test). Examples without `test = true` and benches were not built before either.
+1. **Compilation coverage matches what `cargo build` was producing.** `cargo nextest run --tests` builds the lib (both as unittest and as a non-test dep for bins/integration tests), all bins (also as unittests), and all integration tests. That is a strict superset of plain `cargo build`\'s default targets (lib + bins, non-test). Examples without `test = true` and benches were not built before either.
 2. **`-D warnings` still fires.** `RUSTFLAGS` is a rustc env var, applied to every rustc invocation regardless of which cargo subcommand drives the build. Nextest invokes `cargo test --no-run` internally, which picks up `RUSTFLAGS` exactly as `cargo build` would.
 3. **The redundancy that disappears:** `cargo build` and `cargo nextest run` share `target/debug/` (or in our case `target/ci/`) but **not artifacts** — library crates compiled with `--cfg test` have a different fingerprint and produce **separate `.rlib`s** alongside the dev-build ones. With ~35 crates, that duplication ran into multi-GB at peak disk.
 

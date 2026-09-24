@@ -141,7 +141,7 @@ async fn compile_scss(
 }
 ```
 
-This calls `SystemRuntime::compile_sass()`. Check `WasmRuntime`'s impl of
+This calls `SystemRuntime::compile_sass()`. Check `WasmRuntime`\'s impl of
 this method. It likely bridges to a JS function. Verify it's wired up and
 actually called. The old JS-side `compileAndInjectThemeCss` also used SASS
 compilation and worked — so SASS is available, but maybe the runtime context

@@ -116,7 +116,7 @@ self-reverts, so any reland-conclusion that bypasses them leaks the blur:
    `commitAndArmReland`, read in the apply effect, never written back. It stayed
    *sticky* across moves.
 2. **The apply effect fired for *any* pending landing, and only `intent:'open'`
-   landings clear.** `executeLanding`'s `intent:'focus'` branch (a plain close)
+   landings clear.** `executeLanding`\'s `intent:'focus'` branch (a plain close)
    focuses the outer block and returns **without** `openEditTarget` → no
    `clearRelandFade`.
 

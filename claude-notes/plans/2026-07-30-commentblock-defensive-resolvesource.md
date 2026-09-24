@@ -6,7 +6,7 @@
 
 ## Overview
 
-`ts-packages/preview-renderer`'s integration suite fails on main:
+`ts-packages/preview-renderer`\'s integration suite fails on main:
 `s0-list-item-surfaces.integration.test.tsx` has 18/23 tests failing. All 18
 share a single crash:
 

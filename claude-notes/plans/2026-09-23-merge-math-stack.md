@@ -39,7 +39,7 @@ Parent plans: `2026-09-21-quarto-math-and-native-docx.md`,
   Pandoc leg, and the vendored `equations.lua` crashes
   (`attempt to concatenate a nil value (field 'text')`, pandoc exit 83,
   Q-20-3). Decision (user, 2026-09-23): **ignore the option silently on
-  non-HTML formats**, matching `EquationNumberStage`'s `Writer` no-op and
+  non-HTML formats**, matching `EquationNumberStage`\'s `Writer` no-op and
   Quarto 1 (which forwards the key to pandoc, whose non-HTML writers
   ignore it). No warning: the `html-` prefix is what makes the key safe
   in shared metadata for multi-format projects.

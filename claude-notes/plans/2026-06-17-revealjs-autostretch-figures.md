@@ -165,7 +165,7 @@ render and preview. Options:
   slide" signal plumbed into crossref render. Couples three subsystems
   (reveal/auto-stretch/crossref) and touches hub-client. High cost.
 - **Option 2C — Render-only late AST hoist (parity in render, gap in preview).**
-  A reveal transform after `crossref-render` that hoists the now-`Figure`'s img
+  A reveal transform after `crossref-render` that hoists the now-`Figure`\'s img
   (move id, add `.r-stretch`, sibling caption). Matches Q1 in `q2 render`;
   preview keeps the un-stretched CustomNode. Violates preview-parity for this
   case — only acceptable if we explicitly accept it and `log`/document it.
@@ -177,7 +177,7 @@ in a dedicated strand.
 ## Proposed scope for THIS strand (to confirm with user)
 
 - [x] Implement **Case 1** (markdown captioned figure) — early AST unwrap.
-      `RevealAutoStretchTransform`'s Figure branch now replaces the `Block::Figure`
+      `RevealAutoStretchTransform`\'s Figure branch now replaces the `Block::Figure`
       with `Plain[Image]` (`.r-stretch`, figure `id` transferred onto the img)
       followed by `caption_paragraph(...)` — a `Paragraph` with a trailing
       `Inline::Attr{.caption}`. See `hoist_figure` / `figure_caption_inlines` /

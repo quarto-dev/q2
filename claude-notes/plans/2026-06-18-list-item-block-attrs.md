@@ -152,7 +152,7 @@ project fears).
       `liItemAttrProps(node.itemAttr?.[i], false)` (edit-drop documented inline).
 - [x] preview-renderer suites green (219 unit + 233 integration); `tsc` clean.
   - **Edit edge case (decided 2026-06-18: accept the drop for v1).** These
-    registry renderers' `setLocalAst` rebuilds `{t:'BulletList', c:newItems}`
+    registry renderers\' `setLocalAst` rebuilds `{t:'BulletList', c:newItems}`
     **without** `itemAttr`, so an in-preview text edit of an attributed item
     drops its class. We apply `itemAttr` on render but do **not** thread it
     through edits in v1 (matches how other sidecar data behaves on edit).

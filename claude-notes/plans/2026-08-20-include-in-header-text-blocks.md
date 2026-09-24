@@ -82,7 +82,7 @@ HEAD run.
 
 ## Proposed phases (draft)
 
-- [x] **Phase 0 — Test plan (TDD).** Unit tests in `include_resolve.rs`'s test
+- [x] **Phase 0 — Test plan (TDD).** Unit tests in `include_resolve.rs`\'s test
   module: (a) `text:` holding `PandocBlocks` with a `RawBlock{html}` reaches the
   rendered list verbatim; (b) multi-paragraph blocks are joined; (c) a `Map`
   with neither `file:` nor `text:` still gets the "invalid form" code; (d) the
@@ -123,7 +123,7 @@ HEAD run.
    embed transform (what the catalog documents) or the include stage (the
    original user)? I'd leave embed as documented and move include to `Q-5-30`
    / `Q-5-31`.
-4. **Q-1-20 on bare `<style>`.** Out of scope here (it's `meta.rs`'s markdown
+4. **Q-1-20 on bare `<style>`.** Out of scope here (it's `meta.rs`\'s markdown
    parse warning), but once the fence works the Connect docs no longer need
    the bare form. Confirm we leave Q-1-20 alone.
 

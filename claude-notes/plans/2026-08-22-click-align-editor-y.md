@@ -101,13 +101,13 @@ it is **not** test-bound yet, which is this phase's real work.
       (`Q2PreviewIframe`), and `onPreviewClickAtLine` likewise
       (`ReactRenderer` → `ReactPreview`). Thread the prop **before** changing the
       handler, or `tsc -b` is red between steps.
-- [x] `Q2PreviewIframe`'s capture-phase `pointerup` handler: resolve the nearest
+- [x] `Q2PreviewIframe`\'s capture-phase `pointerup` handler: resolve the nearest
       `[data-loc]` block, add its `getBoundingClientRect().top` to the iframe
       element's own top, pass as `hostY`.
 - [x] `useScrollSync`: `revealEditorLine(line, hostY?)` performs the computation
       above, keeping the `isSyncingRef` bracketing (A5 — ratio sync stays, so the
       overwrite race stays reachable).
-- [x] Rewrite the doc comments the scratch left stale: `useScrollSync`'s header
+- [x] Rewrite the doc comments the scratch left stale: `useScrollSync`\'s header
       still says `revealEditorLine` "calls `editor.revealLineInCenterIfOutsideViewport`".
 - [x] Delete every `TEMPORARY LOCAL EXPERIMENT` marker (none carried into the
       real implementation — it was written fresh from the plan, not by applying

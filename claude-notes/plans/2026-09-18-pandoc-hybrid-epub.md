@@ -46,7 +46,7 @@ does not mean "nothing to port beyond a CSS file." See Phase 1 below.
       guardrails Phase 1 bullet 1 below depends on. P7-foundation depends only on P1/P2/P4, so
       check it independently rather than assuming it tracks P7's own (later) completion.
       **Confirmed 2026-09-20**: all 4 P7-foundation tasks checked off; its tip
-      (`d8c7d3443`) is `feature/pandoc-writer-hybrid`'s current HEAD.
+      (`d8c7d3443`) is `feature/pandoc-writer-hybrid`\'s current HEAD.
 - [x] Confirm the epic has landed through at least P1 (neutral core), P2 (wire schema), P4
       (run machinery), P3 (upstream crossref split), P5 (Lua shim), and P6 (numbering wiring) —
       any document with a callout, tabset, or crossref goes through the shim's Route-R dispatch,

@@ -1152,7 +1152,7 @@ stability.
 38. **`complete_substitutes_partial_descriptions`** —
     fixture with staged file containing placeholders
     + sibling HTML files containing first paragraphs.
-    After completion, `_site/posts.xml`'s
+    After completion, `_site/posts.xml`\'s
     `<description>` tags carry the firstPara HTML wrapped
     in CDATA.
 39. **`complete_substitutes_full_descriptions_with_absolute_urls`**
@@ -1201,7 +1201,7 @@ stability.
 
 45. **`pipeline_e2e_partial_feed`** — same fixture but
     `type: partial`. Posts have multi-paragraph bodies.
-    `_site/posts.xml`'s descriptions are wrapped in
+    `_site/posts.xml`\'s descriptions are wrapped in
     CDATA and contain the first paragraph HTML of each
     post. URLs are absolute (e.g. `https://example.com/posts/foo.html`).
 
@@ -1543,7 +1543,7 @@ scopes. The transforms read from `RenderContext` and
   evaluator already handles. The XML format tolerates
   extra whitespace between tags (RSS readers ignore it).
   Snapshot tests lock the output shape.
-- **Risk: `extract_full_contents`'s urls-to-absolute
+- **Risk: `extract_full_contents`\'s urls-to-absolute
   rewrite hits an edge case (mailto:, javascript:, query
   strings).** *Mitigation:* the rewriter has a guard:
   rewrite only when the href doesn't start with a scheme

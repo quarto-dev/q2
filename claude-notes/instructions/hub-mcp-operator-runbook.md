@@ -137,7 +137,7 @@ include them in stdout. Each event carries:
 - `detail` — failure reason on `auth_fail` (e.g.
   `user_not_allowlisted`, `conflicting_credentials`)
 
-Tokens themselves are never logged; `tower-http`'s `MakeSpan` is
+Tokens themselves are never logged; `tower-http`\'s `MakeSpan` is
 overridden to drop the `Authorization` / `Cookie` headers from the
 request span (`crates/quarto-hub/src/server.rs::RedactedMakeSpan`).
 

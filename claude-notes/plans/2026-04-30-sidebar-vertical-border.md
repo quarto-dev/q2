@@ -82,7 +82,7 @@ Translation:
 - If user wrote `sidebar.border: true|false` in YAML, use that.
 - Otherwise: `true` for `style: docked`, `false` for `style: floating`.
 - The synthesized `$sidebar-border: <bool>;` snippet is fed in
-  *before* `_bootstrap-variables.scss`'s `!default` line, so it wins
+  *before* `_bootstrap-variables.scss`\'s `!default` line, so it wins
   the `!default` race.
 
 So in `03-nested-sidebar`, both sidebars are `style: docked` and

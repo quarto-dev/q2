@@ -110,7 +110,7 @@ projection — as future consumers).
 
 ### Phase B — Rust/WASM relocation primitive (native-testable)
 
-New module `crates/pampa/src/node_tracking.rs` (mirror `apply_node_edit.rs`'s deserialize-and-walk),
+New module `crates/pampa/src/node_tracking.rs` (mirror `apply_node_edit.rs`\'s deserialize-and-walk),
 reusing `quarto_ast_reconcile::compute_block_hash_fresh`. Rust returns **hash recall + nearest**; the
 **slice-verify, distance-cap, and drop policy live in TS** (Phase C), where they're easy to tune.
 
@@ -153,7 +153,7 @@ A pure, host-agnostic `NodeTracker` (plus a thin `useNodeTracking` adapter if co
   referential-stable empty — mirror `nestedEditBuffers`/`EMPTY`).
 - [ ] Add iframe→parent messages `TRACK_NODE {trackId, r0, r1, generation}` and `UNTRACK_NODE {trackId}`
   to the message union + dispatch (`iframeMessageDispatch.ts`), handled in both hosts.
-- [ ] Wire `NodeTracker` into both hosts' `UPDATE_AST` assembly: after producing a fresh
+- [ ] Wire `NodeTracker` into both hosts\' `UPDATE_AST` assembly: after producing a fresh
   `untransformed_ast_json`+`renderedContent`, call `relocate(...)` and attach
   `trackedLocations?: Record<string,[number,number]|null>`.
 - [ ] Slice-verify, distance-cap threshold, and drop policy live here (TS). Distance cap = a multiple of

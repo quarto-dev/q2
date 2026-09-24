@@ -159,7 +159,7 @@ height from a range.
 - **Tier:** jsdom unit (no real layout).
 - **Seam / file:** `src/q2-preview/s0-list-item-surfaces.integration.test.tsx`
   (the existing §0 list-item-surface suite, which already stubs `Range`
-  prototype methods and exercises `measureLeadingBlockBox`'s `rangeUsed` flag).
+  prototype methods and exercises `measureLeadingBlockBox`\'s `rangeUsed` flag).
 - **Real unit mounted:** the actual `measureLeadingBlockBox` export (not a copy).
 - **Mock boundary:** jsdom implements neither `Range.prototype.getClientRects`
   nor `getBoundingClientRect`; stub **both** on the prototype for the test:
@@ -289,7 +289,7 @@ export function refocusTargetForAnchorR0(
 
 ### Chosen fix — part 2: call site in `PreviewRoot.tsx` `executeLanding` — VERBATIM
 
-Add `refocusTargetForAnchorR0` to the `./outerBlocks` import. In `executeLanding`'s
+Add `refocusTargetForAnchorR0` to the `./outerBlocks` import. In `executeLanding`\'s
 `intent === 'focus'` branch, replace the `outerBlockForAnchorR0` call:
 
 ```ts
@@ -391,7 +391,7 @@ parse fail / applyNodeEdit throw           → ERROR
 
 So the indicator **hooks the funnel, not the sources**: classify in
 `handleSetAst`, store one status state, render one overlay. The bulb lives in
-`ReactPreview`'s own `position:relative` container (it already hosts
+`ReactPreview`\'s own `position:relative` container (it already hosts
 `PreviewErrorOverlay`), so it is a parent-side overlay on the preview iframe —
 **no new cross-boundary messaging**. The spurious case is the only real
 behavior change (previously `onContentRewrite` was called unconditionally; the
@@ -697,7 +697,7 @@ export function classifyCommitOutcome(
 ### Two-commit changelog requirement
 
 G22 touches `hub-client/`. Per repo policy, the implementation needs **two
-commits**: (1) the code; (2) `hub-client/changelog.md` referencing commit (1)'s
+commits**: (1) the code; (2) `hub-client/changelog.md` referencing commit (1)\'s
 short hash, one user-facing sentence (e.g. "Add a commit-status indicator and
 surface block-edit errors in the preview").
 

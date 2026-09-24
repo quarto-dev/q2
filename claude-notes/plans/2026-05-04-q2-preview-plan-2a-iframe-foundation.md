@@ -152,7 +152,7 @@ Both q2-debug and q2-preview pass `sourceInfoPool` when available. q2-debug does
 
 - `src="/q2-preview.html"` instead of `/q2-debug.html`.
 - Accepts a new `themeFingerprint?: string | null` prop (three-way semantics — see below). Until item 11 lands, this is always `undefined` and the theme effect is a no-op.
-- Adds a parent-side theme effect that owns the `UPDATE_THEME` lifecycle: reads VFS bytes, creates a blob URL, revokes the previous URL, posts the URL string. Same two-message pattern as `Q2DebugIframe`'s `LOAD_CUSTOM_COMPONENTS` + `UPDATE_AST` split — only URL strings (not bytes) ever cross the postMessage boundary, and the iframe consumes them via a native `<link rel="stylesheet">`.
+- Adds a parent-side theme effect that owns the `UPDATE_THEME` lifecycle: reads VFS bytes, creates a blob URL, revokes the previous URL, posts the URL string. Same two-message pattern as `Q2DebugIframe`\'s `LOAD_CUSTOM_COMPONENTS` + `UPDATE_AST` split — only URL strings (not bytes) ever cross the postMessage boundary, and the iframe consumes them via a native `<link rel="stylesheet">`.
 
   **Three-way `themeFingerprint` semantics** (set by item 11's plumbing in `ReactPreview.tsx`):
 

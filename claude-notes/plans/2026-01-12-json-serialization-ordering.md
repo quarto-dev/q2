@@ -6,7 +6,7 @@
 
 The `unit_test_snapshots_json` test in the `pampa` crate is failing because JSON field ordering changed from alphabetical to insertion order.
 
-**Root Cause**: Commit `3f138f7` added `deno_core`, which enables `serde_json`'s `preserve_order` feature workspace-wide. This changed `serde_json::Map` from `BTreeMap` (alphabetical) to `IndexMap` (insertion order).
+**Root Cause**: Commit `3f138f7` added `deno_core`, which enables `serde_json`\'s `preserve_order` feature workspace-wide. This changed `serde_json::Map` from `BTreeMap` (alphabetical) to `IndexMap` (insertion order).
 
 **Before**: `{"c":"This","s":0,"t":"Str"}` (alphabetical)
 **After**: `{"t":"Str","c":"This","s":0}` (insertion order)

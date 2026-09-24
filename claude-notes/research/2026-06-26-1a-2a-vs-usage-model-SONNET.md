@@ -129,7 +129,7 @@ Plan2a acknowledges the vendored `@quarto/types` as a copy of Q1's published pac
 
 **Severity:** Medium. Marimo's PDF/LaTeX render path would fail at this stub. For the current epic scope (julia engine integration), it is not blocking. But Plan 3's marimo story depends on it.
 
-**Recommended action:** After Item A lands, change `system.pandoc`'s stub from `requiresLaunchContextError` to `notYetImplementedError` (or implement it — the pandoc binary path is in the ambient Init config per Item A's design, so implementation is straightforward). Add a "Plan 2" recovery tag. Document in plan2a or plan2A §2aa.
+**Recommended action:** After Item A lands, change `system.pandoc`\'s stub from `requiresLaunchContextError` to `notYetImplementedError` (or implement it — the pandoc binary path is in the ambient Init config per Item A's design, so implementation is straightforward). Add a "Plan 2" recovery tag. Document in plan2a or plan2A §2aa.
 
 ---
 

@@ -79,7 +79,7 @@ once-computed offset stays correct under scroll with **no recompute and no lag**
 > `BreadcrumbChip.tsx:34` using `surface.offsetParent` as `host` (a *different* element from the chip's
 > real containing block). The fix: give `#quarto-content` `position: relative` (becomes the chip's
 > offset-parent) and look it up **directly** (`document.getElementById('quarto-content')`), not via
-> `surface.offsetParent`. Both then share `#root`'s scroll → once-computed offset is scroll-stable.
+> `surface.offsetParent`. Both then share `#root`\'s scroll → once-computed offset is scroll-stable.
 >
 > **Stacking-context caveat.** Making `#quarto-content` positioned creates a **stacking context**.
 > Audit its z-indexed children (sidebar, TOC, page-nav, any overlay rendered inside `#quarto-content`)
@@ -93,7 +93,7 @@ content" — *not* CSS `position: fixed`.)
 
 > **No top clamp.** `top` is left un-clamped even at the document top. The page's top margin (page
 > padding + title block above the first editable block) keeps `surfaceTop > chipH`, so `top` stays
-> positive — the chip never paints above `#quarto-content`'s top edge. (Assumption, per the user:
+> positive — the chip never paints above `#quarto-content`\'s top edge. (Assumption, per the user:
 > a document whose very first block is the active surface *and* has near-zero top margin is the only
 > edge case that could push `top` negative; accepted as out of scope.) The old e2e assertion
 > `chipBox.y ≥ 0` becomes a natural consequence, not an explicit CSS clamp.

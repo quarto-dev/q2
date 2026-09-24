@@ -57,7 +57,7 @@ pattern (`ShareDialog.tsx`, `Editor.tsx`, `ProjectTab.tsx`); no clipboard.js
 dependency added. Secure-context only (localhost/https — both preview hosts
 qualify).
 
-**Text extraction:** mirror native `code-copy-init.js`'s `getTextToCopy`: from
+**Text extraction:** mirror native `code-copy-init.js`\'s `getTextToCopy`: from
 the button, `closest('.code-copy-outer-scaffold')` → `querySelector('code')` →
 clone → strip `.code-annotation-*` children → `innerText`.
 

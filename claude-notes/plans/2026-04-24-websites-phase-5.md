@@ -944,7 +944,7 @@ regressions.
 ### Orchestrator plumbing (`project/orchestrator.rs`)
 - [x] After each per-doc Pass-2 render, the orchestrator's
       accumulator receives the drained store via
-      `render_document_to_file`'s `Option<&mut ArtifactStore>`
+      `render_document_to_file`\'s `Option<&mut ArtifactStore>`
       parameter (cleaner than tuple-return; same effect).
 - [x] Byte-mismatch produces an error naming the conflicting
       key + lengths via `ArtifactMergeConflict`. The error

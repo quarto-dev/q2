@@ -344,7 +344,7 @@ Guardrails:
 - **Document the boundary** in both directions: a note in
   `crates/quarto-yaml-validation/README.md` ("for user-facing YAML
   config; do NOT replace with schemars-generated JSON Schema") and a
-  parallel rustdoc on `JsonDiagnostic`'s schema export ("schemars is
+  parallel rustdoc on `JsonDiagnostic`\'s schema export ("schemars is
   used here for wire-format documentation only; YAML config
   validation lives in `quarto-yaml-validation`").
 - **Optional follow-up:** an `xtask lint` rule
@@ -412,7 +412,7 @@ assert structure.
 
 - [x] Add Q-7-2..8 catalog entries in `error_catalog.json` (one per
   `DispatchError` variant).
-- [x] Add `schemars` to `quarto-error-reporting`'s deps, derive
+- [x] Add `schemars` to `quarto-error-reporting`\'s deps, derive
   `JsonSchema` on `JsonDiagnostic` / `JsonDiagnosticDetail` /
   `JsonPass1Failure`.
 - [x] Add `$schema` field (with `#[serde(rename = "$schema")]`) and

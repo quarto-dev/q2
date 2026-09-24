@@ -101,6 +101,6 @@ There are no other burnt numbers as of this writing.
 For any released writer version V, every reader that processes
 output from V must agree on the shape at every emitted code. Drift
 between Rust and TS readers is a silent wrong-behavior bug, not a
-type error. Reviewers of any PR that touches `json.rs`'s wire types
+type error. Reviewers of any PR that touches `json.rs`\'s wire types
 must verify the corresponding TS types in `sourceInfo.ts` move in
 lockstep.

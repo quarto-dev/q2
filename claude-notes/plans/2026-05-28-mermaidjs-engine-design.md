@@ -225,7 +225,7 @@ direction for the class of engine.
 ### G6. Capture-splice path drops aux ExecuteResult fields
 
 Tracking: **bd-cp3em**. Verified still present in
-`feature/multi-engine`'s `capture_splice.rs`. The fix is independent
+`feature/multi-engine`\'s `capture_splice.rs`. The fix is independent
 of multi-engine work.
 
 **Mermaid-specific consequence:** A mermaid engine that emits the

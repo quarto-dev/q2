@@ -188,7 +188,7 @@ trail + renderer.
       without a sidebar. Second run green end to end.
 - [x] Snapshot-change inventory: no `.snap` files changed in either
       commit; the one baseline fixture change is itemized in
-      `66bd2284`'s message.
+      `66bd2284`\'s message.
 - [x] Report to user. **Nothing pushed** — awaiting approval.
 
 ### Final commits

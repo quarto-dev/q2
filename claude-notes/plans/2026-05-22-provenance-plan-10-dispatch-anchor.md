@@ -136,7 +136,7 @@ authors can rely on.
   introspect `debug.getinfo()` can resolve `(source: path, line:
   line_num)` into `SourceInfo::Original { file_id, start, end }`
   where `start..end` covers the line's bytes (via
-  `FileInformation`'s line-break index).
+  `FileInformation`\'s line-break index).
 - Update `get_caller_source_info`
   (`crates/pampa/src/lua/diagnostics.rs:255`) — currently constructs
   `Generated { by: By::filter(path, line), from: SmallVec::new() }`.
@@ -259,7 +259,7 @@ Plan-10-specific mechanism.)
 - **Source range of a Dispatch anchor: line-covering `Original`.**
   `debug.getinfo()` gives line numbers, not byte ranges. Once Lua
   file content is in SourceContext, we compute the byte range of the
-  named line via `FileInformation`'s line-break index. The Dispatch
+  named line via `FileInformation`\'s line-break index. The Dispatch
   anchor's source_info is `Original { file_id: lua_file, start:
   line_start, end: line_end }`. Sub-line precision (specific
   function or expression) is out of scope for v1 — `debug.getinfo()`

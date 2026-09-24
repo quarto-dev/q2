@@ -36,7 +36,7 @@ opened.**
 - **Final whole-branch review** (most-capable-model pass across Tasks 2–8) found a real
   **Critical** bug the task-level reviews missed: gating the whole `quarto_crossref_filters`
   group on the new `assign_crossref_numbers()` predicate (Task 2's anchor-A1 conversion) also
-  silently skips `crossrefMetaInject`'s LaTeX preamble setup — unreachable before this patch
+  silently skips `crossrefMetaInject`\'s LaTeX preamble setup — unreachable before this patch
   (skip was ipynb-only) but reachable for *any* format once Task 8 made `crossref-numbering`
   YAML-settable. Reproduced: `--to pdf` under `crossref-numbering: external` crashed with
   `LaTeX Error: Environment codelisting undefined`; `--to typst` crashed similarly. Fixed with a
@@ -107,7 +107,7 @@ Full detail in this worktree's ledger,
   state — M2, like M5 (already acknowledged elsewhere in this file as "identical to M1 by
   construction"), is a cell where `crossref-numbering` stays unset, so Tasks 2-3's real behavior
   change doesn't reach it. A real substitute discriminator was verified by hand
-  (`crossref_present()`'s own `or` disjunct) and documented in the test's own doc comment. Full
+  (`crossref_present()`\'s own `or` disjunct) and documented in the test's own doc comment. Full
   `quarto-core` suite (same pinned pandoc): 4574/4574 passed, 0 failed.
 
 **Findings for Gordon #1's blocking condition is resolved**: P4's vendored filters tree +
@@ -136,7 +136,7 @@ discipline). The Spec is P3 + the design doc; where this file and the plan disag
 ### L-tier gate policy (stated once; referenced by every L row)
 
 **No silent skip.** This repo already has the precedent and it is a *hard-fail*, not a skip:
-`crates/pampa/tests/integration/test.rs:160-180`'s `assert_good_pandoc_version()` panics with an
+`crates/pampa/tests/integration/test.rs:160-180`\'s `assert_good_pandoc_version()` panics with an
 actionable message when the local `pandoc` is outside a calibrated window
 (`PANDOC_ORACLE_MIN_VERSION = (3, 6)` / `PANDOC_ORACLE_MAX_VERSION = (3, 10)`,
 `test.rs:117-118`), with a single deliberate escape hatch
@@ -146,7 +146,7 @@ out-of-range pandoc ⇒ the test fails loudly**, because a silently-skipping tes
 
 **Version floor, verified 2026-09-18.** Quarto `v1.11.3` (the epic's vendoring pin) declares
 `export PANDOC=3.10` (`git show v1.11.3:configuration`); this repo's CI installs **3.8.3**
-(`.github/workflows/test-suite.yml:18`, `ts-test-suite.yml:18`); `cargo xtask dev-setup`'s
+(`.github/workflows/test-suite.yml:18`, `ts-test-suite.yml:18`); `cargo xtask dev-setup`\'s
 `check_pandoc` floors at **3.6** (`crates/xtask/src/dev_setup.rs:282-305`); the dev machine used
 for this pass has **3.8.1**. Reconciling that is **P4's checklist item**, not P3's — but every L
 row here is inert until it is, so each L row names it as a prerequisite rather than assuming it.

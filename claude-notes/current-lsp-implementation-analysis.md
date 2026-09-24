@@ -43,7 +43,7 @@ apps/lsp/
 
 ### 1. **Text Document Synchronization**
 - **Type**: Incremental (`TextDocumentSyncKind.Incremental`)
-- **Implementation**: Uses `vscode-languageserver`'s `TextDocuments` manager
+- **Implementation**: Uses `vscode-languageserver`\'s `TextDocuments` manager
 - **Location**: `src/index.ts`
 
 ### 2. **Completion** (`textDocument/completion`)

@@ -50,7 +50,7 @@ it into the existing printers.
    `QuartoError::Parse(pe) => DiscoverParse(pe)`, everything else →
    `Discover(e.to_string())`. The `path_exists` sites keep the plain
    string mapping (their errors aren't `QuartoError`).
-3. **Text path**: in `execute`'s classify error arm, mirror
+3. **Text path**: in `execute`\'s classify error arm, mirror
    `execute_single_doc`: on `DiscoverParse(pe)`, `eprintln!("{pe}")`
    and `std::process::exit(1)` instead of bubbling through anyhow.
    Output becomes exactly the bare rendered diagnostic — single

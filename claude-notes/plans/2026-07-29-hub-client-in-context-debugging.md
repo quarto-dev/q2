@@ -198,7 +198,7 @@ A visual inspector mounted **inside the SPA**, over the **live repo**:
 construction. To observe the **editor's own** sync traffic:
 
 - Add an optional network-adapter wrap hook (or diagnostics event emitter) to
-  `quarto-sync-client`'s repo construction; reuse `LoggingNetworkAdapter`
+  `quarto-sync-client`\'s repo construction; reuse `LoggingNetworkAdapter`
   (move it from `src/debug/services/` to a shared location).
 - Ring buffer (e.g. last 500 messages, payloads summarized: type, docId,
   byte-size, timestamp) exposed as `quartoDebug.am.messages()` and rendered
@@ -506,7 +506,7 @@ assertion (the first protocol message is a doc `request`, not `sync`)
 
 Branch: `braid/bd-09aja9gl-phase-4-iframe-embed`. Scope note: plain-DOM
 overlay (header + close + iframe), no React and no lazy chunk needed —
-the payload IS the iframe; `debug.html`'s existing `#doc=` hash seed
+the payload IS the iframe; `debug.html`\'s existing `#doc=` hash seed
 does the rest. Verification is unit tests + a manual local-prod pass
 (a Playwright spec would mostly re-test debug.html, which has its own
 coverage).

@@ -13,7 +13,7 @@ The existing architecture is well-suited for XML source tracking. The complexity
 
 ## Investigation Scope
 
-This report analyzes whether `quarto-source-map`'s architecture is suitable for tracking source locations in XML documents, specifically CSL (Citation Style Language) files. The analysis considers:
+This report analyzes whether `quarto-source-map`\'s architecture is suitable for tracking source locations in XML documents, specifically CSL (Citation Style Language) files. The analysis considers:
 
 1. quarto-source-map's current capabilities
 2. quarto-yaml's patterns for source tracking

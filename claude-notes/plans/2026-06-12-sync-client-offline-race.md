@@ -151,7 +151,7 @@ first. All in q2; no hub deployment required until rollout.
 
 ### Part 2 — self-heal failed opens on the online transition (D2)
 
-In `connect()`'s `onPeerConnect` (and the matching handler in the
+In `connect()`\'s `onPeerConnect` (and the matching handler in the
 `createNewProject` path), when transitioning offline→online:
 re-run `loadFileDocuments` for documents that previously failed
 (track failures during the initial pass), firing the normal
@@ -164,7 +164,7 @@ without calling `connect()` again.
 ### Part 3 — honest connection policy for hub-client (D3)
 
 Replace the bare 1 ms default at hub-client's call site (via
-`preview-runtime`'s `automergeSync.connect`) with the
+`preview-runtime`\'s `automergeSync.connect`) with the
 health-arbitrated pattern q2-preview already uses: probe `/health`
 (HTTP, immune to websocket handshake stalls); if the server is
 reachable, wait for the peer with a realistic budget (seconds) before
@@ -260,7 +260,7 @@ mutation. Then D1 durability (prevents new mintings), doctor
 (blast-radius + standing health check), D2/D3 as planned.
 
 **Recorded latent-risk note (evidence-downgraded, kept honest):**
-while chasing a wrong hypothesis we found that `findDoc`'s retry loop
+while chasing a wrong hypothesis we found that `findDoc`\'s retry loop
 bails immediately when `connectedPeers.size === 0` (added in
 e326eb5c, bd-jit6pdwq Phase 1). For cold-cache boots this converts
 "slow but successful" (retry until the peer arrives) into "instant

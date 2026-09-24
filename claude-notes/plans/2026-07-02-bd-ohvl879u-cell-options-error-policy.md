@@ -255,7 +255,7 @@ Resolution flow in the engine (text path, self-contained — no engine-API
 change):
 
 1. Extract the input's `---` front-matter block (same
-   `extract_between_delimiters` pattern as `pampa/src/pandoc/meta.rs`'s
+   `extract_between_delimiters` pattern as `pampa/src/pandoc/meta.rs`\'s
    `rawblock_to_config_value`), parse with
    `quarto_yaml::parse_with_parent`, convert via `yaml_to_config_value`.
    Read the `execute` map from it.

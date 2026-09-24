@@ -215,7 +215,7 @@ phases differ substantially between them.
 ## Risks / tradeoffs (draft)
 
 - **(B)'s blast radius measured lower than feared.** `sectionize_blocks` output feeds
-  `quarto-ast-reconcile`'s hashing, `llms.rs`, the idempotence tests, and the HTML writer's
+  `quarto-ast-reconcile`\'s hashing, `llms.rs`, the idempotence tests, and the HTML writer's
   `section` detection — but the recursion spike passed all 12306 workspace tests. The remaining
   risk is the *attribute-merge* half (finding 5), which the spike did not implement.
 - **The merge rule is the subtle part.** Pandoc absorbs a Div into the section it wraps only under

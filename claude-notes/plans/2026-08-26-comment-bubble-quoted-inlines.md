@@ -143,7 +143,7 @@ Consumers of `inlinesToPlainText`/`blocksToPlainText`: `framework/meta.ts`
 The only behavior change is quote characters now appearing where quoted
 text already appeared — strictly closer to both Pandoc and the visual
 renderer. Risk: snapshot/unit-test churn (at minimum
-`plainText.test.ts:65`'s `'hiq'` expectation, deliberately updated to
+`plainText.test.ts:65`\'s `'hiq'` expectation, deliberately updated to
 `'hi“q”'`). Will run the full hub-client + preview-renderer suites and
 report any other snapshot deltas explicitly.
 

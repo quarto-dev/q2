@@ -71,7 +71,7 @@ Write the tests first against the existing vitest harness
       `indexedDB` global touched even when one exists); default
       remains IndexedDB.
 - [x] Tests: `retryIntervalMs` is forwarded to
-      `BrowserWebSocketClientAdapter`'s constructor.
+      `BrowserWebSocketClientAdapter`\'s constructor.
 - [x] Tests: `findDoc` unavailable-recovery — first `repo.find()`
       rejects "unavailable", a peer then connects, retry succeeds;
       no retry with zero peers (offline fast-fail); bounded attempts;
@@ -126,7 +126,7 @@ boot controller if extracted.
       post-failure health confirmation (3 strikes, 500 ms spacing),
       capped exponential backoff (1 s → 10 s), `ServerGoneError`
       terminal, cooperative cancellation.
-- [x] Implement: thread `ConnectOptions` through `preview-runtime`'s
+- [x] Implement: thread `ConnectOptions` through `preview-runtime`\'s
       `connect()` (+ re-export from quarto-sync-client index, which
       was missing); doc comments updated.
 - [x] Implement: `BootLoadingScreen` component (initializing copy,

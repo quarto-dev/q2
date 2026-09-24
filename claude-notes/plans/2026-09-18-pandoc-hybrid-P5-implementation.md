@@ -81,7 +81,7 @@ those assertions, and must not break them:
 - **P4 T8.3** — the shim file contains no `traverse = 'topdown'` and the group carries `name`,
   `filter`, `traverser = 'jog'`. **P5 replaces the file's body and must keep this test green.**
 - **P4 T1.4 / T1.5 / T8.6** — the repo-level `vendored-pandoc-filters` lint rule asserting every
-  file listed under `resources/pandoc-filters/README.md`'s `## Ours vs. pinned` exists. `quarto2-shim.lua`
+  file listed under `resources/pandoc-filters/README.md`\'s `## Ours vs. pinned` exists. `quarto2-shim.lua`
   is on that list, so P5's file is already protected against a delete-and-recopy re-vendor.
 - **P4 Task 2 `run_main_lua(ast_json, to_format, params_blob_json, out) -> PandocRunOutcome`** — the
   `L`-tier transport helper. P5 extends it (Task 1) rather than writing a second one.
@@ -196,7 +196,7 @@ construction.** For docx the sub-branch is `eqQquad` (`:134`, `:153-155`) becaus
   `return result, custom_node_data[id]` is at **`:263`**.
 - `need_emulation == false` → `:455-457` `return tbl.__quarto_custom_node, tbl`.
 
-**The `:457` branch *is* taken — by Tabset.** `panel-tabset.lua`'s constructor ends `return custom_data, false`
+**The `:457` branch *is* taken — by Tabset.** `panel-tabset.lua`\'s constructor ends `return custom_data, false`
 (`:243`), so **Tabset takes `:457`**. Callout (`callout.lua:112-120`), Theorem
 (`theorem.lua:88-92`), Proof (`proof.lua:55-60`) and FloatRefTarget (`floatreftarget.lua:96-108`)
 all return a single value and take `:453`. Both branches return two values and `.order` goes on the
@@ -212,17 +212,17 @@ the data table. Verified per type, and the three answers are different:**
 | **Callout** | **hard crash** — `titlePrefix` → `numberOption` → `formatNumberOption`, `order.order` on nil (`crossref/format.lua:140`); reached for docx because `calloutDocx` calls `decorate_callout_title_with_crossref` at `quarto-post/docx.lua:193` | render exits 0 **and** the title carries `Note\u{a0}1:` |
 | **Theorem** | **silent, no prefix** — explicit `if order == nil then return el end` at `customnodes/theorem.lua:278-280` | the caption text contains `Theorem 1`. **"the render succeeded" is vacuous here** |
 | **FloatRefTarget** | **warn + empty prefix** — `float_title_prefix` (`crossref/tables.lua:223-236`) `warn("field 'order' is missing from float…")` and `return {}` at `:229-232` | the caption text contains `Figure\u{a0}1:` **and** stderr has no `field 'order' is missing` |
-| **Proof** | n/a — `proof.lua`'s renderer never reads `order` | nothing to assert; do not assign |
+| **Proof** | n/a — `proof.lua`\'s renderer never reads `order` | nothing to assert; do not assign |
 | **Tabset** | n/a — unnumbered | nothing to assert; do not assign |
 
 ### D5 — Route N's expected value is `Figure\u{a0}1` exactly, and three separate collapses are live
 
-Construction of the expected string, from `resolveRefs`'s own body (`crossref/refs.lua:8-145`):
+Construction of the expected string, from `resolveRefs`\'s own body (`crossref/refs.lua:8-145`):
 
 1. `refPrefix("fig", upper)` (`crossref/format.lua:66-96`) → reads
    `param("crossref-fig-prefix")` first (P4 Task 5 supplies it), then
    `by_ref_type["fig"].prefix` (`mainstateinit.lua:38` = `"Figure"`), then the bare `type .. "."`.
-2. `add_ref_prefix`'s nbsp (`refs.lua:13-19`) — a `local function` **inside** the `Cite` callback,
+2. `add_ref_prefix`\'s nbsp (`refs.lua:13-19`) — a `local function` **inside** the `Cite` callback,
    therefore **not reachable** from a spliced-in filter and must be reproduced inline. It appends
    `nbspString()` = `pandoc.Str '\u{a0}'` (`common/pandoc.lua:125-127`) unless the category sets
    `space_before_numbering == false` or the target is Typst.
@@ -244,7 +244,7 @@ The collapses:
 - **`contains("Figure\u{a0}1")` does not discriminate the JSON-decoder float trap** (measured,
   pandoc 3.8.1 / Lua 5.4): `pandoc.json.decode('{"order":1}').order` is a **float** `1.0`
   (`math.type` → `"float"`), and `format.lua:184` does `tostring(num)`, so the rendered text becomes
-  `Figure\u{a0}1.0` — **which contains `Figure\u{a0}1`**. Q1's own decoder, exposed in `main.lua`'s
+  `Figure\u{a0}1.0` — **which contains `Figure\u{a0}1`**. Q1's own decoder, exposed in `main.lua`\'s
   state as `quarto.json.decode` (`init.lua:151` `local json = require '_json'`, published at
   `init.lua:994` `json = json,`), returns an **integer** `1` and renders `1`. So: the shim must
   decode `data-custom-data` with `quarto.json.decode` (or coerce with `math.tointeger`), and the
@@ -277,7 +277,7 @@ four of seven types while *also* failing to detect a swap (`div`↔`name`).
 
 ### D7 — The golden harness cannot detect a 9th wire type, so Task 7's totality test is the only guard
 
-Task 6(a)'s unrecognized-`type_name` path unwraps the scaffold to its slot content and drops the
+Task 6(a)\'s unrecognized-`type_name` path unwraps the scaffold to its slot content and drops the
 wrapper. For a text-extracting golden that is a **zero-byte diff**: the words are all still there,
 only the semantics (numbering, environment, callout chrome) are gone. So a 9th type shipping
 without shim support is invisible to every golden. The bidirectional assertion in Task 7 (T7.3) is
@@ -297,8 +297,8 @@ post-filter AST capture the later tasks assert on.
 **Files:**
 - `resources/pandoc-filters/filters/quarto2-shim.lua` — **ours, inside the vendored tree** (P4
   Task 8 created the placeholder; the inside-the-tree placement is forced because `import()`
-  resolves relative to `PANDOC_SCRIPT_FILE`'s own directory, `main.lua:8-11`). Already listed under
-  `resources/pandoc-filters/README.md`'s `## Ours vs. pinned`, so P4's `vendored-pandoc-filters`
+  resolves relative to `PANDOC_SCRIPT_FILE`\'s own directory, `main.lua:8-11`). Already listed under
+  `resources/pandoc-filters/README.md`\'s `## Ours vs. pinned`, so P4's `vendored-pandoc-filters`
   lint rule protects it from a delete-and-recopy re-vendor — **P5's checklist item "confirm the
   shim's own file lives as a sibling to `customnodes/*.lua` under our own tree" is discharged by
   re-running P4's T1.5/T8.6, not by new code.**
@@ -438,7 +438,7 @@ shape: derive constructor args from `plain_data` + `attr` + slots, call the cons
   - `type` ← `plain_data.type` (**P2 Task 3's extension**; `proof.rs:150-152` carries only
     `{"kind": "Proof"}` today). The renderer does `proof_types[proof_tbl.type:lower()]`
     unconditionally at `proof.lua:81`, so a nil `type` is `attempt to index a nil value`.
-  - `div`/`name`/`identifier` as for Theorem. **No `order`** — `proof.lua`'s renderer never reads it.
+  - `div`/`name`/`identifier` as for Theorem. **No `order`** — `proof.lua`\'s renderer never reads it.
 - **FloatRefTarget** — `floatreftarget.lua:96-108` decomposes `tbl.attr` into
   `identifier`/`classes`/`attributes` and passes everything else through unfiltered.
   - `attr` ← the sanitized attr.
@@ -578,7 +578,7 @@ callout label.
 | T3.2 | **L**(chain) | the same, nil-order polarity | A wrong-target variant (order assigned to the first return value) → assert the run exits **83** and stderr contains `format.lua` | none | the Callout route's two-value destructuring |
 | T3.3 | **L**(chain) | the shim's Callout route, unnumbered path | `callout-plain.qmd` (`::: {.callout-note}`, no id) → assert the title contains no digit-prefix and stderr contains no `unknown callout prefix` | none | the `attr` sanitizer (an unsanitized attr leaves `__quarto_custom_node` on the rendered Div) |
 | T3.4 | **L**(chain) | the shim's Tabset route + `panel-tabset.lua:147-244` | `tabset-basic.qmd` (two `## ` tabs) → assert both tab titles and both bodies appear in the captured AST, **and** stderr contains no `No tabs found in tabset` | none | the `params.tabs` list construction (the per-tab `quarto.Tab{…}` loop) |
-| T3.5 | **L**(chain) | Tabset's `need_emulation == false` return branch | Same fixture → assert the captured AST contains no `__quarto_custom_id`-attributed Div left unrendered (i.e. the scaffold returned from `:457` was picked up by `main.lua`'s render pass) | none | returning the *second* value from `quarto.Tabset` instead of the first |
+| T3.5 | **L**(chain) | Tabset's `need_emulation == false` return branch | Same fixture → assert the captured AST contains no `__quarto_custom_id`-attributed Div left unrendered (i.e. the scaffold returned from `:457` was picked up by `main.lua`\'s render pass) | none | returning the *second* value from `quarto.Tabset` instead of the first |
 
 **Revert hunks, stated exactly:**
 - T3.1 — Revert the Callout route's `tbl.order = { … }` → the run exits 83
@@ -619,10 +619,10 @@ callout label.
 
 ---
 
-## Task 4: Route N for `CrossrefResolvedRef` — call Q1's own functions, inline only `add_ref_prefix`'s nbsp logic
+## Task 4: Route N for `CrossrefResolvedRef` — call Q1's own functions, inline only `add_ref_prefix`\'s nbsp logic
 
 **Scope.** Resolve a `CrossrefResolvedRef` wire node directly to plain Pandoc inlines by calling
-Q1's real globals with Q2's already-resolved `plain_data`, mirroring `resolveRefs`'s body. Q1's
+Q1's real globals with Q2's already-resolved `plain_data`, mirroring `resolveRefs`\'s body. Q1's
 behaviour is normative for the Pandoc leg (decided; design §12's accepted asymmetry).
 
 **Files:**

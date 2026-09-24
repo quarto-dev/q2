@@ -128,7 +128,7 @@ not a strict file-creation order. `host.ts` (Phase 2) is the spine and is
 described first for narrative clarity, but it **imports** the Phase 3
 supporting modules (`deno-host.ts`, `quarto-api.ts`, `mapped-source.ts`,
 `engine-loader.ts`, `types.ts`). Create those modules first (even as typed
-skeletons) so `host.ts` typechecks; flesh out `host.ts`'s dispatch body
+skeletons) so `host.ts` typechecks; flesh out `host.ts`\'s dispatch body
 against them. Treat Phase 0 (the Test Seam Spec, below) as the true first
 step per this repo's tests-first workflow.
 
@@ -177,7 +177,7 @@ under test is never mocked; mock only the genuine boundaries noted.
 
 - [x] **T2 — MappedString rehydration accuracy (`mapped-source.ts`).**
   *Tier:* pure logic + a real temp file (vitest). *Real unit:*
-  `mapped-source.ts`'s `MappedString.map(index, closest)`. *Seam:* build a
+  `mapped-source.ts`\'s `MappedString.map(index, closest)`. *Seam:* build a
   `TsSourceMapEntry[]` with two mappable pieces pointing into a written temp
   file (choose entries where `file_offset ≠ start` so a no-op `.map()` that
   returned `index` unchanged would fail) plus one `source: None` piece; call

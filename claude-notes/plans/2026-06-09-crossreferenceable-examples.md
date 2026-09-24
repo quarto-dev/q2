@@ -100,7 +100,7 @@ message and emphasizes the full runnable demo project. Constants:
 
 Two sub-questions:
 
-**(a) Prefix.** Needs to be free (not in `registry.rs:78`'s table) and read well
+**(a) Prefix.** Needs to be free (not in `registry.rs:78`\'s table) and read well
 in prose. Candidates:
 
 | Prefix | `@…` reads as | Notes |
@@ -163,7 +163,7 @@ Callout → CalloutResolve, and the float sugar → render split):
    when numbered (read from `plain_data.order`), and the source link. Without a
    number, emit today's plain container.
 
-> Why a dedicated render step rather than teaching `CrossrefRenderTransform`'s
+> Why a dedicated render step rather than teaching `CrossrefRenderTransform`\'s
 > float renderer to emit an iframe: keeps crossref-render generic (it knows
 > figures/divs, not iframes), and keeps all embed-specific HTML in one module.
 > The shared machinery only does numbering + ref-link text.

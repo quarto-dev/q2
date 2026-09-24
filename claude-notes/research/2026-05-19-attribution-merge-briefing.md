@@ -18,7 +18,7 @@ Across almost every content conflict, the same two-axis tension repeats:
 | **Module layout** | (nothing — main is pre-reorg) | Package-alias imports (`@quarto/preview-renderer/...`, `@quarto/preview-runtime`), the stub-and-real-entry split |
 
 So the recipe per conflict is usually:
-1. Start from **feature**'s file (correct imports, correct package boundaries).
+1. Start from **feature**\'s file (correct imports, correct package boundaries).
 2. **Graft in** the new attribution surface from main (new props, hook calls, WASM signature additions, `<AttributionWrap>` wrapping).
 3. Re-target any relative imports `main` introduces for attribution helpers to their ts-packages equivalents.
 

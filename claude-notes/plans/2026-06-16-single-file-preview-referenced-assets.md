@@ -46,7 +46,7 @@ injected via `HubConfig`, synced by `reconcile_files_with_index`).
       (8 literal sites) — resolved at the mapping point instead.
 - [x] **D. quarto-hub — sync them.** `ProjectFiles::with_binary_files(...)`; the
       single-file branch in `context.rs` appends `config.single_file_assets` to
-      `binary_files`, so `reconcile_files_with_index`'s binary loop syncs them.
+      `binary_files`, so `reconcile_files_with_index`\'s binary loop syncs them.
       Test: `test_single_file_with_binary_files_adds_referenced_assets`.
 - [x] **E. E2E.** `q2 preview page.qmd` (no `_quarto.yml`) with sibling
       `./sibling-image.png`: before = broken (`naturalWidth 0`, raw HTTP url →

@@ -56,7 +56,7 @@ Decision D1 (bd-creo) and the config-error-handling decision of 2025-12-07
    returns true iff pass1/pass2 failures exist or a *project-level*
    diagnostic has `kind == Error`.
 
-5. **Precedent already in-tree:** `quarto-doctemplate`'s `EvalContext` has a
+5. **Precedent already in-tree:** `quarto-doctemplate`\'s `EvalContext` has a
    working `strict_mode` flag with `warn_or_error_at` /
    `warn_or_error_with_code` (`crates/quarto-doctemplate/src/eval_context.rs:125-232`).
    That's the emission-side pattern; we deliberately do **not** generalize

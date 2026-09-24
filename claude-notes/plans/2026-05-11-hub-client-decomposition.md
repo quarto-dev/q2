@@ -454,7 +454,7 @@ q2-preview-spa/
 }
 ```
 
-`vite.config.ts` mirrors `hub-client/vite.config.ts`'s alias and
+`vite.config.ts` mirrors `hub-client/vite.config.ts`\'s alias and
 `source` condition, with a single entry `index.html`. No proxy
 configuration (Phase A adds it).
 
@@ -472,7 +472,7 @@ createRoot(document.getElementById('root')!).render(
 )
 ```
 
-(`PreviewErrorOverlay`'s actual prop shape is to be checked when
+(`PreviewErrorOverlay`\'s actual prop shape is to be checked when
 the move lands; the placeholder content is interchangeable.)
 
 ## Phasing

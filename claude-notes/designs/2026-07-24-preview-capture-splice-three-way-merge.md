@@ -84,7 +84,7 @@ accretes special cases instead of generalizing.
 The render pipeline does not use this walk. After the engine runs, render calls
 `quarto_ast_reconcile::reconcile(ast, executed_ast)` — a general, content-hash
 two-way reconciliation — to merge the pre-engine and post-engine ASTs while
-preserving source locations. That path renders `index.qmd`'s six marimo islands
+preserving source locations. That path renders `index.qmd`\'s six marimo islands
 correctly. The preview path, using the bespoke walk on the *same* capture, drops
 five of them. The reconciliation machinery is the part that works; the bespoke
 walk is the anomaly.
@@ -138,7 +138,7 @@ entire family of output-block predicates disappears.
 Adjacent cells with a partial edit are the case the merge cannot resolve on its
 own, and the reason is fundamental: **the engine erases cell identity.** A cell
 and the island it becomes share no content, so a content diff finds *no anchor*
-inside a run of adjacent cells. Consider `index.qmd`'s first two cells, which sit
+inside a run of adjacent cells. Consider `index.qmd`\'s first two cells, which sit
 together with no prose between them, when the reader edits only the second:
 
 ```
@@ -150,13 +150,13 @@ engine B1 = [ island1, echoCode2, island2 ]
 The base↔engine diff anchors nothing here — `cell1` and `cell2` both vanished
 into unrelated output — so `diff3` sees one chunk changed on both sides,
 declares a conflict, and takes the reader's side: `[cell1, cell2']`. That drops
-`cell1`'s island even though the reader never touched `cell1`. The result is
+`cell1`\'s island even though the reader never touched `cell1`. The result is
 worse than the bug being fixed.
 
 The resolution keeps the merge but adds one assumption that holds for every
 execution engine: **the engine emits output in cell order and touches only
 cells.** Within an engine-changed region, attribute the output run to source
-cells by order — cell *k* owns the run up to where cell *k+1*'s output begins —
+cells by order — cell *k* owns the run up to where cell *k+1*\'s output begins —
 producing a per-cell output run. The "did the reader edit this cell" test then
 runs per cell, on the hash of the cell's source, which is precisely today's
 `(hash, occurrence)` key. In the example, `cell1` (unedited) takes `island1`,

@@ -47,7 +47,7 @@ intervening work — these are the apples-to-apples comparison and the
 ones the Phase 4 decision should use.
 
 (1) `cargo clean` after the build reported "Removed 36689 files, 22.3 GiB total"
-— a slight discrepancy with `du`'s 21 GB because `du` undercounts
+— a slight discrepancy with `du`\'s 21 GB because `du` undercounts
 hardlinks and compressed metadata. We use `du -sh` as the headline
 figure to stay consistent with the script's output.
 

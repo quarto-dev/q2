@@ -212,7 +212,7 @@ matter; both only touch meta). For each of `date`, `date-modified`:
   time — the doctemplate listing templates keep interpolating plain
   strings, exactly like Q1's EJS.
 - Feeds keep RFC-2822 output (a machine format, not user-styled) but
-  `format_pub_date_rfc822`'s ad-hoc parse is replaced by
+  `format_pub_date_rfc822`\'s ad-hoc parse is replaced by
   `dates::parse_date`, closing the "two parsers drift" hole.
 
 ### 4. Preview (Q9) and testing

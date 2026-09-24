@@ -25,7 +25,7 @@ The fix lives in the external crate. The question this plan settles first is
 **whether it can be made without a breaking API change** (the user's concern
 going in). Conclusion below: **yes** — the minimal fix touches no public
 signature, and the two "nicer" variants are both additive. The genuinely
-breaking variant (changing `SourceFile.content`'s type) is not needed for
+breaking variant (changing `SourceFile.content`\'s type) is not needed for
 this strand and is recorded as a follow-up idea only.
 
 ## Reproduction (2026-09-18, this checkout, `target/release-perf/q2` built 11:16)

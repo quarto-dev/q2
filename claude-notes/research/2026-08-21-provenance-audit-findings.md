@@ -86,10 +86,10 @@ Two shipped; the type system caught none; review caught two.
 
 | # | instance | status | fix |
 |---|---|---|---|
-| 1 | `preimage_in`'s `Substring` arm (Rust) | shipped | Plan 1, 0.1.2 — **refuse** (`None`) |
-| 2 | `resolveChain`'s `Substring` arm (`annotated-qmd`, `source-map.ts:301-315`) | shipped | Plan 2 Phase 4 |
+| 1 | `preimage_in`\'s `Substring` arm (Rust) | shipped | Plan 1, 0.1.2 — **refuse** (`None`) |
+| 2 | `resolveChain`\'s `Substring` arm (`annotated-qmd`, `source-map.ts:301-315`) | shipped | Plan 2 Phase 4 |
 | 3 | a length-preserving predicate proposed as the `preimage_in` fix | caught in review | withdrawn |
-| 4 | `ProvenanceBuilder::finish()`'s length-matching collapse rule | caught in review | now "exactly one piece and it is verbatim" |
+| 4 | `ProvenanceBuilder::finish()`\'s length-matching collapse rule | caught in review | now "exactly one piece and it is verbatim" |
 
 ### The watch-item: it is not the arithmetic
 
@@ -118,8 +118,8 @@ at the site that looked defective:
 
 | the site that looked wrong | where the answer actually was |
 |---|---|
-| `preimage_in`'s `Substring` arm | one level *down*: the arithmetic is byte-identical to `resolve_byte_range`'s; the difference is what the **parent's `Concat` arm** hands back |
-| `incremental.rs:171`'s `preimage_in` call | one level *up*: whether the **baseline capture** can ever contain a fold-bearing `Concat` (`pipeline.rs:1013`) — it cannot, so the site is latent |
+| `preimage_in`\'s `Substring` arm | one level *down*: the arithmetic is byte-identical to `resolve_byte_range`\'s; the difference is what the **parent's `Concat` arm** hands back |
+| `incremental.rs:171`\'s `preimage_in` call | one level *up*: whether the **baseline capture** can ever contain a fold-bearing `Concat` (`pipeline.rs:1013`) — it cannot, so the site is latent |
 | the `shortcode_string` closure's range arithmetic | one call *up*: `process_shortcode_string` destructures the range away (`shortcode.rs:36`), so the arithmetic is dead and the site cannot drift by construction |
 
 The shape that misleads is always the same — *a decoded string paired with a raw
@@ -188,7 +188,7 @@ and never slices text.
 > `InlineAlignment::KeepBefore` arm and `assemble_recursed_container`'s
 > verbatim early return also emit a hull's bytes as a node's text. Both are
 > latent for exactly the reason `:171` is — verified at the consumer, since
-> `incremental_write`'s only two production callers both supply an
+> `incremental_write`\'s only two production callers both supply an
 > untransformed, parent-less baseline (one of which is test-pinned, the other
 > only argued — see the note under § Reachability below). Every remaining site is *locate*,
 > including seven that slice `original_qmd` at **complement** ranges (gap,
@@ -214,7 +214,7 @@ Three findings, each closing one producer:
    `Substring { parent: content_source_info }` because the nested reader
    threads the parent through `node_source_info_with_options`
    (`pampa/src/pandoc/location.rs:214-217`).
-3. **But they cannot reach the copy site.** `incremental_write`'s baseline is
+3. **But they cannot reach the copy site.** `incremental_write`\'s baseline is
    `capture_untransformed_ast_json` (`quarto-core/src/pipeline.rs:1006-1022`,
    called at `:920`), which (a) **re-parses the raw bytes** through
    `pampa::wasm_entry_points::qmd_to_pandoc(content)` (`:1007`) with a fresh,
@@ -231,7 +231,7 @@ protects `incremental.rs:171`; the shape of the preview capture does. That is
 what Plan 3's guard exists to preserve. The guard's reach is narrower than the
 class, though, and Plan 3 § Evidence Phase 1 states the split: it pins the
 `capture_untransformed_ast_json` artifact (`apply_node_edit` inherits it);
-`incremental_write_qmd`'s own raw-byte re-parse
+`incremental_write_qmd`\'s own raw-byte re-parse
 (`wasm-quarto-hub-client/src/lib.rs:2952`) is latent by an **analogous
 invariant that no test exercises**.
 
@@ -269,7 +269,7 @@ next raw byte.
 
 **`quarto_xml::parse_with_parent` is dead code.** Zero callers anywhere,
 including tests. The only references are its definition (`parser.rs:55`), its
-re-export (`lib.rs:86`) and a doc mention (`lib.rs:74`). (`pampa`'s
+re-export (`lib.rs:86`) and a doc mention (`lib.rs:74`). (`pampa`\'s
 `table_caption_provenance.rs` defines a local helper of the same name —
 unrelated.) `quarto-xml` is workspace-internal, not one of the externalized
 published crates, so there are no outside consumers either. `XmlParser::parent`

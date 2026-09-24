@@ -26,7 +26,7 @@ fixed in-strand (Phase A below) because they are exactly the "listings
 maturity" this strand was waiting on:
 
 1. **`sort: "date desc"` mis-parses** — front-matter strings arrive as
-   `PandocInlines`; `parse_sort`'s scalar arm misses the
+   `PandocInlines`; `parse_sort`\'s scalar arm misses the
    `as_plain_text()` route and emits Q-12-3 with an empty sort. Already
    filed as **bd-2qjnd** (fix spelled out there; close it here).
 2. **`contents: posts` (bare directory) matches nothing** — Q1 expands
@@ -167,7 +167,7 @@ error on the not-yet-existing `with_today` (API-first TDD). Crate
 suite 31/31; CLI create suite 30/30 (unimplemented-choice tests
 repointed at `manuscript` / `website:solitaire`); WASM
 `projectCreate.wasm.test.ts` 7/7 against freshly built WASM —
-`time`'s `wasm-bindgen` clock path compiles and runs, so no export
+`time`\'s `wasm-bindgen` clock path compiles and runs, so no export
 signature change was needed. Path assertions normalized for Windows
 back-slashes.
 

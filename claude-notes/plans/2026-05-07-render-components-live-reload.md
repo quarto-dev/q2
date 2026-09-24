@@ -105,7 +105,7 @@ The 500ms delay is a starting point — debounceable, tunable. Future iterations
 
 #### 3. Iframe entry handles repeat `LOAD_CUSTOM_COMPONENTS`
 
-When debouncedCode reference changes, `AstIframe.tsx:42-54`'s effect fires `LOAD_CUSTOM_COMPONENTS` to the iframe. The iframe entry's `loadCustomComponents` rebuilds `customRegistry` from scratch each time. This already works today for the YAML-twiddle workflow; with the live-reload, it just fires more often.
+When debouncedCode reference changes, `AstIframe.tsx:42-54`\'s effect fires `LOAD_CUSTOM_COMPONENTS` to the iframe. The iframe entry's `loadCustomComponents` rebuilds `customRegistry` from scratch each time. This already works today for the YAML-twiddle workflow; with the live-reload, it just fires more often.
 
 Verify during implementation: after a `LOAD_CUSTOM_COMPONENTS` arrives without an `UPDATE_AST` immediately following, does the iframe re-render with the new registry? If not, the iframe entry needs an explicit re-render trigger after `loadCustomComponents` completes — likely a `root.render(...)` call with the last-known AST. ~5 LOC.
 

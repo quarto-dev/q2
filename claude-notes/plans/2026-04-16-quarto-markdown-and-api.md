@@ -180,7 +180,7 @@ referenced by the import map.
   - `EngineProjectContext`
   - **`LanguageClaim`** — the kind-tagged claim returned by `claimsLanguage`:
     `{ kind: "primary" | "interop" | "fallback"; priority?: number }`.
-    `ExecutionEngineDiscovery.claimsLanguage`'s return type widens to
+    `ExecutionEngineDiscovery.claimsLanguage`\'s return type widens to
     `boolean | number | LanguageClaim | null` — the `boolean`/`number` forms
     stay Q1-compatible (the harness normalizes them; a bare `number` is always
     a `primary`, never interop), and `interop`/`fallback` are reachable only via
@@ -425,7 +425,7 @@ needed).
 mergeOutput?: "stderr>stdout"|"stdout>stderr", stderrFilter?, respectStreams?, timeout?)` (6-param).
 knitr `rmd.ts:440-458` calls it with `"stdout>stderr"` **and** a `stderrFilter` closure — real
 engine-author use. q2 runtime `system/index.ts:97-100` is 2-param `(options, stdin?)`;
-`ExecProcessOptions` (`:43-58`) and `platform/index.ts:25-32`'s `ExecOptions = {cwd?, env?, stdin?}`
+`ExecProcessOptions` (`:43-58`) and `platform/index.ts:25-32`\'s `ExecOptions = {cwd?, env?, stdin?}`
 carry **neither** knob — they have no home below the seam. The vendored
 `@quarto/types/quarto-api.ts:616-623` keeps the full 6-param signature → **runtime and vendored
 signatures disagree**, so the `QuartoAPI` aggregation can't typecheck until reconciled. Engine
@@ -444,7 +444,7 @@ already correct, and it is the *runtime* that is under-built (2-param). Reconcil
 the runtime to the six-positional shape (no change to the vendored type) and thread the knobs through
 the seam internally. There is **no technical reason to flatten**: `execProcess` is an **in-process**
 call (the `stderrFilter` *closure* proves it never crosses the wire), so there is no serde/wire
-pressure, and `host.process.exec`'s `ExecOptions` carries the knobs below the seam regardless of how
+pressure, and `host.process.exec`\'s `ExecOptions` carries the knobs below the seam regardless of how
 the public parameters are spelled. Flattening would only buy named-options ergonomics while
 *regressing* the Q1 parity this section ("return-to-Q1") exists to preserve — and under B2#3 (derive
 `SystemNamespace = QuartoAPI["system"]`) it would lock that regression into the single source of

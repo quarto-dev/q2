@@ -5,7 +5,7 @@
 Tree-sitter has a robust, production-ready story for runtime-loaded WASM grammars, unified across native and browser environments. The architecture is:
 
 - **Native**: `tree_sitter::WasmStore` (via `wasmtime-c-api`, feature flag `wasm`) loads `.wasm` grammars at runtime and returns `Language` values that feed directly into `tree_sitter_highlight::HighlightConfiguration`. Minimal binary size cost (\~8–12 MB for wasmtime), sub-100ms first-parse latency for typical grammars.
-- **Browser (wasm32-unknown-unknown)**: Same `.wasm` grammar files load via `web-tree-sitter`'s `Language.load()` which exposes `Parser`, `Language`, `Query`, and query execution—enough to emulate what `tree-sitter-highlight` does in Rust. JS interop via wasm-bindgen is straightforward.
+- **Browser (wasm32-unknown-unknown)**: Same `.wasm` grammar files load via `web-tree-sitter`\'s `Language.load()` which exposes `Parser`, `Language`, `Query`, and query execution—enough to emulate what `tree-sitter-highlight` does in Rust. JS interop via wasm-bindgen is straightforward.
 - **Mixed static/dynamic**: Works uniformly. Built-in grammars (Python, Rust, JS) can be statically compiled; user grammars load dynamically via the same WASM infrastructure. `HighlightConfiguration` is agnostic to grammar origin.
 
 The recommended path forward:

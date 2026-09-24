@@ -78,7 +78,7 @@ The actual fix propagates blank-line information from tree-sitter level through 
    `pandocnativeintermediate.rs`
 
 2. **Added `list_item_has_blank_line_between_blocks()` helper** in `treesitter.rs` — walks the
-   tree-sitter `list_item_node`'s children to find `pandoc_paragraph` nodes followed by another
+   tree-sitter `list_item_node`\'s children to find `pandoc_paragraph` nodes followed by another
    block-level sibling, and checks if the paragraph contains a `block_continuation` that spans
    multiple rows. In tree-sitter's QMD grammar, a multi-row `block_continuation` indicates it
    absorbed a blank line.

@@ -5,7 +5,7 @@
 **Strand:** bd-h4rhohhy (P1) carries the delivery-bug evidence; the close/busy defect is item
 **Bug A** below (tracked in this plan; noted on the strand).
 **Scope:** OUT of Plan 4c's scope (marimo continues separately). This is a focused
-debug-and-fix of `q2 preview`'s engine-capture path plus the browser-tier e2e coverage it
+debug-and-fix of `q2 preview`\'s engine-capture path plus the browser-tier e2e coverage it
 never had (Plan-4 4J's honest limitation).
 **Repos:** q2 worktree `feature/ts-engine-extensions` + upstream `~/src/quarto-julia-engine`
 (engine-side fix on a NEW local branch `q2-close-busy-fix` off main; never push; mirrors the

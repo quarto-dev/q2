@@ -32,7 +32,7 @@ byte-mismatches.** See § Rule 1's entry is style-conditional.
   source offsets. A `*` marks a **replacement**; unmarked pieces are
   **verbatim**, meaning the source range is *byte-identical* to the content
   range. That distinction is not cosmetic — see § The verbatim tag.
-- A source range extending past `span`'s end is expected, not a bug: the walk
+- A source range extending past `span`\'s end is expected, not a bug: the walk
   is bounded by the decoded value, not by the span.
 - A zero-width source range (`n..n`) with non-zero content length is
   synthesis: content with no source byte.
@@ -46,7 +46,7 @@ byte-mismatches.** See § Rule 1's entry is style-conditional.
 `verbatim` is decided by **byte-identity**, never by length. A fold whose source
 run is exactly `\n` and whose content is one space is 1→1 with different bytes;
 tagging it verbatim would produce a piece claiming a byte-identical source range
-it does not have — which any caller that treated `preimage_in`'s hull as a
+it does not have — which any caller that treated `preimage_in`\'s hull as a
 byte-identity claim would then copy. The `root plain, col-0 continuation` row below is that case, and
 it is the reason the tag exists. Only adjacent **verbatim** pieces coalesce.
 

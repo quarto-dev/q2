@@ -85,7 +85,7 @@ If what you actually wanted at the project level was engine
 The project-level `engines:` key configures the **engine registry**: the
 pool of engines (built-ins plus discovered extensions) that resolution
 draws from. Writing it never puts an engine into play. Its guarantees are
-the mirror image of `engine:`'s consequences, and they are worth stating
+the mirror image of `engine:`\'s consequences, and they are worth stating
 as guarantees because they are what make the key safe to use project-wide:
 
 - it never makes any document's sequence explicit (the implicit-fallback

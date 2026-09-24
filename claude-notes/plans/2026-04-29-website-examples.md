@@ -181,7 +181,7 @@ when these become docs.
    one page rebuilt.
 5. `quarto render examples/websites/07-incremental --clean-cache`
    — wipes `.quarto/cache/`. Re-run is now slow again.
-6. Edit `_quarto.yml`'s sidebar — observe how Mode A re-renders
+6. Edit `_quarto.yml`\'s sidebar — observe how Mode A re-renders
    everything; Mode B on a single page would not see sibling
    sidebars rebuild (call this out explicitly as a known
    limitation per Phase 8 §`bd-par3` follow-up).

@@ -136,7 +136,7 @@ JSON*. Cell-aware consumers (Jupyter, Positron, VS Code notebooks) address
 positions as (cell, line, col), which is exactly what we produce. Two
 escalation paths if raw offsets are ever needed: a converter-level decode run
 table stored beside the virtual file (no `SourceInfo` change), or reintroducing
-`Transformed { parent, runs }` upstream (which would also fix `quarto-yaml`'s
+`Transformed { parent, runs }` upstream (which would also fix `quarto-yaml`\'s
 quoted/block-scalar imprecision — same problem class). Neither blocks this
 feature; both need a concrete consumer first.
 

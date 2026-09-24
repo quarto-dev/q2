@@ -62,7 +62,7 @@ no async on-miss fetch. This is the cheap, correct core of the fix.
 
 ## Chosen mechanism: reuse the renderer's *actual* include expansion (C-strict)
 
-**Decision (revised after the bd-udrn0q47 finding):** run `quarto-core`'s real
+**Decision (revised after the bd-udrn0q47 finding):** run `quarto-core`\'s real
 `IncludeExpansionStage` natively against the real filesystem to produce the
 expanded AST + the recorded include set, then collect images off the **expanded**
 AST with `collect_referenced_asset_urls`. The single-file resolver thereby
@@ -179,7 +179,7 @@ scope for now (a later, informative error message is the likely treatment).
       need for image collection). Sequence in `quarto-preview`:
       - `runtime = Arc::new(NativeRuntime::new())`
       - `project = ProjectContext::single_file(abs_deck, &*runtime)?` (canonicalizes,
-        sets `is_single_file` so `StageContext::new`'s extension discovery passes
+        sets `is_single_file` so `StageContext::new`\'s extension discovery passes
         `None` for the project dir — cheap)
       - `document = DocumentInfo::from_path(abs_deck)`
       - `ctx = StageContext::new(runtime, Format::html(), project, document)?`

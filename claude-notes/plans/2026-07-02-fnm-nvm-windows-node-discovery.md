@@ -48,14 +48,14 @@ fnm-on-Windows was wrong):
   nvm, there's no fixed `~/.nvm`-style default):
   - `vX.Y.Z\node.exe` — **flat**, no subdir at all.
   - Known gap, accepted: a scoop-packaged nvm-windows install
-    redirects its actual root via `settings.txt`'s `root:` line
+    redirects its actual root via `settings.txt`\'s `root:` line
     (confirmed on this machine — `NVM_HOME` points at the scoop
     shim, not the version root). Parsing `settings.txt` is out of
     scope (YAGNI — nvm-windows isn't the confirmed-broken case;
     `NVM_HOME` alone covers the common installer-based setup).
 
 **Approach (decided 2026-07-02, Option B):** keep
-`highest_version_node`'s 1-argument signature. Its internal hardcoded
+`highest_version_node`\'s 1-argument signature. Its internal hardcoded
 sub-path list becomes a **superset** covering all four layouts:
 `["bin/node", "installation/bin/node", "installation/node.exe",
 "node.exe"]`. Then add Windows call sites for the fnm base
@@ -80,7 +80,7 @@ for no behavioral gain; Option B is the smaller reasonable change.
 - No behavior change on unix: the two unix subs stay first in the
   list, so an existing unix install resolves to exactly the same path
   it does today.
-- `highest_version_node`'s directory-scan logic stays OS-agnostic so
+- `highest_version_node`\'s directory-scan logic stays OS-agnostic so
   tests exercise both unix-style and Windows-style layouts on any
   platform (it's just `fs::read_dir` + path joins, never
   `probe_version`/`Command::new`).
@@ -257,7 +257,7 @@ cargo xtask verify --skip-hub-build
 ```
 
 `--skip-hub-build` is correct — this touches only
-`quarto-mcp-launcher`, which nothing in `wasm-quarto-hub-client`'s
+`quarto-mcp-launcher`, which nothing in `wasm-quarto-hub-client`\'s
 dependency closure depends on.
 
 ### Step 5 — manual repro re-check

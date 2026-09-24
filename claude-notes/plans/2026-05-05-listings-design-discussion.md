@@ -711,7 +711,7 @@ implementation choice.
 
 User asked: assuming the C5 design (named `listing_item` profile
 field with `extra: BTreeMap<String, ConfigValue>`), can custom
-listings be implemented using `quarto-doctemplate`'s Pandoc-style
+listings be implemented using `quarto-doctemplate`\'s Pandoc-style
 `$var$` syntax instead of EJS? This would avoid embedding a JS
 runtime and keeps hub-client safe to render listings in a browser
 context without sandbox concerns.

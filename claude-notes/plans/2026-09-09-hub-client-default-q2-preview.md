@@ -25,7 +25,7 @@ does not: the same document goes to the **full-DOM renderer** (`Preview.tsx`
 no comments, attribution, or block-editing chrome. Only documents that opt in
 with `format: q2-preview` get the React renderer in hub-client.
 
-This plan brings `q2 preview`'s behaviour to hub-client:
+This plan brings `q2 preview`\'s behaviour to hub-client:
 
 1. **Default = q2-preview.** A document with no `format:` key, `format: html`,
    or `format: html: {…}` renders through `Q2PreviewIframe` in hub-client,
@@ -66,7 +66,7 @@ The `meta.format` string the router reads is already normalised by Rust:
 `detect_format_from_content` (`crates/wasm-quarto-hub-client/src/lib.rs:725`)
 returns `"html"` for a missing key, a bare `html`, a `format: html: {…}` map
 (first key), and a list; `MetadataMergeStage` then overwrites `meta.format`
-with `Format::target_format` (`metadata_merge.rs:453-469`). `_quarto.yml`'s
+with `Format::target_format` (`metadata_merge.rs:453-469`). `_quarto.yml`\'s
 project-level `format:` is not consulted anywhere on the hub-client path.
 
 ### Inside `ReactPreview`, the render call re-detects the format from content
@@ -311,7 +311,7 @@ change) at each phase boundary; commit at each clean boundary.
 
 - [x] Tests, hub-client WASM tier (`hub-client/src/services/*.wasm.test.ts`,
       new file `previewFormatSubstitution.wasm.test.ts`; 7 cases, ran red
-      against the pre-knob WASM: a/e/f failed with no `ast_json`, b/b'/c/d passed): through
+      against the pre-knob WASM: a/e/f failed with no `ast_json`, b/b\'/c/d passed): through
       `renderPageInProjectWithAttribution` on a VFS project,
       (a) no-`format:` doc with `preferPreviewFormat=true` → `ast_json` set,
       `html` absent; (b) same doc with the flag omitted → `html` set,

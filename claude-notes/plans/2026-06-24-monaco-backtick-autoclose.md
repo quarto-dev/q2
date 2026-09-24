@@ -41,7 +41,7 @@ const qmdLanguageConfiguration: Monaco.languages.LanguageConfiguration = {
 
 This config is applied in `registerQmdLanguage()`
 (`quartoTheme.ts:201`, via `monaco.languages.setLanguageConfiguration`),
-which is called from `Editor.tsx`'s `beforeMount` handler
+which is called from `Editor.tsx`\'s `beforeMount` handler
 (`Editor.tsx:19`, `Editor.tsx:546-551`).
 
 ### Why the exact symptom appears

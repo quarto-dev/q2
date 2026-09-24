@@ -233,7 +233,7 @@ hub tooling, other processes) can drive creation without shelling out to
 positional-argument parsing. This is viable and ergonomic with our stack:
 clap adds the flags trivially; the serde wire types largely already exist
 in `quarto-project-create` (shared with the WASM hub-client entry points);
-and the `quarto` crate already enables `quarto-error-reporting`'s `json`
+and the `quarto` crate already enables `quarto-error-reporting`\'s `json`
 feature for structured error output.
 
 **Surface:**
@@ -293,7 +293,7 @@ the warning goes to stderr, never stdout). Unknown fields rejected
   documented.
 - The envelope enum + directive/result types live in the CLI's
   `commands/create/` module for now, with the project payload reusing
-  `quarto-project-create`'s existing serde types. If/when the `extension`
+  `quarto-project-create`\'s existing serde types. If/when the `extension`
   artifact lands and out-of-process consumers want to link the contract
   directly, extract to a small `quarto-create` types crate — not needed
   yet, noted for the follow-up strand.
@@ -342,7 +342,7 @@ the warning goes to stderr, never stdout). Unknown fields rejected
       consolidation); assertions parse the rendered `_quarto.yml` with
       `serde_yaml` (new dev-dep) so they check field values and prove
       validity. `scaffold.rs` gains exact-file-list tests + a
-      compile-all-templates test (replacing `templates.rs`'s, which goes
+      compile-all-templates test (replacing `templates.rs`\'s, which goes
       away with the module in Phase 2).
 - [x] New CLI integration tests at
       `crates/quarto/tests/integration/create.rs` (registered in

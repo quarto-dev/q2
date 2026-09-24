@@ -459,7 +459,7 @@ L8 surface:
   custom`. Already emitted at parse-time. **No change.**
 - **`Q-12-8`** (catalog-only today, no emitter) — Listing
   template file missing. **L8 wires the emission site** in
-  `load_custom_template`'s I/O-failure branch.
+  `load_custom_template`\'s I/O-failure branch.
 - **`Q-12-9`** (existing) — `.ejs.md` deprecation. Already
   emitted. **No change.** (A `.ejs.md` file that the user
   has converted to doctemplate syntax in place will still
@@ -490,7 +490,7 @@ In `crates/quarto-error-reporting/`:
    `Q-12-14` entry with the expected title and message
    template.
 
-In `crates/quarto-core/src/transforms/listing_render.rs`'s
+In `crates/quarto-core/src/transforms/listing_render.rs`\'s
 test module:
 
 2. **`custom_listing_without_template_path_emits_q_12_14_and_falls_back`**

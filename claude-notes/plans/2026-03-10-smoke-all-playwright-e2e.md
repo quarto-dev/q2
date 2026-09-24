@@ -186,7 +186,7 @@ Reuse existing infrastructure from `ts-packages/sync-test-harness/`.
 ### Phase 2: Project creation and loading through Automerge
 
 - [x] Write a helper `createProjectOnServer(serverUrl, files[])` in
-      `e2e/helpers/projectFactory.ts`. Use `@quarto/quarto-sync-client`'s
+      `e2e/helpers/projectFactory.ts`. Use `@quarto/quarto-sync-client`\'s
       `createSyncClient()` + `createNewProject()` (same pattern as
       `sync-test-helpers.ts::createTestProject()`). Returns the `indexDocId`.
       The helper must:

@@ -36,7 +36,7 @@ Phase 2 — fix.
       `hashlink::LinkedHashMap<usize, TreeSitterProcessLog>` in
       `tree_sitter_log.rs`. Done via `use hashlink::LinkedHashMap as
       HashMap;` so the in-file name `HashMap` keeps working at every
-      use site. Also had to swap the import in `error_generation.rs`'s
+      use site. Also had to swap the import in `error_generation.rs`\'s
       test module (`use hashlink::LinkedHashMap as HashMap;`) — the
       `processes` field is now typed `LinkedHashMap`, so the test
       builder's `HashMap::new()` literal had to match.

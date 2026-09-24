@@ -31,7 +31,7 @@ first action is to *confirm* them green, not to build anything.
 
 - [x] Plans 1a, 1b, and 1c complete: Rust subprocess infrastructure + Deno harness + extension integration, echo engine passes (grand-plan table: all ✓)
 - [x] Plan 2A complete: the `@quarto/api` package skeleton (`package.json`, `tsconfig.json`, exports map) and the `./config` key-list subpath are in place
-- [x] Plan 2 complete: the remaining QuartoAPI surface built on that skeleton — `@quarto/api`'s text/markdown/format/path/system/console/crypto subpaths, all QuartoAPI namespaces except `jupyter` wired in
+- [x] Plan 2 complete: the remaining QuartoAPI surface built on that skeleton — `@quarto/api`\'s text/markdown/format/path/system/console/crypto subpaths, all QuartoAPI namespaces except `jupyter` wired in
 - [x] Plan 3 complete: `@quarto/api/jupyter` with `toMarkdown` working and wired into engine-host
 - [ ] Julia installed on the test machine (`julia` in PATH) — machine-specific, verify per session
 - [x] **Plan 1c.2 P1.1 — LANDED** (commit `2b2113e6c`; e2e tests

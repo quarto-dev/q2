@@ -75,7 +75,7 @@ tasks that remain real are templates (8 files) and packages/fonts (5 + 3).
   quarto-cli gap, not a Q2-side problem to solve locally (cross-session finding,
   2026-09-20). Not even `orange-book` implements it for figures/tables: it wires
   `counter(heading)` into equation/callout/subfloat/theorem numbering but
-  `floatreftarget.lua`'s `make_typst_figure` never passes a `numbering:` arg for plain
+  `floatreftarget.lua`\'s `make_typst_figure` never passes a `numbering:` arg for plain
   figures/tables. Already covered by this plan's book-project scope-out above; the right fix
   if it ever matters is an upstream quarto-cli contribution (the epic vendors Q1's Lua
   verbatim per the architecture doc's §7 policy), not a local patch.
@@ -87,7 +87,7 @@ tasks that remain real are templates (8 files) and packages/fonts (5 + 3).
       gate-arm mechanism, `render_qmd_to_pandoc` routing, and the multi-format/project-mode
       guardrails Phase 1 bullet 1 below depends on. P7-foundation depends only on P1/P2/P4, so
       check it independently rather than assuming it tracks P7's own (later) completion.
-      **Confirmed 2026-09-20** (see `CLAUDE.local.md`'s "Preconditions verified" note).
+      **Confirmed 2026-09-20** (see `CLAUDE.local.md`\'s "Preconditions verified" note).
 - [x] Confirm the epic has landed through at least P1 (neutral core), P2 (wire schema), P4
       (run machinery), P5 (Lua shim), P3 (upstream crossref split), and P6 (numbering
       wiring) — this plan's Phase 1 depends on the Pandoc-write stage,
@@ -112,7 +112,7 @@ tasks that remain real are templates (8 files) and packages/fonts (5 + 3).
       the native-format allow-match at `crates/quarto/src/commands/render.rs:680-684`
       (`is_native()` defined at `format.rs:61-63`).
       **The `Typst` arm landed in Phase 2 (2026-09-21)**, in the same change that added
-      `TypstCompileStage` — `render.rs`'s allow-match now includes `Typst` alongside
+      `TypstCompileStage` — `render.rs`\'s allow-match now includes `Typst` alongside
       `Docx`/`Pptx`. See Phase 2's first bullet for detail.
       **Decision (2026-09-20, Gordon): do NOT add a `Typst` arm to this gate in Phase 1.**
       `output_extension_for(FormatIdentifier::Typst)` is (correctly) `"pdf"` — that's the
@@ -183,7 +183,7 @@ tasks that remain real are templates (8 files) and packages/fonts (5 + 3).
       forwarding allow-list" bullet's `columns` entry means *that* one, not
       `quartoColumnParams`; still open, not yet investigated for a Q2 config-reading seam.
       **Leave `typst-available-fonts` unset in Phase 1** —
-      its Lua consumer (`filters/modules/typst_css.lua:681`'s `ensure_available_fonts` /
+      its Lua consumer (`filters/modules/typst_css.lua:681`\'s `ensure_available_fonts` /
       `init_available_fonts`) fails open when the param is unset: the guard at
       `typst_css.lua:697` (`if not _available_fonts or ...`) short-circuits permissive, so
       every font name passes through unfiltered until Phase 2 wires the real `typst fonts`
@@ -216,7 +216,7 @@ tasks that remain real are templates (8 files) and packages/fonts (5 + 3).
       `default-image-extension: svg`. **Done (2026-09-20)**:
       `ExecuteConfig::with_defaults_for_format` (`crates/quarto-core/src/engine/knitr/
       format.rs`) sets `fig_format: "svg"` for typst, `"png"` otherwise; picked up
-      automatically by `build_format_config`'s existing call site.
+      automatically by `build_format_config`\'s existing call site.
       **`wrap: none` turned out not to belong here** — nothing in knitr's
       `execute.R`/`hooks.R` reads `format.pandoc.wrap`; it's fully handled by the pandoc
       invocation builder above (a plan-drafting error in the original bullet, corrected
@@ -266,7 +266,7 @@ tasks that remain real are templates (8 files) and packages/fonts (5 + 3).
          confirmed by reading `output-typst.ts:245-257`: they're read from
          `format.render[kPdfStandard]`/`format.metadata[kFontPaths]` (plain
          document-level YAML keys, not `format.pandoc.*`), consumed entirely by
-         Phase 2's compile step (`typstCompile`'s `--pdf-standard`/`fontPathsArgs`'
+         Phase 2's compile step (`typstCompile`'s `--pdf-standard`/`fontPathsArgs`\'
          `--font-path`). Phase 2's compile-flags bullet already lists both; nothing
          to do here.
       2. **`columns` needed zero new code.** Q1's real mechanism
@@ -285,7 +285,7 @@ tasks that remain real are templates (8 files) and packages/fonts (5 + 3).
          implementation changes, confirming the claim empirically rather than by
          inspection alone.
       3. **`template` needed two small, concrete additions** — mirroring Q1's
-         `userTemplate` (`pandoc.ts:784-810`): `format_paths.rs`'s `FORMAT_PATH_KEYS`
+         `userTemplate` (`pandoc.ts:784-810`): `format_paths.rs`\'s `FORMAT_PATH_KEYS`
          gained a `("template", MarkPolicy::Always, KeyForms::Entries)` row (closing
          the residual-key note bd-hjv5o flagged), and `pandoc_write.rs` gained
          `resolve_user_template_path` (reads the merge-flattened, path-marked

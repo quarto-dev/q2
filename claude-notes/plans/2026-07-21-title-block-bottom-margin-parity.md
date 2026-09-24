@@ -52,7 +52,7 @@ TS Quarto defines the base rule in
 - the title-block layer — `resources/scss/html/templates/title-block.scss`
 - theme + syntax-highlight layers
 
-Q2 ported *most* of `_quarto-rules.scss`'s title-block styling into
+Q2 ported *most* of `_quarto-rules.scss`\'s title-block styling into
 `title-block.scss` (under the `#title-block-header.quarto-title-block.default`
 selector — abstract, meta grid, etc.), but the **unconditional** base rule on
 `#title-block-header` (which applies regardless of the `.default` variant class)

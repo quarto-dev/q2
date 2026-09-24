@@ -247,7 +247,7 @@ q2-preview iframe. The minimum producer-side TS:
   that forwards `attributionJson = null`, mirroring the WASM-side
   wrapper relationship.
 - [x] **q2-preview branch wiring.** Updated
-  `hub-client/src/components/render/ReactPreview.tsx`'s
+  `hub-client/src/components/render/ReactPreview.tsx`\'s
   `doRender` to call `renderPageInProjectWithAttribution` and
   pass `options.attributionJson` through. The same `useAttribution`
   hook that produces the q2-debug payload was already running for
@@ -279,7 +279,7 @@ Consumer-side wiring added in a second pass:
   (which exports `AttributionBadge` + `attributionStyles` +
   `formatRelativeTime`) was moved from `q2-debug/` to
   `framework/` and re-exported through `framework/index.ts`.
-  `q2-debug/components.tsx`'s import path updated to
+  `q2-debug/components.tsx`\'s import path updated to
   `from '../framework'`.
 - [x] **q2-preview dispatchers wrap on hit.** `Block` / `Inline`
   / `CustomBlock` / `CustomInline` in
@@ -411,7 +411,7 @@ Sibling Pass-1 ctxs receive no provider and produce no attribution.
 Rationale:
 
 - **The generate stage already no-ops without a provider.**
-  `AttributionGenerateTransform`'s skip ladder (attribution plan
+  `AttributionGenerateTransform`\'s skip ladder (attribution plan
   Phase 2, rule 3) bails on `ctx.attribution_provider.is_none()`.
   So even if attribution-generate ran during sibling Pass-1 (it
   would, since the stage registers in the Navigation Phase tail

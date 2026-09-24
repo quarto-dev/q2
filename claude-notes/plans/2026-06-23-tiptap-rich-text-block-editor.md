@@ -143,7 +143,7 @@ each one.
 
 ### C1 — Serializer fidelity (the dominant risk)
 
-`prosemirror-markdown`'s default serializer is CommonMark-ish and lossy
+`prosemirror-markdown`\'s default serializer is CommonMark-ish and lossy
 (list-marker normalization, escaping `\_`/`\*`, blank-line collapsing, ATX vs
 setext headings, hard-wrap handling). We need output that **re-parses to the
 right AST**, not output that is byte-identical to the input. The acceptance bar

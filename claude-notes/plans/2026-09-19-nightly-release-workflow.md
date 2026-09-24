@@ -31,7 +31,7 @@ full five-platform artifact set through the *same* jobs `release.yml` uses,
 publishing them as a rolling **prerelease** tagged `nightly`. When `main` is
 already released, it exits in seconds and burns no runners.
 
-The plan reuses the release pipeline rather than copying it: `release.yml`'s
+The plan reuses the release pipeline rather than copying it: `release.yml`\'s
 build/verify/sign/publish jobs move into a **reusable workflow**
 (`workflow_call`), and both the tag-triggered release and the nightly become
 thin callers of it. That keeps every existing gate (placeholder-embed check,

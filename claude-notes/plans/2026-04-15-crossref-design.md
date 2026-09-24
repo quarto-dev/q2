@@ -426,7 +426,7 @@ The key architectural extension: `CrossrefIndexTransform` currently only indexes
 
 - [ ] 4.1 Serialize per-file `CrossrefIndex` to `.quarto/xref/<file-id>.json`.
 - [ ] 4.2 Sketch `ProjectCrossrefIndex` merge in `quarto-core::project::crossref`.
-- [ ] 4.3 Sketch `StaticProjectAnalyzer` that parses all project files' **pre-engine AST** to produce a project-wide index consumable by `CrossrefResolveTransform` and by the hub-client preview.
+- [ ] 4.3 Sketch `StaticProjectAnalyzer` that parses all project files\' **pre-engine AST** to produce a project-wide index consumable by `CrossrefResolveTransform` and by the hub-client preview.
 
 Implementation of Phase 4 is out of scope for the initial crossref delivery — but Phases 0–3 must not foreclose it. Specifically: data model is serializable from day one; `CrossrefResolveTransform` takes the index by handle, not by construction.
 

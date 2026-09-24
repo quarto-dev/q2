@@ -527,7 +527,7 @@ loudly, pointing the user to the build command. Aligns with Quarto 1.
   4. **Determine the registry key — via `TsEngine::name()`, not a key arg.**
      The landed `EngineRegistry::register(&mut self, engine: Arc<dyn
      ExecutionEngine>)` is **keyless** (registry.rs:99) — it keys by
-     `engine.name()`. So set the `TsEngine`'s `name` field **at construction**
+     `engine.name()`. So set the `TsEngine`\'s `name` field **at construction**
      to the registration key: the declared `name` if `Some` (no subprocess
      spawn), else the **extension-id placeholder** (e.g. the extension dir name
      like `julia-engine`). `TsEngine::name()` returns that field

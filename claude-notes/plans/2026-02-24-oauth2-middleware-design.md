@@ -597,7 +597,7 @@ provider can be conditionally omitted or the login UI hidden.
 
 #### Login Component
 
-Google Identity Services' "Sign In With Google" button in redirect mode
+Google Identity Services\' "Sign In With Google" button in redirect mode
 (`ux_mode="redirect"`) keeps the login flow in the same browser window
 instead of opening a popup. The credential is returned via a server-side
 callback.

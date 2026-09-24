@@ -66,7 +66,7 @@ semantics:
   This is where the residual crux — **number injection alone, not category-registry seeding**
   (see §4 C below) — lives.
 
-The field-map is mechanical and verified 1:1 for callout (`callout.rs` doc ↔ `callout.lua`'s
+The field-map is mechanical and verified 1:1 for callout (`callout.rs` doc ↔ `callout.lua`\'s
 **constructor**, `quarto.Callout(...)` — `parse` itself calls the same constructor internally,
 so the mapping holds for both the historical Route-L framing and the current Route-R one): Q2
 `plain_data.{type,appearance,icon}` + `slots.{title,content}` → Q1

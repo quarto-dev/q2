@@ -44,7 +44,7 @@ Second paragraph
 Look for consecutive blocks in the AST:
 1. `NoteDefinitionPara` with id X and content
 2. Immediately followed by `Para`
-3. Where the `Para`'s source text starts with whitespace (indentation)
+3. Where the `Para`\'s source text starts with whitespace (indentation)
 
 This pattern suggests the user intended a multi-paragraph footnote using Pandoc's indentation syntax.
 

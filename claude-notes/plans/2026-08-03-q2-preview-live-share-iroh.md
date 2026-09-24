@@ -58,7 +58,7 @@ Why this shape wins (each alternative was seriously considered):
    and the index doc id comes from same-origin `GET /health`
    (`PreviewApp.tsx:499-514`). A local proxy makes both true by construction —
    zero SPA changes for the MVP.
-2. **The boot/reconnect supervisor keeps working.** `bootController.ts`'s
+2. **The boot/reconnect supervisor keeps working.** `bootController.ts`\'s
    contract is "HTTP `/health` decides liveness; the WebSocket gets patience"
    (`q2-preview-spa/src/bootController.ts:1-20`). With a tunnel, `/health`
    through the local port genuinely probes the remote host: tunnel dies →

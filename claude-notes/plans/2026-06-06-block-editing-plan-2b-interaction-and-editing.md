@@ -105,7 +105,7 @@ when to render the textarea; only the trigger changes.
 Both channels are first-class and of equivalent power; they differ in *representation*.
 
 - **Built-in editing → text channel.** The textarea shows the block's **source
-  markdown**, obtained by slicing `content` over `sourceNode`'s range (Plan 1's
+  markdown**, obtained by slicing `content` over `sourceNode`\'s range (Plan 1's
   `sliceBytes`); on commit the component calls `ctx.commitTextEdit(destinationSourceInfoJson, newText)`;
   the parent runs `parseQmdContentSync(newText)` then `apply_node_edit`.
   (The iframe can't run the writer, so text is the right representation for the textarea.)
@@ -209,11 +209,11 @@ exposed on the global — `usePreviewEdit` is the public surface.
 
 The affordance attribute lives on the block's **own root element**, never on a
 framework-added wrapper — because the framework never wraps (D4).
-`useBlockEditHover`'s `closest('[data-block-pool-id]')` finds it there.
+`useBlockEditHover`\'s `closest('[data-block-pool-id]')` finds it there.
 
 Custom components that render the block through `<B>` or `renderChildren`
 preserve the attribute automatically. A component that wraps the block output
-(e.g. `comment`'s `position:relative` div) gets both its overlay UI **and** the
+(e.g. `comment`\'s `position:relative` div) gets both its overlay UI **and** the
 built-in text-edit affordance on the inner element — no extra work needed.
 
 A component that replaces the rendered block entirely (no `<B>` delegation,

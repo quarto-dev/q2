@@ -54,7 +54,7 @@ hrefs in the sources. Exactly one link escapes — `quarto-tiers.url:
 "/admin/licensing/index.md#product-tiers"` in `_quarto.yml`, a *custom
 metadata key* read by the posit-docs project type, which q2 has no way to
 recognize as a link. That one entry accounts for all 49 affected pages,
-and it is already `br-root-absolute-assets-1o6yy4mx`'s subject.
+and it is already `br-root-absolute-assets-1o6yy4mx`\'s subject.
 
 So q2 rewrites every link it owns. The cost of the shadowing is not wrong
 rendering — it is lost *detectability*: that link used to 404.

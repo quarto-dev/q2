@@ -127,7 +127,7 @@ route?) and mergeability (`git merge-tree --write-tree` against `main`).
   `crates/quarto-preview/src/lib.rs:343` still reads `sync_interval_secs:
   Some(5)` under the comment *"Light periodic sync — the user can Ctrl-C any
   time"* — the exact ≤5 s edit-persistence latency and Ctrl-C race this
-  strand was filed against are still `main`'s behavior.
+  strand was filed against are still `main`\'s behavior.
 - **Merge:** one conflict, `q2-preview-spa/src/PreviewApp.tsx`. It is
   **semantic, not just textual**: since the branch was cut, `main` gained
   bd-jit6pdwq Phase 3, a `pagehide` handler that deliberately *disconnects*

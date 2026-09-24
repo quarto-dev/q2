@@ -188,7 +188,7 @@ fixture these exercise.
   Call `preimage_in(FileId(0))` and assert it returns `None` (NOT the
   byte range of the meta-key — that would copy YAML into the body).
   Pins the invariant against the real `By::appendix(...)` shape that
-  Plan 9 introduces. Lives in `quarto-source-map`'s test module.
+  Plan 9 introduces. Lives in `quarto-source-map`\'s test module.
 
 - **Appendix-license end-to-end round-trip test**: build a project
   fixture with frontmatter `license: MIT` and a synthesized

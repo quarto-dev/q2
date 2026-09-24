@@ -264,7 +264,7 @@ Generate transforms (which produce the source-path-relative input
 for these Renderers) are unchanged. `ResourceResolverContext` is
 unchanged. The body-link path is unchanged.
 
-**Public API:** `resolve_href_for_html`'s signature changes (one
+**Public API:** `resolve_href_for_html`\'s signature changes (one
 new `Option<&ResourceResolverContext>` parameter). The function
 is `pub` but only called from inside this crate's `transforms`
 module, so the blast radius is limited. Grep confirms 4 internal
@@ -340,7 +340,7 @@ agree.
 3. **Documentation.** Update the doc comment on
    `resolve_href_for_html` to describe the new resolver
    semantics, and update the comparison table at
-   `resolve_doc_relative_href`'s comment to reflect that nav
+   `resolve_doc_relative_href`\'s comment to reflect that nav
    output is now also page-relative when a resolver is attached.
 
 Open question for the user before implementation: should the

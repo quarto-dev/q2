@@ -203,7 +203,7 @@ Tests must come *before* implementation.
 - [x] Define `pub struct LuaThrow;` sentinel type at the crate root
       (`crates/wasm-quarto-hub-client/src/lib.rs`) so it is always
       compiled regardless of target. A unit struct is trivially `'static
-      + Send`, satisfying `panic_any`'s requirements.
+      + Send`, satisfying `panic_any`\'s requirements.
 - [x] Replace `panic!("lua error")` in
       `crates/wasm-quarto-hub-client/src/c_shim.rs::rust_lua_throw` with
       `std::panic::panic_any(crate::LuaThrow)`. `panic_any` produces a
@@ -225,7 +225,7 @@ Tests must come *before* implementation.
       traces in output.
 - [x] Existing `test-lua-wasm.mjs` (which includes a `pcall error` case
       that previously produced noise) now passes silently — 10/10 tests
-      still pass; only `test_unwind`'s deliberate `panic!("test panic")`
+      still pass; only `test_unwind`\'s deliberate `panic!("test panic")`
       surfaces (expected).
 - [x] Updated `hub-client/e2e/helpers/previewExtraction.ts` comment to
       reflect new behavior. Kept the `unreachable`/`RuntimeError`

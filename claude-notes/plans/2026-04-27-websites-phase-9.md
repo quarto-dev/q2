@@ -310,7 +310,7 @@ artifact URLs in HTML and on-disk paths
 
 The HTML emitted by Pass 2 already references the correct URL on
 each platform, because `html_url_for` was called with the right
-resolver. `flush_site_libs`'s only job is "write each artifact's
+resolver. `flush_site_libs`\'s only job is "write each artifact's
 bytes at the on-disk location the resolver promised."
 
 That is: `flush_site_libs` should compute its destination from
@@ -361,7 +361,7 @@ async fn post_render(...) -> Result<()> {
 }
 ```
 
-This requires plumbing the resolver into `post_render`'s
+This requires plumbing the resolver into `post_render`\'s
 arguments — already overdue, since today's signature
 reconstructs lib-dir math by hand instead of asking the resolver.
 
@@ -417,7 +417,7 @@ exists.** Per code audit:
 - The Phase-8 cache key
   (`crates/quarto-core/src/project/cache_key.rs`, fed by
   `orchestrator.rs:498-513`) bakes in `_quarto.yml` raw bytes
-  and every layered `_metadata.yml`'s raw bytes. A one-byte edit
+  and every layered `_metadata.yml`\'s raw bytes. A one-byte edit
   invalidates *every* profile cache entry simultaneously — the
   "drop all pass-1 caches on `_quarto.yml` change" behavior is
   achieved structurally without a manual button or special-case
@@ -709,7 +709,7 @@ in VFS).
 into VFS, call `render_page_in_project('/project/index.qmd')`,
 assert response HTML contains the sidebar entry for `/project/about.qmd`.
 
-**Test 9.** Edit `about.qmd`'s title via `vfs_add_file`, re-render
+**Test 9.** Edit `about.qmd`\'s title via `vfs_add_file`, re-render
 `index.qmd`, assert the sidebar entry text reflects the new title.
 This is the live-preview invariant.
 
@@ -784,7 +784,7 @@ forwards to the new `with_renderer`). `ProjectRenderSummary` is
 now generic over the per-page output type with a
 `RenderToFileResult` default. The `run()` method carries an
 extra `R::Output = RenderToFileResult` bound until sub-phase 9.2
-relaxes `ProjectType::post_render`'s output-slice contract.
+relaxes `ProjectType::post_render`\'s output-slice contract.
 
 ### Sub-phase 9.1 — Un-gate `ProjectPipeline` for WASM
 
@@ -826,7 +826,7 @@ ergonomics and would have needed cfg-gating to work on WASM.
 - [x] Single resolver-driven `flush_site_libs` (Decision 4 final).
       No companion `_wasm` module: the same function is the only
       flush implementation, native vs WASM differ only in which
-      resolver they pass. `website_post_render.rs`'s file-level
+      resolver they pass. `website_post_render.rs`\'s file-level
       cfg gate was lifted; non-flush hooks (`copy_favicon`,
       `write_sitemap`, `write_robots_txt`) carry per-function
       `#[cfg(not(target_arch = "wasm32"))]`.
@@ -870,7 +870,7 @@ well-defined on the result).
       with the new `RenderMode::ActivePage(path)` so Pass-2
       renders only the active page (no graph augmentation — see
       below). Per-page artifacts get manually written to VFS;
-      project-scoped artifacts are flushed by `post_render`'s
+      project-scoped artifacts are flushed by `post_render`\'s
       cross-platform `flush_site_libs`.
 - [x] Added a new `RenderMode::ActivePage(PathBuf)` variant to
       `crates/quarto-core/src/project/orchestrator.rs`. The
@@ -895,7 +895,7 @@ well-defined on the result).
 - [x] Added `render_page_in_project` to `WasmModuleExtended`.
 - [x] Added a `renderPageInProject` TS function mirroring
       `renderQmd`.
-- [x] Switched `renderToHtml`'s dispatch from `renderQmd` to
+- [x] Switched `renderToHtml`\'s dispatch from `renderQmd` to
       `renderPageInProject` unconditionally — the single-file
       classification lives on the WASM side so the TS layer
       stays a thin pass-through.
@@ -958,13 +958,13 @@ it interactively or a future session can script it):
    page-navigation strip at the bottom.
 4. Switch to `about.qmd`; confirm the sidebar's active marker
    moves and the prev/next strip updates.
-5. Edit `about.qmd`'s frontmatter title to "About v2"; switch
+5. Edit `about.qmd`\'s frontmatter title to "About v2"; switch
    back to `index.qmd` (or stay on `index.qmd` and trigger a
    re-render by editing it). The sidebar entry should reflect
    the new title — that's the Decision-6 sibling-edit
    invariant working.
 6. Click the in-body `[About page](about.qmd)` link in
-   `index.qmd`'s preview; the iframe should fire
+   `index.qmd`\'s preview; the iframe should fire
    `onNavigateToDocument` and switch the editor to `about.qmd`.
 
 ### Sub-phase 9.6 — Close-out
@@ -1043,7 +1043,7 @@ it interactively or a future session can script it):
   someone wires it native-only, and the in-browser preview falls
   out of parity with the deployed site.
   *Mitigation:* document this explicitly in
-  `WebsiteProjectType::post_render`'s rustdoc — every new hook
+  `WebsiteProjectType::post_render`\'s rustdoc — every new hook
   must answer "is this disk-only or does it shape the rendered
   page?" and if it shapes the page, both bodies need to call it.
   The Phase-7 transforms (title prefix, favicon link, canonical

@@ -65,7 +65,7 @@ The known producer kinds, defined in
 | Constructor                  | Line | `kind` string             | Purpose                                                                       | Atomic? |
 |------------------------------|------|---------------------------|-------------------------------------------------------------------------------|---------|
 | `By::filter(path, line)`     | 458  | `"filter"`                | Typed Inline/Block constructed inside a user Lua filter (auto-attached).      | yes     |
-| `By::sectionize()`           | 470  | `"sectionize"`            | `SectionizeTransform`'s synthesized section `Div`.                            | no      |
+| `By::sectionize()`           | 470  | `"sectionize"`            | `SectionizeTransform`\'s synthesized section `Div`.                            | no      |
 | `By::user_edit()`            | 479  | `"user-edit"`             | **Dormant.** Was React-constructed edit content; the `stampUserEdits` stamping path was removed and the current write-back model (`target-incremental-writes.md`) does not stamp edits. Constructor retained, currently unused in production. | no      |
 | `By::shortcode(name)`        | 494  | `"shortcode"`             | Result of resolving a `{{< name … >}}` token. **Requires an `Invocation`.**   | yes     |
 | `By::include()`              | 505  | `"include"`               | **Dormant.** Was for a planned `IncludeExpansion` wrapper; that design (Plan 8) is abandoned — `IncludeExpansionStage` splices flat and includes round-trip without a wrapper (see Plan 8 tombstone). Constructor retained, currently unused. | n/a |

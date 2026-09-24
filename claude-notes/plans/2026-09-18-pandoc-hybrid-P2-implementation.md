@@ -8,7 +8,7 @@
 P2 *produces* for P4 (serialization step), P5 (the frozen schema the shim reads) and P7 (`Meta`
 carriage + the sideband-map carriage fact for code-block decorations).
 **Status:** Ready for subagent-driven execution. **No blockers remain** — the three findings that
-parked a seam (3: `cite_prefix`'s shape; 4: the TS interface-diff mechanism; 5: `ExampleEmbed`'s
+parked a seam (3: `cite_prefix`\'s shape; 4: the TS interface-diff mechanism; 5: `ExampleEmbed`\'s
 `route`) were decided by Gordon on 2026-09-18 and are applied, so **T3.4, T4.3 and T1.1 are all
 bound** and no `seam deferred until … Gordon` marker remains. **Seven tasks** — Task 7 is new,
 carrying `meta.quarto_pandoc_reader_opts`, reassigned here from P4 (its Findings item 3) because
@@ -54,7 +54,7 @@ format already ships, and the schema artifact plus its three conformance tests a
 contracts. The user-visible consumer of this work is P5/P7's Pandoc leg, which does not exist
 yet. Task 6 therefore records the honest status — "in-process tests green; the real Pandoc render
 path does not exist until P4/P5/P7" — rather than claiming an end-to-end pass. The one real
-binary-level check P2 *can* make is that `q2 preview`'s serialized AST still carries the schema's
+binary-level check P2 *can* make is that `q2 preview`\'s serialized AST still carries the schema's
 `data-custom-data` for a live document (Task 6, T6.2).
 
 ---
@@ -92,9 +92,9 @@ splitting them would produce one task with no checkable deliverable.
 | `Proof` | `transforms/proof.rs:147` | `kind: "Proof"` only (`:150-152`); **deliberately no `ref_type`** (`:148-149`) | **no** — `crossref_index.rs:256-259` early-returns on the missing `ref_type` | `content` (Blocks) always; `title` (Inlines) iff non-empty — `:153-159` |
 | `Equation` | `transforms/equation_label.rs:215` | `ref_type: "eq", kind: "Equation", identifier` (`:218-222`) | **yes** — see Finding 2 | `content` (Inlines, holding the `Math`) — `:225-226` |
 | `ExampleEmbed` | `transforms/example_embed.rs:228` | **all conditional**: `file` iff the file validates (`:188-190`), `height`, `title` iff non-empty (`:191-208`), + `ref_type, kind, identifier` iff `valid_file && is_demo_id` (`:212-216`) | **yes**, under the same condition — see Finding 2 | `snippet` (Blocks) iff the body starts with a CodeBlock; `body` (Blocks) always — `:236-240` |
-| `CrossrefResolvedRef` | `transforms/crossref_resolve.rs:296` | `identifier, ref_type, kind, resolved, kind_source` — all **unconditional** (`:297-313`; note `resolved` and `kind_source` are not enumerated anywhere in P2's prose) | yes, iff an index entry exists (`:314-319`) | `suffix` (Inlines) iff the original `Cite`'s suffix is non-empty (`:327-332`) |
+| `CrossrefResolvedRef` | `transforms/crossref_resolve.rs:296` | `identifier, ref_type, kind, resolved, kind_source` — all **unconditional** (`:297-313`; note `resolved` and `kind_source` are not enumerated anywhere in P2's prose) | yes, iff an index entry exists (`:314-319`) | `suffix` (Inlines) iff the original `Cite`\'s suffix is non-empty (`:327-332`) |
 
-`order`'s shape is `{"section": [int], "order": int}`, written by
+`order`\'s shape is `{"section": [int], "order": int}`, written by
 `crates/quarto-core/src/transforms/crossref_index.rs:287-295` (P2 cites `:283-295`; `283` is the
 comment) and by `crossref_resolve.rs:315-318` (P2 cites `:316-317`).
 
@@ -129,7 +129,7 @@ mirrored in TS at `ts-packages/preview-renderer/src/framework/customNode.ts:44`)
    rather than as an oversight to be "fixed" by a later contributor.
 
 **Prerequisite.** None. The artifact's field sets are derived by reading the Rust above; nothing
-from a later task or another plan is required. (Authoring `Tabset`'s entry has **nothing to
+from a later task or another plan is required. (Authoring `Tabset`\'s entry has **nothing to
 cross-check it against on the TS side** — it does not reach q2-preview as a live CustomNode; that
 is P2's own finding, and the compensating check is Task 2's T2.4, which observes it in the Rust
 harness. `ExampleEmbed` had the same problem and is now simply out of the artifact — see
@@ -142,7 +142,7 @@ acceptance item 5.)
 | T1.1 | U | `quarto_pandoc_types::custom_node_schema::load()` + the committed artifact | call `load()` → assert `Ok`, `version == 1`, and that the `types` key set **equals** the **7**-name literal set (two-way, not `contains`) — and, as the negative half, that it does **not** contain `"ExampleEmbed"` | none — `include_str!` is compile-time; no fs, no network | the `"Tabset"` object in `custom-node-schema.json` |
 | T1.2 | U | same loader + artifact | call `load()` → assert the **per-type route map** equals the **7** `(name, route)` pairs from design §3 | none | `"route": "N"` on the artifact's `Equation` entry |
 | T1.5 | U | the artifact's deliberate-omission note | assert the top-level `"$comment"` exists and mentions `ExampleEmbed` | none | the `"$comment"` field |
-| T1.3 | U | the `Route` / `SlotKind` deserializers in `custom_node_schema.rs` | `serde_json::from_str` two malformed inline literals (`"route": "Q"`; `"slots": {"x": "Chunk"}`) → assert both are `Err` | none | `Route`'s enum `Deserialize` derive |
+| T1.3 | U | the `Route` / `SlotKind` deserializers in `custom_node_schema.rs` | `serde_json::from_str` two malformed inline literals (`"route": "Q"`; `"slots": {"x": "Chunk"}`) → assert both are `Err` | none | `Route`\'s enum `Deserialize` derive |
 | T1.4 | U | same loader + artifact | call `load()` → assert `types["Proof"].plain_data` has **no** `order` key, and that every `order` entry elsewhere has `required: false` + a `producer` | none | the absence of an `"order"` entry under `Proof` |
 
 **Revert hunks, stated exactly:**

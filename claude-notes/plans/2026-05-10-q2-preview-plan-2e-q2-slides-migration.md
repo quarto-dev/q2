@@ -18,7 +18,7 @@ After 2E:
 - `attributesToProps`, `parseStyleString` consolidate into `q2-slides/attributesToProps.ts` (used by every leaf that handles HTML attribute passthrough).
 - `AspectRatioScaler.tsx` moves from the top-level into `q2-slides/`; q2-slides is the only consumer.
 - `q2-slides/SlideContext.tsx` carries slide-control state (`currentSlide`, `setCurrentSlide`, `totalSlides`) — the parent (Editor) mounts the Provider above the registered `Ast` component, mirroring the precedent set by `q2-preview/PreviewContext.tsx`.
-- `ReactRenderer.tsx`'s slide branch (lines 209-233) collapses to one mount: `<Ast registry={isRevealjs ? revealjsRegistry : q2SlidesRegistry} {...astProps} />`.
+- `ReactRenderer.tsx`\'s slide branch (lines 209-233) collapses to one mount: `<Ast registry={isRevealjs ? revealjsRegistry : q2SlidesRegistry} {...astProps} />`.
 - External consumers (`useCursorToSlide.ts`, `useSlideThumbnails.tsx`) retarget their imports from `./ReactAstSlideRenderer` to `./q2-slides`.
 - `ReactAstSlideRenderer.tsx` and `RevealjsReactAstSlideRenderer.tsx` are deleted at the end of Phase 2.
 - The `parity-with-q1` question for revealjs (whether to ever route `format: revealjs` through a Rust-side HTML renderer instead of the React-side reveal.js wrapper) is **explicitly out of scope** — Plan 2E preserves both React paths as first-class.
@@ -78,9 +78,9 @@ The five questions below are unresolved. Each has a recommended pick, but the us
 
 ### §1. Iframe boundary — in-page, single iframe, or two iframes?
 
-q2-debug and q2-preview each have their own iframe + HTML page + `entry.tsx`. The slide renderers today render in-page directly inside `ReactPreview`'s React tree. Three options:
+q2-debug and q2-preview each have their own iframe + HTML page + `entry.tsx`. The slide renderers today render in-page directly inside `ReactPreview`\'s React tree. Three options:
 
-- **(a) Stay in-page** *(Recommended for v1)*. `<Ast registry={…}>` mounts inside `ReactRenderer.tsx`'s slide branch the same way `SlideAst`/`RevealjsSlideAst` mount today. No iframe, no postMessage, no `q2-slides.html` / `revealjs.html` needed. The parent's slide-control hooks (`useCursorToSlide`, `useSlideThumbnails`) keep working without cross-frame plumbing. Iframing is a follow-up plan.
+- **(a) Stay in-page** *(Recommended for v1)*. `<Ast registry={…}>` mounts inside `ReactRenderer.tsx`\'s slide branch the same way `SlideAst`/`RevealjsSlideAst` mount today. No iframe, no postMessage, no `q2-slides.html` / `revealjs.html` needed. The parent's slide-control hooks (`useCursorToSlide`, `useSlideThumbnails`) keep working without cross-frame plumbing. Iframing is a follow-up plan.
 - **(b) Single iframe `/q2-slides.html`** that branches on `meta.format` to mount either `SlideAst` or `RevealjsAst`. One HTML page, one `entry.tsx`, cross-frame plumbing for slide-control state. Symmetric with q2-preview / q2-debug.
 - **(c) Two iframes** (`/q2-slides.html`, `/revealjs.html`). Maximum separation; doubled boilerplate. Useful only if the two formats' iframe-host concerns end up genuinely different (e.g. revealjs needs `<script type="module">` setup that q2-slides doesn't).
 
@@ -112,13 +112,13 @@ interface SlideContextValue {
 }
 ```
 
-Recommended **(A)**. Keyboard/prev/next navigation stays local to `SlideAst` / `RevealjsAst`'s internal state (each consumes the narrow triplet and computes prev/next inline). External consumers (`useCursorToSlide`, `useSlideThumbnails`) only need to read `currentSlide` / `setCurrentSlide`; the narrow shape covers them.
+Recommended **(A)**. Keyboard/prev/next navigation stays local to `SlideAst` / `RevealjsAst`\'s internal state (each consumes the narrow triplet and computes prev/next inline). External consumers (`useCursorToSlide`, `useSlideThumbnails`) only need to read `currentSlide` / `setCurrentSlide`; the narrow shape covers them.
 
 Trade-off: if a future feature (e.g. presenter mode, slide-jump-from-thumbnail UI) wants to reuse the navigation primitives across multiple sibling components, option (B) lifts that wiring once. But adding fields later is mechanical (`SlideContext.tsx` is small); narrowing fields once they're consumed is harder.
 
 ### §4. Image asset resolution — VFS-direct, or migrate to manifest pattern?
 
-`SlideAst`'s `Image` case (`ReactAstSlideRenderer.tsx:780-835`) reads VFS files synchronously inside the render path: `vfsReadFile` for `/.quarto/` paths, `vfsReadBinaryFile` for project-relative paths, base64-encodes the result, sets a `data:` URL. q2-preview pre-walks images in the parent and distributes a `Record<origPath, blobUrl>` via `AssetManifestContext`.
+`SlideAst`\'s `Image` case (`ReactAstSlideRenderer.tsx:780-835`) reads VFS files synchronously inside the render path: `vfsReadFile` for `/.quarto/` paths, `vfsReadBinaryFile` for project-relative paths, base64-encodes the result, sets a `data:` URL. q2-preview pre-walks images in the parent and distributes a `Record<origPath, blobUrl>` via `AssetManifestContext`.
 
 - **(a) Keep VFS-direct** *(Recommended for v1)*. Mechanical migration: `q2-slides/inlines/Image.tsx` carries the same `vfsReadFile` / `vfsReadBinaryFile` calls. Stays sync, no parent-side walker added.
 - **(b) Migrate to manifest pattern.** Adds an `AssetManifestContext` consumer to q2-slides; requires a parent-side walker (which q2-preview has via `assetWalker.ts`) to populate the manifest before mount. Symmetric with q2-preview but adds non-trivial wiring.
@@ -169,7 +169,7 @@ Recommended (a). 2pre's pattern worked; reusing it costs little and gives bisect
 ### Phase 11 — Migrate consumers (one commit each)
 
 - [ ] **11.1** `RevealjsReactAstSlideRenderer.tsx`-side migration is already covered by Phase 10.13's shim conversion. Verify by deleting the file's body (keeping only the re-export) and confirming `npm run build:all` is green. Commit.
-- [ ] **11.2** Migrate `ReactRenderer.tsx`'s slide branch. Replace lines 209-233 with:
+- [ ] **11.2** Migrate `ReactRenderer.tsx`\'s slide branch. Replace lines 209-233 with:
 
   ```tsx
   const ast = JSON.parse(astJson);

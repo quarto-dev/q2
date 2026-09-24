@@ -80,7 +80,7 @@ This phase does **not** implement:
     level. The dangling inconsistency becomes narrower: `site-sidebar`
     (the per-doc override selecting *which* sidebar applies) lives at
     the doc top level while the sidebar configs themselves live under
-    `website.`. Update `bd-n9dr`'s description to match this revised
+    `website.`. Update `bd-n9dr`\'s description to match this revised
     framing when the phase lands.
   - `bd-2quy` (`StageContext` ↔ `RenderContext` bridge completeness) —
     Phase 3 is the second consumer of `ctx.project_index` in the

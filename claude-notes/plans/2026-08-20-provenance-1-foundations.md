@@ -160,7 +160,7 @@ same crate*. The free one is live in q2 **production**:
 `pampa/src/pandoc/treesitter.rs:1463`, `:1464`, `:1485`, `:1486` and
 `quarto-config/src/span_assert.rs:188`. And
 `pampa/tests/integration/test_location_health.rs:448` asserts the two agree —
-it feeds a `Location`'s own `offset` back through `utils::offset_to_location`
+it feeds a `Location`\'s own `offset` back through `utils::offset_to_location`
 and compares row/column — so changing one without the other moves that test.
 Phase 1's audit covers all three, plus q2 and `quarto-yaml`.
 
@@ -190,7 +190,7 @@ Phase 1's audit covers all three, plus q2 and `quarto-yaml`.
   live in `quarto-error-reporting`.
   (b) *A wire change.* `.offset` is not renderer-only: `pampa`'s JSON writer
   emits it as `"o"` (`src/writers/json.rs:550`, `:555`, `:2005`, `:2014`,
-  `:2258`, `:2267`) and `quarto-core`'s TS engine reads it as `file_offset`
+  `:2258`, `:2267`) and `quarto-core`\'s TS engine reads it as `file_offset`
   (`src/engine/ts_engine.rs:689`). Expect JSON-writer snapshot churn for any
   q2 fixture carrying a mid-character offset — and note that neither consumer
   snaps, which is the affirmative case for flooring.
@@ -251,7 +251,7 @@ Phase 1's audit covers all three, plus q2 and `quarto-yaml`.
   precisely the shape these value spans take once provenance is correct, so that
   arm is where the work lands. A confident wrong answer, not a failure to
   resolve. Plan 2 Phase 4 owns it, and the fix is entirely on the TS side.
-  Note what is *not* wrong: `resolveChain`'s `Concat` arm
+  Note what is *not* wrong: `resolveChain`\'s `Concat` arm
   (`source-map.ts:317-375`) walks the pieces via `toMappedString(id)` and takes
   its range from `map(0)` and `map(len-1)+1`, consulting the serialized `r`
   only on error paths. A well-formed `Concat` resolves correctly today; the

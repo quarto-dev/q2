@@ -99,7 +99,7 @@ These make a transient handshake delay into a hard, unrecoverable failure:
 
 1. **5 s peer budget == 5 s adapter retry interval.**
    `PreviewApp.tsx` passes `peerTimeoutMs: 5000`;
-   `WebSocketClientAdapter`'s `retryInterval` default is also 5000 ms.
+   `WebSocketClientAdapter`\'s `retryInterval` default is also 5000 ms.
    Any first-attempt failure loses the race by construction — recovery
    at t≥5 s can never beat the deadline at t=5 s.
 

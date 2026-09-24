@@ -294,7 +294,7 @@ with `$if(...)$` except for variables that are always populated by
 - `version` (always inserted, line 393)
 - `page-layout` (default-set if missing, line 397)
 
-`pampa`'s built-in `main.html` has unguarded `$lang$` and
+`pampa`\'s built-in `main.html` has unguarded `$lang$` and
 `$pagetitle$` (lines 2 / 19), plus unguarded `$idprefix$` and
 `$abstract-title$` inside outer guards. These are only used by the
 `pampa` CLI, which already calls `render_with_diagnostics`. Out of

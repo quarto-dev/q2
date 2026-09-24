@@ -103,7 +103,7 @@ Mechanism options considered:
 
 - **(A) Transform-side construction with native nodes** *(recommended)*:
   `render_float_ref_target` emits the Q1 shape as `Div(outer) >
-  Figure(attrred) > [Div(content), caption]`, using `Block::Figure`'s existing
+  Figure(attrred) > [Div(content), caption]`, using `Block::Figure`\'s existing
   `attr` for the `<figure>` classes. The one gap: Pandoc's `Caption` carries
   no attr, so the **writers** synthesize the figcaption id/classes from
   metadata the transform leaves on the Figure attr (see below).

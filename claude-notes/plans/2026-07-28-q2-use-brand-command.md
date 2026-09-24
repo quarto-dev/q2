@@ -86,7 +86,7 @@ not a nicety here; it is the load-bearing half of the command.
 
 ### Where a `brand:` declaration can legally live
 
-`quarto-sass`'s `ThemeConfig::from_config_value`
+`quarto-sass`\'s `ThemeConfig::from_config_value`
 (`crates/quarto-sass/src/config.rs:166-238`) reads `config.get("brand")` from the
 **format-flattened merged config**. That merge chain is `_quarto.yml` →
 `_metadata.yml` layers (`quarto-core/src/project/mod.rs:69-107`) → document front
@@ -154,7 +154,7 @@ almost exactly this problem shape:
   before declaring success.
 - **Path extraction for assets.** Q1's `extractBrandFilePaths` (`brand.ts:134-212`)
   walks `logo.images.*`, `logo.{small,medium,large}` (string or `{light,dark}`),
-  and `typography.fonts[].files[]` where `source: file`. `quarto-brand`'s typed
+  and `typography.fonts[].files[]` where `source: file`. `quarto-brand`\'s typed
   model already has all these fields, so the Rust version is a typed traversal
   rather than Q1's untyped probing — strictly less code.
 - **A testable HTTP seam precedent.** `PublishHost::http_get`
@@ -191,7 +191,7 @@ Round 1 (1–8) fixed the command's shape; round 2 (9–14) fixed the fetch surf
    as a rule with both cases spelled out; the command reports which one it chose.
 3. **Refuse if a brand file already exists.** If `_brand.yml` or `_brand.yaml`
    exists at the project root, error out and write nothing. This is stricter than
-   `q2 create`'s skip-existing policy, and it makes a second run a **hard error**
+   `q2 create`\'s skip-existing policy, and it makes a second run a **hard error**
    rather than an idempotent no-op — deliberately, since silently doing nothing
    would be worse than saying so.
 4. **Only `_quarto.yml` is inspected** for an existing brand declaration.
@@ -201,7 +201,7 @@ Round 1 (1–8) fixed the command's shape; round 2 (9–14) fixed the fetch surf
 7. **`theme:` is left alone.** `from_config_value` auto-injects `ThemeSpec::Brand`
    when `brand:` is set, so no `- brand` entry is needed, and adding one where a
    user has hand-written a `theme:` list risks the `Q-14-1` hard error.
-8. **`--json` ships in v1**, mirroring `q2 create`'s machine path.
+8. **`--json` ships in v1**, mirroring `q2 create`\'s machine path.
 9. **Both `.tar.gz` and `.zip` are supported.** The `zip` crate joins `flate2`
    (already present) and `tar` (new). Format is detected by **magic bytes**, not
    by file extension.
@@ -262,7 +262,7 @@ the top-level directory inside the archive, from the ref string.
 `org/repo@feature/foo` that is `repo-feature/foo` — a *two-segment path*. A
 GitHub archive has a single root directory; no flat prefix can produce a nested
 path. So the predicted subdir cannot exist, and the lookup falls through to
-`stageBrand`'s lone-subfolder rescue (`brand.ts:553-571`), which happens to
+`stageBrand`\'s lone-subfolder rescue (`brand.ts:553-571`), which happens to
 work — but only by accident, and only when the archive has exactly one top
 level entry and no loose files.
 
@@ -442,7 +442,7 @@ and existing key order survive untouched. The value is `_brand.yml` or
 - **Shared module** (decision 6): lift the plan/writer/prompter/failure types out
   of `commands/create/` into `commands/common/`, with `create` and `use_cmd`
   both importing them. `CreatePlan` → `FilePlan`, `CreateFailure` →
-  `CommandFailure`, etc. `create.rs`'s integration tests protect the refactor.
+  `CommandFailure`, etc. `create.rs`\'s integration tests protect the refactor.
 - `--json` directive shape, mirroring create's tagged form:
   `{"use": "brand", "target": "org/repo", "dry_run": false, "force": false, "trust": false}`,
   unknown fields rejected. Exactly one result object on stdout; diagnostics as
@@ -528,7 +528,7 @@ implements each is noted.
 
 ### Phase 1 — Shared `commands/common/` module
 
-Pure refactor; `create`'s integration tests must stay green throughout.
+Pure refactor; `create`\'s integration tests must stay green throughout.
 
 - [x] Move plan/writer/prompter/failure types from `commands/create/` to
       `commands/common/`, renaming `CreatePlan` → `FilePlan`, `CreateFailure` →

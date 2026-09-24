@@ -93,7 +93,7 @@ Reference: `external-sources/quarto-cli/src/command/preview/{cmd,preview}.ts`,
 | Startup renders only stale inputs (`isModifiedAfter`) unless `--render` | Startup always renders fully | Simpler and honest; a stale-only startup is a follow-up once someone needs it. |
 | Polling watcher over explicit file lists (200 ms+) | `notify`-based recursive watch via the existing `quarto_hub::watch::FileWatcher` | Already in tree and used by the hub preview. |
 | WebSocket devserver channel; every log line streamed to the browser; React progress dialog with an ANSI terminal | Server-sent events (`axum::response::sse`); a small vanilla-JS client with a status badge and an error panel showing the plain-text diagnostics | No new features on axum; `EventSource` auto-reconnects for free (so a restarted server reloads the page); no React in a Rust crate. |
-| IDE control channel (`QUARTO_RENDER_TOKEN`, RStudio render URL), `--timeout`, external `preview.serve.cmd`, PDF via pdf.js, presentations' `postMessage` bridge | Out of scope | Nothing consumes them yet. Listed in § Deferred. |
+| IDE control channel (`QUARTO_RENDER_TOKEN`, RStudio render URL), `--timeout`, external `preview.serve.cmd`, PDF via pdf.js, presentations\' `postMessage` bridge | Out of scope | Nothing consumes them yet. Listed in § Deferred. |
 | Client script appended after `</html>` from a file at a relative URL | Inline script inserted before `</body>` (append if absent) | No extra request and no path-prefix sensitivity. |
 
 ## User-facing surface
@@ -148,7 +148,7 @@ warning so a Q1 project's config does not silently do nothing.
    becomes `/`), and serve the output directory (§ Static server).
 3. **Watch** (unless `--no-watch`). Project mode watches the project root
    recursively; single-file mode watches the file plus its resolved
-   dependency closure, reusing `FileWatcher`'s existing single-file
+   dependency closure, reusing `FileWatcher`\'s existing single-file
    allow-list. Events are classified (§ Watch policy) into *ignore*, *subset
    re-render*, or *full re-render*, coalesced while a render is in flight,
    and executed one at a time on a blocking thread.
@@ -533,7 +533,7 @@ the user wants otherwise.
   the output dir either; `--no-clean` is parsed and ignored today).
 - `--timeout` (exit when no clients for N seconds) and an IDE control
   channel; `preview.serve.cmd` external servers.
-- PDF (typst) output via an embedded viewer; presentations' `postMessage`
+- PDF (typst) output via an embedded viewer; presentations\' `postMessage`
   bridge for IDE slide control.
 - Honouring `site-path` / `site-url` absolute-link prefixes in the 404
   handler (Q1 `serve.ts:687-718`), once `q2 render` emits such links.

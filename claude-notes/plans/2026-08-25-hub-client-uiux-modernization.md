@@ -209,7 +209,7 @@ deferred to Phase 5.
       and active-accent-row mixins (as documented shared classes).
       **Done (7ea60da9):** `.qh-truncate` (5 exact-trio sites),
       `.qh-row-hover`, `.qh-active-accent-row` (logical
-      border-inline-start). `.file-item`'s margin-offset variant of the
+      border-inline-start). `.file-item`\'s margin-offset variant of the
       active row is left for Phase 1 — unifying it is an alignment change,
       not a value-preserving one.
 - [x] Burn down the `lint:css` exceptions list to empty for color/z-index rules.
@@ -522,7 +522,7 @@ scroll, no clipped controls.
       320px viewport — at ≤480px it now spans its anchor's full width
       (the row/card is always inside the viewport). The row-menu submenu
       needed no fix: `.qh-row .qh-menu` (specificity 0,2,0) overrides
-      `.qh-submenu`'s rightward `left: calc(100% + 4px)`, anchoring
+      `.qh-submenu`\'s rightward `left: calc(100% + 4px)`, anchoring
       submenus to each item's right edge — inside the viewport at 320
       and 1280 alike (measured, then pinned by a matrix spec).
 - [x] ProjectsHome grid: extend the existing 980/760 breakpoints for
@@ -543,7 +543,7 @@ scroll, no clipped controls.
       wraps to two rows — previously `.header-left` collapsed to ~9px flex
       width while its icon buttons painted on, ending up *under*
       `.header-right` (later in paint order): an overlap no viewport-bounds
-      assertion catches, pinned by asserting `.header-left`'s own
+      assertion catches, pinned by asserting `.header-left`\'s own
       scrollWidth. Layout redesigns (sidebar drawer, split-view collapse,
       header overflow menu) remain Phase 5 design work.
 - [x] Fix any reflow failures the 320px matrix row surfaces (no horizontal

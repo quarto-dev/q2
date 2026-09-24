@@ -145,7 +145,7 @@ The bd-4eyf test pattern to copy:
 ## Snapshot baseline
 
 `crates/quarto-core/tests/fixtures/phase5-single-doc-baseline/expected_hashes.txt` was re-captured for bd-4eyf because the new
-`<script>` tag changed `doc.html`'s SHA. The baseline `doc.qmd` is
+`<script>` tag changed `doc.html`\'s SHA. The baseline `doc.qmd` is
 math-free, so math-mode work should *not* change `doc.html` again —
 the math stage must skip on math-free input. If the hash shifts, the
 predicate is over-triggering. (Useful canary.)
@@ -163,7 +163,7 @@ in user-facing docs/examples for math.
 
 bd-4eyf already settled these — don't re-design them:
 
-- **Artifact-based external scripts** are the right shape for the JS payload (uses `ApplyTemplateStage`'s existing `js:` collector, gets the right URL via `ResourceResolverContext`, lands in the project lib dir for websites with the `quarto/` namespace, lands per-page for single-doc).
+- **Artifact-based external scripts** are the right shape for the JS payload (uses `ApplyTemplateStage`\'s existing `js:` collector, gets the right URL via `ResourceResolverContext`, lands in the project lib dir for websites with the `quarto/` namespace, lands per-page for single-doc).
 - **Project scope** is the right scope for math assets (shared across pages in a website, mirrors the theme CSS layout).
 - **Vendoring layout under `resources/js/<feature>/`** with an `include_bytes!` is the established pattern; just add a section to `resources/js/README.md`.
 - **TDD with a noop stub for red phase** is the local norm; CLAUDE.md mandates it. The failure messages bd-4eyf used (positive cases fail, skip cases pass-via-false-positive) are documented in the bd-4eyf plan.

@@ -438,7 +438,7 @@ stop erroring, that test reddens here — and it is *not* something Task 2 fixes
 
 Analysis says the three shortcode error codes are safe: `Q-2-27`/`Q-2-28` are
 unterminated shortcodes (`{{< hello` with no close — still an error), and
-`Q-2-34` is governed by `shortcode_number`'s `prec(3)` (verified: `size=2x`
+`Q-2-34` is governed by `shortcode_number`\'s `prec(3)` (verified: `size=2x`
 still reports `Q-2-34` under the widened parser). But a case file testing some
 *other* code could contain a shortcode incidentally. If one newly passes,
 diagnose it individually and record the finding; do not blanket-update.

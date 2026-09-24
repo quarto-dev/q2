@@ -142,7 +142,7 @@ into that tree.)
    Pandoc's short classes (`.kw`, `.st`), not Q2's tree-sitter `hl-*` classes —
    not directly reusable.
 6. **Navbar model has no `tools:`** (`quarto-navigation/src/navbar.rs:104`) — no
-   place to render the toggle; `navbar_to_html`'s right-hand `<ul>`/search slot is
+   place to render the toggle; `navbar_to_html`\'s right-hand `<ul>`/search slot is
    the insertion point. (bd-fod3 tracks `tools:` generally.)
 7. **`DEFAULT_CSS_CACHE` is a single-slot `OnceLock`**; `cache_key` has no variant
    discriminator (bd-8oqw wants a structured `CompileInputs` anyway).
@@ -316,7 +316,7 @@ sort-stable key scheme (`css:theme:0:<fp>`, `css:theme:1:<fp>-dark`, …) or an
 - **Body class at render time**: `append_color_mode_class(mode)` grows its mode
   argument (bd-mtzry); default class = author default (respecting
   `respect-user-color-scheme` means the JS may flip it before paint, same as Q1).
-- **Toggle widget**: website navbar/sidebar — render into `navbar_to_html`'s
+- **Toggle widget**: website navbar/sidebar — render into `navbar_to_html`\'s
   right-hand slot when the format has a dark variant (interim: hardcoded
   emission, folded into bd-fod3's `tools:` support when that lands); plain
   documents get the floating `top-right` fallback (small DOMContentLoaded block

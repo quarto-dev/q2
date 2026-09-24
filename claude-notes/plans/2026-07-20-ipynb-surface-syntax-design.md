@@ -125,7 +125,7 @@ first, observe that we don't actually need it:
 Nobody reads a notebook as raw JSON — not the user (who sees cells in Jupyter
 or a cell-aware editor), not our renderer. The JSON byte layout is an
 implementation detail (Jupyter itself rewrites it freely — fragment
-splitting is unstable across saves). So instead of treating `foo.ipynb`'s
+splitting is unstable across saves). So instead of treating `foo.ipynb`\'s
 bytes as the root and fighting the escape problem, **register each cell's
 logical content as its own ephemeral in-memory `SourceFile`, and make that the
 root coordinate system.** The unescaping happens once, at ingestion, *before*
@@ -203,7 +203,7 @@ If raw-file offsets are ever needed, two escalation paths, in increasing
 order of ambition:
 
 1. **Converter-level decode maps**: while reading the notebook with a
-   span-aware JSON reader (we own `pampa`'s raw-json reader as a starting
+   span-aware JSON reader (we own `pampa`\'s raw-json reader as a starting
    point), record per cell a run table `[(logical_range, file_range), …]`
    breaking at every escape sequence and fragment boundary. Store it next to
    the virtual file (converter output struct — no `SourceInfo` change), and
@@ -348,7 +348,7 @@ pipeline without new surface area (not in scope for the first cut).
 ### Phase 2 — pipeline wiring
 - [ ] `ParseDocumentStage` branch on `SourceType::Ipynb`
 - [ ] SourceContext plumbing on both success and error paths (incl.
-      `run_pipeline`'s rebuilt context)
+      `run_pipeline`\'s rebuilt context)
 - [ ] Cell-options composition test (`#|` YAML error inside a code cell of a
       notebook lands in the right cell)
 - [ ] End-to-end: `cargo run --bin q2 -- render fixture.ipynb` + inspect

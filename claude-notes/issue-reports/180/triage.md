@@ -123,7 +123,7 @@ fn write_figure(
 }
 ```
 
-The block-writer contract in this file: each top-level block writer ends its output with exactly one `\n`. See `write_paragraph` (`qmd.rs:2197`), `write_plain` (`qmd.rs:2209`), `write_figure`'s own fallback path that closes with `writeln!(buf, "\n:::")?` (`qmd.rs:805`), etc. The top-level driver `write_impl` (`qmd.rs:2331`) and `write_div` (`qmd.rs:442`) both rely on this: they emit *one* additional `\n` between blocks, which only becomes a blank line if the previous block already ended in `\n`.
+The block-writer contract in this file: each top-level block writer ends its output with exactly one `\n`. See `write_paragraph` (`qmd.rs:2197`), `write_plain` (`qmd.rs:2209`), `write_figure`\'s own fallback path that closes with `writeln!(buf, "\n:::")?` (`qmd.rs:805`), etc. The top-level driver `write_impl` (`qmd.rs:2331`) and `write_div` (`qmd.rs:442`) both rely on this: they emit *one* additional `\n` between blocks, which only becomes a blank line if the previous block already ended in `\n`.
 
 `write_image` (`qmd.rs:1490`) is an inline writer and correctly does *not* emit a trailing newline. The bug is the early-return in `write_figure`: it bypasses the block-level wrap-up and reuses the inline writer's output verbatim as a block.
 

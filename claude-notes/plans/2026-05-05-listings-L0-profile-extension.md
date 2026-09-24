@@ -385,7 +385,7 @@ listing-item:
 The extraction copies the `extra` sub-map's `ConfigValue` entries
 verbatim into `ListingItemInfo::extra` as a `BTreeMap<String,
 ConfigValue>`. No type coercion. Custom templates (L8) handle the
-typed access at render time via `quarto-doctemplate`'s
+typed access at render time via `quarto-doctemplate`\'s
 `TemplateValue` conversion.
 
 ### Version bump
@@ -648,7 +648,7 @@ pass.
       not the trivial `is_empty()`.
 - [x] Write unit tests 1–13 + the C6 namespace-distinct test
       (#9b) + three D7 `categories_raw` tests in
-      `document_profile.rs`'s test module. Observed:
+      `document_profile.rs`\'s test module. Observed:
       5 extraction tests fail (curated fields, extra
       passthrough, namespace-distinct, two `categories_raw`
       tests). Mechanics + version-mismatch + is_empty tests

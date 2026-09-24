@@ -750,7 +750,7 @@ New file `link_rewriting_pipeline.rs`:
 48. `pipeline_body_link_in_list` — body has a bullet list with
     a `.qmd` link. Output href is rewritten.
 49. `pipeline_body_link_no_cross_contamination` — rendering
-    `index.qmd` does not affect `about.qmd`'s body links
+    `index.qmd` does not affect `about.qmd`\'s body links
     (regression guard, mirrors Phase 3's navbar
     cross-contamination test).
 

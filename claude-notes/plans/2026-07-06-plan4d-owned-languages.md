@@ -137,7 +137,7 @@ the Rust field keeps every deserialize path (round-trip tests) tolerant of its a
 - `EngineResolution::owned_languages_for(&self, engine: &str) -> Vec<String>`
 - `ExecutionContext.owned_languages: Vec<String>` + `ExecutionContext::with_owned_languages(self, Vec<String>) -> Self`
 
-- [ ] **Step 1: Write the failing test** — append to the `tests` module in `resolution.rs` (mirrors `test_handled_languages_for`'s setup at `:1062`):
+- [ ] **Step 1: Write the failing test** — append to the `tests` module in `resolution.rs` (mirrors `test_handled_languages_for`\'s setup at `:1062`):
 
 ```rust
 /// `owned_languages_for` returns { lang present in doc : owned by this engine }.

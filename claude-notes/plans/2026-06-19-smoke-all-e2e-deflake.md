@@ -57,7 +57,7 @@ smoke-all, `retries:3`.
 ## Fix + measurements (commit 6fc040e8)
 
 Root cause (proven by boot-trace): sync client `connect()` →
-`loadFileDocuments()` loaded ~49 file docs **serially**, and `findDoc()`'s
+`loadFileDocuments()` loaded ~49 file docs **serially**, and `findDoc()`\'s
 `repo.find()` had **no deadline** → a single slow doc hung ~60s on
 automerge-repo's internal unavailable timeout → blew the 75s render budget →
 Editor/preview never mounted. (The extension fixtures share one ~49-file

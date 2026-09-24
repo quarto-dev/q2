@@ -128,7 +128,7 @@ construction gets a new `generated_with`, not a second argument.
   so it is unaffected as long as the pampa writer/reader are migrated
   with the rest of the sites.
 - **Keep `SmallVec` inside the box.** Once boxed, the inline storage no
-  longer affects `SourceInfo`'s size, and keeping the type avoids
+  longer affects `SourceInfo`\'s size, and keeping the type avoids
   touching the 22 `smallvec!`/`SmallVec` sites in q2. (Switching to
   `Vec<Anchor>` later is a separate, optional cleanup.)
 - `By` is untouched. Shrinking `data: serde_json::Value` is unnecessary
@@ -140,7 +140,7 @@ construction gets a new `generated_with`, not a second argument.
   of the registry sources, 2026-09-19), so they compile unchanged, but
   cargo will resolve **two copies** of `quarto-source-map` if their
   requirement stays at `0.1.x` while q2 asks for `0.2` — and then
-  `quarto_yaml`'s `SourceInfo` is a different type from q2's. So the
+  `quarto_yaml`\'s `SourceInfo` is a different type from q2's. So the
   release order is: source-map 0.2.0 → quarto-error-reporting (bump dep,
   0.2.3) → quarto-yaml (bump dep, 0.1.4) → q2 bumps all three together.
   The alternative — shipping this as 0.1.5 because no external consumer

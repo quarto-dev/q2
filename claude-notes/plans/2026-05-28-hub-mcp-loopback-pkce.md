@@ -187,7 +187,7 @@ against real systems, not as a precondition for starting work.
     a real WebSocket connect,
   - refresh-token rotation behaviour is unchanged from the Limited-
     Input-Devices client (the persistence rule documented in
-    `refresh-manager.ts`'s top-of-file comment still holds),
+    `refresh-manager.ts`\'s top-of-file comment still holds),
   - **second-run refresh-token return.** Run the full flow twice
     with the **same** Google account and **without**
     `prompt=consent` on the second authorization request. Record

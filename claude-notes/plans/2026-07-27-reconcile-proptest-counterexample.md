@@ -101,7 +101,7 @@ both-sides-present cases — caption `apply.rs:713-719`, cells
 entry remains possible, e.g. exec-only cells from row/column growth). Their
 "no plan means content matched exactly" comments encode the false invariant;
 leaving them as live-looking code invites the bug class back through a
-future compute site. (b)'s "simpler" claim is only true with this cleanup
+future compute site. (b)\'s "simpler" claim is only true with this cleanup
 done.
 
 ### Phase 2 scope: deferred

@@ -25,7 +25,7 @@ list bullet) on the line below.
 Fixture: the snippet above as `tasklist.qmd`, served with
 `target/debug/q2 preview tasklist.qmd --no-browser`, inspected with a headless
 Playwright script (`inspect.mjs`, scratchpad) that finds the checkbox in the
-preview frame and dumps its `<li>`'s outerHTML plus bounding rects. Live DOM of
+preview frame and dumps its `<li>`\'s outerHTML plus bounding rects. Live DOM of
 the item:
 
 ```html

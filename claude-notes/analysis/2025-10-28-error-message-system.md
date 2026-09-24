@@ -289,7 +289,7 @@ Each error corpus file should demonstrate **exactly one** error. Keep examples a
 
 **Good**:
 - Title: "Unclosed Span"
-- Message: "I reached the end of the block before finding a closing ']' for the span or link."
+- Message: "I reached the end of the block before finding a closing \']' for the span or link."
 
 **Bad**:
 - Title: "Parse error"

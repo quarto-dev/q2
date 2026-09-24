@@ -40,8 +40,8 @@ This meant property tests could not exercise most reconciliation code paths.
 - Full AST property test (`reconciliation_preserves_structure_full_ast`) passes
 
 **Bugs Found and Fixed:**
-1. kyoto-sz3: Container blocks (OrderedList, Div, Figure) were preserving `attr` from `before` instead of using `after`'s attr. Fixed in `apply_block_container_reconciliation`.
-2. Header was preserving `attr` and `level` from `before` instead of using `after`'s values. Fixed in `apply_inline_block_reconciliation`.
+1. kyoto-sz3: Container blocks (OrderedList, Div, Figure) were preserving `attr` from `before` instead of using `after`\'s attr. Fixed in `apply_block_container_reconciliation`.
+2. Header was preserving `attr` and `level` from `before` instead of using `after`\'s values. Fixed in `apply_inline_block_reconciliation`.
 3. kyoto-fhh: DefinitionList was not updating terms or definitions from `after`. The bug was twofold: (a) terms were ignored using `_` pattern, (b) `zip` only processed items existing in both lists. Fixed by taking exec's content directly since there are no pre-computed nested plans for DefinitionList.
 
 **Remaining:**

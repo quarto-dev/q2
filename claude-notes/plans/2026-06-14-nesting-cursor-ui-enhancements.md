@@ -15,7 +15,7 @@ with the user. TDD-first; checklist below is ready to execute.
 > **All cited production files live under `ts-packages/preview-renderer/src/q2-preview/`** unless
 > a path is given (e.g. `../utils/byteLineMap.ts`). The Playwright acceptance specs live under
 > `hub-client/e2e/` — that SPA bundles `preview-renderer` from source and runs the real WASM, so
-> the iframe-side TS is exercised through `hub-client`'s e2e tier even though it does not live there.
+> the iframe-side TS is exercised through `hub-client`\'s e2e tier even though it does not live there.
 
 ## Overview
 

@@ -103,7 +103,7 @@ let is_empty_item = item.len() == 1
 A truly empty item (`item.is_empty()`, i.e. `Vec<Block>` of length 0)
 falls through to the `else` branch at L490–499, where the inner
 `for (j, block) in item.iter().enumerate()` loop runs zero times and
-writes nothing. The outer `BulletListContext`'s prefix machinery is
+writes nothing. The outer `BulletListContext`\'s prefix machinery is
 all that's left, producing the `  ` (two-space) blank line we saw —
 not a `*` marker. There is no codepath in this function that ever
 emits a bare `*` (or `*\n`) marker.

@@ -185,7 +185,7 @@ export function fireWindowFocus(): void {
    ```
 3. **Unmount discipline.** Every `renderHook(...)` call captures
    `unmount` and runs it (explicitly or via
-   `@testing-library/react`'s `cleanup`). Leaked
+   `@testing-library/react`\'s `cleanup`). Leaked
    `visibilitychange`/`focus` listeners on the jsdom globals are
    the most likely cross-test footgun.
 4. **Vitest environment pin.** Both files declare

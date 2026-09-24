@@ -67,7 +67,7 @@ first-join latency still hurts.
 3. **Per-connection routing via head-peek, not a per-request reverse proxy.**
    The frontend reads the request head (bounded: 64 KiB cap, 5 s timeout),
    and routes the *whole connection*:
-   - `GET`/`HEAD` whose path — after `spa_handler`'s exact normalization
+   - `GET`/`HEAD` whose path — after `spa_handler`\'s exact normalization
      (query string stripped, `trim_start_matches('/')`, empty →
      `index.html`, raw percent-encoded path, no decoding) — is an **exact
      hit in the manifest** → serve from the embedded bundle via the shared
@@ -82,7 +82,7 @@ first-join latency still hurts.
      WebSocket upgrades and keep-alive follow-up requests flow through the
      splice untouched — byte fidelity is total, which is why this beats
      reconstructing requests through hyper.
-   - **No local index fallback, deliberately.** Mirroring `spa_handler`'s
+   - **No local index fallback, deliberately.** Mirroring `spa_handler`\'s
      "any unmatched path gets `index.html`" locally would shadow any
      present-or-future host route the tunnel list fails to name (a new
      non-`/api` route with unchanged assets → hash match → shadowed), and

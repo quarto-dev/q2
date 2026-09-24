@@ -67,7 +67,7 @@ Today `FileSidebar.handleDrop` (FileSidebar.tsx:142-154) does **not** pick a des
 Approach: extract a `resolveDefaultDestination(opts)` helper that returns a folder path (possibly `""` for root) given:
 
 1. **Drop target** (if a drop event): walk up from `event.target` to the nearest folder node (via a `data-folder-path` attribute on folder headers and file rows in FileSidebar). Files contribute their parent folder; folders contribute themselves.
-2. **Current selection fallback**: if there's no drop target, use the currently focused file's parent folder (`currentFile.path`'s dirname).
+2. **Current selection fallback**: if there's no drop target, use the currently focused file's parent folder (`currentFile.path`\'s dirname).
 3. **Root fallback**: if neither is available, return `""` (project root).
 
 To make #1 work we need to tag tree rows with their folder association (one-line change in `renderFileItem` and `renderTreeNode`). This is a small, contained refactor and is worth doing in Phase A before the dialog lands, because it makes the "+"-button flow and the drop-flow trivially consistent.

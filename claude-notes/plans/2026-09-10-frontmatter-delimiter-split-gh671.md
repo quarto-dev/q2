@@ -90,7 +90,7 @@ emitting `---` inside values.
 
 ### Why the writer needs no change
 
-- The writer's YAML is valid in every shape probed. `yaml_rust2`'s emitter
+- The writer's YAML is valid in every shape probed. `yaml_rust2`\'s emitter
   already quotes scalars that *begin* with `---` (`title: "---"`,
   `sub: "--- foo"`) and emits mid-scalar dashes plain (`tail: foo ---`,
   `list: [x --- y]`, nested maps likewise). A `---` inside a plain scalar

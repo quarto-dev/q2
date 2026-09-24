@@ -196,7 +196,7 @@ Extend the existing plain-table-with-`__name="Pandoc"` representation
 (`rust_pandoc_to_lua_table`, `readwrite.rs:316-342`) with a shared metatable
 providing `walk`, `clone`, `normalize`, `__concat` (meta union right-biased),
 `__eq`. Constructor `pandoc.Pandoc(blocks, meta)` applies fuzzy blocks
-coercion + D2 meta normalization. Keeps `pandoc.read`'s doc shape and the
+coercion + D2 meta normalization. Keeps `pandoc.read`\'s doc shape and the
 constructor's shape identical. (Userdata upgrade is a possible later
 refactor; not needed by the conformance suite.)
 

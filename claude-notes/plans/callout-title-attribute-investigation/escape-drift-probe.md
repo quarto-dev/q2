@@ -76,7 +76,7 @@ which is what makes the coarse fallback safe.
 
 ## Corollary: the same bug exists in the YAML path
 
-`quarto-yaml`'s `compute_scalar_len` deliberately spans the quotes ("which is
+`quarto-yaml`\'s `compute_scalar_len` deliberately spans the quotes ("which is
 what a diagnostic wants to underline") while `parse_config_string_as_markdown`
 is handed the *decoded* scalar
 (`crates/pampa/src/pandoc/meta.rs:59-66`, `:240-330`). Nothing compensates. See

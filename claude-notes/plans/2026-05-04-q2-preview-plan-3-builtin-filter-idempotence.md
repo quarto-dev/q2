@@ -102,7 +102,7 @@ metadata).
 
 `Q2_PREVIEW_STAGE_EXCLUDED` (`pipeline.rs:356`) currently excludes
 three stages by name: `math-js`, `render-html-body`, and
-`apply-template`. `MathJsStage`'s exclusion means `meta.math` never
+`apply-template`. `MathJsStage`\'s exclusion means `meta.math` never
 appears under this pipeline and contributes nothing to the meta
 hash; `RenderHtmlBodyStage` and `ApplyTemplateStage` produce
 HTML/text side outputs that wouldn't reach the AST anyway, so their

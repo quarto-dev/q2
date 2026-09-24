@@ -264,7 +264,7 @@ In `client.ts`:
   `fileHandles`), fire `callbacks.onFileUnavailable?.(path, docId)`,
   `syncLog` a diagnostic (NOT console.log — bd-sl4o01y0), continue.
   Non-unavailable errors keep throwing (don't mask real bugs).
-- `connect()`'s returned `FileEntry[]`: annotate from
+- `connect()`\'s returned `FileEntry[]`: annotate from
   `state.unavailableFiles`.
 - Clear `unavailableFiles` appropriately on disconnect and when an
   entry is removed from the index (`syncWithFiles` removal branch).
@@ -283,7 +283,7 @@ unavailable path skips any doc fetch.
   `syncLog` (`src/log.ts`); there's a source-level invariant test
   that will fail your PR otherwise (bd-sl4o01y0).
 - **The connect spy**: `quarto-hub-mcp/src/connection-manager.test.ts`
-  has a `spySyncClientFactory` modeling `connect`'s signature — if
+  has a `spySyncClientFactory` modeling `connect`\'s signature — if
   you change the connect return shape, update it (it bit us once:
   options-bag migration).
 - **`findDoc`'s `connectedPeers.size === 0` bail** (e326eb5c): noted

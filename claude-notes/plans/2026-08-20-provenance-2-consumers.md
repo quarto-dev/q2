@@ -73,7 +73,7 @@ Each is written in place at the item it affects, as an indented `> CORRECTED` bl
 are not stylistic; three of them change what you should build.
 
 1. **Phase 3, "Dispose of the dead converter"** — the preferred option (delete +
-   retarget `materialize.rs`'s `mod spans` at `yaml_to_config_value`) **cannot compile**:
+   retarget `materialize.rs`\'s `mod spans` at `yaml_to_config_value`) **cannot compile**:
    pampa depends on quarto-config, so the retarget needs a dependency cycle. Take the
    plan's own "keep it in lockstep" alternative; the correction says exactly what to do.
 2. **Phase 3, "The binding regression"** — the predicted symptom ("renders with no source
@@ -115,10 +115,10 @@ without a second target over the same source (e.g. `quarto-core`) do not double.
 
 ### Out-of-plan findings filed as braid strands
 
-- **bd-78e1ahjc** — `quarto-error-reporting`'s `test_location_in_to_text_with_context`
+- **bd-78e1ahjc** — `quarto-error-reporting`\'s `test_location_in_to_text_with_context`
   fails under `cargo test --no-default-features`. Pre-existing (reproduced at `4da3385`),
   unrelated to this epic; neither that repo's CI nor this plan exercises that configuration.
-- **bd-8k41zq68** — `attach_config_source`'s read-and-register may be dead weight, since
+- **bd-8k41zq68** — `attach_config_source`\'s read-and-register may be dead weight, since
   `MetadataMergeStage` already covers every candidate it can name. A design question, from
   correction 2 above.
 

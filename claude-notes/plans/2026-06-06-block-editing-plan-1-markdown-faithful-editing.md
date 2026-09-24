@@ -195,7 +195,7 @@ Plan 2a refactors Plan 1's interim `t==0 && d==0` gate onto `sourceNode`.)*
   commits an edit while a re-render is in-flight, the offsets may not match the
   live content. `compound.renderedContent` is now available and could replace the
   live prop; deferred because commits are assumed to happen on a settled preview
-  and `PreviewApp.tsx`'s already-correct use of `state.renderedContent` can serve
+  and `PreviewApp.tsx`\'s already-correct use of `state.renderedContent` can serve
   as the Playwright repro target. Include a failing test that edits, then types
   quickly before the re-render settles, then commits — assert the surrounding
   blocks are unchanged.

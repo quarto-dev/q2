@@ -158,7 +158,7 @@ The analogous *working* model — first block inline with the marker, blank line
 
 ## Fix sketch (for the beads issue)
 
-In `write_list_table`'s cell-emission loop:
+In `write_list_table`\'s cell-emission loop:
 
 1. **Multi-block case**: if the first block is `Plain` or `Paragraph`, emit its inlines on the marker line. Then for each subsequent block (or for all blocks if the first wasn't `Plain`/`Paragraph`):
    - emit a blank line

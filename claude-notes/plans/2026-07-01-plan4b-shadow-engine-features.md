@@ -85,7 +85,7 @@ One item that looks like a 4b candidate is **not**: `set_project` / per-render
 
 ## Phase 4b-A: Synthetic contending-engine fixtures
 
-The test substrate the rest of the plan builds on. Each mirrors `echo-engine`'s layout —
+The test substrate the rest of the plan builds on. Each mirrors `echo-engine`\'s layout —
 `src/<name>.ts` source + a committed `dist/<name>.js` bundle built with `q2 build-ts-extension`,
 `_extension.yml` `path: dist/<name>.js` (the parser requires a `.js` path). The first group are
 *resolution-shaped* (they make the tier model observable); the second group are *behavioral*

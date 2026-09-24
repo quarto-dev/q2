@@ -487,7 +487,7 @@ oversold, each now pinned by a test in `tests/integration/reader.rs`:
 
 ## Decisions (2026-09-21)
 
-1. **Style vocabulary: keep pandoc's style names.** Decided. Q1 users'
+1. **Style vocabulary: keep pandoc's style names.** Decided. Q1 users\'
    reference docs are keyed on pandoc's names (`Source Code`, `Body Text`,
    `First Paragraph`, `Compact`, `Block Text`, `Caption`, `Image Caption`,
    `Table Caption`, `Verbatim Char`, `Hyperlink`, …); matching them keeps
@@ -505,7 +505,7 @@ oversold, each now pinned by a test in `tests/integration/reader.rs`:
    2026-09-21 velocity check in the session transcript), so a quarterly
    `git log <upstream> -- crates/mitex-lexer crates/mitex-parser` check is
    enough to track bugfixes. Vendoring lets us add the span side table at the
-   parser's `builder.token` sites and drop `mitex-spec-gen`'s Typst/submodule
+   parser's `builder.token` sites and drop `mitex-spec-gen`\'s Typst/submodule
    build step entirely. Record the upstream commit in `VENDORED.md`.
 3. **Use-site attribution inside macro expansions: definition-site for v1.**
    Decided. Revisit if users report confusing math diagnostics.

@@ -263,7 +263,7 @@ guarantee. Optional in this plan; do it if regression-cheap.)
 
 ## Out of scope
 
-- `RenderToHtmlRenderer`'s native HTML-output tests aren't currently
+- `RenderToHtmlRenderer`\'s native HTML-output tests aren't currently
   asserting on link URLs; this plan touches them only for API
   symmetry. If they have latent path-leakage in their assertions
   (unlikely — they test HTML content shape), that's a separate ticket.

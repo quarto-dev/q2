@@ -6,7 +6,7 @@
 
 ## Problem
 
-`NativeRuntime::fetch_url` uses `reqwest`'s async client, which requires
+`NativeRuntime::fetch_url` uses `reqwest`\'s async client, which requires
 a tokio reactor (I/O driver) to poll network sockets. However, the
 native render pipeline is driven by `pollster::block_on` in multiple
 places:

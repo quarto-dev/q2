@@ -54,7 +54,7 @@ Each arrow is its own build step. None of them cascade automatically:
 
 - `cargo build --bin q2` only re-embeds `q2-preview-spa/dist/` if a
   file inside that directory changed (see
-  `crates/quarto-preview/build.rs`'s `rerun-if-changed` directives).
+  `crates/quarto-preview/build.rs`\'s `rerun-if-changed` directives).
   Files inside that dist are themselves Vite output — they only change
   when you re-run the SPA build.
 - `cargo xtask build-q2-preview-spa` runs `npm run build` inside

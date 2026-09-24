@@ -26,9 +26,9 @@ Landing this plan makes `q2 render f.qmd --to docx` and `--to pptx` **reach pand
 ## In scope (= P7's former Tasks 1, 2, 3, 7)
 
 - **The multi-format render warning** — a pure diagnostic (`Q-18-*`) naming the used and skipped keys when `format:` declares more than one, wired in *before* the gate relaxation lands so the guardrail the relaxation removes has a replacement the moment it's needed.
-- **The project-mode containment gate** — gate `WebsiteProjectType::post_render`'s hook sequence on `format.identifier.is_html_based()`, so a website/book/manuscript project rendered to a Pandoc target doesn't write an HTML sitemap/alias-redirect set that doesn't correspond to what was actually produced.
+- **The project-mode containment gate** — gate `WebsiteProjectType::post_render`\'s hook sequence on `format.identifier.is_html_based()`, so a website/book/manuscript project rendered to a Pandoc target doesn't write an HTML sitemap/alias-redirect set that doesn't correspond to what was actually produced.
 - **Relax the `render.rs:680-684` native-format gate** to admit `Docx` and `Pptx` (the two formats P1/P4 already support end-to-end machinery for), route `Pandoc(fmt)` profiles through P4's `render_qmd_to_pandoc`, and wire the multi-format warning in at the same call site. Verified end-to-end for both formats, since they fail at two different lines today (docx at the gate itself, pptx one line earlier at `Format::from_format_string`).
-- **B3 shared services wired into the Pandoc tail** — confirm, with tests, that `ResourceCollector`'s mediabag/resource staging and `LinkRewriteTransform` run before the wire-format handoff, so images and relative links resolve in the produced file.
+- **B3 shared services wired into the Pandoc tail** — confirm, with tests, that `ResourceCollector`\'s mediabag/resource staging and `LinkRewriteTransform` run before the wire-format handoff, so images and relative links resolve in the produced file.
 
 ## Out of scope (stays in P7, or belongs to a later format's own plan)
 

@@ -48,7 +48,7 @@ as the longer-term **bd-d8fo** React-components rewrite.
   scroll effect now only marks the epoch consumed when the target
   element was actually found in the DOM — so the next pass with
   the new astJson succeeds on retry.
-- Pre-existing bug found & fixed: `previewServer.ts`'s URL parser
+- Pre-existing bug found & fixed: `previewServer.ts`\'s URL parser
   appended `/` to the matched URL even when the URL had a query
   string (Phase D.2's CLI-side `?page=` injection produced URLs
   the helper then mutated to `?page=index.qmd/`). Replaced with
@@ -104,7 +104,7 @@ as the longer-term **bd-d8fo** React-components rewrite.
 - React side (`PreviewDocument.tsx`): five chrome slots
   (`NavbarSlot`, `SidebarSlot`, `PageNavSlot`, `FooterSlot`,
   `TocSlot`) + a `HeaderIncludesEffect` for `<head>` tags. Each
-  slot is `React.memo`'d on its HTML string so an identical re-post
+  slot is `React.memo`\'d on its HTML string so an identical re-post
   doesn't tear down the chrome DOM. Wrapper structure mirrors
   `template.rs:178-254` byte-for-byte.
 - Body-classes: PreviewDocument now reads

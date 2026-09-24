@@ -145,7 +145,7 @@ write into `ast.meta` (the same `ConfigValue` map that
 Reasons:
 
 1. **Single extraction path.** With L1 writing to `meta`, all of
-   `listing_item`'s population — author-supplied *and* auto-
+   `listing_item`\'s population — author-supplied *and* auto-
    filled — flows through `extract_listing_item` at the
    checkpoint. There is exactly one site that decides "what does
    `listing_item` look like." A side-channel would split that
@@ -257,7 +257,7 @@ fn autofill_listing_item(doc: &mut DocumentAst, ctx: &StageContext) {
 ```
 
 (Exact `ctx.runtime` accessor name is TBD — verify against
-`StageContext`'s actual fields in the worktree.)
+`StageContext`\'s actual fields in the worktree.)
 
 The shapes `ensure_map_entry`, `fill_if_absent_string`, etc. are
 **not** implied to exist — they're the API L1 wants. The

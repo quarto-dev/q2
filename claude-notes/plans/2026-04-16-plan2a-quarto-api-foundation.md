@@ -89,7 +89,7 @@ them.
   is its own top-level namespace), and **Plan 3 adds `./jupyter`**, each as they
   create the module so the package builds clean before those land.
   `dependencies: { "yaml": "^2.0.0" }` (the
-  package's single dep list; `yaml`'s first consumer is Plan 2's `markdown/`, but
+  package's single dep list; `yaml`\'s first consumer is Plan 2's `markdown/`, but
   it is declared here so the dep list is set once). Run `npm install` from the
   repo root. `@quarto/api` is published to jsr/npm (see the grand plan's
   "Distribution of the engine-author SDK"); the registry identity is set here,
@@ -192,7 +192,7 @@ subprocess, project context) and launch-context method *bodies* stay in
     isCI: boolean;
   }
   ```
-  `@quarto/api`'s host-only namespaces take a `PlatformHost` (constructor-
+  `@quarto/api`\'s host-only namespaces take a `PlatformHost` (constructor-
   injected or passed per call) rather than importing `Deno.*`, so the package
   stays platform-neutral and a `@quarto/engine-host-wasm` can supply a
   VFS-backed host later. No `Deno.*` / `node:*` in `@quarto/api` itself.

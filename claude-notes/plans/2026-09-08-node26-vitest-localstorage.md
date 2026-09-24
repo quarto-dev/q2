@@ -44,7 +44,7 @@ Concretely:
 - [x] `fnm install 24` → v24.20.0 (newer than Homebrew's node@24 24.15.0)
 - [x] `fnm default system` — outside pinned projects `node` stays Homebrew's 26.8.1
 - [x] `~/.zprofile` (new file): `eval "$(fnm env --use-on-cd --version-file-strategy=recursive)"`
-      with a comment explaining why `.zprofile` and not `.zshenv` (`/etc/zprofile`'s
+      with a comment explaining why `.zprofile` and not `.zshenv` (`/etc/zprofile`\'s
       `path_helper` would reorder `/opt/homebrew/bin` ahead of fnm — `/etc/paths.d/homebrew`
       exists on this machine)
 - [x] `~/.zshrc`: pointer comment next to the PATH section

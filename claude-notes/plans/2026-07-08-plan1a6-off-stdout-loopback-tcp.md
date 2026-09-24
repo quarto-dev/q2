@@ -150,7 +150,7 @@ this.
 Engines **never touch the protocol channel** — the harness does. An engine
 implements `ExecutionEngine` methods and returns values; the only code that wires
 the **protocol channel** to Deno streams is `@quarto/engine-host-deno/src/main.ts`
-(`runHost(Deno.stdin.readable, Deno.stdout, denoHost)`). (`main.ts`'s own header
+(`runHost(Deno.stdin.readable, Deno.stdout, denoHost)`). (`main.ts`\'s own header
 comment claiming it is the sole `Deno.*` touch-point is stale — `deno-host.ts`
 uses `Deno.*` extensively for the `PlatformHost`; it just never touches the
 channel.) Under 1.6 **only the harness changes** — `main.ts` (channel selection)

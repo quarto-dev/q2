@@ -296,7 +296,7 @@ For Rust Quarto, since we control pampa, we implement this as an AST transform t
 
 `SectionizeTransform` should be **implemented once in the `pampa` crate** and used by both:
 1. `pampa -t html` (standalone tool)
-2. `quarto-core`'s render pipeline
+2. `quarto-core`\'s render pipeline
 
 **Design principles:**
 

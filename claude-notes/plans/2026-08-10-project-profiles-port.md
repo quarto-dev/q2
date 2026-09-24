@@ -47,7 +47,7 @@ Then group expansion: for each group in `profile.group` (read from
 set, visible to subprocesses as `QUARTO_PROFILE`.
 
 Config merge order (lowest → highest): `_quarto.yml` → active
-profiles' `_quarto-<p>.yml` in **reverse activation order**
+profiles\' `_quarto-<p>.yml` in **reverse activation order**
 (first-listed profile wins) → `_quarto.yml.local`. `.yml` preferred
 over `.yaml`. Project root only; no profile variant of
 `_metadata.yml`. The `profile:` key is read from the base config then

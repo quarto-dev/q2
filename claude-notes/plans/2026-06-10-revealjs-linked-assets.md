@@ -207,7 +207,7 @@ docs feature, not resource-embedding.
   `css:revealjs:<order>` / `js:revealjs:reveal` (order encoded for the CSS
   cascade), paths `revealjs/<file>`, **`Project` scope** ([Q-1]: Project for
   dedup; resolver handles single-doc vs website). Registered from
-  `CompileThemeCssStage`'s reveal branch (the point that already establishes a
+  `CompileThemeCssStage`\'s reveal branch (the point that already establishes a
   doc's CSS-framework artifacts, where the Bootstrap path is skipped).
 - [x] **2 — Link emission.** DONE. `render_revealjs_document(body, meta,
   css_urls, js_urls)` emits `<link>`/`<script src>` in cascade order; only

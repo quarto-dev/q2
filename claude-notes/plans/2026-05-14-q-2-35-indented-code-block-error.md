@@ -35,7 +35,7 @@ Each case is a small `.qmd` chosen to exercise the detection logic at a distinct
 | Case `name`           | Description                                                                  | Why it matters                                                                       |
 | ---                   | ---                                                                          | ---                                                                                  |
 | `basic`               | 4 spaces + plain text at top level after a blank line                        | The straightforward reporter case.                                                   |
-| `tab-indent`          | A single leading tab (which expands to column 4)                             | Confirms tab handling agrees with `advance()`'s 4-column expansion in scanner.c.    |
+| `tab-indent`          | A single leading tab (which expands to column 4)                             | Confirms tab handling agrees with `advance()`\'s 4-column expansion in scanner.c.    |
 | `more-than-four`      | 5–8 leading spaces at top level                                              | "4 or more" boundary.                                                                |
 | `inside-list-item`    | Inside a list item: list marker, then continuation line with **extra** 4-space indent beyond the list-item indent | Confirms the check fires on **leftover** indentation, not raw column count.        |
 | `well-indented-list`  | Continuation line whose indentation **exactly** matches the list-item indent | **Negative** case (no error). Should be a "captures": [] test that expects success. The harness needs to accept negative cases — if it doesn't, file a follow-up beads. |
@@ -55,7 +55,7 @@ Use `crates/pampa/resources/error-corpus/Q-2-32.json` as the structural template
   - Must NOT fire inside a fenced code block (`s->fenced_code_block_delimiter_length > 0`) or inside other "raw content" contexts that already shadow normal line scanning.
   - Must NOT fire on blank lines (lines that are all whitespace).
   - Tab handling: `s->indentation` is already in column units thanks to `advance()`, so the check is `s->indentation >= 4`, not "byte count ≥ 4".
-- [ ] Add the external token to `grammar.js`'s `externals` list with a `_disallowed`-style name following the `$._triple_star_error` precedent (lines 1045-1052). Add a comment block mirroring the Q-2-32 one (file the comment under "KNOWN LIMITATION:").
+- [ ] Add the external token to `grammar.js`\'s `externals` list with a `_disallowed`-style name following the `$._triple_star_error` precedent (lines 1045-1052). Add a comment block mirroring the Q-2-32 one (file the comment under "KNOWN LIMITATION:").
 - [ ] Run `tree-sitter generate; tree-sitter build` from `crates/tree-sitter-qmd/tree-sitter-markdown/`.
 - [ ] Run `tree-sitter test` and confirm the new corpus case (Phase 2 above) passes.
 

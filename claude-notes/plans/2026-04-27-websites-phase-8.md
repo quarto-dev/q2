@@ -391,7 +391,7 @@ this; Phase 8 doesn't.
 
 The user named a specific subset. Render exactly that subset
 plus the minimum set of *DocumentProfile re-extractions* needed
-for that subset's nav features to be correct. **No other pages'
+for that subset's nav features to be correct. **No other pages\'
 Pass-2 runs.** Concretely:
 
 ```
