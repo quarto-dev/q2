@@ -25,6 +25,10 @@ crates/quarto/tests/smoke-all/**/_site/
 
 # Claude Code session-specific plan symlink
 claude-notes/plans/CURRENT.md
+
+# claude-notes is a q2 website (bd-uk8zgkha); its render output is regenerable.
+claude-notes/_site/
+claude-notes/.quarto/
 node_modules/
 # Hub server secret — never commit this (matches any project subdirectory)
 **/.quarto/hub/hub.json
