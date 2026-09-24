@@ -273,7 +273,13 @@ section is what to know when the two interact.
   `install-smoke` job runs both README one-liners on linux, macOS and
   Windows against the fresh nightly and asserts `q2 --version`. A red
   `install-smoke` with a green pipeline means the installers or the
-  release-notes contract regressed, not the build.
+  release-notes contract regressed, not the build. The smoke steps pass
+  the job's `GH_TOKEN` so the installers' API lookup is not subject to
+  the shared-runner anonymous rate limit, and the installers retry the
+  lookup through the seconds right after the release is replaced
+  (bd-n9yh30c8). The installer's error names the HTTP status: a 403
+  means rate limiting, a 404 or "lists no … archive" after all retries
+  means the release really is missing or incomplete.
 - **A red nightly is a signal.** The pipeline gates are the release
   gates; a nightly failure means the next release would fail the same
   way. Fix it before tagging. Failure emails go to whoever last

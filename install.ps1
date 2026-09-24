@@ -26,6 +26,11 @@
 #                        local path form is what the CI smoke test uses)
 #   -Checksum <hex>      expected sha256; skips fetching the .sha256 file
 #   -NoVerify            skip checksum verification (discouraged)
+#
+# Environment:
+#   GH_TOKEN / GITHUB_TOKEN  optional GitHub token for the release lookup
+#                        (api.github.com; anonymous reads are limited to
+#                        60/hour per IP address, a token raises that)
 [CmdletBinding()]
 param(
     [string]$Version,
@@ -66,6 +71,70 @@ function Get-Artifact([string]$src, [string]$out) {
     }
 }
 
+# GitHub API reads (bd-n9yh30c8). Anonymous calls share a budget of 60
+# per hour per IP address, which shared CI runners and NATed networks
+# exhaust; so a token from GH_TOKEN or GITHUB_TOKEN is sent when set. A
+# stale token gets a 401 where an anonymous call would work, so a 401
+# drops the token and retries. Other failures retry with a doubling
+# backoff from 2s (2+4+8+16 = 30s in all): transient API errors, and the
+# seconds after the Nightly workflow replaces the release, when the tag
+# can briefly 404 or list no assets. A rate limit (403/429) is not
+# retried: it lasts up to an hour.
+# A hashtable, not a plain variable, so Invoke-GitHubApi can drop the
+# token: under the README one-liner (& ([scriptblock]::Create(...))) this
+# is not a script scope, so `$script:` would not reach it.
+$Api = @{ Token = $(if ($env:GH_TOKEN) { $env:GH_TOKEN } else { $env:GITHUB_TOKEN }) }
+$ApiAttempts = 5
+
+# HTTP status of a failed web request (0: no HTTP response). Works for
+# both Windows PowerShell 5.1 (WebException) and PowerShell 7
+# (HttpResponseException).
+function Get-HttpStatus($err) {
+    $resp = $err.Exception.PSObject.Properties['Response']
+    if ($resp -and $resp.Value) { return [int]$resp.Value.StatusCode }
+    return 0
+}
+
+function Get-ApiFailureReason([int]$status) {
+    switch ($status) {
+        0 { return 'no response from the GitHub API' }
+        { $_ -in 403, 429 } { return "HTTP ${status}: GitHub API rate limit, most likely; set GH_TOKEN to a GitHub token to raise it" }
+        404 { return 'HTTP 404: no such release' }
+        default { return "HTTP $status from the GitHub API" }
+    }
+}
+
+# GET a GitHub API URL, retrying as above. $Ready says whether a
+# successful response is usable yet (a nightly must list this
+# platform's asset); one that never becomes ready is returned as-is for
+# the caller to diagnose. $What names the lookup in the final error.
+function Invoke-GitHubApi([string]$Uri, [string]$What, [scriptblock]$Ready = { $true }) {
+    $delay = 2
+    for ($attempt = 1; ; $attempt++) {
+        $headers = @{ 'User-Agent' = 'q2-install'; 'Accept' = 'application/vnd.github+json' }
+        if ($Api.Token) { $headers['Authorization'] = "Bearer $($Api.Token)" }
+        try {
+            $rel = Invoke-RestMethod -Uri $Uri -Headers $headers
+            if ((& $Ready $rel) -or $attempt -ge $ApiAttempts) { return $rel }
+            $why = 'the release does not list the expected asset yet'
+        }
+        catch {
+            $status = Get-HttpStatus $_
+            if ($status -eq 401 -and $Api.Token) {
+                Write-Warning 'q2 install: GitHub rejected the token in GH_TOKEN/GITHUB_TOKEN (HTTP 401); retrying without it'
+                $Api.Token = $null
+                $attempt--
+                continue
+            }
+            $why = Get-ApiFailureReason $status
+            if ($status -in 403, 429 -or $attempt -ge $ApiAttempts) { Die "could not resolve $What ($why)" }
+        }
+        Step "$why; retrying in ${delay}s ($($attempt + 1)/$ApiAttempts)..."
+        Start-Sleep -Seconds $delay
+        $delay *= 2
+    }
+}
+
 # Channel selection is one or the other (mirrors install.sh): nightlies
 # are replaced daily, so a nightly version can never be pinned by tag.
 if ($Nightly -and $Version) { Die '-Nightly and -Version are mutually exclusive: -Nightly for the latest nightly, -Version vX.Y.Z for a release' }
@@ -76,8 +145,11 @@ if ($Nightly -and -not $ArtifactUrl) {
     # its tag carries no version — the version is in the asset name
     # (q2-<version>-windows_amd64.zip), so pick the asset by name.
     Step 'resolving nightly release...'
-    $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/$Owner/$Repo/releases/tags/nightly" -Headers $UA
-    $asset = @($rel.assets | Where-Object { $_.name -match "^q2-.+-$Platform\.zip$" })
+    $isAsset = { param($a) $a.name -match "^q2-.+-$Platform\.zip$" }
+    $rel = Invoke-GitHubApi "https://api.github.com/repos/$Owner/$Repo/releases/tags/nightly" `
+        "the nightly release (is one published at https://github.com/$Owner/$Repo/releases/tag/nightly?)" `
+        { param($r) @($r.assets | Where-Object { & $isAsset $_ }).Count -gt 0 }
+    $asset = @($rel.assets | Where-Object { & $isAsset $_ })
     if ($asset.Count -eq 0) { Die "the nightly release has no $Platform archive (expected q2-<version>-$Platform.zip)" }
     $ArtifactUrl = $asset[0].browser_download_url
     $Version = $asset[0].name -replace '^q2-', '' -replace "-$Platform\.zip$", ''
@@ -85,7 +157,7 @@ if ($Nightly -and -not $ArtifactUrl) {
 }
 elseif (-not $Version -and -not $ArtifactUrl) {
     Step 'resolving latest release...'
-    $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/$Owner/$Repo/releases/latest" -Headers $UA
+    $rel = Invoke-GitHubApi "https://api.github.com/repos/$Owner/$Repo/releases/latest" 'the latest release'
     $Version = $rel.tag_name
     if (-not $Version) { Die 'could not determine the latest release; pass -Version vX.Y.Z' }
 }
