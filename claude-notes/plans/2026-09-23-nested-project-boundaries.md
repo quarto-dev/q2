@@ -104,3 +104,28 @@ These already implement nearest-project-wins, and nothing here should change. Th
 - **Explicit reach-in resolution adds a second, scoped walk path.** Its matching must use the same exclusion rules (`is_renderable_source`) or the two paths will drift.
 - **Listings and `sidebar: auto`** consume the render list and pick up the change automatically. This is desired, but the snapshot or e2e tests for sites with nested dirs may shift. Grep the fixtures for nested `_quarto.yml` before Phase 1.
 - **Resource copying** (`project_resources.rs`, `glob/expand.rs`) walks independently and isn't affected. Files under a nested project that an outer page references are still copied. That's fine and out of scope.
+
+## Implementation log (2026-09-24)
+
+All phases except Phase 3 (split out to bd-smerrfma) are done on this branch.
+
+**Separate commit, decision 7.** `find_project_root_above` in `preview.rs` now accepts `_quarto.yaml`. This commit also adds `PROJECT_CONFIG_FILENAMES` in `discovery.rs`, the shared marker list, and closes bd-nqj8gmrb.
+
+**Where the implementation departs from the skeleton:**
+
+- **The walk tags instead of stopping.** `walk_rec` still enters nested roots but tags each candidate with its innermost owning root (`Candidate.nested_root`). `select_from_walk` then decides per pattern whether a candidate is taken or pruned, using `explicit_prefix`: a metacharacter-free pattern is literal throughout; otherwise it's `glob::expand::literal_prefix`, now `pub(crate)`. Two things follow:
+  - Q-5-31 names only the roots where an implicit pattern **would have rendered** something. `render: ["posts/*.qmd"]` next to a nested `other/` reports nothing.
+  - A negation over the root silences the warning with no special case, because excluded candidates never count as pruned.
+  
+  Pruning still happens before the `.md`/`.ipynb` opt-ins take effect, so the spec's intent holds.
+- **The report lives on `ProjectConfig`, not `ProjectContext`.** `ProjectContext` has about 247 struct literals across the workspace, while `ProjectConfig` has two without `..Default`. The new field is `ProjectConfig::nested_projects: NestedProjectReport`, filled in by `discover_with_profile`. The orchestrator emits `nested_project_diagnostics` next to `render_pattern_diagnostics`. `discover_project_files` returns `DiscoveredFiles { files, nested }`, per decision 5.
+- **`diagnostics: {Q-5-31: off}` does not work.** Project-scoped diagnostics bypass the policy; this is a documented v1 limit, tracked as bd-aow4qio3. The docs say so and point at the `!` negation instead. The CLI test for it was dropped. Once bd-aow4qio3 lands, add it back.
+- **The end-to-end tests run through the CLI** (`crates/quarto/tests/integration/nested_projects_cli.rs`), not a quarto-core integration test, so they cover output paths and the stderr text. The unit tests (13 new) live in `discovery.rs`.
+- **No changelog entry.** The only changelog is `hub-client/changelog.md`, and this change doesn't touch hub-client.
+- **Q-5-13 wording.** Its info text and doc page now mention nested projects, because `*/page.qmd` can match nothing for that reason.
+
+**Acceptance (Phase 5).** Run on a scratch copy of claude-notes with `render: ["**/*.md"]`:
+- The render list has 1354 files. The strand recorded 1365 before this change, on a slightly older tree.
+- Q-5-31 lists 7 roots, exactly the nested projects that contain renderable `.md`. The other 46 hold only `.qmd`, which `**/*.md` never matched.
+- Q-5-32 fires 0 times.
+- None of the 53 nested roots has any HTML under `_site/`.

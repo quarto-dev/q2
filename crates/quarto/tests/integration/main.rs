@@ -17,6 +17,7 @@ pub mod founding_crash_config_span_e2e;
 pub mod get_config_cli;
 pub mod json_errors;
 pub mod jupyter_kernel_cleanup_e2e;
+pub mod nested_projects_cli;
 pub mod nightly_gate;
 pub mod preview_cli;
 pub mod preview_static_e2e;

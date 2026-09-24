@@ -61,6 +61,14 @@
 //! excluded file does not override them (the author gets `Q-5-13`
 //! instead). The project config file itself (`_quarto.yml` / `.yaml`)
 //! is naturally excluded because of the `_` prefix rule.
+//!
+//! 4. A subdirectory holding its own project config
+//!    ([`PROJECT_CONFIG_FILENAMES`]) is a nested project and owns its
+//!    subtree (bd-nested-projects-xyb28wnl). Unlike rule 3 this is not a
+//!    hard filter: a pattern that names the nested root (its literal
+//!    prefix is the root or lies below it) still takes files from it.
+//!    Any other match there is pruned. Both outcomes are reported
+//!    through [`NestedProjectReport`] (`Q-5-31` / `Q-5-32`).
 
 use std::path::{Component, Path, PathBuf};
 
@@ -69,8 +77,10 @@ use quarto_source_map::{By, SourceInfo};
 use quarto_system_runtime::SystemRuntime;
 
 use crate::error::{QuartoError, Result};
+use crate::glob::expand::literal_prefix;
 use crate::glob::{
-    BaseDirContext, GlobOptions, GlobResolution, PatternSet, RawGlob, resolve_patterns,
+    BaseDirContext, GlobOptions, GlobResolution, PatternSet, RawGlob, has_metacharacters,
+    resolve_patterns,
 };
 use crate::project::DocumentInfo;
 
@@ -196,9 +206,55 @@ pub const PROJECT_CONFIG_FILENAMES: [&str; 2] = ["_quarto.yml", "_quarto.yaml"];
 pub fn discover_project_files(
     config: &DiscoveryConfig<'_>,
     runtime: &dyn SystemRuntime,
-) -> Result<Vec<PathBuf>> {
+) -> Result<DiscoveredFiles> {
     let walked = walk_sources(config.project_dir, runtime, config.renderable_extensions)?;
     Ok(select_from_walk(&walked, config))
+}
+
+/// What [`discover_project_files`] found.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct DiscoveredFiles {
+    /// The render list (see [`discover_project_files`] for ordering).
+    pub files: Vec<PathBuf>,
+    /// How the render patterns met nested projects.
+    pub nested: NestedProjectReport,
+}
+
+/// How the render patterns met nested projects: subdirectories that
+/// hold their own project config ([`PROJECT_CONFIG_FILENAMES`]).
+///
+/// A nested project owns its subtree. An **implicit** match (the default
+/// `**/*.qmd`, or any pattern whose literal prefix does not name the
+/// nested root) does not reach into it. An **explicit** match (a pattern
+/// whose literal prefix is the nested root or lies below it, such as
+/// `sub/page.qmd`, `sub/*.qmd` or a bare `sub`) still renders, with the
+/// outer project's config. The owning root is always the innermost one.
+///
+/// Carried on [`crate::project::ProjectConfig::nested_projects`] so the
+/// orchestrator can report it through [`nested_project_diagnostics`].
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct NestedProjectReport {
+    /// Nested roots (absolute, sorted) under which an implicit pattern
+    /// matched at least one renderable file that therefore did not
+    /// render. A root whose files a negation excludes is not listed.
+    pub pruned_roots: Vec<PathBuf>,
+    /// Explicit patterns that reached into a nested project, one entry
+    /// per (pattern, nested root) pair, in pattern order.
+    pub reach_ins: Vec<NestedReachIn>,
+}
+
+/// One explicit `project.render` pattern rendering files that belong
+/// to a nested project.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NestedReachIn {
+    /// The pattern as the author wrote it.
+    pub pattern: String,
+    /// Provenance of that YAML scalar.
+    pub source: SourceInfo,
+    /// The nested project root the files belong to (absolute).
+    pub nested_root: PathBuf,
+    /// The files this pattern added from under that root (absolute).
+    pub files: Vec<PathBuf>,
 }
 
 /// `.md` files an author may have expected to render: they survive
@@ -212,10 +268,16 @@ pub fn unmatched_md_files(
     runtime: &dyn SystemRuntime,
 ) -> Result<Vec<PathBuf>> {
     let walked = walk_sources(config.project_dir, runtime, config.renderable_extensions)?;
-    let selected: std::collections::HashSet<PathBuf> =
-        select_from_walk(&walked, config).into_iter().collect();
+    let selected: std::collections::HashSet<PathBuf> = select_from_walk(&walked, config)
+        .files
+        .into_iter()
+        .collect();
+    // Files in a nested project belong to it, so they are not the outer
+    // project's unmatched opt-in candidates.
     Ok(walked
         .into_iter()
+        .filter(|c| c.nested_root.is_none())
+        .map(|c| c.path)
         .filter(|p| has_md_extension(p) && is_renderable_source(p, config))
         .filter(|p| !selected.contains(p))
         .collect())
@@ -269,35 +331,135 @@ fn effective_render_patterns(user: &[RawGlob]) -> Vec<RawGlob> {
 /// (within one pattern: walk order). Exclusions are global: a `!`
 /// entry subtracts from every positive pattern regardless of where
 /// the author wrote it.
-fn select_from_walk(walked: &[PathBuf], config: &DiscoveryConfig<'_>) -> Vec<PathBuf> {
+///
+/// A candidate inside a nested project is taken only when the pattern
+/// is explicit for its root (see [`NestedProjectReport`]); otherwise
+/// the root is recorded as pruned.
+fn select_from_walk(walked: &[Candidate], config: &DiscoveryConfig<'_>) -> DiscoveredFiles {
     let patterns = effective_render_patterns(config.render_patterns);
     let resolution = resolve_render_patterns(config.project_dir, &patterns);
     let Ok(compiled) = resolution.compile(&RENDER_GLOB_OPTIONS) else {
         // Unreachable: resolution only emits patterns it compiled.
-        return Vec::new();
+        return DiscoveredFiles::default();
     };
 
     let mut files = Vec::new();
     let mut seen = std::collections::HashSet::new();
-    for glob in resolution.globs.iter().filter(|g| !g.negated) {
+    // Candidates an implicit pattern matched but could not take,
+    // keyed by path; the value is the owning nested root.
+    let mut pruned: std::collections::BTreeMap<PathBuf, PathBuf> = Default::default();
+    let mut reach_ins: Vec<NestedReachIn> = Vec::new();
+
+    for (glob_index, glob) in resolution.globs.iter().enumerate() {
+        if glob.negated {
+            continue;
+        }
         let Ok(single) = PatternSet::compile(std::slice::from_ref(glob), &RENDER_GLOB_OPTIONS)
         else {
             continue;
         };
+        let prefix = explicit_prefix(&glob.pattern);
         for candidate in walked {
-            let Ok(relative) = candidate.strip_prefix(config.project_dir) else {
+            let Ok(relative) = candidate.path.strip_prefix(config.project_dir) else {
                 continue;
             };
-            if single.matches_path(relative)
+            if !(single.matches_path(relative)
                 && !compiled.excluded_path(relative)
-                && is_renderable_source(candidate, config)
-                && seen.insert(candidate.clone())
+                && is_renderable_source(&candidate.path, config))
             {
-                files.push(candidate.clone());
+                continue;
+            }
+            if let Some(root) = &candidate.nested_root {
+                let root_rel = root.strip_prefix(config.project_dir).unwrap_or(root);
+                if !Path::new(&prefix).starts_with(root_rel) {
+                    pruned.insert(candidate.path.clone(), root.clone());
+                    continue;
+                }
+                if seen.insert(candidate.path.clone()) {
+                    record_reach_in(
+                        &mut reach_ins,
+                        &resolution,
+                        &patterns,
+                        glob_index,
+                        root,
+                        &candidate.path,
+                    );
+                    files.push(candidate.path.clone());
+                }
+                continue;
+            }
+            if seen.insert(candidate.path.clone()) {
+                files.push(candidate.path.clone());
             }
         }
     }
-    files
+
+    // A root counts as pruned only if some file under it still did not
+    // render (an explicit pattern may have taken it after all).
+    let pruned_roots: std::collections::BTreeSet<PathBuf> = pruned
+        .into_iter()
+        .filter(|(path, _)| !seen.contains(path))
+        .map(|(_, root)| root)
+        .collect();
+
+    DiscoveredFiles {
+        files,
+        nested: NestedProjectReport {
+            pruned_roots: pruned_roots.into_iter().collect(),
+            reach_ins,
+        },
+    }
+}
+
+/// The part of a resolved pattern that names a directory literally,
+/// used to decide whether the pattern is explicit for a nested root.
+/// A pattern with no metacharacters is literal throughout (a file, or a
+/// directory via the directory rule); otherwise it is the leading
+/// metacharacter-free directory segments, as [`literal_prefix`] computes.
+fn explicit_prefix(pattern: &str) -> String {
+    let pattern = pattern.trim_end_matches('/');
+    if has_metacharacters(pattern) {
+        literal_prefix(pattern)
+    } else {
+        pattern.to_string()
+    }
+}
+
+/// Add `file` to the reach-in entry for (`glob_index`, `root`),
+/// creating it with the author's raw pattern text on first use.
+fn record_reach_in(
+    reach_ins: &mut Vec<NestedReachIn>,
+    resolution: &GlobResolution,
+    patterns: &[RawGlob],
+    glob_index: usize,
+    root: &Path,
+    file: &Path,
+) {
+    let source = &resolution.sources[glob_index];
+    // Re-pair through `entry_index` rather than by text or span, which
+    // can repeat (see the field docs).
+    let raw = resolution
+        .entry_index
+        .iter()
+        .position(|e| *e == Some(glob_index))
+        .and_then(|i| patterns.get(i))
+        .map_or_else(
+            || resolution.globs[glob_index].pattern.clone(),
+            |r| r.raw.clone(),
+        );
+    if let Some(entry) = reach_ins
+        .iter_mut()
+        .find(|r| r.pattern == raw && r.nested_root == root)
+    {
+        entry.files.push(file.to_path_buf());
+        return;
+    }
+    reach_ins.push(NestedReachIn {
+        pattern: raw,
+        source: source.clone(),
+        nested_root: root.to_path_buf(),
+        files: vec![file.to_path_buf()],
+    });
 }
 
 /// True if a candidate path may appear in a render list at all:
@@ -532,7 +694,8 @@ pub fn render_pattern_diagnostics(
                      `**/` to search subdirectories (`posts/**/*.qmd`). Files whose \
                      name or directory starts with `_` or `.`, `README` files, and \
                      agent-instruction files (`CLAUDE.md`, `AGENTS.md`, `*.llms.md`) \
-                     are never rendered.",
+                     are never rendered, and a subdirectory with its own `_quarto.yml` \
+                     is reached only by a pattern that names it.",
                 )
                 .build(),
             );
@@ -542,16 +705,117 @@ pub fn render_pattern_diagnostics(
     out
 }
 
+/// A walked source file and the innermost nested project that owns
+/// it, if any.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct Candidate {
+    path: PathBuf,
+    nested_root: Option<PathBuf>,
+}
+
+/// Report how the render patterns met nested projects.
+///
+/// - `Q-5-31`: one warning listing every nested root that an implicit
+///   pattern would have rendered from and did not (decision 4 of
+///   bd-nested-projects-xyb28wnl: every root, no cap).
+/// - `Q-5-32`: one warning per explicit pattern and nested root it
+///   reached into, pointed at the pattern's YAML scalar.
+///
+/// Pure, like [`render_pattern_diagnostics`]: the orchestrator calls it
+/// with the report discovery stored on the project config.
+pub fn nested_project_diagnostics(
+    project_dir: &Path,
+    report: &NestedProjectReport,
+) -> Vec<DiagnosticMessage> {
+    let rel = |p: &Path| -> String {
+        p.strip_prefix(project_dir)
+            .unwrap_or(p)
+            .to_string_lossy()
+            .replace(std::path::MAIN_SEPARATOR, "/")
+    };
+    let mut out = Vec::new();
+
+    if !report.pruned_roots.is_empty() {
+        let n = report.pruned_roots.len();
+        let (noun, subject) = if n == 1 {
+            ("project", "This subdirectory contains")
+        } else {
+            ("projects", "These subdirectories contain")
+        };
+        let mut builder = DiagnosticMessageBuilder::warning(format!(
+            "Skipped {n} nested {noun} while building the render list"
+        ))
+        .with_code("Q-5-31")
+        .problem(format!(
+            "{subject} their own `_quarto.yml` (or `_quarto.yaml`), \
+             so their files belong to those projects and do not render as part of \
+             this one."
+        ));
+        for root in &report.pruned_roots {
+            builder = builder.add_note(format!("`{}`", rel(root)));
+        }
+        let example = rel(&report.pruned_roots[0]);
+        let builder = builder
+            .add_info(format!(
+                "Render a nested project on its own, e.g. `q2 render {example}`. To \
+                 render one of its files with this project's config instead, list it \
+                 in `project.render` by a path that names the directory \
+                 (`{example}/<file>.qmd`)."
+            ))
+            .add_hint(format!(
+                "To silence this warning, exclude the directory in `project.render` \
+                 (for example `\"!{example}/**\"`). For settings that apply to one \
+                 directory, use `_metadata.yml` rather than `_quarto.yml`."
+            ));
+        out.push(builder.build());
+    }
+
+    for reach_in in &report.reach_ins {
+        let root = rel(&reach_in.nested_root);
+        let n = reach_in.files.len();
+        let files = if n == 1 { "file" } else { "files" };
+        let mut builder = DiagnosticMessageBuilder::warning(format!(
+            "`project.render` pattern `{}` reaches into nested project `{root}`",
+            reach_in.pattern
+        ))
+        .with_code("Q-5-32")
+        .with_location(reach_in.source.clone())
+        .problem(format!(
+            "`{root}` has its own `_quarto.yml`, so its {files} belong to that project. \
+             This pattern renders {n} of them here, with this project's config instead."
+        ));
+        for file in &reach_in.files {
+            builder = builder.add_note(format!("`{}`", rel(file)));
+        }
+        out.push(
+            builder
+                .add_info(format!(
+                    "`q2 render {root}` renders these files with the nested project's \
+                     own config. If they belong to this project, move the \
+                     `_quarto.yml` out of `{root}`, or rename it to `_metadata.yml` \
+                     if it holds only metadata."
+                ))
+                .build(),
+        );
+    }
+
+    out
+}
+
 /// Recursively walk `project_dir` collecting candidate source files
 /// (`.qmd` and `.md`), already filtered against the cheap excludes
 /// (hidden, underscore components). Paths are absolute and sorted.
+///
+/// The walk still enters nested projects, tagging what it finds there,
+/// so that an explicit pattern can reach in and so the report can say
+/// which nested roots an implicit pattern would have rendered.
 fn walk_sources(
     project_dir: &Path,
     runtime: &dyn SystemRuntime,
     set: &RenderableExtensions,
-) -> Result<Vec<PathBuf>> {
+) -> Result<Vec<Candidate>> {
     let mut out = Vec::new();
-    walk_rec(project_dir, project_dir, runtime, set, &mut out)?;
+    walk_rec(project_dir, project_dir, None, runtime, set, &mut out)?;
     out.sort();
     Ok(out)
 }
@@ -559,13 +823,26 @@ fn walk_sources(
 fn walk_rec(
     root: &Path,
     dir: &Path,
+    owner: Option<&Path>,
     runtime: &dyn SystemRuntime,
     set: &RenderableExtensions,
-    out: &mut Vec<PathBuf>,
+    out: &mut Vec<Candidate>,
 ) -> Result<()> {
     let entries = runtime.dir_list(dir).map_err(|e| {
         QuartoError::Other(format!("Failed to list directory {}: {}", dir.display(), e))
     })?;
+    // A project config below the root makes `dir` a nested project.
+    let owner = if dir != root
+        && entries.iter().any(|e| {
+            e.file_name()
+                .and_then(|s| s.to_str())
+                .is_some_and(|n| PROJECT_CONFIG_FILENAMES.contains(&n))
+                && !runtime.is_dir(e).unwrap_or(false)
+        }) {
+        Some(dir)
+    } else {
+        owner
+    };
     for entry in entries {
         let name = entry
             .file_name()
@@ -577,12 +854,15 @@ fn walk_rec(
         let is_dir = runtime.is_dir(&entry).unwrap_or(false);
         if is_dir {
             if entry.strip_prefix(root).is_ok() {
-                walk_rec(root, &entry, runtime, set, out)?;
+                walk_rec(root, &entry, owner, runtime, set, out)?;
             }
             continue;
         }
         if has_renderable_extension(&entry, set) {
-            out.push(entry);
+            out.push(Candidate {
+                path: entry,
+                nested_root: owner.map(Path::to_path_buf),
+            });
         }
     }
     Ok(())
@@ -637,7 +917,7 @@ mod tests {
             renderable_extensions: &exts,
         };
 
-        let files = discover_project_files(&config, &native()).unwrap();
+        let files = discover_project_files(&config, &native()).unwrap().files;
         let rels: Vec<_> = files
             .iter()
             .map(|p| {
@@ -678,7 +958,7 @@ mod tests {
             render_patterns: &patterns,
             renderable_extensions: &exts,
         };
-        let files = discover_project_files(&config, &native()).unwrap();
+        let files = discover_project_files(&config, &native()).unwrap().files;
         // Diagnostics are computed from the post-exclusion file list,
         // exactly as the orchestrator does it.
         let selected: Vec<DocumentInfo> =
@@ -805,7 +1085,7 @@ mod tests {
 
     #[test]
     fn render_glob_diagnostic_codes_are_registered_in_catalog() {
-        for code in ["Q-5-13", "Q-5-14", "Q-5-15"] {
+        for code in ["Q-5-13", "Q-5-14", "Q-5-15", "Q-5-31", "Q-5-32"] {
             assert!(
                 quarto_error_catalog::ERROR_CATALOG.get(code).is_some(),
                 "{code} must be registered in the quarto-error-catalog"
@@ -859,7 +1139,7 @@ mod tests {
             render_patterns: &patterns,
             renderable_extensions: &exts,
         };
-        let files = discover_project_files(&config, &native()).unwrap();
+        let files = discover_project_files(&config, &native()).unwrap().files;
         let mut rels: Vec<String> = files
             .iter()
             .map(|p| {
@@ -896,7 +1176,7 @@ mod tests {
             render_patterns: &[],
             renderable_extensions: &exts,
         };
-        let files = discover_project_files(&config, &native()).unwrap();
+        let files = discover_project_files(&config, &native()).unwrap().files;
         let rels: Vec<_> = files
             .iter()
             .map(|p| {
@@ -926,7 +1206,7 @@ mod tests {
             render_patterns: &[],
             renderable_extensions: &exts,
         };
-        let files = discover_project_files(&config, &native()).unwrap();
+        let files = discover_project_files(&config, &native()).unwrap().files;
         assert_eq!(files.len(), 1);
         assert!(files[0].ends_with("index.qmd"));
     }
@@ -946,7 +1226,7 @@ mod tests {
             render_patterns: &[],
             renderable_extensions: &exts,
         };
-        let files = discover_project_files(&config, &native()).unwrap();
+        let files = discover_project_files(&config, &native()).unwrap().files;
         let names: Vec<_> = files
             .iter()
             .filter_map(|p| p.file_name().and_then(|s| s.to_str()).map(str::to_string))
@@ -1009,7 +1289,7 @@ mod tests {
                 render_patterns: &patterns,
                 renderable_extensions: &exts,
             };
-            discover_project_files(&config, &native()).unwrap()
+            discover_project_files(&config, &native()).unwrap().files
         };
         let by_default = ordered(&[]);
         let by_pattern = ordered(&["**/*.qmd"]);
@@ -1234,7 +1514,7 @@ mod tests {
             render_patterns: &[],
             renderable_extensions: &exts,
         };
-        let files = discover_project_files(&config, &native()).unwrap();
+        let files = discover_project_files(&config, &native()).unwrap().files;
         let mut rels: Vec<String> = files
             .iter()
             .map(|p| {
@@ -1265,7 +1545,7 @@ mod tests {
             render_patterns: &[],
             renderable_extensions: &exts,
         };
-        let files = discover_project_files(&config, &native()).unwrap();
+        let files = discover_project_files(&config, &native()).unwrap().files;
         let rels: Vec<String> = files
             .iter()
             .map(|p| {
@@ -1336,7 +1616,7 @@ mod tests {
             renderable_extensions: &exts,
         };
 
-        let files = discover_project_files(&config, &native()).unwrap();
+        let files = discover_project_files(&config, &native()).unwrap().files;
         assert_eq!(
             rels_of(&files, &project_dir),
             vec!["a.echo".to_string()],
@@ -1367,7 +1647,7 @@ mod tests {
             renderable_extensions: &exts,
         };
 
-        let files = discover_project_files(&config, &native()).unwrap();
+        let files = discover_project_files(&config, &native()).unwrap().files;
         assert_eq!(
             rels_of(&files, &project_dir),
             vec!["a.echo".to_string()],
@@ -1398,7 +1678,7 @@ mod tests {
             renderable_extensions: &exts,
         };
 
-        let files = discover_project_files(&config, &native()).unwrap();
+        let files = discover_project_files(&config, &native()).unwrap().files;
         assert!(
             files.is_empty(),
             "`.ipynb` is claimed by no engine, so naming it in `render:` must \
@@ -1441,7 +1721,7 @@ mod tests {
             renderable_extensions: &exts,
         };
 
-        let files = discover_project_files(&config, &native()).unwrap();
+        let files = discover_project_files(&config, &native()).unwrap().files;
         let rels = rels_of(&files, &project_dir);
 
         assert_eq!(
@@ -1536,5 +1816,274 @@ mod tests {
             diags.is_empty(),
             "the dynamic-claimer fall-through must be silent; got {diags:?}"
         );
+    }
+
+    // ── Nested projects (bd-nested-projects-xyb28wnl) ────────────────
+    //
+    // A subdirectory holding its own `_quarto.yml` / `_quarto.yaml` is
+    // a nested project. Implicit matches (the default `**/*.qmd`, or a
+    // pattern whose literal prefix does not name the nested root) stop
+    // at it and are reported as pruned (Q-5-31). Explicit references
+    // (literal prefix at or below the root) still render, and are
+    // reported as reach-ins (Q-5-32).
+
+    /// The experiment layout from the strand: an outer website with a
+    /// nested website under `sub/`, plus a plain sibling directory.
+    fn nested_fixture() -> (TempDir, PathBuf) {
+        let temp = TempDir::new().unwrap();
+        let dir = canonical(temp.path());
+        write_file(&dir.join("_quarto.yml"), "project:\n  type: website\n");
+        write_file(&dir.join("index.qmd"), "# outer\n");
+        write_file(&dir.join("notes.md"), "notes\n");
+        write_file(&dir.join("plain/p.qmd"), "# p\n");
+        write_file(&dir.join("sub/_quarto.yml"), "project:\n  type: website\n");
+        write_file(&dir.join("sub/index.qmd"), "# inner\n");
+        write_file(&dir.join("sub/page.qmd"), "# page\n");
+        write_file(&dir.join("sub/inner.md"), "inner\n");
+        write_file(&dir.join("sub/deep/leaf.qmd"), "# leaf\n");
+        (temp, dir)
+    }
+
+    /// Run discovery and return (rendered rels, pruned root rels,
+    /// reach-ins as (pattern, root rel, file rels)).
+    #[allow(clippy::type_complexity)]
+    fn discover_nested(
+        project_dir: &Path,
+        patterns: &[&str],
+    ) -> (Vec<String>, Vec<String>, Vec<(String, String, Vec<String>)>) {
+        let patterns: Vec<RawGlob> = patterns
+            .iter()
+            .map(|p| RawGlob::new(*p, SourceInfo::generated(By::programmatic_config())))
+            .collect();
+        let output_dir = project_dir.join("_site");
+        let exts = RenderableExtensions::fixed();
+        let config = DiscoveryConfig {
+            project_dir,
+            output_dir: &output_dir,
+            render_patterns: &patterns,
+            renderable_extensions: &exts,
+        };
+        let discovered = discover_project_files(&config, &native()).unwrap();
+        let mut files = rels_of(&discovered.files, project_dir);
+        files.sort();
+        let pruned = rels_of(&discovered.nested.pruned_roots, project_dir);
+        let reach_ins = discovered
+            .nested
+            .reach_ins
+            .iter()
+            .map(|r| {
+                (
+                    r.pattern.clone(),
+                    rels_of(std::slice::from_ref(&r.nested_root), project_dir).remove(0),
+                    rels_of(&r.files, project_dir),
+                )
+            })
+            .collect();
+        (files, pruned, reach_ins)
+    }
+
+    fn strs(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn nested_project_is_pruned_from_the_default_render_list() {
+        let (_t, dir) = nested_fixture();
+        let (files, pruned, reach_ins) = discover_nested(&dir, &[]);
+        assert_eq!(files, strs(&["index.qmd", "plain/p.qmd"]));
+        assert_eq!(pruned, strs(&["sub"]));
+        assert!(reach_ins.is_empty());
+    }
+
+    /// Pruning happens before extension opt-ins: `**/*.md` must not
+    /// reach `sub/inner.md` either (the claude-notes case).
+    #[test]
+    fn nested_project_is_pruned_from_md_opt_in() {
+        let (_t, dir) = nested_fixture();
+        let (files, pruned, _) = discover_nested(&dir, &["**/*.md"]);
+        assert_eq!(files, strs(&["notes.md"]));
+        assert_eq!(pruned, strs(&["sub"]));
+    }
+
+    /// A pattern that never reached into the nested project reports
+    /// nothing: the warning is about pages that would have rendered.
+    #[test]
+    fn nested_project_unreached_by_any_pattern_is_not_reported() {
+        let (_t, dir) = nested_fixture();
+        let (files, pruned, reach_ins) = discover_nested(&dir, &["plain/*.qmd"]);
+        assert_eq!(files, strs(&["plain/p.qmd"]));
+        assert!(pruned.is_empty(), "{pruned:?}");
+        assert!(reach_ins.is_empty());
+    }
+
+    #[test]
+    fn literal_path_into_nested_project_renders_and_is_reported() {
+        let (_t, dir) = nested_fixture();
+        let (files, pruned, reach_ins) = discover_nested(&dir, &["index.qmd", "sub/page.qmd"]);
+        assert_eq!(files, strs(&["index.qmd", "sub/page.qmd"]));
+        assert!(pruned.is_empty(), "{pruned:?}");
+        assert_eq!(
+            reach_ins,
+            vec![(
+                "sub/page.qmd".to_string(),
+                "sub".to_string(),
+                strs(&["sub/page.qmd"])
+            )]
+        );
+    }
+
+    /// Decision 1: a pattern is explicit for a nested root when its
+    /// literal prefix is that root or lies below it.
+    #[test]
+    fn glob_naming_the_nested_root_is_explicit() {
+        let (_t, dir) = nested_fixture();
+
+        let (files, pruned, reach_ins) = discover_nested(&dir, &["sub/*.qmd"]);
+        assert_eq!(files, strs(&["sub/index.qmd", "sub/page.qmd"]));
+        assert!(pruned.is_empty());
+        assert_eq!(reach_ins.len(), 1);
+
+        let (files, pruned, _) = discover_nested(&dir, &["sub/**/*.qmd"]);
+        assert_eq!(
+            files,
+            strs(&["sub/deep/leaf.qmd", "sub/index.qmd", "sub/page.qmd"])
+        );
+        assert!(pruned.is_empty());
+
+        // A bare directory is fully literal (directory rule), so it
+        // names the root even though `literal_prefix` would drop it.
+        // (The directory rule matches every renderable file, `.md` too.)
+        let (files, pruned, reach_ins) = discover_nested(&dir, &["sub"]);
+        assert_eq!(
+            files,
+            strs(&[
+                "sub/deep/leaf.qmd",
+                "sub/index.qmd",
+                "sub/inner.md",
+                "sub/page.qmd"
+            ])
+        );
+        assert!(pruned.is_empty());
+        assert_eq!(reach_ins[0].0, "sub");
+    }
+
+    /// Nothing literal names `sub`, so this is implicit even though it
+    /// is not recursive.
+    #[test]
+    fn wildcard_segment_over_the_nested_root_is_implicit() {
+        let (_t, dir) = nested_fixture();
+        let (files, pruned, reach_ins) = discover_nested(&dir, &["*/page.qmd"]);
+        assert!(files.is_empty(), "{files:?}");
+        assert_eq!(pruned, strs(&["sub"]));
+        assert!(reach_ins.is_empty());
+    }
+
+    /// Decision 2: a negation covering the nested root silences the
+    /// report, because nothing under it would have rendered anyway.
+    #[test]
+    fn negation_over_nested_root_silences_the_report() {
+        let (_t, dir) = nested_fixture();
+        for negation in ["!sub", "!sub/**", "!**/sub/**"] {
+            let (files, pruned, _) = discover_nested(&dir, &[negation]);
+            assert_eq!(files, strs(&["index.qmd", "plain/p.qmd"]), "{negation}");
+            assert!(pruned.is_empty(), "{negation}: {pruned:?}");
+        }
+    }
+
+    /// Decision 3: `_quarto.yaml` is a marker; a lone profile overlay
+    /// is not; a marker inside an already-excluded `_` dir is moot.
+    #[test]
+    fn project_markers() {
+        let temp = TempDir::new().unwrap();
+        let dir = canonical(temp.path());
+        write_file(&dir.join("index.qmd"), "# outer\n");
+        write_file(&dir.join("y/_quarto.yaml"), "project:\n  type: default\n");
+        write_file(&dir.join("y/a.qmd"), "# a\n");
+        write_file(&dir.join("prof/_quarto-prod.yml"), "title: x\n");
+        write_file(&dir.join("prof/b.qmd"), "# b\n");
+        write_file(&dir.join("meta/_quarto.yml"), "title: metadata only\n");
+        write_file(&dir.join("meta/c.qmd"), "# c\n");
+        let (files, pruned, _) = discover_nested(&dir, &[]);
+        assert_eq!(files, strs(&["index.qmd", "prof/b.qmd"]));
+        assert_eq!(pruned, strs(&["meta", "y"]));
+    }
+
+    /// The owning root is the innermost one: naming `sub` explicitly
+    /// does not reach through `sub/deeper`'s own boundary.
+    #[test]
+    fn nested_project_inside_nested_project() {
+        let (_t, dir) = nested_fixture();
+        write_file(
+            &dir.join("sub/deeper/_quarto.yml"),
+            "project:\n  type: default\n",
+        );
+        write_file(&dir.join("sub/deeper/x.qmd"), "# x\n");
+        let (files, pruned, reach_ins) = discover_nested(&dir, &["sub/**/*.qmd"]);
+        assert_eq!(
+            files,
+            strs(&["sub/deep/leaf.qmd", "sub/index.qmd", "sub/page.qmd"])
+        );
+        assert_eq!(pruned, strs(&["sub/deeper"]));
+        assert_eq!(reach_ins.len(), 1);
+
+        let (_, pruned, _) = discover_nested(&dir, &[]);
+        assert_eq!(pruned, strs(&["sub", "sub/deeper"]));
+    }
+
+    /// A file first skipped by an implicit pattern and then listed
+    /// explicitly renders; if it was the only file under that root,
+    /// the root is not reported as pruned.
+    #[test]
+    fn explicit_listing_rescues_an_implicitly_pruned_file() {
+        let (_t, dir) = nested_fixture();
+        let (files, pruned, _) = discover_nested(&dir, &["*/page.qmd", "sub/page.qmd"]);
+        assert_eq!(files, strs(&["sub/page.qmd"]));
+        assert!(pruned.is_empty(), "{pruned:?}");
+    }
+
+    #[test]
+    fn unmatched_md_skips_nested_projects() {
+        let (_t, dir) = nested_fixture();
+        assert_eq!(unmatched_with(&dir, &[]), strs(&["notes.md"]));
+    }
+
+    #[test]
+    fn nested_project_diagnostics_list_every_root_and_reach_in() {
+        let (_t, dir) = nested_fixture();
+        write_file(
+            &dir.join("other/_quarto.yml"),
+            "project:\n  type: default\n",
+        );
+        write_file(&dir.join("other/o.qmd"), "# o\n");
+        let raw = vec![
+            RawGlob::new("**/*.qmd", SourceInfo::generated(By::programmatic_config())),
+            RawGlob::new(
+                "sub/page.qmd",
+                SourceInfo::generated(By::programmatic_config()),
+            ),
+        ];
+        let output_dir = dir.join("_site");
+        let exts = RenderableExtensions::fixed();
+        let config = DiscoveryConfig {
+            project_dir: &dir,
+            output_dir: &output_dir,
+            render_patterns: &raw,
+            renderable_extensions: &exts,
+        };
+        let discovered = discover_project_files(&config, &native()).unwrap();
+        let diags = nested_project_diagnostics(&dir, &discovered.nested);
+        let codes: Vec<_> = diags.iter().map(|d| d.code.as_deref().unwrap()).collect();
+        assert_eq!(codes, vec!["Q-5-31", "Q-5-32"], "{diags:?}");
+        let pruned_text = diags[0].to_text(None);
+        assert!(pruned_text.contains("`other`"), "{pruned_text}");
+        assert!(pruned_text.contains("`sub`"), "{pruned_text}");
+        let reach_text = diags[1].to_text(None);
+        assert!(reach_text.contains("sub/page.qmd"), "{reach_text}");
+    }
+
+    #[test]
+    fn no_nested_projects_means_no_diagnostics() {
+        let (_t, dir) = render_fixture();
+        assert!(nested_project_diagnostics(&dir, &NestedProjectReport::default()).is_empty());
     }
 }

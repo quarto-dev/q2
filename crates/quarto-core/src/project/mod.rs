@@ -1013,6 +1013,12 @@ pub struct ProjectConfig {
     /// diagnostics can point at it (bd-mt7a6uc4 D8).
     pub render_patterns: Vec<crate::glob::RawGlob>,
 
+    /// How `render_patterns` met nested projects (subdirectories with
+    /// their own `_quarto.yml`). Not parsed from YAML: discovery fills
+    /// it in, and the orchestrator reports it once per render
+    /// (bd-nested-projects-xyb28wnl).
+    pub nested_projects: discovery::NestedProjectReport,
+
     /// Project-level `project.resources:` patterns (`bd-o8pr`).
     ///
     /// Raw patterns from `_quarto.yml` plus the YAML source location
@@ -1954,6 +1960,7 @@ impl ProjectContext {
             discover_extensions_only(&discovery_anchor, project_dir_for_extensions, runtime);
 
         // Build file list
+        let mut nested_projects = discovery::NestedProjectReport::default();
         let files = if let Some(input) = input_file {
             vec![DocumentInfo::from_path(input)]
         } else {
@@ -1982,8 +1989,13 @@ impl ProjectContext {
                 render_patterns: &render_patterns,
                 renderable_extensions: &renderable_extensions,
             };
-            let paths = discovery::discover_project_files(&discovery_cfg, runtime)?;
-            paths.into_iter().map(DocumentInfo::from_path).collect()
+            let discovered = discovery::discover_project_files(&discovery_cfg, runtime)?;
+            nested_projects = discovered.nested;
+            discovered
+                .files
+                .into_iter()
+                .map(DocumentInfo::from_path)
+                .collect()
         };
 
         // Project-less discovery (no `_quarto.yml` found): still
@@ -2036,6 +2048,7 @@ impl ProjectContext {
         config
             .config_diagnostics
             .extend(extension_intake_diagnostics);
+        config.nested_projects = nested_projects;
 
         let binary_dependencies = BinaryDependencies::discover(runtime);
         // `config` is no longer an `Option` at this point (main rebound it
@@ -2286,6 +2299,8 @@ impl ProjectContext {
             config_diagnostics,
             output_dir,
             render_patterns,
+            // Filled in by discovery, after parsing.
+            nested_projects: Default::default(),
             resources,
             pre_render_scripts,
             post_render_scripts,

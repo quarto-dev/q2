@@ -1623,6 +1623,20 @@
     "docs_url": "https://quarto.org/docs/errors/project/Q-5-30",
     "since_version": "99.9.9"
   },
+  "Q-5-31": {
+    "subsystem": "project",
+    "title": "Nested Projects Skipped",
+    "message_template": "Subdirectories with their own `_quarto.yml` are nested projects. Their files belong to them, so the render list's implicit patterns (the default `**/*.qmd`, or any glob that doesn't name the directory) skip them. Render the nested project on its own, list a file by a path that names the directory, or exclude the directory with a `!` pattern to silence this warning.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-31",
+    "since_version": "99.9.9"
+  },
+  "Q-5-32": {
+    "subsystem": "project",
+    "title": "Render Pattern Reaches Into Nested Project",
+    "message_template": "A `project.render` pattern names files inside a nested project (a subdirectory with its own `_quarto.yml`). They render as part of this project, with this project's config, not the nested one's.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-32",
+    "since_version": "99.9.9"
+  },
   "Q-13-8": {
     "subsystem": "navigation",
     "title": "Unsupported toc-location value",
