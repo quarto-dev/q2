@@ -149,7 +149,9 @@ fn e2e_multi_format_warns() {
     );
 }
 
-/// T3.5: `--to pdf` (and its non-Docx/Pptx siblings) must still refuse.
+/// T3.5: `--to pdf` (a non-pandoc-hybrid format) must still refuse.
+/// Gfm/CommonMark — the other previously-refused formats — have their own
+/// success tests below since Phase 1 admits them through the gate.
 #[test]
 fn e2e_pdf_still_refused() {
     let temp = TempDir::new().unwrap();
@@ -885,5 +887,68 @@ fn e2e_pptx_meta_title() {
     assert!(
         core_xml.contains("<dc:title>My Title</dc:title>"),
         "docProps/core.xml missing the title value: {core_xml}"
+    );
+}
+
+/// Phase 1 gate reachability: `q2 render f.qmd --to gfm` exits 0 and
+/// produces **markdown**, not HTML — the body text is present as plain
+/// text and no `<h1` tag appears, which discriminates against an
+/// accidental fall-through to the native HTML writer under the `.md`
+/// output extension.
+#[test]
+fn e2e_render_gfm() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_file(
+        &dir.join("f.qmd"),
+        "---\ntitle: F\n---\n\n# Head\n\nHelloGfmBody.\n",
+    );
+
+    let output = run_q2(&dir, &["f.qmd", "--to", "gfm"]);
+    assert!(
+        output.status.success(),
+        "q2 render --to gfm should succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let md = std::fs::read_to_string(dir.join("f.md")).expect("f.md should exist");
+    assert!(md.contains("HelloGfmBody"), "gfm body text missing: {md}");
+    assert!(
+        md.contains("# Head"),
+        "expected a markdown ATX heading, got: {md}"
+    );
+    assert!(!md.contains("<h1"), "gfm output must not be HTML: {md}");
+}
+
+/// Phase 1 gate reachability: `--to commonmark`, same contract as
+/// `e2e_render_gfm` but through the commonmark writer arm.
+#[test]
+fn e2e_render_commonmark() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_file(
+        &dir.join("f.qmd"),
+        "---\ntitle: F\n---\n\n# Head\n\nHelloCommonmarkBody.\n",
+    );
+
+    let output = run_q2(&dir, &["f.qmd", "--to", "commonmark"]);
+    assert!(
+        output.status.success(),
+        "q2 render --to commonmark should succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let md = std::fs::read_to_string(dir.join("f.md")).expect("f.md should exist");
+    assert!(
+        md.contains("HelloCommonmarkBody"),
+        "commonmark body text missing: {md}"
+    );
+    assert!(
+        md.contains("# Head"),
+        "expected a markdown ATX heading, got: {md}"
+    );
+    assert!(
+        !md.contains("<h1"),
+        "commonmark output must not be HTML: {md}"
     );
 }

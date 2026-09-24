@@ -579,7 +579,8 @@ impl PipelineStage for PandocWriteStage {
         // document-relative `Path` value is rebased against, since this
         // `Command` inherits the process cwd rather than setting its own.
         let doc_dir = doc.path.parent().unwrap_or_else(|| Path::new("."));
-        let forwarded_args = build_forwarded_args(self.name(), doc_dir, &doc.ast.meta, &to_format)?;
+        let forwarded_args =
+            build_forwarded_args(self.name(), doc_dir, &doc.ast.meta, ctx.format.identifier)?;
 
         // Body-content `Image`/`Link` targets (e.g. `img/thinker.jpg`)
         // reach pandoc as literal, unrebased strings from the AST — unlike

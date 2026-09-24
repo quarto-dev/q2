@@ -145,15 +145,18 @@ impl<'a> FilterParamsBuilder<'a> {
 
 /// `format-identifier: { base-format, target-format }` — `filters.ts:663`'s
 /// `options.format.identifier`/`options.format.formatExtras`-derived pair,
-/// re-derived from Q2's own [`Format`]. `base-format` is the underlying
-/// pandoc writer name (`output_extension`, e.g. `"docx"`); `target-format`
+/// re-derived from Q2's own [`Format`]. `base-format` is the canonical
+/// format *name* ([`FormatIdentifier::canonical_name`], e.g. `"docx"`,
+/// `"typst"`) — long-tail Phase 1 wrinkle 2: this used to send the output
+/// *extension*, so Typst advertised `"pdf"` and extension-based `format:`
+/// scoping in extensions could never match the base format. `target-format`
 /// is the possibly-extended format string (`Format::target_format`, e.g.
 /// `"acm-docx"`).
 fn insert_format_identifier(blob: &mut Map<String, Value>, format: &Format) {
     blob.insert(
         "format-identifier".to_string(),
         json!({
-            "base-format": format.output_extension,
+            "base-format": format.identifier.canonical_name(),
             "target-format": format.target_format,
         }),
     );
@@ -169,7 +172,7 @@ fn insert_format_identifier(blob: &mut Map<String, Value>, format: &Format) {
 /// features are always active for the Pandoc leg, so `enable-crossref`/
 /// `active-filters` stay constants, not derived from render options.
 fn insert_active_filters(blob: &mut Map<String, Value>, format: &Format) {
-    let defaults = super::format_defaults::format_pandoc_defaults(&format.output_extension);
+    let defaults = super::format_defaults::format_pandoc_defaults(format.identifier);
     blob.insert("enable-crossref".to_string(), json!(true));
     blob.insert(
         "output-divs".to_string(),
@@ -601,6 +604,36 @@ mod tests {
             !blob.as_object().unwrap().contains_key("crossref-numbering"),
             "typst must not get crossref-numbering: external, got {blob}"
         );
+    }
+
+    /// Phase 1 (long-tail formats) wrinkle 2 regression:
+    /// `format-identifier.base-format` is the identifier's canonical name,
+    /// **not** the output extension. Typst's extension is `pdf` — sending
+    /// `"pdf"` made the vendored `_format.lua`'s base-format checks
+    /// misclassify every typst render (the latent bug this fixes). An
+    /// extension-style format (`acm-docx`) still canonicalizes to its base.
+    #[test]
+    fn test_format_identifier_base_format_is_canonical_name() {
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = fixture_language();
+
+        for (fmt, expected) in [
+            ("typst", "typst"),
+            ("docx", "docx"),
+            ("pptx", "pptx"),
+            ("acm-docx", "docx"),
+            ("gfm", "gfm"),
+        ] {
+            let format = Format::from_format_string(fmt)
+                .unwrap_or_else(|e| panic!("failed to build Format for {fmt}: {e}"));
+            let blob = fixture_builder(&format, &project, &registry, &language).build();
+            assert_eq!(
+                blob["format-identifier"]["base-format"],
+                json!(expected),
+                "base-format for {fmt} must be the canonical name {expected}"
+            );
+        }
     }
 
     /// T4.11: `results-file` is an absolute path and `quarto-environment`

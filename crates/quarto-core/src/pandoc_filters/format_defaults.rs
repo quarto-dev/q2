@@ -31,6 +31,7 @@ use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_pandoc_types::ConfigValue;
 use quarto_pandoc_types::config_value::ConfigValueKind;
 
+use crate::format::FormatIdentifier;
 use crate::stage::PipelineError;
 
 /// The per-format pandoc-defaults literal table (Finding 1). Fields are
@@ -50,16 +51,22 @@ pub struct FormatPandocDefaults {
     pub default_image_extension: Option<&'static str>,
 }
 
-/// Look up [`FormatPandocDefaults`] for a pandoc base/output format
-/// (`Format::output_extension`, e.g. `"docx"`, `"pptx"`).
-pub fn format_pandoc_defaults(base_format: &str) -> FormatPandocDefaults {
-    match base_format {
-        "docx" | "odt" => FormatPandocDefaults {
+/// Look up [`FormatPandocDefaults`] for a pandoc-hybrid base format.
+///
+/// Keyed by [`FormatIdentifier`], not the output-extension string
+/// (long-tail Phase 1 wrinkle 1): extension keys collide for the tail —
+/// `"xml"` would be both opendocument's wordprocessor defaults and
+/// docbook's plaintext defaults, and Typst's extension is `"pdf"`, not
+/// `"typst"`. The old `"docx" | "odt"` arm's Odt half returns together
+/// with the `Odt` variant (long-tail Phase 2).
+pub fn format_pandoc_defaults(id: FormatIdentifier) -> FormatPandocDefaults {
+    match id {
+        FormatIdentifier::Docx => FormatPandocDefaults {
             page_width: Some(6.5),
             output_divs: None,
             default_image_extension: Some("png"),
         },
-        "pptx" => FormatPandocDefaults {
+        FormatIdentifier::Pptx => FormatPandocDefaults {
             page_width: None,
             output_divs: Some(false),
             default_image_extension: Some("png"),
@@ -122,7 +129,7 @@ fn missing_pandoc_path_error(key: &str, declared: &str, entry: &ConfigValue) -> 
 /// runs), plus the per-format literal defaults
 /// ([`format_pandoc_defaults`]'s `default_image_extension`).
 ///
-/// `slide-level` is forwarded only for `base_format == "pptx"` (T4.3) —
+/// `slide-level` is forwarded only for [`FormatIdentifier::Pptx`] (T4.3) —
 /// pandoc accepts `--slide-level` for every writer, but Q1 never sets it
 /// for docx, and forwarding it unconditionally would silently change docx
 /// output the day a document declares `slide-level:` for an unrelated
@@ -131,7 +138,7 @@ pub fn build_forwarded_args(
     stage_name: &str,
     doc_dir: &Path,
     meta: &ConfigValue,
-    base_format: &str,
+    base_format: FormatIdentifier,
 ) -> Result<Vec<OsString>, PipelineError> {
     let mut args = Vec::new();
 
@@ -145,7 +152,7 @@ pub fn build_forwarded_args(
         // `--template` pointing directly at the user's single file, which
         // — placed later in the pandoc invocation than typst's own flag —
         // would silently win and drop the vendored partials.
-        if *key == "template" && base_format == "typst" {
+        if *key == "template" && base_format == FormatIdentifier::Typst {
             continue;
         }
         let Some(value) = meta.get(key) else {
@@ -194,7 +201,7 @@ pub fn build_forwarded_args(
         args.push(OsString::from("--shift-heading-level-by"));
         args.push(OsString::from(n.to_string()));
     }
-    if base_format == "pptx"
+    if base_format == FormatIdentifier::Pptx
         && let Some(n) = meta.get("slide-level").and_then(|v| v.as_int())
     {
         args.push(OsString::from("--slide-level"));
@@ -245,19 +252,83 @@ mod tests {
         ConfigValue::new_scalar(yaml_rust2::Yaml::Integer(n), SourceInfo::for_test())
     }
 
-    /// T4.1: the per-format defaults table.
+    /// T4.1: the per-format defaults table, keyed by
+    /// [`FormatIdentifier`] (Phase 1 long-tail wrinkle 1: extension-string
+    /// keys collide for the tail — `xml` would be both opendocument's
+    /// wordprocessor defaults and docbook's plaintext defaults).
     #[test]
     fn test_format_defaults_table() {
-        let docx = format_pandoc_defaults("docx");
+        let docx = format_pandoc_defaults(FormatIdentifier::Docx);
         assert_eq!(docx.page_width, Some(6.5));
         assert_eq!(docx.default_image_extension, Some("png"));
 
-        let pptx = format_pandoc_defaults("pptx");
+        let pptx = format_pandoc_defaults(FormatIdentifier::Pptx);
         assert_eq!(pptx.output_divs, Some(false));
         assert_eq!(pptx.default_image_extension, Some("png"));
 
-        let html = format_pandoc_defaults("html");
-        assert_eq!(html, FormatPandocDefaults::default());
+        for id in [
+            FormatIdentifier::Html,
+            FormatIdentifier::Pdf,
+            FormatIdentifier::Epub,
+            FormatIdentifier::Typst,
+            FormatIdentifier::Revealjs,
+            FormatIdentifier::Gfm,
+            FormatIdentifier::CommonMark,
+        ] {
+            assert_eq!(
+                format_pandoc_defaults(id),
+                FormatPandocDefaults::default(),
+                "{id} must have no pandoc-defaults opinion"
+            );
+        }
+    }
+
+    /// Phase 1 wrinkle 2: typst's `template` is owned by its dedicated
+    /// vendored-partials mechanism, so `build_forwarded_args` must skip the
+    /// generic `template` forwarding for Typst while still forwarding it
+    /// for Docx — both polarities, or the skip is vacuous.
+    #[test]
+    fn test_template_forwarding_is_typst_skipped() {
+        use quarto_pandoc_types::ConfigMapEntry;
+        let meta = ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "template".to_string(),
+                key_source: SourceInfo::for_test(),
+                value: ConfigValue::new_path(
+                    "custom-template.docx".to_string(),
+                    SourceInfo::for_test(),
+                ),
+            }],
+            SourceInfo::for_test(),
+        );
+
+        let docx_args = build_forwarded_args(
+            "pandoc-write",
+            Path::new("/doc/dir"),
+            &meta,
+            FormatIdentifier::Docx,
+        )
+        .unwrap();
+        assert!(
+            docx_args
+                .iter()
+                .any(|a| a.to_string_lossy() == "--template"),
+            "docx must forward --template: {docx_args:?}"
+        );
+
+        let typst_args = build_forwarded_args(
+            "pandoc-write",
+            Path::new("/doc/dir"),
+            &meta,
+            FormatIdentifier::Typst,
+        )
+        .unwrap();
+        assert!(
+            !typst_args
+                .iter()
+                .any(|a| a.to_string_lossy() == "--template"),
+            "typst's template is owned by the vendored-partials mechanism: {typst_args:?}"
+        );
     }
 
     /// T4.2: the forwarding allow-list — the discriminator is the
@@ -315,8 +386,13 @@ mod tests {
             SourceInfo::for_test(),
         );
 
-        let args = build_forwarded_args("pandoc-write", Path::new("/doc/dir"), &meta, "docx")
-            .expect("no path-shaped keys present, must not error");
+        let args = build_forwarded_args(
+            "pandoc-write",
+            Path::new("/doc/dir"),
+            &meta,
+            FormatIdentifier::Docx,
+        )
+        .expect("no path-shaped keys present, must not error");
         let joined: Vec<String> = args
             .iter()
             .map(|s| s.to_string_lossy().into_owned())
@@ -358,16 +434,26 @@ mod tests {
             meta.source_info.clone(),
         );
 
-        let pptx_args =
-            build_forwarded_args("pandoc-write", Path::new("/doc/dir"), &meta, "pptx").unwrap();
+        let pptx_args = build_forwarded_args(
+            "pandoc-write",
+            Path::new("/doc/dir"),
+            &meta,
+            FormatIdentifier::Pptx,
+        )
+        .unwrap();
         assert!(
             pptx_args
                 .iter()
                 .any(|a| a.to_string_lossy() == "--slide-level")
         );
 
-        let docx_args =
-            build_forwarded_args("pandoc-write", Path::new("/doc/dir"), &meta, "docx").unwrap();
+        let docx_args = build_forwarded_args(
+            "pandoc-write",
+            Path::new("/doc/dir"),
+            &meta,
+            FormatIdentifier::Docx,
+        )
+        .unwrap();
         assert!(
             !docx_args
                 .iter()
@@ -399,8 +485,13 @@ mod tests {
             }],
             SourceInfo::for_test(),
         );
-        let args =
-            build_forwarded_args("pandoc-write", Path::new("/doc/dir"), &meta, "docx").unwrap();
+        let args = build_forwarded_args(
+            "pandoc-write",
+            Path::new("/doc/dir"),
+            &meta,
+            FormatIdentifier::Docx,
+        )
+        .unwrap();
         let joined: Vec<String> = args
             .iter()
             .map(|s| s.to_string_lossy().into_owned())
@@ -423,8 +514,13 @@ mod tests {
     #[test]
     fn test_missing_reference_doc_is_fatal_q_5_30() {
         let meta = scalar_meta(&[("reference-doc", "missing.docx")]);
-        let err = build_forwarded_args("pandoc-write", Path::new("/doc/dir"), &meta, "docx")
-            .expect_err("a missing reference-doc must be a hard error");
+        let err = build_forwarded_args(
+            "pandoc-write",
+            Path::new("/doc/dir"),
+            &meta,
+            FormatIdentifier::Docx,
+        )
+        .expect_err("a missing reference-doc must be a hard error");
         let msg = err.to_string();
         assert!(
             msg.contains("missing.docx"),

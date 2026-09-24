@@ -246,6 +246,7 @@ const KNOWN_BASE_FORMATS: &[&str] = &[
     "html",
     "pdf",
     "docx",
+    "pptx",
     "epub",
     "typst",
     "revealjs",
@@ -924,5 +925,20 @@ contributes:
             );
             assert_eq!(desc.base_format, *base, "Failed for {}", base);
         }
+    }
+
+    /// `pptx` must be a recognized base format so `acm-pptx`-style
+    /// descriptors resolve to the pptx base (long-tail Phase 1 wrinkle 5:
+    /// pptx was missing from the list, so `acm-pptx` read as extension
+    /// `acm-pptx` with base `html`).
+    #[test]
+    fn test_parse_format_descriptor_pptx() {
+        let desc = parse_format_descriptor("acm-pptx");
+        assert_eq!(desc.extension_name.as_deref(), Some("acm"));
+        assert_eq!(desc.base_format, "pptx");
+
+        let bare = parse_format_descriptor("pptx");
+        assert_eq!(bare.extension_name, None);
+        assert_eq!(bare.base_format, "pptx");
     }
 }
