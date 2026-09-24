@@ -617,11 +617,23 @@ fn send_interrupt(child: &Child) {
     );
 }
 
+/// Console Ctrl events only reach processes sharing the sender's
+/// console, so a test runner started without one (headless CI)
+/// allocates one before spawning the child. A no-op when a console
+/// is already attached.
+#[cfg(windows)]
+fn ensure_console() {
+    // SAFETY: plain FFI call; failure means a console already exists.
+    unsafe { windows_sys::Win32::System::Console::AllocConsole() };
+}
+
 /// An interrupt shuts the server down cleanly with a message.
 #[test]
 fn interrupt_exits_cleanly() {
     let temp = TempDir::new().unwrap();
     let dir = minimal_site(&temp);
+    #[cfg(windows)]
+    ensure_console();
     let mut server = Server::spawn(&dir, &[dir.to_str().unwrap()]);
     send_interrupt(&server.child);
     let mut rest = String::new();
