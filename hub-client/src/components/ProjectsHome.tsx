@@ -43,6 +43,36 @@ import {
 import ShareDialog from './ShareDialog';
 import { FilePlusIcon, ForkIcon, PeekIcon, PeopleIcon, SortIcon } from './icons';
 import { Menu, MenuItem, MenuDivider, MenuLabel, MenuSubmenu } from './Menu';
+import type { ReactNode } from 'react';
+import { buildChoiceTree, type ChoiceTree, type ChoiceTreeNode } from '../utils/choiceTree';
+
+/**
+ * Render the "＋ New" menu's choices as a tree (bd-q33ylfxf): choices with
+ * no `path` are plain items, and every path group becomes a submenu,
+ * recursively. Order comes from the registry via `buildChoiceTree`.
+ */
+function renderChoiceTree(
+  tree: ChoiceTree<ProjectChoice>,
+  onPick: (choice: ProjectChoice) => void,
+): ReactNode {
+  const item = (choice: ProjectChoice) => (
+    <MenuItem key={choice.id} strong subtext={choice.description} onSelect={() => onPick(choice)}>
+      {choice.name}
+    </MenuItem>
+  );
+  const renderNode = (node: ChoiceTreeNode<ProjectChoice>): ReactNode => (
+    <MenuSubmenu key={node.label} label={node.label}>
+      {node.choices.map(item)}
+      {node.children.map(renderNode)}
+    </MenuSubmenu>
+  );
+  return (
+    <>
+      {tree.roots.map(item)}
+      {tree.nodes.map(renderNode)}
+    </>
+  );
+}
 import Tooltip from './Tooltip';
 import ModalDialog from './ModalDialog';
 import { common } from '../strings';
@@ -1725,15 +1755,15 @@ export default function ProjectsHome({
             </button>
             {newMenuOpen && (
               <Menu className="qh-menu-right" onClose={() => setNewMenuOpen(false)} ignoreOutsideSelector=".qh-menu-anchor" aria-label="New project">
-                <MenuLabel>START FROM — QUARTO PROJECT TYPES</MenuLabel>
-                {(projectChoices.length > 0
-                  ? projectChoices
-                  : [{ id: 'default', name: 'Default', description: 'A minimal Quarto project' }]
-                ).map((choice) => (
-                  <MenuItem key={choice.id} strong subtext={choice.description} onSelect={() => openNewDialog(choice)}>
-                    {choice.name}
-                  </MenuItem>
-                ))}
+                <MenuLabel>START FROM</MenuLabel>
+                {renderChoiceTree(
+                  buildChoiceTree(
+                    projectChoices.length > 0
+                      ? projectChoices
+                      : [{ id: 'default', name: 'Default', description: 'A minimal Quarto project' }],
+                  ),
+                  openNewDialog,
+                )}
               </Menu>
             )}
           </div>

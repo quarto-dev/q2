@@ -115,6 +115,8 @@ declare module 'wasm-quarto-hub-client' {
     description: string;
     /** True for the seeded example projects (bd-3fwtdhil). */
     seed?: boolean;
+    /** Hierarchical group labels for the New menu (bd-q33ylfxf). */
+    path?: string[];
   }
 
   export interface ProjectChoicesResponse {

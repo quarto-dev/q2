@@ -1076,6 +1076,11 @@ export interface ProjectChoice {
    * Templates" collection (bd-3fwtdhil). Set by the Rust registry.
    */
   seed?: boolean;
+  /**
+   * Hierarchical group labels for the New menu (bd-q33ylfxf), e.g.
+   * `["Templates"]` or `["Examples"]`. Empty or absent means top level.
+   */
+  path?: string[];
 }
 
 /**

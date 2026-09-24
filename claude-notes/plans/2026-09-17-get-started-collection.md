@@ -336,6 +336,39 @@ Not in this PR (#700): keep #700 as the seeding mechanism plus content;
 land the tree menu and the Presentation template as a follow-up PR on top,
 so each stays reviewable.
 
+### Follow-up implementation (strand bd-q33ylfxf, branch `braid/bd-q33ylfxf-tree-menu` off main at 9e5d519c, 2026-09-24)
+
+Decisions (Andrew, 2026-09-24): the second group is named **"Examples"**;
+the Presentation skeleton is offered on the CLI as well as the hub.
+
+- [x] Tests first: `choices.rs` (path per choice, Templates/Examples split,
+      `in_path`, serde default, `choices_grouped_by_path`, presentation
+      choice), `scaffold.rs` (presentation is two templates), `lib.rs`
+      (`$title$` in both files), `create.rs` (JSON `path`, grouped
+      `--list`, `q2 create project presentation`), WASM test (`path` on
+      every choice; presentation scaffold), `choiceTree.test.ts`, and
+      `ProjectsHome.newMenu.integration.test.tsx`. Red observed: crate
+      failed to compile on `path`/`in_path`/`choices_grouped_by_path`;
+      choiceTree module missing; the three menu tests failed.
+- [x] Rust: `ProjectChoice.path` + `in_path`, registry regrouped
+      (Templates: default, website, blog, presentation, manuscript, book;
+      Examples: welcome tour + four seeded), `ChoiceGroup` +
+      `choices_grouped_by_path`, `presentation` skeleton
+      (`resources/templates/presentation/*.template`, `Default +
+      "presentation"` arm), WASM JSON `path`, CLI `ChoiceListing.path` and
+      grouped `--list` output, docs `create.qmd`. Crate 58/58; CLI create
+      tests green after updating the interactive-prompt expectation to
+      include Presentation.
+- [x] Client: `utils/choiceTree.ts` (`buildChoiceTree`), `ProjectsHome`
+      renders roots + `MenuSubmenu` per group recursively (label now
+      "START FROM"), `ProjectSelector` groups its `<select>` with
+      `<optgroup>`, `ProjectChoice.path?` in the two `.d.ts` and
+      `wasmRenderer.ts`.
+- [ ] Verify: `npm run build:wasm` + `test:wasm`, `cargo xtask verify`,
+      changelog two-commit, e2e in a fresh browser against local-prod
+      (New menu shows Templates ▸ and Examples ▸; the two "Website"
+      entries live in different submenus; `q2 create --list` grouped).
+
 ## Work items
 
 ### Phase 1: content (can start now, no code)

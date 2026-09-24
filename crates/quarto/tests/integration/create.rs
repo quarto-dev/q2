@@ -783,7 +783,12 @@ fn list_json_emits_registry_with_implemented_flags() {
     assert_eq!(by_id("website")["implemented"], true);
     assert_eq!(by_id("default")["implemented"], true);
     assert_eq!(by_id("blog")["implemented"], true);
+    assert_eq!(by_id("presentation")["implemented"], true);
     assert_eq!(by_id("manuscript")["implemented"], false);
+    // Every CLI choice carries its hierarchical path (bd-q33ylfxf).
+    for c in choices {
+        assert_eq!(c["path"], serde_json::json!(["Templates"]), "{}", c["id"]);
+    }
 }
 
 #[test]
@@ -794,6 +799,58 @@ fn list_human_output_names_choices() {
     let stdout = stdout_str(&out);
     assert!(stdout.contains("website"), "stdout: {stdout}");
     assert!(stdout.contains("default"), "stdout: {stdout}");
+    assert!(stdout.contains("presentation"), "stdout: {stdout}");
+}
+
+#[test]
+fn list_human_output_groups_choices_by_path() {
+    // bd-q33ylfxf: entries are indented under their path group, so the
+    // group label precedes every choice in it.
+    let tmp = TempDir::new().unwrap();
+    let out = run_q2_create(tmp.path(), &["--list"]);
+    assert!(out.status.success(), "stderr: {}", stderr_str(&out));
+    let stdout = stdout_str(&out);
+    let group = stdout.find("  Templates").expect("group label line");
+    for id in ["default", "website", "blog", "presentation"] {
+        let line = stdout
+            .lines()
+            .find(|l| l.trim_start().starts_with(id))
+            .unwrap_or_else(|| panic!("no line for {id} in {stdout}"));
+        assert!(
+            line.starts_with("    "),
+            "{id} must be indented under its group: {line:?}"
+        );
+        assert!(
+            stdout.find(line).unwrap() > group,
+            "{id} must follow the group label"
+        );
+    }
+    // The CLI never shows the hub's Examples group.
+    assert!(!stdout.contains("Examples"), "stdout: {stdout}");
+}
+
+#[test]
+fn create_project_presentation_writes_a_titled_deck() {
+    let tmp = TempDir::new().unwrap();
+    let out = run_q2_create(
+        tmp.path(),
+        &["project", "presentation", "deck", "Team Update"],
+    );
+    assert!(
+        out.status.success(),
+        "stderr: {}\nstdout: {}",
+        stderr_str(&out),
+        stdout_str(&out)
+    );
+    let dir = tmp.path().join("deck");
+    let index = std::fs::read_to_string(dir.join("index.qmd")).unwrap();
+    assert!(
+        index.contains("title: \"Team Update\""),
+        "index.qmd: {index}"
+    );
+    assert!(index.contains("revealjs"), "index.qmd: {index}");
+    let yml = std::fs::read_to_string(dir.join("_quarto.yml")).unwrap();
+    assert!(yml.contains("title: \"Team Update\""), "_quarto.yml: {yml}");
 }
 
 // ====================================================================

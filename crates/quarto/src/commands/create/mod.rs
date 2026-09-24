@@ -351,13 +351,24 @@ fn run_list(providers: &[Box<dyn ArtifactProvider>], json: bool) {
     for p in providers {
         println!();
         println!("{} ({})", p.type_id(), p.display_name());
+        // Group by hierarchical path in order of first appearance
+        // (bd-q33ylfxf): the group label on its own line, its choices
+        // indented one level further. Top-level choices print unindented.
+        let mut current_path: Option<Vec<String>> = None;
         for c in p.choices() {
+            if current_path.as_ref() != Some(&c.path) {
+                if !c.path.is_empty() {
+                    println!("  {}", c.path.join(" / "));
+                }
+                current_path = Some(c.path.clone());
+            }
             let marker = if c.implemented {
                 ""
             } else {
                 " (not yet implemented)"
             };
-            println!("  {:<12} {}{}", c.id, c.description, marker);
+            let indent = if c.path.is_empty() { "  " } else { "    " };
+            println!("{indent}{:<12} {}{}", c.id, c.description, marker);
         }
     }
     println!();
@@ -479,7 +490,7 @@ mod interactive_tests {
         );
         // Only implemented choices are offered.
         let labels: Vec<&str> = p.select_items[0].iter().map(|i| i.label.as_str()).collect();
-        assert_eq!(labels, ["Default", "Website", "Blog"]);
+        assert_eq!(labels, ["Default", "Website", "Blog", "Presentation"]);
         // The accepted default title is the directory name, and the
         // interactive path emits no defaulted-title warning — the user
         // saw and accepted the default.

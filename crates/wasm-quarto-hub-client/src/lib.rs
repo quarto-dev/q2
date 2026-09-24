@@ -2076,6 +2076,8 @@ struct JsonProjectChoice {
     description: String,
     /// Seeded into a new user's "Examples / Templates" collection (bd-3fwtdhil)
     seed: bool,
+    /// Hierarchical group labels for the New menu (bd-q33ylfxf)
+    path: Vec<String>,
 }
 
 /// Response for get_project_choices().
@@ -2157,6 +2159,7 @@ pub fn get_project_choices() -> String {
             name: c.name,
             description: c.description,
             seed: c.seed,
+            path: c.path,
         })
         .collect();
 

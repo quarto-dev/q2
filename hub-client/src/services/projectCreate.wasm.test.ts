@@ -22,7 +22,7 @@ interface WasmModule {
 
 interface ProjectChoicesResponse {
   success: boolean;
-  choices: Array<{ id: string; name: string; description: string; seed?: boolean }>;
+  choices: Array<{ id: string; name: string; description: string; seed?: boolean; path?: string[] }>;
 }
 
 interface CreateProjectResponse {
@@ -170,6 +170,30 @@ describe('seeded example choices (bd-3fwtdhil)', () => {
       'team-sync/2026-09-17.qmd',
       'tweaks.scss',
     ]);
+  });
+});
+
+describe('hierarchical path and the Presentation skeleton (bd-q33ylfxf)', () => {
+  it('gives every hub choice a one-level path of Templates or Examples', () => {
+    const response = JSON.parse(wasm.get_project_choices()) as ProjectChoicesResponse;
+    for (const c of response.choices) {
+      expect(c.path, c.id).toHaveLength(1);
+      expect(['Templates', 'Examples'], c.id).toContain(c.path![0]);
+    }
+    const templates = response.choices.filter((c) => c.path![0] === 'Templates').map((c) => c.id);
+    expect(templates).toEqual(['default', 'website', 'blog', 'presentation']);
+    const examples = response.choices.filter((c) => c.path![0] === 'Examples').map((c) => c.id);
+    expect(examples).toEqual([HUB_ONLY_CHOICE_ID, ...SEED_CHOICE_IDS]);
+  });
+
+  it('scaffolds the presentation skeleton with the typed title in both files', () => {
+    const deck = JSON.parse(wasm.create_project('presentation', 'Team Update')) as CreateProjectResponse;
+    expect(deck.success).toBe(true);
+    expect(deck.files!.map((f) => f.path).sort()).toEqual(['_quarto.yml', 'index.qmd']);
+    const index = deck.files!.find((f) => f.path === 'index.qmd')!.content;
+    expect(index).toContain('title: "Team Update"');
+    expect(index).toContain('revealjs');
+    expect(index).not.toContain('$title$');
   });
 });
 

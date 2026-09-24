@@ -30,8 +30,9 @@ mod templates;
 mod types;
 
 pub use choices::{
-    ProjectChoice, ProjectTypeWithTemplate, Surface, available_choices, choices_for, find_choice,
-    find_choice_by_target, find_implemented_choice, implemented_choices, seed_choices,
+    ChoiceGroup, ProjectChoice, ProjectTypeWithTemplate, Surface, available_choices, choices_for,
+    choices_grouped_by_path, find_choice, find_choice_by_target, find_implemented_choice,
+    implemented_choices, seed_choices,
 };
 pub use scaffold::{
     ProjectScaffold, ScaffoldContent, ScaffoldFileDef, ScaffoldedFile, get_scaffold,
@@ -730,6 +731,32 @@ mod render_tests {
                     "{}: missing {required} in {paths:?}",
                     choice.id
                 );
+            }
+        }
+    }
+
+    // ----------------------------------------------------------------
+    // Presentation skeleton (bd-q33ylfxf)
+    // ----------------------------------------------------------------
+
+    #[test]
+    fn presentation_skeleton_substitutes_the_title_into_both_files() {
+        let files =
+            create_project_from_choice(CreateFromChoiceOptions::new("presentation", "Team Update"))
+                .unwrap();
+        let yml = file_content(&files, "_quarto.yml");
+        assert!(yml.contains("title: \"Team Update\""), "_quarto.yml: {yml}");
+        let index = file_content(&files, "index.qmd");
+        assert!(
+            index.contains("title: \"Team Update\""),
+            "index.qmd: {index}"
+        );
+        assert!(index.contains("  revealjs:"), "index.qmd: {index}");
+        // A skeleton: a few empty slides, no instructional prose.
+        assert!(index.matches("\n## ").count() >= 2, "index.qmd: {index}");
+        for f in &files {
+            if let ScaffoldedFile::Text { content, .. } = f {
+                assert!(!content.contains("$title$"), "template residue: {content}");
             }
         }
     }
