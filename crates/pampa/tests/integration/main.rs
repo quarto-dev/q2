@@ -103,6 +103,7 @@ pub mod test_json_roundtrip;
 pub mod test_kv_attr_promotion;
 pub mod test_link_destination_linebreak;
 pub mod test_link_title_provenance;
+pub mod test_list_table_editorial_marks;
 pub mod test_location_health;
 pub mod test_lua_attr_mutation;
 pub mod test_lua_constructors;
