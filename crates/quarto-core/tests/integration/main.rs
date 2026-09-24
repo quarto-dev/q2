@@ -82,6 +82,7 @@ pub mod pandoc_filters;
 pub mod pandoc_filters_patch;
 pub mod pandoc_goldens;
 pub mod pandoc_goldens_fixtures;
+pub mod pandoc_long_tail_formats;
 pub mod pandoc_meta_mapping;
 pub mod pandoc_profile_cut;
 pub mod pandoc_render_to_file;

@@ -39,6 +39,59 @@ pub enum FormatIdentifier {
     Gfm,
     /// CommonMark
     CommonMark,
+    /// OpenOffice text document (long-tail Phase 2; Q1
+    /// `createWordprocessorFormat("OpenOffice", "odt")`)
+    Odt,
+    /// OpenDocument text — same ODF zip as Odt, `.xml` extension (Q1
+    /// `createWordprocessorFormat("OpenDocument", "xml")`)
+    Opendocument,
+    /// Rich Text Format (Q1 `rtfFormat()`: wordprocessor + standalone)
+    Rtf,
+    /// FictionBook 2 ebook (Q1 `createEbookFormat("FictionBook", "fb2")`)
+    Fb2,
+    /// Plain text (Q1 `plaintextFormat("Text", "txt")`)
+    Plain,
+    /// reStructuredText
+    Rst,
+    /// Org mode
+    Org,
+    /// Muse
+    Muse,
+    /// Groff ms (Q1 `plaintextFormat("Groff Manuscript", "ms")`)
+    Ms,
+    /// Groff man page
+    Man,
+    /// GNU TexInfo
+    Texinfo,
+    /// TEI Simple
+    Tei,
+    /// Zim Wiki (`.zim` extension)
+    Zimwiki,
+    /// DokuWiki
+    Dokuwiki,
+    /// Haddock markup
+    Haddock,
+    /// Pandoc JSON (debug aid — the AST pandoc itself would consume, D6)
+    Json,
+    /// Pandoc native Haskell AST (debug aid, D6)
+    Native,
+    /// Adobe InDesign ICML
+    Icml,
+    /// Jira wiki markup
+    Jira,
+    /// MediaWiki
+    Mediawiki,
+    /// XWiki
+    Xwiki,
+    /// Textile (Q1 has the `texttile` typo, so this is a fresh baseline,
+    /// not a Q1 parity port)
+    Textile,
+    /// DocBook (plaintext family — `.xml` extension)
+    Docbook,
+    /// DocBook 4
+    Docbook4,
+    /// DocBook 5
+    Docbook5,
 }
 
 impl FormatIdentifier {
@@ -54,6 +107,31 @@ impl FormatIdentifier {
             FormatIdentifier::Revealjs => "revealjs",
             FormatIdentifier::Gfm => "gfm",
             FormatIdentifier::CommonMark => "commonmark",
+            FormatIdentifier::Odt => "odt",
+            FormatIdentifier::Opendocument => "opendocument",
+            FormatIdentifier::Rtf => "rtf",
+            FormatIdentifier::Fb2 => "fb2",
+            FormatIdentifier::Plain => "plain",
+            FormatIdentifier::Rst => "rst",
+            FormatIdentifier::Org => "org",
+            FormatIdentifier::Muse => "muse",
+            FormatIdentifier::Ms => "ms",
+            FormatIdentifier::Man => "man",
+            FormatIdentifier::Texinfo => "texinfo",
+            FormatIdentifier::Tei => "tei",
+            FormatIdentifier::Zimwiki => "zimwiki",
+            FormatIdentifier::Dokuwiki => "dokuwiki",
+            FormatIdentifier::Haddock => "haddock",
+            FormatIdentifier::Json => "json",
+            FormatIdentifier::Native => "native",
+            FormatIdentifier::Icml => "icml",
+            FormatIdentifier::Jira => "jira",
+            FormatIdentifier::Mediawiki => "mediawiki",
+            FormatIdentifier::Xwiki => "xwiki",
+            FormatIdentifier::Textile => "textile",
+            FormatIdentifier::Docbook => "docbook",
+            FormatIdentifier::Docbook4 => "docbook4",
+            FormatIdentifier::Docbook5 => "docbook5",
         }
     }
 
@@ -81,6 +159,33 @@ impl FormatIdentifier {
                 | FormatIdentifier::Typst
                 | FormatIdentifier::Gfm
                 | FormatIdentifier::CommonMark
+                // Long-tail Phase 2 (Tier A): wordprocessor, ebook, and
+                // plaintext families — all plain pandoc-writer targets.
+                | FormatIdentifier::Odt
+                | FormatIdentifier::Opendocument
+                | FormatIdentifier::Rtf
+                | FormatIdentifier::Fb2
+                | FormatIdentifier::Plain
+                | FormatIdentifier::Rst
+                | FormatIdentifier::Org
+                | FormatIdentifier::Muse
+                | FormatIdentifier::Ms
+                | FormatIdentifier::Man
+                | FormatIdentifier::Texinfo
+                | FormatIdentifier::Tei
+                | FormatIdentifier::Zimwiki
+                | FormatIdentifier::Dokuwiki
+                | FormatIdentifier::Haddock
+                | FormatIdentifier::Json
+                | FormatIdentifier::Native
+                | FormatIdentifier::Icml
+                | FormatIdentifier::Jira
+                | FormatIdentifier::Mediawiki
+                | FormatIdentifier::Xwiki
+                | FormatIdentifier::Textile
+                | FormatIdentifier::Docbook
+                | FormatIdentifier::Docbook4
+                | FormatIdentifier::Docbook5
         )
     }
 
@@ -131,6 +236,31 @@ impl TryFrom<&str> for FormatIdentifier {
             "revealjs" => Ok(FormatIdentifier::Revealjs),
             "gfm" => Ok(FormatIdentifier::Gfm),
             "commonmark" => Ok(FormatIdentifier::CommonMark),
+            "odt" => Ok(FormatIdentifier::Odt),
+            "opendocument" => Ok(FormatIdentifier::Opendocument),
+            "rtf" => Ok(FormatIdentifier::Rtf),
+            "fb2" => Ok(FormatIdentifier::Fb2),
+            "plain" => Ok(FormatIdentifier::Plain),
+            "rst" => Ok(FormatIdentifier::Rst),
+            "org" => Ok(FormatIdentifier::Org),
+            "muse" => Ok(FormatIdentifier::Muse),
+            "ms" => Ok(FormatIdentifier::Ms),
+            "man" => Ok(FormatIdentifier::Man),
+            "texinfo" => Ok(FormatIdentifier::Texinfo),
+            "tei" => Ok(FormatIdentifier::Tei),
+            "zimwiki" => Ok(FormatIdentifier::Zimwiki),
+            "dokuwiki" => Ok(FormatIdentifier::Dokuwiki),
+            "haddock" => Ok(FormatIdentifier::Haddock),
+            "json" => Ok(FormatIdentifier::Json),
+            "native" => Ok(FormatIdentifier::Native),
+            "icml" => Ok(FormatIdentifier::Icml),
+            "jira" => Ok(FormatIdentifier::Jira),
+            "mediawiki" => Ok(FormatIdentifier::Mediawiki),
+            "xwiki" => Ok(FormatIdentifier::Xwiki),
+            "textile" => Ok(FormatIdentifier::Textile),
+            "docbook" => Ok(FormatIdentifier::Docbook),
+            "docbook4" => Ok(FormatIdentifier::Docbook4),
+            "docbook5" => Ok(FormatIdentifier::Docbook5),
             _ => Err(format!("Unknown format: {}", s)),
         }
     }
@@ -485,6 +615,34 @@ fn output_extension_for(id: FormatIdentifier) -> String {
         FormatIdentifier::Revealjs => "html",
         FormatIdentifier::Gfm => "md",
         FormatIdentifier::CommonMark => "md",
+        // Long-tail Phase 2 (Tier A) — Q1 `createFormat` extension choices.
+        // Three formats share `xml` (opendocument, docbook, docbook4/5);
+        // zimwiki's extension is `zim`.
+        FormatIdentifier::Odt => "odt",
+        FormatIdentifier::Opendocument => "xml",
+        FormatIdentifier::Rtf => "rtf",
+        FormatIdentifier::Fb2 => "fb2",
+        FormatIdentifier::Plain => "txt",
+        FormatIdentifier::Rst => "rst",
+        FormatIdentifier::Org => "org",
+        FormatIdentifier::Muse => "muse",
+        FormatIdentifier::Ms => "ms",
+        FormatIdentifier::Man => "man",
+        FormatIdentifier::Texinfo => "texinfo",
+        FormatIdentifier::Tei => "tei",
+        FormatIdentifier::Zimwiki => "zim",
+        FormatIdentifier::Dokuwiki => "dokuwiki",
+        FormatIdentifier::Haddock => "haddock",
+        FormatIdentifier::Json => "json",
+        FormatIdentifier::Native => "native",
+        FormatIdentifier::Icml => "icml",
+        FormatIdentifier::Jira => "jira",
+        FormatIdentifier::Mediawiki => "mediawiki",
+        FormatIdentifier::Xwiki => "xwiki",
+        FormatIdentifier::Textile => "textile",
+        FormatIdentifier::Docbook => "xml",
+        FormatIdentifier::Docbook4 => "xml",
+        FormatIdentifier::Docbook5 => "xml",
     }
     .to_string()
 }
@@ -509,6 +667,11 @@ fn output_extension_for(id: FormatIdentifier) -> String {
 ///   the extension (`-t md`) would silently select pandoc's *plain
 ///   markdown* writer instead — wrong syntax (no GFM tables/task lists),
 ///   wrong thing entirely.
+/// - **Tier A** (long-tail Phase 2) — every one of the 25 gets an explicit
+///   arm even where writer == extension, because four of them *diverge*
+///   (opendocument: writer `opendocument`, extension `xml`; zimwiki:
+///   `zimwiki`/`zim`; plain: `plain`/`txt`; docbook×3: `docbook…`/`xml`)
+///   and a shared `-t xml` would be no pandoc writer at all.
 ///
 /// Every `FormatIdentifier` variant for which [`FormatIdentifier::is_pandoc_hybrid`]
 /// is true must have an explicit arm here.
@@ -517,6 +680,34 @@ fn pandoc_writer_name_for(id: FormatIdentifier) -> String {
         FormatIdentifier::Typst => "typst".to_string(),
         FormatIdentifier::Gfm => "gfm".to_string(),
         FormatIdentifier::CommonMark => "commonmark".to_string(),
+        // Long-tail Phase 2 (Tier A) — explicit arms for all 25, equal to
+        // the canonical name (which is also pandoc's `-t` writer name for
+        // each of these writers).
+        FormatIdentifier::Odt => "odt".to_string(),
+        FormatIdentifier::Opendocument => "opendocument".to_string(),
+        FormatIdentifier::Rtf => "rtf".to_string(),
+        FormatIdentifier::Fb2 => "fb2".to_string(),
+        FormatIdentifier::Plain => "plain".to_string(),
+        FormatIdentifier::Rst => "rst".to_string(),
+        FormatIdentifier::Org => "org".to_string(),
+        FormatIdentifier::Muse => "muse".to_string(),
+        FormatIdentifier::Ms => "ms".to_string(),
+        FormatIdentifier::Man => "man".to_string(),
+        FormatIdentifier::Texinfo => "texinfo".to_string(),
+        FormatIdentifier::Tei => "tei".to_string(),
+        FormatIdentifier::Zimwiki => "zimwiki".to_string(),
+        FormatIdentifier::Dokuwiki => "dokuwiki".to_string(),
+        FormatIdentifier::Haddock => "haddock".to_string(),
+        FormatIdentifier::Json => "json".to_string(),
+        FormatIdentifier::Native => "native".to_string(),
+        FormatIdentifier::Icml => "icml".to_string(),
+        FormatIdentifier::Jira => "jira".to_string(),
+        FormatIdentifier::Mediawiki => "mediawiki".to_string(),
+        FormatIdentifier::Xwiki => "xwiki".to_string(),
+        FormatIdentifier::Textile => "textile".to_string(),
+        FormatIdentifier::Docbook => "docbook".to_string(),
+        FormatIdentifier::Docbook4 => "docbook4".to_string(),
+        FormatIdentifier::Docbook5 => "docbook5".to_string(),
         other => output_extension_for(other),
     }
 }
@@ -547,6 +738,36 @@ fn pandoc_invocation_args_for(id: FormatIdentifier) -> Vec<String> {
             "--default-image-extension".to_string(),
             "svg".to_string(),
         ],
+        // Long-tail Phase 2: Q1's `plaintextFormat` sets
+        // `pandoc: standalone: true` for the whole plaintext family, and
+        // `rtfFormat()` adds standalone on top of its wordprocessor base.
+        // Odt/opendocument need no flag (pandoc's zip writers imply
+        // standalone, as shipped docx already shows) and fb2's
+        // `createEbookFormat` sets none. `--default-image-extension` is
+        // NOT repeated here — decision D2 gives it the single sink in
+        // `format_defaults::build_forwarded_args`.
+        FormatIdentifier::Rtf
+        | FormatIdentifier::Plain
+        | FormatIdentifier::Rst
+        | FormatIdentifier::Org
+        | FormatIdentifier::Muse
+        | FormatIdentifier::Ms
+        | FormatIdentifier::Man
+        | FormatIdentifier::Texinfo
+        | FormatIdentifier::Tei
+        | FormatIdentifier::Zimwiki
+        | FormatIdentifier::Dokuwiki
+        | FormatIdentifier::Haddock
+        | FormatIdentifier::Json
+        | FormatIdentifier::Native
+        | FormatIdentifier::Icml
+        | FormatIdentifier::Jira
+        | FormatIdentifier::Mediawiki
+        | FormatIdentifier::Xwiki
+        | FormatIdentifier::Textile
+        | FormatIdentifier::Docbook
+        | FormatIdentifier::Docbook4
+        | FormatIdentifier::Docbook5 => vec!["--standalone".to_string()],
         _ => Vec::new(),
     }
 }
@@ -1700,5 +1921,174 @@ mod tests {
     #[test]
     fn test_format_keys_from_frontmatter_absent() {
         assert!(format_keys_from_frontmatter("no front matter here").is_empty());
+    }
+
+    // === long-tail Phase 2: Tier A bulk tail (25 variants) ===
+
+    /// The 25 Tier A variants with their Q1 output extensions
+    /// (`formats.ts`/`formats-shared.ts` at the pinned tag). Three formats
+    /// share the `xml` extension (opendocument, docbook, docbook4/5), and
+    /// zimwiki's extension (`zim`) diverges from its name.
+    const TIER_A_EXTENSIONS: &[(&str, &str)] = &[
+        ("odt", "odt"),
+        ("opendocument", "xml"),
+        ("rtf", "rtf"),
+        ("fb2", "fb2"),
+        ("plain", "txt"),
+        ("rst", "rst"),
+        ("org", "org"),
+        ("muse", "muse"),
+        ("ms", "ms"),
+        ("man", "man"),
+        ("texinfo", "texinfo"),
+        ("tei", "tei"),
+        ("zimwiki", "zim"),
+        ("dokuwiki", "dokuwiki"),
+        ("haddock", "haddock"),
+        ("json", "json"),
+        ("native", "native"),
+        ("icml", "icml"),
+        ("jira", "jira"),
+        ("mediawiki", "mediawiki"),
+        ("xwiki", "xwiki"),
+        ("textile", "textile"),
+        ("docbook", "xml"),
+        ("docbook4", "xml"),
+        ("docbook5", "xml"),
+    ];
+
+    /// Q1 `plaintextFormat` family — everything in Tier A except the
+    /// wordprocessor trio (odt/opendocument/rtf) and the ebook format
+    /// (fb2). All of these get pandoc `--standalone` (verified in
+    /// `formats-shared.ts`'s `plaintextFormat`).
+    const TIER_A_PLAINTEXT: &[&str] = &[
+        "plain",
+        "rst",
+        "org",
+        "muse",
+        "ms",
+        "man",
+        "texinfo",
+        "tei",
+        "zimwiki",
+        "dokuwiki",
+        "haddock",
+        "json",
+        "native",
+        "icml",
+        "jira",
+        "mediawiki",
+        "xwiki",
+        "textile",
+        "docbook",
+        "docbook4",
+        "docbook5",
+    ];
+
+    /// Every Tier A name parses from its canonical name and round-trips
+    /// through `as_str`/`canonical_name` — `canonical_name` is what
+    /// `format-identifier.base-format` carries, so a wrong mapping here
+    /// would misclassify the render for every vendored Q1 Lua format check.
+    #[test]
+    fn test_tier_a_try_from_and_canonical_name() {
+        for (name, _) in TIER_A_EXTENSIONS {
+            let id = FormatIdentifier::try_from(*name)
+                .unwrap_or_else(|e| panic!("{name} must parse: {e}"));
+            assert_eq!(id.as_str(), *name);
+            assert_eq!(id.canonical_name(), *name);
+        }
+    }
+
+    /// Case-insensitive parse spot checks, one per family, including the
+    /// two with internal capitals a naive `eq_ignore_ascii_case` might get
+    /// wrong (`zimwiki` has none; `mediawiki`/`docbook5` are the tricky
+    /// spellings).
+    #[test]
+    fn test_tier_a_try_from_case_insensitive() {
+        for mixed in ["ODT", "Fb2", "ZimWiki", "DocBook5", "MediaWiki", "TeXinfo"] {
+            let id = FormatIdentifier::try_from(mixed)
+                .unwrap_or_else(|e| panic!("{mixed} must parse case-insensitively: {e}"));
+            assert_eq!(id.as_str(), mixed.to_ascii_lowercase());
+        }
+    }
+
+    /// Output extensions — the inventory table's third column verbatim,
+    /// including the three-way `xml` sharing and zimwiki's `zim`.
+    #[test]
+    fn test_tier_a_output_extensions() {
+        for (name, ext) in TIER_A_EXTENSIONS {
+            let f = Format::from_format_string(name)
+                .unwrap_or_else(|e| panic!("{name} must parse: {e}"));
+            assert_eq!(f.output_extension, *ext, "output extension for {name}");
+        }
+    }
+
+    /// Wrinkle 4: every Tier A variant has an explicit writer-name arm —
+    /// the writer equals the canonical name, which diverges from the
+    /// extension for opendocument/zimwiki/plain/docbook (fall-through would
+    /// send `-t xml`/`-t zim`/`-t txt`, none of which is a pandoc writer).
+    #[test]
+    fn test_tier_a_pandoc_writer_names_are_explicit_arms() {
+        for (name, ext) in TIER_A_EXTENSIONS {
+            let f = Format::from_format_string(name).unwrap();
+            assert_eq!(
+                f.pandoc_writer_name(),
+                *name,
+                "writer name for {name} must be its canonical name, not its extension {ext}"
+            );
+        }
+        // The divergences, explicitly — these are the rows that fail if a
+        // future edit deletes the explicit arms and restores the
+        // `other => output_extension_for(other)` fall-through.
+        for name in ["opendocument", "zimwiki", "plain", "docbook"] {
+            let f = Format::from_format_string(name).unwrap();
+            assert_ne!(
+                f.pandoc_writer_name(),
+                f.output_extension,
+                "{name}'s writer name must diverge from its output extension"
+            );
+        }
+    }
+
+    /// All 25 are pandoc-hybrid (self-widening the CLI gate at
+    /// `render.rs`'s single `is_pandoc_hybrid` check) and none are native.
+    #[test]
+    fn test_tier_a_is_pandoc_hybrid() {
+        for (name, _) in TIER_A_EXTENSIONS {
+            let id = FormatIdentifier::try_from(*name).unwrap();
+            assert!(id.is_pandoc_hybrid(), "{name} must be pandoc-hybrid");
+            assert!(!id.is_native(), "{name} must not be native");
+        }
+    }
+
+    /// D2/Q1-parity invocation args: `--standalone` for the plaintext
+    /// family and rtf only (`plaintextFormat`'s `pandoc: standalone: true`
+    /// + `rtfFormat`'s wordprocessor-plus-standalone override).
+    /// Odt/opendocument need no flag (pandoc's zip writers imply
+    /// standalone, matching shipped docx behavior) and fb2's
+    /// `createEbookFormat` sets none. `--default-image-extension` is
+    /// deliberately absent from this matrix — its single sink is
+    /// `format_defaults::build_forwarded_args` (D2).
+    #[test]
+    fn test_tier_a_invocation_args_standalone_matrix() {
+        for name in TIER_A_PLAINTEXT.iter().copied().chain(["rtf"]) {
+            let args = Format::from_format_string(name)
+                .unwrap()
+                .pandoc_invocation_args();
+            assert_eq!(
+                args,
+                vec!["--standalone".to_string()],
+                "invocation args for {name}"
+            );
+        }
+        for name in ["odt", "opendocument", "fb2"] {
+            let args = Format::from_format_string(name)
+                .unwrap()
+                .pandoc_invocation_args();
+            assert!(
+                args.is_empty(),
+                "{name} must get no invocation args, got {args:?}"
+            );
+        }
     }
 }

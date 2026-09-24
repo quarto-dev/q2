@@ -886,6 +886,18 @@ fn format_execute_defaults(
             ("echo", yaml_rust2::Yaml::Boolean(false)),
             ("warning", yaml_rust2::Yaml::Boolean(false)),
         ]),
+        // Long-tail Phase 2 (Tier A): the wordprocessor trio (odt /
+        // opendocument / rtf via `rtfFormat()`'s wordprocessor base) and
+        // fb2 (Q1's `createEbookFormat`) all get fig 5×4 — no echo/warning
+        // rows, which remain pptx-only. The `plaintextFormat` variants
+        // declare no execute defaults and stay `None`.
+        FormatIdentifier::Odt
+        | FormatIdentifier::Opendocument
+        | FormatIdentifier::Rtf
+        | FormatIdentifier::Fb2 => Some(vec![
+            ("fig-width", yaml_rust2::Yaml::Real("5".to_string())),
+            ("fig-height", yaml_rust2::Yaml::Real("4".to_string())),
+        ]),
         _ => None,
     }
 }
@@ -3303,6 +3315,61 @@ mod tests {
             None,
             "typst must have no format-level execute defaults"
         );
+    }
+
+    /// Long-tail Phase 2: the Tier A family matrix. The wordprocessor trio
+    /// and fb2 (Q1's `createWordprocessorFormat`/`createEbookFormat`) get
+    /// exactly fig 5×4 — no echo/warning rows, which remain pptx-only. The
+    /// 21 `plaintextFormat` variants stay `None` (Q1's plaintext helper
+    /// declares no `execute:` defaults).
+    #[test]
+    fn test_tier_a_execute_defaults_family_matrix() {
+        const WORDPROCESSOR_AND_EBOOK: &[&str] = &["odt", "opendocument", "rtf", "fb2"];
+        for name in WORDPROCESSOR_AND_EBOOK {
+            let id = FormatIdentifier::try_from(*name)
+                .unwrap_or_else(|e| panic!("{name} must parse: {e}"));
+            assert_eq!(
+                format_execute_defaults(id),
+                Some(vec![
+                    ("fig-width", yaml_rust2::Yaml::Real("5".to_string())),
+                    ("fig-height", yaml_rust2::Yaml::Real("4".to_string())),
+                ]),
+                "execute defaults for {name}"
+            );
+        }
+
+        const PLAINTEXT: &[&str] = &[
+            "plain",
+            "rst",
+            "org",
+            "muse",
+            "ms",
+            "man",
+            "texinfo",
+            "tei",
+            "zimwiki",
+            "dokuwiki",
+            "haddock",
+            "json",
+            "native",
+            "icml",
+            "jira",
+            "mediawiki",
+            "xwiki",
+            "textile",
+            "docbook",
+            "docbook4",
+            "docbook5",
+        ];
+        for name in PLAINTEXT {
+            let id = FormatIdentifier::try_from(*name)
+                .unwrap_or_else(|e| panic!("{name} must parse: {e}"));
+            assert_eq!(
+                format_execute_defaults(id),
+                None,
+                "{name} (plaintext family) must have no format-level execute defaults"
+            );
+        }
     }
 
     /// `merge_execute_scope`'s "no defaults, no document scope" case must

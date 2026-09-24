@@ -952,3 +952,38 @@ fn e2e_render_commonmark() {
         "commonmark output must not be HTML: {md}"
     );
 }
+
+/// Long-tail Phase 2 gate reachability (real binary + real pandoc):
+/// `q2 render f.qmd --to odt` exits 0 and writes a real ODF zip — the
+/// `mimetype` entry is the ODF text-document type and the body text
+/// landed in `content.xml` (both would miss if the CLI admitted the
+/// format but the writer arm were wrong).
+#[test]
+fn e2e_render_odt() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_file(
+        &dir.join("f.qmd"),
+        "---\ntitle: F\n---\n\n# Head\n\nHelloOdtBody.\n",
+    );
+
+    let output = run_q2(&dir, &["f.qmd", "--to", "odt"]);
+    assert!(
+        output.status.success(),
+        "q2 render --to odt should succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let bytes = std::fs::read(dir.join("f.odt")).expect("f.odt should exist");
+    assert_eq!(&bytes[..4], b"PK\x03\x04", "odt output must be a zip");
+    let mimetype = zip_entry_text(&bytes, "mimetype");
+    assert_eq!(
+        mimetype, "application/vnd.oasis.opendocument.text",
+        "odt mimetype entry"
+    );
+    let content = zip_entry_text(&bytes, "content.xml");
+    assert!(
+        content.contains("HelloOdtBody"),
+        "content.xml missing the body text"
+    );
+}

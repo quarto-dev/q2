@@ -263,7 +263,7 @@ fn insert_numbering_params(blob: &mut Map<String, Value>) {
 /// unreachable and untested (P3's companion already logged that trade-off
 /// for the value pair this key introduces).
 ///
-/// **Docx/Pptx only — not every `Pandoc(_)` profile.** `main.lua:737-752`'s
+/// **Docx/Pptx/Odt only — not every `Pandoc(_)` profile.** `main.lua:737-752`'s
 /// own fail-fast guard rejects `crossref-numbering: external` combined with
 /// a LaTeX/Typst target ("only docx, odt, and pptx are supported"), and for
 /// good reason: external mode skips the *entire* `quarto_crossref_filters`
@@ -273,11 +273,16 @@ fn insert_numbering_params(blob: &mut Map<String, Value>) {
 /// own crossref numbers natively at compile time; Q2 has no `.order` to
 /// protect there, so Q1's own crossref group must run unsuppressed
 /// (pandoc-hybrid-typst Phase 1, cross-session finding from the
-/// `explore/latex-typst-numbering-influence` investigation).
+/// `explore/latex-typst-numbering-influence` investigation). Odt joins at
+/// long-tail Phase 2 (wrinkle 6): the vendored `floatreftarget.lua:670`
+/// renderer reads pre-assigned `.order` for odt too. The rest of Tier A
+/// hits the placeholder float renderer — no `.order` to protect — so the
+/// key stays unset for them (see
+/// `test_tier_a_placeholder_renderers_omit_crossref_numbering`).
 fn insert_crossref_numbering_mode(blob: &mut Map<String, Value>, format: &Format) {
     if matches!(
         format.identifier,
-        FormatIdentifier::Docx | FormatIdentifier::Pptx
+        FormatIdentifier::Docx | FormatIdentifier::Pptx | FormatIdentifier::Odt
     ) {
         blob.insert("crossref-numbering".to_string(), json!("external"));
     }
@@ -708,5 +713,78 @@ mod tests {
                 "{key} names a file that does not exist: {path_str}"
             );
         }
+    }
+
+    // === long-tail Phase 2: Tier A bulk tail ===
+
+    /// Deferred from Phase 1 wrinkle 6: odt joins docx/pptx in getting
+    /// `crossref-numbering: "external"` — the vendored
+    /// `floatreftarget.lua:670` renderer reads pre-assigned `.order` for
+    /// odt too, so Q1's own auto-indexer must be suppressed exactly as for
+    /// docx. This is the test whose insertion arm ships with the `Odt`
+    /// variant, per the plan's test-order rule.
+    ///
+    /// Revert hunk: dropping `Odt` from the
+    /// `Docx | Pptx | Odt` gate in `insert_crossref_numbering_mode` makes
+    /// this RED.
+    #[test]
+    fn test_odt_profile_sets_external_crossref_numbering() {
+        let format = Format::from_format_string("odt").unwrap();
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = fixture_language();
+        let blob = fixture_builder(&format, &project, &registry, &language).build();
+
+        assert_eq!(
+            blob["crossref-numbering"],
+            json!("external"),
+            "odt must suppress Q1's auto-indexer via crossref-numbering: external"
+        );
+    }
+
+    /// The rest of Tier A must **not** get the key: rtf/fb2/plain/docbook
+    /// all hit the placeholder float renderer (no pre-assigned `.order` to
+    /// protect), and adding the key for them would trip
+    /// `main.lua`'s fail-fast guard semantics for formats Q1 does not
+    /// support under external numbering. Asserted here so a future
+    /// "helpfully generalize the gate" edit goes red instead of silently
+    /// mis-suppressing Q1's crossref indexer for 20+ formats.
+    #[test]
+    fn test_tier_a_placeholder_renderers_omit_crossref_numbering() {
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = fixture_language();
+
+        for target_format in ["rtf", "fb2", "plain", "docbook"] {
+            let format = Format::from_format_string(target_format)
+                .unwrap_or_else(|e| panic!("failed to build Format for {target_format}: {e}"));
+            let blob = fixture_builder(&format, &project, &registry, &language).build();
+            assert!(
+                !blob.as_object().unwrap().contains_key("crossref-numbering"),
+                "expected no crossref-numbering key for {target_format}, got {blob}"
+            );
+        }
+    }
+
+    /// The wordprocessor page-width flows through the blob (odt), while a
+    /// plaintext sibling sharing the `xml` extension (docbook) gets no
+    /// page-width entry — the blob-level half of
+    /// `format_defaults::tests::test_docbook_and_opendocument_share_extension_not_defaults`.
+    #[test]
+    fn test_odt_blob_has_page_width_docbook_does_not() {
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = fixture_language();
+
+        let odt = Format::from_format_string("odt").unwrap();
+        let blob = fixture_builder(&odt, &project, &registry, &language).build();
+        assert_eq!(blob["page-width"], json!(6.5));
+
+        let docbook = Format::from_format_string("docbook").unwrap();
+        let blob = fixture_builder(&docbook, &project, &registry, &language).build();
+        assert!(
+            blob.as_object().unwrap().get("page-width").is_none(),
+            "docbook (plaintext family) must have no page-width entry"
+        );
     }
 }

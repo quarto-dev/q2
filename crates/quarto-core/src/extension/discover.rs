@@ -252,6 +252,32 @@ const KNOWN_BASE_FORMATS: &[&str] = &[
     "revealjs",
     "gfm",
     "commonmark",
+    // Long-tail Phase 2 (Tier A)
+    "odt",
+    "opendocument",
+    "rtf",
+    "fb2",
+    "plain",
+    "rst",
+    "org",
+    "muse",
+    "ms",
+    "man",
+    "texinfo",
+    "tei",
+    "zimwiki",
+    "dokuwiki",
+    "haddock",
+    "json",
+    "native",
+    "icml",
+    "jira",
+    "mediawiki",
+    "xwiki",
+    "textile",
+    "docbook",
+    "docbook4",
+    "docbook5",
 ];
 
 pub fn parse_format_descriptor(format: &str) -> FormatDescriptor {
@@ -940,5 +966,35 @@ contributes:
         let bare = parse_format_descriptor("pptx");
         assert_eq!(bare.extension_name, None);
         assert_eq!(bare.base_format, "pptx");
+    }
+
+    /// Long-tail Phase 2: Tier A bases must resolve in extension-style
+    /// descriptors (`acm-odt` → base `odt`, not extension `acm-odt` with
+    /// base `html`), and `zimwiki` — whose output extension (`zim`)
+    /// differs from its name — must still be recognized as a bare base.
+    /// Runtime-red until the names join `KNOWN_BASE_FORMATS`.
+    #[test]
+    fn test_parse_format_descriptor_tier_a_bases() {
+        for (input, expected_base) in [
+            ("acm-odt", "odt"),
+            ("acm-docbook", "docbook"),
+            ("acm-rst", "rst"),
+            ("journal-xwiki", "xwiki"),
+        ] {
+            let desc = parse_format_descriptor(input);
+            assert_eq!(
+                desc.base_format, expected_base,
+                "base format for descriptor {input}"
+            );
+            assert_eq!(
+                desc.extension_name.as_deref(),
+                Some(input.split('-').next().unwrap()),
+                "extension name for descriptor {input}"
+            );
+        }
+
+        let bare = parse_format_descriptor("zimwiki");
+        assert_eq!(bare.extension_name, None);
+        assert_eq!(bare.base_format, "zimwiki");
     }
 }
