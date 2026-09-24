@@ -27,6 +27,7 @@
 import {
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useCallback,
   useState,
@@ -333,7 +334,31 @@ export interface MenuSubmenuProps {
 export function MenuSubmenu({ label, children }: MenuSubmenuProps) {
   const [open, setOpen] = useState(false);
   const itemRef = useRef<HTMLButtonElement>(null);
+  const submenuRef = useRef<HTMLDivElement>(null);
   const itemId = useId();
+
+  // Viewport-edge flip. The submenu opens to the right of its parent by
+  // default; a menu pinned to the window's right edge (the ＋ New menu)
+  // would push every submenu offscreen. Measure once per open, before
+  // paint, and open to the left when the right side does not fit but the
+  // left does. If neither fits, stay right: a clipped right edge beats a
+  // clipped left edge, since the labels start on the left.
+  const [flipLeft, setFlipLeft] = useState(false);
+  useLayoutEffect(() => {
+    if (!open) {
+      setFlipLeft(false);
+      return;
+    }
+    const submenu = submenuRef.current;
+    const parent = submenu?.parentElement;
+    if (!submenu || !parent) return;
+    const margin = 8;
+    const rect = submenu.getBoundingClientRect();
+    if (rect.right <= window.innerWidth - margin) return;
+    const parentRect = parent.getBoundingClientRect();
+    const fitsLeft = parentRect.left - 4 - rect.width >= margin;
+    if (fitsLeft) setFlipLeft(true);
+  }, [open]);
 
   // APG: activating the parent opens the submenu and focuses its first
   // item. Open-only, never a toggle: hover may already have opened the
@@ -386,7 +411,8 @@ export function MenuSubmenu({ label, children }: MenuSubmenuProps) {
       </button>
       {open && (
         <div
-          className="qh-menu qh-submenu"
+          ref={submenuRef}
+          className={`qh-menu qh-submenu${flipLeft ? ' qh-submenu-left' : ''}`}
           role="menu"
           aria-labelledby={itemId}
           onKeyDown={(e) => {

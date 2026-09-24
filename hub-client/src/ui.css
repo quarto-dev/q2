@@ -297,6 +297,15 @@
   min-width: 180px;
 }
 
+/* MenuSubmenu measures itself on open and adds this when the default
+   rightward placement would leave the viewport (e.g. under the
+   right-pinned ＋ New menu). */
+.qh-submenu.qh-submenu-left {
+  inset-inline-start: auto;
+  inset-inline-end: calc(100% + 4px);
+  transform-origin: top right;
+}
+
 /* ---- dialogs ---- */
 
 .qh-dialog-backdrop {
