@@ -435,8 +435,15 @@ the Presentation skeleton is offered on the CLI as well as the hub.
       submenu keeps it open with the hovered leaf tinted. Pre-existing
       eslint `react-hooks/refs` and `set-state-in-effect` errors in
       `Menu.tsx`/`ProjectsHome.tsx` are on main too and untouched.
-      Commit `d3a87667`. Follow-up ask: group labels bold like the
-      leaves (`MenuSubmenu strong`), next commit.
+      Commit `d3a87667`. Follow-ups the same afternoon: group labels bold
+      like the leaves (`MenuSubmenu strong`, `61fe6555`); the hover tint
+      was too faint for Andrew in Safari, so `--context-menu-hover` became
+      a solid `color-mix` at about twice the strength (`3ab4cdc0`); and in
+      Firefox the first item stayed lit while hovering the second, because
+      Menu focuses its first item on open and the tint follows focus, so
+      the menu root now focuses whatever menuitem the pointer is over
+      (`88a4636e`; probe: hovering Examples clears Templates, hovering a
+      leaf tints only that leaf plus its open group). Pushed as PR #725.
 
 ## Work items
 
