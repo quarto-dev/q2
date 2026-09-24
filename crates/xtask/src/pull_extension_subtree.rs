@@ -109,13 +109,33 @@ fn describe(outcome: PullOutcome) -> &'static str {
     }
 }
 
-/// Dev/test seam: operate on a repo other than the real one. Falls back to
-/// [`crate::create_worktree::repo_root`] when unset.
+/// Dev/test seam: operate on a repo other than the current one.
+///
+/// The default is the **current worktree's** root (`git rev-parse
+/// --show-toplevel`): subtree add/pull must operate on the checkout the
+/// command was invoked from. This deliberately differs from
+/// [`crate::create_worktree::repo_root`], which resolves the *main*
+/// worktree via `--git-common-dir` (right for placing new worktrees under
+/// `<main-repo>/.worktrees/`, wrong here — from a linked worktree it would
+/// subtree into the main checkout's dirty tree and fail with "working tree
+/// has modifications").
 fn subtree_root() -> Result<PathBuf> {
     if let Ok(root) = std::env::var("QUARTO_SUBTREE_ROOT") {
         return Ok(PathBuf::from(root));
     }
-    crate::create_worktree::repo_root()
+    let output = nested_command("git")
+        .args(["rev-parse", "--path-format=absolute", "--show-toplevel"])
+        .output()
+        .context("spawning `git rev-parse --show-toplevel`")?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        bail!("git rev-parse --show-toplevel failed: {stderr}");
+    }
+    let raw = String::from_utf8(output.stdout)
+        .context("git toplevel path was not valid UTF-8")?
+        .trim_end_matches(['\r', '\n'])
+        .to_string();
+    Ok(crate::util::with_native_separators(Path::new(&raw)))
 }
 
 fn load_table(table_path: Option<&Path>) -> Result<Vec<SubtreeConfig>> {
@@ -327,6 +347,51 @@ mod tests {
         assert_eq!(
             julia.remote_branch, "q2-static-declarations",
             "the julia row subtrees from the fork's q2 branch, not main (epic Step 2c pivot)"
+        );
+    }
+
+    #[test]
+    fn subtree_root_defaults_to_current_worktree_not_main_checkout() {
+        // Regression test: the default root must be the checkout the command
+        // was invoked from (`git rev-parse --show-toplevel`), not the main
+        // worktree of the repository (`--git-common-dir`'s parent, which is
+        // what create_worktree::repo_root() returns and is correct for *its*
+        // use). In a linked worktree those differ, and subtree add/pull must
+        // operate on the branch the caller is standing on.
+        let main_repo = build_fixture_consumer();
+        let worktree_dir = main_repo.path().join("linked-wt");
+        run_git(
+            main_repo.path(),
+            &[
+                "worktree",
+                "add",
+                "-q",
+                worktree_dir.to_str().unwrap(),
+                "-b",
+                "wt-branch",
+            ],
+        )
+        .unwrap();
+
+        // Each nextest test runs in its own process, so chdir + env
+        // mutation here is safe (no cross-test race).
+        let prev_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&worktree_dir).unwrap();
+        let root = subtree_root().unwrap();
+        std::env::set_current_dir(prev_dir).unwrap();
+
+        // Canonicalize both sides: macOS /tmp symlinks make lexical
+        // comparison unreliable.
+        let canon = |p: &Path| p.canonicalize().unwrap();
+        assert_eq!(
+            canon(&root),
+            canon(&worktree_dir),
+            "default root should be the invoking worktree, not the main checkout"
+        );
+        assert_ne!(
+            canon(&root),
+            canon(main_repo.path()),
+            "sanity: the two roots must actually differ in this fixture"
         );
     }
 
