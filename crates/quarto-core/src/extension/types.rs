@@ -137,11 +137,26 @@ pub enum EngineContribution {
 }
 
 /// One static file-claim entry. Extension is stored **undotted, lowercase**
-/// (agrees with `Path::extension()`). Plan 7a will grow this with an optional
-/// `content_pattern` field — additively, no second migration.
+/// (agrees with `Path::extension()`). `processor` names a native content
+/// processor (Plan 7b) that owns this claim's sniff + convert; `None` falls
+/// back to the engine's dynamic `claims_file`/`markdown_for_file`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileClaim {
     pub extension: String,
+    pub processor: Option<ProcessorSpec>,
+}
+
+/// The `processor:` field on a `claims-files` entry (Plan 7b). Parsed and
+/// validated at read time — an unknown name or a missing required param
+/// (percent's `language`) is a parse error, never a silent drop. `comment`
+/// is resolved to its default (`"#"`) at parse time, so downstream code never
+/// re-derives it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProcessorSpec {
+    /// `processor: percent` (map form only — `language` is required).
+    Percent { language: String, comment: String },
+    /// `processor: spin` (bare name; takes no params).
+    Spin,
 }
 
 /// One authoritative static language claim (§3.3). A pure tabulation of
@@ -772,6 +787,7 @@ mod tests {
                 exts.into_iter()
                     .map(|s| FileClaim {
                         extension: s.to_string(),
+                        processor: None,
                     })
                     .collect()
             }),

@@ -1,0 +1,8 @@
+Chunk options via bare `#|` (no preceding `#+`/`# %%` opener).
+
+```{r}
+#| echo: false
+#| fig-width: 5
+hist(rnorm(100))
+```
+

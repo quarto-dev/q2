@@ -115,12 +115,12 @@ impl PipelineStage for ParseDocumentStage {
             false,        // loose mode
             &source_name, // filename for error messages
             &mut output_stream,
-            true, // track source locations
-            None, // file_id
+            true,                       // track source locations
+            source.source_info.clone(), // Plan 7b "A+": parent_source_info
         );
 
         match parse_result {
-            Ok((ast, ast_context, warnings)) => {
+            Ok((ast, mut ast_context, warnings)) => {
                 // Log any warnings
                 if !warnings.is_empty() {
                     trace_event!(
@@ -131,6 +131,39 @@ impl PipelineStage for ParseDocumentStage {
                     );
                     // Also add diagnostics to context for pipeline-level collection
                     ctx.add_diagnostics(warnings.clone());
+                }
+
+                // Plan 7b "A+": when this file was natively converted by a
+                // content processor, `source.source_info` is a genuine
+                // `Concat`/`Original` whose pieces point at
+                // `content_processors::ORIGINAL_FILE_ID` in the original
+                // file. Every AST node's `SourceInfo` is now a `Substring`
+                // over that mapping (via `parent_source_info` above), so
+                // resolving it — ariadne snippets, `map_offset` — needs the
+                // *original* file's bytes registered at that same FileId,
+                // in both SourceContexts that flow out of this stage (they
+                // must stay in lockstep — see `read()`'s doc + the
+                // include-expansion precedent for the same pattern).
+                if source.source_info.is_some() {
+                    let original_content =
+                        ctx.runtime.file_read_string(&source.path).map_err(|e| {
+                            PipelineError::other(format!(
+                                "Could not re-read {} to register its A+ provenance: {}",
+                                source.path.display(),
+                                e
+                            ))
+                        })?;
+                    let original_name = source.path.display().to_string();
+                    ast_context.source_context.add_file_with_id(
+                        crate::engine::content_processors::ORIGINAL_FILE_ID,
+                        original_name.clone(),
+                        Some(original_content.clone()),
+                    );
+                    source_context.add_file_with_id(
+                        crate::engine::content_processors::ORIGINAL_FILE_ID,
+                        original_name,
+                        Some(original_content),
+                    );
                 }
 
                 Ok(PipelineData::DocumentAst(DocumentAst {
@@ -553,5 +586,213 @@ mod tests {
         assert_eq!(doc_ast.path, PathBuf::from("/project/test.echo"));
         // AST must be non-empty.
         assert!(!doc_ast.ast.blocks.is_empty());
+    }
+
+    /// **Plan 7b "A+" — original file registered at the fixed FileId**
+    /// (seam). When `source.source_info` is `Some` (a content processor's
+    /// faithful mapping), `ParseDocumentStage` must re-read the *original*
+    /// file and register it at `content_processors::ORIGINAL_FILE_ID` in
+    /// BOTH `ast_context.source_context` (what AST-node `Substring`s
+    /// resolve against) and the top-level `source_context` (ariadne
+    /// snippets), in lockstep.
+    ///
+    /// Named revert: remove the `if source.source_info.is_some() { … }`
+    /// block in `run()` and this test goes RED (FileId(1) absent from both
+    /// contexts).
+    #[tokio::test]
+    async fn test_parse_document_a_plus_registers_original_file() {
+        use crate::format::Format;
+        use crate::project::{DocumentInfo, ProjectContext};
+        use crate::stage::{LoadedSource, StageContext};
+        use quarto_system_runtime::TempDir;
+        use std::sync::Arc;
+
+        const ORIGINAL_CONTENT: &str = "# %% [markdown]\n# hello\n";
+
+        struct MockRuntime;
+
+        #[async_trait::async_trait]
+        impl quarto_system_runtime::SystemRuntime for MockRuntime {
+            fn file_read(
+                &self,
+                _path: &std::path::Path,
+            ) -> quarto_system_runtime::RuntimeResult<Vec<u8>> {
+                Ok(ORIGINAL_CONTENT.as_bytes().to_vec())
+            }
+            fn file_write(
+                &self,
+                _path: &std::path::Path,
+                _contents: &[u8],
+            ) -> quarto_system_runtime::RuntimeResult<()> {
+                Ok(())
+            }
+            fn path_exists(
+                &self,
+                _path: &std::path::Path,
+                _kind: Option<quarto_system_runtime::PathKind>,
+            ) -> quarto_system_runtime::RuntimeResult<bool> {
+                Ok(true)
+            }
+            fn canonicalize(
+                &self,
+                path: &std::path::Path,
+            ) -> quarto_system_runtime::RuntimeResult<PathBuf> {
+                Ok(path.to_path_buf())
+            }
+            fn path_metadata(
+                &self,
+                _path: &std::path::Path,
+            ) -> quarto_system_runtime::RuntimeResult<quarto_system_runtime::PathMetadata>
+            {
+                unimplemented!()
+            }
+            fn file_copy(
+                &self,
+                _src: &std::path::Path,
+                _dst: &std::path::Path,
+            ) -> quarto_system_runtime::RuntimeResult<()> {
+                Ok(())
+            }
+            fn path_rename(
+                &self,
+                _old: &std::path::Path,
+                _new: &std::path::Path,
+            ) -> quarto_system_runtime::RuntimeResult<()> {
+                Ok(())
+            }
+            fn file_remove(
+                &self,
+                _path: &std::path::Path,
+            ) -> quarto_system_runtime::RuntimeResult<()> {
+                Ok(())
+            }
+            fn dir_create(
+                &self,
+                _path: &std::path::Path,
+                _recursive: bool,
+            ) -> quarto_system_runtime::RuntimeResult<()> {
+                Ok(())
+            }
+            fn dir_remove(
+                &self,
+                _path: &std::path::Path,
+                _recursive: bool,
+            ) -> quarto_system_runtime::RuntimeResult<()> {
+                Ok(())
+            }
+            fn dir_list(
+                &self,
+                _path: &std::path::Path,
+            ) -> quarto_system_runtime::RuntimeResult<Vec<PathBuf>> {
+                Ok(vec![])
+            }
+            fn cwd(&self) -> quarto_system_runtime::RuntimeResult<PathBuf> {
+                Ok(PathBuf::from("/"))
+            }
+            fn temp_dir(&self, _template: &str) -> quarto_system_runtime::RuntimeResult<TempDir> {
+                Ok(TempDir::new(PathBuf::from("/tmp/test")))
+            }
+            fn exec_pipe(
+                &self,
+                _command: &str,
+                _args: &[&str],
+                _stdin: &[u8],
+            ) -> quarto_system_runtime::RuntimeResult<Vec<u8>> {
+                Ok(vec![])
+            }
+            fn exec_command(
+                &self,
+                _command: &str,
+                _args: &[&str],
+                _stdin: Option<&[u8]>,
+            ) -> quarto_system_runtime::RuntimeResult<quarto_system_runtime::CommandOutput>
+            {
+                Ok(quarto_system_runtime::CommandOutput {
+                    code: 0,
+                    stdout: vec![],
+                    stderr: vec![],
+                })
+            }
+            fn env_get(&self, _name: &str) -> quarto_system_runtime::RuntimeResult<Option<String>> {
+                Ok(None)
+            }
+            fn env_all(
+                &self,
+            ) -> quarto_system_runtime::RuntimeResult<std::collections::HashMap<String, String>>
+            {
+                Ok(std::collections::HashMap::new())
+            }
+            async fn fetch_url(
+                &self,
+                _url: &str,
+            ) -> quarto_system_runtime::RuntimeResult<(Vec<u8>, String)> {
+                Err(quarto_system_runtime::RuntimeError::NotSupported(
+                    "mock".to_string(),
+                ))
+            }
+            fn os_name(&self) -> &'static str {
+                "mock"
+            }
+            fn arch(&self) -> &'static str {
+                "mock"
+            }
+            fn cpu_time(&self) -> quarto_system_runtime::RuntimeResult<u64> {
+                Ok(0)
+            }
+            fn xdg_dir(
+                &self,
+                _kind: quarto_system_runtime::XdgDirKind,
+                _subpath: Option<&std::path::Path>,
+            ) -> quarto_system_runtime::RuntimeResult<PathBuf> {
+                Ok(PathBuf::from("/xdg"))
+            }
+            fn stdout_write(&self, _data: &[u8]) -> quarto_system_runtime::RuntimeResult<()> {
+                Ok(())
+            }
+            fn stderr_write(&self, _data: &[u8]) -> quarto_system_runtime::RuntimeResult<()> {
+                Ok(())
+            }
+        }
+
+        let runtime = Arc::new(MockRuntime);
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: crate::project::ProjectConfig::default(),
+            is_single_file: true,
+            output_dir: PathBuf::from("/project"),
+            ..Default::default()
+        };
+        let doc = DocumentInfo::from_path("/project/hello.py");
+        let format = Format::html();
+        let mut ctx = StageContext::new(runtime, format, project, doc).unwrap();
+
+        let stage = ParseDocumentStage::new();
+        let converted = "---\ntitle: hello\n---\n\nhello\n";
+        let mut source = LoadedSource::new(PathBuf::from("/project/hello.py"), converted.into());
+        source.source_info = Some(quarto_source_map::SourceInfo::original(
+            crate::engine::content_processors::ORIGINAL_FILE_ID,
+            0,
+            ORIGINAL_CONTENT.len(),
+        ));
+
+        let output = stage
+            .run(PipelineData::LoadedSource(source), &mut ctx)
+            .await
+            .unwrap();
+        let doc_ast = output.into_document_ast().expect("Should be DocumentAst");
+
+        let original_id = crate::engine::content_processors::ORIGINAL_FILE_ID;
+        let in_ast_context = doc_ast
+            .ast_context
+            .source_context
+            .get_file(original_id)
+            .expect("ast_context.source_context must have the original file registered");
+        assert_eq!(in_ast_context.content.as_deref(), Some(ORIGINAL_CONTENT));
+
+        let in_top_level = doc_ast
+            .source_context
+            .get_file(original_id)
+            .expect("top-level source_context must have the original file registered");
+        assert_eq!(in_top_level.content.as_deref(), Some(ORIGINAL_CONTENT));
     }
 }

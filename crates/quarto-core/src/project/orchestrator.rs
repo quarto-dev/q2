@@ -1413,7 +1413,12 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
                 .extensions
                 .iter()
                 .flat_map(|e| &e.contributes.engines)
-                .flat_map(crate::extension::types::claimed_file_extensions),
+                .flat_map(crate::extension::types::claimed_file_extensions)
+                .chain(
+                    crate::engine::builtin_file_claims()
+                        .into_iter()
+                        .map(|c| c.extension),
+                ),
         );
         let discovery_cfg = crate::project::discovery::DiscoveryConfig {
             project_dir: &self.project.dir,

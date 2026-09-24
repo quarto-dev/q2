@@ -55,6 +55,7 @@
 
 pub mod capture_files;
 pub mod capture_splice;
+pub mod content_processors;
 mod context;
 mod detection;
 pub mod diagnostics;
@@ -85,8 +86,32 @@ mod fixture;
 // Native-only modules
 #[cfg(not(target_arch = "wasm32"))]
 pub mod jupyter;
+// `pub(crate)`, not private: Plan 7b Phase 6's launch-free test
+// (`stage::stages::source_conversion`) reads `knitr::subprocess::
+// rscript_spawn_count()` from outside the `engine` module tree.
 #[cfg(not(target_arch = "wasm32"))]
-mod knitr;
+pub(crate) mod knitr;
+
+/// Static file claims every built-in engine declares (Plan 7b Phase 5),
+/// without constructing any engine or probing the environment (unlike
+/// `JupyterEngine::new()`/`KnitrEngine::new()`, which search `PATH`). Feeds
+/// discovery's gate 1 (`RenderableExtensions`) so a percent `.py`/`.jl`/
+/// `.r`/`.q` or spin `.r` is renderable *when listed* by
+/// `project.render`, exactly like an extension-contributed claim.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn builtin_file_claims() -> Vec<crate::extension::types::FileClaim> {
+    let mut claims = jupyter::JupyterEngine::static_file_claims();
+    claims.extend(knitr::KnitrEngine::static_file_claims());
+    claims
+}
+
+/// WASM has no built-in jupyter/knitr engines (no subprocess host) — empty,
+/// so callers need no `#[cfg]` of their own (mirrors how `claimed_file_extensions`
+/// already degrades to `{qmd}` on WASM via an empty extension list).
+#[cfg(target_arch = "wasm32")]
+pub fn builtin_file_claims() -> Vec<crate::extension::types::FileClaim> {
+    Vec::new()
+}
 
 use std::time::Duration;
 
@@ -191,6 +216,19 @@ mod tests {
     use quarto_source_map::SourceInfo;
     use std::path::PathBuf;
     use std::sync::Arc;
+
+    // --- Plan 7b Phase 5: builtin_file_claims (construction-free). ---
+
+    #[test]
+    fn builtin_file_claims_returns_jupyter_and_knitr_claims() {
+        let claims = builtin_file_claims();
+        // Jupyter's 4 percent claims (.py/.jl/.r/.q) + knitr's 1 spin claim.
+        assert_eq!(claims.len(), 5);
+        assert!(claims.iter().any(|c| c.extension == "py"));
+        assert!(claims.iter().any(|c| c.extension == "jl"));
+        assert!(claims.iter().any(|c| c.extension == "q"));
+        assert_eq!(claims.iter().filter(|c| c.extension == "r").count(), 2);
+    }
 
     /// Helper to create a map ConfigValue
     fn map_config(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {

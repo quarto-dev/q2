@@ -69,6 +69,26 @@ pub fn find_rscript_call_count() -> usize {
     FIND_RSCRIPT_CALL_COUNT.load(Ordering::Relaxed)
 }
 
+/// Number of times [`call_r`] has actually spawned an `Rscript` child
+/// process during this run. Plan 7b Phase 6's launch-free regression
+/// tripwire: unlike the Deno side's `TsEngineHost::spawn_count` (a
+/// long-lived host object), `call_r` spawns a one-shot `Command::new` with
+/// no persistent object to hang a counter on, so this is process-global —
+/// incremented immediately after a successful `spawn()`, never on a failed
+/// one. A test asserting "zero `Rscript` launches in Pass-1" reads this
+/// before/after the run and diffs.
+static RSCRIPT_SPAWN_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+/// Read the current value of [`RSCRIPT_SPAWN_COUNT`]. `#[cfg(test)]`: the
+/// counter itself increments unconditionally (production code needs no
+/// reader today), but this accessor has no caller outside the Phase 6
+/// regression test — gated the same as its only caller, per the
+/// cross-platform test-helper convention.
+#[cfg(test)]
+pub(crate) fn rscript_spawn_count() -> usize {
+    RSCRIPT_SPAWN_COUNT.load(Ordering::Relaxed)
+}
+
 use super::KNITR_RESOURCES;
 use super::error_parser::{RErrorType, parse_r_error};
 use super::types::KnitrRequest;
@@ -382,6 +402,7 @@ where
             e
         ))
     })?;
+    RSCRIPT_SPAWN_COUNT.fetch_add(1, Ordering::Relaxed);
 
     // Write request to stdin
     if let Some(mut stdin) = child.stdin.take() {

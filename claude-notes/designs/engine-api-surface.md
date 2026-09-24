@@ -49,13 +49,18 @@ A third near-instance — **caught before landing**, recorded so the pattern sta
   adding `whenClass:` — `claims_language` is a pure function of `(language, first_class)`, so it
   tabulates fully — so the static surface is **not** narrowed. This review originally recorded a
   residue — **content-inspecting `claims_file`** (Julia's `# %%`) — as the one place static resolution
-  was strictly less powerful. **Corrected 2026-07-07:** a full Q1 census showed every content sniff is
-  `extension-gate → read-file → one regex` (a pure function of file bytes), so it *is* statically
-  declarable — as a `content-pattern` on a `claims-files` entry, evaluated natively (Plan 7a). There is
-  **no** static-vs-dynamic residue in practice; the dynamic `claims_file` method survives only as a
-  fallback for a hypothetical non-regex-expressible sniff (empty across every known engine). See
-  engine-resolution.md §3.3 and
-  [Plan 7a](../plans/2026-07-07-plan7a-static-content-pattern-claims.md).
+  was strictly less powerful. A full Q1 census showed every content sniff is
+  `extension-gate → read-file → one regex` (a pure function of file bytes), so its *convert* and
+  *sniff* steps are both natively expressible with no engine load — but **not** by folding an
+  arbitrary regex into resolution/discovery (Plan 7a's `content-pattern`, tombstoned 2026-07-08).
+  **Corrected 2026-09-24 (Plan 7b):** the sniff is owned by a named **content processor**
+  (`processor: percent` / `processor: spin` on a `claims-files` entry) and runs natively, but only
+  ever **once, at claim time** (`SourceConversionStage`) — never at Pass-1 discovery, which stays
+  content-blind (extension-claim + explicit `project.render` pattern only). The dynamic `claims_file`
+  method survives only as a fallback for a file with no named processor (empty across every known
+  built-in/TS engine today); such a file fails discovery's gate 1 and is renderable only as an
+  explicit single-file argument. See engine-resolution.md §3.3 and
+  [Plan 7b](../plans/2026-07-08-plan7b-native-content-processors.md).
 
 **The author test.** For each Q1 engine method / field / flag, do **not** ask "does the Julia
 validation target need this?" Ask: *does the Q1 engine API expose it as protocol, and could a

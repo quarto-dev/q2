@@ -1,0 +1,16 @@
+---
+title: Basic spin fixture
+---
+
+Some prose before the first chunk.
+
+```{r}
+1 + 1
+```
+
+More prose between chunks.
+
+```{r}
+2 + 2
+```
+

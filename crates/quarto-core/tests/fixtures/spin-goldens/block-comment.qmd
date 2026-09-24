@@ -1,0 +1,6 @@
+Text before a block comment.
+
+```{r}
+1 + 1
+```
+

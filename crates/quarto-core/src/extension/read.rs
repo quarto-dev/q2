@@ -16,7 +16,7 @@ use quarto_system_runtime::SystemRuntime;
 
 use super::types::{
     ClaimKind, Contributes, EngineContribution, Extension, ExtensionFilter, ExtensionId, FileClaim,
-    StaticLanguageClaim,
+    ProcessorSpec, StaticLanguageClaim,
 };
 use crate::error::Result;
 
@@ -429,7 +429,12 @@ fn parse_external_engine(
     // Optional: `claims-files` — None if absent, Some(vec) if present. Accepts
     // bare-string shorthand AND `{extension: ...}` mapping form (change A);
     // each element's extension is normalized to undotted lowercase (change B).
-    let claims_files = item.get("claims-files").map(parse_file_claims);
+    // A malformed/unknown `processor:` is a hard parse error (Plan 7b), never
+    // a silent drop.
+    let claims_files = item
+        .get("claims-files")
+        .map(parse_file_claims)
+        .transpose()?;
 
     Ok(EngineContribution::External {
         path: resolved_path,
@@ -647,33 +652,107 @@ fn parse_normalized_ext_list(cv: &ConfigValue) -> Vec<String> {
 /// Parse a `claims-files` array into `Vec<FileClaim>`.
 ///
 /// Each element is either:
-/// - a **scalar** string (`.echo`) -> `FileClaim { extension: normalize_ext(...) }`
-/// - a **mapping** `{extension: ".echo"}` -> same, reading the `extension` key
+/// - a **scalar** string (`.echo`) -> `FileClaim { extension: normalize_ext(...), processor: None }`
+/// - a **mapping** `{extension: ".echo", processor?: ...}` -> same, reading the
+///   `extension` key, plus an optional `processor:` (Plan 7b)
 ///
-/// Any other shape (or a mapping missing `extension`) is silently skipped,
-/// mirroring `parse_normalized_ext_list`'s non-string-skip behavior.
-fn parse_file_claims(cv: &ConfigValue) -> Vec<FileClaim> {
+/// A mapping missing `extension` is silently skipped, mirroring
+/// `parse_normalized_ext_list`'s non-string-skip behavior. A **malformed or
+/// unknown `processor:`** is a hard parse error — never a silent drop, since
+/// silently dropping it would mean the extension quietly loses its native
+/// conversion path.
+fn parse_file_claims(cv: &ConfigValue) -> Result<Vec<FileClaim>> {
     let ConfigValueKind::Array(items) = &cv.value else {
-        return vec![];
+        return Ok(vec![]);
     };
-    items
-        .iter()
-        .filter_map(|item| match &item.value {
+    let mut out = Vec::new();
+    for item in items {
+        match &item.value {
             ConfigValueKind::Scalar { .. } | ConfigValueKind::PandocInlines(_) => {
-                item.as_str().map(|s| FileClaim {
-                    extension: normalize_ext(s),
-                })
+                if let Some(s) = item.as_str() {
+                    out.push(FileClaim {
+                        extension: normalize_ext(s),
+                        processor: None,
+                    });
+                }
             }
             ConfigValueKind::Map(_) => {
-                item.get("extension")
-                    .and_then(|v| v.as_str())
-                    .map(|s| FileClaim {
-                        extension: normalize_ext(s),
-                    })
+                let Some(ext) = item.get("extension").and_then(|v| v.as_str()) else {
+                    continue;
+                };
+                let processor = item
+                    .get("processor")
+                    .map(parse_processor_spec)
+                    .transpose()?;
+                out.push(FileClaim {
+                    extension: normalize_ext(ext),
+                    processor,
+                });
             }
-            _ => None,
-        })
-        .collect()
+            _ => {}
+        }
+    }
+    Ok(out)
+}
+
+/// Parse a `processor:` value (Plan 7b) into a validated `ProcessorSpec`.
+///
+/// Accepts a bare name (`processor: spin`) or a map (`processor: { name:
+/// percent, language: julia, comment?: "#" }`). `percent` has no valid bare
+/// form (`language` is required); `comment` defaults to `"#"` when absent.
+/// An unknown name, or `percent` missing `language`, is a hard error.
+fn parse_processor_spec(cv: &ConfigValue) -> Result<ProcessorSpec> {
+    match &cv.value {
+        ConfigValueKind::Scalar {
+            yaml: yaml_rust2::Yaml::String(s),
+            ..
+        } => match s.as_str() {
+            "spin" => Ok(ProcessorSpec::Spin),
+            "percent" => Err(crate::error::QuartoError::Other(
+                "processor 'percent' requires a 'language' parameter — use \
+                 '{ name: percent, language: <lang> }', not the bare name 'percent'"
+                    .to_string(),
+            )),
+            other => Err(crate::error::QuartoError::Other(format!(
+                "unknown content processor '{other}' in claims-files entry \
+                 (known processors: percent, spin)"
+            ))),
+        },
+        ConfigValueKind::Map(_) => {
+            let name = cv.get("name").and_then(|v| v.as_str()).ok_or_else(|| {
+                crate::error::QuartoError::Other(
+                    "processor entry is missing required 'name' field".to_string(),
+                )
+            })?;
+            match name {
+                "spin" => Ok(ProcessorSpec::Spin),
+                "percent" => {
+                    let language =
+                        cv.get("language").and_then(|v| v.as_str()).ok_or_else(|| {
+                            crate::error::QuartoError::Other(
+                                "processor 'percent' requires a 'language' field".to_string(),
+                            )
+                        })?;
+                    let comment = cv
+                        .get("comment")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("#")
+                        .to_string();
+                    Ok(ProcessorSpec::Percent {
+                        language: language.to_string(),
+                        comment,
+                    })
+                }
+                other => Err(crate::error::QuartoError::Other(format!(
+                    "unknown content processor '{other}' in claims-files entry \
+                     (known processors: percent, spin)"
+                ))),
+            }
+        }
+        _ => Err(crate::error::QuartoError::Other(
+            "processor entry must be a string name or a map with a 'name' field".to_string(),
+        )),
+    }
 }
 
 /// Parse shortcodes from the contributes section.
@@ -1842,7 +1921,8 @@ contributes:
                     claims_files.as_deref(),
                     Some(
                         &[FileClaim {
-                            extension: "echo".to_string()
+                            extension: "echo".to_string(),
+                            processor: None,
                         }][..]
                     ),
                     "claims-files bare-string shorthand must normalize to undotted lowercase"
@@ -1911,20 +1991,208 @@ contributes:
                 assert_eq!(
                     claims[0],
                     FileClaim {
-                        extension: "echo".to_string()
+                        extension: "echo".to_string(),
+                        processor: None,
                     },
                     "bare-string form must normalize undotted lowercase"
                 );
                 assert_eq!(
                     claims[1],
                     FileClaim {
-                        extension: "echo".to_string()
+                        extension: "echo".to_string(),
+                        processor: None,
                     },
                     "object-map form must normalize undotted lowercase"
                 );
             }
             other => panic!("expected External, got {:?}", other),
         }
+    }
+
+    // --- T-schema (Plan 7b Phase 1): `processor:` on `claims-files`. ---
+
+    /// Bare-name `processor: spin` parses to `ProcessorSpec::Spin`.
+    #[test]
+    fn t_schema_processor_bare_spin() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/my-ext");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+title: Engine Extension
+author: Author
+contributes:
+  engines:
+    - path: engine.js
+      claims-files:
+        - extension: ".R"
+          processor: spin
+"#,
+        );
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+        match &ext.contributes.engines[0] {
+            EngineContribution::External { claims_files, .. } => {
+                let claims = claims_files.as_ref().unwrap();
+                assert_eq!(claims.len(), 1);
+                assert_eq!(claims[0].extension, "r");
+                assert_eq!(claims[0].processor, Some(ProcessorSpec::Spin));
+            }
+            other => panic!("expected External, got {:?}", other),
+        }
+    }
+
+    /// Map-form `processor: { name: percent, language: julia }` parses with
+    /// `comment` defaulted to `"#"`.
+    #[test]
+    fn t_schema_processor_map_percent_comment_defaults_hash() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/my-ext");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+title: Engine Extension
+author: Author
+contributes:
+  engines:
+    - path: engine.js
+      claims-files:
+        - extension: ".jl"
+          processor: { name: percent, language: julia }
+"#,
+        );
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+        match &ext.contributes.engines[0] {
+            EngineContribution::External { claims_files, .. } => {
+                let claims = claims_files.as_ref().unwrap();
+                assert_eq!(claims[0].extension, "jl");
+                assert_eq!(
+                    claims[0].processor,
+                    Some(ProcessorSpec::Percent {
+                        language: "julia".to_string(),
+                        comment: "#".to_string(),
+                    })
+                );
+            }
+            other => panic!("expected External, got {:?}", other),
+        }
+    }
+
+    /// An explicit `comment:` overrides the `"#"` default (e.g. `q`'s `/`).
+    #[test]
+    fn t_schema_processor_map_percent_explicit_comment() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/my-ext");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+title: Engine Extension
+author: Author
+contributes:
+  engines:
+    - path: engine.js
+      claims-files:
+        - extension: ".q"
+          processor: { name: percent, language: q, comment: "/" }
+"#,
+        );
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+        match &ext.contributes.engines[0] {
+            EngineContribution::External { claims_files, .. } => {
+                let claims = claims_files.as_ref().unwrap();
+                assert_eq!(
+                    claims[0].processor,
+                    Some(ProcessorSpec::Percent {
+                        language: "q".to_string(),
+                        comment: "/".to_string(),
+                    })
+                );
+            }
+            other => panic!("expected External, got {:?}", other),
+        }
+    }
+
+    /// An unknown processor name is a loud parse error, never a silent drop.
+    #[test]
+    fn t_schema_processor_unknown_name_is_parse_error() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/my-ext");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+title: Engine Extension
+author: Author
+contributes:
+  engines:
+    - path: engine.js
+      claims-files:
+        - extension: ".foo"
+          processor: bogus
+"#,
+        );
+        let runtime = make_runtime();
+        let err = read_extension(&file, &runtime).expect_err("unknown processor must error");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("bogus"),
+            "error should name the unknown processor: {msg}"
+        );
+    }
+
+    /// A bare `processor: percent` (missing the required `language`) is a
+    /// loud parse error — percent has no valid bare form.
+    #[test]
+    fn t_schema_processor_bare_percent_missing_language_is_parse_error() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/my-ext");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+title: Engine Extension
+author: Author
+contributes:
+  engines:
+    - path: engine.js
+      claims-files:
+        - extension: ".py"
+          processor: percent
+"#,
+        );
+        let runtime = make_runtime();
+        let err = read_extension(&file, &runtime).expect_err("bare percent must error");
+        assert!(
+            err.to_string().contains("language"),
+            "error should mention the missing 'language' param: {err}"
+        );
+    }
+
+    /// A map-form `processor: { name: percent }` (missing `language`) is
+    /// also a loud parse error.
+    #[test]
+    fn t_schema_processor_map_percent_missing_language_is_parse_error() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/my-ext");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+title: Engine Extension
+author: Author
+contributes:
+  engines:
+    - path: engine.js
+      claims-files:
+        - extension: ".py"
+          processor: { name: percent }
+"#,
+        );
+        let runtime = make_runtime();
+        let err = read_extension(&file, &runtime).expect_err("percent without language must error");
+        assert!(
+            err.to_string().contains("language"),
+            "error should mention the missing 'language' param: {err}"
+        );
     }
 
     /// Field-absent → `None`; present-but-empty → `Some(empty)`.

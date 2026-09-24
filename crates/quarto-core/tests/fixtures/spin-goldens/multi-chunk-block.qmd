@@ -1,0 +1,9 @@
+Two chunks back to back, with no doc line between them.
+
+```{r label-a}
+1 + 1
+```
+```{r label-b}
+2 + 2
+```
+
