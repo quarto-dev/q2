@@ -59,6 +59,34 @@ pub enum SectionKind {
     },
 }
 
+/// Which kind of working tree the managed section is written into.
+/// Only a linked worktree under `.worktrees/` sits at `../..` from the
+/// main repo, so only that variant may claim it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Checkout {
+    Worktree,
+    Main,
+}
+
+impl Checkout {
+    fn header(self) -> &'static str {
+        match self {
+            Checkout::Worktree => {
+                "# Worktree Context\n\n\
+                 This is a **worktree** of the q2 repository. Main repo: `../..`\n\n"
+            }
+            Checkout::Main => "# Task Context\n\n",
+        }
+    }
+
+    fn noun(self) -> &'static str {
+        match self {
+            Checkout::Worktree => "worktree",
+            Checkout::Main => "checkout",
+        }
+    }
+}
+
 pub fn derive_slug(title: &str) -> Result<String> {
     let tokens: Vec<String> = title
         .to_lowercase()
@@ -205,7 +233,8 @@ pub fn strip_managed_section(content: &str) -> Result<String> {
     Ok(out)
 }
 
-pub fn build_section(kind: &SectionKind) -> String {
+pub fn build_section(kind: &SectionKind, checkout: Checkout) -> String {
+    let noun = checkout.noun();
     let body = match kind {
         SectionKind::Braid {
             id,
@@ -214,14 +243,15 @@ pub fn build_section(kind: &SectionKind) -> String {
         } => {
             let title = marker_safe(title);
             let mut s = String::new();
-            s.push_str("# Worktree Context\n\n");
-            s.push_str("This is a **worktree** of the q2 repository. Main repo: `../..`\n\n");
+            s.push_str(checkout.header());
             s.push_str(&format!("**Braid:** {id} \u{2014} {title}\n"));
             if let Some(url) = github_url {
                 s.push_str(&format!("**GitHub:** {url}\n"));
             }
             s.push_str("**Plan:** _none yet \u{2014} replace this with `claude-notes/plans/YYYY-MM-DD-<name>.md` once you create the plan file._\n");
-            s.push_str("**Skill:** `/investigate-beads` continues this worktree's work.\n");
+            s.push_str(&format!(
+                "**Skill:** `/investigate-beads` continues this {noun}'s work.\n"
+            ));
             s.push('\n');
             s.push_str(&format!(
                 "Run `braid show {id}` for current status and notes.\n"
@@ -231,8 +261,7 @@ pub fn build_section(kind: &SectionKind) -> String {
         SectionKind::Issue { number, title, url } => {
             let title = marker_safe(title);
             let mut s = String::new();
-            s.push_str("# Worktree Context\n\n");
-            s.push_str("This is a **worktree** of the q2 repository. Main repo: `../..`\n\n");
+            s.push_str(checkout.header());
             s.push_str(&format!("**GitHub issue:** #{number} \u{2014} {title}\n"));
             s.push_str(&format!("**URL:** {url}\n"));
             s.push_str(&format!(
@@ -244,13 +273,14 @@ pub fn build_section(kind: &SectionKind) -> String {
         }
         SectionKind::Upgrade { date } => {
             let mut s = String::new();
-            s.push_str("# Worktree Context\n\n");
-            s.push_str("This is a **worktree** of the q2 repository. Main repo: `../..`\n\n");
+            s.push_str(checkout.header());
             s.push_str(&format!(
                 "**Task:** Cargo dependency upgrade \u{2014} {date}\n"
             ));
             s.push_str("**Plan:** _none yet \u{2014} replace this with a plan file path if you create one._\n");
-            s.push_str("**Skill:** `/upgrade-cargo-deps` continues this worktree's work.\n");
+            s.push_str(&format!(
+                "**Skill:** `/upgrade-cargo-deps` continues this {noun}'s work.\n"
+            ));
             s
         }
     };
@@ -651,7 +681,7 @@ pub fn run(args: Args) -> Result<()> {
         // No beads redirect: braid worktrees under `.worktrees/` resolve
         // the skein via the repo-root `.braid.toml` walk-up (or the
         // committed `.braid-project` marker + user config).
-        let section = build_section(&plan.kind);
+        let section = build_section(&plan.kind, Checkout::Worktree);
         let claude_local = plan.dir.join("CLAUDE.local.md");
         update_claude_local_md(&claude_local, &section)?;
         Ok(())
@@ -1085,11 +1115,14 @@ mod tests {
     }
 
     fn make_dummy_section() -> String {
-        build_section(&SectionKind::Braid {
-            id: "bd-xxxx".into(),
-            title: "Demo".into(),
-            github_url: None,
-        })
+        build_section(
+            &SectionKind::Braid {
+                id: "bd-xxxx".into(),
+                title: "Demo".into(),
+                github_url: None,
+            },
+            Checkout::Worktree,
+        )
     }
 
     #[test]
@@ -1338,27 +1371,65 @@ mod tests {
 
     #[test]
     fn section_beads_with_github() {
-        let s = build_section(&SectionKind::Braid {
-            id: "bd-1d3e".into(),
-            title: "Fix X".into(),
-            github_url: Some("https://github.com/quarto-dev/q2/issues/42".into()),
-        });
+        let s = build_section(
+            &SectionKind::Braid {
+                id: "bd-1d3e".into(),
+                title: "Fix X".into(),
+                github_url: Some("https://github.com/quarto-dev/q2/issues/42".into()),
+            },
+            Checkout::Worktree,
+        );
         assert!(s.starts_with(BEGIN_MARKER));
         assert!(s.trim_end().ends_with(END_MARKER));
         assert!(s.contains("**Braid:** bd-1d3e — Fix X"));
         assert!(s.contains("**GitHub:** https://github.com/quarto-dev/q2/issues/42"));
-        assert!(s.contains("**Skill:** `/investigate-beads`"));
+        assert!(s.contains("**Skill:** `/investigate-beads` continues this worktree's work."));
         assert!(s.contains("Run `braid show bd-1d3e`"));
         assert!(s.contains("Main repo: `../..`"));
     }
 
     #[test]
+    fn section_in_main_checkout_does_not_claim_worktree() {
+        let kinds = [
+            SectionKind::Braid {
+                id: "bd-1d3e".into(),
+                title: "Fix X".into(),
+                github_url: None,
+            },
+            SectionKind::Issue {
+                number: 157,
+                title: "An issue".into(),
+                url: "https://github.com/quarto-dev/q2/issues/157".into(),
+            },
+            SectionKind::Upgrade {
+                date: "2026-05-11".into(),
+            },
+        ];
+        for kind in &kinds {
+            let s = build_section(kind, Checkout::Main);
+            assert!(s.starts_with(BEGIN_MARKER));
+            assert!(s.trim_end().ends_with(END_MARKER));
+            assert!(s.contains("# Task Context"), "{s}");
+            assert!(!s.contains("Main repo:"), "{s}");
+            assert!(!s.to_lowercase().contains("worktree's"), "{s}");
+            assert!(!s.contains("This is a **worktree**"), "{s}");
+        }
+        let braid = build_section(&kinds[0], Checkout::Main);
+        assert!(braid.contains("**Braid:** bd-1d3e — Fix X"));
+        assert!(braid.contains("**Skill:** `/investigate-beads` continues this checkout's work."));
+        assert!(braid.contains("Run `braid show bd-1d3e`"));
+    }
+
+    #[test]
     fn section_beads_without_github_omits_line() {
-        let s = build_section(&SectionKind::Braid {
-            id: "bd-zzzz".into(),
-            title: "T".into(),
-            github_url: None,
-        });
+        let s = build_section(
+            &SectionKind::Braid {
+                id: "bd-zzzz".into(),
+                title: "T".into(),
+                github_url: None,
+            },
+            Checkout::Worktree,
+        );
         assert!(!s.contains("**GitHub:**"));
         assert!(s.contains("**Braid:** bd-zzzz — T"));
         assert!(s.contains("**Skill:** `/investigate-beads`"));
@@ -1366,11 +1437,14 @@ mod tests {
 
     #[test]
     fn section_issue() {
-        let s = build_section(&SectionKind::Issue {
-            number: 157,
-            title: "An issue".into(),
-            url: "https://github.com/quarto-dev/q2/issues/157".into(),
-        });
+        let s = build_section(
+            &SectionKind::Issue {
+                number: 157,
+                title: "An issue".into(),
+                url: "https://github.com/quarto-dev/q2/issues/157".into(),
+            },
+            Checkout::Worktree,
+        );
         assert!(s.contains("**GitHub issue:** #157 — An issue"));
         assert!(s.contains("**URL:** https://github.com/quarto-dev/q2/issues/157"));
         assert!(s.contains("**Braid:** _none yet"));
@@ -1381,9 +1455,12 @@ mod tests {
 
     #[test]
     fn section_upgrade() {
-        let s = build_section(&SectionKind::Upgrade {
-            date: "2026-05-11".into(),
-        });
+        let s = build_section(
+            &SectionKind::Upgrade {
+                date: "2026-05-11".into(),
+            },
+            Checkout::Worktree,
+        );
         assert!(s.contains("**Task:** Cargo dependency upgrade — 2026-05-11"));
         assert!(s.contains("**Skill:** `/upgrade-cargo-deps`"));
         assert!(!s.contains("**Braid:**"));
@@ -1396,11 +1473,14 @@ mod tests {
         // verbatim — `strip_managed_section` would otherwise pick it up as the
         // section terminator on the next run.
         let evil = format!("real title {END_MARKER} oops");
-        let s = build_section(&SectionKind::Braid {
-            id: "bd-x".into(),
-            title: evil,
-            github_url: None,
-        });
+        let s = build_section(
+            &SectionKind::Braid {
+                id: "bd-x".into(),
+                title: evil,
+                github_url: None,
+            },
+            Checkout::Worktree,
+        );
         // END_MARKER must appear exactly once — at the section's actual close.
         assert_eq!(s.matches(END_MARKER).count(), 1);
         // BEGIN_MARKER ditto.
