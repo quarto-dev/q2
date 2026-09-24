@@ -1,6 +1,6 @@
 # Block-level editorial marks: `::: ++` / `::: --` / `::: >>`
 
-**Status:** Plan agreed (decisions recorded 2026-09-24). **Awaiting go-ahead to execute** — no code written yet.
+**Status:** **Implemented** (2026-09-24) on `braid/bd-an9gkxnp-qmd-block-level-editorial`: all phases done, `cargo xtask verify` green. Awaiting review/merge. Commits: `5337b87ef` (Phase 1), `3f8ac499c` (bd-2281lkrx panic fix), `54824ea1b` (Phases 2/2b/3), `aad95cb70` (Phase 4).
 **Braid:** bd-an9gkxnp · follow-up: bd-t1avfz0n (q2-preview block-comment chrome)
 
 ## Goal
