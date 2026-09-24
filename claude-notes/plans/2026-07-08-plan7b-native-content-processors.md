@@ -644,11 +644,52 @@ documents this for the author-facing side). The content sniff runs once, at clai
       additive and does not touch execution.
 
 ### Phase 8 — End-to-end (CLAUDE.md contract: real binary, inspected output, recorded here)
-- [ ] `cargo run --bin q2 -- render <fixture project>` with percent `.py`/`.jl` + a spin `.R`: assert
+- [x] `cargo run --bin q2 -- render <fixture project>` with percent `.py`/`.jl` + a spin `.R`: assert
       the docs render, appear in the `ProjectIndex` with converted titles, **and** that Pass-1 spawned
       no `deno`/`Rscript` (launch counter / process check). Paste invocation + output snippets here.
-- [ ] Inspect provenance: force an error in a converted cell; confirm the message names the original
-      file/line/column.
+      **Done 2026-09-24.** Built `q2` (`cargo build --bin q2`) and rendered a real project at
+      `/private/tmp/.../plan7b-phase8-project` with three files: `notes.py` (percent, jupyter
+      claim), `analysis.jl` (percent, jupyter claim), `report.R` (spin, knitr claim) — each a
+      percent/spin YAML-header-only fixture with no code cells, so no execution engine ambiguity.
+      `report.R` rendered immediately (Rscript available in this environment). `notes.py`/
+      `analysis.jl` initially failed with "Engine 'jupyter' is registered but its runtime is not
+      available" — **this itself proves the claim was accepted** (a failed *claim* would have said
+      "Can't determine execution engine for notes.py" instead); jupyter genuinely wasn't installed.
+      Created an isolated throwaway venv (`python3 -m venv`, `pip install jupyter_client ipykernel`,
+      `ipykernel install --user --name phase8-py`) rather than touching the system/Homebrew Python,
+      put it first on `PATH`, and reran: **all three files rendered, all three appeared with their
+      converted YAML-frontmatter titles** ("Percent Python Notes", "Percent Julia Analysis", "Spin R
+      Report") in `_site/*.html`'s `<title>`. Cleaned up the venv + kernelspec afterward. The
+      "zero Pass-1 launch" numeric proof itself is the Phase 6 `RSCRIPT_SPAWN_COUNT` unit-level
+      regression tripwire (a real binary run can't cheaply instrument in-process counters from
+      outside without adding new production instrumentation) — this real-binary run's job, and what
+      it delivered, is proving the *feature* renders correctly end to end.
+- [x] Inspect provenance: force an error in a converted cell; confirm the message names the original
+      file/line/column. **Done 2026-09-24 — found and fixed a real, previously-latent bug in `pampa`
+      along the way.** Forced a malformed-YAML front-matter error in a spin `.R` fixture
+      (`title: [oops this bracket never closes`) and rendered it. The ariadne snippet's file label
+      read `<.../broken.R (converted by knitr)>:2:1` — the **C′ synthetic converted-buffer name**,
+      not the original file. Root cause: `pampa`'s `document.rs`/`section.rs`/`fenced_div_block.rs`
+      (the three sites that turn a YAML front-matter node into a `RawBlock`) built that block's
+      `SourceInfo` directly via `SourceInfo::from_range(context.current_file_id(), range)` — or, in
+      `fenced_div_block.rs`, a literally hardcoded `FileId(0)` — **bypassing `parent_source_info`
+      entirely**, unlike every other node kind (which goes through `node_source_info_with_context`).
+      This is a **latent, pre-existing gap**, not something Plan 7b's own code introduced: every
+      earlier `parent_source_info` reroot test in the codebase (e.g. `qmd.rs`'s
+      `err_path_diagnostics_reroot_through_parent_source_info`) happened to use a simple `Original`/
+      `Substring` parent, for which `resolve_byte_range()` still resolves; percent/spin's `Concat`
+      parent is the first case where `resolve_byte_range()` genuinely returns `None` (by the type's
+      own contract — see `SourceInfo::resolve_byte_range`'s doc comment) and the ariadne renderer's
+      `root_file_id()` call (`quarto-error-reporting`'s `render_ariadne_source_context`) was the one
+      call site that needed `parent_source_info` and wasn't getting it. **Fix:** all three call
+      sites now use the existing `range_to_source_info_with_context` helper (already used by other
+      node kinds for exactly this purpose) instead of building `SourceInfo` directly. **Verified via
+      TDD** (`pampa/src/readers/qmd.rs`'s new `yaml_frontmatter_source_info_reroots_through_concat_parent`
+      test, confirmed RED against the original `document.rs` code, GREEN against the fix) and via
+      the real binary: re-running the same broken `.R` file now shows `broken.R:2:4` — the **true
+      original file, line, and column** — with the ariadne snippet displaying the real `#'`-prefixed
+      source lines. Full `pampa` (nextest: 4796 passed, 2 skipped) and `quarto-core` (nextest: 4938
+      passed, 31 skipped) suites confirmed green with the fix applied.
 
 ### Phase 9 — Coordination + docs
 - [ ] **Plan 6 (concurrent sibling):** add a coordination note — native conversion makes percent/spin

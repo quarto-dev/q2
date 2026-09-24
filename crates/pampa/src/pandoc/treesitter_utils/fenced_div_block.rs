@@ -9,7 +9,7 @@
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::attr::Attr;
 use crate::pandoc::block::{Block, Div, RawBlock};
-use crate::pandoc::location::node_source_info_with_context;
+use crate::pandoc::location::{node_source_info_with_context, range_to_source_info_with_context};
 use hashlink::LinkedHashMap;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
@@ -42,10 +42,13 @@ pub fn process_fenced_div_block(
                 content.push(Block::RawBlock(RawBlock {
                     format: "quarto_minus_metadata".to_string(),
                     text,
-                    source_info: quarto_source_map::SourceInfo::from_range(
-                        quarto_source_map::FileId(0),
-                        range,
-                    ),
+                    // Was hardcoded to `FileId(0)` — wrong even outside a
+                    // re-parse whenever this isn't the first-registered
+                    // file, and doesn't reroot through `parent_source_info`
+                    // when this parse IS a re-parse (Plan 7b). See
+                    // `document.rs`'s identical fix for the top-level
+                    // metadata block.
+                    source_info: range_to_source_info_with_context(&range, context),
                 }));
             }
             _ => {

@@ -336,4 +336,59 @@ mod tests {
             }
         }
     }
+
+    /// Plan 7b's `document.rs`/`section.rs`/`fenced_div_block.rs` fix: the
+    /// YAML front-matter `RawBlock`'s `source_info` must reroot through
+    /// `parent_source_info` too — found via `q2 render` on a real spin-
+    /// converted `.R` file with malformed front matter, whose ariadne
+    /// snippet named the CONVERTED buffer's synthetic `"<path (converted by
+    /// knitr)>"` label instead of the original file.
+    ///
+    /// This specifically exercises a **`Concat`** parent (what percent/spin
+    /// actually produce), not the `Original`/`Substring` parent every
+    /// pre-existing reroot test above used — `resolve_byte_range()` returns
+    /// `None` for a `Substring` over `Concat` (by design, see
+    /// `quarto_source_map::SourceInfo::resolve_byte_range`'s doc comment),
+    /// which is exactly the gap that let the bug through: every existing
+    /// test happened to use a shape `resolve_byte_range` still handles.
+    /// `root_file_id()` (what the ariadne renderer actually calls) is the
+    /// right check here.
+    ///
+    /// Named revert: restore any of the three call sites to
+    /// `SourceInfo::from_range(context.current_file_id(), range)` (or
+    /// `fenced_div_block.rs`'s literal `FileId(0)`) → `root_file_id()`
+    /// returns `Some(FileId(0))` (the throwaway `<converted>` context's own
+    /// file) instead of `Some(FileId(7))` → RED.
+    #[test]
+    fn yaml_frontmatter_source_info_reroots_through_concat_parent() {
+        use quarto_source_map::{FileId, SourceInfo};
+
+        let text = "---\ntitle: hello\n---\n\nbody text\n";
+        // A `Concat` parent whose single piece maps the whole converted
+        // text back to FileId(7) — the shape a content processor's
+        // `Converted.source_info` actually has.
+        let parent = SourceInfo::concat(vec![(
+            SourceInfo::original(FileId(7), 100, 100 + text.len()),
+            text.len(),
+        )]);
+        let mut sink = std::io::sink();
+        let (pandoc, _ctx, warnings) = super::read(
+            text.as_bytes(),
+            false,
+            "<converted>",
+            &mut sink,
+            true,
+            Some(parent),
+        )
+        .expect("well-formed YAML front matter must parse");
+        assert!(warnings.is_empty(), "unexpected warnings: {warnings:#?}");
+
+        assert_eq!(
+            pandoc.meta.source_info.root_file_id(),
+            Some(FileId(7)),
+            "front-matter metadata's source_info must root to the parent \
+             file (FileId(7)), not the throwaway local context; got {:#?}",
+            pandoc.meta.source_info
+        );
+    }
 }

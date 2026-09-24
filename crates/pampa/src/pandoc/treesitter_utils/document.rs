@@ -8,6 +8,7 @@
 
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::block::{Block, RawBlock};
+use crate::pandoc::location::range_to_source_info_with_context;
 use crate::pandoc::pandoc::Pandoc;
 use quarto_pandoc_types::ConfigValue;
 
@@ -29,10 +30,13 @@ pub fn process_document(
                 blocks.push(Block::RawBlock(RawBlock {
                     format: "quarto_minus_metadata".to_string(),
                     text,
-                    source_info: quarto_source_map::SourceInfo::from_range(
-                        context.current_file_id(),
-                        range,
-                    ),
+                    // Reroot through `parent_source_info` when this parse is
+                    // itself a re-parse (e.g. a content processor's
+                    // converted buffer, Plan 7b) — otherwise a YAML
+                    // front-matter error's ariadne snippet resolves against
+                    // the converted buffer instead of the true original
+                    // file.
+                    source_info: range_to_source_info_with_context(&range, context),
                 }));
             }
             PandocNativeIntermediate::IntermediateUnknown(_) => {
