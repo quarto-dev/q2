@@ -20,19 +20,22 @@ interface ViewToggleControlProps {
   fraction?: number;
   /** Jump the divider to a preset fraction (animated by the caller). */
   onSelect?: (fraction: number) => void;
+  /** Gray out every preset (no preview pane for the current file). */
+  disabled?: boolean;
 }
 
 function isActive(fraction: number | undefined, preset: number): boolean {
   return fraction !== undefined && Math.abs(fraction - preset) < 0.01;
 }
 
-export default function ViewToggleControl({ fraction, onSelect }: ViewToggleControlProps) {
+export default function ViewToggleControl({ fraction, onSelect, disabled = false }: ViewToggleControlProps) {
   return (
     <div className="view-toggle-control">
       <Tooltip content={viewToggle.expandMarkup}>
         <button
           className={`view-toggle-btn${isActive(fraction, SPLIT_PRESETS.markup) ? ' active' : ''}`}
           onClick={() => onSelect?.(SPLIT_PRESETS.markup)}
+          disabled={disabled}
           aria-label={viewToggle.markupView}
           aria-pressed={isActive(fraction, SPLIT_PRESETS.markup)}
         >
@@ -43,6 +46,7 @@ export default function ViewToggleControl({ fraction, onSelect }: ViewToggleCont
         <button
           className={`view-toggle-btn${isActive(fraction, SPLIT_PRESETS.split) ? ' active' : ''}`}
           onClick={() => onSelect?.(SPLIT_PRESETS.split)}
+          disabled={disabled}
           aria-label={viewToggle.splitView}
           aria-pressed={isActive(fraction, SPLIT_PRESETS.split)}
         >
@@ -53,6 +57,7 @@ export default function ViewToggleControl({ fraction, onSelect }: ViewToggleCont
         <button
           className={`view-toggle-btn${isActive(fraction, SPLIT_PRESETS.preview) ? ' active' : ''}`}
           onClick={() => onSelect?.(SPLIT_PRESETS.preview)}
+          disabled={disabled}
           aria-label={viewToggle.previewView}
           aria-pressed={isActive(fraction, SPLIT_PRESETS.preview)}
         >
