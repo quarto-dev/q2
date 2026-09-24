@@ -1208,6 +1208,27 @@ mark {
   }
 }
 
+// Block forms: `::: ++`, `::: --`, `::: !!` and `::: >>` are divs carrying
+// the classes above. Pad them so a tint frames the content evenly (the
+// last child's bottom margin would otherwise sit inside it), and give
+// block comments a left rule; without a background they are otherwise
+// indistinguishable from an italic paragraph.
+div.quarto-insert,
+div.quarto-delete,
+div.quarto-highlight,
+div.quarto-edit-comment {
+  padding: 0.5em 0.75em;
+  margin-bottom: $paragraph-margin-bottom;
+
+  > :last-child {
+    margin-bottom: 0;
+  }
+}
+
+div.quarto-edit-comment {
+  border-left: 3px solid $editorial-comment-color;
+}
+
 // The 1.4 figcaption classes are
 //
 // quarto-float-caption or quarto-subfloat-caption, depending
