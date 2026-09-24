@@ -119,6 +119,75 @@ all — produces a warning
 ([`Q-5-13`](/errors/project/Q-5-13.qmd)) so a silent gap in your site
 doesn't go unnoticed.
 
+Files inside a [nested project](#nested-projects) are also left out
+unless a pattern names that directory.
+
+## Nested projects
+
+A subdirectory with its own `_quarto.yml` (or `_quarto.yaml`) is a
+**nested project**, even inside another project and even when that
+file has no `project:` key. Its files belong to it: `q2 render sub`
+renders them with the nested config, and the outer project's render
+list stops at the directory.
+
+```
+my-site/
+├── _quarto.yml        ← outer project
+├── index.qmd          ← in the outer render list
+└── sub/
+    ├── _quarto.yml    ← nested project: owns everything under sub/
+    ├── index.qmd
+    └── page.qmd
+```
+
+Whether a pattern reaches into `sub/` depends on whether it **names**
+the directory. Look at the part of the pattern before its first
+wildcard:
+
+| Pattern | Reaches into `sub/`? |
+|---------|----------------------|
+| `**/*.qmd` (the default) | no |
+| `**/*.md` | no |
+| `*/page.qmd` | no, because `*` doesn't name `sub` |
+| `sub/page.qmd` | yes |
+| `sub/*.qmd` | yes |
+| `sub/**/*.qmd` | yes |
+| `sub` (bare directory) | yes |
+
+When a pattern doesn't reach in, the nested project's files are left
+out and Quarto warns once per render, listing every nested project it
+skipped ([`Q-5-31`](/errors/project/Q-5-31.qmd)). A `!` pattern that
+excludes the directory (e.g. `"!sub/**"`) silences the warning. You
+have told Quarto the directory isn't part of this project.
+
+When a pattern does reach in, the matched files render **as part of
+the outer project, with the outer config**. The nested `_quarto.yml`
+is not applied. Quarto warns about that too
+([`Q-5-32`](/errors/project/Q-5-32.qmd)), because the same page
+renders differently under `q2 render sub`.
+
+A nested project inside a nested project is its own boundary. Naming
+`sub` doesn't reach into `sub/deeper/` if that directory has its own
+`_quarto.yml`.
+
+Only `_quarto.yml` and `_quarto.yaml` mark a nested project. A
+profile file such as `_quarto-prod.yml` on its own doesn't. To apply
+settings to one directory of a project without splitting it off, use
+`_metadata.yml`, which merges into every document in its directory
+and leaves the directory in the outer project.
+
+::: {.callout-note}
+## Quarto 1 behaves differently
+
+Quarto 1 ignores a nested `_quarto.yml` when rendering the outer
+project, without any warning. It renders `sub/page.qmd` into the outer
+site with the outer config, while `quarto render sub` renders it with
+the nested config. If you migrate a site and pages under a
+subdirectory go missing, check for a stray `_quarto.yml` there. Rename
+it to `_metadata.yml` if it only held settings, or remove it if it's
+left over.
+:::
+
 ## Order
 
 Positive patterns contribute files in the order you list them

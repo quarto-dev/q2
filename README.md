@@ -32,7 +32,10 @@ A nightly is built whenever `main` has changes no release has shipped,
 reports a version like `0.33.0-nightly.20260919` (`q2 --version`), and
 replaces the previous nightly: the `nightly` tag moves daily and only the
 latest one is downloadable. Nightlies are signed with the same key as
-releases.
+releases. The nightly lookup reads the GitHub API, which allows 60
+anonymous requests per hour per IP address; on a shared network or CI
+runner, set `GH_TOKEN` (or `GITHUB_TOKEN`) to a GitHub token to lift
+that limit.
 
 The installer downloads the release archive for your platform, verifies
 its SHA-256 checksum **and** its Ed25519 signature ([minisign](https://jedisct1.github.io/minisign/),

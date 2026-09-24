@@ -98,7 +98,7 @@ pub fn expand(
 /// `data/**/*.csv` → `data`; `*.csv` → `""`; `a/b/c.csv` → `a/b`
 /// (the final segment is dropped because it names the file, not a
 /// directory to descend into).
-fn literal_prefix(pattern: &str) -> String {
+pub(crate) fn literal_prefix(pattern: &str) -> String {
     let segments: Vec<&str> = pattern.split('/').collect();
     let mut prefix: Vec<&str> = Vec::new();
     for segment in segments.iter().take(segments.len().saturating_sub(1)) {

@@ -1,0 +1,65 @@
+---
+title: "Render Pattern Reaches Into Nested Project"
+description: "A `project.render` pattern names files inside a nested project; they render with this project's config."
+code: Q-5-32
+subsystem: project
+status: complete
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-32` — Render Pattern Reaches Into Nested Project
+
+> A `project.render` pattern names files inside a nested project (a
+> subdirectory with its own `_quarto.yml`). They render as part of
+> this project, with this project's config.
+
+## What this means
+
+A subdirectory with its own `_quarto.yml` (or `_quarto.yaml`) is a
+nested project. Implicit patterns skip it (see
+[`Q-5-31`](Q-5-31.qmd)). A pattern that **names the nested
+directory** is explicit, though, so its matches still render in the
+outer project:
+
+```yaml
+project:
+  render:
+    - index.qmd
+    - sub/page.qmd     # sub/ has its own _quarto.yml
+```
+
+Here `sub/page.qmd` renders into the outer site with the outer
+project's chrome and metadata. The nested `sub/_quarto.yml` does not
+apply. `q2 render sub` would render the same page with the nested
+config instead. The warning says so because it's easy to miss.
+
+A pattern counts as explicit when the directories it names before
+its first wildcard reach the nested directory or go below it:
+
+| Pattern          | Explicit for `sub/`? |
+|------------------|----------------------|
+| `sub/page.qmd`   | yes                  |
+| `sub/*.qmd`      | yes                  |
+| `sub/**/*.qmd`   | yes                  |
+| `sub`            | yes (a bare directory means everything under it) |
+| `**/*.qmd`       | no, so `sub/` is skipped |
+| `*/page.qmd`     | no, so `sub/` is skipped |
+
+If `sub/` itself contains a deeper nested project, such as
+`sub/deeper/_quarto.yml`, naming `sub` does not reach into
+`sub/deeper`. The pattern has to name `sub/deeper` itself.
+
+## How to fix it
+
+- **The files belong to the outer project.** Move the nested
+  `_quarto.yml` out of the directory, or rename it to `_metadata.yml`
+  if it only holds settings for that directory. The warning then
+  goes away.
+- **The directory really is a separate project.** Remove the
+  pattern from the outer `project.render`, and render the nested
+  project on its own with `q2 render sub`.
+- **You deliberately render these pages in both places.** The
+  warning is informational. It is reported once for the whole
+  project, so the `diagnostics:` key cannot silence it yet.
