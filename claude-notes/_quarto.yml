@@ -7,6 +7,8 @@ project:
   output-dir: _site
   render:
     - "**/*.md"
+    # session-specific symlink to the active plan (gitignored)
+    - "!plans/CURRENT.md"
     # TEMPORARY: nested repro projects (directories with their own
     # _quarto.yml) that contain .md files. The q2 nightly we render with
     # (0.33.0-nightly.20260922) absorbs nested projects into the outer site;

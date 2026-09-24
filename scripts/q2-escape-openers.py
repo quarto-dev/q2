@@ -23,6 +23,7 @@ Supported codes: see RULES below.
 import argparse
 import collections
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -83,6 +84,36 @@ def locate(line, col, ch):
     return None
 
 
+CODE_SPAN = re.compile(r"(`+)(?:.*?[^`])?\1(?!`)")
+
+
+def block_escape(lines, ln, pattern):
+    """Escape every unescaped match of `pattern` outside code spans in the
+    block (run of non-blank lines) that ends at or before 1-based `ln`.
+
+    Fallback for diagnostics with no opener position: the error is reported
+    at the end of the block (typical in pipe tables), so the opener is
+    somewhere above. Returns the number of escapes."""
+    e = min(ln, len(lines))
+    while e > 1 and lines[e - 1].strip() == "":
+        e -= 1
+    s = e
+    while s > 1 and lines[s - 2].strip() != "":
+        s -= 1
+    n = 0
+    for i in range(s - 1, e):
+        line = lines[i]
+        spans = [m.span() for m in CODE_SPAN.finditer(line)]
+        hits = [m.start() for m in pattern.finditer(line)
+                if not any(a <= m.start() < b for a, b in spans)
+                and (m.start() == 0 or line[m.start() - 1] != "\\")]
+        for j in reversed(hits):
+            line = line[:j] + "\\" + line[j:]
+        lines[i] = line
+        n += len(hits)
+    return n
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("project")
@@ -90,7 +121,12 @@ def main():
     ap.add_argument("--q2", default="q2")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--max-rounds", type=int, default=10)
+    ap.add_argument("--block-pattern", metavar="REGEX",
+                    help="for diagnostics without an opener position, escape every match of "
+                         "REGEX (outside code spans) in the enclosing block; the match start is "
+                         "the escaped character. E.g. '~' for Q-2-17, \"(?<=`)'(?=\\w)\" for Q-2-7")
     args = ap.parse_args()
+    block_re = re.compile(args.block_pattern) if args.block_pattern else None
     ch, _ = RULES[args.code]
 
     total = 0
@@ -109,6 +145,14 @@ def main():
             for ln, col in sorted(locs, key=lambda t: (t[0], -t[1])):
                 line = lines[ln - 1]
                 i = locate(line, col, ch)
+                if i is None and col < 0 and block_re is not None:
+                    n = block_escape(lines, ln, block_re)
+                    if n:
+                        if args.dry_run:
+                            print(f"{f}:{ln}: [block fallback: {n} escapes]")
+                        changed = True
+                        edits += n
+                        continue
                 if i is None:
                     if (f, ln, col) not in seen_skips:
                         seen_skips.add((f, ln, col))
