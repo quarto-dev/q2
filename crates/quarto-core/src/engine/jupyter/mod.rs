@@ -42,6 +42,7 @@ mod error;
 mod execute;
 mod kernelspec;
 mod session;
+mod stored;
 mod text_execute;
 
 pub use daemon::{JupyterDaemon, KernelScope, daemon, kernel_scope};
@@ -49,6 +50,7 @@ pub use error::{JupyterError, Result};
 pub use execute::{CellOutput, ExecuteResult, ExecuteStatus, MimeBundle};
 pub use kernelspec::{ResolvedKernel, find_kernelspec, is_jupyter_language, list_kernelspecs};
 pub use session::{KernelInfo, KernelSession, SessionKey};
+pub use stored::IpynbReplayEngine;
 
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -169,6 +171,13 @@ impl JupyterEngine {
                     comment: "/".to_string(),
                 }),
             },
+            // Plan 7c Phase 2: notebooks route through the native ipynb
+            // content processor (sniff + convert + per-cell SourceInfo),
+            // not the jupyter kernel.
+            FileClaim {
+                extension: "ipynb".to_string(),
+                processor: Some(ProcessorSpec::Ipynb),
+            },
         ]
     }
 }
@@ -276,12 +285,13 @@ mod tests {
     // --- Plan 7b Phase 5: builtin file claims. ---
 
     /// `static_file_claims()` (and `file_claims()`, which delegates to it)
-    /// returns all four percent claims — no registry, no engine
-    /// construction beyond the struct literal this test itself makes.
+    /// returns the four percent claims plus the ipynb claim (Plan 7c
+    /// Phase 2) — no registry, no engine construction beyond the struct
+    /// literal this test itself makes.
     #[test]
-    fn static_file_claims_returns_four_percent_claims() {
+    fn static_file_claims_returns_percent_and_ipynb_claims() {
         let claims = JupyterEngine::static_file_claims();
-        assert_eq!(claims.len(), 4);
+        assert_eq!(claims.len(), 5);
         let by_ext = |ext: &str| claims.iter().find(|c| c.extension == ext).unwrap();
 
         for (ext, language, comment) in [
@@ -300,6 +310,11 @@ mod tests {
                 "extension {ext}"
             );
         }
+
+        assert_eq!(
+            by_ext("ipynb").processor,
+            Some(crate::extension::types::ProcessorSpec::Ipynb)
+        );
     }
 
     /// A percent `.py` converts via the default `markdown_for_file`

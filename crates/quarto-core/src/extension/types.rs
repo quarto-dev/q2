@@ -157,6 +157,8 @@ pub enum ProcessorSpec {
     Percent { language: String, comment: String },
     /// `processor: spin` (bare name; takes no params).
     Spin,
+    /// `processor: ipynb` (bare name; takes no params) — Plan 7c.
+    Ipynb,
 }
 
 /// One authoritative static language claim (§3.3). A pure tabulation of

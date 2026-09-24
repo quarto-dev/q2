@@ -222,11 +222,13 @@ mod tests {
     #[test]
     fn builtin_file_claims_returns_jupyter_and_knitr_claims() {
         let claims = builtin_file_claims();
-        // Jupyter's 4 percent claims (.py/.jl/.r/.q) + knitr's 1 spin claim.
-        assert_eq!(claims.len(), 5);
+        // Jupyter's 4 percent claims (.py/.jl/.r/.q) + ipynb (Plan 7c) +
+        // knitr's 1 spin claim.
+        assert_eq!(claims.len(), 6);
         assert!(claims.iter().any(|c| c.extension == "py"));
         assert!(claims.iter().any(|c| c.extension == "jl"));
         assert!(claims.iter().any(|c| c.extension == "q"));
+        assert!(claims.iter().any(|c| c.extension == "ipynb"));
         assert_eq!(claims.iter().filter(|c| c.extension == "r").count(), 2);
     }
 

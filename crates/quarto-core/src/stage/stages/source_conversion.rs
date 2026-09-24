@@ -65,6 +65,16 @@ use crate::stage::{
 };
 use crate::trace_event;
 
+/// What one claiming engine produced for this file (Plan 7c Phase 2): the
+/// converted QMD, the provenance to stamp on `LoadedSource`, and — only on
+/// the processor path — the converter's ephemeral virtual files.
+struct ClaimedConversion {
+    engine_name: String,
+    qmd_text: String,
+    source_info: Option<quarto_source_map::SourceInfo>,
+    files: Vec<(String, String)>,
+}
+
 /// Pre-parse stage: ask engines whether they claim the input file and, if so,
 /// convert it to QMD before `ParseDocumentStage` sees the bytes.
 pub struct SourceConversionStage;
@@ -153,7 +163,7 @@ impl PipelineStage for SourceConversionStage {
         // Iterate engines in deterministic order: contribution_order (TS
         // engines) → built-ins → alphabetical remainder.
         let engines = ctx.registry.engines_in_order();
-        let mut claimer: Option<(String, String, Option<quarto_source_map::SourceInfo>)> = None; // (engine_name, qmd_text, source_info)
+        let mut claimer: Option<ClaimedConversion> = None;
 
         // Engines that tried to claim a natively-owned extension (D5). Names
         // are collected rather than warned about inline: the refusal sits
@@ -208,43 +218,100 @@ impl PipelineStage for SourceConversionStage {
             // overrides `claims_file` (always `false`), so without this
             // check a percent/spin claim could never be reached at all.
             match engine.native_claims_file(&path, &ctx.runtime) {
-                Some(true) => {}
+                Some(true) => {
+                    // Plan 7c (open question 7, option (a)): dispatch through
+                    // the registry directly — `markdown_for_file`'s only job
+                    // on this path is to call `convert`, but its
+                    // `(String, SourceInfo)` return type drops the
+                    // converter's ephemeral files, which the SourceContext
+                    // rebuild needs. The file is read here once more (after
+                    // the sniff read), exactly as
+                    // `native_markdown_for_file` did before.
+                    let spec = engine
+                        .native_processor_for_file(&path)
+                        .expect("native_claims_file answered Some(true), so a processor exists");
+                    let content = ctx.runtime.file_read_string(&path).map_err(|e| {
+                        PipelineError::other(format!(
+                            "failed to re-read {:?} for processor conversion: {e}",
+                            source.path
+                        ))
+                    })?;
+                    let converted = crate::engine::content_processors::convert(
+                        &spec,
+                        &path,
+                        &content,
+                        &ctx.runtime,
+                    )
+                    .map_err(|e| {
+                        PipelineError::other(format!(
+                            "Engine '{}' failed to convert {:?}: {}",
+                            engine.name(),
+                            source.path,
+                            e
+                        ))
+                    })?;
+                    let faithful_source_info = (!matches!(
+                        converted.source_info,
+                        quarto_source_map::SourceInfo::Generated(_)
+                    ))
+                    .then_some(converted.source_info);
+                    trace_event!(
+                        ctx,
+                        EventLevel::Debug,
+                        "engine '{}' claims {:?} (processor)",
+                        engine.name(),
+                        source.path
+                    );
+                    claimer = Some(ClaimedConversion {
+                        engine_name: engine.name().to_string(),
+                        qmd_text: converted.markdown,
+                        source_info: faithful_source_info,
+                        files: converted.files,
+                    });
+                    break; // first claimer wins
+                }
                 Some(false) => continue,
                 None => {
                     if !engine.claims_file(&file_str, &ext_for_engine) {
                         continue;
                     }
+
+                    let (qmd_text, source_info) =
+                        engine.markdown_for_file(&path, &ctx.runtime).map_err(|e| {
+                            PipelineError::other(format!(
+                                "Engine '{}' failed to convert {:?}: {}",
+                                engine.name(),
+                                source.path,
+                                e
+                            ))
+                        })?;
+
+                    // Plan 7b "A+": only a genuine Concat/Original/Substring mapping
+                    // is safe to thread forward as `parent_source_info` — the
+                    // dynamic/wire path's placeholder `Generated(By::unknown())`
+                    // carries no offsets to wrap a `Substring` over.
+                    let faithful_source_info =
+                        (!matches!(source_info, quarto_source_map::SourceInfo::Generated(_)))
+                            .then_some(source_info);
+
+                    // The dynamic/wire path can never produce ephemeral
+                    // files (its conversion is `Generated` by construction).
+                    trace_event!(
+                        ctx,
+                        EventLevel::Debug,
+                        "engine '{}' claims {:?}",
+                        engine.name(),
+                        source.path
+                    );
+                    claimer = Some(ClaimedConversion {
+                        engine_name: engine.name().to_string(),
+                        qmd_text,
+                        source_info: faithful_source_info,
+                        files: Vec::new(),
+                    });
+                    break; // first claimer wins
                 }
             }
-
-            trace_event!(
-                ctx,
-                EventLevel::Debug,
-                "engine '{}' claims {:?}",
-                engine.name(),
-                source.path
-            );
-
-            let (qmd_text, source_info) =
-                engine.markdown_for_file(&path, &ctx.runtime).map_err(|e| {
-                    PipelineError::other(format!(
-                        "Engine '{}' failed to convert {:?}: {}",
-                        engine.name(),
-                        source.path,
-                        e
-                    ))
-                })?;
-
-            // Plan 7b "A+": only a genuine Concat/Original/Substring mapping
-            // is safe to thread forward as `parent_source_info` — the
-            // dynamic/wire path's placeholder `Generated(By::unknown())`
-            // carries no offsets to wrap a `Substring` over.
-            let faithful_source_info =
-                (!matches!(source_info, quarto_source_map::SourceInfo::Generated(_)))
-                    .then_some(source_info);
-
-            claimer = Some((engine.name().to_string(), qmd_text, faithful_source_info));
-            break; // first claimer wins
         }
 
         // One file, one diagnostic — naming every engine that was refused.
@@ -285,9 +352,9 @@ impl PipelineStage for SourceConversionStage {
         }
 
         match claimer {
-            Some((engine_name, qmd_text, source_info)) => {
+            Some(claimed) => {
                 // Convert: replace content with QMD bytes, stamp provenance.
-                source.content = qmd_text.into_bytes();
+                source.content = claimed.qmd_text.into_bytes();
                 // Only the conversion branch stamps a type. The
                 // pass-through branch below is already correct from load
                 // (`.qmd`/`.md` got `Some(...)` in `LoadedSource::new`), and
@@ -295,10 +362,11 @@ impl PipelineStage for SourceConversionStage {
                 // makes "always `Some` after this stage" an invariant.
                 source.source_type = Some(SourceType::Qmd);
                 source.conversion = Some(ConversionProvenance {
-                    engine: engine_name.clone(),
+                    engine: claimed.engine_name.clone(),
                 });
-                source.source_info = source_info;
-                ctx.claimed_engine_name = Some(engine_name);
+                source.source_info = claimed.source_info;
+                source.files = claimed.files;
+                ctx.claimed_engine_name = Some(claimed.engine_name);
             }
             None if is_qmd_or_md => {
                 // Common fast path: .qmd / .md with no engine claiming it.
@@ -1199,6 +1267,14 @@ mod tests {
         };
         assert_eq!(result.source_type, Some(SourceType::Qmd));
         assert_eq!(ctx.claimed_engine_name, Some("echo-engine".to_string()));
+        // The dynamic/wire path can never produce ephemeral files (its
+        // conversion returns `Generated(By::unknown())` by construction) —
+        // `files` must stay at its default, empty.
+        assert!(
+            result.files.is_empty(),
+            "dynamic conversion must not carry files; got {:?}",
+            result.files
+        );
         assert!(
             !ctx.diagnostics
                 .iter()
@@ -1309,6 +1385,58 @@ mod tests {
         assert!(
             err.to_string().contains("Can't determine execution engine"),
             "unexpected error: {err}"
+        );
+    }
+
+    /// Plan 7c Phase 2 (open question 7, option (a)): a processor-bearing
+    /// conversion transports its ephemeral per-cell files on `LoadedSource`
+    /// alongside the faithful `source_info` — the registry dispatch happens
+    /// in the stage (`content_processors::convert` directly), so the files
+    /// survive the trait hop that used to drop them at
+    /// `markdown_for_file`'s `(String, SourceInfo)` boundary.
+    #[tokio::test]
+    async fn processor_conversion_carries_ephemeral_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join("nb.ipynb"),
+            r#"{"cells":[{"cell_type":"markdown","metadata":{},"source":["first\n"]},{"cell_type":"markdown","metadata":{},"source":["second\n"]}],"metadata":{"kernelspec":{"name":"python3"}},"nbformat":4,"nbformat_minor":5}"#,
+        )
+        .unwrap();
+
+        let reg = EngineRegistry::new();
+        let mut ctx = make_native_ctx_with_registry(reg, tmp.path().to_path_buf());
+        let stage = SourceConversionStage::new();
+
+        let path = tmp.path().join("nb.ipynb");
+        let source = LoadedSource::new(path, std::fs::read(tmp.path().join("nb.ipynb")).unwrap());
+        let output = stage
+            .run(PipelineData::LoadedSource(source), &mut ctx)
+            .await
+            .expect("the ipynb claim must convert natively");
+        let PipelineData::LoadedSource(result) = output else {
+            panic!("expected LoadedSource output");
+        };
+
+        assert_eq!(result.source_type, Some(SourceType::Qmd));
+        assert_eq!(ctx.claimed_engine_name, Some("jupyter".to_string()));
+
+        // One ephemeral virtual file per cell, in notebook order, with the
+        // converter's `<name>[cell N, kind]` labels (plan decision 5).
+        assert_eq!(result.files.len(), 2, "got {:?}", result.files);
+        assert_eq!(result.files[0].0, "nb.ipynb[cell 1, markdown]");
+        assert_eq!(result.files[0].1, "first\n");
+        assert_eq!(result.files[1].0, "nb.ipynb[cell 2, markdown]");
+        assert_eq!(result.files[1].1, "second\n");
+
+        // The source_info is the converter's faithful multi-piece map, not
+        // a dynamic path placeholder.
+        let source_info = result
+            .source_info
+            .as_ref()
+            .expect("processor conversion must carry source_info");
+        assert!(
+            !matches!(source_info, SourceInfo::Generated(_)),
+            "expected a faithful Concat, got {source_info:?}"
         );
     }
 }

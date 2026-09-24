@@ -346,13 +346,41 @@ impl PipelineStage for EngineExecutionStage {
             return Ok(PipelineData::DocumentAst(doc_ast));
         }
 
+        // Plan 7c Phase 3: an `.ipynb` input renders its code cells'
+        // *stored* outputs by default (Q1 parity — stored outputs are the
+        // document). Two placements are forced by what follows:
+        //
+        // 1. BEFORE the policy gate — replay is not execution (it never
+        //    launches a kernel), so static preview shows stored outputs
+        //    under any ExecutionPolicy.
+        // 2. BEFORE Step 2's availability resolution — an `.ipynb` claim
+        //    short-circuits engine resolution to jupyter even for a
+        //    zero-code-cell notebook, and a registered-but-unavailable
+        //    engine hard-errors there before any engine code could
+        //    decide.
+        //
+        // `execute.enabled: true` in the fully merged metadata (the
+        // notebook's front-matter cell, merged by MetadataMergeStage) is
+        // the only demand route back to live execution; a demanded
+        // document falls through to the unchanged path below.
+        let notebook_replay =
+            is_notebook_input(&ctx.document.input) && !execute_demanded(&doc_ast.ast.meta);
+        if notebook_replay {
+            trace_event!(
+                ctx,
+                EventLevel::Debug,
+                "ipynb stored-output replay — no engine availability consulted"
+            );
+        }
+
         // bd-sl79jjiq: the render's `ExecutionPolicy` may exclude this
         // document. Decided here, after the *pure* resolver and before
         // Step 2 touches engine implementations, so a skipped document
         // never loads an engine, never warns about a missing runtime,
         // and never executes. Documents that resolve to markdown only
         // have nothing to skip and are not marked.
-        if !ctx.execution_policy.allows(&ctx.document.input)
+        if !notebook_replay
+            && !ctx.execution_policy.allows(&ctx.document.input)
             && resolution.sequence.iter().any(|e| !e.is_markdown())
         {
             ctx.execution_skipped = true;
@@ -377,28 +405,44 @@ impl PipelineStage for EngineExecutionStage {
         // Step 2: Resolve each engine in the sequence to an implementation
         // (with fallback), dropping markdown — it's a no-op, so a markdown
         // engine anywhere in the sequence is skipped (this also covers
-        // unavailable engines that fall back to markdown).
-        let mut engine_warnings = Vec::new();
+        // unavailable engines that fall back to markdown). Stored replay
+        // (`.ipynb` with no `execute.enabled` demand) skips resolution
+        // entirely: the replay engine is selected directly and is
+        // deliberately NOT in the registry.
         let mut to_run: Vec<(
             Arc<dyn ExecutionEngine>,
             Option<quarto_pandoc_types::ConfigValue>,
         )> = Vec::new();
-        for detected in &resolution.sequence {
-            let engine =
-                self.get_engine_with_fallback(&detected.name, &ctx.registry, &mut engine_warnings)?;
-            if engine.name() == "markdown" {
-                trace_event!(
-                    ctx,
-                    EventLevel::Debug,
-                    "engine '{}' resolved to markdown (no-op) — skipping",
-                    detected.name
-                );
-                continue;
+        if notebook_replay {
+            // The replay engine rides the same per-engine loop below as a
+            // live engine (mask → serialize → execute → unmask → capture
+            // → reparse), so capture/splice works unchanged.
+            to_run.push((
+                Arc::new(crate::engine::jupyter::IpynbReplayEngine) as Arc<dyn ExecutionEngine>,
+                None,
+            ));
+        } else {
+            let mut engine_warnings = Vec::new();
+            for detected in &resolution.sequence {
+                let engine = self.get_engine_with_fallback(
+                    &detected.name,
+                    &ctx.registry,
+                    &mut engine_warnings,
+                )?;
+                if engine.name() == "markdown" {
+                    trace_event!(
+                        ctx,
+                        EventLevel::Debug,
+                        "engine '{}' resolved to markdown (no-op) — skipping",
+                        detected.name
+                    );
+                    continue;
+                }
+                to_run.push((engine, detected.config.clone()));
             }
-            to_run.push((engine, detected.config.clone()));
-        }
-        if !engine_warnings.is_empty() {
-            ctx.add_diagnostics(engine_warnings);
+            if !engine_warnings.is_empty() {
+                ctx.add_diagnostics(engine_warnings);
+            }
         }
 
         // Step 3: Fast path — nothing to execute (all markdown / no
@@ -856,6 +900,24 @@ fn resolve_execute_timeout(meta: &quarto_pandoc_types::ConfigValue) -> Option<Du
     }
     // Unknown value type: fall back to default.
     Some(DEFAULT_EXECUTE_TIMEOUT)
+}
+
+/// Plan 7c Phase 3: `.ipynb` input (case-insensitive) — the stored-replay
+/// candidate.
+fn is_notebook_input(path: &std::path::Path) -> bool {
+    path.extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("ipynb"))
+}
+
+/// Plan 7c Phase 3: `execute.enabled: true` in the fully merged metadata
+/// demands live execution for a notebook; absent/false renders the
+/// notebook's stored outputs (Q1 parity). Only a strict boolean `true`
+/// demands — anything else never silently routes the document to a
+/// kernel.
+fn execute_demanded(meta: &quarto_pandoc_types::ConfigValue) -> bool {
+    meta.get_path(&["execute", "enabled"])
+        .and_then(|enabled| enabled.as_bool())
+        .unwrap_or(false)
 }
 
 /// The per-format `execute:` defaults table (P7 Task 5, values from
