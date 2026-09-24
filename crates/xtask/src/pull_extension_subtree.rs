@@ -33,13 +33,27 @@ pub struct SubtreeConfig {
 /// `git-subtree-split` trailer, not in this row; `remote_branch: "main"`
 /// just means "re-running `pull-extension-subtree orange-book` later picks
 /// up whatever main has moved to," same as every other row.
+///
+/// `julia-engine` subtrees from the `q2-static-declarations` branch of the
+/// `gordonwoodhull/quarto-julia-engine` fork — q2's upstream of record until
+/// the Q1 `external-engine` schema change (quarto-dev/quarto-cli#14936) ships
+/// in a stable release and the declarations can go upstream to PumasAI
+/// (julia epic, Step 2c pivot, 2026-09-24).
 pub fn subtrees() -> Vec<SubtreeConfig> {
-    vec![SubtreeConfig {
-        name: "orange-book".to_string(),
-        prefix: "resources/extension-subtrees/orange-book".to_string(),
-        remote_url: "https://github.com/quarto-ext/orange-book.git".to_string(),
-        remote_branch: "main".to_string(),
-    }]
+    vec![
+        SubtreeConfig {
+            name: "orange-book".to_string(),
+            prefix: "resources/extension-subtrees/orange-book".to_string(),
+            remote_url: "https://github.com/quarto-ext/orange-book.git".to_string(),
+            remote_branch: "main".to_string(),
+        },
+        SubtreeConfig {
+            name: "julia-engine".to_string(),
+            prefix: "resources/extension-subtrees/julia-engine".to_string(),
+            remote_url: "https://github.com/gordonwoodhull/quarto-julia-engine.git".to_string(),
+            remote_branch: "q2-static-declarations".to_string(),
+        },
+    ]
 }
 
 /// Result of processing a single subtree.
@@ -276,7 +290,7 @@ mod tests {
         let table = subtrees();
         assert!(
             !table.is_empty(),
-            "subtrees() should contain the orange-book row (book-projects P2 item 80)"
+            "subtrees() should contain the orange-book (book-projects P2 item 80) and julia-engine (julia epic Step 4) rows"
         );
         for row in &table {
             assert_eq!(
@@ -305,6 +319,15 @@ mod tests {
             "https://github.com/quarto-ext/orange-book.git"
         );
         assert_eq!(orange_book.remote_branch, "main");
+
+        let julia = table
+            .iter()
+            .find(|r| r.name == "julia-engine")
+            .expect("subtrees() must contain the julia-engine row");
+        assert_eq!(
+            julia.remote_branch, "q2-static-declarations",
+            "the julia row subtrees from the fork's q2 branch, not main (epic Step 2c pivot)"
+        );
     }
 
     #[test]
