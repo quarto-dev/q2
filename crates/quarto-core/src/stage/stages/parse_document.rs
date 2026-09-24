@@ -154,11 +154,20 @@ impl PipelineStage for ParseDocumentStage {
                             ))
                         })?;
                     let original_name = source.path.display().to_string();
+                    // The FileId is no assumption: ORIGINAL_FILE_ID is the
+                    // well-known constant the content processor itself built
+                    // the Concat pieces against, and the name/content are
+                    // re-derived from the one file those pieces describe
+                    // (`source.path`).
+                    // lint:allow(add-file-with-id) — see reason above
                     ast_context.source_context.add_file_with_id(
                         crate::engine::content_processors::ORIGINAL_FILE_ID,
                         original_name.clone(),
                         Some(original_content.clone()),
                     );
+                    // Same registration, into the second SourceContext that flows
+                    // out of this stage (the two must stay in lockstep).
+                    // lint:allow(add-file-with-id) — see reason above
                     source_context.add_file_with_id(
                         crate::engine::content_processors::ORIGINAL_FILE_ID,
                         original_name,

@@ -83,6 +83,12 @@ parse-time fold establishes.
   entries (bare-string `.echo` shorthand accepted via untagged serde); parse-time undotted-lowercase
   fold for both `file-extensions` and `claims-files`; single `to_wire_ext` adapter (T9/T10/T11).
   **Content-pattern is out of scope — Plan 7a.**
+  **Extended 2026-09-24 (Plan 7b):** `FileClaim` gained an optional
+  `processor: Option<ProcessorSpec>` field (`extension/types.rs:146`) — a `processor:` key on a
+  `claims-files` entry names a native content processor (`percent` | `spin`), parsed and validated
+  at read time. Plan 7a's arbitrary `content-pattern` stayed withdrawn; `processor:` is the
+  structured successor for the two built-in cases, and it builds directly on the typed-entry
+  surface this item delivered.
 - [x] **P2 discovery fold** — statically-claimed extensions enter project discovery (both the walk and
   the `render:`-pattern paths) via a `RenderableExtensions` set; shared `claimed_file_extensions` free
   fn co-located with `lookup_static_claim` (T6/T6b/T7/T7b/T8/T8b).

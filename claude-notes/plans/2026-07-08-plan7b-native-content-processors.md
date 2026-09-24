@@ -334,23 +334,32 @@ knobs are knitr-compile concerns, not conversion — out of scope.
 
 The implementer MUST keep these general even though 7b only fills the percent/spin arms:
 
-- [ ] `ContentProcessor::convert` takes `&ProcessorContext` (asset-writing capable) from the start.
-- [ ] `SourceInfo` stays the general Plan-0 enum; **no** percent-specific mapping type leaks into the
+- [x] `ContentProcessor::convert` takes `&ProcessorContext` (asset-writing capable) from the start.
+      **Verified 2026-09-24:** `convert(&self, path, content, params, ctx: &ProcessorContext)` at
+      `content_processors/mod.rs:101`; `ProcessorContext` threads `Arc<dyn SystemRuntime>` (mod.rs:73).
+- [x] `SourceInfo` stays the general Plan-0 enum; **no** percent-specific mapping type leaks into the
       registry. (Revised 2026-08-17: 7c no longer needs a `NotebookCell` variant — cell identity is
       per-*file*, not per-*span* — so this obligation is now just "don't specialize the enum," which
-      is cheaper than it was.)
-- [ ] **`Converted` carries a channel for ephemeral source files** — `files: Vec<(String, String)>`
+      is cheaper than it was.) **Verified 2026-09-24:** `Converted.source_info: SourceInfo` (mod.rs:81);
+      the only processor-specific types are the schema-side `ProcessorSpec` arms, which carry no mapping
+      data.
+- [x] **`Converted` carries a channel for ephemeral source files** — `files: Vec<(String, String)>`
       (label, logical content), or an equivalent registration handle on `ProcessorContext`.
       **Added 2026-08-17.** Percent and spin never surface this: they map back into the *original*
       file, which the caller already registered. ipynb's `Concat` pieces point at **virtual per-cell
       files that exist only in memory**, so the processor must hand them back for registration in
       `SourceContext`. Without this field, 7c must change `convert`'s return type — exactly the
       non-additive change these obligations exist to prevent. Cheap now, expensive later.
+      **Verified 2026-09-24:** `Converted.files: Vec<(String, String)>` at mod.rs:85, empty for
+      percent/spin as specified.
 - [x] ~~The sidecar envelope is a **versioned tagged union**, not a bare per-line format.~~
       **DROPPED 2026-09-24** (was "suspended" 2026-08-17) — see § Review corrections #2. This
       obligation existed solely so 7c could add a `jupyter_notebook` arm; 7c declined one, and no
       other consumer exists. No envelope type is built by this plan.
-- [ ] The registry is **name-keyed**; the `processor:` schema is an open union (bare name | map).
+- [x] The registry is **name-keyed**; the `processor:` schema is an open union (bare name | map).
+      **Verified 2026-09-24:** `Registry { processors: HashMap<&'static str, …> }` (mod.rs:110);
+      `parse_processor_spec` accepts bare `spin` or `{name: percent, language, comment?}`
+      (`extension/read.rs:698`).
 
 None of these require thinking about ipynb's *conversion semantics* now — they are shape choices only.
 
@@ -692,28 +701,48 @@ documents this for the author-facing side). The content sniff runs once, at clai
       passed, 31 skipped) suites confirmed green with the fix applied.
 
 ### Phase 9 — Coordination + docs
-- [ ] **Plan 6 (concurrent sibling):** add a coordination note — native conversion makes percent/spin
+- [x] **Plan 6 (concurrent sibling):** add a coordination note — native conversion makes percent/spin
       Pass-1 profiles **hashable**, so the Pass-1 cache key should fold in the *processor version* +
       converted output; Plan 6 decision-9's "unhashed `.js` conversion" caveat and P1's
       "may have loaded a content-inspecting engine" parenthetical are **removed for percent/spin** when
       both settle. No dependency either way.
-- [ ] **Plan 4b:** relabel the `content-claim` fixture as the *dynamic residue*; note it is excluded
+      **Done 2026-09-24:** coordination note added under decision 9 of
+      `2026-06-29-plan6-pass1-engine-resolution.md`, plus a pointer appended to the P1 parenthetical.
+- [x] **Plan 4b:** relabel the `content-claim` fixture as the *dynamic residue*; note it is excluded
       from Pass-1 discovery (decision 3) and is the only surviving must-load path.
+      **Done 2026-09-24:** relabel note added to the `content-claim` fixture item in
+      `2026-07-01-plan4b-shadow-engine-features.md`.
 - [x] **Grand plan sub-plans table** — done 2026-08-17, ahead of implementation, so the epic's index
       stops contradicting the 7a tombstone: 7 → series root (◍), 7a → tombstoned, 7b/7c rows added,
       totals + status key updated.
 - [x] **Grand plan sub-plans table, row for Plan 7b** (`2026-04-16-ts-engine-extensions-subprocess.md:569`):
       dropped "Additive; not on the critical path," replaced with the Julia-bundling blocker note.
       **Done 2026-09-24** (this review).
-- [ ] **1c.2 P4:** record that `processor:` extends the structured `claims-files` it delivered.
-- [ ] User docs (`docs/`, usage not internals): the `processor:` declaration for extension authors.
+- [x] **1c.2 P4:** record that `processor:` extends the structured `claims-files` it delivered.
+      **Done 2026-09-24:** note appended to the P4 restructure item in
+      `2026-07-01-plan1c2-engine-extensions-loose-ends.md`.
+- [x] User docs (`docs/`, usage not internals): the `processor:` declaration for extension authors.
       **Scope corrected 2026-09-24** (§ Review corrections #5) — `docs/guides/projects/render-list.qmd`
       already documents the percent/spin auto-discovery divergence; extend that page rather than
       writing it fresh. Verify with `cargo run --bin q2 -- render docs/` (never Q1).
-- [ ] Reconcile this checklist against reality; commit; ask Gordon before any push/merge. **Target
+      **Done 2026-09-24:** new "Listed scripts with a declared processor" section added to
+      `render-list.qmd` (built-in percent/spin claims + the extension-author `processor:` YAML shape,
+      matching `parse_processor_spec` and the julia fixture). Verified with
+      `cargo run --bin q2 -- render docs/guides/projects/render-list.qmd` — rendered cleanly and the
+      new section + YAML sample confirmed present in `docs/_site/guides/projects/render-list.html`.
+- [x] Reconcile this checklist against reality; commit; ask Gordon before any push/merge. **Target
       updated 2026-09-24:** `feature/ts-engine-extensions` merged to `main` via PR #416 — merge to
       `main` (or its current integration branch, if one exists at execution time), not the
       now-closed epic branch.
+      **Reconciled 2026-09-24:** every box re-verified against code/docs (the four forward-compat
+      obligations were confirmed in `content_processors/mod.rs` + `extension/read.rs` and checked off
+      with citations; Phase 9's four items landed this session). Workspace gate: `cargo nextest run
+      --workspace` at HEAD (`3772390af`) — **14793 passed, 200 skipped, 0 failed**; the branch diff
+      vs `origin/main` adds exactly 60 `#[test]` functions and removes none, so the delta is +60,
+      all from this plan's TDD phases. Note: `origin/main` advanced past the branch point today
+      (nested-projects render-list work, PR #722) — it extends `render-list.qmd` with a disjoint
+      "Nested projects" section; no textual conflict with this plan's docs edit, but rebase/merge
+      will pull both in.
 
 ---
 

@@ -3441,6 +3441,8 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "tree-sitter",
+ "tree-sitter-r",
  "typst-gather",
  "uuid",
  "which",

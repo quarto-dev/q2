@@ -230,6 +230,19 @@ Ratified with Gordon 2026-07-02 through 2026-07-05:
    non-QMD file's Pass-1 conversion runs `markdown_for_file` in the engine's
    `.js`, which is unhashed — out of scope, disclosed.)
 
+   **Coordination note (2026-09-24, from Plan 7b):** Plan 7b's native
+   percent/spin content processors move a claimed file's conversion off the
+   engine's `.js` entirely — the Pass-1 profile of a processor-claimed file
+   is produced by versioned Rust code, which makes it **hashable**. When the
+   key work is picked up, the Pass-1 cache key should fold in the *processor
+   version* + the converted output for such files; at that point the
+   "unhashed `.js` conversion" caveat above and P1's "may have loaded a
+   content-inspecting engine" parenthetical (§"Load-free predicate") are
+   **removed for percent/spin**. The caveat survives for the remaining
+   dynamic `claims_file` residue (Plan 4b's `content-claim` fixture path,
+   now relabelled as exactly that). No dependency either way; recorded here
+   so the two plans don't drift.
+
 ## Rebase note (latest: 2026-07-08b, base `70fcf6264` → `0e5a13358`)
 
 **2026-07-08b rebase onto the feature tip `0e5a13358`.** Feature advanced
@@ -412,7 +425,11 @@ metadata (decision 2/3). A doc resolves **load-free at Pass-1** iff any of:
   short-circuit consults no claims at all (`resolution.rs:370-375`). (The
   file-*claim* itself may have loaded a content-inspecting engine in
   `EngineClaimsFileStage` — pre-existing Pass-1 behavior, not resolution
-  loading; the predicate is about `resolve_engines`.)
+  loading; the predicate is about `resolve_engines`. **2026-09-24:** for
+  percent/spin-claimed files this parenthetical is now moot — Plan 7b's
+  native content processors do the sniff+convert in Rust with no engine
+  launch; only the dynamic `claims_file` residue can still load here. See
+  the coordination note under decision 9.)
 - **P2** — the language scan is empty (markdown passthrough,
   `resolution.rs:380-386`; `generated-languages` not consulted, decision 8).
 - **P3** — explicit `engine: markdown` opt-out (`resolution.rs:425-430`).
