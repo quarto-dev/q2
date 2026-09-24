@@ -244,7 +244,11 @@
   transition: background-color var(--duration-fast) var(--ease-out);
 }
 
-.qh-menu-item:hover { background: var(--context-menu-hover); }
+/* Pointer hover and the keyboard's current item share one tint, so the
+   leaf a submenu focuses on open (APG) is visibly "current". */
+.qh-menu-item:hover,
+.qh-menu-item:focus { background: var(--context-menu-hover); }
+.qh-menu-item:focus:not(:focus-visible) { outline: none; }
 .qh-menu-item[aria-disabled="true"] { opacity: 0.5; cursor: default; }
 .qh-menu-item[aria-disabled="true"]:hover { background: none; }
 .qh-menu-item.strong { font-weight: 600; }
@@ -288,13 +292,40 @@
   cursor: pointer;
 }
 
-.qh-menu-item-inner:hover { background: var(--context-menu-hover); }
-.qh-submenu-arrow { color: var(--text-secondary); }
+/* A group item stays tinted while its submenu is open, so the path
+   from the root to the hovered leaf reads as one highlighted trail. */
+.qh-menu-item-inner:hover,
+.qh-menu-item-inner:focus,
+.qh-menu-item-inner[aria-expanded="true"] { background: var(--context-menu-hover); }
+.qh-menu-item-inner:focus:not(:focus-visible) { outline: none; }
+.qh-menu-item-inner-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  text-align: left;
+}
+.qh-submenu-arrow { color: var(--text-secondary); margin-inline-start: 12px; }
 
 .qh-submenu {
   top: -6px;
   left: calc(100% + 4px);
   min-width: 180px;
+}
+
+/* Invisible bridge over the 4px gap to the parent item, so a pointer
+   crossing into the submenu never counts as having left it. */
+.qh-submenu::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  inset-inline-start: -4px;
+  width: 4px;
+}
+.qh-submenu.qh-submenu-left::before {
+  inset-inline-start: auto;
+  inset-inline-end: -4px;
 }
 
 /* MenuSubmenu measures itself on open and adds this when the default

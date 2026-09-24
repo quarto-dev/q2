@@ -25,15 +25,57 @@
  */
 
 import {
+  createContext,
+  useContext,
   useEffect,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useCallback,
   useState,
   type ReactNode,
   type MouseEvent as ReactMouseEvent,
 } from 'react';
+
+/**
+ * One level of a menu owns which of its submenus is open: at most one.
+ * `Menu` provides a level for its direct children and every open
+ * submenu provides a fresh one for its own children, so opening a
+ * nested group never closes the group it lives in, while hovering a
+ * sibling group closes the one that was open (even if the keyboard had
+ * focus inside it). Without a provider a `MenuSubmenu` falls back to
+ * standalone state.
+ */
+interface SubmenuLevel {
+  openId: string | null;
+  setOpenId: (update: (prev: string | null) => string | null) => void;
+}
+
+const SubmenuLevelContext = createContext<SubmenuLevel | null>(null);
+
+/** How long a hover-opened submenu survives the pointer leaving it. */
+export const SUBMENU_CLOSE_GRACE_MS = 150;
+
+function SubmenuLevelProvider({ children }: { children: ReactNode }) {
+  const [openId, setOpenIdState] = useState<string | null>(null);
+  const value = useMemo<SubmenuLevel>(
+    () => ({ openId, setOpenId: (update) => setOpenIdState(update) }),
+    [openId],
+  );
+  return <SubmenuLevelContext.Provider value={value}>{children}</SubmenuLevelContext.Provider>;
+}
+
+/** `[open, setOpen]` for one submenu, coordinated with its siblings. */
+function useSubmenuOpen(id: string): [boolean, (open: boolean) => void] {
+  const level = useContext(SubmenuLevelContext);
+  const [local, setLocal] = useState(false);
+  if (!level) return [local, setLocal];
+  const open = level.openId === id;
+  const setOpen = (next: boolean) =>
+    level.setOpenId((prev) => (next ? id : prev === id ? null : prev));
+  return [open, setOpen];
+}
 
 export interface MenuProps {
   /** Close the menu. `returnFocus` is true for keyboard-driven closes. */
@@ -243,7 +285,7 @@ export function Menu({
       onKeyDown={onKeyDown}
       onClick={onClick}
     >
-      {children}
+      <SubmenuLevelProvider>{children}</SubmenuLevelProvider>
     </div>
   );
 }
@@ -324,18 +366,21 @@ export function MenuLabel({ children }: { children: ReactNode }) {
 export interface MenuSubmenuProps {
   /** The parent item's label. */
   label: ReactNode;
+  /** Second line of muted explanatory text, as on `MenuItem`. */
+  subtext?: ReactNode;
   children: ReactNode;
 }
 
 /**
  * A submenu parent item. Opens on click, ArrowRight, or Enter/Space;
  * ArrowLeft inside the submenu closes it and refocuses this item.
+ * Opening it closes any sibling submenu at the same level.
  */
-export function MenuSubmenu({ label, children }: MenuSubmenuProps) {
-  const [open, setOpen] = useState(false);
+export function MenuSubmenu({ label, subtext, children }: MenuSubmenuProps) {
+  const itemId = useId();
+  const [open, setOpen] = useSubmenuOpen(itemId);
   const itemRef = useRef<HTMLButtonElement>(null);
   const submenuRef = useRef<HTMLDivElement>(null);
-  const itemId = useId();
 
   // Viewport-edge flip. The submenu opens to the right of its parent by
   // default; a menu pinned to the window's right edge (the ＋ New menu)
@@ -343,12 +388,13 @@ export function MenuSubmenu({ label, children }: MenuSubmenuProps) {
   // paint, and open to the left when the right side does not fit but the
   // left does. If neither fits, stay right: a clipped right edge beats a
   // clipped left edge, since the labels start on the left.
-  const [flipLeft, setFlipLeft] = useState(false);
+  //
+  // The class is toggled on the DOM node rather than held in state: the
+  // submenu element mounts fresh on every open, so it always starts
+  // unflipped, and a layout effect may touch the DOM before paint
+  // without a second render.
   useLayoutEffect(() => {
-    if (!open) {
-      setFlipLeft(false);
-      return;
-    }
+    if (!open) return;
     const submenu = submenuRef.current;
     const parent = submenu?.parentElement;
     if (!submenu || !parent) return;
@@ -357,7 +403,7 @@ export function MenuSubmenu({ label, children }: MenuSubmenuProps) {
     if (rect.right <= window.innerWidth - margin) return;
     const parentRect = parent.getBoundingClientRect();
     const fitsLeft = parentRect.left - 4 - rect.width >= margin;
-    if (fitsLeft) setFlipLeft(true);
+    if (fitsLeft) submenu.classList.add('qh-submenu-left');
   }, [open]);
 
   // APG: activating the parent opens the submenu and focuses its first
@@ -373,18 +419,39 @@ export function MenuSubmenu({ label, children }: MenuSubmenuProps) {
     });
   };
 
+  // Pointer close is deferred a little: the submenu sits 4px away from
+  // its parent item, and a pointer heading for it (or cutting a corner
+  // toward a lower leaf) briefly leaves the parent's box. `.qh-submenu`
+  // also paints an invisible bridge over the gap; the grace period
+  // covers the diagonal case the bridge cannot.
+  const closeTimer = useRef<number | undefined>(undefined);
+  const cancelClose = () => {
+    if (closeTimer.current !== undefined) {
+      window.clearTimeout(closeTimer.current);
+      closeTimer.current = undefined;
+    }
+  };
+  useEffect(() => cancelClose, []);
+
   return (
     <div
       className="qh-menu-item qh-submenu-parent"
       data-submenu-parent
       // Hover parity with the previous ad-hoc menus: opening on hover is
       // a pointer convenience; keyboard uses ArrowRight/Enter.
-      onMouseEnter={() => setOpen(true)}
+      onMouseEnter={() => {
+        cancelClose();
+        setOpen(true);
+      }}
       onMouseLeave={(e) => {
         // Don't collapse under the keyboard user: if focus is inside this
         // submenu, the mouse leaving must not drop the focused subtree.
         if (e.currentTarget.contains(document.activeElement)) return;
-        setOpen(false);
+        cancelClose();
+        closeTimer.current = window.setTimeout(() => {
+          closeTimer.current = undefined;
+          setOpen(false);
+        }, SUBMENU_CLOSE_GRACE_MS);
       }}
     >
       <button
@@ -407,14 +474,22 @@ export function MenuSubmenu({ label, children }: MenuSubmenuProps) {
           }
         }}
       >
-        {label} <span className="qh-submenu-arrow" aria-hidden="true">▸</span>
+        <span className="qh-menu-item-inner-text">
+          <span className="qh-menu-item-label" id={`${itemId}-label`}>
+            {label}
+          </span>
+          {subtext && <span className="qh-menu-subtext">{subtext}</span>}
+        </span>
+        <span className="qh-submenu-arrow" aria-hidden="true">▸</span>
       </button>
       {open && (
         <div
           ref={submenuRef}
-          className={`qh-menu qh-submenu${flipLeft ? ' qh-submenu-left' : ''}`}
+          className="qh-menu qh-submenu"
           role="menu"
-          aria-labelledby={itemId}
+          // Named by the label alone, not the whole item: the subtext
+          // would otherwise become part of the submenu's name.
+          aria-labelledby={`${itemId}-label`}
           onKeyDown={(e) => {
             if (e.key === 'ArrowLeft') {
               e.preventDefault();
@@ -424,7 +499,7 @@ export function MenuSubmenu({ label, children }: MenuSubmenuProps) {
             }
           }}
         >
-          {children}
+          <SubmenuLevelProvider>{children}</SubmenuLevelProvider>
         </div>
       )}
     </div>

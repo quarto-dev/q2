@@ -1084,11 +1084,23 @@ export interface ProjectChoice {
 }
 
 /**
+ * A group of project choices sharing one `path`, with the registry's
+ * explanation of what the group is for (bd-q33ylfxf). The New menu shows
+ * `description` as subtext under the group's item.
+ */
+export interface ProjectChoiceGroup {
+  path: string[];
+  description: string;
+}
+
+/**
  * Response from get_project_choices()
  */
 interface ProjectChoicesResponse {
   success: boolean;
   choices: ProjectChoice[];
+  /** Absent on WASM builds that predate group descriptions. */
+  groups?: ProjectChoiceGroup[];
 }
 
 /**
@@ -1120,6 +1132,17 @@ export async function getProjectChoices(): Promise<ProjectChoice[]> {
   const wasm = getWasm();
   const response: ProjectChoicesResponse = JSON.parse(wasm.get_project_choices());
   return response.choices;
+}
+
+/**
+ * The described choice groups (Templates, Examples, ...) for the New
+ * menu's group subtext. Only groups the registry describes are returned.
+ */
+export async function getProjectChoiceGroups(): Promise<ProjectChoiceGroup[]> {
+  await initWasm();
+  const wasm = getWasm();
+  const response: ProjectChoicesResponse = JSON.parse(wasm.get_project_choices());
+  return response.groups ?? [];
 }
 
 /**

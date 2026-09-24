@@ -22,6 +22,7 @@ import * as projectStorage from '../services/projectStorage';
 import * as userSettingsService from '../services/userSettings';
 import {
   getProjectChoices,
+  getProjectChoiceGroups,
   createProject as wasmCreateProject,
   importProjectFromZip,
   exportProjectAsZip,
@@ -31,6 +32,7 @@ import {
   getBinaryFileContent,
   isFileBinary,
   type ProjectChoice,
+  type ProjectChoiceGroup,
   type ProjectFile,
 } from '@quarto/preview-runtime';
 import {
@@ -61,7 +63,7 @@ function renderChoiceTree(
     </MenuItem>
   );
   const renderNode = (node: ChoiceTreeNode<ProjectChoice>): ReactNode => (
-    <MenuSubmenu key={node.label} label={node.label}>
+    <MenuSubmenu key={node.label} label={node.label} subtext={node.description}>
       {node.choices.map(item)}
       {node.children.map(renderNode)}
     </MenuSubmenu>
@@ -338,6 +340,7 @@ export default function ProjectsHome({
   const [showServerField, setShowServerField] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [projectChoices, setProjectChoices] = useState<ProjectChoice[]>([]);
+  const [projectChoiceGroups, setProjectChoiceGroups] = useState<ProjectChoiceGroup[]>([]);
 
   // Connect / Import dialog state
   const [addTab, setAddTab] = useState<'connect' | 'import'>('connect');
@@ -463,6 +466,8 @@ export default function ProjectsHome({
     getProjectChoices().then(setProjectChoices).catch((err) => {
       console.error('Failed to load project choices:', err);
     });
+    // Group subtext is a nicety: a failure leaves the labels bare.
+    getProjectChoiceGroups().then(setProjectChoiceGroups).catch(() => {});
   }, []);
 
   const items: ProjectItem[] = useMemo(() => {
@@ -1761,6 +1766,7 @@ export default function ProjectsHome({
                     projectChoices.length > 0
                       ? projectChoices
                       : [{ id: 'default', name: 'Default', description: 'A minimal Quarto project' }],
+                    projectChoiceGroups,
                   ),
                   openNewDialog,
                 )}

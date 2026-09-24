@@ -337,10 +337,29 @@ pub fn seed_choices() -> Vec<ProjectChoice> {
         .collect()
 }
 
+/// What a group of choices is for, keyed by its hierarchical path
+/// (bd-q33ylfxf). The hub shows this as subtext under the group's menu
+/// item, next to the per-choice descriptions, so the two kinds of entry
+/// are told apart before the group opens. Lives beside the registry so
+/// a label and its explanation cannot drift apart.
+pub fn path_description(path: &[String]) -> Option<&'static str> {
+    match path {
+        [group] if group == "Templates" => {
+            Some("Bare skeletons with just enough structure to start writing")
+        }
+        [group] if group == "Examples" => {
+            Some("Filled-in projects that show what each format can do")
+        }
+        _ => None,
+    }
+}
+
 /// A run of choices sharing one hierarchical path, in registry order.
 #[derive(Debug, Clone)]
 pub struct ChoiceGroup {
     pub path: Vec<String>,
+    /// See [`path_description`].
+    pub description: Option<&'static str>,
     pub choices: Vec<ProjectChoice>,
 }
 
@@ -354,6 +373,7 @@ pub fn choices_grouped_by_path(surface: Surface) -> Vec<ChoiceGroup> {
         match groups.iter_mut().find(|g| g.path == choice.path) {
             Some(g) => g.choices.push(choice),
             None => groups.push(ChoiceGroup {
+                description: path_description(&choice.path),
                 path: choice.path.clone(),
                 choices: vec![choice],
             }),
@@ -680,6 +700,33 @@ mod tests {
         assert_eq!(c.path, ["Templates", "Decks"]);
         let v: serde_json::Value = serde_json::to_value(&c).unwrap();
         assert_eq!(v["path"], serde_json::json!(["Templates", "Decks"]));
+    }
+
+    #[test]
+    fn every_group_in_the_registry_has_a_description() {
+        // The hub shows the description as subtext under the group's
+        // menu item, so a group without one would render a bare label.
+        for group in choices_grouped_by_path(Surface::Hub) {
+            assert!(
+                group.description.is_some(),
+                "group {:?} has no description",
+                group.path
+            );
+        }
+        assert!(
+            path_description(&["Templates".to_string()])
+                .unwrap()
+                .to_lowercase()
+                .contains("skeleton")
+        );
+        assert!(
+            path_description(&["Examples".to_string()])
+                .unwrap()
+                .to_lowercase()
+                .contains("format")
+        );
+        assert_eq!(path_description(&["Nope".to_string()]), None);
+        assert_eq!(path_description(&[]), None);
     }
 
     #[test]

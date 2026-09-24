@@ -23,6 +23,7 @@ interface WasmModule {
 interface ProjectChoicesResponse {
   success: boolean;
   choices: Array<{ id: string; name: string; description: string; seed?: boolean; path?: string[] }>;
+  groups?: Array<{ path: string[]; description: string }>;
 }
 
 interface CreateProjectResponse {
@@ -65,6 +66,13 @@ describe('get_project_choices', () => {
     expect(ids).toContain('default');
     expect(ids).toContain('website');
     expect(ids).toContain('blog');
+  });
+
+  it('describes the Templates and Examples groups (bd-q33ylfxf)', () => {
+    const response = JSON.parse(wasm.get_project_choices()) as ProjectChoicesResponse;
+    const byLabel = Object.fromEntries((response.groups ?? []).map((g) => [g.path.join('/'), g.description]));
+    expect(byLabel['Templates']).toMatch(/skeleton/i);
+    expect(byLabel['Examples']).toMatch(/format/i);
   });
 
   it('offers the hub-only choice that the CLI hides (bd-d147nkqx)', () => {

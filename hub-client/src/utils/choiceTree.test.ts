@@ -25,6 +25,24 @@ describe('buildChoiceTree', () => {
     expect(tree.nodes[0].children).toEqual([]);
   });
 
+  it('attaches group descriptions to the matching nodes', () => {
+    const tree = buildChoiceTree(
+      [c('default', ['Templates']), c('welcome', ['Examples']), c('deck', ['Templates', 'Decks'])],
+      [
+        { path: ['Templates'], description: 'Bare skeletons' },
+        { path: ['Examples'], description: 'Filled-in projects' },
+        { path: ['Templates', 'Decks'], description: 'Slide decks' },
+      ],
+    );
+    expect(tree.nodes.map((n) => n.description)).toEqual(['Bare skeletons', 'Filled-in projects']);
+    expect(tree.nodes[0].children[0].description).toBe('Slide decks');
+  });
+
+  it('leaves the description undefined for a node no group describes', () => {
+    const tree = buildChoiceTree([c('default', ['Templates'])], [{ path: ['Other'], description: 'x' }]);
+    expect(tree.nodes[0].description).toBeUndefined();
+  });
+
   it('keeps choices with no path as roots, ahead of the nodes', () => {
     const tree = buildChoiceTree([c('a'), c('b', ['Group']), c('d', [])]);
     expect(tree.roots.map((x) => x.id)).toEqual(['a', 'd']);

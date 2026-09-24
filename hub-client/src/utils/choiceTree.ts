@@ -18,9 +18,17 @@ export interface ChoiceLike {
   seed?: boolean;
 }
 
+/** A registry description of one group, keyed by its full path. */
+export interface ChoiceGroupLike {
+  path: string[];
+  description: string;
+}
+
 export interface ChoiceTreeNode<C extends ChoiceLike = ChoiceLike> {
   /** The group label at this level of the path. */
   label: string;
+  /** The registry's explanation of the group, when it has one. */
+  description?: string;
   /** Choices whose path ends exactly here, in registry order. */
   choices: C[];
   /** Deeper groups, in order of first appearance. */
@@ -34,7 +42,13 @@ export interface ChoiceTree<C extends ChoiceLike = ChoiceLike> {
   nodes: ChoiceTreeNode<C>[];
 }
 
-export function buildChoiceTree<C extends ChoiceLike>(choices: C[]): ChoiceTree<C> {
+export function buildChoiceTree<C extends ChoiceLike>(
+  choices: C[],
+  groups: ChoiceGroupLike[] = [],
+): ChoiceTree<C> {
+  const describe = (path: string[]): string | undefined =>
+    groups.find((g) => g.path.length === path.length && g.path.every((s, i) => s === path[i]))
+      ?.description;
   const tree: ChoiceTree<C> = { roots: [], nodes: [] };
   for (const choice of choices) {
     const path = choice.path ?? [];
@@ -44,10 +58,13 @@ export function buildChoiceTree<C extends ChoiceLike>(choices: C[]): ChoiceTree<
     }
     let level = tree.nodes;
     let node: ChoiceTreeNode<C> | undefined;
-    for (const label of path) {
+    for (let depth = 0; depth < path.length; depth += 1) {
+      const label = path[depth];
       node = level.find((n) => n.label === label);
       if (!node) {
         node = { label, choices: [], children: [] };
+        const description = describe(path.slice(0, depth + 1));
+        if (description) node.description = description;
         level.push(node);
       }
       level = node.children;

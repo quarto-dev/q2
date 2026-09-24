@@ -32,7 +32,7 @@ mod types;
 pub use choices::{
     ChoiceGroup, ProjectChoice, ProjectTypeWithTemplate, Surface, available_choices, choices_for,
     choices_grouped_by_path, find_choice, find_choice_by_target, find_implemented_choice,
-    implemented_choices, seed_choices,
+    implemented_choices, path_description, seed_choices,
 };
 pub use scaffold::{
     ProjectScaffold, ScaffoldContent, ScaffoldFileDef, ScaffoldedFile, get_scaffold,

@@ -20,8 +20,14 @@ const choices = [
   { id: 'example-article', name: 'Article', description: 'A short article', path: ['Examples'], seed: true },
 ];
 
+const groups = [
+  { path: ['Templates'], description: 'Bare skeletons with just enough structure to start writing' },
+  { path: ['Examples'], description: 'Filled-in projects that show what each format can do' },
+];
+
 vi.mock('@quarto/preview-runtime', () => ({
   getProjectChoices: vi.fn(async () => choices),
+  getProjectChoiceGroups: vi.fn(async () => groups),
   createProject: vi.fn(),
   importProjectFromZip: vi.fn(),
   exportProjectAsZip: vi.fn(),
@@ -66,6 +72,18 @@ describe('ProjectsHome New menu tree', () => {
     // Leaves are not visible until their group opens.
     expect(within(menu).queryByRole('menuitem', { name: /Default/ })).toBeNull();
     expect(within(menu).queryByRole('menuitem', { name: /Article/ })).toBeNull();
+  });
+
+  it('explains each group with subtext from the registry', async () => {
+    renderHome();
+    fireEvent.click(await screen.findByRole('button', { name: '＋ New ▾' }));
+    const menu = await screen.findByRole('menu', { name: 'New project' });
+    const templates = within(menu).getByRole('menuitem', { name: /Templates/ });
+    await screen.findByText('Bare skeletons with just enough structure to start writing');
+    expect(templates.textContent).toContain('Bare skeletons');
+    expect(within(menu).getByRole('menuitem', { name: /Examples/ }).textContent).toContain(
+      'Filled-in projects',
+    );
   });
 
   it('opens a group to reveal its choices in registry order', async () => {

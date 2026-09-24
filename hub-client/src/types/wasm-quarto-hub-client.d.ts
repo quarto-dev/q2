@@ -136,6 +136,8 @@ declare module 'wasm-quarto-hub-client' {
   export interface ProjectChoicesResponse {
     success: boolean;
     choices: ProjectChoice[];
+    /** Described groups for the New menu's subtext (bd-q33ylfxf). */
+    groups?: Array<{ path: string[]; description: string }>;
   }
 
   export interface ProjectFile {
