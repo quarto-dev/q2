@@ -9,6 +9,7 @@
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::block::{Block, Plain, RawBlock};
 use crate::pandoc::caption::Caption;
+use crate::pandoc::location::range_to_source_info_with_context;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
 
@@ -32,10 +33,11 @@ pub fn process_section(
                 blocks.push(Block::RawBlock(RawBlock {
                     format: "quarto_minus_metadata".to_string(),
                     text,
-                    source_info: quarto_source_map::SourceInfo::from_range(
-                        context.current_file_id(),
-                        range,
-                    ),
+                    // Reroot through `parent_source_info` when this parse is
+                    // itself a re-parse (e.g. a content processor's
+                    // converted buffer, Plan 7b) — see `document.rs`'s
+                    // identical fix for the top-level metadata block.
+                    source_info: range_to_source_info_with_context(&range, context),
                 }));
             }
             _ => panic!("Expected Block or Section, got {:?}", child),
