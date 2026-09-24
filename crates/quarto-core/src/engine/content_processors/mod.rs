@@ -20,6 +20,7 @@
 //! (`stage::stages::source_conversion::SourceConversionStage`) — never at
 //! Pass-1 discovery (`project::discovery`), which stays content-blind.
 
+pub mod ipynb;
 mod line_writer;
 pub mod percent;
 pub mod spin;
@@ -62,6 +63,7 @@ pub enum ProcessorParams {
         fence_language: String,
     },
     Spin,
+    Ipynb,
 }
 
 /// Thin handle threaded through `convert` for a future asset-writing
@@ -116,6 +118,7 @@ impl Registry {
         let mut processors: HashMap<&'static str, Box<dyn ContentProcessor>> = HashMap::new();
         processors.insert("percent", Box::new(percent::Percent));
         processors.insert("spin", Box::new(spin::Spin));
+        processors.insert("ipynb", Box::new(ipynb::Ipynb));
         Self { processors }
     }
 }
@@ -143,6 +146,7 @@ fn spec_to_params(spec: &ProcessorSpec) -> (&'static str, ProcessorParams) {
             },
         ),
         ProcessorSpec::Spin => ("spin", ProcessorParams::Spin),
+        ProcessorSpec::Ipynb => ("ipynb", ProcessorParams::Ipynb),
     }
 }
 
@@ -192,6 +196,11 @@ mod tests {
     }
 
     #[test]
+    fn registry_resolves_ipynb_by_name() {
+        assert!(resolve("ipynb").is_some());
+    }
+
+    #[test]
     fn registry_unknown_name_resolves_to_none() {
         assert!(resolve("bogus").is_none());
     }
@@ -221,6 +230,13 @@ mod tests {
     }
 
     #[test]
+    fn spec_to_params_ipynb_carries_no_params() {
+        let (name, params) = spec_to_params(&ProcessorSpec::Ipynb);
+        assert_eq!(name, "ipynb");
+        assert_eq!(params, ProcessorParams::Ipynb);
+    }
+
+    #[test]
     fn convert_dispatches_through_registry_by_spec() {
         // "hello" has no chunk-opener, so real `spin` wraps it as a bare
         // code chunk — this test pins dispatch-by-spec (registry lookup +
@@ -247,6 +263,37 @@ mod tests {
             Path::new("script.R"),
             "anything"
         ));
+    }
+
+    #[test]
+    fn ipynb_dispatches_through_registry_by_spec() {
+        // Pins dispatch-by-spec for ipynb (registry lookup + params
+        // threading), not the notebook grammar itself (see
+        // `content_processors::ipynb::tests` and the
+        // `integration/ipynb_content_processor.rs` harness for that).
+        let notebook = r#"{"cells":[{"cell_type":"markdown","metadata":{},"source":["hello"]}],"metadata":{"kernelspec":{"name":"python3"}},"nbformat":4,"nbformat_minor":5}"#;
+        assert!(sniff(
+            &ProcessorSpec::Ipynb,
+            Path::new("nb.ipynb"),
+            notebook
+        ));
+        assert!(!sniff(
+            &ProcessorSpec::Ipynb,
+            Path::new("nb.ipynb"),
+            "not a notebook"
+        ));
+
+        let runtime: Arc<dyn SystemRuntime> = Arc::new(quarto_system_runtime::NativeRuntime::new());
+        let converted = convert(
+            &ProcessorSpec::Ipynb,
+            Path::new("nb.ipynb"),
+            notebook,
+            &runtime,
+        )
+        .expect("ipynb must convert through the registry");
+        assert!(converted.markdown.contains("hello"));
+        // One ephemeral virtual file per cell (plan decision 5).
+        assert_eq!(converted.files.len(), 1);
     }
 
     // --- ProcessorContext threads a runtime handle (T-registry, Phase 2). ---

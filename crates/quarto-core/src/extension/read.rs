@@ -708,6 +708,7 @@ fn parse_processor_spec(cv: &ConfigValue) -> Result<ProcessorSpec> {
             ..
         } => match s.as_str() {
             "spin" => Ok(ProcessorSpec::Spin),
+            "ipynb" => Ok(ProcessorSpec::Ipynb),
             "percent" => Err(crate::error::QuartoError::Other(
                 "processor 'percent' requires a 'language' parameter — use \
                  '{ name: percent, language: <lang> }', not the bare name 'percent'"
@@ -715,7 +716,7 @@ fn parse_processor_spec(cv: &ConfigValue) -> Result<ProcessorSpec> {
             )),
             other => Err(crate::error::QuartoError::Other(format!(
                 "unknown content processor '{other}' in claims-files entry \
-                 (known processors: percent, spin)"
+                 (known processors: percent, spin, ipynb)"
             ))),
         },
         ConfigValueKind::Map(_) => {
@@ -726,6 +727,7 @@ fn parse_processor_spec(cv: &ConfigValue) -> Result<ProcessorSpec> {
             })?;
             match name {
                 "spin" => Ok(ProcessorSpec::Spin),
+                "ipynb" => Ok(ProcessorSpec::Ipynb),
                 "percent" => {
                     let language =
                         cv.get("language").and_then(|v| v.as_str()).ok_or_else(|| {
@@ -745,7 +747,7 @@ fn parse_processor_spec(cv: &ConfigValue) -> Result<ProcessorSpec> {
                 }
                 other => Err(crate::error::QuartoError::Other(format!(
                     "unknown content processor '{other}' in claims-files entry \
-                     (known processors: percent, spin)"
+                     (known processors: percent, spin, ipynb)"
                 ))),
             }
         }
@@ -2037,6 +2039,38 @@ contributes:
                 assert_eq!(claims.len(), 1);
                 assert_eq!(claims[0].extension, "r");
                 assert_eq!(claims[0].processor, Some(ProcessorSpec::Spin));
+            }
+            other => panic!("expected External, got {:?}", other),
+        }
+    }
+
+    /// Bare-name `processor: ipynb` parses to `ProcessorSpec::Ipynb`
+    /// (Plan 7c Phase 2 registry wiring).
+    #[test]
+    fn t_schema_processor_bare_ipynb() {
+        let tmp = TempDir::new().unwrap();
+        let ext_dir = tmp.path().join("_extensions/my-ext");
+        let file = write_extension(
+            &ext_dir,
+            r#"
+title: Engine Extension
+author: Author
+contributes:
+  engines:
+    - path: engine.js
+      claims-files:
+        - extension: ".ipynb"
+          processor: ipynb
+"#,
+        );
+        let runtime = make_runtime();
+        let ext = read_extension(&file, &runtime).unwrap();
+        match &ext.contributes.engines[0] {
+            EngineContribution::External { claims_files, .. } => {
+                let claims = claims_files.as_ref().unwrap();
+                assert_eq!(claims.len(), 1);
+                assert_eq!(claims[0].extension, "ipynb");
+                assert_eq!(claims[0].processor, Some(ProcessorSpec::Ipynb));
             }
             other => panic!("expected External, got {:?}", other),
         }

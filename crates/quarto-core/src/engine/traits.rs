@@ -16,7 +16,7 @@ use quarto_system_runtime::SystemRuntime;
 use super::context::{ExecuteResult, ExecutionContext};
 use super::error::ExecutionError;
 use crate::engine::LanguageClaim;
-use crate::extension::types::FileClaim;
+use crate::extension::types::{FileClaim, ProcessorSpec};
 
 /// Execution engine for code cells in Quarto documents.
 ///
@@ -214,23 +214,11 @@ pub trait ExecutionEngine: Send + Sync {
         Vec::new()
     }
 
-    /// Native, zero-load content-processor **claim** decision (Plan 7b
-    /// Phase 6) — the sniff half of "sniff + convert". Consulted by
-    /// `SourceConversionStage` *before* it calls the dynamic `claims_file`;
-    /// a processor-bearing entry's sniff answer is authoritative (`Some`),
-    /// so the stage never falls through to a built-in's always-`false`
-    /// `claims_file` default for that extension. Returns `None` when
-    /// [`Self::file_claims`] has no entry for this file's extension, or the
-    /// matching entry declares no processor — the caller falls back to its
-    /// own `claims_file`/`try_claims_file` path.
-    ///
-    /// The only I/O is the file read (via `runtime`); it never constructs
-    /// an engine or spawns a subprocess. A read failure answers `Some(false)`
-    /// (does not claim) rather than erroring here — if no other engine
-    /// claims the file either, the stage's existing "Can't determine
-    /// execution engine" path (or a later `markdown_for_file` call, for a
-    /// claim some other engine made) surfaces it properly.
-    fn native_claims_file(&self, file: &Path, runtime: &Arc<dyn SystemRuntime>) -> Option<bool> {
+    /// The claim→spec lookup behind the native dispatch (Plan 7c Phase 2):
+    /// the processor declared for `file`'s extension, or `None` when
+    /// [`Self::file_claims`] has no entry for it or the entry declares no
+    /// processor. Extension lookup only — no file read, no launch.
+    fn native_processor_for_file(&self, file: &Path) -> Option<ProcessorSpec> {
         let ext = file
             .extension()
             .and_then(|e| e.to_str())
@@ -240,7 +228,26 @@ pub trait ExecutionEngine: Send + Sync {
             .file_claims()
             .into_iter()
             .find(|c| c.extension == ext)?;
-        let spec = claim.processor?;
+        claim.processor
+    }
+
+    /// Native, zero-load content-processor **claim** decision (Plan 7b
+    /// Phase 6) — the sniff half of "sniff + convert". Consulted by
+    /// `SourceConversionStage` *before* it calls the dynamic `claims_file`;
+    /// a processor-bearing entry's sniff answer is authoritative (`Some`),
+    /// so the stage never falls through to a built-in's always-`false`
+    /// `claims_file` default for that extension. Returns `None` when
+    /// [`Self::native_processor_for_file`] has no spec for this file — the
+    /// caller falls back to its own `claims_file`/`try_claims_file` path.
+    ///
+    /// The only I/O is the file read (via `runtime`); it never constructs
+    /// an engine or spawns a subprocess. A read failure answers `Some(false)`
+    /// (does not claim) rather than erroring here — if no other engine
+    /// claims the file either, the stage's existing "Can't determine
+    /// execution engine" path (or a later `markdown_for_file` call, for a
+    /// claim some other engine made) surfaces it properly.
+    fn native_claims_file(&self, file: &Path, runtime: &Arc<dyn SystemRuntime>) -> Option<bool> {
+        let spec = self.native_processor_for_file(file)?;
         let content = match runtime.file_read_string(file) {
             Ok(c) => c,
             Err(_) => return Some(false),
@@ -253,26 +260,16 @@ pub trait ExecutionEngine: Send + Sync {
     /// engine (e.g. `TsEngine`) that must fall back to a dynamic/wire path
     /// when no processor governs the extension.
     ///
-    /// Returns `None` when [`Self::file_claims`] has no entry for this
-    /// file's extension, or the matching entry declares no processor — the
-    /// caller falls back to its own path. The only I/O is the file read
-    /// (via `runtime`, so this stays WASM-clean); it never constructs an
-    /// engine or spawns a subprocess.
+    /// Returns `None` when [`Self::native_processor_for_file`] has no spec
+    /// for this file — the caller falls back to its own path. The only I/O
+    /// is the file read (via `runtime`, so this stays WASM-clean); it never
+    /// constructs an engine or spawns a subprocess.
     fn native_markdown_for_file(
         &self,
         file: &Path,
         runtime: &Arc<dyn SystemRuntime>,
     ) -> Option<Result<(String, SourceInfo), ExecutionError>> {
-        let ext = file
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("")
-            .to_lowercase();
-        let claim = self
-            .file_claims()
-            .into_iter()
-            .find(|c| c.extension == ext)?;
-        let spec = claim.processor?;
+        let spec = self.native_processor_for_file(file)?;
         let content = match runtime.file_read_string(file) {
             Ok(c) => c,
             Err(e) => return Some(Err(ExecutionError::Other(e.to_string()))),
@@ -487,6 +484,42 @@ mod tests {
             .markdown_for_file(&file, &native_runtime())
             .expect_err("a claim with no processor must not natively dispatch");
         assert!(matches!(err, ExecutionError::NotSupported(_)));
+    }
+
+    /// The claim→spec lookup helper (Plan 7c Phase 2): returns the declared
+    /// processor for a matching extension, `None` for an unmatched extension
+    /// or a claim with no processor. No file read — extension lookup only.
+    #[test]
+    fn native_processor_for_file_returns_declared_spec() {
+        let engine = TestEngine {
+            name: "test",
+            available: true,
+            file_claims: vec![
+                FileClaim {
+                    extension: "ipynb".to_string(),
+                    processor: Some(ProcessorSpec::Ipynb),
+                },
+                FileClaim {
+                    extension: "echotest".to_string(),
+                    processor: None,
+                },
+            ],
+        };
+
+        assert_eq!(
+            engine.native_processor_for_file(Path::new("/proj/nb.ipynb")),
+            Some(ProcessorSpec::Ipynb)
+        );
+        assert_eq!(
+            engine.native_processor_for_file(Path::new("/proj/x.echotest")),
+            None,
+            "a claim with no processor yields None"
+        );
+        assert_eq!(
+            engine.native_processor_for_file(Path::new("/proj/x.unrelated")),
+            None,
+            "no matching claim yields None"
+        );
     }
 
     /// No matching claim at all (unrelated extension) is likewise

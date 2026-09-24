@@ -6062,9 +6062,9 @@ dependencies = [
 
 [[package]]
 name = "quarto-error-reporting"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6fdac7249f35a9325eb940fbc71cab6f4199757cc65f31d727d3845f33d96b17"
+checksum = "4090d1ec8e0d46f98f9e8877401d139e14f4dc2e87037c9b5658f24ec9040a68"
 dependencies = [
  "ariadne",
  "quarto-source-map",

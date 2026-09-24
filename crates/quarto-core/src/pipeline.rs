@@ -877,31 +877,66 @@ pub async fn run_pipeline(
     // survives.
     let policy = stage_ctx.diagnostic_policy;
 
+    // Plan 7c seam 2: the conversion provenance ParseDocumentStage stashed on
+    // the stage context, consumed by the StageError arm below to rebuild a
+    // SourceContext that matches what a successful parse would have produced.
+    let conversion_stash = stage_ctx.conversion_stash.take();
+
     result
-        .map_err(|e| match e {
-            // Already-structured errors (built by stages that know
-            // their span lives outside the document — see
-            // `theme_diagnostic`). Pass through with the stage's own
-            // SourceContext so the ariadne renderer can resolve
-            // cross-file references.
-            crate::stage::PipelineError::Structured(mut pe) => {
-                policy.apply(&mut pe.diagnostics);
-                crate::error::QuartoError::Parse(pe)
+        .map_err({
+            let policy = policy.clone();
+            move |e| match e {
+                // Already-structured errors (built by stages that know
+                // their span lives outside the document — see
+                // `theme_diagnostic`). Pass through with the stage's own
+                // SourceContext so the ariadne renderer can resolve
+                // cross-file references.
+                crate::stage::PipelineError::Structured(mut pe) => {
+                    policy.apply(&mut pe.diagnostics);
+                    crate::error::QuartoError::Parse(pe)
+                }
+                crate::stage::PipelineError::StageError {
+                    mut diagnostics, ..
+                } if !diagnostics.is_empty() => {
+                    policy.apply(&mut diagnostics);
+                    // Create a SourceContext for the parse error
+                    let mut source_context = SourceContext::new();
+                    let content_str = String::from_utf8_lossy(content).to_string();
+                    match conversion_stash {
+                        // The parse ran on engine-converted text, so FileId(0)
+                        // must be the converted buffer under the same
+                        // synthetic name ParseDocumentStage uses — otherwise
+                        // diagnostics pointing into the converted text are
+                        // labeled with the original file's name. When the
+                        // converter also produced a faithful mapping,
+                        // registering converted → original → cells *in that
+                        // order* lands each file on the exact FileId the
+                        // Concat pieces point at (ORIGINAL_FILE_ID, then the
+                        // contiguous cells), because `add_file` assigns ids
+                        // sequentially.
+                        Some(stash) => {
+                            source_context.add_file(
+                                format!("<{source_name} (converted by {})>", stash.engine),
+                                Some(stash.converted),
+                            );
+                            if stash.source_info.is_some() {
+                                source_context.add_file(source_name.to_string(), Some(content_str));
+                                for (label, text) in stash.files {
+                                    source_context.add_file(label, Some(text));
+                                }
+                            }
+                        }
+                        None => {
+                            source_context.add_file(source_name.to_string(), Some(content_str));
+                        }
+                    }
+                    crate::error::QuartoError::Parse(crate::error::ParseError::new(
+                        diagnostics,
+                        source_context,
+                    ))
+                }
+                other => crate::error::QuartoError::Other(other.to_string()),
             }
-            crate::stage::PipelineError::StageError {
-                mut diagnostics, ..
-            } if !diagnostics.is_empty() => {
-                policy.apply(&mut diagnostics);
-                // Create a SourceContext for the parse error
-                let mut source_context = SourceContext::new();
-                let content_str = String::from_utf8_lossy(content).to_string();
-                source_context.add_file(source_name.to_string(), Some(content_str));
-                crate::error::QuartoError::Parse(crate::error::ParseError::new(
-                    diagnostics,
-                    source_context,
-                ))
-            }
-            other => crate::error::QuartoError::Other(other.to_string()),
         })
         .map(|d| {
             let mut diagnostics = stage_ctx.diagnostics;
@@ -930,10 +965,11 @@ pub async fn parse_qmd_to_ast(
         crate::error::QuartoError::Other("Pipeline did not produce ast".to_string())
     })?;
 
-    // Create source context for the output
-    let mut source_context = SourceContext::new();
-    let content_str = String::from_utf8_lossy(content).to_string();
-    source_context.add_file(source_name.to_string(), Some(content_str));
+    // Plan 7c seam 2: carry the stage-populated SourceContext — for a
+    // converted document it includes the converted buffer, the original
+    // file, and the per-cell virtual files. Byte-identical to the previous
+    // single-file context for plain .qmd.
+    let source_context = ast.source_context;
 
     Ok(AstOutput {
         ast: ast.ast,
@@ -1103,11 +1139,12 @@ pub async fn render_qmd_to_preview_ast(
         )
     })?;
 
-    // Source context for translating diagnostic offsets into
-    // line/column on the JS side.
-    let mut source_context = SourceContext::new();
-    let content_str = String::from_utf8_lossy(content).to_string();
-    source_context.add_file(source_name.to_string(), Some(content_str));
+    // Plan 7c seam 2: carry the stage-populated SourceContext — for a
+    // converted document it includes the converted buffer, the original
+    // file, and the per-cell virtual files, so preview diagnostics resolve
+    // into per-cell locations. Byte-identical to the previous single-file
+    // context for plain .qmd.
+    let source_context = ast.source_context;
 
     // Build an `ASTContext` from the source context — the JSON
     // writer needs this to emit `[file_id, start, end]` source-
@@ -1115,7 +1152,9 @@ pub async fn render_qmd_to_preview_ast(
     // true`). This shape is lifted verbatim from the q2-debug
     // entry point (`wasm-quarto-hub-client/src/lib.rs:914-916`)
     // so q2-preview's JSON envelope matches q2-debug's at the
-    // wire level.
+    // wire level. (`filenames` stays the single original name: the
+    // writer interns Substring parent chains from the AST nodes' own
+    // embedded SourceInfo Arcs, not from this list.)
     let ast_context = pampa::pandoc::ASTContext {
         filenames: vec![source_name.to_string()],
         example_list_counter: std::cell::Cell::new(1),

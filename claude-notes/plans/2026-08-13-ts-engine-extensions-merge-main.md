@@ -334,6 +334,14 @@ This runbook ends when Phase C is green. bd-zlemoc6w is scheduled *after* it and
 *before* the PR; it is deliberately not a checkbox here, because nothing in this
 runbook can satisfy it.
 
+> **Update 2026-09-24:** bd-zlemoc6w was closed obsolete during Plan 7c's
+> staleness/consistency review. We since established TS engines can't do
+> input-format conversion at all (that's the Pass-1 engine-launch bug Plan 7b/7c
+> exist to avoid), so the wire path this strand targets is being retired rather
+> than fixed. Left above as the historical record of the merge-time decision; see
+> `2026-07-08-plan7c-ipynb-content-processor.md` § Review corrections for the
+> resolution.
+
 ---
 
 # Phase A — the merge

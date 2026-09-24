@@ -226,6 +226,14 @@ pub struct StageContext {
     /// short-circuit to the single claiming engine. `None` for `.qmd`.
     pub claimed_engine_name: Option<String>,
 
+    /// Conversion provenance stashed by `ParseDocumentStage` (Plan 7c
+    /// seam 2) so `run_pipeline`'s StageError arm can rebuild a
+    /// `SourceContext` that resolves diagnostics against the converted
+    /// buffer, the original file, and any per-cell virtual files. `None`
+    /// unless the document was engine-converted. Mirrors
+    /// `claimed_engine_name`'s stash pattern.
+    pub conversion_stash: Option<crate::stage::ConversionStash>,
+
     /// Per-page scope-aware resolver for HTML asset URLs and
     /// cross-document body links.
     ///
@@ -360,6 +368,7 @@ impl StageContext {
             execution_policy: crate::engine::ExecutionPolicy::default(),
             execution_skipped: false,
             claimed_engine_name: None,
+            conversion_stash: None,
             resource_resolver: None,
             observer: Arc::new(NoopObserver),
             cancellation: Cancellation::new(),

@@ -52,6 +52,8 @@ pub mod include_nested_expansion;
 pub mod include_project_absolute;
 pub mod include_resolve_pipeline;
 pub mod incremental_rebuild;
+pub mod ipynb_content_processor;
+pub mod ipynb_stored_replay;
 pub mod julia_engine_e2e;
 pub mod jupyter_integration;
 pub mod jupyter_kernel_cleanup;
