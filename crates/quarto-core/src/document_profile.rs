@@ -456,7 +456,9 @@ pub struct ProfileAuthor {
 /// A comment is authored as `[>> comment text ]` (optionally with an
 /// attribute block) or equivalently `[…]{.quarto-edit-comment}`; the
 /// qmd reader normalizes both to an `Inline::Span` whose classes
-/// contain `quarto-edit-comment`. Comments in included files count
+/// contain `quarto-edit-comment`. A block comment (`::: >>`, possibly
+/// several paragraphs) is likewise a `Block::Div` with that class.
+/// Comments in included files count
 /// toward the including document (the checkpoint sees the
 /// post-include AST), consistent with `outline`.
 ///
@@ -465,7 +467,8 @@ pub struct ProfileAuthor {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProfileComment {
     /// Plain-text projection of the comment's content
-    /// (`pampa::writers::plaintext::inlines_to_string`).
+    /// (`pampa::writers::plaintext::inlines_to_string`, or
+    /// `blocks_to_string` for a block comment).
     pub text: String,
 
     /// Source span of the mark, for jump-to-comment, gutter markers,
@@ -1296,6 +1299,7 @@ fn strip_numbers(entries: &mut Vec<TocEntry>) {
 /// contain `quarto-edit-comment`: the qmd reader's postprocess
 /// rewrites `Inline::EditComment` parse nodes into that span form
 /// (both `[>> … ]` and `[…]{.quarto-edit-comment}` normalize to it).
+/// A block comment (`::: >>`) is a `Block::Div` with the same class.
 /// A defensive `EditComment` arm keeps the walk correct for any AST
 /// that reaches extraction pre-postprocess.
 ///
@@ -1311,7 +1315,7 @@ fn extract_comments(blocks: &[quarto_pandoc_types::block::Block]) -> Vec<Profile
     collector.seen
 }
 
-/// Marker class the qmd reader stamps on comment spans.
+/// Marker class the qmd reader stamps on comment spans and divs.
 const EDIT_COMMENT_CLASS: &str = "quarto-edit-comment";
 
 struct CommentCollector {
@@ -1322,7 +1326,7 @@ impl CommentCollector {
     fn record(
         &mut self,
         attr: &quarto_pandoc_types::attr::Attr,
-        content: &quarto_pandoc_types::Inlines,
+        text: String,
         source: &quarto_source_map::SourceInfo,
     ) {
         let (_, _, kvs) = attr;
@@ -1337,7 +1341,7 @@ impl CommentCollector {
             }
         }
         self.seen.push(ProfileComment {
-            text: pampa::writers::plaintext::inlines_to_string(content).0,
+            text,
             source: source.clone(),
             author,
             date,
@@ -1375,6 +1379,11 @@ impl CommentCollector {
                 }
             }
             Block::Header(h) => self.visit_inlines(&h.content),
+            // A block comment (`::: >>`), like the inline mark, is a leaf.
+            Block::Div(d) if d.attr.1.iter().any(|c| c == EDIT_COMMENT_CLASS) => {
+                let text = pampa::writers::plaintext::blocks_to_string(&d.content).0;
+                self.record(&d.attr, text, &d.source_info);
+            }
             Block::Div(d) => self.visit_blocks(&d.content),
             Block::Figure(f) => self.visit_blocks(&f.content),
             Block::Table(t) => {
@@ -1429,14 +1438,18 @@ impl CommentCollector {
         match inline {
             Inline::Span(s) => {
                 if s.attr.1.iter().any(|c| c == EDIT_COMMENT_CLASS) {
-                    self.record(&s.attr, &s.content, &s.source_info);
+                    let text = pampa::writers::plaintext::inlines_to_string(&s.content).0;
+                    self.record(&s.attr, text, &s.source_info);
                 } else {
                     self.visit_inlines(&s.content);
                 }
             }
             // Pre-postprocess parse form; postprocess rewrites this
             // into the span form above before the checkpoint.
-            Inline::EditComment(e) => self.record(&e.attr, &e.content, &e.source_info),
+            Inline::EditComment(e) => {
+                let text = pampa::writers::plaintext::inlines_to_string(&e.content).0;
+                self.record(&e.attr, text, &e.source_info)
+            }
             Inline::Link(l) => self.visit_inlines(&l.content),
             Inline::Image(i) => self.visit_inlines(&i.content),
             Inline::Emph(e) => self.visit_inlines(&e.content),
@@ -2782,6 +2795,55 @@ x = 1
         assert_eq!(b.author.as_deref(), Some("Bob"));
         assert_eq!(b.date, None);
         assert!(b.attributes.is_empty());
+    }
+
+    #[test]
+    fn profile_extract_block_comment() {
+        // `::: >>` is a Div.quarto-edit-comment: one comment, its text the
+        // plain projection of all its blocks, author/date from the opener.
+        let qmd = "---\ntitle: T\n---\n\n\
+Before [>> inline ].\n\n\
+::: >> {author=\"Ann\" date=\"2026-09-24T00:00:00Z\" level=\"major\"}\n\n\
+First *paragraph*.\n\n\
+Second paragraph.\n\n\
+:::\n\n\
+After.\n";
+        let profile = extract_from(qmd);
+        assert_eq!(profile.comments.len(), 2, "inline and block comment");
+        assert_eq!(profile.comments[0].text, "inline");
+
+        let c = &profile.comments[1];
+        assert!(
+            c.text.contains("First paragraph.") && c.text.contains("Second paragraph."),
+            "block comment text covers every block, got {:?}",
+            c.text
+        );
+        assert_eq!(c.author.as_deref(), Some("Ann"));
+        assert_eq!(c.date.as_deref(), Some("2026-09-24T00:00:00Z"));
+        assert_eq!(
+            c.attributes,
+            vec![("level".to_string(), "major".to_string())]
+        );
+        let covered = &qmd[c.source.start_offset()..c.source.end_offset()];
+        assert!(
+            covered.starts_with("::: >>") && covered.contains("Second paragraph."),
+            "source span covers the whole block mark, got {covered:?}"
+        );
+    }
+
+    #[test]
+    fn profile_extract_block_comment_is_a_leaf() {
+        // An inline comment nested inside a block comment is part of the
+        // block comment's text, not a comment of its own; the comment
+        // container Div used for code-block threads is not a comment.
+        let qmd = "---\ntitle: T\n---\n\n\
+::: >>\n\nOuter [>> inner ] text.\n\n:::\n\n\
+::: {.quarto-edit-comment-container}\n\n[>> on code ]\n\n:::\n";
+        let profile = extract_from(qmd);
+        let texts: Vec<&str> = profile.comments.iter().map(|c| c.text.as_str()).collect();
+        assert_eq!(texts.len(), 2, "got {texts:?}");
+        assert!(texts[0].starts_with("Outer"), "got {texts:?}");
+        assert_eq!(texts[1], "on code");
     }
 
     #[test]
