@@ -368,6 +368,8 @@ export interface MenuSubmenuProps {
   label: ReactNode;
   /** Second line of muted explanatory text, as on `MenuItem`. */
   subtext?: ReactNode;
+  /** Bold label, as on `MenuItem`, so groups match the leaves they hold. */
+  strong?: boolean;
   children: ReactNode;
 }
 
@@ -376,7 +378,7 @@ export interface MenuSubmenuProps {
  * ArrowLeft inside the submenu closes it and refocuses this item.
  * Opening it closes any sibling submenu at the same level.
  */
-export function MenuSubmenu({ label, subtext, children }: MenuSubmenuProps) {
+export function MenuSubmenu({ label, subtext, strong, children }: MenuSubmenuProps) {
   const itemId = useId();
   const [open, setOpen] = useSubmenuOpen(itemId);
   const itemRef = useRef<HTMLButtonElement>(null);
@@ -461,7 +463,7 @@ export function MenuSubmenu({ label, subtext, children }: MenuSubmenuProps) {
         aria-haspopup="menu"
         aria-expanded={open}
         ref={itemRef}
-        className="qh-menu-item-inner"
+        className={`qh-menu-item-inner${strong ? ' strong' : ''}`}
         onClick={(e) => {
           e.stopPropagation();
           openAndFocusFirst();

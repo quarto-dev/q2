@@ -63,7 +63,7 @@ function renderChoiceTree(
     </MenuItem>
   );
   const renderNode = (node: ChoiceTreeNode<ProjectChoice>): ReactNode => (
-    <MenuSubmenu key={node.label} label={node.label} subtext={node.description}>
+    <MenuSubmenu key={node.label} label={node.label} subtext={node.description} strong>
       {node.choices.map(item)}
       {node.children.map(renderNode)}
     </MenuSubmenu>

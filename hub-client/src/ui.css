@@ -298,6 +298,7 @@
 .qh-menu-item-inner:focus,
 .qh-menu-item-inner[aria-expanded="true"] { background: var(--context-menu-hover); }
 .qh-menu-item-inner:focus:not(:focus-visible) { outline: none; }
+.qh-menu-item-inner.strong .qh-menu-item-label { font-weight: 600; }
 .qh-menu-item-inner-text {
   display: flex;
   flex-direction: column;

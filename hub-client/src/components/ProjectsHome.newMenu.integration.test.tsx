@@ -81,6 +81,8 @@ describe('ProjectsHome New menu tree', () => {
     const templates = within(menu).getByRole('menuitem', { name: /Templates/ });
     await screen.findByText('Bare skeletons with just enough structure to start writing');
     expect(templates.textContent).toContain('Bare skeletons');
+    // Group labels are bold like the leaves they hold.
+    expect(templates.classList.contains('strong')).toBe(true);
     expect(within(menu).getByRole('menuitem', { name: /Examples/ }).textContent).toContain(
       'Filled-in projects',
     );
