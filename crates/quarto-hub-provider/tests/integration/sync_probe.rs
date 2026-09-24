@@ -153,7 +153,7 @@ async fn probe_files_str_or_text() {
             for k in doc.keys(&files_obj).collect::<Vec<_>>() {
                 if let Some((v, vid)) = doc.get(&files_obj, &k).ok().flatten() {
                     let s = match v {
-                        Value::Scalar(s) => s.to_str().map(str::to_string),
+                        Value::Scalar(s) => s.as_str().map(str::to_string),
                         Value::Object(automerge::ObjType::Text) => doc.text(&vid).ok(),
                         _ => None,
                     };

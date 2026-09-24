@@ -223,7 +223,7 @@ pub fn read_capture_meta(doc: &Automerge) -> Option<CaptureDocMetaRead> {
         doc.get(&meta_obj, key)
             .ok()
             .flatten()
-            .and_then(|(value, _)| value.to_str().map(str::to_string))
+            .and_then(|(value, _)| value.as_str().map(str::to_string))
     };
     let engines = match doc.get(&meta_obj, "engines").ok().flatten() {
         Some((_, engines_obj)) => (0..doc.length(&engines_obj))
@@ -231,7 +231,7 @@ pub fn read_capture_meta(doc: &Automerge) -> Option<CaptureDocMetaRead> {
                 doc.get(&engines_obj, i)
                     .ok()
                     .flatten()
-                    .and_then(|(value, _)| value.to_str().map(str::to_string))
+                    .and_then(|(value, _)| value.as_str().map(str::to_string))
             })
             .collect(),
         None => Vec::new(),
@@ -482,9 +482,9 @@ mod tests {
         // Standard binary-doc fields intact.
         assert_eq!(detect_document_type(&doc), DocumentType::Binary);
         let (mime, _) = doc.get(ROOT, "mimeType").unwrap().unwrap();
-        assert_eq!(mime.to_str(), Some(CAPTURE_MIME_TYPE));
+        assert_eq!(mime.as_str(), Some(CAPTURE_MIME_TYPE));
         let (hash, _) = doc.get(ROOT, "hash").unwrap().unwrap();
-        assert_eq!(hash.to_str(), Some(compute_hash(b"gzipped-bytes").as_str()));
+        assert_eq!(hash.as_str(), Some(compute_hash(b"gzipped-bytes").as_str()));
     }
 
     #[test]
