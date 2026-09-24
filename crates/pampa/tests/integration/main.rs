@@ -87,6 +87,7 @@ pub mod test_email_autolink;
 pub mod test_emphasis_opening_mark;
 pub mod test_error_corpus;
 pub mod test_fenced_div_no_space;
+pub mod test_fenced_div_sigils;
 pub mod test_figure_figcaption_synthesis;
 pub mod test_frontmatter_delimiters;
 pub mod test_grid_table_error;

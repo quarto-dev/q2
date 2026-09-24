@@ -77,6 +77,19 @@ const PANDOC_VALID_OTHER_PUNCTUATION =
 // U+00BB = » (right-pointing double angle quotation mark / guillemet)
 const PANDOC_SMART_QUOTES = "\\u{2018}\\u{2019}\\u{201A}\\u{201B}\\u{201C}\\u{201D}\\u{201E}\\u{201F}\\u{2039}\\u{203A}\\u{00AB}\\u{00BB}";
 
+// Everything after the opener line of a `:::`-fenced block: the body
+// blocks, the optional `:::` closer, and the block close. Shared by every
+// construct that starts with `$._fenced_div_start` (`pandoc_div`,
+// `note_definition_fenced_block`, ...), which differ only in what follows
+// `::: ` on the opener line. This is a JS helper, not a hidden rule, so
+// each construct gets the sequence inlined and the parse table is the same
+// as if it were written out by hand.
+const fencedDivTail = ($) => seq(
+    repeat($._block),
+    optional(seq($._fenced_div_end, $._close_block, choice($._newline, $._eof))),
+    $._block_close,
+);
+
 const regexBracket = (str) => `(?:${str})`;
 const regexOr = (...groups) => regexBracket(groups.join("|"));
 
@@ -1004,9 +1017,7 @@ module.exports = grammar({
           optional($._whitespace),
           choice(alias($._commonmark_naked_value, $.info_string), alias($._pandoc_attr_specifier, $.attribute_specifier)),
           $._newline,
-          repeat($._block),
-          optional(seq($._fenced_div_end, $._close_block, choice($._newline, $._eof))),
-          $._block_close,
+          fencedDivTail($),
         ),
 
         ///////////////////////////////////////////////////////////////////////////////////////////
@@ -1023,9 +1034,7 @@ module.exports = grammar({
             $._whitespace,
             $.fenced_div_note_id,
             $._newline,
-            repeat($._block),
-            optional(seq($._fenced_div_end, $._close_block, choice($._newline, $._eof))),
-            $._block_close,
+            fencedDivTail($),
         ),
 
         ///////////////////////////////////////////////////////////////////////////////////////////

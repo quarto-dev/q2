@@ -1958,7 +1958,14 @@ static bool parse_fenced_div_note_id(Scanner *s, TSLexer *lexer,
     // https://pandoc.org/MANUAL.html#extension-footnotes
     // The identifiers in footnote references may not contain spaces, tabs, newlines,
     // or the characters ^, [, or ].
-    while (lexer->lookahead != ' ' && lexer->lookahead != '\t' && lexer->lookahead != '\n' &&
+    //
+    // The EOF check is load-bearing: at EOF `lookahead` is 0 and
+    // `advance` is a no-op, so without it `::: ^id` as the last bytes of
+    // a document loops forever. '\r' ends the id so CRLF input does not
+    // leak the carriage return into it.
+    while (!lexer->eof(lexer) &&
+           lexer->lookahead != ' ' && lexer->lookahead != '\t' &&
+           lexer->lookahead != '\n' && lexer->lookahead != '\r' &&
            lexer->lookahead != '^' && lexer->lookahead != '['  && lexer->lookahead != ']') {
         advance(s, lexer);
     }
@@ -2494,10 +2501,36 @@ static bool parse_tilde(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     return false;
 }
 
-static bool parse_caret(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
-    if (valid_symbols[FENCED_DIV_NOTE_ID]) {
-        return parse_fenced_div_note_id(s, lexer, valid_symbols);
+// Fenced-div sigils: the token right after `::: ` that turns a fenced
+// div opener into a different construct (`::: ^id` is a note
+// definition). The parser makes a sigil token valid only in the state
+// that follows `$._fenced_div_start $._whitespace`, which is where
+// `pandoc_div` expects its info string or attribute specifier; see
+// `fencedDivTail` in grammar.js for the part these constructs share.
+//
+// To add a construct: add an external token, a case below, and a rule
+// in grammar.js that consumes the token after `$._fenced_div_start
+// $._whitespace`.
+static bool any_fenced_div_sigil_valid(const bool *valid_symbols) {
+    return valid_symbols[FENCED_DIV_NOTE_ID];
+}
+
+static bool parse_fenced_div_sigil(Scanner *s, TSLexer *lexer,
+                                   const bool *valid_symbols) {
+    switch (lexer->lookahead) {
+        case '^':
+            if (valid_symbols[FENCED_DIV_NOTE_ID]) {
+                return parse_fenced_div_note_id(s, lexer, valid_symbols);
+            }
+            break;
     }
+    return false;
+}
+
+static bool parse_caret(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
+    // unused
+    (void)(s);
+
     lexer->advance(lexer, false);
     if (lexer->lookahead == '[' && valid_symbols[INLINE_NOTE_START_TOKEN]) {
         lexer->advance(lexer, false);
@@ -2729,6 +2762,18 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         EMIT_TOKEN(INDENTED_CODE_BLOCK_DISALLOWED);
     }
 
+    // Right after `::: ` only a fenced-div sigil or pandoc_div's info
+    // string / attribute specifier (both internal-lexer tokens) can
+    // follow: in the generated parse table the sigil tokens share a
+    // scanner state with no other external token (apart from the
+    // all-valid error-recovery state, which returns CLOSE_BLOCK above).
+    // So a sigil is decided here, before the main switch would route
+    // '^' to superscripts, and a failed sigil scan hands the position
+    // to the internal lexer.
+    if (any_fenced_div_sigil_valid(valid_symbols)) {
+        return parse_fenced_div_sigil(s, lexer, valid_symbols);
+    }
+
     // Decide which tokens to consider based on the first non-whitespace
     // character
     DEBUG_PRINT("before main lookahead switch\n");
@@ -2829,7 +2874,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             }
             break;
         case '^':
-            if (valid_symbols[FENCED_DIV_NOTE_ID] || valid_symbols[SUPERSCRIPT_CLOSE] || valid_symbols[SUPERSCRIPT_OPEN]) {
+            if (valid_symbols[SUPERSCRIPT_CLOSE] || valid_symbols[SUPERSCRIPT_OPEN]) {
                 return parse_caret(s, lexer, valid_symbols);
             }
             break;
