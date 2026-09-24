@@ -892,6 +892,43 @@ mod tests {
         fs::write(path, contents).unwrap();
     }
 
+    // --- T-discovery-noop (Plan 7b Phase 6): gate 1 needs zero changes. ---
+
+    /// `RenderableExtensions` admits a processor-bearing claim exactly like
+    /// any other extension-claim string — it never looks at `processor` at
+    /// all, so a percent/spin claim (built-in or extension-contributed)
+    /// passes gate 1 with **no code change to this module**. The actual
+    /// fix Plan 7b needed was at the two call sites that build this set
+    /// (`project/mod.rs`, `project/orchestrator.rs`), which previously
+    /// never unioned `engine::builtin_file_claims()` in — see Phase 5.
+    #[test]
+    fn renderable_extensions_admits_a_processor_bearing_claim() {
+        let claim = crate::extension::types::FileClaim {
+            extension: "py".to_string(),
+            processor: Some(crate::extension::types::ProcessorSpec::Percent {
+                language: "python".to_string(),
+                comment: "#".to_string(),
+            }),
+        };
+        let exts = RenderableExtensions::new(std::iter::once(claim.extension));
+        assert!(exts.contains("py"));
+    }
+
+    /// The real fix, exercised end to end: `engine::builtin_file_claims()`'s
+    /// extensions (jupyter's percent + knitr's spin) all pass gate 1 once
+    /// unioned in — exactly what both production call sites now do.
+    #[test]
+    fn renderable_extensions_admits_every_builtin_claim() {
+        let exts = RenderableExtensions::new(
+            crate::engine::builtin_file_claims()
+                .into_iter()
+                .map(|c| c.extension),
+        );
+        for ext in ["py", "jl", "r", "q"] {
+            assert!(exts.contains(ext), "extension {ext} must pass gate 1");
+        }
+    }
+
     #[test]
     fn discovery_walks_directory() {
         let temp = TempDir::new().unwrap();

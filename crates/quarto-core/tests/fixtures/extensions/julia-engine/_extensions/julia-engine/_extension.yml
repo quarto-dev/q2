@@ -12,3 +12,6 @@ contributes:
           priority: 1
       file-extensions:
         - .jl
+      claims-files:
+        - extension: .jl
+          processor: { name: percent, language: julia }

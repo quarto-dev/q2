@@ -256,6 +256,19 @@ pub struct LoadedSource {
     /// Set by `SourceConversionStage` when an engine converts this file to QMD.
     /// `None` for `.qmd` / `.md` inputs (pass-through path).
     pub conversion: Option<ConversionProvenance>,
+    /// Faithful original-file provenance for a converted file (Plan 7b "A+"),
+    /// set by `SourceConversionStage` from the claiming engine's
+    /// `markdown_for_file` return value — but **only** when that value is a
+    /// genuine `Concat`/`Original`/`Substring` mapping, never the
+    /// placeholder `SourceInfo::generated(By::unknown())` a dynamic/wire
+    /// conversion still returns (wrapping a `Substring` over a `Generated`
+    /// parent is not meaningful). `None` for `.qmd`/`.md` pass-through and
+    /// for any conversion that has no real provenance to offer.
+    ///
+    /// `ParseDocumentStage` threads this through as `pampa::readers::qmd::
+    /// read`'s `parent_source_info` — see `content_processors::
+    /// ORIGINAL_FILE_ID` for the FileId convention this relies on.
+    pub source_info: Option<quarto_source_map::SourceInfo>,
 }
 
 impl LoadedSource {
@@ -270,6 +283,7 @@ impl LoadedSource {
             content,
             source_type,
             conversion: None,
+            source_info: None,
         }
     }
 
@@ -284,6 +298,7 @@ impl LoadedSource {
             content,
             source_type: Some(source_type),
             conversion: None,
+            source_info: None,
         }
     }
 

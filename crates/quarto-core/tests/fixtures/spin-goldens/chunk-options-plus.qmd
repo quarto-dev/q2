@@ -1,0 +1,6 @@
+Chunk options via `#+`.
+
+```{r echo=FALSE, fig.width=5}
+plot(1:10)
+```
+

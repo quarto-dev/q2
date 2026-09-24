@@ -16,6 +16,7 @@ use quarto_system_runtime::SystemRuntime;
 use super::context::{ExecuteResult, ExecutionContext};
 use super::error::ExecutionError;
 use crate::engine::LanguageClaim;
+use crate::extension::types::FileClaim;
 
 /// Execution engine for code cells in Quarto documents.
 ///
@@ -200,21 +201,106 @@ pub trait ExecutionEngine: Send + Sync {
         Some(false)
     }
 
+    /// Static file claims this engine declares (Plan 7b), construction-free
+    /// and side-effect-free — reading it never loads or launches the
+    /// engine. Each entry pairs an extension with an optional named content
+    /// processor (`ProcessorSpec`); a `None` processor means the extension
+    /// is claimed but converted dynamically (the wire fallback for TS
+    /// engines, or simply unsupported for a built-in that never overrides
+    /// `markdown_for_file`).
+    ///
+    /// Default: empty (no static file claims).
+    fn file_claims(&self) -> Vec<FileClaim> {
+        Vec::new()
+    }
+
+    /// Native, zero-load content-processor **claim** decision (Plan 7b
+    /// Phase 6) — the sniff half of "sniff + convert". Consulted by
+    /// `SourceConversionStage` *before* it calls the dynamic `claims_file`;
+    /// a processor-bearing entry's sniff answer is authoritative (`Some`),
+    /// so the stage never falls through to a built-in's always-`false`
+    /// `claims_file` default for that extension. Returns `None` when
+    /// [`Self::file_claims`] has no entry for this file's extension, or the
+    /// matching entry declares no processor — the caller falls back to its
+    /// own `claims_file`/`try_claims_file` path.
+    ///
+    /// The only I/O is the file read (via `runtime`); it never constructs
+    /// an engine or spawns a subprocess. A read failure answers `Some(false)`
+    /// (does not claim) rather than erroring here — if no other engine
+    /// claims the file either, the stage's existing "Can't determine
+    /// execution engine" path (or a later `markdown_for_file` call, for a
+    /// claim some other engine made) surfaces it properly.
+    fn native_claims_file(&self, file: &Path, runtime: &Arc<dyn SystemRuntime>) -> Option<bool> {
+        let ext = file
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+        let claim = self
+            .file_claims()
+            .into_iter()
+            .find(|c| c.extension == ext)?;
+        let spec = claim.processor?;
+        let content = match runtime.file_read_string(file) {
+            Ok(c) => c,
+            Err(_) => return Some(false),
+        };
+        Some(super::content_processors::sniff(&spec, file, &content))
+    }
+
+    /// Native, zero-load dispatch to a named content processor (Plan 7b),
+    /// consulted by the default [`Self::markdown_for_file`] and by any
+    /// engine (e.g. `TsEngine`) that must fall back to a dynamic/wire path
+    /// when no processor governs the extension.
+    ///
+    /// Returns `None` when [`Self::file_claims`] has no entry for this
+    /// file's extension, or the matching entry declares no processor — the
+    /// caller falls back to its own path. The only I/O is the file read
+    /// (via `runtime`, so this stays WASM-clean); it never constructs an
+    /// engine or spawns a subprocess.
+    fn native_markdown_for_file(
+        &self,
+        file: &Path,
+        runtime: &Arc<dyn SystemRuntime>,
+    ) -> Option<Result<(String, SourceInfo), ExecutionError>> {
+        let ext = file
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+        let claim = self
+            .file_claims()
+            .into_iter()
+            .find(|c| c.extension == ext)?;
+        let spec = claim.processor?;
+        let content = match runtime.file_read_string(file) {
+            Ok(c) => c,
+            Err(e) => return Some(Err(ExecutionError::Other(e.to_string()))),
+        };
+        Some(
+            super::content_processors::convert(&spec, file, &content, runtime)
+                .map(|converted| (converted.markdown, converted.source_info))
+                .map_err(|e| ExecutionError::Other(e.to_string())),
+        )
+    }
+
     /// Convert a non-QMD file to QMD text. Called only for files this engine
     /// claimed via `claims_file`. For QMD files, q2 handles parsing directly
     /// and this method is never called.
     ///
-    /// Returns the converted text; the `SourceInfo` slot is reserved for
-    /// faithful original-file provenance (deferred — see "Provenance" in
-    /// plan1a-engine) and is `SourceInfo::default()` in v1.
-    ///
-    /// Default: returns `Err(ExecutionError::NotSupported("markdown_for_file"))`.
+    /// Default: dispatches to [`Self::native_markdown_for_file`] — a named
+    /// content processor, if `file_claims()` declares one for this
+    /// extension — and falls back to
+    /// `Err(ExecutionError::NotSupported("markdown_for_file"))` otherwise.
     fn markdown_for_file(
         &self,
-        _file: &Path,
-        _runtime: &Arc<dyn SystemRuntime>,
+        file: &Path,
+        runtime: &Arc<dyn SystemRuntime>,
     ) -> Result<(String, SourceInfo), ExecutionError> {
-        Err(ExecutionError::not_supported("markdown_for_file"))
+        match self.native_markdown_for_file(file, runtime) {
+            Some(result) => result,
+            None => Err(ExecutionError::not_supported("markdown_for_file")),
+        }
     }
 
     /// Check if this engine is available in the current environment.
@@ -277,6 +363,7 @@ mod tests {
     struct TestEngine {
         name: &'static str,
         available: bool,
+        file_claims: Vec<FileClaim>,
     }
 
     impl ExecutionEngine for TestEngine {
@@ -295,46 +382,43 @@ mod tests {
         fn is_available(&self) -> bool {
             self.available
         }
+
+        fn file_claims(&self) -> Vec<FileClaim> {
+            self.file_claims.clone()
+        }
+    }
+
+    fn test_engine(name: &'static str, available: bool) -> TestEngine {
+        TestEngine {
+            name,
+            available,
+            file_claims: Vec::new(),
+        }
     }
 
     #[test]
     fn test_engine_trait_name() {
-        let engine = TestEngine {
-            name: "test",
-            available: true,
-        };
+        let engine = test_engine("test", true);
         assert_eq!(engine.name(), "test");
     }
 
     #[test]
     fn test_engine_trait_default_can_freeze() {
-        let engine = TestEngine {
-            name: "test",
-            available: true,
-        };
+        let engine = test_engine("test", true);
         assert!(!engine.can_freeze());
     }
 
     #[test]
     fn test_engine_trait_default_intermediate_files() {
-        let engine = TestEngine {
-            name: "test",
-            available: true,
-        };
+        let engine = test_engine("test", true);
         let files = engine.intermediate_files(Path::new("/test.qmd"));
         assert!(files.is_empty());
     }
 
     #[test]
     fn test_engine_trait_is_available() {
-        let available = TestEngine {
-            name: "test",
-            available: true,
-        };
-        let unavailable = TestEngine {
-            name: "test",
-            available: false,
-        };
+        let available = test_engine("test", true);
+        let unavailable = test_engine("test", false);
 
         assert!(available.is_available());
         assert!(!unavailable.is_available());
@@ -344,5 +428,88 @@ mod tests {
     fn test_engine_is_send_sync() {
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<TestEngine>();
+    }
+
+    // --- T-registry (Phase 2): default `markdown_for_file` native dispatch. ---
+
+    use crate::extension::types::ProcessorSpec;
+    use tempfile::TempDir;
+
+    fn native_runtime() -> Arc<dyn SystemRuntime> {
+        Arc::new(quarto_system_runtime::NativeRuntime::new())
+    }
+
+    /// A claim naming a processor dispatches natively — no `NotSupported`,
+    /// no engine object beyond the already-constructed `TestEngine`.
+    #[test]
+    fn default_markdown_for_file_dispatches_to_named_processor() {
+        let tmp = TempDir::new().unwrap();
+        let file = tmp.path().join("script.spintest");
+        // No roxygen header / chunk markers -> spin wraps it as one bare
+        // code chunk; this test only cares that dispatch occurred (see
+        // `content_processors::spin::tests` for spin's own grammar tests).
+        std::fs::write(&file, "hello from spin").unwrap();
+
+        let engine = TestEngine {
+            name: "test",
+            available: true,
+            file_claims: vec![FileClaim {
+                extension: "spintest".to_string(),
+                processor: Some(ProcessorSpec::Spin),
+            }],
+        };
+
+        let (markdown, _source_info) = engine
+            .markdown_for_file(&file, &native_runtime())
+            .expect("processor-bearing claim must dispatch natively");
+        assert_eq!(markdown, "\n```{r}\nhello from spin\n```\n\n");
+    }
+
+    /// A claim with NO processor is not natively dispatchable — the default
+    /// trait method falls back to `NotSupported` (an engine like `TsEngine`
+    /// instead falls back to its own dynamic/wire path; see `ts_engine.rs`).
+    #[test]
+    fn default_markdown_for_file_no_processor_falls_back_to_not_supported() {
+        let tmp = TempDir::new().unwrap();
+        let file = tmp.path().join("script.echotest");
+        std::fs::write(&file, "irrelevant").unwrap();
+
+        let engine = TestEngine {
+            name: "test",
+            available: true,
+            file_claims: vec![FileClaim {
+                extension: "echotest".to_string(),
+                processor: None,
+            }],
+        };
+
+        let err = engine
+            .markdown_for_file(&file, &native_runtime())
+            .expect_err("a claim with no processor must not natively dispatch");
+        assert!(matches!(err, ExecutionError::NotSupported(_)));
+    }
+
+    /// No matching claim at all (unrelated extension) is likewise
+    /// `NotSupported` — proves the extension-match, not just "any claim
+    /// exists," gates dispatch.
+    #[test]
+    fn default_markdown_for_file_no_matching_claim_falls_back_to_not_supported() {
+        let tmp = TempDir::new().unwrap();
+        let file = tmp.path().join("script.unrelated");
+        std::fs::write(&file, "irrelevant").unwrap();
+
+        let engine = TestEngine {
+            name: "test",
+            available: true,
+            file_claims: vec![FileClaim {
+                extension: "spintest".to_string(),
+                processor: Some(ProcessorSpec::Spin),
+            }],
+        };
+
+        let err = engine
+            .markdown_for_file(&file, &native_runtime())
+            .expect_err("an unrelated extension must not dispatch");
+        assert!(matches!(err, ExecutionError::NotSupported(_)));
     }
 }

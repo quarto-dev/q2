@@ -31,6 +31,14 @@ glob = "0.3"
 # unconditionally and `quarto-core` depends on `pampa` unconditionally, so
 # regex is already compiled into the WASM payload.
 regex = "1.12"
+# Plan 7b spin processor: `matchable` (is a `#'`/chunk marker inside a
+# multi-line string, or a real top-level token?) reuses tree-sitter-r rather
+# than hand-rolling an R tokenizer. Cross-target on purpose (native + wasm32)
+# — see claude-notes/plans/2026-07-08-plan7b-native-content-processors.md
+# Decision 4. `quarto-highlight` already pays this cost in the wasm32 build
+# (`wasm-quarto-hub-client` depends on it), so this is not new WASM weight.
+tree-sitter.workspace = true
+tree-sitter-r = "1.2"
 # `time` for date formatting (used by L1 ListingItemInfoStage; see
 # claude-notes/plans/2026-05-05-listings-L1-autofill-stage.md §D12).
 # `formatting` enables `OffsetDateTime::format`; `parsing` enables

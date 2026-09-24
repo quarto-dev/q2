@@ -58,6 +58,7 @@ use super::context::{ExecuteResult as EngineExecuteResult, ExecutionContext};
 use super::error::ExecutionError;
 use super::traits::ExecutionEngine;
 use crate::engine::LanguageClaim;
+use crate::extension::types::{FileClaim, ProcessorSpec};
 
 /// Number of times the underlying PATH lookup for the jupyter
 /// executable has run during this process. With the
@@ -130,6 +131,46 @@ impl JupyterEngine {
     pub fn jupyter_path(&self) -> Option<&Path> {
         self.jupyter_path.as_deref()
     }
+
+    /// Static, construction-free `percent` claims (Plan 7b Phase 5) — the
+    /// same data `file_claims()` returns, callable without `JupyterEngine::
+    /// new()` (which probes `PATH` for the `jupyter` binary). Used by
+    /// `builtin_file_claims()` for discovery's gate 1.
+    ///
+    /// `comment` defaults to `"#"` for every extension except `.q`, which
+    /// uses `/` (Plan 7b Decision 2).
+    pub fn static_file_claims() -> Vec<FileClaim> {
+        vec![
+            FileClaim {
+                extension: "py".to_string(),
+                processor: Some(ProcessorSpec::Percent {
+                    language: "python".to_string(),
+                    comment: "#".to_string(),
+                }),
+            },
+            FileClaim {
+                extension: "jl".to_string(),
+                processor: Some(ProcessorSpec::Percent {
+                    language: "julia".to_string(),
+                    comment: "#".to_string(),
+                }),
+            },
+            FileClaim {
+                extension: "r".to_string(),
+                processor: Some(ProcessorSpec::Percent {
+                    language: "r".to_string(),
+                    comment: "#".to_string(),
+                }),
+            },
+            FileClaim {
+                extension: "q".to_string(),
+                processor: Some(ProcessorSpec::Percent {
+                    language: "q".to_string(),
+                    comment: "/".to_string(),
+                }),
+            },
+        ]
+    }
 }
 
 impl Default for JupyterEngine {
@@ -185,6 +226,10 @@ impl ExecutionEngine for JupyterEngine {
         self.jupyter_path.is_some()
     }
 
+    fn file_claims(&self) -> Vec<FileClaim> {
+        Self::static_file_claims()
+    }
+
     fn intermediate_files(&self, input_path: &Path) -> Vec<PathBuf> {
         // Jupyter may produce {input}_files/ directory for outputs
         let stem = input_path
@@ -226,6 +271,54 @@ mod tests {
         let files = engine.intermediate_files(Path::new("/project/notebook.qmd"));
         assert_eq!(files.len(), 1);
         assert_eq!(files[0], PathBuf::from("/project/notebook_files"));
+    }
+
+    // --- Plan 7b Phase 5: builtin file claims. ---
+
+    /// `static_file_claims()` (and `file_claims()`, which delegates to it)
+    /// returns all four percent claims — no registry, no engine
+    /// construction beyond the struct literal this test itself makes.
+    #[test]
+    fn static_file_claims_returns_four_percent_claims() {
+        let claims = JupyterEngine::static_file_claims();
+        assert_eq!(claims.len(), 4);
+        let by_ext = |ext: &str| claims.iter().find(|c| c.extension == ext).unwrap();
+
+        for (ext, language, comment) in [
+            ("py", "python", "#"),
+            ("jl", "julia", "#"),
+            ("r", "r", "#"),
+            ("q", "q", "/"),
+        ] {
+            let claim = by_ext(ext);
+            assert_eq!(
+                claim.processor,
+                Some(crate::extension::types::ProcessorSpec::Percent {
+                    language: language.to_string(),
+                    comment: comment.to_string(),
+                }),
+                "extension {ext}"
+            );
+        }
+    }
+
+    /// A percent `.py` converts via the default `markdown_for_file`
+    /// dispatch (native, no jupyter kernel/subprocess) — `JupyterEngine`
+    /// overrides neither `claims_file` nor `markdown_for_file` itself; the
+    /// `file_claims()` override is enough for the trait default to work.
+    #[test]
+    fn py_percent_converts_via_native_dispatch() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("script.py");
+        std::fs::write(&file, "# %% [markdown]\n# hello\n").unwrap();
+
+        let engine = JupyterEngine::new();
+        let runtime: std::sync::Arc<dyn quarto_system_runtime::SystemRuntime> =
+            std::sync::Arc::new(quarto_system_runtime::NativeRuntime::new());
+        let (markdown, _source_info) = engine
+            .markdown_for_file(&file, &runtime)
+            .expect("percent .py must convert via native dispatch");
+        assert_eq!(markdown, "hello\n\n");
     }
 
     #[test]

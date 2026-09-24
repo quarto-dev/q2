@@ -915,6 +915,14 @@ impl ExecutionEngine for TsEngine {
         self.extension_yml_path.lock().unwrap().clone()
     }
 
+    /// Static file claims (Plan 7b) — same data `try_claims_file` already
+    /// reads, exposed for the default trait's native `markdown_for_file`
+    /// dispatch. `None` (undeclared `claims-files`) is the wire-only
+    /// dynamic-claimer shape and has no static claims to report.
+    fn file_claims(&self) -> Vec<FileClaim> {
+        self.claims_files.clone().unwrap_or_default()
+    }
+
     fn claims_file(&self, file: &str, ext: &str) -> bool {
         // 1. Pre-filter: if file_extensions is Some and ext ∉ it ⇒ false, no load.
         if let Some(exts) = &self.file_extensions
@@ -1098,8 +1106,16 @@ impl ExecutionEngine for TsEngine {
     fn markdown_for_file(
         &self,
         file: &Path,
-        _runtime: &Arc<dyn SystemRuntime>,
+        runtime: &Arc<dyn SystemRuntime>,
     ) -> Result<(String, SourceInfo), ExecutionError> {
+        // Plan 7b: native-first. A `claims-files` entry naming a content
+        // processor (percent/spin) converts in-process — no Deno launch —
+        // and only a claim with no processor falls through to the wire
+        // path below.
+        if let Some(result) = self.native_markdown_for_file(file, runtime) {
+            return result;
+        }
+
         // P2-17: cache the converted QMD per canonical path so both passes of a
         // two-pass (website) render share one conversion, not two subprocess
         // round-trips.  The key is the file path as supplied by the caller (already
@@ -1194,7 +1210,7 @@ mod tests {
         FromEngine, HostGlobalConfig, LaunchEngineResult, LoadEngineResult, ToEngine,
         TsExecuteResult,
     };
-    use crate::extension::types::{ClaimKind, StaticLanguageClaim};
+    use crate::extension::types::{ClaimKind, ProcessorSpec, StaticLanguageClaim};
 
     // ── Test helpers ─────────────────────────────────────────────────────────
 
@@ -2404,6 +2420,7 @@ mod tests {
                 Some(vec![".echo".to_string()]),
                 Some(vec![FileClaim {
                     extension: ".echo".to_string(),
+                    processor: None,
                 }]),
                 ext_id,
                 aliases,
@@ -2515,6 +2532,7 @@ mod tests {
                 None,
                 Some(vec![FileClaim {
                     extension: "echo".to_string(),
+                    processor: None,
                 }]),
                 ext_id,
                 aliases,
@@ -2557,6 +2575,229 @@ mod tests {
                 }
                 other => panic!("expected ToEngine::ClaimsFile, got {other:?}"),
             }
+
+            mock.signal_eof();
+        });
+    }
+
+    // ── Plan 7b: native-first `markdown_for_file` ──────────────────────────────
+
+    /// A processor-bearing claim converts natively — **zero** wire messages,
+    /// not even `LoadEngine`. This is the "zero Pass-1 launch" guarantee at
+    /// the `TsEngine` level: a julia/marimo percent script converts without
+    /// ever spawning Deno.
+    #[test]
+    fn markdown_for_file_processor_claim_dispatches_native_no_launch() {
+        watchdog(Duration::from_secs(10), || {
+            let dir = tempfile::tempdir().unwrap();
+            let file = dir.path().join("script.spintest");
+            // No roxygen header / chunk markers -> spin wraps it as one
+            // bare code chunk; this test only cares that dispatch occurred
+            // with zero wire messages (see `content_processors::spin::tests`
+            // for spin's own grammar tests).
+            std::fs::write(&file, "native content, unlaunched").unwrap();
+
+            let (write, read, mock) = MockTransport::pair_with_handle();
+            let ctx = make_host_global_config();
+            let host = Arc::new(TsEngineHost::with_transport(write, read, ctx));
+            let aliases = Arc::new(Mutex::new(HashMap::new()));
+            let diag = Arc::new(Mutex::new(Vec::new()));
+            let ext_id = ExtensionId::new("native-processor");
+            let engine = TsEngine::new(
+                "native-processor",
+                false,
+                PathBuf::from("/engines/native-processor.ts"),
+                Arc::clone(&host),
+                None,
+                None,
+                Some(vec![FileClaim {
+                    extension: "spintest".to_string(),
+                    processor: Some(ProcessorSpec::Spin),
+                }]),
+                ext_id,
+                aliases,
+                diag,
+            );
+
+            let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> =
+                Arc::new(quarto_system_runtime::NativeRuntime::new());
+            let (markdown, _source_info) = engine
+                .markdown_for_file(&file, &runtime)
+                .expect("processor-bearing claim must dispatch natively");
+            assert_eq!(markdown, "\n```{r}\nnative content, unlaunched\n```\n\n");
+
+            assert!(
+                mock.sent_messages().is_empty(),
+                "native dispatch must send zero wire messages (no LoadEngine, no \
+                 MarkdownForFile): {:?}",
+                mock.sent_messages()
+            );
+            assert_eq!(
+                host.load_engine_count(),
+                0,
+                "native dispatch must never launch the TS engine"
+            );
+
+            mock.signal_eof();
+        });
+    }
+
+    /// A claim with NO processor still falls back to the dynamic wire path
+    /// (unchanged behavior for engines that declare `claims-files` without
+    /// `processor:`).
+    #[test]
+    fn markdown_for_file_no_processor_claim_falls_back_to_wire() {
+        watchdog(Duration::from_secs(10), || {
+            let dir = tempfile::tempdir().unwrap();
+            let file = dir.path().join("script.echo");
+            std::fs::write(&file, "irrelevant, engine converts it").unwrap();
+
+            let (write, read, mock) = MockTransport::pair_with_handle();
+            let ctx = make_host_global_config();
+            let host = Arc::new(TsEngineHost::with_transport(write, read, ctx));
+            let aliases = Arc::new(Mutex::new(HashMap::new()));
+            let diag = Arc::new(Mutex::new(Vec::new()));
+            let ext_id = ExtensionId::new("wire-fallback");
+            let engine = TsEngine::new(
+                "wire-fallback",
+                false,
+                PathBuf::from("/engines/wire-fallback.ts"),
+                Arc::clone(&host),
+                None,
+                None,
+                Some(vec![FileClaim {
+                    extension: "echo".to_string(),
+                    processor: None,
+                }]),
+                ext_id,
+                aliases,
+                diag,
+            );
+
+            mock.script_response(0, loaded_response("wire-fallback", vec![]));
+            mock.script_response(1, launched_response());
+            mock.script_response(
+                2,
+                FromEngine::MarkdownForFileResult {
+                    result: crate::engine::ts_protocol::TsMappedStringWithMap {
+                        value: "converted over the wire".to_string(),
+                        file_name: None,
+                        source_map: vec![],
+                    },
+                },
+            );
+
+            let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> =
+                Arc::new(quarto_system_runtime::NativeRuntime::new());
+            let (markdown, _source_info) = engine
+                .markdown_for_file(&file, &runtime)
+                .expect("a claim with no processor must fall back to the wire path");
+            assert_eq!(markdown, "converted over the wire");
+
+            let sent = mock.sent_messages();
+            assert!(
+                sent.iter()
+                    .any(|m| matches!(m, ToEngine::MarkdownForFile { .. })),
+                "expected a ToEngine::MarkdownForFile wire message; got {sent:?}"
+            );
+
+            mock.signal_eof();
+        });
+    }
+
+    // ── Plan 7b Phase 7: julia's real `_extension.yml` claims `.jl` percent ────
+
+    /// Loads the REAL committed julia-engine fixture's `_extension.yml`
+    /// (`tests/fixtures/extensions/julia-engine/`) — not a synthetic
+    /// `FileClaim` — and proves a `.jl` percent script converts natively
+    /// (zero wire messages, no Deno launch) with genuine `Original`
+    /// provenance (not the wire path's `Generated(By::unknown())`
+    /// placeholder). This is the fixture Plan 4's e2e tests
+    /// (`julia_engine_e2e.rs`) already exercise for *execution*; this test
+    /// covers the *conversion* half those never touch (they render `.qmd`
+    /// documents with `engine: julia`, never a percent `.jl` file).
+    ///
+    /// Named revert: drop the `claims-files` entry from the fixture's
+    /// `_extension.yml` → `claims_files` parses to `None` →
+    /// `native_markdown_for_file` finds no claim for `.jl` → falls to the
+    /// wire path → a `ToEngine::MarkdownForFile` message is sent → RED.
+    #[test]
+    fn julia_fixture_jl_percent_converts_natively() {
+        watchdog(Duration::from_secs(10), || {
+            let fixture_yml = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(
+                "tests/fixtures/extensions/julia-engine/_extensions/julia-engine/_extension.yml",
+            );
+            let runtime = quarto_system_runtime::NativeRuntime::new();
+            let extension = crate::extension::read::read_extension(&fixture_yml, &runtime)
+                .expect("the committed julia-engine fixture must parse");
+            let claims_files = extension
+                .contributes
+                .engines
+                .iter()
+                .find_map(|c| match c {
+                    crate::extension::types::EngineContribution::External {
+                        claims_files, ..
+                    } => claims_files.clone(),
+                    _ => None,
+                })
+                .expect("julia-engine fixture must declare claims-files (Plan 7b Phase 7)");
+            assert_eq!(
+                claims_files,
+                vec![FileClaim {
+                    extension: "jl".to_string(),
+                    processor: Some(ProcessorSpec::Percent {
+                        language: "julia".to_string(),
+                        comment: "#".to_string(),
+                    }),
+                }],
+                "fixture must claim .jl via the percent processor"
+            );
+
+            let (write, read, mock) = MockTransport::pair_with_handle();
+            let ctx = make_host_global_config();
+            let host = Arc::new(TsEngineHost::with_transport(write, read, ctx));
+            let aliases = Arc::new(Mutex::new(HashMap::new()));
+            let diag = Arc::new(Mutex::new(Vec::new()));
+            let ext_id = ExtensionId::new("julia");
+            let engine = TsEngine::new(
+                "julia",
+                true,
+                PathBuf::from("/engines/julia-engine.js"),
+                Arc::clone(&host),
+                None,
+                Some(vec!["jl".to_string()]),
+                Some(claims_files),
+                ext_id,
+                aliases,
+                diag,
+            );
+
+            let dir = tempfile::tempdir().unwrap();
+            let file = dir.path().join("script.jl");
+            std::fs::write(&file, "# %% [markdown]\n# hello from julia\n").unwrap();
+
+            let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> =
+                Arc::new(quarto_system_runtime::NativeRuntime::new());
+            let (markdown, source_info) = engine
+                .markdown_for_file(&file, &runtime)
+                .expect("julia's real fixture claim must dispatch natively");
+            assert_eq!(markdown, "hello from julia\n\n");
+            assert!(
+                matches!(source_info, quarto_source_map::SourceInfo::Concat { .. }),
+                "expected genuine Concat provenance, not the wire path's \
+                 Generated(By::unknown()) placeholder; got {source_info:?}"
+            );
+
+            assert!(
+                mock.sent_messages().is_empty(),
+                "native dispatch must send zero wire messages: {:?}",
+                mock.sent_messages()
+            );
+            assert_eq!(
+                host.load_engine_count(),
+                0,
+                "native dispatch must never launch the julia TS engine"
+            );
 
             mock.signal_eof();
         });
