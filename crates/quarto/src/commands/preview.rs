@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
+use quarto_core::project::discovery::PROJECT_CONFIG_FILENAMES;
 use quarto_preview::{
     EnginePolicy, PreviewConfig,
     config::{read_engine_policy_from_project, resolve_project_resource_html},
@@ -857,7 +858,8 @@ pub(crate) struct ResolvedProject {
 ///    it; otherwise leave `initial_page = None` and let the SPA fall
 ///    through to its own selection.
 /// 2. **`canonical` is a file inside a `_quarto.yml` project.** Walk
-///    up from the file's parent looking for `_quarto.yml`. When
+///    up from the file's parent looking for `_quarto.yml` (or
+///    `_quarto.yaml`). When
 ///    found, that ancestor is the project root and the file's path
 ///    relative to it is the initial page. This is the case that
 ///    `q2 preview posts/intro.qmd` is supposed to do something
@@ -935,12 +937,16 @@ pub(crate) fn resolve_project_and_initial_page(canonical: &Path) -> Result<Resol
 }
 
 /// Walk up from `start` (a directory) looking for the nearest ancestor
-/// that contains `_quarto.yml`. Returns the ancestor directory, or
-/// `None` if the walk reaches the filesystem root without finding one.
+/// that contains `_quarto.yml` or `_quarto.yaml`. Returns the ancestor
+/// directory, or `None` if the walk reaches the filesystem root without
+/// finding one.
 fn find_project_root_above(start: &Path) -> Option<PathBuf> {
     let mut current = Some(start.to_path_buf());
     while let Some(dir) = current {
-        if dir.join("_quarto.yml").is_file() {
+        if PROJECT_CONFIG_FILENAMES
+            .iter()
+            .any(|name| dir.join(name).is_file())
+        {
             return Some(dir);
         }
         current = dir.parent().map(|p| p.to_path_buf());
@@ -1196,6 +1202,24 @@ mod tests {
             resolved.single_file.is_none(),
             "multi-file _quarto.yml project must not flip single-file mode",
         );
+    }
+
+    #[test]
+    fn resolve_file_in_quarto_yaml_project_walks_up_to_project_root() {
+        // bd-nqj8gmrb: `_quarto.yaml` marks a project root exactly
+        // like `_quarto.yml` does; without it the file fell back to
+        // single-file mode.
+        let tmp = TempDir::with_prefix("d2-file-in-yaml-proj-").unwrap();
+        let proj = canonical_dir(&tmp);
+        std::fs::write(proj.join("_quarto.yaml"), "project:\n  type: website\n").unwrap();
+        std::fs::create_dir_all(proj.join("posts")).unwrap();
+        let file = proj.join("posts").join("intro.qmd");
+        std::fs::write(&file, "# intro").unwrap();
+
+        let resolved = resolve_project_and_initial_page(&file).expect("file-in-project resolves");
+        assert_eq!(resolved.root, proj);
+        assert_eq!(resolved.initial_page.as_deref(), Some("posts/intro.qmd"));
+        assert!(resolved.single_file.is_none());
     }
 
     #[test]

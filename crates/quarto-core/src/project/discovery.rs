@@ -182,6 +182,11 @@ pub struct DiscoveryConfig<'a> {
 /// ≡ `render: ["**/*.qmd"]`.
 pub const DEFAULT_RENDER_PATTERN: &str = "**/*.qmd";
 
+/// File names whose presence makes a directory a project root. Either
+/// one is enough, with or without a `project:` key. A profile overlay
+/// (`_quarto-<profile>.yml`) on its own is not a marker.
+pub const PROJECT_CONFIG_FILENAMES: [&str; 2] = ["_quarto.yml", "_quarto.yaml"];
+
 /// Discover the render list for a project.
 ///
 /// Returned paths are **absolute** (joined with `project_dir`) and
