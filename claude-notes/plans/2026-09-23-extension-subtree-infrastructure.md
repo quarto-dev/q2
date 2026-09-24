@@ -261,8 +261,11 @@ dependency (xtask knows the repo root via `create_worktree::repo_root()`).
 ## Explicitly out of scope
 
 - Vendoring the **julia** engine (one `SUBTREES` row + payload registration
-  once this lands) — that is the epic's Step 4, still gated on PumasAI#15
-  providing a stable branch and on the Q8 14M sign-off.
+  once this lands) — that is the epic's Step 4. *(Originally gated on
+  PumasAI#15 providing a stable branch; unblocked 2026-09-24 when the epic's
+  Step 2c pivoted to the `gordonwoodhull/quarto-julia-engine` fork's
+  `q2-static-declarations` branch. Remaining gates: the Q8 14M sign-off and
+  Q9.)*
 - The fixture-convergence question (replacing the hand-maintained julia
   fixture with the bundled copy) — epic Step 5.
 - Q9 (UX on a machine without Julia) — epic Step 4.

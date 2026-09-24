@@ -10,12 +10,23 @@
 > it has been started. **Review before acting on any of it.**
 
 **Status:** preliminary draft — research done, not scoped into tasks. **In progress
-as of 2026-09-22/23** — see "Developments" below.
+as of 2026-09-22/23/24** — see "Developments" below.
 **Author context:** written 2026-09-03 off the back of the worker-leak
 investigation (`0f243f64c` on `julia-orphan-triage`).
 
-## Developments (2026-09-22/23)
+## Developments (2026-09-22/23/24)
 
+- **Step 2c pivoted to the fork (2026-09-24):** Gordon closed
+  [PumasAI/quarto-julia-engine#15](https://github.com/PumasAI/quarto-julia-engine/pull/15)
+  unmerged — *"this is more complicated than just using my fork of this repo as
+  the upstream until Quarto 1 allows the Quarto 2 `_extension.yml`
+  configuration syntax. I'll close this and open a PR at that time."* The
+  stable branch to subtree from is therefore `q2-static-declarations` on
+  **`gordonwoodhull/quarto-julia-engine`** (the proper fork created 2026-09-23,
+  carrying commit `7d72bda`), not a PumasAI-hosted branch. **Step 4's vendoring
+  is unblocked** — gated only on the q2-internal sign-offs Q8 (14M in git
+  history) and Q9 (no-Julia UX). The upstream PR to PumasAI is deferred until
+  quarto-cli#14936 ships in a stable Q1 release; Step 2b's shape is unchanged.
 - **Upstream released v0.2.2 (2026-09-08, PR #14):** Julius merged his own
   minimal version of the oneShot-worker leak fix — a plain `close` on the error
   path plus a smoke test — explicitly crediting q2#655 ("Found and fixed by
@@ -87,7 +98,8 @@ investigation (`0f243f64c` on `julia-orphan-triage`).
   reachable in practice) stays open — the fix is correct either way.
 - **Step 0 has effectively begun asynchronously:** q2#655 floated the q2-branch
   idea and attached this plan; Julius responded by shipping #14 without
-  engaging on the rest. #15 is now the conversation venue.
+  engaging on the rest. *(2026-09-24: #15 closed unmerged — the fork is the
+  venue now; the upstream conversation resumes when the schema is stable.)*
 - **Fork-network gotcha (cost a session some time):**
   `gordonwoodhull/quarto-julia-engine` was a *standalone* repo, not a GitHub
   fork, so cross-repo PRs failed ("Head sha can't be blank…"). Fixed by
@@ -310,7 +322,8 @@ on how q2 surfaces `engines` in metadata — not traced.
 > into [2026-09-23-extension-subtree-infrastructure.md](2026-09-23-extension-subtree-infrastructure.md)
 > — the vendoring/discovery machinery is unblocked and proceeds now against a
 > fake extension; what remains below in Step 4 is only the julia-specific
-> vendoring, still gated on Step 2c.
+> vendoring. *(Originally gated on Step 2c; unblocked 2026-09-24 by the 2c
+> pivot to the fork — see Developments.)*
 
 ### Step 0 — talk to Julius first
 
@@ -371,24 +384,29 @@ Adds the `name:`/`claims:`/`file-extensions:` block, and must additionally:
 - explain F2 (accept-and-ignore, not a Q1 behavior change) and F3
   (`file-extensions` != `validExtensions`) in the PR body.
 
-**(c) Offer a q2 branch on `PumasAI/quarto-julia-engine` — FILED as
+**(c) Offer a q2 branch — PIVOTED (2026-09-24).** Originally filed as
 [PumasAI/quarto-julia-engine#15](https://github.com/PumasAI/quarto-julia-engine/pull/15)
-(2026-09-23), awaiting Julius.** The PR carries the declarations on
-`q2-static-declarations` and leads with the q2-branch ask. Because 2b waits on
-a release cycle, this branch is the unblocker. It:
+(carrying the declarations on `q2-static-declarations`, leading with the ask
+for a PumasAI-hosted `q2` branch), it was closed unmerged the next day: hosting
+the branch upstream is more complicated than simply using the
+`gordonwoodhull/quarto-julia-engine` **fork** as q2's upstream of record until
+the Q1 schema change ships in a stable release. The branch
+`q2-static-declarations` on the fork is now the source Step 4 subtrees from.
+The upstream PR will be re-filed at that time. Because 2b waits on a release
+cycle, the fork branch remains the unblocker. It:
 
-- gives early adopters a real, upstream-hosted path with no prerelease
-  `quarto-required` and no fork of record,
-- gives q2 a **stable remote to subtree from** for Step 5 (see F8) — the
-  bundled copy would track this branch, not `main`,
-- keeps `main` clean and Q1-only until Step 1's schema change is stable,
-  which is likely what PumasAI would prefer anyway,
+- gives early adopters a real path with no prerelease
+  `quarto-required` and no ambiguity about which repo q2 tracks,
+- gives q2 a **stable remote to subtree from** for Step 4 (see F8) — the
+  bundled copy tracks the fork's `q2-static-declarations` branch, not
+  upstream `main`,
+- keeps upstream `main` clean and Q1-only until Step 1's schema change is
+  stable, which is likely what PumasAI would prefer anyway,
 - lets us validate the declarations against real users before asking for them
-  in `main`.
+  in upstream `main`.
 
-*Open: does the branch live on PumasAI (preferred — upstream-hosted, discoverable)
-or on the `gordonwoodhull` fork (no permission needed)? This is part of the
-Step 0 conversation.*
+*Resolved (2026-09-24): the branch lives on the `gordonwoodhull` fork — no
+permission needed, and the PumasAI ask is deferred.*
 
 ### Step 3 — q2: fix the static-claim case sensitivity (F5)
 
@@ -409,8 +427,10 @@ registry, RED before the fix.
 ### Step 4 — q2: bundle the julia engine as a vendored subtree
 
 **Goal:** `q2` ships with Julia support built in — no separate extension
-install. Gated on Step 2c (a stable branch to subtree from). See **F8** for the
-research.
+install. ~~Gated on Step 2c (a stable branch to subtree from).~~
+*(2026-09-24: unblocked by the 2c pivot — the fork's `q2-static-declarations`
+branch is the subtree source; the remaining gates are the q2-internal Q8/Q9
+sign-offs.)* See **F8** for the research.
 
 > **2026-09-23: the infrastructure half of this step moved to
 > [2026-09-23-extension-subtree-infrastructure.md](2026-09-23-extension-subtree-infrastructure.md)
@@ -419,7 +439,7 @@ research.
 Work items (first pass, not scoped):
 
 - **Add the julia row** to the infra plan's `SUBTREES` table
-  (`PumasAI/quarto-julia-engine`, the Step 2c branch) and run
+  (`gordonwoodhull/quarto-julia-engine`, branch `q2-static-declarations`) and run
   `cargo xtask pull-extension-subtree julia-engine`, vendoring into
   `resources/extension-subtrees/julia-engine/`. Decide the git-history cost
   first (14M — F8's open question; the infra plan's D2 sets the "whole repo,
@@ -479,9 +499,11 @@ Work items (first pass, not scoped):
 - **Q2.** *(Resolved in this revision — target a stable release, not a
   prerelease.)* Remaining: how long is that cycle, and does it change what we
   do in the meantime beyond Step 2c?
-- **Q3.** Step 0: what does Julius say? Everything in Step 2 is contingent on
-  it. Specifically: q2-only keys in `main` or only on a branch; who hosts the
-  Step 2c branch; and are they willing to bump `quarto-required` at all.
+- **Q3.** ~~Step 0: what does Julius say?~~ *(Moot as of 2026-09-24: the 2c
+  pivot means nothing in Step 2 asks PumasAI for anything until the schema
+  change is stable. The upstream conversation resumes when quarto-cli#14936
+  reaches a stable release — at that point the declarations PR is re-filed and
+  the `quarto-required` bump question comes with it.)*
 - **Q7.** ~~Step 4 layout: one builtin-extensions root or a list?~~ *(Moved to
   the infra plan, 2026-09-23 — resolved there as **D1: list of roots**,
   mirroring Q1.)*
