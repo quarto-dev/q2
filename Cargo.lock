@@ -5866,6 +5866,7 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "walkdir",
+ "windows-sys 0.61.2",
  "yaml-rust2",
  "zip",
 ]
