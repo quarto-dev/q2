@@ -264,6 +264,17 @@ export function Menu({
     }
   };
 
+  // The pointer sets the current item. Focus is what the current-item
+  // tint follows, and the menu auto-focuses its first item on open, so
+  // without this the first item would stay lit while the pointer sits
+  // on another one. Bubbles from submenu leaves too (they are inside
+  // this root in the DOM).
+  const onMouseOver = (e: ReactMouseEvent) => {
+    const item = (e.target as HTMLElement).closest<HTMLElement>('[role="menuitem"]');
+    if (!item || item.getAttribute('aria-disabled') === 'true') return;
+    if (document.activeElement !== item) item.focus({ preventScroll: true });
+  };
+
   // Activating an item closes the menu and returns focus to the trigger.
   // Items that need the menu to stay open (e.g. in-place "copied!"
   // feedback) stop propagation in their own handler, so this never runs.
@@ -284,6 +295,7 @@ export function Menu({
       style={fixed ? { top: fixed.y, left: fixed.x } : undefined}
       onKeyDown={onKeyDown}
       onClick={onClick}
+      onMouseOver={onMouseOver}
     >
       <SubmenuLevelProvider>{children}</SubmenuLevelProvider>
     </div>

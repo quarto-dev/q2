@@ -56,6 +56,26 @@ function renderTwoGroups() {
   );
 }
 
+describe('Menu current item follows the pointer', () => {
+  it('moves focus (the current-item tint) to the hovered item, so the auto-focused first item is not left lit', () => {
+    mockGeometry({ innerWidth: 1400, parentLeft: 100, submenuWidth: 220 });
+    renderTwoGroups();
+    const templates = screen.getByRole('menuitem', { name: /Templates/ });
+    const examples = screen.getByRole('menuitem', { name: /Examples/ });
+    // Menu focuses its first item on open.
+    expect(document.activeElement).toBe(templates);
+
+    fireEvent.mouseOver(examples);
+    expect(document.activeElement).toBe(examples);
+
+    // Leaves inside an open submenu become current on hover too.
+    fireEvent.mouseEnter(examples.parentElement!);
+    const article = screen.getByRole('menuitem', { name: 'Article' });
+    fireEvent.mouseOver(article);
+    expect(document.activeElement).toBe(article);
+  });
+});
+
 describe('MenuSubmenu siblings', () => {
   it('closes an open sibling when the pointer moves onto another group, even with focus inside it', () => {
     mockGeometry({ innerWidth: 1400, parentLeft: 100, submenuWidth: 220 });
