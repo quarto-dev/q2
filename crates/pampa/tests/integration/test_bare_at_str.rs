@@ -146,6 +146,13 @@ fn standalone_at_before_a_quote() {
         "a @'x' b\n",
         "Str(a) Space Str(@) Quoted[Str(x)] Space Str(b)",
     );
+    // Curly quotes are plain text (no Quoted node), so the `@` joins them.
+    assert_inlines(
+        "a @“quoted” b\n",
+        "Str(a) Space Str(@“quoted”) Space Str(b)",
+    );
+    assert_inlines("a @‘x’ b\n", "Str(a) Space Str(@‘x’) Space Str(b)");
+    assert_inlines("a @” b\n", "Str(a) Space Str(@”) Space Str(b)");
 }
 
 /// A container prefix or continuation indent swallows the whitespace before

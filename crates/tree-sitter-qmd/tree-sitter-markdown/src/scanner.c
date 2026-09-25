@@ -2663,8 +2663,8 @@ static bool parse_shortcode_open(Scanner *s, TSLexer *lexer, const bool *valid_s
 // citation attempt:
 //
 // - standalone: preceded by whitespace or line start AND followed by
-//   whitespace, EOL or EOF (`a @ b`), or directly by a quote (`a @"x"`).
-//   That shape is decided here and emitted as LITERAL_STR (the bd-j9cf
+//   whitespace, EOL or EOF (`a @ b`), or directly by a straight or curly
+//   quote (`a @"x"`, `a @“x”`). That shape is decided here and emitted as LITERAL_STR (the bd-j9cf
 //   token, folded into `pandoc_str` by the grammar);
 // - inside or at the end of a word (`user@example.com`, `word@`): the
 //   scanner cannot see the character before the `@`, so this is decided
@@ -2674,6 +2674,12 @@ static bool parse_shortcode_open(Scanner *s, TSLexer *lexer, const bool *valid_s
 //
 // Every other `@` keeps emitting the citation delimiter; when no key
 // follows, the grammar reports the missing key as an error.
+
+// Straight and curly quotation marks: " ' “ ” ‘ ’
+static bool is_quote_mark(int32_t chr) {
+    return chr == '"' || chr == '\'' || chr == 0x201C || chr == 0x201D ||
+           chr == 0x2018 || chr == 0x2019;
+}
 
 static bool parse_cite_author_in_text(Scanner *s, TSLexer *lexer,
                                       const bool *valid_symbols) {
@@ -2688,10 +2694,9 @@ static bool parse_cite_author_in_text(Scanner *s, TSLexer *lexer,
         EMIT_TOKEN(CITE_AUTHOR_IN_TEXT_WITH_OPEN_BRACKET);
     }
     // A key never starts with whitespace or a quote, so this cannot steal
-    // a citation.
+    // a citation. Curly quotes count like straight ones (`a @“x”`).
     bool standalone = preceded_by_ws &&
-        (at_ws_or_eol(lexer) || lexer->lookahead == '"' ||
-         lexer->lookahead == '\'');
+        (at_ws_or_eol(lexer) || is_quote_mark(lexer->lookahead));
     if (standalone && valid_symbols[LITERAL_STR]) {
         lexer->mark_end(lexer);
         EMIT_TOKEN(LITERAL_STR);

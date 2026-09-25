@@ -30,8 +30,9 @@ where it is **unlikely to be a mistyped citation**:
 - a **standalone** `@`: whitespace or line start before it, and
   whitespace, end of line, or end of file after it (`main @ sha`,
   `Q&A @ 3pm`);
-- a standalone-preceded `@` directly followed by a **quote**
-  (`a @"quoted" b`);
+- a standalone-preceded `@` directly followed by a **quote**, straight
+  or curly (`a @"quoted" b`, `a @“quoted” b`; curly added 2026-09-25,
+  see Decisions);
 - a **word-final** `@` (`word@`, as in `pkg@ latest` or `a@`), which
   is consistent with `word@word` being a word.
 
@@ -80,6 +81,7 @@ The probes ran on `main` at `ce01489c4` with a freshly built
 | `[a @ b]{.x}` / `[a @ b](u)` / `*a @ b*` | span / link / emph, literal | 1 |
 | `a @"quoted" b` | `Str "@", Quoted DoubleQuote […]` | 1 |
 | `a @'x' b` | `Str "@", Quoted SingleQuote […]` | 1 |
+| `a @“quoted” b`, `a @‘x’ b`, `a @” b` | `Str "@“quoted”"` (curly quotes are plain text) | 1 |
 | `a@ b`, `a@` (EOL / EOF) | `Str "a@"` | 2 |
 | `a@.`, `a@,` | `Str "a@."` | 2, by construction (see tier 2) |
 
@@ -387,6 +389,21 @@ lexes `user@example.com`, `mermaid@11`, `a@` and `a@.` as word text.
       reflow in `scanner.c` and one extra assertion (`>@ b`); the corpus
       and `test_bare_at_str` were rerun green.
 - [x] Follow-up strands filed (bd-2o8rq2xj, bd-0idqzj33, bd-5qmh5acq).
+- [x] Curly quotes after a standalone `@` (`“ ” ‘ ’`, U+201C/D and
+      U+2018/9), same as `"` and `'`: `is_quote_mark()` in the scanner.
+      Three corpus cases were confirmed red without the change and are
+      green with it (808/808 with an isolated `TREE_SITTER_LIBDIR`),
+      plus three pampa assertions matching pandoc (`Str "@“quoted”"`).
+      The other quote marks in `PANDOC_SMART_QUOTES` (`„ ‚ « » ‹ ›`) were
+      deliberately not included.
+- [x] PR #732 overlap checked (non-ASCII punctuation as Str). A trial
+      merge conflicts only in the generated `parser.c` / `grammar.json`;
+      `grammar.js` auto-merges into a regex carrying both changes.
+      Regenerated, the merge passes 816/816 corpus and 5127 Rust tests.
+      Resolution for whichever PR lands second: take the merged
+      `grammar.js`, then `tree-sitter generate` and `tree-sitter test`
+      with an isolated `TREE_SITTER_LIBDIR` (bd-agsgrbfn: the default
+      grammar cache is shared across checkouts).
 - [x] Comment on the strand with the results.
 
 ## Decisions (2026-09-25)
@@ -399,5 +416,8 @@ lexes `user@example.com`, `mermaid@11`, `a@` and `a@.` as word text.
    here.
 3. **Container-prefix limitation is acceptable** for this fix if the
    `> @ b` / list-continuation tests can't be made to pass cheaply.
-4. **Strand scope narrowed to `@`.** The other uncoded sources are
+4. **Curly quotes (2026-09-25, after the #732 review):** `a @“x”`
+   is literal like `a @"x"`. Rationale: easy to explain, and it avoids
+   surprises now that curly quotes are ordinary text.
+5. **Strand scope narrowed to `@`.** The other uncoded sources are
    bd-0idqzj33, and the strand description was updated.
