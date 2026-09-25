@@ -243,3 +243,245 @@ a `****` z
         (code_span_delimiter))
       (pandoc_space)
       (pandoc_str))))
+
+================================================================================
+14 inner backtick run longer than a 1-backtick delimiter (bd-nycn85a8)
+================================================================================
+a `x``y` b
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_code_span
+        (code_span_delimiter)
+        (content)
+        (code_span_delimiter))
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+15 triple run inside a 1-backtick delimiter, the ` ```mermaid ` idiom (bd-nycn85a8)
+================================================================================
+a ` ```mermaid ` b
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_code_span
+        (code_span_delimiter)
+        (content)
+        (code_span_delimiter))
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+16 triple run inside a 2-backtick delimiter (bd-nycn85a8)
+================================================================================
+a `` ```{r} `` b
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_code_span
+        (code_span_delimiter)
+        (content)
+        (code_span_delimiter))
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+17 quadruple run inside a 3-backtick delimiter (bd-nycn85a8)
+================================================================================
+a ``` x````y ``` b
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_code_span
+        (code_span_delimiter)
+        (content)
+        (code_span_delimiter))
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+18 quadruple run inside a 1-backtick delimiter (bd-nycn85a8)
+================================================================================
+a ` ````markdown ` b
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_code_span
+        (code_span_delimiter)
+        (content)
+        (code_span_delimiter))
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+19 quadruple run inside a 2-backtick delimiter (bd-nycn85a8)
+================================================================================
+a `` ```` `` b
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_code_span
+        (code_span_delimiter)
+        (content)
+        (code_span_delimiter))
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+20 shorter and longer runs in the same span (bd-nycn85a8)
+================================================================================
+a ``` x`y````z`` ``` b
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_code_span
+        (code_span_delimiter)
+        (content)
+        (code_span_delimiter))
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+21 CommonMark spec: ` `` ` (bd-nycn85a8)
+================================================================================
+` `` `
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_code_span
+        (code_span_delimiter)
+        (content)
+        (code_span_delimiter)))))
+
+================================================================================
+22 CommonMark spec: ` foo `` bar ` (bd-nycn85a8)
+================================================================================
+` foo `` bar `
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_code_span
+        (code_span_delimiter)
+        (content)
+        (code_span_delimiter)))))
+
+================================================================================
+23 longer inner run on the second line of a multi-line span (bd-nycn85a8)
+================================================================================
+a `x
+``y` b
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_code_span
+        (code_span_delimiter)
+        (content
+          (pandoc_soft_break))
+        (code_span_delimiter))
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+24 longer inner run does not open a nested span; text after the span is plain (bd-nycn85a8)
+================================================================================
+a `x``y` and `z`
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_code_span
+        (code_span_delimiter)
+        (content)
+        (code_span_delimiter))
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_code_span
+        (code_span_delimiter)
+        (content)
+        (code_span_delimiter)))))
+
+================================================================================
+25 fence-looking line inside an open span stays span content (bd-ilv8p gate, documented in bd-nycn85a8)
+================================================================================
+a `x
+```
+b`
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_code_span
+        (code_span_delimiter)
+        (content
+          (pandoc_soft_break)
+          (pandoc_soft_break))
+        (code_span_delimiter)))))
+
+================================================================================
+26 triple-backtick span at paragraph start: not a fence, the info string has a backtick (bd-nycn85a8)
+================================================================================
+``` x ``` b
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_code_span
+        (code_span_delimiter)
+        (content)
+        (code_span_delimiter))
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+27 quadruple-backtick span at paragraph start with a longer inner run (bd-nycn85a8)
+================================================================================
+```` x `````y ```` b
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_code_span
+        (code_span_delimiter)
+        (content)
+        (code_span_delimiter))
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+28 a real fence with a backtick-free info string still wins at paragraph start (bd-nycn85a8)
+================================================================================
+```python
+x = 1
+```
+
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_code_block
+      (fenced_code_block_delimiter)
+      (info_string)
+      (block_continuation)
+      (code_fence_content
+        (block_continuation))
+      (fenced_code_block_delimiter))))

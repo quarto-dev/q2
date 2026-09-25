@@ -1,0 +1,28 @@
+affected lines: 158
+ERROR under old grammar: 154
+ERROR under new grammar: 15
+fixed (old ERROR, new ok): 143
+regressed (old ok, new ERROR): 4
+
+regressed lines (old ok, new ERROR):
+  claude-notes/commonmark-reference/spec-index.md:67: - **ASCII punctuation character** - `!-/`, `:-@`, `[-``, `{-~`
+  claude-notes/plans/2026-05-14-q-2-36-knitr-style-chunk-options.md:74: - Stdin `{r echo=FALSE}` → clean `[Q-2-36]` error, **highlight now spans only the header line** (`1 │ ` ` ```{
+  claude-notes/plans/2026-08-20-provenance-3-audit-and-fix.md:1480: | ```` ````{python}\n```\n ```` (no closing fence) | ```` ``` ```` | 0..17 (whole block) | 13..16 ⚠️ |
+  claude-notes/plans/2026-08-25-r-display-fence-parse-error.md:207: `` ``r x` ``, a newline after `r`, the escaped-backtick form (below), plus
+
+lines still erroring under the new grammar (other causes, e.g. bare @, unclosed *):
+  claude-notes/commonmark-reference/spec-index.md:67: - **ASCII punctuation character** - `!-/`, `:-@`, `[-``, `{-~`
+  claude-notes/issue-reports/205/triage.md:70: …]]` from raw `` `x`'s end `` no longer reproduces — the reader now
+  claude-notes/plans/2026-04-16-quarto-jupyter.md:858: | 3 | **to-markdown output path** for a display_data output whose sole data is a **non-math** `text/latex` ⇒ e
+  claude-notes/plans/2026-05-14-q-2-36-knitr-style-chunk-options.md:74: - Stdin `{r echo=FALSE}` → clean `[Q-2-36]` error, **highlight now spans only the header line** (`1 │ ` ` ```{
+  claude-notes/plans/2026-05-24-multiline-inline-code-spans.md:81: | `` `code\n```python\nx=1\n```\nspan` `` (triple fence)   | one `Code "code \`\`\`python x=1 \`\`\` span"` — 
+  claude-notes/plans/2026-07-01-bd-gthycd33-jupyter-cell-wrapper.md:40: (` ```{.cell-output} `, ` ```{.cell-output-stdout} `, …) — **no `::: {.cell}`
+  claude-notes/plans/2026-08-20-provenance-3-audit-and-fix.md:1479: | ```` ````{python}\n```\n```` ```` | ```` ``` ```` | 13..16 | 13..16 ✅ |
+  claude-notes/plans/2026-08-20-provenance-3-audit-and-fix.md:1480: | ```` ````{python}\n```\n ```` (no closing fence) | ```` ``` ```` | 0..17 (whole block) | 13..16 ⚠️ |
+  claude-notes/plans/2026-08-20-provenance-3-audit-and-fix.md:1481: | ```` ````{python}\nx\n```\n ```` (no closing fence) | `` x\n``` `` | 0..19 (whole block) | 13..18 ⚠️ |
+  claude-notes/plans/2026-08-20-provenance-3-audit-and-fix.md:1536: | ```` ````{python}\r\n```\r\n```` ```` | ```` ```\r ```` | 14..18 | 14..18 ✅ |
+  claude-notes/plans/2026-08-20-provenance-3-audit-and-fix.md:1538: | ```` ````{python}\r\nx\r\n```\r\n ```` (no closing fence) | `` x\r\n```\r `` | 0..22 (whole block) | 14..21 
+  claude-notes/plans/2026-08-25-r-display-fence-parse-error.md:207: `` ``r x` ``, a newline after `r`, the escaped-backtick form (below), plus
+  claude-notes/plans/2026-08-25-r-display-fence-parse-error.md:373: drops once this strand lands** — `` ```R `` stops being the only working
+  claude-notes/plans/2026-08-26-listings-L10-migration-docs.md:110: "…so raw HTML goes in a ` ```{=html} ` block just as it would in a
+  claude-notes/research/2026-08-23-provenance-3-design-recommendations.md:126: >    (```` ````{python}\n```\n ```` → `0..17`; ```` ````{python}\nx\n```\n ````
