@@ -44,10 +44,11 @@ The non-interactive form spells everything out:
 q2 create project <type> <directory> [title]
 ```
 
-- `<type>` is a project type: `default` (a minimal project) or
-  `website` (a website with navigation). The types `blog`,
-  `manuscript`, and `book` are recognized but not yet implemented in
-  Quarto 2.
+- `<type>` is a project type: `default` (a minimal project),
+  `website` (a website with navigation), `blog` (a website with the
+  blog template), or `presentation` (a reveal.js slide deck). The
+  types `manuscript` and `book` are recognized but not yet implemented
+  in Quarto 2.
 - `<directory>` is where the project is created, relative to the
   current directory. Use `.` to scaffold into the current directory.
 - `[title]` is the project title. When omitted, the title defaults to
@@ -64,11 +65,13 @@ To see the available artifact and project types, run `q2 create --list`:
 Available artifact types:
 
 project (Project)
-  default      A minimal Quarto project
-  website      A Quarto website with navigation
-  blog         A blog using the Quarto blog template (not yet implemented)
-  manuscript   An academic manuscript (not yet implemented)
-  book         A multi-chapter book (not yet implemented)
+  Templates
+    default      A minimal Quarto project
+    website      A Quarto website with navigation
+    blog         A blog using the Quarto blog template
+    presentation A reveal.js slide deck
+    manuscript   An academic manuscript (not yet implemented)
+    book         A multi-chapter book (not yet implemented)
 
 Usage: q2 create project <type> <directory> [title]
 ```

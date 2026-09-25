@@ -181,3 +181,16 @@ pub mod examples {
             include_str!("../resources/templates/examples/presentation/fork-icon.svg");
     }
 }
+
+/// Scaffold contents for the Presentation skeleton (`default:presentation`,
+/// bd-q33ylfxf): a reveal.js deck with a title slide and a few empty slides.
+/// Both files interpolate `$title$`.
+pub mod presentation {
+    /// `_quarto.yml` template for presentation projects.
+    pub const QUARTO_YML: &str =
+        include_str!("../resources/templates/presentation/_quarto.yml.template");
+
+    /// `index.qmd` template: the deck itself.
+    pub const INDEX_QMD: &str =
+        include_str!("../resources/templates/presentation/index.qmd.template");
+}

@@ -27,6 +27,8 @@ pub struct ChoiceListing {
     pub name: String,
     pub description: String,
     pub implemented: bool,
+    /// Hierarchical group labels, outermost first (bd-q33ylfxf).
+    pub path: Vec<String>,
 }
 
 pub trait ArtifactProvider {
