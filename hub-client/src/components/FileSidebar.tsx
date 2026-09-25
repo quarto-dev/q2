@@ -17,6 +17,12 @@ import {
   type FileTreeNode,
 } from '../utils/fileTree';
 import { resolveDefaultDestination } from './fileUpload';
+import {
+  prepareDragOut,
+  prepareFolderDragOut,
+  downloadFile,
+  downloadFolderAsZip,
+} from '../services/fileDragOut';
 import { buildSnippet, type SearchFiles, type SearchResult } from '../services/search';
 import {
   FilePlusIcon,
@@ -113,6 +119,9 @@ interface NavItem {
 
 /** dataTransfer type for sidebar-originated drags (read by Editor.tsx too). */
 const HUB_FILE_TYPE = 'application/x-hub-file';
+/** Marker for a folder drag: only meaningful as a drag-out (zip); the
+ *  sidebar and editor treat it as nothing to drop. */
+const HUB_FOLDER_TYPE = 'application/x-hub-folder';
 
 /** Check if a file path is an image (shared with the editor's image viewer) */
 function isImageFile(path: string): boolean {
@@ -462,6 +471,11 @@ export default function FileSidebar({
     (e: React.DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
+      if (e.dataTransfer.types.includes(HUB_FOLDER_TYPE)) {
+        // Folder drags only go *out* (as a zip); nothing to drop here.
+        e.dataTransfer.dropEffect = 'none';
+        return;
+      }
       if (e.dataTransfer.types.includes(HUB_FILE_TYPE)) {
         const source = draggingPathRef.current;
         const move = source && onRenameFile ? resolveMove(source, e.target) : null;
@@ -488,6 +502,7 @@ export default function FileSidebar({
       setIsDragOver(false);
       setMoveTarget(null);
 
+      if (e.dataTransfer.types.includes(HUB_FOLDER_TYPE)) return;
       const internal = e.dataTransfer.getData(HUB_FILE_TYPE);
       if (internal) {
         const { path } = JSON.parse(internal) as { path: string };
@@ -651,7 +666,21 @@ export default function FileSidebar({
       path: file.path,
       type: fileType,
     }));
+    // Dropping outside the browser saves the file (Chromium's DownloadURL;
+    // ignored elsewhere — see services/fileDragOut).
+    const dragOut = prepareDragOut(file.path);
+    // setData, not items.add: Chromium looks the type up by its
+    // lowercased name, which setData normalizes and items.add does not.
+    if (dragOut) e.dataTransfer.setData('DownloadURL', dragOut);
     e.dataTransfer.effectAllowed = 'copyMove';
+  }, []);
+
+  // Folder drag: out of the browser only, as `<folder>.zip` (Chromium).
+  const handleFolderDragStart = useCallback((e: React.DragEvent, folder: string) => {
+    e.dataTransfer.setData(HUB_FOLDER_TYPE, folder);
+    const dragOut = prepareFolderDragOut(folder);
+    if (dragOut) e.dataTransfer.setData('DownloadURL', dragOut);
+    e.dataTransfer.effectAllowed = 'copy';
   }, []);
 
   const handleFileDragEnd = useCallback(() => {
@@ -770,6 +799,8 @@ export default function FileSidebar({
           }}
           onFocus={() => setFocusedPath(node.path)}
           onContextMenu={(e) => handleFolderContextMenu(e, node)}
+          draggable
+          onDragStart={(e) => handleFolderDragStart(e, node.path)}
         />
         {isExpanded && node.children.length > 0 && (
           <div className="folder-children" role="group">
@@ -989,6 +1020,13 @@ export default function FileSidebar({
           <MenuItem icon={<UploadIcon />} onSelect={() => onUploadFiles([], folderMenu.path)}>
             {fileSidebar.menuNewAssetInside}
           </MenuItem>
+          <MenuItem
+            icon={<DownloadIcon />}
+            disabled={folderMenu.isEmpty}
+            onSelect={() => downloadFolderAsZip(folderMenu.path)}
+          >
+            {fileSidebar.menuDownloadFolder}
+          </MenuItem>
           {onDeleteFolder && (
             <MenuItem
               danger
@@ -1033,6 +1071,9 @@ export default function FileSidebar({
               {fileSidebar.menuMove}
             </MenuItem>
           )}
+          <MenuItem icon={<DownloadIcon />} onSelect={() => downloadFile(contextMenu.file!.path)}>
+            {fileSidebar.menuDownload}
+          </MenuItem>
           {onDeleteFile && (
             <MenuItem danger onSelect={() => handleDelete(contextMenu.file!)}>
               {fileSidebar.menuDelete}

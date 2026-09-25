@@ -8,6 +8,7 @@
 import {
   createSyncClient,
   exportProjectAsZip as exportZip,
+  exportFolderAsZip as exportFolderZip,
   parseProjectZip,
   type SyncClient,
   type SyncClientCallbacks,
@@ -396,6 +397,14 @@ export function getFilePaths(): string[] {
  */
 export function exportProjectAsZip(rootDir?: string): Uint8Array {
   return exportZip(ensureClient(), rootDir);
+}
+
+/**
+ * Export one folder (recursively) as a ZIP rooted at `<folder>/`.
+ * Null when the folder holds no files.
+ */
+export function exportFolderAsZip(folder: string): Uint8Array | null {
+  return exportFolderZip(ensureClient(), folder);
 }
 
 /**
