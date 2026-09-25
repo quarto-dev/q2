@@ -1656,8 +1656,8 @@
                     "value": "[^`\\n\\r]+"
                   },
                   {
-                    "type": "PATTERN",
-                    "value": "[`]"
+                    "type": "SYMBOL",
+                    "name": "_code_span_backtick_run"
                   },
                   {
                     "type": "ALIAS",
@@ -5108,6 +5108,10 @@
     {
       "type": "SYMBOL",
       "name": "_code_span_close"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_code_span_backtick_run"
     },
     {
       "type": "SYMBOL",

@@ -3,7 +3,31 @@
 **Date:** 2026-09-25
 **Braid:** bd-code-span-longer-backtick-run-nycn85a8
 **Branch:** `braid/nycn85a8-code-span-backtick-run` (topic branch in the main checkout, based on `main` \@ `5b811915`; no worktree, per user request)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design agreed 2026-09-25; implementation in progress on this branch.
+
+## Decisions (Carlos, 2026-09-25)
+
+1. **Token-emission design accepted:** hidden external token emitted by
+   `parse_code_span` for any in-span backtick run whose length differs from
+   the delimiter; the grammar's `/[`]/` alternative is removed.
+2. **Paragraph-start triple-backtick spans (case 30):** fix in this session
+   if it works out; otherwise file a follow-up (uncommon, lower priority).
+3. **Unclosed backtick strings:** keep q2's strictness; a new diagnostic
+   (Q-code) is the ideal outcome, filed as a separate strand.
+4. **Fence line inside an open span (case 31):** leave the bd-ilv8p
+   behaviour (span content), add a corpus test documenting it.
+5. **Acceptance:** a local-build claude-notes tally is fine, and
+   tree-sitter corpus tests derived from the actual claude-notes failures
+   may stand in for the stricter criterion. The
+   `code-span-backtick-run-investigation/scan-corpus.py` scan of
+   claude-notes found 195 affected spans in six (delimiter, longest inner
+   run) classes: (1,2) (1,3) (1,4) (2,3) (2,4) (3,4). Those classes are all
+   covered by corpus tests.
+
+Prior art: `claude-notes/analysis/2025-10-28-code-span-delimiter-matching.md`
+documents the same mechanism and three failed attempts; its "chicken and
+egg" (the scanner cannot tell the grammar to consume N backticks as content)
+is what the new external token resolves.
 
 ## Triage verdict
 
@@ -195,6 +219,46 @@ token changes nothing on the pampa side.
    zero uncoded errors pointing at a backtick" sufficient, or do you want
    the tally script from bd-uk8zgkha's workflow step 2 built as part of
    this strand?
+
+## Implementation record (2026-09-25)
+
+**Scanner** (`src/scanner.c`): new external token `CODE_SPAN_BACKTICK_RUN`
+after `CODE_SPAN_CLOSE`. `parse_code_span` emits it when the token and
+`CODE_SPAN_CLOSE` are both valid, `code_span_delimiter_length > 0`, and the
+counted run differs from that length. The double gate keeps error
+recovery (every symbol valid) from emitting it with a stale length.
+`parse_fenced_code_block` additionally emits `CODE_SPAN_START` for a
+`level >= 3` run when the would-be info string contains a backtick and a
+matching closer exists, which fixes case 30 (decision 2).
+
+**Grammar** (`grammar.js`): the `/[`]/` alternative in `pandoc_code_span`
+content became `$._code_span_backtick_run`; the token is declared in
+`externals` right after `_code_span_close`. Net symbol count is unchanged
+(one anonymous regex token out, one external in), and `STATE_COUNT` stayed
+at 4511, so the regenerated `_autogen-table.json` came out byte-identical
+(`crates/pampa/scripts/build_error_table.ts` was run to confirm).
+
+**Tests:** corpus tests 14–28 in `test/corpus/code_span.txt` (every
+(delimiter, inner-run) class from the claude-notes scan, the three in-scope
+spec examples, multi-line, no-leak, fence-inside-span documentation,
+paragraph-start triple/quadruple, and a real-fence guard), one pipe-table
+cell case in `test/corpus/pipe_table.txt`, and three pampa integration
+tests (`test_pandoc_code_span_inner_run_*` in
+`test_treesitter_refactoring.rs`). `tree-sitter test`: 641/641.
+
+**Acceptance on claude-notes** (`compare-corpus-lines.py`, results in
+`corpus-compare.txt`): of 158 prose lines holding an affected span, 154
+errored under the old grammar and 15 under the new one; 143 fixed, 0
+lines fixed-by-accident lost, 4 newly erroring. All 4 are malformed under
+the CommonMark rule itself (e.g. `` `` ``r x` `` `` closes at the
+second run, leaving a trailing unmatched backtick), so pandoc reads them
+the same way; they belong to the unclosed-run class. The 11 lines that
+error under both grammars are the same class plus unrelated strictness
+(bare `@`, unclosed `*`).
+
+**Follow-up filed:** bd-038l5b3k, a Q-code for unmatched backtick runs.
+Q-2-24 "Unclosed Code Span" already exists but has been dormant since
+bd-ilv8p; the strand records a way to revive it.
 
 ## Risks / tradeoffs (draft)
 

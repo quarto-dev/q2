@@ -482,3 +482,32 @@ issue #206 - Caption (single colon + space) still parses after a pipe table row
         (pandoc_str)
         (pandoc_space)
         (pandoc_str)))))
+
+================================================================================
+Pipe table cell code span with an inner backtick run longer than the delimiter (bd-nycn85a8)
+================================================================================
+| a | b |
+|---|---|
+| `x``y` | text |
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pipe_table
+      (pipe_table_header
+        (pipe_table_cell
+          (pandoc_str))
+        (pipe_table_cell
+          (pandoc_str)))
+      (pipe_table_delimiter_row
+        (pipe_table_delimiter_cell)
+        (pipe_table_delimiter_cell))
+      (pipe_table_row
+        (pipe_table_cell
+          (pandoc_code_span
+            (code_span_delimiter)
+            (content)
+            (code_span_delimiter)))
+        (pipe_table_cell
+          (pandoc_str))))))

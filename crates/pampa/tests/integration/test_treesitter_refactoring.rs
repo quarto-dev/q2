@@ -4440,3 +4440,60 @@ fn test_standalone_caption_no_table() {
     );
     // Note: A warning "Caption found without a preceding table" is emitted (not tested here)
 }
+
+// ============================================================================
+// Code spans whose content contains a backtick run at least as long as the
+// delimiter (bd-code-span-longer-backtick-run-nycn85a8). CommonMark: the
+// closer is a run of exactly the opener's length; any other run is content.
+// ============================================================================
+
+/// Every (delimiter, inner run) class seen in the claude-notes corpus scan,
+/// plus the CommonMark spec examples that exercise the same rule.
+#[test]
+fn test_pandoc_code_span_inner_run_longer_than_delimiter() {
+    let cases: &[(&str, &str)] = &[
+        ("a `x``y` b", "x``y"),
+        ("a ` ```mermaid ` b", "```mermaid"),
+        ("a ` ````markdown ` b", "````markdown"),
+        ("a `` ```{r} `` b", "```{r}"),
+        ("a `` ```` `` b", "````"),
+        ("a ``` x````y ``` b", "x````y"),
+        ("a ``` x`y````z`` ``` b", "x`y````z``"),
+        // Shorter inner runs keep working.
+        ("a `` `x` `` b", "`x`"),
+        // CommonMark spec examples.
+        ("` `` `", "``"),
+        ("` foo `` bar `", "foo `` bar"),
+        ("``foo`bar``", "foo`bar"),
+    ];
+    for (input, expected_code) in cases {
+        let result = parse_qmd_to_pandoc_ast(input);
+        assert!(
+            result.contains("Code"),
+            "{input:?}: should contain Code: {result}"
+        );
+        assert!(
+            result.contains(&format!("\"{expected_code}\"")),
+            "{input:?}: should contain code text {expected_code:?}: {result}"
+        );
+    }
+}
+
+/// A longer inner run must not close the span early and leak the rest of
+/// the paragraph; the text after the span stays plain and a later span
+/// still parses.
+#[test]
+fn test_pandoc_code_span_inner_run_does_not_leak() {
+    let result = parse_qmd_to_pandoc_ast("a `x``y` and `z`");
+    assert!(result.contains("\"x``y\""), "{result}");
+    assert!(result.contains("Str \"and\""), "{result}");
+    assert!(result.contains("\"z\""), "{result}");
+}
+
+/// Multi-line span with the longer run on the continuation line.
+#[test]
+fn test_pandoc_code_span_inner_run_across_soft_break() {
+    let result = parse_qmd_to_pandoc_ast("a `x\n``y` b");
+    assert!(result.contains("Code"), "{result}");
+    assert!(result.contains("\"x ``y\""), "{result}");
+}

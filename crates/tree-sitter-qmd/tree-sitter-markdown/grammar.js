@@ -493,7 +493,12 @@ module.exports = grammar({
             // do add the code_span_code token
             alias(repeat1(choice(
                     /[^`\n\r]+/,
-                    /[`]/,
+                    // bd-nycn85a8: backtick runs inside the span are emitted
+                    // whole by the external scanner (any run whose length
+                    // differs from the delimiter). Never match single
+                    // backticks here: that split runs and let a later
+                    // fragment close the span early.
+                    $._code_span_backtick_run,
                     // bd-ilv8p: line breaks inside content. The scanner's
                     // parse_code_span look-ahead allows the opener to commit
                     // across newlines (up to a blank line); _soft_line_break
@@ -1162,6 +1167,7 @@ module.exports = grammar({
         // code span delimiters for parsing pipe table cells
         $._code_span_start,
         $._code_span_close,
+        $._code_span_backtick_run,
 
         // latex span delimiters for parsing pipe table cells
         $._latex_span_start,

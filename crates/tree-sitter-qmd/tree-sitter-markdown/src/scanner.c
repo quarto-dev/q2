@@ -69,6 +69,11 @@ typedef enum {
     // code span delimiters for parsing pipe table cells
     CODE_SPAN_START,
     CODE_SPAN_CLOSE,
+    // bd-nycn85a8: a backtick run inside an open code span whose length
+    // differs from the delimiter, emitted whole so the internal lexer never
+    // splits it (CommonMark: the closer is a run of exactly the opener's
+    // length; any other run is content).
+    CODE_SPAN_BACKTICK_RUN,
     // latex span delimiters for parsing pipe table cells
     LATEX_SPAN_START,
     LATEX_SPAN_CLOSE,
@@ -209,6 +214,7 @@ static char* token_names[] = {
     // code span delimiters for parsing pipe table cells
     "CODE_SPAN_START",
     "CODE_SPAN_CLOSE",
+    "CODE_SPAN_BACKTICK_RUN",
     // latex span delimiters for parsing pipe table cells
     "LATEX_SPAN_START",
     "LATEX_SPAN_CLOSE",
@@ -785,6 +791,17 @@ static bool parse_fenced_code_block(Scanner *s, const char delimiter,
                 }
                 advance(s, lexer);
             }
+        }
+        // bd-nycn85a8: a backtick fence whose info string contains a
+        // backtick is not a fence (CommonMark), so the line is paragraph
+        // text and the run may open a code span instead: "``` x ``` b" is
+        // a paragraph starting with the span `x`. The look-ahead starts at
+        // the first inner backtick, which is where a closing run could
+        // begin, since everything before it was backtick-free.
+        if (info_string_has_backtick && valid_symbols[CODE_SPAN_START] &&
+            code_span_close_exists_ahead(lexer, level)) {
+            s->code_span_delimiter_length = level;
+            EMIT_TOKEN(CODE_SPAN_START);
         }
         // If it does not then choose to interpret this as the start of a fenced
         // code block.
@@ -1984,6 +2001,19 @@ static bool parse_code_span(Scanner *s, TSLexer *lexer, const bool *valid_symbol
     if (level == s->code_span_delimiter_length && valid_symbols[CODE_SPAN_CLOSE]) {
         s->code_span_delimiter_length = 0;
         EMIT_TOKEN(CODE_SPAN_CLOSE);
+    }
+
+    // bd-nycn85a8: inside an open span, a run whose length differs from the
+    // delimiter is content. Emit the whole run as one hidden token so the
+    // internal lexer never splits it into single backticks; before this, a
+    // split run left a trailing single backtick that then matched a
+    // 1-backtick delimiter as the closer. Gated on CODE_SPAN_CLOSE being
+    // valid too, so error recovery (where every symbol is valid) cannot
+    // emit it with a stale delimiter length.
+    if (valid_symbols[CODE_SPAN_BACKTICK_RUN] && valid_symbols[CODE_SPAN_CLOSE] &&
+        s->code_span_delimiter_length > 0 &&
+        level != s->code_span_delimiter_length) {
+        EMIT_TOKEN(CODE_SPAN_BACKTICK_RUN);
     }
 
     // Try to open a new code span by looking ahead for a matching closing delimiter.

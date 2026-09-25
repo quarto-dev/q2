@@ -1,7 +1,7 @@
 # Code Span Delimiter Matching Issue
 
 **Date:** 2025-10-28
-**Status:** Documented, Workaround Available, Warning Rule Needed
+**Status:** Resolved 2026-09-25 by bd-code-span-longer-backtick-run-nycn85a8 (see `claude-notes/plans/2026-09-25-code-span-backtick-run.md`). The scanner now emits any in-span backtick run of a different length than the delimiter as one hidden external token, so the grammar never splits a run; the CommonMark exact-length rule holds. The analysis below is kept as the record of the mechanism and the earlier failed attempts.
 
 ## The Problem
 
