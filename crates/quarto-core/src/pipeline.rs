@@ -921,8 +921,22 @@ pub async fn run_pipeline(
                             );
                             if stash.source_info.is_some() {
                                 source_context.add_file(source_name.to_string(), Some(content_str));
-                                for (label, text) in stash.files {
-                                    source_context.add_file(label, Some(text));
+                                for (i, cell_file) in stash.files.into_iter().enumerate() {
+                                    let file_id = source_context
+                                        .add_file(cell_file.label, Some(cell_file.text));
+                                    // Mirror ParseDocumentStage's success-path
+                                    // registration (plan 7c Phase 4): the
+                                    // rebuilt context must match what a
+                                    // successful parse would have produced.
+                                    if let Some(f) = source_context.get_file_mut(file_id) {
+                                        f.metadata.origin =
+                                            Some(quarto_source_map::FileOrigin::NotebookCell {
+                                                notebook_path: source_name.to_string(),
+                                                cell_index: i + 1,
+                                                cell_id: cell_file.cell_id,
+                                                cell_type: cell_file.cell_type,
+                                            });
+                                    }
                                 }
                             }
                         }

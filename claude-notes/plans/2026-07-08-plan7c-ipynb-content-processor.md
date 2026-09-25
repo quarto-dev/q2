@@ -967,14 +967,99 @@ unit tests in `ipynb.rs` + integration regression
 prepends `\n` when the cell text doesn't end with one — the newline lives
 in the Generated fence-close piece, so Original ranges stay contiguous.
 
-Phase boundary: `cargo nextest run --workspace` run at the Phase 3
-commit; delta accounted below (recorded after the run).
+Phase boundary: `cargo nextest run --workspace` run at the Phase 4 end
+commit `bd79ca160` (2026-09-25): 14860 tests run (+3 vs the 14857
+baseline — 1 item-1 FileOrigin test + the two items-2–3 e2e tests in
+`quarto::json_errors`), 14859 passed / 1 failed / 201 skipped. The one
+failure, `julia_engine_e2e::j7_failed_run_does_not_leak_worker`, is a
+load flake — `engine 'julia' timed out during execute` at 398 s under
+full-suite load; it passes in isolation (87 s) and the julia engine is
+untouched by this diff.
 
 ### Phase 4 — presentation hardening (upstream)
-- [ ] `FileOrigin` structured metadata in `quarto-source-map` +
+
+> **Upstream status (2026-09-25): both upstream halves SHIPPED — do not
+> revisit.** qsm 0.3.0 published (PR #8 merged `4014408f`, release.yml
+> auto-publish). QER 0.3.2 on crates.io 2026-09-25T14:03Z (PR #8
+> squash-merged as `234935e` after all-green CI; the first run failed
+> Windows-only — `fs::canonicalize` returns verbatim `\\?\C:\…` paths which
+> `Url::from_file_path` renders as an unopenable `file://?/C:/…`; fixed in
+> `f7c92b9` by `DiagnosticMessage::plain_absolute_path`, which strips the
+> verbatim prefix — `\\?\UNC\` → `\\` — before URL building, and is used by
+> the test too so test and renderer cannot diverge). QER 0.3.2 requires
+> qsm ^0.3.0; QER 0.3.1 pins qsm ^0.2, so the q2 bump moves both together.
+>
+> **Third upstream release required (2026-09-25, discovered during the q2
+> bump): quarto-yaml 0.3.0.** The q2 pin bump (qsm 0.2→0.3) put two
+> semver-incompatible qsm copies in the tree: quarto-yaml 0.2.0 re-exports
+> qsm 0.2 types, and quarto-sass mixes `quarto_yaml::SourceInfo` with qsm
+> types directly, so the workspace did not compile. qsm 0.2→0.3 is purely
+> additive (diff of pub API: additions only), so the fix was a req bump +
+> version bump — upstream PR #20 (branch `dep-bump-source-map-0.3`,
+> mirroring #19's 0.2 bump), all-green CI, merged `038f898`, release.yml
+> auto-published quarto-yaml 0.3.0 + quarto-yaml-validation 0.3.0. q2's
+> root Cargo.toml pins qsm 0.3.2/… — see the status note below for the
+> final pin set.
+>
+> **q2-side transport finding:** `Converted.files` and both `LoadedSource`
+> structs carry `Vec<(String, String)>` (label, text) — cell_type and
+> nbformat cell.id are NOT transported, and § Presentation requires both
+> (cell.id in JSON output only). Extend the files transport to carry them
+> from the ipynb converter (a struct, not a tuple); parsing the
+> `…[cell N, kind]` label cannot recover cell.id. percent/spin emit empty
+> `files`, so the shape change is contained. Workspace deps currently pin
+> `quarto-error-reporting = "0.3.0"`, `quarto-source-map = "0.2.0"`
+> (root Cargo.toml) — bump both reqs deliberately, then
+> `cargo update -p quarto-source-map -p quarto-error-reporting`.
+
+- [x] `FileOrigin` structured metadata in `quarto-source-map` +
       `quarto-error-reporting` rendering (replaces the P1 pseudo-path).
-- [ ] `--json-errors` structured cell locations.
-- [ ] Hyperlink behaviour for virtual files.
+      (q2 half done 2026-09-25: pins moved to qer 0.3.2 / qsm 0.3.0 /
+      quarto-yaml 0.3.0 — the last required upstream PR #20, see the note
+      above; `ConvertedFile {label, text, cell_type, cell_id}` transport
+      struct replaces the `(label, text)` tuples in `Converted`,
+      `ConversionStash`, `LoadedSource`, `ClaimedConversion` (cell.id and
+      cell_type now flow from the ipynb converter — the transport finding
+      resolved); `ParseDocumentStage` stamps
+      `FileOrigin::NotebookCell {notebook_path, cell_index, cell_id,
+      cell_type}` on every registered cell in BOTH contexts, and the
+      `run_pipeline` StageError rebuild site mirrors it. TDD: the
+      per-cell-files test extended first (fixture gained nbformat 4.5 cell
+      ids), observed RED on `origin: None`, then GREEN. quarto-core clippy
+      -D warnings clean; quarto-core suite 5003 passed / 32 skipped ×2.)
+- [x] `--json-errors` structured cell locations.
+      (Done 2026-09-25, commit 0fc30d913: e2e test
+      `ipynb_parse_error_json_carries_cell_origin` in
+      `crates/quarto/tests/integration/json_errors.rs` renders a broken
+      .ipynb through the real binary and asserts a diagnostic carries
+      `origin {kind: notebook_cell, notebook_path, cell_index: 1,
+      cell_id, cell_type}`. Passed first run — no q2 wire code was
+      needed: q2's consumer calls QER 0.3.2 `diagnostic_to_json`
+      directly, and the item-1 commit attaches origin at both
+      registration sites. Numbering note, deliberate: labels reserve
+      "cell 1" for the synthesized front-matter pseudo-cell
+      (`number_shift`), while `cell_index` counts real notebook cells —
+      observed label `[cell 2, markdown]` alongside `cell_index: 1`.
+      Structured origin is notebook-relative by design. E2E evidence:
+      `cargo run --bin q2 -- render tmp-e2e/broken.ipynb --json-errors`,
+      NDJSON inspected, origin exactly as asserted. quarto clippy -D
+      warnings clean; json_errors suite 14/14.)
+- [x] Hyperlink behaviour for virtual files.
+      (Done 2026-09-25, commit b2cfacb9e: e2e test
+      `ipynb_diagnostic_hyperlinks_real_notebook` asserts the ANSI
+      rendering hyperlinks the REAL notebook — OSC-8 target
+      `file://<canonical>/broken.ipynb` — with the pseudo-path
+      `broken.ipynb[cell 2, markdown]` as visible label, and (via exact
+      URL match) that no `#line:col` fragment is appended — origin-link
+      coordinates are cell-relative, deliberate in QER 0.3.2
+      (`hyperlink_target` → `origin.notebook_path`;
+      `wrap_path_with_hyperlink` fragments only self-links). Passed
+      first run; pins the P2 promise so a regression re-pointing OSC-8
+      at the non-existent pseudo-path fails. Human-path evidence: real
+      `cargo run --bin q2 -- render tmp-e2e/broken.ipynb` (exit 1),
+      raw OSC-8 bytes inspected in stderr. quarto clippy -D warnings
+      clean (one filter_map_next fix in the new test); json_errors
+      suite 15/15.)
 
 ### Phase 5 — coordination
 - [x] Point bd-19nc56ao and bd-xxul at this plan; record the
@@ -986,6 +1071,40 @@ commit; delta accounted below (recorded after the run).
       (Done 2026-09-25: `docs/guides/authoring/notebooks.qmd` + sidebar entry;
       rendered with `q2 render docs/guides/authoring/notebooks.qmd`, output
       inspected — all five sections present, breadcrumb + sidebar wired.)
+
+---
+
+## Completion
+
+Plan complete 2026-09-25. Checklist reconciled against landed work; the
+final two commits came after the phase-boundary run above:
+
+- `bd79ca160` — lint: the `add-file-with-id` verify rule now skips any
+  `tests/`-segment path whole-file. The contract said "test code is
+  skipped" but only `#[cfg(test)]` blocks were; plan7c's integration
+  tests tripped verify's step-0. TDD; xtask 181/181.
+- `e320a4087` — wasm: compile out the ipynb replay push (`engine::jupyter`
+  is native-only) so the push compiles out on WASM, `to_run` stays empty,
+  and Step 3's fast path passes the AST through; and align the nested
+  `wasm-quarto-hub-client` direct `quarto-source-map` pin to 0.3.0 — the
+  item-1 pins had split the WASM graph (0.2.0 direct + 0.3.0 transitive),
+  producing 13 E0308s on dual `SourceContext` copies once quarto-core
+  compiled for wasm. Full `cargo xtask verify` (no skip flags) was the
+  first gate to see both — all prior gates ran `--skip-hub-build`.
+  Green before commit: `npm run build:wasm`; clippy -p quarto-core
+  --all-targets -D warnings; `cargo nextest run -p quarto-core`
+  (5003 passed / 32 skipped, julia j7 passed).
+
+Full `cargo xtask verify` (no skip flags, `e320a4087`): **all 14 steps
+green, exit 0** (2026-09-25). Workspace leg inside verify: 14861 run /
+14861 passed / 201 skipped — +4 vs the 14857 baseline, all accounted
+(+3 items-1–3 tests, +1 `bd79ca160`'s xtask lint test
+`integration_test_files_are_skipped`; the "14860" phase-boundary figure
+above was the bare run taken before `bd79ca160` landed — verify2
+pre-fix and verify3 post-fix both count 14861, so `e320a4087` adds no
+tests). Step 11's `querySelector` jsdom mutation-observer noise in
+preview-renderer integration tests is pre-existing; that suite is green
+(674 passed / 1 skipped).
 
 ---
 

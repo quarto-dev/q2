@@ -32,7 +32,7 @@ use regex::Regex;
 use smallvec::smallvec;
 
 use super::{
-    ContentProcessor, Converted, ORIGINAL_FILE_ID, ProcessorContext, ProcessorError,
+    ContentProcessor, Converted, ConvertedFile, ORIGINAL_FILE_ID, ProcessorContext, ProcessorError,
     ProcessorParams,
 };
 
@@ -104,6 +104,7 @@ pub fn convert_notebook(path: &Path, content: &str) -> Result<Converted, Process
             source_is_empty_array: source.is_empty_array,
             has_outputs,
             raw_mimetype,
+            id: cell.get("id").and_then(|v| v.as_str()).map(str::to_string),
         });
     }
 
@@ -282,11 +283,11 @@ pub fn convert_notebook(path: &Path, content: &str) -> Result<Converted, Process
     let files = cells
         .iter()
         .enumerate()
-        .map(|(i, cell)| {
-            (
-                format!("{name}[cell {}, {}]", i + 1 + number_shift, cell.kind),
-                cell.text.clone(),
-            )
+        .map(|(i, cell)| ConvertedFile {
+            label: format!("{name}[cell {}, {}]", i + 1 + number_shift, cell.kind),
+            text: cell.text.clone(),
+            cell_type: cell.kind.clone(),
+            cell_id: cell.id.clone(),
         })
         .collect();
 
@@ -313,6 +314,7 @@ struct CellData {
     source_is_empty_array: bool,
     has_outputs: bool,
     raw_mimetype: Option<String>,
+    id: Option<String>,
 }
 
 struct CellSource {
@@ -699,11 +701,11 @@ mod tests {
             "notebook.ipynb".to_string(),
             Some(notebook.to_string()),
         );
-        for (i, (label, text)) in converted.files.iter().enumerate() {
+        for (i, cell_file) in converted.files.iter().enumerate() {
             ctx.add_file_with_id(
                 FileId(ORIGINAL_FILE_ID.0 + 1 + i),
-                label.clone(),
-                Some(text.clone()),
+                cell_file.label.clone(),
+                Some(cell_file.text.clone()),
             );
         }
         ctx
@@ -868,7 +870,7 @@ mod tests {
             converted
                 .files
                 .iter()
-                .map(|(l, _)| l.as_str())
+                .map(|f| f.label.as_str())
                 .collect::<Vec<_>>(),
             vec![
                 "notebook.ipynb[cell 1, code]",
@@ -891,7 +893,7 @@ mod tests {
         );
         assert_eq!(converted.files.len(), 2);
         assert_eq!(
-            converted.files[1].1, "tab\there\nnew\nline\ncafé ✓\n",
+            converted.files[1].text, "tab\there\nnew\nline\ncafé ✓\n",
             "the virtual file must hold the logical (unescaped) text"
         );
         assert!(converted.markdown.contains("tab\there\n"));
@@ -943,7 +945,7 @@ mod tests {
             converted
                 .files
                 .iter()
-                .map(|(l, _)| l.as_str())
+                .map(|f| f.label.as_str())
                 .collect::<Vec<_>>(),
             vec![
                 "notebook.ipynb[cell 2, markdown]",
@@ -1106,7 +1108,7 @@ mod tests {
             converted
                 .files
                 .iter()
-                .map(|(l, _)| l.as_str())
+                .map(|f| f.label.as_str())
                 .collect::<Vec<_>>(),
             vec![
                 "notebook.ipynb[cell 1, markdown]",
@@ -1117,5 +1119,20 @@ mod tests {
         // Assembled length must equal the concat's total length.
         let total: usize = converted.source_info.length();
         assert_eq!(total, converted.markdown.len());
+    }
+
+    #[test]
+    fn converted_files_carry_cell_type_and_id() {
+        // nbformat 4.5+: every cell has an `id`. Older notebooks (and
+        // hand-rolled fixtures) omit it — `cell_id` stays `None` then.
+        let converted = convert_ok(
+            r#"{"cell_type":"code","id":"alpha","metadata":{},"outputs":[],"source":["a()\n"]},
+               {"cell_type":"markdown","metadata":{},"source":["b\n"]}"#,
+        );
+        assert_eq!(converted.files.len(), 2);
+        assert_eq!(converted.files[0].cell_type, "code");
+        assert_eq!(converted.files[0].cell_id.as_deref(), Some("alpha"));
+        assert_eq!(converted.files[1].cell_type, "markdown");
+        assert_eq!(converted.files[1].cell_id, None);
     }
 }

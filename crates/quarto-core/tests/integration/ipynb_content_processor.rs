@@ -33,11 +33,11 @@ fn register_cells(ctx: &mut SourceContext, converted: &Converted, notebook: &str
         "notebook.ipynb".to_string(),
         Some(notebook.to_string()),
     );
-    for (i, (label, text)) in converted.files.iter().enumerate() {
+    for (i, cell_file) in converted.files.iter().enumerate() {
         ctx.add_file_with_id(
             FileId(ORIGINAL_FILE_ID.0 + 1 + i),
-            label.clone(),
-            Some(text.clone()),
+            cell_file.label.clone(),
+            Some(cell_file.text.clone()),
         );
     }
 }
@@ -231,10 +231,10 @@ fn converted_files_carry_logical_cell_text_in_notebook_order() {
         .expect("escaped-text notebook must convert");
 
     assert_eq!(converted.files.len(), 2);
-    assert_eq!(converted.files[0].0, "notebook.ipynb[cell 1, markdown]");
-    assert_eq!(converted.files[0].1, "first\n");
-    assert_eq!(converted.files[1].0, "notebook.ipynb[cell 2, markdown]");
-    assert_eq!(converted.files[1].1, "tab\there\nnew\nline\ncafé ✓\n");
+    assert_eq!(converted.files[0].label, "notebook.ipynb[cell 1, markdown]");
+    assert_eq!(converted.files[0].text, "first\n");
+    assert_eq!(converted.files[1].label, "notebook.ipynb[cell 2, markdown]");
+    assert_eq!(converted.files[1].text, "tab\there\nnew\nline\ncafé ✓\n");
     // And the assembled markdown embeds the unescaped text verbatim.
     assert!(converted.markdown.contains("tab\there\n"));
 }
@@ -405,19 +405,20 @@ mod seam2 {
             "{name}: ORIGINAL_FILE_ID must hold the raw notebook bytes"
         );
 
-        for (i, (label, text)) in converted.files.iter().enumerate() {
+        for (i, cell_file) in converted.files.iter().enumerate() {
             let id = FileId(ORIGINAL_FILE_ID.0 + 1 + i);
             let f = sc
                 .get_file(id)
                 .unwrap_or_else(|| panic!("{name}: cell {i} missing at {id:?}"));
             assert!(
-                f.path.ends_with(label),
-                "{name}: cell {i} label must end with {label:?}, got {:?}",
+                f.path.ends_with(cell_file.label.as_str()),
+                "{name}: cell {i} label must end with {:?}, got {:?}",
+                cell_file.label,
                 f.path
             );
             assert_eq!(
                 f.content.as_deref(),
-                Some(text.as_str()),
+                Some(cell_file.text.as_str()),
                 "{name}: cell {i} content"
             );
         }

@@ -59,6 +59,7 @@ use std::path::PathBuf;
 
 use async_trait::async_trait;
 
+use crate::engine::content_processors::ConvertedFile;
 use crate::stage::{
     ConversionProvenance, EventLevel, PipelineData, PipelineDataKind, PipelineError, PipelineStage,
     SourceType, StageContext,
@@ -72,7 +73,7 @@ struct ClaimedConversion {
     engine_name: String,
     qmd_text: String,
     source_info: Option<quarto_source_map::SourceInfo>,
-    files: Vec<(String, String)>,
+    files: Vec<ConvertedFile>,
 }
 
 /// Pre-parse stage: ask engines whether they claim the input file and, if so,
@@ -1423,10 +1424,10 @@ mod tests {
         // One ephemeral virtual file per cell, in notebook order, with the
         // converter's `<name>[cell N, kind]` labels (plan decision 5).
         assert_eq!(result.files.len(), 2, "got {:?}", result.files);
-        assert_eq!(result.files[0].0, "nb.ipynb[cell 1, markdown]");
-        assert_eq!(result.files[0].1, "first\n");
-        assert_eq!(result.files[1].0, "nb.ipynb[cell 2, markdown]");
-        assert_eq!(result.files[1].1, "second\n");
+        assert_eq!(result.files[0].label, "nb.ipynb[cell 1, markdown]");
+        assert_eq!(result.files[0].text, "first\n");
+        assert_eq!(result.files[1].label, "nb.ipynb[cell 2, markdown]");
+        assert_eq!(result.files[1].text, "second\n");
 
         // The source_info is the converter's faithful multi-piece map, not
         // a dynamic path placeholder.
