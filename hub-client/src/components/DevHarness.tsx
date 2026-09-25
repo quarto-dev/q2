@@ -43,7 +43,6 @@ import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import type { Symbol } from '@quarto/preview-renderer/types/intelligence';
 import type { ProjectSetEntry } from '@quarto/quarto-automerge-schema';
 import type { CollectionSnapshot } from '../services/projectSetService';
-import type { SearchFiles } from '../services/search';
 import type { PwaPromptStore } from '../pwaPrompt';
 import type { ReplayState, ReplayControls } from '../hooks/useReplayMode';
 
@@ -154,15 +153,6 @@ const pendingPrompt: PwaPromptStore = {
   isPending: () => true,
 };
 
-/** Search fixture for the sidebar route: substring match over FAKE_FILES. */
-const fakeSearchFiles: SearchFiles = async (query) => {
-  const q = query.trim().toLowerCase();
-  if (!q) return [];
-  return FAKE_FILES.filter((f) => f.path.toLowerCase().includes(q)).map(
-    (f) => ({ path: f.path, score: 1, terms: [q] }),
-  );
-};
-
 /**
  * Stateful sidebar sections fixture, shared by the sidebar and
  * editor-shell routes. Interaction specs need observable behavior, so
@@ -190,7 +180,6 @@ function StatefulSidebarSections({ files = FAKE_FILES }: { files?: FileEntry[] }
               onRenameFile={(f, p) => setLastAction(`rename:${f.path}->${p}`)}
               onOpenInNewTab={(f) => setLastAction(`new-tab:${f.path}`)}
               onCopyLink={(f) => setLastAction(`copy:${f.path}`)}
-              searchFiles={fakeSearchFiles}
             />
           ) : sectionId === 'outline' ? (
             <OutlinePanel

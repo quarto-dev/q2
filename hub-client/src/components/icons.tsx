@@ -247,6 +247,16 @@ export function FolderPlusIcon({ size }: IconProps) {
   );
 }
 
+/** Magnifying glass — search. */
+export function SearchIcon({ size }: IconProps) {
+  return (
+    <StrokeIcon size={size}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m21 21-4.3-4.3" />
+    </StrokeIcon>
+  );
+}
+
 /** Chevron pointing down — dropdown triggers. */
 export function ChevronDownIcon({ size }: IconProps) {
   return (

@@ -52,6 +52,8 @@ import FileSidebar from './FileSidebar';
 import NewFileDialog from './NewFileDialog';
 import NewFolderDialog from './NewFolderDialog';
 import PlaceFileDialog, { type PlaceRequest } from './PlaceFileDialog';
+import SearchFilesDialog from './SearchFilesDialog';
+import type { MatchRange } from '../services/search';
 import { linkFromPaste } from '../utils/pasteLink';
 import { toggleWrap } from '../utils/markdownToggle';
 import { joinPath } from '../utils/uniquePath';
@@ -439,6 +441,36 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
   const [showNewFileDialog, setShowNewFileDialog] = useState(false);
   // Parent folder for the new-folder dialog; null = dialog closed.
   const [newFolderParent, setNewFolderParent] = useState<string | null>(null);
+  const [showSearchDialog, setShowSearchDialog] = useState(false);
+  // Match to select once the search-picked document is in the editor.
+  // Switching files remounts MonacoEditor, so the selection is applied
+  // from handleEditorMount, not synchronously.
+  const pendingMatchRef = useRef<{ path: string; match: MatchRange } | null>(null);
+
+  const selectMatchInEditor = useCallback((match: MatchRange) => {
+    // Deferred a frame: Monaco resets scroll/layout when it takes a new
+    // document value, and a reveal issued in the same frame is undone by
+    // that reset. The second frame guarantees layout has run.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const editor = editorRef.current;
+        const model = editor?.getModel();
+        if (!editor || !model) return;
+        const start = model.getPositionAt(match.index);
+        const end = model.getPositionAt(match.index + match.length);
+        const range = {
+          startLineNumber: start.lineNumber,
+          startColumn: start.column,
+          endLineNumber: end.lineNumber,
+          endColumn: end.column,
+        };
+        editor.setSelection(range);
+        editor.revealRangeInCenter(range, 1 /* ScrollType.Immediate */);
+        editor.focus();
+      })
+    );
+  }, []);
+
   // Place-file dialog queue (moves and conflicting drops); the head is
   // shown. Several dropped files can conflict at once, so they line up.
   const [placeQueue, setPlaceQueue] = useState<PlaceRequest[]>([]);
@@ -913,6 +945,15 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
 
     // Signal that editor is ready for scroll sync
     setEditorReady(true);
+
+    // A search result picked while another file was open: the editor
+    // remounts per file (see the MonacoEditor `key`), so the match is
+    // applied here, once the new instance holds the picked document.
+    const pending = pendingMatchRef.current;
+    if (pending && pending.path === currentFile?.path) {
+      pendingMatchRef.current = null;
+      selectMatchInEditor(pending.match);
+    }
   };
 
   // Handle symbol click from outline panel - navigate editor to symbol location
@@ -948,6 +989,19 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
     // Update URL without adding history entry (sidebar navigation)
     onNavigateToFile(file.path, { replace: true });
   }, [fileContents, onNavigateToFile, replayState.isActive]);
+
+  // Search result picked: open the file and highlight the first match.
+  const handleSelectSearchResult = useCallback(
+    (file: FileEntry, match: MatchRange | null) => {
+      const alreadyOpen = currentFile?.path === file.path;
+      handleSelectFile(file);
+      if (!match) return;
+      if (alreadyOpen) selectMatchInEditor(match);
+      else pendingMatchRef.current = { path: file.path, match };
+    },
+    [currentFile?.path, handleSelectFile, selectMatchInEditor]
+  );
+
 
   // Handle opening a file in a new browser tab
   const handleOpenInNewTab = useCallback((file: FileEntry) => {
@@ -1421,8 +1475,7 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
                         onRenameFile={handleRenameFile}
                         onOpenInNewTab={handleOpenInNewTab}
                         onCopyLink={handleCopyLink}
-                        searchFiles={searchFiles}
-                        fileContents={fileContents}
+                        onOpenSearch={() => setShowSearchDialog(true)}
                       />
                     </>
                   );
@@ -1746,6 +1799,16 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
         }}
         onCreateTextFile={handleCreateTextFile}
         initialFilename={newFileInitialName}
+      />
+
+      {/* Search files dialog */}
+      <SearchFilesDialog
+        isOpen={showSearchDialog}
+        files={files}
+        searchFiles={searchFiles}
+        fileContents={fileContents}
+        onClose={() => setShowSearchDialog(false)}
+        onSelectFile={handleSelectSearchResult}
       />
 
       {/* Place-file dialog (move, or add a conflicting drop) */}

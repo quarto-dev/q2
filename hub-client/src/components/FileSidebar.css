@@ -27,6 +27,7 @@
    each wrapped in a Tooltip anchor span (the wrapper is the flex item).
    inline-flex centers the SVG glyph. */
 .sidebar-header .new-file-btn,
+.sidebar-header .search-files-btn,
 .sidebar-header .new-folder-btn,
 .sidebar-header .upload-asset-btn {
   display: inline-flex;
@@ -83,8 +84,7 @@
    treeview/listbox). Inset outline so the ring isn't clipped by the
    scroll container. */
 .file-item:focus-visible,
-.folder-header:focus-visible,
-.search-result:focus-visible {
+.folder-header:focus-visible {
   outline: var(--focus-ring);
   outline-offset: calc(-1 * var(--focus-ring-offset));
 }
@@ -201,85 +201,3 @@
   opacity: 1;
 }
 
-/* ── Full-text search ─────────────────────────────────────────────── */
-
-.sidebar-search {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--sidebar-border);
-}
-
-.sidebar-search-input {
-  flex: 1;
-  min-width: 0;
-  padding: 4px 8px;
-  background: var(--editor-accent-bg);
-  border: 1px solid var(--editor-accent-border);
-  border-radius: var(--radius-xs);
-  color: var(--editor-text);
-  font-size: 12px;
-}
-
-.sidebar-search-input::placeholder {
-  color: var(--editor-text-muted);
-}
-
-.sidebar-search-input:focus {
-  outline: none;
-  border-color: var(--sidebar-active-accent);
-}
-
-.sidebar-search-clear {
-  flex: none;
-  padding: 2px 6px;
-  background: none;
-  border: none;
-  color: var(--editor-text-muted);
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.sidebar-search-clear:hover {
-  color: var(--editor-text);
-}
-
-.search-result {
-  padding: 6px 12px;
-  cursor: pointer;
-  transition: background-color var(--duration-fast) var(--ease-out);
-}
-
-.search-result-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.search-result-name {
-  font-family: var(--font-mono);
-  color: var(--editor-text);
-  font-size: 13px;
-}
-
-.search-result-path {
-  color: var(--editor-text-muted);
-  font-size: 11px;
-}
-
-.search-result-snippet {
-  margin-top: 2px;
-  padding-left: 22px;
-  color: var(--editor-text-muted);
-  font-size: 11px;
-  line-height: 1.4;
-}
-
-.search-result-snippet mark {
-  background: var(--editor-accent-border);
-  color: var(--editor-text);
-  border-radius: var(--radius-xs);
-  padding: 0 1px;
-}

@@ -9,9 +9,6 @@
       "right: 0;",
       "right: 16px;"
     ],
-    "components/FileSidebar.css": [
-      "padding-left: 22px;"
-    ],
     "components/OutlinePanel.css": [
       "margin-left: 4px;",
       "padding-left: 12px;",

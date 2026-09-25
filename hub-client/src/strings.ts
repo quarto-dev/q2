@@ -74,7 +74,6 @@ export const fileSidebar = {
   addAsset: 'Add asset',
   searchPlaceholder: 'Search files…',
   searchLabel: 'Search files',
-  clearSearch: 'Clear search',
   resultsLabel: 'Search results',
   noMatches: 'No matches',
   emptyTitle: 'No files yet',
@@ -229,6 +228,9 @@ export const dialogs = {
     errorExtensionRequired: 'Enter a file extension',
     errorInvalidChars: 'Filename contains invalid characters',
     errorExists: 'A file with this name already exists',
+  },
+  searchFiles: {
+    title: 'Search files',
   },
   moveFile: {
     title: (name: string) => `Move ${name}`,

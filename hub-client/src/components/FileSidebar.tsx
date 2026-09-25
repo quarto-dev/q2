@@ -23,17 +23,17 @@ import {
   downloadFile,
   downloadFolderAsZip,
 } from '../services/fileDragOut';
-import { buildSnippet, type SearchFiles, type SearchResult } from '../services/search';
 import {
   FilePlusIcon,
   UploadIcon,
   FolderPlusIcon,
   ShareIcon,
+  SearchIcon,
   DownloadIcon,
 } from './icons';
 import FileTreeRow from './FileTreeRow';
 import MoreActionsIconButton from './MoreActionsIconButton';
-import { getFileIcon, treeRowIndent } from './fileTreeRowHelpers';
+import { treeRowIndent } from './fileTreeRowHelpers';
 import { Menu, MenuItem } from './Menu';
 import Tooltip from './Tooltip';
 import { fileSidebar } from '../strings';
@@ -85,17 +85,8 @@ export interface FileSidebarProps {
   onOpenInNewTab?: (file: FileEntry) => void;
   /** Copy a link to a file to clipboard */
   onCopyLink?: (file: FileEntry) => void;
-  /**
-   * Full-text search over the open project. When provided, a search box is
-   * shown and a query replaces the file tree with ranked results. Absent
-   * means search is disabled (the tree renders as before).
-   */
-  searchFiles?: SearchFiles;
-  /**
-   * Live text content per path, used only to render match snippets in search
-   * results. Optional; without it results show the path alone.
-   */
-  fileContents?: Map<string, string>;
+  /** Open the search dialog (header magnifying-glass button). */
+  onOpenSearch?: () => void;
 }
 
 interface FolderMenuState {
@@ -175,8 +166,7 @@ export default function FileSidebar({
   onRenameFile,
   onOpenInNewTab,
   onCopyLink,
-  searchFiles,
-  fileContents,
+  onOpenSearch,
 }: FileSidebarProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   // Drag-to-move (sidebar-internal drag of a file row): the folder path
@@ -190,8 +180,6 @@ export default function FileSidebar({
   // and its timer. Holding over a folder briefly opens it; passing over
   // it does not.
   const hoverExpandRef = useRef<{ folder: string; timer: number } | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [folderMenu, setFolderMenu] = useState<FolderMenuState>({
     visible: false,
     x: 0,
@@ -214,7 +202,6 @@ export default function FileSidebar({
   // treeview/listbox): exactly one row is tabbable at a time.
   const [focusedPath, setFocusedPath] = useState<string | null>(null);
   const typeAheadRef = useRef({ buffer: '', timer: 0 });
-  const searchInputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
 
@@ -227,32 +214,6 @@ export default function FileSidebar({
     for (const f of files) m.set(f.path, f);
     return m;
   }, [files]);
-
-  const isSearching = searchQuery.trim() !== '';
-
-  // Debounced full-text search; ignore stale async resolutions. All state
-  // updates happen inside the timer callback (never synchronously in the
-  // effect body) to avoid cascading renders.
-  useEffect(() => {
-    if (!searchFiles) return;
-    let cancelled = false;
-    const handle = setTimeout(
-      () => {
-        if (!isSearching) {
-          if (!cancelled) setSearchResults([]);
-          return;
-        }
-        void searchFiles(searchQuery, { limit: 50 }).then((results) => {
-          if (!cancelled) setSearchResults(results);
-        });
-      },
-      isSearching ? 120 : 0
-    );
-    return () => {
-      cancelled = true;
-      clearTimeout(handle);
-    };
-  }, [searchFiles, searchQuery, isSearching]);
 
   const expandFolder = useCallback((path: string) => {
     if (!path) return;
@@ -327,23 +288,7 @@ export default function FileSidebar({
     return out;
   }, [fileTree, expandedFolders]);
 
-  // Search mode navigates the flat result list with the same keys.
-  const navItems: NavItem[] = useMemo(() => {
-    if (!isSearching) return visibleItems;
-    return searchResults.flatMap((result) => {
-      const file = filesByPath.get(result.path);
-      if (!file) return [];
-      return [
-        {
-          path: result.path,
-          name: result.path.split('/').pop() || result.path,
-          type: 'file' as const,
-          parent: null,
-          file,
-        },
-      ];
-    });
-  }, [isSearching, visibleItems, searchResults, filesByPath]);
+  const navItems: NavItem[] = visibleItems;
 
   // The roving tab stop: the focused row when it's visible, else the
   // active file, else the first row.
@@ -437,13 +382,6 @@ export default function FileSidebar({
           e.preventDefault();
           activateNavItem(item);
           return;
-        case 'Escape':
-          if (isSearching) {
-            e.preventDefault();
-            setSearchQuery('');
-            searchInputRef.current?.focus();
-          }
-          return;
         default:
           break;
       }
@@ -499,7 +437,6 @@ export default function FileSidebar({
       toggleFolder,
       focusNavItem,
       activateNavItem,
-      isSearching,
     ]
   );
 
@@ -921,58 +858,6 @@ export default function FileSidebar({
     );
   };
 
-  // Render the ranked search results (replaces the tree while searching).
-  const renderSearchResults = (): React.ReactNode => {
-    if (searchResults.length === 0) {
-      return (
-        <div className="empty-state">
-          <p>{fileSidebar.noMatches}</p>
-        </div>
-      );
-    }
-    return searchResults.map((result) => {
-      const file = filesByPath.get(result.path);
-      if (!file) return null; // result for a file no longer listed
-      const fileName = result.path.split('/').pop() || result.path;
-      const dir = result.path.slice(0, result.path.length - fileName.length);
-      const content = fileContents?.get(result.path);
-      const snippet = content ? buildSnippet(content, result.terms) : [];
-      const isActive = currentFile?.path === result.path;
-      return (
-        <div
-          key={result.path}
-          role="option"
-          aria-selected={isActive}
-          tabIndex={tabbablePath === result.path ? 0 : -1}
-          data-tree-path={result.path}
-          className={`search-result qh-row-hover qh-active-accent-row ${isActive ? 'active' : ''}`}
-          onClick={() => {
-            setFocusedPath(result.path);
-            onSelectFile(file);
-          }}
-          onFocus={() => setFocusedPath(result.path)}
-        >
-          <div className="search-result-header">
-            {getFileIcon(result.path)}
-            <span className="search-result-name qh-truncate">{fileName}</span>
-            {dir && <span className="search-result-path qh-truncate">{dir}</span>}
-          </div>
-          {snippet.length > 0 && (
-            <div className="search-result-snippet qh-truncate">
-              {snippet.map((seg, i) =>
-                seg.match ? (
-                  <mark key={i}>{seg.text}</mark>
-                ) : (
-                  <span key={i}>{seg.text}</span>
-                )
-              )}
-            </div>
-          )}
-        </div>
-      );
-    });
-  };
-
   return (
     <div
       ref={sidebarRef}
@@ -1013,74 +898,31 @@ export default function FileSidebar({
             <UploadIcon />
           </button>
         </Tooltip>
+        {onOpenSearch && (
+          <Tooltip content={fileSidebar.searchLabel}>
+            <button
+              className="qh-btn small outline search-files-btn"
+              onClick={onOpenSearch}
+              aria-label={fileSidebar.searchLabel}
+            >
+              <SearchIcon />
+            </button>
+          </Tooltip>
+        )}
       </div>
 
-      {searchFiles && (
-        <div className="sidebar-search">
-          <input
-            ref={searchInputRef}
-            type="search"
-            className="sidebar-search-input"
-            placeholder={fileSidebar.searchPlaceholder}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => {
-              // ArrowDown moves into the results list; Escape clears.
-              if (e.key === 'ArrowDown' && navItems.length > 0) {
-                e.preventDefault();
-                focusNavItem(navItems[0].path);
-              } else if (e.key === 'Escape' && isSearching) {
-                e.preventDefault();
-                setSearchQuery('');
-              }
-            }}
-            aria-label={fileSidebar.searchLabel}
-          />
-          {isSearching && (
-            <Tooltip content={fileSidebar.clearSearch}>
-              <button
-                className="sidebar-search-clear"
-                onClick={() => setSearchQuery('')}
-                aria-label={fileSidebar.clearSearch}
-              >
-                ✕
-              </button>
-            </Tooltip>
-          )}
-        </div>
-      )}
-
-      {/* APG treeview (file tree) / listbox (search results): one tab
-          stop via roving tabindex; arrows/Home/End/type-ahead navigate,
-          Enter activates, Shift+F10 opens the row's context menu. An
-          empty tree/listbox carries no widget role — a role with zero
-          items violates aria-required-children; the empty state is plain
-          text. */}
+      {/* APG treeview: one tab stop via roving tabindex; arrows/Home/End/
+          type-ahead navigate, Enter activates, Shift+F10 opens the row's
+          context menu. An empty tree carries no widget role — a role with
+          zero items violates aria-required-children; the empty state is
+          plain text. */}
       <div
         className={`file-list ${moveTarget === '' ? 'drop-target' : ''}`}
-        role={
-          isSearching
-            ? searchResults.length > 0
-              ? 'listbox'
-              : undefined
-            : files.length > 0
-              ? 'tree'
-              : undefined
-        }
-        aria-label={
-          isSearching
-            ? searchResults.length > 0
-              ? fileSidebar.resultsLabel
-              : undefined
-            : files.length > 0
-              ? fileSidebar.treeLabel
-              : undefined
-        }
+        role={files.length > 0 ? 'tree' : undefined}
+        aria-label={files.length > 0 ? fileSidebar.treeLabel : undefined}
         onKeyDown={handleNavKeyDown}
       >
-        {isSearching ? (
-          renderSearchResults()
-        ) : files.length === 0 ? (
+        {files.length === 0 ? (
           <div className="empty-state">
             <FilePlusIcon size={16} />
             <p>{fileSidebar.emptyTitle}</p>
