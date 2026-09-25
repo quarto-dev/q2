@@ -15,13 +15,10 @@ where it is wrong. Then write agent guidance so new notes render cleanly.
 
 `claude-notes/_quarto.yml` renders only `**/*.md`. The `.qmd` files here are repro
 fixtures, and a positive render pattern replaces the default `**/*.qmd`. It also
-has `!` exclusions for:
-
-- 22 nested repro projects that contain `.md`. These are temporary: the q2 nightly
-  we render with (0.33.0-nightly.20260922) absorbs nested projects into the outer
-  site. The fix (bd-nested-projects-xyb28wnl) is on `main`; drop the list once a
-  nightly ships it.
-- `plans/CURRENT.md`, the gitignored per-session symlink.
+excludes `plans/CURRENT.md`, the gitignored per-session symlink. Nested repro
+projects (directories with their own `_quarto.yml`) are skipped by q2 itself since
+0.33.0-nightly.20260925 (bd-nested-projects-xyb28wnl), with a Q-5-31 warning that
+names them; the temporary exclusion list we carried before that is gone.
 
 `README.md` files are already skipped by q2 discovery. Render output
 (`claude-notes/_site/`, `claude-notes/.quarto/`) is gitignored.
@@ -65,7 +62,10 @@ original only by inserted backslashes.
   apostrophe in the parser (bd-apostrophe-after-span-6l9c8c26).
 - Star emphasis: escape only clearly literal stars; review the rest by hand.
 - Nested projects: stop the implicit glob at `_quarto.yml` boundaries and warn
-  (bd-nested-projects-xyb28wnl, merged).
+  (bd-nested-projects-xyb28wnl, shipped in 0.33.0-nightly.20260925).
+- An unmatched backtick run is an intentional rejection (mismatched backticks render
+  poorly), unlike CommonMark; it needs a Q-code and a good message
+  (bd-unmatched-backtick-run-literal-tjfo21xq).
 
 ## Findings filed as strands
 
@@ -77,6 +77,14 @@ original only by inserted backslashes.
 | bd-code-span-longer-backtick-run-nycn85a8 | code span containing a longer backtick run than its delimiter fails |
 | bd-whitespace-flanked-delimiters-0ncy8bgq | whitespace-flanked `*`, `_`, `^` and `~` pair up *silently* into emphasis, sub- or superscript |
 | bd-nested-projects-xyb28wnl | nested `_quarto.yml` silently absorbed by the outer render |
+| bd-angle-bracket-u27e8-parse-error-r6l55zmh | a Unicode angle bracket (U+27E8) anywhere in prose is a parse error |
+| bd-dollar-math-flanking-wzjx4hn8 | `$` without Pandoc's flanking rules: prices and shell prompts fail |
+| bd-unmatched-backtick-run-literal-tjfo21xq | unmatched backtick run: intentional rejection, needs a Q-code |
+| bd-uncoded-braces-indent-9eq8004k | braces in prose and indented lines fail without a Q-code |
+
+Shipped in 0.33.0-nightly.20260925: the code-span fix, the nested-project boundary,
+and the flanking fix for `*`, `~` and `^` (now literal, no error). `_` is half done:
+no more silent pairing, but an unpaired `_` is still an error (Q-2-5).
 
 The silent pairing is the nastiest: an odd number of literal delimiters in a
 paragraph is an error, an even number mis-renders without a word. Before the tilde
@@ -100,11 +108,19 @@ whose original markup had an unbalanced backtick.
 | | Rendered | Files with errors | Uncoded parse errors |
 |--|--:|--:|--:|
 | Baseline (2026-09-23) | 448 / 1365 | 917 | 1458 |
-| Now (2026-09-25) | 1006 / 1352 | 348 | 491 |
+| 2026-09-25, nightly .20260922 | 1006 / 1352 | 348 | 491 |
+| 2026-09-25, nightly .20260925 | 1075 / 1353 | 280 | 316 |
 
-Remaining error classes: uncoded parse errors 491 (177 files), Q-2-12 54,
-Q-2-13 46, Q-2-11 30, Q-2-41 28, Q-2-5 10, Q-2-35 10, Q-2-16 9, plus a tail.
-Warnings are not yet addressed: Q-2-49 175, Q-2-9 94, Q-16-5 43, Q-16-3 39.
+Remaining error classes (nightly .20260925): uncoded parse errors 316 (150 files),
+Q-2-12 43, Q-2-11 29, Q-2-41 18, Q-2-13 14, Q-2-5 10, Q-2-35 10, plus a tail.
+Uncoded, by cause: end-of-line cascades 76, backtick runs 44, indented lines 58,
+braces 20, `⟨` 6, `$` 5. Warnings are not yet addressed: Q-2-49 199, Q-2-9 104,
+Q-16-5 43, Q-16-3 41.
+
+The star review queue below was collected on nightly .20260922; the flanking fix
+resolved most of the Q-2-13 items. Regenerate it before working through it:
+`scripts/q2-escape-openers.py claude-notes Q-2-12 --dry-run --only-context '...'`
+with the star pattern from `claude-notes-escape-fixpoint.sh`.
 
 ## Manual review queue: star emphasis
 
