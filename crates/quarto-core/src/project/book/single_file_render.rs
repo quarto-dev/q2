@@ -300,6 +300,33 @@ pub(crate) async fn render_book_single_file(
     merged.meta.remove("bibliography");
     merged.meta.remove("csl");
 
+    // Derive Q2's `epub-cover-image` key from `book.cover-image` (EPUB
+    // output only, and only when the author set no explicit
+    // `epub-cover-image`). Q1's `epubBookExtension.onSingleFilePreRender`
+    // instead writes a generic `cover-image` metadata key that Pandoc's
+    // EPUB writer reads natively; Q2 forwards only the literally-named
+    // `epub-cover-image` key (`pandoc_write.rs`'s `epub_extra_args`), so
+    // this is a deliberate adaptation to Q2's architecture, not a port.
+    // The merged doc's synthetic input sits at the project root, so its
+    // document directory *is* the project root — the project-root-relative
+    // `book.cover-image` value (a leading `/` in config context means
+    // project root, never the filesystem root) carries over after stripping
+    // that prefix, exactly as the path-resolution contract requires.
+    if format.identifier == FormatIdentifier::Epub {
+        let book_cover = book_config
+            .and_then(|b| b.get("cover-image"))
+            .and_then(|v| v.as_plain_text());
+        if let Some(cover) = book_cover
+            && merged.meta.get("epub-cover-image").is_none()
+        {
+            let declared = cover.strip_prefix('/').unwrap_or(&cover);
+            merged.meta.insert_path(
+                &["epub-cover-image"],
+                ConfigValue::new_string(declared, SourceInfo::generated(By::programmatic_config())),
+            );
+        }
+    }
+
     // Output path (Decision 5): `book_output_stem` + the same
     // output-dir-resolution policy every document uses, fed a synthetic
     // input path so `determine_output_paths` derives the same stem back

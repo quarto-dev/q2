@@ -17,7 +17,7 @@
 //!
 //! ## Recognized input shapes
 //!
-//! Per plan 1.2, four author-facing shapes collapse to the same canonical
+//! Per plan 1.2, five author-facing shapes collapse to the same canonical
 //! node:
 //!
 //! 1. `Div(#<ref>-..)` containing arbitrary content plus an optional
@@ -31,6 +31,14 @@
 //!    custom node's slots.
 //! 4. `Div(#tbl-..) > Table` — standard table crossref. The Table's own
 //!    caption becomes the target's caption; the Table stays as content.
+//! 5. `CodeBlock(#lst-.. lst-cap=..)` — the attribute-form listing (fenced
+//!    code block whose id classifies as `lst` and which carries an
+//!    `lst-cap` attribute; see `classify_codeblock`). Q1's
+//!    `parsefiguredivs.lua` handles this shape in Lua, but converting it
+//!    here — before crossref indexing — is what makes `@lst-..` in-text
+//!    references resolve; the Lua filters run after the index is built.
+//!    The cell-option form (`#| label:` / `#| lst-cap:`) is desugared
+//!    earlier by `codeblock_shorthand` into shape 1 and needs no arm here.
 //!
 //! A fifth shape, engine-emitted figure divs, matches shape (3) or (1)
 //! post-engine and is therefore handled by the same code paths.
@@ -73,9 +81,12 @@
 //! `plain_data.order` is *not* set here — the [`CrossrefIndexTransform`]
 //! fills it during the crossref phase.
 
+use pampa::pandoc::meta::parse_config_string_as_markdown;
+use quarto_error_reporting::DiagnosticMessage;
 use quarto_pandoc_types::attr::{Attr, AttrSourceInfo};
-use quarto_pandoc_types::block::{Block, Blocks, Div, Figure, Plain};
+use quarto_pandoc_types::block::{Block, Blocks, CodeBlock, Div, Figure, Plain};
 use quarto_pandoc_types::custom::{CustomNode, Slot};
+use quarto_pandoc_types::inline::{Inline, Inlines, Str};
 use quarto_pandoc_types::pandoc::Pandoc;
 use serde_json::json;
 
@@ -117,22 +128,30 @@ impl AstTransform for FloatRefTargetSugarTransform {
         let Some(registry) = ctx.ref_type_registry.as_ref() else {
             return Ok(());
         };
-        transform_blocks(&mut ast.blocks, registry);
+        transform_blocks(&mut ast.blocks, registry, &mut ctx.diagnostics);
         Ok(())
     }
 }
 
 /// Walk a block list, sugaring float-ref targets in place.
-fn transform_blocks(blocks: &mut Vec<Block>, reg: &RefTypeRegistry) {
+fn transform_blocks(
+    blocks: &mut Vec<Block>,
+    reg: &RefTypeRegistry,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) {
     for block in blocks.iter_mut() {
-        transform_block(block, reg);
+        transform_block(block, reg, diagnostics);
     }
 }
 
 /// Walk one block: first recurse into children, then check this node itself
 /// for crossref-target shape. Bottom-up order matters for nested crossref
 /// targets (a figure inside a larger document region).
-fn transform_block(block: &mut Block, reg: &RefTypeRegistry) {
+fn transform_block(
+    block: &mut Block,
+    reg: &RefTypeRegistry,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) {
     // Desugar the bare-table caption form into the canonical float Div first,
     // so the uniform `Block::Div` classifier below handles it exactly like the
     // `::: {#tbl-…}` authoring form (bd-4ly7ne01).
@@ -140,33 +159,33 @@ fn transform_block(block: &mut Block, reg: &RefTypeRegistry) {
 
     // Recurse into children first.
     match block {
-        Block::BlockQuote(bq) => transform_blocks(&mut bq.content, reg),
+        Block::BlockQuote(bq) => transform_blocks(&mut bq.content, reg, diagnostics),
         Block::OrderedList(ol) => {
             for item in &mut ol.content {
-                transform_blocks(item, reg);
+                transform_blocks(item, reg, diagnostics);
             }
         }
         Block::BulletList(bl) => {
             for item in &mut bl.content {
-                transform_blocks(item, reg);
+                transform_blocks(item, reg, diagnostics);
             }
         }
         Block::DefinitionList(dl) => {
             for (_term, defs) in &mut dl.content {
                 for def in defs {
-                    transform_blocks(def, reg);
+                    transform_blocks(def, reg, diagnostics);
                 }
             }
         }
-        Block::Figure(fig) => transform_blocks(&mut fig.content, reg),
-        Block::Div(div) => transform_blocks(&mut div.content, reg),
+        Block::Figure(fig) => transform_blocks(&mut fig.content, reg, diagnostics),
+        Block::Div(div) => transform_blocks(&mut div.content, reg, diagnostics),
         Block::Custom(custom) => {
             // Crossref targets can nest inside other custom nodes
             // (e.g. a figure inside a callout). Recurse through slots.
             for (_name, slot) in &mut custom.slots {
                 match slot {
-                    Slot::Block(b) => transform_block(b, reg),
-                    Slot::Blocks(bs) => transform_blocks(bs, reg),
+                    Slot::Block(b) => transform_block(b, reg, diagnostics),
+                    Slot::Blocks(bs) => transform_blocks(bs, reg, diagnostics),
                     _ => {}
                 }
             }
@@ -210,6 +229,22 @@ fn transform_block(block: &mut Block, reg: &RefTypeRegistry) {
                 def,
             )
         }),
+        Block::CodeBlock(cb) => classify_codeblock(cb, reg).map(|(def, caption_value)| {
+            convert_codeblock(
+                std::mem::replace(
+                    cb,
+                    CodeBlock {
+                        attr: empty_attr(),
+                        text: String::new(),
+                        source_info: cb.source_info.clone(),
+                        attr_source: AttrSourceInfo::empty(),
+                    },
+                ),
+                def,
+                caption_value,
+                diagnostics,
+            )
+        }),
         _ => None,
     };
 
@@ -246,6 +281,92 @@ fn classify_fig<'r>(
 ) -> Option<&'r crate::crossref::RefTypeDef> {
     let id = attr.0.as_str();
     reg.classify_cite_id(id)
+}
+
+/// Classify a CodeBlock for the *attribute-form* listing sugar — Q1's
+/// `parsefiguredivs.lua` `CodeBlock` handler. The id must classify as the
+/// `lst` ref-type and an `lst-cap` attribute must be present; only then is
+/// the code block a float. Returns the ref-type def and the caption value.
+///
+/// (The cell-option form — `#| label:` / `#| lst-cap:` — is desugared
+/// earlier by `codeblock_shorthand` into a wrapper Div and arrives here as
+/// shape 1; this arm is the only handler for the `{#lst-… lst-cap=…}`
+/// attribute form. Before it existed, attribute-form listings were converted
+/// only by the vendored Lua filters, which run *after* crossref indexing, so
+/// `@lst-…` in-text references never resolved.)
+fn classify_codeblock<'r>(
+    cb: &CodeBlock,
+    reg: &'r RefTypeRegistry,
+) -> Option<(&'r crate::crossref::RefTypeDef, String)> {
+    let def = reg.classify_cite_id(&cb.attr.0)?;
+    if def.ref_type != "lst" {
+        return None;
+    }
+    let caption = cb.attr.2.get("lst-cap")?.clone();
+    Some((def, caption))
+}
+
+/// Convert an attribute-form listing CodeBlock into a FloatRefTarget,
+/// mirroring Q1's `parsefiguredivs.lua` `CodeBlock` handler: the id moves
+/// onto the float node (classes and any remaining attributes ride along),
+/// the inner code block keeps its classes/attributes but loses the id so
+/// nothing matches it again downstream, `lst-cap` is consumed off both, and
+/// the caption value is parsed as markdown (`string_to_quarto_ast_blocks`).
+fn convert_codeblock(
+    cb: CodeBlock,
+    def: &crate::crossref::RefTypeDef,
+    caption_value: String,
+    diagnostics: &mut Vec<DiagnosticMessage>,
+) -> CustomNode {
+    let source_info = cb.source_info.clone();
+
+    let mut attr = cb.attr.clone();
+    let identifier = attr.0.clone();
+    attr.2.remove("lst-cap");
+
+    let mut inner = cb;
+    inner.attr.0 = String::new();
+    inner.attr.2.remove("lst-cap");
+
+    let inlines = match parse_config_string_as_markdown(&caption_value, &source_info, diagnostics) {
+        quarto_pandoc_types::ConfigValueKind::PandocInlines(inlines) => inlines,
+        quarto_pandoc_types::ConfigValueKind::PandocBlocks(blocks) => blocks
+            .into_iter()
+            .find_map(|b| match b {
+                Block::Paragraph(p) => Some(p.content),
+                Block::Plain(p) => Some(p.content),
+                _ => None,
+            })
+            .unwrap_or_else(|| literal_caption_inlines(&caption_value, &source_info)),
+        _ => literal_caption_inlines(&caption_value, &source_info),
+    };
+
+    let mut node = CustomNode::new(FLOAT_REF_TARGET, attr, source_info);
+    node.plain_data = json!({
+        "ref_type":   def.ref_type,
+        "kind":       def.kind,
+        "identifier": identifier,
+    });
+    node.slots.insert(
+        "content".into(),
+        Slot::Blocks(vec![Block::CodeBlock(inner)]),
+    );
+    node.slots.insert(
+        "caption_long".into(),
+        Slot::Blocks(vec![Block::Plain(Plain {
+            content: inlines,
+            source_info: node.source_info.clone(),
+        })]),
+    );
+    node
+}
+
+/// Fallback caption inlines: the caption text, verbatim.
+fn literal_caption_inlines(text: &str, source_info: &quarto_source_map::SourceInfo) -> Inlines {
+    vec![Inline::Str(Str {
+        text: text.to_string(),
+        source_info: source_info.clone(),
+    })]
 }
 
 fn empty_attr() -> Attr {
@@ -488,7 +609,8 @@ mod tests {
 
     fn run_transform(blocks: Vec<Block>, reg: &RefTypeRegistry) -> Vec<Block> {
         let mut blocks = blocks;
-        transform_blocks(&mut blocks, reg);
+        let mut diagnostics = Vec::new();
+        transform_blocks(&mut blocks, reg, &mut diagnostics);
         blocks
     }
 
@@ -891,5 +1013,120 @@ mod tests {
         let view = crossref_target_view(&out[0]).expect("is a target");
         assert_eq!(view.ref_type, "dia");
         assert_eq!(view.kind, "Diagram");
+    }
+
+    /// Q1's `parsefiguredivs.lua` `CodeBlock` handler: a fenced code block
+    /// whose id classifies as `lst` and which carries an `lst-cap` attribute
+    /// is a float — the id moves onto the float node, the inner code block
+    /// loses it, and `lst-cap` becomes the caption. Before the transform
+    /// handled this shape, only the cell-option form (`#| label:` /
+    /// `#| lst-cap:`) was indexed, so `@lst-*` in-text references never
+    /// resolved (P3 torture-test finding).
+    #[test]
+    fn attribute_form_listing_code_block_sugars_to_float_ref_target() {
+        let reg = RefTypeRegistry::builtin();
+        let mut kvs = LinkedHashMap::new();
+        kvs.insert("lst-cap".to_string(), "Hello World in Python".to_string());
+        let cb = Block::CodeBlock(CodeBlock {
+            attr: ("lst-hello".to_string(), vec!["python".to_string()], kvs),
+            text: "def hello():\n    print(\"Hello, World!\")\n".to_string(),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let out = run_transform(vec![cb], &reg);
+        let Block::Custom(node) = &out[0] else {
+            panic!(
+                "attribute-form listing code block must sugar to a float target, got {:?}",
+                out[0]
+            );
+        };
+        let view = crossref_target_view(&out[0]).expect("is a float-ref target");
+        assert_eq!(view.identifier, "lst-hello");
+        assert_eq!(view.ref_type, "lst");
+        assert_eq!(view.kind, "Listing");
+
+        // The id moved off the inner code block (Q1: the code block keeps
+        // its classes and attributes but loses the identifier).
+        let Slot::Blocks(content) = node.slots.get("content").unwrap() else {
+            panic!("content slot not a Blocks");
+        };
+        let Block::CodeBlock(inner) = &content[0] else {
+            panic!("expected the code block in content, got {:?}", content[0]);
+        };
+        assert_eq!(inner.attr.0, "", "inner code block loses its id");
+        assert_eq!(inner.attr.1, vec!["python".to_string()]);
+        assert!(
+            !inner.attr.2.contains_key("lst-cap"),
+            "lst-cap is consumed into the caption"
+        );
+
+        // The node's own attr preserves classes but not the consumed key.
+        assert_eq!(node.attr.0, "lst-hello");
+        assert_eq!(node.attr.1, vec!["python".to_string()]);
+        assert!(!node.attr.2.contains_key("lst-cap"));
+
+        // Caption: the lst-cap value, parsed as markdown, canonicalized
+        // to a leading Plain like every other float form. The parse splits
+        // words into separate Str/Space inlines — reconstruct to compare.
+        let Slot::Blocks(cap) = node.slots.get("caption_long").unwrap() else {
+            panic!("caption_long slot not a Blocks");
+        };
+        let Block::Plain(p) = &cap[0] else {
+            panic!("caption first block should be Plain, got {:?}", cap[0]);
+        };
+        let joined: String = p
+            .content
+            .iter()
+            .map(|i| match i {
+                Inline::Str(s) => s.text.clone(),
+                Inline::Space(_) => " ".to_string(),
+                _ => String::new(),
+            })
+            .collect();
+        assert_eq!(
+            joined, "Hello World in Python",
+            "caption inlines: {:?}",
+            p.content
+        );
+    }
+
+    /// Q1: `if caption == nil then return nil end` — a bare `#lst-*` id
+    /// without an `lst-cap` attribute stays an ordinary code block.
+    #[test]
+    fn code_block_without_lst_cap_is_not_sugared() {
+        let reg = RefTypeRegistry::builtin();
+        let cb = Block::CodeBlock(CodeBlock {
+            attr: attr_id("lst-nocap"),
+            text: "1 + 1\n".to_string(),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let out = run_transform(vec![cb], &reg);
+        assert!(
+            matches!(&out[0], Block::CodeBlock(_)),
+            "a #lst-* code block without lst-cap must stay a code block, got {:?}",
+            out[0]
+        );
+    }
+
+    /// Q1 fidelity: only `lst` — a `#fig-*` id on a code block is not a
+    /// float even with a `fig-cap` attribute present.
+    #[test]
+    fn non_lst_code_block_with_cap_attribute_is_not_sugared() {
+        let reg = RefTypeRegistry::builtin();
+        let mut kvs = LinkedHashMap::new();
+        kvs.insert("fig-cap".to_string(), "Not a float".to_string());
+        let cb = Block::CodeBlock(CodeBlock {
+            attr: ("fig-cb".to_string(), vec!["python".to_string()], kvs),
+            text: "1\n".to_string(),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let out = run_transform(vec![cb], &reg);
+        assert!(
+            matches!(&out[0], Block::CodeBlock(_)),
+            "a #fig-* code block must not sugar, got {:?}",
+            out[0]
+        );
     }
 }
