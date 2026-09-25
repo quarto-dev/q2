@@ -278,6 +278,18 @@ const KNOWN_BASE_FORMATS: &[&str] = &[
     "docbook",
     "docbook4",
     "docbook5",
+    // Long-tail Phase 3 (Tier B) — the markdown family. The suffixed
+    // flavors use pandoc's underscore spelling (`markdown_strict`, not
+    // `markdown-strict`), so `parse_format_descriptor`'s last-hyphen split
+    // treats each whole string as the base format rather than an
+    // extension-prefixed variant.
+    "markdown",
+    "markdown_strict",
+    "markdown_phpextra",
+    "markdown_github",
+    "markdown_mmd",
+    "markua",
+    "commonmark_x",
 ];
 
 pub fn parse_format_descriptor(format: &str) -> FormatDescriptor {

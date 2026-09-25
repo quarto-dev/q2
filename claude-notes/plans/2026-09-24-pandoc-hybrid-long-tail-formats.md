@@ -413,24 +413,58 @@ once per phase boundary.
 
 ### Phase 3 — Tier B markdown family (7 new variants + gfm/commonmark completion)
 
-- [ ] **Test spec first:** `output-divs: false` asserted in the params
+- [x] **Test spec first:** `output-divs: false` asserted in the params
       blob for every Tier B variant **except `Markdown`** (Q1 parity:
-      true); shortcode round-trip test (`{{\<` → `{{<` unescaping)
-      matching q2's shipped gfm behavior — first check what P7 shipped
-      for gfm; if q2's gfm lacks Q1's `shortcodeUnescapePostprocessor`,
-      file that as its own fix and apply uniformly.
-- [ ] New variants + mappings + `output_divs: Some(false)` rows
-      (`Markdown` excepted).
-- [ ] **gfm/commonmark completion:** e2e *reachability* tests for
+      true) — `test_tier_b_output_divs_per_format` (params.rs) +
+      `test_format_defaults_table` rows (format_defaults.rs);
+      shortcode round-trip test — P7 check done: q2 shipped **no**
+      shortcode-unescape postprocessor at all (zero hits in Rust; the
+      hybrid path had no output postprocessing), so it was filed as its
+      own fix and applied uniformly: `FormatIdentifier::is_markdown_output()`
+      + `unescape_shortcodes_in_output` in `pandoc_write.rs`, called
+      after a successful pandoc invocation for markdown-family formats,
+      gated on the written file containing `{{\<`/`\>}}`
+      (commit `cb9a00733`). Red-first: both the integration test and
+      the real-binary e2e failed with output `{{\< meta title \>}}`.
+- [x] New variants + mappings + `output_divs: Some(false)` rows
+      (`Markdown` excepted): 7 variants (Markdown, MarkdownStrict,
+      MarkdownPhpExtra, MarkdownGithub, MarkdownMmd, Markua,
+      CommonmarkX) with all seams; writer names are explicit arms —
+      the extension fall-through would send `-t md` (pandoc's plain
+      markdown writer) for every flavor.
+- [x] **gfm/commonmark completion:** e2e *reachability* tests for
       `--to gfm` / `--to commonmark` already landed in Phase 1 (see the
-      Phase 1 checklist); what remains here is content completion:
-      D7 resolved 2026-09-24 — keep the Phase 1 bare `-t gfm` arm (no
-      variant-string mechanism; see the D7 decision entry for the
-      archaeology); set `crossref-numbering: external` for Gfm
-      (renderer at `floatreftarget.lua:1191`).
-- [ ] `KNOWN_BASE_FORMATS`: add the Tier B bases.
-- [ ] E2E at least `markdown_strict` and `commonmark_x`; inspect.
-- [ ] Workspace nextest; commit.
+      Phase 1 checklist); content completion: D7 resolved 2026-09-24 —
+      kept the Phase 1 bare `-t gfm` arm (no variant-string mechanism;
+      see the D7 decision entry for the archaeology);
+      `crossref-numbering: external` set for Gfm
+      (`insert_crossref_numbering_mode`; renderer at
+      `floatreftarget.lua:1191`; bare markdown/commonmark stay unset —
+      placeholder float renderer — and the vendored `main.lua:737-752`
+      fail-fast guard only rejects LaTeX/Typst targets, so no guard
+      accommodation needed).
+- [x] `KNOWN_BASE_FORMATS`: added the 7 Tier B bases (gfm/commonmark
+      were already present).
+- [x] E2E at least `markdown_strict` and `commonmark_x`; inspected.
+      Invocation: `cargo run --bin q2 -- render target/tmp-tierb/f.qmd
+      --to <fmt> --output-dir target/tmp-tierb/out-<fmt>` for **all
+      nine** flavors (fixture: heading + emphasis + code + escaped
+      shortcode; no code cells). Snippets (Escaped line): markdown,
+      markdown_github, markdown_mmd, markua, gfm, commonmark,
+      commonmark_x → `{{< meta title >}}` (postprocessor active);
+      markdown_strict, markdown_phpextra → `{{&lt; meta title &gt;}}`
+      (those two writers HTML-entity-escape; measured Q1 parity — its
+      postprocessor does not rewrite them either). All nine produced
+      non-empty `f.md`. Also committed as `e2e_render_markdown_strict` /
+      `e2e_render_commonmark_x` (commit `4859efa60`).
+- [x] Workspace nextest; commit. (commits `cb9a00733` Phase 3a +
+      `4859efa60` Phase 3b.) Measured 2026-09-24 on this branch after
+      both commits: 14,776 run / 14,776 passed / 200 skipped / 0
+      failed. Delta vs the Phase 2 baseline (14,762 run) = **+14**, all
+      accounted for by this phase's new `#[test]` fns: 7 in format.rs
+      (`test_tier_b_*` × 6 + `test_is_markdown_output_negatives`), 3 in
+      params.rs, 1 in pandoc_long_tail_formats.rs, 3 in the e2e file.
+      Skipped unchanged.
 
 ### Phase 4 — Tier C stretch (12 variants)
 

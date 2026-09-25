@@ -109,6 +109,32 @@ pub fn format_pandoc_defaults(id: FormatIdentifier) -> FormatPandocDefaults {
             output_divs: None,
             default_image_extension: Some("png"),
         },
+        // Long-tail Phase 3 (Tier B): the markdown family. Q1's bare
+        // `markdown` is `pandocMarkdownFormat()` — plaintext base, no
+        // output-divs override — while every other `isMarkdownOutput`
+        // flavor is `markdownFormat(displayName)`, which sets
+        // `render: {output-divs: false}` (executed-cell output must not be
+        // wrapped in a `::: cell` Div markdown writers can't express).
+        // All nine inherit plaintextFormat's png image default; gfm and
+        // commonmark join the table here after Phase 1 left them at the
+        // no-op default.
+        FormatIdentifier::Markdown => FormatPandocDefaults {
+            page_width: None,
+            output_divs: None,
+            default_image_extension: Some("png"),
+        },
+        FormatIdentifier::MarkdownStrict
+        | FormatIdentifier::MarkdownPhpExtra
+        | FormatIdentifier::MarkdownGithub
+        | FormatIdentifier::MarkdownMmd
+        | FormatIdentifier::Markua
+        | FormatIdentifier::CommonmarkX
+        | FormatIdentifier::Gfm
+        | FormatIdentifier::CommonMark => FormatPandocDefaults {
+            page_width: None,
+            output_divs: Some(false),
+            default_image_extension: Some("png"),
+        },
         _ => FormatPandocDefaults::default(),
     }
 }
@@ -311,13 +337,46 @@ mod tests {
             FormatIdentifier::Epub,
             FormatIdentifier::Typst,
             FormatIdentifier::Revealjs,
-            FormatIdentifier::Gfm,
-            FormatIdentifier::CommonMark,
         ] {
             assert_eq!(
                 format_pandoc_defaults(id),
                 FormatPandocDefaults::default(),
                 "{id} must have no pandoc-defaults opinion"
+            );
+        }
+
+        // Long-tail Phase 3 (Tier B): Q1's bare `markdown` is
+        // `pandocMarkdownFormat()` — plaintextFormat with **no**
+        // output-divs override, so the builder default (`true`) stays;
+        // every other `isMarkdownOutput` flavor goes through
+        // `markdownFormat(displayName)`, which sets
+        // `render: {output-divs: false}`. All nine are png-image.
+        let markdown = format_pandoc_defaults(FormatIdentifier::Markdown);
+        assert_eq!(markdown.page_width, None);
+        assert_eq!(markdown.output_divs, None);
+        assert_eq!(markdown.default_image_extension, Some("png"));
+
+        for id in [
+            FormatIdentifier::MarkdownStrict,
+            FormatIdentifier::MarkdownPhpExtra,
+            FormatIdentifier::MarkdownGithub,
+            FormatIdentifier::MarkdownMmd,
+            FormatIdentifier::Markua,
+            FormatIdentifier::CommonmarkX,
+            FormatIdentifier::Gfm,
+            FormatIdentifier::CommonMark,
+        ] {
+            let defaults = format_pandoc_defaults(id);
+            assert_eq!(
+                defaults.output_divs,
+                Some(false),
+                "output-divs for {id} (Q1 markdownFormat override)"
+            );
+            assert_eq!(defaults.page_width, None, "page-width for {id}");
+            assert_eq!(
+                defaults.default_image_extension,
+                Some("png"),
+                "default image extension for {id}"
             );
         }
     }

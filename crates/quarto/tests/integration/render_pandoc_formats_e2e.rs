@@ -987,3 +987,108 @@ fn e2e_render_odt() {
         "content.xml missing the body text"
     );
 }
+
+/// Long-tail Phase 3: Q1's shortcode-unescape postprocessor reachability
+/// through the real binary. An escaped shortcode (`{{{< meta title >}}}`)
+/// must come out of `--to gfm` as literal `{{< meta title >}}` text —
+/// pandoc's gfm writer re-escapes the braces to `{{\<`/`\>}}`, and Q1
+/// rewrites the output file afterward (`format-markdown.ts:21`). Without
+/// that rewrite the output double-escapes the shortcode.
+#[test]
+fn e2e_render_gfm_shortcode_round_trip() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_file(
+        &dir.join("esc.qmd"),
+        "---\ntitle: RoundTrip Title\n---\n\n# Head\n\nEscaped: {{{< meta title >}}} stays literal.\n",
+    );
+
+    let output = run_q2(&dir, &["esc.qmd", "--to", "gfm"]);
+    assert!(
+        output.status.success(),
+        "q2 render --to gfm should succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let md = std::fs::read_to_string(dir.join("esc.md")).expect("esc.md should exist");
+    assert!(
+        md.contains("{{< meta title >}}"),
+        "escaped shortcode must come out as literal {{< … >}} text: {md}"
+    );
+    assert!(
+        !md.contains("{{\\<"),
+        "writer-escaped open delimiter must be unescaped: {md}"
+    );
+    assert!(
+        !md.contains("\\>}}"),
+        "writer-escaped close delimiter must be unescaped: {md}"
+    );
+}
+
+/// Long-tail Phase 3 gate reachability: `--to markdown_strict` exits 0
+/// and produces markdown through pandoc's strict writer arm (not HTML,
+/// not a fall-through to another writer).
+#[test]
+fn e2e_render_markdown_strict() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_file(
+        &dir.join("f.qmd"),
+        "---\ntitle: F\n---\n\n# Head\n\nHelloStrictBody.\n",
+    );
+
+    let output = run_q2(&dir, &["f.qmd", "--to", "markdown_strict"]);
+    assert!(
+        output.status.success(),
+        "q2 render --to markdown_strict should succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let md = std::fs::read_to_string(dir.join("f.md")).expect("f.md should exist");
+    assert!(
+        md.contains("HelloStrictBody"),
+        "markdown_strict body text missing: {md}"
+    );
+    assert!(
+        md.contains("# Head"),
+        "expected a markdown ATX heading, got: {md}"
+    );
+    assert!(
+        !md.contains("<h1"),
+        "markdown_strict output must not be HTML: {md}"
+    );
+}
+
+/// Long-tail Phase 3 gate reachability: `--to commonmark_x`, same
+/// contract as `e2e_render_commonmark` but through the extended
+/// commonmark writer arm.
+#[test]
+fn e2e_render_commonmark_x() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_file(
+        &dir.join("f.qmd"),
+        "---\ntitle: F\n---\n\n# Head\n\nHelloCommonmarkXBody.\n",
+    );
+
+    let output = run_q2(&dir, &["f.qmd", "--to", "commonmark_x"]);
+    assert!(
+        output.status.success(),
+        "q2 render --to commonmark_x should succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let md = std::fs::read_to_string(dir.join("f.md")).expect("f.md should exist");
+    assert!(
+        md.contains("HelloCommonmarkXBody"),
+        "commonmark_x body text missing: {md}"
+    );
+    assert!(
+        md.contains("# Head"),
+        "expected a markdown ATX heading, got: {md}"
+    );
+    assert!(
+        !md.contains("<h1"),
+        "commonmark_x output must not be HTML: {md}"
+    );
+}
