@@ -8,13 +8,15 @@
  * ConnectionStatusDialog (the affordance the old header online/offline
  * indicator provided).
  *
- * States (visible text is kept short; the full description is the
- * button's accessible name and tooltip):
+ * States. Compact (default, the FILES header) shows only the time; the
+ * full description is always the button's accessible name and tooltip,
+ * and is the visible text too when `verbose` (the document bottom bar):
  * - Disconnected (browser offline, websocket not open, or no peer
- *   handshake): yellow dot, no text.
+ *   handshake): yellow dot; compact: no text; verbose: "Offline — synced
+ *   n minutes ago".
  * - Connected, sync activity this session within the last 15s (a remote
  *   change received, or a local change the hub confirmed delivered):
- *   green dot, "just now".
+ *   green dot, "just now" / "Synced just now".
  * - Connected, < 1 minute: yellow-green dot, "<1 minute ago".
  * - Connected, otherwise: yellow-green dot, "n minutes/hours/days ago".
  *
@@ -65,9 +67,18 @@ interface SyncStatusBadgeProps {
    * column is labeled with the document name.
    */
   currentFilePath?: string | null;
+  /** Show the full status sentence instead of just the time. */
+  verbose?: boolean;
+  /** Which side of the text the dot sits on (default: before it). */
+  dotPosition?: 'start' | 'end';
 }
 
-export default function SyncStatusBadge({ scope, currentFilePath }: SyncStatusBadgeProps) {
+export default function SyncStatusBadge({
+  scope,
+  currentFilePath,
+  verbose = false,
+  dotPosition = 'start',
+}: SyncStatusBadgeProps) {
   const [now, setNow] = useState(() => Date.now());
   const [showDialog, setShowDialog] = useState(false);
 
@@ -154,6 +165,9 @@ export default function SyncStatusBadge({ scope, currentFilePath }: SyncStatusBa
     full = `${s.synced} ${detail}`;
   }
 
+  const visible = verbose ? full : detail;
+  const dot = <span className={`sync-status-dot ${dotClass}`} aria-hidden="true" />;
+
   return (
     <>
       <button
@@ -162,12 +176,13 @@ export default function SyncStatusBadge({ scope, currentFilePath }: SyncStatusBa
         title={`${full}. ${s.tooltip}`}
         aria-label={`${full}. ${s.tooltip}`}
       >
-        <span className={`sync-status-dot ${dotClass}`} aria-hidden="true" />
-        {detail && (
+        {dotPosition === 'start' && dot}
+        {visible && (
           <span className="sync-status-text">
-            <em>{detail}</em>
+            <em>{visible}</em>
           </span>
         )}
+        {dotPosition === 'end' && dot}
       </button>
       {showDialog && (
         <ConnectionStatusDialog

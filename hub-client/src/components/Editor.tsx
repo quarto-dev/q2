@@ -1451,7 +1451,11 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
               disabled={replayState.isActive}
               headerExtras={(id) =>
                 id === 'files' ? (
-                  <SyncStatusBadge scope="project" currentFilePath={currentFile?.path ?? null} />
+                  <SyncStatusBadge
+                    scope="project"
+                    currentFilePath={currentFile?.path ?? null}
+                    dotPosition="end"
+                  />
                 ) : null
               }
             >
@@ -1782,6 +1786,7 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
               <SyncStatusBadge
                 scope="document"
                 currentFilePath={currentFile?.path ?? null}
+                verbose
               />
             }
           />
