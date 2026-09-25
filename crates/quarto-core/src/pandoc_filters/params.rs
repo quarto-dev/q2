@@ -263,7 +263,7 @@ fn insert_numbering_params(blob: &mut Map<String, Value>) {
 /// unreachable and untested (P3's companion already logged that trade-off
 /// for the value pair this key introduces).
 ///
-/// **Docx/Pptx/Odt only — not every `Pandoc(_)` profile.** `main.lua:737-752`'s
+/// **Docx/Pptx/Odt/Gfm only — not every `Pandoc(_)` profile.** `main.lua:737-752`'s
 /// own fail-fast guard rejects `crossref-numbering: external` combined with
 /// a LaTeX/Typst target ("only docx, odt, and pptx are supported"), and for
 /// good reason: external mode skips the *entire* `quarto_crossref_filters`
@@ -278,11 +278,16 @@ fn insert_numbering_params(blob: &mut Map<String, Value>) {
 /// renderer reads pre-assigned `.order` for odt too. The rest of Tier A
 /// hits the placeholder float renderer — no `.order` to protect — so the
 /// key stays unset for them (see
-/// `test_tier_a_placeholder_renderers_omit_crossref_numbering`).
+/// `test_tier_a_placeholder_renderers_omit_crossref_numbering`). Long-tail
+/// Phase 3 (Tier B, wrinkle 6 completion): `Gfm` joins — the vendored
+/// `floatreftarget.lua:1191` renderer resolves float refs for gfm too.
 fn insert_crossref_numbering_mode(blob: &mut Map<String, Value>, format: &Format) {
     if matches!(
         format.identifier,
-        FormatIdentifier::Docx | FormatIdentifier::Pptx | FormatIdentifier::Odt
+        FormatIdentifier::Docx
+            | FormatIdentifier::Pptx
+            | FormatIdentifier::Odt
+            | FormatIdentifier::Gfm
     ) {
         blob.insert("crossref-numbering".to_string(), json!("external"));
     }
@@ -786,5 +791,101 @@ mod tests {
             blob.as_object().unwrap().get("page-width").is_none(),
             "docbook (plaintext family) must have no page-width entry"
         );
+    }
+
+    // === long-tail Phase 3: Tier B markdown family ===
+
+    /// The plan's Phase 3 test spec, blob half: `output-divs` is `false` in
+    /// the params blob for every Tier B flavor except bare `markdown`
+    /// (Q1 parity — `markdownFormat(displayName)` sets
+    /// `render: {output-divs: false}` on eight of the nine
+    /// `isMarkdownOutput` flavors; `pandocMarkdownFormat()` for bare
+    /// markdown leaves it, so the builder default `true` stays). Executed
+    /// cells must arrive as plain paragraphs in markdown-family output, not
+    /// wrapped in a `::: cell` Div no markdown writer can express.
+    ///
+    /// Revert hunk: deleting the markdown-family rows from
+    /// `format_pandoc_defaults` makes every non-markdown assertion here RED.
+    #[test]
+    fn test_tier_b_output_divs_per_format() {
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = fixture_language();
+
+        let markdown = Format::from_format_string("markdown").unwrap();
+        let blob = fixture_builder(&markdown, &project, &registry, &language).build();
+        assert_eq!(
+            blob["output-divs"],
+            json!(true),
+            "bare markdown keeps Q1's pandocMarkdownFormat output-divs default"
+        );
+
+        for target_format in [
+            "markdown_strict",
+            "markdown_phpextra",
+            "markdown_github",
+            "markdown_mmd",
+            "markua",
+            "commonmark_x",
+            "gfm",
+            "commonmark",
+        ] {
+            let format = Format::from_format_string(target_format)
+                .unwrap_or_else(|e| panic!("failed to build Format for {target_format}: {e}"));
+            let blob = fixture_builder(&format, &project, &registry, &language).build();
+            assert_eq!(
+                blob["output-divs"],
+                json!(false),
+                "output-divs must be false for {target_format} (Q1 markdownFormat override)"
+            );
+        }
+    }
+
+    /// Wrinkle 6 completion: gfm joins docx/pptx/odt in getting
+    /// `crossref-numbering: "external"` — the vendored
+    /// `floatreftarget.lua:1191` renderer resolves float refs for gfm too,
+    /// so Q1's auto-indexer must be suppressed the same way.
+    ///
+    /// Revert hunk: dropping `Gfm` from `insert_crossref_numbering_mode`'s
+    /// gate makes this RED.
+    #[test]
+    fn test_gfm_sets_external_crossref_numbering() {
+        let format = Format::from_format_string("gfm").unwrap();
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = fixture_language();
+        let blob = fixture_builder(&format, &project, &registry, &language).build();
+
+        assert_eq!(
+            blob["crossref-numbering"],
+            json!("external"),
+            "gfm must suppress Q1's auto-indexer via crossref-numbering: external"
+        );
+    }
+
+    /// The other markdown flavors hit the placeholder float renderer (no
+    /// pre-assigned `.order` to protect), so the key stays unset — same
+    /// polarity guard as `test_tier_a_placeholder_renderers_omit_crossref_numbering`.
+    /// (The vendored `main.lua:737-752` fail-fast guard only rejects
+    /// LaTeX/Typst targets, so omitting the key here is a semantics choice,
+    /// not a guard accommodation.)
+    ///
+    /// Revert hunk: generalizing the gate to "every markdown flavor" makes
+    /// this RED.
+    #[test]
+    fn test_markdown_commonmark_omit_crossref_numbering() {
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = fixture_language();
+
+        for target_format in ["markdown", "commonmark"] {
+            let format = Format::from_format_string(target_format)
+                .unwrap_or_else(|e| panic!("failed to build Format for {target_format}: {e}"));
+            let blob = fixture_builder(&format, &project, &registry, &language).build();
+            assert!(
+                !blob.as_object().unwrap().contains_key("crossref-numbering"),
+                "expected no crossref-numbering key for {target_format}, got {blob}"
+            );
+        }
     }
 }

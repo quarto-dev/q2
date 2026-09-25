@@ -139,3 +139,52 @@ fn textile_fresh_baseline_snapshot() {
     let output = std::fs::read_to_string(&result.output_path).expect("textile output readable");
     insta::assert_snapshot!(output);
 }
+
+/// Q1 renders an escaped shortcode (`{{{< meta title >}}}`) to
+/// markdown-family output as literal `{{< meta title >}}` text: q2's parser
+/// produces an escaped `Shortcode`, `shortcode_resolve` preserves it as a
+/// literal Str, and then pandoc's markdown-family **writers re-escape the
+/// braces** (measured, pandoc 3.11 `-t gfm` on a Str containing
+/// `{{< meta title >}}` writes `{{\< meta title \>}}`). Q1 undoes that with
+/// the shortcode-unescape postprocessor (`format-markdown.ts:21`, applied for
+/// every `isMarkdownOutput` flavor in `pandoc.ts:968-973`); without it the
+/// output double-escapes and no longer shows the literal shortcode the
+/// author asked for.
+#[test]
+fn gfm_shortcode_round_trip() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = temp.path().canonicalize().unwrap();
+    let input_path = project_dir.join("esc.qmd");
+    std::fs::write(
+        &input_path,
+        "---\ntitle: RoundTrip Title\n---\n\n# Head\n\nEscaped: {{{< meta title >}}} stays literal.\n",
+    )
+    .unwrap();
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result = render_document_to_file(
+        &input_path,
+        "gfm",
+        &RenderToFileOptions::default(),
+        None,
+        runtime,
+        None,
+        None,
+        None,
+    )
+    .expect("gfm render should succeed");
+
+    let md = std::fs::read_to_string(&result.output_path).expect("gfm output readable");
+    assert!(
+        md.contains("{{< meta title >}}"),
+        "escaped shortcode must come out as literal {{< … >}} text: {md}"
+    );
+    assert!(
+        !md.contains("{{\\<"),
+        "writer-escaped open delimiter must be unescaped: {md}"
+    );
+    assert!(
+        !md.contains("\\>}}"),
+        "writer-escaped close delimiter must be unescaped: {md}"
+    );
+}

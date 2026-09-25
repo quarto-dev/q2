@@ -92,6 +92,27 @@ pub enum FormatIdentifier {
     Docbook4,
     /// DocBook 5
     Docbook5,
+    /// Pandoc markdown (long-tail Phase 3, Tier B; Q1
+    /// `pandocMarkdownFormat()` — plaintext base with **no** output-divs
+    /// override, unlike every other markdown flavor)
+    Markdown,
+    /// Strict markdown (Q1 `markdownFormat("Strict Markdown")`)
+    MarkdownStrict,
+    /// PHP Markdown Extra (Q1 `markdownFormat("PHP Markdown Extra")`)
+    MarkdownPhpExtra,
+    /// GitHub-flavored markdown via pandoc's `markdown_github` writer
+    /// (Q1 `markdownFormat("GitHub-Flavored Markdown")` with
+    /// `pandoc: { to: "markdown_github" }`; distinct from the Phase 1
+    /// `Gfm` variant, whose writer is `gfm`)
+    MarkdownGithub,
+    /// MultiMarkdown (Q1 `markdownFormat("MultiMarkdown")`)
+    MarkdownMmd,
+    /// Markua (Q1 `markdownFormat("Markua")`)
+    Markua,
+    /// CommonMark-X (Q1 `markdownFormat("CommonMark (Extended)")` via
+    /// `pandoc: { to: "commonmark_x" }`; distinct from the Phase 1
+    /// `CommonMark` variant)
+    CommonmarkX,
 }
 
 impl FormatIdentifier {
@@ -132,6 +153,15 @@ impl FormatIdentifier {
             FormatIdentifier::Docbook => "docbook",
             FormatIdentifier::Docbook4 => "docbook4",
             FormatIdentifier::Docbook5 => "docbook5",
+            // Long-tail Phase 3 (Tier B) — Q1 `isMarkdownOutput`'s nine
+            // flavors; canonical names are pandoc's `-t` writer names.
+            FormatIdentifier::Markdown => "markdown",
+            FormatIdentifier::MarkdownStrict => "markdown_strict",
+            FormatIdentifier::MarkdownPhpExtra => "markdown_phpextra",
+            FormatIdentifier::MarkdownGithub => "markdown_github",
+            FormatIdentifier::MarkdownMmd => "markdown_mmd",
+            FormatIdentifier::Markua => "markua",
+            FormatIdentifier::CommonmarkX => "commonmark_x",
         }
     }
 
@@ -186,6 +216,36 @@ impl FormatIdentifier {
                 | FormatIdentifier::Docbook
                 | FormatIdentifier::Docbook4
                 | FormatIdentifier::Docbook5
+                // Long-tail Phase 3 (Tier B): the markdown family — all
+                // plain pandoc-writer targets like Tier A.
+                | FormatIdentifier::Markdown
+                | FormatIdentifier::MarkdownStrict
+                | FormatIdentifier::MarkdownPhpExtra
+                | FormatIdentifier::MarkdownGithub
+                | FormatIdentifier::MarkdownMmd
+                | FormatIdentifier::Markua
+                | FormatIdentifier::CommonmarkX
+        )
+    }
+
+    /// Whether this is one of Q1's `isMarkdownOutput` flavors
+    /// (`config/format.ts:169-180`): the markdown family whose pandoc
+    /// writers re-escape shortcode braces, so written output needs the
+    /// shortcode-unescape postprocessor
+    /// ([`crate::stage::stages::pandoc_write`], mirroring Q1's
+    /// `format-markdown.ts:21`).
+    pub fn is_markdown_output(&self) -> bool {
+        matches!(
+            self,
+            FormatIdentifier::Markdown
+                | FormatIdentifier::MarkdownStrict
+                | FormatIdentifier::MarkdownPhpExtra
+                | FormatIdentifier::MarkdownGithub
+                | FormatIdentifier::MarkdownMmd
+                | FormatIdentifier::Markua
+                | FormatIdentifier::CommonmarkX
+                | FormatIdentifier::Gfm
+                | FormatIdentifier::CommonMark
         )
     }
 
@@ -261,6 +321,13 @@ impl TryFrom<&str> for FormatIdentifier {
             "docbook" => Ok(FormatIdentifier::Docbook),
             "docbook4" => Ok(FormatIdentifier::Docbook4),
             "docbook5" => Ok(FormatIdentifier::Docbook5),
+            "markdown" => Ok(FormatIdentifier::Markdown),
+            "markdown_strict" => Ok(FormatIdentifier::MarkdownStrict),
+            "markdown_phpextra" => Ok(FormatIdentifier::MarkdownPhpExtra),
+            "markdown_github" => Ok(FormatIdentifier::MarkdownGithub),
+            "markdown_mmd" => Ok(FormatIdentifier::MarkdownMmd),
+            "markua" => Ok(FormatIdentifier::Markua),
+            "commonmark_x" => Ok(FormatIdentifier::CommonmarkX),
             _ => Err(format!("Unknown format: {}", s)),
         }
     }
@@ -643,6 +710,15 @@ fn output_extension_for(id: FormatIdentifier) -> String {
         FormatIdentifier::Docbook => "xml",
         FormatIdentifier::Docbook4 => "xml",
         FormatIdentifier::Docbook5 => "xml",
+        // Long-tail Phase 3 (Tier B) — the markdown family all writes `.md`,
+        // Q1 `markdownFormat`'s extension choice for every flavor.
+        FormatIdentifier::Markdown => "md",
+        FormatIdentifier::MarkdownStrict => "md",
+        FormatIdentifier::MarkdownPhpExtra => "md",
+        FormatIdentifier::MarkdownGithub => "md",
+        FormatIdentifier::MarkdownMmd => "md",
+        FormatIdentifier::Markua => "md",
+        FormatIdentifier::CommonmarkX => "md",
     }
     .to_string()
 }
@@ -708,6 +784,17 @@ fn pandoc_writer_name_for(id: FormatIdentifier) -> String {
         FormatIdentifier::Docbook => "docbook".to_string(),
         FormatIdentifier::Docbook4 => "docbook4".to_string(),
         FormatIdentifier::Docbook5 => "docbook5".to_string(),
+        // Long-tail Phase 3 (Tier B) — explicit arms for all seven new
+        // flavors (writer = canonical name): the fall-through would send
+        // `-t md` (their shared *extension*), which silently selects
+        // pandoc's plain markdown writer for every one of them.
+        FormatIdentifier::Markdown => "markdown".to_string(),
+        FormatIdentifier::MarkdownStrict => "markdown_strict".to_string(),
+        FormatIdentifier::MarkdownPhpExtra => "markdown_phpextra".to_string(),
+        FormatIdentifier::MarkdownGithub => "markdown_github".to_string(),
+        FormatIdentifier::MarkdownMmd => "markdown_mmd".to_string(),
+        FormatIdentifier::Markua => "markua".to_string(),
+        FormatIdentifier::CommonmarkX => "commonmark_x".to_string(),
         other => output_extension_for(other),
     }
 }
@@ -2082,6 +2169,132 @@ mod tests {
             );
         }
         for name in ["odt", "opendocument", "fb2"] {
+            let args = Format::from_format_string(name)
+                .unwrap()
+                .pandoc_invocation_args();
+            assert!(
+                args.is_empty(),
+                "{name} must get no invocation args, got {args:?}"
+            );
+        }
+    }
+
+    // === long-tail Phase 3: Tier B markdown family (9 flavors) ===
+
+    /// Q1 `isMarkdownOutput`'s nine flavors (`config/format.ts:169-180`),
+    /// with their shared `md` output extension. `gfm`/`commonmark` are the
+    /// Phase 1 variants; the other seven are the Phase 3 additions.
+    const TIER_B: &[&str] = &[
+        "markdown",
+        "markdown_strict",
+        "markdown_phpextra",
+        "markdown_github",
+        "markdown_mmd",
+        "markua",
+        "commonmark_x",
+        "gfm",
+        "commonmark",
+    ];
+
+    /// Every Tier B name parses from its canonical name and round-trips
+    /// through `as_str`/`canonical_name` — same contract seam as Tier A
+    /// (`format-identifier.base-format` carries this string).
+    #[test]
+    fn test_tier_b_try_from_and_canonical_name() {
+        for name in TIER_B {
+            let id = FormatIdentifier::try_from(*name)
+                .unwrap_or_else(|e| panic!("{name} must parse: {e}"));
+            assert_eq!(id.as_str(), *name);
+            assert_eq!(id.canonical_name(), *name);
+        }
+    }
+
+    /// Case-insensitive parse spot checks over the awkward spellings.
+    #[test]
+    fn test_tier_b_try_from_case_insensitive() {
+        for mixed in [
+            "Markdown",
+            "MARKDOWN_STRICT",
+            "Markdown_PhpExtra",
+            "Markdown_GitHub",
+            "Markdown_MMD",
+            "Markua",
+            "CommonMark_X",
+        ] {
+            let id = FormatIdentifier::try_from(mixed)
+                .unwrap_or_else(|e| panic!("{mixed} must parse case-insensitively: {e}"));
+            assert_eq!(id.as_str(), mixed.to_ascii_lowercase());
+        }
+    }
+
+    /// All nine produce `.md` — including the seven new flavors, so the
+    /// `output_extension_for` arms must spell `md` explicitly (a
+    /// fall-through to the format name would give `markdown_strict` files).
+    #[test]
+    fn test_tier_b_output_extensions() {
+        for name in TIER_B {
+            let f = Format::from_format_string(name)
+                .unwrap_or_else(|e| panic!("{name} must parse: {e}"));
+            assert_eq!(f.output_extension, "md", "output extension for {name}");
+        }
+    }
+
+    /// Writer name equals canonical name for all nine — pandoc's writer
+    /// flags are exactly `-t markdown`, `-t markdown_strict`, …
+    /// `-t commonmark_x`, diverging from the shared `md` extension.
+    #[test]
+    fn test_tier_b_pandoc_writer_names() {
+        for name in TIER_B {
+            let f = Format::from_format_string(name).unwrap();
+            assert_eq!(
+                f.pandoc_writer_name(),
+                *name,
+                "writer name for {name} must be its canonical name, not the md extension"
+            );
+            assert_ne!(
+                f.pandoc_writer_name(),
+                f.output_extension,
+                "{name}'s writer name must diverge from its output extension"
+            );
+        }
+    }
+
+    /// All nine are pandoc-hybrid, none native, and all nine are
+    /// markdown-output — the shortcode-unescape postprocessor's gate
+    /// (Phase 3a) must cover the whole family, not just the Phase 1 pair.
+    #[test]
+    fn test_tier_b_is_pandoc_hybrid_and_markdown_output() {
+        for name in TIER_B {
+            let id = FormatIdentifier::try_from(*name).unwrap();
+            assert!(id.is_pandoc_hybrid(), "{name} must be pandoc-hybrid");
+            assert!(!id.is_native(), "{name} must not be native");
+            assert!(
+                id.is_markdown_output(),
+                "{name} must be markdown-output (shortcode unescape gate)"
+            );
+        }
+    }
+
+    /// The shortcode-unescape gate must not swallow non-markdown formats.
+    #[test]
+    fn test_is_markdown_output_negatives() {
+        for name in [
+            "html", "revealjs", "docx", "pptx", "odt", "plain", "typst", "epub",
+        ] {
+            let id = FormatIdentifier::try_from(name).unwrap();
+            assert!(
+                !id.is_markdown_output(),
+                "{name} must not be markdown-output"
+            );
+        }
+    }
+
+    /// Tier B gets no invocation flags: Q1's `markdownFormat`/
+    /// `pandocMarkdownFormat` set no `pandoc:` overrides beyond
+    /// `output-divs` (which rides the filter-params blob, not the CLI).
+    #[test]
+    fn test_tier_b_invocation_args_empty() {
+        for name in TIER_B {
             let args = Format::from_format_string(name)
                 .unwrap()
                 .pandoc_invocation_args();
