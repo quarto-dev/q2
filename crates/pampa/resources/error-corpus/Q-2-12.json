@@ -15,7 +15,7 @@
     {
       "name": "stray-ending-star",
       "description": "Simple case",
-      "content": "foo* a ",
+      "content": "foo *a ",
       "captures": [
         {
           "label": "emphasis-start",
@@ -28,7 +28,7 @@
     {
       "name": "simple",
       "description": "Simple case",
-      "content": "a *",
+      "content": "a *b",
       "captures": [
         {
           "label": "emphasis-start",
@@ -113,10 +113,6 @@
         [
           "",
           "`a`"
-        ],
-        [
-          "",
-          "'a'"
         ],
         [
           "",

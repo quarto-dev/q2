@@ -831,11 +831,11 @@ module.exports = grammar({
             alias($._strong_emphasis_close_underscore, $.strong_emphasis_delimiter),
         )),
 
-        // Things that are parsed directly as a pandoc str. `$._pandoc_lt_str`
+        // Things that are parsed directly as a pandoc str. `$._pandoc_literal_str`
         // (bd-j9cf) is emitted by the external scanner when a bare '<' has no
         // HTML construct interpretation; it becomes part of a pandoc_str node
         // so downstream consumers see it as a normal Str.
-        pandoc_str: $ => choice(new RegExp(PANDOC_REGEX_STR, 'u'), '|', $._pandoc_lt_str),
+        pandoc_str: $ => choice(new RegExp(PANDOC_REGEX_STR, 'u'), '|', $._pandoc_literal_str),
 
         // CONTAINER BLOCKS
 
@@ -1278,13 +1278,21 @@ module.exports = grammar({
 
         $.html_element, // best-effort lexing of HTML elements simply for error reporting.
 
-        // bd-j9cf: a single '<' character that is not the start of an HTML
-        // construct (element, autolink, comment, raw-specifier). Emitted by
-        // parse_open_angle_brace in scanner.c when the scan loop reaches EOF
-        // without finding a closing delimiter, or when '<' is followed by '!'
-        // in a context where HTML_COMMENT is not requested. Consumed as a
-        // choice inside `pandoc_str` so the AST shape stays uniform.
-        $._pandoc_lt_str,
+        // "This is literal text after all." Emitted by the scanner for:
+        // - bd-j9cf: a single '<' that is not the start of an HTML construct
+        //   (element, autolink, comment, raw-specifier), see
+        //   parse_open_angle_brace;
+        // - bd-star-as-str-qigl02pz: a `*` or `_` run that CommonMark's
+        //   flanking rules say cannot open (followed by whitespace) and
+        //   cannot close (preceded by whitespace / line start), and a `~` or
+        //   `^` whose closer does not appear before the next whitespace
+        //   (Pandoc's sub/superscript rule), see parse_star,
+        //   parse_thematic_break_underscore, parse_tilde, parse_caret.
+        // Consumed as a choice inside `pandoc_str` so the AST shape stays
+        // uniform. Note the scanner consumes the whitespace in front of the
+        // token, so the node may start with spaces; treesitter.rs splits
+        // those back out into a Space inline.
+        $._pandoc_literal_str,
 
         $._pipe_table_delimiter, // so we can distinguish between pipe table | and pandoc_str |
 
