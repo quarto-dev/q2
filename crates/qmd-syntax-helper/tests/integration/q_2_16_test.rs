@@ -27,7 +27,7 @@ fn test_detects_single_violation() {
     let rm = ResourceManager::new().unwrap();
     let test_file = rm.temp_dir().join("test.qmd");
 
-    fs::write(&test_file, "x^2\n").unwrap();
+    fs::write(&test_file, "x^2`a^`\n").unwrap();
 
     let registry = RuleRegistry::new().unwrap();
     let rule = registry.get("q-2-16").unwrap();
@@ -42,7 +42,7 @@ fn test_converts_single_violation() {
     let rm = ResourceManager::new().unwrap();
     let test_file = rm.temp_dir().join("test.qmd");
 
-    let original = "x^2\n";
+    let original = "x^2`a^`\n";
     fs::write(&test_file, original).unwrap();
 
     let registry = RuleRegistry::new().unwrap();
@@ -53,5 +53,26 @@ fn test_converts_single_violation() {
     assert_eq!(result.fixes_applied, 1);
 
     let converted = result.message.unwrap();
-    assert_eq!(converted, "x^2^\n", "Should add closing superscript mark");
+    assert_eq!(
+        converted, "x^2`a^`^\n",
+        "Should add closing superscript mark"
+    );
+}
+
+// Since bd-star-as-str-qigl02pz a `^` only opens a superscript when its
+// closer appears before the next whitespace (Pandoc's rule), so a plain
+// `x^2` is literal text and no longer a violation. The
+// violation cases above use a closer swallowed by a code span, which is the
+// remaining way to leave a superscript unclosed.
+#[test]
+fn test_bare_opener_is_literal_text_not_a_violation() {
+    let rm = ResourceManager::new().unwrap();
+    let test_file = rm.temp_dir().join("test.qmd");
+    fs::write(&test_file, "x^2\nx^2 and y^3 z\n").unwrap();
+
+    let registry = RuleRegistry::new().unwrap();
+    let rule = registry.get("q-2-16").unwrap();
+
+    let results = rule.check(&test_file, false).unwrap();
+    assert_eq!(results.len(), 0, "a bare opener is literal text");
 }

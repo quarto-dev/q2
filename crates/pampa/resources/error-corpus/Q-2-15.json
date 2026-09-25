@@ -13,7 +13,7 @@
     {
       "name": "simple",
       "description": "Simple case",
-      "content": "__",
+      "content": "__a",
       "captures": [
         {
           "label": "strong-start",
@@ -102,10 +102,6 @@
         [
           "",
           "`a`"
-        ],
-        [
-          "",
-          "'a'"
         ],
         [
           "",

@@ -75,6 +75,14 @@ pub struct QmdWriterContext {
     /// [`Self::inline_fragment`] is set. Starts `false` because a fragment is
     /// embedded mid-line; a SoftBreak or LineBreak sets it back to `true`.
     pub at_line_start: bool,
+
+    /// How many Subscript/Superscript nodes enclose the inline being
+    /// written. Inside one, `write_space` and `write_soft_break` emit `\ `
+    /// instead of a bare space: since bd-star-as-str-qigl02pz the reader
+    /// only opens `~sub~` / `^sup^` when the closer appears before the next
+    /// unescaped whitespace (Pandoc's rule), so `~a b~` would read back as
+    /// literal text. Pandoc's markdown writer does the same.
+    pub sub_sup_depth: usize,
 }
 
 impl Default for QmdWriterContext {
@@ -92,6 +100,7 @@ impl QmdWriterContext {
             suppress_dash_canonicalization: false,
             inline_fragment: false,
             at_line_start: false,
+            sub_sup_depth: 0,
         }
     }
 
@@ -1953,16 +1962,26 @@ fn write_str(
 fn write_space(
     _: &crate::pandoc::Space,
     buf: &mut dyn std::io::Write,
-    _ctx: &mut QmdWriterContext,
+    ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
+    if ctx.sub_sup_depth > 0 {
+        // See `QmdWriterContext::sub_sup_depth`.
+        return write!(buf, "\\ ");
+    }
     write!(buf, " ")
 }
 
 fn write_soft_break(
     _: &crate::pandoc::SoftBreak,
     buf: &mut dyn std::io::Write,
-    _ctx: &mut QmdWriterContext,
+    ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
+    if ctx.sub_sup_depth > 0 {
+        // A newline inside `~sub~` would end the subscript on re-read
+        // (see `QmdWriterContext::sub_sup_depth`); a soft break is a
+        // space semantically, so write it as an escaped space.
+        return write!(buf, "\\ ");
+    }
     // Pandoc's writer for markdown outputs a space for soft breaks
     // We choose to deviate from Pandoc for roundtripping purposes
     writeln!(buf)
@@ -2140,9 +2159,13 @@ fn write_subscript(
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     write!(buf, "~")?;
-    for inline in &subscript.content {
-        write_inline(inline, buf, ctx)?;
-    }
+    ctx.sub_sup_depth += 1;
+    let result = subscript
+        .content
+        .iter()
+        .try_for_each(|inline| write_inline(inline, buf, ctx));
+    ctx.sub_sup_depth -= 1;
+    result?;
     write!(buf, "~")
 }
 
@@ -2152,9 +2175,13 @@ fn write_superscript(
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     write!(buf, "^")?;
-    for inline in &superscript.content {
-        write_inline(inline, buf, ctx)?;
-    }
+    ctx.sub_sup_depth += 1;
+    let result = superscript
+        .content
+        .iter()
+        .try_for_each(|inline| write_inline(inline, buf, ctx));
+    ctx.sub_sup_depth -= 1;
+    result?;
     write!(buf, "^")
 }
 
