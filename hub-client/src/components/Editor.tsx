@@ -51,7 +51,8 @@ import EphemeralSessionBanner from './EphemeralSessionBanner';
 import FileSidebar from './FileSidebar';
 import NewFileDialog from './NewFileDialog';
 import NewFolderDialog from './NewFolderDialog';
-import MoveFileDialog from './MoveFileDialog';
+import PlaceFileDialog, { type PlaceRequest } from './PlaceFileDialog';
+import { joinPath } from '../utils/uniquePath';
 import NewAssetDialog from './NewAssetDialog';
 import ShareDialog from './ShareDialog';
 import ProjectTopBar from './ProjectTopBar';
@@ -74,6 +75,8 @@ import './Editor.css';
 import PreviewRouter from './render/PreviewRouter';
 import { fileSidebar } from '../strings';
 import { getAncestorPaths } from '../utils/fileTree';
+import { sanitizeFilename } from '../services/resourceService';
+import { processAssetFiles } from './fileUpload/processAssetFiles';
 
 interface Props {
   project: ProjectEntry;
@@ -434,8 +437,15 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
   const [showNewFileDialog, setShowNewFileDialog] = useState(false);
   // Parent folder for the new-folder dialog; null = dialog closed.
   const [newFolderParent, setNewFolderParent] = useState<string | null>(null);
-  // File being moved via the move dialog; null = dialog closed.
-  const [movingFile, setMovingFile] = useState<FileEntry | null>(null);
+  // Place-file dialog queue (moves and conflicting drops); the head is
+  // shown. Several dropped files can conflict at once, so they line up.
+  const [placeQueue, setPlaceQueue] = useState<PlaceRequest[]>([]);
+  const enqueuePlace = useCallback((req: PlaceRequest) => {
+    setPlaceQueue((q) => [...q, req]);
+  }, []);
+  const dequeuePlace = useCallback(() => {
+    setPlaceQueue((q) => q.slice(1));
+  }, []);
 
   // Every folder in the project: explicitly created ones plus those
   // implied by file paths. Feeds the folder pickers in both dialogs.
@@ -1180,6 +1190,33 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
     }
   }, [handleCreateTextFile, currentFile]);
 
+  // Files dropped onto the sidebar tree: added directly, no dialog —
+  // unless the name is already taken (in the project or earlier in the
+  // batch), in which case the place-file dialog asks for a folder/name,
+  // exactly as a conflicting internal move does. Files failing the
+  // size/empty checks are skipped with a console warning.
+  const handleDropFiles = useCallback(
+    (droppedFiles: File[], destination: string) => {
+      const taken = new Set(files.map((f) => f.path));
+      for (const { file, error } of processAssetFiles(droppedFiles)) {
+        if (error) {
+          console.warn(`[sidebar drop] skipped ${file.name}: ${error}`);
+          continue;
+        }
+        const name = sanitizeFilename(file.name);
+        const path = joinPath(destination, name);
+        if (taken.has(path)) {
+          enqueuePlace({ kind: 'add', file, folder: destination, name });
+          continue;
+        }
+        taken.add(path);
+        void handleUploadAsset(file, path);
+      }
+    },
+    [files, handleUploadAsset, enqueuePlace]
+  );
+
+
   // Handle deleting a file
   const handleDeleteFile = useCallback((file: FileEntry) => {
     try {
@@ -1241,6 +1278,15 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
     }
   }, [currentFile]);
 
+  // Place-file dialog confirmed: move an existing file or add a new one.
+  const handlePlaceConfirm = useCallback(
+    (request: PlaceRequest, newPath: string) => {
+      if (request.kind === 'move') handleRenameFile(request.file, newPath);
+      else void handleUploadAsset(request.file, newPath);
+    },
+    [handleRenameFile, handleUploadAsset]
+  );
+
   return (
     <div className="editor-container">
       <div className="editor-columns">
@@ -1276,8 +1322,9 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
                         onNewFileIn={handleNewFileIn}
                         onNewFolder={handleNewFolder}
                         onDeleteFolder={handleDeleteFolder}
-                        onMoveFile={setMovingFile}
+                        onMoveFile={(file, preset) => enqueuePlace({ kind: 'move', file, ...preset })}
                         onUploadFiles={handleUploadFiles}
+                        onDropFiles={handleDropFiles}
                         onDeleteFile={handleDeleteFile}
                         onRenameFile={handleRenameFile}
                         onOpenInNewTab={handleOpenInNewTab}
@@ -1609,13 +1656,13 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
         initialFilename={newFileInitialName}
       />
 
-      {/* Move file dialog */}
-      <MoveFileDialog
-        file={movingFile}
+      {/* Place-file dialog (move, or add a conflicting drop) */}
+      <PlaceFileDialog
+        request={placeQueue[0] ?? null}
         folders={allFolders}
         existingPaths={files.map((f) => f.path)}
-        onClose={() => setMovingFile(null)}
-        onMove={handleRenameFile}
+        onClose={dequeuePlace}
+        onConfirm={handlePlaceConfirm}
       />
 
       {/* New folder dialog */}

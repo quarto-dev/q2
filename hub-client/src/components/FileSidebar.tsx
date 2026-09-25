@@ -57,8 +57,14 @@ export interface FileSidebarProps {
    * header button and as a folder context-menu entry when provided.
    */
   onNewFolder?: (parent: string) => void;
-  /** Open the move dialog for a file (file context menu). */
-  onMoveFile?: (file: FileEntry) => void;
+  /**
+   * Open the move dialog for a file: from the context menu (no preset),
+   * from a drag whose destination already has a same-named file
+   * (`folder` preset), or from an inline rename that collides (`name`
+   * preset).
+   */
+  onMoveFile?: (file: FileEntry, preset?: { folder?: string; name?: string }) => void;
+
   /** Delete an explicitly created folder; only offered when it is empty. */
   onDeleteFolder?: (path: string) => void;
   /**
@@ -67,6 +73,12 @@ export interface FileSidebarProps {
    * the destination input with (empty string = project root).
    */
   onUploadFiles: (files: File[], destination: string) => void;
+  /**
+   * Files dropped onto the tree from outside the browser. When provided
+   * they are added straight into `destination` (no dialog); otherwise the
+   * drop falls back to `onUploadFiles`.
+   */
+  onDropFiles?: (files: File[], destination: string) => void;
   onDeleteFile?: (file: FileEntry) => void;
   onRenameFile?: (file: FileEntry, newPath: string) => void;
   /** Open a file in a new browser tab */
@@ -119,9 +131,21 @@ interface NavItem {
 
 /** dataTransfer type for sidebar-originated drags (read by Editor.tsx too). */
 const HUB_FILE_TYPE = 'application/x-hub-file';
+/** How long a drag must hover a folder before it expands. */
+const HOVER_EXPAND_DELAY_MS = 800;
 /** Marker for a folder drag: only meaningful as a drag-out (zip); the
  *  sidebar and editor treat it as nothing to drop. */
 const HUB_FOLDER_TYPE = 'application/x-hub-folder';
+
+/**
+ * Folder a drop on `target` lands in: the nearest `data-folder-path`
+ * ancestor (a folder wrapper or a file row, which carries its parent), or
+ * the project root ('') for tree background.
+ */
+function folderFromTarget(target: EventTarget | null): string {
+  const el = target instanceof Element ? target.closest('[data-folder-path]') : null;
+  return el?.getAttribute('data-folder-path') ?? '';
+}
 
 /** Check if a file path is an image (shared with the editor's image viewer) */
 function isImageFile(path: string): boolean {
@@ -146,6 +170,7 @@ export default function FileSidebar({
   onDeleteFolder,
   onMoveFile,
   onUploadFiles,
+  onDropFiles,
   onDeleteFile,
   onRenameFile,
   onOpenInNewTab,
@@ -161,6 +186,10 @@ export default function FileSidebar({
   // dragover — only the payload's *type* is exposed until drop.
   const [moveTarget, setMoveTarget] = useState<string | null>(null);
   const draggingPathRef = useRef<string | null>(null);
+  // Hover-to-expand while dragging: the folder currently armed to expand
+  // and its timer. Holding over a folder briefly opens it; passing over
+  // it does not.
+  const hoverExpandRef = useRef<{ folder: string; timer: number } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [folderMenu, setFolderMenu] = useState<FolderMenuState>({
@@ -224,6 +253,35 @@ export default function FileSidebar({
       clearTimeout(handle);
     };
   }, [searchFiles, searchQuery, isSearching]);
+
+  const expandFolder = useCallback((path: string) => {
+    if (!path) return;
+    setExpandedFolders((prev) => (prev.has(path) ? prev : new Set(prev).add(path)));
+  }, []);
+
+  const cancelHoverExpand = useCallback(() => {
+    const pending = hoverExpandRef.current;
+    if (pending) window.clearTimeout(pending.timer);
+    hoverExpandRef.current = null;
+  }, []);
+
+  // Set the drop-target highlight and arm hover-to-expand for the folder.
+  const hoverDropTarget = useCallback(
+    (folder: string | null) => {
+      setMoveTarget(folder);
+      const pending = hoverExpandRef.current;
+      if (pending?.folder === folder) return;
+      cancelHoverExpand();
+      if (folder) {
+        const timer = window.setTimeout(() => {
+          expandFolder(folder);
+          hoverExpandRef.current = null;
+        }, HOVER_EXPAND_DELAY_MS);
+        hoverExpandRef.current = { folder, timer };
+      }
+    },
+    [cancelHoverExpand, expandFolder]
+  );
 
   // Toggle a folder's expanded state
   const toggleFolder = useCallback((path: string) => {
@@ -453,13 +511,17 @@ export default function FileSidebar({
    * is a no-op (same folder) or would overwrite an existing file.
    */
   const resolveMove = useCallback(
-    (sourcePath: string, target: EventTarget | null): { folder: string; newPath: string } | null => {
-      const el = target instanceof Element ? target.closest('[data-folder-path]') : null;
-      const folder = el?.getAttribute('data-folder-path') ?? '';
+    (
+      sourcePath: string,
+      target: EventTarget | null
+    ): { folder: string; newPath: string; valid: boolean } | null => {
+      const folder = folderFromTarget(target);
       const name = sourcePath.split('/').pop() || sourcePath;
       const newPath = normalizeProjectPath(folder ? `${folder}/${name}` : name);
-      if (newPath === sourcePath || filesByPath.has(newPath)) return null;
-      return { folder, newPath };
+      // Same folder: nothing to do, no highlight. A name clash is still a
+      // target — dropping opens the move dialog to resolve it.
+      if (newPath === sourcePath) return null;
+      return { folder, newPath, valid: !filesByPath.has(newPath) };
     },
     [filesByPath]
   );
@@ -480,27 +542,35 @@ export default function FileSidebar({
         const source = draggingPathRef.current;
         const move = source && onRenameFile ? resolveMove(source, e.target) : null;
         e.dataTransfer.dropEffect = move ? 'move' : 'none';
-        setMoveTarget(move ? move.folder : null);
+        hoverDropTarget(move ? move.folder : null);
         return;
       }
-      setIsDragOver(true);
+      // External files: highlight the destination folder like an internal
+      // move. The full-sidebar overlay only remains for an empty project,
+      // where there is no tree to highlight.
+      if (files.length === 0) {
+        setIsDragOver(true);
+        return;
+      }
+      e.dataTransfer.dropEffect = 'copy';
+      hoverDropTarget(folderFromTarget(e.target));
     },
-    [onRenameFile, resolveMove]
+    [onRenameFile, resolveMove, files.length, hoverDropTarget]
   );
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(false);
-    setMoveTarget(null);
-  }, []);
+    hoverDropTarget(null);
+  }, [hoverDropTarget]);
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
       setIsDragOver(false);
-      setMoveTarget(null);
+      hoverDropTarget(null);
 
       if (e.dataTransfer.types.includes(HUB_FOLDER_TYPE)) return;
       const internal = e.dataTransfer.getData(HUB_FILE_TYPE);
@@ -509,21 +579,42 @@ export default function FileSidebar({
         const source = filesByPath.get(path);
         if (source && onRenameFile) {
           const move = resolveMove(path, e.target);
-          if (move) onRenameFile(source, move.newPath);
+          if (move?.valid) {
+            onRenameFile(source, move.newPath);
+            expandFolder(move.folder);
+          } else if (move && onMoveFile) {
+            // Destination already has a file with this name: let the user
+            // resolve it in the move dialog (rename, or move-and-rename).
+            onMoveFile(source, { folder: move.folder });
+          }
         }
         return;
       }
 
       const droppedFiles = Array.from(e.dataTransfer.files);
       if (droppedFiles.length > 0) {
-        const destination = resolveDefaultDestination({
-          dropTarget: e.target,
-          selection: currentFile?.path,
-        });
-        onUploadFiles(droppedFiles, destination);
+        // Same folder the drag-over highlighted; in an empty project fall
+        // back to the selection's folder (there is nothing to hover).
+        const destination =
+          files.length > 0
+            ? folderFromTarget(e.target)
+            : resolveDefaultDestination({ dropTarget: e.target, selection: currentFile?.path });
+        (onDropFiles ?? onUploadFiles)(droppedFiles, destination);
+        expandFolder(destination);
       }
     },
-    [onUploadFiles, currentFile, filesByPath, onRenameFile, resolveMove]
+    [
+      onUploadFiles,
+      onDropFiles,
+      currentFile,
+      filesByPath,
+      onRenameFile,
+      resolveMove,
+      files.length,
+      hoverDropTarget,
+      expandFolder,
+      onMoveFile,
+    ]
   );
 
   // "Upload" button: open the asset dialog with no pre-filled files.
@@ -591,12 +682,17 @@ export default function FileSidebar({
       const newPath = normalizeProjectPath(folder ? `${folder}/${renameValue}` : renameValue);
       // Only rename if the path actually changed; same path = cancel
       if (newPath && newPath !== renamingFile.path) {
-        onRenameFile(renamingFile, newPath);
+        if (filesByPath.has(newPath) && onMoveFile) {
+          // Collides with an existing file: resolve it in the move dialog.
+          onMoveFile(renamingFile, { folder, name: newPath.split('/').pop() });
+        } else {
+          onRenameFile(renamingFile, newPath);
+        }
       }
     }
     setRenamingFile(null);
     setRenameValue('');
-  }, [renamingFile, renameValue, onRenameFile]);
+  }, [renamingFile, renameValue, onRenameFile, onMoveFile, filesByPath]);
 
   const handleRenameKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -689,8 +785,8 @@ export default function FileSidebar({
 
   const handleFileDragEnd = useCallback(() => {
     draggingPathRef.current = null;
-    setMoveTarget(null);
-  }, []);
+    hoverDropTarget(null);
+  }, [hoverDropTarget]);
 
   const hasFileActions = !!(
     onOpenInNewTab || onCopyLink || onRenameFile || onMoveFile || onDeleteFile
@@ -747,6 +843,8 @@ export default function FileSidebar({
               onChange={(e) => setRenameValue(e.target.value)}
               onBlur={handleRenameSubmit}
               onKeyDown={handleRenameKeyDown}
+              autoFocus
+              onFocus={(e) => e.target.select()}
             />
           }
         >

@@ -232,8 +232,11 @@ export const dialogs = {
   },
   moveFile: {
     title: (name: string) => `Move ${name}`,
+    addTitle: (name: string) => `Add ${name}`,
     folderLabel: 'Folder:',
+    nameLabel: 'Name:',
     move: 'Move',
+    add: 'Add',
     errorExists: 'A file with this name already exists in that folder',
   },
   newFolder: {
