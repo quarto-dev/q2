@@ -573,16 +573,34 @@ cargo xtask lint --verbose # Show all files being checked
 cargo xtask lint --quiet   # Only show errors
 ```
 
-### Current Lint Rules
+Rules live in `crates/xtask/src/lint/`; each module's doc comment is the
+authoritative spec (what it flags, why, scope limits, history). What you must
+do when authoring code:
 
-- **external-sources-in-macro**: Detects references to `external-sources/` in compile-time macros like `include_dir!`, `include_str!`, `include_bytes!`. These break builds because `external-sources/` is not version-controlled.
-- **add-file-with-id**: Restricts `SourceContext::add_file_with_id` to blessed modules (`config_sources.rs`, `metadata_merge.rs`, `span_assert.rs`, plus two temporarily-blessed files pending PR #478 / bd-x113wg9v). The API pairs an arbitrary FileId with arbitrary content; binding an *assumed* file to a diagnostic's resolved id renders byte offsets against the wrong text (bd-m6wmztln). Use `quarto_core::config_sources::bind_config_source` instead. Test code is skipped. Suppress a provably-safe use with `// lint:allow(add-file-with-id)` on the line or the line above, with a reason. Introduced with bd-jrq4hroi (audit: bd-nv4p0eb1).
-- **error-docs-page-missing**: Every code in `crates/quarto-error-catalog/error_catalog.json` must have a page at `docs/errors/<subsystem>/<code>.qmd`, and its `docs_url` must be `https://quarto.org/docs/errors/<subsystem>/<code>`. Diagnostics print the `docs_url` unconditionally, so a code without a page ships a 404 — which happened repeatedly (28 codes had accumulated by 2026-08-11, each added by a feature PR that stopped at the catalog). **When you add an error code, add its page in the same commit**; see `docs/errors/README.md` for the template. This is a *repo-level* rule — unlike the others here it reconciles whole trees rather than grepping one Rust file, and it anchors violations at the catalog entry's line. Orphan/misplaced pages and front-matter drift are deliberately out of scope (bd-8otua's `cargo xtask error-docs` audit owns those); a page `title` may differ from the catalog `title`. Introduced with bd-u2qj4y29.
-- **error-docs-sidebar-unlisted**: Every page under `docs/errors/<subsystem>/` must be referenced by an entry in the errors sidebar in `docs/_quarto.yml`, and every sidebar entry must point at a page that exists. The sidebar enumerates all ~214 pages **by hand** — a deliberate v1 choice (`claude-notes/plans/2026-05-22-error-docs-foundation.md` §"Navbar + sidebar wiring") that nothing enforced, so it drifted to 153 of the 211 pages then present, with `crossref` and `extension` having no `- section:` block at all — every `Q-15-*` and `Q-16-*` page unreachable by navigation. `error-docs-page-missing` does not catch this: it checks page *existence* and `docs_url`, not sidebar membership. **When you add an error page, add its sidebar entry in the same commit.** It also requires **entries within a `- section:` block to ascend by code number** (`Q-1-2` before `Q-1-10`), so the sidebar reads in code order rather than drifting to lexicographic as entries are appended. **Section order is deliberately not policed** — the 13 historical sections stay in their arbitrary order (`yaml, markdown, writer, listing, xml, cli, navigation, template, project, include, internal, theme, lua`, with `crossref` and `extension` appended), because no canonical section order has been agreed. Like `error-docs-page-missing` this is a *repo-level* rule; unlisted-page violations anchor at the `- id: errors` line, stale entries and out-of-order entries at their own line. Ordering the error *index* (the listing at `docs/errors/index.qmd`) by code number is a separate unsolved problem — bd-otmqu; it needs custom front-matter fields to reach listing items, and neither Q2 nor Q1 has a numeric-aware build-time comparator. Introduced with bd-wcmk1fsq.
-- **metadata-as-str**: Detects `meta.get("key")…as_str()` reads of document metadata. A bare YAML string in front-matter context is stored as `ConfigValueKind::PandocInlines`, for which `ConfigValue::as_str()` returns `None` — silently dropping the option. Use `as_plain_text()` instead (handles both `Scalar(String)` and `PandocInlines`). Only flags chains whose `.get(<string literal>)` receiver is a metadata expression (final identifier `meta`/`metadata`); internal map reads and test code are skipped. Suppress a deliberate scalar-only read with a `// lint:allow(metadata-as-str)` comment on the line or the line above. Introduced with bd-y89ihf0i.
-- **ci-test-suite-unwired**: Every npm-workspace package with a `test` script must be run by a step in `.github/workflows/ts-test-suite.yml` or `.github/workflows/hub-client-e2e.yml`, or be listed in `EXCUSED` in `crates/xtask/src/lint/ci_test_wiring.rs` with a reason and a tracking strand. CI ran only `hub-client` and `engine-host-deno` for months while ~2,000 assertions across a dozen packages sat outside the merge gate — long enough for a KaTeX class rename to redden `preview-renderer` on `main` unnoticed (GH #250). Nothing reconciled "packages that have tests" against "packages CI runs"; this rule is that reconciliation. It **parses** the workflows and inspects each step's `run:` script, rather than substring-matching the file: a package path in a *build* step must not count (`ts-packages/quarto-hub-mcp` appears in the MCP smoke check, `hub-client` in the WASM build), and a step with no `name:` must not merge into its neighbour. Two workflows are scanned because `sync-test-harness`'s hub tier spawns `cargo run --bin hub`, which only the e2e workflow pre-builds. **Deliberate v1 limit:** the rule is package-granular, not tier-granular — once any CI step mentions a package, every `test*` tier of that package reads as covered, even tiers no step actually runs. Concretely outside the gate today but invisible to this rule: `preview-runtime`'s `test:integration`, `q2-demos/kanban`'s `test:wasm`, `q2-preview-spa`'s `test:e2e`, and `hub-client`'s `test:e2e`. Widening the rule to be tier-aware is follow-up work, tracked as bd-lkercidb. Like the `error-docs-*` rules it is *repo-level* and anchors violations at the offending `package.json`'s `"test":` line. **When you add a `test` script to a workspace package, add its CI step in the same commit.**
-
-  Note what this rule does *not* buy you: `main` has branch protection (force-pushes and deletions blocked) but **neither "Require status checks to pass before merging" nor a required review count is enabled** (checked via the API on 2026-09-19, bd-p4ljdp2e; an earlier version of this note claimed one approving review was required), and there are no rulesets. So no CI check in this repo is required — every workflow reports on the PR and a human decides. A job this rule forces you to add is therefore advisory, exactly like `test-suite` and `ts-test-suite` already are; the lint rule gates the *wiring*, not the merge. If the repo ever does enable required status checks, each job's check names have to be listed there as well — a GitHub-side setting, not something a commit here can do.
+- **external-sources-in-macro**: never reference `external-sources/` in
+  compile-time macros (`include_dir!`, `include_str!`, `include_bytes!`) —
+  it isn't version-controlled, so such builds break elsewhere. No suppression.
+- **add-file-with-id**: don't call `SourceContext::add_file_with_id` outside
+  the blessed modules; use `quarto_core::config_sources::bind_config_source`.
+  Suppress a provably-safe use with `// lint:allow(add-file-with-id)` + reason.
+- **error-docs-page-missing**: when you add an error code to
+  `error_catalog.json`, add its `docs/errors/<subsystem>/<code>.qmd` page
+  (template: `docs/errors/README.md`) **in the same commit**.
+- **error-docs-sidebar-unlisted**: when you add an error page, add its
+  `docs/_quarto.yml` sidebar entry in the same commit, ascending by code
+  number within its section.
+- **metadata-as-str**: read document metadata with `as_plain_text()`, never
+  `as_str()` — a bare YAML string is `PandocInlines`, for which `as_str()`
+  returns `None`. Suppress deliberate scalar-only reads with
+  `// lint:allow(metadata-as-str)`.
+- **ci-test-suite-unwired**: when you add a `test` script to a workspace
+  package, wire it into `.github/workflows/ts-test-suite.yml` or
+  `hub-client-e2e.yml` — or add it to `EXCUSED` in
+  `crates/xtask/src/lint/ci_test_wiring.rs` with a reason and a tracking
+  strand — in the same commit.
+- **vendored-pandoc-filters / pandoc-pin-agreement**: keep the vendored
+  filters' "Ours vs. pinned" section and the pandoc version pin in sync
+  across CI / dev-setup / README.
 
 ### Adding New Lint Rules
 
