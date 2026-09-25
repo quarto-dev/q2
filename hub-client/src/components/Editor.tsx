@@ -52,6 +52,8 @@ import FileSidebar from './FileSidebar';
 import NewFileDialog from './NewFileDialog';
 import NewFolderDialog from './NewFolderDialog';
 import PlaceFileDialog, { type PlaceRequest } from './PlaceFileDialog';
+import { linkFromPaste } from '../utils/pasteLink';
+import { toggleWrap } from '../utils/markdownToggle';
 import { joinPath } from '../utils/uniquePath';
 import NewAssetDialog from './NewAssetDialog';
 import ShareDialog from './ShareDialog';
@@ -781,6 +783,55 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
 
   // Capture Monaco editor instance on mount
   const handleEditorMount = (editor: Monaco.editor.IStandaloneCodeEditor, monaco: typeof Monaco) => {
+    // Cmd/Ctrl+B toggles **bold** around the selection (or inserts an
+    // empty pair at the cursor).
+    const registerToggle = (id: string, label: string, key: number, marker: string) => {
+      editor.addAction({
+        id,
+        label,
+        keybindings: [monaco.KeyMod.CtrlCmd | key],
+        run: (ed) => {
+          const model = ed.getModel();
+          const sel = ed.getSelection();
+          if (!model || !sel) return;
+          const selected = model.getValueInRange(sel);
+          const m = marker.length;
+          const before = model.getValueInRange({
+            startLineNumber: sel.startLineNumber,
+            startColumn: Math.max(1, sel.startColumn - m),
+            endLineNumber: sel.startLineNumber,
+            endColumn: sel.startColumn,
+          });
+          const after = model.getValueInRange({
+            startLineNumber: sel.endLineNumber,
+            startColumn: sel.endColumn,
+            endLineNumber: sel.endLineNumber,
+            endColumn: sel.endColumn + m,
+          });
+          const r = toggleWrap(selected, marker, before, after);
+          const range = {
+            startLineNumber: sel.startLineNumber,
+            startColumn: sel.startColumn - r.extendBefore,
+            endLineNumber: sel.endLineNumber,
+            endColumn: sel.endColumn + r.extendAfter,
+          };
+          ed.executeEdits(id, [{ range, text: r.text, forceMoveMarkers: true }]);
+          // Re-select the inner text (or place the cursor between the markers).
+          const startCol = range.startColumn + r.selectStart;
+          const singleLine = sel.startLineNumber === sel.endLineNumber;
+          ed.setSelection({
+            startLineNumber: sel.startLineNumber,
+            startColumn: startCol,
+            endLineNumber: singleLine ? sel.startLineNumber : sel.endLineNumber,
+            endColumn: singleLine
+              ? range.startColumn + r.selectEnd
+              : sel.endColumn + r.extendAfter - (r.text.length - r.selectEnd),
+          });
+        },
+      });
+    };
+    registerToggle('qmd.toggleBold', 'Toggle bold', monaco.KeyCode.KeyB, '**');
+
     editorRef.current = editor;
     monacoRef.current = monaco;
     onSyncEditorMount(editor);
@@ -1201,6 +1252,21 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
       const clipboard = e.clipboardData;
       if (!clipboard) return;
       const files = Array.from(clipboard.files);
+
+      // Pasting a URL over selected text wraps the selection as a link.
+      const editor = editorRef.current;
+      const selection = editor?.getSelection();
+      if (editor && selection && files.length === 0) {
+        const selected = editor.getModel()?.getValueInRange(selection) ?? '';
+        const link = linkFromPaste(selected, clipboard.getData('text/plain'));
+        if (link) {
+          e.preventDefault();
+          e.stopPropagation();
+          editor.executeEdits('paste-link', [{ range: selection, text: link, forceMoveMarkers: true }]);
+          return;
+        }
+      }
+
       if (
         classifyPastePayload({
           files: files.map((f) => ({ name: f.name, type: f.type, size: f.size })),
