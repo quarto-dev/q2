@@ -209,6 +209,18 @@ pub fn get_scaffold(target: &ProjectTypeWithTemplate) -> Option<ProjectScaffold>
                         templates::default::INDEX_QMD,
                     )),
             ),
+            // Presentation skeleton (bd-q33ylfxf): both files take `$title$`.
+            Some("presentation") => Some(
+                ProjectScaffold::with_template(ProjectType::Default, "presentation")
+                    .add_file(ScaffoldFileDef::template(
+                        "_quarto.yml",
+                        templates::presentation::QUARTO_YML,
+                    ))
+                    .add_file(ScaffoldFileDef::template(
+                        "index.qmd",
+                        templates::presentation::INDEX_QMD,
+                    )),
+            ),
             // Seeded examples (bd-3fwtdhil): fixed content, nothing interpolates.
             Some("example-meeting-notes") => {
                 use templates::examples::meeting_notes as t;
@@ -527,6 +539,27 @@ mod tests {
     fn test_get_scaffold_unknown_template() {
         let target = ProjectTypeWithTemplate::with_template(ProjectType::Website, "nonexistent");
         assert!(get_scaffold(&target).is_none());
+    }
+
+    #[test]
+    fn test_get_scaffold_presentation_is_a_two_file_skeleton() {
+        // The Presentation skeleton (bd-q33ylfxf): a `Default` project whose
+        // two files are templates, so the typed title lands in both.
+        let target = ProjectTypeWithTemplate::with_template(ProjectType::Default, "presentation");
+        let scaffold = get_scaffold(&target).expect("presentation scaffold");
+        let paths: Vec<_> = scaffold
+            .files
+            .iter()
+            .map(|f| f.full_path().to_str().unwrap().replace('\\', "/"))
+            .collect();
+        assert_eq!(paths, ["_quarto.yml", "index.qmd"]);
+        for f in &scaffold.files {
+            assert!(
+                matches!(f.content, ScaffoldContent::Template(_)),
+                "{} must be a template",
+                f.path
+            );
+        }
     }
 
     #[test]

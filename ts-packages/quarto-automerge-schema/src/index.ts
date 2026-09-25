@@ -487,6 +487,22 @@ const BINARY_EXTENSIONS = new Set([
 ]);
 
 /**
+ * Image extensions a browser `<img>` can display. Subset of
+ * `BINARY_EXTENSIONS`; drives the hub-client image viewer and the
+ * sidebar's image icon / drag type.
+ */
+const IMAGE_EXTENSIONS = new Set([
+  'png',
+  'jpg',
+  'jpeg',
+  'gif',
+  'webp',
+  'svg',
+  'ico',
+  'bmp',
+]);
+
+/**
  * Known text file extensions.
  */
 const TEXT_EXTENSIONS = new Set([
@@ -520,6 +536,14 @@ export function getFileExtension(path: string): string {
 export function isBinaryExtension(path: string): boolean {
   const ext = getFileExtension(path);
   return BINARY_EXTENSIONS.has(ext);
+}
+
+/**
+ * Check if a file path is an image a browser can display inline (by extension).
+ */
+export function isImageExtension(path: string): boolean {
+  const ext = getFileExtension(path);
+  return IMAGE_EXTENSIONS.has(ext);
 }
 
 /**

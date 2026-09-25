@@ -32,6 +32,8 @@ interface DocumentTopBarProps {
   splitFraction?: number;
   /** Jump the divider to a preset fraction (animated). */
   onSetSplit?: (fraction: number) => void;
+  /** Gray out the split presets (current file has no preview pane). */
+  splitDisabled?: boolean;
 }
 
 export default function DocumentTopBar({
@@ -43,6 +45,7 @@ export default function DocumentTopBar({
   sidebarToggleRef,
   splitFraction,
   onSetSplit,
+  splitDisabled,
 }: DocumentTopBarProps) {
   return (
     <header className="top-bar document-top-bar">
@@ -72,7 +75,7 @@ export default function DocumentTopBar({
           </span>
         </div>
       </div>
-      <ViewToggleControl fraction={splitFraction} onSelect={onSetSplit} />
+      <ViewToggleControl fraction={splitFraction} onSelect={onSetSplit} disabled={splitDisabled} />
       {onToggleFullscreenPreview && !isFullscreenPreview && (
         <div className="fullscreen-btn-box">
           <Tooltip content={header.fullscreenPreview}>

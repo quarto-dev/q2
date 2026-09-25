@@ -1,0 +1,495 @@
+================================================================================
+note definition opener at EOF without a trailing newline terminates
+================================================================================
+::: ^foo
+--------------------------------------------------------------------------------
+
+(document
+  (ERROR
+    (fenced_div_note_id)))
+
+================================================================================
+block insert
+================================================================================
+::: ++
+
+add all of these paragraphs.
+
+Yes. All of them.
+
+:::
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (editorial_div
+      (insert_delimiter)
+      (block_continuation)
+      (pandoc_paragraph
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (block_continuation))
+      (pandoc_paragraph
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (block_continuation))
+      (block_continuation))))
+
+================================================================================
+block delete
+================================================================================
+::: --
+
+delete all of these.
+
+paragraphs.
+
+:::
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (editorial_div
+      (delete_delimiter)
+      (block_continuation)
+      (pandoc_paragraph
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (block_continuation))
+      (pandoc_paragraph
+        (pandoc_str)
+        (block_continuation))
+      (block_continuation))))
+
+================================================================================
+block edit comment
+================================================================================
+::: >>
+
+This is a really long comment.
+
+Many paragraphs
+
+:::
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (editorial_div
+      (edit_comment_delimiter)
+      (block_continuation)
+      (pandoc_paragraph
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (block_continuation))
+      (pandoc_paragraph
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (block_continuation))
+      (block_continuation))))
+
+================================================================================
+block highlight
+================================================================================
+::: !!
+
+highlighted.
+
+:::
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (editorial_div
+      (highlight_delimiter)
+      (block_continuation)
+      (pandoc_paragraph
+        (pandoc_str)
+        (block_continuation))
+      (block_continuation))))
+
+================================================================================
+block edit comment with attributes
+================================================================================
+::: >> {author="cs" date="2026-09-24"}
+
+comment.
+
+:::
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (editorial_div
+      (edit_comment_delimiter)
+      (attribute_specifier
+        (commonmark_specifier
+          (key_value_specifier
+            (key_value_key)
+            (key_value_value))
+          (key_value_specifier
+            (key_value_key)
+            (key_value_value))))
+      (block_continuation)
+      (pandoc_paragraph
+        (pandoc_str)
+        (block_continuation))
+      (block_continuation))))
+
+================================================================================
+block insert with attributes and no space before them
+================================================================================
+::: ++{.extra}
+
+added.
+
+:::
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (editorial_div
+      (insert_delimiter)
+      (attribute_specifier
+        (commonmark_specifier
+          (attribute_class)))
+      (block_continuation)
+      (pandoc_paragraph
+        (pandoc_str)
+        (block_continuation))
+      (block_continuation))))
+
+================================================================================
+trailing whitespace after the marker
+================================================================================
+::: --   
+
+gone.
+
+:::
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (editorial_div
+      (delete_delimiter)
+      (block_continuation)
+      (pandoc_paragraph
+        (pandoc_str)
+        (block_continuation))
+      (block_continuation))))
+
+================================================================================
+body without blank lines
+================================================================================
+::: --
+gone.
+:::
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (editorial_div
+      (delete_delimiter)
+      (block_continuation)
+      (pandoc_paragraph
+        (pandoc_str)
+        (block_continuation)))))
+
+================================================================================
+block edit comment nested in block insert
+================================================================================
+:::: ++
+
+added.
+
+::: >>
+
+why?
+
+:::
+
+::::
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (editorial_div
+      (insert_delimiter)
+      (block_continuation)
+      (pandoc_paragraph
+        (pandoc_str)
+        (block_continuation))
+      (block_continuation)
+      (editorial_div
+        (edit_comment_delimiter)
+        (block_continuation)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (block_continuation)
+        (block_continuation))
+      (block_continuation))))
+
+================================================================================
+block delete inside a list item
+================================================================================
+- item
+
+  ::: --
+
+  gone.
+
+  :::
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (editorial_div
+          (delete_delimiter)
+          (block_continuation)
+          (pandoc_paragraph
+            (pandoc_str)
+            (block_continuation)))))))
+
+================================================================================
+block insert inside a block quote
+================================================================================
+> ::: ++
+>
+> added.
+>
+> :::
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (editorial_div
+        (insert_delimiter)
+        (block_continuation)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (block_continuation)))))
+
+================================================================================
+inline editorial marks inside a block mark
+================================================================================
+::: --
+
+gone [++ added] and [>> why].
+
+:::
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (editorial_div
+      (delete_delimiter)
+      (block_continuation)
+      (pandoc_paragraph
+        (pandoc_str)
+        (insert
+          (insert_delimiter)
+          (content
+            (pandoc_str))
+          (insert_delimiter))
+        (pandoc_space)
+        (pandoc_str)
+        (edit_comment
+          (edit_comment_delimiter)
+          (content
+            (pandoc_str))
+          (edit_comment_delimiter))
+        (pandoc_str)
+        (block_continuation))
+      (block_continuation))))
+
+================================================================================
+unclosed block mark runs to EOF
+================================================================================
+::: >>
+
+comment.
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (editorial_div
+      (edit_comment_delimiter)
+      (block_continuation)
+      (pandoc_paragraph
+        (pandoc_str)))))
+
+================================================================================
+block mark opener at EOF without a trailing newline
+================================================================================
+::: ++
+--------------------------------------------------------------------------------
+    (document
+      (ERROR
+        (insert_delimiter)))
+
+================================================================================
+list, thematic break and cite lines right after the opener
+================================================================================
+::: --
+- item
+
+---
+
+-@cite says so.
+:::
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (editorial_div
+      (delete_delimiter)
+      (block_continuation)
+      (pandoc_list
+        (list_item
+          (list_marker_minus)
+          (pandoc_paragraph
+            (pandoc_str)
+            (block_continuation))))
+      (pandoc_horizontal_rule
+        (block_continuation))
+      (block_continuation)
+      (pandoc_paragraph
+        (citation
+          (citation_delimiter)
+          (citation_id_suppress_author))
+        (pandoc_space)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (block_continuation)))))
+
+================================================================================
+div info string starting with a dash is an error (Q-2-53)
+:error
+================================================================================
+::: --foo
+
+x
+
+:::
+--------------------------------------------------------------------------------
+
+================================================================================
+triple dash after the colons is an error (Q-2-53)
+:error
+================================================================================
+::: ---
+
+x
+
+:::
+--------------------------------------------------------------------------------
+
+================================================================================
+single dash word after the colons is an error (Q-2-53)
+:error
+================================================================================
+::: -x
+
+x
+
+:::
+--------------------------------------------------------------------------------
+
+================================================================================
+dashes inside a div info string are still fine
+================================================================================
+::: foo-bar
+
+x
+
+:::
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_div
+      (info_string)
+      (block_continuation)
+      (pandoc_paragraph
+        (pandoc_str)
+        (block_continuation))
+      (block_continuation))))
+
+================================================================================
+div hidden in an HTML comment is unchanged
+================================================================================
+<!--
+::: {.callout-note}
+hidden
+::: -->
+
+after
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (comment))
+    (pandoc_paragraph
+      (pandoc_str))))
+
+================================================================================
+note definition still wins for ^
+================================================================================
+::: ^note
+
+note body.
+
+:::
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (note_definition_fenced_block
+      (fenced_div_note_id)
+      (block_continuation)
+      (pandoc_paragraph
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (block_continuation))
+      (block_continuation))))

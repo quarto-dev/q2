@@ -39,6 +39,122 @@ pub enum FormatIdentifier {
     Gfm,
     /// CommonMark
     CommonMark,
+    /// OpenOffice text document (long-tail Phase 2; Q1
+    /// `createWordprocessorFormat("OpenOffice", "odt")`)
+    Odt,
+    /// OpenDocument text — same ODF zip as Odt, `.xml` extension (Q1
+    /// `createWordprocessorFormat("OpenDocument", "xml")`)
+    Opendocument,
+    /// Rich Text Format (Q1 `rtfFormat()`: wordprocessor + standalone)
+    Rtf,
+    /// FictionBook 2 ebook (Q1 `createEbookFormat("FictionBook", "fb2")`)
+    Fb2,
+    /// Plain text (Q1 `plaintextFormat("Text", "txt")`)
+    Plain,
+    /// reStructuredText
+    Rst,
+    /// Org mode
+    Org,
+    /// Muse
+    Muse,
+    /// Groff ms (Q1 `plaintextFormat("Groff Manuscript", "ms")`)
+    Ms,
+    /// Groff man page
+    Man,
+    /// GNU TexInfo
+    Texinfo,
+    /// TEI Simple
+    Tei,
+    /// Zim Wiki (`.zim` extension)
+    Zimwiki,
+    /// DokuWiki
+    Dokuwiki,
+    /// Haddock markup
+    Haddock,
+    /// Pandoc JSON (debug aid — the AST pandoc itself would consume, D6)
+    Json,
+    /// Pandoc native Haskell AST (debug aid, D6)
+    Native,
+    /// Adobe InDesign ICML
+    Icml,
+    /// Jira wiki markup
+    Jira,
+    /// MediaWiki
+    Mediawiki,
+    /// XWiki
+    Xwiki,
+    /// Textile (Q1 has the `texttile` typo, so this is a fresh baseline,
+    /// not a Q1 parity port)
+    Textile,
+    /// DocBook (plaintext family — `.xml` extension)
+    Docbook,
+    /// DocBook 4
+    Docbook4,
+    /// DocBook 5
+    Docbook5,
+    /// Pandoc markdown (long-tail Phase 3, Tier B; Q1
+    /// `pandocMarkdownFormat()` — plaintext base with **no** output-divs
+    /// override, unlike every other markdown flavor)
+    Markdown,
+    /// Strict markdown (Q1 `markdownFormat("Strict Markdown")`)
+    MarkdownStrict,
+    /// PHP Markdown Extra (Q1 `markdownFormat("PHP Markdown Extra")`)
+    MarkdownPhpExtra,
+    /// GitHub-flavored markdown via pandoc's `markdown_github` writer
+    /// (Q1 `markdownFormat("GitHub-Flavored Markdown")` with
+    /// `pandoc: { to: "markdown_github" }`; distinct from the Phase 1
+    /// `Gfm` variant, whose writer is `gfm`)
+    MarkdownGithub,
+    /// MultiMarkdown (Q1 `markdownFormat("MultiMarkdown")`)
+    MarkdownMmd,
+    /// Markua (Q1 `markdownFormat("Markua")`)
+    Markua,
+    /// CommonMark-X (Q1 `markdownFormat("CommonMark (Extended)")` via
+    /// `pandoc: { to: "commonmark_x" }`; distinct from the Phase 1
+    /// `CommonMark` variant)
+    CommonmarkX,
+    /// Djot markup (long-tail Phase 4, Tier C; pandoc `Format.hs`
+    /// extension `dj`, not Q1's blanket `txt`)
+    Djot,
+    /// txt2tags
+    T2t,
+    /// Pandoc XML (native-AST XML serialization)
+    Xml,
+    /// ANSI terminal escape output (kept per Gordon, 2026-09-24; ext
+    /// `txt` — no file convention)
+    Ansi,
+    /// Vim help files (`doc/*.txt` by hard convention, ext `txt`)
+    Vimdoc,
+    /// BBCode (forum markup; Q1 supports none of the six bbcode
+    /// flavors — all fall to `unknownFormat` — so zero parity risk, D3)
+    Bbcode,
+    /// BBCode, Steam flavor
+    BbcodeSteam,
+    /// BBCode, phpBB flavor
+    BbcodePhpbb,
+    /// BBCode, FluxBB flavor
+    BbcodeFluxbb,
+    /// BBCode, Hubzilla flavor
+    BbcodeHubzilla,
+    /// BBCode, XenForo flavor
+    BbcodeXenforo,
+    /// Pandoc chunked HTML — the writer emits a **zip archive** of
+    /// chapter files plus `index.html` (embeds images; a missing image
+    /// is a hard exit 99). Vendored Lua treats it as non-HTML, so
+    /// FloatRefTargets degrade to placeholders (Q1 parity).
+    Chunkedhtml,
+    /// S5 slide decks (long-tail Phase 5, Tier D; Q1
+    /// `createHtmlPresentationFormat` — standalone deck, bundled
+    /// `s5/default/` assets)
+    S5,
+    /// DZSlides slide decks (self-contained inline shim, no external
+    /// assets)
+    Dzslides,
+    /// Slidy slide decks (W3C CDN assets — requires network at view
+    /// time, pandoc's stock template behavior)
+    Slidy,
+    /// Slideous slide decks (bundled `slideous/` assets)
+    Slideous,
 }
 
 impl FormatIdentifier {
@@ -54,12 +170,179 @@ impl FormatIdentifier {
             FormatIdentifier::Revealjs => "revealjs",
             FormatIdentifier::Gfm => "gfm",
             FormatIdentifier::CommonMark => "commonmark",
+            FormatIdentifier::Odt => "odt",
+            FormatIdentifier::Opendocument => "opendocument",
+            FormatIdentifier::Rtf => "rtf",
+            FormatIdentifier::Fb2 => "fb2",
+            FormatIdentifier::Plain => "plain",
+            FormatIdentifier::Rst => "rst",
+            FormatIdentifier::Org => "org",
+            FormatIdentifier::Muse => "muse",
+            FormatIdentifier::Ms => "ms",
+            FormatIdentifier::Man => "man",
+            FormatIdentifier::Texinfo => "texinfo",
+            FormatIdentifier::Tei => "tei",
+            FormatIdentifier::Zimwiki => "zimwiki",
+            FormatIdentifier::Dokuwiki => "dokuwiki",
+            FormatIdentifier::Haddock => "haddock",
+            FormatIdentifier::Json => "json",
+            FormatIdentifier::Native => "native",
+            FormatIdentifier::Icml => "icml",
+            FormatIdentifier::Jira => "jira",
+            FormatIdentifier::Mediawiki => "mediawiki",
+            FormatIdentifier::Xwiki => "xwiki",
+            FormatIdentifier::Textile => "textile",
+            FormatIdentifier::Docbook => "docbook",
+            FormatIdentifier::Docbook4 => "docbook4",
+            FormatIdentifier::Docbook5 => "docbook5",
+            // Long-tail Phase 3 (Tier B) — Q1 `isMarkdownOutput`'s nine
+            // flavors; canonical names are pandoc's `-t` writer names.
+            FormatIdentifier::Markdown => "markdown",
+            FormatIdentifier::MarkdownStrict => "markdown_strict",
+            FormatIdentifier::MarkdownPhpExtra => "markdown_phpextra",
+            FormatIdentifier::MarkdownGithub => "markdown_github",
+            FormatIdentifier::MarkdownMmd => "markdown_mmd",
+            FormatIdentifier::Markua => "markua",
+            FormatIdentifier::CommonmarkX => "commonmark_x",
+            // Long-tail Phase 4 (Tier C) — canonical names are pandoc's
+            // `-t` writer names.
+            FormatIdentifier::Djot => "djot",
+            FormatIdentifier::T2t => "t2t",
+            FormatIdentifier::Xml => "xml",
+            FormatIdentifier::Ansi => "ansi",
+            FormatIdentifier::Vimdoc => "vimdoc",
+            FormatIdentifier::Bbcode => "bbcode",
+            FormatIdentifier::BbcodeSteam => "bbcode_steam",
+            FormatIdentifier::BbcodePhpbb => "bbcode_phpbb",
+            FormatIdentifier::BbcodeFluxbb => "bbcode_fluxbb",
+            FormatIdentifier::BbcodeHubzilla => "bbcode_hubzilla",
+            FormatIdentifier::BbcodeXenforo => "bbcode_xenforo",
+            FormatIdentifier::Chunkedhtml => "chunkedhtml",
+            // Long-tail Phase 5 (Tier D) — canonical names are pandoc's
+            // `-t` writer names.
+            FormatIdentifier::S5 => "s5",
+            FormatIdentifier::Dzslides => "dzslides",
+            FormatIdentifier::Slidy => "slidy",
+            FormatIdentifier::Slideous => "slideous",
         }
     }
 
     /// Check if this format uses the native Rust pipeline
     pub fn is_native(&self) -> bool {
         matches!(self, FormatIdentifier::Html | FormatIdentifier::Revealjs)
+    }
+
+    /// Check if this format renders through the pandoc-hybrid path
+    /// ([`crate::stage::stages::PandocWriteStage`] with a real `pandoc`
+    /// `-t <writer>` invocation), as opposed to the native Rust pipeline.
+    ///
+    /// Every variant listed here **must** have an explicit arm in
+    /// [`pandoc_writer_name_for`] naming the pandoc writer Q1 uses —
+    /// admitting a variant through the render gate (render.rs's
+    /// `is_pandoc_hybrid()` check) without a writer arm would send pandoc
+    /// the output *extension* as `-t` instead, or fail to reach pandoc at
+    /// all. `Pdf` is deliberately absent: the latex/beamer epic owns it.
+    pub fn is_pandoc_hybrid(&self) -> bool {
+        matches!(
+            self,
+            FormatIdentifier::Docx
+                | FormatIdentifier::Pptx
+                | FormatIdentifier::Epub
+                | FormatIdentifier::Typst
+                | FormatIdentifier::Gfm
+                | FormatIdentifier::CommonMark
+                // Long-tail Phase 2 (Tier A): wordprocessor, ebook, and
+                // plaintext families — all plain pandoc-writer targets.
+                | FormatIdentifier::Odt
+                | FormatIdentifier::Opendocument
+                | FormatIdentifier::Rtf
+                | FormatIdentifier::Fb2
+                | FormatIdentifier::Plain
+                | FormatIdentifier::Rst
+                | FormatIdentifier::Org
+                | FormatIdentifier::Muse
+                | FormatIdentifier::Ms
+                | FormatIdentifier::Man
+                | FormatIdentifier::Texinfo
+                | FormatIdentifier::Tei
+                | FormatIdentifier::Zimwiki
+                | FormatIdentifier::Dokuwiki
+                | FormatIdentifier::Haddock
+                | FormatIdentifier::Json
+                | FormatIdentifier::Native
+                | FormatIdentifier::Icml
+                | FormatIdentifier::Jira
+                | FormatIdentifier::Mediawiki
+                | FormatIdentifier::Xwiki
+                | FormatIdentifier::Textile
+                | FormatIdentifier::Docbook
+                | FormatIdentifier::Docbook4
+                | FormatIdentifier::Docbook5
+                // Long-tail Phase 3 (Tier B): the markdown family — all
+                // plain pandoc-writer targets like Tier A.
+                | FormatIdentifier::Markdown
+                | FormatIdentifier::MarkdownStrict
+                | FormatIdentifier::MarkdownPhpExtra
+                | FormatIdentifier::MarkdownGithub
+                | FormatIdentifier::MarkdownMmd
+                | FormatIdentifier::Markua
+                | FormatIdentifier::CommonmarkX
+                // Long-tail Phase 4 (Tier C): the stretch tail — bare
+                // pandoc-writer targets (no defaults rows anywhere).
+                | FormatIdentifier::Djot
+                | FormatIdentifier::T2t
+                | FormatIdentifier::Xml
+                | FormatIdentifier::Ansi
+                | FormatIdentifier::Vimdoc
+                | FormatIdentifier::Bbcode
+                | FormatIdentifier::BbcodeSteam
+                | FormatIdentifier::BbcodePhpbb
+                | FormatIdentifier::BbcodeFluxbb
+                | FormatIdentifier::BbcodeHubzilla
+                | FormatIdentifier::BbcodeXenforo
+                | FormatIdentifier::Chunkedhtml
+                // Long-tail Phase 5 (Tier D): the JS slide family —
+                // standalone pandoc decks.
+                | FormatIdentifier::S5
+                | FormatIdentifier::Dzslides
+                | FormatIdentifier::Slidy
+                | FormatIdentifier::Slideous
+        )
+    }
+
+    /// Whether this is one of Q1's `isMarkdownOutput` flavors
+    /// (`config/format.ts:169-180`): the markdown family whose pandoc
+    /// writers re-escape shortcode braces, so written output needs the
+    /// shortcode-unescape postprocessor
+    /// ([`crate::stage::stages::pandoc_write`], mirroring Q1's
+    /// `format-markdown.ts:21`).
+    pub fn is_markdown_output(&self) -> bool {
+        matches!(
+            self,
+            FormatIdentifier::Markdown
+                | FormatIdentifier::MarkdownStrict
+                | FormatIdentifier::MarkdownPhpExtra
+                | FormatIdentifier::MarkdownGithub
+                | FormatIdentifier::MarkdownMmd
+                | FormatIdentifier::Markua
+                | FormatIdentifier::CommonmarkX
+                | FormatIdentifier::Gfm
+                | FormatIdentifier::CommonMark
+        )
+    }
+
+    /// The canonical format *name*: what `format-identifier.base-format`
+    /// filter params carry, what `KNOWN_BASE_FORMATS` (extension
+    /// discovery) spells, and what `TryFrom<&str>` accepts. This is the
+    /// contract seam that must hold for every variant — **never** the
+    /// output *extension* (`output_extension`), which diverges for Typst
+    /// (`"typst"` vs `.pdf`) and the markdown writers (`"gfm"`/`"commonmark"`
+    /// vs `.md`). Long-tail Phase 1 wrinkle 2: the params builder used to
+    /// send the extension here, so a Typst render advertised base-format
+    /// `"pdf"` and downstream `format:` scoping in extensions could never
+    /// match it.
+    pub fn canonical_name(&self) -> &'static str {
+        self.as_str()
     }
 
     /// Check if this is an HTML-based format
@@ -95,6 +378,55 @@ impl TryFrom<&str> for FormatIdentifier {
             "revealjs" => Ok(FormatIdentifier::Revealjs),
             "gfm" => Ok(FormatIdentifier::Gfm),
             "commonmark" => Ok(FormatIdentifier::CommonMark),
+            "odt" => Ok(FormatIdentifier::Odt),
+            "opendocument" => Ok(FormatIdentifier::Opendocument),
+            "rtf" => Ok(FormatIdentifier::Rtf),
+            "fb2" => Ok(FormatIdentifier::Fb2),
+            "plain" => Ok(FormatIdentifier::Plain),
+            "rst" => Ok(FormatIdentifier::Rst),
+            "org" => Ok(FormatIdentifier::Org),
+            "muse" => Ok(FormatIdentifier::Muse),
+            "ms" => Ok(FormatIdentifier::Ms),
+            "man" => Ok(FormatIdentifier::Man),
+            "texinfo" => Ok(FormatIdentifier::Texinfo),
+            "tei" => Ok(FormatIdentifier::Tei),
+            "zimwiki" => Ok(FormatIdentifier::Zimwiki),
+            "dokuwiki" => Ok(FormatIdentifier::Dokuwiki),
+            "haddock" => Ok(FormatIdentifier::Haddock),
+            "json" => Ok(FormatIdentifier::Json),
+            "native" => Ok(FormatIdentifier::Native),
+            "icml" => Ok(FormatIdentifier::Icml),
+            "jira" => Ok(FormatIdentifier::Jira),
+            "mediawiki" => Ok(FormatIdentifier::Mediawiki),
+            "xwiki" => Ok(FormatIdentifier::Xwiki),
+            "textile" => Ok(FormatIdentifier::Textile),
+            "docbook" => Ok(FormatIdentifier::Docbook),
+            "docbook4" => Ok(FormatIdentifier::Docbook4),
+            "docbook5" => Ok(FormatIdentifier::Docbook5),
+            "markdown" => Ok(FormatIdentifier::Markdown),
+            "markdown_strict" => Ok(FormatIdentifier::MarkdownStrict),
+            "markdown_phpextra" => Ok(FormatIdentifier::MarkdownPhpExtra),
+            "markdown_github" => Ok(FormatIdentifier::MarkdownGithub),
+            "markdown_mmd" => Ok(FormatIdentifier::MarkdownMmd),
+            "markua" => Ok(FormatIdentifier::Markua),
+            "commonmark_x" => Ok(FormatIdentifier::CommonmarkX),
+            "djot" => Ok(FormatIdentifier::Djot),
+            "t2t" => Ok(FormatIdentifier::T2t),
+            "xml" => Ok(FormatIdentifier::Xml),
+            "ansi" => Ok(FormatIdentifier::Ansi),
+            "vimdoc" => Ok(FormatIdentifier::Vimdoc),
+            "bbcode" => Ok(FormatIdentifier::Bbcode),
+            "bbcode_steam" => Ok(FormatIdentifier::BbcodeSteam),
+            "bbcode_phpbb" => Ok(FormatIdentifier::BbcodePhpbb),
+            "bbcode_fluxbb" => Ok(FormatIdentifier::BbcodeFluxbb),
+            "bbcode_hubzilla" => Ok(FormatIdentifier::BbcodeHubzilla),
+            "bbcode_xenforo" => Ok(FormatIdentifier::BbcodeXenforo),
+            "chunkedhtml" => Ok(FormatIdentifier::Chunkedhtml),
+            // Long-tail Phase 5 (Tier D)
+            "s5" => Ok(FormatIdentifier::S5),
+            "dzslides" => Ok(FormatIdentifier::Dzslides),
+            "slidy" => Ok(FormatIdentifier::Slidy),
+            "slideous" => Ok(FormatIdentifier::Slideous),
             _ => Err(format!("Unknown format: {}", s)),
         }
     }
@@ -449,6 +781,64 @@ fn output_extension_for(id: FormatIdentifier) -> String {
         FormatIdentifier::Revealjs => "html",
         FormatIdentifier::Gfm => "md",
         FormatIdentifier::CommonMark => "md",
+        // Long-tail Phase 2 (Tier A) — Q1 `createFormat` extension choices.
+        // Three formats share `xml` (opendocument, docbook, docbook4/5);
+        // zimwiki's extension is `zim`.
+        FormatIdentifier::Odt => "odt",
+        FormatIdentifier::Opendocument => "xml",
+        FormatIdentifier::Rtf => "rtf",
+        FormatIdentifier::Fb2 => "fb2",
+        FormatIdentifier::Plain => "txt",
+        FormatIdentifier::Rst => "rst",
+        FormatIdentifier::Org => "org",
+        FormatIdentifier::Muse => "muse",
+        FormatIdentifier::Ms => "ms",
+        FormatIdentifier::Man => "man",
+        FormatIdentifier::Texinfo => "texinfo",
+        FormatIdentifier::Tei => "tei",
+        FormatIdentifier::Zimwiki => "zim",
+        FormatIdentifier::Dokuwiki => "dokuwiki",
+        FormatIdentifier::Haddock => "haddock",
+        FormatIdentifier::Json => "json",
+        FormatIdentifier::Native => "native",
+        FormatIdentifier::Icml => "icml",
+        FormatIdentifier::Jira => "jira",
+        FormatIdentifier::Mediawiki => "mediawiki",
+        FormatIdentifier::Xwiki => "xwiki",
+        FormatIdentifier::Textile => "textile",
+        FormatIdentifier::Docbook => "xml",
+        FormatIdentifier::Docbook4 => "xml",
+        FormatIdentifier::Docbook5 => "xml",
+        // Long-tail Phase 3 (Tier B) — the markdown family all writes `.md`,
+        // Q1 `markdownFormat`'s extension choice for every flavor.
+        FormatIdentifier::Markdown => "md",
+        FormatIdentifier::MarkdownStrict => "md",
+        FormatIdentifier::MarkdownPhpExtra => "md",
+        FormatIdentifier::MarkdownGithub => "md",
+        FormatIdentifier::MarkdownMmd => "md",
+        FormatIdentifier::Markua => "md",
+        FormatIdentifier::CommonmarkX => "md",
+        // Long-tail Phase 4 (Tier C) — pandoc `Format.hs` extension
+        // conventions where one exists (`djot`→`dj`), a deliberate
+        // filename improvement over Q1's blanket `txt` (documented for
+        // Q1 migrants in Phase 6); `chunkedhtml` writes a zip archive.
+        FormatIdentifier::Djot => "dj",
+        FormatIdentifier::T2t => "t2t",
+        FormatIdentifier::Xml => "xml",
+        FormatIdentifier::Ansi => "txt",
+        FormatIdentifier::Vimdoc => "txt",
+        FormatIdentifier::Bbcode => "txt",
+        FormatIdentifier::BbcodeSteam => "txt",
+        FormatIdentifier::BbcodePhpbb => "txt",
+        FormatIdentifier::BbcodeFluxbb => "txt",
+        FormatIdentifier::BbcodeHubzilla => "txt",
+        FormatIdentifier::BbcodeXenforo => "txt",
+        FormatIdentifier::Chunkedhtml => "zip",
+        // Long-tail Phase 5 (Tier D) — all four write HTML decks.
+        FormatIdentifier::S5
+        | FormatIdentifier::Dzslides
+        | FormatIdentifier::Slidy
+        | FormatIdentifier::Slideous => "html",
     }
     .to_string()
 }
@@ -457,19 +847,98 @@ fn output_extension_for(id: FormatIdentifier) -> String {
 /// render — distinct from [`output_extension_for`], which names the file
 /// extension of the *final* user-facing artifact.
 ///
-/// For every format currently routed through `PandocWriteStage` except
-/// typst, the two coincide (`docx` writes `.docx`, `pptx` writes `.pptx`,
-/// …), which is why nothing needed this distinction before. Typst breaks
-/// that: pandoc's typst *writer* is invoked with `-t typst`, but the
-/// user-facing output is a compiled PDF (`output_extension_for` correctly
-/// says `"pdf"`) — there is no direct `-t pdf` path through pandoc's typst
-/// writer, and passing the final extension here would skip the writer, the
-/// vendored Lua filters, and the template entirely. Compiling the `.typ`
-/// pandoc produces into that PDF is `TypstCompileStage`'s job (pandoc-hybrid
-/// Phase 2), not this stage's.
+/// The two coincide for docx/pptx/epub, which is why nothing needed this
+/// distinction before. It diverges for every format whose pandoc writer
+/// name is not its file extension:
+///
+/// - **Typst** — pandoc's typst *writer* is invoked with `-t typst`, but
+///   the user-facing output is a compiled PDF (`output_extension_for`
+///   correctly says `"pdf"`) — there is no direct `-t pdf` path through
+///   pandoc's typst writer, and passing the final extension here would
+///   skip the writer, the vendored Lua filters, and the template entirely.
+///   Compiling the `.typ` pandoc produces into that PDF is
+///   `TypstCompileStage`'s job (pandoc-hybrid Phase 2), not this stage's.
+/// - **Gfm / CommonMark** (long-tail Phase 1 wrinkle 4) — pandoc's writers
+///   are `-t gfm` / `-t commonmark`, but the output file is `.md`. Passing
+///   the extension (`-t md`) would silently select pandoc's *plain
+///   markdown* writer instead — wrong syntax (no GFM tables/task lists),
+///   wrong thing entirely.
+/// - **Tier A** (long-tail Phase 2) — every one of the 25 gets an explicit
+///   arm even where writer == extension, because four of them *diverge*
+///   (opendocument: writer `opendocument`, extension `xml`; zimwiki:
+///   `zimwiki`/`zim`; plain: `plain`/`txt`; docbook×3: `docbook…`/`xml`)
+///   and a shared `-t xml` would be no pandoc writer at all.
+///
+/// Every `FormatIdentifier` variant for which [`FormatIdentifier::is_pandoc_hybrid`]
+/// is true must have an explicit arm here.
 fn pandoc_writer_name_for(id: FormatIdentifier) -> String {
     match id {
         FormatIdentifier::Typst => "typst".to_string(),
+        FormatIdentifier::Gfm => "gfm".to_string(),
+        FormatIdentifier::CommonMark => "commonmark".to_string(),
+        // Long-tail Phase 2 (Tier A) — explicit arms for all 25, equal to
+        // the canonical name (which is also pandoc's `-t` writer name for
+        // each of these writers).
+        FormatIdentifier::Odt => "odt".to_string(),
+        FormatIdentifier::Opendocument => "opendocument".to_string(),
+        FormatIdentifier::Rtf => "rtf".to_string(),
+        FormatIdentifier::Fb2 => "fb2".to_string(),
+        FormatIdentifier::Plain => "plain".to_string(),
+        FormatIdentifier::Rst => "rst".to_string(),
+        FormatIdentifier::Org => "org".to_string(),
+        FormatIdentifier::Muse => "muse".to_string(),
+        FormatIdentifier::Ms => "ms".to_string(),
+        FormatIdentifier::Man => "man".to_string(),
+        FormatIdentifier::Texinfo => "texinfo".to_string(),
+        FormatIdentifier::Tei => "tei".to_string(),
+        FormatIdentifier::Zimwiki => "zimwiki".to_string(),
+        FormatIdentifier::Dokuwiki => "dokuwiki".to_string(),
+        FormatIdentifier::Haddock => "haddock".to_string(),
+        FormatIdentifier::Json => "json".to_string(),
+        FormatIdentifier::Native => "native".to_string(),
+        FormatIdentifier::Icml => "icml".to_string(),
+        FormatIdentifier::Jira => "jira".to_string(),
+        FormatIdentifier::Mediawiki => "mediawiki".to_string(),
+        FormatIdentifier::Xwiki => "xwiki".to_string(),
+        FormatIdentifier::Textile => "textile".to_string(),
+        FormatIdentifier::Docbook => "docbook".to_string(),
+        FormatIdentifier::Docbook4 => "docbook4".to_string(),
+        FormatIdentifier::Docbook5 => "docbook5".to_string(),
+        // Long-tail Phase 3 (Tier B) — explicit arms for all seven new
+        // flavors (writer = canonical name): the fall-through would send
+        // `-t md` (their shared *extension*), which silently selects
+        // pandoc's plain markdown writer for every one of them.
+        FormatIdentifier::Markdown => "markdown".to_string(),
+        FormatIdentifier::MarkdownStrict => "markdown_strict".to_string(),
+        FormatIdentifier::MarkdownPhpExtra => "markdown_phpextra".to_string(),
+        FormatIdentifier::MarkdownGithub => "markdown_github".to_string(),
+        FormatIdentifier::MarkdownMmd => "markdown_mmd".to_string(),
+        FormatIdentifier::Markua => "markua".to_string(),
+        FormatIdentifier::CommonmarkX => "commonmark_x".to_string(),
+        // Long-tail Phase 4 (Tier C) — explicit arms for all twelve
+        // (writer = canonical name): the fall-through would send the
+        // *extension* (`-t txt` for ansi/vimdoc/bbcode×6, `-t dj` for
+        // djot, `-t zip` for chunkedhtml), none of which is a pandoc
+        // writer.
+        FormatIdentifier::Djot => "djot".to_string(),
+        FormatIdentifier::T2t => "t2t".to_string(),
+        FormatIdentifier::Xml => "xml".to_string(),
+        FormatIdentifier::Ansi => "ansi".to_string(),
+        FormatIdentifier::Vimdoc => "vimdoc".to_string(),
+        FormatIdentifier::Bbcode => "bbcode".to_string(),
+        FormatIdentifier::BbcodeSteam => "bbcode_steam".to_string(),
+        FormatIdentifier::BbcodePhpbb => "bbcode_phpbb".to_string(),
+        FormatIdentifier::BbcodeFluxbb => "bbcode_fluxbb".to_string(),
+        FormatIdentifier::BbcodeHubzilla => "bbcode_hubzilla".to_string(),
+        FormatIdentifier::BbcodeXenforo => "bbcode_xenforo".to_string(),
+        FormatIdentifier::Chunkedhtml => "chunkedhtml".to_string(),
+        // Long-tail Phase 5 (Tier D) — the deck writers are the format
+        // names; an extension fall-through would send `-t html`, a plain
+        // non-deck document.
+        FormatIdentifier::S5 => "s5".to_string(),
+        FormatIdentifier::Dzslides => "dzslides".to_string(),
+        FormatIdentifier::Slidy => "slidy".to_string(),
+        FormatIdentifier::Slideous => "slideous".to_string(),
         other => output_extension_for(other),
     }
 }
@@ -499,6 +968,48 @@ fn pandoc_invocation_args_for(id: FormatIdentifier) -> Vec<String> {
             "none".to_string(),
             "--default-image-extension".to_string(),
             "svg".to_string(),
+        ],
+        // Long-tail Phase 2: Q1's `plaintextFormat` sets
+        // `pandoc: standalone: true` for the whole plaintext family, and
+        // `rtfFormat()` adds standalone on top of its wordprocessor base.
+        // Odt/opendocument need no flag (pandoc's zip writers imply
+        // standalone, as shipped docx already shows) and fb2's
+        // `createEbookFormat` sets none. `--default-image-extension` is
+        // NOT repeated here — decision D2 gives it the single sink in
+        // `format_defaults::build_forwarded_args`.
+        FormatIdentifier::Rtf
+        | FormatIdentifier::Plain
+        | FormatIdentifier::Rst
+        | FormatIdentifier::Org
+        | FormatIdentifier::Muse
+        | FormatIdentifier::Ms
+        | FormatIdentifier::Man
+        | FormatIdentifier::Texinfo
+        | FormatIdentifier::Tei
+        | FormatIdentifier::Zimwiki
+        | FormatIdentifier::Dokuwiki
+        | FormatIdentifier::Haddock
+        | FormatIdentifier::Json
+        | FormatIdentifier::Native
+        | FormatIdentifier::Icml
+        | FormatIdentifier::Jira
+        | FormatIdentifier::Mediawiki
+        | FormatIdentifier::Xwiki
+        | FormatIdentifier::Textile
+        | FormatIdentifier::Docbook
+        | FormatIdentifier::Docbook4
+        | FormatIdentifier::Docbook5 => vec!["--standalone".to_string()],
+        // Long-tail Phase 5 (Tier D): Q1's `createHtmlPresentationFormat`
+        // always renders standalone with `wrap: none` (the decks rely on
+        // their own CSS/JS for layout; pandoc's soft wrapping would
+        // corrupt attribute-heavy slide markup).
+        FormatIdentifier::S5
+        | FormatIdentifier::Dzslides
+        | FormatIdentifier::Slidy
+        | FormatIdentifier::Slideous => vec![
+            "--standalone".to_string(),
+            "--wrap".to_string(),
+            "none".to_string(),
         ],
         _ => Vec::new(),
     }
@@ -665,7 +1176,8 @@ impl Format {
 
     /// The pandoc writer name `PandocWriteStage` should pass as `-t` for a
     /// `PipelineProfile::Pandoc` render. See [`pandoc_writer_name_for`] for
-    /// why this differs from [`Self::output_extension`] for typst.
+    /// why this differs from [`Self::output_extension`] (typst, gfm,
+    /// commonmark).
     pub fn pandoc_writer_name(&self) -> String {
         pandoc_writer_name_for(self.identifier)
     }
@@ -1229,7 +1741,7 @@ mod tests {
 
     /// The pandoc writer name (`-t` argument) must stay `"typst"` even
     /// though the final user-facing `output_extension` is `"pdf"` — see
-    /// `pandoc_writer_name_for`'s doc comment.
+    /// [`pandoc_writer_name_for`]'s doc comment.
     #[test]
     fn test_typst_pandoc_writer_name_differs_from_output_extension() {
         let f = Format::from_format_string("typst").unwrap();
@@ -1237,11 +1749,67 @@ mod tests {
         assert_eq!(f.pandoc_writer_name(), "typst");
     }
 
-    /// For every other Pandoc-routed format, the writer name and the
-    /// output extension still coincide (no behavior change for docx/pptx).
+    /// Phase 1 (long-tail formats) wrinkle 4: gfm/commonmark need explicit
+    /// writer-name arms because the CLI gate admits them from Phase 1
+    /// onward — the fall-through default would send `-t md` (the output
+    /// extension), invoking pandoc's generic markdown writer instead of
+    /// gfm/commonmark.
+    #[test]
+    fn test_gfm_commonmark_writer_names_are_not_md() {
+        assert_eq!(
+            Format::from_format_string("gfm")
+                .unwrap()
+                .pandoc_writer_name(),
+            "gfm"
+        );
+        assert_eq!(
+            Format::from_format_string("commonmark")
+                .unwrap()
+                .pandoc_writer_name(),
+            "commonmark"
+        );
+    }
+
+    /// Phase 1 wrinkle 3: the CLI gate's predicate. True exactly for the
+    /// formats routed through `PandocWriteStage`; every variant listed here
+    /// must have an explicit `pandoc_writer_name_for` arm (see
+    /// `test_gfm_commonmark_writer_names_are_not_md`). Pdf stays refused
+    /// (latex/beamer epic); Html/Revealjs are native.
+    #[test]
+    fn test_is_pandoc_hybrid_predicate() {
+        use FormatIdentifier as F;
+        for id in [F::Docx, F::Pptx, F::Epub, F::Typst, F::Gfm, F::CommonMark] {
+            assert!(id.is_pandoc_hybrid(), "{id} must be pandoc-hybrid");
+        }
+        for id in [F::Html, F::Pdf, F::Revealjs] {
+            assert!(!id.is_pandoc_hybrid(), "{id} must not be pandoc-hybrid");
+        }
+    }
+
+    /// Phase 1 wrinkle 2: `canonical_name()` is the format key vendored Q1
+    /// Lua reads as `format-identifier.base-format` — never the output
+    /// extension. Typst's extension is `pdf` but its canonical name is
+    /// `typst` (the latent bug this plan fixes); gfm's is `gfm`, not `md`.
+    #[test]
+    fn test_canonical_name_is_not_the_extension() {
+        assert_eq!(FormatIdentifier::Typst.canonical_name(), "typst");
+        assert_ne!(
+            FormatIdentifier::Typst.canonical_name(),
+            output_extension_for(FormatIdentifier::Typst),
+            "typst's canonical name must not be its output extension"
+        );
+        assert_eq!(FormatIdentifier::Gfm.canonical_name(), "gfm");
+        assert_eq!(FormatIdentifier::Docx.canonical_name(), "docx");
+    }
+
+    /// For every Pandoc-routed format without a dedicated writer arm, the
+    /// writer name and the output extension still coincide (no behavior
+    /// change for docx/pptx/epub). Gfm/CommonMark now have dedicated arms
+    /// (`test_gfm_commonmark_writer_names_are_not_md`) and typst diverges
+    /// (`test_typst_pandoc_writer_name_differs_from_output_extension`).
     #[test]
     fn test_pandoc_writer_name_matches_output_extension_for_non_typst() {
-        for fmt in ["docx", "pptx", "epub", "gfm", "commonmark"] {
+        for fmt in ["docx", "pptx", "epub"] {
             let f = Format::from_format_string(fmt).unwrap();
             assert_eq!(
                 f.pandoc_writer_name(),
@@ -1596,5 +2164,551 @@ mod tests {
     #[test]
     fn test_format_keys_from_frontmatter_absent() {
         assert!(format_keys_from_frontmatter("no front matter here").is_empty());
+    }
+
+    // === long-tail Phase 2: Tier A bulk tail (25 variants) ===
+
+    /// The 25 Tier A variants with their Q1 output extensions
+    /// (`formats.ts`/`formats-shared.ts` at the pinned tag). Three formats
+    /// share the `xml` extension (opendocument, docbook, docbook4/5), and
+    /// zimwiki's extension (`zim`) diverges from its name.
+    const TIER_A_EXTENSIONS: &[(&str, &str)] = &[
+        ("odt", "odt"),
+        ("opendocument", "xml"),
+        ("rtf", "rtf"),
+        ("fb2", "fb2"),
+        ("plain", "txt"),
+        ("rst", "rst"),
+        ("org", "org"),
+        ("muse", "muse"),
+        ("ms", "ms"),
+        ("man", "man"),
+        ("texinfo", "texinfo"),
+        ("tei", "tei"),
+        ("zimwiki", "zim"),
+        ("dokuwiki", "dokuwiki"),
+        ("haddock", "haddock"),
+        ("json", "json"),
+        ("native", "native"),
+        ("icml", "icml"),
+        ("jira", "jira"),
+        ("mediawiki", "mediawiki"),
+        ("xwiki", "xwiki"),
+        ("textile", "textile"),
+        ("docbook", "xml"),
+        ("docbook4", "xml"),
+        ("docbook5", "xml"),
+    ];
+
+    /// Q1 `plaintextFormat` family — everything in Tier A except the
+    /// wordprocessor trio (odt/opendocument/rtf) and the ebook format
+    /// (fb2). All of these get pandoc `--standalone` (verified in
+    /// `formats-shared.ts`'s `plaintextFormat`).
+    const TIER_A_PLAINTEXT: &[&str] = &[
+        "plain",
+        "rst",
+        "org",
+        "muse",
+        "ms",
+        "man",
+        "texinfo",
+        "tei",
+        "zimwiki",
+        "dokuwiki",
+        "haddock",
+        "json",
+        "native",
+        "icml",
+        "jira",
+        "mediawiki",
+        "xwiki",
+        "textile",
+        "docbook",
+        "docbook4",
+        "docbook5",
+    ];
+
+    /// Every Tier A name parses from its canonical name and round-trips
+    /// through `as_str`/`canonical_name` — `canonical_name` is what
+    /// `format-identifier.base-format` carries, so a wrong mapping here
+    /// would misclassify the render for every vendored Q1 Lua format check.
+    #[test]
+    fn test_tier_a_try_from_and_canonical_name() {
+        for (name, _) in TIER_A_EXTENSIONS {
+            let id = FormatIdentifier::try_from(*name)
+                .unwrap_or_else(|e| panic!("{name} must parse: {e}"));
+            assert_eq!(id.as_str(), *name);
+            assert_eq!(id.canonical_name(), *name);
+        }
+    }
+
+    /// Case-insensitive parse spot checks, one per family, including the
+    /// two with internal capitals a naive `eq_ignore_ascii_case` might get
+    /// wrong (`zimwiki` has none; `mediawiki`/`docbook5` are the tricky
+    /// spellings).
+    #[test]
+    fn test_tier_a_try_from_case_insensitive() {
+        for mixed in ["ODT", "Fb2", "ZimWiki", "DocBook5", "MediaWiki", "TeXinfo"] {
+            let id = FormatIdentifier::try_from(mixed)
+                .unwrap_or_else(|e| panic!("{mixed} must parse case-insensitively: {e}"));
+            assert_eq!(id.as_str(), mixed.to_ascii_lowercase());
+        }
+    }
+
+    /// Output extensions — the inventory table's third column verbatim,
+    /// including the three-way `xml` sharing and zimwiki's `zim`.
+    #[test]
+    fn test_tier_a_output_extensions() {
+        for (name, ext) in TIER_A_EXTENSIONS {
+            let f = Format::from_format_string(name)
+                .unwrap_or_else(|e| panic!("{name} must parse: {e}"));
+            assert_eq!(f.output_extension, *ext, "output extension for {name}");
+        }
+    }
+
+    /// Wrinkle 4: every Tier A variant has an explicit writer-name arm —
+    /// the writer equals the canonical name, which diverges from the
+    /// extension for opendocument/zimwiki/plain/docbook (fall-through would
+    /// send `-t xml`/`-t zim`/`-t txt`, none of which is a pandoc writer).
+    #[test]
+    fn test_tier_a_pandoc_writer_names_are_explicit_arms() {
+        for (name, ext) in TIER_A_EXTENSIONS {
+            let f = Format::from_format_string(name).unwrap();
+            assert_eq!(
+                f.pandoc_writer_name(),
+                *name,
+                "writer name for {name} must be its canonical name, not its extension {ext}"
+            );
+        }
+        // The divergences, explicitly — these are the rows that fail if a
+        // future edit deletes the explicit arms and restores the
+        // `other => output_extension_for(other)` fall-through.
+        for name in ["opendocument", "zimwiki", "plain", "docbook"] {
+            let f = Format::from_format_string(name).unwrap();
+            assert_ne!(
+                f.pandoc_writer_name(),
+                f.output_extension,
+                "{name}'s writer name must diverge from its output extension"
+            );
+        }
+    }
+
+    /// All 25 are pandoc-hybrid (self-widening the CLI gate at
+    /// `render.rs`'s single `is_pandoc_hybrid` check) and none are native.
+    #[test]
+    fn test_tier_a_is_pandoc_hybrid() {
+        for (name, _) in TIER_A_EXTENSIONS {
+            let id = FormatIdentifier::try_from(*name).unwrap();
+            assert!(id.is_pandoc_hybrid(), "{name} must be pandoc-hybrid");
+            assert!(!id.is_native(), "{name} must not be native");
+        }
+    }
+
+    /// D2/Q1-parity invocation args: `--standalone` for the plaintext
+    /// family and rtf only (`plaintextFormat`'s `pandoc: standalone: true`
+    /// + `rtfFormat`'s wordprocessor-plus-standalone override).
+    /// Odt/opendocument need no flag (pandoc's zip writers imply
+    /// standalone, matching shipped docx behavior) and fb2's
+    /// `createEbookFormat` sets none. `--default-image-extension` is
+    /// deliberately absent from this matrix — its single sink is
+    /// `format_defaults::build_forwarded_args` (D2).
+    #[test]
+    fn test_tier_a_invocation_args_standalone_matrix() {
+        for name in TIER_A_PLAINTEXT.iter().copied().chain(["rtf"]) {
+            let args = Format::from_format_string(name)
+                .unwrap()
+                .pandoc_invocation_args();
+            assert_eq!(
+                args,
+                vec!["--standalone".to_string()],
+                "invocation args for {name}"
+            );
+        }
+        for name in ["odt", "opendocument", "fb2"] {
+            let args = Format::from_format_string(name)
+                .unwrap()
+                .pandoc_invocation_args();
+            assert!(
+                args.is_empty(),
+                "{name} must get no invocation args, got {args:?}"
+            );
+        }
+    }
+
+    // === long-tail Phase 3: Tier B markdown family (9 flavors) ===
+
+    /// Q1 `isMarkdownOutput`'s nine flavors (`config/format.ts:169-180`),
+    /// with their shared `md` output extension. `gfm`/`commonmark` are the
+    /// Phase 1 variants; the other seven are the Phase 3 additions.
+    const TIER_B: &[&str] = &[
+        "markdown",
+        "markdown_strict",
+        "markdown_phpextra",
+        "markdown_github",
+        "markdown_mmd",
+        "markua",
+        "commonmark_x",
+        "gfm",
+        "commonmark",
+    ];
+
+    /// Every Tier B name parses from its canonical name and round-trips
+    /// through `as_str`/`canonical_name` — same contract seam as Tier A
+    /// (`format-identifier.base-format` carries this string).
+    #[test]
+    fn test_tier_b_try_from_and_canonical_name() {
+        for name in TIER_B {
+            let id = FormatIdentifier::try_from(*name)
+                .unwrap_or_else(|e| panic!("{name} must parse: {e}"));
+            assert_eq!(id.as_str(), *name);
+            assert_eq!(id.canonical_name(), *name);
+        }
+    }
+
+    /// Case-insensitive parse spot checks over the awkward spellings.
+    #[test]
+    fn test_tier_b_try_from_case_insensitive() {
+        for mixed in [
+            "Markdown",
+            "MARKDOWN_STRICT",
+            "Markdown_PhpExtra",
+            "Markdown_GitHub",
+            "Markdown_MMD",
+            "Markua",
+            "CommonMark_X",
+        ] {
+            let id = FormatIdentifier::try_from(mixed)
+                .unwrap_or_else(|e| panic!("{mixed} must parse case-insensitively: {e}"));
+            assert_eq!(id.as_str(), mixed.to_ascii_lowercase());
+        }
+    }
+
+    /// All nine produce `.md` — including the seven new flavors, so the
+    /// `output_extension_for` arms must spell `md` explicitly (a
+    /// fall-through to the format name would give `markdown_strict` files).
+    #[test]
+    fn test_tier_b_output_extensions() {
+        for name in TIER_B {
+            let f = Format::from_format_string(name)
+                .unwrap_or_else(|e| panic!("{name} must parse: {e}"));
+            assert_eq!(f.output_extension, "md", "output extension for {name}");
+        }
+    }
+
+    /// Writer name equals canonical name for all nine — pandoc's writer
+    /// flags are exactly `-t markdown`, `-t markdown_strict`, …
+    /// `-t commonmark_x`, diverging from the shared `md` extension.
+    #[test]
+    fn test_tier_b_pandoc_writer_names() {
+        for name in TIER_B {
+            let f = Format::from_format_string(name).unwrap();
+            assert_eq!(
+                f.pandoc_writer_name(),
+                *name,
+                "writer name for {name} must be its canonical name, not the md extension"
+            );
+            assert_ne!(
+                f.pandoc_writer_name(),
+                f.output_extension,
+                "{name}'s writer name must diverge from its output extension"
+            );
+        }
+    }
+
+    /// All nine are pandoc-hybrid, none native, and all nine are
+    /// markdown-output — the shortcode-unescape postprocessor's gate
+    /// (Phase 3a) must cover the whole family, not just the Phase 1 pair.
+    #[test]
+    fn test_tier_b_is_pandoc_hybrid_and_markdown_output() {
+        for name in TIER_B {
+            let id = FormatIdentifier::try_from(*name).unwrap();
+            assert!(id.is_pandoc_hybrid(), "{name} must be pandoc-hybrid");
+            assert!(!id.is_native(), "{name} must not be native");
+            assert!(
+                id.is_markdown_output(),
+                "{name} must be markdown-output (shortcode unescape gate)"
+            );
+        }
+    }
+
+    /// The shortcode-unescape gate must not swallow non-markdown formats.
+    #[test]
+    fn test_is_markdown_output_negatives() {
+        for name in [
+            "html", "revealjs", "docx", "pptx", "odt", "plain", "typst", "epub",
+        ] {
+            let id = FormatIdentifier::try_from(name).unwrap();
+            assert!(
+                !id.is_markdown_output(),
+                "{name} must not be markdown-output"
+            );
+        }
+    }
+
+    /// Tier B gets no invocation flags: Q1's `markdownFormat`/
+    /// `pandocMarkdownFormat` set no `pandoc:` overrides beyond
+    /// `output-divs` (which rides the filter-params blob, not the CLI).
+    #[test]
+    fn test_tier_b_invocation_args_empty() {
+        for name in TIER_B {
+            let args = Format::from_format_string(name)
+                .unwrap()
+                .pandoc_invocation_args();
+            assert!(
+                args.is_empty(),
+                "{name} must get no invocation args, got {args:?}"
+            );
+        }
+    }
+
+    // === long-tail Phase 4: Tier C stretch (12 variants) ===
+
+    /// The 12 Tier C formats. Q1 gives all of them *no* format object at
+    /// all (`unknownFormat("txt")`, `formats.ts:341-343`), so the
+    /// Q1-parity invocation is **bare** — and `--standalone` is not a
+    /// no-op here: pandoc 3.11 ships default templates for
+    /// ansi/djot/t2t/bbcode/vimdoc, so standalone would wrap output in
+    /// template chrome Q1 never produced (measured: `pandoc -t djot
+    /// --standalone` prepends `# <title>`).
+    const TIER_C: &[(&str, &str)] = &[
+        ("djot", "dj"),
+        ("t2t", "t2t"),
+        ("xml", "xml"),
+        ("ansi", "txt"),
+        ("vimdoc", "txt"),
+        ("bbcode", "txt"),
+        ("bbcode_steam", "txt"),
+        ("bbcode_phpbb", "txt"),
+        ("bbcode_fluxbb", "txt"),
+        ("bbcode_hubzilla", "txt"),
+        ("bbcode_xenforo", "txt"),
+        ("chunkedhtml", "zip"),
+    ];
+
+    /// Every Tier C name parses from its canonical name and round-trips
+    /// through `as_str`/`canonical_name`.
+    #[test]
+    fn test_tier_c_try_from_and_canonical_name() {
+        for (name, _) in TIER_C {
+            let id = FormatIdentifier::try_from(*name)
+                .unwrap_or_else(|e| panic!("{name} must parse: {e}"));
+            assert_eq!(id.as_str(), *name);
+            assert_eq!(id.canonical_name(), *name);
+        }
+    }
+
+    /// Extensions follow pandoc's `Format.hs` conventions where one
+    /// exists (`djot`→`dj`), not Q1's blanket `txt` (a deliberate
+    /// filename improvement for Q1 migrants, documented in Phase 6);
+    /// `chunkedhtml` writes a zip archive.
+    #[test]
+    fn test_tier_c_output_extensions() {
+        for (name, ext) in TIER_C {
+            let f = Format::from_format_string(name)
+                .unwrap_or_else(|e| panic!("{name} must parse: {e}"));
+            assert_eq!(f.output_extension, *ext, "output extension for {name}");
+        }
+    }
+
+    /// Writer name equals canonical name for all twelve — an explicit
+    /// arm each, because the extension fall-through would send `-t txt`
+    /// (ansi/vimdoc/bbcode×6) or `-t zip`/`-t dj` (chunkedhtml/djot),
+    /// none of which is a pandoc writer. (`t2t` and `xml` legitimately
+    /// coincide with their extensions; the extension check pins the two
+    /// where divergence is the point.)
+    #[test]
+    fn test_tier_c_pandoc_writer_names() {
+        for (name, _ext) in TIER_C {
+            let f = Format::from_format_string(name).unwrap();
+            assert_eq!(
+                f.pandoc_writer_name(),
+                *name,
+                "writer name for {name} must be its canonical name"
+            );
+        }
+        assert_ne!(
+            Format::from_format_string("djot")
+                .unwrap()
+                .pandoc_writer_name(),
+            Format::from_format_string("djot").unwrap().output_extension
+        );
+        assert_ne!(
+            Format::from_format_string("chunkedhtml")
+                .unwrap()
+                .pandoc_writer_name(),
+            Format::from_format_string("chunkedhtml")
+                .unwrap()
+                .output_extension
+        );
+    }
+
+    /// All twelve are pandoc-hybrid, none native, and none is
+    /// markdown-output — Tier C writers don't re-escape shortcode
+    /// braces, so the Phase 3a unescape postprocessor must stay off.
+    #[test]
+    fn test_tier_c_is_pandoc_hybrid_and_not_markdown_output() {
+        for (name, _) in TIER_C {
+            let id = FormatIdentifier::try_from(*name).unwrap();
+            assert!(id.is_pandoc_hybrid(), "{name} must be pandoc-hybrid");
+            assert!(!id.is_native(), "{name} must not be native");
+            assert!(
+                !id.is_markdown_output(),
+                "{name} must not be markdown-output (no shortcode unescape)"
+            );
+        }
+    }
+
+    /// Bare invocation: no CLI flags at all. The `--standalone` flags
+    /// every other family gets would activate pandoc's default templates
+    /// for these writers and change output vs Q1.
+    #[test]
+    fn test_tier_c_invocation_args_empty() {
+        for (name, _) in TIER_C {
+            let args = Format::from_format_string(name)
+                .unwrap()
+                .pandoc_invocation_args();
+            assert!(
+                args.is_empty(),
+                "{name} must get no invocation args, got {args:?}"
+            );
+        }
+    }
+
+    /// No defaults rows: `format_pandoc_defaults` must return the no-op
+    /// default for every Tier C format (no page-width, no output-divs
+    /// override, no `--default-image-extension`), and the params blob
+    /// builder must not grow format-specific keys for them. This pins
+    /// the "bare invocation" decision at the defaults *sink* — an
+    /// accidental row added later fails here.
+    #[test]
+    fn test_tier_c_pandoc_defaults_noop() {
+        use crate::pandoc_filters::format_defaults::{
+            FormatPandocDefaults, format_pandoc_defaults,
+        };
+        for (name, _) in TIER_C {
+            let id = FormatIdentifier::try_from(*name).unwrap();
+            assert_eq!(
+                format_pandoc_defaults(id),
+                FormatPandocDefaults::default(),
+                "{name} must get no pandoc defaults (Q1 unknownFormat parity)"
+            );
+        }
+    }
+
+    // === Phase 5: Tier D — JS slide formats (Q1 createHtmlPresentationFormat) ===
+    //
+    // Q1 gives these four `createHtmlPresentationFormat` treatment:
+    // standalone HTML slide decks with fig 9.5×6.5, echo/warning false,
+    // `--standalone --wrap none --default-image-extension png`. Measured
+    // against real pandoc 3.11 (`pandoc -f markdown -t <fmt> --standalone
+    // --wrap none`, deck fixture with `# One`/`# Two`):
+    //   s5       → `class="slide section level1"`, assets `href="s5/default/…"`
+    //   dzslides → `class="slide level1"`, self-contained inline shim
+    //              (no external JS asset; the literal `dzslides` marker
+    //              appears in the inlined template)
+    //   slidy    → `class="slide titlepage"` + `slide section`,
+    //              CDN `https://www.w3.org/Talks/Tools/Slidy2/.../slidy.js`
+    //   slideous → `class="slide titlepage"`, `src="slideous/slideous.js"`
+    const TIER_D: &[(&str, &str)] = &[
+        ("s5", "html"),
+        ("dzslides", "html"),
+        ("slidy", "html"),
+        ("slideous", "html"),
+    ];
+
+    /// Every Tier D name parses from its canonical name and round-trips
+    /// through `as_str`/`canonical_name`.
+    #[test]
+    fn test_tier_d_try_from_and_canonical_name() {
+        for (name, _) in TIER_D {
+            let id = FormatIdentifier::try_from(*name)
+                .unwrap_or_else(|e| panic!("{name} must parse: {e}"));
+            assert_eq!(id.as_str(), *name);
+            assert_eq!(id.canonical_name(), *name);
+        }
+    }
+
+    /// All four write HTML decks — the same extension as html, but a
+    /// distinct writer target.
+    #[test]
+    fn test_tier_d_output_extensions_html() {
+        for (name, ext) in TIER_D {
+            let f = Format::from_format_string(name)
+                .unwrap_or_else(|e| panic!("{name} must parse: {e}"));
+            assert_eq!(f.output_extension, *ext, "output extension for {name}");
+        }
+    }
+
+    /// Writer name equals canonical name for all four — an explicit arm
+    /// each, because the extension fall-through would send `-t html`,
+    /// which renders a plain (non-deck) HTML document.
+    #[test]
+    fn test_tier_d_pandoc_writer_names() {
+        for (name, _) in TIER_D {
+            let f = Format::from_format_string(name).unwrap();
+            assert_eq!(
+                f.pandoc_writer_name(),
+                *name,
+                "writer name for {name} must be its canonical name"
+            );
+        }
+    }
+
+    /// All four are pandoc-hybrid, none native, none markdown-output.
+    #[test]
+    fn test_tier_d_is_pandoc_hybrid_and_not_markdown_output() {
+        for (name, _) in TIER_D {
+            let id = FormatIdentifier::try_from(*name).unwrap();
+            assert!(id.is_pandoc_hybrid(), "{name} must be pandoc-hybrid");
+            assert!(!id.is_native(), "{name} must not be native");
+            assert!(
+                !id.is_markdown_output(),
+                "{name} must not be markdown-output (no shortcode unescape)"
+            );
+        }
+    }
+
+    /// Q1's `createHtmlPresentationFormat` always renders standalone with
+    /// no wrapping — the exact flag set, pinned as a vector so an added
+    /// or dropped flag is caught.
+    #[test]
+    fn test_tier_d_invocation_args_standalone_wrap_none() {
+        for (name, _) in TIER_D {
+            let args = Format::from_format_string(name)
+                .unwrap()
+                .pandoc_invocation_args();
+            assert_eq!(
+                args,
+                vec![
+                    "--standalone".to_string(),
+                    "--wrap".to_string(),
+                    "none".to_string()
+                ],
+                "invocation args for {name}"
+            );
+        }
+    }
+
+    /// The presentation family's `--default-image-extension png` row
+    /// (Q1 `format-typst.ts` analog: `createHtmlPresentationFormat`'s
+    /// fig-format) — the only `format_pandoc_defaults` row this tier
+    /// gets; page-width and output-divs stay untouched.
+    #[test]
+    fn test_tier_d_pandoc_defaults_png() {
+        use crate::pandoc_filters::format_defaults::format_pandoc_defaults;
+        for (name, _) in TIER_D {
+            let id = FormatIdentifier::try_from(*name).unwrap();
+            let defaults = format_pandoc_defaults(id);
+            assert_eq!(
+                defaults.default_image_extension,
+                Some("png"),
+                "{name} must default images to png"
+            );
+            assert_eq!(defaults.page_width, None, "{name} must not set page-width");
+            assert_eq!(
+                defaults.output_divs, None,
+                "{name} must not override output-divs"
+            );
+        }
     }
 }

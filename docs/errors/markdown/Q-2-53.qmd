@@ -1,0 +1,72 @@
+---
+title: "Fenced div info string starts with `-`"
+description: "The word after a fenced div's opening colons starts with `-`, which Quarto 2 reserves for the block deletion mark `::: --`."
+code: Q-2-53
+subsystem: markdown
+status: complete
+since: "99.9.9"
+categories:
+  - markdown
+---
+
+# `Q-2-53` — Fenced div info string starts with `-`
+
+> The word after a fenced div's opening colons starts with `-`, which
+> Quarto 2 reserves for the block deletion mark `::: --`.
+
+## What this means
+
+A fenced div opens with a line of three or more colons. The colons can
+be followed by a single bare word, which becomes the div's class
+(`::: note` is `<div class="note">`), or by an attribute block
+(`::: {.note #intro}`).
+
+In Quarto 2, the bare word cannot start with `-`. After the colons, a
+leading `-` is reserved for **editorial marks**. `::: --` opens a block
+whose content is marked as deleted. It is the block form of the inline
+`[-- deleted text]`. The marks `::: ++` (inserted), `::: >>` (comment)
+and `::: !!` (highlighted) work the same way.
+
+So `::: --foo`, `::: ---` and `::: -x` are errors, not divs.
+
+## Why this happens
+
+- **A block deletion mark with no space after it.** `::: --` has to be
+  followed by a space, the end of the line, or an attribute block
+  (`::: --{author="me"}`). `::: --draft` is read as an attempt to name
+  a class `--draft`.
+- **A document written for Quarto 1 or Pandoc.** Both read `::: --foo`
+  as a div with class `--foo`. A class name starting with dashes is
+  unusual, and we have not found one in practice. If you do use one,
+  it now has to be set as an attribute.
+
+## How to fix
+
+To mark the content as deleted, put a space or a line break after the
+two dashes:
+
+```markdown
+::: --
+
+This paragraph is marked as deleted.
+
+:::
+```
+
+To use a class whose name starts with `-`, set it with a `class`
+attribute (the `.name` shorthand does not accept a leading `-` either):
+
+```markdown
+::: {class="--foo"}
+
+Content.
+
+:::
+```
+
+Better still, rename the class so that it starts with a letter:
+`::: foo` or `::: {.foo}`.
+
+## Related errors
+
+None yet.

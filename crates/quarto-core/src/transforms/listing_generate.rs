@@ -412,8 +412,22 @@ impl AstTransform for ListingGenerateTransform {
             // else copies it into the output tree. Register a copy
             // intent per project-relative item image; they flush
             // with the host page's other copies.
+            //
+            // bd-yqlbfrln: not in VFS-root mode (the hub-client).
+            // There the only allowed write root is the synthetic
+            // artifacts root, so a `{output_dir}/{img}` destination
+            // fails the OutputSink check and the whole page render
+            // errors out. The hub's asset walker serves `<img src>`
+            // straight from the VFS, as it does for body images
+            // (see `ResourceCollectorTransform`), so nothing is lost
+            // by skipping.
+            let vfs_root_mode = ctx
+                .resource_resolver
+                .as_ref()
+                .is_some_and(|r| r.is_vfs_root_mode());
             for item in &items {
-                if let Some(img) = item.image.as_deref()
+                if !vfs_root_mode
+                    && let Some(img) = item.image.as_deref()
                     && !crate::project::listing::helpers::is_external_src(img)
                 {
                     ctx.resource_copies.push(crate::render::ResourceCopyIntent {
@@ -707,6 +721,77 @@ mod tests {
             .await
             .unwrap();
         (ctx.resolved_listings, ctx.diagnostics)
+    }
+
+    /// Like `run_transform`, but attaches a resource resolver and
+    /// returns the copy intents the transform registered.
+    async fn resource_copies_with_resolver(
+        resolver: Option<crate::resource_resolver::ResourceResolverContext>,
+    ) -> Vec<crate::render::ResourceCopyIntent> {
+        let mut ast = Pandoc {
+            meta: map(vec![("listing", map(vec![("contents", s("posts"))]))]),
+            blocks: vec![],
+        };
+        let mut first =
+            make_profile_with_date("posts/first.qmd", "posts/first.html", "First", "2026-01-15");
+        // Document-relative, as an author writes it; hydration
+        // rebases it to the project-relative `posts/cover.png`.
+        first.image = Some("cover.png".to_string());
+        let (project, index) = make_project("index.qmd", vec![first]);
+        let doc = DocumentInfo::from_path("/project/index.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx =
+            RenderContext::new(&project, &doc, &format, &binaries).with_project_index(index);
+        ctx.resource_resolver = resolver;
+        ListingGenerateTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        ctx.resource_copies
+    }
+
+    // bd-qv2lsab0: natively, a front-matter `image:` is copied to the
+    // matching project-relative position under the output dir.
+    #[tokio::test]
+    async fn item_image_copy_intent_targets_output_dir_natively() {
+        let copies = resource_copies_with_resolver(Some(
+            crate::resource_resolver::ResourceResolverContext::website(
+                "/project/_site",
+                "/project/_site/index.html",
+                "site_libs",
+                "index",
+            ),
+        ))
+        .await;
+        assert_eq!(copies.len(), 1, "copies: {:?}", copies);
+        assert_eq!(copies[0].src, PathBuf::from("/project/posts/cover.png"));
+        assert_eq!(
+            copies[0].dest,
+            PathBuf::from("/project/_site/posts/cover.png")
+        );
+    }
+
+    // bd-yqlbfrln: in the hub-client the only allowed write root is
+    // the synthetic VFS artifacts root, so `output_dir.join(img)`
+    // (`/project/_site/...`) fails the OutputSink allowed-root check
+    // and takes the whole page render down with it. The hub's asset
+    // walker reads `<img src>` straight from the VFS, exactly as it
+    // does for body images (see `ResourceCollectorTransform`), so no
+    // copy intent is needed there.
+    #[tokio::test]
+    async fn item_image_copy_intent_skipped_in_vfs_root_mode() {
+        let copies = resource_copies_with_resolver(Some(
+            crate::resource_resolver::ResourceResolverContext::vfs_root(
+                "/.quarto/project-artifacts",
+            ),
+        ))
+        .await;
+        assert!(
+            copies.is_empty(),
+            "vfs_root mode must not register copy intents; got {:?}",
+            copies
+        );
     }
 
     // 28. generate_skips_when_no_listing_key

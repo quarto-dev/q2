@@ -1,0 +1,13 @@
+---
+source: crates/quarto-core/tests/integration/pandoc_long_tail_formats.rs
+assertion_line: 140
+expression: output
+---
+h1(#head). Head
+
+Hello _emphasis_ and *strong*.
+
+* first
+* second
+
+bc(python code-with-copy). x = 1 + 1

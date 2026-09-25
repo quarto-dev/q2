@@ -149,7 +149,9 @@ fn e2e_multi_format_warns() {
     );
 }
 
-/// T3.5: `--to pdf` (and its non-Docx/Pptx siblings) must still refuse.
+/// T3.5: `--to pdf` (a non-pandoc-hybrid format) must still refuse.
+/// Gfm/CommonMark — the other previously-refused formats — have their own
+/// success tests below since Phase 1 admits them through the gate.
 #[test]
 fn e2e_pdf_still_refused() {
     let temp = TempDir::new().unwrap();
@@ -885,5 +887,364 @@ fn e2e_pptx_meta_title() {
     assert!(
         core_xml.contains("<dc:title>My Title</dc:title>"),
         "docProps/core.xml missing the title value: {core_xml}"
+    );
+}
+
+/// Phase 1 gate reachability: `q2 render f.qmd --to gfm` exits 0 and
+/// produces **markdown**, not HTML — the body text is present as plain
+/// text and no `<h1` tag appears, which discriminates against an
+/// accidental fall-through to the native HTML writer under the `.md`
+/// output extension.
+#[test]
+fn e2e_render_gfm() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_file(
+        &dir.join("f.qmd"),
+        "---\ntitle: F\n---\n\n# Head\n\nHelloGfmBody.\n",
+    );
+
+    let output = run_q2(&dir, &["f.qmd", "--to", "gfm"]);
+    assert!(
+        output.status.success(),
+        "q2 render --to gfm should succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let md = std::fs::read_to_string(dir.join("f.md")).expect("f.md should exist");
+    assert!(md.contains("HelloGfmBody"), "gfm body text missing: {md}");
+    assert!(
+        md.contains("# Head"),
+        "expected a markdown ATX heading, got: {md}"
+    );
+    assert!(!md.contains("<h1"), "gfm output must not be HTML: {md}");
+}
+
+/// Phase 1 gate reachability: `--to commonmark`, same contract as
+/// `e2e_render_gfm` but through the commonmark writer arm.
+#[test]
+fn e2e_render_commonmark() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_file(
+        &dir.join("f.qmd"),
+        "---\ntitle: F\n---\n\n# Head\n\nHelloCommonmarkBody.\n",
+    );
+
+    let output = run_q2(&dir, &["f.qmd", "--to", "commonmark"]);
+    assert!(
+        output.status.success(),
+        "q2 render --to commonmark should succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let md = std::fs::read_to_string(dir.join("f.md")).expect("f.md should exist");
+    assert!(
+        md.contains("HelloCommonmarkBody"),
+        "commonmark body text missing: {md}"
+    );
+    assert!(
+        md.contains("# Head"),
+        "expected a markdown ATX heading, got: {md}"
+    );
+    assert!(
+        !md.contains("<h1"),
+        "commonmark output must not be HTML: {md}"
+    );
+}
+
+/// Long-tail Phase 2 gate reachability (real binary + real pandoc):
+/// `q2 render f.qmd --to odt` exits 0 and writes a real ODF zip — the
+/// `mimetype` entry is the ODF text-document type and the body text
+/// landed in `content.xml` (both would miss if the CLI admitted the
+/// format but the writer arm were wrong).
+#[test]
+fn e2e_render_odt() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_file(
+        &dir.join("f.qmd"),
+        "---\ntitle: F\n---\n\n# Head\n\nHelloOdtBody.\n",
+    );
+
+    let output = run_q2(&dir, &["f.qmd", "--to", "odt"]);
+    assert!(
+        output.status.success(),
+        "q2 render --to odt should succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let bytes = std::fs::read(dir.join("f.odt")).expect("f.odt should exist");
+    assert_eq!(&bytes[..4], b"PK\x03\x04", "odt output must be a zip");
+    let mimetype = zip_entry_text(&bytes, "mimetype");
+    assert_eq!(
+        mimetype, "application/vnd.oasis.opendocument.text",
+        "odt mimetype entry"
+    );
+    let content = zip_entry_text(&bytes, "content.xml");
+    assert!(
+        content.contains("HelloOdtBody"),
+        "content.xml missing the body text"
+    );
+}
+
+/// Long-tail Phase 3: Q1's shortcode-unescape postprocessor reachability
+/// through the real binary. An escaped shortcode (`{{{< meta title >}}}`)
+/// must come out of `--to gfm` as literal `{{< meta title >}}` text —
+/// pandoc's gfm writer re-escapes the braces to `{{\<`/`\>}}`, and Q1
+/// rewrites the output file afterward (`format-markdown.ts:21`). Without
+/// that rewrite the output double-escapes the shortcode.
+#[test]
+fn e2e_render_gfm_shortcode_round_trip() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_file(
+        &dir.join("esc.qmd"),
+        "---\ntitle: RoundTrip Title\n---\n\n# Head\n\nEscaped: {{{< meta title >}}} stays literal.\n",
+    );
+
+    let output = run_q2(&dir, &["esc.qmd", "--to", "gfm"]);
+    assert!(
+        output.status.success(),
+        "q2 render --to gfm should succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let md = std::fs::read_to_string(dir.join("esc.md")).expect("esc.md should exist");
+    assert!(
+        md.contains("{{< meta title >}}"),
+        "escaped shortcode must come out as literal {{< … >}} text: {md}"
+    );
+    assert!(
+        !md.contains("{{\\<"),
+        "writer-escaped open delimiter must be unescaped: {md}"
+    );
+    assert!(
+        !md.contains("\\>}}"),
+        "writer-escaped close delimiter must be unescaped: {md}"
+    );
+}
+
+/// Long-tail Phase 3 gate reachability: `--to markdown_strict` exits 0
+/// and produces markdown through pandoc's strict writer arm (not HTML,
+/// not a fall-through to another writer).
+#[test]
+fn e2e_render_markdown_strict() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_file(
+        &dir.join("f.qmd"),
+        "---\ntitle: F\n---\n\n# Head\n\nHelloStrictBody.\n",
+    );
+
+    let output = run_q2(&dir, &["f.qmd", "--to", "markdown_strict"]);
+    assert!(
+        output.status.success(),
+        "q2 render --to markdown_strict should succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let md = std::fs::read_to_string(dir.join("f.md")).expect("f.md should exist");
+    assert!(
+        md.contains("HelloStrictBody"),
+        "markdown_strict body text missing: {md}"
+    );
+    assert!(
+        md.contains("# Head"),
+        "expected a markdown ATX heading, got: {md}"
+    );
+    assert!(
+        !md.contains("<h1"),
+        "markdown_strict output must not be HTML: {md}"
+    );
+}
+
+/// Long-tail Phase 3 gate reachability: `--to commonmark_x`, same
+/// contract as `e2e_render_commonmark` but through the extended
+/// commonmark writer arm.
+#[test]
+fn e2e_render_commonmark_x() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_file(
+        &dir.join("f.qmd"),
+        "---\ntitle: F\n---\n\n# Head\n\nHelloCommonmarkXBody.\n",
+    );
+
+    let output = run_q2(&dir, &["f.qmd", "--to", "commonmark_x"]);
+    assert!(
+        output.status.success(),
+        "q2 render --to commonmark_x should succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let md = std::fs::read_to_string(dir.join("f.md")).expect("f.md should exist");
+    assert!(
+        md.contains("HelloCommonmarkXBody"),
+        "commonmark_x body text missing: {md}"
+    );
+    assert!(
+        md.contains("# Head"),
+        "expected a markdown ATX heading, got: {md}"
+    );
+    assert!(
+        !md.contains("<h1"),
+        "commonmark_x output must not be HTML: {md}"
+    );
+}
+
+/// Long-tail Phase 4 gate reachability (real binary + real pandoc):
+/// `q2 render f.qmd --to djot` exits 0, writes `f.dj` (pandoc's `dj`
+/// extension convention, not Q1's blanket `.txt`), and — bare invocation,
+/// Q1 `unknownFormat` parity — contains the body with no standalone
+/// template chrome (the djot default template would prepend `# F`).
+#[test]
+fn e2e_render_djot() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_file(
+        &dir.join("f.qmd"),
+        "---\ntitle: F\n---\n\n# Head\n\nHelloDjotBody.\n",
+    );
+
+    let output = run_q2(&dir, &["f.qmd", "--to", "djot"]);
+    assert!(
+        output.status.success(),
+        "q2 render --to djot should succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let dj = std::fs::read_to_string(dir.join("f.dj")).expect("f.dj should exist");
+    assert!(dj.contains("HelloDjotBody"), "djot body text missing: {dj}");
+    assert!(
+        dj.contains("# Head"),
+        "expected a djot ATX heading, got: {dj}"
+    );
+    assert!(
+        !dj.lines().any(|l| l.trim() == "# F"),
+        "djot output must not carry standalone title chrome: {dj}"
+    );
+}
+
+/// Long-tail Phase 4 gate reachability: `--to chunkedhtml` produces a
+/// zip archive (pandoc's chunked writer emits a zip regardless of the
+/// `-o` name) with an `index.html` shell plus numbered chapter files —
+/// the body text lands in a chapter entry, not the shell.
+#[test]
+fn e2e_render_chunkedhtml() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_file(
+        &dir.join("f.qmd"),
+        "---\ntitle: F\n---\n\n# Head\n\nHelloChunkedBody.\n",
+    );
+
+    let output = run_q2(&dir, &["f.qmd", "--to", "chunkedhtml"]);
+    assert!(
+        output.status.success(),
+        "q2 render --to chunkedhtml should succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let bytes = std::fs::read(dir.join("f.zip")).expect("f.zip should exist");
+    assert_eq!(
+        &bytes[..4],
+        b"PK\x03\x04",
+        "chunkedhtml output must be a zip"
+    );
+    let cursor = std::io::Cursor::new(bytes.clone());
+    let mut zip = zip::ZipArchive::new(cursor).expect("output should be a valid zip archive");
+    let mut names: Vec<String> = Vec::new();
+    for i in 0..zip.len() {
+        names.push(zip.by_index(i).unwrap().name().to_string());
+    }
+    assert!(
+        names.iter().any(|n| n == "index.html"),
+        "zip must contain index.html, got: {names:?}"
+    );
+    let mut found_body = false;
+    for name in &names {
+        let text = zip_entry_text(&bytes, name);
+        if text.contains("HelloChunkedBody") {
+            found_body = true;
+            break;
+        }
+    }
+    assert!(
+        found_body,
+        "zip must carry the body text in some chapter entry: {names:?}"
+    );
+}
+
+/// Long-tail Phase 5: the real `q2 render` binary produces a slidy deck
+/// — `class="slide…"` structure plus slidy's W3C CDN script — through
+/// the pandoc-hybrid write path.
+#[test]
+fn e2e_render_slidy() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_file(
+        &dir.join("f.qmd"),
+        "---\ntitle: F\n---\n\n# Head\n\nHelloSlidyBody.\n",
+    );
+
+    let output = run_q2(&dir, &["f.qmd", "--to", "slidy"]);
+    assert!(
+        output.status.success(),
+        "q2 render --to slidy should succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let html = std::fs::read_to_string(dir.join("f.html")).expect("f.html should exist");
+    assert!(
+        html.contains("class=\"slide"),
+        "slidy output must be a slide deck: {:.200}",
+        html
+    );
+    assert!(
+        html.contains("slidy.js"),
+        "slidy deck must reference slidy.js: {:.200}",
+        html
+    );
+    assert!(
+        html.contains("HelloSlidyBody"),
+        "slidy output must contain the body text: {:.200}",
+        html
+    );
+}
+
+/// Long-tail Phase 5: same contract for s5, the other bundled-asset
+/// deck (s5/default/ CSS+JS tree).
+#[test]
+fn e2e_render_s5() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_file(
+        &dir.join("f.qmd"),
+        "---\ntitle: F\n---\n\n# Head\n\nHelloS5Body.\n",
+    );
+
+    let output = run_q2(&dir, &["f.qmd", "--to", "s5"]);
+    assert!(
+        output.status.success(),
+        "q2 render --to s5 should succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let html = std::fs::read_to_string(dir.join("f.html")).expect("f.html should exist");
+    assert!(
+        html.contains("class=\"slide"),
+        "s5 output must be a slide deck: {:.200}",
+        html
+    );
+    assert!(
+        html.contains("s5/default/"),
+        "s5 deck must reference its bundled assets: {:.200}",
+        html
+    );
+    assert!(
+        html.contains("HelloS5Body"),
+        "s5 output must contain the body text: {:.200}",
+        html
     );
 }

@@ -395,6 +395,21 @@ async fn run(args: StaticArgs) -> Result<()> {
     } else {
         None
     };
+    // Events are not edits: a render reading a file raises one on Linux
+    // (`notify` subscribes to inotify OPEN), and editors touch files
+    // without changing them. Seed with what the boot render read so its
+    // own reads never trigger the first re-render. Seeding is part of
+    // the before-anyone-can-connect setup: an edit that lands before
+    // the seed would become the baseline, and its event would then
+    // compare equal and be dropped (bd-tp0yym04).
+    let mut tracker = ContentTracker::default();
+    tracker.seed(
+        report
+            .inputs
+            .iter()
+            .chain(report.config_sources.iter())
+            .cloned(),
+    );
     let mut shutdown = ShutdownSignal::install()?;
 
     // ── Server ─────────────────────────────────────────────────────
@@ -470,18 +485,6 @@ async fn run(args: StaticArgs) -> Result<()> {
     // ── Loop ───────────────────────────────────────────────────────
     let to = args.to.clone();
     let mut last = LastRender::from_report(&report);
-    // Events are not edits: a render reading a file raises one on Linux
-    // (`notify` subscribes to inotify OPEN), and editors touch files
-    // without changing them. Seed with what the boot render read so its
-    // own reads never trigger the first re-render.
-    let mut tracker = ContentTracker::default();
-    tracker.seed(
-        report
-            .inputs
-            .iter()
-            .chain(report.config_sources.iter())
-            .cloned(),
-    );
     let mut pending = Action::Ignore;
     let mut in_flight: Option<Action> = None;
     let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<(Action, RenderOutcome)>(1);

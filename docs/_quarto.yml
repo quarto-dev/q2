@@ -48,6 +48,7 @@ website:
             - guides/publishing/index.qmd
             - guides/formats/epub/index.qmd
             - guides/formats/typst/index.qmd
+            - guides/formats/pandoc/index.qmd
     - id: Authoring
       collapse-level: 1
       contents:
@@ -166,6 +167,7 @@ website:
             - errors/markdown/Q-2-50.qmd
             - errors/markdown/Q-2-51.qmd
             - errors/markdown/Q-2-52.qmd
+            - errors/markdown/Q-2-53.qmd
         - section: "writer"
           contents:
             - errors/writer/Q-3-1.qmd

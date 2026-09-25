@@ -6,7 +6,7 @@ import '../monacoSetup';
 import MonacoEditor, { DiffEditor } from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
 import type { ProjectEntry, FileEntry } from '@quarto/preview-renderer/types/project';
-import { isBinaryExtension, isTextExtension } from '@quarto/preview-renderer/types/project';
+import { isBinaryExtension, isImageExtension, isSourceFile, isTextExtension } from '@quarto/preview-renderer/types/project';
 import type { Route } from '../utils/routing';
 import { buildFullUrl, buildShareableUrl } from '../utils/routing';
 import {
@@ -64,6 +64,7 @@ import SettingsTab from './tabs/SettingsTab';
 import AboutTab from './tabs/AboutTab';
 import { useViewMode } from './ViewModeContext';
 import MarkdownSummary from './MarkdownSummary';
+import ImageViewer from './ImageViewer';
 import ReplayDrawer from './ReplayDrawer';
 import './Editor.css';
 import PreviewRouter from './render/PreviewRouter';
@@ -72,6 +73,11 @@ interface Props {
   project: ProjectEntry;
   files: FileEntry[];
   fileContents: Map<string, string>;
+  /**
+   * Path -> change counter for binary (image) documents. Bumped by App when
+   * a binary doc syncs or changes so the image viewer re-reads its bytes.
+   */
+  binaryFileVersions?: Map<string, number>;
   onDisconnect: () => void;
   onContentOperations: (path: string, changes: EditorContentChange[]) => void;
   /** Current route from URL */
@@ -202,7 +208,7 @@ function selectDefaultFile(files: FileEntry[]): FileEntry | null {
   return files[0];
 }
 
-export default function Editor({ project, files, fileContents, onDisconnect, onContentOperations, route, onNavigateToFile, identities, captures, executorsOnline, onRequestExecution, isOnline, sessionEphemeral, banner, userName }: Props) {
+export default function Editor({ project, files, fileContents, binaryFileVersions, onDisconnect, onContentOperations, route, onNavigateToFile, identities, captures, executorsOnline, onRequestExecution, isOnline, sessionEphemeral, banner, userName }: Props) {
   // View mode for pane sizing
   const { viewMode } = useViewMode();
 
@@ -242,6 +248,18 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   }, [files, route]);
 
   const [currentFile, setCurrentFile] = useState<FileEntry | null>(getInitialFile);
+  // Image files open in the ImageViewer instead of Monaco. Their bytes live
+  // in a binary Automerge doc, so the text-oriented hooks (sync, presence,
+  // intelligence, replay, branches) are bound to `textFile`, which is null
+  // while an image is selected.
+  const currentFileIsImage = currentFile !== null && isImageExtension(currentFile.path);
+  const textFile = currentFile !== null && !isBinaryExtension(currentFile.path) ? currentFile : null;
+  // Text files that are not .qmd/.md (yml, css, json, ...) have no preview:
+  // the editor pane takes the whole main area and stays visible in every
+  // view mode; the divider and preview pane are not rendered.
+  const currentFileIsPlainText = textFile !== null && !isSourceFile(textFile.path);
+  // No preview pane for either -> split presets and comments modes are grayed out.
+  const previewUnavailable = currentFileIsImage || currentFileIsPlainText;
 
   // Ensure URL includes the current file path on initial render
   // This handles the case where the URL is just #/p/<id> and we select a default file
@@ -271,7 +289,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   // effective branch is forced to main so disabling it mid-branch can't
   // leave the editor bound to an invisible branch doc.
   const [documentBranchesEnabled] = usePreference('documentBranches');
-  const { branches, activeBranchId: rawActiveBranchId } = useDocBranches(currentFile?.path ?? null);
+  const { branches, activeBranchId: rawActiveBranchId } = useDocBranches(textFile?.path ?? null);
   const activeBranchId = documentBranchesEnabled ? rawActiveBranchId : null;
 
   // "Compare with main" diff view — session-only, leaves when the branch
@@ -284,7 +302,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   // Presence for collaborative cursors — disabled while on a local branch
   // (the branch doc is invisible to peers, so cursors would be misleading)
   const { remoteUsers, userCount, onEditorMount: onPresenceEditorMount } = usePresence(
-    currentFile?.path ?? null,
+    textFile?.path ?? null,
     { enabled: activeBranchId === null }
   );
 
@@ -295,14 +313,14 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     error: intelligenceError,
     refresh: refreshIntelligence,
   } = useIntelligence({
-    path: currentFile?.path ?? null,
+    path: textFile?.path ?? null,
     enableSymbols: true,
   });
 
   // Replay mode for document history.
   // isActiveRef is updated synchronously in enter()/exit() — before React
   // re-renders — so it can guard handleEditorChange against stale closures.
-  const { state: replayState, controls: replayControls, isActiveRef: replayActiveRef } = useReplayMode(currentFile?.path ?? null);
+  const { state: replayState, controls: replayControls, isActiveRef: replayActiveRef } = useReplayMode(textFile?.path ?? null);
 
   // Bidirectional Automerge ↔ Monaco sync
   const {
@@ -313,7 +331,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     handleContentRewrite,
     onEditorMount: onSyncEditorMount,
   } = useAutomergeSync({
-    currentFile,
+    currentFile: textFile,
     fileContents,
     onContentOperations,
     replayActiveRef,
@@ -658,8 +676,8 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     if (newFilePath && newFilePath !== prevFilePath) {
       const targetFile = files.find(f => f.path === newFilePath);
       if (targetFile && targetFile.path !== currentFile?.path) {
-        // Don't switch to binary files
-        if (!isBinaryExtension(targetFile.path)) {
+        // Don't switch to binary files that have no viewer (images do)
+        if (!isBinaryExtension(targetFile.path) || isImageExtension(targetFile.path)) {
           setCurrentFile(targetFile);
           const fileContent = fileContents.get(targetFile.path);
           setContent(fileContent ?? '');
@@ -816,10 +834,9 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   const handleSelectFile = useCallback((file: FileEntry) => {
     // Block file switching during replay mode
     if (replayState.isActive) return;
-    // Don't switch to binary files in the editor
-    if (isBinaryExtension(file.path)) {
-      // For now, just ignore binary file selection
-      // Future: could show a preview panel for images
+    // Images open in the ImageViewer; other binary files (pdf, fonts,
+    // media) have no viewer yet, so selecting them is a no-op.
+    if (isBinaryExtension(file.path) && !isImageExtension(file.path)) {
       return;
     }
 
@@ -1271,6 +1288,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
               sidebarToggleRef={sidebarDrawer.toggleRef}
               splitFraction={editorPaneFraction}
               onSetSplit={handleSetSplitPreset}
+              splitDisabled={previewUnavailable}
             />
             {replayState.isActive && (
               <div className="replay-mode-banner">REPLAY MODE</div>
@@ -1300,13 +1318,29 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
           tabIndex={-1}
           className={`editor-main view-mode-${viewMode}${isDraggingDivider ? ' dragging-divider' : ''}${splitAnimating ? ' split-animating' : ''}`}
         >
-        {!isFullscreenPreview && (
+        {/* Image files: the viewer takes the whole editor + preview area */}
+        {currentFileIsImage && currentFile && (
+          <ImageViewer
+            key={currentFile.path}
+            path={currentFile.path}
+            version={binaryFileVersions?.get(currentFile.path) ?? 0}
+          />
+        )}
+        {!currentFileIsImage && (
+        <>
+        {(!isFullscreenPreview || currentFileIsPlainText) && (
           <div
             className={`pane editor-pane${isEditorDragOver ? ' drag-over' : ''}`}
-            style={viewMode === 'both' ? { flex: `${editorPaneFraction} 1 0%` } : undefined}
+            style={
+              currentFileIsPlainText
+                ? { flex: '1 1 0%' }
+                : viewMode === 'both'
+                  ? { flex: `${editorPaneFraction} 1 0%` }
+                  : undefined
+            }
           >
             {/* Show MarkdownSummary overlay in preview mode */}
-            {viewMode === 'preview' && (
+            {viewMode === 'preview' && !currentFileIsPlainText && (
               <div className="markdown-summary-overlay">
                 <MarkdownSummary
                   content={displayContent}
@@ -1319,7 +1353,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
               </div>
             )}
             {/* Local branch bar (fork / switch / merge-to-main) */}
-            {documentBranchesEnabled && currentFile && !isBinaryExtension(currentFile.path) && viewMode !== 'preview' && (
+            {documentBranchesEnabled && currentFile && !isBinaryExtension(currentFile.path) && (viewMode !== 'preview' || currentFileIsPlainText) && (
               <BranchBar
                 branches={branches}
                 activeBranchId={activeBranchId}
@@ -1332,8 +1366,8 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
                 onToggleCompare={() => setComparingWithMain((c) => !c)}
               />
             )}
-            {/* Always render Monaco but hide in preview mode */}
-            <div style={{ display: viewMode === 'preview' ? 'none' : 'block', flex: 1, minHeight: 0 }}>
+            {/* Always render Monaco but hide in preview mode (plain-text files have no preview) */}
+            <div style={{ display: viewMode === 'preview' && !currentFileIsPlainText ? 'none' : 'block', flex: 1, minHeight: 0 }}>
               {comparingWithMain && activeBranchId !== null && currentFile ? (
                 <DiffEditor
                   key={`diff::${currentFile.path}::${activeBranchId}`}
@@ -1372,7 +1406,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
         )}
 
         {/* Pane divider — drag to resize the editor/preview split */}
-        {!isFullscreenPreview && (
+        {!isFullscreenPreview && !currentFileIsPlainText && (
           <div
             className="pane-divider"
             role="separator"
@@ -1398,6 +1432,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
           />
         )}
 
+        {!currentFileIsPlainText && (
         <div
           className={`pane preview-pane${isFullscreenPreview ? ' fullscreen' : ''}`}
           style={
@@ -1461,6 +1496,9 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             onAttributionGeneratingChange={setAttributionGenerating}
           />
         </div>
+        )}
+        </>
+        )}
         </main>
 
         {/* Document bottom bar: replay drawer. Stays mounted in
@@ -1475,15 +1513,19 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             onAttributionChange={setAttributionOn}
             commentsMode={commentsMode}
             onCommentsModeChange={setCommentsMode}
+            commentsDisabled={previewUnavailable}
             previewEditing={previewEditing}
             onPreviewEditingChange={setPreviewEditing}
             // Only q2-preview has a block-edit surface (q2-debug ignores
             // editingDisabled; slides have no editor).
-            previewEditingDisabled={currentFormat !== 'q2-preview'}
+            // `currentFormat` is only reported by the preview router, which
+            // is not mounted for images / plain-text files, so it would keep
+            // the previous document's format — gate on previewUnavailable too.
+            previewEditingDisabled={previewUnavailable || currentFormat !== 'q2-preview'}
             commentsCount={outstandingCommentCount}
             attributionGenerating={attributionGenerating}
             attributionDisabled={
-              currentFormat !== 'q2-debug' && currentFormat !== 'q2-preview'
+              previewUnavailable || (currentFormat !== 'q2-debug' && currentFormat !== 'q2-preview')
             }
             statusSlot={
               <SyncStatusBadge

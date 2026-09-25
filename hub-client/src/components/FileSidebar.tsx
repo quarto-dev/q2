@@ -10,7 +10,7 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
-import { isBinaryExtension } from '@quarto/preview-renderer/types/project';
+import { isBinaryExtension, isImageExtension } from '@quarto/preview-renderer/types/project';
 import {
   buildFileTree,
   computeExpandedFolders,
@@ -92,13 +92,9 @@ interface NavItem {
   file?: FileEntry;
 }
 
-/** Image extensions for drag-drop detection */
-const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'bmp', 'tiff', 'tif'];
-
-/** Check if a file path is an image */
+/** Check if a file path is an image (shared with the editor's image viewer) */
 function isImageFile(path: string): boolean {
-  const ext = path.split('.').pop()?.toLowerCase() || '';
-  return IMAGE_EXTENSIONS.includes(ext);
+  return isImageExtension(path);
 }
 
 /** Check if a file path is a renderable source file (.qmd or .md) */
@@ -111,7 +107,7 @@ function isSourceFile(path: string): boolean {
 function getFileIcon(path: string): React.ReactNode {
   const ext = path.split('.').pop()?.toLowerCase() || '';
 
-  if (IMAGE_EXTENSIONS.includes(ext)) {
+  if (isImageFile(path)) {
     return (
       <span className="file-icon file-icon--image">
         <ImageFileIcon size={16} />
@@ -612,7 +608,7 @@ export default function FileSidebar({
   const renderFileItem = (file: FileEntry, depth: number) => {
     const fileName = file.path.split('/').pop() || file.path;
     const isActive = currentFile?.path === file.path;
-    const isBinary = isBinaryExtension(file.path);
+    const isBinary = (isBinaryExtension(file.path) && !isImageFile(file.path));
     const isRenaming = renamingFile?.path === file.path;
     // Only make images and qmd files draggable (for editor insertion)
     const isDraggable =

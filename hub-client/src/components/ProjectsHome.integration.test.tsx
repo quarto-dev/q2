@@ -20,6 +20,7 @@ import type { CollectionSnapshot } from '../services/projectSetService';
 const connectMock = vi.fn();
 vi.mock('@quarto/preview-runtime', () => ({
   getProjectChoices: vi.fn().mockResolvedValue([]),
+  getProjectChoiceGroups: vi.fn().mockResolvedValue([]),
   createProject: vi.fn(),
   importProjectFromZip: vi.fn(),
   exportProjectAsZip: vi.fn(),

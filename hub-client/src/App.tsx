@@ -132,6 +132,9 @@ function App() {
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [fileContents, setFileContents] = useState<Map<string, string>>(new Map());
+  // Path -> change counter for binary docs (images). The bytes themselves
+  // stay in the sync client; the counter tells the image viewer to re-read.
+  const [binaryFileVersions, setBinaryFileVersions] = useState<Map<string, number>>(new Map());
   const [showSaveToast, setShowSaveToast] = useState(false);
   const [screenName, setScreenName] = useState<string | undefined>();
   const [cursorColor, setCursorColor] = useState<string | undefined>();
@@ -589,6 +592,7 @@ function App() {
         setProject(null);
         setFiles([]);
         setFileContents(new Map());
+        setBinaryFileVersions(new Map());
         setConnectionError(null);
       } else if (route.type === 'project' || route.type === 'file') {
         // Navigating to a project (possibly different from current)
@@ -791,6 +795,13 @@ function App() {
         setFileContents((prev) => {
           const next = new Map(prev);
           next.set(path, content);
+          return next;
+        });
+      },
+      onBinaryContent: (path) => {
+        setBinaryFileVersions((prev) => {
+          const next = new Map(prev);
+          next.set(path, (prev.get(path) ?? 0) + 1);
           return next;
         });
       },
@@ -1164,6 +1175,7 @@ function App() {
               project={project}
               files={files}
               fileContents={fileContents}
+              binaryFileVersions={binaryFileVersions}
               onDisconnect={handleDisconnect}
               onContentOperations={handleContentOperations}
               route={route}

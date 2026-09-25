@@ -77,6 +77,19 @@ const PANDOC_VALID_OTHER_PUNCTUATION =
 // U+00BB = » (right-pointing double angle quotation mark / guillemet)
 const PANDOC_SMART_QUOTES = "\\u{2018}\\u{2019}\\u{201A}\\u{201B}\\u{201C}\\u{201D}\\u{201E}\\u{201F}\\u{2039}\\u{203A}\\u{00AB}\\u{00BB}";
 
+// Everything after the opener line of a `:::`-fenced block: the body
+// blocks, the optional `:::` closer, and the block close. Shared by every
+// construct that starts with `$._fenced_div_start` (`pandoc_div`,
+// `note_definition_fenced_block`, ...), which differ only in what follows
+// `::: ` on the opener line. This is a JS helper, not a hidden rule, so
+// each construct gets the sequence inlined and the parse table is the same
+// as if it were written out by hand.
+const fencedDivTail = ($) => seq(
+    repeat($._block),
+    optional(seq($._fenced_div_end, $._close_block, choice($._newline, $._eof))),
+    $._block_close,
+);
+
 const regexBracket = (str) => `(?:${str})`;
 const regexOr = (...groups) => regexBracket(groups.join("|"));
 
@@ -229,6 +242,7 @@ module.exports = grammar({
             prec(-1, alias($.minus_metadata, $.metadata)),
 
             $.note_definition_fenced_block,
+            $.editorial_div,
             $.inline_ref_def,
 
             $._soft_line_break,
@@ -630,6 +644,11 @@ module.exports = grammar({
         ),
 
         _commonmark_naked_value: $ => /[A-Za-z0-9_-]+/,
+        // A fenced div's bare info string (`::: note`). Unlike code-block
+        // info strings it may not start with `-`: after `::: `, a leading
+        // `-` is reserved for the block delete mark (`::: --`), and
+        // `::: --foo` / `::: ---` are errors (Q-2-53) rather than classes.
+        _div_info_string: $ => /[A-Za-z0-9_][A-Za-z0-9_-]*/,
         _commonmark_single_quote_string: $ => seq(/[']/, choice(/([^ ']|\\')/, $.shortcode), repeat(choice(/[^']/, /\\'/, $.shortcode)), /[']/),
         _commonmark_double_quote_string: $ => seq(/["]/, choice(/([^ "]|\\")/, $.shortcode), repeat(choice(/[^"]/, /\\"/, $.shortcode)), /["]/),
 
@@ -1007,11 +1026,9 @@ module.exports = grammar({
         pandoc_div: $ => seq(
           $._fenced_div_start,
           optional($._whitespace),
-          choice(alias($._commonmark_naked_value, $.info_string), alias($._pandoc_attr_specifier, $.attribute_specifier)),
+          choice(alias($._div_info_string, $.info_string), alias($._pandoc_attr_specifier, $.attribute_specifier)),
           $._newline,
-          repeat($._block),
-          optional(seq($._fenced_div_end, $._close_block, choice($._newline, $._eof))),
-          $._block_close,
+          fencedDivTail($),
         ),
 
         ///////////////////////////////////////////////////////////////////////////////////////////
@@ -1028,9 +1045,38 @@ module.exports = grammar({
             $._whitespace,
             $.fenced_div_note_id,
             $._newline,
-            repeat($._block),
-            optional(seq($._fenced_div_end, $._close_block, choice($._newline, $._eof))),
-            $._block_close,
+            fencedDivTail($),
+        ),
+
+        ///////////////////////////////////////////////////////////////////////////////////////////
+        // qmd extension: block-level editorial marks, the block counterparts of
+        // the inline `[++ ...]`, `[-- ...]`, `[>> ...]` and `[!! ...]` marks:
+
+        /// ::: -- {author="cs"}
+        /// delete all of these.
+        ///
+        /// paragraphs.
+        /// :::
+
+        // The marker names the kind; the delimiter node names match the
+        // inline marks'. The scanner only emits a marker when the doubled
+        // character is followed by whitespace, a line ending or `{`, so
+        // `::: --foo` never gets here.
+        editorial_div: $ => seq(
+            $._fenced_div_start,
+            $._whitespace,
+            choice(
+                alias($._fenced_div_insert_marker, $.insert_delimiter),
+                alias($._fenced_div_delete_marker, $.delete_delimiter),
+                alias($._fenced_div_edit_comment_marker, $.edit_comment_delimiter),
+                alias($._fenced_div_highlight_marker, $.highlight_delimiter),
+            ),
+            optional(seq(
+                optional($._whitespace),
+                alias($._pandoc_attr_specifier, $.attribute_specifier),
+            )),
+            $._newline,
+            fencedDivTail($),
         ),
 
         ///////////////////////////////////////////////////////////////////////////////////////////
@@ -1163,6 +1209,11 @@ module.exports = grammar({
 
         $.ref_id_specifier,
         $.fenced_div_note_id,
+        // block-level editorial marks; see `editorial_div`
+        $._fenced_div_insert_marker,
+        $._fenced_div_delete_marker,
+        $._fenced_div_edit_comment_marker,
+        $._fenced_div_highlight_marker,
 
         // code span delimiters for parsing pipe table cells
         $._code_span_start,

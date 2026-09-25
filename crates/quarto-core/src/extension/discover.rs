@@ -246,11 +246,71 @@ const KNOWN_BASE_FORMATS: &[&str] = &[
     "html",
     "pdf",
     "docx",
+    "pptx",
     "epub",
     "typst",
     "revealjs",
     "gfm",
     "commonmark",
+    // Long-tail Phase 2 (Tier A)
+    "odt",
+    "opendocument",
+    "rtf",
+    "fb2",
+    "plain",
+    "rst",
+    "org",
+    "muse",
+    "ms",
+    "man",
+    "texinfo",
+    "tei",
+    "zimwiki",
+    "dokuwiki",
+    "haddock",
+    "json",
+    "native",
+    "icml",
+    "jira",
+    "mediawiki",
+    "xwiki",
+    "textile",
+    "docbook",
+    "docbook4",
+    "docbook5",
+    // Long-tail Phase 3 (Tier B) — the markdown family. The suffixed
+    // flavors use pandoc's underscore spelling (`markdown_strict`, not
+    // `markdown-strict`), so `parse_format_descriptor`'s last-hyphen split
+    // treats each whole string as the base format rather than an
+    // extension-prefixed variant.
+    "markdown",
+    "markdown_strict",
+    "markdown_phpextra",
+    "markdown_github",
+    "markdown_mmd",
+    "markua",
+    "commonmark_x",
+    // Long-tail Phase 4 (Tier C). The underscore bbcode flavors use
+    // pandoc's underscore spelling, so the last-hyphen split treats each
+    // whole string as the base (`acm-bbcode_steam` → base
+    // `bbcode_steam`).
+    "djot",
+    "t2t",
+    "xml",
+    "ansi",
+    "vimdoc",
+    "bbcode",
+    "bbcode_steam",
+    "bbcode_phpbb",
+    "bbcode_fluxbb",
+    "bbcode_hubzilla",
+    "bbcode_xenforo",
+    "chunkedhtml",
+    // Long-tail Phase 5 (Tier D) — the JS slide family.
+    "s5",
+    "dzslides",
+    "slidy",
+    "slideous",
 ];
 
 pub fn parse_format_descriptor(format: &str) -> FormatDescriptor {
@@ -923,6 +983,115 @@ contributes:
                 base
             );
             assert_eq!(desc.base_format, *base, "Failed for {}", base);
+        }
+    }
+
+    /// `pptx` must be a recognized base format so `acm-pptx`-style
+    /// descriptors resolve to the pptx base (long-tail Phase 1 wrinkle 5:
+    /// pptx was missing from the list, so `acm-pptx` read as extension
+    /// `acm-pptx` with base `html`).
+    #[test]
+    fn test_parse_format_descriptor_pptx() {
+        let desc = parse_format_descriptor("acm-pptx");
+        assert_eq!(desc.extension_name.as_deref(), Some("acm"));
+        assert_eq!(desc.base_format, "pptx");
+
+        let bare = parse_format_descriptor("pptx");
+        assert_eq!(bare.extension_name, None);
+        assert_eq!(bare.base_format, "pptx");
+    }
+
+    /// Long-tail Phase 2: Tier A bases must resolve in extension-style
+    /// descriptors (`acm-odt` → base `odt`, not extension `acm-odt` with
+    /// base `html`), and `zimwiki` — whose output extension (`zim`)
+    /// differs from its name — must still be recognized as a bare base.
+    /// Runtime-red until the names join `KNOWN_BASE_FORMATS`.
+    #[test]
+    fn test_parse_format_descriptor_tier_a_bases() {
+        for (input, expected_base) in [
+            ("acm-odt", "odt"),
+            ("acm-docbook", "docbook"),
+            ("acm-rst", "rst"),
+            ("journal-xwiki", "xwiki"),
+        ] {
+            let desc = parse_format_descriptor(input);
+            assert_eq!(
+                desc.base_format, expected_base,
+                "base format for descriptor {input}"
+            );
+            assert_eq!(
+                desc.extension_name.as_deref(),
+                Some(input.split('-').next().unwrap()),
+                "extension name for descriptor {input}"
+            );
+        }
+
+        let bare = parse_format_descriptor("zimwiki");
+        assert_eq!(bare.extension_name, None);
+        assert_eq!(bare.base_format, "zimwiki");
+    }
+
+    /// Long-tail Phase 4: Tier C bases must resolve in extension-style
+    /// descriptors too — including an underscore flavor (`bbcode_steam`)
+    /// riding the last-hyphen split, and `chunkedhtml`/`xml` whose names
+    /// are not output extensions. Runtime-red until the names join
+    /// `KNOWN_BASE_FORMATS`.
+    #[test]
+    fn test_parse_format_descriptor_tier_c_bases() {
+        for (input, expected_base) in [
+            ("acm-djot", "djot"),
+            ("acm-chunkedhtml", "chunkedhtml"),
+            ("acm-xml", "xml"),
+            ("acm-ansi", "ansi"),
+            ("acm-bbcode_steam", "bbcode_steam"),
+            ("journal-vimdoc", "vimdoc"),
+        ] {
+            let desc = parse_format_descriptor(input);
+            assert_eq!(
+                desc.base_format, expected_base,
+                "base format for descriptor {input}"
+            );
+            assert_eq!(
+                desc.extension_name.as_deref(),
+                Some(input.split('-').next().unwrap()),
+                "extension name for descriptor {input}"
+            );
+        }
+
+        for bare_name in ["ansi", "vimdoc", "bbcode_xenforo"] {
+            let bare = parse_format_descriptor(bare_name);
+            assert_eq!(bare.extension_name, None, "bare {bare_name}");
+            assert_eq!(bare.base_format, bare_name, "bare {bare_name}");
+        }
+    }
+
+    /// Long-tail Phase 5 (Tier D): the JS slide bases participate in
+    /// extension-descriptor parsing the same way (`acm-slidy` → base
+    /// `slidy`), and the bare names stay bare.
+    #[test]
+    fn test_parse_format_descriptor_tier_d_bases() {
+        for (input, expected_base) in [
+            ("acm-s5", "s5"),
+            ("acm-dzslides", "dzslides"),
+            ("acm-slidy", "slidy"),
+            ("journal-slideous", "slideous"),
+        ] {
+            let desc = parse_format_descriptor(input);
+            assert_eq!(
+                desc.base_format, expected_base,
+                "base format for descriptor {input}"
+            );
+            assert_eq!(
+                desc.extension_name.as_deref(),
+                Some(input.split('-').next().unwrap()),
+                "extension name for descriptor {input}"
+            );
+        }
+
+        for bare_name in ["s5", "dzslides", "slidy", "slideous"] {
+            let bare = parse_format_descriptor(bare_name);
+            assert_eq!(bare.extension_name, None, "bare {bare_name}");
+            assert_eq!(bare.base_format, bare_name, "bare {bare_name}");
         }
     }
 }

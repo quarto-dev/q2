@@ -223,6 +223,38 @@ fn test_compiled_css_has_editorial_marks() {
     );
 }
 
+/// Block editorial marks (`::: ++`, `::: --`, `::: !!`, `::: >>`) are divs
+/// carrying the span classes; they get block framing on top of the span
+/// styling, and block comments a left rule.
+#[test]
+fn test_compiled_css_has_block_editorial_marks() {
+    let css = compile_theme(BuiltInTheme::Cosmo).expect("Cosmo should compile");
+
+    let framing = css
+        .split("div.quarto-insert,")
+        .nth(1)
+        .and_then(|rest| rest.split_once('}'))
+        .map(|(body, _)| body)
+        .expect("block editorial mark rule should exist");
+    for class in [
+        "div.quarto-delete",
+        "div.quarto-highlight",
+        "div.quarto-edit-comment",
+    ] {
+        assert!(framing.contains(class), "framing rule should cover {class}");
+    }
+    assert!(framing.contains("padding:"), "block marks should be padded");
+
+    // The framing rule's selector list also ends in `div.quarto-edit-comment {`,
+    // so look for the left rule among every body with that selector.
+    assert!(
+        rule_bodies(&css, "div.quarto-edit-comment")
+            .iter()
+            .any(|body| body.contains("border-left:")),
+        "block comments should have a left rule"
+    );
+}
+
 /// Collect the bodies of all top-level rules whose selector list starts
 /// at a line beginning with `selector` (expanded output style puts each
 /// top-level selector at the start of a line).

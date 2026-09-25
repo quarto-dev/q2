@@ -579,7 +579,8 @@ impl PipelineStage for PandocWriteStage {
         // document-relative `Path` value is rebased against, since this
         // `Command` inherits the process cwd rather than setting its own.
         let doc_dir = doc.path.parent().unwrap_or_else(|| Path::new("."));
-        let forwarded_args = build_forwarded_args(self.name(), doc_dir, &doc.ast.meta, &to_format)?;
+        let forwarded_args =
+            build_forwarded_args(self.name(), doc_dir, &doc.ast.meta, ctx.format.identifier)?;
 
         // Body-content `Image`/`Link` targets (e.g. `img/thinker.jpg`)
         // reach pandoc as literal, unrebased strings from the AST — unlike
@@ -654,6 +655,18 @@ impl PipelineStage for PandocWriteStage {
         )?;
         retain_temp_json_unless_success(output.status.success(), &json_path);
         ctx.add_diagnostics(warnings);
+
+        // Q1's shortcode-unescape postprocessor (`format-markdown.ts:21`,
+        // wired for every `isMarkdownOutput` flavor at `pandoc.ts:968-973`):
+        // pandoc's markdown-family writers re-escape the braces of a
+        // literal `{{< … >}}` Str to `{{\< … \>}}`, so an escaped shortcode
+        // from the source (`{{{< … >}}}`) would round-trip double-escaped.
+        // Rewrite the output file in place. Only runs after a successful
+        // pandoc invocation, and only touches files that contain the
+        // writer-escaped delimiters.
+        if output.status.success() && ctx.format.identifier.is_markdown_output() {
+            unescape_shortcodes_in_output(&output_path)?;
+        }
 
         // T9.2: no binary bytes travel through `PipelineData` — pandoc
         // already wrote `output_path` directly. For typst, `output_path`
@@ -789,6 +802,32 @@ fn insert_typst_section_numbering(meta: &mut quarto_pandoc_types::ConfigValue) {
             ),
         );
     }
+}
+
+/// Q1's `shortcodeUnescapePostprocessor` (`format-markdown.ts:21-22`):
+/// replace pandoc's writer-escaped shortcode delimiters `{{\<` / `\>}}`
+/// with the literal `{{<` / `>}}` the source's escaped shortcode
+/// (`{{{< … >}}}`) is supposed to round-trip to. Skips files containing
+/// neither delimiter (the common case — no rewrite, no mtime churn);
+/// a read or write failure fails the stage, since leaving the output
+/// double-escaped would be silently wrong.
+fn unescape_shortcodes_in_output(output_path: &Path) -> Result<(), PipelineError> {
+    let content = std::fs::read_to_string(output_path).map_err(|e| {
+        PipelineError::stage_error(
+            PandocWriteStage.name(),
+            format!("failed to read output for shortcode unescaping: {e}"),
+        )
+    })?;
+    if !content.contains("{{\\<") && !content.contains("\\>}}") {
+        return Ok(());
+    }
+    let unescaped = content.replace("{{\\<", "{{<").replace("\\>}}", ">}}");
+    std::fs::write(output_path, unescaped).map_err(|e| {
+        PipelineError::stage_error(
+            PandocWriteStage.name(),
+            format!("failed to write unescaped output: {e}"),
+        )
+    })
 }
 
 #[cfg(test)]
