@@ -60,9 +60,16 @@ struct Server {
 impl Server {
     fn spawn(cwd: &Path, args: &[&str]) -> Server {
         // `-v` so the driver's own log lines (which render ran, why)
-        // land in the captured stderr for a failure's diagnosis.
+        // land in the captured stderr for a failure's diagnosis. The
+        // driver itself logs at debug, so a dropped watcher event
+        // ("event without a content change; ignored") is visible too;
+        // `RUST_LOG` takes precedence over `-v`.
         let mut command = Command::new(Q2_BIN);
         command
+            .env(
+                "RUST_LOG",
+                "quarto=info,q2=info,q2::commands::preview_static=debug",
+            )
             .arg("-v")
             .arg("preview")
             .arg("--static")
@@ -195,7 +202,10 @@ impl Server {
                 break;
             }
         }
-        SseReader { reader }
+        SseReader {
+            reader,
+            server_stderr: Arc::clone(&self.stderr),
+        }
     }
 
     fn stderr(&self) -> String {
@@ -259,9 +269,16 @@ impl Response {
 
 struct SseReader {
     reader: BufReader<TcpStream>,
+    /// The server's captured stderr, for failure messages: a missing
+    /// event is diagnosed by the driver's log, not by the stream.
+    server_stderr: Arc<Mutex<String>>,
 }
 
 impl SseReader {
+    fn server_stderr(&self) -> String {
+        self.server_stderr.lock().unwrap().clone()
+    }
+
     /// Read events until one named `name` arrives; returns its `data`
     /// line. Panics after [`EVENT_DEADLINE`].
     fn wait_for(&mut self, name: &str) -> String {
@@ -271,14 +288,22 @@ impl SseReader {
         loop {
             assert!(
                 Instant::now() < deadline,
-                "no `{name}` event within {EVENT_DEADLINE:?}"
+                "no `{name}` event within {EVENT_DEADLINE:?}; stderr:\n{}",
+                self.server_stderr()
             );
             line.clear();
-            let n = self
-                .reader
-                .read_line(&mut line)
-                .unwrap_or_else(|e| panic!("reading SSE stream while waiting for `{name}`: {e}"));
-            assert!(n > 0, "SSE stream closed while waiting for `{name}`");
+            let n = match self.reader.read_line(&mut line) {
+                Ok(n) => n,
+                Err(e) => panic!(
+                    "reading SSE stream while waiting for `{name}`: {e}; stderr:\n{}",
+                    self.server_stderr()
+                ),
+            };
+            assert!(
+                n > 0,
+                "SSE stream closed while waiting for `{name}`; stderr:\n{}",
+                self.server_stderr()
+            );
             let l = line.trim_end_matches(['\r', '\n']);
             if let Some(ev) = l.strip_prefix("event: ") {
                 current_event = ev.to_string();
