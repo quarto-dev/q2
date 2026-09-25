@@ -149,7 +149,7 @@ According to `claude-notes/plans/2025-10-31-treesitter-grammar-refactoring.md`:
 2. **Prose punctuation**: `prose_punctuation` (commas, periods, etc.)
 
 ### Then (Phase 2: Basic Formatting)
-3. `pandoc_emph` - emphasis with * or _
+3. `pandoc_emph` - emphasis with \* or _
 4. `pandoc_strong` - strong emphasis with ** or __
 5. `pandoc_code_span` - inline code with backticks
 6. `backslash_escape` - escaped characters

@@ -98,7 +98,7 @@ Sources:
 - Body envelope:
   `external-sources/quarto-cli/src/command/render/pandoc.ts:1702-1731`
   (writes website-navbar HTML to a temp file, prepends/appends to
-  the include-* lists)
+  the include-\* lists)
 - User docs for the **shortcode** include:
   `external-sources/quarto-web/docs/authoring/includes.qmd` (note: Q1
   does not have a dedicated docs page for the slot includes —

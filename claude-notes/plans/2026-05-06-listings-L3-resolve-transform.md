@@ -1365,7 +1365,7 @@ See §"Filing reminder" for descriptions. During impl:
       multi-paragraph link wrappers around metadata
       sections (markdown can't represent them); each
       field gets its own block. Per-item interactivity
-      (the `metadata-attrs` data-* attrs in the wrapper
+      (the `metadata-attrs` data-\* attrs in the wrapper
       Div) lands in phase 7 alongside `list.min.js`.
 - [x] Implement `ListingRenderTransform` at
       `crates/quarto-core/src/transforms/listing_render.rs`:

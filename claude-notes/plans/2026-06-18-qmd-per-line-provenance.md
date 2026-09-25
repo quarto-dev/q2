@@ -235,7 +235,7 @@ Per `prevalidating-test-seams`: each row names the **real unit** (the new/change
 pampa method, native Rust, **no mocks**), the **seam** (input qmd · call ·
 assertion on the returned `(bytes, spans|SourceInfo)`), and the **named revert →
 RED**. Tests live in `crates/pampa/tests/integration/` (registered in `main.rs`).
-The N*/E* fixtures are the research note's, with their observed-wrong numbers
+The N\*/E\* fixtures are the research note's, with their observed-wrong numbers
 flipped to **correct**. RED-first.
 
 ### Nest-in (Projection B — `write_block_with_line_spans`)

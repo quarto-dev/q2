@@ -5,7 +5,7 @@
 **Issue**: bd-c05x6 (P3, task)
 **Parent (discovered-from)**: bd-hjv5o (item #1 in its checklist)
 **Related precedent**: bd-qor9a (nav-surface SourceInfo plumbing) — done.
-**Related**: bd-8d6rk (structured Q-13-* diagnostic shape) — done.
+**Related**: bd-8d6rk (structured Q-13-\* diagnostic shape) — done.
 
 ## Reproducer
 
@@ -20,7 +20,7 @@ Warning [Q-13-4]: Body link references missing document
 
 There is no `at file:row:col` line — the user has to grep the source
 tree to find which `.qmd` file holds the broken link. Compare with the
-sidebar / navbar / footer Q-13-* diagnostics, which (after bd-qor9a)
+sidebar / navbar / footer Q-13-\* diagnostics, which (after bd-qor9a)
 already render an `at …` line pointing at the offending YAML scalar.
 
 The desired output looks like:

@@ -31,13 +31,13 @@ This plan adds structured error reporting infrastructure to quarto-doctemplate, 
 
 ### What's Missing
 
-1. **Error codes** - No Q-10-* codes in error_catalog.json
+1. **Error codes** - No Q-10-\* codes in error_catalog.json
 2. **Structured error messages** - Current messages are plain strings without codes
 3. **Error corpus for parse errors** - No TreeSitterLogObserver integration
 
 ## Implementation Plan
 
-### Phase 1: Add Q-10-* Error Codes to Catalog
+### Phase 1: Add Q-10-\* Error Codes to Catalog
 
 Add the following entries to `crates/quarto-error-reporting/error_catalog.json`:
 
@@ -228,7 +228,7 @@ Add tests to verify error codes are correctly attached:
 
 ## Implementation Order
 
-1. **Phase 1**: Add Q-10-* codes to error_catalog.json (\~5 min)
+1. **Phase 1**: Add Q-10-\* codes to error_catalog.json (\~5 min)
 2. **Phase 2-3**: Update DiagnosticCollector and EvalContext (\~15 min)
 3. **Phase 4**: Update evaluator.rs error points (\~10 min)
 4. **Phase 5**: Update parse error handling (\~15 min)

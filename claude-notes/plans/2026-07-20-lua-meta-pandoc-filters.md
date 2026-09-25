@@ -301,7 +301,7 @@ Phase 2 notes:
 - bd-o8pr additivity E2E (noted in bd-uy3z) is now unblocked but not
   written here; it belongs to that strand's scope.
 
-### Phase 3 — pandoc.Pandoc/Meta/Meta* constructors + doc value
+### Phase 3 — pandoc.Pandoc/Meta/Meta\* constructors + doc value
 - [x] Flip xfails (ratchet-driven TDD: removed the lines first, watched the
       12 unexpected failures, then implemented). Conformance now 196 pass /
       7 xfail: normalize ×2 (follow-up strand), walk order ×2 (Phase 4:

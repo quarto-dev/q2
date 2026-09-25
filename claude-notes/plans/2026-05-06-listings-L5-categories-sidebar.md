@@ -782,8 +782,8 @@ In `crates/quarto-core/src/transforms/categories_sidebar.rs`
     elements; no "All" pill.
 14. **`emits_cloud_mode_with_size_classes`** — `Cloud` mode +
     counts `{a:5, b:1}`, total 6 → pill for `a` has class
-    `category-cloud-9` (ceil(5/6 * 10) = 9), pill for `b`
-    has `category-cloud-2` (ceil(1/6 * 10) = 2).
+    `category-cloud-9` (ceil(5/6 \* 10) = 9), pill for `b`
+    has `category-cloud-2` (ceil(1/6 \* 10) = 2).
 15. **`cloud_mode_clamps_to_one_minimum`** — count 0 (won't
     happen by aggregation but defensive); cloud mode 1.
 16. **`heading_is_categories`** — the sidebar always emits

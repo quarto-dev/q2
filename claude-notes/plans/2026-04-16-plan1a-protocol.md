@@ -345,7 +345,7 @@ Define the message types used between Rust and Deno. Both sides need matching de
     — not a bare constant. (The `HANDLED_LANGUAGES` constant remains the
     cell-handler contribution to the union; see plan1a-engine.)
 
-  No Ts* protocol type is constructed outside `ts_engine.rs`. The trait,
+  No Ts\* protocol type is constructed outside `ts_engine.rs`. The trait,
   `ExecutionContext`, and `ExecuteResult` see only q2-native types.
 
   Fields used by the Julia engine (our validation target) — all reads

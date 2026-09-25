@@ -762,7 +762,7 @@ Run this audit:
 
 ### Issue: ValidationErrorKind Mismatch
 
-**Problem:** Q-1-* code in catalog but no corresponding ValidationErrorKind
+**Problem:** Q-1-\* code in catalog but no corresponding ValidationErrorKind
 
 **Solution:**
 1. Add variant to ValidationErrorKind enum

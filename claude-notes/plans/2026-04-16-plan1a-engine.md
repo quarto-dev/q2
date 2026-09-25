@@ -2,7 +2,7 @@
 
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
 **Companion plans:** [plan1a-protocol](2026-04-16-plan1a-protocol.md) (data types), [plan1a-host](2026-04-16-plan1a-host.md) (subprocess + transport)
-**Depends on:** plan1a-protocol (uses Ts* types), plan1a-host (uses `TsEngineHost` API)
+**Depends on:** plan1a-protocol (uses Ts\* types), plan1a-host (uses `TsEngineHost` API)
 **Soft-depends on:** Plan 1b (Deno harness) — a **runtime-only** contract: the
 `discovery` `OnceLock` benign-race correctness relies on the harness handling
 repeat `LoadEngine` idempotently (see "Race-free init"). Plan 1a is implemented

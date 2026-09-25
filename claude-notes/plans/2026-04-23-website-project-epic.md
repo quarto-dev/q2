@@ -498,7 +498,7 @@ resources website). See `bd-tr81` for its own plan.
 
 ## Open questions to resolve during phase 0
 
-- **Naming** (Document* type, Trait, Stage).
+- **Naming** (Document\* type, Trait, Stage).
 - **Crate placement:** does `DocumentProfile` + `ProjectType` live in
   `quarto-core`, or a new `quarto-project` crate that depends on
   `quarto-core`? Depends on circular-dep analysis.

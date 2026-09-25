@@ -35,7 +35,7 @@ fn make_source_info(&self, marker: &Marker, len: usize) -> SourceInfo {
 ```
 
 For a YAML document with N nodes:
-- **Current**: O(N * D) where D = depth of parent chain
+- **Current**: O(N \* D) where D = depth of parent chain
 - **With Rc/Arc**: O(N) - just increment reference count
 
 ## Serialization Compatibility

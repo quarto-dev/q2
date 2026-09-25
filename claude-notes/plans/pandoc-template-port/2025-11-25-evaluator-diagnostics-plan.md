@@ -257,7 +257,7 @@ fn evaluate_partial(partial: &Partial, ctx: &mut EvalContext) -> TemplateResult<
 
 ### Diagnostic Categories
 
-Template errors use **Q-10-*** codes:
+Template errors use **Q-10-**\* codes:
 
 | Code | Error Type |
 |------|------------|

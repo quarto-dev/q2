@@ -129,7 +129,7 @@ Expected behavioral outcomes (pandoc parity, from the sweep):
 - [x] `peek_ordered_marker` now shape-only; gate 1 guards both
       dash/plus and digit branches with
       `s->indentation <= claimable_list_indentation(s) + 3` (new
-      helper: leading LIST_ITEM* run of the stack); gate 2 guards with
+      helper: leading LIST_ITEM\* run of the stack); gate 2 guards with
       residual `<= 3` on both the first_peeked shortcut and its own
       peek branches (skipping the peek on over-indent so the existing
       mark_end absorbs the residue); `first_peeked` now always means

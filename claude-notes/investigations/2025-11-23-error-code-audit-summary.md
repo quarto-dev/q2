@@ -165,8 +165,8 @@ def format_csv(results: AuditResults) -> str:
 
 ### Add Validation Checks
 Extend the audit to check:
-- Error corpus coverage (Q-2-* codes should have test files)
-- Subsystem consistency (Q-1-* should have subsystem="yaml")
+- Error corpus coverage (Q-2-\* codes should have test files)
+- Subsystem consistency (Q-1-\* should have subsystem="yaml")
 - Code number gaps (Q-1-10, Q-1-11, Q-1-13 - missing 12?)
 
 ### Integration Ideas
@@ -248,7 +248,7 @@ As you use the script, consider:
 
 3. **Additional checks:**
    - Subsystem consistency validation?
-   - Error corpus coverage for Q-2-* codes?
+   - Error corpus coverage for Q-2-\* codes?
    - Code number gap detection?
    - Documentation URL validation?
 

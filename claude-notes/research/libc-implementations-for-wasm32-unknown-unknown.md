@@ -290,7 +290,7 @@ Functions Lua needs that aren't in the above:
    - Might need to use Lua's panic/catch_unwind strategy instead
 
 3. **stdio functions** (if Lua uses them)
-   - Most libcs don't provide FILE* operations for wasm32-unknown-unknown
+   - Most libcs don't provide FILE\* operations for wasm32-unknown-unknown
    - May need to stub out or redirect to Rust I/O
 
 ---

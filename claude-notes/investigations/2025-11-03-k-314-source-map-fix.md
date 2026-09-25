@@ -70,7 +70,7 @@ All handlers now accept `source_info` parameter in their closures.
 All JSON and QMD snapshots were updated to reflect the new, simpler source mapping format:
 - 001.snap: Basic strong formatting
 - 002.snap-007.snap: Various formatting combinations
-- html-comment-*.snap: HTML comment tests (61 files)
+- html-comment-\*.snap: HTML comment tests (61 files)
 - Plus many other test snapshots
 
 The new format is simpler and more accurate - source ranges directly map to byte positions without complex displacement entries.

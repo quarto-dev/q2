@@ -5,7 +5,7 @@ In the past, we've studied how it works inside quarto-cli, in the following plan
 - claude-notes/config-merging-analysis.md
 - claude-notes/session-logs/session-log-2025-10-11.md
 
-I've then done some additional work on a separate repository studying a model Haskell implementation of the problem, in /Users/cscheid/repos/cscheid/composable-validation. That repository has notes you wrote in /Users/cscheid/repos/cscheid/composable-validation/claude-notes/*.md
+I've then done some additional work on a separate repository studying a model Haskell implementation of the problem, in /Users/cscheid/repos/cscheid/composable-validation. That repository has notes you wrote in /Users/cscheid/repos/cscheid/composable-validation/claude-notes/\*.md
 
 The main observation in the composable-validation directory is that we can reproduce all of the (complex, but necessary) behavior of quarto-cli's mergeConfigs and related functions with a system that performs different merging operations depending on the _tags_ of the values associated with the YAML object: "!prefer" and "!concat". The composable-validation repository has a fuller explanation. (That repository was also concerned with the behavior of the validator library under this merging operation. We'll want to worry about that as well, but not in this current session)
 

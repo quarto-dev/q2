@@ -104,7 +104,7 @@ Module `crates/xtask/src/node_version.rs`. Pure functions unit-tested; process/I
       npm-driven step skipped the preflight reports itself skipped (see § End-to-end record)
 - [x] E2 `cargo xtask verify` (full: WASM + hub build + every test leg) in the worktree under
       fnm's Node 24.20.0: `✓ All verification steps passed!` — 13,757 Rust tests, hub-client
-      1084/119/133, trace-viewer, shared preview-* and hub MCP suites all green (2026-09-08)
+      1084/119/133, trace-viewer, shared preview-\* and hub MCP suites all green (2026-09-08)
 - [x] E3 `cargo xtask dev-setup` output under both Nodes inspected
 - [x] E4 pre-commit checklist: no `HashMap`/`FxHashMap` in changed Rust; no TODOs; `cargo fmt`
       clean; clippy `-D warnings` clean; `cargo xtask lint` clean; new module's decision logic

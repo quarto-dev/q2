@@ -84,7 +84,7 @@ so we can iterate without touching the browser.
 
 - [ ] Pick/craft a representative fixture qmd (\~same size as the profiled
       document). Candidates: an existing large fixture in `crates/pampa/tests/`,
-      the repo's own docs/*.qmd, or a synthetic document of N paragraphs each
+      the repo's own docs/\*.qmd, or a synthetic document of N paragraphs each
       with M inlines. Record the chosen size and a rough token/node count.
 - [ ] Add a Criterion bench `crates/pampa/benches/sourceinfo_intern.rs` that:
       - parses the fixture to AST once (outside the timed section),

@@ -132,7 +132,7 @@ export interface MappedString {
   readonly value: string;
   readonly fileName?: string;
   readonly map: (index: number, closest?: boolean) => StringMapResult;
-  /**
+  /\*\*
    * Flattened provenance: one entry per leaf-backed segment, in output order,
    * covering [0, value.length). Optional — consumers that don't need provenance
    * (engines) ignore it; `undefined` ⇒ provenance NOT PROVIDED (opaque), which the

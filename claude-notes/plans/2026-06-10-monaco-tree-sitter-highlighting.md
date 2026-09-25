@@ -86,7 +86,7 @@ Braid epic: **bd-t4ezufyg**. Sub-strands: Phase 0 `bd-mawltv3x`, Phase 1
   - *Phase 7:* `quartoTheme.ts` — `'qmd'` language registration, markdown-derived
     Monarch base (tier 1: `nextEmbedded` routing of `{r}`/`{python}`/frontmatter
     to stock tokenizers), exported `quartoThemeRules` (all `qmd.`-prefixed,
-    code.* mirroring the `hl-*` palette), `quarto-{light,dark}` themes with
+    code.\* mirroring the `hl-*` palette), `quarto-{light,dark}` themes with
     `semanticHighlighting: true`. Tier-2 palette-alignment deferred (gate on
     observed flicker at the Phase-8 check).
   - **Tests:** Rust `code_legend_covers_render_css` green (24 roots match).

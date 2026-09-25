@@ -117,7 +117,7 @@ impl SourceInfo {
 }
 ```
 
-**Complexity**: O(pieces * depth), typically <10 pieces and <5 depth
+**Complexity**: O(pieces \* depth), typically <10 pieces and <5 depth
 
 ### 5. Integration with yaml-rust2
 

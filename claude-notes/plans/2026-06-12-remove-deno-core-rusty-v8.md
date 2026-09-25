@@ -94,7 +94,7 @@ surface, reqwest/grass deps.
       js/ dir). Stale pampa `filters`-feature comment updated.
 - [x] Removed workspace-root `deno_core` / `deno_web` / `deno_webidl` /
       `serde_v8` deps (deno_web/webidl were already consumer-less).
-      Workspace `tokio` kept — pampa/quarto-lsp*/quarto use it.
+      Workspace `tokio` kept — pampa/quarto-lsp\*/quarto use it.
 - [x] Removed wasm-quarto-hub-client `test_js_*` wrappers + `JsTestResponse`.
 - [x] Removed `template.js` + `ejs` dep from wasm-js-bridge; updated both
       `.d.ts` files (incl. the stale `create_project: Promise<string>`

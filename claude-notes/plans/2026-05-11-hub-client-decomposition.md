@@ -855,7 +855,7 @@ works; it doesn't yet prove the full WASM-bridge setup.
       `--skip-shared-package-tests`, `--skip-q2-preview-spa-build`.
 - [x] Verified `cargo xtask verify --skip-rust-tests`: all 11
       steps pass (build + tests for Rust workspace, tree-sitter,
-      hub-client, trace-viewer, shared preview-* packages, SPA).
+      hub-client, trace-viewer, shared preview-\* packages, SPA).
 - [x] Cleanup audit on `hub-client/src/`:
       - No empty directories.
       - `components/render/q2-preview/` holds only the one-line

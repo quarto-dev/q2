@@ -170,7 +170,7 @@ Reproduction at HEAD: see `../observations.md` in the investigation dir.
    both open with this one as the narrow symptom tracker?
 2. **Scope of first implementation.** Just CodeBlock + Inline::Code (this strand's
    symptom, smallest Q1-parity slice), or the full bd-fz6gwfq0 set (attributes, img
-   src, link target, Raw*/Math) in one pass since the expander makes them cheap?
+   src, link target, Raw\*/Math) in one pass since the expander makes them cheap?
 3. **Sequencing.** OK to add `waits-for` on bp06aub8 (merge order: its branch first,
    then this work reuses `expand_text_segments`)?
 4. **Unresolved-shortcode policy in code text.** bp06aub8's design uses marker +

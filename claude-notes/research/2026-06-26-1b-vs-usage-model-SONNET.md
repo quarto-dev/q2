@@ -30,7 +30,7 @@
 
 **GAP-1 — `quarto.jupyter.widgetDependencyIncludes` is absent from q2's runtime.** When the harness calls `instance.dependencies()` for a jupyter engine, that method calls `quarto.jupyter.widgetDependencyIncludes(options.dependencies as JupyterWidgetDependencies[], options.tempDir)` (jupyter.ts:610-613 — verified by reading). This is the *only real work* jupyter's `dependencies()` does. q2's `jupyter` namespace is **types-only** — no `quarto-api/src/jupyter/` runtime directory exists (confirmed: model Part D.1). So at runtime: the fold-in fires at exactly the right moment (step 4), constructs `DependenciesOptions` correctly, calls `instance.dependencies()`, which calls `quarto.jupyter.widgetDependencyIncludes(…)`, which hits the absent runtime and throws (or returns undefined). This silently drops widget dependencies for jupyter. Plan 3 must ship `widgetDependencyIncludes` before the `dependencies()` fold-in is functional for jupyter.
 
-**Evidence:** model B.3 (widgetDependencyIncludes: jupyter-only, jupyter.ts:610-613), D.1 (entire jupyter.* namespace: types-only, no runtime dir), plan Phase 2 step 4 (fold-in design is correct).
+**Evidence:** model B.3 (widgetDependencyIncludes: jupyter-only, jupyter.ts:610-613), D.1 (entire jupyter.\* namespace: types-only, no runtime dir), plan Phase 2 step 4 (fold-in design is correct).
 
 **Severity:** Medium for now (jupyter is deferred to Plan 3 anyway), but the Plan 3 scope note should explicitly name `widgetDependencyIncludes` as a dependency of the fold-in, not just of the jupyter namespace generally. If Plan 3 ships the namespace without this method the fold-in silently fails.
 

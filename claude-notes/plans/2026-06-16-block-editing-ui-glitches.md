@@ -145,7 +145,7 @@ so it never does. On the blockquote level `surfaceLeft == colLeft` → `gutter 0
 again `slots 1` → only `❝`. Hence "one or the other, depending on the level."
 
 **Diagnostic proof:** temporarily setting `bandWidth = max(gutter,
-crumbs.length * MIN_GLYPH_W)` (grow the band rightward to fit every crumb) made
+crumbs.length \* MIN_GLYPH_W)` (grow the band rightward to fit every crumb) made
 both `❝ Cd` appear — confirming path is fine, display selection is the bug.
 
 ### Chosen fix — pivot-pinned **left-spill** + comfortable per-crumb width

@@ -112,7 +112,7 @@ The final switchover involves:
 - ✅ src/pandoc/inline.rs
 - ✅ src/pandoc/block.rs
 - ✅ src/pandoc/treesitter.rs
-- ✅ src/pandoc/treesitter_utils/*.rs (all files)
+- ✅ src/pandoc/treesitter_utils/\*.rs (all files)
 - ✅ src/pandoc/meta.rs
 - ✅ src/writers/native.rs
 - ✅ src/readers/json.rs (35 constructions)

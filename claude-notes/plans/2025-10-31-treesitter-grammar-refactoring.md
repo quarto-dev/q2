@@ -81,7 +81,7 @@ Already working or next to implement:
 - ❌ `pandoc_space` - derived from `_whitespace` token
 
 ### Category 2: Basic Inline Formatting (Priority: HIGH)
-- `pandoc_emph` - emphasis with * or _
+- `pandoc_emph` - emphasis with \* or _
 - `pandoc_strong` - strong emphasis with ** or __
 - `pandoc_code_span` - inline code with backticks
 - `backslash_escape` - escaped characters
