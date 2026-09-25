@@ -288,6 +288,12 @@ fn insert_crossref_numbering_mode(blob: &mut Map<String, Value>, format: &Format
             | FormatIdentifier::Pptx
             | FormatIdentifier::Odt
             | FormatIdentifier::Gfm
+        // Long-tail Phase 5 (Tier D): Q1's `createHtmlPresentationFormat`
+        // family renders float refs through the vendored filter too.
+            | FormatIdentifier::S5
+            | FormatIdentifier::Dzslides
+            | FormatIdentifier::Slidy
+            | FormatIdentifier::Slideous
     ) {
         blob.insert("crossref-numbering".to_string(), json!("external"));
     }
@@ -861,6 +867,32 @@ mod tests {
             json!("external"),
             "gfm must suppress Q1's auto-indexer via crossref-numbering: external"
         );
+    }
+
+    /// Long-tail Phase 5: the Tier D JS slide formats join
+    /// gfm/docx/pptx/odt in getting `crossref-numbering: "external"` —
+    /// Q1's `createHtmlPresentationFormat` family renders float refs via
+    /// the vendored filter, so the auto-indexer must be suppressed the
+    /// same way.
+    ///
+    /// Revert hunk: dropping the Tier D arm from
+    /// `insert_crossref_numbering_mode` makes this RED.
+    #[test]
+    fn test_tier_d_sets_external_crossref_numbering() {
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = fixture_language();
+
+        for target_format in ["s5", "dzslides", "slidy", "slideous"] {
+            let format = Format::from_format_string(target_format)
+                .unwrap_or_else(|e| panic!("failed to build Format for {target_format}: {e}"));
+            let blob = fixture_builder(&format, &project, &registry, &language).build();
+            assert_eq!(
+                blob["crossref-numbering"],
+                json!("external"),
+                "{target_format} must suppress Q1's auto-indexer via crossref-numbering: external"
+            );
+        }
     }
 
     /// The other markdown flavors hit the placeholder float renderer (no

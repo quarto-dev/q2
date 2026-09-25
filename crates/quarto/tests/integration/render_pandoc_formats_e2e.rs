@@ -1175,3 +1175,76 @@ fn e2e_render_chunkedhtml() {
         "zip must carry the body text in some chapter entry: {names:?}"
     );
 }
+
+/// Long-tail Phase 5: the real `q2 render` binary produces a slidy deck
+/// — `class="slide…"` structure plus slidy's W3C CDN script — through
+/// the pandoc-hybrid write path.
+#[test]
+fn e2e_render_slidy() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_file(
+        &dir.join("f.qmd"),
+        "---\ntitle: F\n---\n\n# Head\n\nHelloSlidyBody.\n",
+    );
+
+    let output = run_q2(&dir, &["f.qmd", "--to", "slidy"]);
+    assert!(
+        output.status.success(),
+        "q2 render --to slidy should succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let html = std::fs::read_to_string(dir.join("f.html")).expect("f.html should exist");
+    assert!(
+        html.contains("class=\"slide"),
+        "slidy output must be a slide deck: {:.200}",
+        html
+    );
+    assert!(
+        html.contains("slidy.js"),
+        "slidy deck must reference slidy.js: {:.200}",
+        html
+    );
+    assert!(
+        html.contains("HelloSlidyBody"),
+        "slidy output must contain the body text: {:.200}",
+        html
+    );
+}
+
+/// Long-tail Phase 5: same contract for s5, the other bundled-asset
+/// deck (s5/default/ CSS+JS tree).
+#[test]
+fn e2e_render_s5() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_file(
+        &dir.join("f.qmd"),
+        "---\ntitle: F\n---\n\n# Head\n\nHelloS5Body.\n",
+    );
+
+    let output = run_q2(&dir, &["f.qmd", "--to", "s5"]);
+    assert!(
+        output.status.success(),
+        "q2 render --to s5 should succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let html = std::fs::read_to_string(dir.join("f.html")).expect("f.html should exist");
+    assert!(
+        html.contains("class=\"slide"),
+        "s5 output must be a slide deck: {:.200}",
+        html
+    );
+    assert!(
+        html.contains("s5/default/"),
+        "s5 deck must reference its bundled assets: {:.200}",
+        html
+    );
+    assert!(
+        html.contains("HelloS5Body"),
+        "s5 output must contain the body text: {:.200}",
+        html
+    );
+}

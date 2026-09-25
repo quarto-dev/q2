@@ -237,3 +237,36 @@ fn plain_execute_defaults_absent() {
         "plain must not receive wordprocessor figure defaults: {scope:?}"
     );
 }
+
+// === long-tail Phase 5: Tier D JS slides ===
+
+/// Long-tail Phase 5: the Tier D JS slide formats observe the
+/// `createHtmlPresentationFormat` defaults — fig 9.5×6.5 and
+/// echo/warning false — through the real stage merge.
+#[test]
+fn tier_d_execute_defaults_reach_engine() {
+    for target_format in ["s5", "dzslides", "slidy", "slideous"] {
+        let scope = observed_execute_scope(CELL_FIXTURE, target_format)
+            .unwrap_or_else(|| panic!("{target_format} must produce a scope"));
+        assert_eq!(
+            scope.get("echo").and_then(|v| v.as_bool()),
+            Some(false),
+            "{target_format}'s echo:false default did not reach the engine"
+        );
+        assert_eq!(
+            scope.get("warning").and_then(|v| v.as_bool()),
+            Some(false),
+            "{target_format}'s warning:false default did not reach the engine"
+        );
+        assert_eq!(
+            scope.get("fig-width").and_then(|v| v.as_f64_lenient()),
+            Some(9.5),
+            "{target_format}'s fig-width:9.5 default did not reach the engine"
+        );
+        assert_eq!(
+            scope.get("fig-height").and_then(|v| v.as_f64_lenient()),
+            Some(6.5),
+            "{target_format}'s fig-height:6.5 default did not reach the engine"
+        );
+    }
+}

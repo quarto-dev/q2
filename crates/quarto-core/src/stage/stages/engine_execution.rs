@@ -898,6 +898,19 @@ fn format_execute_defaults(
             ("fig-width", yaml_rust2::Yaml::Real("5".to_string())),
             ("fig-height", yaml_rust2::Yaml::Real("4".to_string())),
         ]),
+        // Long-tail Phase 5 (Tier D): the JS slide family (Q1's
+        // `createHtmlPresentationFormat`) — pptx-shaped code defaults:
+        // fig 9.5×6.5 (inches) with echo/warning off, since a slide deck
+        // shows neither source nor warnings.
+        FormatIdentifier::S5
+        | FormatIdentifier::Dzslides
+        | FormatIdentifier::Slidy
+        | FormatIdentifier::Slideous => Some(vec![
+            ("fig-width", yaml_rust2::Yaml::Real("9.5".to_string())),
+            ("fig-height", yaml_rust2::Yaml::Real("6.5".to_string())),
+            ("echo", yaml_rust2::Yaml::Boolean(false)),
+            ("warning", yaml_rust2::Yaml::Boolean(false)),
+        ]),
         _ => None,
     }
 }

@@ -135,6 +135,18 @@ pub fn format_pandoc_defaults(id: FormatIdentifier) -> FormatPandocDefaults {
             output_divs: Some(false),
             default_image_extension: Some("png"),
         },
+        // Long-tail Phase 5 (Tier D): the JS slide family
+        // (`createHtmlPresentationFormat`) — png-only image default like
+        // the plaintext tail; no page-width (decks have no pages) and no
+        // output-divs override (the cell Div renders fine into HTML).
+        FormatIdentifier::S5
+        | FormatIdentifier::Dzslides
+        | FormatIdentifier::Slidy
+        | FormatIdentifier::Slideous => FormatPandocDefaults {
+            page_width: None,
+            output_divs: None,
+            default_image_extension: Some("png"),
+        },
         _ => FormatPandocDefaults::default(),
     }
 }
