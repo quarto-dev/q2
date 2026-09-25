@@ -1,0 +1,196 @@
+=== 01-strand-2-in-1                     ERROR | a `x``y` b|
+    (document [0, 0] - [1, 0]
+      (ERROR [0, 0] - [1, 0]
+        (pandoc_str [0, 0] - [0, 1])
+        (pandoc_code_span [0, 1] - [0, 6]
+          (code_span_delimiter [0, 1] - [0, 3])
+          (content [0, 3] - [0, 5])
+          (code_span_delimiter [0, 5] - [0, 6]))
+        (pandoc_str [0, 6] - [0, 7])
+        (shortcode_name [0, 9] - [0, 10])))
+=== 02-strand-3-in-1                     ERROR | a ` ```mermaid ` b|
+    (document [0, 0] - [1, 0]
+      (ERROR [0, 0] - [1, 0]
+        (pandoc_str [0, 0] - [0, 1])
+        (pandoc_code_span [0, 1] - [0, 7]
+          (code_span_delimiter [0, 1] - [0, 3])
+          (content [0, 3] - [0, 6])
+          (code_span_delimiter [0, 6] - [0, 7]))
+        (pandoc_str [0, 7] - [0, 14])
+        (shortcode_name [0, 17] - [0, 18])))
+=== 03-strand-3-in-2                     ERROR | a `` ```{r} `` b|
+    (document [0, 0] - [1, 0]
+      (ERROR [0, 0] - [1, 0]
+        (pandoc_str [0, 0] - [0, 1])
+        (pandoc_code_span [0, 1] - [0, 11]
+          (code_span_delimiter [0, 1] - [0, 4])
+          (content [0, 4] - [0, 6])
+          (code_span_delimiter [0, 6] - [0, 8])
+          (attribute_specifier [0, 8] - [0, 11]
+            (language_specifier [0, 9] - [0, 10])))
+        (shortcode_name [0, 15] - [0, 16])))
+=== 04-strand-4-in-3                     ERROR | a ``` x````y ``` b|
+    (document [0, 0] - [1, 0]
+      (ERROR [0, 0] - [1, 0]
+        (pandoc_str [0, 0] - [0, 1])
+        (pandoc_code_span [0, 1] - [0, 11]
+          (code_span_delimiter [0, 1] - [0, 5])
+          (content [0, 5] - [0, 8])
+          (code_span_delimiter [0, 8] - [0, 11]))
+        (pandoc_str [0, 11] - [0, 12])
+        (shortcode_name [0, 17] - [0, 18])))
+=== 05-strand-shorter-ok                 ok    | a `` `x` `` b|
+    (document [0, 0] - [1, 0]
+      (section [0, 0] - [1, 0]
+        (pandoc_paragraph [0, 0] - [1, 0]
+          (pandoc_str [0, 0] - [0, 1])
+          (pandoc_code_span [0, 1] - [0, 11]
+            (code_span_delimiter [0, 1] - [0, 4])
+            (content [0, 4] - [0, 8])
+            (code_span_delimiter [0, 8] - [0, 11]))
+          (pandoc_space [0, 11] - [0, 12])
+          (pandoc_str [0, 12] - [0, 13]))))
+=== 06-strand-2-in-3-ok                  ok    | a ``` x``y ``` b|
+    (document [0, 0] - [1, 0]
+      (section [0, 0] - [1, 0]
+        (pandoc_paragraph [0, 0] - [1, 0]
+          (pandoc_str [0, 0] - [0, 1])
+          (pandoc_code_span [0, 1] - [0, 14]
+            (code_span_delimiter [0, 1] - [0, 5])
+            (content [0, 5] - [0, 11])
+            (code_span_delimiter [0, 11] - [0, 14]))
+          (pandoc_space [0, 14] - [0, 15])
+          (pandoc_str [0, 15] - [0, 16]))))
+=== 07-strand-3-in-4-ok                  ok    | a ```` ```mermaid ```` b|
+    (document [0, 0] - [1, 0]
+      (section [0, 0] - [1, 0]
+        (pandoc_paragraph [0, 0] - [1, 0]
+          (pandoc_str [0, 0] - [0, 1])
+          (pandoc_code_span [0, 1] - [0, 22]
+            (code_span_delimiter [0, 1] - [0, 6])
+            (content [0, 6] - [0, 18])
+            (code_span_delimiter [0, 18] - [0, 22]))
+          (pandoc_space [0, 22] - [0, 23])
+          (pandoc_str [0, 23] - [0, 24]))))
+=== 10-spec-foo                          ok    | `foo`|
+    (document [0, 0] - [1, 0]
+      (section [0, 0] - [1, 0]
+        (pandoc_paragraph [0, 0] - [1, 0]
+          (pandoc_code_span [0, 0] - [0, 5]
+            (code_span_delimiter [0, 0] - [0, 1])
+            (content [0, 1] - [0, 4])
+            (code_span_delimiter [0, 4] - [0, 5])))))
+=== 11-spec-foo-bar                      ok    | `` foo ` bar ``|
+    (document [0, 0] - [1, 0]
+      (section [0, 0] - [1, 0]
+        (pandoc_paragraph [0, 0] - [1, 0]
+          (pandoc_code_span [0, 0] - [0, 15]
+            (code_span_delimiter [0, 0] - [0, 2])
+            (content [0, 2] - [0, 13])
+            (code_span_delimiter [0, 13] - [0, 15])))))
+=== 12-spec-double-inside-single         ERROR | ` `` `|
+    (document [0, 0] - [1, 0]
+      (ERROR [0, 0] - [1, 0]
+        (pandoc_code_span [0, 0] - [0, 4]
+          (code_span_delimiter [0, 0] - [0, 1])
+          (content [0, 1] - [0, 3])
+          (code_span_delimiter [0, 3] - [0, 4]))))
+=== 13-spec-one-space-stripped           ERROR | `  ``  `|
+    (document [0, 0] - [1, 0]
+      (ERROR [0, 0] - [1, 0]
+        (pandoc_code_span [0, 0] - [0, 5]
+          (code_span_delimiter [0, 0] - [0, 1])
+          (content [0, 1] - [0, 4])
+          (code_span_delimiter [0, 4] - [0, 5]))))
+=== 14-spec-left-space-only              ok    | ` a`|
+    (document [0, 0] - [1, 0]
+      (section [0, 0] - [1, 0]
+        (pandoc_paragraph [0, 0] - [1, 0]
+          (pandoc_code_span [0, 0] - [0, 4]
+            (code_span_delimiter [0, 0] - [0, 1])
+            (content [0, 1] - [0, 3])
+            (code_span_delimiter [0, 3] - [0, 4])))))
+=== 15-spec-backslash                    ERROR | `foo\`bar`|
+    (document [0, 0] - [1, 0]
+      (ERROR [0, 0] - [1, 0]
+        (pandoc_code_span [0, 0] - [0, 6]
+          (code_span_delimiter [0, 0] - [0, 1])
+          (content [0, 1] - [0, 5])
+          (code_span_delimiter [0, 5] - [0, 6]))
+        (pandoc_str [0, 6] - [0, 9])))
+=== 16-spec-foo-tick-bar                 ok    | ``foo`bar``|
+    (document [0, 0] - [1, 0]
+      (section [0, 0] - [1, 0]
+        (pandoc_paragraph [0, 0] - [1, 0]
+          (pandoc_code_span [0, 0] - [0, 11]
+            (code_span_delimiter [0, 0] - [0, 2])
+            (content [0, 2] - [0, 9])
+            (code_span_delimiter [0, 9] - [0, 11])))))
+=== 17-spec-foo-dd-bar                   ERROR | ` foo `` bar `|
+    (document [0, 0] - [1, 0]
+      (ERROR [0, 0] - [1, 0]
+        (pandoc_code_span [0, 0] - [0, 8]
+          (code_span_delimiter [0, 0] - [0, 1])
+          (content [0, 1] - [0, 7])
+          (code_span_delimiter [0, 7] - [0, 8]))
+        (pandoc_space [0, 8] - [0, 9])
+        (pandoc_str [0, 9] - [0, 12])))
+=== 18-spec-star-precedence              ERROR | *foo`*`|
+    (document [0, 0] - [1, 0]
+      (ERROR [0, 0] - [1, 0]
+        (emphasis_delimiter [0, 0] - [0, 1])
+        (pandoc_str [0, 1] - [0, 4])
+        (pandoc_code_span [0, 4] - [0, 7]
+          (code_span_delimiter [0, 4] - [0, 5])
+          (content [0, 5] - [0, 6])
+          (code_span_delimiter [0, 6] - [0, 7]))))
+=== 19-spec-link-precedence              ERROR | [not a `link](/foo`)|
+    (document [0, 0] - [1, 0]
+      (ERROR [0, 0] - [1, 0]
+        (pandoc_str [0, 1] - [0, 4])
+        (pandoc_space [0, 4] - [0, 5])
+        (pandoc_str [0, 5] - [0, 6])
+        (pandoc_code_span [0, 6] - [0, 19]
+          (code_span_delimiter [0, 6] - [0, 8])
+          (content [0, 8] - [0, 18])
+          (code_span_delimiter [0, 18] - [0, 19]))
+        (pandoc_str [0, 19] - [0, 20])))
+=== 20-spec-unclosed-3-2                 ERROR | ```foo``|
+    (document [0, 0] - [1, 0]
+      (ERROR [0, 0] - [1, 0]
+        (shortcode_name [0, 3] - [0, 6])))
+=== 21-spec-unclosed-1                   ERROR | `foo|
+    (document [0, 0] - [1, 0]
+      (ERROR [0, 0] - [1, 0]
+        (shortcode_name [0, 1] - [0, 4])))
+=== 22-spec-unclosed-then-double         ERROR | `foo``bar``|
+    (document [0, 0] - [1, 0]
+      (ERROR [0, 0] - [1, 0]
+        (shortcode_name [0, 1] - [0, 4])
+        (shortcode_name [0, 6] - [0, 9])))
+=== 23-spec-multiline                    ok    | ``|foo|bar  |baz|``|
+    (document [0, 0] - [5, 0]
+      (section [0, 0] - [5, 0]
+        (pandoc_paragraph [0, 0] - [5, 0]
+          (pandoc_code_span [0, 0] - [4, 2]
+            (code_span_delimiter [0, 0] - [0, 2])
+            (content [0, 2] - [4, 0]
+              (pandoc_soft_break [0, 2] - [1, 0])
+              (pandoc_soft_break [1, 3] - [2, 0])
+              (pandoc_soft_break [2, 5] - [3, 0])
+              (pandoc_soft_break [3, 3] - [4, 0]))
+            (code_span_delimiter [4, 0] - [4, 2])))))
+=== 30-extra-para-start-triple           ERROR | ``` x ``` b|
+    (document [0, 0] - [1, 0]
+      (ERROR [0, 0] - [1, 0]
+        (shortcode_name [0, 4] - [0, 5])
+        (shortcode_name [0, 10] - [0, 11])))
+=== 31-extra-fence-interrupts            ERROR | a `x|```|b`|
+    (ERROR [0, 0] - [3, 0]
+      (pandoc_str [0, 0] - [0, 1])
+      (pandoc_code_span [0, 1] - [1, 3]
+        (code_span_delimiter [0, 1] - [0, 3])
+        (content [0, 3] - [1, 2]
+          (pandoc_soft_break [0, 4] - [1, 0]))
+        (code_span_delimiter [1, 2] - [1, 3]))
+      (pandoc_str [2, 0] - [2, 1]))
