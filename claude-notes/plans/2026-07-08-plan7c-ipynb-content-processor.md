@@ -689,7 +689,7 @@ feature sets.
       6. Sniff left as the Phase-1 stub: admission is the separate Pass-1
       item below. TDD: 5 new/updated tests RED on compile, then GREEN;
       clippy + per-crate nextest 4973 passed / 32 skipped.)*
-- [ ] `Converted.files` transport (open question 7, **resolved 2026-09-24 —
+- [x] `Converted.files` transport (open question 7, **resolved 2026-09-24 —
       option (a)**): `SourceConversionStage`'s processor-bearing arm (the
       `native_claims_file` → `Some(true)` branch, `source_conversion.rs:~205`)
       calls `content_processors::convert` directly instead of
@@ -977,10 +977,15 @@ commit; delta accounted below (recorded after the run).
 - [ ] Hyperlink behaviour for virtual files.
 
 ### Phase 5 — coordination
-- [ ] Point bd-19nc56ao and bd-xxul at this plan; record the
+- [x] Point bd-19nc56ao and bd-xxul at this plan; record the
       supersession of the July-20 doc's attachment point. (k-zr88 was closed
       superseded 2026-09-24 — open question 5 — so nothing to point there.)
-- [ ] User docs (usage, not internals): rendering `.ipynb` inputs.
+      (Done 2026-09-25: comments c-w6h6bb1c on bd-19nc56ao and c-5p8owfwx on
+      bd-xxul.)
+- [x] User docs (usage, not internals): rendering `.ipynb` inputs.
+      (Done 2026-09-25: `docs/guides/authoring/notebooks.qmd` + sidebar entry;
+      rendered with `q2 render docs/guides/authoring/notebooks.qmd`, output
+      inspected — all five sections present, breadcrumb + sidebar wired.)
 
 ---
 
