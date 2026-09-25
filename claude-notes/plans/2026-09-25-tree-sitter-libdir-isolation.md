@@ -3,7 +3,7 @@
 **Date:** 2026-09-25
 **Braid:** bd-agsgrbfn
 **Branch:** `braid/bd-agsgrbfn-tree-sitter-libdir-isolation` (topic branch in the main checkout, based on `main` @ `ce01489c4`)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design settled with user (2026-09-25); implementing.
 
 ## Triage verdict
 
@@ -96,68 +96,87 @@ diverging `parser.c`, and the strand's room-5/room-2 observation already
 documents the failure. The Phase 0 tests below cover the xtask side
 mechanically.
 
-## Proposed phases (draft)
+## Decisions (user, 2026-09-25)
 
-- **Phase 0 — Tests first.**
-  - Add a unit test for a new helper (e.g.
-    `util::tree_sitter_command(project_root) -> Command`). It asserts
-    that `TREE_SITTER_LIBDIR` is set to `<project_root>/target/tree-sitter-lib`,
-    using the same `env_overrides(&cmd)` pattern as
-    `nested_command_strips_pkg_vars` in `util.rs`. It fails until the
-    helper exists.
-  - Optionally add an integration-style check: run `tree-sitter test`
-    through the helper and assert that the dylib appears under
-    `target/tree-sitter-lib`. This depends on the CLI being on PATH, so
-    it may only be worth doing as a manual e2e step.
-- **Phase 1 — xtask.** Route `verify.rs` step 4 and
-  `treesitter_crlf::run_parity_check` through the helper. Pass
-  `project_root` into the CRLF check, or use a separate subdirectory for
-  CRLF; see Q3.
-- **Phase 2 — Hand-run path.** Depends on Q1: a documented `export`,
-  a checked-in `.envrc`, and/or a `cargo xtask ts-test` wrapper.
-- **Phase 3 — Doctemplate grammar.** Depends on Q2.
-- **Phase 4 — Docs.** Update the tree-sitter bullet at `AGENTS.md:647`
-  and say where the cache now lives and why.
-- **E2E.** Poison the shared cache on purpose, e.g. copy a dylib built
-  from a modified `parser.c` into `~/.cache/tree-sitter/lib/markdown.dylib`
-  and `touch` it. Then show that `cargo xtask verify` step 4 still
-  passes.
+1. **Hand-run coverage:** (c) + (a). Add a `cargo xtask ts-test [--grammar qmd|doctemplate] [--rebuild] [-- <tree-sitter test args>]`
+   wrapper (generate → build → test with the isolated libdir). Point
+   AGENTS.md at it, and document the `export` for other hand runs
+   (e.g. `tree-sitter parse`).
+2. **Doctemplate in verify:** out of scope. Filed as bd-0njf3lab
+   (discovered-from this strand). `ts-test --grammar doctemplate` does
+   cover hand runs.
+3. **CRLF run:** a private libdir inside the parity run's tempdir, so it
+   always compiles fresh.
+4. **Directory:** the literal `<project_root>/target/tree-sitter-lib`,
+   deliberately *not* `CARGO_TARGET_DIR`. Leave a code comment explaining
+   why, so future agents don't "fix" it.
+5. **User-set `TREE_SITTER_LIBDIR`:** always overridden by xtask.
 
-## Open design questions for the user
+## Checklist
 
-1. **Hand-run coverage (Q1).** How should hand-run `tree-sitter test`
-   (AGENTS.md:647) be isolated? Options:
-   (a) AGENTS.md only: document `export TREE_SITTER_LIBDIR=$PWD/target/tree-sitter-lib`;
-   (b) a checked-in `.envrc` for direnv users, plus (a);
-   (c) a `cargo xtask ts-test [--grammar qmd|doctemplate] [--rebuild]`
-   wrapper that runs generate/build/test with the right env, with
-   AGENTS.md pointing agents at it instead of raw `tree-sitter`.
-   My lean is (c) + (a). Agents follow AGENTS.md literally, and a wrapper
-   makes the safe path the easy one. direnv isn't universal.
-2. **Doctemplate scope (Q2).** Should this strand only isolate the cache
-   for doctemplate's hand-run tests? Or should it also add doctemplate
-   corpus tests to `verify` step 4, which don't run today? Adding them
-   widens the scope and needs a CI counterpart per the verify/CI sync
-   rule. That probably deserves its own strand.
-3. **CRLF run's libdir (Q3).** Should the CRLF parity run share
-   `target/tree-sitter-lib` with the LF run? It's the same grammar name
-   and the same `parser.c` contents, but the copied files have
-   different mtimes. Or should it get its own `target/tree-sitter-lib-crlf`
-   (or a dir inside its tempdir) so it always compiles fresh? A private
-   dir costs one extra grammar compile per verify (a few seconds) and
-   can never be confused.
-4. **Directory choice.** Is `<project_root>/target/tree-sitter-lib` the
-   right place? It is per-checkout, gitignored, and wiped by
-   `cargo clean`. The main risk is a user-set `CARGO_TARGET_DIR`
-   pointing outside the checkout. Should we respect `CARGO_TARGET_DIR`
-   (and risk sharing again if it's shared across worktrees), or always
-   use the literal `<root>/target`? I lean toward the literal path. Your
-   memory notes that shared target dirs across worktrees are already
-   discouraged.
-5. **Respect a user-set `TREE_SITTER_LIBDIR`?** If the caller already
-   exported one, should xtask override it (always isolated) or keep it
-   (the user knows best)? I lean toward always overriding, because a
-   globally exported value would bring the bug back.
+### Phase 0 — Tests first
+- [x] Unit tests in a new `crates/xtask/src/tree_sitter.rs`:
+  `libdir()` is `<root>/target/tree-sitter-lib`; `command()` sets
+  `TREE_SITTER_LIBDIR` to it; the grammar dirs resolve to existing
+  directories in the repo.
+- [x] Confirmed they fail (E0425/E0433: helpers missing), then pass (3/3).
+
+### Phase 1 — xtask plumbing
+- [x] `tree_sitter::{libdir, command, Grammar}` helpers.
+- [x] verify step 4 runs `tree-sitter test` through the helper.
+- [x] CRLF parity run: grammar copy at `<tmp>/grammar`, private libdir at `<tmp>/lib`.
+
+### Phase 2 — `cargo xtask ts-test`
+- [x] Subcommand: `--grammar qmd|doctemplate` (default qmd), `--rebuild`,
+  trailing args after `--` passed through to `tree-sitter test`.
+
+### Phase 3 — Docs
+- [x] AGENTS.md tree-sitter bullet: use `cargo xtask ts-test`; explain the
+  shared-cache hazard and the `export` fallback.
+- [x] xtask module doc list in `main.rs`.
+
+### Phase 4 — Verification
+- [x] E2E (below).
+- [x] `cargo xtask verify --skip-hub-build --skip-hub-tests`: all steps passed (14999 Rust tests; step 4 LF + CRLF 721/721). The hub-client
+  WASM tests fail at HEAD in this checkout only because
+  `wasm_quarto_hub_client_bg.wasm` is stale (built Sep 18); this change is
+  xtask-only and touches nothing hub-client depends on.
+
+### E2E record (inspected)
+
+I didn't want to touch the real `~/.cache/tree-sitter/lib`, which other
+rooms share, so I pointed `HOME` at a scratch dir. That moves
+tree-sitter's default cache to `$S/home/.cache/tree-sitter/lib`. I then
+planted a grammar compiled from `206826fd6^` (before the flanking-rules
+commit) in it:
+
+```
+$ cd <old grammar copy> && env -u TREE_SITTER_LIBDIR HOME=$S/home tree-sitter test
+# -> $S/home/.cache/tree-sitter/lib/markdown.dylib (17:38)
+
+# The bug, reproduced: bare `tree-sitter test` in this checkout uses the planted grammar
+$ cd crates/tree-sitter-qmd/tree-sitter-markdown
+$ env -u TREE_SITTER_LIBDIR HOME=$S/home tree-sitter test
+Total parses: 721; successful parses: 678; failed parses: 43
+
+# The fix; an exported TREE_SITTER_LIBDIR pointing at the poisoned dir is overridden
+$ rm -rf target/tree-sitter-lib
+$ HOME=$S/home CARGO_HOME=~/.cargo RUSTUP_HOME=~/.rustup \
+    TREE_SITTER_LIBDIR=$S/home/.cache/tree-sitter/lib cargo xtask ts-test
+TREE_SITTER_LIBDIR=/Users/cscheid/rooms/room-4/q2/target/tree-sitter-lib
+Total parses: 721; successful parses: 721; failed parses: 0
+
+$ <same env> cargo xtask verify --skip-<everything but step 4>
+━━━ Step 4/14: Testing tree-sitter grammars ━━━
+Total parses: 721; successful parses: 721; failed parses: 0
+  ↳ Re-running with CRLF line endings...
+Total parses: 721; successful parses: 721; failed parses: 0
+  ✓ CRLF parity check complete
+```
+
+Afterwards, the planted `markdown.dylib` still had its 17:38 mtime, so
+neither run read or rewrote it. `ts-test`'s `tree-sitter generate` left
+no tracked files modified.
 
 ## Risks / tradeoffs (draft)
 

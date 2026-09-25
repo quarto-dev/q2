@@ -13,6 +13,7 @@
 //! - `pandoc-check`: Check local pandoc against the pampa oracle tests
 //! - `render-corpus-diff`: Dev-only byte-identity corpus capture/diff harness
 //! - `test`: Run workspace tests with platform-appropriate crate exclusions
+//! - `ts-test`: Regenerate, build, and test a tree-sitter grammar with a per-checkout grammar cache
 //! - `verify`: Run full project verification (build + tests for Rust and hub-client)
 //! - `build-all`: Fresh-clone build orchestration (npm install + hub-client + Rust workspace)
 //! - `build-trace-viewer`: Build just the trace-viewer SPA
@@ -43,6 +44,7 @@ mod render_corpus_diff;
 mod stage_doc_examples;
 mod switch_task;
 mod test;
+mod tree_sitter;
 mod treesitter_crlf;
 mod ts_packages;
 mod util;
@@ -154,6 +156,28 @@ enum Command {
         /// Extra arguments to pass to cargo nextest run.
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
+    },
+
+    /// Regenerate, build, and test a tree-sitter grammar in this checkout.
+    ///
+    /// Runs `tree-sitter generate`, `build`, and `test` in the grammar
+    /// directory with TREE_SITTER_LIBDIR pinned to
+    /// `<checkout>/target/tree-sitter-lib`, so the compiled grammar is never
+    /// shared with (or clobbered by) another checkout on this machine.
+    /// Extra arguments after `--` are forwarded to `tree-sitter test`
+    /// (e.g. `-- -i 'emphasis'`).
+    TsTest {
+        /// Which grammar to test.
+        #[arg(long, value_enum, default_value = "qmd")]
+        grammar: tree_sitter::Grammar,
+
+        /// Force `tree-sitter test` to recompile the grammar.
+        #[arg(long)]
+        rebuild: bool,
+
+        /// Extra arguments to pass to `tree-sitter test`.
+        #[arg(last = true)]
+        test_args: Vec<String>,
     },
 
     /// Run full project verification (mirrors CI checks).
@@ -453,6 +477,15 @@ fn main() -> Result<()> {
             };
             test::run(&args, rustflags)
         }
+        Command::TsTest {
+            grammar,
+            rebuild,
+            test_args,
+        } => tree_sitter::run_ts_test(tree_sitter::TsTestArgs {
+            grammar,
+            rebuild,
+            test_args,
+        }),
         Command::Verify {
             skip_rust_build,
             skip_rust_tests,

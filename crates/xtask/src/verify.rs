@@ -295,14 +295,17 @@ pub fn run(config: &VerifyConfig) -> Result<()> {
             "\n━━━ Step 4/{}: Testing tree-sitter grammars ━━━\n",
             TOTAL_STEPS
         );
-        let ts_dir = project_root.join("crates/tree-sitter-qmd/tree-sitter-markdown");
-        run_command(
-            "tree-sitter",
-            &["test"],
-            &ts_dir,
-            None,
-            "Tree-sitter grammar tests failed",
-        )?;
+        // Pin the compiled-grammar cache to this checkout; the default
+        // ~/.cache/tree-sitter/lib is shared by every checkout (bd-agsgrbfn).
+        let ts_dir = crate::tree_sitter::Grammar::Qmd.dir(&project_root);
+        let status = crate::tree_sitter::command(&crate::tree_sitter::libdir(&project_root))
+            .arg("test")
+            .current_dir(&ts_dir)
+            .status()
+            .context("Failed to run tree-sitter test")?;
+        if !status.success() {
+            bail!("Tree-sitter grammar tests failed");
+        }
         println!("✓ Tree-sitter grammar tests complete");
 
         if !config.skip_treesitter_crlf_tests {
