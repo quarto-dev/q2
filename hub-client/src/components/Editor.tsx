@@ -1613,6 +1613,7 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
         isOpen={showNewAssetDialog}
         existingPaths={files.map(f => f.path)}
         defaultDestination={assetDestination}
+        folders={allFolders}
         initialFiles={assetInitialFiles}
         onClose={handleAssetDialogClose}
         onUploadAsset={handleUploadAsset}

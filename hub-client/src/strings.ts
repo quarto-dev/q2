@@ -264,8 +264,7 @@ export const dialogs = {
   },
   newAsset: {
     title: 'Add asset to project',
-    destinationLabel: 'Destination folder:',
-    destinationPlaceholder: '(project root)',
+    destinationLabel: 'Folder:',
     dropZone: 'Drag & drop files here',
     dropZoneOr: 'or',
     browse: 'Browse files',

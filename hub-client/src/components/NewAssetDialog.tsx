@@ -17,6 +17,7 @@ import {
   type AssetFilePreview,
 } from './fileUpload';
 import ModalDialog from './ModalDialog';
+import FolderPicker from './FolderPicker';
 import { DownloadIcon, FileTextIcon } from './icons';
 import { common, dialogs } from '../strings';
 import './NewAssetDialog.css';
@@ -24,8 +25,10 @@ import './NewAssetDialog.css';
 export interface NewAssetDialogProps {
   isOpen: boolean;
   existingPaths: string[];
-  /** Destination folder to seed the input with. Empty string = project root. */
+  /** Destination folder to seed the picker with. Empty string = project root. */
   defaultDestination: string;
+  /** Every folder in the project (explicit and file-derived), for the picker. */
+  folders?: string[];
   onClose: () => void;
   /**
    * Called once per valid file on confirm. `targetPath` is the composed
@@ -45,6 +48,7 @@ export default function NewAssetDialog({
   isOpen,
   existingPaths,
   defaultDestination,
+  folders = [],
   onClose,
   onUploadAsset,
   initialFiles,
@@ -237,13 +241,11 @@ export default function NewAssetDialog({
         <div className="dialog-content">
           <div className="destination-input">
             <label htmlFor="asset-destination">{dialogs.newAsset.destinationLabel}</label>
-            <input
+            <FolderPicker
               id="asset-destination"
-              type="text"
-              className="qh-input focus-accent"
+              folders={folders}
               value={destination}
-              placeholder={dialogs.newAsset.destinationPlaceholder}
-              onChange={(e) => setDestination(e.target.value)}
+              onChange={setDestination}
             />
             {destinationError && (
               <div className="qh-error inline">{destinationError}</div>
