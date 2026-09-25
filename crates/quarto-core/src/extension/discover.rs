@@ -290,6 +290,22 @@ const KNOWN_BASE_FORMATS: &[&str] = &[
     "markdown_mmd",
     "markua",
     "commonmark_x",
+    // Long-tail Phase 4 (Tier C). The underscore bbcode flavors use
+    // pandoc's underscore spelling, so the last-hyphen split treats each
+    // whole string as the base (`acm-bbcode_steam` → base
+    // `bbcode_steam`).
+    "djot",
+    "t2t",
+    "xml",
+    "ansi",
+    "vimdoc",
+    "bbcode",
+    "bbcode_steam",
+    "bbcode_phpbb",
+    "bbcode_fluxbb",
+    "bbcode_hubzilla",
+    "bbcode_xenforo",
+    "chunkedhtml",
 ];
 
 pub fn parse_format_descriptor(format: &str) -> FormatDescriptor {
@@ -1008,5 +1024,39 @@ contributes:
         let bare = parse_format_descriptor("zimwiki");
         assert_eq!(bare.extension_name, None);
         assert_eq!(bare.base_format, "zimwiki");
+    }
+
+    /// Long-tail Phase 4: Tier C bases must resolve in extension-style
+    /// descriptors too — including an underscore flavor (`bbcode_steam`)
+    /// riding the last-hyphen split, and `chunkedhtml`/`xml` whose names
+    /// are not output extensions. Runtime-red until the names join
+    /// `KNOWN_BASE_FORMATS`.
+    #[test]
+    fn test_parse_format_descriptor_tier_c_bases() {
+        for (input, expected_base) in [
+            ("acm-djot", "djot"),
+            ("acm-chunkedhtml", "chunkedhtml"),
+            ("acm-xml", "xml"),
+            ("acm-ansi", "ansi"),
+            ("acm-bbcode_steam", "bbcode_steam"),
+            ("journal-vimdoc", "vimdoc"),
+        ] {
+            let desc = parse_format_descriptor(input);
+            assert_eq!(
+                desc.base_format, expected_base,
+                "base format for descriptor {input}"
+            );
+            assert_eq!(
+                desc.extension_name.as_deref(),
+                Some(input.split('-').next().unwrap()),
+                "extension name for descriptor {input}"
+            );
+        }
+
+        for bare_name in ["ansi", "vimdoc", "bbcode_xenforo"] {
+            let bare = parse_format_descriptor(bare_name);
+            assert_eq!(bare.extension_name, None, "bare {bare_name}");
+            assert_eq!(bare.base_format, bare_name, "bare {bare_name}");
+        }
     }
 }

@@ -468,14 +468,67 @@ once per phase boundary.
 
 ### Phase 4 — Tier C stretch (12 variants)
 
-- [ ] **Test spec first:** parametrized render smoke per variant;
-      chunkedhtml asserts valid zip containing `index.html`; ansi
-      asserts escape bytes present; **all variants assert bare
-      invocation** (no `--standalone` — Q1 `unknownFormat` parity).
-- [ ] Variants + mappings; **no** defaults rows (bare invocation).
-- [ ] `KNOWN_BASE_FORMATS`: add the Tier C bases.
-- [ ] E2E djot + chunkedhtml at minimum; inspect (unzip listing).
-- [ ] Workspace nextest; commit.
+- [x] **Test spec first:** parametrized render smoke per variant
+      (`tier_c_smoke_all_variants`, `pandoc_long_tail_formats.rs`);
+      chunkedhtml asserts a valid zip whose `index.html` shell is backed
+      by a chapter entry carrying the body text (**correction during
+      execution:** the chunked writer splits content into numbered
+      `1-<slug>.html` files — `index.html` is only the shell, so the
+      first draft's "body inside index.html" assertion was wrong and
+      was fixed against measured output); ansi asserts `\x1b[` escape
+      bytes; **bare invocation asserted at three sinks** —
+      `test_tier_c_invocation_args_empty` (no CLI flags),
+      `test_tier_c_pandoc_defaults_noop` (`format_pandoc_defaults`
+      returns the no-op default for all 12, pinning "no defaults rows"
+      at the sink), and an *output-level* title-marker check (fixture
+      title `TierCMarkerTitle` must not appear in the 10 text writers'
+      output — measured pandoc 3.11: `pandoc -t djot --standalone`
+      prepends `# <title>`; the AST-dump `xml` writer legitimately
+      echoes metadata so it's exempt). Red-first: all 11 new tests
+      failed with `Unknown format: djot` before the variants landed
+      (/tmp/tc-red.log).
+- [x] Variants + mappings: 12 variants (Djot, T2t, Xml, Ansi, Vimdoc,
+      Bbcode, BbcodeSteam, BbcodePhpbb, BbcodeFluxbb, BbcodeHubzilla,
+      BbcodeXenforo, Chunkedhtml) with as_str/TryFrom/is_pandoc_hybrid/
+      output_extension_for/pandoc_writer_name_for arms — all explicit,
+      the extension fall-through would send `-t txt`/`-t dj`/`-t zip`.
+      **No defaults rows anywhere** (bare invocation): none in
+      `format_pandoc_defaults`, `format_execute_defaults`,
+      `pandoc_invocation_args_for`, or `insert_crossref_numbering_mode`
+      (placeholder float renderer — same polarity as the plaintext
+      tail).
+- [x] `KNOWN_BASE_FORMATS`: added the 12 Tier C bases (+1 unit test:
+      `test_parse_format_descriptor_tier_c_bases`, incl. an
+      underscore flavor through the last-hyphen split,
+      `acm-bbcode_steam` → base `bbcode_steam`).
+- [x] E2E djot + chunkedhtml through the real binary; inspected.
+
+      Recorded 2026-09-24, fixture `target/e2e-tierc/f.qmd` (title
+      `Tier C Fixture`, `# Head`, `HelloTierCBody with *emphasis*.`,
+      2-item list), binary `./target/debug/q2` at branch tip:
+
+      - **djot**: `cargo run --bin q2 -- render
+        target/e2e-tierc/f.qmd --to djot --output-dir
+        target/e2e-tierc/out-djot` → `f.dj`, body:
+        `{#head}` / `# Head` / `HelloTierCBody with _emphasis_.` /
+        `- one` / `- two`. No title chrome (bare invocation) — the
+        standalone template would have prepended `# Tier C Fixture`.
+      - **chunkedhtml**: `… --to chunkedhtml --output-dir
+        target/e2e-tierc/out-chunked` → `f.zip` (3,629 bytes).
+        `unzip -l`: `sitemap.json` (217 B), `index.html` (4,384 B),
+        `1-head.html` (4,638 B). `unzip -p … 1-head.html` carries
+        `<h1 data-number="1" id="head">` and `HelloTierCBody with
+        <em>emphasis</em>` — the body lives in the chapter file, the
+        shell in `index.html`.
+
+      Both outputs inspected by hand. Also committed as
+      `e2e_render_djot` / `e2e_render_chunkedhtml`.
+- [x] Workspace nextest; commit. (14,786 run / 14,786 passed / 200
+      skipped / 0 failed, measured 2026-09-24 on this branch; delta vs
+      the Phase 3 baseline (14,776 run) = **+10**, all accounted for by
+      this phase's new `#[test]` fns: 6 in format.rs (`test_tier_c_*`),
+      1 in discover.rs, 1 in pandoc_long_tail_formats.rs, 2 in the e2e
+      file. Skipped unchanged.)
 
 ### Phase 5 — Tier D JS slide formats (4 variants)
 

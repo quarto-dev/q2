@@ -1092,3 +1092,86 @@ fn e2e_render_commonmark_x() {
         "commonmark_x output must not be HTML: {md}"
     );
 }
+
+/// Long-tail Phase 4 gate reachability (real binary + real pandoc):
+/// `q2 render f.qmd --to djot` exits 0, writes `f.dj` (pandoc's `dj`
+/// extension convention, not Q1's blanket `.txt`), and — bare invocation,
+/// Q1 `unknownFormat` parity — contains the body with no standalone
+/// template chrome (the djot default template would prepend `# F`).
+#[test]
+fn e2e_render_djot() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_file(
+        &dir.join("f.qmd"),
+        "---\ntitle: F\n---\n\n# Head\n\nHelloDjotBody.\n",
+    );
+
+    let output = run_q2(&dir, &["f.qmd", "--to", "djot"]);
+    assert!(
+        output.status.success(),
+        "q2 render --to djot should succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let dj = std::fs::read_to_string(dir.join("f.dj")).expect("f.dj should exist");
+    assert!(dj.contains("HelloDjotBody"), "djot body text missing: {dj}");
+    assert!(
+        dj.contains("# Head"),
+        "expected a djot ATX heading, got: {dj}"
+    );
+    assert!(
+        !dj.lines().any(|l| l.trim() == "# F"),
+        "djot output must not carry standalone title chrome: {dj}"
+    );
+}
+
+/// Long-tail Phase 4 gate reachability: `--to chunkedhtml` produces a
+/// zip archive (pandoc's chunked writer emits a zip regardless of the
+/// `-o` name) with an `index.html` shell plus numbered chapter files —
+/// the body text lands in a chapter entry, not the shell.
+#[test]
+fn e2e_render_chunkedhtml() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_file(
+        &dir.join("f.qmd"),
+        "---\ntitle: F\n---\n\n# Head\n\nHelloChunkedBody.\n",
+    );
+
+    let output = run_q2(&dir, &["f.qmd", "--to", "chunkedhtml"]);
+    assert!(
+        output.status.success(),
+        "q2 render --to chunkedhtml should succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let bytes = std::fs::read(dir.join("f.zip")).expect("f.zip should exist");
+    assert_eq!(
+        &bytes[..4],
+        b"PK\x03\x04",
+        "chunkedhtml output must be a zip"
+    );
+    let cursor = std::io::Cursor::new(bytes.clone());
+    let mut zip = zip::ZipArchive::new(cursor).expect("output should be a valid zip archive");
+    let mut names: Vec<String> = Vec::new();
+    for i in 0..zip.len() {
+        names.push(zip.by_index(i).unwrap().name().to_string());
+    }
+    assert!(
+        names.iter().any(|n| n == "index.html"),
+        "zip must contain index.html, got: {names:?}"
+    );
+    let mut found_body = false;
+    for name in &names {
+        let text = zip_entry_text(&bytes, name);
+        if text.contains("HelloChunkedBody") {
+            found_body = true;
+            break;
+        }
+    }
+    assert!(
+        found_body,
+        "zip must carry the body text in some chapter entry: {names:?}"
+    );
+}
