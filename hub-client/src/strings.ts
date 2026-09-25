@@ -88,6 +88,13 @@ export const fileSidebar = {
   menuCopyLink: 'Copy link',
   menuRename: common.rename,
   menuDelete: common.delete,
+  newFolder: 'New folder',
+  menuNewFolderInside: 'New folder inside',
+  menuDeleteFolder: 'Delete folder',
+  deleteFolderNotEmpty: 'Only empty folders can be deleted',
+  folderEmpty: 'Empty',
+  folderActionsFor: (name: string) => `Actions for folder ${name}`,
+  confirmDeleteFolder: (path: string) => `Delete folder ${path}?`,
 } as const;
 
 /** OutlinePanel. */
@@ -205,6 +212,15 @@ export const dialogs = {
     errorRequired: 'Filename is required',
     errorInvalidChars: 'Filename contains invalid characters',
     errorExists: 'A file with this name already exists',
+  },
+  newFolder: {
+    title: 'New folder',
+    nameLabel: (parent: string) => (parent ? `Folder name (inside ${parent}/):` : 'Folder name:'),
+    namePlaceholder: 'e.g., chapters',
+    errorRequired: 'Folder name is required',
+    errorInvalidChars: 'Folder name contains invalid characters',
+    errorExists: 'A folder with this name already exists',
+    errorFileExists: 'A file with this name already exists',
   },
   connectionStatus: {
     title: 'Connection status',

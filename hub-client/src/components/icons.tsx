@@ -236,6 +236,17 @@ export function FolderIcon({ size }: IconProps) {
   );
 }
 
+/** Folder with a plus — "new folder" action. */
+export function FolderPlusIcon({ size }: IconProps) {
+  return (
+    <StrokeIcon size={size}>
+      <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+      <path d="M12 10v6" />
+      <path d="M9 13h6" />
+    </StrokeIcon>
+  );
+}
+
 /** Arrow dropping into a tray — drop-target overlays. */
 export function DownloadIcon({ size }: IconProps) {
   return (

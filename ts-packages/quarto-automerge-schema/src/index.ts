@@ -11,7 +11,7 @@
 // ============================================================================
 
 /** Current schema version for IndexDocument. */
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 /** Current schema version for ProjectSetDocument. */
 export const CURRENT_PROJECT_SET_SCHEMA_VERSION = 1;
@@ -54,12 +54,18 @@ export interface CaptureRef {
  * `captures` is a sidecar map (V2+) keyed by the same paths used in
  * `files`. Entries are absent until an engine capture is recorded for
  * the path; the q2 preview server writes them and the SPA reads them.
+ *
+ * `folders` (V3+) records folders that exist independently of any file
+ * under them. Folders implied by file paths are never listed here; the
+ * set only makes *empty* folders representable. Keys are slash-separated
+ * paths relative to the project root, with no leading or trailing slash.
  */
 export interface IndexDocument {
   files: Record<string, string>; // path -> docId mapping
-  version?: number; // schema version (2 = current)
+  version?: number; // schema version (3 = current)
   identities?: Record<string, ActorIdentity>; // actorId -> identity
   captures?: Record<string, CaptureRef>; // path -> capture sidecar entry (V2+)
+  folders?: Record<string, true>; // explicitly created folders (V3+)
 }
 
 /**
@@ -70,6 +76,7 @@ export interface IndexDocument {
  *   V0 → V1: initialize `identities`, set `version = 1`.
  *   V1 → V2: bump `version = 2`. No structural change — `captures` is
  *            absent until a capture is recorded.
+ *   V2 → V3: initialize `folders`, set `version = 3`.
  *
  * Any preexisting `captures` sidecar (e.g. on a doc mis-tagged as V1)
  * is preserved through the bump.
@@ -91,6 +98,14 @@ export function migrateIndexDocument(doc: IndexDocument): boolean {
   if (doc.version === 1) {
     // V1 → V2 (sidecar capture map; no structural change needed)
     doc.version = 2;
+    changed = true;
+  }
+  if (doc.version === 2) {
+    // V2 → V3 (explicit-folder set)
+    if (!doc.folders) {
+      doc.folders = {};
+    }
+    doc.version = 3;
     changed = true;
   }
   return changed;
@@ -519,6 +534,25 @@ const TEXT_EXTENSIONS = new Set([
   'tsx',
   'jsx',
 ]);
+
+/**
+ * Normalize a project-relative path to the canonical form used as a key
+ * in `IndexDocument.files` / `.folders`: forward slashes only, no
+ * leading or trailing slash, no empty or `.` segments, trimmed.
+ *
+ * Every mutation that takes a path (create, upload, rename, move, folder
+ * create/delete) runs through this so `folder/a.qmd` and `/folder/a.qmd`
+ * can never coexist as two different folders. `..` segments are left in
+ * place for the caller's validator to reject; they are not resolved.
+ */
+export function normalizeProjectPath(path: string): string {
+  return path
+    .trim()
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter((seg) => seg !== '' && seg !== '.')
+    .join('/');
+}
 
 /**
  * Get file extension from path (lowercase, without dot).

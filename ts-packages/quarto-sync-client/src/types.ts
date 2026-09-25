@@ -142,6 +142,13 @@ export interface SyncClientCallbacks {
   onCapturesChange?: (captures: Record<string, CaptureRef>) => void;
 
   /**
+   * Called when the set of explicitly created folders changes (optional,
+   * V3+). Provides the full list of folder paths. Folders implied by file
+   * paths are not included — the consumer merges the two.
+   */
+  onFoldersChange?: (folders: string[]) => void;
+
+  /**
    * Called when connection state changes (optional).
    */
   onConnectionChange?: (connected: boolean) => void;

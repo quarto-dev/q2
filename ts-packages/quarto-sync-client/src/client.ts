@@ -42,6 +42,7 @@ import {
   getDocumentType,
   isBinaryExtension,
   migrateIndexDocument,
+  normalizeProjectPath,
   setIdentity,
 } from '@quarto/quarto-automerge-schema';
 
@@ -481,6 +482,23 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   // Track last-seen captures for diffing
   let lastCaptures: Record<string, CaptureRef> = {};
 
+  // Helper: get the explicit-folder set from the index document (V3+)
+  function getFoldersFromIndex(doc: IndexDocument): string[] {
+    return doc.folders ? Object.keys(doc.folders).sort() : [];
+  }
+
+  // Track last-seen folders for diffing
+  let lastFolders: string[] = [];
+
+  // Helper: fire onFoldersChange if the folder set differs from last seen
+  function notifyFoldersIfChanged(doc: IndexDocument): void {
+    const current = getFoldersFromIndex(doc);
+    if (JSON.stringify(current) !== JSON.stringify(lastFolders)) {
+      lastFolders = current;
+      callbacks.onFoldersChange?.(current);
+    }
+  }
+
   // Index-document self-heal (bd-6f21d4c6 / H4): the 'change' handler
   // currently attached to state.indexHandle, tracked so a recovery can
   // detach it from the old (about-to-be-deleted) handle before attaching
@@ -781,6 +799,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       callbacks.onFilesChange?.(newFiles);
       notifyIdentitiesIfChanged(changedDoc);
       if (notifyCaptures) notifyCapturesIfChanged(changedDoc);
+      notifyFoldersIfChanged(changedDoc);
     }
   }
 
@@ -1255,6 +1274,10 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       lastCaptures = getCapturesFromIndex(currentDoc);
       callbacks.onCapturesChange?.(lastCaptures);
 
+      // Fire initial folders (empty before V3)
+      lastFolders = getFoldersFromIndex(currentDoc);
+      callbacks.onFoldersChange?.(lastFolders);
+
       // Subscribe to index changes
       attachIndexSubscription(indexHandle, true);
 
@@ -1564,10 +1587,11 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   /**
    * Create a new text file.
    */
-  async function createFile(path: string, content: string = ''): Promise<void> {
+  async function createFile(rawPath: string, content: string = ''): Promise<void> {
     if (!state.repo || !state.indexHandle) {
       throw new Error('Not connected');
     }
+    const path = normalizeProjectPath(rawPath);
 
     const handle = createDoc<TextDocumentContent>();
     handle.change(doc => {
@@ -1588,13 +1612,14 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
    * Create a new binary file with deduplication.
    */
   async function createBinaryFile(
-    path: string,
+    rawPath: string,
     content: Uint8Array,
     mimeType: string
   ): Promise<CreateBinaryFileResult> {
     if (!state.repo || !state.indexHandle) {
       throw new Error('Not connected');
     }
+    let path = normalizeProjectPath(rawPath);
 
     const hash = await computeSHA256(content);
     const indexDoc = state.indexHandle.doc();
@@ -1644,10 +1669,11 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   /**
    * Delete a file.
    */
-  function deleteFile(path: string): void {
+  function deleteFile(rawPath: string): void {
     if (!state.indexHandle) {
       throw new Error('Not connected');
     }
+    const path = normalizeProjectPath(rawPath);
 
     const indexHandle = state.indexHandle;
     indexHandle.change(doc => {
@@ -1691,11 +1717,65 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   }
 
   /**
-   * Rename a file.
+   * Record an explicitly created folder so it exists (and is listed) even
+   * with no files under it. Idempotent. `path` is root-relative with no
+   * leading or trailing slash.
    */
-  function renameFile(oldPath: string, newPath: string): void {
+  function createFolder(rawPath: string): void {
     if (!state.indexHandle) {
       throw new Error('Not connected');
+    }
+    const path = normalizeProjectPath(rawPath);
+    if (!path) return;
+    state.indexHandle.change(doc => {
+      if (!doc.folders) doc.folders = {};
+      if (doc.folders[path] !== true) doc.folders[path] = true;
+    });
+  }
+
+  /**
+   * Forget an explicitly created folder. Only the folder marker is
+   * removed — files under the path are untouched, so a folder that still
+   * contains files keeps appearing in listings (derived from those
+   * paths). Callers wanting "delete folder" semantics delete the files
+   * first. No-op when the marker is absent.
+   */
+  function deleteFolder(rawPath: string): void {
+    if (!state.indexHandle) {
+      throw new Error('Not connected');
+    }
+    const path = normalizeProjectPath(rawPath);
+    state.indexHandle.change(doc => {
+      if (doc.folders && doc.folders[path] !== undefined) {
+        delete doc.folders[path];
+      }
+    });
+  }
+
+  /**
+   * List explicitly created folders (V3+). Empty before connect.
+   */
+  function getFolderPaths(): string[] {
+    const doc = state.indexHandle?.doc();
+    return doc ? getFoldersFromIndex(doc) : [];
+  }
+
+  /**
+   * Rename a file.
+   */
+  function renameFile(rawOldPath: string, rawNewPath: string): void {
+    if (!state.indexHandle) {
+      throw new Error('Not connected');
+    }
+    // Existing keys may predate normalization, so look the old path up
+    // as given and fall back to its normalized form.
+    const indexBefore = state.indexHandle.doc();
+    const oldPath = indexBefore?.files?.[rawOldPath] !== undefined
+      ? rawOldPath
+      : normalizeProjectPath(rawOldPath);
+    const newPath = normalizeProjectPath(rawNewPath);
+    if (!newPath) {
+      throw new Error('New path is empty');
     }
 
     const indexDoc = state.indexHandle.doc();
@@ -2000,7 +2080,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       // pre-generated ID so the first change uses the correct actor.
       syncLog(`[createNewProject] Creating index document with ID ${indexDocId}`);
       const indexHandle = createDoc<IndexDocument>(
-        { files: {}, version: CURRENT_SCHEMA_VERSION, identities: {} },
+        { files: {}, version: CURRENT_SCHEMA_VERSION, identities: {}, folders: {} },
         indexDocId,
       );
       state.indexHandle = indexHandle;
@@ -2020,6 +2100,10 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       // Fire initial captures (always empty for a fresh project)
       lastCaptures = getCapturesFromIndex(indexHandle.doc()!);
       callbacks.onCapturesChange?.(lastCaptures);
+
+      // Fire initial folders (always empty for a fresh project)
+      lastFolders = getFoldersFromIndex(indexHandle.doc()!);
+      callbacks.onFoldersChange?.(lastFolders);
 
       // Phase 3: Create file documents (now using the correct actor).
       const createdFiles: FileEntry[] = [];
@@ -2160,6 +2244,9 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     createBinaryFile,
     deleteFile,
     renameFile,
+    createFolder,
+    deleteFolder,
+    getFolderPaths,
     clearCapture,
     isConnected,
     getFileHandle,

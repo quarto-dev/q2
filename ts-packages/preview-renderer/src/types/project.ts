@@ -24,6 +24,7 @@ export {
   isImageExtension,
   isTextExtension,
   inferMimeType,
+  normalizeProjectPath,
 } from '@quarto/quarto-automerge-schema';
 
 // ============================================================================

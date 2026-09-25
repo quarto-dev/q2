@@ -145,6 +145,8 @@ function App() {
   // Populated by the sync client's onCapturesChange; threaded down to the
   // preview so recorded engine output can be spliced into the rendered AST.
   const [captures, setCaptures] = useState<Record<string, CaptureRef>>({});
+  // IndexDocument V3 explicit-folder set: folders that exist with no files.
+  const [folders, setFolders] = useState<string[]>([]);
   const [isOnline, setIsOnline] = useState<boolean>(false);
 
   // bd-sfet3264 (Phase 2D + Phase 4b): track which q2 executors are online for
@@ -790,6 +792,9 @@ function App() {
       onCapturesChange: (newCaptures) => {
         setCaptures(newCaptures);
       },
+      onFoldersChange: (newFolders) => {
+        setFolders(newFolders);
+      },
       onFileContent: (path, content, _patches) => {
         // Note: patches are ignored - we use diff-based sync in Editor.tsx
         setFileContents((prev) => {
@@ -1174,6 +1179,7 @@ function App() {
             <Editor
               project={project}
               files={files}
+              folders={folders}
               fileContents={fileContents}
               binaryFileVersions={binaryFileVersions}
               onDisconnect={handleDisconnect}

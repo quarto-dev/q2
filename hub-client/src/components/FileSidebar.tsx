@@ -10,7 +10,7 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
-import { isBinaryExtension, isImageExtension } from '@quarto/preview-renderer/types/project';
+import { isBinaryExtension, isImageExtension, normalizeProjectPath } from '@quarto/preview-renderer/types/project';
 import {
   buildFileTree,
   computeExpandedFolders,
@@ -29,6 +29,7 @@ import {
   ImageFileIcon,
   GearIcon,
   FolderIcon,
+  FolderPlusIcon,
   DownloadIcon,
 } from './icons';
 import { Menu, MenuItem } from './Menu';
@@ -38,9 +39,22 @@ import './FileSidebar.css';
 
 export interface FileSidebarProps {
   files: FileEntry[];
+  /**
+   * Explicitly created folders (IndexDocument V3 `folders`). Rendered even
+   * when no file lives under them; folders implied by file paths need not
+   * be listed.
+   */
+  folders?: string[];
   currentFile: FileEntry | null;
   onSelectFile: (file: FileEntry) => void;
   onNewFile: () => void;
+  /**
+   * Create an empty folder under `parent` ('' = project root). Shown as a
+   * header button and as a folder context-menu entry when provided.
+   */
+  onNewFolder?: (parent: string) => void;
+  /** Delete an explicitly created folder; only offered when it is empty. */
+  onDeleteFolder?: (path: string) => void;
   /**
    * Open the asset dialog. `files` may be empty (e.g. when the user clicks
    * the Upload button). `destination` is the folder the dialog should seed
@@ -72,6 +86,17 @@ export interface FileSidebarProps {
   fileContents?: Map<string, string>;
 }
 
+interface FolderMenuState {
+  visible: boolean;
+  x: number;
+  y: number;
+  /** Folder path the menu is for. */
+  path: string;
+  /** Whether the folder has no children (files or subfolders). */
+  isEmpty: boolean;
+  trigger?: HTMLElement | null;
+}
+
 interface ContextMenuState {
   visible: boolean;
   x: number;
@@ -91,6 +116,9 @@ interface NavItem {
   parent: string | null;
   file?: FileEntry;
 }
+
+/** dataTransfer type for sidebar-originated drags (read by Editor.tsx too). */
+const HUB_FILE_TYPE = 'application/x-hub-file';
 
 /** Check if a file path is an image (shared with the editor's image viewer) */
 function isImageFile(path: string): boolean {
@@ -138,9 +166,12 @@ function getFileIcon(path: string): React.ReactNode {
 
 export default function FileSidebar({
   files,
+  folders,
   currentFile,
   onSelectFile,
   onNewFile,
+  onNewFolder,
+  onDeleteFolder,
   onUploadFiles,
   onDeleteFile,
   onRenameFile,
@@ -151,8 +182,22 @@ export default function FileSidebar({
   fileContents,
 }: FileSidebarProps) {
   const [isDragOver, setIsDragOver] = useState(false);
+  // Drag-to-move (sidebar-internal drag of a file row): the folder path
+  // currently hovered as a drop destination ('' = project root), or null
+  // when no valid move is being hovered. `draggingPathRef` remembers the
+  // row being dragged because dataTransfer.getData is unreadable during
+  // dragover — only the payload's *type* is exposed until drop.
+  const [moveTarget, setMoveTarget] = useState<string | null>(null);
+  const draggingPathRef = useRef<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [folderMenu, setFolderMenu] = useState<FolderMenuState>({
+    visible: false,
+    x: 0,
+    y: 0,
+    path: '',
+    isEmpty: false,
+  });
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
     visible: false,
     x: 0,
@@ -198,7 +243,7 @@ export default function FileSidebar({
   }, [currentFile?.path, currentFormat]);
 
   // Build file tree from flat file list
-  const fileTree = useMemo(() => buildFileTree(files), [files]);
+  const fileTree = useMemo(() => buildFileTree(files, folders), [files, folders]);
 
   // Resolve a search result's path back to its FileEntry.
   const filesByPath = useMemo(() => {
@@ -453,17 +498,49 @@ export default function FileSidebar({
     ]
   );
 
-  // Drag and drop handlers
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(true);
-  }, []);
+  /**
+   * Where a sidebar-internal drag of `sourcePath` would land if dropped on
+   * `target`: the enclosing folder's path via the nearest
+   * `data-folder-path` ancestor, or the project root when the drop lands
+   * on tree background. Returns the new full path, or null when the move
+   * is a no-op (same folder) or would overwrite an existing file.
+   */
+  const resolveMove = useCallback(
+    (sourcePath: string, target: EventTarget | null): { folder: string; newPath: string } | null => {
+      const el = target instanceof Element ? target.closest('[data-folder-path]') : null;
+      const folder = el?.getAttribute('data-folder-path') ?? '';
+      const name = sourcePath.split('/').pop() || sourcePath;
+      const newPath = normalizeProjectPath(folder ? `${folder}/${name}` : name);
+      if (newPath === sourcePath || filesByPath.has(newPath)) return null;
+      return { folder, newPath };
+    },
+    [filesByPath]
+  );
+
+  // Drag and drop handlers. Two kinds of drag reach the sidebar: external
+  // files (upload — shows the drop overlay) and the sidebar's own file
+  // rows (move — highlights the destination folder).
+  const handleDragOver = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.dataTransfer.types.includes(HUB_FILE_TYPE)) {
+        const source = draggingPathRef.current;
+        const move = source && onRenameFile ? resolveMove(source, e.target) : null;
+        e.dataTransfer.dropEffect = move ? 'move' : 'none';
+        setMoveTarget(move ? move.folder : null);
+        return;
+      }
+      setIsDragOver(true);
+    },
+    [onRenameFile, resolveMove]
+  );
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(false);
+    setMoveTarget(null);
   }, []);
 
   const handleDrop = useCallback(
@@ -471,6 +548,18 @@ export default function FileSidebar({
       e.preventDefault();
       e.stopPropagation();
       setIsDragOver(false);
+      setMoveTarget(null);
+
+      const internal = e.dataTransfer.getData(HUB_FILE_TYPE);
+      if (internal) {
+        const { path } = JSON.parse(internal) as { path: string };
+        const source = filesByPath.get(path);
+        if (source && onRenameFile) {
+          const move = resolveMove(path, e.target);
+          if (move) onRenameFile(source, move.newPath);
+        }
+        return;
+      }
 
       const droppedFiles = Array.from(e.dataTransfer.files);
       if (droppedFiles.length > 0) {
@@ -481,7 +570,7 @@ export default function FileSidebar({
         onUploadFiles(droppedFiles, destination);
       }
     },
-    [onUploadFiles, currentFile]
+    [onUploadFiles, currentFile, filesByPath, onRenameFile, resolveMove]
   );
 
   // "Upload" button: open the asset dialog with no pre-filled files.
@@ -507,6 +596,27 @@ export default function FileSidebar({
     setContextMenu((prev) => ({ ...prev, visible: false }));
   }, []);
 
+  const closeFolderMenu = useCallback(() => {
+    setFolderMenu((prev) => ({ ...prev, visible: false }));
+  }, []);
+
+  const handleFolderContextMenu = useCallback(
+    (e: React.MouseEvent, node: FileTreeNode) => {
+      if (!onNewFolder && !onDeleteFolder) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setFolderMenu({
+        visible: true,
+        x: e.clientX,
+        y: e.clientY,
+        path: node.path,
+        isEmpty: node.children.length === 0,
+        trigger: e.currentTarget as HTMLElement,
+      });
+    },
+    [onNewFolder, onDeleteFolder]
+  );
+
   // Rename handlers
   const startRename = useCallback((file: FileEntry) => {
     setRenamingFile(file);
@@ -521,9 +631,9 @@ export default function FileSidebar({
 
   const handleRenameSubmit = useCallback(() => {
     if (renamingFile && renameValue.trim() && onRenameFile) {
-      const newPath = renameValue.trim();
+      const newPath = normalizeProjectPath(renameValue);
       // Only rename if the path actually changed; same path = cancel
-      if (newPath !== renamingFile.path) {
+      if (newPath && newPath !== renamingFile.path) {
         onRenameFile(renamingFile, newPath);
       }
     }
@@ -586,8 +696,10 @@ export default function FileSidebar({
     [onSelectFile, onOpenInNewTab]
   );
 
-  // Drag start handler for file items (for dragging to editor)
+  // Drag start handler for file items: the same payload serves dropping
+  // into the editor (insert image/link) and onto a sidebar folder (move).
   const handleFileDragStart = useCallback((e: React.DragEvent, file: FileEntry) => {
+    draggingPathRef.current = file.path;
     // Determine the type of file for markdown insertion
     let fileType: 'image' | 'qmd' | 'other' = 'other';
     if (isImageFile(file.path)) {
@@ -597,11 +709,16 @@ export default function FileSidebar({
     }
 
     // Set custom data for internal drag detection
-    e.dataTransfer.setData('application/x-hub-file', JSON.stringify({
+    e.dataTransfer.setData(HUB_FILE_TYPE, JSON.stringify({
       path: file.path,
       type: fileType,
     }));
-    e.dataTransfer.effectAllowed = 'copy';
+    e.dataTransfer.effectAllowed = 'copyMove';
+  }, []);
+
+  const handleFileDragEnd = useCallback(() => {
+    draggingPathRef.current = null;
+    setMoveTarget(null);
   }, []);
 
   // Render a file item with depth-based indentation
@@ -610,9 +727,9 @@ export default function FileSidebar({
     const isActive = currentFile?.path === file.path;
     const isBinary = (isBinaryExtension(file.path) && !isImageFile(file.path));
     const isRenaming = renamingFile?.path === file.path;
-    // Only make images and qmd files draggable (for editor insertion)
-    const isDraggable =
-      !isRenaming && (isImageFile(file.path) || isSourceFile(file.path));
+    // Every row can be dragged onto a folder to move it; images and
+    // sources can additionally be dropped into the editor.
+    const isDraggable = !isRenaming;
     // Parent folder of this file, used by resolveDefaultDestination when a
     // drop lands on a file row (the drop target is the file, but the
     // destination for an upload is the enclosing folder).
@@ -643,6 +760,7 @@ export default function FileSidebar({
         onDragStart={
           isDraggable ? (e) => handleFileDragStart(e, file) : undefined
         }
+        onDragEnd={isDraggable ? handleFileDragEnd : undefined}
       >
         {getFileIcon(file.path)}
         {isRenaming ? (
@@ -712,7 +830,11 @@ export default function FileSidebar({
     }
 
     return (
-      <div key={node.path} className="tree-folder" data-folder-path={node.path}>
+      <div
+        key={node.path}
+        className={`tree-folder ${moveTarget === node.path ? 'drop-target' : ''}`}
+        data-folder-path={node.path}
+      >
         <div
           className="folder-header"
           role="treeitem"
@@ -726,14 +848,23 @@ export default function FileSidebar({
             toggleFolder(node.path);
           }}
           onFocus={() => setFocusedPath(node.path)}
+          onContextMenu={(e) => handleFolderContextMenu(e, node)}
         >
           <span className="folder-chevron">{isExpanded ? '▼' : '▶'}</span>
           <span className="folder-icon"><FolderIcon size={16} /></span>
           <span className="folder-name qh-truncate">{node.name}</span>
         </div>
-        {isExpanded && (
+        {isExpanded && node.children.length > 0 && (
           <div className="folder-children" role="group">
             {node.children.map((child) => renderTreeNode(child, depth + 1))}
+          </div>
+        )}
+        {isExpanded && node.children.length === 0 && (
+          <div
+            className="folder-empty-hint"
+            style={{ paddingLeft: `${12 + (depth + 1) * 16 + 16}px` }}
+          >
+            {fileSidebar.folderEmpty}
           </div>
         )}
       </div>
@@ -810,6 +941,19 @@ export default function FileSidebar({
             <FilePlusIcon />
           </button>
         </Tooltip>
+        {onNewFolder && (
+          <Tooltip content={fileSidebar.newFolder}>
+            <button
+              className="qh-btn small outline new-folder-btn"
+              onClick={() =>
+                onNewFolder(resolveDefaultDestination({ selection: currentFile?.path }))
+              }
+              aria-label={fileSidebar.newFolder}
+            >
+              <FolderPlusIcon />
+            </button>
+          </Tooltip>
+        )}
         <Tooltip content={fileSidebar.addAsset}>
           <button
             className="qh-btn small outline upload-asset-btn"
@@ -887,7 +1031,7 @@ export default function FileSidebar({
           items violates aria-required-children; the empty state is plain
           text. */}
       <div
-        className="file-list"
+        className={`file-list ${moveTarget === '' ? 'drop-target' : ''}`}
         role={
           isSearching
             ? searchResults.length > 0
@@ -928,6 +1072,33 @@ export default function FileSidebar({
             <span>{fileSidebar.dropOverlay}</span>
           </div>
         </div>
+      )}
+
+      {/* Folder context menu */}
+      {folderMenu.visible && (
+        <Menu
+          key={`folder:${folderMenu.path}`}
+          fixed={{ x: folderMenu.x, y: folderMenu.y }}
+          onClose={closeFolderMenu}
+          triggerRef={{ current: folderMenu.trigger ?? null }}
+          aria-label={fileSidebar.folderActionsFor(folderMenu.path)}
+        >
+          {onNewFolder && (
+            <MenuItem onSelect={() => onNewFolder(folderMenu.path)}>
+              {fileSidebar.menuNewFolderInside}
+            </MenuItem>
+          )}
+          {onDeleteFolder && (
+            <MenuItem
+              danger
+              disabled={!folderMenu.isEmpty}
+              subtext={folderMenu.isEmpty ? undefined : fileSidebar.deleteFolderNotEmpty}
+              onSelect={() => onDeleteFolder(folderMenu.path)}
+            >
+              {fileSidebar.menuDeleteFolder}
+            </MenuItem>
+          )}
+        </Menu>
       )}
 
       {/* Context Menu */}

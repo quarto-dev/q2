@@ -6,7 +6,7 @@ import '../monacoSetup';
 import MonacoEditor, { DiffEditor } from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
 import type { ProjectEntry, FileEntry } from '@quarto/preview-renderer/types/project';
-import { isBinaryExtension, isImageExtension, isSourceFile, isTextExtension } from '@quarto/preview-renderer/types/project';
+import { isBinaryExtension, isImageExtension, isSourceFile, isTextExtension, normalizeProjectPath } from '@quarto/preview-renderer/types/project';
 import type { Route } from '../utils/routing';
 import { buildFullUrl, buildShareableUrl } from '../utils/routing';
 import {
@@ -14,6 +14,8 @@ import {
   createBinaryFile,
   deleteFile,
   renameFile,
+  createFolder,
+  deleteFolder,
   exportProjectAsZip,
   type EditorContentChange,
 } from '@quarto/preview-runtime';
@@ -48,6 +50,7 @@ import { diagnosticsToMarkers } from '../utils/diagnosticToMonaco';
 import EphemeralSessionBanner from './EphemeralSessionBanner';
 import FileSidebar from './FileSidebar';
 import NewFileDialog from './NewFileDialog';
+import NewFolderDialog from './NewFolderDialog';
 import NewAssetDialog from './NewAssetDialog';
 import ShareDialog from './ShareDialog';
 import ProjectTopBar from './ProjectTopBar';
@@ -68,10 +71,14 @@ import ImageViewer from './ImageViewer';
 import ReplayDrawer from './ReplayDrawer';
 import './Editor.css';
 import PreviewRouter from './render/PreviewRouter';
+import { fileSidebar } from '../strings';
+import { getAncestorPaths } from '../utils/fileTree';
 
 interface Props {
   project: ProjectEntry;
   files: FileEntry[];
+  /** Explicitly created folders (may be empty of files). */
+  folders?: string[];
   fileContents: Map<string, string>;
   /**
    * Path -> change counter for binary (image) documents. Bumped by App when
@@ -208,7 +215,7 @@ function selectDefaultFile(files: FileEntry[]): FileEntry | null {
   return files[0];
 }
 
-export default function Editor({ project, files, fileContents, binaryFileVersions, onDisconnect, onContentOperations, route, onNavigateToFile, identities, captures, executorsOnline, onRequestExecution, isOnline, sessionEphemeral, banner, userName }: Props) {
+export default function Editor({ project, files, folders, fileContents, binaryFileVersions, onDisconnect, onContentOperations, route, onNavigateToFile, identities, captures, executorsOnline, onRequestExecution, isOnline, sessionEphemeral, banner, userName }: Props) {
   // View mode for pane sizing
   const { viewMode } = useViewMode();
 
@@ -424,6 +431,8 @@ export default function Editor({ project, files, fileContents, binaryFileVersion
 
   // New file dialog state (text-only after Phase C of generic-file-uploader plan)
   const [showNewFileDialog, setShowNewFileDialog] = useState(false);
+  // Parent folder for the new-folder dialog; null = dialog closed.
+  const [newFolderParent, setNewFolderParent] = useState<string | null>(null);
   // Initial filename for new file dialog (e.g., from clicking a link to a non-existent file)
   const [newFileInitialName, setNewFileInitialName] = useState<string>('');
 
@@ -1104,7 +1113,8 @@ export default function Editor({ project, files, fileContents, binaryFileVersion
   }, [handleEditorDragOver, handleEditorDragLeave, handleEditorDrop, handleEditorPaste]);
 
   // Handle creating a new text file
-  const handleCreateTextFile = useCallback(async (path: string, initialContent: string) => {
+  const handleCreateTextFile = useCallback(async (rawPath: string, initialContent: string) => {
+    const path = normalizeProjectPath(rawPath);
     try {
       await createFile(path, initialContent);
       // Select the newly created file
@@ -1173,8 +1183,34 @@ export default function Editor({ project, files, fileContents, binaryFileVersion
     }
   }, [currentFile, files]);
 
+  // Open the new-folder dialog for `parent` ('' = project root).
+  const handleNewFolder = useCallback((parent: string) => {
+    setNewFolderParent(parent);
+  }, []);
+
+  const handleCreateFolder = useCallback((path: string) => {
+    try {
+      createFolder(path);
+    } catch (err) {
+      console.error('Failed to create folder:', err);
+    }
+  }, []);
+
+  // Forget an explicitly created folder. FileSidebar only offers this for
+  // folders with nothing under them, so no files are affected.
+  const handleDeleteFolder = useCallback((path: string) => {
+    if (!window.confirm(fileSidebar.confirmDeleteFolder(path))) return;
+    try {
+      deleteFolder(path);
+    } catch (err) {
+      console.error('Failed to delete folder:', err);
+    }
+  }, []);
+
   // Handle renaming a file
-  const handleRenameFile = useCallback((file: FileEntry, newPath: string) => {
+  const handleRenameFile = useCallback((file: FileEntry, rawNewPath: string) => {
+    const newPath = normalizeProjectPath(rawNewPath);
+    if (!newPath || newPath === file.path) return;
     try {
       renameFile(file.path, newPath);
       // If we renamed the current file, update the reference
@@ -1216,9 +1252,12 @@ export default function Editor({ project, files, fileContents, binaryFileVersion
                       </div>
                       <FileSidebar
                         files={files}
+                        folders={folders}
                         currentFile={currentFile}
                         onSelectFile={handleSelectFile}
                         onNewFile={handleNewFile}
+                        onNewFolder={handleNewFolder}
+                        onDeleteFolder={handleDeleteFolder}
                         onUploadFiles={handleUploadFiles}
                         onDeleteFile={handleDeleteFile}
                         onRenameFile={handleRenameFile}
@@ -1548,6 +1587,19 @@ export default function Editor({ project, files, fileContents, binaryFileVersion
         }}
         onCreateTextFile={handleCreateTextFile}
         initialFilename={newFileInitialName}
+      />
+
+      {/* New folder dialog */}
+      <NewFolderDialog
+        isOpen={newFolderParent !== null}
+        parent={newFolderParent ?? ''}
+        existingFolders={[
+          ...(folders ?? []),
+          ...files.flatMap((f) => getAncestorPaths(f.path)),
+        ]}
+        existingPaths={files.map((f) => f.path)}
+        onClose={() => setNewFolderParent(null)}
+        onCreateFolder={handleCreateFolder}
       />
 
       {/* Asset upload dialog */}

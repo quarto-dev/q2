@@ -35,6 +35,7 @@ export type { ConnectOptions, Patch, EditorContentChange, FileEntry, ActorIdenti
 type FilesChangeHandler = (files: FileEntry[]) => void;
 type IdentitiesChangeHandler = (identities: Record<string, ActorIdentity>) => void;
 type CapturesChangeHandler = (captures: Record<string, CaptureRef>) => void;
+type FoldersChangeHandler = (folders: string[]) => void;
 type FileContentHandler = (path: string, content: string, patches: Patch[]) => void;
 type BinaryContentHandler = (path: string, content: Uint8Array, mimeType: string) => void;
 type ConnectionHandler = (connected: boolean) => void;
@@ -43,6 +44,7 @@ type ErrorHandler = (error: Error) => void;
 let onFilesChange: FilesChangeHandler | null = null;
 let onIdentitiesChange: IdentitiesChangeHandler | null = null;
 let onCapturesChange: CapturesChangeHandler | null = null;
+let onFoldersChange: FoldersChangeHandler | null = null;
 let onFileContent: FileContentHandler | null = null;
 let onBinaryContent: BinaryContentHandler | null = null;
 let onConnectionChange: ConnectionHandler | null = null;
@@ -69,6 +71,7 @@ export function setSyncHandlers(handlers: {
   onFilesChange?: FilesChangeHandler;
   onIdentitiesChange?: IdentitiesChangeHandler;
   onCapturesChange?: CapturesChangeHandler;
+  onFoldersChange?: FoldersChangeHandler;
   onFileContent?: FileContentHandler;
   onBinaryContent?: BinaryContentHandler;
   onConnectionChange?: ConnectionHandler;
@@ -77,6 +80,7 @@ export function setSyncHandlers(handlers: {
   if (handlers.onFilesChange) onFilesChange = handlers.onFilesChange;
   if (handlers.onIdentitiesChange) onIdentitiesChange = handlers.onIdentitiesChange;
   if (handlers.onCapturesChange) onCapturesChange = handlers.onCapturesChange;
+  if (handlers.onFoldersChange) onFoldersChange = handlers.onFoldersChange;
   if (handlers.onFileContent) onFileContent = handlers.onFileContent;
   if (handlers.onBinaryContent) onBinaryContent = handlers.onBinaryContent;
   if (handlers.onConnectionChange) onConnectionChange = handlers.onConnectionChange;
@@ -118,6 +122,9 @@ function createInternalCallbacks(): SyncClientCallbacks {
     },
     onCapturesChange: (captures: Record<string, CaptureRef>) => {
       onCapturesChange?.(captures);
+    },
+    onFoldersChange: (folders: string[]) => {
+      onFoldersChange?.(folders);
     },
     onConnectionChange: (connected: boolean) => {
       onConnectionChange?.(connected);
@@ -270,6 +277,20 @@ export function clearCapture(path: string): void {
 export function renameFile(oldPath: string, newPath: string): void {
   ensureClient().renameFile(oldPath, newPath);
   // VFS is updated via callback
+}
+
+/**
+ * Record an explicitly created (possibly empty) folder.
+ */
+export function createFolder(path: string): void {
+  ensureClient().createFolder(path);
+}
+
+/**
+ * Forget an explicitly created folder (files under it are untouched).
+ */
+export function deleteFolder(path: string): void {
+  ensureClient().deleteFolder(path);
 }
 
 /**

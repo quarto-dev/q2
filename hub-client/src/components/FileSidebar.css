@@ -27,6 +27,7 @@
    each wrapped in a Tooltip anchor span (the wrapper is the flex item).
    inline-flex centers the SVG glyph. */
 .sidebar-header .new-file-btn,
+.sidebar-header .new-folder-btn,
 .sidebar-header .upload-asset-btn,
 .sidebar-header .print-file-btn {
   display: inline-flex;
@@ -181,6 +182,20 @@
   background: var(--sidebar-border);
 }
 
+/* Drag-to-move destination: the hovered folder's header, or the whole
+   tree when the drop would land at the project root. Solid tint plus an
+   inset outline so the target reads even on a short list. */
+.tree-folder.drop-target > .folder-header {
+  background: var(--sidebar-drag-bg);
+  outline: 2px solid var(--sidebar-drop-accent);
+  outline-offset: -2px;
+}
+
+.file-list.drop-target {
+  outline: 2px solid var(--sidebar-drop-accent);
+  outline-offset: -2px;
+}
+
 .folder-chevron {
   font-size: 8px;
   width: 10px;
@@ -202,6 +217,15 @@
 
 .folder-children {
   /* Children are indented via inline paddingLeft on items */
+}
+
+/* Placeholder row inside an expanded folder with nothing in it. */
+.folder-empty-hint {
+  padding-top: 4px;
+  padding-bottom: 4px;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--editor-text-dim);
 }
 
 /* Rename input */

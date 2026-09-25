@@ -50,6 +50,8 @@ function sortTreeChildren(node: FileTreeNode): void {
  * Build a nested file tree from a flat list of file entries.
  *
  * @param files - Array of FileEntry objects with path and docId
+ * @param folders - Explicitly created folder paths (may have no files);
+ *   each gets a folder node whether or not any file path implies it
  * @returns Root node of the tree (type 'folder', empty name/path)
  *
  * @example
@@ -62,7 +64,7 @@ function sortTreeChildren(node: FileTreeNode): void {
  * //   - folder "src" with nested "components" folder containing Button.tsx
  * //   - file "index.qmd"
  */
-export function buildFileTree(files: FileEntry[]): FileTreeNode {
+export function buildFileTree(files: FileEntry[], folders: string[] = []): FileTreeNode {
   const root: FileTreeNode = {
     name: '',
     path: '',
@@ -70,12 +72,11 @@ export function buildFileTree(files: FileEntry[]): FileTreeNode {
     children: [],
   };
 
-  for (const file of files) {
-    const segments = file.path.split('/');
+  // Walk (creating as needed) the folder nodes for `segments`, returning
+  // the deepest one.
+  const ensureFolders = (segments: string[]): FileTreeNode => {
     let current = root;
-
-    // Create/traverse folder nodes for all but the last segment
-    for (let i = 0; i < segments.length - 1; i++) {
+    for (let i = 0; i < segments.length; i++) {
       const segment = segments[i];
       const folderPath = segments.slice(0, i + 1).join('/');
 
@@ -94,6 +95,17 @@ export function buildFileTree(files: FileEntry[]): FileTreeNode {
       }
       current = child;
     }
+    return current;
+  };
+
+  for (const folder of folders) {
+    if (folder) ensureFolders(folder.split('/'));
+  }
+
+  for (const file of files) {
+    const segments = file.path.split('/');
+    // Folder nodes for all but the last segment
+    const current = ensureFolders(segments.slice(0, -1));
 
     // Add the file as a leaf
     const fileName = segments[segments.length - 1];

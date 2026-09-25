@@ -54,6 +54,9 @@ export interface MockSyncClient {
   createBinaryFile(path: string, content: Uint8Array, mimeType: string): Promise<CreateBinaryFileResult>;
   deleteFile(path: string): void;
   renameFile(oldPath: string, newPath: string): void;
+  createFolder(path: string): void;
+  deleteFolder(path: string): void;
+  getFolderPaths(): string[];
   getFileHandle(path: string): { documentId: string } | null;
   getFilePaths(): string[];
   getRepo(): unknown;
@@ -104,6 +107,7 @@ export function createMockSyncClient(
   const files = new Map<string, FilePayload>(options.initialFiles || []);
   let connected = false;
   const fileHandles = new Map<string, { documentId: string }>();
+  const folders = new Set<string>();
   let docIdCounter = 0;
 
   const generateDocId = () => `automerge:test-${docIdCounter++}`;
@@ -234,6 +238,20 @@ export function createMockSyncClient(
 
       callbacks.onFileRemoved(oldPath);
       callbacks.onFileAdded(newPath, file);
+    },
+
+    createFolder(path: string): void {
+      folders.add(path);
+      callbacks.onFoldersChange?.(Array.from(folders).sort());
+    },
+
+    deleteFolder(path: string): void {
+      folders.delete(path);
+      callbacks.onFoldersChange?.(Array.from(folders).sort());
+    },
+
+    getFolderPaths(): string[] {
+      return Array.from(folders).sort();
     },
 
     getFileHandle(path: string): { documentId: string } | null {

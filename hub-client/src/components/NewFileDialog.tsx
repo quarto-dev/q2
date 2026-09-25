@@ -8,6 +8,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { normalizeProjectPath } from '@quarto/preview-renderer/types/project';
 import { discoverTemplates, type ProjectTemplate } from '../services/templateService';
 import ModalDialog from './ModalDialog';
 import { common, dialogs } from '../strings';
@@ -84,10 +85,10 @@ export default function NewFileDialog({
 
   const validateFilename = useCallback(
     (name: string): string | null => {
-      if (!name.trim()) {
+      if (!name) {
         return dialogs.newFile.errorRequired;
       }
-      if (/[<>:"|?*\\]/.test(name)) {
+      if (/[<>:"|?*\\]/.test(name) || name.split('/').includes('..')) {
         return dialogs.newFile.errorInvalidChars;
       }
       if (existingPaths.includes(name)) {
@@ -99,13 +100,14 @@ export default function NewFileDialog({
   );
 
   const handleCreateTextFile = useCallback(() => {
-    const validationError = validateFilename(filename);
+    const path = normalizeProjectPath(filename);
+    const validationError = validateFilename(path);
     if (validationError) {
       setError(validationError);
       return;
     }
     const content = selectedTemplate?.strippedContent ?? '';
-    onCreateTextFile(filename, content);
+    onCreateTextFile(path, content);
     onClose();
   }, [filename, selectedTemplate, validateFilename, onCreateTextFile, onClose]);
 
