@@ -12,8 +12,8 @@
  * full description is always the button's accessible name and tooltip,
  * and is the visible text too when `verbose` (the document bottom bar):
  * - Disconnected (browser offline, websocket not open, or no peer
- *   handshake): yellow dot; compact: no text; verbose: "Offline — synced
- *   n minutes ago".
+ *   handshake): yellow dot; compact: "n minutes ago" (the color carries
+ *   the offline state); verbose: "Offline — synced n minutes ago".
  * - Connected, sync activity this session within the last 15s (a remote
  *   change received, or a local change the hub confirmed delivered):
  *   green dot, "just now" / "Synced just now".
@@ -141,14 +141,15 @@ export default function SyncStatusBadge({
   }, [docId, inMemory, connected]);
 
   let dotClass: string;
-  /** Short visible text; empty when offline (the dot color says it). */
+  /** Short visible text (compact mode). */
   let detail: string;
   /** Full description for the tooltip and accessible name. */
   let full: string;
   if (!connected) {
     dotClass = 'yellow';
-    detail = '';
-    full = `${s.savingLocally} — ${lastSyncedAt ? s.syncedAgo(agoText(now - lastSyncedAt)) : s.neverSynced}`;
+    const ago = lastSyncedAt ? agoText(now - lastSyncedAt) : s.neverSynced;
+    detail = ago;
+    full = `${s.savingLocally} — ${lastSyncedAt ? s.syncedAgo(ago) : s.neverSynced}`;
   } else if (inMemory && now - inMemory < SYNCING_WINDOW_MS) {
     // Green only for sync activity observed *this session* — the
     // persisted/seeded timestamp must not light "just now" on load.
