@@ -571,9 +571,11 @@ export default function FileSidebar({
   );
 
   // Rename handlers
+  // Inline rename edits the name only; the folder stays put (use Move…
+  // or drag to change it). Slashes typed here still nest, as a shortcut.
   const startRename = useCallback((file: FileEntry) => {
     setRenamingFile(file);
-    setRenameValue(file.path);
+    setRenameValue(file.path.split('/').pop() || file.path);
     closeContextMenu();
     // Focus input and select all text after render
     setTimeout(() => {
@@ -584,7 +586,9 @@ export default function FileSidebar({
 
   const handleRenameSubmit = useCallback(() => {
     if (renamingFile && renameValue.trim() && onRenameFile) {
-      const newPath = normalizeProjectPath(renameValue);
+      const lastSlash = renamingFile.path.lastIndexOf('/');
+      const folder = lastSlash >= 0 ? renamingFile.path.slice(0, lastSlash) : '';
+      const newPath = normalizeProjectPath(folder ? `${folder}/${renameValue}` : renameValue);
       // Only rename if the path actually changed; same path = cancel
       if (newPath && newPath !== renamingFile.path) {
         onRenameFile(renamingFile, newPath);
