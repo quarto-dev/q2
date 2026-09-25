@@ -8,13 +8,14 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import ModalDialog from './ModalDialog';
+import FolderPicker from './FolderPicker';
 import { normalizeProjectPath } from '@quarto/preview-renderer/types/project';
 import { common, dialogs } from '../strings';
 import './NewFileDialog.css';
 
 export interface NewFolderDialogProps {
   isOpen: boolean;
-  /** Folder to create inside ('' = project root). */
+  /** Initial folder to create inside ('' = project root); editable in the dialog. */
   parent: string;
   /** Existing folder paths (explicit and file-derived), for collision checks. */
   existingFolders: string[];
@@ -23,37 +24,38 @@ export interface NewFolderDialogProps {
   onCreateFolder: (path: string) => void;
 }
 
-export default function NewFolderDialog({
-  isOpen,
+export default function NewFolderDialog({ isOpen, ...rest }: NewFolderDialogProps) {
+  // The form mounts fresh on every open, so its state (including the
+  // seeded parent folder) starts clean without any reset effects.
+  if (!isOpen) return null;
+  return <NewFolderForm {...rest} />;
+}
+
+function NewFolderForm({
   parent,
   existingFolders,
   existingPaths,
   onClose,
   onCreateFolder,
-}: NewFolderDialogProps) {
+}: Omit<NewFolderDialogProps, 'isOpen'>) {
   const [name, setName] = useState('');
+  const [parentFolder, setParentFolder] = useState(parent);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (isOpen) {
-      setTimeout(() => inputRef.current?.focus(), 100);
-    }
-  }, [isOpen]);
+    const t = setTimeout(() => inputRef.current?.focus(), 100);
+    return () => clearTimeout(t);
+  }, []);
 
-  // Reset the form as part of closing (Cancel, Escape, or after Create).
-  const close = useCallback(() => {
-    setName('');
-    setError(null);
-    onClose();
-  }, [onClose]);
+  const close = onClose;
 
   const fullPath = useCallback(
     (raw: string) => {
       const trimmed = normalizeProjectPath(raw);
-      return normalizeProjectPath(parent && trimmed ? `${parent}/${trimmed}` : trimmed);
+      return normalizeProjectPath(parentFolder && trimmed ? `${parentFolder}/${trimmed}` : trimmed);
     },
-    [parent]
+    [parentFolder]
   );
 
   const handleCreate = useCallback(() => {
@@ -91,8 +93,6 @@ export default function NewFolderDialog({
     [handleCreate]
   );
 
-  if (!isOpen) return null;
-
   return (
     <ModalDialog
       title={dialogs.newFolder.title}
@@ -102,8 +102,20 @@ export default function NewFolderDialog({
     >
       <div className="dialog-content">
         <div className="text-file-form">
+          <div className="folder-input">
+            <label htmlFor="new-folder-parent">{dialogs.newFolder.parentLabel}</label>
+            <FolderPicker
+              id="new-folder-parent"
+              folders={existingFolders}
+              value={parentFolder}
+              onChange={(f) => {
+                setParentFolder(f);
+                setError(null);
+              }}
+            />
+          </div>
           <div className="filename-input">
-            <label htmlFor="folder-name">{dialogs.newFolder.nameLabel(parent)}</label>
+            <label htmlFor="folder-name">{dialogs.newFolder.nameLabel}</label>
             <input
               ref={inputRef}
               id="folder-name"

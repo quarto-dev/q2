@@ -12,6 +12,31 @@
 }
 
 /* Text file form */
+.text-file-form .folder-input {
+  margin-bottom: 14px;
+}
+
+/* Folder and Filename rows: label and control on one line. */
+.text-file-form .folder-input,
+.text-file-form .filename-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.text-file-form .folder-input label,
+.text-file-form .filename-input label {
+  margin-bottom: 0;
+  flex-shrink: 0;
+  min-width: 72px;
+}
+
+.text-file-form .folder-input > .folder-picker,
+.text-file-form .filename-input > input {
+  flex: 1;
+  min-width: 0;
+}
+
 .text-file-form label {
   display: block;
   margin-bottom: 8px;

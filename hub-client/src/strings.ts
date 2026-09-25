@@ -97,6 +97,12 @@ export const fileSidebar = {
   confirmDeleteFolder: (path: string) => `Delete folder ${path}?`,
 } as const;
 
+/** FolderPicker (New-file dialog's folder dropdown). */
+export const folderPicker = {
+  label: 'Choose folder',
+  root: '(project root)',
+} as const;
+
 /** OutlinePanel. */
 export const outline = {
   expand: (name: string) => `Expand ${name}`,
@@ -207,6 +213,7 @@ export const dialogs = {
     title: 'New file',
     templateLabel: 'Template:',
     blank: 'Blank file',
+    folderLabel: 'Folder:',
     filenameLabel: 'Filename:',
     filenamePlaceholder: 'e.g., chapter1.qmd',
     errorRequired: 'Filename is required',
@@ -215,7 +222,8 @@ export const dialogs = {
   },
   newFolder: {
     title: 'New folder',
-    nameLabel: (parent: string) => (parent ? `Folder name (inside ${parent}/):` : 'Folder name:'),
+    parentLabel: 'Folder:',
+    nameLabel: 'Name:',
     namePlaceholder: 'e.g., chapters',
     errorRequired: 'Folder name is required',
     errorInvalidChars: 'Folder name contains invalid characters',

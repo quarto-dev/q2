@@ -247,6 +247,15 @@ export function FolderPlusIcon({ size }: IconProps) {
   );
 }
 
+/** Chevron pointing down — dropdown triggers. */
+export function ChevronDownIcon({ size }: IconProps) {
+  return (
+    <StrokeIcon size={size}>
+      <path d="m6 9 6 6 6-6" />
+    </StrokeIcon>
+  );
+}
+
 /** Arrow dropping into a tray — drop-target overlays. */
 export function DownloadIcon({ size }: IconProps) {
   return (

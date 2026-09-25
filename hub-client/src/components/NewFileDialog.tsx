@@ -11,26 +11,45 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { normalizeProjectPath } from '@quarto/preview-renderer/types/project';
 import { discoverTemplates, type ProjectTemplate } from '../services/templateService';
 import ModalDialog from './ModalDialog';
+import FolderPicker from './FolderPicker';
 import { common, dialogs } from '../strings';
 import './NewFileDialog.css';
 
 export interface NewFileDialogProps {
   isOpen: boolean;
   existingPaths: string[];
+  /** Every folder in the project (explicit and file-derived), for the picker. */
+  folders?: string[];
   onClose: () => void;
   onCreateTextFile: (path: string, content: string) => void;
-  /** Optional initial filename (e.g., from clicking a link to a non-existent file) */
+  /**
+   * Optional initial path (e.g., from clicking a link to a non-existent
+   * file, or the current file's folder as `notes/`). A directory part
+   * seeds the folder picker; the rest seeds the filename.
+   */
   initialFilename?: string;
+}
+
+/** Split `notes/intro.qmd` into folder `notes` and name `intro.qmd`. */
+function splitInitial(initial: string): { folder: string; name: string } {
+  const normalized = normalizeProjectPath(initial);
+  const endsWithSlash = initial.trim().endsWith('/');
+  if (endsWithSlash) return { folder: normalized, name: '' };
+  const lastSlash = normalized.lastIndexOf('/');
+  if (lastSlash < 0) return { folder: '', name: normalized };
+  return { folder: normalized.slice(0, lastSlash), name: normalized.slice(lastSlash + 1) };
 }
 
 export default function NewFileDialog({
   isOpen,
   existingPaths,
+  folders = [],
   onClose,
   onCreateTextFile,
   initialFilename,
 }: NewFileDialogProps) {
   const [filename, setFilename] = useState('');
+  const [folder, setFolder] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   // Template state
@@ -40,10 +59,12 @@ export default function NewFileDialog({
 
   const filenameInputRef = useRef<HTMLInputElement>(null);
 
-  // Seed the filename input on open.
+  // Seed the folder picker and filename input on open.
   useEffect(() => {
     if (isOpen && initialFilename) {
-      setFilename(initialFilename);
+      const { folder: f, name } = splitInitial(initialFilename);
+      setFolder(f);
+      setFilename(name);
     }
   }, [isOpen, initialFilename]);
 
@@ -76,6 +97,7 @@ export default function NewFileDialog({
   useEffect(() => {
     if (!isOpen) {
       setFilename('');
+      setFolder('');
       setError(null);
       setTemplates([]);
       setSelectedTemplate(null);
@@ -100,7 +122,7 @@ export default function NewFileDialog({
   );
 
   const handleCreateTextFile = useCallback(() => {
-    const path = normalizeProjectPath(filename);
+    const path = normalizeProjectPath(folder ? `${folder}/${filename}` : filename);
     const validationError = validateFilename(path);
     if (validationError) {
       setError(validationError);
@@ -109,7 +131,7 @@ export default function NewFileDialog({
     const content = selectedTemplate?.strippedContent ?? '';
     onCreateTextFile(path, content);
     onClose();
-  }, [filename, selectedTemplate, validateFilename, onCreateTextFile, onClose]);
+  }, [folder, filename, selectedTemplate, validateFilename, onCreateTextFile, onClose]);
 
   // Enter submits; Escape and Tab containment are owned by ModalDialog.
   const handleKeyDown = useCallback(
@@ -162,6 +184,18 @@ export default function NewFileDialog({
                 </select>
               </div>
             )}
+            <div className="folder-input">
+              <label htmlFor="new-file-folder">{dialogs.newFile.folderLabel}</label>
+              <FolderPicker
+                id="new-file-folder"
+                folders={folders}
+                value={folder}
+                onChange={(f) => {
+                  setFolder(f);
+                  setError(null);
+                }}
+              />
+            </div>
             <div className="filename-input">
               <label htmlFor="filename">{dialogs.newFile.filenameLabel}</label>
               <input

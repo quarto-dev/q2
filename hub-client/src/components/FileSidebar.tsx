@@ -10,7 +10,7 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
-import { isBinaryExtension, isImageExtension, normalizeProjectPath } from '@quarto/preview-renderer/types/project';
+import { isImageExtension, normalizeProjectPath } from '@quarto/preview-renderer/types/project';
 import {
   buildFileTree,
   computeExpandedFolders,
@@ -23,15 +23,12 @@ import {
   FilePlusIcon,
   UploadIcon,
   PrintIcon,
-  MoreIcon,
-  QmdFileIcon,
-  FileTextIcon,
-  ImageFileIcon,
-  GearIcon,
-  FolderIcon,
   FolderPlusIcon,
   DownloadIcon,
 } from './icons';
+import FileTreeRow from './FileTreeRow';
+import MoreActionsIconButton from './MoreActionsIconButton';
+import { getFileIcon, treeRowIndent } from './fileTreeRowHelpers';
 import { Menu, MenuItem } from './Menu';
 import Tooltip from './Tooltip';
 import { common, fileSidebar } from '../strings';
@@ -129,38 +126,6 @@ function isImageFile(path: string): boolean {
 function isSourceFile(path: string): boolean {
   const ext = path.split('.').pop()?.toLowerCase() || '';
   return ext === 'qmd' || ext === 'md';
-}
-
-/** File icon + per-type tint, wrapped in the .file-icon span. */
-function getFileIcon(path: string): React.ReactNode {
-  const ext = path.split('.').pop()?.toLowerCase() || '';
-
-  if (isImageFile(path)) {
-    return (
-      <span className="file-icon file-icon--image">
-        <ImageFileIcon size={16} />
-      </span>
-    );
-  }
-  if (['qmd', 'md'].includes(ext)) {
-    return (
-      <span className="file-icon file-icon--qmd">
-        <QmdFileIcon size={16} />
-      </span>
-    );
-  }
-  if (['yml', 'yaml', 'json'].includes(ext)) {
-    return (
-      <span className="file-icon file-icon--config">
-        <GearIcon size={16} />
-      </span>
-    );
-  }
-  return (
-    <span className="file-icon">
-      <FileTextIcon size={16} />
-    </span>
-  );
 }
 
 
@@ -721,11 +686,12 @@ export default function FileSidebar({
     setMoveTarget(null);
   }, []);
 
+  const hasFileActions = !!(onOpenInNewTab || onCopyLink || onRenameFile || onDeleteFile);
+
   // Render a file item with depth-based indentation
   const renderFileItem = (file: FileEntry, depth: number) => {
     const fileName = file.path.split('/').pop() || file.path;
     const isActive = currentFile?.path === file.path;
-    const isBinary = (isBinaryExtension(file.path) && !isImageFile(file.path));
     const isRenaming = renamingFile?.path === file.path;
     // Every row can be dragged onto a folder to move it; images and
     // sources can additionally be dropped into the editor.
@@ -738,79 +704,56 @@ export default function FileSidebar({
 
     const rowTip = fileSidebar.rowTooltip(file.path, !!onOpenInNewTab);
     return (
-      <Tooltip block content={rowTip}>
-      <div
-        key={file.path}
-        role="treeitem"
-        aria-level={depth + 1}
-        aria-selected={isActive}
-        tabIndex={tabbablePath === file.path ? 0 : -1}
-        data-tree-path={file.path}
-        className={`file-item qh-row-hover ${isActive ? 'active' : ''} ${isBinary ? 'binary' : ''}`}
-        style={{ paddingLeft: `${12 + depth * 16}px` }}
-        data-folder-path={parentFolderPath}
-        onClick={(e) => {
-          if (isRenaming) return;
-          setFocusedPath(file.path);
-          handleFileClick(e, file);
-        }}
-        onFocus={() => setFocusedPath(file.path)}
-        onContextMenu={(e) => handleContextMenu(e, file)}
-        draggable={isDraggable}
-        onDragStart={
-          isDraggable ? (e) => handleFileDragStart(e, file) : undefined
-        }
-        onDragEnd={isDraggable ? handleFileDragEnd : undefined}
-      >
-        {getFileIcon(file.path)}
-        {isRenaming ? (
-          <input
-            ref={renameInputRef}
-            type="text"
-            className="rename-input"
-            value={renameValue}
-            onChange={(e) => setRenameValue(e.target.value)}
-            onBlur={handleRenameSubmit}
-            onKeyDown={handleRenameKeyDown}
-          />
-        ) : (
-          <span className="file-name qh-truncate">{fileName}</span>
-        )}
-        {!isRenaming && (onOpenInNewTab || onCopyLink || onRenameFile || onDeleteFile) && (
-          <button
-            type="button"
-            className="qh-icon-btn file-kebab"
-            // Not a tab stop: the tree is one tab stop (roving tabindex)
-            // and keyboard users open this menu with Shift+F10 on the row.
-            tabIndex={-1}
-            aria-label={fileSidebar.actionsFor(fileName)}
-            aria-haspopup="menu"
-            aria-expanded={contextMenu.visible && contextMenu.file?.path === file.path}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (contextMenu.visible && contextMenu.file?.path === file.path) {
-                closeContextMenu();
-                return;
+      <Tooltip key={file.path} block content={rowTip}>
+        <FileTreeRow
+          type="file"
+          name={fileName}
+          path={file.path}
+          depth={depth}
+          role="treeitem"
+          aria-level={depth + 1}
+          aria-selected={isActive}
+          active={isActive}
+          tabIndex={tabbablePath === file.path ? 0 : -1}
+          data-tree-path={file.path}
+          data-folder-path={parentFolderPath}
+          onClick={(e) => {
+            if (isRenaming) return;
+            setFocusedPath(file.path);
+            handleFileClick(e, file);
+          }}
+          onFocus={() => setFocusedPath(file.path)}
+          onContextMenu={(e) => handleContextMenu(e, file)}
+          draggable={isDraggable}
+          onDragStart={
+            isDraggable ? (e) => handleFileDragStart(e, file) : undefined
+          }
+          onDragEnd={isDraggable ? handleFileDragEnd : undefined}
+          nameSlot={
+            isRenaming &&
+            <input
+              ref={renameInputRef}
+              type="text"
+              className="rename-input"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onBlur={handleRenameSubmit}
+              onKeyDown={handleRenameKeyDown}
+            />
+          }
+        >
+          {!isRenaming && hasFileActions && (
+            <MoreActionsIconButton
+              label={fileSidebar.actionsFor(fileName)}
+              expanded={contextMenu.visible && contextMenu.file?.path === file.path}
+              onOpen={({ x, y, trigger }) =>
+                setContextMenu({ visible: true, x, y, file, trigger })
               }
-              const rect = e.currentTarget.getBoundingClientRect();
-              setContextMenu({
-                visible: true,
-                x: rect.left,
-                y: rect.bottom + 4,
-                file,
-                trigger: e.currentTarget,
-              });
-            }}
-            onContextMenu={(e) => {
-              // Menu key / right-click on the kebab opens the same menu.
-              e.stopPropagation();
-              handleContextMenu(e, file);
-            }}
-          >
-            <MoreIcon />
-          </button>
-        )}
-      </div>
+              onClose={closeContextMenu}
+              onContextMenu={(e) => handleContextMenu(e, file)}
+            />
+          )}
+        </FileTreeRow>
       </Tooltip>
     );
   };
@@ -835,25 +778,24 @@ export default function FileSidebar({
         className={`tree-folder ${moveTarget === node.path ? 'drop-target' : ''}`}
         data-folder-path={node.path}
       >
-        <div
-          className="folder-header"
+        <FileTreeRow
+          type="folder"
+          name={node.name}
+          path={node.path}
+          depth={depth}
+          expanded={isExpanded}
           role="treeitem"
           aria-level={depth + 1}
           aria-expanded={isExpanded}
           tabIndex={tabbablePath === node.path ? 0 : -1}
           data-tree-path={node.path}
-          style={{ paddingLeft: `${12 + depth * 16}px` }}
           onClick={() => {
             setFocusedPath(node.path);
             toggleFolder(node.path);
           }}
           onFocus={() => setFocusedPath(node.path)}
           onContextMenu={(e) => handleFolderContextMenu(e, node)}
-        >
-          <span className="folder-chevron">{isExpanded ? '▼' : '▶'}</span>
-          <span className="folder-icon"><FolderIcon size={16} /></span>
-          <span className="folder-name qh-truncate">{node.name}</span>
-        </div>
+        />
         {isExpanded && node.children.length > 0 && (
           <div className="folder-children" role="group">
             {node.children.map((child) => renderTreeNode(child, depth + 1))}
@@ -862,7 +804,7 @@ export default function FileSidebar({
         {isExpanded && node.children.length === 0 && (
           <div
             className="folder-empty-hint"
-            style={{ paddingLeft: `${12 + (depth + 1) * 16 + 16}px` }}
+            style={{ paddingLeft: `${treeRowIndent(depth + 1) + 16}px` }}
           >
             {fileSidebar.folderEmpty}
           </div>

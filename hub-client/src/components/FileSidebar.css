@@ -91,17 +91,6 @@
 }
 
 /* File items - paddingLeft is set inline based on depth */
-.file-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  cursor: pointer;
-  border-start-start-radius: var(--radius-md);
-  border-end-start-radius: var(--radius-md);
-  transition: background-color var(--duration-fast) var(--ease-out);
-}
-
 .file-item.active {
   /* Same surface as the document top/bottom bars (--monaco-bg exists
      only in the dark editor scope; light falls back to --editor-bg). */
@@ -125,32 +114,6 @@
   outline-offset: calc(-1 * var(--focus-ring-offset));
 }
 
-.file-icon {
-  display: inline-flex;
-  align-items: center;
-  color: var(--editor-text-muted);
-  flex-shrink: 0;
-}
-
-/* Per-type tints. */
-.file-icon--qmd {
-  color: var(--editor-info);
-}
-
-.file-icon--image {
-  color: var(--editor-success);
-}
-
-.file-icon--config {
-  color: var(--editor-warning);
-}
-
-.file-name {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  color: var(--editor-text-dim);
-}
-
 /* Calmer hover than the shared .qh-row-hover gray (too loud in light
    mode): the border color mixed most of the way back into the sidebar
    surface. */
@@ -162,24 +125,12 @@
   color: var(--editor-text);
 }
 
+/* Row look (.file-item / .folder-header and their icon + name spans)
+   lives in FileTreeRow.css, shared with the folder picker. */
+
 /* Tree folder structure */
 .tree-folder {
   /* Container for a folder and its children */
-}
-
-.folder-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
-  color: var(--editor-text-muted);
-  font-size: 12px;
-  cursor: pointer;
-  transition: background-color var(--duration-fast) var(--ease-out);
-}
-
-.folder-header:hover {
-  background: var(--sidebar-border);
 }
 
 /* Drag-to-move destination: the hovered folder's header, or the whole
@@ -194,25 +145,6 @@
 .file-list.drop-target {
   outline: 2px solid var(--sidebar-drop-accent);
   outline-offset: -2px;
-}
-
-.folder-chevron {
-  font-size: 8px;
-  width: 10px;
-  text-align: center;
-  color: var(--editor-text-muted);
-  flex-shrink: 0;
-}
-
-.folder-icon {
-  display: inline-flex;
-  align-items: center;
-  color: var(--editor-text-dim);
-  flex-shrink: 0;
-}
-
-.folder-name {
-  font-weight: 500;
 }
 
 .folder-children {

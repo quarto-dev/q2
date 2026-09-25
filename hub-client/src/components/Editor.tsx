@@ -433,6 +433,14 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
   const [showNewFileDialog, setShowNewFileDialog] = useState(false);
   // Parent folder for the new-folder dialog; null = dialog closed.
   const [newFolderParent, setNewFolderParent] = useState<string | null>(null);
+
+  // Every folder in the project: explicitly created ones plus those
+  // implied by file paths. Feeds the folder pickers in both dialogs.
+  const allFolders = useMemo(() => {
+    const set = new Set<string>(folders ?? []);
+    for (const f of files) for (const a of getAncestorPaths(f.path)) set.add(a);
+    return Array.from(set).sort();
+  }, [files, folders]);
   // Initial filename for new file dialog (e.g., from clicking a link to a non-existent file)
   const [newFileInitialName, setNewFileInitialName] = useState<string>('');
 
@@ -1581,6 +1589,7 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
       <NewFileDialog
         isOpen={showNewFileDialog}
         existingPaths={files.map(f => f.path)}
+        folders={allFolders}
         onClose={() => {
           handleDialogClose();
           setNewFileInitialName(''); // Clear on close
@@ -1593,10 +1602,7 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
       <NewFolderDialog
         isOpen={newFolderParent !== null}
         parent={newFolderParent ?? ''}
-        existingFolders={[
-          ...(folders ?? []),
-          ...files.flatMap((f) => getAncestorPaths(f.path)),
-        ]}
+        existingFolders={allFolders}
         existingPaths={files.map((f) => f.path)}
         onClose={() => setNewFolderParent(null)}
         onCreateFolder={handleCreateFolder}
