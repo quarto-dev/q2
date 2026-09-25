@@ -270,7 +270,7 @@ edit was needed to make the bundle build or `deno check` pass.
    `import.meta.url` reasoning holds: the bundle correctly resolved
    `command.py`/`extract.py` co-located in `_extensions/marimo/` and `uv run`
    spawned both successfully (see §9). No relocation issue.
-2. **`find_entry_ts`'s naming convention doesn't match `marimo-engine.ts`
+2. **`find_entry_ts`\'s naming convention doesn't match `marimo-engine.ts`
    directly** (§5) — works today only because of the "any `.ts` in `src/`"
    fallback. If a second `.ts` file is ever added to the fixture's `src/`
    (e.g. a `constants.ts` companion, mirroring julia's), the fallback

@@ -106,7 +106,7 @@ scope for the audit, not over-stepping.
 `crates/tree-sitter-qmd/` crate originated as a fork of MDeiml's
 `tree-sitter-markdown`, but has been developed independently for a
 long time. The first audit pass misclassified it as "vendored"
-(see *Note on `tree-sitter-qmd`'s stale "fork" framing* under
+(see *Note on `tree-sitter-qmd`\'s stale "fork" framing* under
 entry H below).
 
 The cleanup landed in two commits on
@@ -126,7 +126,7 @@ The cleanup landed in two commits on
 Files kept: `LICENSE` (preserves the original MIT copyright as
 required), `bindings/rust/`, `tree-sitter.json` (used by the
 `tree-sitter` CLI), `common/common.js` and
-`common/html_entities.json` (referenced by `Cargo.toml`'s
+`common/html_entities.json` (referenced by `Cargo.toml`\'s
 `include`), the grammar/queries/sources, and developer utilities
 still referenced from source (e.g.
 `tree-sitter-markdown/scripts/unicode-ranges.py` is mentioned in a
@@ -286,7 +286,7 @@ Each entry uses the following fields:
 - **Upstream:** per-language tree-sitter repos. Each file carries a
   provenance header (Source URL, Commit SHA, License, Vendored
   date). Currently only `julia` is vendored:
-  `tree-sitter/tree-sitter-julia` @ `e0f9dcd180fdcfcfa8d79a3531e11d99e79321d3`.
+  `tree-sitter/tree-sitter-julia` \@ `e0f9dcd180fdcfcfa8d79a3531e11d99e79321d3`.
 - **Bundled via:** `include_str!` in
   `crates/quarto-highlight/src/langs/<lang>.rs`.
 - **Consumed by:** `quarto-highlight` for syntax highlighting.
@@ -329,7 +329,7 @@ Each entry uses the following fields:
 - **License:** MIT (matches the original tree-sitter-markdown).
 - **Last reviewed:** 2026-05-04.
 
-#### Note on `tree-sitter-qmd`'s stale "fork" framing
+#### Note on `tree-sitter-qmd`\'s stale "fork" framing
 
 Several files in `crates/tree-sitter-qmd/` still describe the crate
 as a fork of upstream `tree-sitter-markdown`. They are out of date:

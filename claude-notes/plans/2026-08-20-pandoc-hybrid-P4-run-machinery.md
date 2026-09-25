@@ -226,10 +226,10 @@ Finding 1's own table).** Concretely: `@thm-pythagoras` renders as **"thm. 1"**,
 in both shipping v1 formats — and for `fig`/`tbl`/`lst` (which *do* have a `by_ref_type` entry),
 the caption localizes via `-title` while the reference stays in Q1's hardcoded English
 `category.prefix`, producing a within-document inconsistency in any non-English render. This is
-not a hypothetical: verified `refPrefix`'s real body directly, and confirmed
+not a hypothetical: verified `refPrefix`\'s real body directly, and confirmed
 `crossref.categories.all` (`mainstateinit.lua:32-119`) carries no theorem entries.
 **Fix: emit both `crossref-<ref_type>-title` and `crossref-<ref_type>-prefix` from
-`RefTypeRegistry`, for every registered type**, mirroring `filters.ts:484`'s own "derive `-prefix`
+`RefTypeRegistry`, for every registered type**, mirroring `filters.ts:484`\'s own "derive `-prefix`
 from `-title`" pattern — same source, same loop, one extra key per type.
 
 ## Finding — five wiring gaps closed (2026-09-18, implementation-feasibility review)
@@ -252,10 +252,10 @@ concretely enough to implement without inventing an answer.
    directory (matters for repeated renders and for a future `q2 preview`-equivalent, if one is
    ever built for Pandoc targets — not planned now).
 2. **The shim needs a loading mechanism, and it's simpler than it first looks.** Route R needs
-   `quarto.Callout`/`quarto.Theorem`/etc., which only exist inside `main.lua`'s own Lua
+   `quarto.Callout`/`quarto.Theorem`/etc., which only exist inside `main.lua`\'s own Lua
    interpreter state — a separate `pandoc --lua-filter shim.lua --lua-filter main.lua` pass
    **cannot work** (separate filter files get separate Lua states in pandoc's filter chain).
-   Read `main.lua`'s actual filter-chain assembly (lines 709-727): `quarto_filter_list` is built
+   Read `main.lua`\'s actual filter-chain assembly (lines 709-727): `quarto_filter_list` is built
    by `tappend`-ing a sequence of named filter-group tables (`quarto_init_filters`,
    `quarto_normalize_filters`, `quarto_pre_filters`, `quarto_crossref_filters`,
    `quarto_layout_filters`, `quarto_post_filters`, `quarto_finalize_filters`), then (line 735)
@@ -267,14 +267,14 @@ concretely enough to implement without inventing an answer.
    review, Reviewer A — the original text below said "add one line"; `quarto_pandoc_shim_filters`
    is a Lua global that exists only once the shim file has itself been `import()`ed, and
    `main.lua` loads every sibling file through its own `import()` helper
-   (`main.lua:8-11`, `dofile`-based, resolved relative to `PANDOC_SCRIPT_FILE`'s directory) —
+   (`main.lua:8-11`, `dofile`-based, resolved relative to `PANDOC_SCRIPT_FILE`\'s directory) —
    called from a block of \~45 `import("./…")` lines at `main.lua:13-60`. So the patch needs an
    `import("./<shim>.lua")` line there **in addition to** the `tappend(quarto_filter_list,
    quarto_pandoc_shim_filters)` line at the splice point below): `tappend(quarto_filter_list,
    quarto_pandoc_shim_filters)`, requiring a **new**, non-upstream Lua file (P5's shim). **The
    shim file must live *inside* the vendored filters tree, as a sibling to `customnodes/*.lua`
    (matching P5's own wording), not "alongside" the `v1.11.3` tree as this Finding originally
-   said** — `import()`'s path resolution is relative to `PANDOC_SCRIPT_FILE`'s own directory, so a
+   said** — `import()`\'s path resolution is relative to `PANDOC_SCRIPT_FILE`\'s own directory, so a
    file placed outside that tree needs `package.path` setup nobody has scoped; only the
    inside-the-tree placement works with the mechanism as described. Because the shim lives inside
    the pinned tree, a future re-vendor ("bump the pinned tag, re-run Layer-1/2") must explicitly
@@ -287,16 +287,16 @@ concretely enough to implement without inventing an answer.
    slot contents. **Verified independently in round 4 review (Reviewer B) that this position is
    load-bearing in *both* directions, not just convenient:** after `quarto_init_filters` is
    mandatory because `crossrefOption()` (which Route N calls) indexes `crossref.options`, which is
-   `nil` until `init_crossref_options(meta)` runs inside `quarto_init_filters`'s first entry — a
+   `nil` until `init_crossref_options(meta)` runs inside `quarto_init_filters`\'s first entry — a
    shim spliced any earlier would hard-crash on its first call; before `quarto_normalize_filters`
    is mandatory because the wire wrapper's `Div` **retains its original semantic classes**
-   (`callout`, `callout-note`, `panel-tabset`, etc. — `pampa`'s writer only *prepends*
+   (`callout`, `callout-note`, `panel-tabset`, etc. — `pampa`\'s writer only *prepends*
    `__quarto_custom_node`, it doesn't replace the class list), and at least three Q1
    `parse()`-keyed handlers (`Callout`, `Tabset`, `ConditionalBlock`) key on exactly those classes
    inside `quarto_normalize_filters`; splicing before it means the shim has already replaced the
    wire Div with a class-less Q1 scaffold by the time those handlers would otherwise misfire on
    it. **Anchor this patch by the named group boundary (`quarto_init_filters` /
-   `quarto_normalize_filters`), not a line number**, in the marked-patch comment — `main.lua`'s
+   `quarto_normalize_filters`), not a line number**, in the marked-patch comment — `main.lua`\'s
    group *contents* have been actively refactored for performance twice in the last two years
    (a 2024-11 traversal-engine migration touching every group table, a 2025-01 "combine finalize
    filters" merge), even though the top-level group *ordering* itself has been stable since 2023.
@@ -446,7 +446,7 @@ concretely enough to implement without inventing an answer.
 - [x] Re-derive the full `QUARTO_FILTER_PARAMS` key set (all three research-doc open questions
       resolved above); decided which keys the smoke/v1 minimally needs (items 1-5) vs. deferred
       (item 6, with reasons).
-- [x] Trace `main.lua`'s transitive require/resource closure; vendor accordingly (not just top-level dirs) — **two roots, not one, see Finding 1**: the filters tree AND `init.lua`'s separate `src/resources/pandoc/datadir/` tree. `include_dir!` for storage, `ResourceBundle` to materialize both to disk at invocation time (`main.lua` needs real files, `include_dir!` alone doesn't extract them); lint green. **Done: Task 1.**
+- [x] Trace `main.lua`\'s transitive require/resource closure; vendor accordingly (not just top-level dirs) — **two roots, not one, see Finding 1**: the filters tree AND `init.lua`\'s separate `src/resources/pandoc/datadir/` tree. `include_dir!` for storage, `ResourceBundle` to materialize both to disk at invocation time (`main.lua` needs real files, `include_dir!` alone doesn't extract them); lint green. **Done: Task 1.**
 - [x] **New (2026-09-18): vendor the shim's loading mechanism** — a small, marked patch to
       `main.lua` inserting `tappend(quarto_filter_list, quarto_pandoc_shim_filters)` between
       `quarto_init_filters` and `quarto_normalize_filters` (per Finding 2), in the same spirit as
@@ -469,7 +469,7 @@ concretely enough to implement without inventing an answer.
       + sidebar) and Task 10 (unconditional capture, Q-11-1 reuse, verbatim nonzero-exit wrap,
       temp-JSON retention).**
 - [x] **New (2026-09-18): pin the base64 variant (standard + padded) and state a size bound +
-      fallback for `QUARTO_FILTER_PARAMS`'s included text** (Finding 5) — a Windows correctness
+      fallback for `QUARTO_FILTER_PARAMS`\'s included text** (Finding 5) — a Windows correctness
       risk if left unbounded. **Done: Task 3 (codec + size-bound predicate); the fallback itself
       stays `accepted-untested`/undecided per Findings item 9 — a final decision, not a gap.**
 - [x] Pin the vendored source to a release tag, not a dev commit — **resolved 2026-09-17,
@@ -500,17 +500,17 @@ concretely enough to implement without inventing an answer.
       --workspace` today (pampa's oracle tests `.expect()`-panic if pandoc is absent), and this
       epic is about to add its most environment-sensitive dependency yet with no `verify`
       counterpart. Note separately: Windows has **no CI test leg at all** (`test-suite.yml`'s
-      matrix is `[ubuntu-latest, macos-latest]`), which is exactly the platform Finding 5(b)'s
+      matrix is `[ubuntu-latest, macos-latest]`), which is exactly the platform Finding 5(b)\'s
       32,767-char env-block risk lives on — make that size-bound check a unit-testable pure
       function (e.g. `fn params_blob_exceeds_platform_limit(len) -> bool` with the Windows
       constant as data) so it is at least covered by `cargo nextest run --workspace` on the
       platforms that do run in CI, even though the platform it protects doesn't. **Done: Tasks 7-8.**
 - [x] Document the runtime-environment contract (cwd/temp-file layout/`--resource-path`) Q1's Lua assumes. **Done: Task 2** (`harness.rs` module doc + `resources/pandoc-filters/README.md`).
-- [x] Resolve the source of `languageFilterParams`'s `crossref-<type>-title` family —
+- [x] Resolve the source of `languageFilterParams`\'s `crossref-<type>-title` family —
       **resolved 2026-09-17, decided with Gordon** (see finding above): source from Q2's
       `RefTypeRegistry`, not Q1's own locale files. Closes P5's "constructor default-passthrough
       policy" open question as a standing principle, not just a Theorem-specific fix.
-- [x] Build `languageFilterParams`'s params from `RefTypeRegistry`, one `crossref-<ref_type>-title`
+- [x] Build `languageFilterParams`\'s params from `RefTypeRegistry`, one `crossref-<ref_type>-title`
       **and one `crossref-<ref_type>-prefix`** key per registered type (corrected 2026-09-18,
       round 4 review — see the Critical correction above: `-title` alone leaves the reference-text
       path, `refPrefix()`, reading an unfed param and falling through to a bare literal for every

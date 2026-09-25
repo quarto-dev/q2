@@ -244,7 +244,7 @@ the origin codes and may remap to their own presentation codes.
   (`items_after_test_module` etc.); the standalone repo becomes the single source.
 - **WASM workspace resolution** → §5; verify with full `cargo xtask verify`, never
   `--skip-hub-build`.
-- **`| tail` masks `cargo xtask verify`'s real exit code** → run it without a tail
+- **`| tail` masks `cargo xtask verify`\'s real exit code** → run it without a tail
   pipe (or check the file), or use `run_in_background`.
 - **crates.io / GitHub are user/identity-gated and irreversible** → you prep & dry-
   run; the user publishes and (optionally) `cargo owner --add github:posit-dev:<team>`.

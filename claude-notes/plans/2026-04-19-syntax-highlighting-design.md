@@ -272,7 +272,7 @@ All locked 2026-04-19 unless otherwise noted. Rationale condensed; see conversat
 
 5. **Pandoc-bridge writers**: v1 no-op. Pandoc runs its own skylighting for typst/latex/docx when we eventually add those output paths. `data-hl-spans` passes through and is ignored by Pandoc. Parity work deferred to Phase 7.
 
-6. **Highlight query provenance**: start with each built-in grammar's own upstream `highlights.scm`, vendored under `resources/highlights/<lang>/` with commit-hash + license provenance comments. Upgrade per language to [Helix](https://github.com/helix-editor/helix/tree/master/runtime/queries)'s (MPL-2.0), [Zed](https://github.com/zed-industries/zed)'s (MIT), or [nvim-treesitter](https://github.com/nvim-treesitter/nvim-treesitter)'s (Apache-2.0) curated version only when a specific grammar's shipped queries prove inadequate. Keeps licensing decision per-file.
+6. **Highlight query provenance**: start with each built-in grammar's own upstream `highlights.scm`, vendored under `resources/highlights/<lang>/` with commit-hash + license provenance comments. Upgrade per language to [Helix](https://github.com/helix-editor/helix/tree/master/runtime/queries)'s (MPL-2.0), [Zed](https://github.com/zed-industries/zed)'s (MIT), or [nvim-treesitter](https://github.com/nvim-treesitter/nvim-treesitter)\'s (Apache-2.0) curated version only when a specific grammar's shipped queries prove inadequate. Keeps licensing decision per-file.
 
 7. **New `quarto-highlight` crate**: yes. Isolates grammar crate deps + wasmtime from `quarto-core`. Exports the pipeline stage + encoding + (on native) the `WasmStore`-based loader.
 

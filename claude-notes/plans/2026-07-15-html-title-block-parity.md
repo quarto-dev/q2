@@ -153,7 +153,7 @@ constraints (single transform pipeline, **no DOM postprocessor**):
 
 1. **Author/metadata normalization as a Rust transform** (Normalization
    phase, extending or sitting next to `MetadataNormalizeTransform`): a port
-   of `authors.lua`'s normalization producing typed Rust structs
+   of `authors.lua`\'s normalization producing typed Rust structs
    (`Author`, `Affiliation`, …) that are then serialized back into meta as
    `authors`, `affiliations`, `by-author`, `by-affiliation`, and `labels` —
    the exact shapes Q1 templates consume. Format-agnostic: PDF/DOCX/JATS

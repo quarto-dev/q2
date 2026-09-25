@@ -286,7 +286,7 @@ unavailable path skips any doc fetch.
   has a `spySyncClientFactory` modeling `connect`\'s signature — if
   you change the connect return shape, update it (it bit us once:
   options-bag migration).
-- **`findDoc`'s `connectedPeers.size === 0` bail** (e326eb5c): noted
+- **`findDoc`\'s `connectedPeers.size === 0` bail** (e326eb5c): noted
   latent cold-boot issue, deliberately NOT in scope — don't "fix" it
   in passing; it's tracked in the parent plan's D2 with its own test
   requirements.

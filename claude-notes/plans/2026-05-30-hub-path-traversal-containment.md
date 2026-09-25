@@ -82,7 +82,7 @@ use std::path::{Component, Path, PathBuf};
 fn contained_join(project_root: &Path, rel: &str) -> Option<PathBuf>;
 ```
 
-**Do not reuse `quarto-core`'s `lexical_clean` (`output_sink.rs:444`).** It
+**Do not reuse `quarto-core`\'s `lexical_clean` (`output_sink.rs:444`).** It
 *normalizes* (`..` at the root is kept as a `ParentDir` component) whereas we
 need *reject-on-escape*; different semantics, and reaching across a crate
 boundary for a \~15-line pure function is not worth the coupling.

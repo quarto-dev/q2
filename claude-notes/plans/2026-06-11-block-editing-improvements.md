@@ -1017,7 +1017,7 @@ the jsdom / Rust tier); what is deferred is the browser-/binary-level *verificat
   disabling the dispatchers chord branch reds (B)+(C). Restore → 3/3 green.)*
 - [\~] **(cross-ref) Collapsed-region drop** (from P2.3b — see the §2b/Self-heal deferral notes):
   a collaborator re-render that moves the active *unchanged* edited block into a `display:none`
-  region → drop, measuring `activeEditRegionRef`'s box after the re-anchor remount. Needs real
+  region → drop, measuring `activeEditRegionRef`\'s box after the re-anchor remount. Needs real
   layout. Already removed from the P2.3b inline check; this is the remaining browser-tier piece.
   **STILL DEFERRED — blocked by bd-k1evg0g1 (decided 2026-06-13, P3.5).** This item needs *new*
   production code (the follow-up visibility layout effect was never written — see the
@@ -1037,7 +1037,7 @@ the jsdom / Rust tier); what is deferred is the browser-/binary-level *verificat
 - [x] **SPA nesting-cursor e2e** (§3a/§3b; `q2-preview-spa/e2e`, real `q2 preview` binary — Playwright
   *against the binary*): with `?nestingCursor=1`, load a nested-blockquote fixture → confirm leaf-click
   resolution + a clean nested-blockquote-child edit; load **without** the param → confirm locked
-  (whole-quote). Extends `basic-preview.spec.ts`'s `startPreviewServer()`. (Boot path already covered
+  (whole-quote). Extends `basic-preview.spec.ts`\'s `startPreviewServer()`. (Boot path already covered
   at jsdom: `q2-preview-spa/src/p3-2-nesting-cursor-spa.integration.test.tsx`.) *(P3.5 DONE —
   `q2-preview-spa/e2e/nesting-cursor.spec.ts` (2 tests) + a `startPreviewServer({allowEdit})` test-infra
   extension. With `?nestingCursor=1` the leaf-click yields the clean child buffer (no `>`); without it,

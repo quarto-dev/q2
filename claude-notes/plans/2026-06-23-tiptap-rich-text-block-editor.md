@@ -257,7 +257,7 @@ qmd fixture → pampa parse → AST_in → [AST→PM bridge] → PM doc
       buckets each fixture `exact` / `equivalent` (reformatted) / `broken` by
       comparing source-stripped ASTs (exact) and whitespace-normalized ASTs
       (equivalent). Fails the suite only on `broken`.
-- [x] Define the **ProseMirror schema** (`schema.ts`): `prosemirror-markdown`'s
+- [x] Define the **ProseMirror schema** (`schema.ts`): `prosemirror-markdown`\'s
       schema + an atomic inline `chip` node (attrs `{src, kind}`).
 - [x] Implement **AST → PM doc** (`astToPm.ts`): walks the Pandoc AST; opaque
       node types (`Math`/`Cite`/`Span.quarto-shortcode__`/`RawInline`, plus

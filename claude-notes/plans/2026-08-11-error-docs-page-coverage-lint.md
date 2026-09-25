@@ -268,7 +268,7 @@ only after the tree it guards is clean.
 ## Risks / tradeoffs (draft)
 
 - **The gate is only as good as its timing.** A check that lands in a red
-  state gets `--fail-on none`'d and then ignored. The ordering question (2)
+  state gets `--fail-on none`\'d and then ignored. The ordering question (2)
   is the one that decides whether this strand actually prevents the next
   page-less code or just documents that we ship them.
 - **Backfilling 28 pages is a content task wearing a tooling task's
@@ -308,7 +308,7 @@ crates/quarto-error-catalog/error_catalog.json:464:3: [error-docs-page-missing]
 LINT EXIT CODE = 1
 ```
 
-Line 464 is `Q-2-99`'s own line in the catalog. Deleting an existing page
+Line 464 is `Q-2-99`\'s own line in the catalog. Deleting an existing page
 (`docs/errors/extension/Q-16-5.qmd`) produces the same shape. Catalog
 restored after both probes; `git diff` on the catalog shows only the
 intended two-line `docs_url` change.

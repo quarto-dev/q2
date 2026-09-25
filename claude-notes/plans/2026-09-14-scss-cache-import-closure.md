@@ -264,7 +264,7 @@ against `main`, four commits, full verify green per its description.
   is already hashed by content. An in-process memo `(path → hash)` for
   the duration of one render bounds the cost on large closures; add it
   only if Phase 3 shows it matters.
-- **Native recording point: `RuntimeFs::read`'s runtime-fallback
+- **Native recording point: `RuntimeFs::read`\'s runtime-fallback
   branch only** (`sass_native.rs`), via a `RefCell<Vec<PathBuf>>` on
   the adapter. Embedded hits are not recorded. Paths are whatever grass
   asked for — `theme_dir.join(import)` — which after #679 is the

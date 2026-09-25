@@ -268,16 +268,16 @@ upstream-observation caveat was *materially* untrue rather than merely conservat
 Pandoc cut never sees an `ExampleEmbed` node at all, because `example-embed-render`
 (`example_embed.rs:274`) has destroyed it by then. The remaining seven are all genuinely present at
 the cut. **Cost, stated rather than absorbed:** these two fixtures were the binding for
-`example_embed.rs:175-185`'s invalid-`file` degradation (see the Missing-test pass) — that binding
+`example_embed.rs:175-185`\'s invalid-`file` degradation (see the Missing-test pass) — that binding
 is gone and the path is now `accepted-untested` **in P2**, with its natural home being **P1 Task 4**,
-which owns `ExampleEmbedRenderTransform`'s format-parameterization.
+which owns `ExampleEmbedRenderTransform`\'s format-parameterization.
 
 ### Test Seam Spec
 
 | # | Tier | Real unit exercised | Seam (invoked → asserted) | Mock boundary | Named revert hunk |
 |---|---|---|---|---|---|
 | T2.1 | I | `CrossrefIndexTransform::index_custom_target` (`crossref_index.rs:250-311`) | run the chain on the `#fig-alpha` / `#thm-a` / `#eq-a` / `#tip-foo` fixtures → `json::write` → parse `data-custom-data` → assert each observed key set **equals** the schema's, i.e. **includes `order`** | `ProjectContext`/`DocumentInfo`/`Format::html()`/`BinaryDependencies` test fixtures (genuine env deps; no engine, no fs, no pandoc) | `crossref_index.rs:287-295` |
-| T2.2 | I | `CalloutTransform`'s crossref-eligible guard (`callout.rs:287-296`) | run the chain on both Callout fixtures → assert the plain one's set is **exactly** `{type, appearance, collapse, collapse_starts_collapsed, icon}` and the id'd one's is that + `{ref_type, kind, identifier, order}` | same | `callout.rs:288-296` |
+| T2.2 | I | `CalloutTransform`\'s crossref-eligible guard (`callout.rs:287-296`) | run the chain on both Callout fixtures → assert the plain one's set is **exactly** `{type, appearance, collapse, collapse_starts_collapsed, icon}` and the id'd one's is that + `{ref_type, kind, identifier, order}` | same | `callout.rs:288-296` |
 | T2.3 | I | `stream_write_custom_block` / `stream_write_custom_inline` (`json.rs:3684`, `:3795`) | after `json::write`, assert every `__quarto_custom_node` wrapper in the output has a `data-custom-data` kv | same | `json.rs:3710-3715` |
 | T2.4 | I | the whole harness + the artifact | assert `observed_type_names == schema.types.keys()`, both directions | same | `PanelTabsetTransform` in the harness chain |
 | T2.5 | I | the duplicate-id early return (`crossref_index.rs:262-270`) | two `#fig-alpha` fixtures → assert the **first** wrapper has `order` and the **second** does **not**, and that a duplicate-id diagnostic was collected | same | `crossref_index.rs:262-270` |
@@ -390,11 +390,11 @@ corpus so each new field is exercised on a branch that discriminates it.
 1. Task 2's conformance test passes with the three new keys declared in the schema and produced
    by the transforms.
 2. `@Fig-alpha` yields `label_upper: true`; `@fig-alpha` yields `label_upper: false`.
-3. `[-@fig-alpha]` (SuppressAuthor) yields a `cite_mode` distinguishable from `@fig-alpha`'s.
+3. `[-@fig-alpha]` (SuppressAuthor) yields a `cite_mode` distinguishable from `@fig-alpha`\'s.
 4. A `::: {.proof}` fixture yields `type: "proof"` and its key set equals the schema's
    `{kind, type}`.
 5. `cargo nextest run --workspace` green (this touches `quarto-core` producers that
-   `crossref_fixtures.rs`, `crossref_render.rs`'s unit tests, and the preview snapshot tests all
+   `crossref_fixtures.rs`, `crossref_render.rs`\'s unit tests, and the preview snapshot tests all
    observe — expect churn there and account for it rather than blanket-accepting).
 6. **`cite_prefix` is a `slots` entry, never a `plain_data` key.** The schema's
    `CrossrefResolvedRef.plain_data` must **not** contain `cite_prefix`, and its `slots` must —

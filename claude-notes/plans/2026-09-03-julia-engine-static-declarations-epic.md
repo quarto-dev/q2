@@ -187,7 +187,7 @@ q2 should subtree the full repo into `resources/extension-subtrees/julia-engine/
 (git cost only, mirroring Q1) but point `include_dir!` at just its
 `_extensions/` subdirectory — 68K in the binary. **Open: is 14M in q2's git
 history acceptable, or should we vendor a curated copy instead and give up
-`git subtree`'s merge tracking?**
+`git subtree`\'s merge tracking?**
 
 The genuinely new work is therefore the **maintenance command**, not the
 runtime: port `pull-git-subtree` as `cargo xtask pull-extension-subtree`. xtask
@@ -372,7 +372,7 @@ Work items (first pass, not scoped):
   into the existing embedded bundle) or teach discovery a **list** of builtin
   roots (mirroring Q1's separate `extensions` / `extension-subtrees` roots)?
 - **Q8.** Is 14M of vendored repo acceptable in q2's git history for the sake of
-  `git subtree`'s merge tracking, or do we vendor a curated 68K copy and accept
+  `git subtree`\'s merge tracking, or do we vendor a curated 68K copy and accept
   manual syncing?
 - **Q9.** Once Julia is bundled, what is the story on a machine without Julia
   installed — silent fallback to jupyter, or a diagnostic?

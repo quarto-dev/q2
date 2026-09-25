@@ -83,7 +83,7 @@ provenance should come from**.
    (`text` lacks the continuation markers, so the contiguous search fails and we return the
    block — coarse, never wrong). \~10 lines; T7 from the seam spec binds it, with its revert hunk
    rewritten as "the bounded search → back to whole-block `find`".
-2. **Producer-side, the principled fix.** Keep `code_fence_content`'s provenance: build it with
+2. **Producer-side, the principled fix.** Keep `code_fence_content`\'s provenance: build it with
    `ProvenanceBuilder` (verbatim runs between `block_continuation` gaps — the deletion shape Plan
    1 made expressible) and carry it on `CodeBlock` as a `text_source: SourceInfo` (the
    `attr_source` precedent). Then `body_source_for` becomes `cb.text_source.clone()` and
@@ -322,11 +322,11 @@ every row: `cd repro-fixture && rm -rf _site && ../../target-v0240/debug/q2 rend
 | cfg | `quarto-error-reporting` | helper | `quarto-source-map` | result |
 |---|---|---|---|---|
 | A | 0.2.1 crates.io (pre-fix) | — (no helper; ariadne spans unclamped) | 0.1.0 | **abort 101** |
-| B | path @ `922b09c` | full: (1)+(2)+(3) | 0.1.0 | clean 0 |
+| B | path \@ `922b09c` | full: (1)+(2)+(3) | 0.1.0 | clean 0 |
 | C | path | (1)+(2) clamp kept, (3) snap removed | 0.1.0 | **abort 101** |
 | D | path | (3) snap kept, (1)+(2) clamp removed | 0.1.0 | clean 0 |
 | E | path | pass-through | 0.1.0 | **abort 101** |
-| F | path | pass-through | path @ `09ec6d1` (0.1.3, floor) | clean 0 |
+| F | path | pass-through | path \@ `09ec6d1` (0.1.3, floor) | clean 0 |
 | G | current branch `d6ee475be`, stock lock (0.2.2 / 0.1.3), Plan 2 mapping fix | full | 0.1.3 | clean 0, carets **correct** (`:7:16`, `:7:37`) |
 
 Verbatim observed lines (from `.scratch/run-{A..F}.log`; identical text in A, C, E):
@@ -507,7 +507,7 @@ crossref id → exactly one `Q-15-1` error.
 
 ### Options
 
-1. **Add the test** (\~20 lines): `render_exit_codes`'s fixture +
+1. **Add the test** (\~20 lines): `render_exit_codes`\'s fixture +
    `QUARTO_FAULT_INJECT_DIAGNOSTIC_RENDER=0` → assert `!status.success()`, stderr contains
    `internal error rendering diagnostic Q-15-1`, and does **not** contain the `Q-15-1` text
    rendering (so the fault really hit that diagnostic).
@@ -649,7 +649,7 @@ rewritten so the fix is not (a).** Re-scope to (c): "`toMappedString` cannot der
 provenance because provenance is a map, not a store; callers that need the decoded string
 already have it on the node." That is an `annotated-qmd` API decision and belongs to the TS
 source-tracking line (`bd-1d6io`, branch `braid/bd-1d6io-annotated-qmd-source-tracking`),
-whose owner is already changing `SourceInfoReconstructor`'s contract. Priority stays 2/latent.
+whose owner is already changing `SourceInfoReconstructor`\'s contract. Priority stays 2/latent.
 
 Suggested replacement body for the strand:
 
@@ -708,7 +708,7 @@ for the reasons the review gave.
 **Not in the list, worth one line each:**
 
 - `q_2_33.rs:74-75` reads `start_offset()` *and* `end_offset()` — Q3's sibling; same fix.
-- `to_text_with_renderer`'s no-context branch prints `loc.start_offset()` as "at offset N"
+- `to_text_with_renderer`\'s no-context branch prints `loc.start_offset()` as "at offset N"
   (`diagnostic.rs:516`) — content-offset `0` for any `Concat`-rooted location. Harmless, but it
   is the accessor rule's exact shape inside the crate that owns the renderer; `root_file_id` +
   `map_offset` need a ctx, so the honest fix is to omit the line when the span is not

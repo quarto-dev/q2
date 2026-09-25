@@ -326,16 +326,16 @@ P7-foundation has landed and builds the docx/pptx-specific work on top of it.
      `render_document_to_file_docx_embeds_a_relatively_referenced_image` in
      `pandoc_render_to_file.rs` (RED confirmed before the fix, GREEN after).
   2. **A crossref-numbered table's caption was duplicated in every docx/pptx render.** Q1's own
-     parse-time behavior (`quarto-pre/parsefiguredivs.lua`) clears a `Table`'s native `caption`
+     parse-time behavior (`quarto-pre/parsefiguredivs.lua`) clears a `Table`\'s native `caption`
      once it's surfaced onto the wrapping float target, so only the numbered rendering shows it.
-     Q2 only replicated that elision inside `crossref_render.rs`'s HTML-float-DOM branch — but
+     Q2 only replicated that elision inside `crossref_render.rs`\'s HTML-float-DOM branch — but
      `crossref-render` is `Bucket::B4` (does not survive to the Pandoc cut at all), so it never
      runs for docx/pptx, and the Table's own caption reached the vendored Lua filters uncleared.
-     Fixed at the actual construction site, `float_ref_target.rs`'s `convert_div`'s
+     Fixed at the actual construction site, `float_ref_target.rs`\'s `convert_div`\'s
      `[Block::Table(_)]` arm (clears `table.caption` there, matching Q1's parse-time behavior
      unconditionally rather than only in the HTML branch) — plus, as a defensive second layer
      matching Q1's own redundant clearing at two separate Lua sites, generalized
-     `crossref_render.rs`'s existing elision to run on both its `html_float_dom` and non-HTML
+     `crossref_render.rs`\'s existing elision to run on both its `html_float_dom` and non-HTML
      branches, not only the HTML one. Reproduced via `cargo run --bin q2 -- render
      <table-with-a-caption> --to docx`, which produced two "My Caption" paragraphs in the output
      `word/document.xml`. Bound by `div_over_table_clears_the_tables_own_caption`
@@ -345,7 +345,7 @@ P7-foundation has landed and builds the docx/pptx-specific work on top of it.
   since they cost real debugging time): a fixture rendered through `render_document_to_file`
   needs a **discovered** `ProjectContext` (not `None`) for image resource resolution to work at
   all; and several real quarto-cli-sourced fixtures declare `format: latex` in their own front
-  matter, which `resolve_format_key`'s prefer-merge lets **outrank** the render call's `format`
+  matter, which `resolve_format_key`\'s prefer-merge lets **outrank** the render call's `format`
   argument unless the desired format is *also* passed via the `format_override` parameter (the
   one a real `--to docx` CLI invocation threads through) — passing only `format` reproduced
   `Unknown format: latex` (latex is a documented stub with no `FormatIdentifier` implementation).
@@ -382,7 +382,7 @@ P7-foundation has landed and builds the docx/pptx-specific work on top of it.
   `92b89e517` on `braid/pandoc-hybrid-p7-format-tail`.** `number-sections`/`number-offset`
   deliberately excluded from the allow-list (T4.11).
 - [x] **New (2026-09-18, round 4 review): apply the pptx `execute` defaults into
-  `EngineExecutionStage`'s own defaulting** — this plan states the values (Finding 1) but no plan
+  `EngineExecutionStage`\'s own defaulting** — this plan states the values (Finding 1) but no plan
   previously owned applying them; explicitly this plan's item now (see the correction above),
   since P7 is the only plan with the per-format facts and no other plan mentions
   `EngineExecutionStage`. **Done 2026-09-20 — implementation companion Task 5, commit `e8d6cea4e`.**
@@ -392,7 +392,7 @@ P7-foundation has landed and builds the docx/pptx-specific work on top of it.
   into `resources/formats/docx/`, wired as part of Task 4, commit `92b89e517`.**
 - [x] **Moved to P7-foundation, 2026-09-20:** the multi-format render warning (Finding 3 / design
   doc §14) and the project-mode containment gate (design doc §13, Gordon's decision) — both
-  format-agnostic guardrails made necessary by relaxing `render.rs`'s format gate at all, not by
+  format-agnostic guardrails made necessary by relaxing `render.rs`\'s format gate at all, not by
   anything docx/pptx-specific. See
   [`2026-09-20-pandoc-hybrid-P7-foundation.md`](2026-09-20-pandoc-hybrid-P7-foundation.md) Tasks 1
   and 2.

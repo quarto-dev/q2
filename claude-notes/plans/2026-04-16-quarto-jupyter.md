@@ -199,7 +199,7 @@ importing it satisfies the portability constraint ("no q2-specific imports").
   landed). If it hadn't, you would create the minimal scaffolding first
   (`package.json`, `tsconfig.json`, `exports` map).
 
-- [x] **Add the `./jupyter` subpath to `@quarto/api`'s `exports` map**
+- [x] **Add the `./jupyter` subpath to `@quarto/api`\'s `exports` map**
   (unconditional — 2A landed *without* a `./jupyter` entry; `package.json`
   currently has none). Mirror the sibling entries, e.g.:
   ```json
@@ -386,7 +386,7 @@ Small, focused modules that `toMarkdown` depends on. Each is self-contained.
       but the **harness** performs it, not this method: `PandocIncludes`
       (kebab, `include-in-header`…) → `TsPandocIncludes` (camelCase
       `inHeader`/`beforeBody`/`afterBody`) via the harness's `renameIncludes()`
-      (defined in `@quarto/engine-host-deno`'s `host.ts`; the `TsPandocIncludes`
+      (defined in `@quarto/engine-host-deno`\'s `host.ts`; the `TsPandocIncludes`
       shape + rename are described at `pandoc.ts:18-25`). Return kebab
       `PandocIncludes`; let the harness convert.
     - **MUST be exported from the `makeJupyter` factory** (P3-7) with the host
@@ -779,7 +779,7 @@ Wire `@quarto/api/jupyter` into the `quarto.jupyter` namespace in
     `const jupyterNs = makeJupyter(host);`, and set `jupyter: jupyterNs` in the
     returned object.
   - **Delete** the now-dead `notYetImplementedError` helper and the
-    `jupyterStub`'s `as unknown as QuartoAPI["jupyter"]` cast (it was the last
+    `jupyterStub`\'s `as unknown as QuartoAPI["jupyter"]` cast (it was the last
     remaining cast in the file).
   (Cite by symbol, not line number — `quarto-api.ts` is actively churning as
   Plan 2 lands.) Any per-call wrappers (e.g. supplying the per-execute `tempDir`
@@ -855,7 +855,7 @@ differ across the two sides of the behavior, or the row goes vacuous.
 |---|---|---|---|
 | 1 | `displayDataMimeType` — bundle `{text/markdown, text/html}`, opts `{toMarkdown:true}` ⇒ returns `'text/markdown'` | none (pure) | Revert dynamic base-order → fixed html-first list ⇒ returns `'text/html'`. **Disc:** bundle must hold *both* md+html (P3-9) |
 | 2 | `displayDataIsJson` / `displayDataMimeType` — bundle w/ `…widget-view+json`, `{toHtml:true}` ⇒ widget MIME selected + `<script>` path | none | Revert the conditional widget-cluster splice ⇒ widget MIME never chosen (P3-9) |
-| 3 | **to-markdown output path** for a display_data output whose sole data is a **non-math** `text/latex` ⇒ emitted cell markdown contains a `` ```{=tex} `` raw block (from the `mdLatexOutput`→`mdFormatOutput("tex")`-equivalent), **not** a math/markdown rendering. (`displayDataLatexIsMath` is the pivot predicate returning `false`; the `{=tex}` emission is **downstream**, **not** in `displayDataWithMarkdownMath` — that pre-transform only hoists *math* latex into the markdown slot and leaves non-math unchanged; P3-10.) | recording `host.fs` (unused on the latex path) | Revert `displayDataLatexIsMath`'s is-math test → `return true` ⇒ `displayDataWithMarkdownMath` hoists the non-math latex into the markdown slot ⇒ `displayDataMimeType` picks `text/markdown` ⇒ emitted as math, **no** `{=tex}` ⇒ RED. **Disc:** input latex must be **non-math** — a math latex is hoisted either way, so it can't discriminate (P3-10) |
+| 3 | **to-markdown output path** for a display_data output whose sole data is a **non-math** `text/latex` ⇒ emitted cell markdown contains a `` ```{=tex} `` raw block (from the `mdLatexOutput`→`mdFormatOutput("tex")`-equivalent), **not** a math/markdown rendering. (`displayDataLatexIsMath` is the pivot predicate returning `false`; the `{=tex}` emission is **downstream**, **not** in `displayDataWithMarkdownMath` — that pre-transform only hoists *math* latex into the markdown slot and leaves non-math unchanged; P3-10.) | recording `host.fs` (unused on the latex path) | Revert `displayDataLatexIsMath`\'s is-math test → `return true` ⇒ `displayDataWithMarkdownMath` hoists the non-math latex into the markdown slot ⇒ `displayDataMimeType` picks `text/markdown` ⇒ emitted as math, **no** `{=tex}` ⇒ RED. **Disc:** input latex must be **non-math** — a math latex is hoisted either way, so it can't discriminate (P3-10) |
 | 4 | `includeWarnings` — cell `{global warning:false, local warning:true}` ⇒ included | none | Revert the global-false+local-true override branch ⇒ excluded. **Disc:** global≠local (P3-12) |
 | 5 | `tags` `echoFenced` — cell `echo: fenced` ⇒ fenced-echo path | none | Revert the `echoFenced` branch ⇒ plain echo (P3-12) |
 | 6 | `cellLabelValidator` — two cells, same label ⇒ duplicate flagged | none | Revert the dedup check ⇒ no flag (P3-11) |
@@ -1000,7 +1000,7 @@ false — disproven by `julia:272,287,231,245`; it has been removed.)
   is in Q1 today; no live restore mechanism is claimed (P3-15)
 - [x] Error outputs format tracebacks readably
 - [x] All tests pass (unit tests can pass a mock host with in-memory FS)
-- [x] Integrated into `@quarto/engine-host-deno`'s QuartoAPI: `makeJupyter(host)`
+- [x] Integrated into `@quarto/engine-host-deno`\'s QuartoAPI: `makeJupyter(host)`
   wired **inside `buildQuartoAPI(global, host)`** — replacing the throwing
   `jupyterStub` Proxy, with the `notYetImplementedError` helper + `as unknown as`
   cast deleted (Phase 3E). (There is no separate `buildJupyterNamespace`

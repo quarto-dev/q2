@@ -89,9 +89,9 @@ design doc §3 table and needs to land there in the same pass as P2's naming fix
 design doc §3 table on 2026-09-17 (commit `8e9e546b4`), alongside Callout's reclassification
 found independently in P6.
 
-**Field-map audited, clean.** `panel-tabset.lua`'s `constructor(params)` takes `params.level`,
+**Field-map audited, clean.** `panel-tabset.lua`\'s `constructor(params)` takes `params.level`,
 `params.attr`, and `params.tabs` (a list built by `quarto.Tab({content, title, active})`). Q2's
-wire fields zip into that directly: `level`→`params.level`, `attr` (from the `CustomNode`'s own
+wire fields zip into that directly: `level`→`params.level`, `attr` (from the `CustomNode`\'s own
 attr)→`params.attr`, and `actives[i]`/`slots.title-{i}`/`slots.content-{i}`→one
 `quarto.Tab(...)` call per tab. No missing field. The extra `plain_data.group` Q2 sometimes sets
 is an HTML-only grouped-tab-sync signal (`TabsetsJsStage`) with no Q1 counterpart — harmless
@@ -146,7 +146,7 @@ it's Q2-native:
   `crossref_resolve.rs:296-320`). Q1's own model for this is `refs.lua`, which resolves a `Cite`
   **directly into final Inlines (a `Link`/`Str`) in place** — Q1 never persists a scaffold/custom
   node for a resolved ref at all. **Recommendation: the shim resolves `CrossrefResolvedRef`
-  directly to a plain Pandoc inline (mirroring `refs.lua`'s own behavior), not via a
+  directly to a plain Pandoc inline (mirroring `refs.lua`\'s own behavior), not via a
   nonexistent Q1 constructor.** Simpler than either Route L or R — no scaffold round-trip needed.
 
 **`ExampleEmbed` no longer belongs in this finding — resolved 2026-09-17, out of this plan's
@@ -170,22 +170,22 @@ everything except the iframe, entirely in Rust, upstream of the wire-format cut.
 
 An implementation-feasibility review found this plan never specified *how* or *where* the shim
 gets loaded into Q1's Lua interpreter — a real blocker, since Route R needs `quarto.Callout`/
-`quarto.Theorem`, which only exist inside `main.lua`'s own Lua state (a separate
+`quarto.Theorem`, which only exist inside `main.lua`\'s own Lua state (a separate
 `pandoc --lua-filter` pass is a separate interpreter and cannot reach them). **Resolved in P4**
 (which owns vendoring `main.lua` in the first place): a small, marked patch inserts the shim's
 filter group into `quarto_filter_list` between `quarto_init_filters` and
 `quarto_normalize_filters`, in the same spirit as P3's existing 3-file crossref patch. See P4's
 "Finding — five wiring gaps closed" for the full mechanism and position rationale.
 
-**This closes Route N's central open question too: since the shim runs inside `main.lua`'s own
+**This closes Route N's central open question too: since the shim runs inside `main.lua`\'s own
 Lua state, "mirror `refs.lua`"/"mirror `equations.lua`" means *call Q1's own functions*, not
 reimplement their logic.** Concretely:
 
 - **`CrossrefResolvedRef`.** Q1's `resolveRefs()` (`crossref/refs.lua:8-145`, corrected 2026-09-18
   from `8-130`) is a `{Cite = ...}`
   filter callback, not a general-purpose "resolve one ref" function — the shim can't call it
-  directly as a helper. But `refs.lua`'s internal building blocks (`refPrefix()`, `crossrefOption`,
-  `refHyperlink()`) **are** plain callable globals inside `main.lua`'s state, and this is the
+  directly as a helper. But `refs.lua`\'s internal building blocks (`refPrefix()`, `crossrefOption`,
+  `refHyperlink()`) **are** plain callable globals inside `main.lua`\'s state, and this is the
   version to call: it's cite-mode aware (`cite.prefix`, `SuppressAuthor` → `ref-noprefix`), only
   emits a `Link` `if refHyperlink()`, and uses class `quarto-xref` — genuinely different from
   Q2's own `crossref_render.rs:1114-1193` (always a `Link`, `"{kind}\u{a0}{n}"` text, no
@@ -193,7 +193,7 @@ reimplement their logic.** Concretely:
   crossref-presentation-options limitation (design doc §12): Q1's behavior is normative for the
   Pandoc leg** — the shim builds the visible inline by calling Q1's real prefix/hyperlink
   functions with Q2's already-resolved `plain_data` (`identifier, ref_type, kind, order,
-  kind_source`), not by porting `crossref_render.rs`'s logic to Lua. This is the same asymmetry
+  kind_source`), not by porting `crossref_render.rs`\'s logic to Lua. This is the same asymmetry
   already accepted for crossref presentation options generally — the Pandoc leg gets Q1's fuller
   behavior for free, Q2's HTML leg doesn't (yet) match it. **Worked example:**
   ```lua
@@ -203,7 +203,7 @@ reimplement their logic.** Concretely:
   ```
   An unresolved ref (`kind_source: "promised"` with no real category, or `resolved: false`)
   should degrade the same way Q1's own `resolveRefs` degrades a broken `@ref` — check
-  `refs.lua`'s own unresolved-citation path rather than inventing new placeholder text (e.g. Q2's
+  `refs.lua`\'s own unresolved-citation path rather than inventing new placeholder text (e.g. Q2's
   own `?id?`/`quarto-unresolved-ref` convention).
 
   **Correction (2026-09-18, round 4 review, Reviewer B) — the function list and worked example
@@ -216,8 +216,8 @@ reimplement their logic.** Concretely:
   entry shape from `plain_data`** (it already has `order` in the right shape per P2's schema
   correction; `appendix`/`parent` are not currently in `plain_data` and default to
   false/nil for the flat, non-appendix, non-nested case this epic's v1 targets). Three more
-  pieces of `resolveRefs`'s body are load-bearing and were previously unmentioned:
-  - **`add_ref_prefix`'s nbsp logic must be inlined, not called** — it is a `local function`
+  pieces of `resolveRefs`\'s body are load-bearing and were previously unmentioned:
+  - **`add_ref_prefix`\'s nbsp logic must be inlined, not called** — it is a `local function`
     declared *inside* the `Cite` callback (`refs.lua:13-19`), so unlike the four globals above it
     is **not** reachable from a spliced-in filter. Its logic (append the prefix, then insert
     `nbspString()` unless the category sets `space_before_numbering == false` or the target is
@@ -233,7 +233,7 @@ reimplement their logic.** Concretely:
     explicitly rather than leaving it silently unaddressed.
   **Corrected function list for Route N's `CrossrefResolvedRef` case: `refPrefix`,
   `refNumberOption`, `subrefNumber`, `refHyperlink`, `refDelim`, `crossrefOption`, `nbspString` —
-  all reachable plain globals except `add_ref_prefix`'s nbsp logic, which must be reproduced
+  all reachable plain globals except `add_ref_prefix`\'s nbsp logic, which must be reproduced
   inline.**
 - **`Equation`.** `renderEquation(eq, label, alt, order)` (`crossref/equations.lua`) **already
   takes `order` as a parameter** — so, exactly like Route R's post-construction `order`
@@ -248,7 +248,7 @@ reimplement their logic.** Concretely:
   `pandoc.Span(eq, Attr(label))`. The "already takes `order`, just call it" argument is sound only
   for this fallback branch — which is fortunately the one docx/pptx actually take — but state this
   precisely so an implementer doesn't expect `order` to matter for the (stubbed) latex target and
-  get confused when it doesn't. **If the shim runs inside `main.lua`'s state (per the loading
+  get confused when it doesn't. **If the shim runs inside `main.lua`\'s state (per the loading
   mechanism above), this is a direct function call, not a reimplementation** — an implementer
   writing this cold, without knowing `renderEquation` already accepts `order`, would very likely
   reimplement it and drift from Q1 as Q1 evolves.

@@ -488,7 +488,7 @@ they don't own. Full model: `claude-notes/designs/engine-resolution.md`
   - **Recurse** into container blocks (Divs, `BlockQuote`, list items, etc.) —
     cells can be nested, so the per-block primitive must be driven by a full
     block walk. **No shared block-walker exists to reuse** — the tree has only
-    ad-hoc local walkers (e.g. `engine_execution.rs:1003`'s
+    ad-hoc local walkers (e.g. `engine_execution.rs:1003`\'s
     `fn walk_block(b, out)` collecting `FileId`s, the closest structural
     precedent). Hand-roll a small private recursion in `resolution.rs`
     mirroring that idiom; do not build a general visitor.
@@ -506,7 +506,7 @@ they don't own. Full model: `claude-notes/designs/engine-resolution.md`
     not ownership (§4.2), and is passed straight to `claims_language`.
   - **Empty set → no engine → markdown passthrough** (§4.1).
   `resolve_engines` calls this internally; `EngineExecutionStage` passes the
-  AST it already holds. Update `detection.rs`'s "Future Enhancements" comment
+  AST it already holds. Update `detection.rs`\'s "Future Enhancements" comment
   (the future has arrived) — though the explicit `engine:`-key path in
   `detection.rs` stays metadata-only; this is the *language* axis, not the
   declared-engine axis.
@@ -769,7 +769,7 @@ The Rust struct that implements `ExecutionEngine` by delegating to the shared su
   init is exclusive under the `Mutex` — the `LaunchEngine` message count
   observed by the mock is **exactly 1**. A companion test races two
   `ensure_loaded` calls and asserts the `LoadEngine` count is **1 or 2**
-  (the `discovery` `OnceLock`'s benign double-issue window — never 0,
+  (the `discovery` `OnceLock`\'s benign double-issue window — never 0,
   never > thread count). The end-to-end "engine.launch() invoked exactly
   once across the real harness" assertion is **Plan 1b's contract**, tested
   against the real harness; Rust+harness composition lives in Plan 1c's
@@ -778,7 +778,7 @@ The Rust struct that implements `ExecutionEngine` by delegating to the shared su
 - [x] **Add `cancellation: Cancellation` AND `execute_timeout: Option<Duration>`
   to `ExecutionContext`** (the cross-plan dependency plan1a-host's "Cancellation
   wiring" and "Per-request timeouts" are blocked on). `cancellation` is the only
-  way the token reaches the engine: `request`'s timeout/cancel loop polls
+  way the token reaches the engine: `request`\'s timeout/cancel loop polls
   `is_cancelled()`, but `execute` receives only `&ExecutionContext`, which today
   carries no token. `execute_timeout` is the resolved `Execute` window —
   **`EngineExecutionStage` reads `execute.timeout` from `doc_ast.ast.meta`**
@@ -1003,11 +1003,11 @@ The Rust struct that implements `ExecutionEngine` by delegating to the shared su
       diagnostics: Mutex<Vec<DiagnosticMessage>>,                    // hint-validation, missing-hints, name-collision warnings
   }
   ```
-  Both mutexes are independent of `TsEngineHost`'s transport mutex.
+  Both mutexes are independent of `TsEngineHost`\'s transport mutex.
   Following the `JupyterDaemon` pattern (`crates/quarto-core/src/engine/jupyter/daemon.rs`)
   — separate locks for separate concerns; no cross-locking.
 
-  **Migration from `main`'s registry (`#[derive(Clone)]` blocker — the
+  **Migration from `main`\'s registry (`#[derive(Clone)]` blocker — the
   Clone-drop is NOT self-contained; decided 2026-06-24).** On `main`,
   `EngineRegistry` is `{ engines: HashMap<String, Arc<dyn ExecutionEngine>> }`
   and derives `Clone`. `Mutex` is **not** `Clone`, so adding the `aliases` /
@@ -1027,7 +1027,7 @@ The Rust struct that implements `ExecutionEngine` by delegating to the shared su
   per-document construction in `EngineExecutionStage::new`, and
   `with_replay_many` — do **not** break *from the `Clone`-drop*: they *move* the
   registry in or *build it fresh*, so they never relied on `Clone`. Note
-  `with_registry`'s *signature* still changes as part of the `Arc`-type
+  `with_registry`\'s *signature* still changes as part of the `Arc`-type
   propagation below — "doesn't break from `Clone`" and "signature changes for
   `Arc`" are both true and not in tension.)
 
@@ -1051,7 +1051,7 @@ The Rust struct that implements `ExecutionEngine` by delegating to the shared su
   - **A third config struct the clone-site list omitted: `HtmlRenderConfig`**
     (`pipeline.rs:118`) and its `with_engine_registry` builder
     (`pipeline.rs:131`). The `render_to_file.rs:328` clone feeds
-    `config.engine_registry`, so the `Arc` reaches into `quarto-core`'s
+    `config.engine_registry`, so the `Arc` reaches into `quarto-core`\'s
     `HtmlRenderConfig` — **name it explicitly so the count isn't a surprise.**
   - **The `quarto-preview` pass-through chain** (\~9 fn signatures in
     `re_execute.rs` / `capture_driver.rs` / `cache.rs` that carry the
@@ -1128,7 +1128,7 @@ The Rust struct that implements `ExecutionEngine` by delegating to the shared su
   [Plan 1c](2026-04-16-plan1c-extension-integration.md) — the
   extension-author-facing surface lives there alongside the
   `_extension.yml` schema, hint declarations, and engine-API docs.
-  Same rule applies to `claims_file`'s content-inspection (cache key is
+  Same rule applies to `claims_file`\'s content-inspection (cache key is
   the canonical path; if the engine reads mutable file metadata the
   cache will go stale within a single render, which is expected to be
   rare in practice).
@@ -1236,7 +1236,7 @@ The Rust struct that implements `ExecutionEngine` by delegating to the shared su
       **id-keyed, delay-capable, and BLOCKS in `recv()`** until a paired/scripted
       response is available (a passive `VecDeque` would read empty-as-EOF and
       false-trigger the crash path); `shutdown()` signals EOF. It captures sent
-      messages (`sent_messages() -> &[ToEngine]`) and echoes each `Request`'s
+      messages (`sent_messages() -> &[ToEngine]`) and echoes each `Request`\'s
       `id`. See plan1a-host's Design Note "MockTransport & the test demux" for
       the full shape and rationale.
     All Phase 4 unit tests construct a

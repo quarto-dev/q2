@@ -147,7 +147,7 @@ Nothing in `quarto-error-reporting` (external crate) changes.
   CLI-render policy. If browser strictness is ever wanted, the promotion
   point would be where the WASM response assembles its
   `warnings`/`diagnostics` fields.
-- **`quarto-doctemplate`'s internal `strict_mode`: untouched.** Its
+- **`quarto-doctemplate`\'s internal `strict_mode`: untouched.** Its
   warnings surface upward as ordinary `DiagnosticMessage` warnings and get
   promoted at the boundary like everything else.
 - **`eprintln!`/`tracing` output: out of scope** (not structurally

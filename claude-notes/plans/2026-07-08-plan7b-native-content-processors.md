@@ -228,7 +228,7 @@ output branch. **`matchable` computed via `tree-sitter-r`.**
 
 **`matchable` via tree-sitter-r:** parse the script; a `#'`/`{{ }}` line is a *real* marker only if it
 starts a top-level token at column 1 — i.e. it is **not** inside a `string`/`string_content` span
-(walk for those node kinds' byte ranges) and begins a top-level `program` child. On
+(walk for those node kinds\' byte ranges) and begins a top-level `program` child. On
 `root_node().has_error()`, fall back to **all-matchable** (knitr's exact behaviour, `spin.R:73`).
 
 **SourceInfo:** `Concat` of prefix-stripped `Original` pieces (doc/`#'` lines, chunk bodies) +
@@ -278,7 +278,7 @@ The implementer MUST keep these general even though 7b only fills the percent/sp
       **Added 2026-08-17.** Percent and spin never surface this: they map back into the *original*
       file, which the caller already registered. ipynb's `Concat` pieces point at **virtual per-cell
       files that exist only in memory**, so the processor must hand them back for registration in
-      `SourceContext`. Without this field, 7c must change `convert`'s return type — exactly the
+      `SourceContext`. Without this field, 7c must change `convert`\'s return type — exactly the
       non-additive change these obligations exist to prevent. Cheap now, expensive later.
 - [ ] ~~The sidecar envelope is a **versioned tagged union**, not a bare per-line format.~~
       **Suspended 2026-08-17** — see the REOPENED note above. This obligation existed solely so 7c
@@ -353,7 +353,7 @@ Everything lives in `quarto-core`, which feeds `wasm-quarto-hub-client` — full
       wire-only-when-no-processor (retain the `markdownForFile`/`ClaimsFile` verbs for that residue).
 
 ### Phase 3 — `percent` processor + SourceInfo
-- [ ] Tests: port `percent-script.ts`'s behaviour — `[markdown]`/`[raw]` cells, `"""` blocks,
+- [ ] Tests: port `percent-script.ts`\'s behaviour — `[markdown]`/`[raw]` cells, `"""` blocks,
       prefix strip, `#|` options, fence. Golden equivalence vs the TS helper / Q1. SourceInfo: an
       error in a markdown comment and in a code cell both report the **original file:line:col**.
 - [ ] Implement percent (`(comment_open, fence_language)`), per-line `Concat`/`Original`.

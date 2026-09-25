@@ -117,7 +117,7 @@ after the above, if at all.
 
 I did not verify these; they're the risks I'd want closed.
 
-1. **Does anything pattern-match `Default`'s output expecting `Original`?**
+1. **Does anything pattern-match `Default`\'s output expecting `Original`?**
    Grep the crate and consumers for matches on `SourceInfo::Original` that
    could receive a defaulted value.
 2. **Tiling / ordering logic.** q2's Plan 7g has a "tiling precondition"

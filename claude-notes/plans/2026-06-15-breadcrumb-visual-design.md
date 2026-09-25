@@ -528,7 +528,7 @@ is kept for history but **this section is authoritative for the shipped behavior
 - **The crumb row fills the indent gutter `[colLeft, surfaceLeft]`** and flexes so its
   right edge **meets the surface left** (the pivot). Crumbs never enter the outer margin.
 - **▶ (in-arrow) + the future placeholder sit just right of `surfaceLeft`** (over content).
-- **`surfaceLeft` is the `<textarea>`'s left, not the `#q2-active-edit-region` wrapper's.**
+- **`surfaceLeft` is the `<textarea>`\'s left, not the `#q2-active-edit-region` wrapper's.**
   The wrapper spans the full text column (left = `colLeft`) for every block, so anchoring
   to it lost the indent; the textarea sits at the block's real (indented) content left.
 - **Per-ancestor band measurement (old 3b) was dropped.** The crumbs share the gutter

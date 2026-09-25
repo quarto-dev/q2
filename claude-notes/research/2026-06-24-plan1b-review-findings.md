@@ -194,7 +194,7 @@ design doc.
 10. **`writeMutex` vs atomic `writeSync`** — design keeps the mutex *and* claims atomic
     per-line writes; the mutex only matters if a frame is written across `await`s/chunks.
     **Action: state whether writes are a single `writeSync` (no mutex) or async (mutex
-    needed); name `AsyncMutex`'s source.** Low.
+    needed); name `AsyncMutex`\'s source.** Low.
 11. **Dangling "#N in the review"** (828, 869) — **CONFIRMED dangling.** **Action: link/
     inline.** Cosmetic.
 

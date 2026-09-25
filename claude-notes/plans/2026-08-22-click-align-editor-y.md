@@ -201,10 +201,10 @@ and focus alone.
 
 | # | Decision | Rationale |
 |---|----------|-----------|
-| A7 | **The reveal-then-overwrite race exists on this path too, and threading `revealEditorLine` is what closes it.** | `Preview.tsx:395` wires ratio scroll sync, so a post-click reflow lets `syncPreviewToEditor` replace the alignment \~50 ms later. `revealEditorLine` brackets **`useScrollSync`'s** `isSyncingRef` — the flag `syncPreviewToEditor` actually reads. Extracting the arithmetic into a shared pure helper called from `useSelectionSync` would instead set that hook's *own* unrelated `isSyncingRef` and leave the race wide open. So the callback is threaded deliberately; **do not "decouple the hooks".** Pinned by the HTML-path analogue of U2e. |
+| A7 | **The reveal-then-overwrite race exists on this path too, and threading `revealEditorLine` is what closes it.** | `Preview.tsx:395` wires ratio scroll sync, so a post-click reflow lets `syncPreviewToEditor` replace the alignment \~50 ms later. `revealEditorLine` brackets **`useScrollSync`\'s** `isSyncingRef` — the flag `syncPreviewToEditor` actually reads. Extracting the arithmetic into a shared pure helper called from `useSelectionSync` would instead set that hook's *own* unrelated `isSyncingRef` and leave the race wide open. So the callback is threaded deliberately; **do not "decouple the hooks".** Pinned by the HTML-path analogue of U2e. |
 | A8 | **The pre-existing `fileId` bug in `useSelectionSync` is fixed in this phase**, in its own commit, rather than deferred to a strand. | `handlePreviewSelection` builds a Monaco range from `startPos` and never checks `fileId`, so selecting inside *included* content moves the caret to a bogus line of the currently-open file. Same class as the q2-side defect fixed on-branch two days ago, and materially worse: that one produced a wrong *scroll*, this produces a wrong *caret and selection*, so a user who then types edits the wrong location. Leaving it would also make the paths asymmetric right as they converge — q2 inert, HTML mis-positioning. The site already calls `lineForClickTarget`, so the guard is one condition in a function this phase edits. No strand filed: resolved in the same breath. |
 
-- [x] **Investigate first, and report before implementing:** `MorphIframe`'s
+- [x] **Investigate first, and report before implementing:** `MorphIframe`\'s
       `onSelectionChange` reports only `(startPos, endPos)` — no anchor rect. Decide
       where the anchor Y comes from. Candidates: widen `onSelectionChange` to carry
       it (symmetric with `onClickAtLine`), or compute it in `useSelectionSync` from
@@ -226,7 +226,7 @@ and focus alone.
 - [x] A Playwright row equivalent to A1g on the HTML preview path. T3 in the
       existing spec is the HTML-preview control and must stay green. (P2a, its own
       dedicated `htmlAlignFixture()` — a wrapping paragraph, since a single-line
-      one like `fixture()`'s can't discriminate span- from block-anchored `hostY`.
+      one like `fixture()`\'s can't discriminate span- from block-anchored `hostY`.
       Fail-on-revert confirmed: measuring the containing `<p>` instead of the
       clicked span reddens this row.)
 - [x] Reuse `lineForClickTarget`/`parseDataLoc` rather than adding a parallel

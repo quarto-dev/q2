@@ -181,14 +181,14 @@ alongside typst.
 - **Crossref hookup:** `crossref/equations.lua` has a live `isTypstOutput()` branch
   (`:115`) — Typst gets `#math.equation(numbering:...)`, other formats get
   `\label{}`/text-fallback. This branch existing is a head start, but **confirming it
-  engages end-to-end requires `numbering.typ`'s `equation-numbering` symbol to already be
+  engages end-to-end requires `numbering.typ`\'s `equation-numbering` symbol to already be
   staged** (see the phase-ordering note in Part 5/the typst plan) — it cannot be verified as
   an isolated Phase 1 item before the template partials land.
 - **Brand bridge — corrected (Rev 1 pointed at the wrong Q2 file).** Q1's typst brand
   filters read a serialized `brand` filter param. The Q2-side bridge is **not**
   `crates/quarto-core/src/brand_fonts.rs`, which is narrowly about publishing `source: file`
   fonts beside theme CSS — the actual brand parser is the **`crates/quarto-brand` crate**
-  (`ResolvedBrand`, `BrandFont`), plus `crates/quarto-sass`'s `brand_to_layers`. The real
+  (`ResolvedBrand`, `BrandFont`), plus `crates/quarto-sass`\'s `brand_to_layers`. The real
   task is serializing `ResolvedBrand` into the shape `typst-brand-yaml.lua` expects as a
   filter param — a schema-matching job against an existing, working brand parser, not a Lua
   port and not "check if brand support exists" (it does).
@@ -206,7 +206,7 @@ alongside typst.
   `kKeepTyp = "keep-typ"` (`config/constants.ts:88`), typed at `config/types.ts:473`, forced
   on in debug mode alongside `keep-tex` (`config/metadata.ts:131-134`), consumed at
   `command/render/output-typst.ts:296`. Port it directly: discard the intermediate `.typ`
-  unless `keep-typ: true` (matching `keep-tex`'s default).
+  unless `keep-typ: true` (matching `keep-tex`\'s default).
 - **PATH-discovery vs. bundled-binary asymmetry.** Q1's `typstBinaryPath()`
   (`core/typst.ts:20-23`) is `QUARTO_TYPST || architectureToolsPath("typst")` — Q1 *bundles*
   typst. `validateRequiredTypstVersion()` (`:198-227`, min typst `>=0.8`) runs **only** when
@@ -257,7 +257,7 @@ alongside typst.
 ## Part 5 — Q2's existing external-process / binary-discovery infrastructure, and the typst compile step's real shape
 
 - **Binary discovery abstraction already exists and already covers typst — verified, not
-  just plausible.** `crates/quarto-core/src/render.rs`'s `BinaryDependencies` struct has a
+  just plausible.** `crates/quarto-core/src/render.rs`\'s `BinaryDependencies` struct has a
   `typst: Option<PathBuf>` field (`:133`), populated by `discover()` (`:150-158`) via
   `runtime.find_binary("typst", "QUARTO_TYPST")` (`:155`) — the same env-var-then-PATH
   pattern used for `pandoc`, `git`, `dart_sass`, `esbuild`. **Currently unconsumed** — the
@@ -277,7 +277,7 @@ alongside typst.
   nothing to add there).
 - **`quarto typst` CLI subcommand already exists as a stub**
   (`crates/quarto/src/commands/typst.rs`: `Err(QuartoError::NotImplemented("typst"))`),
-  parallel to `quarto pandoc`'s identical stub — a placeholder for a future
+  parallel to `quarto pandoc`\'s identical stub — a placeholder for a future
   "Quarto bundles/exposes a copy of the tool" feature, not a blocker for a Rust-side compile
   stage that shells out (or links) directly.
 - **No typst auto-install exists.** `quarto install <target>` currently only documents

@@ -104,7 +104,7 @@ Each of these was settled deliberately. Do not silently revisit them; if one loo
 
 - **D-7 — `none` anywhere in the list clears it (deliberate divergence).** Q1 only special-cases `none` in the *string* form; `repo-actions: [none]` reaches Q1's `default:` branch and warns "Unknown repo action 'none'". But `[none]` is schema-legal (`definitions.yml:705` declares `maybeArrayOf: enum [none, edit, source, issue]`), and warning on schema-legal input is bad behavior. q2 treats `none` as clearing the list wherever it appears. Task 2 tests this.
 
-  **`none` clears the list outright — it also suppresses `issue-url`'s forced
+  **`none` clears the list outright — it also suppresses `issue-url`\'s forced
   link (revised 2026-08-25, deliberate divergence).** Q1 pushes `issue` onto the
   action list unconditionally whenever `issue-url` is set, immediately after
   `websiteConfigActions` has returned `[]` for `none`
@@ -1399,7 +1399,7 @@ git commit -m "Add Q-13-11/12/13 for repo-action misconfiguration (bd-repo-actio
 
 Create the module with only the test block, and **declare it in `mod.rs` in this same step** — add `mod repo_actions_render;` to `crates/quarto-core/src/transforms/mod.rs` now, not in Step 4. An undeclared file is never compiled, so without this Step 2 runs zero tests and exits 0 instead of failing. (The `pub use` for the transform still waits until Step 4, when the type exists.)
 
-**Copy the harness; you cannot import it.** `footer_render.rs`'s helpers are private to its own `#[cfg(test)] mod tests`. Copy `make_test_project`, `config_map`, `s`, and `b` verbatim from `crates/quarto-core/src/transforms/footer_render.rs:184-228`, and `arr` from `crates/quarto-core/src/transforms/footer_generate.rs:225` (it is not among footer_render's helpers):
+**Copy the harness; you cannot import it.** `footer_render.rs`\'s helpers are private to its own `#[cfg(test)] mod tests`. Copy `make_test_project`, `config_map`, `s`, and `b` verbatim from `crates/quarto-core/src/transforms/footer_render.rs:184-228`, and `arr` from `crates/quarto-core/src/transforms/footer_generate.rs:225` (it is not among footer_render's helpers):
 
 ```rust
 fn arr(items: Vec<ConfigValue>) -> ConfigValue {
@@ -1407,7 +1407,7 @@ fn arr(items: Vec<ConfigValue>) -> ConfigValue {
 }
 ```
 
-The copied helpers need the same imports `footer_render.rs`'s test module carries (`:184-195`) — `use super::*;` alone will not do:
+The copied helpers need the same imports `footer_render.rs`\'s test module carries (`:184-195`) — `use super::*;` alone will not do:
 
 ```rust
 use super::*;
@@ -1438,7 +1438,7 @@ async fn run(meta: ConfigValue, source: &str) -> (ConfigValue, Vec<DiagnosticMes
 }
 ```
 
-This mirrors `footer_render.rs`'s `run_with` (`:243-263`), with the document path parameterised so `page_relative_source` yields the `source` each test asks for. The tests:
+This mirrors `footer_render.rs`\'s `run_with` (`:243-263`), with the document path parameterised so `page_relative_source` yields the `source` each test asks for. The tests:
 
 ```rust
 #[cfg(test)]
@@ -2796,7 +2796,7 @@ Run: `cargo nextest run -p quarto --test integration smoke_all`
 
 - [x] **Step 5: Prove the assertions are live**
 
-A smoke-all fixture that silently fails to assert looks identical to one that passes. Temporarily add an impossible selector (`"div.this-cannot-exist"`) to `actions.qmd`'s must-match list, re-run the filtered command, confirm it **fails**, then remove it. Do not skip this — it is the only thing distinguishing a real fixture from a decorative one.
+A smoke-all fixture that silently fails to assert looks identical to one that passes. Temporarily add an impossible selector (`"div.this-cannot-exist"`) to `actions.qmd`\'s must-match list, re-run the filtered command, confirm it **fails**, then remove it. Do not skip this — it is the only thing distinguishing a real fixture from a decorative one.
 
 - [x] **Step 6: Keep the render output out of git**
 

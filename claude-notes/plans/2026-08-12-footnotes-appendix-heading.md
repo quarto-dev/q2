@@ -1,4 +1,4 @@
-# Footnotes appendix section omits the visible 'Footnotes' heading that Quarto 1 emits (bd-v9zs83zj)
+# Footnotes appendix section omits the visible \'Footnotes\' heading that Quarto 1 emits (bd-v9zs83zj)
 
 **Date:** 2026-08-12
 **Braid:** bd-v9zs83zj
@@ -377,7 +377,7 @@ Chased to ground before continuing:
 Filed as **`bd-7ilvb5r2`**. Worth knowing because the failure is indistinguishable from a
 real grammar regression and points at a file the session never touched.
 
-A process note that cost real time here: `cargo xtask verify | tail -30` reports **`tail`'s**
+A process note that cost real time here: `cargo xtask verify | tail -30` reports **`tail`\'s**
 exit code, not xtask's, so a failed verify looks like it exited 0. Run it unpiped when the
 exit status matters.
 

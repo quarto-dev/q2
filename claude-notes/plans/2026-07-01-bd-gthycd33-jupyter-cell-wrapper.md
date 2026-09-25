@@ -50,7 +50,7 @@ source — exactly the browser symptom.
 
 Test: `crates/quarto-core/tests/integration/repro_gthycd33.rs` (in this
 branch's working tree). It runs `record_capture` with the **real** engine
-(mirroring `quarto-hub-provider`'s `pollster::block_on` calling convention —
+(mirroring `quarto-hub-provider`\'s `pollster::block_on` calling convention —
 the jupyter engine builds its own current-thread tokio runtime, so the test
 must not be `#[tokio::test]`), then replays exactly what `CaptureSpliceStage`
 does: parse `input_qmd` / `result.markdown` with `pampa::readers::qmd::read`
@@ -193,7 +193,7 @@ live cell with the wrapper, and "no output" renders as just the echoed code.
    the `.cell-code` echo fence and `.cell-output` divs too. Ratified
    rationale: **cross-engine congruence of post-engine markdown is a
    correctness requirement in q2**, not cosmetics — any structural divergence
-   between engines' text output is precisely the class of bug bd-gthycd33 is
+   between engines\' text output is precisely the class of bug bd-gthycd33 is
    (the splice, CSS selectors, and future cell-level transforms all key on
    one shared shape). Corollary: where quarto-cli's jupyter emission differs
    *structurally* from knitr's, treat that as a quarto-cli bug and do **not**

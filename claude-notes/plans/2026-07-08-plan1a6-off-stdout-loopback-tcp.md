@@ -387,7 +387,7 @@ for v1.)
     enrich the error with the (now-populated) `recent_stderr` ring before returning.
     On success it returns `(Arc<TcpTransport>, TcpReadHalf, JoinHandle /*stderr*/,
     JoinHandle /*stdout*/)` — both drains already running, handed to the host.
-  - **`ensure_started_inner`'s `init` closure (`:566-575`) return grows to carry
+  - **`ensure_started_inner`\'s `init` closure (`:566-575`) return grows to carry
     the drains.** Model it as an enum, because the callers supply drains at
     different times. Note there are **three** live callers today, not two — the
     signature change must keep all three compiling: the two production callers

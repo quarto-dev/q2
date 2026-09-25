@@ -19,7 +19,7 @@
 
 ## Background (corrected diagnosis)
 
-An earlier reading called the committed synth `dist/*.js` "ad-hoc esbuild, not deno-bundle output." **Empirical spikes disproved this:** deno 2.9's `deno bundle` *is* esbuild internally (same prelude, no `// deno:` markers); a canonical rebuild of `alpha` was byte-near-identical. `julia`/`marimo`'s `// deno:` markers just mean an older deno built them. So the bundles were valid and `synth_engines_e2e.rs`'s "real deno bundle output" docstring was accurate — the "fix false docstring / rebuild esbuild→deno" tasks were dropped.
+An earlier reading called the committed synth `dist/*.js` "ad-hoc esbuild, not deno-bundle output." **Empirical spikes disproved this:** deno 2.9's `deno bundle` *is* esbuild internally (same prelude, no `// deno:` markers); a canonical rebuild of `alpha` was byte-near-identical. `julia`/`marimo`\'s `// deno:` markers just mean an older deno built them. So the bundles were valid and `synth_engines_e2e.rs`\'s "real deno bundle output" docstring was accurate — the "fix false docstring / rebuild esbuild→deno" tasks were dropped.
 
 Real findings driving this plan:
 1. **Command name** — Q1 parity is `quarto call build-ts-extension`; q2 shipped it top-level (`plan1c` line 470 vs the same item's line 481).
@@ -152,7 +152,7 @@ the underlying `.js`-rejection independent of the hint text).
               commands::build_ts_extension::BuildTsExtensionArgs { path, config, workspace }),
   },
   ```
-  *(`PathBuf` stays imported. `Test` gains `allow_hyphen_values` — minor desirable improvement. `call/mod.rs`'s `Some(other)`/`None` arms become unreachable — harmless; leave them.)*
+  *(`PathBuf` stays imported. `Test` gains `allow_hyphen_values` — minor desirable improvement. `call/mod.rs`\'s `Some(other)`/`None` arms become unreachable — harmless; leave them.)*
 
 - [x] **Step 4:** Hints/docs: `read.rs:415` + `read.rs:1409`; `project/mod.rs:748`; `build_ts_extension.rs:1` doc; `call/mod.rs` doc adds `build-ts-extension`; `build_ts_extension_e2e.rs` prose at lines 4/6/51/100/112. *(The `read.rs:415` + `project/mod.rs:748` hint edits are the `call ` prefix that reddens T3/T4's rename assertion — do them here, not before Step 1's assertion change.)*
 
@@ -160,7 +160,7 @@ the underlying `.js`-rejection independent of the hint text).
   ```bash
   grep -rn "q2 build-ts-extension\|'q2 build-ts" crates/ | grep -v 'call build-ts-extension'
   ```
-  Expected: only the clap leaf `#[command(name = "build-ts-extension")]` (correct) remains; fix `behave_engine_e2e.rs:379`'s regeneration comment too.
+  Expected: only the clap leaf `#[command(name = "build-ts-extension")]` (correct) remains; fix `behave_engine_e2e.rs:379`\'s regeneration comment too.
 
 - [x] **Step 6 (green + real binary):**
   ```bash
@@ -190,7 +190,7 @@ pub fn build_ts_extension(opts: BuildOptions) -> anyhow::Result<PathBuf>;
 
 - [x] **Step 1:** Create `extension/build.rs` and **move verbatim** from `crates/quarto/src/commands/build_ts_extension.rs`: `resolve_build_config`, `find_workspace_root`, `SHIPPED_DENO_JSON` + `materialize_shipped_config`, `find_entry_ts`, `find_output_path`, `run_deno_bundle`, and the whole `#[cfg(test)] mod tests`. The `include_str!("../../../../resources/extension-build/deno.json")` path is **unchanged** — both old and new files sit exactly 4 dirs below the repo root (`crates/quarto/src/commands/` vs `crates/quarto-core/src/extension/`). Convert the old `execute(args)` body into `pub fn build_ts_extension(opts: BuildOptions) -> anyhow::Result<PathBuf>` returning the resolved `output_js` (add the return; the old fn returned `Ok(())`). (`resolve_extension_dir`, an internal helper used by `execute`/`build_ts_extension` and exercised by 3 of the moved tests, moved too — kept private to the module, not in the plan's explicit fn list but implied by "move the build logic + the whole tests module".)
 
-- [x] **Step 2:** In `extension/mod.rs`, add `#[cfg(not(target_arch = "wasm32"))] pub mod build;` (mirrors `engine::ts_process`'s native gate). No flat re-export added: the Interface-produced block in this plan documents only the nested `quarto_core::extension::build::{BuildOptions, build_ts_extension}` path, and Task 4's helper hard-codes that same full path — adding a flat re-export would be an unrequested extra surface with no consumer, so it was left out to keep the two in sync as specced.
+- [x] **Step 2:** In `extension/mod.rs`, add `#[cfg(not(target_arch = "wasm32"))] pub mod build;` (mirrors `engine::ts_process`\'s native gate). No flat re-export added: the Interface-produced block in this plan documents only the nested `quarto_core::extension::build::{BuildOptions, build_ts_extension}` path, and Task 4's helper hard-codes that same full path — adding a flat re-export would be an unrequested extra surface with no consumer, so it was left out to keep the two in sync as specced.
 
 - [x] **Step 3:** Rewrite `crates/quarto/src/commands/build_ts_extension.rs` to a thin wrapper — keep `BuildTsExtensionArgs` (the CLI struct) and:
   ```rust
@@ -285,7 +285,7 @@ pub fn build_ts_extension(opts: BuildOptions) -> anyhow::Result<PathBuf>;
   ```
   *(`env!("CARGO_MANIFEST_DIR")` here is `crates/quarto-core` — the test's own crate — so `../../resources/...` reaches the repo root. This is a quarto-core-internal API call, so there is no cross-crate binary problem.)*
 
-- [x] **Step 2 (validate the mechanism):** a throwaway test copies `alpha`'s source into a tempdir and builds:
+- [x] **Step 2 (validate the mechanism):** a throwaway test copies `alpha`\'s source into a tempdir and builds:
   ```rust
   #[test]
   fn build_helper_produces_bundle() {
@@ -341,7 +341,7 @@ pub fn build_ts_extension(opts: BuildOptions) -> anyhow::Result<PathBuf>;
   crates/quarto-core/tests/fixtures/extensions/*/dist/
   resources/extension-build/deno.lock
   ```
-  (the `*/dist/` glob matches every extension's `dist/` dir; the 10 hermetic bundles are `git rm`'d (Step 1) so their regenerated copies stay ignored, while `legacy-python/dist/legacy-python.js` remains a tracked committed stub (a gitignore entry cannot untrack an already-tracked file); `julia-engine`/`marimo` live under `_extensions/`, not `dist/`, so are unaffected. `deno.lock` is defensive — hermetic builds produce none. `resources/extension-build/node_modules/` — created by `deno.workspace.json`'s `nodeModulesDir: auto` — is **already** git-ignored and stays clean under hermetic builds, so it needs no new rule here.)
+  (the `*/dist/` glob matches every extension's `dist/` dir; the 10 hermetic bundles are `git rm`\'d (Step 1) so their regenerated copies stay ignored, while `legacy-python/dist/legacy-python.js` remains a tracked committed stub (a gitignore entry cannot untrack an already-tracked file); `julia-engine`/`marimo` live under `_extensions/`, not `dist/`, so are unaffected. `deno.lock` is defensive — hermetic builds produce none. `resources/extension-build/node_modules/` — created by `deno.workspace.json`\'s `nodeModulesDir: auto` — is **already** git-ignored and stays clean under hermetic builds, so it needs no new rule here.)
 
 - [x] **Step 3 (prove regeneration from clean):**
   ```bash
@@ -364,8 +364,8 @@ pub fn build_ts_extension(opts: BuildOptions) -> anyhow::Result<PathBuf>;
   Expected: clean build, all tests pass, verify green (incl. wasm build of quarto-core).
 
   **PLAN GAP found here (Task 5's consumer enumeration was scoped to `crates/quarto-core/tests/integration/*.rs` only, so it missed committed-`echo-engine`-bundle consumers in OTHER crates). Full-workspace `cargo nextest run --workspace --no-fail-fast` surfaced 2 more failures beyond the quarto-core suites:**
-  - **`crates/quarto/src/commands/render.rs::classify_echo_file_admitted_by_extension_discovery_not_rejected`** — deno-free, existence-only (only hits `build_engine_registry`'s bundle-exists guard, never executes). **Fix: write a stub `dist/echo-engine.js` after `copy_dir` (the same deno-free T5 stub pattern used for `engine_registry_build`).**
-  - **`crates/quarto-preview/src/capture_driver.rs::{p2_14_eager_capture_runs_extension_engine, p2_15_on_edit_re_execution_keeps_extension_engine}`** — deno-gated and actually *execute* echo-engine (assert `ECHO_EXECUTED`), so a stub is insufficient. **Fix: regenerate the real bundle in `build_ctx_with_echo_extension` via the public `quarto_core::extension::build::build_ts_extension` lib (the tests are already `deno_available()`-gated; the `../../resources/…` config-path depth matches because quarto-preview and quarto-core are both one level under `crates/`).** This faithfully extends the plan's "regenerate at test time" design to the missed consumer rather than re-committing echo-engine's bundle. *(Note: `cargo xtask verify`'s nextest aborts on first failure — it only reported render.rs; the authoritative full failure set came from a separate `--no-fail-fast` workspace run.)*
+  - **`crates/quarto/src/commands/render.rs::classify_echo_file_admitted_by_extension_discovery_not_rejected`** — deno-free, existence-only (only hits `build_engine_registry`\'s bundle-exists guard, never executes). **Fix: write a stub `dist/echo-engine.js` after `copy_dir` (the same deno-free T5 stub pattern used for `engine_registry_build`).**
+  - **`crates/quarto-preview/src/capture_driver.rs::{p2_14_eager_capture_runs_extension_engine, p2_15_on_edit_re_execution_keeps_extension_engine}`** — deno-gated and actually *execute* echo-engine (assert `ECHO_EXECUTED`), so a stub is insufficient. **Fix: regenerate the real bundle in `build_ctx_with_echo_extension` via the public `quarto_core::extension::build::build_ts_extension` lib (the tests are already `deno_available()`-gated; the `../../resources/…` config-path depth matches because quarto-preview and quarto-core are both one level under `crates/`).** This faithfully extends the plan's "regenerate at test time" design to the missed consumer rather than re-committing echo-engine's bundle. *(Note: `cargo xtask verify`\'s nextest aborts on first failure — it only reported render.rs; the authoritative full failure set came from a separate `--no-fail-fast` workspace run.)*
 
 - [x] **Step 6:** Reconcile checklist; **commit** (`test(plan1c3): delete committed synth bundles; regenerate at test time; gitignore dist/`). Report removed-file count + confirm clean tree after a test run. **Done: committed `52a207602`; 10 bundles removed; working tree clean of tracked changes after a full-workspace test run.**
 

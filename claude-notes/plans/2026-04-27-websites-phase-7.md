@@ -563,7 +563,7 @@ default`):
 - Per-page transforms read `meta.get_path(&["website", "title"])`
   etc., which return `None`. Each transform returns early — no AST
   mutation, no diagnostics.
-- post_render is `DefaultProjectType`'s no-op default. Nothing
+- post_render is `DefaultProjectType`\'s no-op default. Nothing
   written.
 
 A standalone `.qmd` file with no website context produces
@@ -677,7 +677,7 @@ Every test authored before the code that makes it pass.
     `website.site-url: "https://example.com"`. `_site/index.html`
     has `<link rel="canonical" href="https://example.com/index.html">`.
 34. `pipeline_sitemap_emitted_with_site_url` — sitemap has both
-    pages' URLs based on site-url.
+    pages\' URLs based on site-url.
 35. `pipeline_sitemap_omitted_without_site_url` — fixture with
     `website.title` set but no site-url → no `_site/sitemap.xml`.
 36. `pipeline_robots_txt_emitted_when_site_url_set` —

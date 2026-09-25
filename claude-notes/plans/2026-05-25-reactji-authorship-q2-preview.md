@@ -92,13 +92,13 @@ Each step has a TDD pair: write the test (or extend Phase 1's diag) → confirm 
 
 ### 2a. Expose `useNodeAttribution` on `__Q2_PREVIEW_RENDERER__`
 
-- [x] Test: from inside `comment.tsx`, `window.__Q2_PREVIEW_RENDERER__.useNodeAttribution` is a function. *Covered by `q2-preview-render-components-comment.spec.ts`'s `diag.hasUseNodeAttribution` soft assertion (passes post-2a).*
+- [x] Test: from inside `comment.tsx`, `window.__Q2_PREVIEW_RENDERER__.useNodeAttribution` is a function. *Covered by `q2-preview-render-components-comment.spec.ts`\'s `diag.hasUseNodeAttribution` soft assertion (passes post-2a).*
 - [x] Implementation: add `useNodeAttribution` + `AttributionLookupContext` to the global surface at `ts-packages/preview-renderer/src/q2-preview/entry.tsx:97-122`.
 - [x] q2-debug parity: skipped (Q4 decision — q2-preview only this session).
 
 ### 2b. Forward current actor id into the iframe
 
-- [x] Test: from inside `comment.tsx`, `useCurrentActor()` returns the value the parent posts. *Covered by `diag.me === TEST_ACTOR_ID` assertion in the spec. The spec injects the actor via `page.addInitScript` + a new `__QUARTO_TEST_ACTOR_ID__` override in `hub-client/src/App.tsx`'s `resolveActorId`, since `getActorId()` is null without auth.*
+- [x] Test: from inside `comment.tsx`, `useCurrentActor()` returns the value the parent posts. *Covered by `diag.me === TEST_ACTOR_ID` assertion in the spec. The spec injects the actor via `page.addInitScript` + a new `__QUARTO_TEST_ACTOR_ID__` override in `hub-client/src/App.tsx`\'s `resolveActorId`, since `getActorId()` is null without auth.*
 
   **Implementation note (Automerge actor-id hex-format gotcha):** the first version of `TEST_ACTOR_ID` used a human-readable placeholder (`'test-actor-7e1f02a3'`). Automerge silently rejected writes against that actor — `page.goto` landed on the project-list screen rather than entering the editor view, with no console error visible. Switching to a 32-hex-char string (`'e2e7e1f02a30000000000000000007e1'`) fixed it immediately. Any test reusing the `__QUARTO_TEST_ACTOR_ID__` override must use a 32-char lowercase hex id.
 - [x] Implementation (option A — piggyback on `UPDATE_AST`, per decision-log Q1):

@@ -294,7 +294,7 @@ Both linked `discovered-from` this strand.
 
 Unknown-code validation, unused-suppression reporting, `--show-suppressed`, per-path globs, per-line suppression, project-scoped-diagnostic coverage, and the xtask lint requiring codes on new warnings.
 
-**Also deferred: re-keying `qmd-syntax-helper`'s `literal-brackets` rule to the `q_2_NN.rs` convention.** Now that Q-2-49 exists the rule *could* become `q_2_49.rs` like its siblings, which was one of the strand's stated motivations. It is deliberately not part of this change: the rename touches a user-visible CLI surface (`-r literal-brackets`, which appears in the `Q-2-46` docs page, the rule's own header, and the new `Q-2-49` page), and the sibling rules derive violations from parse errors while this one derives them from its own `bracket_analysis` — so it is a real refactor rather than a rename. The rule works as-is; `-r literal-brackets` remains the correct invocation everywhere it is documented.
+**Also deferred: re-keying `qmd-syntax-helper`\'s `literal-brackets` rule to the `q_2_NN.rs` convention.** Now that Q-2-49 exists the rule *could* become `q_2_49.rs` like its siblings, which was one of the strand's stated motivations. It is deliberately not part of this change: the rename touches a user-visible CLI surface (`-r literal-brackets`, which appears in the `Q-2-46` docs page, the rule's own header, and the new `Q-2-49` page), and the sibling rules derive violations from parse errors while this one derives them from its own `bracket_analysis` — so it is a real refactor rather than a rename. The rule works as-is; `-r literal-brackets` remains the correct invocation everywhere it is documented.
 
 The rule should also **stay opt-in** for `convert -r all` regardless of the re-keying, for the reason its own header gives: an escape is a source edit that cannot afterwards be distinguished from an author's intent.
 
@@ -302,7 +302,7 @@ The rule should also **stay opt-in** for `convert -r all` regardless of the re-k
 
 1. **Config shape:** per-code map, reason *encouraged* (short form `Q-2-49: off`, long form `{level:, reason:}`). Chosen over a flat `suppress:` list so per-code severity (`error`, `warning`) is reachable later without a second key.
 2. **Sequencing:** minimal suppression (`off` only) **plus** Q-2-49 ship together. Unknown-code validation, unused-suppression reporting, and `--show-suppressed` are deferred to a follow-up strand.
-3. **Scope:** suppression applies **everywhere**, including `q2 preview` and hub-client — deliberately diverging from `--strict`'s Decision-D1 exclusion, because an author who has declared a construct legitimate should not be nagged in the editor.
+3. **Scope:** suppression applies **everywhere**, including `q2 preview` and hub-client — deliberately diverging from `--strict`\'s Decision-D1 exclusion, because an author who has declared a construct legitimate should not be nagged in the editor.
 4. **Uncoded warnings:** ship anyway; the \~25–30 uncoded warnings are simply unsuppressible in v1, documented as such, with bd-m2w7a linked as `related`. No xtask lint in v1.
 
 ### What decision 3 changes about the design
@@ -315,12 +315,12 @@ The seam that satisfies decision 3 is **`run_pipeline`** (`crates/quarto-core/sr
 .map(|d| (d, stage_ctx.diagnostics))
 ```
 
-(:811) is the one place every per-document diagnostic passes through, for *every* frontend: `render_qmd_to_html` (:920), `parse_qmd_to_ast`, and `render_qmd_to_preview_ast` (:998) all funnel through it. Filtering there covers CLI single-doc, CLI project (per-page), preview, and WASM in one edit — and, because it happens inside the render, it lands strictly *before* `--strict`'s promotion at the CLI boundary, so the suppress-then-promote ordering of A3 falls out for free rather than needing to be enforced.
+(:811) is the one place every per-document diagnostic passes through, for *every* frontend: `render_qmd_to_html` (:920), `parse_qmd_to_ast`, and `render_qmd_to_preview_ast` (:998) all funnel through it. Filtering there covers CLI single-doc, CLI project (per-page), preview, and WASM in one edit — and, because it happens inside the render, it lands strictly *before* `--strict`\'s promotion at the CLI boundary, so the suppress-then-promote ordering of A3 falls out for free rather than needing to be enforced.
 
 Resolution and application are split:
 
 - **Resolve** in `MetadataMergeStage`, right after `activate_trace_from_metadata` (`metadata_merge.rs:420`) — the point where merged metadata exists. Project → directory → document precedence comes free from the existing merge, so `_quarto.yml` and front matter both work with no new precedence machinery.
-- **Apply** in `run_pipeline`'s tail, via a new `StageContext.diagnostic_policy` field.
+- **Apply** in `run_pipeline`\'s tail, via a new `StageContext.diagnostic_policy` field.
 
 **Known v1 gap, accepted:** *project-scoped* diagnostics (`project_diagnostics` in `ProjectRenderSummary`, plus the `eprintln!` config-diagnostic path at `render.rs:897`) do not pass through `run_pipeline` and are therefore not suppressible in v1. Per-document diagnostics — which is what Q-2-49 is — are fully covered, including when the suppression is written in `_quarto.yml`, because project config is merge layer 1.
 

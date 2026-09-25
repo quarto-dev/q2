@@ -286,7 +286,7 @@ Branch: `braid/include-in-code-block-f8mvtczn`. D4 settled 2026-08-10: **trim ex
 ### Phase 1 — Recognizer + textual splice in `IncludeExpansionStage` (D1, D2)
 
 - [x] Share `code_shortcode_opt_out` out of `shortcode_resolve.rs` (make `pub(crate)`)
-- [x] Add the shared recognition helper (single source of truth, mirroring `child_block_lists_mut`'s role)
+- [x] Add the shared recognition helper (single source of truth, mirroring `child_block_lists_mut`\'s role)
 - [x] Splice in `expand_blocks`: read target, replace the line, no parsing, no re-indentation, D4 trim
 - [x] Diagnostics on read failure, consistent with the block-position arms
 
@@ -294,7 +294,7 @@ Branch: `braid/include-in-code-block-f8mvtczn`. D4 settled 2026-08-10: **trim ex
 
 - [x] `record_include` for each fence target
 - [x] Extend `collect_include_paths` through the *same* helper so the preview dep-graph cannot drift
-- [x] Confirm `quarto-preview`'s `extract_include_deps` picks it up
+- [x] Confirm `quarto-preview`\'s `extract_include_deps` picks it up
 
 ### Phase 3 — Opt-out + recursion
 
@@ -335,5 +335,5 @@ None. D1–D7 are settled; implementation is underway.
 - **Invariant preserved, not broken.** `shortcode_resolve.rs:623-629` documents "any `include` still present here is inline among other content, the one unsupported position." D1's site keeps that sentence true (the transform-site alternative would have falsified it) — a point in D1's favor, now settled.
 - **Test churn is modest but load-bearing.** Four test sites plus a docs page assert today's behavior. None of them are snapshots, so the changes are explicit and reviewable — good. The pinning unit test `extract_include_path_from_non_paragraph` should be *rewritten*, not deleted, so the new contract stays pinned.
 - **A deliberate Q1 divergence ships with this** (D3, no recursion inside a fence). It is defensible and arguably better for listings, but it is a parity gap on a strand labeled `parity`. bd-cq0xhxg5 is where it gets explained to users; make sure that lands rather than being dropped once the code works.
-- **Q1 comparison is now done, at one data point.** `quarto render` of the repro was run against `external-sources/quarto-cli` @ `abc6a78ed`; source was read for the recursion, opt-out and newline logic. Not yet compared: multi-include fences, indented includes, `.qmd`-into-fence, and the full Connect-docs corpus. Phase 6 should widen this before the work is called done.
+- **Q1 comparison is now done, at one data point.** `quarto render` of the repro was run against `external-sources/quarto-cli` \@ `abc6a78ed`; source was read for the recursion, opt-out and newline logic. Not yet compared: multi-include fences, indented includes, `.qmd`-into-fence, and the full Connect-docs corpus. Phase 6 should widen this before the work is called done.
 - **No incoming dependencies** means nothing else in this skein breaks whichever way we go — the risk is confined to include semantics.

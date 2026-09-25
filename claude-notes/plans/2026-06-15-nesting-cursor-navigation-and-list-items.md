@@ -37,7 +37,7 @@ alone — its leading block already renders its own pool-id'd, activatable, meas
 `data-block-pool-id` and the inner `<p>` keeps the sole id (no duplicate). Added as **0.g**.
 
 **A2 — §1 must skip *container-gap* lines (the structural-line case).** `surfaceLineSpan` trims, but
-a `BulletList`'s trimmed span still covers an empty item's marker line, and a `<dl>`'s span covers
+a `BulletList`\'s trimmed span still covers an empty item's marker line, and a `<dl>`\'s span covers
 its `<dt>` term lines. So C1's "deepest surface whose trimmed span contains L" resolves those lines
 to the **container** — the exact drop-into-whole-list outcome Rule B's table (row 1) was built to
 prevent. (The current `outerByLine` resolver only dodges this because it iterates *blocks*, not
@@ -54,7 +54,7 @@ A `::: definition-list` fenced div is rewritten by `postprocess.rs:803` into a `
 carrying the div's `source_info`; the qmd grammar has no separate def-list rule. Parsed:
 `DefinitionList s:0` (editable), each definition body leads with a `Plain` (`s:2`) — the A1 happy
 path. The `<dt>` term is `[[Str]]` (inlines, no block node) → correctly out. **The A1 predicate and
-the §0.f empty-guard apply unchanged to each `<dd>`'s leading block** (a definition body that leads
+the §0.f empty-guard apply unchanged to each `<dd>`\'s leading block** (a definition body that leads
 with a `Para`/sublist must not borrow).
 
 **A4 — centralize the proxy measure in the helper (don't enumerate sites).** C3's "everywhere a

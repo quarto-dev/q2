@@ -102,7 +102,7 @@ New file `crates/quarto-core/src/transforms/mermaid.rs`:
 - If ≥1 block matched, append the CDN script to
   `ast.meta.rendered.includes.after-body` (the
   `website_favicon.rs` / `feed/link_inject.rs` precedent, consumed by
-  `IncludeResolveStage`'s `write_rendered_lists` output and
+  `IncludeResolveStage`\'s `write_rendered_lists` output and
   `ApplyTemplateStage`):
 
   ```html
@@ -123,7 +123,7 @@ New file `crates/quarto-core/src/transforms/mermaid.rs`:
 
   **Verify at impl time**: a Finalization-phase transform runs after
   `IncludeResolveStage` has already written `rendered.includes.*` —
-  confirm the favicon/feed-link transforms' exact append target and
+  confirm the favicon/feed-link transforms\' exact append target and
   timing, and do the same. If late appends to
   `rendered.includes.after-body` are NOT picked up by
   `ApplyTemplateStage`, fall back to appending a trailing

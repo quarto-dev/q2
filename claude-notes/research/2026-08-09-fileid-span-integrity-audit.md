@@ -225,7 +225,7 @@ This constrains B in three ways, none of which raise its risk:
   fallback). The caller reads via its runtime (host FS or VFS) and hands over
   the string. This *removes* filesystem awareness from quarto-source-map
   relative to today — the library's current disk touchpoints (`add_file(path,
-  None)`, `map_offset`'s and the renderer's render-time re-reads) are exactly
+  None)`, `map_offset`\'s and the renderer's render-time re-reads) are exactly
   what already degrades in WASM.
 - **Prefer the uniform-lookup variant of B.3** (have `add_file` also record
   its id in the sparse map) over deleting the positional fallback outright:

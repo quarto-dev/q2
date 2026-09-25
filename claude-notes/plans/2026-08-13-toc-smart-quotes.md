@@ -247,7 +247,7 @@ small named-flavor enum and keep any options struct private.
 
 **Sequencing:** `bd-zzke` is **not** a prerequisite for this epic and should not be merged
 into it. Making TOC entries carry inlines *deletes* `toc.rs::inlines_to_text` outright,
-shrinking `bd-zzke`'s surface. Un-defer it separately, after, with the corrected site list.
+shrinking `bd-zzke`\'s surface. Un-defer it separately, after, with the corrected site list.
 
 ## The three constraints that make this an epic
 
@@ -255,7 +255,7 @@ These are why "change `String` to `Inlines`" is not a one-commit change.
 
 1. **`TocEntry` is an on-disk, versioned contract.** It is `DocumentProfile.outline`
    (`document_profile.rs:453`), serialized to disk and read back by incremental rebuilds.
-   Changing `title`'s type is a profile-shape change and requires a **`profile_version` bump**
+   Changing `title`\'s type is a profile-shape change and requires a **`profile_version` bump**
    (currently >= 4) per `claude-notes/designs/document-profile-contract.md`. Today the only
    production reader of `.outline` is the profile itself — all other hits are tests
    (`document_profile_pipeline.rs:202-206,400`) — so the migration cost is low, but the
@@ -277,7 +277,7 @@ These are why "change `String` to `Inlines`" is not a one-commit change.
 
 ## Work items
 
-Phase boundaries are commit points (per `CLAUDE.md`'s commit-and-continue rule). Checked
+Phase boundaries are commit points (per `CLAUDE.md`\'s commit-and-continue rule). Checked
 items are done and committed.
 
 ### Phase 0 — Test plan (TDD, failing first) — **DONE**
@@ -419,7 +419,7 @@ there when it is un-deferred.
       wrapped with the new `plain_inlines`.
 - [x] Render it through `render_toc_label` into `<h2 id="toc-title">`.
 - [x] Add `&["toc-title"]` to `MARKDOWN_CONFIG_PATHS`; both sources tested.
-- [x] Cross-reference note added to *both* registries (`bd-qzn1azon`'s whole scope) — a
+- [x] Cross-reference note added to *both* registries (`bd-qzn1azon`\'s whole scope) — a
       four-row comparison table in each module header saying when to pick which.
 - [x] **Preview parity**: `rendered.navigation.toc-title` published by `TocRenderTransform`;
       `template.rs` and `PreviewDocument.tsx` both read it; `TocSlot` takes `titleHtml`.
@@ -460,7 +460,7 @@ walk inline nodes) would duplicate the HTML writer in TypeScript.
 
 - [x] `bd-zzke` un-deferred (`deferred` -> `open`) with a rewritten description: the
       corrected 10-site table, the essential-vs-incidental axis analysis, the named-flavour
-      warning about options-struct combinatorics, and a note that `toc.rs`'s copy is already
+      warning about options-struct combinatorics, and a note that `toc.rs`\'s copy is already
       gone. Linked `related` to this strand and to the autoid one.
 - [x] `bd-qzn1azon` **closed** — its whole scope (a "see also, and when to pick which" note
       in both key-path registries) landed in Phase 3.
@@ -511,7 +511,7 @@ Kept for the record, since the reasoning is easy to re-litigate:
   carrying a `Strong`; `as_plain_text()` (toc.rs:146) discards it. That is the defect this
   epic fixes, not a decision to make. The residual — what to do with a `Scalar(String)` —
   follows from the contract: it came from project config (literal by design) or programmatic
-  construction, so **wrap it as a single `Str`**. Re-parsing would bypass `ProjectConfig`'s
+  construction, so **wrap it as a single `Str`**. Re-parsing would bypass `ProjectConfig`\'s
   deliberate default; the registry (decision 2) is the sanctioned opt-in.
 
 ## Adjacent gap — filed as `bd-d7ljiz9q`

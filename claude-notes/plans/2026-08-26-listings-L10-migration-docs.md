@@ -135,7 +135,7 @@ All go in `crates/quarto-core/tests/integration/listing_pipeline.rs`
       `guides/projects/listings.qmd`.
 - [x] **"Links and images must be markdown."** The two silent failure
       modes as one rule with two costs. The anchor-markdown /
-      contents-raw idiom, citing the built-ins'
+      contents-raw idiom, citing the built-ins\'
       ``[`$image-html$`{=html}]($path$)``. Include the masking note
       (finding 3) — it is why this survives testing.
 - [x] **"Descriptions and the placeholder envelope."** Why the envelope

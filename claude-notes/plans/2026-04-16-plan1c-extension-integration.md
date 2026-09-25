@@ -568,7 +568,7 @@ loudly, pointing the user to the build command. Aligns with Quarto 1.
   3. **Validate every name in the user-specified order is registered.**
      If a Reorder hint names an engine that's not in the registry,
      error out at config-resolve time with the live registry listed
-     (matches Q1 engine.ts:275–283: `'X' was specified in the list of
+     (matches Q1 engine.ts:275–283: `\'X' was specified in the list of
      engines... but it is not a valid engine. Available engines are
      ...`). No silent skip.
   4. **Final order:** user-specified entries first (deduplicated, in
@@ -577,7 +577,7 @@ loudly, pointing the user to the build command. Aligns with Quarto 1.
      (`resolution.rs:57`, Q1-faithful per engine.ts:49–53), then any
      remaining (extension) registry engines sorted by name. **NB the
      built-in tiebreak is this `BUILTIN_ORDER` constant in `resolution.rs`
-     (consulted by `candidate_engines`), NOT `EngineRegistry::new()`'s
+     (consulted by `candidate_engines`), NOT `EngineRegistry::new()`\'s
      registration order** — that order is `markdown → knitr → jupyter` and
      is irrelevant, because the registry stores engines in a `HashMap`, so
      registration order is neither preserved nor consulted by resolution.
@@ -640,7 +640,7 @@ loudly, pointing the user to the build command. Aligns with Quarto 1.
      `2026-03-16-extensions-grand-plan.md` Phase 12, an epic above this one.
      (The spoof: q2's real version is `0.x` while Q1 engines declare
      `quartoRequired: ">=1.9"`/`">=1.10"`; Phase 12 isolates a spoofed compat
-     version behind a single `engine_compat_version() -> "1.11.0"` so Q1 engines'
+     version behind a single `engine_compat_version() -> "1.11.0"` so Q1 engines\'
      requirements pass — a clearly-commented stopgap, one place to revisit.
      That `1.11.0`/`engine_compat_version()` choice is recorded in Phase 12's
      notes so the gate work inherits it.)
@@ -693,7 +693,7 @@ artifact (design doc §9), not a single engine.
 **Current state (post-rebase main):** `detect_engine_sequence(meta) ->
 EngineSequence` already exists (multi-engine, bd-5yff4) but is **metadata-only**
 — it reads the `engine:` array / top-level key and has no language-based or
-claims-based resolution (`detection.rs`'s old "Future Enhancements" comment has
+claims-based resolution (`detection.rs`\'s old "Future Enhancements" comment has
 since been amended to point at `resolution.rs`). `EngineExecutionStage` owns the
 `EngineRegistry` (an `Arc<EngineRegistry>` field) plus a `spliced_engines:
 HashSet<String>` (bd-sauc9iiq, preview capture-splice) and its `run()` takes

@@ -1163,7 +1163,7 @@ against the installed pandoc is explicitly rejected as environment-measuring.
 - *The env contract:* **bound** — T2.2 (positive, the discriminator), T2.3 (documented failure
   shape), T2.4 (dependency file).
 - *Windows specifically:* **`accepted-untested` on Windows, bound as pure logic on the platforms CI
-  runs: `test-suite.yml:28`'s matrix is `[ubuntu-latest, macos-latest]` — there is no Windows CI leg
+  runs: `test-suite.yml:28`\'s matrix is `[ubuntu-latest, macos-latest]` — there is no Windows CI leg
   at all.** Mitigations, all of them required: (a) T3.3 makes the 32,767-char env-block bound a
   `U`-tier pure-function test, exactly as the plan instructs, so it runs on Linux and macOS; (b) all
   path construction in Tasks 2 and 9 must use `Path::join`, and T2.1/T9.6 assert on `PathBuf`s

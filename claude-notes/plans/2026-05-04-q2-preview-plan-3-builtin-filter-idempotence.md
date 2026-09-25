@@ -267,7 +267,7 @@ Two distinct properties get loosely called "non-idempotence":
 Plan 3 deliberately scopes to (1) because:
 
 - (2) isn't exercised by today's pipeline.
-- (2)'s test conflates writer-lossiness with filter-non-idempotence.
+- (2)\'s test conflates writer-lossiness with filter-non-idempotence.
 - For built-ins, the universe is small (one Lua filter +
   \~36 Rust transforms, all under our control), so the accepted-gap
   risk is low.
@@ -720,7 +720,7 @@ are the triage backlog.
   lookup), or other transforms that record absolute paths into meta
   MUST use only paths that resolve relative to the fixture root,
   never absolute process paths. Reason: the built-in extensions
-  resource bundle extracts to a `temp_dir()`'d location whose
+  resource bundle extracts to a `temp_dir()`\'d location whose
   absolute path differs across processes (stable within a single
   process — fine for Plan 3's two-runs-compare contract, but a
   latent issue for any future stored-snapshot variant). The
@@ -825,7 +825,7 @@ convenience for navigating, not a contract.
   Each transform's `name()` matches the kebab-case strings listed in
   §"What 'built-in' covers."
 - `crates/quarto-core/src/transforms/code_highlight.rs:126`
-  `CodeHighlightStage`'s native user-grammar disk scan
+  `CodeHighlightStage`\'s native user-grammar disk scan
   (`ctx.project.dir.join("_quarto").join("grammars")`). OS-order-
   dependent if a grammar directory is present; not exercised by
   Plan 3 fixtures (see §"Noted, not actively tested").
@@ -886,7 +886,7 @@ convenience for navigating, not a contract.
 - `resources/extensions/quarto/video/video-filter.lua` — the one
   built-in Lua filter today.
 - `claude-notes/plans/lua-filter-pipeline/00-index.md` — Carlos's
-  2025-12-21 analysis of **TypeScript Quarto**'s `run_as_extended_ast()`
+  2025-12-21 analysis of **TypeScript Quarto**\'s `run_as_extended_ast()`
   Lua filter pipeline (\~78 stages classified by side-effect category).
   This is porting reference material for the broader epic, **not** the
   inventory Plan 3 tests. Plan 3's universe is enumerated in §"What
@@ -956,7 +956,7 @@ convenience for navigating, not a contract.
   change is needed.
 - [x] Implement `pandoc_to_document_ast(pandoc) -> DocumentAst` — the
   small field-shuffle between the re-parsed `Pandoc` and the
-  hashing helpers' expected shape. Land inline in `idempotence.rs`;
+  hashing helpers\' expected shape. Land inline in `idempotence.rs`;
   do not promote to library code until a second caller appears.
 - [x] Create `crates/quarto-core/tests/fixtures/idempotence/`
   directory with a README listing the fixture-format rules:
@@ -1154,7 +1154,7 @@ explicitly says so. Do not silently disable.
   per Phase 5; **leave failing + file a sub-agent investigation prompt**
   (see §"CI failure policy & sub-agent prompt template"). `#[ignore]`
   only when the user explicitly says so.
-- **Hash stability across binary versions**: `FxHasher`'s output is
+- **Hash stability across binary versions**: `FxHasher`\'s output is
   stable within a Rust process but not across versions. Tests compare
   hashes computed in the same process, not stored as constants. This is
   the natural shape of "run pipeline twice and compare" anyway.
@@ -1179,7 +1179,7 @@ test suite isn't expected to flake on either; they're recorded here so
 the next person who *does* hit a hash divergence in their neighborhood
 has a head start:
 
-- **`CodeHighlightStage`'s native disk scan for user grammars**
+- **`CodeHighlightStage`\'s native disk scan for user grammars**
   (`crates/quarto-core/src/transforms/code_highlight.rs:126-129`).
   On native, when no `user_grammar_provider` is supplied (CLI
   default), the stage falls back to scanning

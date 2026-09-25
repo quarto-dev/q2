@@ -618,7 +618,7 @@ inert would have been worse than implementing forty lines.
    rather than inlined — so the assertion searches the whole output tree.
    Worth recording because the first version of the test passed
    vacuously in neither direction: it simply could not find the file.
-6. **`ReplaceRange`'s `expected` is sliced from the config text, not
+6. **`ReplaceRange`\'s `expected` is sliced from the config text, not
    reused from the declaration's display summary.** They are equal
    today; but `value_summary` exists to be *read by a human* (it renders
    an inline block as `(inline brand block)`), and if it ever gained
@@ -959,11 +959,11 @@ plan.
   cares about. Mitigations: parse-then-append (never re-serialize), refuse the
   shapes we cannot safely edit, `--dry-run` that shows the exact resulting text.
 - **The shared-module refactor touches shipped code.** `q2 create` is two weeks
-  old and has real users' first impressions riding on it. Phase 1 is a pure
-  rename/move with no behavior change, and `create.rs`'s integration tests must
+  old and has real users\' first impressions riding on it. Phase 1 is a pure
+  rename/move with no behavior change, and `create.rs`\'s integration tests must
   stay green throughout.
 - **Decision 3 makes re-running an error, not a no-op.** That is intentional but
-  is a UX departure from `q2 create`'s skip-existing merge semantics. The error
+  is a UX departure from `q2 create`\'s skip-existing merge semantics. The error
   message has to be good enough that "run it again" is obviously not the fix.
 - **`Commands::Use` shape change is mildly breaking** for anyone scripting the
   current (unimplemented) flat form. Since it returns `NotImplemented` today,

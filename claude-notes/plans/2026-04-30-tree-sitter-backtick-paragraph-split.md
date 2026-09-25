@@ -82,7 +82,7 @@ So the scanner is over-rejecting `SOFT_LINE_ENDING` whenever a continuation line
 
 ### Why 3+ matters
 
-`parse_fenced_code_block` (scanner.c:615–675) only emits `FENCED_CODE_BLOCK_START_BACKTICK` when `level >= 3`. With only one or two leading backticks the scanner falls through to inline parsing (`CODE_SPAN_START` at line 626–628). So at the line-break decision point, "lookahead == '`'" is overly broad — we need to count backticks before deciding.
+`parse_fenced_code_block` (scanner.c:615–675) only emits `FENCED_CODE_BLOCK_START_BACKTICK` when `level >= 3`. With only one or two leading backticks the scanner falls through to inline parsing (`CODE_SPAN_START` at line 626–628). So at the line-break decision point, "lookahead == \'`'" is overly broad — we need to count backticks before deciding.
 
 ## Proposed fix
 

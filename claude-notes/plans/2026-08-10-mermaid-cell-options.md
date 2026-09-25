@@ -145,7 +145,7 @@ affected. Note the `&quot;` in B3's figcaption above:
 
 - **D1 — quoted YAML strings keep their quotes.** `#| fig-cap: "Quoted caption."`
   renders as `Figure 2: "Quoted caption."` (literal quote characters). Cause:
-  `parse_cell_options`' `split_once(':')` + `trim()` instead of YAML parsing.
+  `parse_cell_options`\' `split_once(':')` + `trim()` instead of YAML parsing.
 - **D2 — markdown in captions is not parsed.** `#| fig-cap: A *emphasized*
   caption with [a link](…)` renders the asterisks and brackets literally. Cause:
   `caption_paragraph()` builds a single `Inline::Str` rather than parsing the
@@ -267,7 +267,7 @@ The branch was rebased onto `origin/main` before opening the PR, and
 `main` had meanwhile claimed **Q-2-42 through Q-2-46** (conditional-content
 attributes, callout titles, reference-style links — PR #497). The two codes
 added here were renumbered **Q-2-42 → Q-2-47** and **Q-2-43 → Q-2-48**; the
-catalog conflict was resolved by keeping `main`'s entries and appending the
+catalog conflict was resolved by keeping `main`\'s entries and appending the
 renumbered pair. The Phase 6 commit *message* still names the pre-rebase
 numbers — the code, catalog, tests and this plan all use the final ones.
 

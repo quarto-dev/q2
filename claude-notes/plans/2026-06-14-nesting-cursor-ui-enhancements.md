@@ -511,7 +511,7 @@ option deferred to backlog.
 ### Hover / touch outline (the reported bug)
 The outline highlights the deepest leaf, but locked-mode click activates the **outer block** —
 the highlight promises a granularity the click doesn't deliver. Make the outline use the same mode
-branch `activate()` and the click-switch already use. **Split `hoveredRef`'s overloaded role**
+branch `activate()` and the click-switch already use. **Split `hoveredRef`\'s overloaded role**
 (it is both the dedupe key *and* the Enter/Space activation target, `:129,:237,:246`):
 - `rawLeafRef` — the raw `closest('[data-block-pool-id]')`, used **only** for cheap dedupe.
 - `hoveredRef` — the **resolved** element that carries the box-shadow and is the activation target.
@@ -555,7 +555,7 @@ and keyboard would disagree in nesting mode. Make it mode-aware:
    shift-invariant under a uniform insert-above. **But self-heal does NOT preserve the map** — the
    re-anchor is content-based, not a guaranteed uniform δ (Reflection #16), so the map is *cleared*
    on every self-heal fire rather than relied on across KEEP. (§1.)
-3. **Caret→child in line space via a new helper** — `childSurfaceToward`'s exclusive-end byte
+3. **Caret→child in line space via a new helper** — `childSurfaceToward`\'s exclusive-end byte
    containment misfires on the prefix; the byte-space helper is retained as the fallback. (§2.)
 4. **Caret reading centralized in `requestNestingMove`, read pre-commit.** (§2.)
 5. **Caret-driven nest-in vs. breadcrumb invariant** → caret wins; breadcrumb re-derives from the
@@ -784,7 +784,7 @@ mislabeled "sub-sub"):
   `handleClickSwitchBlur`** at the new `{intent:'open', spec, caret}` landing shape (dropped
   `intent:'activate'`). Removed the copy-pasted find-by-line. **DONE (2026-06-15):** tsc clean,
   371 unit + 384 integ green (no-op verified); fail-on-revert verified COLD — breaking
-  `resolveLanding`'s up-comparison turns the §2-Phase-0 characterization test (dirty reland) AND the
+  `resolveLanding`\'s up-comparison turns the §2-Phase-0 characterization test (dirty reland) AND the
   P2.5a unmodified-ArrowUp sync-hop test RED (both route through the new dispatcher), restore → GREEN.
   **RE-SEQUENCED (2026-06-14):** §1 was done first (user review milestone); this is the start of §2.
 
@@ -802,7 +802,7 @@ mislabeled "sub-sub"):
   **── EXECUTION HANDOFF (2026-06-14, paused at \~40% context per user's 50% gauge) ──**
   Pre-validated test seams for the next session (decided in the parent context, not to be re-derived):
   - **`snapshotOuterBlockGeometry(openedEl, pool, topBlockR0Num)` → `Map<string,{contentHeight,boxStyle}>`**
-    lives in `outerBlocks.ts`. Climb to outermost `[data-block-pool-id]` (reuse `resolveOuterBlock`'s
+    lives in `outerBlocks.ts`. Climb to outermost `[data-block-pool-id]` (reuse `resolveOuterBlock`\'s
     chain-walk); if ≤1 visible pool-id descendant → return empty `Map`; else `querySelectorAll`, filter
     `isVisibleBlock`, `measureBlockBox` each; key = `` `${pool[pid].r[0]-topBlockR0Num}:${pool[pid].r[1]-topBlockR0Num}` ``,
     DOM-pre-order-first on duplicate key (matches `enumerateOuterBlocks` dedupe). **Tier: jsdom unit**
@@ -825,7 +825,7 @@ mislabeled "sub-sub"):
     synchronously **before** `setEditTargetRaw` (the children are swapped to a textarea after). Capture at
     the 3 open sites: `activate` (via context), `executeLanding` open, `requestMove` sync-hop — all gated on
     `unlockNestingCursor && multilevel`.
-  - **Consume:** add `'snapshot'` to `openEditTarget`'s `box` union; in `applyNestingRetarget` pass
+  - **Consume:** add `'snapshot'` to `openEditTarget`\'s `box` union; in `applyNestingRetarget` pass
     `box:'snapshot'` and resolve in `openEditTarget` by `editGeometryRef.get(``${next.r0-topBlockR0}:${next.r1-topBlockR0}``)`,
     falling back to today's measure-or-keep when the key is missing (jsdom/no-layout or unrendered surface).
     `topBlockR0` for the lookup = `topBlockR0(buildNestingSurfaces(sourceIndexRef.current), et.anchorR0, et.anchorR1)`.
@@ -884,7 +884,7 @@ mislabeled "sub-sub"):
   `bufferLine = sourceLine − map.lineOf(surfaceR0)`, `cleanT = cleanBuffer.split('\n')[bufferLine].trimEnd()`,
   `fullT = sliceUtf8(content, map.lineStart(L), map.lineStart(L+1)).trimEnd()`; if
   `fullT.endsWith(cleanT)` → `fullT.length − cleanT.length`, else **warn + best-effort**
-  (`placeCaretAtColumn`'s existing column clamp absorbs overflow → that IS the clamp-and-warn).
+  (`placeCaretAtColumn`\'s existing column clamp absorbs overflow → that IS the clamp-and-warn).
   Column space is UTF-16 (textarea-native, matches `getLogicalColumn`/`placeCaretAtColumn`);
   byte offsets only ever feed `sliceUtf8`/`map`. Pure → jsdom unit (construct realistic
   blockquote `> `/indent pairs + the `endsWith`-fail case). Belongs WITH the caret-placement
@@ -893,7 +893,7 @@ mislabeled "sub-sub"):
   `activeEditRegionRef.current?.querySelector('textarea')` (selection survives the breadcrumb
   button's `preventDefault`), `selectionEnd` on a non-collapsed selection, **synchronously
   before any commit/close**. One source of truth for the chord (dispatchers.tsx) and the ▶
-  button (BreadcrumbChip.tsx) — `requestNestingMove`'s signature does NOT change.
+  button (BreadcrumbChip.tsx) — `requestNestingMove`\'s signature does NOT change.
 - [x] `resolveLanding` `kind:'nest'` (+ `kind:'crumb'`): the §2-Phase-0 dispatcher already exists
   (`outerByLine` done, commit 449eea3b). `nest`: relocate the committed container by its
   commit-stable `fromStartLine` in the new source index, project `caretBufferLine`, then

@@ -94,7 +94,7 @@ deliberately **not** folded into the existing `isMarimoCell(cell)` (whose only c
 info to pass). `execute()` reads `options.handledLanguages` and derives `bareSqlOwned` from it, then threads
 that boolean to `extract.py` as a new 4th positional argv (`bare_sql: yes|no`), after `input`/`mime`/`eval`.
 
-**b. `e8ec4fb` — `extract.py`'s `BARE_SQL_FENCE_REGEX`.** marimo's own markdown parser has **no `.marimo`
+**b. `e8ec4fb` — `extract.py`\'s `BARE_SQL_FENCE_REGEX`.** marimo's own markdown parser has **no `.marimo`
 gate at all** — the gate is entirely TS-side. marimo classifies a cell as SQL only when the fence is already
 in the qmd-form `sql {.marimo}` (language before the brace); a sibling `SQL_DOT_FENCE_REGEX` pre-rewrites
 `{sql .marimo}`/`{sql.marimo}` into that form. Bare `{sql}` wasn't covered, so it was misclassified as python

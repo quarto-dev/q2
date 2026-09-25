@@ -188,7 +188,7 @@ effect.
 - **B (`closeSettleGate`):** new helper
   `closeSettleGate = () => { preCommitContentRef.current = null; clearRelandFade(); }`,
   routed through all three reland-conclusion sites — `openEditTarget` (land),
-  `cancelPendingLand` (abort), and **`executeLanding`'s `'focus'` branch** (the
+  `cancelPendingLand` (abort), and **`executeLanding`\'s `'focus'` branch** (the
   previously-untouched path, covering all its exits).
 - **D (watchdog):** `FADE_WATCHDOG_MS = 1000` + a `fadeTimeoutRef`. The apply
   effect arms it when it fades a cell; `clearRelandFade` cancels it on a normal
@@ -360,7 +360,7 @@ affected; lists merely make single-line content the common case.
    `max(contentHeight, scrollHeight)` picked `scrollHeight` the instant it expanded.
    Tuning the monospace line box to sit just **below** the rendered line makes `max`
    stay at `contentHeight` → no grow. **Live-tuned 2026-06-18: 0.9 → 0.85 → 0.825**
-   (user chose 0.825). `caretGeometry`'s measurement mirror copies the textarea's
+   (user chose 0.825). `caretGeometry`\'s measurement mirror copies the textarea's
    *computed* font size (`caretGeometry.ts:57`), so `isOnLastVisualLine` /
    `isOnFirstVisualLine` track this automatically — no second edit.
 
@@ -469,7 +469,7 @@ L4 > 2.  dear               Plain [43,53]  span was [4,6]  → should be [4,4]
 
 `oh` (line 2, 1-line draft) → `destLine = 2+1 = 3`; with span `[2,4]`,
 `surfaceAtLine(3)` re-resolved to `oh` itself → "caught". (Latent bonus bug:
-`surfaceAtLine(4)` — `dear`'s own content line — resolved to `oh` because the
+`surfaceAtLine(4)` — `dear`\'s own content line — resolved to `oh` because the
 inflated spans overlap.)
 
 ### Chosen fix (`nestingNav.ts` `surfaceLineSpan`) — VERBATIM
@@ -571,7 +571,7 @@ For **G16-at**, the `surfaceAtLine` surface SET is the inline array
 {r0:43,r1:53} /*dear*/]` (add `{r0:57,r1:65}` for the item-3 leaf if exercising
 line 6). With the fixed `>`-aware span, line 3's deepest containing surface is the
 OrderedList **container** whose only leaf children (`oh`→[2,2], `dear`→[4,4]) do
-**not** cover line 3 → `surfaceAtLine`'s A2 container-gap check returns `null`
+**not** cover line 3 → `surfaceAtLine`\'s A2 container-gap check returns `null`
 (verified against the real container structure 2026-06-18).
 
 | # | Real unit | Assertion surface | Named revert → RED |
@@ -831,7 +831,7 @@ live validation (2026-06-18). Revertable in one line if we later build that harn
 
 ### Layer 2 (deferred — spurious dirty writes, an audit)
 
-The *trigger* in the reported clean scenario: `handleClickSwitchBlur`'s dirty check
+The *trigger* in the reported clean scenario: `handleClickSwitchBlur`\'s dirty check
 (`:1087`) compares the draft against the **raw** `et.anchorSlice`, while every other
 dirty check uses the P3.3 clean-buffer-aware `normalizeLineEndings(seededDraft ??
 anchorSlice).trimEnd()`. For a nested block the seeded clean buffer (`"oh"`) differs

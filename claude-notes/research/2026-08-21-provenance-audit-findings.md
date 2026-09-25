@@ -184,8 +184,8 @@ and never slices text.
 
 > **Classified 2026-08-23 (Plan 3 Phase 1).** All 26 are now classified; the
 > table is in Plan 3 § Evidence → Phase 1. The result corrects the count above:
-> there are **three** copy sites, not one. `assemble_inline_content`'s
-> `InlineAlignment::KeepBefore` arm and `assemble_recursed_container`'s
+> there are **three** copy sites, not one. `assemble_inline_content`\'s
+> `InlineAlignment::KeepBefore` arm and `assemble_recursed_container`\'s
 > verbatim early return also emit a hull's bytes as a node's text. Both are
 > latent for exactly the reason `:171` is — verified at the consumer, since
 > `incremental_write`\'s only two production callers both supply an
@@ -517,7 +517,7 @@ adjacent `Text` siblings while extending `sourcepos.end`, and — with
 `parse.escaped_char_spans` and `render.escaped_char_spans` false — splices
 `Escaped` children into their neighbours, extending `sourcepos.end` again.
 
-Two consequences: **`inline.rs:94`'s `NodeValue::Escaped` arm is dead code**
+Two consequences: **`inline.rs:94`\'s `NodeValue::Escaped` arm is dead code**
 under `Options::default()` — do not build a fix on it. And **comrak already
 solves this internally and discards it**:
 `postprocess_text_node_with_context` builds
@@ -561,7 +561,7 @@ any `--to` value (`json`, `raw-json`, `native`, `markdown`/`qmd`, `html`,
 writer's `r`/`p` output: `writers/json.rs:357-361` emits the `Substring`'s
 content-relative pair, `:363-379` emits `(0, sum_of_piece_lengths)` for the
 parent. **Do not infer from `r` alone that a reader breaks** — Plan 2 retracted
-exactly that inference after finding `annotated-qmd`'s `resolveChain` treats
+exactly that inference after finding `annotated-qmd`\'s `resolveChain` treats
 `info.r` as an error path and walks the pieces properly
 (`source-map.ts:317-375`). The observable is the pool chain and snapshot churn.
 
@@ -625,7 +625,7 @@ mistaken for call counts. These are line-classified:
 ## 9. Glossary
 
 - **preimage** — the byte range in an original file that a `SourceInfo` covers.
-- **hull** — the smallest single range containing all of a `Concat`'s pieces.
+- **hull** — the smallest single range containing all of a `Concat`\'s pieces.
   Exists only when the pieces tile the source without gaps.
 - **fold** (*fold piece*, *fold-shaped*) — a `Concat` piece whose source run and
   content run have **equal length but different bytes**. YAML's line folding

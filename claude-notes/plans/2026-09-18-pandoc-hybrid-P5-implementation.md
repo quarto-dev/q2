@@ -630,7 +630,7 @@ behaviour is normative for the Pandoc leg (decided; design §12's accepted asymm
 - `crates/quarto-core/tests/integration/pandoc_shim.rs` — extend.
 - `crates/quarto-core/tests/fixtures/pandoc_shim/{ref-figure,ref-unresolved}.qmd` — new.
 
-**The seven callable globals, all verified present and reachable in `main.lua`'s state:**
+**The seven callable globals, all verified present and reachable in `main.lua`\'s state:**
 
 | function | anchor | role |
 |---|---|---|
@@ -669,7 +669,7 @@ case this epic's v1 targets.
   `quarto-pandoc-types/src/custom.rs:72-75`) with the slot-shaped alternative left undecided.
   `seam deferred until P2 Finding 3 is answered`.
 - **`cite_mode` / `label_upper`** (`refs.lua:31`, `:56`, `:95-96`) **are** available once P2 Task 3
-  lands; the `SuppressAuthor` branch and `refPrefix`'s `upper` argument are in scope.
+  lands; the `SuppressAuthor` branch and `refPrefix`\'s `upper` argument are in scope.
 
 **Unresolved refs** degrade the way Q1's own `resolveRefs` degrades them, not with Q2's `?id?`
 convention: the `not resolve` path builds a `Span(stringToInlines(label), Attr("",
@@ -776,13 +776,13 @@ would otherwise index and renumber, does not run — it lives in `quarto_crossre
 
 | # | Tier | Real unit exercised | Seam (invoked → asserted) | Mock boundary | Named revert hunk |
 |---|---|---|---|---|---|
-| T5.1 | **L**(chain) | the shim's Equation route + `renderEquation`'s fallback branch (`equations.lua:133-144`) | `equation-numbered.qmd` → **docx**, captured AST → assert a `Span` with identifier `eq-x` containing a `Math` whose `text` ends with `\qquad(1)`, and no `data-custom-type` | none | the `order` argument in the `renderEquation(eq, label, nil, order)` call |
+| T5.1 | **L**(chain) | the shim's Equation route + `renderEquation`\'s fallback branch (`equations.lua:133-144`) | `equation-numbered.qmd` → **docx**, captured AST → assert a `Span` with identifier `eq-x` containing a `Math` whose `text` ends with `\qquad(1)`, and no `data-custom-type` | none | the `order` argument in the `renderEquation(eq, label, nil, order)` call |
 | T5.2 | **L**(chain) | the integer coercion, equation path | Same capture → assert the Math text contains `\qquad(1)` and **not** `\qquad(1.0)` | none | Task 1's `quarto.json.decode` choice |
 | T5.3 | **L**(chain) | branch attribution, negative direction | Same fixture → **latex** → assert the captured AST contains `\begin{equation}` and **no** `\qquad` | none | none — this test exists to prove the latex target cannot bind `order` (see the vacuity check) |
 | T5.4 | **L**(chain) | the unwrap | Same docx capture → assert the `Math` inline's `mathtype` is `DisplayMath` and there is exactly one `Math` node (the wire `Span`/`Plain` wrappers were unwrapped, not nested) | none | the slot-unwrap step that strips the `Plain` wrapper around an `Inlines` slot |
 
 **Revert hunks, stated exactly:**
-- T5.1 — Revert the `order` argument (pass `nil`) → `renderEquation`'s fallback does
+- T5.1 — Revert the `order` argument (pass `nil`) → `renderEquation`\'s fallback does
   `numberOption("eq", nil)` → `formatNumberOption` → `order.order` on nil (`format.lua:140`) → exit
   83, so `assert!(outcome.status.success())` in `test_equation_is_numbered_for_docx` RED, and the
   `\qquad(1)` assertion RED with it.
@@ -829,7 +829,7 @@ Q2-only by construction and cannot appear in any Q1-parity golden.
   `error-docs-page-missing` (`crates/xtask/src/lint/error_docs.rs:73`) and
   `error-docs-sidebar-unlisted` (`crates/xtask/src/lint/error_docs_sidebar.rs:81`), with entries
   **ascending by code number** inside the `- section: "pandoc"` block.
-  `2026-09-20-pandoc-hybrid-P7-foundation-implementation.md`'s Task 1 also claims a `Q-18-*` code
+  `2026-09-20-pandoc-hybrid-P7-foundation-implementation.md`\'s Task 1 also claims a `Q-18-*` code
   in this same catalog file and sidebar block. `Q-18-1` through `Q-18-4` are already taken (P4
   Task 6); P7-foundation's Task 1 claims `Q-18-5`, so **this task's two codes are `Q-18-6` and
   `Q-18-7`**. Whichever of these two tasks lands second must re-check the catalog for the current
@@ -956,7 +956,7 @@ production writer, and say so in the test's doc comment.
 ## Task 7: Layer-1 contract test — registry introspection, per-type name mapping, bidirectional totality, and the Route-N function arity probe
 
 **Scope.** The Q1-version drift tripwire against the `v1.11.3` pin: introspect Q1's live handler
-registry from inside `main.lua`'s own Lua state, assert a **per-type name mapping** (not
+registry from inside `main.lua`\'s own Lua state, assert a **per-type name mapping** (not
 set-equality), assert totality in **both** directions against P2's schema artifact, and assert each
 Route-N global the shim depends on exists and accepts the expected arity.
 
@@ -981,7 +981,7 @@ missing `slots` as "no forwarder", warning only if it is present and not an arra
 (pandoc 3.8.1): **each `--lua-filter` runs in its own Lua state.** A global set in one `-L` file
 reads `nil` in the next. So a standalone probe script invoked as `pandoc -L main.lua -L probe.lua`
 would see an **empty** `by_ast_name` and the whole Layer-1 test would be vacuously green. The probe
-must therefore run *inside* `main.lua`'s state, which means it must be reachable from the vendored
+must therefore run *inside* `main.lua`\'s state, which means it must be reachable from the vendored
 tree's import graph.
 
 **The probe is mechanism (a): an env-gated dump inside `quarto2-shim.lua` itself.** Rejected
@@ -1054,7 +1054,7 @@ shim's own route-table construction, which T7.3 reads.
 **Rejected mechanisms, recorded so they are not re-proposed:** a standalone probe that `dofile`s
 `main.lua` re-runs the whole document pipeline (`main.lua:737` `run_as_extended_ast(...)` executes
 at load); a standalone probe that imports `ast/customnodes.lua` plus each `customnodes/*.lua`
-by hand re-implements `main.lua`'s 170-line import block and would drift silently — which is the
+by hand re-implements `main.lua`\'s 170-line import block and would drift silently — which is the
 exact failure Layer-1 exists to catch.
 
 **The Route-N arity probe.** For each of `refPrefix`, `refNumberOption`, `subrefNumber`,
@@ -1066,7 +1066,7 @@ is *already* loud (`attempt to call a nil value` → pandoc nonzero exit → P4 
 the arity assertion is what converts a **signature change on the same name**, which would
 otherwise silently produce wrong output, into a contract-test failure.
 
-**Acceptance criterion.** H7 is present in `quarto2-shim.lua`'s filter group and writes a census
+**Acceptance criterion.** H7 is present in `quarto2-shim.lua`\'s filter group and writes a census
 when `QUARTO2_LAYER1_DUMP` is set; the census contains an entry for each of the five Route-R
 `ast_name`s with its `kind`, `class_name` and `slots` (or an explicit nil marker); the per-type
 mapping table in D6 is asserted entry by entry; both totality directions hold against
@@ -1083,7 +1083,7 @@ remains; this task is dispatchable.
 
 | # | Tier | Real unit exercised | Seam (invoked → asserted) | Mock boundary | Named revert hunk |
 |---|---|---|---|---|---|
-| T7.1 | **L**(chain) | Q1's live `by_ast_name` registry, from inside `main.lua`'s state | Run `main.lua` with `QUARTO2_LAYER1_DUMP=<tmp>`, load the census → assert it contains all five Route-R `ast_name`s (`Callout`, `Tabset`, `Theorem`, `Proof`, `FloatRefTarget`) **and** that its total size is `>= 13` (the `ast_name` count in the pinned tree), so an empty or partial census cannot read as green; **and** that the file exists at all (absence is a hard error, not an empty census) | **nothing mocked** — the registry is the unit under test and must never be hand-written | **H7**, the `quarto2-layer1-census` filter-group entry in `quarto2-shim.lua` |
+| T7.1 | **L**(chain) | Q1's live `by_ast_name` registry, from inside `main.lua`\'s state | Run `main.lua` with `QUARTO2_LAYER1_DUMP=<tmp>`, load the census → assert it contains all five Route-R `ast_name`s (`Callout`, `Tabset`, `Theorem`, `Proof`, `FloatRefTarget`) **and** that its total size is `>= 13` (the `ast_name` count in the pinned tree), so an empty or partial census cannot read as green; **and** that the file exists at all (absence is a hard error, not an empty census) | **nothing mocked** — the registry is the unit under test and must never be hand-written | **H7**, the `quarto2-layer1-census` filter-group entry in `quarto2-shim.lua` |
 | T7.2 | I | the census × `custom_node_schema` — **Q1-facing** direction | For each of the five Route-R types in the schema, assert the census has a handler, and assert the Q1 `slots` value equals the literal recorded in D6 **per type** (`{div,name}` for Theorem/Proof, `{title,content}` for Callout, `{content,caption_long,caption_short}` for FloatRefTarget, **nil** for Tabset) | none | a mapping table entry (e.g. swapping Theorem's `div`↔`name`) |
 | T7.3 | I | the shim's route table × the schema — **shim-facing** direction | Assert every `type_name` in the schema whose `route` is `R` or `N` has an entry in `quarto2_shim.routes`, and that `routes` has no entry absent from the schema | none | adding a ninth type to the schema without a shim route (the direction no golden can catch — D7) |
 | T7.4 | **L**(chain) | the seven Route-N globals | For each name assert `type(fn) == "function"` **and** `debug.getinfo(fn,"u").nparams == <recorded>` | none | any recorded arity literal; and, upstream, a Q1 signature change on the same name |
@@ -1092,7 +1092,7 @@ remains; this task is dispatchable.
 | T7.7 | **L**(chain) | H7's inertness when unset | Run the **same** fixture twice through `run_main_lua_capturing_ast`, once with `QUARTO2_LAYER1_DUMP` set and once unset → assert the two ASTs are identical | **nothing mocked** | H7's `if out == nil then return nil end` early guard |
 
 **Revert hunks, stated exactly:**
-- T7.1 — Revert **H7** (delete the `quarto2-layer1-census` entry from `quarto2-shim.lua`'s
+- T7.1 — Revert **H7** (delete the `quarto2-layer1-census` entry from `quarto2-shim.lua`\'s
   filter-group literal) → `capture_layer1_introspection()` finds no census file and
   `test_q1_handler_registry_is_populated` RED at its file-exists precondition. **Two assertions
   are doing distinct work here**: the file-exists precondition catches H7 being absent or its
@@ -1114,7 +1114,7 @@ remains; this task is dispatchable.
 - T7.3 — Revert by adding a ninth schema type with no shim route →
   `assert!(missing_routes.is_empty())` in `test_shim_routes_cover_the_schema` RED. **This is the
   only mechanical guard for that case** (D7) and must not be deferred.
-- T7.4 — Revert `refNumberOption`'s recorded arity from 2 to 1 →
+- T7.4 — Revert `refNumberOption`\'s recorded arity from 2 to 1 →
   `assert_eq!(nparams("refNumberOption"), 2)` in `test_route_n_globals_have_expected_arity` RED.
 - T7.5 — Revert the `QUARTO_CLI_PIN` reference → `assert_eq!(recorded_pin, QUARTO_CLI_PIN)` in
   `test_arity_table_is_pinned` RED.

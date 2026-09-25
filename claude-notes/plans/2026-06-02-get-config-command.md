@@ -70,7 +70,7 @@ is out of scope for v1.
 - **Path navigation already exists**: `ConfigValue::get_nested("a.b.c")`
   / `get_path(&["a","b","c"])`. **Caveat:** these traverse *maps only* —
   there is no array-index support (`authors.0.name` does not work today).
-- **`ConfigValue`'s default serde output is NOT suitable** for this
+- **`ConfigValue`\'s default serde output is NOT suitable** for this
   command. It emits an internal tagged form, e.g.
   `{"PandocInlines":[{"t":"Str",...}]}`, with merge-op/source wrappers.
   `get-config` needs its **own clean JSON projection** (a small

@@ -28,7 +28,7 @@ the large majority of the model's non-Julia at-risk ledger with named seams.
 Both agents independently reached "mostly adequate," and converged on the **same two real
 gaps**. After grounding, the net is:
 
-- **One genuinely uncovered gap, epic-wide: `system.execProcess`'s `mergeOutput` +
+- **One genuinely uncovered gap, epic-wide: `system.execProcess`\'s `mergeOutput` +
   `stderrFilter` params** (knitr uses both). Low–Moderate.
 - **One coordinated *feature* deferral that is seamed but unconnected: preserve-restore**
   (`postprocess` hook + `text.postProcessRestorePreservedHtml`). Low.
