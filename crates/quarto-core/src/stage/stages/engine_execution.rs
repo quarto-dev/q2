@@ -417,6 +417,16 @@ impl PipelineStage for EngineExecutionStage {
             // The replay engine rides the same per-engine loop below as a
             // live engine (mask → serialize → execute → unmask → capture
             // → reparse), so capture/splice works unchanged.
+            //
+            // Native only: `engine::jupyter` — and the replay engine — is
+            // gated out of the WASM build (engine/mod.rs), so this push
+            // compiles out there. `to_run` stays empty and Step 3's
+            // empty-`to_run` fast path passes the AST through unchanged:
+            // stored cells inert, no misleading warning, native behavior
+            // untouched. WASM keeps `notebook_replay` true so the policy
+            // gate above still bypasses for replay (replay never launches
+            // a kernel).
+            #[cfg(not(target_arch = "wasm32"))]
             to_run.push((
                 Arc::new(crate::engine::jupyter::IpynbReplayEngine) as Arc<dyn ExecutionEngine>,
                 None,

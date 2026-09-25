@@ -76,6 +76,26 @@ pub struct ProcessorContext {
     pub runtime: Arc<dyn SystemRuntime>,
 }
 
+/// One ephemeral virtual file a converter emitted for its output pieces to
+/// point at — one per notebook cell for ipynb; percent/spin emit none. The
+/// caller registers each into the document's `SourceContext` (Plan 7c
+/// decision 6).
+#[derive(Debug, Clone)]
+pub struct ConvertedFile {
+    /// The registered file's label — the pseudo-path diagnostics display,
+    /// `{notebook}[cell N, kind]`.
+    pub label: String,
+    /// The cell's logical (unescaped) text.
+    pub text: String,
+    /// nbformat `cell_type` (`code` | `markdown` | `raw`). Feeds
+    /// `FileOrigin::NotebookCell::cell_type`; label-parsing cannot recover
+    /// it reliably (the notebook name may contain `[cell N, …]`).
+    pub cell_type: String,
+    /// nbformat `cell.id`, when the notebook carries one (mandatory from
+    /// nbformat 4.5, absent in older notebooks). JSON output only.
+    pub cell_id: Option<String>,
+}
+
 /// The result of converting one non-qmd input to qmd markdown.
 #[derive(Debug, Clone)]
 pub struct Converted {
@@ -84,7 +104,7 @@ pub struct Converted {
     /// Ephemeral source files the pieces above point at, for the caller to
     /// register in `SourceContext`. Empty for percent/spin — they map back
     /// into the already-registered original file.
-    pub files: Vec<(String, String)>,
+    pub files: Vec<ConvertedFile>,
 }
 
 #[derive(Debug, thiserror::Error)]

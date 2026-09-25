@@ -193,18 +193,35 @@ impl PipelineStage for ParseDocumentStage {
                     // order — exactly the ids the converter's Concat pieces
                     // point at (Plan 7c decision 6), so per-cell diagnostics
                     // resolve into their own virtual file.
-                    for (i, (label, text)) in source.files.iter().enumerate() {
+                    for (i, cell_file) in source.files.iter().enumerate() {
                         let cell_id = quarto_source_map::FileId(
                             crate::engine::content_processors::ORIGINAL_FILE_ID.0 + 1 + i,
                         );
+                        let label = cell_file.label.clone();
+                        let text = cell_file.text.clone();
+                        // Structured provenance for the virtual file (plan 7c
+                        // Phase 4): diagnostics render the real notebook path
+                        // and cell from this instead of decoding the label.
+                        let origin = quarto_source_map::FileOrigin::NotebookCell {
+                            notebook_path: source.path.display().to_string(),
+                            cell_index: i + 1,
+                            cell_id: cell_file.cell_id.clone(),
+                            cell_type: cell_file.cell_type.clone(),
+                        };
                         // lint:allow(add-file-with-id) — same reason as above
                         ast_context.source_context.add_file_with_id(
                             cell_id,
                             label.clone(),
                             Some(text.clone()),
                         );
+                        if let Some(f) = ast_context.source_context.get_file_mut(cell_id) {
+                            f.metadata.origin = Some(origin.clone());
+                        }
                         // lint:allow(add-file-with-id) — same reason as above
-                        source_context.add_file_with_id(cell_id, label.clone(), Some(text.clone()));
+                        source_context.add_file_with_id(cell_id, label, Some(text));
+                        if let Some(f) = source_context.get_file_mut(cell_id) {
+                            f.metadata.origin = Some(origin);
+                        }
                     }
                 }
 
@@ -855,11 +872,11 @@ mod tests {
         use crate::format::Format;
         use crate::project::{DocumentInfo, ProjectContext};
         use crate::stage::{ConversionProvenance, LoadedSource, StageContext};
-        use quarto_source_map::FileId;
+        use quarto_source_map::{FileId, FileOrigin};
         use quarto_system_runtime::TempDir;
         use std::sync::Arc;
 
-        const NOTEBOOK: &str = r#"{"cells":[{"cell_type":"markdown","metadata":{},"source":["first\n"]},{"cell_type":"markdown","metadata":{},"source":["second\n"]}],"metadata":{"kernelspec":{"name":"python3"}},"nbformat":4,"nbformat_minor":5}"#;
+        const NOTEBOOK: &str = r#"{"cells":[{"cell_type":"markdown","id":"a1","metadata":{},"source":["first\n"]},{"cell_type":"markdown","id":"b2","metadata":{},"source":["second\n"]}],"metadata":{"kernelspec":{"name":"python3"}},"nbformat":4,"nbformat_minor":5}"#;
 
         struct MockRuntime;
 
@@ -1044,16 +1061,26 @@ mod tests {
                 .get_file(original_id)
                 .unwrap_or_else(|| panic!("{ctx_name}: original missing at ORIGINAL_FILE_ID"));
             assert_eq!(orig.content.as_deref(), Some(NOTEBOOK));
-            for (i, (label, text)) in converted.files.iter().enumerate() {
+            for (i, cell_file) in converted.files.iter().enumerate() {
                 let id = FileId(original_id.0 + 1 + i);
                 let f = sc
                     .get_file(id)
                     .unwrap_or_else(|| panic!("{ctx_name}: cell {i} missing at {id:?}"));
-                assert_eq!(f.path, *label, "{ctx_name}: cell {i} label");
+                assert_eq!(f.path, cell_file.label, "{ctx_name}: cell {i} label");
                 assert_eq!(
                     f.content.as_deref(),
-                    Some(text.as_str()),
+                    Some(cell_file.text.as_str()),
                     "{ctx_name}: cell {i} content"
+                );
+                assert_eq!(
+                    f.metadata.origin,
+                    Some(FileOrigin::NotebookCell {
+                        notebook_path: "/project/nb.ipynb".to_string(),
+                        cell_index: i + 1,
+                        cell_id: cell_file.cell_id.clone(),
+                        cell_type: cell_file.cell_type.clone(),
+                    }),
+                    "{ctx_name}: cell {i} origin"
                 );
             }
         }

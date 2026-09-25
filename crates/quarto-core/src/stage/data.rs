@@ -26,6 +26,7 @@ use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_source_map::SourceContext;
 
 use crate::document_profile::{DocumentProfile, IncludeEntry};
+use crate::engine::content_processors::ConvertedFile;
 use crate::format::Format;
 
 /// Type tag for pipeline data variants.
@@ -249,8 +250,8 @@ pub struct ConversionStash {
     /// The converter's faithful converted→original mapping, when it
     /// produced one (`None` = register only the converted buffer).
     pub source_info: Option<quarto_source_map::SourceInfo>,
-    /// Ephemeral per-cell virtual files, `(label, text)` in piece order.
-    pub files: Vec<(String, String)>,
+    /// Ephemeral per-cell virtual files, in piece order.
+    pub files: Vec<ConvertedFile>,
 }
 
 /// Loaded file with detected source type.
@@ -298,13 +299,13 @@ pub struct LoadedSource {
     /// ORIGINAL_FILE_ID` for the FileId convention this relies on.
     pub source_info: Option<quarto_source_map::SourceInfo>,
     /// Ephemeral virtual files the conversion's `source_info` pieces point
-    /// at (Plan 7c, open question 7 option (a)): `(label, text)` pairs in
-    /// piece order — e.g. one per notebook cell for the ipynb processor,
-    /// each to be registered in the document's `SourceContext`. Always
+    /// at (Plan 7c, open question 7 option (a)): one per notebook cell for
+    /// the ipynb processor, in piece order — each to be registered in the
+    /// document's `SourceContext`. Always
     /// empty on the dynamic/wire path: that conversion returns
     /// `Generated(By::unknown())` placeholders by construction and has no
     /// faithful per-piece provenance to name files for.
-    pub files: Vec<(String, String)>,
+    pub files: Vec<ConvertedFile>,
 }
 
 impl LoadedSource {

@@ -345,8 +345,8 @@ mod tests {
             nb_path.display().to_string(),
             Some(notebook.to_string()),
         );
-        for (label, text) in &converted.files {
-            sc.add_file(label.clone(), Some(text.clone()));
+        for cell_file in &converted.files {
+            sc.add_file(cell_file.label.clone(), Some(cell_file.text.clone()));
         }
         let ctx = ExecutionContext::new(dir.to_path_buf(), dir.to_path_buf(), nb_path, "html")
             .with_source_info(converted.source_info, Arc::new(sc));
@@ -511,8 +511,8 @@ mod tests {
             Some(converted.markdown.clone()),
         );
         sc.add_file_with_id(ORIGINAL_FILE_ID, nb_path.display().to_string(), None);
-        for (label, text) in &converted.files {
-            sc.add_file(label.clone(), Some(text.clone()));
+        for cell_file in &converted.files {
+            sc.add_file(cell_file.label.clone(), Some(cell_file.text.clone()));
         }
         let ctx = ExecutionContext::new(
             dir.path().to_path_buf(),
