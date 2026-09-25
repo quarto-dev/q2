@@ -122,6 +122,15 @@ interface NavItem {
 
 /** dataTransfer type for sidebar-originated drags (read by Editor.tsx too). */
 const HUB_FILE_TYPE = 'application/x-hub-file';
+/** Height of a folder row, for stacking sticky folder headers by depth. */
+const FOLDER_ROW_HEIGHT_PX = 24;
+/**
+ * Top z-index for pinned folder headers, one below the section header
+ * row (`--z-sticky`, 10). Deeper folders get lower values so a nested
+ * header being pushed up slides *under* its still-pinned ancestor rather
+ * than over it (same-depth siblings never overlap: one pushes the other).
+ */
+const FOLDER_HEADER_Z_TOP = 9;
 /** How long a drag must hover a folder before it expands. */
 const HOVER_EXPAND_DELAY_MS = 800;
 /** Marker for a folder drag: only meaningful as a drag-out (zip); the
@@ -818,7 +827,7 @@ export default function FileSidebar({
     return (
       <div
         key={node.path}
-        className={`tree-folder ${moveTarget === node.path ? 'drop-target' : ''}`}
+        className={`tree-folder ${isExpanded ? 'expanded' : ''} ${moveTarget === node.path ? 'drop-target' : ''}`}
         data-folder-path={node.path}
       >
         <FileTreeRow
@@ -832,6 +841,14 @@ export default function FileSidebar({
           aria-expanded={isExpanded}
           tabIndex={tabbablePath === node.path ? 0 : -1}
           data-tree-path={node.path}
+          // Expanded folders' headers stay pinned while their contents
+          // scroll. The sidebar (not the file list) is the scroll
+          // container, so they sit below the sticky FILES header and the
+          // sticky toolbar; nested ones stack under their ancestors.
+          style={{
+            top: `calc(var(--sidebar-section-header-height, 0px) + var(--sidebar-files-toolbar-height, 0px) + ${depth * FOLDER_ROW_HEIGHT_PX}px)`,
+            zIndex: Math.max(1, FOLDER_HEADER_Z_TOP - depth),
+          }}
           onClick={() => {
             setFocusedPath(node.path);
             toggleFolder(node.path);

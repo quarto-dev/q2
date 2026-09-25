@@ -1,10 +1,16 @@
 .file-sidebar {
+  /* Toolbar height (8px padding × 2 + 28px buttons + 1px border), fixed
+     so the sticky folder headers can offset themselves below it. */
+  --sidebar-files-toolbar-height: 45px;
   flex: 1;
   display: flex;
   flex-direction: column;
   position: relative;
   user-select: none;
-  overflow: hidden;
+  /* No overflow clipping here (or on .file-list / the section content):
+     the sidebar column is the scroll container, and a clipping ancestor
+     would become the scrollport for the sticky folder headers below,
+     which would then never pin. */
 }
 
 .file-sidebar.drag-over {
@@ -12,15 +18,27 @@
 }
 
 .sidebar-header {
+  /* Pinned just under the FILES section header while the tree scrolls;
+     the open folders' headers pin under this in turn. */
+  position: sticky;
+  top: var(--sidebar-section-header-height, 0px);
+  z-index: var(--z-sticky);
+  background: var(--sidebar-bg);
+  height: var(--sidebar-files-toolbar-height);
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   /* Compact, left-aligned buttons — right-alignment leaves a gap that
      reads as a missing button. */
   justify-content: flex-start;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 6px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--sidebar-border);
+}
+
+.sidebar-header .qh-btn {
+  height: 28px;
 }
 
 /* Sidebar-header buttons are icon-only .qh-btn.small.outline (ui.css),
@@ -39,7 +57,6 @@
 
 .file-list {
   flex: 1;
-  overflow-y: auto;
   padding: 8px 0;
 }
 
@@ -106,6 +123,25 @@
 /* Tree folder structure */
 .tree-folder {
   /* Container for a folder and its children */
+}
+
+/* Expanded folder headers pin to the top of the scrolling list (the
+   inline `top` stacks nested ones under their ancestors). Opaque
+   background so rows scrolling underneath don't show through. */
+.file-list .folder-header {
+  /* Fixed height so nested headers stack at exact multiples (see the
+     inline `top` in FileSidebar.tsx). */
+  height: 24px;
+  box-sizing: border-box;
+}
+
+/* Only *open* folders pin. Collapsed headers stay static and
+   unpositioned, so they scroll beneath a pinned one instead of painting
+   over it. The z-index is set inline, decreasing with depth (see
+   FOLDER_HEADER_Z_TOP in FileSidebar.tsx). */
+.file-list .tree-folder.expanded > .folder-header {
+  position: sticky;
+  background: var(--sidebar-bg);
 }
 
 /* Drag-to-move destination: the hovered folder's header, or the whole

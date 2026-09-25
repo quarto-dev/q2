@@ -15,6 +15,7 @@
  */
 
 import { useEffect, useId, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import type { HTMLAttributes, KeyboardEvent, ReactNode } from 'react';
 import { common } from '../strings';
 
@@ -111,7 +112,10 @@ export default function ModalDialog({
     onKeyDown?.(e);
   };
 
-  return (
+  // Portal to <body>: dialogs are opened from inside sticky headers and
+  // other stacking contexts (z-index'd sidebar chrome), where a fixed
+  // backdrop would be trapped beneath sibling layers.
+  return createPortal(
     <div className="qh-dialog-backdrop" onClick={onClose}>
       <div
         {...dialogProps}
@@ -132,5 +136,7 @@ export default function ModalDialog({
         {children}
       </div>
     </div>
+    ,
+    document.body
   );
 }

@@ -1,4 +1,8 @@
 .sidebar-sections {
+  /* Header height = the button's natural size (8px padding × 2 + a 13px
+     line of 11px text), fixed so sticky folder headers inside FILES can
+     offset themselves below it exactly. */
+  --sidebar-section-header-height: 29px;
   width: 220px;
   min-width: 180px;
   max-width: 300px;
@@ -29,11 +33,26 @@
   border-bottom: none;
 }
 
+.sidebar-section-header-row {
+  position: sticky;
+  top: 0;
+  /* Above the sticky folder headers (--z-raised) inside FILES. */
+  z-index: var(--z-sticky);
+  display: flex;
+  align-items: stretch;
+  height: var(--sidebar-section-header-height);
+  box-sizing: border-box;
+  background: var(--sidebar-section-bg);
+}
+
 .section-header {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 12px;
+  padding: 0 12px;
+  line-height: 13px;
   background: var(--sidebar-section-bg);
   border: none;
   border-radius: 0;
@@ -89,9 +108,10 @@
   pointer-events: none;
 }
 
-/* When FILES section is expanded, let it take available space */
+/* When FILES section is expanded, let it take available space. No
+   overflow clipping: it would become the scrollport for the sticky
+   folder headers inside (see FileSidebar.css). */
 .sidebar-section.expanded:first-child .section-content {
   flex: 1;
   min-height: 150px;
-  overflow: hidden;
 }

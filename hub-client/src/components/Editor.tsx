@@ -1447,18 +1447,19 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
               onChooseNewProject={onDisconnect}
               onShare={handleShare}
             />
-            <SidebarTabs disabled={replayState.isActive}>
+            <SidebarTabs
+              disabled={replayState.isActive}
+              headerExtras={(id) =>
+                id === 'files' ? (
+                  <SyncStatusBadge scope="project" currentFilePath={currentFile?.path ?? null} />
+                ) : null
+              }
+            >
             {(activeTab) => {
               switch (activeTab) {
                 case 'files':
                   return (
                     <>
-                      <div className="files-sync-status">
-                        <SyncStatusBadge
-                          scope="project"
-                          currentFilePath={currentFile?.path ?? null}
-                        />
-                      </div>
                       <FileSidebar
                         files={files}
                         folders={folders}

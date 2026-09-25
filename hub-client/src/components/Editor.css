@@ -605,18 +605,6 @@
 
 }
 
-/* Sync-status badge for the project index doc, at the top of the
-   FILES section (above the file-tree toolbar). */
-.files-sync-status {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  min-height: 28px;
-  /* Badge's own 8px padding + 4px lines up with the 12px file rows. */
-  padding-inline: 4px;
-  border-bottom: 1px solid var(--sidebar-border);
-}
-
 /* Document bottom bar: the replay drawer (which hosts the document
    sync-status badge in its right-side cluster). */
 .document-bottom-bar {
