@@ -930,15 +930,14 @@ pub fn render_once(
     }
 
     // Native formats (HTML, revealjs) render in-process. Every
-    // pandoc-hybrid format (`FormatIdentifier::is_pandoc_hybrid` — currently
-    // Docx/Pptx/Epub/Typst plus, since the long-tail Phase 1 gate change,
-    // Gfm/CommonMark) routes through Pandoc via `render_qmd_to_pandoc`.
-    // Only non-hybrid, non-native formats (Pdf for now — the latex/beamer
-    // epic owns it — and future enum additions that have not yet gained a
+    // pandoc-hybrid format (`FormatIdentifier::is_pandoc_hybrid`) routes
+    // through Pandoc via `render_qmd_to_pandoc`. Only non-hybrid,
+    // non-native formats (Pdf for now — the latex/beamer epic owns it —
+    // and future enum additions that have not yet gained a
     // `pandoc_writer_name_for` arm) are refused here.
     if !format.identifier.is_native() && !format.identifier.is_pandoc_hybrid() {
         return Err(RenderAbort::Other(anyhow::anyhow!(
-            "Format '{}' is not yet supported. Only HTML and revealjs are available in this version.",
+            "Format '{}' is not yet supported.",
             format.identifier
         )));
     }

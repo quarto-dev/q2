@@ -48,6 +48,7 @@ website:
             - guides/publishing/index.qmd
             - guides/formats/epub/index.qmd
             - guides/formats/typst/index.qmd
+            - guides/formats/pandoc/index.qmd
     - id: Authoring
       collapse-level: 1
       contents:
