@@ -113,6 +113,36 @@ pub enum FormatIdentifier {
     /// `pandoc: { to: "commonmark_x" }`; distinct from the Phase 1
     /// `CommonMark` variant)
     CommonmarkX,
+    /// Djot markup (long-tail Phase 4, Tier C; pandoc `Format.hs`
+    /// extension `dj`, not Q1's blanket `txt`)
+    Djot,
+    /// txt2tags
+    T2t,
+    /// Pandoc XML (native-AST XML serialization)
+    Xml,
+    /// ANSI terminal escape output (kept per Gordon, 2026-09-24; ext
+    /// `txt` — no file convention)
+    Ansi,
+    /// Vim help files (`doc/*.txt` by hard convention, ext `txt`)
+    Vimdoc,
+    /// BBCode (forum markup; Q1 supports none of the six bbcode
+    /// flavors — all fall to `unknownFormat` — so zero parity risk, D3)
+    Bbcode,
+    /// BBCode, Steam flavor
+    BbcodeSteam,
+    /// BBCode, phpBB flavor
+    BbcodePhpbb,
+    /// BBCode, FluxBB flavor
+    BbcodeFluxbb,
+    /// BBCode, Hubzilla flavor
+    BbcodeHubzilla,
+    /// BBCode, XenForo flavor
+    BbcodeXenforo,
+    /// Pandoc chunked HTML — the writer emits a **zip archive** of
+    /// chapter files plus `index.html` (embeds images; a missing image
+    /// is a hard exit 99). Vendored Lua treats it as non-HTML, so
+    /// FloatRefTargets degrade to placeholders (Q1 parity).
+    Chunkedhtml,
 }
 
 impl FormatIdentifier {
@@ -162,6 +192,20 @@ impl FormatIdentifier {
             FormatIdentifier::MarkdownMmd => "markdown_mmd",
             FormatIdentifier::Markua => "markua",
             FormatIdentifier::CommonmarkX => "commonmark_x",
+            // Long-tail Phase 4 (Tier C) — canonical names are pandoc's
+            // `-t` writer names.
+            FormatIdentifier::Djot => "djot",
+            FormatIdentifier::T2t => "t2t",
+            FormatIdentifier::Xml => "xml",
+            FormatIdentifier::Ansi => "ansi",
+            FormatIdentifier::Vimdoc => "vimdoc",
+            FormatIdentifier::Bbcode => "bbcode",
+            FormatIdentifier::BbcodeSteam => "bbcode_steam",
+            FormatIdentifier::BbcodePhpbb => "bbcode_phpbb",
+            FormatIdentifier::BbcodeFluxbb => "bbcode_fluxbb",
+            FormatIdentifier::BbcodeHubzilla => "bbcode_hubzilla",
+            FormatIdentifier::BbcodeXenforo => "bbcode_xenforo",
+            FormatIdentifier::Chunkedhtml => "chunkedhtml",
         }
     }
 
@@ -225,6 +269,20 @@ impl FormatIdentifier {
                 | FormatIdentifier::MarkdownMmd
                 | FormatIdentifier::Markua
                 | FormatIdentifier::CommonmarkX
+                // Long-tail Phase 4 (Tier C): the stretch tail — bare
+                // pandoc-writer targets (no defaults rows anywhere).
+                | FormatIdentifier::Djot
+                | FormatIdentifier::T2t
+                | FormatIdentifier::Xml
+                | FormatIdentifier::Ansi
+                | FormatIdentifier::Vimdoc
+                | FormatIdentifier::Bbcode
+                | FormatIdentifier::BbcodeSteam
+                | FormatIdentifier::BbcodePhpbb
+                | FormatIdentifier::BbcodeFluxbb
+                | FormatIdentifier::BbcodeHubzilla
+                | FormatIdentifier::BbcodeXenforo
+                | FormatIdentifier::Chunkedhtml
         )
     }
 
@@ -328,6 +386,18 @@ impl TryFrom<&str> for FormatIdentifier {
             "markdown_mmd" => Ok(FormatIdentifier::MarkdownMmd),
             "markua" => Ok(FormatIdentifier::Markua),
             "commonmark_x" => Ok(FormatIdentifier::CommonmarkX),
+            "djot" => Ok(FormatIdentifier::Djot),
+            "t2t" => Ok(FormatIdentifier::T2t),
+            "xml" => Ok(FormatIdentifier::Xml),
+            "ansi" => Ok(FormatIdentifier::Ansi),
+            "vimdoc" => Ok(FormatIdentifier::Vimdoc),
+            "bbcode" => Ok(FormatIdentifier::Bbcode),
+            "bbcode_steam" => Ok(FormatIdentifier::BbcodeSteam),
+            "bbcode_phpbb" => Ok(FormatIdentifier::BbcodePhpbb),
+            "bbcode_fluxbb" => Ok(FormatIdentifier::BbcodeFluxbb),
+            "bbcode_hubzilla" => Ok(FormatIdentifier::BbcodeHubzilla),
+            "bbcode_xenforo" => Ok(FormatIdentifier::BbcodeXenforo),
+            "chunkedhtml" => Ok(FormatIdentifier::Chunkedhtml),
             _ => Err(format!("Unknown format: {}", s)),
         }
     }
@@ -719,6 +789,22 @@ fn output_extension_for(id: FormatIdentifier) -> String {
         FormatIdentifier::MarkdownMmd => "md",
         FormatIdentifier::Markua => "md",
         FormatIdentifier::CommonmarkX => "md",
+        // Long-tail Phase 4 (Tier C) — pandoc `Format.hs` extension
+        // conventions where one exists (`djot`→`dj`), a deliberate
+        // filename improvement over Q1's blanket `txt` (documented for
+        // Q1 migrants in Phase 6); `chunkedhtml` writes a zip archive.
+        FormatIdentifier::Djot => "dj",
+        FormatIdentifier::T2t => "t2t",
+        FormatIdentifier::Xml => "xml",
+        FormatIdentifier::Ansi => "txt",
+        FormatIdentifier::Vimdoc => "txt",
+        FormatIdentifier::Bbcode => "txt",
+        FormatIdentifier::BbcodeSteam => "txt",
+        FormatIdentifier::BbcodePhpbb => "txt",
+        FormatIdentifier::BbcodeFluxbb => "txt",
+        FormatIdentifier::BbcodeHubzilla => "txt",
+        FormatIdentifier::BbcodeXenforo => "txt",
+        FormatIdentifier::Chunkedhtml => "zip",
     }
     .to_string()
 }
@@ -795,6 +881,23 @@ fn pandoc_writer_name_for(id: FormatIdentifier) -> String {
         FormatIdentifier::MarkdownMmd => "markdown_mmd".to_string(),
         FormatIdentifier::Markua => "markua".to_string(),
         FormatIdentifier::CommonmarkX => "commonmark_x".to_string(),
+        // Long-tail Phase 4 (Tier C) — explicit arms for all twelve
+        // (writer = canonical name): the fall-through would send the
+        // *extension* (`-t txt` for ansi/vimdoc/bbcode×6, `-t dj` for
+        // djot, `-t zip` for chunkedhtml), none of which is a pandoc
+        // writer.
+        FormatIdentifier::Djot => "djot".to_string(),
+        FormatIdentifier::T2t => "t2t".to_string(),
+        FormatIdentifier::Xml => "xml".to_string(),
+        FormatIdentifier::Ansi => "ansi".to_string(),
+        FormatIdentifier::Vimdoc => "vimdoc".to_string(),
+        FormatIdentifier::Bbcode => "bbcode".to_string(),
+        FormatIdentifier::BbcodeSteam => "bbcode_steam".to_string(),
+        FormatIdentifier::BbcodePhpbb => "bbcode_phpbb".to_string(),
+        FormatIdentifier::BbcodeFluxbb => "bbcode_fluxbb".to_string(),
+        FormatIdentifier::BbcodeHubzilla => "bbcode_hubzilla".to_string(),
+        FormatIdentifier::BbcodeXenforo => "bbcode_xenforo".to_string(),
+        FormatIdentifier::Chunkedhtml => "chunkedhtml".to_string(),
         other => output_extension_for(other),
     }
 }
@@ -2301,6 +2404,140 @@ mod tests {
             assert!(
                 args.is_empty(),
                 "{name} must get no invocation args, got {args:?}"
+            );
+        }
+    }
+
+    // === long-tail Phase 4: Tier C stretch (12 variants) ===
+
+    /// The 12 Tier C formats. Q1 gives all of them *no* format object at
+    /// all (`unknownFormat("txt")`, `formats.ts:341-343`), so the
+    /// Q1-parity invocation is **bare** — and `--standalone` is not a
+    /// no-op here: pandoc 3.11 ships default templates for
+    /// ansi/djot/t2t/bbcode/vimdoc, so standalone would wrap output in
+    /// template chrome Q1 never produced (measured: `pandoc -t djot
+    /// --standalone` prepends `# <title>`).
+    const TIER_C: &[(&str, &str)] = &[
+        ("djot", "dj"),
+        ("t2t", "t2t"),
+        ("xml", "xml"),
+        ("ansi", "txt"),
+        ("vimdoc", "txt"),
+        ("bbcode", "txt"),
+        ("bbcode_steam", "txt"),
+        ("bbcode_phpbb", "txt"),
+        ("bbcode_fluxbb", "txt"),
+        ("bbcode_hubzilla", "txt"),
+        ("bbcode_xenforo", "txt"),
+        ("chunkedhtml", "zip"),
+    ];
+
+    /// Every Tier C name parses from its canonical name and round-trips
+    /// through `as_str`/`canonical_name`.
+    #[test]
+    fn test_tier_c_try_from_and_canonical_name() {
+        for (name, _) in TIER_C {
+            let id = FormatIdentifier::try_from(*name)
+                .unwrap_or_else(|e| panic!("{name} must parse: {e}"));
+            assert_eq!(id.as_str(), *name);
+            assert_eq!(id.canonical_name(), *name);
+        }
+    }
+
+    /// Extensions follow pandoc's `Format.hs` conventions where one
+    /// exists (`djot`→`dj`), not Q1's blanket `txt` (a deliberate
+    /// filename improvement for Q1 migrants, documented in Phase 6);
+    /// `chunkedhtml` writes a zip archive.
+    #[test]
+    fn test_tier_c_output_extensions() {
+        for (name, ext) in TIER_C {
+            let f = Format::from_format_string(name)
+                .unwrap_or_else(|e| panic!("{name} must parse: {e}"));
+            assert_eq!(f.output_extension, *ext, "output extension for {name}");
+        }
+    }
+
+    /// Writer name equals canonical name for all twelve — an explicit
+    /// arm each, because the extension fall-through would send `-t txt`
+    /// (ansi/vimdoc/bbcode×6) or `-t zip`/`-t dj` (chunkedhtml/djot),
+    /// none of which is a pandoc writer. (`t2t` and `xml` legitimately
+    /// coincide with their extensions; the extension check pins the two
+    /// where divergence is the point.)
+    #[test]
+    fn test_tier_c_pandoc_writer_names() {
+        for (name, _ext) in TIER_C {
+            let f = Format::from_format_string(name).unwrap();
+            assert_eq!(
+                f.pandoc_writer_name(),
+                *name,
+                "writer name for {name} must be its canonical name"
+            );
+        }
+        assert_ne!(
+            Format::from_format_string("djot")
+                .unwrap()
+                .pandoc_writer_name(),
+            Format::from_format_string("djot").unwrap().output_extension
+        );
+        assert_ne!(
+            Format::from_format_string("chunkedhtml")
+                .unwrap()
+                .pandoc_writer_name(),
+            Format::from_format_string("chunkedhtml")
+                .unwrap()
+                .output_extension
+        );
+    }
+
+    /// All twelve are pandoc-hybrid, none native, and none is
+    /// markdown-output — Tier C writers don't re-escape shortcode
+    /// braces, so the Phase 3a unescape postprocessor must stay off.
+    #[test]
+    fn test_tier_c_is_pandoc_hybrid_and_not_markdown_output() {
+        for (name, _) in TIER_C {
+            let id = FormatIdentifier::try_from(*name).unwrap();
+            assert!(id.is_pandoc_hybrid(), "{name} must be pandoc-hybrid");
+            assert!(!id.is_native(), "{name} must not be native");
+            assert!(
+                !id.is_markdown_output(),
+                "{name} must not be markdown-output (no shortcode unescape)"
+            );
+        }
+    }
+
+    /// Bare invocation: no CLI flags at all. The `--standalone` flags
+    /// every other family gets would activate pandoc's default templates
+    /// for these writers and change output vs Q1.
+    #[test]
+    fn test_tier_c_invocation_args_empty() {
+        for (name, _) in TIER_C {
+            let args = Format::from_format_string(name)
+                .unwrap()
+                .pandoc_invocation_args();
+            assert!(
+                args.is_empty(),
+                "{name} must get no invocation args, got {args:?}"
+            );
+        }
+    }
+
+    /// No defaults rows: `format_pandoc_defaults` must return the no-op
+    /// default for every Tier C format (no page-width, no output-divs
+    /// override, no `--default-image-extension`), and the params blob
+    /// builder must not grow format-specific keys for them. This pins
+    /// the "bare invocation" decision at the defaults *sink* — an
+    /// accidental row added later fails here.
+    #[test]
+    fn test_tier_c_pandoc_defaults_noop() {
+        use crate::pandoc_filters::format_defaults::{
+            FormatPandocDefaults, format_pandoc_defaults,
+        };
+        for (name, _) in TIER_C {
+            let id = FormatIdentifier::try_from(*name).unwrap();
+            assert_eq!(
+                format_pandoc_defaults(id),
+                FormatPandocDefaults::default(),
+                "{name} must get no pandoc defaults (Q1 unknownFormat parity)"
             );
         }
     }
