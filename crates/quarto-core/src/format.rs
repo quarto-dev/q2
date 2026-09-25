@@ -143,6 +143,18 @@ pub enum FormatIdentifier {
     /// is a hard exit 99). Vendored Lua treats it as non-HTML, so
     /// FloatRefTargets degrade to placeholders (Q1 parity).
     Chunkedhtml,
+    /// S5 slide decks (long-tail Phase 5, Tier D; Q1
+    /// `createHtmlPresentationFormat` — standalone deck, bundled
+    /// `s5/default/` assets)
+    S5,
+    /// DZSlides slide decks (self-contained inline shim, no external
+    /// assets)
+    Dzslides,
+    /// Slidy slide decks (W3C CDN assets — requires network at view
+    /// time, pandoc's stock template behavior)
+    Slidy,
+    /// Slideous slide decks (bundled `slideous/` assets)
+    Slideous,
 }
 
 impl FormatIdentifier {
@@ -206,6 +218,12 @@ impl FormatIdentifier {
             FormatIdentifier::BbcodeHubzilla => "bbcode_hubzilla",
             FormatIdentifier::BbcodeXenforo => "bbcode_xenforo",
             FormatIdentifier::Chunkedhtml => "chunkedhtml",
+            // Long-tail Phase 5 (Tier D) — canonical names are pandoc's
+            // `-t` writer names.
+            FormatIdentifier::S5 => "s5",
+            FormatIdentifier::Dzslides => "dzslides",
+            FormatIdentifier::Slidy => "slidy",
+            FormatIdentifier::Slideous => "slideous",
         }
     }
 
@@ -283,6 +301,12 @@ impl FormatIdentifier {
                 | FormatIdentifier::BbcodeHubzilla
                 | FormatIdentifier::BbcodeXenforo
                 | FormatIdentifier::Chunkedhtml
+                // Long-tail Phase 5 (Tier D): the JS slide family —
+                // standalone pandoc decks.
+                | FormatIdentifier::S5
+                | FormatIdentifier::Dzslides
+                | FormatIdentifier::Slidy
+                | FormatIdentifier::Slideous
         )
     }
 
@@ -398,6 +422,11 @@ impl TryFrom<&str> for FormatIdentifier {
             "bbcode_hubzilla" => Ok(FormatIdentifier::BbcodeHubzilla),
             "bbcode_xenforo" => Ok(FormatIdentifier::BbcodeXenforo),
             "chunkedhtml" => Ok(FormatIdentifier::Chunkedhtml),
+            // Long-tail Phase 5 (Tier D)
+            "s5" => Ok(FormatIdentifier::S5),
+            "dzslides" => Ok(FormatIdentifier::Dzslides),
+            "slidy" => Ok(FormatIdentifier::Slidy),
+            "slideous" => Ok(FormatIdentifier::Slideous),
             _ => Err(format!("Unknown format: {}", s)),
         }
     }
@@ -805,6 +834,11 @@ fn output_extension_for(id: FormatIdentifier) -> String {
         FormatIdentifier::BbcodeHubzilla => "txt",
         FormatIdentifier::BbcodeXenforo => "txt",
         FormatIdentifier::Chunkedhtml => "zip",
+        // Long-tail Phase 5 (Tier D) — all four write HTML decks.
+        FormatIdentifier::S5
+        | FormatIdentifier::Dzslides
+        | FormatIdentifier::Slidy
+        | FormatIdentifier::Slideous => "html",
     }
     .to_string()
 }
@@ -898,6 +932,13 @@ fn pandoc_writer_name_for(id: FormatIdentifier) -> String {
         FormatIdentifier::BbcodeHubzilla => "bbcode_hubzilla".to_string(),
         FormatIdentifier::BbcodeXenforo => "bbcode_xenforo".to_string(),
         FormatIdentifier::Chunkedhtml => "chunkedhtml".to_string(),
+        // Long-tail Phase 5 (Tier D) — the deck writers are the format
+        // names; an extension fall-through would send `-t html`, a plain
+        // non-deck document.
+        FormatIdentifier::S5 => "s5".to_string(),
+        FormatIdentifier::Dzslides => "dzslides".to_string(),
+        FormatIdentifier::Slidy => "slidy".to_string(),
+        FormatIdentifier::Slideous => "slideous".to_string(),
         other => output_extension_for(other),
     }
 }
@@ -958,6 +999,18 @@ fn pandoc_invocation_args_for(id: FormatIdentifier) -> Vec<String> {
         | FormatIdentifier::Docbook
         | FormatIdentifier::Docbook4
         | FormatIdentifier::Docbook5 => vec!["--standalone".to_string()],
+        // Long-tail Phase 5 (Tier D): Q1's `createHtmlPresentationFormat`
+        // always renders standalone with `wrap: none` (the decks rely on
+        // their own CSS/JS for layout; pandoc's soft wrapping would
+        // corrupt attribute-heavy slide markup).
+        FormatIdentifier::S5
+        | FormatIdentifier::Dzslides
+        | FormatIdentifier::Slidy
+        | FormatIdentifier::Slideous => vec![
+            "--standalone".to_string(),
+            "--wrap".to_string(),
+            "none".to_string(),
+        ],
         _ => Vec::new(),
     }
 }
@@ -2538,6 +2591,123 @@ mod tests {
                 format_pandoc_defaults(id),
                 FormatPandocDefaults::default(),
                 "{name} must get no pandoc defaults (Q1 unknownFormat parity)"
+            );
+        }
+    }
+
+    // === Phase 5: Tier D — JS slide formats (Q1 createHtmlPresentationFormat) ===
+    //
+    // Q1 gives these four `createHtmlPresentationFormat` treatment:
+    // standalone HTML slide decks with fig 9.5×6.5, echo/warning false,
+    // `--standalone --wrap none --default-image-extension png`. Measured
+    // against real pandoc 3.11 (`pandoc -f markdown -t <fmt> --standalone
+    // --wrap none`, deck fixture with `# One`/`# Two`):
+    //   s5       → `class="slide section level1"`, assets `href="s5/default/…"`
+    //   dzslides → `class="slide level1"`, self-contained inline shim
+    //              (no external JS asset; the literal `dzslides` marker
+    //              appears in the inlined template)
+    //   slidy    → `class="slide titlepage"` + `slide section`,
+    //              CDN `https://www.w3.org/Talks/Tools/Slidy2/.../slidy.js`
+    //   slideous → `class="slide titlepage"`, `src="slideous/slideous.js"`
+    const TIER_D: &[(&str, &str)] = &[
+        ("s5", "html"),
+        ("dzslides", "html"),
+        ("slidy", "html"),
+        ("slideous", "html"),
+    ];
+
+    /// Every Tier D name parses from its canonical name and round-trips
+    /// through `as_str`/`canonical_name`.
+    #[test]
+    fn test_tier_d_try_from_and_canonical_name() {
+        for (name, _) in TIER_D {
+            let id = FormatIdentifier::try_from(*name)
+                .unwrap_or_else(|e| panic!("{name} must parse: {e}"));
+            assert_eq!(id.as_str(), *name);
+            assert_eq!(id.canonical_name(), *name);
+        }
+    }
+
+    /// All four write HTML decks — the same extension as html, but a
+    /// distinct writer target.
+    #[test]
+    fn test_tier_d_output_extensions_html() {
+        for (name, ext) in TIER_D {
+            let f = Format::from_format_string(name)
+                .unwrap_or_else(|e| panic!("{name} must parse: {e}"));
+            assert_eq!(f.output_extension, *ext, "output extension for {name}");
+        }
+    }
+
+    /// Writer name equals canonical name for all four — an explicit arm
+    /// each, because the extension fall-through would send `-t html`,
+    /// which renders a plain (non-deck) HTML document.
+    #[test]
+    fn test_tier_d_pandoc_writer_names() {
+        for (name, _) in TIER_D {
+            let f = Format::from_format_string(name).unwrap();
+            assert_eq!(
+                f.pandoc_writer_name(),
+                *name,
+                "writer name for {name} must be its canonical name"
+            );
+        }
+    }
+
+    /// All four are pandoc-hybrid, none native, none markdown-output.
+    #[test]
+    fn test_tier_d_is_pandoc_hybrid_and_not_markdown_output() {
+        for (name, _) in TIER_D {
+            let id = FormatIdentifier::try_from(*name).unwrap();
+            assert!(id.is_pandoc_hybrid(), "{name} must be pandoc-hybrid");
+            assert!(!id.is_native(), "{name} must not be native");
+            assert!(
+                !id.is_markdown_output(),
+                "{name} must not be markdown-output (no shortcode unescape)"
+            );
+        }
+    }
+
+    /// Q1's `createHtmlPresentationFormat` always renders standalone with
+    /// no wrapping — the exact flag set, pinned as a vector so an added
+    /// or dropped flag is caught.
+    #[test]
+    fn test_tier_d_invocation_args_standalone_wrap_none() {
+        for (name, _) in TIER_D {
+            let args = Format::from_format_string(name)
+                .unwrap()
+                .pandoc_invocation_args();
+            assert_eq!(
+                args,
+                vec![
+                    "--standalone".to_string(),
+                    "--wrap".to_string(),
+                    "none".to_string()
+                ],
+                "invocation args for {name}"
+            );
+        }
+    }
+
+    /// The presentation family's `--default-image-extension png` row
+    /// (Q1 `format-typst.ts` analog: `createHtmlPresentationFormat`'s
+    /// fig-format) — the only `format_pandoc_defaults` row this tier
+    /// gets; page-width and output-divs stay untouched.
+    #[test]
+    fn test_tier_d_pandoc_defaults_png() {
+        use crate::pandoc_filters::format_defaults::format_pandoc_defaults;
+        for (name, _) in TIER_D {
+            let id = FormatIdentifier::try_from(*name).unwrap();
+            let defaults = format_pandoc_defaults(id);
+            assert_eq!(
+                defaults.default_image_extension,
+                Some("png"),
+                "{name} must default images to png"
+            );
+            assert_eq!(defaults.page_width, None, "{name} must not set page-width");
+            assert_eq!(
+                defaults.output_divs, None,
+                "{name} must not override output-divs"
             );
         }
     }

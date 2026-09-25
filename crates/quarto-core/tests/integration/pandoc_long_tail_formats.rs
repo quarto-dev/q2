@@ -316,3 +316,98 @@ fn tier_c_smoke_all_variants() {
         }
     }
 }
+
+// === Phase 5: Tier D — JS slide formats (s5/dzslides/slidy/slideous) ===
+//
+// Q1's `createHtmlPresentationFormat` family: standalone HTML decks. All
+// four get `--standalone --wrap none`, so (unlike Tier C) the title page
+// legitimately appears. Per-format markers measured against real pandoc
+// 3.11 standalone output (deck fixture with `# One`/`# Two`):
+//   s5       → bundled assets under `s5/default/`
+//   dzslides → self-contained inline shim; the literal `dzslides` string
+//              appears in the inlined template (no external JS asset to
+//              reference)
+//   slidy    → W3C CDN `slidy.js`
+//   slideous → bundled `slideous/slideous.js`
+const TIER_D: &[(&str, &str)] = &[
+    ("s5", "html"),
+    ("dzslides", "html"),
+    ("slidy", "html"),
+    ("slideous", "html"),
+];
+
+/// The distinguishing per-format marker each deck must reference (see
+/// the TIER_D block comment for why dzslides' marker is a literal in the
+/// inline shim rather than an asset path).
+const TIER_D_JS_MARKER: &[(&str, &str)] = &[
+    ("s5", "s5/default/"),
+    ("dzslides", "dzslides"),
+    ("slidy", "slidy.js"),
+    ("slideous", "slideous.js"),
+];
+
+const TIER_D_FIXTURE_QMD: &str =
+    "---\ntitle: TierDDeckTitle\n---\n\n# One\n\nTierDBodyOne.\n\n# Two\n\nTierDBodyTwo.\n";
+
+/// Parametrized smoke: every Tier D variant renders through
+/// `render_document_to_file` to a non-empty `.html` file that is a
+/// **deck** — `class="slide…"` structure and the format's own asset/
+/// shim marker — carrying the body text. A plain `-t html` document
+/// would fail the slide-structure check, pinning the writer mapping.
+#[test]
+fn tier_d_smoke_all_variants() {
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let options = RenderToFileOptions::default();
+
+    for (name, ext) in TIER_D {
+        let temp = TempDir::new().unwrap();
+        let project_dir = temp.path().canonicalize().unwrap();
+        let input_path = project_dir.join("f.qmd");
+        std::fs::write(&input_path, TIER_D_FIXTURE_QMD).unwrap();
+
+        let result = render_document_to_file(
+            &input_path,
+            name,
+            &options,
+            None,
+            runtime.clone(),
+            None,
+            None,
+            None,
+        )
+        .unwrap_or_else(|e| panic!("render --to {name} failed: {e}"));
+
+        assert_eq!(
+            result.output_path.extension().and_then(|e| e.to_str()),
+            Some(*ext),
+            "output extension for {name}"
+        );
+        let text = String::from_utf8(
+            std::fs::read(&result.output_path)
+                .unwrap_or_else(|e| panic!("output for {name} should exist: {e}")),
+        )
+        .unwrap();
+        assert!(!text.is_empty(), "output for {name} must be non-empty");
+
+        assert!(
+            text.contains("class=\"slide"),
+            "{name} output must be a slide deck (class=\"slide\" structure): {:.200}",
+            text
+        );
+        assert!(
+            text.contains("TierDBodyOne"),
+            "{name} output must contain the body text: {:.200}",
+            text
+        );
+        let marker = TIER_D_JS_MARKER
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, m)| *m)
+            .unwrap();
+        assert!(
+            text.contains(marker),
+            "{name} deck must reference its own assets/marker {marker:?}: {:.200}",
+            text
+        );
+    }
+}

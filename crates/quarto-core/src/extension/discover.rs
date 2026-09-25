@@ -306,6 +306,11 @@ const KNOWN_BASE_FORMATS: &[&str] = &[
     "bbcode_hubzilla",
     "bbcode_xenforo",
     "chunkedhtml",
+    // Long-tail Phase 5 (Tier D) — the JS slide family.
+    "s5",
+    "dzslides",
+    "slidy",
+    "slideous",
 ];
 
 pub fn parse_format_descriptor(format: &str) -> FormatDescriptor {
@@ -1054,6 +1059,36 @@ contributes:
         }
 
         for bare_name in ["ansi", "vimdoc", "bbcode_xenforo"] {
+            let bare = parse_format_descriptor(bare_name);
+            assert_eq!(bare.extension_name, None, "bare {bare_name}");
+            assert_eq!(bare.base_format, bare_name, "bare {bare_name}");
+        }
+    }
+
+    /// Long-tail Phase 5 (Tier D): the JS slide bases participate in
+    /// extension-descriptor parsing the same way (`acm-slidy` → base
+    /// `slidy`), and the bare names stay bare.
+    #[test]
+    fn test_parse_format_descriptor_tier_d_bases() {
+        for (input, expected_base) in [
+            ("acm-s5", "s5"),
+            ("acm-dzslides", "dzslides"),
+            ("acm-slidy", "slidy"),
+            ("journal-slideous", "slideous"),
+        ] {
+            let desc = parse_format_descriptor(input);
+            assert_eq!(
+                desc.base_format, expected_base,
+                "base format for descriptor {input}"
+            );
+            assert_eq!(
+                desc.extension_name.as_deref(),
+                Some(input.split('-').next().unwrap()),
+                "extension name for descriptor {input}"
+            );
+        }
+
+        for bare_name in ["s5", "dzslides", "slidy", "slideous"] {
             let bare = parse_format_descriptor(bare_name);
             assert_eq!(bare.extension_name, None, "bare {bare_name}");
             assert_eq!(bare.base_format, bare_name, "bare {bare_name}");
