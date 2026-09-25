@@ -397,7 +397,10 @@ struct FloatState {
 /// the *presented* number is chapter-scoped. Matches Q1, where the Lua
 /// `order` counter is flat and `file.bookItemNumber` supplies the chapter
 /// prefix at display time.
-fn format_crossref_number(order: u32, chapter_seed: Option<&crate::render::ChapterSeed>) -> String {
+pub(crate) fn format_crossref_number(
+    order: u32,
+    chapter_seed: Option<&crate::render::ChapterSeed>,
+) -> String {
     match chapter_seed {
         None => order.to_string(),
         Some(seed) => format!(
@@ -1255,6 +1258,22 @@ fn render_resolved_ref(node: CustomNode, terms: Option<&LanguageTerms>, fs: &Flo
         .and_then(|v| v.get("order"))
         .and_then(|v| v.as_u64())
         .map(|n| n as u32);
+    // Cross-chapter patch (book-projects P5): `resolved_number` was already
+    // composed at aggregation time from the *owning* chapter's raw order +
+    // seed; `format_crossref_number` here would wrongly apply the
+    // *rendering* chapter's seed and renumber the target. `target_href` is
+    // the owning chapter's page-relative link target; absent for
+    // locally-resolved refs, which keep the `#id` anchor.
+    let resolved_number = node
+        .plain_data
+        .get("resolved_number")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+    let target_href = node
+        .plain_data
+        .get("target_href")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
 
     let source_info = node.source_info.clone();
 
@@ -1267,7 +1286,12 @@ fn render_resolved_ref(node: CustomNode, terms: Option<&LanguageTerms>, fs: &Flo
         if ref_type == "sec" {
             // `sec` numbers are the target's *section path*, not the
             // per-type counter (Q1 refs.lua + format.lua; book-projects P0).
+            // The cross-chapter patch rewrites `order`/`in_appendix` to the
+            // owning chapter's values, so this path needs no seed and works
+            // unchanged for cross-chapter targets.
             sec_ref_text(&node, &kind, terms, fs)
+        } else if let Some(num) = resolved_number {
+            format!("{kind}\u{a0}{num}")
         } else {
             match number {
                 Some(n) => {
@@ -1287,7 +1311,10 @@ fn render_resolved_ref(node: CustomNode, terms: Option<&LanguageTerms>, fs: &Flo
         text,
         source_info: source_info.clone(),
     })];
-    let target = (format!("#{identifier}"), String::new());
+    let target = (
+        target_href.unwrap_or_else(|| format!("#{identifier}")),
+        String::new(),
+    );
 
     // Every crossref link carries `quarto-xref`; unresolved refs additionally
     // carry `quarto-unresolved-ref` so downstream extensions can loudly style a
@@ -2251,6 +2278,204 @@ mod tests {
         assert!(
             link.attr.1.contains(&"quarto-unresolved-ref".to_string()),
             "unresolved ref should carry quarto-unresolved-ref"
+        );
+    }
+
+    // ── P5: cross-chapter patched refs ─────────────────────────────
+    //
+    // `CrossChapterCrossrefResolveTransform` patches still-unresolved
+    // nodes with `resolved_number` / `target_href` (plus the owning
+    // chapter's raw `order` / `in_appendix`). The display side must prefer
+    // those: the generic non-sec path runs `format_crossref_number` with
+    // the *rendering* chapter's seed, which would renumber another
+    // chapter's figure; the link target would stay a dangling local `#id`.
+
+    fn crossref_entry(
+        id: &str,
+        ref_type: &str,
+        section: Vec<u32>,
+        order: u32,
+        in_appendix: bool,
+    ) -> crate::crossref::index::CrossrefEntry {
+        crate::crossref::index::CrossrefEntry {
+            identifier: id.to_string(),
+            ref_type: ref_type.to_string(),
+            parent: None,
+            order: crate::crossref::index::Order { section, order },
+            caption: None,
+            in_appendix,
+            source_info: si(),
+        }
+    }
+
+    /// An unresolved `CrossrefResolvedRef` node exactly as
+    /// `CrossrefResolveTransform` leaves it for a foreign id.
+    fn unresolved_ref_node(identifier: &str, ref_type: &str, kind: &str) -> Inline {
+        let mut node = CustomNode::new(CROSSREF_RESOLVED_REF, Attr::default(), si());
+        node.plain_data = serde_json::json!({
+            "identifier": identifier,
+            "ref_type": ref_type,
+            "kind": kind,
+            "resolved": false,
+            "label_upper": false,
+        });
+        Inline::Custom(node)
+    }
+
+    /// The real P5 unit path for one cross-chapter ref: aggregate the
+    /// given chapter inventories into a registry, run the resolve
+    /// transform over an AST carrying one unresolved ref to `target_id`,
+    /// then the render transform — under `rendering_seed` (the seed of the
+    /// chapter being rendered, distinct from every owning chapter's).
+    /// Returns the rendered Link.
+    async fn render_cross_chapter(
+        inventories: Vec<crate::crossref::project_index::ChapterCrossrefInventory>,
+        target_id: &str,
+        ref_type: &str,
+        kind: &str,
+        rendering_seed: crate::render::ChapterSeed,
+        doc_max_heading: u32,
+    ) -> Link {
+        use crate::format::Format;
+        use crate::project::{DocumentInfo, ProjectConfig, ProjectContext};
+        use crate::render::BinaryDependencies;
+        use crate::transforms::cross_chapter_crossref_resolve::CrossChapterCrossrefResolveTransform;
+        use std::path::PathBuf;
+        let (registry, _) =
+            crate::crossref::project_index::aggregate_chapter_inventories(&inventories);
+        let project = ProjectContext {
+            dir: PathBuf::from("/p"),
+            config: ProjectConfig::default(),
+            is_single_file: true,
+            files: vec![],
+            output_dir: PathBuf::from("/p"),
+            ..Default::default()
+        };
+        let doc = DocumentInfo::from_path("/p/ch3.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        ctx.ref_type_registry = Some(RefTypeRegistry::builtin());
+        ctx.chapter_seed = Some(rendering_seed);
+        let mut index = crate::crossref::CrossrefIndex::new(FileId(0));
+        index.max_heading = doc_max_heading;
+        ctx.crossref_index = Some(index);
+        ctx.cross_chapter_crossref_registry = Some(std::sync::Arc::new(registry));
+
+        let mut ast = Pandoc {
+            meta: quarto_pandoc_types::ConfigValue::default(),
+            blocks: vec![Block::Paragraph(Paragraph {
+                content: vec![unresolved_ref_node(target_id, ref_type, kind)],
+                source_info: si(),
+            })],
+        };
+        CrossChapterCrossrefResolveTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        CrossrefRenderTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        let Block::Paragraph(p) = &ast.blocks[0] else {
+            panic!();
+        };
+        let Inline::Link(link) = &p.content[0] else {
+            panic!("expected Link, got {:?}", p.content[0]);
+        };
+        link.clone()
+    }
+
+    #[tokio::test]
+    async fn cross_chapter_ref_renders_owning_number_and_target() {
+        // ch2 owns fig-two; ch3 is being rendered (seed 3). The patched
+        // node must show ch2's "2.1" — not the rendering chapter's "3.1"
+        // — and link into ch2's file, not a dangling local anchor.
+        let ch2 = crate::crossref::project_index::ChapterCrossrefInventory {
+            index: {
+                let mut index = crate::crossref::CrossrefIndex::new(FileId(0));
+                index.max_heading = 1;
+                index.insert(crossref_entry("fig-two", "fig", vec![2], 1, false));
+                index
+            },
+            chapter_seed: Some(crate::render::ChapterSeed {
+                chapter_number: 2,
+                is_appendix: false,
+            }),
+            output_href: "ch2.html".to_string(),
+        };
+        let link = render_cross_chapter(
+            vec![ch2],
+            "fig-two",
+            "fig",
+            "Figure",
+            crate::render::ChapterSeed {
+                chapter_number: 3,
+                is_appendix: false,
+            },
+            1,
+        )
+        .await;
+        let Inline::Str(s) = &link.content[0] else {
+            panic!();
+        };
+        assert_eq!(
+            s.text, "Figure\u{a0}2.1",
+            "the owning chapter's composed number must win over the rendering chapter's seed"
+        );
+        assert_eq!(
+            link.target.0, "ch2.html#fig-two",
+            "the link must target the owning chapter's file"
+        );
+        assert!(link.attr.1.contains(&"quarto-xref".to_string()));
+        assert!(
+            !link.attr.1.contains(&"quarto-unresolved-ref".to_string()),
+            "a registry-resolved ref is resolved, not unresolved"
+        );
+    }
+
+    #[tokio::test]
+    async fn cross_chapter_sec_ref_renders_owning_appendix_shape() {
+        // Appendix A owns sec-methods at §[1,2] (seed-offset path; the
+        // appendix flag lives on the inventory). The display side re-derives
+        // the number from the patched `order` + `in_appendix` — the same
+        // local code path, no seed involved — and takes the patched
+        // `target_href` for the link target.
+        let app = crate::crossref::project_index::ChapterCrossrefInventory {
+            index: {
+                let mut index = crate::crossref::CrossrefIndex::new(FileId(0));
+                index.max_heading = 1;
+                index.insert(crossref_entry("sec-methods", "sec", vec![1, 2], 2, true));
+                index
+            },
+            chapter_seed: Some(crate::render::ChapterSeed {
+                chapter_number: 1,
+                is_appendix: true,
+            }),
+            output_href: "app-a.html".to_string(),
+        };
+        let link = render_cross_chapter(
+            vec![app],
+            "sec-methods",
+            "sec",
+            "Section",
+            crate::render::ChapterSeed {
+                chapter_number: 3,
+                is_appendix: false,
+            },
+            1,
+        )
+        .await;
+        let Inline::Str(s) = &link.content[0] else {
+            panic!();
+        };
+        assert_eq!(
+            s.text, "Section\u{a0}A.2",
+            "the owning chapter's appendix shape must come through the patched order/in_appendix"
+        );
+        assert_eq!(
+            link.target.0, "app-a.html#sec-methods",
+            "the link must target the owning chapter's file"
         );
     }
 

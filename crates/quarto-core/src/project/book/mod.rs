@@ -10,6 +10,10 @@ pub mod citeproc;
 pub mod config;
 pub mod links;
 pub mod merge;
+// Native-only: drives the render-to-file tail (`crate::render_to_file` is
+// gated out for wasm; WASM preview renders single documents, never books).
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) mod multi_file_html;
 pub mod project_type;
 pub mod render_item;
 

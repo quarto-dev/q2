@@ -1070,6 +1070,34 @@ fn stage_context_from_render_context(
     // book-projects P4: the per-chapter seed is likewise input-only for
     // the crossref transforms — bridged one-way, never restored.
     stage_ctx.chapter_seed = ctx.chapter_seed;
+    // book-projects P5: so is the project-wide crossref registry (an
+    // `Arc`, cloned) — `CrossChapterCrossrefResolveTransform` reads it;
+    // nothing mutates it.
+    stage_ctx.cross_chapter_crossref_registry = ctx.cross_chapter_crossref_registry.clone();
+    // book-projects P5: a *finishing* pipeline (driven by
+    // `run_pipeline_from_ast`) must see the state a *pausing* caller
+    // holds on the outer ctx across the pause — none of it is re-derived
+    // by the finishing stages themselves:
+    // - `includes`: populated pause-side (engine execution / Lua
+    //   filters); `ApplyTemplateStage`'s late drain is the resume-side
+    //   consumer. Restore moves back whatever the drain left.
+    // - `code_block_decorations`: written pause-side by
+    //   `code-block-generate`, read resume-side by `code-block-render`.
+    // - `attribution_data`: generated pause-side by
+    //   `AttributionGenerateStage`, consumed resume-side by
+    //   `AttributionRenderTransform`. Cloned (an `Option<Arc>`); the
+    //   restore hands the caller's copy back below.
+    // - `format_options` / `document_profile`: restore always carried
+    //   these *out*; seeding them *in* here is what keeps a caller-held
+    //   value from being clobbered by the stage default at restore time
+    //   (nothing in the resume list re-populates them).
+    // For a full `run_pipeline` render all five are at their defaults at
+    // entry, so every transfer below is a no-op there.
+    stage_ctx.includes = std::mem::take(&mut ctx.includes);
+    stage_ctx.code_block_decorations = std::mem::take(&mut ctx.code_block_decorations);
+    stage_ctx.attribution_data = ctx.attribution_data.clone();
+    stage_ctx.format_options = std::mem::take(&mut ctx.format_options);
+    stage_ctx.document_profile = ctx.document_profile.take();
 
     Ok(stage_ctx)
 }
@@ -1106,6 +1134,15 @@ fn restore_render_context(ctx: &mut RenderContext<'_>, stage_ctx: &mut StageCont
     // in the caller's context at entry, so this is purely additive there.
     ctx.ref_type_registry = stage_ctx.ref_type_registry.take();
     ctx.crossref_index = stage_ctx.crossref_index.take();
+    // book-projects P5: hand back the pause-surviving state seeded by
+    // `stage_context_from_render_context` (see the comment there for the
+    // per-field rationale). `includes` is usually empty here —
+    // `ApplyTemplateStage`'s late drain already consumed it — but the
+    // symmetric take keeps the bridge honest if the finishing list ever
+    // changes shape.
+    ctx.includes = std::mem::take(&mut stage_ctx.includes);
+    ctx.code_block_decorations = std::mem::take(&mut stage_ctx.code_block_decorations);
+    ctx.attribution_data = stage_ctx.attribution_data.take();
 }
 
 /// Apply the diagnostic-suppression policy and map a pipeline result into
@@ -1343,6 +1380,167 @@ impl ChapterPauseState {
             user_grammar_provider: ctx.user_grammar_provider.clone(),
             resource_report: std::mem::take(&mut ctx.resource_report),
             execution_skipped: ctx.execution_skipped,
+        }
+    }
+}
+
+/// Book-projects P5's per-chapter owned state: the **full** field superset
+/// [`ChapterPauseState`] deliberately does not carry (see its doc comment),
+/// held by the book orchestrator for all N chapters **simultaneously** in a
+/// book-scoped `Vec` — unlike P2's one-at-a-time, drop-after-use pattern
+/// (design doc §6). A chapter's instance lives from before its pause-side
+/// partial render (`..=Navigation`) until after its independent resume
+/// (`run_pipeline_from_ast` with `Finalization..`), and its fields must come
+/// back attributed to *that* chapter, never cross-wired with a sibling's.
+///
+/// The sixteen audited `RenderContext`-owned fields are the plan's full list
+/// (artifacts, diagnostics, crossref_index, ref_type_registry, project_index,
+/// resource_resolver, options, includes, pipeline_profile, observer,
+/// user_grammar_provider, resource_report, resource_copies,
+/// code_block_decorations, attribution_provider, attribution_data), plus
+/// P2's output-only `execution_skipped`, plus `format_options` and
+/// `document_profile` — both proven by the item-45 bridge round-trip to
+/// survive a resume only if the caller seeds them back in.
+///
+/// Deliberately **not** serializable: `observer`/`user_grammar_provider`
+/// contain trait objects (an `Rc`/`Arc`), so — unlike
+/// `ChapterCrossrefInventory`/`ProjectCrossrefIndex` — this type keeps no
+/// serde derives. The serializable-for-day-one decision applies to the
+/// inventory types, not to the live render state.
+///
+/// Forward-compatibility (P6): the unified-bibliography phase wires a
+/// `ChapterCitationManifest` into this struct as one more named field — the
+/// named-field shape is the contract; do not restructure into a tuple or a
+/// side-table when adding it.
+///
+/// Not carried, on purpose: the orchestrator-controlled inputs that are
+/// identical for pause and resume and are set fresh on each reconstructed
+/// context — `chapter_seed`, `defer_citeproc`, `execution_policy`,
+/// `engine_registry_override`, and (resume-only, post-aggregation)
+/// `cross_chapter_crossref_registry` — plus the borrowed `project`/
+/// `document`/`format`/`binaries` that [`Self::build_context`]'s caller
+/// owns. `resource_resolver` *is* carried (it is on the audited list), but
+/// note the plan's recompute-don't-carry decision still applies to
+/// `output_path`/`resource_paths`, which are derived at write time, not
+/// carried here.
+pub struct BookChapterPauseState {
+    pub artifacts: crate::artifact::ArtifactStore,
+    pub diagnostics: Vec<DiagnosticMessage>,
+    pub crossref_index: Option<crate::crossref::CrossrefIndex>,
+    pub ref_type_registry: Option<crate::crossref::RefTypeRegistry>,
+    pub project_index: Option<Arc<crate::project::index::ProjectIndex>>,
+    pub resource_resolver: Option<crate::resource_resolver::ResourceResolverContext>,
+    pub options: crate::render::RenderOptions,
+    pub includes: crate::stage::PandocIncludes,
+    pub pipeline_profile: crate::format::PipelineProfile,
+    pub observer: Arc<dyn crate::stage::PipelineObserver>,
+    pub user_grammar_provider: Option<Rc<RefCell<dyn quarto_highlight::UserGrammarProvider>>>,
+    pub resource_report: crate::project_resources::DocumentResourceReport,
+    pub resource_copies: Vec<crate::render::ResourceCopyIntent>,
+    pub code_block_decorations: std::collections::HashMap<
+        crate::transforms::CodeBlockDecorationKey,
+        crate::transforms::CodeBlockDecoration,
+    >,
+    pub attribution_provider: Option<Arc<dyn crate::attribution::AttributionSourceProvider>>,
+    pub attribution_data: Option<Arc<crate::attribution::AttributionData>>,
+    /// Mirrors [`ChapterPauseState::execution_skipped`]: output-only, set by
+    /// the paused render's `restore_render_context`; nothing to restore.
+    pub execution_skipped: bool,
+    pub format_options: crate::render::FormatOptions,
+    pub document_profile: Option<crate::document_profile::DocumentProfile>,
+}
+
+impl BookChapterPauseState {
+    /// A fresh instance with every field at its default/empty state — the
+    /// shape a chapter's owned state starts in before its partial render has
+    /// run. Project-level fields (`project_index`, `resource_resolver`,
+    /// `user_grammar_provider`, …) are seeded once at book level by the
+    /// orchestrator, the same compute-once source every chapter reads.
+    pub fn new(pipeline_profile: crate::format::PipelineProfile) -> Self {
+        Self {
+            artifacts: crate::artifact::ArtifactStore::default(),
+            diagnostics: Vec::new(),
+            crossref_index: None,
+            ref_type_registry: None,
+            project_index: None,
+            resource_resolver: None,
+            options: crate::render::RenderOptions::default(),
+            includes: crate::stage::PandocIncludes::default(),
+            pipeline_profile,
+            observer: Arc::new(crate::stage::NoopObserver),
+            user_grammar_provider: None,
+            resource_report: crate::project_resources::DocumentResourceReport::default(),
+            resource_copies: Vec::new(),
+            code_block_decorations: std::collections::HashMap::new(),
+            attribution_provider: None,
+            attribution_data: None,
+            execution_skipped: false,
+            format_options: crate::render::FormatOptions::default(),
+            document_profile: None,
+        }
+    }
+
+    /// Reconstruct a short-lived `RenderContext` borrowing `self`'s owned
+    /// fields plus the always-shared, never-chapter-mutated
+    /// project/document/format/binaries references — the same shape
+    /// [`ChapterPauseState::build_context`] uses, just with the full field
+    /// list. The caller sets the orchestrator-controlled inputs
+    /// (`chapter_seed`, `cross_chapter_crossref_registry`, …) on the
+    /// returned context afterward, per the struct's doc comment.
+    pub fn build_context<'a>(
+        &mut self,
+        project: &'a crate::project::ProjectContext,
+        document: &'a crate::project::DocumentInfo,
+        format: &'a crate::format::Format,
+        binaries: &'a crate::render::BinaryDependencies,
+    ) -> RenderContext<'a> {
+        let mut ctx = RenderContext::new(project, document, format, binaries);
+        ctx.artifacts = std::mem::take(&mut self.artifacts);
+        ctx.diagnostics = std::mem::take(&mut self.diagnostics);
+        ctx.project_index = self.project_index.take();
+        ctx.resource_resolver = self.resource_resolver.take();
+        ctx.ref_type_registry = self.ref_type_registry.take();
+        ctx.options = self.options.clone();
+        ctx.includes = std::mem::take(&mut self.includes);
+        ctx.pipeline_profile = self.pipeline_profile.clone();
+        ctx.observer = self.observer.clone();
+        ctx.user_grammar_provider = self.user_grammar_provider.clone();
+        ctx.resource_report = std::mem::take(&mut self.resource_report);
+        ctx.crossref_index = self.crossref_index.take();
+        ctx.resource_copies = std::mem::take(&mut self.resource_copies);
+        ctx.code_block_decorations = std::mem::take(&mut self.code_block_decorations);
+        ctx.attribution_provider = self.attribution_provider.clone();
+        ctx.attribution_data = self.attribution_data.clone();
+        ctx.format_options = self.format_options.clone();
+        ctx.document_profile = self.document_profile.take();
+        ctx
+    }
+
+    /// Extract the full field list back out of `ctx` after a pause-side or
+    /// resume-side call, leaving the source `RenderContext` at its
+    /// default/empty state for those fields (it is meant to be dropped
+    /// next, not read again).
+    pub fn extract_from(ctx: &mut RenderContext<'_>) -> Self {
+        Self {
+            artifacts: std::mem::take(&mut ctx.artifacts),
+            diagnostics: std::mem::take(&mut ctx.diagnostics),
+            crossref_index: ctx.crossref_index.take(),
+            ref_type_registry: ctx.ref_type_registry.take(),
+            project_index: ctx.project_index.take(),
+            resource_resolver: ctx.resource_resolver.take(),
+            options: ctx.options.clone(),
+            includes: std::mem::take(&mut ctx.includes),
+            pipeline_profile: ctx.pipeline_profile.clone(),
+            observer: ctx.observer.clone(),
+            user_grammar_provider: ctx.user_grammar_provider.clone(),
+            resource_report: std::mem::take(&mut ctx.resource_report),
+            resource_copies: std::mem::take(&mut ctx.resource_copies),
+            code_block_decorations: std::mem::take(&mut ctx.code_block_decorations),
+            attribution_provider: ctx.attribution_provider.clone(),
+            attribution_data: ctx.attribution_data.take(),
+            execution_skipped: ctx.execution_skipped,
+            format_options: ctx.format_options.clone(),
+            document_profile: ctx.document_profile.take(),
         }
     }
 }
@@ -1679,8 +1877,11 @@ fn capture_untransformed_ast_json(content: &[u8], source_name: &str) -> Option<S
 /// ## Finalization Phase
 /// 17. `LinkRewriteTransform` - Rewrite body-content `.qmd` links to relative output URLs (Phase 6)
 /// 18. `AppendixStructureTransform` - Consolidate appendix content into container
-/// 19. `CrossrefRenderTransform` - Resolve crossref custom nodes to final HTML structure
-/// 20. `ResourceCollectorTransform` - Collect image dependencies
+/// 19. `CrossChapterCrossrefResolveTransform` - Patch cross-chapter crossref
+///     numbers/targets from the project-wide registry (book-projects P5;
+///     no-op without the registry)
+/// 20. `CrossrefRenderTransform` - Resolve crossref custom nodes to final HTML structure
+/// 21. `ResourceCollectorTransform` - Collect image dependencies
 /// Select the format-specific footer-render stage.
 ///
 /// Footer *generation* is format-agnostic (`FooterGenerateTransform` →
@@ -2063,6 +2264,14 @@ pub fn build_transform_pipeline(
     // `claude-notes/plans/2026-04-24-websites-phase-6.md`.
     pipeline.push(Box::new(LinkRewriteTransform::new()));
     pipeline.push(Box::new(AppendixStructureTransform::new()));
+    // Cross-chapter crossref resolution (book-projects P5). Must run
+    // *before* `CrossrefRenderTransform`, which renders the node shape this
+    // patches. Registered unconditionally: it is a true no-op unless the
+    // book orchestrator attached a project-wide registry to the context,
+    // so non-book renders never run the walk.
+    pipeline.push(Box::new(
+        crate::transforms::cross_chapter_crossref_resolve::CrossChapterCrossrefResolveTransform::new(),
+    ));
     pipeline.push(Box::new(CrossrefRenderTransform::new()));
     // Example-embed render (bd-t3cert81). Runs right after
     // `CrossrefRenderTransform` so the per-`demo` `order` the index assigned
@@ -2492,6 +2701,13 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     // --- B3: shared post-core services ------------------------------------
     ("link-rewrite", Bucket::B3),
     ("appendix-structure", Bucket::B3),
+    // Cross-chapter crossref resolution (book-projects P5). A shared
+    // service, sibling of `link-rewrite`: it mutates `plain_data` on
+    // unresolved `CrossrefResolvedRef` nodes only, is a true no-op unless
+    // the book orchestrator attached the project-wide registry, and never
+    // bakes format presentation — a Pandoc writer must see the patched
+    // numbers too.
+    ("cross-chapter-crossref-resolve", Bucket::B3),
     ("resource-collector", Bucket::B3),
     // Captures the markdown companion for llms.txt. A service, not
     // presentation of the current format; self-gates on `llms_view_active`
@@ -5313,6 +5529,346 @@ mod tests {
         assert!(extracted.resource_report.entries.is_empty());
     }
 
+    /// book-projects P5 (plan item 45): `run_pipeline_from_ast`'s
+    /// `RenderContext`↔`StageContext` bridge must round-trip every field the
+    /// pause/resume split now straddles — seeded *in* at the resume call and
+    /// carried back *out* before the caller reads the ctx. A pause at
+    /// Navigation leaves these on the *outer* ctx; the finishing pipeline's
+    /// stages read them from the *stage* ctx, so a missing bridge leg
+    /// silently drops state:
+    ///
+    /// - `code_block_decorations`: `code-block-generate` (Normalization,
+    ///   pause-side) writes the sideband; `code-block-render` (Finalization,
+    ///   resume-side) reads it. The field historically had no `StageContext`
+    ///   counterpart at all — the inner bridge drops it on both legs.
+    /// - `includes`: engine execution (pause-side) populates them;
+    ///   `ApplyTemplateStage`'s late drain is the resume-side consumer.
+    /// - `format_options` / `document_profile`: restore always carried them
+    ///   *out*, but nothing seeded them *in* — so a caller-held value was
+    ///   clobbered by the stage's default at restore time.
+    #[tokio::test]
+    async fn finishing_pipeline_bridge_round_trips_seeded_fields() {
+        use crate::document_profile::DocumentProfile;
+        use crate::render::FormatOptions;
+
+        // A fenced code block with a `filename` attribute: the pause-side
+        // code-block-generate turns that into a decoration entry, which the
+        // resume-side code-block-render must still see.
+        let qmd =
+            "---\ntitle: T\n---\n\n# Intro\n\n``` {filename=\"p5-bridge.rs\"}\nlet x = 1;\n```\n";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let runtime = make_test_runtime();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let (doc_ast, _diagnostics) = render_qmd_to_ast_partial(
+            qmd.as_bytes(),
+            "test.qmd",
+            &mut ctx,
+            runtime.clone(),
+            TransformPhase::Navigation,
+        )
+        .await
+        .unwrap();
+
+        assert!(
+            !ctx.code_block_decorations.is_empty(),
+            "the pause must harvest code-block-generate's sideband into the \
+             caller's context (inner + outer bridge, outbound leg)"
+        );
+
+        // Seed the fields whose bridge legs are under test. All are values
+        // a book orchestrator holds across the pause; none are written by
+        // the finishing stages themselves.
+        ctx.includes
+            .header_includes
+            .push("<meta name=\"p5-bridge-probe\" content=\"include-survived\">".to_string());
+        let mut seeded_format_options = FormatOptions::default();
+        seeded_format_options.html.attribution_viewer_enabled = false;
+        ctx.format_options = seeded_format_options;
+        ctx.document_profile = Some(DocumentProfile::default());
+
+        let (output, _diagnostics) = run_pipeline_from_ast(
+            doc_ast,
+            &mut ctx,
+            runtime,
+            build_html_pipeline_finishing_stages(TransformPhase::Finalization),
+        )
+        .await
+        .unwrap();
+
+        let rendered = output
+            .into_rendered_output()
+            .unwrap_or_else(|| panic!("finishing pipeline must produce RenderedOutput"));
+        let head = &rendered.content[..rendered.content.len().min(2000)];
+
+        assert!(
+            rendered.content.contains("p5-bridge-probe"),
+            "the seeded header include must reach the template \
+             (ApplyTemplateStage's late drain); got:\n{head}"
+        );
+        assert!(
+            rendered.content.contains("code-with-filename")
+                && rendered.content.contains("p5-bridge.rs"),
+            "the pause-side code-block decoration must drive the resume-side \
+             filename wrapper; got:\n{head}"
+        );
+        assert!(
+            !ctx.format_options.html.attribution_viewer_enabled,
+            "the seeded format_options must survive the round trip instead of \
+             being clobbered by the stage's default"
+        );
+        assert!(
+            ctx.document_profile.is_some(),
+            "the seeded document_profile must survive the round trip instead \
+             of being clobbered by None at restore time"
+        );
+    }
+
+    /// book-projects P5 (plan item 45, attribution leg): `attribution_data`
+    /// is *generated* by `AttributionGenerateStage` in the pause-side stage
+    /// list and *consumed* by `AttributionRenderTransform` (Finalization) in
+    /// the resume leg. Both bridge directions must carry it: in (the render
+    /// transform sees the sidecar and bakes the writer-side lookup into
+    /// `format_options`) and out (the caller's held sidecar survives restore
+    /// instead of being dropped).
+    #[tokio::test]
+    async fn finishing_pipeline_bridge_carries_attribution_data_both_ways() {
+        use crate::attribution::AttributionData;
+
+        let qmd = "---\ntitle: T\n---\n\n# Intro\n\nBody.\n";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let runtime = make_test_runtime();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let (doc_ast, _diagnostics) = render_qmd_to_ast_partial(
+            qmd.as_bytes(),
+            "test.qmd",
+            &mut ctx,
+            runtime.clone(),
+            TransformPhase::Navigation,
+        )
+        .await
+        .unwrap();
+
+        // What AttributionGenerateStage would have produced pre-pause.
+        ctx.attribution_data = Some(Arc::new(AttributionData::default()));
+
+        let (_output, _diagnostics) = run_pipeline_from_ast(
+            doc_ast,
+            &mut ctx,
+            runtime,
+            build_html_pipeline_finishing_stages(TransformPhase::Finalization),
+        )
+        .await
+        .unwrap();
+
+        assert!(
+            ctx.format_options.html.attribution_lookup.is_some(),
+            "AttributionRenderTransform must see the bridged-in sidecar and \
+             bake the writer-side lookup"
+        );
+        assert!(
+            ctx.attribution_data.is_some(),
+            "the caller-held sidecar must survive restore instead of being \
+             dropped"
+        );
+    }
+
+    /// book-projects P5 (plan item 43): the N-at-once version of
+    /// `chapter_pause_state_round_trips_all_p2_owned_fields`. Three chapters'
+    /// owned structs are held **simultaneously**, each paused at
+    /// `..=Navigation`, then resumed independently via
+    /// `run_pipeline_from_ast(Finalization..)`. Every distinctive marker
+    /// must come back attributed to its own chapter — a field dropped or
+    /// cross-wired by `build_context`/`extract_from` shows up as the wrong
+    /// chapter's value (or no value) in the resumed render. The plan's
+    /// sharpest cases get direct assertions: `attribution_data`,
+    /// `code_block_decorations`, and `crossref_index` are read only in the
+    /// resumed Finalization phase (or by the aggregation step), so a
+    /// pause-side drop surfaces only here, not at the pause.
+    #[tokio::test]
+    async fn book_chapter_pause_state_holds_three_chapters_without_cross_contamination() {
+        use crate::crossref::CrossrefIndex;
+        use quarto_source_map::FileId;
+
+        struct Held {
+            n: u32,
+            doc: DocumentInfo,
+            ast: crate::stage::DocumentAst,
+            state: BookChapterPauseState,
+            attribution: Arc<crate::attribution::AttributionData>,
+        }
+
+        let project = make_test_project();
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+
+        // --- Pause: all three chapters render through Navigation, each
+        // into its own held struct ---
+        let mut held: Vec<Held> = Vec::new();
+        for n in 1..=3u32 {
+            let qmd = format!(
+                "---\ntitle: Chapter {n}\n---\n\n# Chapter {n}\n\n\
+                 ``` {{filename=\"ch{n}-deco.txt\"}}\nlet x{n} = {n};\n```\n"
+            );
+            let doc = DocumentInfo::from_path(format!("/project/ch{n}.qmd"));
+            let mut state = BookChapterPauseState::new(crate::format::PipelineProfile::HtmlRender);
+            // Distinct markers, concentrated on the fields P2's short list
+            // does not carry — those are the ones a naive P2-pattern copy
+            // silently drops.
+            state.artifacts.store_text(
+                format!("held-by-ch{n}"),
+                format!("value-{n}"),
+                "text/plain",
+            );
+            state
+                .includes
+                .header_includes
+                .push(format!("<meta name=\"ch{n}-held\" content=\"paused\">"));
+            state.crossref_index = Some(CrossrefIndex::new(FileId(n as usize)));
+            // Chapter 3 runs attribution-off: its sidecar stays `None`, so
+            // `AttributionRenderTransform` early-returns and the seeded
+            // `viewer_enabled = false` must survive the resume untouched.
+            // Chapters 1–2 carry real sidecars; the transform then writes
+            // its lookup *onto* the round-tripped struct, asserted below.
+            if n == 3 {
+                state.format_options.html.attribution_viewer_enabled = false;
+            }
+            let attribution = Arc::new(crate::attribution::AttributionData::default());
+            if n != 3 {
+                state.attribution_data = Some(attribution.clone());
+            }
+
+            let mut ctx = state.build_context(&project, &doc, &format, &binaries);
+            let (ast, diagnostics) = render_qmd_to_ast_partial(
+                qmd.as_bytes(),
+                &format!("ch{n}.qmd"),
+                &mut ctx,
+                make_test_runtime(),
+                TransformPhase::Navigation,
+            )
+            .await
+            .unwrap();
+            assert!(
+                diagnostics.is_empty(),
+                "ch{n}: unexpected diagnostics: {diagnostics:?}"
+            );
+            let state = BookChapterPauseState::extract_from(&mut ctx);
+            held.push(Held {
+                n,
+                doc,
+                ast,
+                state,
+                attribution,
+            });
+        }
+
+        // --- Resume: each chapter independently, from its own held struct ---
+        for Held {
+            n,
+            doc,
+            mut ast,
+            mut state,
+            attribution,
+        } in held
+        {
+            let mut ctx = state.build_context(&project, &doc, &format, &binaries);
+            let (output, diagnostics) = run_pipeline_from_ast(
+                std::mem::take(&mut ast),
+                &mut ctx,
+                make_test_runtime(),
+                build_html_pipeline_finishing_stages(TransformPhase::Finalization),
+            )
+            .await
+            .unwrap();
+            assert!(
+                diagnostics.is_empty(),
+                "ch{n} resume: unexpected diagnostics: {diagnostics:?}"
+            );
+
+            // The sidecar must come back as *this chapter's* Arc — or, for
+            // the attribution-off chapter, must stay absent.
+            if n == 3 {
+                assert!(
+                    ctx.attribution_data.is_none(),
+                    "ch3: the attribution-off chapter must not acquire a sidecar"
+                );
+            } else {
+                assert!(
+                    ctx.attribution_data
+                        .as_ref()
+                        .is_some_and(|a| Arc::ptr_eq(a, &attribution)),
+                    "ch{n}: attribution_data must round-trip as the chapter's own sidecar"
+                );
+            }
+            // The index must come back as *this chapter's* index.
+            assert_eq!(
+                ctx.crossref_index.as_ref().map(|i| i.file_id),
+                Some(FileId(n as usize)),
+                "ch{n}: crossref_index must round-trip with its own file id"
+            );
+            // Writer-side options seeded before the pause must not be
+            // clobbered by the finishing pipeline's defaults: ch3's seed
+            // survives (its transform early-returns), ch1–2 prove the
+            // transform wrote *onto* the round-tripped struct.
+            if n == 3 {
+                assert!(
+                    !ctx.format_options.html.attribution_viewer_enabled,
+                    "ch3: the seeded attribution-off option must round-trip, not reset"
+                );
+            } else {
+                assert!(
+                    ctx.format_options.html.attribution_lookup.is_some(),
+                    "ch{n}: AttributionRenderTransform must write onto the \
+                     round-tripped format_options"
+                );
+            }
+            // The artifact seeded on the held struct must still be there —
+            // and no sibling's artifact may have leaked in.
+            assert_eq!(
+                ctx.artifacts
+                    .get(&format!("held-by-ch{n}"))
+                    .and_then(|a| a.as_str()),
+                Some(format!("value-{n}").as_str()),
+                "ch{n}: the chapter's own held artifact must survive the round trip"
+            );
+            for other in 1..=3u32 {
+                if other != n {
+                    assert!(
+                        ctx.artifacts.get(&format!("held-by-ch{other}")).is_none(),
+                        "ch{n}: must not see ch{other}'s artifact"
+                    );
+                }
+            }
+
+            let rendered = output
+                .into_rendered_output()
+                .unwrap_or_else(|| panic!("ch{n}: resume must produce RenderedOutput"));
+            // The pause-harvested decoration (pause-side generate) must
+            // drive the resume-side render's filename wrapper.
+            assert!(
+                rendered.content.contains("code-with-filename")
+                    && rendered.content.contains(&format!("ch{n}-deco.txt")),
+                "ch{n}: the pause-harvested code-block decoration must drive the \
+                 resume-side wrapper",
+            );
+            // The include seeded on the held struct must reach this
+            // chapter's template head.
+            assert!(
+                rendered.content.contains(&format!("ch{n}-held")),
+                "ch{n}: the held include must reach the resumed output",
+            );
+        }
+    }
+
     #[test]
     fn repo_actions_render_sits_between_its_producers_and_consumers() {
         let pipeline = build_transform_pipeline(
@@ -5597,6 +6153,7 @@ mod tests {
                 "footer-render",
                 "link-rewrite",
                 "appendix-structure",
+                "cross-chapter-crossref-resolve",
                 "crossref-render",
                 "example-embed-render",
                 "mermaid-render",
@@ -5685,6 +6242,7 @@ mod tests {
                 "reveal-footer-logo",
                 "link-rewrite",
                 "appendix-structure",
+                "cross-chapter-crossref-resolve",
                 "crossref-render",
                 "example-embed-render",
                 "reveal-auto-stretch",
@@ -5832,6 +6390,7 @@ mod tests {
                 "crossref-resolve",
                 "link-rewrite",
                 "appendix-structure",
+                "cross-chapter-crossref-resolve",
                 "example-embed-render",
                 "resource-collector",
                 "llms-capture",
@@ -6053,6 +6612,7 @@ mod tests {
                 "footer-render",
                 "link-rewrite",
                 "appendix-structure",
+                "cross-chapter-crossref-resolve",
                 "example-embed-render",
                 "code-block-render",
                 "resource-collector",

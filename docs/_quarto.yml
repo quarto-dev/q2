@@ -345,6 +345,7 @@ website:
         - section: "crossref"
           contents:
             - errors/crossref/Q-15-1.qmd
+            - errors/crossref/Q-15-2.qmd
         - section: "extension"
           contents:
             - errors/extension/Q-16-1.qmd

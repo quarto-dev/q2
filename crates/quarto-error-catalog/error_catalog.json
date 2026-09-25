@@ -1224,6 +1224,13 @@
     "docs_url": "https://quarto.org/docs/errors/crossref/Q-15-1",
     "since_version": "99.9.9"
   },
+  "Q-15-2": {
+    "subsystem": "crossref",
+    "title": "Duplicate Crossref Identifier Across Chapters",
+    "message_template": "A crossref identifier (e.g. a `fig-`/`tbl-` label or an explicit `#id`) is defined in more than one chapter of the same book. A reference like `@fig-foo` must resolve to exactly one target, so each crossref id must be unique across all chapters. Quarto keeps the first chapter's definition; give one of the duplicates a different label.",
+    "docs_url": "https://quarto.org/docs/errors/crossref/Q-15-2",
+    "since_version": "99.9.9"
+  },
   "Q-5-8": {
     "subsystem": "project",
     "title": "Project Render Script Failed",

@@ -227,6 +227,15 @@ pub trait Pass2Renderer {
         _seeds: std::collections::HashMap<PathBuf, crate::render::ChapterSeed>,
     ) {
     }
+
+    /// Book-projects P5: the CLI `--to` value the renderer merges into
+    /// each document's format resolution. The multi-file-HTML
+    /// orchestrator branch re-uses it so non-item project files render
+    /// with the same per-doc format resolution as Pass 2 itself.
+    /// Default: `None` (renderers without a forced format).
+    fn format_override(&self) -> Option<&str> {
+        None
+    }
 }
 
 // ───────────────────────────────────────────────────────────────────
@@ -406,6 +415,10 @@ impl<'a> Pass2Renderer for RenderToFileRenderer<'a> {
         seeds: std::collections::HashMap<PathBuf, crate::render::ChapterSeed>,
     ) {
         self.chapter_seeds = seeds;
+    }
+
+    fn format_override(&self) -> Option<&str> {
+        self.format_override.as_deref()
     }
 }
 

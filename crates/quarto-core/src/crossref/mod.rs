@@ -38,6 +38,7 @@ pub const TRACE_KIND_CROSSREF_INDEX: &str = "CrossrefIndex";
 pub mod codeblock_shorthand;
 pub mod index;
 pub mod metadata;
+pub mod project_index;
 pub mod registry;
 pub mod section_number;
 pub mod target;

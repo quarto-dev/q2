@@ -229,6 +229,10 @@ impl PipelineStage for AstTransformsStage {
         // inner context — the crossref index/render transforms read it;
         // nothing mutates it, so nothing bridges it back.
         render_ctx.chapter_seed = ctx.chapter_seed;
+        // book-projects P5: the project-wide registry rides one-way in the
+        // same shape — `CrossChapterCrossrefResolveTransform` reads it;
+        // nothing mutates it.
+        render_ctx.cross_chapter_crossref_registry = ctx.cross_chapter_crossref_registry.clone();
         // `project_index` is read-only to transforms, so we clone the
         // `Arc` instead of moving it. Leaving `ctx.project_index`
         // untouched means later stages in the pipeline still see it.
@@ -262,6 +266,21 @@ impl PipelineStage for AstTransformsStage {
         // the outer renderer for the final sink flush. Move ownership
         // across the bridge in both directions, same as `artifacts`.
         render_ctx.resource_copies = std::mem::take(&mut ctx.resource_copies);
+        // book-projects P5: the code-block decoration sideband moves
+        // both ways, like `artifacts` — a book chapter's pause/resume
+        // split puts `code-block-generate` (writer) and
+        // `code-block-render` (reader) in *different* stage-list calls,
+        // so the map must survive on the stage context between them.
+        // Single-shot renders move it straight through, unchanged.
+        render_ctx.code_block_decorations = std::mem::take(&mut ctx.code_block_decorations);
+        // Move the stage context's writer-side options INTO the inner
+        // context before the pipeline runs, so the out-move below hands
+        // back the same struct transforms mutate rather than a fresh
+        // default: without this, any value pre-seeded on the stage
+        // context (P5's resume bridge carries `format_options` across a
+        // chapter pause) is silently replaced by the inner pipeline's
+        // default at the out-move.
+        render_ctx.format_options = std::mem::take(&mut ctx.format_options);
 
         // Execute the transform pipeline (phase-bounded when constructed
         // with `for_range`; the default range is unbounded).
@@ -275,6 +294,7 @@ impl PipelineStage for AstTransformsStage {
         ctx.includes = render_ctx.includes;
         ctx.ref_type_registry = render_ctx.ref_type_registry;
         ctx.crossref_index = render_ctx.crossref_index;
+        ctx.code_block_decorations = render_ctx.code_block_decorations;
         // Bridge `format_options` back so downstream stages
         // (`RenderHtmlBodyStage`, future JSON writer entry) see the
         // attribution lookup + identities populated by

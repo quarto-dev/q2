@@ -140,6 +140,16 @@ pub struct StageContext {
     /// input to transforms, never mutated, so nothing restores it.
     pub chapter_seed: Option<crate::render::ChapterSeed>,
 
+    /// Project-wide crossref registry (book-projects P5): the merged
+    /// multi-file-book index that
+    /// [`crate::transforms::CrossChapterCrossrefResolveTransform`] consults
+    /// for `@ref`s no single chapter defines (`None` for every non-book
+    /// render). Bridged one-way from
+    /// [`crate::render::RenderContext::cross_chapter_crossref_registry`] —
+    /// read-only input, never mutated, so nothing restores it.
+    pub cross_chapter_crossref_registry:
+        Option<std::sync::Arc<crate::crossref::project_index::ProjectCrossrefIndex>>,
+
     /// Per-document resource report (`bd-o8pr`). Engine stages and
     /// (Phase 3) Lua-filter post-drain push raw paths into this; the
     /// orchestrator drains it after Pass-2 render and resolves
@@ -277,6 +287,19 @@ pub struct StageContext {
     /// provider was installed.
     pub attribution_data: Option<Arc<crate::attribution::AttributionData>>,
 
+    /// Code-block decoration sideband (book-projects P5 bridge):
+    /// `CodeBlockGenerateTransform` (Normalization) writes it and
+    /// `CodeBlockRenderTransform` (Finalization) reads it — both inside
+    /// `AstTransformsStage`'s inner `RenderContext`, but on *opposite
+    /// sides* of a book chapter's pause/resume split, so the map must
+    /// survive on the stage context across the two pipeline calls
+    /// instead of living only inside one inner context. Single-shot
+    /// renders never notice it: both legs move it straight through.
+    pub code_block_decorations: std::collections::HashMap<
+        crate::transforms::CodeBlockDecorationKey,
+        crate::transforms::CodeBlockDecoration,
+    >,
+
     /// Per-format writer-side options, populated by Render-phase
     /// transforms inside [`crate::stage::stages::AstTransformsStage`]
     /// and bridged back here after the inner pipeline runs. Consumed
@@ -388,10 +411,12 @@ impl StageContext {
             cancellation: Cancellation::new(),
             attribution_provider: None,
             attribution_data: None,
+            code_block_decorations: std::collections::HashMap::new(),
             format_options: crate::render::FormatOptions::default(),
             user_grammar_provider: None,
             defer_citeproc: false,
             chapter_seed: None,
+            cross_chapter_crossref_registry: None,
         })
     }
 

@@ -1166,4 +1166,155 @@ Content.
 
         assert!(result.output_path.exists());
     }
+
+    /// book-projects P5 (plan item 46): the resume leg's write path. The
+    /// orchestrator's per-chapter sequence is pause → held struct → resume
+    /// via `run_pipeline_from_ast(Finalization..)` → recompute the output
+    /// trio (never carried) → `finalize_rendered_output(is_native = true)`.
+    /// This test runs exactly that sequence for one chapter against a real
+    /// temp dir and asserts a real HTML file lands at the recomputed
+    /// `output_path` (pause-harvested decorations included), that the
+    /// page-scoped artifact and resource-copy intent a resumed chapter
+    /// carries are drained into the output tree, and that the resource
+    /// report leaves the context inside the result.
+    ///
+    /// The "single-shot callers stay byte-identical" half of item 46 needs
+    /// no new test: the split landed in P2 as a pure Extract Method
+    /// (`render_document_to_file` calls render-then-finalize back-to-back),
+    /// and every render since — the whole P2–P4 suite plus e2e — exercised
+    /// the split path. Recorded in the plan rather than re-proven here.
+    #[test]
+    fn resume_finalize_writes_real_html_and_drains_sidebands() {
+        let temp = TempDir::new().unwrap();
+        let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+
+        // A fenced code block with a `filename` attribute: the pause side
+        // harvests its decoration, the resumed Finalization leg wraps it —
+        // proving the written HTML came from the resumed chapter, not a
+        // bare single-shot re-render.
+        let input_path = temp.path().join("ch1.qmd");
+        fs::write(
+            &input_path,
+            "---\ntitle: Chapter One\n---\n\n# Chapter One\n\n\
+             ``` {filename=\"resume-write.rs\"}\nlet x = 1;\n```\n",
+        )
+        .unwrap();
+
+        let project = ProjectContext {
+            dir: temp.path().to_path_buf(),
+            config: crate::project::ProjectConfig::default(),
+            is_single_file: true,
+            files: vec![DocumentInfo::from_path(&input_path)],
+            output_dir: temp.path().to_path_buf(),
+            ..Default::default()
+        };
+        let doc = DocumentInfo::from_path(&input_path);
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+
+        // --- Pause at ..=Navigation (the orchestrator's Pass-2 stop) ---
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        let source = fs::read(&input_path).unwrap();
+        let (ast, _diagnostics) = pollster::block_on(crate::pipeline::render_qmd_to_ast_partial(
+            source.as_slice(),
+            "ch1.qmd",
+            &mut ctx,
+            runtime.clone(),
+            crate::transform::TransformPhase::Navigation,
+        ))
+        .unwrap();
+        let mut held = crate::pipeline::BookChapterPauseState::extract_from(&mut ctx);
+
+        // --- Recompute, don't carry: the output trio + resolver ---
+        let (output_path, output_dir, output_stem) =
+            determine_output_paths(&input_path, "html", &RenderToFileOptions::default()).unwrap();
+        runtime.dir_create(&output_dir, true).unwrap();
+        let resources_dir = output_dir.join(format!("{output_stem}_files"));
+        let project_type = crate::project::orchestrator::project_type_for(&project);
+        let resolver = ResourceResolverContext::website(
+            &project.output_dir,
+            &output_path,
+            project_type.lib_dir(),
+            &output_stem,
+        );
+
+        // --- Resume from Finalization with the sidebands a real chapter
+        // carries across the pause ---
+        let mut ctx = held.build_context(&project, &doc, &format, &binaries);
+        ctx.resource_resolver = Some(resolver.clone());
+        ctx.artifacts.store(
+            "resume-page-asset",
+            crate::artifact::Artifact::from_string("asset-bytes", "text/plain")
+                .with_path("resume-asset.txt"),
+        );
+        let resource_src = temp.path().join("figure.png");
+        fs::write(&resource_src, b"png-bytes").unwrap();
+        ctx.resource_copies.push(crate::render::ResourceCopyIntent {
+            src: resource_src,
+            dest: resources_dir.join("figure.png"),
+            origin: quarto_source_map::SourceInfo::original(quarto_source_map::FileId(0), 0, 0),
+        });
+
+        let (output, _diagnostics) = pollster::block_on(crate::pipeline::run_pipeline_from_ast(
+            ast,
+            &mut ctx,
+            runtime.clone(),
+            crate::pipeline::build_html_pipeline_finishing_stages(
+                crate::transform::TransformPhase::Finalization,
+            ),
+        ))
+        .unwrap();
+        let rendered = output.into_rendered_output().unwrap();
+
+        let render_output = crate::pipeline::RenderOutput {
+            html: rendered.content,
+            diagnostics: Vec::new(),
+            source_context: rendered.source_context,
+            execution_skipped: ctx.execution_skipped,
+        };
+
+        let result = finalize_rendered_output(
+            &input_path,
+            output_path.clone(),
+            resources_dir.clone(),
+            render_output,
+            &mut ctx,
+            &resolver,
+            project_type.as_ref(),
+            None,
+            &runtime,
+            true,
+        )
+        .unwrap();
+
+        // The recomputed output path holds real chapter HTML.
+        let html = fs::read_to_string(&output_path).unwrap();
+        assert!(
+            html.contains("Chapter One"),
+            "resume must write real chapter HTML at the recomputed path"
+        );
+        assert!(
+            html.contains("code-with-filename") && html.contains("resume-write.rs"),
+            "the written HTML must reflect the resumed chapter's decoration"
+        );
+
+        // Sidebands drained into the output tree: the page-scoped artifact
+        // at its resolver route, the resource copy at its intent's dest.
+        let asset_disk = resolver.on_disk_path_for(
+            crate::artifact::ArtifactScope::Page,
+            Path::new("resume-asset.txt"),
+        );
+        assert!(
+            runtime.path_exists(&asset_disk, None).unwrap(),
+            "the page-scoped artifact must be flushed into the output tree"
+        );
+        assert!(
+            resources_dir.join("figure.png").exists(),
+            "the resource-copy intent must be flushed into the output tree"
+        );
+
+        // The resource report left the context inside the result.
+        assert!(ctx.resource_report.entries.is_empty());
+        assert_eq!(result.output_path, output_path);
+    }
 }

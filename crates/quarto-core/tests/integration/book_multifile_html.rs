@@ -11,8 +11,9 @@
  * (plan appendix: `scratchpad/minibook` + the unnumbered-interlude
  * experiment): chapter 1 → 1.1, chapter 2 → 2.1, appendix → A.1; an
  * unnumbered chapter consumes no slot and numbers its own figures flat.
- * Cross-chapter `@ref`s deliberately ship as the visible unresolved
- * placeholder (P5 replaces it with the project-wide registry).
+ * Cross-chapter `@ref`s resolve through P5's project-wide registry
+ * (ch2 shows ch1's "Figure 1.1" as a link into ch1.html); an id no
+ * chapter defines keeps P4's visible unresolved placeholder.
  */
 
 use std::path::{Path, PathBuf};
@@ -122,11 +123,18 @@ book:
 /// Render `project_dir` as a multi-file HTML book and return the rendered
 /// HTML text of one output file, found by its stem (e.g. `"ch2"`).
 fn render_and_read(project_dir: &Path, stem: &str) -> String {
+    let outputs = render_book_with_options(project_dir, RenderToFileOptions::default());
+    read_output(&outputs, stem)
+}
+
+/// Render the book once and return every output path, so a test can read
+/// several chapters' files from a single render (a second render would
+/// clobber the first's outputs).
+fn render_book_with_options(project_dir: &Path, options: RenderToFileOptions) -> Vec<PathBuf> {
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
     let mut project = ProjectContext::discover(project_dir, runtime.as_ref()).unwrap();
     let project_type = project_type_for(&project);
     let format = Format::from_format_string("html").unwrap();
-    let options = RenderToFileOptions::default();
     let mut pipeline = ProjectPipeline::new(
         &mut project,
         project_type,
@@ -142,14 +150,17 @@ fn render_and_read(project_dir: &Path, stem: &str) -> String {
         "expected at least one output, got {:?}",
         summary.outputs
     );
-    let output_path = summary
-        .outputs
+    summary.outputs.into_iter().map(|o| o.output_path).collect()
+}
+
+/// Read the rendered HTML of one output, found by its stem (e.g. `"ch2"`).
+fn read_output(outputs: &[PathBuf], stem: &str) -> String {
+    let output_path = outputs
         .iter()
-        .map(|o| &o.output_path)
         .find(|p| {
             p.file_stem().is_some_and(|s| s == stem) && p.extension().is_some_and(|e| e == "html")
         })
-        .unwrap_or_else(|| panic!("no html output with stem {stem} in {:?}", summary.outputs));
+        .unwrap_or_else(|| panic!("no html output with stem {stem} in {outputs:?}"));
     std::fs::read_to_string(output_path).unwrap()
 }
 
@@ -199,9 +210,14 @@ fn three_chapter_book_renders_separate_files_with_chapter_local_numbers() {
         "ch2 caption must be chapter-scoped 2.1: {}",
         ch2
     );
+    // The flat-counter failure mode renders ch2's own caption with
+    // chapter 1's counter — pin the exact caption string, not a bare
+    // "Figure 1" prefix: ch2 legitimately carries a resolved
+    // cross-chapter link reading "Figure 1.1" (P5 registry), which the
+    // broader form would false-positive on.
     assert!(
-        !ch2.contains("Figure\u{a0}1"),
-        "ch2 must not show chapter 1's numbering: {}",
+        !ch2.contains("Figure\u{a0}1.1: A figure in chapter two"),
+        "ch2's own figure must not use chapter 1's counter: {}",
         ch2
     );
 
@@ -303,9 +319,10 @@ fn same_chapter_ref_resolves_to_working_link() {
 
     // The link to the same chapter's figure carries the scoped number
     // and a working in-page anchor target. (The minibook's ch2 also
-    // holds a deliberate cross-chapter ref — `?fig-one?` — whose
-    // unresolved marker is pinned by the next test, so the "not
-    // unresolved" check here is scoped to the same-chapter link.)
+    // holds a deliberate cross-chapter ref — `@fig-one`, resolved to
+    // "Figure 1.1" — whose registry resolution is pinned by the next
+    // test, so the "not unresolved" check here is scoped to the
+    // same-chapter link.)
     assert!(
         ch2.contains("href=\"#fig-two\""),
         "the same-chapter ref must link to the figure anchor: {}",
@@ -578,11 +595,10 @@ book:
     );
 }
 
-/// P4 checklist: a cross-chapter `@ref` renders a visible, non-crashing
-/// unresolved indicator — the explicit contract P4 ships with (P5's
-/// registry replaces it). Already true today via
-/// `CrossrefResolveTransform`'s unresolved node; this test pins it so the
-/// multi-file wiring can never silently regress it.
+/// P5 checklist: the cross-chapter `@ref` P4 pinned as an unresolved
+/// indicator now resolves through the project-wide registry — the owning
+/// chapter's scoped number and a working relative link into its output
+/// file, no `quarto-unresolved-ref` marker left behind.
 #[test]
 fn cross_chapter_ref_renders_visible_unresolved_indicator() {
     let temp = TempDir::new().unwrap();
@@ -590,22 +606,21 @@ fn cross_chapter_ref_renders_visible_unresolved_indicator() {
     write_minibook(&project_dir);
     let ch2 = render_and_read(&project_dir, "ch2");
 
-    // ch2 references ch1's `@fig-one`: visible `?fig-one?` text, the
-    // `quarto-unresolved-ref` marker class, and a dangling in-page
-    // target — not a panic, not a silently wrong number.
+    // ch2 references ch1's `@fig-one`: ch1's scoped number (1.1) and a
+    // page-relative link into ch1's actual output file.
     assert!(
-        ch2.contains("?fig-one?"),
-        "the cross-chapter ref must show the literal ?id? placeholder: {}",
+        ch2.contains(">Figure\u{a0}1.1</a>"),
+        "the cross-chapter ref must show ch1's scoped number 1.1: {}",
         ch2
     );
     assert!(
-        ch2.contains("quarto-unresolved-ref"),
-        "the cross-chapter ref must carry the unresolved marker class: {}",
+        ch2.contains("href=\"ch1.html#fig-one\""),
+        "the cross-chapter ref must link into ch1's output file: {}",
         ch2
     );
     assert!(
-        ch2.contains("href=\"#fig-one\""),
-        "the unresolved ref still carries its (dangling) anchor target: {}",
+        !ch2.contains("quarto-unresolved-ref"),
+        "a registry-resolved ref must drop the unresolved marker class: {}",
         ch2
     );
 }
@@ -696,6 +711,266 @@ fn non_book_render_numbers_stay_flat() {
     assert!(
         html.contains(">Figure\u{a0}1</a>"),
         "non-book ref must stay flat 1: {}",
+        html
+    );
+}
+
+// ---------------------------------------------------------------------------
+// P5 — pass-3 project-wide crossref registry (pause / aggregate / resume).
+// ---------------------------------------------------------------------------
+
+/// P5 checklist: chapter 1 references `@fig-two` (defined in chapter 2)
+/// and `@fig-app` (defined in the appendix) — both *forward* references
+/// into later files. After the full pause/aggregate/resume render,
+/// chapter 1's HTML carries the owning chapter's number and a working
+/// relative link into each owning chapter's actual output file. Verified
+/// by reading the rendered HTML from disk, per the end-to-end
+/// verification rule.
+#[test]
+fn cross_chapter_forward_reference_resolves_with_number_and_link() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write_minibook(&project_dir);
+    write(
+        &project_dir.join("ch1.qmd"),
+        &chapter_source(
+            "Chapter One",
+            "fig-one",
+            "A figure in chapter one",
+            "Chapter one references forward to @fig-two and @fig-app; its own figure is @fig-one.",
+        ),
+    );
+
+    let ch1 = render_and_read(&project_dir, "ch1");
+
+    // Forward ref into chapter 2: the owning chapter's scoped number
+    // (2.1) and a relative link into ch2's actual output file.
+    assert!(
+        ch1.contains("href=\"ch2.html#fig-two\""),
+        "the forward ref into ch2 must link to ch2's file: {}",
+        ch1
+    );
+    assert!(
+        ch1.contains(">Figure\u{a0}2.1</a>"),
+        "the forward ref into ch2 must show ch2's scoped number 2.1: {}",
+        ch1
+    );
+
+    // Forward ref into the appendix: letter-scoped A.1, link into
+    // app-a's output file.
+    assert!(
+        ch1.contains("href=\"app-a.html#fig-app\""),
+        "the forward ref into the appendix must link to app-a's file: {}",
+        ch1
+    );
+    assert!(
+        ch1.contains(">Figure\u{a0}A.1</a>"),
+        "the forward ref into the appendix must show A.1: {}",
+        ch1
+    );
+}
+
+/// P5 checklist: an id that exists in *no* chapter keeps the P4
+/// unresolved placeholder — P5 is additive over P4's error handling, not
+/// a replacement. (Documenting/pinning for the P5 change: passes against
+/// P4 today; its job is to still pass once the registry transform
+/// lands — the transform must only touch ids the registry knows.)
+#[test]
+fn unknown_ref_still_shows_unresolved_placeholder() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write_minibook(&project_dir);
+    write(
+        &project_dir.join("ch1.qmd"),
+        &chapter_source(
+            "Chapter One",
+            "fig-one",
+            "A figure in chapter one",
+            "Chapter one references @fig-nowhere, which no chapter defines.",
+        ),
+    );
+
+    let ch1 = render_and_read(&project_dir, "ch1");
+
+    assert!(
+        ch1.contains("?fig-nowhere?"),
+        "an id no chapter defines must keep the literal ?id? placeholder: {}",
+        ch1
+    );
+    assert!(
+        ch1.contains("quarto-unresolved-ref"),
+        "an unknown id must keep the unresolved marker class: {}",
+        ch1
+    );
+    assert!(
+        ch1.contains("href=\"#fig-nowhere\""),
+        "an unknown id keeps its dangling in-page anchor: {}",
+        ch1
+    );
+}
+
+/// P5 checklist: the pause/resume round-trip must not re-run engine
+/// execution — the expensive part of rendering happens exactly once per
+/// chapter. A `fixture-a` cell in each of ch1 and ch2, with the engine's
+/// shared `received_inputs` handle counting every `execute` call across
+/// the whole book render: exactly two (one per chapter). A second
+/// execution pass (the failure mode the pause/resume shape invites)
+/// would make it four.
+#[test]
+fn engine_executes_exactly_once_per_chapter_across_pause_resume() {
+    use quarto_core::engine::{EngineRegistry, FixtureEngine};
+
+    let engine = FixtureEngine::with_results("fixture-a", vec!["EXECUTED-ONCE-MARKER".to_string()]);
+    let received = engine.received_inputs();
+    let mut registry = EngineRegistry::new();
+    registry.register(Arc::new(engine));
+
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write_minibook(&project_dir);
+    // ch1 and ch2 each declare `engine: fixture-a` and carry one
+    // executable cell; index/app-a execute nothing.
+    write(
+        &project_dir.join("ch1.qmd"),
+        "---\nengine: fixture-a\n---\n\n# Chapter One\n\nBefore.\n\n```{fixture-a}\nonce\n```\n",
+    );
+    write(
+        &project_dir.join("ch2.qmd"),
+        "---\nengine: fixture-a\n---\n\n# Chapter Two\n\nBefore.\n\n```{fixture-a}\nonce\n```\n",
+    );
+
+    let options = RenderToFileOptions {
+        engine_registry_override: Some(Arc::new(registry)),
+        ..Default::default()
+    };
+    let outputs = render_book_with_options(&project_dir, options);
+    let ch1 = read_output(&outputs, "ch1");
+    let ch2 = read_output(&outputs, "ch2");
+
+    // The spliced result feeds each chapter's page exactly once.
+    assert!(
+        ch1.contains("EXECUTED-ONCE-MARKER"),
+        "ch1's executed result must appear: {}",
+        ch1
+    );
+    assert!(
+        ch2.contains("EXECUTED-ONCE-MARKER"),
+        "ch2's executed result must appear: {}",
+        ch2
+    );
+
+    // Exactly one execute() call per chapter across the whole book.
+    let count = received.lock().unwrap().len();
+    assert_eq!(
+        count, 2,
+        "each chapter's engine must run exactly once (got {count} calls)"
+    );
+}
+
+/// P5 checklist: Navigation-phase output (the sidebar, generated before
+/// the pause) is unaffected by the aggregation or the resumed
+/// Finalization phase — the phase split must not leak Navigation work
+/// across the boundary. (Documenting/pinning for the P5 change: passes
+/// against P4 today; its job is to still pass once resume lands — a
+/// finishing-stage range accidentally starting at Navigation would
+/// regenerate or drop this markup.)
+#[test]
+fn navigation_phase_output_survives_cross_chapter_resolution() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write_minibook(&project_dir);
+    // Front-matter titles so the sidebar labels are decorated.
+    for (file, title, fig, cap) in [
+        (
+            "ch1.qmd",
+            "Chapter One",
+            "fig-one",
+            "A figure in chapter one",
+        ),
+        (
+            "ch2.qmd",
+            "Chapter Two",
+            "fig-two",
+            "A figure in chapter two",
+        ),
+    ] {
+        write(
+            &project_dir.join(file),
+            &format!(
+                "---\ntitle: \"{title}\"\n---\n\n{}",
+                chapter_source(title, fig, cap, &format!("See @{fig}."))
+            ),
+        );
+    }
+
+    let ch1 = render_and_read(&project_dir, "ch1");
+    let ch2 = render_and_read(&project_dir, "ch2");
+
+    for (stem, html) in [("ch1", &ch1), ("ch2", &ch2)] {
+        assert!(
+            html.contains("id=\"quarto-sidebar\""),
+            "{stem}: the sidebar must survive the render: {html}"
+        );
+        assert!(
+            html.contains("<span class=\"chapter-number\">"),
+            "{stem}: decorated sidebar labels must survive: {html}"
+        );
+    }
+    assert!(
+        ch1.contains("href=\"ch1.html\" class=\"sidebar-item-text sidebar-link active\""),
+        "ch1: the active-page state must survive: {ch1}"
+    );
+    assert!(
+        ch2.contains("href=\"ch2.html\" class=\"sidebar-item-text sidebar-link active\""),
+        "ch2: the active-page state must survive: {ch2}"
+    );
+}
+
+/// P5 checklist: a non-book render never populates
+/// `cross_chapter_crossref_registry`, and the registry transform is a
+/// true no-op there — every crossref anchor on the page keeps exactly
+/// its pre-P5 shape. This is the guard that makes registering
+/// `CrossChapterCrossrefResolveTransform` in the *shared*
+/// `build_transform_pipeline` safe. (Documenting/pinning for the P5
+/// change: passes against P4 today; the pins are the complete set of
+/// xref markup on the page, so any registry leak shows up as a pin
+/// miss.)
+#[test]
+fn non_book_render_is_byte_identical_without_the_registry() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: default\n",
+    );
+    write(
+        &project_dir.join("doc.qmd"),
+        &chapter_source(
+            "Standalone Doc",
+            "fig-solo",
+            "A solo figure",
+            "See @fig-solo.",
+        ),
+    );
+
+    let html = render_and_read(&project_dir, "doc");
+
+    // The complete xref markup on the page, pinned exactly: flat
+    // numbering, in-page anchor, no unresolved marker, no registry-side
+    // link rewriting.
+    assert!(
+        html.contains("<a href=\"#fig-solo\" class=\"quarto-xref\">Figure\u{a0}1</a>"),
+        "the ref anchor must keep its exact pre-P5 shape: {}",
+        html
+    );
+    assert!(
+        html.contains("Figure\u{a0}1: A solo figure"),
+        "the caption must keep its exact pre-P5 shape: {}",
+        html
+    );
+    assert!(
+        !html.contains("quarto-unresolved-ref"),
+        "a same-chapter ref must not be marked unresolved: {}",
         html
     );
 }

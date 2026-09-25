@@ -28,7 +28,7 @@ use std::collections::HashMap;
 use crate::attribution::{
     AttributionData, AttributionRecord, AttributionSourceProvider, IdentityMap,
 };
-use crate::crossref::{CrossrefIndex, RefTypeRegistry};
+use crate::crossref::{CrossrefIndex, RefTypeRegistry, project_index::ProjectCrossrefIndex};
 use crate::format::{Format, PipelineProfile};
 use crate::project::index::ProjectIndex;
 use crate::project::{DocumentInfo, ProjectContext};
@@ -461,6 +461,18 @@ pub struct RenderContext<'a> {
     /// bibliography and one citation-numbering pass instead of N
     /// per-chapter ones.
     pub defer_citeproc: bool,
+
+    /// Project-wide crossref registry for multi-file books (book-projects
+    /// P5): every chapter's crossref targets, keyed by identifier, built by
+    /// aggregating all chapters' inventories after they pause post-Navigation
+    /// and before any chapter resumes into Finalization.
+    ///
+    /// `None` (the default) for every non-book render — the
+    /// `CrossChapterCrossrefResolveTransform` that consults it no-ops, so
+    /// registering that transform unconditionally in the shared transform
+    /// pipeline is safe. See
+    /// `claude-notes/plans/2026-09-21-book-projects-P5-crossref-registry.md`.
+    pub cross_chapter_crossref_registry: Option<std::sync::Arc<ProjectCrossrefIndex>>,
 }
 
 /// Seed for a book chapter's section numbering: render this document as if
@@ -533,6 +545,7 @@ impl<'a> RenderContext<'a> {
             document_profile: None,
             chapter_seed: None,
             defer_citeproc: false,
+            cross_chapter_crossref_registry: None,
         }
     }
 
@@ -574,6 +587,21 @@ impl<'a> RenderContext<'a> {
     /// [`with_project_index`](Self::with_project_index) builder idiom.
     pub fn with_chapter_seed(mut self, seed: ChapterSeed) -> Self {
         self.chapter_seed = Some(seed);
+        self
+    }
+
+    /// Attach the project-wide crossref registry to this context.
+    ///
+    /// Book mode (P5) calls this on each chapter's reconstructed resume
+    /// context, after all chapters have paused and the registry has been
+    /// aggregated; P8's preview analyzer will feed the same field from a
+    /// cheaper pre-engine producer. Matches the
+    /// [`with_chapter_seed`](Self::with_chapter_seed) builder idiom.
+    pub fn with_cross_chapter_crossref_registry(
+        mut self,
+        registry: std::sync::Arc<ProjectCrossrefIndex>,
+    ) -> Self {
+        self.cross_chapter_crossref_registry = Some(registry);
         self
     }
 
