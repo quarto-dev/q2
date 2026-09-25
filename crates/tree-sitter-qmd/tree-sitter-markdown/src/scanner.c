@@ -418,6 +418,20 @@ typedef struct {
     // delimiter_preceded_by_ws). Do not use s->indentation for this: it
     // persists across tokens and is stale mid-line.
     uint8_t ws_before_token;
+    // Where the current line's inline content starts, as column + 1 (0 =
+    // unknown), when the last token the scanner emitted ended exactly
+    // there: a block-quote marker, a list marker, a soft line ending or a
+    // block continuation. Those tokens swallow the line's container prefix
+    // and indentation, whitespace included, so the first inline token
+    // after them sees ws_before_token == 0 and a nonzero column even
+    // though, as in CommonMark, it is at line start. See
+    // at_ws_or_line_content_start. Serialized: tree-sitter restores the state of
+    // the last emitted external token before every scan() call.
+    uint8_t line_content_column;
+    // Per-call scratch: the value note_line_content_start recorded for the
+    // token this call emits (0 if none). Copied into line_content_column
+    // by tree_sitter_markdown_external_scanner_scan on success.
+    uint8_t pending_line_content_column;
 
     bool simulate;
 } Scanner;
@@ -465,6 +479,7 @@ static unsigned serialize(Scanner *s, char *buffer) {
     buffer[size++] = (char)s->fenced_code_block_delimiter_length;
     buffer[size++] = (char)s->code_span_delimiter_length;
     buffer[size++] = (char)s->latex_span_delimiter_length;
+    buffer[size++] = (char)s->line_content_column;
     size_t blocks_count = s->open_blocks.size;
     if (blocks_count > 0) {
         memcpy(&buffer[size], s->open_blocks.items,
@@ -488,6 +503,7 @@ static void deserialize(Scanner *s, const char *buffer, unsigned length) {
     s->fenced_code_block_delimiter_length = 0;
     s->code_span_delimiter_length = 0;
     s->latex_span_delimiter_length = 0;
+    s->line_content_column = 0;
     if (length > 0) {
         size_t size = 0;
         s->own_size = length;
@@ -499,6 +515,7 @@ static void deserialize(Scanner *s, const char *buffer, unsigned length) {
         s->fenced_code_block_delimiter_length = (uint8_t)buffer[size++];
         s->code_span_delimiter_length = (uint8_t)buffer[size++];
         s->latex_span_delimiter_length = (uint8_t)buffer[size++];
+        s->line_content_column = (uint8_t)buffer[size++];
         size_t blocks_size = length - size;
         if (blocks_size > 0) {
             size_t blocks_count = blocks_size / sizeof(Block);
@@ -869,6 +886,38 @@ static bool delimiter_preceded_by_ws(Scanner *s, TSLexer *lexer) {
     return s->ws_before_token > 0 || lexer->get_column(lexer) == 0;
 }
 
+// Record that the token about to be emitted ends where the line's inline
+// content starts (Scanner.line_content_column). Call it only where the
+// token's end is the lexer's current position: mark_end was just called
+// there, or not at all during this scan() call. A token whose range was
+// left behind a peek must not call it; the anchor would be too far right.
+static void note_line_content_start(Scanner *s, TSLexer *lexer) {
+    uint32_t column = lexer->get_column(lexer);
+    s->pending_line_content_column =
+        column < UINT8_MAX ? (uint8_t)(column + 1) : 0;
+}
+
+// delimiter_preceded_by_ws, plus: at the start of a line's content after a
+// container prefix or indentation (`> @ b`, `- @ b`, `text\n  @ b`), which
+// CommonMark treats as line start. Used by the bare-`@` rule
+// (bd-bare-at-literal-w3ytmu8e); the emphasis flanking rules above still
+// use delimiter_preceded_by_ws and keep their documented approximation.
+//
+// The anchor is exact within a line: tree-sitter lexes any token between
+// the anchoring token and here without changing the restored scanner state,
+// but the column only grows along the line. Across lines it relies on every
+// line break being an external token, which replaces the anchor. The few
+// internal tokens that can span a newline (multi-line display math, a
+// quoted shortcode string) could leave a stale anchor that happens to
+// equal a later `@`'s column; the consequence is bounded to reading that
+// `@` as literal text, which is what pandoc does anyway.
+static bool at_ws_or_line_content_start(Scanner *s, TSLexer *lexer) {
+    if (s->ws_before_token > 0) return true;
+    uint32_t column = lexer->get_column(lexer);
+    return column == 0 || (s->line_content_column != 0 &&
+                           column + 1 == s->line_content_column);
+}
+
 static bool at_ws_or_eol(TSLexer *lexer) {
     return lexer->eof(lexer) || lexer->lookahead == ' ' ||
            lexer->lookahead == '\t' || lexer->lookahead == '\n' ||
@@ -993,6 +1042,7 @@ static bool parse_star(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         // Otherwise the token should go until this point.
         if (star_count == 1) {
             mark_end(s, lexer);
+            note_line_content_start(s, lexer);
         }
         // Not counting one space...
         extra_indentation--;
@@ -1121,6 +1171,8 @@ static bool parse_block_quote(Scanner *s, TSLexer *lexer,
             }
             push_block(s, BLOCK_QUOTE);
         // }
+        // No mark_end during this call: the token ends at the lexer.
+        note_line_content_start(s, lexer);
         EMIT_TOKEN(BLOCK_QUOTE_START);
     }
     return false;
@@ -1304,6 +1356,8 @@ static bool parse_plus(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 }
                 push_block(s, (Block)(LIST_ITEM + extra_indentation));
             // }
+            // No mark_end during this call: the token ends at the lexer.
+            note_line_content_start(s, lexer);
             if (dont_interrupt) {
                 EMIT_TOKEN(LIST_MARKER_PLUS_DONT_INTERRUPT);
             } else {
@@ -1376,6 +1430,8 @@ static bool parse_ordered_list_marker(Scanner *s, TSLexer *lexer,
                         push_block(
                             s, (Block)(LIST_ITEM + extra_indentation + digits));
                     // }
+                    // No mark_end during this call: the token ends at the lexer.
+                    note_line_content_start(s, lexer);
                     if (dot) {
                         EMIT_TOKEN(LIST_MARKER_DOT);
                     } else {
@@ -1662,6 +1718,8 @@ static bool parse_example_list_marker(Scanner *s, TSLexer *lexer,
             }
             // Use 3 as the indentation offset (length of "(@)")
             push_block(s, (Block)(LIST_ITEM + extra_indentation + 3));
+            // No mark_end during this call: the token ends at the lexer.
+            note_line_content_start(s, lexer);
             if (dont_interrupt) {
                 EMIT_TOKEN(LIST_MARKER_EXAMPLE_DONT_INTERRUPT);
             } else {
@@ -1854,6 +1912,7 @@ static bool parse_minus(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                    list_marker_minus) {
             if (minus_count == 1) {
                 mark_end(s, lexer);
+                note_line_content_start(s, lexer);
             }
             extra_indentation--;
             if (extra_indentation <= 3) {
@@ -2591,11 +2650,35 @@ static bool parse_shortcode_open(Scanner *s, TSLexer *lexer, const bool *valid_s
     EMIT_TOKEN(SHORTCODE_OPEN_ESCAPED);
 }
 
+// ---------------------------------------------------------------------------
+// Bare `@` (bd-bare-at-literal-w3ytmu8e).
+//
+// An `@` used to be a citation start unconditionally, so any `@` without a
+// key after it (`main @ sha`, `a @`) failed the document with an uncoded
+// parse error. Pandoc reads every such `@` as text, but q2 deliberately
+// does not follow it all the way: an `@` next to citation-like punctuation
+// (`@-foo`, `@,`, `(see @)`, `-@`, `@@`, `@}`) is far more likely a
+// mistyped citation than prose, and guessing would let the typo reach the
+// output. So an `@` is literal text only when it cannot be read as a
+// citation attempt:
+//
+// - standalone: preceded by whitespace or line start AND followed by
+//   whitespace, EOL or EOF (`a @ b`), or directly by a quote (`a @"x"`).
+//   That shape is decided here and emitted as LITERAL_STR (the bd-j9cf
+//   token, folded into `pandoc_str` by the grammar);
+// - inside or at the end of a word (`user@example.com`, `word@`): the
+//   scanner cannot see the character before the `@`, so this is decided
+//   by the lexer instead — PANDOC_REGEX_STR in grammar.js lets an `@`
+//   continue a word after an alphanumeric, and the word is lexed before
+//   the scanner ever sees its `@`.
+//
+// Every other `@` keeps emitting the citation delimiter; when no key
+// follows, the grammar reports the missing key as an error.
+
 static bool parse_cite_author_in_text(Scanner *s, TSLexer *lexer,
                                       const bool *valid_symbols) {
-    // unused
-    (void)(s);
-
+    // Must be computed before advancing past the `@`.
+    bool preceded_by_ws = at_ws_or_line_content_start(s, lexer);
     lexer->advance(lexer, false);
     if (lexer->lookahead == '{' && valid_symbols[CITE_AUTHOR_IN_TEXT_WITH_OPEN_BRACKET]) {
         lexer->advance(lexer, false);
@@ -2603,7 +2686,17 @@ static bool parse_cite_author_in_text(Scanner *s, TSLexer *lexer,
         // brackets.
         lexer->mark_end(lexer);
         EMIT_TOKEN(CITE_AUTHOR_IN_TEXT_WITH_OPEN_BRACKET);
-    } else if (valid_symbols[CITE_AUTHOR_IN_TEXT]) {
+    }
+    // A key never starts with whitespace or a quote, so this cannot steal
+    // a citation.
+    bool standalone = preceded_by_ws &&
+        (at_ws_or_eol(lexer) || lexer->lookahead == '"' ||
+         lexer->lookahead == '\'');
+    if (standalone && valid_symbols[LITERAL_STR]) {
+        lexer->mark_end(lexer);
+        EMIT_TOKEN(LITERAL_STR);
+    }
+    if (valid_symbols[CITE_AUTHOR_IN_TEXT]) {
         lexer->mark_end(lexer);
         EMIT_TOKEN(CITE_AUTHOR_IN_TEXT);
     }
@@ -2885,6 +2978,8 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 s->state &= (~STATE_MATCHING);
             }
             DEBUG_PRINT("STATE_WAS_SOFT_LINE_BREAK: %s\n", (s->state & STATE_WAS_SOFT_LINE_BREAK) ? "true": "false");
+            // match_line never calls mark_end: the token ends at the lexer.
+            note_line_content_start(s, lexer);
             EMIT_TOKEN(BLOCK_CONTINUATION);
         }
 
@@ -3434,6 +3529,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                     // No peek; mark_end at post-indent so the token absorbs
                     // the indent (original behavior).
                     lexer->mark_end(lexer);
+                    note_line_content_start(s, lexer);
                 }
                 DEBUG_PRINT("set STATE_WAS_SOFT_LINE_BREAK\n");
                 EMIT_TOKEN(SOFT_LINE_ENDING);
@@ -3632,6 +3728,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                     // SOFT_LINE_ENDING token's range; leave the range where
                     // the earlier mark_end put it.
                     lexer->mark_end(lexer);
+                    note_line_content_start(s, lexer);
                 }
                 EMIT_TOKEN(SOFT_LINE_ENDING);
             }
@@ -3680,7 +3777,14 @@ bool tree_sitter_markdown_external_scanner_scan(void *payload, TSLexer *lexer,
                                                 const bool *valid_symbols) {
     Scanner *scanner = (Scanner *)payload;
     scanner->simulate = false;
-    return scan(scanner, lexer, valid_symbols);
+    scanner->pending_line_content_column = 0;
+    bool found = scan(scanner, lexer, valid_symbols);
+    if (found) {
+        // Every emitted token replaces the anchor, so it only ever
+        // describes the position right after the token that set it.
+        scanner->line_content_column = scanner->pending_line_content_column;
+    }
+    return found;
 }
 
 unsigned tree_sitter_markdown_external_scanner_serialize(void *payload,
