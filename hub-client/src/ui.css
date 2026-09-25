@@ -255,6 +255,18 @@
 .qh-menu-item.accent { color: var(--accent-action-text); font-weight: 600; }
 .qh-menu-item.danger { color: var(--error-text); }
 
+/* Optional leading icon inside the label. */
+.qh-menu-item-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.qh-menu-item-icon {
+  display: inline-flex;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
 .qh-menu-item.with-hint {
   flex-direction: row;
   align-items: center;

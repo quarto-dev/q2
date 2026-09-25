@@ -22,6 +22,7 @@ import {
   FilePlusIcon,
   UploadIcon,
   FolderPlusIcon,
+  ShareIcon,
   DownloadIcon,
 } from './icons';
 import FileTreeRow from './FileTreeRow';
@@ -43,11 +44,15 @@ export interface FileSidebarProps {
   currentFile: FileEntry | null;
   onSelectFile: (file: FileEntry) => void;
   onNewFile: () => void;
+  /** Open the new-file dialog seeded with `folder` (folder context menu). */
+  onNewFileIn?: (folder: string) => void;
   /**
    * Create an empty folder under `parent` ('' = project root). Shown as a
    * header button and as a folder context-menu entry when provided.
    */
   onNewFolder?: (parent: string) => void;
+  /** Open the move dialog for a file (file context menu). */
+  onMoveFile?: (file: FileEntry) => void;
   /** Delete an explicitly created folder; only offered when it is empty. */
   onDeleteFolder?: (path: string) => void;
   /**
@@ -127,8 +132,10 @@ export default function FileSidebar({
   currentFile,
   onSelectFile,
   onNewFile,
+  onNewFileIn,
   onNewFolder,
   onDeleteFolder,
+  onMoveFile,
   onUploadFiles,
   onDeleteFile,
   onRenameFile,
@@ -533,7 +540,7 @@ export default function FileSidebar({
 
   const handleFolderContextMenu = useCallback(
     (e: React.MouseEvent, node: FileTreeNode) => {
-      if (!onNewFolder && !onDeleteFolder) return;
+      if (!onNewFileIn && !onNewFolder && !onDeleteFolder && !onUploadFiles) return;
       e.preventDefault();
       e.stopPropagation();
       setFolderMenu({
@@ -545,7 +552,7 @@ export default function FileSidebar({
         trigger: e.currentTarget as HTMLElement,
       });
     },
-    [onNewFolder, onDeleteFolder]
+    [onNewFileIn, onNewFolder, onDeleteFolder, onUploadFiles]
   );
 
   // Rename handlers
@@ -652,7 +659,9 @@ export default function FileSidebar({
     setMoveTarget(null);
   }, []);
 
-  const hasFileActions = !!(onOpenInNewTab || onCopyLink || onRenameFile || onDeleteFile);
+  const hasFileActions = !!(
+    onOpenInNewTab || onCopyLink || onRenameFile || onMoveFile || onDeleteFile
+  );
 
   // Render a file item with depth-based indentation
   const renderFileItem = (file: FileEntry, depth: number) => {
@@ -967,11 +976,19 @@ export default function FileSidebar({
           triggerRef={{ current: folderMenu.trigger ?? null }}
           aria-label={fileSidebar.folderActionsFor(folderMenu.path)}
         >
+          {onNewFileIn && (
+            <MenuItem icon={<FilePlusIcon />} onSelect={() => onNewFileIn(folderMenu.path)}>
+              {fileSidebar.menuNewFileInside}
+            </MenuItem>
+          )}
           {onNewFolder && (
-            <MenuItem onSelect={() => onNewFolder(folderMenu.path)}>
+            <MenuItem icon={<FolderPlusIcon />} onSelect={() => onNewFolder(folderMenu.path)}>
               {fileSidebar.menuNewFolderInside}
             </MenuItem>
           )}
+          <MenuItem icon={<UploadIcon />} onSelect={() => onUploadFiles([], folderMenu.path)}>
+            {fileSidebar.menuNewAssetInside}
+          </MenuItem>
           {onDeleteFolder && (
             <MenuItem
               danger
@@ -1002,13 +1019,18 @@ export default function FileSidebar({
             </MenuItem>
           )}
           {onCopyLink && (
-            <MenuItem onSelect={() => handleCopyLink(contextMenu.file!)}>
+            <MenuItem icon={<ShareIcon />} onSelect={() => handleCopyLink(contextMenu.file!)}>
               {fileSidebar.menuCopyLink}
             </MenuItem>
           )}
           {onRenameFile && (
             <MenuItem onSelect={() => startRename(contextMenu.file!)}>
               {fileSidebar.menuRename}
+            </MenuItem>
+          )}
+          {onMoveFile && (
+            <MenuItem onSelect={() => onMoveFile(contextMenu.file!)}>
+              {fileSidebar.menuMove}
             </MenuItem>
           )}
           {onDeleteFile && (

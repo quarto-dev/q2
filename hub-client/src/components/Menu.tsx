@@ -304,6 +304,8 @@ export function Menu({
 
 export interface MenuItemProps {
   onSelect: () => void;
+  /** Leading icon, rendered before the label. */
+  icon?: ReactNode;
   /** Destructive action — must be confirm-guarded or undoable (see header). */
   danger?: boolean;
   strong?: boolean;
@@ -320,6 +322,7 @@ export interface MenuItemProps {
 
 export function MenuItem({
   onSelect,
+  icon,
   danger,
   strong,
   accent,
@@ -354,7 +357,10 @@ export function MenuItem({
         onSelect();
       }}
     >
-      <span className="qh-menu-item-label">{children}</span>
+      <span className="qh-menu-item-label">
+        {icon && <span className="qh-menu-item-icon">{icon}</span>}
+        {children}
+      </span>
       {hint && <span className="qh-menu-hint">{hint}</span>}
       {subtext && <span className="qh-menu-subtext">{subtext}</span>}
     </button>

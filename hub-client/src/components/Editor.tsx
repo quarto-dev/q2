@@ -51,6 +51,7 @@ import EphemeralSessionBanner from './EphemeralSessionBanner';
 import FileSidebar from './FileSidebar';
 import NewFileDialog from './NewFileDialog';
 import NewFolderDialog from './NewFolderDialog';
+import MoveFileDialog from './MoveFileDialog';
 import NewAssetDialog from './NewAssetDialog';
 import ShareDialog from './ShareDialog';
 import ProjectTopBar from './ProjectTopBar';
@@ -433,6 +434,8 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
   const [showNewFileDialog, setShowNewFileDialog] = useState(false);
   // Parent folder for the new-folder dialog; null = dialog closed.
   const [newFolderParent, setNewFolderParent] = useState<string | null>(null);
+  // File being moved via the move dialog; null = dialog closed.
+  const [movingFile, setMovingFile] = useState<FileEntry | null>(null);
 
   // Every folder in the project: explicitly created ones plus those
   // implied by file paths. Feeds the folder pickers in both dialogs.
@@ -1191,6 +1194,12 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
     }
   }, [currentFile, files]);
 
+  // Open the new-file dialog seeded with `folder` ('' = project root).
+  const handleNewFileIn = useCallback((folder: string) => {
+    setNewFileInitialName(folder ? `${folder}/` : '');
+    setShowNewFileDialog(true);
+  }, []);
+
   // Open the new-folder dialog for `parent` ('' = project root).
   const handleNewFolder = useCallback((parent: string) => {
     setNewFolderParent(parent);
@@ -1264,8 +1273,10 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
                         currentFile={currentFile}
                         onSelectFile={handleSelectFile}
                         onNewFile={handleNewFile}
+                        onNewFileIn={handleNewFileIn}
                         onNewFolder={handleNewFolder}
                         onDeleteFolder={handleDeleteFolder}
+                        onMoveFile={setMovingFile}
                         onUploadFiles={handleUploadFiles}
                         onDeleteFile={handleDeleteFile}
                         onRenameFile={handleRenameFile}
@@ -1596,6 +1607,15 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
         }}
         onCreateTextFile={handleCreateTextFile}
         initialFilename={newFileInitialName}
+      />
+
+      {/* Move file dialog */}
+      <MoveFileDialog
+        file={movingFile}
+        folders={allFolders}
+        existingPaths={files.map((f) => f.path)}
+        onClose={() => setMovingFile(null)}
+        onMove={handleRenameFile}
       />
 
       {/* New folder dialog */}

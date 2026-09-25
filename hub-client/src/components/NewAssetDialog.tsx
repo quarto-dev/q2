@@ -265,6 +265,8 @@ export default function NewAssetDialog({
                   {dialogs.newAsset.browse}
                 </button>
                 <p className="size-hint">{dialogs.newAsset.maxSize(maxMB)}</p>
+                <p className="hint">{dialogs.newAsset.dropZoneOr}</p>
+                <p className="hint">{dialogs.newAsset.sidebarHint}</p>
               </>
             ) : (
               <div className="file-previews">
