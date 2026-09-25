@@ -24,7 +24,7 @@ import re
 import sys
 from pathlib import Path
 
-FENCE = re.compile(r"^\s*(`{3,}|~{3,})")
+FENCE = re.compile(r"^(\s*)(`{3,}|~{3,})")
 # Regions inside a line that must not be edited.
 PROTECTED = re.compile(
     r"(`+)(?:.*?[^`])?\1(?!`)"          # code span
@@ -39,7 +39,7 @@ def sweep(text, pattern):
     lines = text.split("\n")
     out = []
     edits = []
-    fence = None      # the opening fence string while inside a fenced block
+    fence = None      # (indent, fence run) of the open fenced block, if any
     in_front = lines and lines[0].strip() == "---"
     in_math = False
     in_comment = False
@@ -51,13 +51,16 @@ def sweep(text, pattern):
             continue
         m = FENCE.match(line)
         if fence is not None:
-            if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence) \
-                    and line.strip() == m.group(1):
+            # a closer is the same character, at least as long, nothing else on
+            # the line, and indented at most 3 columns past the opener
+            indent, run = fence
+            if m and m.group(2)[0] == run[0] and len(m.group(2)) >= len(run) \
+                    and line.strip() == m.group(2) and len(m.group(1)) <= indent + 3:
                 fence = None
             out.append(line)
             continue
         if m:
-            fence = m.group(1)
+            fence = (len(m.group(1)), m.group(2))
             out.append(line)
             continue
         if line.strip().startswith("$$"):
