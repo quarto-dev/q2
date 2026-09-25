@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-12
 **Braid:** bd-lone-bracket-diagnostic-mxu41qbt
-**Branch:** `braid/bd-lone-bracket-diagnostic-warning-suppression`, based on `main` @ `593f2785` (no worktree — investigation ran in the room-3 checkout)
+**Branch:** `braid/bd-lone-bracket-diagnostic-warning-suppression`, based on `main` \@ `593f2785` (no worktree — investigation ran in the room-3 checkout)
 **Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
 
 ## Triage verdict
@@ -101,7 +101,7 @@ Confirmed by search across `crates/quarto-config/src`, `crates/quarto-core/src`,
 
 `claude-notes/plans/2026-07-02-strict-mode-warnings-as-errors.md` is the map. Its findings, re-verified at HEAD:
 
-- **No emission chokepoint.** Warnings are pushed into `StageContext.diagnostics`, `RenderContext.diagnostics` (`render.rs:233`), pampa's `DiagnosticCollector`, ~15 transforms taking a bare `&mut Vec<DiagnosticMessage>`, and Lua `quarto.warn()` harvesting. Filtering at emission would be unsustainable.
+- **No emission chokepoint.** Warnings are pushed into `StageContext.diagnostics`, `RenderContext.diagnostics` (`render.rs:233`), pampa's `DiagnosticCollector`, \~15 transforms taking a bare `&mut Vec<DiagnosticMessage>`, and Lua `quarto.warn()` harvesting. Filtering at emission would be unsustainable.
 - **Everything converges on `ProjectRenderSummary`** (`crates/quarto-core/src/project/orchestrator.rs:481`) through exactly four fields: `pass1_failures[].diagnostics`, `pass2_failures[].diagnostics`, `project_diagnostics`, and per-output `outputs[].render_output.diagnostics` (via the `OutputDiagnostics` trait, `:546`).
 - **The policy hook is already written and shipped**: `ProjectRenderSummary::promote_warnings_to_errors()` (`orchestrator.rs:617`) walks all four sources post-run, pre-print. `OutputDiagnostics::diagnostics_mut()` exists specifically so policies can rewrite diagnostics in place. `should_exit_nonzero` (`render.rs:1118`) is the one exit gate.
 
@@ -181,7 +181,7 @@ Why a **per-code severity map** rather than a flat `suppress: [Q-2-49]` list: it
 
 Once A ships: add a third trigger to `reference_link_diagnostics.rs` for a lone `is_bare_span`, under a new code (**Q-2-49** — Q-2-48 is the current maximum in `error_catalog.json`), pointing at `\[`/`\]` escaping as the fix. Then rewrite the module docs, whose central claim ("no way to tell it apart from a deliberate span") is what A dissolves.
 
-Downstream: `qmd-syntax-helper`'s `literal-brackets` rule (`crates/qmd-syntax-helper/src/conversions/literal_brackets.rs`) can become a diagnostic-code-keyed `q_2_49.rs` rule like its siblings, instead of the run-`check`-first special case it is today. It should probably **stay** opt-in for `convert -r all` regardless — the rule's own header explains why (an escape is a source edit that cannot afterwards be distinguished from author intent), and that reasoning is independent of the diagnostic.
+Downstream: `qmd-syntax-helper`\'s `literal-brackets` rule (`crates/qmd-syntax-helper/src/conversions/literal_brackets.rs`) can become a diagnostic-code-keyed `q_2_49.rs` rule like its siblings, instead of the run-`check`-first special case it is today. It should probably **stay** opt-in for `convert -r all` regardless — the rule's own header explains why (an escape is a source edit that cannot afterwards be distinguished from author intent), and that reasoning is independent of the diagnostic.
 
 Before shipping B, **measure the noise**: run the detection over a real corpus (`docs/`, the Connect docs, `crates/pampa` fixtures) and count how many lone bare spans exist in documents nobody considers broken. If the count is near zero, B is uncontroversial. If it is large, the count itself is the argument for how good A's ergonomics have to be.
 
@@ -286,7 +286,7 @@ the only signal, and only because each side wrote a docs page.
 ### Follow-up strands filed
 
 - **bd-91rgxmav** — warning-suppression v1 follow-ups (validation, rot control, `--show-suppressed`, globs, per-line, project-scoped coverage, the codes lint, additional levels).
-- **bd-cljk1g5p** — re-key `qmd-syntax-helper`'s `literal-brackets` rule to the `q_2_49.rs` convention.
+- **bd-cljk1g5p** — re-key `qmd-syntax-helper`\'s `literal-brackets` rule to the `q_2_49.rs` convention.
 
 Both linked `discovered-from` this strand.
 

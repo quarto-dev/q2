@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-08
 **Braid:** bd-of20unsb (P2, bug)
-**Checkout:** main worktree at `main` @ `e5fc4ffb` (post-merge of PR #474)
+**Checkout:** main worktree at `main` \@ `e5fc4ffb` (post-merge of PR #474)
 **Status:** Implemented 2026-08-08, all phases complete on local `main`
 (commits `e2cda047` → docs). Full `cargo xtask verify` green (incl. WASM
 leg). **Not pushed — awaiting user review + push approval.** Follow-up
@@ -69,7 +69,7 @@ Two findings beyond the strand description:
 
 1. **The failure is worse than "drops the bundled SCSS": the *entire* theme
    list is dropped.** `styles.css` is the 7 KB static `DEFAULT_CSS` — even the
-   valid `cosmo` entry is gone (a compiled cosmo is ~321 KB). One bad entry
+   valid `cosmo` entry is gone (a compiled cosmo is \~321 KB). One bad entry
    nukes the whole theme.
 2. **The warning is invisible even with `-v`.** The fallback site logs via
    `trace_event!(EventLevel::Warn, …)`, which routes to `tracing::warn!`;
@@ -84,7 +84,7 @@ missing piece is exactly the ext-dir → doc-dir rebase.
 
 1. **Read side** — `crates/quarto-core/src/extension/read.rs:218`:
    `PATH_VALUED_KEYS = ["template", "template-partials", "shortcodes"]` (plus
-   special-cased `filters`). `mark_path_valued_keys` flips only those keys'
+   special-cased `filters`). `mark_path_valued_keys` flips only those keys\'
    string values to `ConfigValueKind::Path`. `theme`, `css`, `include-*` etc.
    stay `Scalar`.
 2. **Merge side** — `crates/quarto-core/src/stage/stages/metadata_merge.rs:268-273`:

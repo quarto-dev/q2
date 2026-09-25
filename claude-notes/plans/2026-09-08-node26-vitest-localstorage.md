@@ -2,12 +2,12 @@
 
 **Date:** 2026-09-08
 **Braid:** bd-lh30hlvd
-**Worktree:** `.worktrees/bd-lh30hlvd-node-version-guard` (branch `braid/bd-lh30hlvd-node-version-guard`, based on `main` @ `b7e7c96a`)
+**Worktree:** `.worktrees/bd-lh30hlvd-node-version-guard` (branch `braid/bd-lh30hlvd-node-version-guard`, based on `main` \@ `b7e7c96a`)
 **Status:** Executing — direction agreed with the user on 2026-09-08 (see § Decision).
 
 ## Overview
 
-`cargo xtask verify`'s hub-client leg went red on this machine because a routine
+`cargo xtask verify`\'s hub-client leg went red on this machine because a routine
 `brew upgrade` on 2026-09-04 relinked `/opt/homebrew/bin/node` from node@24 to node 26.8.1.
 Node ≥ 25 defines a `localStorage` accessor on `globalThis` (returning `undefined` without
 `--localstorage-file`), and vitest 4.x's jsdom environment skips window keys that already

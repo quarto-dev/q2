@@ -3,7 +3,7 @@
 **Date:** 2026-08-12
 **Braid:** bd-adjacent-footnote-definitions-miif1k1z (bug, p2, label `parser`)
 **Worktree:** `.worktrees/bd-adjacent-footnote-definitions-miif1k1z-adjacent-footnote-definitions-merge`
-(branch `braid/bd-adjacent-footnote-definitions-miif1k1z-adjacent-footnote-definitions-merge`, based on `main` @ `7bcddf61`)
+(branch `braid/bd-adjacent-footnote-definitions-miif1k1z-adjacent-footnote-definitions-merge`, based on `main` \@ `7bcddf61`)
 **Pre-flight:** `cargo xtask verify --skip-hub-build` **green** before any change
 (11728 tests run, 11728 passed, 197 skipped; all 14 steps passed). Run in the
 main checkout at `c28cfd81`; `main` has since been reset to `7bcddf61`, which
@@ -24,7 +24,7 @@ progress.** See "Design decisions (settled)" below.
 **Ready to design**, but the fix as filed rests on one false premise and one
 unexamined behavior choice, both of which the user has to settle first (Q1 and
 Q2 below). The root cause is confirmed exactly as described; the mechanical fix
-is a ~30-line mirror of 92737cdd. What is *not* settled is whether a `[^id]:`
+is a \~30-line mirror of 92737cdd. What is *not* settled is whether a `[^id]:`
 line should interrupt an ordinary paragraph — Pandoc says no, and q2's own
 model says yes.
 
@@ -80,10 +80,10 @@ described shape (line numbers have drifted since filing):
 
 | Description says | Actually at HEAD |
 | --- | --- |
-| `inline_ref_def: seq(ref_id_specifier, _whitespace, pandoc_paragraph)` @ grammar.js:283 | grammar.js:283 — **exact match** |
-| gate 1 leader list @ scanner.c ~2939-2945 | scanner.c:2940-2947 |
-| gate 2 leader list @ scanner.c ~3120-3123 | scanner.c:3118-3125 |
-| `parse_ref_id_specifier` @ scanner.c:1795 | scanner.c:1795 — **exact match** |
+| `inline_ref_def: seq(ref_id_specifier, _whitespace, pandoc_paragraph)` \@ grammar.js:283 | grammar.js:283 — **exact match** |
+| gate 1 leader list \@ scanner.c ~2939-2945 | scanner.c:2940-2947 |
+| gate 2 leader list \@ scanner.c ~3120-3123 | scanner.c:3118-3125 |
+| `parse_ref_id_specifier` \@ scanner.c:1795 | scanner.c:1795 — **exact match** |
 | `peek_ordered_marker` / `peek_dash_plus_opens_block` | scanner.c:1359 / 1400 |
 
 Confirmed: `'['` is absent from both leader lists. A `[`-leading continuation

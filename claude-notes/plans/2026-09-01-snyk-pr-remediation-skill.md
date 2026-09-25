@@ -126,7 +126,7 @@ Verification for the katex case:
 - [x] Write `.claude/skills/snyk-pr/SKILL.md` (generic workflow) +
       `references/katex.md` + `references/paired-packages.md`; add the
       `.agents/skills/` symlink
-- [x] Commit the skill (repo artifact, so colleagues' sessions get it)
+- [x] Commit the skill (repo artifact, so colleagues\' sessions get it)
 
 ### Phase 2 — validate on PR #637 (dogfood)
 

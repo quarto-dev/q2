@@ -34,7 +34,7 @@ make the fold a no-op or a type error if implemented as written.
 > … and `tempDir` …; plus the optional `libDir` … and the minimal `projectDir`
 > shim. Note `target` and `resourceDir` are mandatory and were easy to miss …"
 
-The plan enumerates `DependenciesOptions`' required fields but **the
+The plan enumerates `DependenciesOptions`\' required fields but **the
 constructed object never carries `dependencies`** — the array of raw engine
 deps. It is mentioned nowhere in step 4.
 

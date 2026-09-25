@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-18
 **Braid:** bd-heading-id-attr-duplicated-xbpcmejr (p2, bug, label `markdown`)
-**Checkout:** main checkout, branch `main` @ `0c3542d0`
+**Checkout:** main checkout, branch `main` \@ `0c3542d0`
 **Status:** Merged and closed 2026-08-19 — PR #556 (`f387bd68`); strand
 bd-heading-id-attr-duplicated-xbpcmejr closed. Open follow-ups:
 bd-fffjzi5s (class-charset writer fallback, p3), bd-0vfgz2cl (per-word
@@ -55,7 +55,7 @@ port fragment-parity goal described in the strand body.
 
 ## What the code looks like today
 
-All paths verified at `main` @ `0c3542d0`; symptom reproduced (see
+All paths verified at `main` \@ `0c3542d0`; symptom reproduced (see
 `heading-id-kv-attribute-investigation/observed-2026-08-18.md`).
 
 - **Single reader-side choke point exists.**

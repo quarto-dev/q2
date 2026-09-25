@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-14
 **Braid:** `bd-add-html-dependency-version-5tnub5ds`
-**Branch:** `main` @ `3ac596e0` (investigated in place; no worktree created)
+**Branch:** `main` \@ `3ac596e0` (investigated in place; no worktree created)
 **Status:** Implemented and verified 2026-08-14 (full `cargo xtask verify`
 green, all 14 steps). All design questions settled (§ Decisions, § Settled
 design). One follow-up remains: tell the connect-docs side to drop its
@@ -31,7 +31,7 @@ reported symptom.
    the eventual design is expected to involve reworking the execution-output
    automerge sidecar into a more portable format, likely `.ipynb`-based — but
    whatever lands **will need multi-version dependency support**, so the field
-   has to mean something now rather than be trained out of users' extensions.
+   has to mean something now rather than be trained out of users\' extensions.
 
    This supersedes the "cosmetic parity" framing in Finding 2 below: the
    requirement is real, it just isn't *Q1's* requirement (see the amendment

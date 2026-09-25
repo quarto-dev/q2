@@ -4,7 +4,7 @@
 - **Triage:** `claude-notes/issue-reports/152/q236-triage.md`
 - **Fixtures:** `claude-notes/issue-reports/152/q236-repro.qmd`, `q236-repro-variants.qmd`
 - **Beads:** bd-j4fe
-- **Branch:** `issue-152` (based on `bugfix/issue-184` @ `e2d224f6`; will rebase onto `main` once #184 lands)
+- **Branch:** `issue-152` (based on `bugfix/issue-184` \@ `e2d224f6`; will rebase onto `main` once #184 lands)
 - **Approach:** upgrade the existing Q-2-8 warning site to a Q-2-36 *error*; Merr-map the parse-error forms that already error today. **No `scanner.c` change, no `grammar.js` change.** See triage `Approach` section for why scanner-emit is the wrong shape here.
 
 ## Overview

@@ -2,14 +2,14 @@
 
 **To:** whoever picks up `posit-dev/quarto-source-map`
 **From:** q2 session on bd-9yh3pzfu / bd-2mxo (2026-08-06)
-**Checkout:** `~/repos/github/posit-dev/quarto-source-map` @ `b61b447` (release-0.1.1)
+**Checkout:** `~/repos/github/posit-dev/quarto-source-map` \@ `b61b447` (release-0.1.1)
 **Consumer evidence:** `~/rooms/room-1/q2` (q2 monorepo)
 **Scope:** small and self-contained. This is the *only* piece of the
 bd-2mxo investigation that lives outside q2.
 
 ## The problem
 
-`SourceInfo`'s `Default` impl returns a well-formed `Original` span:
+`SourceInfo`\'s `Default` impl returns a well-formed `Original` span:
 
 ```rust
 // src/source_info.rs:139-147

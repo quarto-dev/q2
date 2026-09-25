@@ -140,4 +140,4 @@ Recorded because several reverse an earlier decision above.
 ## Resolved questions
 
 1. ~~How much of "what works today" to include~~ — none; see 7.
-2. The invite cards' footnote keeps "New to Quarto Hub? Learn more."
+2. The invite cards\' footnote keeps "New to Quarto Hub? Learn more."

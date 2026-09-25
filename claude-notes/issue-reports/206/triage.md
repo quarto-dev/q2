@@ -3,7 +3,7 @@
 - **GitHub**: https://github.com/quarto-dev/q2/issues/206
 - **Reporter**: @rundel (Colin Rundel), 2026-05-15
 - **Triage date**: 2026-05-15
-- **Worktree**: `.worktrees/issue-206` (branch `issue-206`, based on `main` @ `09b2de7e`)
+- **Worktree**: `.worktrees/issue-206` (branch `issue-206`, based on `main` \@ `09b2de7e`)
 - **Beads issue**: bd-expy
 - **Scope**: the specific parse failure when a `:::` line directly follows a pipe table row. Adjacent oddities found during triage (pipe table absorbing trailing block content as cells) are flagged but **not** in scope for this issue.
 

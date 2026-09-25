@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-11
 **Braid:** bd-page-footer-items-f4th80mj (bug, P1, labels `parity` / `websites`)
-**Branch:** `braid/bd-page-footer-items-f4th80mj-nav-item-text`, off `main` @ `6516a330`, in the main checkout (`/Users/cscheid/rooms/room-1/q2`) — no worktree, per decision 6. Investigation was committed on `main` first (`6632884b`).
+**Branch:** `braid/bd-page-footer-items-f4th80mj-nav-item-text`, off `main` \@ `6516a330`, in the main checkout (`/Users/cscheid/rooms/room-1/q2`) — no worktree, per decision 6. Investigation was committed on `main` first (`6632884b`).
 **Status:** **Implemented and verified.** All six design questions answered by Carlos (see "Settled decisions"); all five defects fixed and verified end-to-end; full workspace suite green. Awaiting PR + review.
 
 ## Settled decisions (2026-08-11)
@@ -251,7 +251,7 @@ Contents depend on the design answers below; ordering does not.
 ## Risks / tradeoffs (draft)
 
 - **Behavior change for existing sites, silently.** Blessing more paths means any existing site whose item `text:` happens to contain `*`, `_`, `<`, or `&…;` changes rendering with no warning. Same tradeoff the 2026-08-10 strand already accepted for `website.title`, so it's precedent rather than a new risk — but the repro set should include a "text that looks like markdown but wasn't meant to be" case so the behavior is pinned, not incidental.
-- **`!str` cannot opt out.** Per `config_markdown.rs`'s own module docs, a `!str`-tagged project-config string is indistinguishable from an untagged one after load. So there is *no* escape hatch for an author who wants literal `*text*` in an item label, beyond backslash-escaping. Worth deciding whether that's acceptable at this blast radius, or whether the registry needs a genuine opt-out first.
+- **`!str` cannot opt out.** Per `config_markdown.rs`\'s own module docs, a `!str`-tagged project-config string is indistinguishable from an untagged one after load. So there is *no* escape hatch for an author who wants literal `*text*` in an item label, beyond backslash-escaping. Worth deciding whether that's acceptable at this blast radius, or whether the registry needs a genuine opt-out first.
 - **Sequencing is load-bearing.** Fixing (1) without (5) actively *creates* invalid HTML (nested anchors) on the Connect docs. Do not split these across PRs.
 - **Snapshot churn** across `quarto-navigation` and any website-fixture snapshots. Per the repo's snapshot policy, count and summarize them in the commit message, and flag anything that changed for a reason other than "item text is now rendered".
 - **Two mechanisms remain in the tree** after this. Both are documented as temporary pending schema-driven interpretation. Someone will propose extending the wrong one again; a cross-reference note in `meta_annotations.rs` pointing at `config_markdown.rs` (and vice versa) would be cheap insurance. Worth filing as a follow-up chore.

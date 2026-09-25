@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-11
 **Braid:** `bd-lua-filter-table-form-ignored-ph23becz` (bug, p1, labels `pampa` / `parity`)
-**Branch:** `main` @ `808215fc` (investigated in the main checkout; no worktree created)
+**Branch:** `main` \@ `808215fc` (investigated in the main checkout; no worktree created)
 **Status:** Complete and awaiting review — **PR #508**
 (`bugfix/bd-lua-filter-table-form-ignored-ph23becz`), all 8 CI checks green.
 All phases done. `main` was never touched: the work was developed in the main
@@ -77,7 +77,7 @@ lua.load(&filter_source)
 let filter_table = get_filter_table(&lua)?;   // <-- globals only
 ```
 
-`get_filter_table` (`filter.rs:323`) walks a hardcoded list of ~50 element
+`get_filter_table` (`filter.rs:323`) walks a hardcoded list of \~50 element
 names and copies same-named globals into a fresh table. Its doc comment
 describes a contract the code never implemented — and never has: the function
 arrived with the original Lua-filter landing (`0f9fc8da`, 2025-12-02) already
@@ -100,7 +100,7 @@ the returned-table form has never worked in q2.
 - The walker is entirely **name-agnostic**: `inline_fn`/`block_fn`
   (`walk.rs:339,349`) look handlers up by tag with `filter.get::<Function>(tag)`,
   and `pass_is_active` (`walk.rs:421`) iterates the table's own keys rather than
-  a whitelist. So a returned table needs **no name list at all** — the ~50-name
+  a whitelist. So a returned table needs **no name list at all** — the \~50-name
   whitelist is an artifact of the globals path only, and would keep applying
   just to that path.
 - `get_walking_order` (`filter.rs:88`) already reads `traverse` off whatever
@@ -221,7 +221,7 @@ observed failure recorded in the phase log.
 - [x] 0.1 Unit tests, returned-table forms — `crates/pampa/src/lua/filter_tests.rs`
       (TempDir + `apply_lua_filter`, the existing idiom): single table; list
       applied in order; `traverse` on a returned table; per-entry `traverse` in
-      a list; handler name outside the old ~50-name whitelist works in a
+      a list; handler name outside the old \~50-name whitelist works in a
       returned table.
 - [x] 0.2 Unit tests, globals path unchanged — script returning nothing still
       builds its filter from globals.
@@ -274,7 +274,7 @@ observed failure recorded in the phase log.
       `LuaBlock::tag_name` plus the catch-alls (`Pandoc`, `Doc`, `Meta`,
       `Inline`, `Inlines`, `Block`, `Blocks`). **One source of truth** — do not
       hand-write a third list.
-- [x] 3.4 Point `get_filter_table`'s globals scan at that set, which fixes
+- [x] 3.4 Point `get_filter_table`\'s globals scan at that set, which fixes
       **bd-18a2r2lp** (the five dropped tags) as a side effect rather than as
       separate work.
 - [x] 3.5 Add the unrecognized-handler-name warning (new code, likely

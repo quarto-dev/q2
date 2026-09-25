@@ -255,7 +255,7 @@ Need to capture separate nodes for TableHead, TableBody, TableFoot, Caption.
 
 **Challenge**: Current parsing doesn't have explicit nodes for thead/tbody/tfoot - they're implicitly constructed based on header presence. Need to:
 - Use header node's range for TableHead source
-- Use body rows' aggregate range for TableBody source
+- Use body rows\' aggregate range for TableBody source
 - Use empty/zero range for TableFoot (since pipe tables don't have footers)
 - Capture caption node range when present
 

@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-10
 **Braid:** bd-4b7f1hr7
-**Checkout:** room-2 main checkout, branch `main` @ `e628a18f` (investigation committed here; implementation stacks on `feature/revealjs-render-preview-convergence`, PR #271 — decided [Q1])
+**Checkout:** room-2 main checkout, branch `main` \@ `e628a18f` (investigation committed here; implementation stacks on `feature/revealjs-render-preview-convergence`, PR #271 — decided [Q1])
 **Status:** DONE (2026-06-10) — all phases complete, full `cargo xtask verify`
 green on branch `beads/bd-4b7f1hr7-q2-preview-audit-html` (stacked on PR
 #271's `feature/revealjs-render-preview-convergence`). Not pushed. Follow-up
@@ -53,7 +53,7 @@ source/codepath + a sync/identity check, keeping the React preview path.
   polish (epic phase D territory). Epic integration branch convention says
   sub-task work normally branches off the epic's integration line — see [Q1].
 
-## What the code looks like today (audit findings, `main` @ e628a18f + PR #271)
+## What the code looks like today (audit findings, `main` \@ e628a18f + PR #271)
 
 ### (1) Theme CSS codepath: SHARED — but output identity is unverified
 

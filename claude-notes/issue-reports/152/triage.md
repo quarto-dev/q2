@@ -3,7 +3,7 @@
 - **GitHub**: https://github.com/quarto-dev/q2/issues/152
 - **Reporter**: @rundel (Colin Rundel), 2026-05-03
 - **Triage date**: 2026-05-03
-- **Worktree**: `.worktrees/issue-152` (branch `issue-152`, based on `main` @ `132c13c8`)
+- **Worktree**: `.worktrees/issue-152` (branch `issue-152`, based on `main` \@ `132c13c8`)
 - **Beads issue**: bd-f3pl ("qmd writer drops table caption attributes (issue #152)", priority 1, bug)
 - **Scope**: this report covers only the **second** issue in #152 ("Table caption attributes are not written"). The first issue (old-style code-block options being mangled in qmd output) is being deprecated upstream and is intentionally not addressed here.
 
@@ -84,7 +84,7 @@ The existing `write_attr` helper in `qmd.rs` (line 396) already handles the form
    - `table-caption-with-classes.qmd` — `: cap {.striped .hover}`
    - `table-caption-with-mixed-attrs.qmd` — id + classes + keyvals together (mirrors the docs example)
 2. Confirm each new fixture **fails** the round-trip equality check before any code change.
-3. In `write_table` (pipe-table branch, around lines 1228–1234), after the caption text is written but before the trailing newline, emit ` {...}` via `write_attr(&table.attr, buf, ctx)?` if `!is_empty_attr(&table.attr)`. The exact placement (` {…}\n` vs. `\n: caption {…}\n`) should match what the parser accepts and what `table-caption-attr.qmd`'s native AST round-trips to.
+3. In `write_table` (pipe-table branch, around lines 1228–1234), after the caption text is written but before the trailing newline, emit ` {...}` via `write_attr(&table.attr, buf, ctx)?` if `!is_empty_attr(&table.attr)`. The exact placement (` {…}\n` vs. `\n: caption {…}\n`) should match what the parser accepts and what `table-caption-attr.qmd`\'s native AST round-trips to.
 4. Run the new fixtures and the full pampa suite. Confirm no existing snapshots regress (`table-caption.qmd` should be unchanged because that fixture has empty `Table.attr`).
 5. Run `cargo xtask verify --skip-hub-build` (Rust-only change in pampa, no quarto-core/pandoc-types touched, so the WASM leg is not affected).
 
@@ -94,7 +94,7 @@ Estimated diff size: < 20 lines in `qmd.rs`, plus 4 small fixtures and their `.s
 
 ### 1. Empty-id auto-suppression — **NOT NEEDED**
 
-Resolved by reading `crates/pampa/src/pandoc/treesitter_utils/pipe_table.rs:148–200`. The only path that writes to `Table.attr.0` is the `Inline::Attr` extraction at lines 191–195, which fires only when the user explicitly authored `{#id ...}` in the caption attribute block. There is no equivalent of figures' implicit-`fig-` numbering for tables. The reader does record `attr_source` (line 149), so if implicit `tbl-foo` numbering is ever introduced, the writer can adopt the same `attr_source.id.is_none()` guard headers use (`qmd.rs:557–561`). For this fix, no guard is required — emit `Table.attr.0` unconditionally when non-empty.
+Resolved by reading `crates/pampa/src/pandoc/treesitter_utils/pipe_table.rs:148–200`. The only path that writes to `Table.attr.0` is the `Inline::Attr` extraction at lines 191–195, which fires only when the user explicitly authored `{#id ...}` in the caption attribute block. There is no equivalent of figures\' implicit-`fig-` numbering for tables. The reader does record `attr_source` (line 149), so if implicit `tbl-foo` numbering is ever introduced, the writer can adopt the same `attr_source.id.is_none()` guard headers use (`qmd.rs:557–561`). For this fix, no guard is required — emit `Table.attr.0` unconditionally when non-empty.
 
 ### 2. Table-attr-prefix vs. caption-suffix — **suffix is the only valid form**
 

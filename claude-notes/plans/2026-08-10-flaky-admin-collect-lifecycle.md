@@ -25,7 +25,7 @@ tracking item, and green-light bd-eb2wnxkp's plan.
 
 The strand asked for the one thing nobody had: captured failure output (both
 prior sightings were fail-fast full-workspace runs). A 150-iteration stress
-loop of the two `admin_collect_lifecycle` tests on `main` @ `59bbccb9`
+loop of the two `admin_collect_lifecycle` tests on `main` \@ `59bbccb9`
 (macOS/APFS) produced **3 failures in 142 iterations (~2%/iteration)**, all
 with the same signature — ids identical in 27 of 28 characters, differing
 **only in the case of character index 1**:

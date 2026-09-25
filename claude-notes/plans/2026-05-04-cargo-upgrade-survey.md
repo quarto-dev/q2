@@ -1,6 +1,6 @@
 # Cargo dependency upgrade survey — 2026-05-04
 
-**Worktree:** `.worktrees/cargo-upgrade-2026-05-04` (branch `cargo-upgrade-2026-05-04`, based on `main` @ `3e0bc4c5`)
+**Worktree:** `.worktrees/cargo-upgrade-2026-05-04` (branch `cargo-upgrade-2026-05-04`, based on `main` \@ `3e0bc4c5`)
 **Skill:** `.claude/skills/upgrade-cargo-deps/SKILL.md`
 **Beads epic:** bd-hb8h
 **Previous survey:** none (first run)
@@ -12,7 +12,7 @@
 - **Skipped: 7** (vendored — consumed only by `crates/wasm-bindgen-futures-patch/`).
 - **Surfaced but not filed: 28** patch/minor out-of-range deltas (workspace declares narrower ranges than the version constraint of upstream allows). These are non-breaking and listed below for reference; per the v1 skill, they don't get individual beads.
 - **Duplicates baseline:** 49 distinct crates appear at multiple versions (108 crate-version entries). No after-state to compare since lockfile didn't change.
-- **Verification:** pre-flight `cargo xtask verify --skip-hub-build` passed on `main` @ `3e0bc4c5`. Worktree verify was skipped because the lockfile is identical to main's — see "Notes" below for the skill refinement this surfaced.
+- **Verification:** pre-flight `cargo xtask verify --skip-hub-build` passed on `main` \@ `3e0bc4c5`. Worktree verify was skipped because the lockfile is identical to main's — see "Notes" below for the skill refinement this surfaced.
 
 ## Applied & verified
 

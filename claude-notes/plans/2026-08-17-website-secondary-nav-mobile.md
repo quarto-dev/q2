@@ -325,7 +325,7 @@ is therefore byte-parity with Q1's output, not a deviation from it.
 
 ## Work items
 
-Branch: `braid/bd-26bf3j1y-website-mobile-secondary-nav`, off `main` @ `7de02ea2`.
+Branch: `braid/bd-26bf3j1y-website-mobile-secondary-nav`, off `main` \@ `7de02ea2`.
 
 Phase ordering is deliberate: Phase 1 (header wrapper) is the DOM change with the
 widest snapshot blast radius, so it goes first and alone. Phases 3+4 must land
@@ -348,7 +348,7 @@ and become load-bearing once the markup exists.
       banner mode, and the F1 title-block pin. 2 fail / 3 absence-pins pass.
 - [x] `crates/quarto-core/tests/integration/secondary_nav_pipeline.rs` (7 tests,
       registered in `main.rs`), driving the real `ProjectPipeline` on temp-dir
-      website fixtures per `CLAUDE.md`'s end-to-end rule. 5 fail / 2 pass.
+      website fixtures per `CLAUDE.md`\'s end-to-end rule. 5 fail / 2 pass.
 - [x] The SCSS cliff test —
       `quarto-sass::compile::tests::test_sidebar_stays_visible_at_lg_despite_collapse_class`.
       Compiles the real default CSS, brace-matches every `min-width:992px`
@@ -370,7 +370,7 @@ and become load-bearing once the markup exists.
 - [x] Port the Q1 SCSS that selects through the wrapper: `#quarto-header > nav`
       padding (`quarto-nav.scss:63-66`) — ported as the paired rule Q1 writes,
       alongside `footer.footer .nav-footer`.
-- [x] Update `title_banner.rs`'s module doc, which currently states q2 has no
+- [x] Update `title_banner.rs`\'s module doc, which currently states q2 has no
       `#quarto-header`.
 - [x] Re-run snapshots; **documented per `CLAUDE.md`** — see below.
 
@@ -482,7 +482,7 @@ bar shows the title and the document shows it again right below.
 - [x] Close `bd-xva3f8uy` (folded in); `bd-ersobfbt` re-read against what
       shipped.
 
-**End-to-end record** (per `CLAUDE.md`'s requirement to record the invocation,
+**End-to-end record** (per `CLAUDE.md`\'s requirement to record the invocation,
 a snippet, and an explicit note that output was inspected).
 
 Invocation: `cargo run --bin q2 -- render /tmp/q2-secnav-fixture`, then

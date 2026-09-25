@@ -178,7 +178,7 @@ runtime. (Question 1 below.)
       name still warns Q-14-5 once (existing coverage).
 - [x] Smoke-all fixture `highlighting/07-adaptive-pair-github-arrow.qmd`:
       light/dark pair + `{light: github, dark: arrow}`,
-      `noErrorsOrWarnings`, both palettes' keyword colors present, default
+      `noErrorsOrWarnings`, both palettes\' keyword colors present, default
       palette's solarized green absent.
 - [x] Tests for the YAML `code-block-bg` / `code-block-color` keys: unit
       tests on `derive_doc_scss_layer` (written first, observed failing) +
@@ -276,8 +276,8 @@ runtime. (Question 1 below.)
    `text-styles.Normal` or top-level `background-color`/`text-color`),
    adaptive or not — the palette's bg was designed to match its highlights.
    Escape hatches, verified against the layer machinery:
-   - **Custom SCSS (works today):** user theme layers' defaults land above
-     built-in layers' defaults in the merged band (`assemble_with_user_layers`
+   - **Custom SCSS (works today):** user theme layers\' defaults land above
+     built-in layers\' defaults in the merged band (`assemble_with_user_layers`
      ordering in `crates/quarto-sass/src/compile.rs`), so one
      `$code-block-bg: …;` line in a user theme file wins.
    - **YAML keys (added by this strand):** support Q1's `code-block-bg` /
@@ -285,7 +285,7 @@ runtime. (Question 1 below.)
      (`derive_doc_scss_layer` in
      `crates/quarto-core/src/stage/stages/compile_theme_css.rs:72`, which
      already lands at the top of the defaults band and wins the `!default`
-     race — currently carries only `$sidebar-border`). ~15 lines + tests.
+     race — currently carries only `$sidebar-border`). \~15 lines + tests.
      This also reproduces Q1's "user metadata suppresses injection" guard
      for free via `!default` semantics.
    Accepted caveat: ported sites diverge from Q1's look (Q1 skips bg/fg
@@ -294,7 +294,7 @@ runtime. (Question 1 below.)
    parity is one YAML/SCSS line.
 4. **One canonical capture→token mapping table** for all translated
    palettes, with **dotted-name fallback** (`function.builtin` inherits
-   `function`'s bucket unless specifically mapped, so new upstream grammar
+   `function`\'s bucket unless specifically mapped, so new upstream grammar
    captures degrade gracefully). Rationale: `.theme` files carry nothing
    finer than Pandoc's ~30 token names, so a single table hits the quality
    ceiling (Q1 parity) by construction — there is no per-palette information
@@ -305,7 +305,7 @@ runtime. (Question 1 below.)
    refinements exploiting q2's finer captures remain possible later via
    hand-written per-palette overlay SCSS layered after the translated output
    (the layering mechanism already exists) — opt-in, deferred.
-5. **Full Q1 catalog** in one pass (~26 names, 8 adaptive pairs).
+5. **Full Q1 catalog** in one pass (\~26 names, 8 adaptive pairs).
 6. **Copy-button colors in scope** (`$btn-code-copy-color` from Comment,
    `$btn-code-copy-color-active` from Function, per Q1's
    `resolveTextHighlightingLayer`); **item (3)** (compiled-CSS darkness

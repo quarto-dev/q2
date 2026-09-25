@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-20
 **Braid:** bd-include-in-header-text-blocks-ins2v6za
-**Branch:** `main` @ `87c0e21a` (investigated in the main checkout; no worktree created)
+**Branch:** `main` \@ `87c0e21a` (investigated in the main checkout; no worktree created)
 **Status:** Implemented 2026-08-20 (design questions answered by the user the same day; see "Decisions").
 
 ## Triage verdict

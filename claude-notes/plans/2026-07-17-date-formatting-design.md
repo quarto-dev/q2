@@ -48,7 +48,7 @@ transform** that writes plain strings into metadata, keeping
 doctemplates logic-less — is not a compromise; it is structurally the
 same pipeline position Q1 uses. Everything downstream (built-in
 partials, user `template-partials`, the q2-preview React title block,
-listings' doctemplates) gets formatted dates for free.
+listings\' doctemplates) gets formatted dates for free.
 
 ## Q1 feature surface (source + docs study)
 

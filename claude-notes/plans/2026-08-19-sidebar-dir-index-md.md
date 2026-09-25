@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-19
 **Braid:** bd-sidebar-dir-index-md-5khf3lds
-**Branch:** `main` @ `f387bd68` (investigation committed in place; no worktree created)
+**Branch:** `main` \@ `f387bd68` (investigation committed in place; no worktree created)
 **Status:** Design questions answered by user 2026-08-19 — approved for TDD implementation. See "Design decisions" below.
 
 ## Triage verdict
@@ -40,10 +40,10 @@ In `section_for_dir`, resolve the directory's index profile **by stem** instead 
 
 ## Proposed phases (draft)
 
-- **Phase 0 — Test plan (TDD, failing tests first).** Unit tests in `sidebar_auto.rs`'s test module (helpers `make_profile` et al. already exist):
+- **Phase 0 — Test plan (TDD, failing tests first).** Unit tests in `sidebar_auto.rs`\'s test module (helpers `make_profile` et al. already exist):
   - `index.md` in a bare-dir shorthand → promoted to section header (title + href), excluded from children.
   - Same under `auto: true` grouping.
-  - `dir/sub/index.md` is **not** promoted for `dir`'s section.
+  - `dir/sub/index.md` is **not** promoted for `dir`\'s section.
   - Tie-break: dir with both `index.qmd` and `index.md` → deterministic winner (per design Q1).
   - Pagination-adjacent assertion: child list ordering/count with `.md` index excluded (prev/next is downstream of the entry list, so entry-level tests cover it).
 - **Phase 1 — Implement** stem-based index resolution in `section_for_dir` (single function; delete the stale MVP comment).
@@ -54,7 +54,7 @@ In `section_for_dir`, resolve the directory's index profile **by stem** instead 
 
 1. **Tie-break when both `guides/index.qmd` and `guides/index.md` exist:** fixed preference order, `qmd` > `md` (> anything else, in member order). User: "might need tweaking, but for now it'll do."
 2. **Search domain:** resolve the index within `members` (the draft-filtered, matcher-filtered candidates), not the whole `ProjectIndex`. Side effect accepted: a **draft** directory index is no longer promoted to a linked section header. User also flagged the broader question — does q2 have a *structural* mechanism preventing draft pages from being linked anywhere? — delegated to a study agent; its outcome (summary or new-strand recommendation) is tracked separately from this fix.
-3. **Case sensitivity:** the stem match is **case-sensitive** (`stem == "index"` exactly). User's call: case-insensitive matching invites trouble across case-sensitive vs case-preserving/insensitive filesystems (macOS). Note this deliberately diverges from `is_top_level_index`'s `eq_ignore_ascii_case`; the broader case-handling inconsistency is filed as discovered work (low priority) rather than fixed here.
+3. **Case sensitivity:** the stem match is **case-sensitive** (`stem == "index"` exactly). User's call: case-insensitive matching invites trouble across case-sensitive vs case-preserving/insensitive filesystems (macOS). Note this deliberately diverges from `is_top_level_index`\'s `eq_ignore_ascii_case`; the broader case-handling inconsistency is filed as discovered work (low priority) rather than fixed here.
 
 ## Work items
 
@@ -69,4 +69,4 @@ In `section_for_dir`, resolve the directory's index profile **by stem** instead 
 
 - Snapshot exposure: website-render snapshot tests that exercise sidebars may shift if any fixture has a directory `index.md`; expected to be zero or small, but the snapshot-audit step in Phase 2 covers it.
 - The draft-index behavior change in design Q2 (if accepted) is a subtle semantic change beyond the reported bug; it should be called out in the commit message and covered by its own test.
-- No cross-crate surface: `quarto-navigation`'s `sidebar.rs` parses the shorthand; expansion lives entirely in `quarto-core`. WASM leg is in scope for `cargo xtask verify` (change is under `quarto-core`).
+- No cross-crate surface: `quarto-navigation`\'s `sidebar.rs` parses the shorthand; expansion lives entirely in `quarto-core`. WASM leg is in scope for `cargo xtask verify` (change is under `quarto-core`).

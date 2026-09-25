@@ -131,7 +131,7 @@ keys with a fraction of the complexity.
 
   (`quarto.config.md` reuses `parse_yaml_string_as_markdown_to_config`
   semantics so Lua and YAML agree about what markdown means.)
-- **No `pampa.` global.** pampa is an internal crate name; users' identity
+- **No `pampa.` global.** pampa is an internal crate name; users\' identity
   for this system is Quarto, Q1 filters already use `quarto.*`, and q2
   already ships `quarto.{warn,error,log,utils,doc,...}`. If pampa is ever
   externalized as a standalone tool, alias `pampa = quarto`-subset then.

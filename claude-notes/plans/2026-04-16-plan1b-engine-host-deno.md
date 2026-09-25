@@ -233,7 +233,7 @@ under test is never mocked; mock only the genuine boundaries noted.
     before resolving the first; assert the second does **not** start until the
     first resolves (the per-engine queue serializes them).
 
-  *Mock boundary:* the engines' deferreds; the loop + queue are real. *Named
+  *Mock boundary:* the engines\' deferreds; the loop + queue are real. *Named
   reverts:* ▸ make the read loop `await` each handler before reading the next
   frame → the cross-engine-concurrency assertion RED. ▸ remove the per-engine
   queue (dispatch same-engine requests concurrently) → the same-engine-ordering
@@ -294,7 +294,7 @@ unguarded *here*, with rationale:
   Engine-API contract block (added with the RTQ Item-A host-loop ownership); the
   entry-point split (`runHost(reader, writer, host)`) is exercised by every loop
   test (T3/T5/T6/T7/T-A5) driving the in-memory duplex, so it needs no separate row.
-- **`drain-before-exit` on EOF/`shutdown`** (a still-in-flight `Execute`'s
+- **`drain-before-exit` on EOF/`shutdown`** (a still-in-flight `Execute`\'s
   `Response` is flushed before `Deno.exit`, not truncated) — **accepted-untested in
   1b v1.** Rationale: in the normal teardown order q2 stops issuing requests before
   closing stdin, so the drain is the empty common case; the backstop is bounded by
@@ -488,7 +488,7 @@ unguarded *here*, with rationale:
     - `init` **(RTQ Item A — first frame, response-less)** → the loop's **very
       first** action: read one `Init { global: HostGlobalConfig }` frame, call
       `buildQuartoAPI(global, denoHost)` once, and stash the single shared
-      `quartoAPI` reference for every later `loadEngine`'s `engine.init?.()`.
+      `quartoAPI` reference for every later `loadEngine`\'s `engine.init?.()`.
       **`Init` is fire-and-forget — the harness writes NO response** (it is sent
       like `Shutdown`, in a `Request` envelope with a throwaway `id` and **no
       pending slot** on the Rust side, so a reply would be dropped as an unknown

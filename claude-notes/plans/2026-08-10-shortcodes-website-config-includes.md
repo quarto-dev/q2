@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-10
 **Braid:** bd-shortcodes-in-metadata-bp06aub8
-**Checkout:** `main` @ `0c5d0abe` (investigation committed in place; no worktree created)
+**Checkout:** `main` \@ `0c5d0abe` (investigation committed in place; no worktree created)
 **Status:** Complete. Implemented on `braid/bd-shortcodes-in-metadata-bp06aub8`, merged to `main` via PR #487 (2026-08-10); strand closed. Follow-ups: bd-1fue1ly5, bd-fz6gwfq0.
 
 ## Triage verdict
@@ -83,7 +83,7 @@ registered at `pipeline.rs:1198`) calls `resolve_blocks(&mut ast.blocks, …)` o
 (`shortcode_resolve.rs:1217-1224`); `ast.meta` is read-only input. Hence the `?env`
 subtitle. Downstream, `MetadataNormalizeTransform::inlines_to_plain_text` **silently
 drops** `Inline::Shortcode` when deriving `pagetitle`
-(`metadata_normalize.rs:184`), and `quarto-navigation`'s `push_inline`
+(`metadata_normalize.rs:184`), and `quarto-navigation`\'s `push_inline`
 (`crates/quarto-navigation/src/render_html.rs:730-818`) has no `Shortcode` arm (falls
 into escaped-plain-text catch-all).
 
@@ -217,7 +217,7 @@ avoids both.
    `Normalization` transform ordered before `ShortcodeResolveTransform`), not at
    project-config load: one site, provenance-independent (project config, profiles,
    frontmatter overrides all pass through), no `InterpretationContext` change, and
-   `ConfigValue`'s `SourceInfo` gives the re-parse correct spans (precedent:
+   `ConfigValue`\'s `SourceInfo` gives the re-parse correct spans (precedent:
    `listing_render.rs`). Downstream consumers keep using `as_plain_text()` /
    `render_text`, which already handle both shapes.
 3. **`<title>`: substitute, then flatten to plain text.** Verified against the real

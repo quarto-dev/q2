@@ -748,14 +748,14 @@ template-compile time) and by L7's regex.
 ## Vendored client-side assets (Phase 5 artifact store)
 
 L3 vendors three Q1 client-side assets that the built-in
-templates' markup depends on, all routed through Phase
+templates\' markup depends on, all routed through Phase
 5's `Project`-scoped artifact store and emitted into
 `_site/site_libs/listing/` (or the WASM equivalent under
 the resolver's VFS root):
 
 | Asset                  | Q1 path                                                                    | Role                                                                                  |
 |------------------------|----------------------------------------------------------------------------|---------------------------------------------------------------------------------------|
-| `list.min.js`          | `src/resources/projects/website/listing/list.min.js`                       | Third-party (~25KB, MIT). Backs the sort/filter UI markup the templates emit.        |
+| `list.min.js`          | `src/resources/projects/website/listing/list.min.js`                       | Third-party (\~25KB, MIT). Backs the sort/filter UI markup the templates emit.        |
 | `quarto-listing.js`    | `src/resources/projects/website/listing/quarto-listing.js`                 | Q1-owned glue. Provides `window.quartoListingCategory(...)` (clicked from category items). Without it, category clicks are dead JS references. |
 | `quarto-listing.scss`  | `src/resources/projects/website/listing/quarto-listing.scss`               | Layout styles for `.quarto-listing`, `.quarto-post`, the grid layout, the table view. |
 
@@ -833,7 +833,7 @@ Two builders need updating:
 - `build_wasm_html_pipeline` (hub-client / WASM path).
 
 In both, insert `ListingGenerateTransform` and
-`ListingRenderTransform` into the `AstTransformsStage`'s
+`ListingRenderTransform` into the `AstTransformsStage`\'s
 transform list, between the existing generate transforms
 and the existing render transforms. The exact slot is in
 `build_transform_pipeline` /
@@ -1064,7 +1064,7 @@ resolve them inline rather than punt:
   resolved listings under `meta.listings.<id>` for Lua-
   mutation forward-compat. Per D13 there is no Lua slot
   today, and the `Listing`/`ListingItem` ConfigValue
-  round-trip would be ~200 lines of boilerplate that
+  round-trip would be \~200 lines of boilerplate that
   drifts. We follow the `crossref_index` precedent
   instead: a `pub resolved_listings: Vec<ResolvedListing>`
   field on `RenderContext`, populated by
@@ -1260,7 +1260,7 @@ See §"Filing reminder" for descriptions. During impl:
 - [x] Implement `pipes.rs` with `apply_pipe` /
       `apply_pipes` dispatch and individual
       implementations.
-- [x] Wire into `evaluator.rs`'s two `// TODO: Apply
+- [x] Wire into `evaluator.rs`\'s two `// TODO: Apply
       pipes` sites — variable path and partial-output
       path.
 - [x] Fix latent parser bug: outer `pipe` rule arm was

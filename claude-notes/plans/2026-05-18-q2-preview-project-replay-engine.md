@@ -380,7 +380,7 @@ All cases use `quarto_ast_reconcile::compute_block_hash_fresh` and
    should be lossless, but if a token escape differs the structural
    hashes won't match and every cell falls through to raw source.
    Mitigation: a round-trip test in Phase 1 that parses
-   `input_qmd` and asserts the cells' structural hashes equal
+   `input_qmd` and asserts the cells\' structural hashes equal
    `A2`\'s for an unedited document.
 2. **Block-level walk assumption.** The algorithm assumes the engine
    transforms only at the block level. True for knitr/jupyter today

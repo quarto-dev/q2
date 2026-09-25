@@ -3,7 +3,7 @@
 Companion to `claude-notes/plans/2026-07-15-html-title-block-parity.md`
 (epic bd-gx9cic8z). Captured 2026-07-15 with Quarto 1 = `quarto 99.9.9`
 (dev symlink on PATH) and Q2 = `feature/bd-gx9cic8z-title-block-parity`
-branch point (main @ cd89283b).
+branch point (main \@ cd89283b).
 
 ## Reproduction procedure
 

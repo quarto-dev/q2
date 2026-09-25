@@ -1,7 +1,7 @@
 # Non-http URI schemes are path-normalized (bd-scheme-href-path-normalized-w5zya82r)
 
 **Strand:** `bd-scheme-href-path-normalized-w5zya82r` (P1 bug, labels `navigation`, `parity`)
-**Branch:** `braid/bd-scheme-href-path-normalized-w5zya82r-scheme-href-path-normalized` (workspace-3, off `main` @ d05e96ee8 = v0.27.0)
+**Branch:** `braid/bd-scheme-href-path-normalized-w5zya82r-scheme-href-path-normalized` (workspace-3, off `main` \@ d05e96ee8 = v0.27.0)
 **Verdict:** Ready — fix direction is unambiguous; implemented in this plan.
 
 ## Overview

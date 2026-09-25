@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-12
 **Braid:** bd-v9zs83zj
-**Checkout:** main @ `de2375f0` (no worktree/branch created — this skill ran in the main checkout)
+**Checkout:** main \@ `de2375f0` (no worktree/branch created — this skill ran in the main checkout)
 **Status:** Design settled 2026-08-12 — **ready to implement.** All four questions
 answered by the user; see "Design answers" below.
 

@@ -2,8 +2,8 @@
 
 **Date:** 2026-08-21
 **Braid:** bd-ersobfbt
-**Branch:** `main` @ `587721bb` (investigated in the main checkout; no worktree created)
-**Status:** Implementation in progress on topic branch `braid/bd-ersobfbt-headroom-fixed-top` (off `main` @ `587721bb`; investigation commits included). Started 2026-08-24.
+**Branch:** `main` \@ `587721bb` (investigated in the main checkout; no worktree created)
+**Status:** Implementation in progress on topic branch `braid/bd-ersobfbt-headroom-fixed-top` (off `main` \@ `587721bb`; investigation commits included). Started 2026-08-24.
 
 Reference material collected during the investigation:
 `claude-notes/plans/headroom-fixed-top-investigation/q1-headroom-reference.md`

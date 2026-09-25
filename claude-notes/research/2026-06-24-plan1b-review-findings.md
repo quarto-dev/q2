@@ -42,7 +42,7 @@ lives on `review/1a-host`, `review/1a-engine`, and `feature/ts-engine-extensions
 2. **Plan contradicts itself on the embedding *model*.** §Build-model (lines 36–44) and
    §runtime (line 1121) cite the reveal.js "bundle is *source*, commit-and-`include_str!`"
    precedent; **Phase 4 (lines 1058–1060) explicitly says that framing is wrong** ("treated
-   exactly like `q2 mcp`'s `dist-bundle/`… the earlier 'bundle is source like reveal.js' framing
+   exactly like `q2 mcp`'s `dist-bundle/`… the earlier 'bundle is source like reveal.js\' framing
    was wrong; the cited `quarto-system-runtime`/`ejs-bundle.js` precedent does not exist").
    Reconcile to the Phase-4 (generated-artifact) framing.
 
@@ -128,7 +128,7 @@ lives on `review/1a-host`, `review/1a-engine`, and `feature/ts-engine-extensions
   daemon could hang B. The "completes normally" guarantee is proven only for the test double.
 - **stdin-EOF exit vs in-flight concurrent requests.** Lines 401–409 exit the read loop on stdin EOF
   → `Deno.exit(0)`, the same terminal as `shutdown`. With concurrent in-flight tasks (parallel
-  Pass-2), an immediate exit on EOF could truncate a still-running `Execute`'s response. The Rust
+  Pass-2), an immediate exit on EOF could truncate a still-running `Execute`\'s response. The Rust
   side closes stdin *after* `Shutdown` and joins on child exit, expecting a drain — but the harness
   has no specified drain-before-exit step.
 - **Per-engine queue is an unbounded promise chain.** A project with thousands of files on one engine
@@ -171,7 +171,7 @@ design doc.
 ### Underspecified
 5. **Poison on cancel-before-start** — **Intentional, not a gap.** Design §2: *any* `Execute`
    cancel/timeout "always poisons"; a queued Execute that times out during queue-wait
-   poisoning the instance is the expected path, cost = one ~0 re-launch. 1b just doesn't
+   poisoning the instance is the expected path, cost = one \~0 re-launch. 1b just doesn't
    restate it. **Action: optional cross-ref to design §2–3.** Low.
 6. **`Cancel` ack / dropped `Cancelled`** — **Resolved by design.** `Cancel` is
    fire-and-forget; the Rust worker resolves its own slot locally on cancel/timeout, and the

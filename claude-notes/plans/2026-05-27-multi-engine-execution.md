@@ -467,7 +467,7 @@ doc-keyed invalidation already covers it.
 - [x] Design + land the **file-backed test engine** (`FixtureEngine`,
       `crates/quarto-core/src/engine/fixture.rs`) with 15 unit tests:
       splices per-cell results in order; in-memory + JSON-file-backed
-      results; ignores other engines' cells / display blocks; skips
+      results; ignores other engines\' cells / display blocks; skips
       content inside non-matching fences; engine→engine handoff
       (result introduces the next engine's cell); surplus/missing/
       unterminated diagnostics; longer-fence round-trip. Gated to

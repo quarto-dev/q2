@@ -111,7 +111,7 @@ When template diagnostics are generated, use `SourceInfo::FilterProvenance` vari
 
 ### Option C: SourceContext Merging (Medium Complexity)
 
-Add the template file(s) to the main program's `SourceContext` before rendering diagnostics, and remap the template diagnostics' file_ids accordingly.
+Add the template file(s) to the main program's `SourceContext` before rendering diagnostics, and remap the template diagnostics\' file_ids accordingly.
 
 **Pros**:
 - Keeps existing architecture mostly intact

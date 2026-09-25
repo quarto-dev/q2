@@ -1,6 +1,6 @@
 # Investigation notes — bd-205v6 (flaky proptest: reconciliation_preserves_structure_full_ast)
 
-**Date:** 2026-08-19. Investigated at `main` @ `4b4a63ce`.
+**Date:** 2026-08-19. Investigated at `main` \@ `4b4a63ce`.
 
 ## Reproduction
 
@@ -20,7 +20,7 @@ The original 2026-05-26 seed from the strand description is
 ## First divergence in the shrunk case
 
 Extracted the `Result:` / `After:` debug dumps from the failure and found the first
-differing character. The divergence is inside a `Cite`'s `citations` field:
+differing character. The divergence is inside a `Cite`\'s `citations` field:
 
 - **Result** (wrong): `Citation { id: "", prefix: [Str "A"], suffix: [Strikeout[Emph[Str "gu"]]], mode: NormalCitation, ... }`
   — this is the **before** document's citation.
@@ -35,12 +35,12 @@ This is the bd-3zp3z4jx bug class (container identity inherited across a type-on
 match), recurring for `Cite`:
 
 1. **compute.rs — inline alignment Step 2** (type-based container matching,
-   `compute_inline_alignments`, ~line 654–689): the identity guard added for
+   `compute_inline_alignments`, \~line 654–689): the identity guard added for
    bd-3zp3z4jx checks `Custom.type_name`, `Link.target+attr`, `Image.target+attr`,
    `Span.attr` — and **falls through to `_ => true` for `Cite`**. Two Cites with
    completely different `citations` (id, mode, prefix, suffix) are paired as "the
    same container" (`RecurseIntoContainer`).
-2. **apply.rs — `apply_inline_container_reconciliation`** (~line 346): the `Cite`
+2. **apply.rs — `apply_inline_container_reconciliation`** (\~line 346): the `Cite`
    arm reconciles only `o.content` and keeps `o.citations` from the original.
    Unlike `Link`/`Image`/`Span`/…, it copies **no** structural fields from the
    exec side. Result: the reconciled AST carries the before-citations.
@@ -64,7 +64,7 @@ spliced source text; the source-consistent fix is the Step-2 `UseAfter` fallthro
 inline and recurses into the paragraph), Cites differing only in `citations`
 (id "a"/prefix "x" vs id "b"/prefix "y"). Fails at HEAD with the result keeping
 citation "a"/"x". Verified 2026-08-19 by temporarily inserting it into
-`lib.rs`'s test module (then reverted; the fix session should re-add it TDD-style).
+`lib.rs`\'s test module (then reverted; the fix session should re-add it TDD-style).
 
 Important subtlety discovered on the way: with the Cite as the paragraph's *only*
 inline, the test **passes** — block-level phase 2 requires at least one

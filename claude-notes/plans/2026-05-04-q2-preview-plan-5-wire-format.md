@@ -912,7 +912,7 @@ starting Plan 5:
 
 ## References
 
-(Line numbers as of `feature/provenance` @ 4c465768. Plan 4's migration
+(Line numbers as of `feature/provenance` \@ 4c465768. Plan 4's migration
 will shift these; refresh before implementing.)
 
 - `crates/pampa/src/writers/json.rs:115` — `SourceInfoJson.t` field
@@ -953,7 +953,7 @@ Phase 6 for test-file placement and per-phase landing.)
   build a `SourceInfo`, serialize to JSON, deserialize, assert
   equality. Cover the full enum.
 - **Concat-of-Generated round-trip**: a `Concat { pieces }` whose
-  pieces' `source_info` is `Generated` (the shape produced by coalesced
+  pieces\' `source_info` is `Generated` (the shape produced by coalesced
   filter-emitted spans). Serialize → deserialize → assert structural
   equality. Closes a coverage gap not exercised by the per-variant
   property test above.
@@ -998,7 +998,7 @@ Phase 6 for test-file placement and per-phase landing.)
   `stream_write_pandoc` into a `Vec<u8>` and reads back through
   `pampa::readers::json::read`. Run a representative Generated-bearing
   AST through it; assert equality. The streaming writer's match arms
-  are independent of `to_json`'s, so a Phase-4 regression could
+  are independent of `to_json`\'s, so a Phase-4 regression could
   otherwise slip through.
 - **AnchorRole round-trip test**: build a `Generated` with each role
   (`Invocation`, `ValueSource`, `Other("ext/foo/bar")`) wrapped in

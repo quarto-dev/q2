@@ -321,7 +321,7 @@ Extend Phase 1 tests to verify the new implementation:
       Receive a presence message whose cursor string references an op
       not yet present in our doc; assert that `getCursorPosition` throws
       `RangeError` and the hook skips the decoration for this render
-      (no crash, no other peers' decorations affected). Then apply the
+      (no crash, no other peers\' decorations affected). Then apply the
       content change and assert the cursor resolves to the intended
       offset on the next render.
 - [x] **Test: two concurrent remote edits** — two peers insert into the
@@ -407,7 +407,7 @@ in the *same* commit.
       Monaco decorations from the resolved offsets. Wrap each call in
       `try/catch (RangeError)` and `continue` on throw — an unsynced
       cursor should drop the decoration for this render, not crash the
-      effect or block other peers' decorations.
+      effect or block other peers\' decorations.
 - [x] Add Phase-3 tests and verify them pass.
 - [x] Verify Phase-1 tests still pass under the new implementation.
 - [x] Commit as "refactor(presence): replace OT offset tracking with

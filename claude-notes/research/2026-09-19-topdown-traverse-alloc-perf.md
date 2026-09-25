@@ -1,7 +1,7 @@
 # Why `topdown_traverse_blocks::walk_vec` bottoms out in the allocator (and memmove)
 
 **Status:** experiments B, D and E below are being landed as
-bd-w0x91nmh on branch `perf/topdown-traverse-alloc` (off `main` @
+bd-w0x91nmh on branch `perf/topdown-traverse-alloc` (off `main` \@
 `6b7be8f0`), with the counting allocator, per-pass counters, backtrace
 print and size/benchmark test stripped out and an allocation-budget
 regression test (`crates/pampa/tests/integration/topdown_traverse_alloc_budget.rs`)
@@ -11,7 +11,7 @@ added in their place. The size-shrinking suggestions (3–5) are deferred.
 (`QUARTO_JOBS=1`), all 352 files of `docs-quarto-2`, hyperfine 3 runs
 back to back: baseline **5.657 s ± 0.022** → B+D+E **4.769 s ± 0.025**,
 i.e. −16% (user 4.85 s → 4.01 s). A separate earlier baseline run gave
-5.41 s ± 0.09, so the machine drifts by ~5% between sessions; the
+5.41 s ± 0.09, so the machine drifts by \~5% between sessions; the
 back-to-back pair is the number to trust.
 
 Related: bd-5yektmwt ("AST construction memmove is ~28% of non-SCSS

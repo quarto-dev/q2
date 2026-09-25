@@ -48,10 +48,10 @@ By lint:
 ### Judgment-call lints (per the agreed policy: `#[allow]` + note, file
 follow-ups only if a real refactor is warranted)
 
-- `should_implement_trait` @ `quarto-source-map/src/source_info.rs:163`
+- `should_implement_trait` \@ `quarto-source-map/src/source_info.rs:163`
   — an inherent method shadowing a trait method name; likely a
   deliberate API. `#[allow]` with a note unless trivially renameable.
-- `naive_bytecount` @ `xtask/src/braid_snapshot.rs:60`,
+- `naive_bytecount` \@ `xtask/src/braid_snapshot.rs:60`,
   `xtask/src/create_worktree.rs:1132` — would pull in the `bytecount`
   crate for a dev-tool line count; `#[allow]` (not worth a dep).
 

@@ -325,7 +325,7 @@ divergences:
 | `quarto-lsp-core/src/analysis.rs`           | (separate fn) | (separate fn) | recurse | recurse | …           | …              | …           | drop        |
 
 A "consolidate to one shared helper" pass requires either
-choosing one shape (and silently changing the others' output —
+choosing one shape (and silently changing the others\' output —
 a snapshot-churn risk on five render paths) or building an
 options-driven helper with five booleans plus a per-site
 audit. That is a separate hygiene project, deliberately

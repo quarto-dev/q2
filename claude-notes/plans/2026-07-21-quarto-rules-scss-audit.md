@@ -67,7 +67,7 @@ code looks like today" below, so nothing is lost.
 
 ## What the code looks like today
 
-All referenced paths exist at HEAD (`main` @ `c7523c2b`, in sync with origin):
+All referenced paths exist at HEAD (`main` \@ `c7523c2b`, in sync with origin):
 
 - **Source of truth:**
   `external-sources/quarto-cli/src/resources/formats/html/_quarto-rules.scss`

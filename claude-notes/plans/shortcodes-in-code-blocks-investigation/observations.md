@@ -1,7 +1,7 @@
 # Reproduction at HEAD (2026-08-10)
 
 Checkout: `braid/bd-environment-files-372u9qbs-load-environment-files` (contains
-main @ 3ef77da8 via PR #486 merge). Pre-flight `cargo xtask verify --skip-hub-build`
+main \@ 3ef77da8 via PR #486 merge). Pre-flight `cargo xtask verify --skip-hub-build`
 passed at this HEAD before the repro.
 
 Invocation (from `repro/`):

@@ -85,7 +85,7 @@ What a Q1 shortcode extension author was promised:
    unmodified to Hugo").
 10. **Built-ins:** `meta`, `var`, `env`, `pagebreak`, `kbd`, `video`, `include`,
     `embed`, `lipsum`, `placeholder`, `contents`, `version`, `brand` (the last
-    missing from the docs' own table). `include`/`embed` are **not** Lua handlers
+    missing from the docs\' own table). `include`/`embed` are **not** Lua handlers
     in Q1 — they're TS text-level directives at pre-/post-engine stages.
 
 Q1 quirks we get to *not* port (see § Design decisions): the undocumented paired

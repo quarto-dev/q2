@@ -86,7 +86,7 @@ you regenerate.)
 
 ## Reproduction status
 
-- `cargo xtask verify --skip-hub-build` at `main` @ 78d55deb: everything
+- `cargo xtask verify --skip-hub-build` at `main` \@ 78d55deb: everything
   green **except** exactly this test (7744 passed, 1 failed, fail-fast) —
   confirming the strand's "pre-existing latent bug on main" claim.
 - Deterministic: seed file + `cargo nextest run -p quarto-ast-reconcile -E

@@ -32,7 +32,7 @@ files from renders.
    whitespace for the next scan, and who consumes it depends on what
    follows.** An external-scanner token (code-span start, emphasis
    open) absorbs it into its own range; `block_continuation` claims
-   exactly the open blocks' prefix columns; anything else falls to
+   exactly the open blocks\' prefix columns; anything else falls to
    the internal lexer as `_whitespace`. Whether the grammar state
    after `_soft_line_ending` can shift that `_whitespace` decides
    between a clean parse and a hard error — and a hard parse error

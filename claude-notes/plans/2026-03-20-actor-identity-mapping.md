@@ -85,7 +85,7 @@ In the `indexHandle.on('change', ...)` handler, the sync client diffs both `file
 
 ### Stale Identities
 
-Identities persist in the Automerge document forever. This is intentional — the document history is immutable, and stale identity mappings are harmless (they only map actor ID to screen name). Old contributors' names remain resolvable in replay, which is a feature.
+Identities persist in the Automerge document forever. This is intentional — the document history is immutable, and stale identity mappings are harmless (they only map actor ID to screen name). Old contributors\' names remain resolvable in replay, which is a feature.
 
 ### Replay Changes
 

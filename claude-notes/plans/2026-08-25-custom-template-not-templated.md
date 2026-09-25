@@ -12,7 +12,7 @@
 
 **Braid:** bd-custom-template-not-templated-e5t6m0i0 — parent bd-61cd (listings epic); related bd-hzsi (L10 migration docs + LLM skill), bd-u4ow (custom-template reference page), bd-lu16jgxq (Q-12-7 wording); supersedes bd-oywyaouf.
 
-**Worktree:** `.worktrees/workspace-2`, branch `braid/bd-custom-template-not-templated-e5t6m0i0-custom-template-not-templated`, based on `origin/main` @ `05b6fd75c`. Pre-flight `cargo xtask verify --skip-hub-build --skip-hub-tests` green at that base: 13380 Rust tests passed, 199 skipped.
+**Worktree:** `.worktrees/workspace-2`, branch `braid/bd-custom-template-not-templated-e5t6m0i0-custom-template-not-templated`, based on `origin/main` \@ `05b6fd75c`. Pre-flight `cargo xtask verify --skip-hub-build --skip-hub-tests` green at that base: 13380 Rust tests passed, 199 skipped.
 
 ## Decisions (settled with Gordon, 2026-08-25)
 

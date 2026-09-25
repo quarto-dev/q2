@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-11
 **Braid:** `bd-digit-line-splits-paragraph-w6tod0gh` (bug, P1, labels `bug` / `parity`)
-**Branch:** investigated in place on `main` @ `fc2895b2` — no worktree created (see "Where this should land")
+**Branch:** investigated in place on `main` \@ `fc2895b2` — no worktree created (see "Where this should land")
 **Status:** Implemented on `braid/bd-digit-line-splits-paragraph-w6tod0gh-continuation-line-starting-digit`. Design questions answered by the user 2026-08-11; see "Answers" and "Implementation record" below.
 
 ## Triage verdict
@@ -41,7 +41,7 @@ a wrapped line. Authors cannot reasonably be expected to avoid wrapping before
 a number.
 
 Filed 2026-08-11 by Carlos Scheidegger; observed on 0.16.0, re-verified on
-0.17.0 / `origin/main` @ `001cb6a5`.
+0.17.0 / `origin/main` \@ `001cb6a5`.
 
 ## Dependency graph
 
@@ -139,7 +139,7 @@ interruption entirely while CommonMark permits it for `1.`. **Investigation
 suggests this is already decided.** The interruption matrix
 (`interrupt.qmd`, full table in the investigation README):
 
-| continuation line | q2 @ HEAD | pandoc commonmark | pandoc markdown (Q1) |
+| continuation line | q2 \@ HEAD | pandoc commonmark | pandoc markdown (Q1) |
 | --- | --- | --- | --- |
 | `- apples` | interrupts | interrupts | no |
 | `1. apples` | interrupts | interrupts | no |
@@ -169,7 +169,7 @@ the reported symptom.
 strand judges this harmless for `-` because a `-`-leading line genuinely can
 open a list. Checking it directly shows otherwise:
 
-| input | q2 @ HEAD | pandoc commonmark |
+| input | q2 \@ HEAD | pandoc commonmark |
 | --- | --- | --- |
 | `Temperature dropped to` / `-5 degrees overnight.` | two `<p>` | one `<p>` |
 | `Gain was` / `+5 percent.` | two `<p>` | one `<p>` |
@@ -308,7 +308,7 @@ symbols are not in the valid set and read as false for every marker. The code
 comment records this so the next person doesn't retry it.
 
 Also extended: the `mark_end` guard after gate 2 was keyed on the *character*
-(`!= '`' && != '*'`). With three more peeking branches that proxy no longer
+(`!= '`\' && != \'*'`). With three more peeking branches that proxy no longer
 holds, so it is now an explicit `second_peeked` boolean — otherwise a peeked
 run would be swallowed into the SOFT_LINE_ENDING token's range.
 

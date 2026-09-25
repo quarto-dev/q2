@@ -136,7 +136,7 @@ from the block's measured rect.
   `div.callout-body > p:first-child`-style parent/child relations hold with
   comments present and absent, and with the bubble visible; the layer holds
   the bubbles; no element between a block and its parent.
-- Rewrite the existing suites' DOM helpers: `wrapper()` /
+- Rewrite the existing suites\' DOM helpers: `wrapper()` /
   `wrapperGlows()` in `CommentBlock.resolveLast.integration.test.tsx` (~103-131)
   assume `para.parentElement` is the positioned wrapper; the glow assertion
   moves to the overlay outline. `CommentBlock.defensive` (`host = para.parentElement`,

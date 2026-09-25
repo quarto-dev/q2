@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-13
 **Braid:** bd-toc-smart-quotes-6nro57ed
-**Branch:** `main` @ `0dcd7e83` (investigated in the main checkout — no worktree was created)
+**Branch:** `main` \@ `0dcd7e83` (investigated in the main checkout — no worktree was created)
 **Status:** **Complete** (2026-08-13). All five phases done; `cargo xtask verify` green,
 11,846/11,846 workspace tests pass, end-to-end verified through the `q2` binary. See
 "Outcome" at the end of the Work items.
@@ -52,7 +52,7 @@ All settled; nothing is awaiting an answer.
 3. **Consolidation (`bd-zzke`) is sequenced after, not merged in.** See "The wider family"
    below — the TOC work *removes* one of the copies, so it shrinks that strand rather than
    depending on it. Its description still needs the corrected site list (it lists 6; there
-   are ~10).
+   are \~10).
 
 4. **`bd-heading-id-drops-inline-content-fl84n3ql` stays fully independent.** Same
    root-cause class, different code path; this epic no longer touches
@@ -69,7 +69,7 @@ Source `## Using a "raw" volume` with `toc: true`:
 | | heading | TOC entry |
 |---|---|---|
 | Quarto 1 | Using a “raw” volume | Using a “raw” volume |
-| q2 @ 0dcd7e83 | Using a “raw” volume | Using a raw volume |
+| q2 \@ 0dcd7e83 | Using a “raw” volume | Using a raw volume |
 
 Controls (apostrophe, en dash) survive in both places because they are `Str`-internal
 rewrites by `apply_smart_typography`; the failing case is the one that becomes an
@@ -176,7 +176,7 @@ A second probe fixture at `claude-notes/plans/toc-smart-quotes-investigation/mar
 <a ... >Math <span class="math inline">\(x+y\)</span> and a link</a>
 ```
 
-**q2 @ 0dcd7e83** (`_site/index.html`):
+**q2 \@ 0dcd7e83** (`_site/index.html`):
 
 ```html
 <a ... >Use code and em and strong</a>
@@ -225,7 +225,7 @@ TOC label, and the backticks would be a visible regression against today's outpu
 (`PlainTextOptions { wrap_quoted, line_break_as, include_code, include_notes, ... }`), and
 there is a standing code comment pointing at it at `metadata_normalize.rs:121-127`
 ("if a third in-crate consumer arrives, file bd-zzke ... rather than continuing to add new
-call sites here"). It lists **6** sites; the survey above found ~10 production ones, so it
+call sites here"). It lists **6** sites; the survey above found \~10 production ones, so it
 undercounts and its description should be refreshed.
 
 **Are the axes essential or incidental?** Mostly incidental, which is the fact that makes

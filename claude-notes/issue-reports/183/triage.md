@@ -3,7 +3,7 @@
 - **GitHub**: https://github.com/quarto-dev/q2/issues/183
 - **Reporter**: @rundel (Colin Rundel), 2026-05-11
 - **Triage date**: 2026-05-14
-- **Worktree**: `.worktrees/issue-183` (branch `issue-183`, based on `main` @ `76b8fe3e`)
+- **Worktree**: `.worktrees/issue-183` (branch `issue-183`, based on `main` \@ `76b8fe3e`)
 - **Beads issue**: bd-oxsr
 - **Scope**: Writer bug in `write_list_table` (qmd writer). Related to #174 and #180 only in the broad category of "writer produces qmd that the reader rejects"; mechanism is independent.
 

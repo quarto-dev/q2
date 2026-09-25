@@ -124,7 +124,7 @@ up automatically by `test_qmd_roundtrip_consistency` in
       positions cleanly.
 - [x] Run `cargo nextest run -p pampa test_qmd_roundtrip_consistency` and
       confirm the four positive tests fail in the expected way before
-      any code change. Verified: all four fixtures' writer output drops
+      any code change. Verified: all four fixtures\' writer output drops
       the `\@` escape; first three re-parse as `Cite` (wrong AST), the
       `at_escape_trailing` case re-parses as a hard parse error.
 

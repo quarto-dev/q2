@@ -467,7 +467,7 @@ does.
   request → headers only with correct `Content-Length`; editor-UI session
   boots from the locally served editor index (`/` normalizes to an exact
   `index.html` manifest hit). *(done 2026-08-13 — `join_frontend.rs`
-  un-ignored, 8/8 green; the harness' request log is a TCP shim between
+  un-ignored, 8/8 green; the harness\' request log is a TCP shim between
   the tunnel host and the hub; local-serving tests no-op on
   placeholder trees per the crate's both-tree-states pattern)*
 - [x] Full workspace: `cargo nextest run --workspace` and `cargo xtask

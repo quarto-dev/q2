@@ -135,7 +135,7 @@ A few things the skill needs to know about:
 - **Workspace inheritance**: many deps are declared in the root `Cargo.toml`\'s
   `[workspace.dependencies]`. Upgrades should prefer the workspace level.
 - **WASM target**: `wasm-qmd-parser` and `wasm-quarto-hub-client` build to
-  `wasm32-unknown-unknown`. Some crates' upgrades break on WASM but not native.
+  `wasm32-unknown-unknown`. Some crates\' upgrades break on WASM but not native.
   Verification needs to include the WASM build path (per CLAUDE.md, `cargo xtask
   verify` covers this).
 - **Tree-sitter crates**: pinned versions matter; upgrading these often means

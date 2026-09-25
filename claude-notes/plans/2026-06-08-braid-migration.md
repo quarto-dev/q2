@@ -77,7 +77,7 @@ avoid collision (beads\' `create --id worker1-100` pattern becomes obsolete).
    periodic `braid export` snapshot to the repo for grep/diff/recovery, but:
    - The snapshot flows **automerge → file only**. It is **never** a sync or
      import source back into the skein (except the *one-time* initial
-     migration import, which reads beads' JSONL, not this snapshot).
+     migration import, which reads beads\' JSONL, not this snapshot).
    - On any git conflict in the snapshot file, **resolve by pulling fresh
      `braid export` from automerge** — even if that means "cross-branch
      contamination" (the snapshot on branch A showing issue state created on

@@ -708,10 +708,10 @@ New file `navbar_footer_pipeline.rs` mirroring `sidebar_pipeline.rs`:
     Render both pages; each output HTML contains `<nav class="navbar...`,
     with the current page's `nav-link` carrying `active`.
 46. **`pipeline_navbar_dropdown_href_rewriting`** — navbar with a menu
-    containing `about.qmd` becomes `about.html` in both pages' HTML.
+    containing `about.qmd` becomes `about.html` in both pages\' HTML.
 47. **`pipeline_renders_page_footer_for_two_page_website`** — fixture
     with top-level `page-footer: { left: "© 2026", right: [about.qmd] }`
-    in `_quarto.yml`; assert both pages' HTML contains
+    in `_quarto.yml`; assert both pages\' HTML contains
     `<footer class="footer"` and the `about.qmd` href rewritten to
     `.html`.
 48. **`pipeline_navbar_active_never_cross_contaminates`** — rendering

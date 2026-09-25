@@ -20,7 +20,7 @@ toggle (expand / show / hide) lives in
 GH #445 asks: teach Quarto 2's Pass-1 processing (the
 `DocumentProfile`) to summarize the comments present in a document, so
 UI that wants "are there comments? how many?" doesn't have to process
-the whole document — and so *other* documents' comment states are
+the whole document — and so *other* documents\' comment states are
 knowable without rendering them (Pass-1 profiles exist for every
 project file).
 

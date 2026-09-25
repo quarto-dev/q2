@@ -68,7 +68,7 @@ Write the new tests against the not-yet-existing API and confirm they fail
   `new_with_data_dir_ephemeral(project_root, data_dir)` with rustdoc:
   secrets live only in memory, env vars still honored, intended for
   short-lived embedded hubs (preview); contrast with the persistent
-  constructors' multi-instance warning.
+  constructors\' multi-instance warning.
 - [x] Refactor `resolve_server_secret` / `resolve_session_secret` branch 3
   to call `generate_secret()` (no behavior change).
 - [x] `cargo nextest run -p quarto-hub` — new and existing tests pass.

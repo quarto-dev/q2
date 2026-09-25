@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-14
 **Braid:** bd-llms-txt-unimplemented-oih6z6j7
-**Checkout:** main @ `3ac596e0` (investigation committed in place; implementation should get its own branch/worktree)
+**Checkout:** main \@ `3ac596e0` (investigation committed in place; implementation should get its own branch/worktree)
 **Status:** Design aligned 2026-08-14 (all six questions resolved — see Resolved design decisions). Ready to implement on a dedicated branch/worktree.
 
 ## Triage verdict
@@ -184,7 +184,7 @@ phase's tests are written and observed failing before implementation.
 - [x] User-provided `llms.txt` resource collision test
 - [x] Warn-on-inert test: `llms-txt: true` on a non-website project warns
 - [x] Incremental-render test: `llms.txt` regenerated from cached
-      profiles; skipped pages' companions persist and llms-full.txt
+      profiles; skipped pages\' companions persist and llms-full.txt
       covers them via on-disk read-back
       (`llms_incremental_render_covers_skipped_pages`)
 - [x] Multi-sidebar + straggler test: pages in no sidebar land in
@@ -252,7 +252,7 @@ phase's tests are written and observed failing before implementation.
       (no sidebar) use a single `## Pages` section; navbar stage only
       refines sites that declare sidebars
 - [x] Incremental discipline: llms.txt + llms-full.txt regenerate from
-      the full (cached) profile index; skipped pages' companion content
+      the full (cached) profile index; skipped pages\' companion content
       read back from disk when the manifest vouches for it
 
 ### Phase 4 — `llms-full.txt`

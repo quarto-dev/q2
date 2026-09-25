@@ -656,7 +656,7 @@ let (spec, ep_idx) = parse_filter_item(item, default_idx);
    `{path: lightbox, at: post-render}` resolves `lightbox` as an extension
    name. Confirmed in TS Quarto (`filters.ts:868-872`): both string and map
    forms resolve extension names. The map form's `at` overrides all expanded
-   filters' entry points (`filters.ts:904-919`). Note: this is a completely
+   filters\' entry points (`filters.ts:904-919`). Note: this is a completely
    separate code path from Phase 2.1's `mark_path_valued_keys()`. The
    `mark_path_valued_keys()` function always marks map `path` values as `!path`
    because extension format metadata never contains bare extension names (those

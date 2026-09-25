@@ -1,6 +1,6 @@
 # Headroom.js in Quarto 1 — end-to-end reference (for bd-ersobfbt)
 
-Source: `external-sources/quarto-cli` @ `45caede32` (1.10.15). All paths below
+Source: `external-sources/quarto-cli` \@ `45caede32` (1.10.15). All paths below
 are relative to that tree. Collected 2026-08-21.
 
 **Short version:** the library is vendored, conditionally added as an HTML

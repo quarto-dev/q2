@@ -374,7 +374,7 @@ P7-foundation has landed and builds the docx/pptx-specific work on top of it.
   written). No fix needed; reuse the transform verbatim.
 - [x] Invocation builder (docx, pptx) per the facts pulled from the TS research doc above; latex
   stub documented. **Include format-specific `execute`/`pandoc` defaults** (Finding 1: pptx
-  `echo: false`/`warning: false`, both formats' fig sizes and `default-image-extension: png`) and
+  `echo: false`/`warning: false`, both formats\' fig sizes and `default-image-extension: png`) and
   **the pandoc-defaults forwarding allow-list** (Finding 2: `reference-doc`, `template`,
   `highlight-style`, `toc`/`toc-depth`, `reference-location`, `shift-heading-level-by`,
   `slide-level`) — register `reference-doc`/`template` as `FORMAT_PATH_KEYS` consumers per the

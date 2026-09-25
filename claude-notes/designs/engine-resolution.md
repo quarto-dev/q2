@@ -840,7 +840,7 @@ case-4. **Deliberate divergence from Q1's eager
   intermediate-slot FileIds). Thread the accumulating merged context into each
   engine's per-position `source_map`, designed once for built-in + TS.
 - **bd-r8n4r** (nested-handoff splice) — **tangential, increased exposure.** Our
-  cede mechanism re-emits at top level (within `splice_cells`' reach), so the
+  cede mechanism re-emits at top level (within `splice_cells`\' reach), so the
   nested-in-`Div.cell` case it tracks is not produced by ceding; but auto-split
   makes handoff more common, so it stays a live preview limitation.
 

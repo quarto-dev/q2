@@ -191,7 +191,7 @@ Keep a shim crate at old location that re-exports from pampa.
 1. Update root Cargo.toml (workspace members and dependencies)
 2. Update crates/pampa/Cargo.toml (package name, add [[bin]])
 3. Update crates/pampa/fuzz/Cargo.toml
-4. Update dependent crates' Cargo.toml files
+4. Update dependent crates\' Cargo.toml files
 
 ### Phase 4: Source Code
 1. Update main.rs command name

@@ -1,7 +1,7 @@
 # Observed behavior at HEAD (60cc579e, 2026-08-17)
 
 All four fixtures in this directory were run through
-`cargo run --bin pampa -- -t native <file>` at main @ 60cc579e.
+`cargo run --bin pampa -- -t native <file>` at main \@ 60cc579e.
 
 | Fixture | Input | Result |
 | --- | --- | --- |

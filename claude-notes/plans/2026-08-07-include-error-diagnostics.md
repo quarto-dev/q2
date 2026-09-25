@@ -57,7 +57,7 @@ This line mentions the groups' Unique IDs instead of their names.
 ```
 
 `q2 render index.qmd --to html` reproduces both diagnostics exactly
-(verified 2026-08-07 on `main` @ 9249c43d). Rendering `_bad.qmd`
+(verified 2026-08-07 on `main` \@ 9249c43d). Rendering `_bad.qmd`
 standalone shows the swallowed inner error: Q-2-10 "Closed Quote
 Without Matching Open Quote" with a two-label ariadne snippet.
 
@@ -289,6 +289,6 @@ page) was fixed by de-linking.
 - Discovered strand: **bd-1fz3vh99** — includes nested inside
   container blocks are silently dropped (linked
   `discovered-from:bd-qpvoamvu`).
-- Q-2-10 (the Connect docs' actual inner error) is itself arguably too
+- Q-2-10 (the Connect docs\' actual inner error) is itself arguably too
   strict for prose apostrophes after plural nouns (`groups' Unique
   IDs` is correct English). Not in scope; mentioned for context.

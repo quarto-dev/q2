@@ -460,7 +460,7 @@ Scope decisions at phase start:
   `openInspector()`.
 - `debug.css` has global selectors (`*`, `body`, `h1`, `button`…), so
   the panel gets its **own stylesheet scoped under
-  `.quarto-debug-inspector`**, restyling the reused components' class
+  `.quarto-debug-inspector`**, restyling the reused components\' class
   names; debug.html's file is untouched.
 - Panel covers the **sync-client repo only** (RepoContext mount);
   project-set/collections state appears in the Sync pane as JSON. The

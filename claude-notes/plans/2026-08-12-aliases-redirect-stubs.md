@@ -4,7 +4,7 @@
 **Braid:** `bd-aliases-redirects-missing-sch7cd1g` (p2, feature, label `website`)
 **Duplicate:** `bd-hzwecpyk` — **closed** in favour of this strand
 **Follow-up:** `bd-wdhhl0t9` (stale-stub cleanup, deferred)
-**Branch:** `braid/aliases-redirect-stubs`, based on `main` @ `1ba0f2ec` (no worktree — work in place)
+**Branch:** `braid/aliases-redirect-stubs`, based on `main` \@ `1ba0f2ec` (no worktree — work in place)
 **Status:** **Implemented.** All phases complete and verified end-to-end
 (§ Outcome). `cargo xtask verify --skip-hub-build` green; the Connect-docs
 file-count gap is closed.
@@ -214,7 +214,7 @@ short-circuiting when their config is absent, all called from
 
 ### q2 has a structural advantage over Q1 here
 
-Q1's `updateAliases` spends \~60 of its ~120 lines on an incremental-render workaround: on
+Q1's `updateAliases` spends \~60 of its \~120 lines on an incremental-render workaround: on
 an incremental build it re-walks *every* project input, re-reads each one's `aliases`,
 and re-adds them to the map (with `allowNewAnchors=false`) so that a redirect file
 claimed by several pages isn't rewritten with only the subset's entries.
@@ -300,7 +300,7 @@ Extracting only the front-matter `aliases:` blocks from the 69 declaring files i
 | Page-relative (`../…`, `./…`) | 30 | join against the page's own output dir |
 | Trailing slash (`…/`) | 77 | append `index.html` |
 | Ends in `.html` | 18 | use as-is |
-| Extensionless, no slash | ~11 | append `/index.html` |
+| Extensionless, no slash | \~11 | append `/index.html` |
 | Carries a `#fragment` | 5 | multi-entry redirect map |
 
 **Every one of Q1's `fixupHref` branches is exercised** — the trailing-slash rule alone
@@ -478,7 +478,7 @@ with variants or three separate codes is an implementation call. Each new code n
    as Q1-compatible?
 
 6. ~~**Hash fragments** — defer or not?~~ **Answered by the corpus measurement: not
-   deferrable.** 5 of the Connect docs' 106 aliases carry fragments, and two of them
+   deferrable.** 5 of the Connect docs\' 106 aliases carry fragments, and two of them
    merge into a stub shared by two different pages pointing at two different targets.
    A fragment-less first cut would produce wrong redirects, not merely incomplete ones.
    Flagging rather than asking — say so if you disagree and want a staged landing anyway.
@@ -505,7 +505,7 @@ with variants or three separate codes is an implementation call. Each new code n
 - **`DOCUMENT_PROFILE_VERSION` bump is cheap but not invisible.** `cache_key.rs` folds
   the version into its hash, so every project's profile cache invalidates once on the
   first render after this lands. Expected, worth mentioning in the changelog.
-- **Revisiting an explicit epic exclusion.** `bd-0tr6`'s MVP scope statement names
+- **Revisiting an explicit epic exclusion.** `bd-0tr6`\'s MVP scope statement names
   `aliases` in its exclusion list. Implementing it isn't a conflict — the MVP shipped —
   but the epic description should be amended so the exclusion list doesn't read as
   current policy.

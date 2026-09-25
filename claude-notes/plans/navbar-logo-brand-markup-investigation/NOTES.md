@@ -1,6 +1,6 @@
 # Investigation notes — bd-navbar-logo-unstyled-gbzd8vcu
 
-**Date:** 2026-08-19, main @ `f387bd68`.
+**Date:** 2026-08-19, main \@ `f387bd68`.
 
 ## Repro confirmation at HEAD
 

@@ -3,14 +3,14 @@
 - **GitHub**: https://github.com/quarto-dev/q2/issues/581
 - **Reporter**: @mcanouil (Mickaël Canouil), 2026-08-23
 - **Triage date**: 2026-08-25
-- **Worktree**: `.worktrees/issue-581` (branch `issue-581`, based on `main` @ `05b6fd75c`)
+- **Worktree**: `.worktrees/issue-581` (branch `issue-581`, based on `main` \@ `05b6fd75c`)
 - **Braid strand**: bd-vk4olgv6
 - **Scope**: both halves of the report — (a) inline `brand:` block in front matter fails with Q-14-1, (b) `brand: _brand.yml` in front matter emits a spurious Q-1-20 warning. The third item the reporter mentions (per-colour `light`/`dark`, GH #580) is already fixed and covered by `unified_brand_light_dark_renders_both_stylesheets` in `crates/quarto-core/tests/integration/brand_render.rs`; it is out of scope here.
 
 ## Summary
 
 The reporter's analysis is correct in every particular, and both halves reproduce
-exactly as described at `main` @ `05b6fd75c`. Front matter is converted with
+exactly as described at `main` \@ `05b6fd75c`. Front matter is converted with
 `InterpretationContext::DocumentMetadata`, which parses every untagged string as
 markdown into `ConfigValueKind::PandocInlines`; the brand deserializer's
 YAML-rebuilding walker rejects that variant, so **any** inline `brand:` block in
@@ -99,7 +99,7 @@ fix below eliminates this too.
 ## Open questions — resolved during triage
 
 - **Where should the fix live — pampa load time, or tolerate `PandocInlines` in
-  quarto-sass?** Load time. `meta_annotations.rs`'s own decision table says
+  quarto-sass?** Load time. `meta_annotations.rs`\'s own decision table says
   machine-facing keys are protected there; a consumer-side
   `as_plain_text()` flatten in `config_value_to_yaml_value` would be lossy
   (markdown-mangled values accepted silently) and would leave the Q-1-20
@@ -146,7 +146,7 @@ fix below eliminates this too.
   content — under Pandoc-inherited metadata semantics, shouldn't they be
   markdown rather than raw strings? Basis for choosing raw strings,
   verified against Quarto 1** (`external-sources/quarto-cli/src/project/project-shared.ts`,
-  `resolveBrand` / the `fileName !== undefined` branch, ~lines 669-718):
+  `resolveBrand` / the `fileName !== undefined` branch, \~lines 669-718):
   Q1 supports inline brand blocks in front matter and reads them via
   `project.fileMetadata(fileName)` — its own js-yaml front-matter read —
   then hands the raw object to `new Brand(...)` / `splitUnifiedBrand(...)`.
@@ -197,7 +197,7 @@ receives the **plain-text projection** of an `!md` value
 (`as_plain_text`, markup consumed); the merged metadata tree retains the
 rich inlines for q2-internal metadata consumers. The untagged path
 (annotation) remains byte-preserving. Note: `!md` on a *custom* meta
-field only fully materializes once bd-8q5o86r1 lifts `BrandMeta`'s
+field only fully materializes once bd-8q5o86r1 lifts `BrandMeta`\'s
 `deny_unknown_fields`; `!md` on known fields (e.g. `meta.name`) works
 as soon as this fix lands.
 
@@ -207,7 +207,7 @@ Phase 1 — tests first, verify each fails before implementing:
    for `brand` matches `["brand"]`, `["brand","color","background"]`,
    `["brand","light"]`; does not match `["my","brand"]`, `["brandx"]`;
    existing exact-length entries unaffected.
-2. `crates/pampa/src/pandoc/meta.rs` tests (module `tests`, ~line 646):
+2. `crates/pampa/src/pandoc/meta.rs` tests (module `tests`, \~line 646):
    DocumentMetadata conversion of `brand: {color: {background: "#b22222"}}`
    yields `Scalar` string leaves (not `PandocInlines`); `brand: _brand.yml`
    yields `Scalar("_brand.yml")` with **zero** diagnostics.
@@ -237,7 +237,7 @@ Phase 2 — implementation:
    exact-length otherwise, no suffix matching.
 5. Add the entry `(&["brand", "**"], Interpretation::PlainString)`, with a
    comment citing GH #581 / bd-vk4olgv6.
-6. Update the module docs' path-semantics section for `**`.
+6. Update the module docs\' path-semantics section for `**`.
 7. Walker tolerance for explicit `!md`
    (`crates/quarto-sass/src/config.rs:864`, `config_value_to_yaml_value`):
    map `PandocInlines` to `serde_yaml::Value::String(<as_plain_text>)`

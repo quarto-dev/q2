@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-13
 **Braid:** bd-79c4do6g (P1, bug, label `perf`)
-**Branch:** `braid/bd-79c4do6g-scss-cache-key-path` in the main checkout (based on `main` @ `35bc11415`; topic branch, no worktree, per user request)
+**Branch:** `braid/bd-79c4do6g-scss-cache-key-path` in the main checkout (based on `main` \@ `35bc11415`; topic branch, no worktree, per user request)
 **Status:** Design agreed 2026-09-14; implementing.
 
 ## Triage verdict
@@ -28,9 +28,9 @@ Filed 2026-09-13 by Carlos from the Connect-docs render profile
 *and* the file contents. Because the merged metadata carries a
 **document-relative** spelling of the theme path, the string differs
 per document directory even though it names the same file. On the
-Connect docs (352 docs across 349 directories) that means ~700 distinct
-keys for ~4 distinct compiled outputs: `perf.sass hits=22 compiles=682`,
-~48 ms per grass compile, 78 % of the serial render (42 s wall).
+Connect docs (352 docs across 349 directories) that means \~700 distinct
+keys for \~4 distinct compiled outputs: `perf.sass hits=22 compiles=682`,
+\~48 ms per grass compile, 78 % of the serial render (42 s wall).
 
 Research note (on the parent branch, not yet merged):
 `claude-notes/research/2026-09-13-connect-docs-render-profile.md` §1.
@@ -45,9 +45,9 @@ Research note (on the parent branch, not yet merged):
   Uncommitted there as of this investigation.
 - **related ← bd-ddahjqr1** (open, P2): "LRU sass cache leaks orphaned
   entries under parallel Pass 2 (index lost-update)". Separate bug in
-  `cache_set_lru`'s read-modify-write of the LRU index. Interaction:
+  `cache_set_lru`\'s read-modify-write of the LRU index. Interaction:
   the orphan leak is *bounded* once this strand shrinks the key space
-  to a handful of keys, and orphans currently mask ~30 % of this bug
+  to a handful of keys, and orphans currently mask \~30 % of this bug
   (they still serve `cache_get` hits by key). Fixing this one first
   makes that one less urgent; the two fixes don't overlap in code.
 - No `blocks` edges in either direction. No epic parent.
@@ -81,7 +81,7 @@ a plain `join` — no normalization. `document_dir` is
    `ConfigValueKind::Path("_extensions/posit-dev/posit-docs/theme.scss")`
    (project-root-relative).
 2. Every `Path`-marked value is then rewritten **per document** by the
-   metadata merge: `project/format_paths.rs::mark_entry` (line ~250)
+   metadata merge: `project/format_paths.rs::mark_entry` (line \~250)
    stores `pathdiff::diff_paths(&source, document_dir)`, i.e.
    `../../theme.scss` for a doc two levels deep. This applies to *any*
    custom theme declared in `_quarto.yml` / `_metadata.yml`, not just
@@ -89,8 +89,8 @@ a plain `join` — no normalization. `document_dir` is
    `theme: [my.scss]`, brand-less or not.
 
 Net: same file, one spelling per directory depth/location, one cache
-key per spelling. The 10 MB LRU (`SASS_CACHE_BUDGET_BYTES`, ~337 KB per
-entry → ~31 entries) then thrashes.
+key per spelling. The 10 MB LRU (`SASS_CACHE_BUDGET_BYTES`, \~337 KB per
+entry → \~31 entries) then thrashes.
 
 **Where the path legitimately matters.** `process_theme_specs`
 (`themes.rs:748-754`) pushes `resolved_path.parent()` onto the sass load
@@ -123,7 +123,7 @@ Fixture: `claude-notes/plans/scss-cache-key-path-investigation/fixture/`
 — a website project with `theme: [theme.scss]` (which `@import`s
 `_colors.scss`) and three documents at depths 0, 1, 2.
 
-Commands (from the fixture directory, `main` @ `35bc11415`):
+Commands (from the fixture directory, `main` \@ `35bc11415`):
 
 ```bash
 rm -rf .quarto/cache/sass _site
@@ -168,7 +168,7 @@ Skeleton only — actual phase contents wait on the design discussion.
   - Keep-distinct test: two different files in different directories
     with identical contents must still yield distinct keys (pins the
     import-context property; see Q1).
-  - Restate `test_cache_key_custom_file_reads_content`'s intent.
+  - Restate `test_cache_key_custom_file_reads_content`\'s intent.
   - End-to-end: render the repro fixture through `q2 render` with a
     cleared cache and assert the sass cache dir holds one entry (or,
     once the gauge lands, `compiles=1 hits=2`).
@@ -177,7 +177,7 @@ Skeleton only — actual phase contents wait on the design discussion.
   component with a canonical identity.
 - **Phase 2 — Measure.** Re-run the Connect-docs serial render with a
   cleared cache; expect `compiles` ≈ number of distinct variants (4)
-  and wall time to drop from ~42 s toward the ~9 s the research note
+  and wall time to drop from \~42 s toward the \~9 s the research note
   projects for the non-SCSS remainder. Record numbers here.
 - **Phase 3 — Docs/notes.** Update the `cache_key` doc comment (it
   currently says "Custom themes contribute their resolved path and
@@ -211,7 +211,7 @@ Skeleton only — actual phase contents wait on the design discussion.
 - [x] Phase 3 — `cache_key` doc comment; plan + strand notes.
 - [x] Follow-up commit: bd-ddahjqr1 (see § below) — implemented, full verify green.
 
-## Connect docs measurement (release `q2` @ `4a2d219fe`, 2026-09-14)
+## Connect docs measurement (release `q2` \@ `4a2d219fe`, 2026-09-14)
 
 Same project and procedure as the research note's "warm,
 `QUARTO_JOBS=1`, sass cache cleared first" row (352 docs, posit-docs
@@ -224,7 +224,7 @@ inspected.
 | cold serial, wall           | 42.0 s                     | **6.68 s**                   |
 | cold serial, `perf.sass`    | hits=22 compiles=682       | **hits=702 compiles=2**      |
 | cold serial, peak RSS       | 2.5 GB                     | 1.08 GB                      |
-| warm serial, wall           | ~30 s (orphan-assisted)    | 6.22 s (hits=704 compiles=0) |
+| warm serial, wall           | \~30 s (orphan-assisted)    | 6.22 s (hits=704 compiles=0) |
 | cold parallel (16), wall    | 4.55 s                     | 2.33 s                       |
 | cold parallel, `perf.sass`  | —                          | hits=672 compiles=32         |
 | sass cache entries          | 315 files / 101 MB (pre-existing) | 2 files              |
@@ -232,7 +232,7 @@ inspected.
 `compiles=2` rather than the note's expected 4: the second output per
 variant it observed came from the pre-existing orphan population, not
 from a live `doc_vars` split. Parallel cold `compiles=32` = 16 workers
-× 2 variants is the thundering herd noted above; it costs ~1.5 s of CPU
+× 2 variants is the thundering herd noted above; it costs \~1.5 s of CPU
 spread across workers and is not on the critical path.
 
 ## Follow-up: bd-ddahjqr1 — LRU index lost-update (same branch, own commit)
@@ -252,7 +252,7 @@ hid ~30 % of bd-79c4do6g.
    (`async_lock::Mutex<()>`, executor-agnostic, wasm-safe; new small
    dependency of `quarto-system-runtime`) held across the load/store in
    both wrappers. This makes a single `q2 render` exact; contention is
-   negligible (the index is ~10 KB JSON and writes are now rare —
+   negligible (the index is \~10 KB JSON and writes are now rare —
    `compiles ≈ variants` after bd-79c4do6g). A `std::sync::Mutex` guard
    across `.await` would trip `clippy::await_holding_lock` and can
    deadlock a single-threaded wasm executor; an async mutex has neither
@@ -294,7 +294,7 @@ which still contains the fixture's `.repro{color:#123456}` rule.
 default job count the cold gauge reads `compiles=3 hits=0` even though
 only one entry lands in the cache: all three pages miss before the
 first compile finishes. On the Connect docs that bounds the cold cost
-at ~`jobs` compiles per variant (16 workers → ≤ 64 compiles, not 704),
+at \~`jobs` compiles per variant (16 workers → ≤ 64 compiles, not 704),
 and every later page hits. Single-flighting the compile per key would
 close that; it is a natural companion to bd-ddahjqr1's in-process
 index and is noted there rather than done here.

@@ -979,7 +979,7 @@ cd /Users/gordon/src/q2/.worktrees/workspace-1
 cargo build --bin q2
 ```
 
-- [x] **Step 2: Run both strands' committed repros through the CLI**
+- [x] **Step 2: Run both strands\' committed repros through the CLI**
 
 Per the repo's end-to-end rule, tests passing is not sufficient — drive the
 binary a user would run and inspect the output. Remove the stale `_site/` first
@@ -1046,7 +1046,7 @@ cargo xtask lint
 cargo xtask verify
 ```
 
-Full `verify`, not `--skip-hub-build`: `pampa` is in `wasm-quarto-hub-client`'s
+Full `verify`, not `--skip-hub-build`: `pampa` is in `wasm-quarto-hub-client`\'s
 dependency closure, so the WASM leg can break even when the workspace build is
 clean.
 
@@ -1155,7 +1155,7 @@ counted once, plus 4 new writer unit tests in `crates/pampa/src/writers/qmd.rs`
 (Task 3, same method) counted twice (compiled into both `pampa` and
 `pampa::bin/pampa`). This was cross-checked against an independent
 diff-scoped derivation (Task 1 touches zero `.rs` files, so pampa's count
-after Task 1 equals `main`'s: 4572/2 skipped; pampa after Task 3 is 4590;
+after Task 1 equals `main`\'s: 4572/2 skipped; pampa after Task 3 is 4590;
 4590 − 4572 = +18, implying the same `main` total of 13329) — both methods
 agree exactly. See the Task 4 report for a fuller discussion, including a
 noted disagreement about whether the isolated-worktree measurement is fully

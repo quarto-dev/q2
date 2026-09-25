@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-20
 **Braid:** bd-yjsz6hdu (bug, p2, label `listings`)
-**Checkout:** main checkout, branch `braid/bd-yjsz6hdu` (off `main` @ `a72a2bb26`)
+**Checkout:** main checkout, branch `braid/bd-yjsz6hdu` (off `main` \@ `a72a2bb26`)
 **Status:** Design aligned 2026-08-21; executing.
 
 ## Design decisions (2026-08-21, aligned with user)

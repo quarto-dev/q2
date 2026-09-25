@@ -90,7 +90,7 @@ These are inputs to this plan, not open questions:
    CLI-only feature (decided 2026-05-05).** The
    description-preview-from-rendered-content and
    preview-image-from-rendered-content features (Q1's
-   `completeListingItems`) require reading sibling pages' rendered
+   `completeListingItems`) require reading sibling pages\' rendered
    HTML output. This means the feature *only* works in
    environments that complete a full project render, with engine
    execution, before the listing host page is finalized.
@@ -444,7 +444,7 @@ see "Bracketing rules" below.
 
 **Purpose.** *Upgrade* the description-preview and preview-image
 fields of listing items, replacing the static-AST fallbacks
-populated by L1 with content extracted from siblings' fully-
+populated by L1 with content extracted from siblings\' fully-
 rendered HTML output (post-engine, post-filter, post-highlight).
 The listing renders correctly without this step; L7 is purely an
 enhancement. This matches Q1's behavior, which the Quarto
@@ -452,7 +452,7 @@ ecosystem relies on (e.g. ggplot output as the "above the fold"
 preview image for a blog post).
 
 **Why this exists in the architecture.** The data L7 reads —
-sibling pages' rendered HTML — does not exist in any in-memory
+sibling pages\' rendered HTML — does not exist in any in-memory
 form during the per-file Pass-2 of the listing host. It only
 exists as bytes on disk after every sibling has finished
 rendering. To use that data, *something* must read those bytes
@@ -482,7 +482,7 @@ after they exist. L7 is that step.
   - HTML parsing: **`scraper`** (decision 4). Its CSS-selector
     API maps directly to Q1's `querySelector(...)` patterns and
     aligns with the user's planned future use in
-    `_quarto.tests`. L7's sub-plan must verify `scraper`'s
+    `_quarto.tests`. L7's sub-plan must verify `scraper`\'s
     transitive dependencies do not break the existing WASM
     build even though L7 itself is CLI-only — pulling
     incompatible deps into `quarto-core` would break hub-client
@@ -571,7 +571,7 @@ the form of the trade-off.
 
 Scope:
 - Wire the `template:` config path through to
-  `ListingResolveTransform`'s template resolver: when the user
+  `ListingResolveTransform`\'s template resolver: when the user
   sets `template: my-listing.template` (decision 1), resolve via
   `FileSystemResolver` rooted at the host-page directory, falling
   back to `MemoryResolver` for built-in partials referenced

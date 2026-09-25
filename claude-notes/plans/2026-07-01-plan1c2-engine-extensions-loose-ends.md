@@ -189,7 +189,7 @@ which stays valid). (Note: this `render.rs` is in the **`quarto`** crate, not `q
   Discovery stays a pure path/string module. Do **not** thread `Arc<EngineRegistry>` in.
   **Both `RenderableExtensions` and the `FIXED_RENDERABLE` const (= `{"qmd"}`) are introduced here** —
   neither exists yet; `FIXED_RENDERABLE` replaces the current hardcoded `"qmd"` in `has_qmd_extension`.
-  > **Forward note (Plan 7a):** 7a extends this seam to (a) union **built-in** engines' static claim
+  > **Forward note (Plan 7a):** 7a extends this seam to (a) union **built-in** engines\' static claim
   > declarations (read as *data*, still without launching them — the rule sharpens from "never the
   > registry" to "never *launch*; do read static declarations"), and (b) admit **content-pattern**
   > claims by reading candidate files and evaluating a native regex. 1c.2 lands the extension-only,

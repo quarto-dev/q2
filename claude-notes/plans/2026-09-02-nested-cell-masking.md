@@ -2,7 +2,7 @@
 
 **Strand:** bd-knitr-executes-nested-display-fence-atbtktdj (epic: bd-98m98wg8)
 **Branch:** `braid/bd-knitr-executes-nested-display-fence-atbtktdj-mask` off
-`origin/main` @ `85e98fb02`.
+`origin/main` \@ `85e98fb02`.
 
 The **minimal, forward-compatible slice** of a larger epic. The epic plan, the
 full design-decision table, the open questions and the

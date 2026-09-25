@@ -3,7 +3,7 @@
 - **GitHub**: https://github.com/quarto-dev/q2/issues/182
 - **Reporter**: @rundel (Colin Rundel), 2026-05-11
 - **Triage date**: 2026-05-12
-- **Worktree**: `.worktrees/issue-182` (branch `issue-182`, based on `main` @ `16a8d67c`)
+- **Worktree**: `.worktrees/issue-182` (branch `issue-182`, based on `main` \@ `16a8d67c`)
 - **Beads issue**: bd-nkx4
 - **Scope**: covers the *whitespace-loss* part of the report (reporter's follow-up comment). Explicitly does **not** attempt to fix the underlying ambiguity of two adjacent Code/RawInline spans with no separator in the AST (cscheid's first reply). That case has no unambiguous qmd surface form and isn't the user's actual complaint.
 

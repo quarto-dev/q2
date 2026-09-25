@@ -14,7 +14,7 @@ quarto render --output-dir _site-q1
 
 ## `repro/` — the strand's case
 
-**q2 @ `0dcd7e83`**, `_site/index.html`:
+**q2 \@ `0dcd7e83`**, `_site/index.html`:
 
 ```html
 <nav id="TOC" role="doc-toc" class="toc-active">

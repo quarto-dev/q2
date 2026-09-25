@@ -113,7 +113,7 @@ Full detail in this worktree's ledger,
 **Findings for Gordon #1's blocking condition is resolved**: P4's vendored filters tree +
 `QUARTO_FILTER_PARAMS` blob builder + pandoc-version reconciliation all now exist on
 `feature/pandoc-writer-hybrid`; Task 7's prerequisite is fully satisfied. This file's Task 6 and
-Task 7 sections' own `**Prerequisite.**` lines (stating the vendored tree "does not exist in this
+Task 7 sections\' own `**Prerequisite.**` lines (stating the vendored tree "does not exist in this
 worktree," verified 2026-09-18) describe pre-P4 reality and are now historical, not current.
 
 This file adds nothing to P3's scope — it converts P3's Coarse checklist into `## Task N` units

@@ -2,7 +2,7 @@
 
 **Strand:** `bd-sidebar-title-with-navbar-82wxow6m` (bug, p3, labels: `navigation`, `parity`)
 **Branch:** `braid/bd-sidebar-title-with-navbar-82wxow6m-sidebar-title-with-navbar`
-**Base:** `origin/main` @ `c11aa0e4d` (rebased 2026-08-26; originally planned at `99e7db175`)
+**Base:** `origin/main` \@ `c11aa0e4d` (rebased 2026-08-26; originally planned at `99e7db175`)
 **Worktree:** `.worktrees/workspace-3`
 
 ## TL;DR

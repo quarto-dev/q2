@@ -223,7 +223,7 @@ below.
 ### Implementation
 - [x] Before touching `node_lookup.rs`, `grep` for all Rust callers of
   `lookup_block` (the return type changes from `Option<usize>` to
-  `Option<NodePath>`) and list them so none are missed. **Verified @ 2ecf09c4 —
+  `Option<NodePath>`) and list them so none are missed. **Verified \@ 2ecf09c4 —
   the call set is small:** `crates/pampa/src/apply_node_edit.rs:143` (the only
   non-test caller) and `crates/pampa/tests/integration/node_edit_tests.rs` (lookup
   tests + the `edit_block` helper; the `Some(0)`/`Some(1)` asserts at ~181/190/

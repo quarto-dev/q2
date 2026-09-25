@@ -305,7 +305,7 @@ Alias map handles unnamed extensions whose runtime name is only known post-LoadE
 alphabetical. **Note the order difference vs Q1's `knitr, jupyter, markdown, julia`
 for the `Available engines:` message — see deviation D-? (§8).**
 
-### 6.5 Native engines' daemon-like state (Part 2 substrate)
+### 6.5 Native engines\' daemon-like state (Part 2 substrate)
 
 - **jupyter**: real in-process daemon — `JupyterDaemon` global singleton
   (`daemon.rs`), sessions keyed `(kernel_name, working_dir)`, ZeroMQ + connection file

@@ -125,10 +125,10 @@ must continue to use the typed top-level fields. If a future
 feature finds itself wanting to read `listing_item`, that is a
 **redesign trigger** — either widen the typed top-level field set
 with a versioned bump, or define a new scoped feature surface. Do
-not silently broaden listings' scope.
+not silently broaden listings\' scope.
 
 The discipline is enforced by code review, not the type system.
-The `listing_item` field is `pub` for serde and for listings' own
+The `listing_item` field is `pub` for serde and for listings\' own
 use; the contract above is the boundary that matters.
 
 This is the same discipline `bd-fegm` (Phase 8) used when it
@@ -368,7 +368,7 @@ Tracking: `bd-creo` (CLI strictness), `bd-mwtf` /
     feature surfaces".
   - `categories_raw: Option<ConfigValue>` — tagged form of the
     top-level `categories:` value, preserving `!prefer` /
-    `!concat` merge tags for listings consumers' tag-aware
+    `!concat` merge tags for listings consumers\' tag-aware
     merging via `quarto_config::MergedConfig`. Most consumers
     keep reading the flattened `categories: Vec<String>`;
     only listings reach for the raw form. Default `None`.

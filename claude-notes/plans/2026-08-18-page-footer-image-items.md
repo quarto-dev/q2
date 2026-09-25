@@ -55,7 +55,7 @@ session. No incoming `blocks` edges; urgency comes from the connect-docs port.
 
 ## What the code looks like today
 
-Everything the strand points at exists unchanged at `main` @ 5b6774d1. Full
+Everything the strand points at exists unchanged at `main` \@ 5b6774d1. Full
 trace with line numbers: `page-footer-image-items-investigation/code-trace.md`.
 Condensed:
 
@@ -64,7 +64,7 @@ Condensed:
   reader's postprocess desugars a single-image paragraph into `Block::Figure`
   (`postprocess.rs:978`); `meta.rs:75` only unwraps a lone `Paragraph` to
   `PandocInlines`, so the value stays `PandocBlocks([Figure])`; and
-  `render_text`'s `block_inlines` (`render_html.rs:913`) matches only
+  `render_text`\'s `block_inlines` (`render_html.rs:913`) matches only
   `Plain|Paragraph|Header` → empty string.
 - **Defect 2** is one missing call: `rewrite_items_hrefs`
   (`footer_render.rs:147`) rewrites `item.href` and recurses into `item.menu`
@@ -172,7 +172,7 @@ Follow-up strands filed (discovered-from this strand):
    its image in `parse_yaml_string_as_markdown_to_config` (`meta.rs`) —
    "a figure with caption semantics is arguably never wanted there." The value
    becomes `PandocInlines([Image])`, so every consumer (render, inline
-   rewriters, `copy_footer_images`' image collection) works on it for free.
+   rewriters, `copy_footer_images`\' image collection) works on it for free.
 2. **Scope of defect 2: all three surfaces.** Route item `text:`/`bare_text`
    inlines through the rewriter for page-footer, navbar, and sidebar items in
    this pass (shared helper), not footer-only.
@@ -261,7 +261,7 @@ Mechanics established:
 
 ## End-to-end verification (investigation)
 
-Run at HEAD (`main` @ 5b6774d1, 2026-08-18), pre-flight
+Run at HEAD (`main` \@ 5b6774d1, 2026-08-18), pre-flight
 `cargo xtask verify --skip-hub-build` green first. Output inspected directly.
 
 - Invocation: `cargo run --bin q2 -- render claude-notes/plans/page-footer-image-items-investigation/repro`

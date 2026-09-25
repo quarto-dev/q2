@@ -482,7 +482,7 @@ tightens a span; it does not correct a wrong byte position. Scope it
 accordingly, and note that the dead range computation at `:1000-1005` can simply
 be deleted rather than corrected.
 
-**`cell_options`' constraint, named:** a language's option-line syntax may only
+**`cell_options`\' constraint, named:** a language's option-line syntax may only
 *elide* spans, never *transform* them, because every byte of the reassembled
 YAML must be a real source byte. Plan 1's reversal to **store** zero-content
 pieces makes a deletion expressible, so `replacement(src_range, 0)` would lift

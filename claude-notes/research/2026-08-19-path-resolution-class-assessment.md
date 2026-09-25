@@ -20,7 +20,7 @@ bd-oejuizi9 (the bug), bd-hjv5o (the deferred audit),
 
 ---
 
-## 1. Empirical verification (main @ e6ac236d, 2026-08-19)
+## 1. Empirical verification (main \@ e6ac236d, 2026-08-19)
 
 Issue #455's exact fixture (project `_quarto.yml` with
 `format.html.include-in-header: [custom-header.html]`, inputs `index.qmd` and
@@ -98,7 +98,7 @@ now **three coexisting correct mechanisms** plus the incorrect ad-hoc joins:
 1. **`resolve_metadata_path`** (`transforms/navigation_href.rs:583`, from
    bd-qor9a): SourceInfo provenance → declaring file's dir → project-root-
    relative. Adopted by navigation surfaces only (sidebar/navbar/footer
-   generate transforms). Caveat: `_quarto.yml`'s FileId is typically not in
+   generate transforms). Caveat: `_quarto.yml`\'s FileId is typically not in
    the per-document SourceContext, so the helper *degrades to raw* for
    `_quarto.yml`-declared values — correct only because its callers happen to
    assume project-root-relative input.

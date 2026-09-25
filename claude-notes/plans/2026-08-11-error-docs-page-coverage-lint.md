@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-11
 **Braid:** bd-u2qj4y29 (task, p2, filed 2026-08-10 by Carlos)
-**Checkout:** main checkout of q2, branch `main` @ `d05e021e`
+**Checkout:** main checkout of q2, branch `main` \@ `d05e021e`
 **Status:** Design settled 2026-08-11 with Carlos; implementing. See
 **Design decisions** below — they supersede the *Open design questions*
 section, which is kept as the record of what was asked.
@@ -77,7 +77,7 @@ the documentation already promises it.
 
 ## What the code looks like today
 
-Verified at `main` @ `d05e021e`.
+Verified at `main` \@ `d05e021e`.
 
 **Everything the strand describes still holds structurally.** The catalog is
 `crates/quarto-error-catalog/error_catalog.json` — a JSON *object* keyed by

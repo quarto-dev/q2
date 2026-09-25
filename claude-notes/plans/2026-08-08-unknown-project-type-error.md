@@ -82,7 +82,7 @@ printf -- '---\ntitle: Sub\n---\n\nMore.\n' > sub/page.md
 cargo run --bin q2 -- render /tmp/md-libs-repro
 ```
 
-Observed (2026-08-08, workspace @ 5c714919):
+Observed (2026-08-08, workspace \@ 5c714919):
 
 - `q2 render` prints `Rendering project: … (type: default)` — no
   warning, no error — and exits 0.
@@ -153,7 +153,7 @@ error[Q-5-17]: Unknown project type `posit-docs`
 
 ### Non-goals
 
-- **No change to default-type projects' per-document `_files/` layout.**
+- **No change to default-type projects\' per-document `_files/` layout.**
   That layout is intentional for `type: default` (and matches Q1);
   the bug is only the misclassification.
 - **No extension project-type support.** That's a large feature; if we

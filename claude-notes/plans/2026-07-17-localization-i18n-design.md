@@ -317,7 +317,7 @@ Phase 4 notes:
   at render time; captions use the localized `kind`. Proof labels use
   `environment-proof-title`.
 - Theorem sugar now takes its display name from the registry (localized),
-  keeping `THEOREM_CLASSES`' English column only as the registry-less
+  keeping `THEOREM_CLASSES`\' English column only as the registry-less
   test fallback — the duplicate display-name table is effectively gone.
 - Title block: `labels.{author,published,abstract}` computed in Rust
   (author single/plural by author count, Q1 `computeLabels` parity),

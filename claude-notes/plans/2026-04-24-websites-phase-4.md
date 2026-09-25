@@ -569,7 +569,7 @@ New file `page_navigation_pipeline.rs` modeled on
     `[a.qmd, ---, b.qmd]`. `a.html`: next empty. `b.html`: prev empty.
 43. **`pipeline_page_nav_cross_contamination_guard`** — rendering
     `index.qmd` does not mark or leak neighbors into the other two
-    pages' output (regression against stateful-transform bugs, same
+    pages\' output (regression against stateful-transform bugs, same
     shape as the navbar cross-contamination test from Phase 3).
 44. **`pipeline_single_doc_no_page_nav`** — a bare `doc.qmd` with no
     `_quarto.yml`, top-level `page-navigation: true`: no

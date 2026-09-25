@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-09
 **Braid:** bd-brace-escape-hint-0tmemkyt (feature, p2, label `diagnostics`)
-**Branch:** `main` @ `ec8a35f9` (investigation committed in place; no worktree created)
+**Branch:** `main` \@ `ec8a35f9` (investigation committed in place; no worktree created)
 **Status:** Design settled with user (2026-08-09) — implementation in progress.
 
 ## Settled design decisions (user-confirmed 2026-08-09)
@@ -46,7 +46,7 @@ brace run.
 
 Real-world driver: porting Q1 projects — REST API docs write path
 parameters as `{name}` constantly (the generated Posit Connect API
-reference hit this dozens of times across ~160 endpoints). Origin strand in
+reference hit this dozens of times across \~160 endpoints). Origin strand in
 the connect-docs skein: `br-brace-escape-hint-z8vy6sis`; external repro at
 `~/repos/github/cscheid/q2-connect-docs/llms-info/repros/bare-braces-parse-error/`
 (README states expected vs. actual; a copy of the repro's behavior facts is

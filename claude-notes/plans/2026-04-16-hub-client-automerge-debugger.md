@@ -325,7 +325,7 @@ between the two pages.
   requires changing `quarto-sync-client` or the main app wiring and
   contradicts the "no refactor of hub-client" constraint. Revisit only
   if Phase 5's static snapshot view proves insufficient.
-- **Raw IndexedDB byte dump.** Chrome DevTools' Application tab already
+- **Raw IndexedDB byte dump.** Chrome DevTools\' Application tab already
   handles the "is something even there?" case. We could decode Automerge
   binary blobs for a richer view, but that's marginal value on top of
   Phase 5's real-Repo-against-real-storage approach.

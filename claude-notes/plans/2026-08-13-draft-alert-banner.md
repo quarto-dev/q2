@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-13
 **Braid:** `bd-draft-banner-missing-hgx1gkqm` (feature, p3, labels: `navigation`, `parity`)
-**Branch:** `main` @ `0dcd7e83` (investigated in place; no worktree created)
+**Branch:** `main` \@ `0dcd7e83` (investigated in place; no worktree created)
 **Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
 
 ## Triage verdict
@@ -10,7 +10,7 @@
 **Ready to design, and considerably smaller than the strand describes** — the CSS
 rule, the icon font, and the localization term all already ship; the `$if(draft)$`
 template plumbing was empirically verified to work with no new wiring. The only
-missing piece is emitting ~1 line of HTML, plus deciding where the localized
+missing piece is emitting \~1 line of HTML, plus deciding where the localized
 "Draft" string gets computed.
 
 Four claims in the strand description are wrong or incomplete; see
@@ -133,7 +133,7 @@ when there is no header — which is precisely q2's situation).
 is in the "anything else" row, so "banner whenever `draft: true`" is exactly
 Q1-correct today. `bd-w0o9` does not block this; when `draft-mode: gone` lands it
 will need to suppress the banner, which is a one-line condition wherever the guard
-ends up. Worth a note in the code so `bd-w0o9`'s implementer finds it.
+ends up. Worth a note in the code so `bd-w0o9`\'s implementer finds it.
 
 ### Architectural note
 
@@ -266,7 +266,7 @@ because `HeaderIncludesEffect` applies `rendered.includes.header`
 imperatively to `document.head` — which is exactly why the partial success
 was misleading.
 
-Split to **bd-3cpv7dah** per the agreed rule. The fix looks like ~20 lines
+Split to **bd-3cpv7dah** per the agreed rule. The fix looks like \~20 lines
 (a `DraftAlertSlot` before `NavbarSlot`), since the transform already
 publishes the localized label the slot would consume.
 

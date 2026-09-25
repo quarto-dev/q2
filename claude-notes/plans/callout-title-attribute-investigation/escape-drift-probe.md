@@ -1,7 +1,7 @@
 # Probe: attribute values are unescaped, but their spans are raw
 
 Evidence behind the source-mapping design in the plan. Run against
-`origin/main` @ `b2b6100c`.
+`origin/main` \@ `b2b6100c`.
 
 ## Input
 

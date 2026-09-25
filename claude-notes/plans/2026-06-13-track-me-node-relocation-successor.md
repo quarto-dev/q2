@@ -302,7 +302,7 @@ The load-bearing conclusions, all folded into the phases above:
 - **C5/C6/C7** hash gives clean deletion (`null`), clean content-change drop, and **sibling-edit
   immunity** (per-subtree) — the latter is the nested-child fix.
 - **C13/C33** duplicates → nearest-`lastPos` + slice-verify + distance-cap; residual = deleted-twin
-  (cursors' domain).
+  (cursors\' domain).
 - **C15** the generation handshake is the correctness floor (TRACK offsets are version-relative).
 - **C17/C18** commit-rebase and destination-projection reuse this exact primitive — **deliberately
   out of scope** here, designed-for.

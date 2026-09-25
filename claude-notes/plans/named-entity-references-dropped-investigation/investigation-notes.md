@@ -1,6 +1,6 @@
 # Investigation notes — bd-named-entities-w6xbfftj
 
-Investigated 2026-08-10 at main @ `0cb8abce`. Pre-flight
+Investigated 2026-08-10 at main \@ `0cb8abce`. Pre-flight
 `cargo xtask verify --skip-hub-build` passed before any changes.
 
 ## Reproduction at HEAD

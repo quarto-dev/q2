@@ -5,7 +5,7 @@
 **Origin strand:** `br-de85v0a8` — in the **connect-docs porting skein**, a
 *different* braid project. It does not resolve against the q2 skein; the
 q2-side strand above is the one to work.
-**Branch:** `braid/callout-title-attribute`, off `origin/main` @ `b2b6100c`.
+**Branch:** `braid/callout-title-attribute`, off `origin/main` \@ `b2b6100c`.
 (Investigated on `docs/feature-porting-process`; cherry-picked across once main
 was current.)
 **Status:** Implemented. All phases complete; workspace suite green
@@ -43,7 +43,7 @@ Q1 emits:
 <div class="callout-title-container flex-fill"><span class="screen-reader-only">Note</span>Off-Host Execution</div>
 ```
 
-**Impact:** ~25 pages of the Posit Connect docs, which use the attribute form
+**Impact:** \~25 pages of the Posit Connect docs, which use the attribute form
 throughout. Readers see an unlabeled "Note"/"Warning"/"Important". No warning is
 emitted. Because the title is never marked user-supplied, the
 `screen-reader-only` type span is also skipped, so a titled and an untitled

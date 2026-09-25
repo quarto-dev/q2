@@ -353,7 +353,7 @@ wave to destructure `ConfigValueKind::Scalar { yaml, content_source_info }`
 and use `content_source_info.as_ref().unwrap_or(&cv.source_info)`, mirroring
 `parse_scalar_string_in_place`. **Unbindable by construction**, same audit
 category as the `callout.rs` deletion above: no consumer reads those
-inlines' spans (they feed only image-URL extraction, and `parse_diags` is
+inlines\' spans (they feed only image-URL extraction, and `parse_diags` is
 discarded), so no fixture can distinguish the corrected base from the raw
 one. See Phase 6's § Evidence for the recorded-as-unbindable entry.
 

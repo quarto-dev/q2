@@ -166,7 +166,7 @@ drop their `---` lines.
 
 Blast radius: 5 corpus files / 9 `(metadata)` expectations become
 `(metadata (yaml))`; `tree-sitter generate; tree-sitter build; tree-sitter test`;
-one dispatch arm in pampa; three test files' fixtures. Error recovery for an
+one dispatch arm in pampa; three test files\' fixtures. Error recovery for an
 unterminated block is unchanged in outcome (no `start` is emitted unless a
 close exists, exactly as today).
 
@@ -282,7 +282,7 @@ Phase 3 — wrap-up:
   markdown and comes back as a bullet list, so the writer emits `* foo`.
   That is the markdown-metadata contract, not a delimiter problem.
 
-## Reproduction record (2026-09-10, `main` @ 5a12a773)
+## Reproduction record (2026-09-10, `main` \@ 5a12a773)
 
 ```
 $ printf -- '---\ndescription: "Hello — world"\nauthor: Z\n---\n\nx\n' \

@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-14
 **Braid:** bd-format-css-not-copied-crn3bjdz (bug, p1, label `websites`)
-**Checkout:** main checkout, branch `main` @ `10d86829` (investigation only — no worktree/branch created)
+**Checkout:** main checkout, branch `main` \@ `10d86829` (investigation only — no worktree/branch created)
 **Status:** Implementation complete on branch
 `braid/bd-format-css-not-copied-crn3bjdz` (commits `37758160` +
 `86a6f79d` on top of the investigation commits). All phases done; full
@@ -119,7 +119,7 @@ comes from the strands the description references:
 
 ## What the code looks like today
 
-All paths verified at `main` @ `10d86829`:
+All paths verified at `main` \@ `10d86829`:
 
 - **Link emission**: `extract_css_from_meta`
   (`crates/quarto-core/src/template.rs:928`) reads the `css` metadata key
@@ -157,7 +157,7 @@ Fixture: `claude-notes/plans/format-css-not-copied-investigation/repro/`
 (mirrors the external repro at
 `~/repos/github/cscheid/q2-connect-docs/llms-info/repros/format-css-not-copied/`).
 
-Run 2026-08-14 at `main` @ `10d86829` (pre-flight `cargo xtask verify
+Run 2026-08-14 at `main` \@ `10d86829` (pre-flight `cargo xtask verify
 --skip-hub-build` green, 12167/12167):
 
 ```
@@ -250,7 +250,7 @@ consumption models.
 
 ## Evidence pass 2: q2 boundary audit
 
-Per-key status at `main` @ `10d86829` (file:line cites in the agent record;
+Per-key status at `main` \@ `10d86829` (file:line cites in the agent record;
 load-bearing ones inline):
 
 | key | q2 today |
@@ -334,7 +334,7 @@ theme css already lands there (Q1 analog: `<stem>_files/libs/`).
 
 Implementation runs on branch `braid/bd-format-css-not-copied-crn3bjdz`
 (remote will be `bugfix/bd-format-css-not-copied-crn3bjdz`), branched from
-`main` @ `10d86829` with the investigation commits.
+`main` \@ `10d86829` with the investigation commits.
 
 ### Phase 0 — failing tests first
 
@@ -344,7 +344,7 @@ Implementation runs on branch `braid/bd-format-css-not-copied-crn3bjdz`
 - [x] Integration: document front-matter `css:` in a subdirectory resolves against the document dir (copied + linked)
 - [x] Integration: missing declared css → Q-code diagnostic, link still emitted, render completes
 - [x] Integration: external URL entries pass through verbatim, no copy, no diagnostic
-- [x] Integration: default-project (DefaultProjectType — books' dispatch) render copies css + correct hrefs
+- [x] Integration: default-project (DefaultProjectType — books\' dispatch) render copies css + correct hrefs
 - [x] Integration: revealjs single-doc render links user `css:` (currently dropped)
 - [x] All of the above verified failing at HEAD
 
@@ -372,7 +372,7 @@ Implementation runs on branch `braid/bd-format-css-not-copied-crn3bjdz`
 - [x] Re-check the Connect docs repro (2026-08-14, branch binary: both css files copied, deep hrefs `../../styles.css` + relocated quarto-contrib path — matches Q1 table)
 - [x] Verify `q2 preview` behavior; filed follow-up **bd-b3oq2fsy** (user css not applied in VFS mode; also fixed a false Q-5-29 in the preview overlay by cfg-gating emission to native)
 - [x] Full `cargo xtask verify` green (14 legs, 2026-08-14; workspace re-run after the wasm cfg fix: 12182 native + 131 wasm)
-- [x] User-facing docs: the Q-5-29 page documents the resolution rules (per-layer anchors, leading `/`); rendered through q2 and inspected. The docs' own `css: styles.css` example (guides/projects/create.qmd) now actually works. No further docs page needed.
+- [x] User-facing docs: the Q-5-29 page documents the resolution rules (per-layer anchors, leading `/`); rendered through q2 and inspected. The docs\' own `css: styles.css` example (guides/projects/create.qmd) now actually works. No further docs page needed.
 
 ## Proposed phases (draft)
 

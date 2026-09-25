@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-10
 **Braid:** `bd-include-in-code-block-f8mvtczn` (bug, P1, label `parity`)
-**Branch:** `braid/include-in-code-block-f8mvtczn`, off `main` @ `bcdbce6b`
+**Branch:** `braid/include-in-code-block-f8mvtczn`, off `main` \@ `bcdbce6b`
 **Status:** Implemented, fully verified, **awaiting review before commit**. All decisions (D1–D7 plus D3a/D3b/D4a found during implementation) are settled and recorded below.
 
 ## Triage verdict
@@ -11,7 +11,7 @@
 
 ## Design decisions
 
-Settled with the user on 2026-08-10. Each records what Q1 actually does, verified against `external-sources/quarto-cli` @ `abc6a78ed` and a real `quarto render` of the repro.
+Settled with the user on 2026-08-10. Each records what Q1 actually does, verified against `external-sources/quarto-cli` \@ `abc6a78ed` and a real `quarto render` of the repro.
 
 ### D1 — Fix site: `IncludeExpansionStage` ✅ settled
 
@@ -113,7 +113,7 @@ Either branch ends the spliced text with `\n\n`. So Q1 *adds* a blank line.
 
   A newline immediately before `</code></pre>` is *not* stripped by the HTML spec (only one immediately after `<pre>` is), so it renders as an empty final line.
 
-**Consequence.** Nearly every source file ends with a newline (POSIX convention; most editors and linters enforce it). Splicing verbatim would therefore give *every* listing a spurious blank last line — the default case, not an edge case — and would break parity for all ~44 Connect-docs listings, which is the reason this strand exists.
+**Consequence.** Nearly every source file ends with a newline (POSIX convention; most editors and linters enforce it). Splicing verbatim would therefore give *every* listing a spurious blank last line — the default case, not an edge case — and would break parity for all \~44 Connect-docs listings, which is the reason this strand exists.
 
 **On the "users can't force an intentional trailing newline" concern.** They can, symmetrically with how the parser already treats fences: end the file with two newlines — one is consumed by the trim, one remains. That is the same affordance a hand-written fence has.
 

@@ -5,7 +5,7 @@ bd-hb9a9ik8 (2026-07-21), bd-51k5yz4e (2026-07-17), bd-4vbd3b7g (2026-08-14). Sa
 filed four times over three months, correctly diagnosed twice, never fixed.
 **Reported:** 2026-09-17, `~/Desktop/daily-log/2026/09/17/fig-test/test.qmd` (knitr cell with
 `#| fig-cap` + `![This is another figure](plot.png){#fig-test-2}`).
-**Verified against:** `main` @ `aa92c4b9e`. **Q1 reference:** `quarto` 99.9.9 (dev checkout).
+**Verified against:** `main` \@ `aa92c4b9e`. **Q1 reference:** `quarto` 99.9.9 (dev checkout).
 **Status:** executing on branch `braid/bd-n3sark9b-crossref-float-caption-prefix`. Phase 1 committed (`18fa6670d`); Phase 2 committed (`1a83b4776`); full `cargo xtask verify` green 2026-09-17. Pushed; PR https://github.com/quarto-dev/q2/pull/690 (CI in progress).
 **Docs follow-up:** bd-t0qt409i (under the docs epic bd-tr81, blocked on this strand).
 
@@ -312,7 +312,7 @@ nbsp — all out of scope.
 - [x] Pushed with approval; PR https://github.com/quarto-dev/q2/pull/690. First CI pass: 7 of 10 checks
   green. The three red legs are pre-existing and tracked elsewhere — both "Workspace TS suites" legs
   fail on quarto-hub-mcp's `exit-drain.test.ts` timeout, red on `main` since PR #685
-  (bd-ppu6xmvv); "Run test suite (macos-latest)" hit `test_race_free_instance_exclusive`'s
+  (bd-ppu6xmvv); "Run test suite (macos-latest)" hit `test_race_free_instance_exclusive`\'s
   DEADLOCK timeout under full-workspace load (bd-xxpbo8cf), which passed on ubuntu and in three
   local full runs. Both fixes have since merged to `main` (#691 sizes the exit-drain budgets for
   automerge-repo 2.6); `origin/main` merged into this branch for a fresh CI run.

@@ -67,7 +67,7 @@ elsewhere) and are recorded as such below, not as new work.
   (`render-files.ts:146`); the **only** Q1 caller that sets it `false` is **single-file book
   rendering** (`book-render.ts:136`, `resolveDependencies: isMultiFileBookFormat(format)`). The
   semantic is **rendering topology**: *one output per `execute()`* → inline; *many `execute()`s
-  merged into one output* (a single-file PDF/epub book) → **defer**, so all chapters' deps
+  merged into one output* (a single-file PDF/epub book) → **defer**, so all chapters\' deps
   resolve **once, together, at the final combined render** where `output` is finally known
   (hence `dependencies()` takes `output: recipe.output`, `render.ts:97`).
 - **Why this is a scope-reduction finding, not a design question.** The deferred path

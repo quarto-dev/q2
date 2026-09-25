@@ -3,7 +3,7 @@
 - **GitHub**: https://github.com/quarto-dev/q2/issues/175
 - **Reporter**: @rundel (Colin Rundel), 2026-05-11
 - **Triage date**: 2026-05-11
-- **Worktree**: `.worktrees/issue-175` (branch `issue-175`, based on `main` @ `53394156`)
+- **Worktree**: `.worktrees/issue-175` (branch `issue-175`, based on `main` \@ `53394156`)
 - **Beads issue**: bd-7mpv
 - **Scope**: the single round-trip bug described in the issue body. No other reports.
 

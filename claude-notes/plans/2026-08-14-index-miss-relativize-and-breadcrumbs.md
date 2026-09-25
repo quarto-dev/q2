@@ -7,7 +7,7 @@
 - bd-breadcrumbs-missing-1vpuqh34 — website breadcrumbs not rendered (blocked on the two above; the blocks edges encode the required ordering)
 - bd-root-relative-paths-design-fc5pvkcv — parent design (related); its decisions 4/5 and helpers govern this session
 
-**Checkout:** main checkout, `main` @ 3ac596e0. User asked for all three fixes in this session, in the order encoded in the graph.
+**Checkout:** main checkout, `main` \@ 3ac596e0. User asked for all three fixes in this session, in the order encoded in the graph.
 
 ## Triage verdict
 

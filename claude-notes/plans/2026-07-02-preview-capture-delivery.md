@@ -180,7 +180,7 @@ assertion — J3-correction precedent):
 - [x] PC1 + PC2 TDD upstream (deno tests, socket/command-writer mocked); rebundle the q2
       julia fixture from the branch; compat log + migration guide addenda (julia-engine.ts is
       no longer zero-changes — UPDATE THE HEADLINE claims in both docs honestly).
-      *(Upstream `q2-close-busy-fix` @ 93bce7b. Decision gate = YES: QNR exposes `forceclose`;
+      *(Upstream `q2-close-busy-fix` \@ 93bce7b. Decision gate = YES: QNR exposes `forceclose`;
       PC2 = force-close recovery. New pure `src/worker-close.ts` (preRunClose/postRunClose over
       an injectable writer); 6 deno unit tests RED→GREEN. Fixture rebundled `82bff64…`. Compat
       log §15 + migration-guide headline updated. See .superpowers/sdd/task-p1-report.md.)*

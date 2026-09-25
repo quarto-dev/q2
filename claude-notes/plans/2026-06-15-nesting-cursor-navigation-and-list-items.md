@@ -43,7 +43,7 @@ to the **container** — the exact drop-into-whole-list outcome Rule B's table (
 prevent. (The current `outerByLine` resolver only dodges this because it iterates *blocks*, not
 lines, `PreviewRoot.tsx:560-581`; §1's line walk loses that.) **Rule:** advance past line L when the
 deepest surface whose trimmed span contains L is **not a leaf for L** — it is a container *and* L
-lies in none of its descendant surfaces' spans (inter-item markers, blank lines inside a container,
+lies in none of its descendant surfaces\' spans (inter-item markers, blank lines inside a container,
 empty items, `<dt>` term lines). Equivalently: only land when `surfaceAtLine(L)` is a leaf in the
 active set; otherwise treat L as contentless and continue to L±1. **Decision recorded:** `<dt>` term
 lines are non-landable (consistent with "terms are out"); the alternative (land on the whole `<dl>`)

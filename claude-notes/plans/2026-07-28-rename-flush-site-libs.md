@@ -3,7 +3,7 @@
 **Date:** 2026-07-28
 **Braid:** bd-v8gx (chore, p4) — rename `flush_site_libs` → `flush_project_artifacts`
 **Braid:** bd-gdhk (chore, p3) — extract the drain-and-flush-or-merge helper
-**Branch:** `braid/bd-v8gx-flush-project-artifacts`, based on `main` @ `581e45c0`
+**Branch:** `braid/bd-v8gx-flush-project-artifacts`, based on `main` \@ `581e45c0`
 **Status:** ✅ **Complete.** Design settled with user 2026-07-28 (name = as-filed,
 scope = (c) rename+dedupe, module = move, branch + PR, both strands together).
 Shipped in [PR #430](https://github.com/quarto-dev/q2/pull/430) (`478f7c37`),
@@ -77,7 +77,7 @@ is *not* behavior-preserving.
 
 Two facts that make the rest of the delegation safe:
 
-- `flush_site_libs`'s `if project_artifacts.is_empty() { return Ok(()) }` early
+- `flush_site_libs`\'s `if project_artifacts.is_empty() { return Ok(()) }` early
   return can go: `OutputSink::flush` early-returns on empty `ops` **before**
   materializing allowed roots (`output_sink.rs:291-293`), so no `dir_create`
   happens either way. Existing test `flush_site_libs_empty_store_is_noop`
@@ -166,7 +166,7 @@ module whose doc opens "Post-render hooks for `WebsiteProjectType`."
       The two pass-2 sites were byte-identical before; they are now one call each.
 - [x] **Phase 5 — Prose sweep.** 31 → 3 occurrences. The 3 that remain are
       deliberate history notes in prose (backticked, not doc links): two in
-      `artifact_flush.rs`'s module doc explaining why the family lives there, one
+      `artifact_flush.rs`\'s module doc explaining why the family lives there, one
       in `website_post_render.rs` saying where the flush went. Both stale
       **intra-doc links** (`resource_resolver.rs`, `pass2_renderer.rs`) were
       repointed — these are the ones CI cannot catch.

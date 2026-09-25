@@ -327,7 +327,7 @@ gathered by comparing hub preview against native `q2 render` of the same file:
 
 Template edits from the review: the article table caption no longer uses a
 crossref (works around bd-daa1nw40's visible artifact), and every template's
-"Make it yours" section (or meeting-notes' customization tail) now points at
+"Make it yours" section (or meeting-notes\' customization tail) now points at
 the getting started guide:
 https://quarto-dev.github.io/quarto-hub/get-started.html
 

@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-19
 **Braid:** bd-205v6
-**Branch:** `braid/bd-205v6-cite-reconcile-identity` (off `main` @ `4b4a63ce`)
+**Branch:** `braid/bd-205v6-cite-reconcile-identity` (off `main` \@ `4b4a63ce`)
 **Status:** Approved 2026-08-19 — in execution.
 
 ## Design decisions (user-aligned 2026-08-19)
@@ -69,10 +69,10 @@ minimal-repro-test.rs).
 **Root cause (confirmed, not a structural_eq false-negative):**
 
 - `compute_inline_alignments` Step 2 (type-based container matching,
-  `crates/quarto-ast-reconcile/src/compute.rs` ~654–689) pairs two `Cite`s by
+  `crates/quarto-ast-reconcile/src/compute.rs` \~654–689) pairs two `Cite`s by
   discriminant alone — the bd-3zp3z4jx identity guard covers
   `Custom`/`Link`/`Image`/`Span` but falls through to `_ => true` for `Cite`.
-- `apply_inline_container_reconciliation`'s `Cite` arm
+- `apply_inline_container_reconciliation`\'s `Cite` arm
   (`crates/quarto-ast-reconcile/src/apply.rs:346`) reconciles only `content` and
   keeps the original's `citations` wholesale.
 
@@ -87,7 +87,7 @@ already cover citation fields correctly; only Step 2's guard is missing. The
 ### Phase 0 — Test plan (TDD)
 
 - [x] Re-add the minimal unit test from the investigation dir
-  (`minimal-repro-test.rs`) to `lib.rs`'s test module; verify it fails.
+  (`minimal-repro-test.rs`) to `lib.rs`\'s test module; verify it fails.
   (`test_reconcile_cite_citations_changed_not_paired`, plus companion
   `test_reconcile_cite_same_citations_recurses` which passes by design.)
 - [x] Add both saved seeds (`cc 8f798bbf…` from the description, `cc c8f78493…`
@@ -97,7 +97,7 @@ already cover citation fields correctly; only Step 2's guard is missing. The
 
 - [x] Add a `Cite` identity guard to compute Step 2, mirroring bd-3zp3z4jx:
   new `structural_eq_citations` helper in `hash.rs`, shared with
-  `structural_eq_inline`'s Cite arm; guard falls through to `UseAfter`.
+  `structural_eq_inline`\'s Cite arm; guard falls through to `UseAfter`.
 - [x] Unit test + both seeds green; crate tests green (228/228).
 
 ### Phase 2 — Verify + commit
@@ -126,7 +126,7 @@ already cover citation fields correctly; only Step 2's guard is missing. The
   (pampa integration, end-to-end through the JSON round-trip path) and
   `test_reconcile_identity_changed_containers_not_paired` (plan-shape test
   covering all five containers). Both confirmed failing before the guard.
-- [x] Fix: Step-2 guards for `Quoted.quote_type` and the four marks' `attr`.
+- [x] Fix: Step-2 guards for `Quoted.quote_type` and the four marks\' `attr`.
 - [x] Findings recorded here; nothing scoped out, no follow-up strands needed.
 
 ### Audit table (final state)

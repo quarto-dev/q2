@@ -423,7 +423,7 @@ specific logic, so this phase is a smoke test of the integration.
         *(accepted-untested — if-observed only; not observed)*
   - [x] Sidebar/navbar transforms run normally (the `_quarto.yml` navbar
         rendered) *(observation only — accepted-untested)*
-- [x] Verify the `Arc<TsEngineHost>` is shared across both files' renders:
+- [x] Verify the `Arc<TsEngineHost>` is shared across both files\' renders:
   **J8 (observable) landed + unit-tested TDD-first; J6 (assertion) GREEN.**
   Net-new production `tracing::info!(target: "engine_host", pid, …)` in
   `ensure_started_inner` — GREEN, RED→GREEN + named-revert proven
@@ -478,7 +478,7 @@ only; no `claims_file` wiring for `.jl` percent scripts in v1).
   resolution-complete and at the first Julia execute. — confirmed: one
   `engine-host spawned` line, after both `engine resolution complete`
   lines, immediately followed by the child's own execute-time stderr
-  (`Running [1/1] at line 27...`, the first line of `plot.qmd`'s cell).
+  (`Running [1/1] at line 27...`, the first line of `plot.qmd`\'s cell).
   Full log snippet in compat log §12.
 - [x] If `claims_file` is wired for `.jl` percent scripts later, the
   subprocess will spawn during Pass 1 — note that as expected
@@ -487,7 +487,7 @@ only; no `claims_file` wiring for `.jl` percent scripts in v1).
 
 ### Phase 4J: Julia-in-preview validation (V-7 — added 2026-07-02, user-requested)
 
-Plan 1c's **R5** wired TS engines into `q2 preview`'s **native** capture →
+Plan 1c's **R5** wired TS engines into `q2 preview`\'s **native** capture →
 splice pipeline (all three call sites: eager `capture_driver.rs`,
 `preview_record`/`cache.rs`, `re_execute.rs`) and proved it with the echo
 engine (P2-14). Nothing has validated a *real* engine through preview. This
@@ -635,7 +635,7 @@ always go through the TempDir copy.
   source listing present → RED. (Discriminator check: assert both halves —
   output-present + source-absent — so "render failed entirely" can't fake a
   pass.) Cell-level `#|` variants are the 4E manual greps, binding
-  `toMarkdown`'s cell-option path instead.
+  `toMarkdown`\'s cell-option path instead.
 - **J3 — exeflags through the julia block (4E).** Tier: integration,
   julia+deno-gated. Unit: P1.1b threading of the `julia:` frontmatter subtree
   → `format.metadata` → serialized options → QuartoNotebookRunner. Seam: doc

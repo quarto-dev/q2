@@ -8,7 +8,7 @@ bd-96fswwce (combining marks, `\p{M}`)
 entity reference — folded into this PR, Phase 1b); bd-5rr4lgj1 (leading BOM
 not stripped — follow-up, out of scope)
 **GitHub:** https://github.com/quarto-dev/q2/issues/672
-**Checkout:** main @ `7ef59618` (investigated in place; no worktree yet)
+**Checkout:** main \@ `7ef59618` (investigated in place; no worktree yet)
 **Status:** Implemented 2026-09-11 on branch
 `braid/bd-wuiu1of7-zero-width-entities` — `caa29d6c` (writer + grammar) and
 `b15868ed` (`&` escaping, bd-i18zoy4n). Full `cargo xtask verify` green for

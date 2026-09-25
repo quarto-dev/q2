@@ -459,7 +459,7 @@ Deliverables:
 - WASM API surface: `build_project_nav`, `render_page_in_project`.
 - Hub-client state: project-scoped nav cache, invalidation on profile-
   affecting edits.
-- Live preview: editing a page's title updates siblings' sidebars within one
+- Live preview: editing a page's title updates siblings\' sidebars within one
   render cycle.
 - End-to-end smoke test in a real browser session (per CLAUDE.md policy).
 

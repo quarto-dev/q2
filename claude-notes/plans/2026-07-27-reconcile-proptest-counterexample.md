@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-27
 **Braid:** bd-9fwn1504
-**Checkout:** worktree for bd-en2hvrwn (branch `main` @ `78d55deb`) — investigation only; the fix should land on its own branch.
+**Checkout:** worktree for bd-en2hvrwn (branch `main` \@ `78d55deb`) — investigation only; the fix should land on its own branch.
 **Status:** Design settled (2026-07-27, see "Design decisions") — ready to implement on its own branch.
 
 ## Triage verdict
@@ -20,7 +20,7 @@ Filed 2026-07-24 by Carlos (priority 1, bug). CI on PR #415 hit a failing random
 
 ## What the code looks like today
 
-Verified at `main` @ 78d55deb: `cargo xtask verify --skip-hub-build` is green **except** exactly this test once the seed file is present (7744 passed, 1 failed, fail-fast stopped the rest).
+Verified at `main` \@ 78d55deb: `cargo xtask verify --skip-hub-build` is green **except** exactly this test once the seed file is present (7744 passed, 1 failed, fail-fast stopped the rest).
 
 **Root cause (confirmed):** the `needs_plan` optimization in `compute.rs` drops a nested plan when every executed-side alignment is `KeepBefore` and no nested plans exist, inferring "contents identical." But alignments are per-*executed* item: the check misses **extra original items** (deletions) and **reordering** (`KeepBefore` matches by hash at any position). With the plan dropped, apply-side fallbacks use the *original* content wholesale, resurrecting deleted content.
 

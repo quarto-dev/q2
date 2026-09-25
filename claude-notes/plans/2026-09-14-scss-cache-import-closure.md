@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-14
 **Braid:** bd-m3hga05o (P2, bug, label `perf`)
-**Branch:** `braid/bd-m3hga05o-scss-cache-import-closure` in the room-2 main checkout (based on `main` @ `35bc11415`; topic branch, no worktree, per user request)
+**Branch:** `braid/bd-m3hga05o-scss-cache-import-closure` in the room-2 main checkout (based on `main` \@ `35bc11415`; topic branch, no worktree, per user request)
 **Status:** Implemented on the branch (2026-09-15); Phase 2 measurement partly done. Rebased onto `main` after PR #679 merged (`f0bcb9538`).
 
 ## Triage verdict
@@ -127,7 +127,7 @@ Fixture: `claude-notes/plans/scss-cache-import-closure-investigation/fixture/`
 (copied from the bd-79c4do6g branch). `theme.scss` does
 `@import "_colors"`; `_colors.scss` sets `$repro-fg: #123456`.
 
-Commands (from the fixture directory, `main` @ `35bc11415`, after a green
+Commands (from the fixture directory, `main` \@ `35bc11415`, after a green
 `cargo xtask verify --skip-hub-build`):
 
 ```bash

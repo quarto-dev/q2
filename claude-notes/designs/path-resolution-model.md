@@ -118,7 +118,7 @@ Three provenance-correct mechanisms coexist today. New code should prefer
    SourceInfo lookup and runs before any consumer. Covers `css`, `theme`,
    and the three `include-*` slots. Note the registry carries a per-key
    **marking policy** the original contract text did not anticipate: some
-   keys' strings are only *sometimes* paths (`theme` shares its namespace
+   keys\' strings are only *sometimes* paths (`theme` shares its namespace
    with builtin theme names → existence-driven, silent), while others are
    always paths (`include-*` → unconditional, so even a missing file's
    later diagnostic reports the declaration-resolved location).
@@ -132,7 +132,7 @@ bd-hjv5o): generalize mechanism 3 into a single path-shaped-key registry
 unifying the four scattered tables plus the annotation table
 (`crates/pampa/src/pandoc/meta_annotations.rs`, whose `Interpretation::Path`
 is currently unused), so values arrive at consumers already marked and
-declaration-dir-resolved, and consumers' existing `doc_dir.join` reads
+declaration-dir-resolved, and consumers\' existing `doc_dir.join` reads
 become correct as written. Enforcement: the `config-path-base` xtask lint
 (see strand reference in the inventory's gap list).
 

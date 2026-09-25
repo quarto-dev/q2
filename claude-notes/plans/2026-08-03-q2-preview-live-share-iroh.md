@@ -118,7 +118,7 @@ re-execute. Keep as future work for native-peer use cases (e.g.
 `q2 provide-hub` over iroh), where samod-over-iroh replaces the *entire*
 surface, not a fifth of it.
 
-## iroh facts this plan depends on (verified against ../iroh @ v1.0.3)
+## iroh facts this plan depends on (verified against ../iroh \@ v1.0.3)
 
 The local checkout is **iroh 1.0.3** — a hard API break from pre-1.0
 tutorials. Published on crates.io; MIT OR Apache-2.0; MSRV 1.91 (we're on
@@ -168,7 +168,7 @@ nightly-2026-04-28 / 1.97 — fine); edition 2024 (we already use it).
   sync and only queues.
 - Default n0 relays need no auth; behind NAT the relay path is the designed
   fallback (worst case: relayed throughput, not failure).
-- No in-tree TCP↔QUIC bridge exists; we write the ~30-line splice ourselves.
+- No in-tree TCP↔QUIC bridge exists; we write the \~30-line splice ourselves.
   `iroh/examples/echo-no-router.rs`, `auth-hook.rs`, `search.rs` are the
   patterns to crib from.
 

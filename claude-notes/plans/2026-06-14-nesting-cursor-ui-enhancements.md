@@ -51,8 +51,8 @@ Citations are post-rename names; the rename mapping is in §0. Current tree (pre
   navigation runs over the untransformed *surfaces*; the geometry snapshot measures *transformed*
   DOM elements (`pool[id].r`). **The only thing that joins a transformed DOM element to a nesting
   surface is the full `(r0,r1)` source range.** Everything that identifies a surface — the source
-  index key, `buildNestingSurfaces`' dedupe, `parentSurface`/`childSurfaceToward`, and
-  `applyNestingRetarget`'s `next` — uses `(r0,r1)`. This drives the §1 key choice and the §2
+  index key, `buildNestingSurfaces`\' dedupe, `parentSurface`/`childSurfaceToward`, and
+  `applyNestingRetarget`\'s `next` — uses `(r0,r1)`. This drives the §1 key choice and the §2
   resolver design.
 - **Activation** — `useBlockEditHover.tsx`: `activate(el)` (`:59`) resolves the click mode-aware
   (leaf in unlocked, `resolveOuterBlock` in locked), captures the identity triple
@@ -67,7 +67,7 @@ Citations are post-rename names; the rename mapping is in §0. Current tree (pre
   matched subtree with a synthetic `<div id="q2-active-edit-region">` (ref =
   `activeEditRegionRef`). The wrapper div is sized by `editTarget.boxStyle`; `editTarget.contentHeight`
   sizes the inner `<textarea>` (`dispatchers.tsx:249`), not the div. The nesting chord is
-  handled in `EditTextarea`'s `onKeyDown` (`:281`) via `classifyNestingKey` → `requestNestingMove`.
+  handled in `EditTextarea`\'s `onKeyDown` (`:281`) via `classifyNestingKey` → `requestNestingMove`.
   The pending-caret hint is applied once on mount via `placeCaretAtColumn` (`:152-162`).
   `LEFT_INSET_STRIPPED_TYPES` (`:27`, applied `:60`) zeroes left margin/pad/border for the three
   **list** types (`BulletList`/`OrderedList`/`DefinitionList`) — **not** `BlockQuote`, so a
@@ -174,7 +174,7 @@ join regardless of collision frequency.) Value = `{contentHeight, boxStyle}`.
 **Duplicate-key rule.** Two visible `[data-block-pool-id]` elements *can* share a source range
 (a filter attributing a wrapper and its content to the same range). When they do they are normally
 rect-**coincident** (same box → harmless). Keep DOM-pre-order-first (outermost), matching
-`enumerateOuterBlocks`' dedupe convention (`outerBlocks.ts:188-191`). The non-coincident
+`enumerateOuterBlocks`\' dedupe convention (`outerBlocks.ts:188-191`). The non-coincident
 same-range case is not produced by the current renderer; the key-uniqueness regression test
 (below) will fail loudly if that ever changes.
 
@@ -203,10 +203,10 @@ i.e. the §10 alignment assumption is load-bearing for the key *arithmetic*, not
 **Where capture runs** — at **three** fresh-open sites that seed a new draft, synchronously
 *before* `setEditTargetRaw` (a post-open effect is too late; the children are already swapped out):
 - `activate()` (`useBlockEditHover.tsx:96`),
-- `executeLanding`'s open (`PreviewRoot.tsx:388`) — this is the reland for both arrow-move **and**
+- `executeLanding`\'s open (`PreviewRoot.tsx:388`) — this is the reland for both arrow-move **and**
   click-switch (click-switch stashes `intent:'activate'` and lands *through* `executeLanding`; the
   earlier "`:387` click-switch" was a miscount — it is the same site),
-- `requestMove`'s sync-hop open (`PreviewRoot.tsx:479`).
+- `requestMove`\'s sync-hop open (`PreviewRoot.tsx:479`).
 The §2 nest-reland adds a fourth open site; it captures a fresh snapshot on arrival.
 Only the nest consumer (`applyNestingRetarget` via the landing core) **consumes** the snapshot; the
 above opens still measure their own (rendered) outer-block destination live —
@@ -330,7 +330,7 @@ once we open, it is swapped to a textarea).
 
 **Layering:** the pure surface helpers (`childSurfaceTowardLine`, `parentSurface`, the crumb pick)
 live in `nestingNav.ts` (no DOM/React, jsdom-testable). `resolveLanding`, `openEditTarget`, and
-`seedForRange`'s *caller* glue live in `PreviewRoot` because `outerByLine` and the box/snapshot
+`seedForRange`\'s *caller* glue live in `PreviewRoot` because `outerByLine` and the box/snapshot
 lookup touch the DOM and refs. The earlier "resolveLanding is pure / lives in nestingNav" framing
 was wrong — `outerByLine` is inherently DOM-based (`enumerateOuterBlocks(previewHostRef.current)`).
 
@@ -382,7 +382,7 @@ each render and stays consistent.
   `[3,3]`); the start-trim is symmetric insurance against a leading blank line. **Tiebreak** when
   more than one direct child still contains `Ls`: prefer the child whose **start line == `Ls`**;
   else the **narrowest** span; else nearest direct child by line distance. Line space also sidesteps
-  the `> `/indent prefix (which only shifts *columns*) and `childSurfaceToward`'s exclusive-end byte
+  the `> `/indent prefix (which only shifts *columns*) and `childSurfaceToward`\'s exclusive-end byte
   containment. **`childSurfaceToward` (byte space) is retained**, not replaced — it is the
   no-readable-caret / programmatic fallback (see `leafAnchorR0` below). (Reflection #17.)
 - **Dirty move — line-based parent re-resolution (the `kind:'nest'` resolver).** After a dirty
@@ -468,7 +468,7 @@ committing). Land commit-if-dirty in the **shared core** so *all* entry points i
 - **Unmodified** → synchronous hop: `resolveLanding(kind:'nest')` (pure-surface, against the
   current source index), `openEditTarget` with `box:'snapshot'`, no commit, no re-render. **Nest
   sync must use the snapshot, never a live measure** — at sync time the active textarea occupies
-  the subtree, so even nest-*out*'s parent is present-but-distorted (it contains the textarea).
+  the subtree, so even nest-*out*\'s parent is present-but-distorted (it contains the textarea).
 - **Modified** → commit (`SET_AST`), close, stash an `intent:'open'` landing with the `kind:'nest'`
   (or `kind:'crumb'`) spec carrying `{fromStartLine, caretBufferLine}` (a buffer-relative line, not
   an absolute one). Post-render the destination subtree is clean (textarea gone), so the reland

@@ -3,7 +3,7 @@
 **Strand:** `bd-hzsi` (P2, task, parent `bd-61cd` Listings epic, blocked-by
 `bd-rqgx` L8 — closed).
 **Branch:** `braid/bd-hzsi-listing-template-migration-docs` (worktree
-`.worktrees/workspace-4`), off `main` @ `c11aa0e4d`.
+`.worktrees/workspace-4`), off `main` \@ `c11aa0e4d`.
 
 ## Overview
 

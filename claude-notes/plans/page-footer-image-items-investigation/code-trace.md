@@ -1,4 +1,4 @@
-# Code trace — bd-page-footer-image-items-stmpikgo (2026-08-18, main @ 5b6774d1)
+# Code trace — bd-page-footer-image-items-stmpikgo (2026-08-18, main \@ 5b6774d1)
 
 Both defects confirmed present at HEAD by code inspection. The strand's file
 references are all current; nothing in the area has been refactored since filing.

@@ -3,7 +3,7 @@
 The "Before" section below is the baseline captured during investigation; the
 "After" section is the same fixture re-rendered once the fix landed.
 
-## Before (`docs/feature-porting-process` @ `d1a8ac9f`)
+## Before (`docs/feature-porting-process` \@ `d1a8ac9f`)
 
 Invocation, run from the repo root after `cargo xtask verify --skip-hub-build`
 passed (exit 0):

@@ -286,7 +286,7 @@ enough that repeat-pastes of the same content don't proliferate files.
     last-writer-wins on the index map key and one image would silently
     vanish. Distinct names sidestep LWW entirely.
   - Concurrent pastes of the *same* image → same name, same content; LWW
-    picks one docId, both peers' markdown references resolve to identical
+    picks one docId, both peers\' markdown references resolve to identical
     bytes. The losing doc is orphaned (unreferenced in the index) —
     harmless. Sequentially, the dedup branch already returns
     `deduplicated: true` and creates nothing.

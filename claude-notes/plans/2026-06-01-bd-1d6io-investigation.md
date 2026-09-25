@@ -237,7 +237,7 @@ This is a separate task for someone comfortable with the external scanner +
 grammar precedence, done TDD: (a) add byte-offset regression tests
 (inline-`Code`-in-prose, multi-kv attr) to the CI-resident
 `crates/pampa/snapshots/json/` family *first*; (b) run a deliberate regression
-sweep, because a shared-preamble change can shift many other tokens' ranges
+sweep, because a shared-preamble change can shift many other tokens\' ranges
 simultaneously and current coverage is too thin to catch that automatically.
 
 Escalation note: failure #1 lands in the same inline-parser rewrite that was

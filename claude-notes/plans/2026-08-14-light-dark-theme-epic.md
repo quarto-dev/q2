@@ -461,7 +461,7 @@ Integration branch: `feature/light-dark-theme` (created off `main`).
   as a side effect: both content-swap halves were already compiled; the body
   class flip makes them live. **Bug found by browser verification, fixed
   with a regression test**: `colorToRGBA()` was never ported to
-  `_bootstrap-functions.scss`, so the toggle icons' SVG fills contained the
+  `_bootstrap-functions.scss`, so the toggle icons\' SVG fills contained the
   literal call text (silently invalid — string interpolation doesn't error
   on unknown functions) and the icon was invisible. Golden hash re-captured
   for that fix. **Browser-verified end-to-end** (chrome-devtools MCP against

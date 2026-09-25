@@ -86,7 +86,7 @@ reuse (or share hoisted compiles with) that loop.
 Minimal repro copied to
 `claude-notes/plans/listing-declared-order-investigation/repro/` (declares
 `contents: [./bravo/index.md, ./alpha/index.md]` with `sort: false`).
-Rendered with the HEAD binary (2026-08-09, `main` @ 2f2f4be3, v0.14.0):
+Rendered with the HEAD binary (2026-08-09, `main` \@ 2f2f4be3, v0.14.0):
 
 ```
 $ cd claude-notes/plans/listing-declared-order-investigation/repro
@@ -178,7 +178,7 @@ listings.
 - [x] **Discovered latent bug** (found because the first default-sort test
   fixture passed coincidentally): `compare_items` applies the `Desc` flip
   to the *whole* comparison, so missing-value items float to the TOP of
-  desc sorts — contradicting `compare_values`' documented "missing sorts
+  desc sorts — contradicting `compare_values`\' documented "missing sorts
   last regardless of direction" rule. Pinned by failing test
   `missing_dates_sort_to_end_in_desc_too`; fix folded into Phase 2.
 

@@ -6,7 +6,7 @@
 code. Root cause: marimo's `claimsFile` returns true for any `.qmd`/`.md`
 containing a marimo fence (`marimo-engine.ts:146`). That drives q2's
 `EngineClaimsFileStage` → `ctx.claimed_engine_name = Some("marimo")` →
-`resolve_engines`' CLAIMED SHORT-CIRCUIT (`resolution.rs:366`) → sequence
+`resolve_engines`\' CLAIMED SHORT-CIRCUIT (`resolution.rs:366`) → sequence
 `[marimo]`, empty ownership, `engine_count=1`. The `{r}` cell is left to no
 engine.
 

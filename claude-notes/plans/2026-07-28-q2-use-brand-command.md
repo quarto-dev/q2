@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-28
 **Braid:** bd-1vlw8 — *Implement quarto use brand scaffolding command*
-**Branch:** `main` @ `581e45c0` (investigated in the primary checkout — no worktree)
+**Branch:** `main` \@ `581e45c0` (investigated in the primary checkout — no worktree)
 **Pre-flight:** `cargo xtask verify --skip-hub-build` — ✓ all steps passed at this HEAD (10593 tests)
 **Status:** Design settled (rounds 1 + 2, 2026-07-28) — no open questions. **Do not start implementation until the user gives the go-ahead.**
 
@@ -73,7 +73,7 @@ writes a config key.
 
 Q2 **deliberately has no auto-discovery**. `crates/quarto-core/src/project/mod.rs:354-376`:
 
-> The **project-level** brand named by `_quarto.yml`'s `brand:` key […] `None`
+> The **project-level** brand named by `_quarto.yml`\'s `brand:` key […] `None`
 > when no `brand:` key is present — Q2 deliberately has no `_brand.yml`
 > auto-discovery, unlike Q1
 

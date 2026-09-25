@@ -675,7 +675,7 @@ This plan:
   (`ExecutionEngineDiscovery`/`Instance`, `ExecuteOptions`/`Result`/`Target`,
   `QuartoAPI` with namespace signatures + the pure/host-only/ambient jsdoc
   classification, `MappedString`, `EngineProjectContext`, `LanguageClaim`, and the jupyter namespace
-  signatures incl. `widgetDependencyIncludes`→`PandocIncludes`). The engine packages' per-package
+  signatures incl. `widgetDependencyIncludes`→`PandocIncludes`). The engine packages\' per-package
   `tsc --noEmit` are green with all *present* consumers (1b's `buildQuartoAPI`, an author-fixture
   source unit) — no `tsc -b` graph exists over ts-packages; the wire-dual types have a TS↔Rust
   parity check; sequencing is 1b → 2 → 3. (See "coherence gate" above.)

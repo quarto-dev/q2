@@ -20,7 +20,7 @@ is the per-selector appendix.
    `transforms/mermaid.rs`, `transforms/footnotes.rs`, `template.rs`.
 3. **Ground truth**: end-to-end render of
    `claude-notes/plans/quarto-rules-scss-audit-investigation/kitchen-sink.qmd`
-   via `cargo run --bin q2 -- render …` (2026-07-21, main @ `04882745`);
+   via `cargo run --bin q2 -- render …` (2026-07-21, main \@ `04882745`);
    emitted HTML inspected directly. Per design discussion, grep + kitchen-sink
    is the accepted evidence bar for BLOCKED verdicts (no per-feature fixture
    attempts for unimplemented features).
@@ -41,7 +41,7 @@ missing) · `BE` blocked-on-emitter · `ID` intentionally-dropped.
 - Q2's `_bootstrap-rules.scss` is largely a port of Q1's **`_quarto.scss`**
   (page layout), and already contains **dead CSS** for DOM Q2 doesn't emit:
   `.quarto-layout-cell[data-ref-parent]`, `.tippy-content > *`,
-  `.code-annotation-*` (~70 lines), `#quarto-embedded-source-code-modal`,
+  `.code-annotation-*` (\~70 lines), `#quarto-embedded-source-code-modal`,
   `.panel-input`, `.layout-sidebar`, title-block `.code-tools-button`. Not
   this epic's scope (different source file), but the pattern to avoid.
 - **Task lists are broken, not just unstyled**: `- [ ] todo` renders as
@@ -76,7 +76,7 @@ missing) · `BE` blocked-on-emitter · `ID` intentionally-dropped.
 | 10 | `iframe` margin | 262–264 | absent | raw-HTML iframes pass through | **PN** (cheap) | misc |
 | 11 | `details`/`summary` rules | 267–282 | absent | raw-HTML `<details>` passes through (fixture); code-fold emitter is an explicit Phase-3 TODO in `code_block_render.rs:182` | **PN** (live for authored content; code-fold will land on it) | misc |
 | 12 | `div.code-copy-outer-scaffold` | 285–287 | **present** (`copy-code.scss:58`) | yes (`code_block_render.rs`) | **AP** | — |
-| 13a | inline `code:not(.sourceCode)` pre-wrap (`p`, `dd`) | 291–294 | only the `td` variant exists (`_bootstrap-rules` ~1294) | yes | **PN** | code |
+| 13a | inline `code:not(.sourceCode)` pre-wrap (`p`, `dd`) | 291–294 | only the `td` variant exists (`_bootstrap-rules` \~1294) | yes | **PN** | code |
 | 13b | bare `code { white-space: pre }` + `@media print` pre-wrap | 299–306 | only `code.sourceCode` scoped (`highlight.scss:30`) | yes | **PN** | code |
 | 13c | `pre > code { display:block }` | 307–309 | **present** (`highlight.scss`) | yes | **AP** | — |
 | 13d | `$code-white-space` themable var | 311–313 | hard-coded `pre` | yes | **PN** (port the var) | code |
@@ -89,7 +89,7 @@ missing) · `BE` blocked-on-emitter · `ID` intentionally-dropped.
 | 16 | `.quarto-embedded-source-code` | 361–363 | modal CSS present (dead) | no code-tools feature | **BE** | backlog |
 | 17 | `.quarto-unresolved-ref` | 366–368 | absent | Q2 emits `<a class="quarto-xref">?fig-nope?</a>` instead — visible failure without the class | **PN with emitter tweak** (add class or restyle `quarto-xref`) | misc |
 | 18 | `.quarto-cover-image` | 371–375 | absent | no books/cover injection | **BE** | backlog |
-| 19 | Engine output: `.widget-subarea`, `.cell-output-display` overflow, `.knitsql-table`, `div.ansi-escaped-output` + ~36 ANSI color classes, `table.gt_table` (7 rules) | 378–387, 447–587, 601–647 | absent | engine-produced DOM; jupyter + knitr engines exist, knitr hooks already emit `cell-output-display` | **one engine-output strand**, ported against executed fixtures | engine-output |
+| 19 | Engine output: `.widget-subarea`, `.cell-output-display` overflow, `.knitsql-table`, `div.ansi-escaped-output` + \~36 ANSI color classes, `table.gt_table` (7 rules) | 378–387, 447–587, 601–647 | absent | engine-produced DOM; jupyter + knitr engines exist, knitr hooks already emit `cell-output-display` | **one engine-output strand**, ported against executed fixtures | engine-output |
 | 20 | `.panel-input`, `.layout-sidebar`, `.tab-content > .page-columns.active` | 389–414 | partial dead CSS | no OJS/shiny/tabsets | **BE** | backlog |
 | 21 | `div.sourceCode > iframe` (code-preview) | 417–433 | absent | no code-preview feature | **BE** | backlog |
 | 22 | `a { text-underline-offset: 3px }` | 436–438 | absent | trivially yes | **PN** | misc |

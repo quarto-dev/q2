@@ -5,7 +5,7 @@
 - **GitHub**: https://github.com/quarto-dev/q2/issues/201
 - **Beads**: bd-8lcm
 - **Triage**: `claude-notes/issue-reports/201/triage.md`
-- **Worktree**: `.worktrees/issue-201` (branch `issue-201`, based on `main` @ `26b8943c`)
+- **Worktree**: `.worktrees/issue-201` (branch `issue-201`, based on `main` \@ `26b8943c`)
 
 The qmd writer at `crates/pampa/src/writers/qmd.rs` emits a bare `'` for an apostrophe whose source form required a `\'` escape. Round-trip `qmd → AST → qmd → AST` fails on `reveal.js\' jump-to-slide.` and similar real-world inputs.
 

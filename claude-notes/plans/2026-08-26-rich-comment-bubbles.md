@@ -258,7 +258,7 @@ it is the bubble-content contract suite):
 - [ ] An ordinary `[text]{.mark}` span in a comment renders normally
       (interceptor is class-scoped, not all-Spans).
 - [ ] New unit test for `routeLinkClick` (external / `#frag` /
-      qmd-path cases) in `iframeLinkHandlers`' existing test home, plus
+      qmd-path cases) in `iframeLinkHandlers`\' existing test home, plus
       an assertion that the body listener still works (existing tests).
 
 Verification gates: preview-renderer `npm test` + `test:integration`;

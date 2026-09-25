@@ -1,6 +1,6 @@
 # Investigation results — bd-sidebar-dir-index-md-5khf3lds
 
-**Date:** 2026-08-19, at `main` @ `f387bd68` (v0.24.0).
+**Date:** 2026-08-19, at `main` \@ `f387bd68` (v0.24.0).
 
 ## Invocation
 
@@ -9,7 +9,7 @@ cargo run --bin q2 -- render claude-notes/plans/sidebar-dir-index-md-investigati
 # Rendered 4 of 4 files to .../repro/_site
 ```
 
-Then inspected `_site/guides/alpha.html`'s `#quarto-sidebar`.
+Then inspected `_site/guides/alpha.html`\'s `#quarto-sidebar`.
 
 ## Observed (HEAD, buggy)
 

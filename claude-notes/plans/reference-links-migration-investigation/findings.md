@@ -71,7 +71,7 @@ convert` iterates rules up to `--max-iterations` (default 10) by default.
 
 Rendering, both engines:
 
-| input | q2 @ 05c2454e | `quarto pandoc` (Q1) |
+| input | q2 \@ 05c2454e | `quarto pandoc` (Q1) |
 | --- | --- | --- |
 | `\[escaped\]` | `[escaped]` | `[escaped]` |
 | `[Version TBD]` | `Version TBD` (brackets gone) | `[Version TBD]` |
@@ -158,7 +158,7 @@ parallel to "`Inline::Span` with empty attr":
 **The escape form for images is `!\[solo\]`, and it is safe in both engines**
 (`mini4.qmd` / `q1probe2.md`):
 
-| input | q2 @ `05c2454e` | `quarto pandoc` (Q1) |
+| input | q2 \@ `05c2454e` | `quarto pandoc` (Q1) |
 | --- | --- | --- |
 | `![solo]` (no definition) | `<img src="" alt="solo" />` | literal `![solo]` |
 | `!\[esc\]` | literal `![esc]` | literal `![esc]` |
@@ -192,7 +192,7 @@ machinery.
 The rewrite target is an inline link, so the rules may only emit inline-link
 syntax q2 can parse. `mini5.qmd` / `mini6.qmd`:
 
-| emitted form | q2 @ `05c2454e` |
+| emitted form | q2 \@ `05c2454e` |
 | --- | --- |
 | `[a](url "title")` | ✅ `<a href="url" title="title">` |
 | `[e](url "ti\"tle")` | ✅ `title="ti&quot;tle"` — backslash-escaped `"` works |

@@ -274,7 +274,7 @@ push-approval gate.
               has 4 — insertion between `MetadataMergeStage` and
               `PreEngineSugaringStage`).
         - `stage/mod.rs` and `stage/stages/mod.rs`: accept both
-          sides' additions.
+          sides\' additions.
         - `.beads/issues.jsonl`: union of both sides; `br import
           --resolve-collisions` after the textual resolution to
           reconcile.

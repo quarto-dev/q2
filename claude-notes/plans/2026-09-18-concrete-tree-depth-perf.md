@@ -17,7 +17,7 @@ The goal is to make the guard as close to free as we can while keeping it just
 as strong: no document that passes today should fail, and every document that
 fails today should still fail.
 
-## Measurement (2026-09-18, main @ c6808f20)
+## Measurement (2026-09-18, main \@ c6808f20)
 
 - Build: `cargo build --profile release-perf --bin q2`
 - Fixture: `~/repos/github/cscheid/q2-connect-docs/docs-quarto-2/api/index.qmd`
@@ -27,7 +27,7 @@ fails today should still fail.
   real checkout. Rendering the file on its own fails because it includes
   `api_codes.fragment.html` from the same directory.
 - Command: `samply record --save-only --unstable-presymbolicate --rate 8000 -- q2 render api/index.qmd`
-  (~1.3 s wall, 9.5k samples). The samples were aggregated with a small
+  (\~1.3 s wall, 9.5k samples). The samples were aggregated with a small
   Python script over the samply JSON plus the `.syms.json` sidecar.
 
 Direct callees of `pampa::readers::qmd::read` (share of **all** samples):

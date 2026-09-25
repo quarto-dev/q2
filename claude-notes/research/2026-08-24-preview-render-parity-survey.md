@@ -50,7 +50,7 @@ either a real divergence, intentional, or a limit of the harness/survey.
 
 - **`parity` → `dom-parity`** (commit `d750318b7`): the DSL key, the Rust
   field `TestSpec.dom_parity` and its error text (`dom-parity must be a
-  boolean`), both TS parsers' no-op case, the runner's lookup and assertion
+  boolean`), both TS parsers\' no-op case, the runner's lookup and assertion
   message, the two already-opted-in fixtures, `testing.md`, and the
   preview-render-parity skill. File names and the
   `PARITY_RULES`/`compareParity`/`smokeAllParity` identifiers were kept.

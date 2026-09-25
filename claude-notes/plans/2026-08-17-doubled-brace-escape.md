@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-17 (investigation); design aligned with user same day
 **Braid:** bd-escaped-executable-fence-uuvv37pk
-**Checkout:** main worktree `q2` (branch `main` @ `60cc579e`)
+**Checkout:** main worktree `q2` (branch `main` \@ `60cc579e`)
 **Status:** Design settled — ready to implement on user go-ahead.
 
 ## Design decisions (2026-08-17, aligned with Carlos)
@@ -50,7 +50,7 @@ appears fail differently:
    the *worst* diagnostic q2 has.
 
 The strand notes real-world impact: 8 blocks across 3 pages of the Connect docs
-(pages whose subject IS how to write Quarto cells), 5 of the ~47 pages still
+(pages whose subject IS how to write Quarto cells), 5 of the \~47 pages still
 differing from the Q1 reference render.
 
 **Counter-case that shaped decision 1:** `user/fastapi/index.qmd` shows a

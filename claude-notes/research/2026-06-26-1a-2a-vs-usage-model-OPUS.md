@@ -237,7 +237,7 @@ type doesn't calcify a reduced shape. Either way: **name it**, because today it 
 | Q1 `jupyter/jupyter.ts:358-372` (read directly) | partitionedMarkdown `format?` arg flows to markdownFromNotebookFile |
 | `quarto-marimo/src/marimo-engine.ts:127-135` (read directly) | sole `system.pandoc(["-f","html","-t","markdown"], html)` caller + console.warning fallback |
 
-**Coverage note:** I did not re-read the host/engine plans' HOST-1..6/ENG-1..2 code-bug items —
+**Coverage note:** I did not re-read the host/engine plans\' HOST-1..6/ENG-1..2 code-bug items —
 they are q2-native bug fixes with no Q1 analogue and out of this review's lens (the model is about
 the *engine-author API surface*, not the host's crash/cache internals). RTQ owns those and they
 don't bear on the non-Julia at-risk ledger.

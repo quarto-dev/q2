@@ -3,7 +3,7 @@
 - **GitHub**: https://github.com/quarto-dev/q2/issues/173
 - **Reporter**: @rundel (Colin Rundel), 2026-05-11
 - **Triage date**: 2026-05-11
-- **Worktree**: `.worktrees/issue-173` (branch `issue-173`, based on `main` @ `37f78170`)
+- **Worktree**: `.worktrees/issue-173` (branch `issue-173`, based on `main` \@ `37f78170`)
 - **Beads issue**: bd-v1qc
 - **Scope**: the fenced-code-block round-trip bug only. The three quarto-web links in the issue body are example sites of the same bug; they will be fixed by the same change and don't need separate triage.
 

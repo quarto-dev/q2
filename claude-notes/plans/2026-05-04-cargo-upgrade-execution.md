@@ -68,17 +68,17 @@ For each entry:
 
 ## Progress tracker
 
-- [x] 1. similar 2 → 3 (bd-zh24) — branch `deps/similar-3` @ `82c725f1`
-- [x] 2. tree-sitter pair (bd-c083, bd-wjpd) — branch `deps/tree-sitter-026` @ `3c73b49d` (named_child API: usize → u32)
-- [x] 3. RustCrypto trio (bd-gz6k, bd-znva, bd-fyuo) — branch `deps/rustcrypto` @ `9ee17613` (digest 0.10→0.11: GenericArray→Array, KeyInit trait split)
-- [x] 4. quick-xml (bd-8356) — branch `deps/quick-xml-039` @ `3f6c765c` (BytesText::unescape removed; Event::GeneralRef coalescing)
+- [x] 1. similar 2 → 3 (bd-zh24) — branch `deps/similar-3` \@ `82c725f1`
+- [x] 2. tree-sitter pair (bd-c083, bd-wjpd) — branch `deps/tree-sitter-026` \@ `3c73b49d` (named_child API: usize → u32)
+- [x] 3. RustCrypto trio (bd-gz6k, bd-znva, bd-fyuo) — branch `deps/rustcrypto` \@ `9ee17613` (digest 0.10→0.11: GenericArray→Array, KeyInit trait split)
+- [x] 4. quick-xml (bd-8356) — branch `deps/quick-xml-039` \@ `3f6c765c` (BytesText::unescape removed; Event::GeneralRef coalescing)
 - [ ] 5. rand (bd-0a3b) — **deferred, blocked by bd-tv2s (automerge)**. `ThreadRng` in rand 0.10 doesn't satisfy the rand 0.9 `Rng` trait that `automerge::DocumentId::new` consumes; the upgrade only makes sense once automerge/samod move to rand 0.10.
-- [x] 6. scraper (bd-9h2g) — branch `deps/scraper-026` @ `d0d044ec` (one-line bump, no API change)
-- [x] 7. comrak (bd-anhg) — branch `deps/comrak-052` @ `c3a96f21` (no API change)
+- [x] 6. scraper (bd-9h2g) — branch `deps/scraper-026` \@ `d0d044ec` (one-line bump, no API change)
+- [x] 7. comrak (bd-anhg) — branch `deps/comrak-052` \@ `c3a96f21` (no API change)
 - [ ] 8. automerge (bd-tv2s) — **paused** (parallel work in flight; revisit in a later session)
-- [x] 9. reqwest (bd-v0zm) — branch `deps/reqwest-013` @ `ebd84b30` (rustls-tls feature renamed to rustls)
-- [x] 10. ureq (bd-r9hs) — branch `deps/ureq-3` @ `24007314` (Error::Status removed, status→StatusCode, into_body() body API)
-- [x] 11. runtimelib (bd-tanz) — branch `deps/runtimelib-2` @ `415999ab` (paired with jupyter-protocol 2; MediaType non_exhaustive)
+- [x] 9. reqwest (bd-v0zm) — branch `deps/reqwest-013` \@ `ebd84b30` (rustls-tls feature renamed to rustls)
+- [x] 10. ureq (bd-r9hs) — branch `deps/ureq-3` \@ `24007314` (Error::Status removed, status→StatusCode, into_body() body API)
+- [x] 11. runtimelib (bd-tanz) — branch `deps/runtimelib-2` \@ `415999ab` (paired with jupyter-protocol 2; MediaType non_exhaustive)
 - [ ] 12. Deno pair (bd-nl5q, bd-rhs6) — **paused** (largest semver jump; revisit when there's a dedicated session window)
 
 ## Session boundary protocol

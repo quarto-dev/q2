@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-10
 **Braid:** bd-email-autolink-dropped-2jj38iiv (bug, P2, labels: pampa, parity)
-**Checkout:** invoked on `main` @ `46cacc88` (no new worktree/branch created; user decides where implementation lands)
+**Checkout:** invoked on `main` \@ `46cacc88` (no new worktree/branch created; user decides where implementation lands)
 **Status:** Design settled 2026-08-10 (user answered all questions); implementation in progress.
 
 ## Triage verdict
@@ -47,7 +47,7 @@ show only the strand itself). Context instead lives in:
 
 ## What the code looks like today
 
-Reproduced at HEAD (main @ 46cacc88); full transcript + pandoc reference
+Reproduced at HEAD (main \@ 46cacc88); full transcript + pandoc reference
 output in `claude-notes/plans/email-autolink-investigation/notes.md`; repro
 fixture copied to `claude-notes/plans/email-autolink-investigation/repro.qmd`.
 
@@ -174,7 +174,7 @@ which keep the `mailto:` prefix in the visible text.
   `<...>`; extending its responsibilities means the new classification logic
   must be total (no new panic paths).
 - Any change to what Q-2-9 fires on will shift diagnostic counts in large
-  ports (the Connect docs' 2833 Q-2-9s) — expected and desirable here (bare
+  ports (the Connect docs\' 2833 Q-2-9s) — expected and desirable here (bare
   emails stop warning entirely), worth a release-note line.
 - pampa is in the WASM closure → full `cargo xtask verify` (not
   `--skip-hub-build`) before landing.

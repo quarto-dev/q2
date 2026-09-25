@@ -5,11 +5,11 @@
 Related: bd-1tl09 / bd-g1prx (code-fold), bd-moef1ec4 (`eval`), bd-cymkcyaf (format-level
 execute defaults).
 **Reported against:** q2 0.20.0 (macOS arm64 release tarball)
-**Verified against:** `main` @ `3ac596e0` (0.21.0-dev) — `git log v0.20.0..HEAD` touches neither
+**Verified against:** `main` \@ `3ac596e0` (0.21.0-dev) — `git log v0.20.0..HEAD` touches neither
 `engine/jupyter/text_execute.rs` nor `engine/knitr/`, so 0.20.0 and today's `main` behave
 identically on this path.
 **Q1 reference:** `quarto` on PATH, version `99.9.9` (dev checkout at `external-sources/quarto-cli`
-@ `45caede32`).
+\@ `45caede32`).
 
 ## TL;DR
 

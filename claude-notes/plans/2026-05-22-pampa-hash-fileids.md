@@ -177,7 +177,7 @@ silently regress.
 
 2. **Cross-parser agreement.** Parse the same `_quarto.yml` via
    `quarto_yaml::parse_file` and via pampa's recursive
-   metadata parser; assert the root `SourceInfo`s' FileIds
+   metadata parser; assert the root `SourceInfo`s\' FileIds
    match. Fails today because pampa wraps everything as
    `FileId(0)`.
 

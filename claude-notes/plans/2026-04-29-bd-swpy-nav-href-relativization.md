@@ -305,7 +305,7 @@ agree.
 1. Add new tests 1–5 to `navigation_href.rs`. Confirm they
    compile and **fail** against today's signature.
 2. Extend the new signature; tests 1–5 pass.
-3. Update the four Render transforms' call sites to pass the
+3. Update the four Render transforms\' call sites to pass the
    resolver. Confirm existing tests still pass.
 4. Add Render-transform regression tests (one per transform, page
    at depth 1, resolver attached). Confirm they pass.

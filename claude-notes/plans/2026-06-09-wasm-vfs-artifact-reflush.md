@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-09
 **Beads:** bd-q3bxnq2e
-**Worktree:** main checkout (branch `main`, based on `main` @ `ade34bed`)
+**Worktree:** main checkout (branch `main`, based on `main` \@ `ade34bed`)
 **Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
 
 ## Triage verdict
@@ -40,14 +40,14 @@ read-back contract.
 
 ## What the code looks like today
 
-All paths verified at `main` @ `ade34bed`. Pre-flight
+All paths verified at `main` \@ `ade34bed`. Pre-flight
 `cargo xtask verify --skip-hub-build` is green.
 
 ### Three flush sites, all unconditional
 
 1. **Single-doc render tail** — `crates/wasm-quarto-hub-client/src/lib.rs:1417-1425`
    (exactly as the strand quotes). Used by `render_qmd` /
-   `render_qmd_content` and by `render_page_in_project`'s no-project
+   `render_qmd_content` and by `render_page_in_project`\'s no-project
    fall-through. Flushes **all** of `ctx.artifacts` (page- and project-scope;
    the single-doc path never drains): one `content.clone()` + insert per
    artifact per render.
@@ -99,7 +99,7 @@ sweep, 2026-06-09):
   (`ts-packages/preview-runtime/src/automergeSync.ts:88-108`: `onFileAdded` /
   `onFileChanged` / `onBinaryChanged` / `onFileRemoved` all call `vfsAddFile`-family;
   no reverse callback exists).
-- `WasmRuntime`'s VFS is a `HashMap<PathBuf, Vec<u8>>` behind an `RwLock`
+- `WasmRuntime`\'s VFS is a `HashMap<PathBuf, Vec<u8>>` behind an `RwLock`
   (`crates/quarto-system-runtime/src/wasm.rs:229`), no persistence hooks.
 - The only VFS artifact read-backs are the iframe post-processor
   (`hub-client/src/components/render/ReactAstSlideRenderer.tsx:770-775`, →
@@ -112,7 +112,7 @@ caps the severity: the "much worse" branch of the strand did not materialize.
 
 ### Severity caveat (why we measure before fixing)
 
-Memcpy of ~1–2 MB is sub-millisecond native and low-single-digit ms in WASM.
+Memcpy of \~1–2 MB is sub-millisecond native and low-single-digit ms in WASM.
 That is real per-keystroke waste but plausibly **not** the dominant preview
 cost (each render also re-runs the whole project pipeline). Per
 `claude-notes/instructions/performance-profiling.md`, Phase 1 quantifies with

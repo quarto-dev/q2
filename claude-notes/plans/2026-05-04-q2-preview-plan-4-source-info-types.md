@@ -941,7 +941,7 @@ contiguity, lives in `quarto-source-map/src/source_info.rs`.
   with that accessor in `quarto-source-map`.)
 - `remap_file_ids()` for `Generated`: build a
   `Generated { from: [Invocation -> Original{FileId(0), …}, ValueSource -> Original{FileId(3), …}] }`,
-  apply `|id| FileId(id.0 + 10)`, assert both anchors' source_info
+  apply `|id| FileId(id.0 + 10)`, assert both anchors\' source_info
   carry remapped FileIds. This catches the "no-op like FilterProvenance"
   regression — `Generated` must NOT be a no-op since it can hold FileIds.
 - `root_file_id()` coverage on every variant. Generated with an
@@ -1020,14 +1020,14 @@ contiguity, lives in `quarto-source-map/src/source_info.rs`.
     - two anchors (Invocation + ValueSource for `meta`/`var` once
       bd-129m3 lands; Invocation + Dispatch for Lua-handler shortcodes
       once bd-36fr9 lands).
-  Cap=2 grows the `SmallVec<[Anchor; …]>` field by ~40 bytes (the size
-  of one inline `Anchor` slot — `AnchorRole`'s largest variant
+  Cap=2 grows the `SmallVec<[Anchor; …]>` field by \~40 bytes (the size
+  of one inline `Anchor` slot — `AnchorRole`\'s largest variant
   `Other(String)` is 32 bytes, plus 8 for `Arc<SourceInfo>`). Because
   the `SourceInfo` enum's stack size is dictated by its largest
   variant, **every** `SourceInfo` value in the AST grows by that 40
   bytes — not just `Generated` instances. For a doc with thousands of
   Block/Inline nodes (each carrying a `SourceInfo` by value, not
-  Arc-boxed), the cap=1 → cap=2 step costs ~40 bytes per node, i.e.
+  Arc-boxed), the cap=1 → cap=2 step costs \~40 bytes per node, i.e.
   tens-to-hundreds of KB on a large document. The trade is paid in
   exchange for eliminating the heap spill cap=1 would incur on every
   multi-anchor shortcode in the steady state. Three-or-more-anchor
@@ -1054,7 +1054,7 @@ contiguity, lives in `quarto-source-map/src/source_info.rs`.
 - **`Default` on containers of `SourceInfo`**: verified no struct in
   `quarto-pandoc-types/src/{block,inline}.rs` derives `Default` (each
   `SourceInfo`-bearing struct is constructed explicitly), so changing
-  `SourceInfo`'s arm set can't cascade into a broken
+  `SourceInfo`\'s arm set can't cascade into a broken
   `#[derive(Default)]`. The hand-written `Default for SourceInfo` impl
   (the `Original { FileId(0), 0, 0 }` zero-value) stays unchanged.
 - **`combine()` with a `Generated` operand**: structurally valid (it

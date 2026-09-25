@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-18
 **Braid:** bd-tabset-headings-in-toc-t04ie7f7
-**Branch:** `main` @ `5b6774d1` (investigated in the main checkout, per `/investigate-beads`; no worktree created)
+**Branch:** `main` \@ `5b6774d1` (investigated in the main checkout, per `/investigate-beads`; no worktree created)
 **Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
 
 ## Triage verdict
