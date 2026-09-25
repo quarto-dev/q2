@@ -1,0 +1,49 @@
+Block-level editorial marks.
+
+::: --
+
+delete all of these.
+
+paragraphs.
+
+:::
+
+::: ++
+
+add all of these paragraphs.
+
+Yes. All of them.
+
+:::
+
+::: >> {author="cs" date="2026-09-24"}
+
+This is a really long comment.
+
+Many paragraphs
+
+:::
+
+::: !! {#hl .extra}
+
+highlighted, with [++ an inline insertion] inside.
+
+:::
+
+:::: ++
+
+Added text.
+
+::: >>
+
+Why was this added?
+
+:::
+
+::::
+
+> ::: ++
+>
+> added inside a block quote.
+>
+> :::

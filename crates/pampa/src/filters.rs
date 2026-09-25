@@ -888,6 +888,22 @@ fn traverse_inline_nonterminal(
             source_info: span.source_info,
             attr_source: span.attr_source,
         }),
+        Inline::Insert(ins) => Inline::Insert(crate::pandoc::Insert {
+            content: topdown_traverse_inlines(ins.content, filter, ctx),
+            ..ins
+        }),
+        Inline::Delete(del) => Inline::Delete(crate::pandoc::Delete {
+            content: topdown_traverse_inlines(del.content, filter, ctx),
+            ..del
+        }),
+        Inline::Highlight(hl) => Inline::Highlight(crate::pandoc::Highlight {
+            content: topdown_traverse_inlines(hl.content, filter, ctx),
+            ..hl
+        }),
+        Inline::EditComment(ec) => Inline::EditComment(crate::pandoc::EditComment {
+            content: topdown_traverse_inlines(ec.content, filter, ctx),
+            ..ec
+        }),
         _ => panic!("Unsupported inline type: {:?}", inline),
     }
 }
@@ -1517,6 +1533,66 @@ mod tests {
         let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
         assert_eq!(result.len(), 1);
         assert!(matches!(result[0], Inline::Span(_)));
+    }
+
+    /// A filter with no handler for the editorial-mark inlines must still
+    /// descend into them (bd-2281lkrx: they used to hit the catch-all panic
+    /// in `traverse_inline_nonterminal`).
+    #[test]
+    fn test_traverse_editorial_marks_without_handlers() {
+        use crate::pandoc::{Delete, EditComment, Highlight, Insert};
+        let upper = |s: Str, _ctx: &mut FilterContext| {
+            FilterReturn::FilterResult(
+                vec![Inline::Str(Str {
+                    text: s.text.to_uppercase(),
+                    source_info: s.source_info,
+                })],
+                false,
+            )
+        };
+        let marks = vec![
+            Inline::Insert(Insert {
+                attr: empty_attr(),
+                content: vec![str_inline("ins")],
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+            }),
+            Inline::Delete(Delete {
+                attr: empty_attr(),
+                content: vec![str_inline("del")],
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+            }),
+            Inline::Highlight(Highlight {
+                attr: empty_attr(),
+                content: vec![str_inline("hl")],
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+            }),
+            Inline::EditComment(EditComment {
+                attr: empty_attr(),
+                content: vec![str_inline("com")],
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+            }),
+        ];
+        for mark in marks {
+            let mut filter = Filter::new().with_str(upper);
+            let mut ctx = FilterContext::new();
+            let result = topdown_traverse_inline(mark, &mut filter, &mut ctx);
+            assert_eq!(result.len(), 1);
+            let content = match &result[0] {
+                Inline::Insert(i) => &i.content,
+                Inline::Delete(d) => &d.content,
+                Inline::Highlight(h) => &h.content,
+                Inline::EditComment(e) => &e.content,
+                other => panic!("mark kind changed: {other:?}"),
+            };
+            match &content[0] {
+                Inline::Str(s) => assert_eq!(s.text, s.text.to_uppercase()),
+                other => panic!("expected Str, got {other:?}"),
+            }
+        }
     }
 
     #[test]

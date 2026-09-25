@@ -12,6 +12,7 @@ use crate::pandoc::treesitter_utils::code_fence_content::process_code_fence_cont
 use crate::pandoc::treesitter_utils::code_span_helpers::process_pandoc_code_span;
 use crate::pandoc::treesitter_utils::commonmark_attribute::process_commonmark_attribute;
 use crate::pandoc::treesitter_utils::document::process_document;
+use crate::pandoc::treesitter_utils::editorial_div::process_editorial_div;
 use crate::pandoc::treesitter_utils::editorial_marks::{
     process_delete, process_editcomment, process_highlight, process_insert,
 };
@@ -1497,6 +1498,7 @@ fn native_visitor<T: Write>(
             result
         }
         "pandoc_div" => process_fenced_div_block(node, children, context),
+        "editorial_div" => process_editorial_div(node, children, context),
         "pipe_table_delimiter_cell" => process_pipe_table_delimiter_cell(children, context),
         "pipe_table_header" | "pipe_table_row" => {
             process_pipe_table_header_or_row(node, children, context)
