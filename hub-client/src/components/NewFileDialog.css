@@ -16,19 +16,95 @@
   margin-bottom: 14px;
 }
 
-/* Folder and Filename rows: label and control on one line. */
+/* Folder, File type and Filename rows: label and control on one line. */
 .text-file-form .folder-input,
+.text-file-form .file-type-input,
 .text-file-form .filename-input {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
+.text-file-form .file-type-input {
+  /* Grid, not flex: the label centers against the button row alone,
+     and the custom-extension field (when shown) drops to a second row
+     under the buttons rather than pushing the label off-center. */
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
 .text-file-form .folder-input label,
+.text-file-form .file-type-input label,
 .text-file-form .filename-input label {
   margin-bottom: 0;
   flex-shrink: 0;
   min-width: 72px;
+}
+
+/* File type picker: a row of icon radio buttons, plus the custom
+   extension field when "Other" is chosen. */
+.file-type-picker {
+  /* Its children (choices, custom field) become grid items of
+     .file-type-input directly. */
+  display: contents;
+}
+
+.file-type-choices {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.file-type-choice {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 56px;
+  padding: 6px 8px;
+  line-height: 1.2;
+}
+
+.file-type-choice.checked {
+  background: var(--sidebar-drag-bg);
+  border-color: var(--sidebar-drop-accent);
+  color: var(--editor-text);
+}
+
+.file-type-choice-icon {
+  display: inline-flex;
+}
+
+.file-type-choice-label {
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+
+/* "Other" is a word, not an extension: lighter so it doesn't read as
+   a literal suffix beside .qmd / .md / .yml. */
+.file-type-choice-label--other {
+  color: var(--editor-text-muted);
+}
+
+.file-type-custom {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.file-type-custom label {
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+
+.file-type-custom input {
+  flex: 1;
+  min-width: 0;
+  max-width: 160px;
 }
 
 .text-file-form .folder-input > .folder-picker,

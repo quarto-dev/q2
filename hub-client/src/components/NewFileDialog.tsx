@@ -12,6 +12,7 @@ import { normalizeProjectPath } from '@quarto/preview-renderer/types/project';
 import { discoverTemplates, type ProjectTemplate } from '../services/templateService';
 import ModalDialog from './ModalDialog';
 import FolderPicker from './FolderPicker';
+import FileTypePicker, { type FileTypeChoice } from './FileTypePicker';
 import { common, dialogs } from '../strings';
 import './NewFileDialog.css';
 
@@ -30,14 +31,25 @@ export interface NewFileDialogProps {
   initialFilename?: string;
 }
 
-/** Split `notes/intro.qmd` into folder `notes` and name `intro.qmd`. */
-function splitInitial(initial: string): { folder: string; name: string } {
+/** Map an extension (no dot, lowercase) to a picker choice; unknown → other. */
+function choiceForExtension(ext: string): FileTypeChoice {
+  return ext === 'qmd' || ext === 'md' || ext === 'yml' ? ext : 'other';
+}
+
+/**
+ * Split `notes/intro.qmd` into folder `notes`, name `intro`, and
+ * extension `qmd` (empty when the seed has none).
+ */
+function splitInitial(initial: string): { folder: string; name: string; ext: string } {
   const normalized = normalizeProjectPath(initial);
   const endsWithSlash = initial.trim().endsWith('/');
-  if (endsWithSlash) return { folder: normalized, name: '' };
+  if (endsWithSlash) return { folder: normalized, name: '', ext: '' };
   const lastSlash = normalized.lastIndexOf('/');
-  if (lastSlash < 0) return { folder: '', name: normalized };
-  return { folder: normalized.slice(0, lastSlash), name: normalized.slice(lastSlash + 1) };
+  const folder = lastSlash < 0 ? '' : normalized.slice(0, lastSlash);
+  const base = lastSlash < 0 ? normalized : normalized.slice(lastSlash + 1);
+  const lastDot = base.lastIndexOf('.');
+  if (lastDot <= 0) return { folder, name: base, ext: '' };
+  return { folder, name: base.slice(0, lastDot), ext: base.slice(lastDot + 1).toLowerCase() };
 }
 
 export default function NewFileDialog({
@@ -50,6 +62,8 @@ export default function NewFileDialog({
 }: NewFileDialogProps) {
   const [filename, setFilename] = useState('');
   const [folder, setFolder] = useState('');
+  const [fileType, setFileType] = useState<FileTypeChoice>('qmd');
+  const [customExtension, setCustomExtension] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   // Template state
@@ -62,9 +76,14 @@ export default function NewFileDialog({
   // Seed the folder picker and filename input on open.
   useEffect(() => {
     if (isOpen && initialFilename) {
-      const { folder: f, name } = splitInitial(initialFilename);
+      const { folder: f, name, ext } = splitInitial(initialFilename);
       setFolder(f);
       setFilename(name);
+      if (ext) {
+        const choice = choiceForExtension(ext);
+        setFileType(choice);
+        setCustomExtension(choice === 'other' ? ext : '');
+      }
     }
   }, [isOpen, initialFilename]);
 
@@ -98,6 +117,8 @@ export default function NewFileDialog({
     if (!isOpen) {
       setFilename('');
       setFolder('');
+      setFileType('qmd');
+      setCustomExtension('');
       setError(null);
       setTemplates([]);
       setSelectedTemplate(null);
@@ -121,8 +142,19 @@ export default function NewFileDialog({
     [existingPaths]
   );
 
+  // Extension from the type picker; empty means "other" with nothing typed.
+  const extension =
+    fileType === 'other' ? customExtension.trim().replace(/^\.+/, '').toLowerCase() : fileType;
+
   const handleCreateTextFile = useCallback(() => {
-    const path = normalizeProjectPath(folder ? `${folder}/${filename}` : filename);
+    if (!extension) {
+      setError(dialogs.newFile.errorExtensionRequired);
+      return;
+    }
+    const base = filename.trim();
+    // Don't double the extension if the user typed it into the name too.
+    const withExt = base.toLowerCase().endsWith(`.${extension}`) ? base : `${base}.${extension}`;
+    const path = normalizeProjectPath(folder ? `${folder}/${withExt}` : withExt);
     const validationError = validateFilename(path);
     if (validationError) {
       setError(validationError);
@@ -131,7 +163,7 @@ export default function NewFileDialog({
     const content = selectedTemplate?.strippedContent ?? '';
     onCreateTextFile(path, content);
     onClose();
-  }, [folder, filename, selectedTemplate, validateFilename, onCreateTextFile, onClose]);
+  }, [folder, filename, extension, selectedTemplate, validateFilename, onCreateTextFile, onClose]);
 
   // Enter submits; Escape and Tab containment are owned by ModalDialog.
   const handleKeyDown = useCallback(
@@ -192,6 +224,21 @@ export default function NewFileDialog({
                 value={folder}
                 onChange={(f) => {
                   setFolder(f);
+                  setError(null);
+                }}
+              />
+            </div>
+            <div className="file-type-input">
+              <label id="new-file-type-label">{dialogs.newFile.typeLabel}</label>
+              <FileTypePicker
+                value={fileType}
+                onChange={(t) => {
+                  setFileType(t);
+                  setError(null);
+                }}
+                customExtension={customExtension}
+                onCustomExtensionChange={(e) => {
+                  setCustomExtension(e);
                   setError(null);
                 }}
               />
