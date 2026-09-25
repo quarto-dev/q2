@@ -419,7 +419,7 @@ branch and it works text-level: a hand-rolled fence scanner finds
 `{name}` cells and splices replacement text in. **Mermaid should
 mirror this** rather than go through pampa's parser:
 
-- Simpler. ~100 lines of text-walking vs. AST manipulation +
+- Simpler. \~100 lines of text-walking vs. AST manipulation +
   `serialize_ast_to_qmd` (which is private to `engine_execution.rs`).
 - Cheaper. No round-trip through the parser, no AST allocation.
 - Less coupled. The mermaid engine never touches pampa internals or

@@ -71,8 +71,8 @@ CI. It is run-on-demand; durability comes from the written note.
       with commands, tables, verbatim gauge output, ranked findings.
 - [x] One strand per actionable hotspot, linked
       `discovered-from:bd-fq44dlnm`.
-- [x] Compare against the 2026-06-01 bucket table (tree-sitter ~29 %,
-      memmove/AST ~13 %, fs \~14 %) — what moved?
+- [x] Compare against the 2026-06-01 bucket table (tree-sitter \~29 %,
+      memmove/AST \~13 %, fs \~14 %) — what moved?
 
 ## Findings
 
@@ -127,6 +127,6 @@ Rendered 352 of 352 files to .../docs-quarto-2/_site
 ```
 
 - Exit 0, no warnings. `_site/` is 78 MB; `api/index.html` alone is 2.0 MB.
-- **68 s of CPU for 2.3 MB of markdown** (~190 ms CPU per input) vs. the
-  2026-06-01 qmd-plans baseline of ~8 ms/file — and **3.4 GiB peak RSS**.
+- **68 s of CPU for 2.3 MB of markdown** (\~190 ms CPU per input) vs. the
+  2026-06-01 qmd-plans baseline of \~8 ms/file — and **3.4 GiB peak RSS**.
   Both are the first things the profile has to explain.

@@ -425,7 +425,7 @@ were the freshly rebuilt `target/debug/q2` (SPA re-embedded).
   `crates/quarto-core/src/engine/mermaid.rs`, `tests/mermaid_pipeline.rs`
 - Transform pipeline contract: `claude-notes/designs/transform-pipeline-phases.md`;
   `build_transform_pipeline` at `crates/quarto-core/src/pipeline.rs:1173`,
-  Finalization seams ~1373-1400, `Q2_PREVIEW_TRANSFORM_EXCLUDED` ~1461
+  Finalization seams \~1373-1400, `Q2_PREVIEW_TRANSFORM_EXCLUDED` \~1461
 - Includes mechanism precedents:
   `crates/quarto-core/src/transforms/website_favicon.rs`,
   `crates/quarto-core/src/project/listing/feed/link_inject.rs:38`,

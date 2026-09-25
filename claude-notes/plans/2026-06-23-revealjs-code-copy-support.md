@@ -89,8 +89,8 @@ The bd-fu1a5g6l suppression is lifted: reveal honors
   reveal assembly `assemble_reveal_scss()` (\~`:382`); HTML assembly
   `compile_default_css()` / `assemble_with_user_layers()` in `compile.rs`.
 - **Reveal CSS-content tests:** `crates/quarto-sass/src/compile.rs` —
-  `test_compile_reveal_theme_includes_highlight_rules` (~`:660`) and
-  `test_compile_default_css` (~`:599`) are the mirror templates.
+  `test_compile_reveal_theme_includes_highlight_rules` (\~`:660`) and
+  `test_compile_default_css` (\~`:599`) are the mirror templates.
 - **Reveal JS artifact registration:** `crates/quarto-core/src/revealjs/assemble.rs`
   `reveal_assets()` / `register_reveal_assets()` (\~`:98-171`) — where the
   `js:revealjs:reveal` core asset is declared; add clipboard assets here.

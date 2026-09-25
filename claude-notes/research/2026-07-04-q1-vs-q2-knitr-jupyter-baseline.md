@@ -351,7 +351,7 @@ question-surfacing activity, and the two highest-unknown clusters go first:
 
 Rationale: the risk is concentrated in 11d (novel daemon bundling) and in the
 shared contracts 11c ratifies; front-loading a 11c-author + 11d-spike pair puts
-~all design questions on the table in the first step, while 11a/11b (mostly
+\~all design questions on the table in the first step, while 11a/11b (mostly
 mechanical) can be specced last without hiding surprises.
 
 ### Cross-plan coordination

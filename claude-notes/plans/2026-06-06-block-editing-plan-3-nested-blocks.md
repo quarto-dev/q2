@@ -226,7 +226,7 @@ below.
   `Option<NodePath>`) and list them so none are missed. **Verified \@ 2ecf09c4 —
   the call set is small:** `crates/pampa/src/apply_node_edit.rs:143` (the only
   non-test caller) and `crates/pampa/tests/integration/node_edit_tests.rs` (lookup
-  tests + the `edit_block` helper; the `Some(0)`/`Some(1)` asserts at ~181/190/
+  tests + the `edit_block` helper; the `Some(0)`/`Some(1)` asserts at \~181/190/
   212–213 — see the U4 test item). **No `quarto-core`/WASM callers**, and
   `apply_node_edit`'s WASM signature is unchanged (the path is internal). Re-grep
   to confirm nothing new landed.
@@ -325,7 +325,7 @@ below.
 
   **2 new components — add full affordance boilerplate.** These files currently
   have no `PreviewContext` import, no `poolId` extraction, and no `resolveSource`
-  call. Add the same ~4-line pattern used by Div.tsx:
+  call. Add the same \~4-line pattern used by Div.tsx:
   `poolId`, `resolved`, `isEditable` (C2-safe gate), and `data-block-pool-id` on
   the wrapper element:
   - `blocks/Figure.tsx` — `data-block-pool-id` on the `<figure>` element

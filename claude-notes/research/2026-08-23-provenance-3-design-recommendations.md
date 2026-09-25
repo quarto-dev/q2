@@ -81,7 +81,7 @@ provenance should come from**.
    consists solely of fence characters (a `` ``` `` body under a `` ```` `` fence), which is the
    one hole and should be named in the comment. The blockquote/list fallback stays as it is
    (`text` lacks the continuation markers, so the contiguous search fails and we return the
-   block — coarse, never wrong). ~10 lines; T7 from the seam spec binds it, with its revert hunk
+   block — coarse, never wrong). \~10 lines; T7 from the seam spec binds it, with its revert hunk
    rewritten as "the bounded search → back to whole-block `find`".
 2. **Producer-side, the principled fix.** Keep `code_fence_content`'s provenance: build it with
    `ProvenanceBuilder` (verbatim runs between `block_continuation` gaps — the deletion shape Plan
@@ -199,7 +199,7 @@ doc § 6 already settled scope (wrong-span, not drifting); the plan asks only "d
    `let … else { panic!() }`, and add a two-line comment at the construction site: *the arg's
    range is the quote-inclusive node span paired with the decoded string; no consumer offsets
    into it (`shortcode_resolve.rs:135, :171, :837, :848, :2232, :2265` take the string only)*.
-   ~15 lines, no behaviour change, no snapshot movement (the surviving range is unchanged).
+   \~15 lines, no behaviour change, no snapshot movement (the surviving range is unchanged).
 2. **Tighten for real:** drive `ProvenanceBuilder` here so the arg carries content provenance
    like attribute values do after Plan 2 Phase 4. No consumer wants it (Plan 2's deferred-minor
    #5 says the same: "the only unescaper in the tree producing no provenance; if that bothers
@@ -462,7 +462,7 @@ is refused. The helper documents this as a "conservative over-approximation"
 
 ### Options
 
-1. **Narrow** to the touched pieces (~25 lines in `is_gapless`/`concat_pieces_are_contiguous`,
+1. **Narrow** to the touched pieces (\~25 lines in `is_gapless`/`concat_pieces_are_contiguous`,
    taking an optional content sub-range), bound by flipping the NOTE above into an assertion.
 2. **Leave it**, documented as it already is. Real: nothing user-visible depends on it.
 
@@ -507,7 +507,7 @@ crossref id → exactly one `Q-15-1` error.
 
 ### Options
 
-1. **Add the test** (~20 lines): `render_exit_codes`'s fixture +
+1. **Add the test** (\~20 lines): `render_exit_codes`'s fixture +
    `QUARTO_FAULT_INJECT_DIAGNOSTIC_RENDER=0` → assert `!status.success()`, stderr contains
    `internal error rendering diagnostic Q-15-1`, and does **not** contain the `Q-15-1` text
    rendering (so the fault really hit that diagnostic).
@@ -588,7 +588,7 @@ the answer.
 ### Options
 
 1. **Wrap it now** in `render_diagnostic_guarded(code, || diagnostic.to_text(None))` — uniform
-   with the other eight, ~3 lines, and Plan 2's `grep -c = 8` evidence becomes 9.
+   with the other eight, \~3 lines, and Plan 2's `grep -c = 8` evidence becomes 9.
 2. **Comment only**: record why `None` is safe and that binding `config_sources` here requires
    the guard.
 3. Nothing.
@@ -727,7 +727,7 @@ for the reasons the review gave.
 | 3 | `q_2_28` splice guard | No generic guard. Replace `end_offset()` with `resolve_byte_range()` here and in `q_2_33`; comment the `== ">}}}"` check as the splice guard | Plan 3 Phase 6 | high |
 | 4 | what prevents the founding crash | **Mis-framed twice.** Snap (3) was load-bearing at the crashing version (C aborts, D clean); today the upstream `offset_to_location` floor alone suffices (F clean). Rewrite the helper's doc to say it is defense in depth; add an end-to-end q2 pin over the README fixture; keep the snap; the pin asserts carets too | Plan 3 Phase 6 (both the upstream doc PR and the pin) | high — six-config experiment, restored |
 | 5 | narrow `is_gapless` | Narrow to touched pieces, bound by the existing NOTE-test; low priority; leaving it is acceptable | Plan 3 Phase 6 | medium |
-| 6 | caught panic on error-severity | Add the ~20-line pin using the `Q-15-1` fixture; **correct the ordering claim** (print precedes the gate; immutability is the invariant) | Plan 3 Phase 6 | high |
+| 6 | caught panic on error-severity | Add the \~20-line pin using the `Q-15-1` fixture; **correct the ordering claim** (print precedes the gate; immutability is the invariant) | Plan 3 Phase 6 | high |
 | 7 | `render.rs:904` unguarded `to_text(None)` | Wrap it now + one comment naming `config_sources` as what would change the calculus; evidence count 8 → 9 | Plan 3 Phase 6 | high |
 | 8 | `bd-g7qh1ltt` boundary | Boundary right (outside the epic); root cause mis-stated — provenance is a map, not a store; re-scope to caller-supplied content; owner `bd-1d6io` | `bd-1d6io` (edit the strand) | medium-high |
 | — | sweep | Plan 3's gating table is stale (all gates closed); add the sixth site to the Phase 8 census cross-check; no deferred-minor becomes a strand | Plan 3 | high |

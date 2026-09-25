@@ -241,7 +241,7 @@ Upstream `_extensions/marimo/marimo-engine.js` (the file `_extension.yml`'s `pat
 **GitHub-release downloader shim** — 1160 bytes, not a real bundle; it fetches the actual engine from a
 release artifact at install time. This doesn't work in an offline, git-checked-out fixture, so the fixture's
 `_extension.yml` instead points at the same relative filename, but populated by **locally rebundling**
-`src/marimo-engine.ts` via `q2 build-ts-extension` — the real ~22 KB compiled engine, not the shim. Bundle
+`src/marimo-engine.ts` via `q2 build-ts-extension` — the real \~22 KB compiled engine, not the shim. Bundle
 sanity checks used throughout: output size (22070 → 22033 bytes across the two SC19-adjacent rebundles,
 consistent with like-for-like refactors, not functional changes), `grep -c marimo`/`grep -c '^export'` counts
 matching the source, `deno check` clean, and no stray `@quarto/api` string markers (the engine only imports
@@ -330,7 +330,7 @@ part of the engine diff being proposed upstream.
 | Dropped/inert methods | `partitionedMarkdown`/`postprocess` inert (no wire case); `checkInstallation` inert in q2 (no wire case, grep-confirmed); `generatesFigures` no consumer; `canFreeze:false` accepted-untested (bd-mx5x609r). |
 | `first_class`/dotted-language | `whenClass` gates space-separated claims; dotted (`python.marimo`) tokens are separate keys. `claimsFile`'s whole-file short-circuit bypasses ALL per-language `claims:` resolution and breaks multi-engine coexistence unless `claims-files: []` is declared — general TS-engine gotcha, not marimo-specific. |
 | `deno.json`/mock remap | Upstream's own root `deno.json` (test mocks, pinned URL imports) deliberately not copied; q2's workspace auto-detection + `resources/extension-build/deno.json` supplies the real `@quarto/api`/`@quarto/types`. |
-| Loader-shim replacement | Upstream `marimo-engine.js` is a GitHub-release downloader shim (1160 bytes); fixture rebuilds the real ~22 KB bundle locally via `build-ts-extension` + the same directory-resolution symlink workaround Julia's guide documents. |
+| Loader-shim replacement | Upstream `marimo-engine.js` is a GitHub-release downloader shim (1160 bytes); fixture rebuilds the real \~22 KB bundle locally via `build-ts-extension` + the same directory-resolution symlink workaround Julia's guide documents. |
 | q2-core changes forced | Pampa QMD-writer bracket-class round-trip fix (`411380777`); TS-engine includes read as file paths not literal content (`13f697c85`); `ts_protocol.rs` doc pin on the leave-alone contract (`b4f4f52bf`). All "fixed in q2, no engine action needed." |
 
 ## Bottom line

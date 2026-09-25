@@ -246,8 +246,8 @@ user an error. `DestinationNotFound` is removed from the error enum entirely.
     `lookup_finds_block_via_generated_preimage_fallback` (lines 178–200; find
     by function name — line numbers may drift).
   - `claude-notes/plans/2026-06-04-target-incremental-writes.md`: update three
-    spots — data-flow diagram comment (~line 98), editability gate prose
-    (~lines 144–147), and Phase 2 checklist part (b) (\~lines 211–218) — to
+    spots — data-flow diagram comment (\~line 98), editability gate prose
+    (\~lines 144–147), and Phase 2 checklist part (b) (\~lines 211–218) — to
     document that property #2 is retired and `Generated` nodes now return `None`.
     Find by content rather than exact line number.
 - [x] **Change `apply_node_edit` step 3** from `.ok_or(DestinationNotFound)?`
@@ -312,7 +312,7 @@ P1 reflow Playwright test. See
   *Roving-tabindex arrow navigation, ARIA, and touch OS gesture suppression are
   in Plan 2c.*
 - [x] `PreviewDocument.tsx` — spread the hook's `hostProps` on the root host
-  after `attr.hostProps` (lines ~263 main / ~238 minimal); render `stylesheet`
+  after `attr.hostProps` (lines \~263 main / \~238 minimal); render `stylesheet`
   node from hook. The two `hostProps` sets are disjoint today (`useAttributionHover`
   uses `onMouseOver`/`onMouseOut`; `useBlockEditHover` uses pointer events) so a
   second spread is correct. If a future handler introduces a key overlap, a

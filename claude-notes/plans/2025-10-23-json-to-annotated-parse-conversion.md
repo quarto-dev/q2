@@ -544,7 +544,7 @@ ts-packages/rust-qmd-json/
 |--------|------------------|---------------------|
 | MetaInlines result | Reconstructed plain text string | JSON array of inline nodes AS-IS |
 | Text extraction | Complex recursive inline traversal | Not needed! |
-| Code complexity | 3 phases, ~300 lines | 2 phases, ~150 lines |
+| Code complexity | 3 phases, \~300 lines | 2 phases, \~150 lines |
 | Data fidelity | Text only, formatting lost | Full structure preserved |
 | Performance | Slower (text reconstruction) | Faster (direct mapping + caching) |
 | Future inline navigation | Need to re-parse | Already have structure in result |

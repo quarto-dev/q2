@@ -203,7 +203,7 @@ Work items:
 
 - [x] Add `By::test_scaffold()` constructor in `quarto-source-map`.
 - [x] Add `SourceInfo::for_test()` convenience in `quarto-source-map`.
-- [x] Audit test-file usages of `SourceInfo::default()`; replace with one of the four patterns above. Swept ~700 sites across 3 commits: pampa batch (filter_tests.rs + 85 src test-mod sites + 156 tests/ sites), 4-crate scaffolding batch (quarto-xml, quarto-yaml-validation, quarto-ast-reconcile, quarto-core integration tests — 61 sites), and workspace-wide batch (~ 60 PURE_TEST files + 28 MIXED-file test-mod regions, ~570 sites).
+- [x] Audit test-file usages of `SourceInfo::default()`; replace with one of the four patterns above. Swept \~700 sites across 3 commits: pampa batch (filter_tests.rs + 85 src test-mod sites + 156 tests/ sites), 4-crate scaffolding batch (quarto-xml, quarto-yaml-validation, quarto-ast-reconcile, quarto-core integration tests — 61 sites), and workspace-wide batch (\~ 60 PURE_TEST files + 28 MIXED-file test-mod regions, \~570 sites).
 - [x] Update writer-exercising test expectations where switching to `for_test()` changes the dispatch rule (R1-empty-range → R5/R3) — the new output is the correct one. Two assertion-pin fixes surfaced and addressed (`engine_execution.rs:1378`, `inline.rs:1459`); neither was a writer-byte-output test, both pinned production behavior that Phase 7's deprecation will surface for proper fix-up.
 - [x] Verify: `cargo nextest run --workspace` passes after replacements (9736/9736 pass after the test-mod sweep + later Phase 6.5 commits).
 
@@ -308,7 +308,7 @@ InvalidStructure {
 The signature change has wider fanout than the four `None` sites suggest:
 
 - **Schema-structure-error sites (4)** at `schema/merge.rs:32, 51, 88` and `schema/mod.rs:256` (the variant is actually constructed at line 250; line 256 in the plan refers to the closure's body) → set `location: None`.
-- **User-yaml-validation sites (~11)** at `schema/helpers.rs:20, 40, 56, 70, 86, 95, 114, 125, 151, 158` already pass a real `value.source_info.clone()` → wrap each in `Some(...)`.
+- **User-yaml-validation sites (\~11)** at `schema/helpers.rs:20, 40, 56, 70, 86, 95, 114, 125, 151, 158` already pass a real `value.source_info.clone()` → wrap each in `Some(...)`.
 - **Formatter** at `crates/quarto-yaml-validation/src/error.rs:33-46` destructures `InvalidStructure { message, location }` and calls `location.start_offset()` → add a `match Some/None` arm; `None` renders without span.
 - **Test pattern-matching** in `schema/helpers.rs:288, 332, 377, 428, 475, 489, 538, 589, 672, 686` already destructures with `..` → unchanged.
 
@@ -400,7 +400,7 @@ Why widen the enum rather than wire through three callers separately: provenance
   - `crates/quarto-citeproc/src/output.rs:1274` — landed as dedicated `By::citeproc()` (atomic).
   - `crates/quarto-config/src/materialize.rs:132, 152, 165` — landed as `By::programmatic_config()` / `By::unknown()` per site.
   - `crates/quarto-core/src/project/listing/feed/stage.rs:596, 602` — landed as `By::unknown()`. Same shape applied to the sibling sites in `feed/complete.rs` and `listing/post_render_upgrade/substitute.rs`.
-- [x] Change `SchemaError::InvalidStructure::location` to `Option<SourceInfo>`; update the 4 `None` sentinel sites (`schema/merge.rs:32, 51, 88`; `schema/mod.rs:250`), wrap the ~11 real-source sites in `helpers.rs:20, 40, 56, 70, 86, 95, 114, 125, 151, 158` in `Some(...)`. Actual scope was wider — 33 `Some(...)` wraps across helpers.rs, parser.rs, parsers/{combinators,enum,objects,ref,wrappers}.rs — applied via compile-error-driven sweep. Formatter at `error.rs:33-46` now branches on `Option`. New regression test `test_schema_error_invalid_structure_display_no_location`.
+- [x] Change `SchemaError::InvalidStructure::location` to `Option<SourceInfo>`; update the 4 `None` sentinel sites (`schema/merge.rs:32, 51, 88`; `schema/mod.rs:250`), wrap the \~11 real-source sites in `helpers.rs:20, 40, 56, 70, 86, 95, 114, 125, 151, 158` in `Some(...)`. Actual scope was wider — 33 `Some(...)` wraps across helpers.rs, parser.rs, parsers/{combinators,enum,objects,ref,wrappers}.rs — applied via compile-error-driven sweep. Formatter at `error.rs:33-46` now branches on `Option`. New regression test `test_schema_error_invalid_structure_display_no_location`.
 - [x] Refactor `InlineAttr::new` signature (at `crates/quarto-pandoc-types/src/inline.rs:340`); add `new_from_attr_source` convenience.
 - [x] Widen `PandocNativeIntermediate::IntermediateAttr` from `(Attr, AttrSourceInfo)` to `(Attr, AttrSourceInfo, SourceInfo)`. Updated every constructor site (5 production sites in `treesitter.rs` + `commonmark_attribute.rs` + `info_string.rs` + `language_specifier.rs`) and every consumer site (the three plan-named sites + 8 destructuring sites in `atx_heading`, `code_span_helpers`, `editorial_marks`, `fenced_code_block` ×2, `fenced_div_block`, `span_link_helpers` ×2).
 - [x] Update the **test-code** `InlineAttr::new` call sites (`quarto-pandoc-types/src/inline.rs:1455, 1474, 1491`; `pampa/src/filters.rs:1503, 1513, 2123`; `pampa/src/writers/plaintext.rs:887`; `pampa/src/lua/types.rs:2932`; `pampa/src/lua/filter.rs:2254`) to pass `SourceInfo::for_test()`. Two `inline.rs` tests migrated to `new_from_attr_source` since they specifically exercise the derive-from-AttrSourceInfo path.
@@ -412,7 +412,7 @@ Why widen the enum rather than wire through three callers separately: provenance
 
 ### Discovered production residue — landed during Phase 6.5
 
-The Phase 6 sweep surfaced ~70 production `SourceInfo::default()`
+The Phase 6 sweep surfaced \~70 production `SourceInfo::default()`
 sites the plan didn't enumerate. Per user direction (2026-06-01),
 they were all addressed during Phase 6.5 rather than deferred to
 Phase 7's compiler audit. Three new `By::*` kinds were defined to

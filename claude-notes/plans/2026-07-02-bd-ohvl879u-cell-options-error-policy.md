@@ -467,7 +467,7 @@ unchanged mechanism, not a redesign.
 - Q1 canonical partition: `external-sources/quarto-cli/src/core/lib/partition-cell-options.ts`
   (registry at L310; `optionCommentPattern` L294); error semantics:
   `external-sources/quarto-cli/src/resources/jupyter/notebook.py`
-  (`cell_execute`, ~L550); knitr-format sniffing:
+  (`cell_execute`, \~L550); knitr-format sniffing:
   `src/core/lib/guess-chunk-options-format.ts`.
 - q2 precedents: `crates/quarto-lsp-core/src/tokens.rs` (run detection +
   offset table), `crates/pampa/src/pandoc/meta.rs:334-390`

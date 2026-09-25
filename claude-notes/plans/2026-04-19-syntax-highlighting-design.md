@@ -176,7 +176,7 @@ branch *and* run the binary.
 
 - **Phase 3 — browser built-ins**:
   - [x] Statically linked grammar crates compile clean into `wasm-quarto-hub-client`
-  - [x] Bundle-size recorded: **~32.8 MB** uncompressed WASM (~16 MB over the 17 MB pre-highlighting baseline, per-grammar average ~1.3 MB). No numeric threshold set per user guidance.
+  - [x] Bundle-size recorded: **\~32.8 MB** uncompressed WASM (\~16 MB over the 17 MB pre-highlighting baseline, per-grammar average \~1.3 MB). No numeric threshold set per user guidance.
   - [x] Same highlighting code path exercised from the WASM harness via a test-only `quarto_highlight_for_test` export that calls through to `Registry::global().highlight()`. Per-grammar coverage in `hub-client/src/services/highlight.wasm.test.ts` consumes the same fixture JSON as native `golden.rs`.
   - [x] **End-to-end verification (2026-04-20)**: user rendered `claude-notes/fixtures/phase3-highlight-check.qmd` (no `theme:` frontmatter) via `cd hub-client && npm run dev:fresh` in Firefox. Observed `<span class="hl-keyword">def</span>` / `<span class="hl-function-builtin">print</span>` spans with colors applied; `pre > code { display: block }` honored; inline highlighted code visible. Output inspected in DevTools.
 
@@ -223,8 +223,8 @@ Motivated by the requirement to support **user-supplied tree-sitter grammars** (
 
 ### Where the cost lives
 
-- **Native `quarto` binary**: adding the wasmtime runtime adds ~8–12 MB. The current `quarto` CLI is already ~95 MB (batteries-included); wasmtime is noise against that baseline. **No Cargo feature gate** — wasm grammar loading is always compiled in. Downstream library consumers (LSP, hub server) who don't need user grammars can depend on a thinner subcrate if that becomes necessary later, but we don't pre-build that split.
-- **Browser hub-client**: web-tree-sitter adds ~1.5–2 MB compressed. Acceptable.
+- **Native `quarto` binary**: adding the wasmtime runtime adds \~8–12 MB. The current `quarto` CLI is already \~95 MB (batteries-included); wasmtime is noise against that baseline. **No Cargo feature gate** — wasm grammar loading is always compiled in. Downstream library consumers (LSP, hub server) who don't need user grammars can depend on a thinner subcrate if that becomes necessary later, but we don't pre-build that split.
+- **Browser hub-client**: web-tree-sitter adds \~1.5–2 MB compressed. Acceptable.
 - **Per user grammar**: 50–200 KB for a typical grammar `.wasm` file on disk; loaded on demand.
 
 ### User grammar workflow (target v1 UX)
@@ -278,7 +278,7 @@ All locked 2026-04-19 unless otherwise noted. Rationale condensed; see conversat
 
 8. **Browser user grammars in v1** (revised 2026-04-21): web-tree-sitter npm dep + wasm-bindgen JS-interop shim + `UserGrammarProvider` trait unifying native/browser paths + hub-client auto-discovery of `_quarto/grammars/*` from the project file tree. Distribution between Automerge peers is not a grammar-specific concern (grammar files ride the same sync path as images/PDFs/etc). Generic file-upload UX is tracked separately under bd-eity. Sub-plan: `claude-notes/plans/2026-04-21-syntax-highlighting-phase-4.md`.
 
-9. **Wasmtime binary-size budget**: accepted as noise against the ~95 MB batteries-included baseline. No Cargo feature gate; wasm-grammar-loading always compiled into native builds.
+9. **Wasmtime binary-size budget**: accepted as noise against the \~95 MB batteries-included baseline. No Cargo feature gate; wasm-grammar-loading always compiled into native builds.
 
 ## Out-of-scope for v1
 

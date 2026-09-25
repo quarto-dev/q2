@@ -228,13 +228,13 @@ Add tests to verify error codes are correctly attached:
 
 ## Implementation Order
 
-1. **Phase 1**: Add Q-10-* codes to error_catalog.json (~5 min)
-2. **Phase 2-3**: Update DiagnosticCollector and EvalContext (~15 min)
-3. **Phase 4**: Update evaluator.rs error points (~10 min)
-4. **Phase 5**: Update parse error handling (~15 min)
-5. **Phase 7**: Add tests (~20 min)
+1. **Phase 1**: Add Q-10-* codes to error_catalog.json (\~5 min)
+2. **Phase 2-3**: Update DiagnosticCollector and EvalContext (\~15 min)
+3. **Phase 4**: Update evaluator.rs error points (\~10 min)
+4. **Phase 5**: Update parse error handling (\~15 min)
+5. **Phase 7**: Add tests (\~20 min)
 
-Total estimated work: ~1 hour
+Total estimated work: \~1 hour
 
 ## Out of Scope (Future Work)
 

@@ -3,7 +3,7 @@
 **Grand plan:** [2026-04-16-ts-engine-extensions-subprocess.md](2026-04-16-ts-engine-extensions-subprocess.md)
 **Depends on:** the npm workspace (no epic dependency — independent root, peer of plan1a-protocol)
 **Blocks:** Plan 1b (imports `@quarto/api/config`; depends on `@quarto/types` to typecheck/bundle; its contract tests need the §2aa runtime surface below), Plan 2 (rest of `@quarto/api`; Plan 2E refines `@quarto/types`), Plan 3 (`@quarto/api/jupyter` needs the skeleton)
-**Estimated sessions:** ~1 for the foundation (done) + ~1 for §2aa (the runtime surface, **landed**)
+**Estimated sessions:** \~1 for the foundation (done) + \~1 for §2aa (the runtime surface, **landed**)
 **Status:** the **foundation** (config + `@quarto/types` + package shell) **and** the **§2aa** runtime surface below — the `platform` seam + pure/host-only namespaces — are **landed** on `feature/ts-engine-extensions` (npm build clean; 217 tests pass / 1 skip).
 
 ## Overview

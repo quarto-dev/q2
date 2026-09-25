@@ -17,14 +17,14 @@ The Lua filter infrastructure consists of \~2,500 lines across 8 core files:
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `customnodes.lua` | ~800 | Custom node handler system |
-| `emulatedfilter.lua` | ~150 | Filter wrapping and integration |
-| `runemulation.lua` | ~300 | Filter orchestration and execution |
-| `parse.lua` | ~100 | Div/Span → custom node conversion |
-| `render.lua` | ~150 | Custom node → Pandoc AST rendering |
-| `scopedwalk.lua` | ~400 | Alternative tree traversal |
-| `init.lua` (datadir) | ~1,070 | Bootstrap and core utilities |
-| `_utils.lua` (datadir) | ~640 | AST manipulation utilities |
+| `customnodes.lua` | \~800 | Custom node handler system |
+| `emulatedfilter.lua` | \~150 | Filter wrapping and integration |
+| `runemulation.lua` | \~300 | Filter orchestration and execution |
+| `parse.lua` | \~100 | Div/Span → custom node conversion |
+| `render.lua` | \~150 | Custom node → Pandoc AST rendering |
+| `scopedwalk.lua` | \~400 | Alternative tree traversal |
+| `init.lua` (datadir) | \~1,070 | Bootstrap and core utilities |
+| `_utils.lua` (datadir) | \~640 | AST manipulation utilities |
 
 ### The Dual Representation Problem
 

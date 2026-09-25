@@ -500,13 +500,13 @@ integration tests by phase:
 
 | Phase | Lines (rough) |
 |---|---|
-| 1: Infrastructure (`config_value_to_inlines_with_provenance` + `DocumentProfile.title_source_info` + `AppendixSection` enum) | ~150 |
-| 2: Meta/var shortcode (bd-129m3) | ~80 |
-| 3: Nav-text ValueSource (bd-8pmq3) | ~60 |
-| 4: Appendix sub-Div ValueSource | ~180 |
-| 5: ValueSource role-asymmetry tests | ~100 |
-| Tests across phases | ~250 |
-| **Total** | **~820** |
+| 1: Infrastructure (`config_value_to_inlines_with_provenance` + `DocumentProfile.title_source_info` + `AppendixSection` enum) | \~150 |
+| 2: Meta/var shortcode (bd-129m3) | \~80 |
+| 3: Nav-text ValueSource (bd-8pmq3) | \~60 |
+| 4: Appendix sub-Div ValueSource | \~180 |
+| 5: ValueSource role-asymmetry tests | \~100 |
+| Tests across phases | \~250 |
+| **Total** | **\~820** |
 
 One focused session, possibly two if Phase 4's per-section
 discrimination surfaces unexpected interactions. Comparable scope to

@@ -70,12 +70,12 @@ surface, reqwest/grass deps.
       `cargo clean && cargo build --bin q2` (dev profile = optimized +
       debuginfo), macOS arm64:
       - wall **64.92 s** (user 880.32 s, sys 56.75 s)
-      - `target/debug/q2` **203,267,120 bytes (~194 MB)**
+      - `target/debug/q2` **203,267,120 bytes (\~194 MB)**
       - `target/debug` total **5.7 GB**
       - Cargo.lock: **721 packages**, 5 deno/v8-related
         (v8, deno_core, serde_v8, deno_ops, deno_error)
       - (v8 prebuilt archive was already cached locally; cold-cache builds
-        additionally download ~100MB)
+        additionally download \~100MB)
 
 ### Phase 1: Guard test first (TDD)
 
@@ -127,7 +127,7 @@ surface, reqwest/grass deps.
       | `target/debug` total | 5.7 GB | 5.0 GB | −0.7 GB |
       | Cargo.lock packages | 721 | 655 | **−66** |
 
-      Plus: cold-cache builds no longer download the ~100 MB v8 prebuilt
+      Plus: cold-cache builds no longer download the \~100 MB v8 prebuilt
       archive, and the rusty_v8 musl blocker on release targets is gone.
 
 ### Phase 5: Handoff

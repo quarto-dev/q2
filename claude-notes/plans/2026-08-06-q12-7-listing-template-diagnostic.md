@@ -159,7 +159,7 @@ be tested for the thing that actually broke.
 ### Phase 0 — Make spans assertable
 
 The reason this bug survived: **154 assertions in `crates/` check a
-diagnostic's `code`; ~12 touch its location.** `config.rs:1233` is typical —
+diagnostic's `code`; \~12 touch its location.** `config.rs:1233` is typical —
 `assert_eq!(diags[0].code.as_deref(), Some("Q-12-7"))` passes cheerfully
 with a garbage span. Nothing here is testable until that changes, and the
 helper is worth having independently of both fixes (it is what would catch a

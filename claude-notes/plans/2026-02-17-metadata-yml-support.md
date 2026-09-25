@@ -588,7 +588,7 @@ quarto-core (ast_transforms.rs) ◄─── merge all layers
 ### Existing Implementation to Study
 
 **Project metadata merging** (just completed, use as template):
-- `crates/quarto-core/src/stage/stages/ast_transforms.rs` - Look at lines ~107-200 for the existing project → document merge
+- `crates/quarto-core/src/stage/stages/ast_transforms.rs` - Look at lines \~107-200 for the existing project → document merge
 - `crates/quarto-config/src/format.rs` - `resolve_format_config()` flattens `format.{target}.*` to top-level
 
 **YAML parsing to ConfigValue**:
@@ -599,8 +599,8 @@ quarto-core (ast_transforms.rs) ◄─── merge all layers
 **Project context**:
 - `crates/quarto-core/src/project.rs` - `ProjectContext` struct has `dir: PathBuf` (project root)
 - `ProjectConfig` struct has `metadata: Option<ConfigValue>` (the parsed `_quarto.yml`)
-- **Look at `find_project_config()`** (~line 263) - shows pattern for checking `.yml` and `.yaml` extensions
-- **Look at `parse_config()`** (~line 301) - shows how to parse YAML to ConfigValue with `yaml_to_config_value`
+- **Look at `find_project_config()`** (\~line 263) - shows pattern for checking `.yml` and `.yaml` extensions
+- **Look at `parse_config()`** (\~line 301) - shows how to parse YAML to ConfigValue with `yaml_to_config_value`
 
 **SystemRuntime abstraction**:
 - `quarto_system_runtime::SystemRuntime` trait abstracts file I/O

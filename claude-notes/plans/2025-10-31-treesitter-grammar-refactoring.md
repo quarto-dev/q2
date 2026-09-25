@@ -99,7 +99,7 @@ Already working or next to implement:
 
 ### Category 5: Advanced Inline (Priority: MEDIUM)
 - `pandoc_superscript` - ^superscript^
-- `pandoc_subscript` - ~subscript~
+- `pandoc_subscript` - \~subscript\~
 - `pandoc_strikeout` - ~~strikeout~~
 - `pandoc_single_quote` - 'quoted'
 - `pandoc_double_quote` - "quoted"

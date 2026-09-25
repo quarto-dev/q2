@@ -60,7 +60,7 @@ point.
 | `post-quarto` | after numbers assigned | end of **Crossref** phase | ❌ |
 | `pre-render` | before format presentation | start of **Navigation** | ❌ |
 | `post-render` | after presentation | end of `AstTransformsStage` | ✅ = current `post` |
-| `pre-finalize` | before deps/cleanup | between `AstTransformsStage` and tail stages | ~ (≈ current `post`) |
+| `pre-finalize` | before deps/cleanup | between `AstTransformsStage` and tail stages | \~ (≈ current `post`) |
 | `post-finalize` | after everything | after tail stages, before write | ❌ |
 
 Exposing any of the six unexposed rows is mechanical, not architectural: add a
@@ -241,7 +241,7 @@ Dominated by the format axis — **13 files target formats Q2 doesn't emit** (`r
 | callout.lua | agnostic(+fmt) | **ported** | `customnode:Callout`, `callout.rs`/`callout_resolve.rs`. (revealjs/epub DOM variant not branched — fidelity check) |
 | content-hidden.lua | agnostic | not-ported | `content-visible/-hidden` + `when/unless-format/meta/profile` — **entirely absent**; needs profile plumbing → Normalization transform |
 | decoratedcodeblock.lua | agnostic(+fmt) | **ported** | sideband map, deliberate (`render.rs:350`) |
-| floatreftarget.lua | agnostic(+fmt) | **ported** | `customnode:Float`, full crossref pipeline; ~9/11 format branches format-not-in-q2 |
+| floatreftarget.lua | agnostic(+fmt) | **ported** | `customnode:Float`, full crossref pipeline; \~9/11 format branches format-not-in-q2 |
 | htmltag.lua | html | not-ported | leaf helper for tabset/panel; obviated by direct RawBlock construction |
 | latexcmd.lua | pdf/latex | format-not-in-q2 | — |
 | latexenv.lua | pdf/latex | format-not-in-q2 | — |
@@ -306,7 +306,7 @@ The catalog was produced by 11 parallel agents classifying against a shared taxo
 | **obsolete** | 14 | 10% | Q1-engine machinery Q2 needs by design (filter-chain wiring, skip-flags, JSON side-channels, scaffold round-trips, reader-state smuggling) |
 | **ported** | 12 | 9% | working equivalent with cited evidence |
 
-So **~59%** of built-in Q1 filters (ported + partial + not-ported − the writer-blocked ones) are *about* the formats Q2 ships; **~32%** are simply waiting on writers; **~10%** will never be needed because Q2's architecture (native tree-sitter reader, real Rust CustomNodes, single-process `RenderContext`, small named-transform pipeline) dissolves the problem they solved.
+So **\~59%** of built-in Q1 filters (ported + partial + not-ported − the writer-blocked ones) are *about* the formats Q2 ships; **\~32%** are simply waiting on writers; **\~10%** will never be needed because Q2's architecture (native tree-sitter reader, real Rust CustomNodes, single-process `RenderContext`, small named-transform pipeline) dissolves the problem they solved.
 
 ### The headline answer: do the built-in filters motivate new Lua *stages*?
 

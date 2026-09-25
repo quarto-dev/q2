@@ -134,7 +134,7 @@ defect.**
 Oracles + logs live in `/tmp/bd-1d6io/` (oracle_code2.py, oracle_attr2.py,
 oracle_code_min.py, bisect-*.log).
 
-## Why CI stayed green for ~7 months (answers the "snapshots" question)
+## Why CI stayed green for \~7 months (answers the "snapshots" question)
 
 Three artifacts could in principle have caught this; each had a blind spot.
 

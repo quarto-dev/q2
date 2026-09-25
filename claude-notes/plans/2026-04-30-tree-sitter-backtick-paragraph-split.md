@@ -86,7 +86,7 @@ So the scanner is over-rejecting `SOFT_LINE_ENDING` whenever a continuation line
 
 ## Proposed fix
 
-In both branches of scanner.c that exclude backtick from soft-line-break candidates (lines ~2263–2272 and ~2291–2315), replace the bare `lexer->lookahead != '\``'` test with a count: only treat `` ` `` as a paragraph interrupter when there are **3 or more** consecutive backticks.
+In both branches of scanner.c that exclude backtick from soft-line-break candidates (lines \~2263–2272 and \~2291–2315), replace the bare `lexer->lookahead != '\``'` test with a count: only treat `` ` `` as a paragraph interrupter when there are **3 or more** consecutive backticks.
 
 Approach:
 

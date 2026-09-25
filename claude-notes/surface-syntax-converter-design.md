@@ -992,7 +992,7 @@ impl SourceConverter for LegacyEngineAdapter {
 | **Performance** | Sequential | Cacheable + parallel |
 | **Third-party support** | Complex | Simple trait impl |
 | **LSP support** | Limited | Full source mapping |
-| **Code size** | ~500 lines | ~800 lines (more explicit) |
+| **Code size** | \~500 lines | \~800 lines (more explicit) |
 
 ## Critical Design Questions
 

@@ -26,7 +26,7 @@ the Quarto-specific error-code catalog.
    This makes extraction low-risk: nothing in the engine breaks if the crate moves.
 
 3. **The three *foundation* crates are heavily used inside q2.** `quarto-source-map`
-   (~26 dependents), `quarto-error-reporting` (~19), and `quarto-yaml` (8) are core
+   (\~26 dependents), `quarto-error-reporting` (\~19), and `quarto-yaml` (8) are core
    infrastructure. They **cannot simply be relocated** — q2 still needs them. The
    split therefore has to be a *publish-and-consume* arrangement (q2 depends on the
    externalized crates), not a move.
@@ -88,8 +88,8 @@ All four share the workspace `[workspace.package]` metadata
 |---|---|---|
 | `quarto-yaml-validation` | `validate-yaml` only | **Trivial** — move freely; only the CLI follows |
 | `quarto-yaml` | pampa, quarto-core, quarto-config, quarto-error-reporting, quarto-lsp-core, validate-yaml (8) | q2 still needs it → must depend on externalized crate |
-| `quarto-error-reporting` | ~19 crates (pampa, quarto-core, quarto-config, quarto-csl, quarto-citeproc, quarto-doctemplate, quarto-lsp-core, quarto-preview, quarto-publish, quarto, wasm-quarto-hub-client, …) | Deeply embedded → cannot move; must be a shared dependency |
-| `quarto-source-map` | ~26 crates (most of the workspace, incl. WASM client) | Core infra → cannot move; must be a shared dependency |
+| `quarto-error-reporting` | \~19 crates (pampa, quarto-core, quarto-config, quarto-csl, quarto-citeproc, quarto-doctemplate, quarto-lsp-core, quarto-preview, quarto-publish, quarto, wasm-quarto-hub-client, …) | Deeply embedded → cannot move; must be a shared dependency |
+| `quarto-source-map` | \~26 crates (most of the workspace, incl. WASM client) | Core infra → cannot move; must be a shared dependency |
 
 **Consequence:** the only crate that *leaves* q2 cleanly is `quarto-yaml-validation`
 itself. The three foundation crates have to become shared/published dependencies that

@@ -1178,13 +1178,13 @@ pinned version assert (`:1460`) live in the crate root
 - [x] Reconciliation edits (secondary artifacts):
   - [x] `2026-04-16-ts-engine-extensions-subprocess.md` — update the
         "Multi-engine resolution (post-merge)" summary (Pass-2 placement +
-        file-claim-only-Pass-1 wording, lines ~63-82) and this plan's row in
+        file-claim-only-Pass-1 wording, lines \~63-82) and this plan's row in
         the sub-plans table (research stub → implementation plan).
   - [x] `2026-04-16-plan1c-extension-integration.md` — D1's "fully static →
         Pass-1 precondition" wording (lines 163-165) becomes the per-doc
         predicate; cross-reference this plan for the metadata inputs.
   - [x] `2026-04-16-plan1a-engine.md` — tighten the "zero-cost Pass-1 lift"
-        assertions (lines ~436-448) to "per-doc, load-free-only".
+        assertions (lines \~436-448) to "per-doc, load-free-only".
   - [x] `2026-07-01-plan4b-shadow-engine-features.md` — coordination note
         already added (`71cf07394`) and 4b-C shipped `engine_entry_name`
         matching it (`5acf0e6dc`). **Verify** the landed grammar still

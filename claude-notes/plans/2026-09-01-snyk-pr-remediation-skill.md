@@ -53,13 +53,13 @@ Four surfaces must name one exact version:
    lockfile delta.
 3. `DEFAULT_KATEX_URL_BASE` in `crates/quarto-core/src/stage/stages/math_js.rs:85`
    (`https://cdn.jsdelivr.net/npm/katex@X.Y.Z/dist/`).
-4. `hub-client/public/q2-sandboxed-preview.html` — a **committed** ~1.8 MB
+4. `hub-client/public/q2-sandboxed-preview.html` — a **committed** \~1.8 MB
    single-file bundle with KaTeX inlined. The guard test covers the three
    version *declarations*, not the bundled bytes, and there is no
    `git diff --exit-code` freshness gate for this artifact (unlike
    quarto-engine-host-deno). Regenerate with `cd hub-client && npm run
    build:sandboxed`; the rebuild is deterministic. Inspect the diff — for a
-   pure version bump it should be ~2 bytes of version string; a larger delta
+   pure version bump it should be \~2 bytes of version string; a larger delta
    means the bundle was already stale (as with #573) and deserves a callout in
    the commit message.
 

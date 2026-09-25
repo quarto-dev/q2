@@ -808,7 +808,7 @@ escape-length table (`\t`→2:1, `\uNNNN`→6:n, `''`→2:1, `\`+break→n:0), t
 block indent, and "a break run is a source whitespace run containing a
 newline."
 
-**Every measured shape passes** with one ~90-line walker. The count and the
+**Every measured shape passes** with one \~90-line walker. The count and the
 per-shape piece lists live in
 `claude-notes/research/2026-08-21-yaml-content-provenance-fixtures.md`, which is
 the authority; this plan does not repeat the number, because it was stale in six
@@ -2069,7 +2069,7 @@ configured.
       boundaries.
 - [x] Audit — **read-only, bounded, output goes in § Evidence.** The scope is
       "sites that can hand a non-boundary offset to a `Location`", not every
-      construction site: there are ~155 `Location {` literals in q2's non-test
+      construction site: there are \~155 `Location {` literals in q2's non-test
       sources and enumerating them is not this phase's job. Concretely: the
       third implementation `offset_to_location_bytes`
       (q2 `quarto-parse-errors/src/error_generation.rs:330`, whose mid-char
@@ -2964,7 +2964,7 @@ releases now"):**
   published to crates.io **2026-08-21T22:57:16Z**, tag `v0.1.3`.
 - `quarto-yaml` **0.1.3** and `quarto-yaml-validation` **0.1.3** (the content-
   provenance feature) — PR posit-dev/quarto-yaml#18, CI green on all four
-  checks (Windows ran ~1m38s against ~40s elsewhere, consistent with the test
+  checks (Windows ran \~1m38s against \~40s elsewhere, consistent with the test
   job running the suite twice — plain and `strict-provenance` — across the OS
   matrix), merged **2026-08-21T23:04:45Z**, published
   **2026-08-21T23:05:40Z** / **23:05:44Z**, tag `v0.1.3`. Verified against the

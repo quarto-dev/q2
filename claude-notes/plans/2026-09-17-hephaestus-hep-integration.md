@@ -292,7 +292,7 @@ Child strands: bd-sxiv2tio (phase 2, preview client), bd-l6e3sd45
   across the graph), so the library is loaded at run time and a machine
   without it just gets an empty system collection — harmless, because
   plot text is shaped with the bundled faces.
-- **First `.hep` render pays ~2 s once per process** for font-context
+- **First `.hep` render pays \~2 s once per process** for font-context
   initialization (system font enumeration). Documents without `.hep`
   images never pay it; the registration is lazy.
 - **A missing `.hep` warns twice** — `Q-19-1` (plot not rendered) and
@@ -318,7 +318,7 @@ Child strands: bd-sxiv2tio (phase 2, preview client), bd-l6e3sd45
    different `textLength`, different tick label widths → different layout),
    which breaks snapshot tests and makes rendered output machine-dependent.
    Recommendation: vendor the four Roboto faces hephaestus's wasm clients
-   ship (~500 kB in `resources/hephaestus/fonts/`, OFL) and register them +
+   ship (\~500 kB in `resources/hephaestus/fonts/`, OFL) and register them +
    map `sans-serif` to them in the transform, exactly as
    `examples/document_svg.rs` does. Output then matches what the preview
    client draws, byte for byte at the same size. Alternative: no bundled

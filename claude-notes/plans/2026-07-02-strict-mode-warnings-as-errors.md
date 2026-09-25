@@ -71,7 +71,7 @@ Decision D1 (bd-creo) and the config-error-handling decision of 2025-12-07
   exit-gate extension, otherwise a promoted warning on a successful render
   would print as `error` and still exit 0. (This is arguably a latent
   inconsistency even without strict mode — see Open Questions.)
-- **~552 `eprintln!` and ~63 `tracing::warn!` call sites bypass the
+- **\~552 `eprintln!` and \~63 `tracing::warn!` call sites bypass the
   structured system entirely.** Strict mode structurally cannot see these.
   That is acceptable (they are logging, not user-facing diagnostics), but
   it makes the convention "user-visible warnings must be
@@ -165,7 +165,7 @@ Nothing in `quarto-error-reporting` (external crate) changes.
   explicitly "what are now errors".
 - **Emission-point promotion** (generalize doctemplate's
   `warn_or_error_*` everywhere): no central emission chokepoint exists
-  (~15 bare-`Vec` pushes, several sink types, plus Lua harvesting); every
+  (\~15 bare-`Vec` pushes, several sink types, plus Lua harvesting); every
   future warning author would need to remember the strict-aware API —
   exactly the unsustainable shape we're avoiding. It would also let strict
   mode alter mid-render control flow (`has_errors()` checks, fail-fast

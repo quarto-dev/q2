@@ -562,7 +562,7 @@ unguarded *here*, with rationale:
       set and nothing to unblock**: the whole API was available from the
       `Init { global }` config delivered at spawn (RTQ Item A — gating removed).
       `engine.launch(project)` only **constructs** the `ExecutionEngineInstance`
-      object — it is cheap (~0), matching Quarto 1, where `launch()` is a
+      object — it is cheap (\~0), matching Quarto 1, where `launch()` is a
       synchronous object-literal construction that starts no daemon. **`launch()`
       takes Q1's `EngineProjectContext` (`execute/types.ts:86`)**, which the
       harness builds from `msg.project` — including a **harness-local

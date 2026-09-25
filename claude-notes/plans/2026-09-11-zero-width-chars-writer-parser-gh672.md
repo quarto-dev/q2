@@ -76,7 +76,7 @@ tolerates (cf. `&#34;` → `\"`, `---` → em dash).
 
 ### Writer: which characters, which spelling
 
-- **Set:** Unicode general category `Cf` (format), ~170 codepoints in ~20
+- **Set:** Unicode general category `Cf` (format), \~170 codepoints in \~20
   ranges. Rust's `std` has no general-category query, so add a small
   `is_format_char(c) -> bool` over an explicit sorted range table in a new
   `crates/pampa/src/writers/unicode_format.rs` (or a sibling module of

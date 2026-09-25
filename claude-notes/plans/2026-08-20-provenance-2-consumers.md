@@ -1695,7 +1695,7 @@ crates.io publish.
    The structural argument for why this can't happen is sound — `diagnostic_counts()` runs
    before printing, so an error-severity diagnostic has already been counted by the time
    `render_diagnostic_guarded` could swallow its render panic — but it is the one property here
-   worth ~20 lines of test rather than an argument. (Final whole-branch review, deferred item
+   worth \~20 lines of test rather than an argument. (Final whole-branch review, deferred item
    8.)
 
    > **Correction, 2026-08-23 (Plan 3 Phase 6d, T9).** The record above is left as written; this
@@ -1958,7 +1958,7 @@ recorded at the end of this subsection.)_ Session 1 landed the `Scalar` struct v
 session 2 landed the dead converter, the desync report, and `caption_inlines`.
 
 **The `ConfigValueKind::Scalar` migration** (`6a5de44b6` shape + helpers + serde + hash arm
-+ wire-shape test; `c9a77d18c` the sweep). Touched **~207 non-test / 241 total sites across
++ wire-shape test; `c9a77d18c` the sweep). Touched **\~207 non-test / 241 total sites across
 58 files**, vs the plan's predicted 206/240 across 49+8. The plan's figure came from grepping
 the literal `ConfigValueKind::Scalar(`, which cannot see sites reached through an alias:
 `quarto-core/src/stage/stages/include_resolve.rs` (`use ConfigValueKind as K`) and
@@ -2135,7 +2135,7 @@ named example sites was not — see § Latent exposures). Seven new tests share 
 carrying every construct whose value slot changed. Binding was **measured**: wrapping every
 diagnostic location on both arms of `pampa::readers::qmd::read` in a
 `SourceInfo::concat(...)` — precisely the shape the decoder now produces — visibly corrupts
-`qmd-syntax-helper`'s output (a splice at byte 0; a `replace_range` percent-encoding ~340
+`qmd-syntax-helper`'s output (a splice at byte 0; a `replace_range` percent-encoding \~340
 bytes), and **5 of the 7 tests catch it**. No production code changed in that crate.
 
 **The TypeScript boundary.** `@quarto/annotated-qmd` moved to content semantics and bumped to

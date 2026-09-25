@@ -42,7 +42,7 @@ Strand's stated scope:
 - `.quarto-sidebar-collapse-item` on the sidebar + Bootstrap collapse plumbing,
 - the mobile breadcrumb instance (no extra classes; rendered even for length-1
   trails; `bread-crumbs: false` fallback to a collapsed `h1.quarto-secondary-nav-title`),
-- SCSS: Q1 `quarto-nav.scss` ~411–450 and ~470–520.
+- SCSS: Q1 `quarto-nav.scss` \~411–450 and \~470–520.
 
 ## Dependency graph
 

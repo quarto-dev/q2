@@ -408,7 +408,7 @@ let result = schema.validate(&instance);
 Current TypeScript:
 - Schemas defined in TypeScript code
 - Some loaded from YAML/JSON resources
-- Schema definitions are ~2000 LOC
+- Schema definitions are \~2000 LOC
 
 Rust approach:
 - Define schemas in Rust (most control)
@@ -469,24 +469,24 @@ Must preserve:
 ### Complexity: **High**
 
 **Why**:
-- Large surface area (~6,500 LOC TypeScript)
+- Large surface area (\~6,500 LOC TypeScript)
 - Complex schema system with many edge cases
 - Error handling must be excellent (user-facing)
 - Integration with MappedString critical
 - Completions need schema navigation logic
 - Must handle malformed input gracefully (IDE features)
 
-### LOC Estimate: ~4,000-5,000 lines Rust
+### LOC Estimate: \~4,000-5,000 lines Rust
 
 **Breakdown**:
-- AnnotatedParse + parsing: ~500 lines
-- Validator core: ~800 lines
-- Error handlers: ~600 lines
-- Schema types: ~400 lines
-- Schema definitions (frontmatter, project, etc.): ~1,500 lines
-- Completion generation: ~400 lines
-- Schema utilities (navigation, walking): ~500 lines
-- Tests: ~300 lines
+- AnnotatedParse + parsing: \~500 lines
+- Validator core: \~800 lines
+- Error handlers: \~600 lines
+- Schema types: \~400 lines
+- Schema definitions (frontmatter, project, etc.): \~1,500 lines
+- Completion generation: \~400 lines
+- Schema utilities (navigation, walking): \~500 lines
+- Tests: \~300 lines
 
 ### Time Estimate: 4-6 weeks
 

@@ -774,7 +774,7 @@ so 3.3/4.6 will run here as-is — but do not assume that elsewhere.
       **assertions**.
 
       In `crates/quarto-navigation/src/render_html.rs`, after
-      `sidebar_render_hidden_title_emits_no_header` (ends ~`:2587`):
+      `sidebar_render_hidden_title_emits_no_header` (ends \~`:2587`):
       - `sidebar_render_text_title_with_navbar_emits_no_header` — a
         `SidebarTitle::Text` sidebar rendered via `sidebar_to_html_with_options`
         with `has_navbar: true` emits neither `sidebar-header` nor
@@ -1085,7 +1085,7 @@ grep -rl 'sidebar-title' . | grep -vE '^\./(target|external-sources|\.git)/' \
 ```
 
 Finds **20** files. Every one was checked. The `_site/` exclusion matters: once
-you render `docs/` (Phase 3.3) the same grep returns ~260 more hits, all build
+you render `docs/` (Phase 3.3) the same grep returns \~260 more hits, all build
 output.
 
 **The one breakage:**

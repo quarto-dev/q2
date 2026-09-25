@@ -30,8 +30,8 @@ each):
 
 - 483 samples in `EngineRegistry::new → JupyterEngine::new`
   (combined `posix_spawn` + `poll` waiting on the child).
-- Geometric scaling on tiny fixtures: ~4 ms/doc steady state, of
-  which the spawn is at least ~2–3 ms.
+- Geometric scaling on tiny fixtures: \~4 ms/doc steady state, of
+  which the spawn is at least \~2–3 ms.
 
 The fix is the cheapest thing that could possibly work and yields
 the largest expected win in the profile. It also unblocks more

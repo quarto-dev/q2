@@ -211,26 +211,26 @@ Recommended (a). 2pre's pattern worked; reusing it costs little and gives bisect
 
 | Component | Lines (rough) |
 |---|---|
-| `q2-slides/styles.ts` (NEW — extracted constants) | ~50 |
-| `q2-slides/attributesToProps.ts` (NEW — moved) | ~70 |
-| `q2-slides/parseSlides.ts` (NEW — moved + slimmed; minus `extractMetaString`) | ~140 |
-| `q2-slides/AspectRatioScaler.tsx` (moved verbatim from top-level) | ~92 |
-| `q2-slides/SlideContext.tsx` (NEW) | ~25 |
-| `q2-slides/blocks/*.tsx` (NEW — 11 leaves \@ ~30 LOC each) | ~330 |
-| `q2-slides/inlines/*.tsx` (NEW — 12 leaves \@ ~25 LOC each, except Image and Math which are ~50) | ~340 |
-| `q2-slides/blocks/index.ts` + `inlines/index.ts` | ~25 |
-| `q2-slides/dispatchers.tsx` (NEW — Block, Inline) | ~50 |
-| `q2-slides/SlideAst.tsx` (NEW — carousel chrome only; leaves are dispatched) | ~120 |
-| `q2-slides/RevealjsAst.tsx` (NEW — reveal.js chrome only) | ~110 |
-| `q2-slides/registry.ts` (NEW — both registries + sharedLeaves spread) | ~30 |
-| `q2-slides/index.ts` (NEW — public barrel) | ~10 |
+| `q2-slides/styles.ts` (NEW — extracted constants) | \~50 |
+| `q2-slides/attributesToProps.ts` (NEW — moved) | \~70 |
+| `q2-slides/parseSlides.ts` (NEW — moved + slimmed; minus `extractMetaString`) | \~140 |
+| `q2-slides/AspectRatioScaler.tsx` (moved verbatim from top-level) | \~92 |
+| `q2-slides/SlideContext.tsx` (NEW) | \~25 |
+| `q2-slides/blocks/*.tsx` (NEW — 11 leaves \@ \~30 LOC each) | \~330 |
+| `q2-slides/inlines/*.tsx` (NEW — 12 leaves \@ \~25 LOC each, except Image and Math which are \~50) | \~340 |
+| `q2-slides/blocks/index.ts` + `inlines/index.ts` | \~25 |
+| `q2-slides/dispatchers.tsx` (NEW — Block, Inline) | \~50 |
+| `q2-slides/SlideAst.tsx` (NEW — carousel chrome only; leaves are dispatched) | \~120 |
+| `q2-slides/RevealjsAst.tsx` (NEW — reveal.js chrome only) | \~110 |
+| `q2-slides/registry.ts` (NEW — both registries + sharedLeaves spread) | \~30 |
+| `q2-slides/index.ts` (NEW — public barrel) | \~10 |
 | `ReactAstSlideRenderer.tsx` shim → deletion | -885 |
 | `RevealjsReactAstSlideRenderer.tsx` shim → deletion | -163 |
 | Top-level `AspectRatioScaler.tsx` deletion | -92 |
-| `ReactRenderer.tsx` slide-branch rewrite | ~10 |
-| `useCursorToSlide.ts` import path update | ~1 |
-| `useSlideThumbnails.tsx` import path update | ~1 |
-| **Net** | **~+250 LOC, distributed across 30+ small files** |
+| `ReactRenderer.tsx` slide-branch rewrite | \~10 |
+| `useCursorToSlide.ts` import path update | \~1 |
+| `useSlideThumbnails.tsx` import path update | \~1 |
+| **Net** | **\~+250 LOC, distributed across 30+ small files** |
 
 The line-count *grows* slightly because per-tag leaves are explicit (one file per Pandoc tag) rather than buried in a switch arm. The structural payoff is exactly that: each leaf is independently editable, importable, testable, and overridable. q2-debug and q2-preview already pay that file-count cost; q2-slides catching up is the point.
 

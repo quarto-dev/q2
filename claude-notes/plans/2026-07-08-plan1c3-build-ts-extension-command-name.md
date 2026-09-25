@@ -4,7 +4,7 @@
 
 **Goal:** (1) Rename `q2 build-ts-extension` → `q2 call build-ts-extension` (Q1 parity); (2) extract the extension-bundle build logic out of the bin-only `quarto` crate into a `quarto-core` library so both the CLI and the tests can call it in-process; (3) stop committing the synth engine `dist/*.js` — delete them, `.gitignore` them, and have the e2e suites **regenerate each bundle at test time** hermetically via that shared library.
 
-**Architecture:** The build logic (deno.json resolution + `deno bundle` spawn) currently lives in `crates/quarto/src/commands/build_ts_extension.rs`, unreachable from `quarto-core`\'s tests (bin-only crate; `CARGO_BIN_EXE_q2` is same-package-only; no lib target). Move it to `quarto-core::extension::build` (native-gated, like `engine::ts_process`), make the CLI command a thin wrapper, and call the same function in-process from the tests. The 8 synth engines + `echo-engine`/`echo-legacy` import only `@quarto/api/claims` (pure, type-only transitive deps) and `@quarto/types` (erased); after switching the 7 barrel-importing engines to the `@quarto/api/claims` subpath, `deno bundle` resolves their graph from local `ts-packages/` with no npm/jsr/network and no `deno.lock` (~2 KB, ~10 ms — validated). `julia-engine`/`marimo` pull jsr/`deno.land` deps and stay committed.
+**Architecture:** The build logic (deno.json resolution + `deno bundle` spawn) currently lives in `crates/quarto/src/commands/build_ts_extension.rs`, unreachable from `quarto-core`\'s tests (bin-only crate; `CARGO_BIN_EXE_q2` is same-package-only; no lib target). Move it to `quarto-core::extension::build` (native-gated, like `engine::ts_process`), make the CLI command a thin wrapper, and call the same function in-process from the tests. The 8 synth engines + `echo-engine`/`echo-legacy` import only `@quarto/api/claims` (pure, type-only transitive deps) and `@quarto/types` (erased); after switching the 7 barrel-importing engines to the `@quarto/api/claims` subpath, `deno bundle` resolves their graph from local `ts-packages/` with no npm/jsr/network and no `deno.lock` (\~2 KB, \~10 ms — validated). `julia-engine`/`marimo` pull jsr/`deno.land` deps and stay committed.
 
 **Tech Stack:** Rust (clap 4 derive; `anyhow`, `serde_yaml`, `tempfile` — all already quarto-core deps), Deno 2.9 `deno bundle`, `resources/extension-build/deno.workspace.json` import map, nextest.
 
@@ -122,7 +122,7 @@ the underlying `.js`-rejection independent of the hint text).
   ```
   Expected: read.rs assertions FAIL (current hint lacks the `call ` prefix). *(The `build_ts_extension_e2e` red is a **runtime** failure: pre-conversion `Call { function, args }` accepts any positional, so `q2 call build-ts-extension <dir>` parses and fails at runtime with `Unknown function: build-ts-extension` → the `status.success()` assert fails. Not a clap error.)*
 
-- [x] **Step 3:** In `main.rs`: delete the top-level `#[command(name="build-ts-extension")] BuildTsExtension {…}` variant (~295-315) + its dispatch arm (~706-716). Replace `Call` with `Call { #[command(subcommand)] command: CallCommands }`. Add after `Commands`:
+- [x] **Step 3:** In `main.rs`: delete the top-level `#[command(name="build-ts-extension")] BuildTsExtension {…}` variant (\~295-315) + its dispatch arm (\~706-716). Replace `Call` with `Call { #[command(subcommand)] command: CallCommands }`. Add after `Commands`:
   ```rust
   /// Subcommands under `quarto call` — the Q1-parity `call` group.
   /// Q1's group is `{ engine, build-ts-extension, typst-gather }`; q2 ships
@@ -311,9 +311,9 @@ pub fn build_ts_extension(opts: BuildOptions) -> anyhow::Result<PathBuf>;
 
 - [x] **Step 2 (executing suites — build hermetic installs):** In each suite that *loads and executes* a bundle, call `crate::engine_fixture_build::ensure_bundle(&copied_ext_dir, name)` right after copying each fixture into the tempdir, **after** the `deno_available()` gate. Known sites:
   - `synth_engines_e2e.rs` `setup_project` (loop over `ext_names`).
-  - `echo_engine_e2e.rs` `setup_project`, **plus** the inline `echo-wrong` copy (~:242): it renames `echo-engine`→`echo-wrong` with a custom `_extension.yml`; call `build_bundle` on that dir (name-convention entry lookup falls back to the sole `src/*.ts`; output path comes from the custom yml).
+  - `echo_engine_e2e.rs` `setup_project`, **plus** the inline `echo-wrong` copy (\~:242): it renames `echo-engine`→`echo-wrong` with a custom `_extension.yml`; call `build_bundle` on that dir (name-convention entry lookup falls back to the sole `src/*.ts`; output path comes from the custom yml).
   - `behave_engine_e2e.rs` `setup_project`.
-  - `capture_splice_seam.rs` inline `echo-engine` copy (~:132).
+  - `capture_splice_seam.rs` inline `echo-engine` copy (\~:132).
 
 - [x] **Step 3 (explicitly leave unwired — do NOT build):**
   - `marimo_resolution.rs` — installs only `marimo` (non-hermetic); it's a pure resolver test (no load, no deno, no render). No change.
@@ -321,7 +321,7 @@ pub fn build_ts_extension(opts: BuildOptions) -> anyhow::Result<PathBuf>;
   - `marimo_engine_e2e.rs` — installs only `marimo` (non-hermetic, via `setup_marimo_project` + the dynamic-path `_extension.yml` rewrite); no hermetic fixture is copied (verified 2026-07-22 by Step 1's grep). No change. *(If a future grep ever shows a hermetic fixture installed here, wire it per Step 2.)*
   - `pass1_engine_resolution_pipeline.rs` — installs the committed hand-written `legacy-python` **stub** bundle (non-hermetic: it has no `src/*.ts`, is not regenerable, and is never loaded/executed). No change. *(An 11th committed bundle the plan's original inventory omitted; it stays committed and is correctly left unwired.)*
 
-- [x] **Step 4 (`engine_registry_build` — stub, not build; seam T5):** These tests only assert the bundle `.js` **exists** (static registry build + the `if !path.exists()` guard at `project/mod.rs:745`); they never execute it and have **no** deno gate. Where it used committed `dist/{alpha,beta}.js` (~:112/:117), have it **write a placeholder `.js`** (e.g. `std::fs::write(dist_dir.join("alpha.js"), "// stub for registry existence check\n")`) into a tempdir copy instead. No `build_bundle`, no deno dependency — preserves no-deno coverage (T5's revert: relax the `:745` guard → Ok-assert RED).
+- [x] **Step 4 (`engine_registry_build` — stub, not build; seam T5):** These tests only assert the bundle `.js` **exists** (static registry build + the `if !path.exists()` guard at `project/mod.rs:745`); they never execute it and have **no** deno gate. Where it used committed `dist/{alpha,beta}.js` (\~:112/:117), have it **write a placeholder `.js`** (e.g. `std::fs::write(dist_dir.join("alpha.js"), "// stub for registry existence check\n")`) into a tempdir copy instead. No `build_bundle`, no deno dependency — preserves no-deno coverage (T5's revert: relax the `:745` guard → Ok-assert RED).
 
 - [x] **Step 5 (run consumers, committed bundles still present):**
   ```bash
@@ -353,7 +353,7 @@ pub fn build_ts_extension(opts: BuildOptions) -> anyhow::Result<PathBuf>;
 
   **Bind T8 here (fail-on-revert — the regenerate seam only binds now):** with the committed bundles deleted, stub `ensure_bundle` to a no-op (`if false { … }`), re-run the executing suites → `synth_engines_e2e::smoke_alpha_registers_and_loads` (and siblings) must go **RED** (no bundle to load) → restore → GREEN. Record the RED verbatim. *(Before this step the committed bundle masks the no-op, so this proof is impossible at Task 5 — it is deliberately deferred to here.)* **Actual (T8 RED verbatim): `ensure_bundle`→`if false && …` no-op ⇒ `Summary 7 tests run: 0 passed, 7 failed` in `synth_engines_e2e` (incl. `smoke_alpha_registers_and_loads`, `smoke_beta…`, `smoke_interop_r…`, `smoke_fallback_univ…`, `smoke_whenclass_marimo…`, `b10…`, `b11…`) → restored ⇒ 7/7 PASS. Binding proven.**
 
-- [x] **Step 4:** Update `synth_engines_e2e.rs` docstring (~:35): bundles are **regenerated at test time** via `crate::engine_fixture_build` (fixtures import `@quarto/api/claims` → hermetic). Keep "real deno bundle output" (accurate). **Done.**
+- [x] **Step 4:** Update `synth_engines_e2e.rs` docstring (\~:35): bundles are **regenerated at test time** via `crate::engine_fixture_build` (fixtures import `@quarto/api/claims` → hermetic). Keep "real deno bundle output" (accurate). **Done.**
 
 - [x] **Step 5 (full verification — WASM leg included):**
   ```bash

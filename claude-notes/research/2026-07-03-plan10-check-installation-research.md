@@ -733,7 +733,7 @@ are informational rather than prerequisites for q2, and Q1's render-check gate
 (`jupyter_core` present + python kernelspec) technically over-requires.
 Mitigating fact: ipykernel depends on jupyter_core, so "kernelspec exists but
 jupyter_core absent" is practically unreachable. *Recommendation:* keep the Q1
-decision tree and lines verbatim (binding constraint; divergence cost ~nil),
+decision tree and lines verbatim (binding constraint; divergence cost \~nil),
 and treat the test render as the ground truth of "q2 can execute".
 (Knitr analog verified NON-issue: q2's R scripts require both knitr and
 rmarkdown — `rmarkdown::` is called 30+ times in execute.R — so Q1's gates are

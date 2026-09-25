@@ -172,7 +172,7 @@ cargo run --bin quarto-markdown-pandoc -- -i test-emoji-ts.md
 ### 5. Re-run corpus validation
 
 Expected impact:
-- ~29 errors across 3+ files should be fixed
+- \~29 errors across 3+ files should be fixed
 - Files should move from uncoded-errors to clean
 
 ## Safety Considerations
@@ -217,8 +217,8 @@ And their variants without U+FE0F (rare but valid): 0⃣ 1⃣ 2⃣ etc.
 ## Expected Results
 
 - **Before**: 18 uncoded errors
-- **After**: ~9 uncoded errors (50% reduction)
-- **Files fixed**: ~3 files with 29+ errors
+- **After**: \~9 uncoded errors (50% reduction)
+- **Files fixed**: \~3 files with 29+ errors
 - **Test coverage**: Keycap emojis now tested in grammar
 
 ## References

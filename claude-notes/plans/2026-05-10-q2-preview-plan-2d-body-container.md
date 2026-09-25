@@ -213,7 +213,7 @@ The `inlinesToPlainText` re-use means q2-preview's `MetaInlines` → string coer
 
 **Why shared util, not q2-preview-local**: the slide renderer (`ReactAstSlideRenderer.tsx`, top-level under `components/render/`) already uses `extractMetaString` privately. Lifting avoids two copies that drift independently. The slide-renderer call site is updated to import from `framework/meta` in the same commit (Phase 6.0d). Future format-render targets (the q2-slides migration in Plan 2E, hypothetical docx/PDF preview, etc.) get the helper for free.
 
-**Phase 7 addition: `extractMetaStringList`** (~15 LOC) — reads a `MetaList` whose entries are each `MetaString` or `MetaInlines`, returning `string[]`. Returns empty array for missing / wrong shape (callers default to single-author via `extractMetaString` first, then fall through). Used by `PreviewTitleBlock` for `author: [Alice, Bob]` YAML form.
+**Phase 7 addition: `extractMetaStringList`** (\~15 LOC) — reads a `MetaList` whose entries are each `MetaString` or `MetaInlines`, returning `string[]`. Returns empty array for missing / wrong shape (callers default to single-author via `extractMetaString` first, then fall through). Used by `PreviewTitleBlock` for `author: [Alice, Bob]` YAML form.
 
 ```ts
 /**
@@ -508,7 +508,7 @@ export const PreviewTitleBlock = ({ ast }: AstProps) => {
   - **Data model in TS Quarto**: YAML files at `src/resources/language/_language[-<locale>].yml` carry the keys `title-block-author-single`, `title-block-author-plural`, `title-block-published`, `section-title-abstract` (`_language.yml:30-34, 18`). A Lua filter `src/resources/filters/modules/authors.lua:852-906` writes them into `meta.labels.{authors,published,abstract,...}`. The HTML title-block partial reads `$labels.authors$` / `$labels.published$` / `$labels.abstract$` (`src/resources/formats/html/templates/title-metadata.html`).
   - **Active locale resolution in TS Quarto**: `lang` frontmatter (IETF tag) → optional `language:` key pointing at a YAML file or inline overrides → `_language.yml` (English) as fallback.
   - **Rust q2 status**: no language-resolution stage. `crates/quarto-core/src/template.rs:222/227/235` uses hardcoded English literals. The `lang` template variable IS plumbed but only for `<html lang="…">` (`template.rs:81/141`). No `_language*.yml` files have been ported into `resources/`. The schema declares the language-map shape (`crates/pampa/test-fixtures/schemas/definitions.yml:1321`) but nothing reads it.
-  - **Why deferred from 2D**: making i18n work end-to-end requires a Rust-side `LanguageResolveStage` (port the YAMLs into `resources/`, resolve locale from `meta.lang`, write `meta.labels.*`) plus flipping `template.rs` literals to `$labels.*$` references. That's ~400 LOC + YAML data + a stage-ordering decision (must run before `MetadataMergeStage` and before `DocumentProfileStage`). Out of scope for 2D; should become its own plan whenever someone needs translated labels. **For future implementer**: when this lands, q2-preview's `PreviewTitleBlock` switches the three hardcoded label literals to `extractMetaString(meta.labels?.author) ?? 'Author'` (with English fallback) — single-commit change once Rust has produced the data.
+  - **Why deferred from 2D**: making i18n work end-to-end requires a Rust-side `LanguageResolveStage` (port the YAMLs into `resources/`, resolve locale from `meta.lang`, write `meta.labels.*`) plus flipping `template.rs` literals to `$labels.*$` references. That's \~400 LOC + YAML data + a stage-ordering decision (must run before `MetadataMergeStage` and before `DocumentProfileStage`). Out of scope for 2D; should become its own plan whenever someone needs translated labels. **For future implementer**: when this lands, q2-preview's `PreviewTitleBlock` switches the three hardcoded label literals to `extractMetaString(meta.labels?.author) ?? 'Author'` (with English fallback) — single-commit change once Rust has produced the data.
 - **Multi-author rendering UX**. Rust today emits exactly one `<div class="quarto-title-meta-author">` with all names concatenated as one string (`AliceBob`, no separator) — the doctemplate engine stringifies `TemplateValue::List` as the empty-join. q2-preview matches verbatim (single block, empty-string-joined names). When Rust grows proper multi-author support (structured author objects, separator policy, possibly an "Authors" plural heading), q2-preview mirrors in the same plan — no per-format CSS fork needed in the meantime.
 - **Re-enabling the Rust `title-block` transform for minimal mode only**. 2D re-implements the transform's minimal-mode branch (`transforms/title_block.rs:54-110`) on the React side via Phase 6.2's `<h1>` synthesis. This is a deliberate divergence with a known structural cost (see §Risk areas "Minimal-mode section structure divergence"): the React-side `<h1>` is a sibling of the body's section wrappers rather than nested inside `<section level1>` like Rust's pre-section-structure insertion. The cleaner long-term fix is to **un-exclude `"title-block"` from `Q2_PREVIEW_TRANSFORM_EXCLUDED` (`pipeline.rs:1052`) but configure it to short-circuit in full-template mode** (where q2-preview's React `PreviewTitleBlock` emits the chrome) and run only in minimal mode (where it pre-pends the synthetic header to `ast.blocks` before section-structure). That keeps React owning the full-template path (Bootstrap parity, theme-CSS targeting) and gives Rust ownership of the minimal-mode AST shape (so section-structure wraps correctly). Out of scope for 2D — would require touching `Q2_PREVIEW_TRANSFORM_EXCLUDED`, validating that the transform's full-template short-circuit interacts cleanly with React's chrome (no double-h1), and removing Phase 6.2's React-side synthesis. Worth filing as a follow-up beads issue if the section-nesting divergence ever bites.
 
@@ -750,22 +750,22 @@ Record the inspected output snippet in the implementation transcript.
 
 | Component | Lines (rough) |
 |---|---|
-| `hub-client/src/components/render/framework/plainText.ts` (NEW — moved from `q2-preview/utils.tsx`) | ~110 |
-| `hub-client/src/components/render/framework/meta.ts` (NEW — `extractMetaString` + `extractMetaBool` + `extractMetaStringList`) | ~50 |
-| `framework/index.ts` re-export updates (`meta`, `plainText`, `customNode` bookkeeping fix) | ~5 |
-| `framework/types.ts:163` `FormatRegistry` tightening — typed optional `__fallback__` and `__title_block__` entries (Phase 7.3) | ~6 |
-| `q2-preview/utils.tsx` slim-down (remove the moved walks) + import updates in `Image.tsx` and `Note.tsx` | ~15 |
-| `ReactAstSlideRenderer.tsx` migration to `framework/meta` (replaces private `extractMetaString`; behavior change for inline-markup titles, regression test added) | ~15 |
-| `ReactRenderer.tsx:211` + `getQ2Format.ts` consolidation onto `extractMetaString(meta.format)` | ~10 |
-| `q2-preview/PreviewDocument.tsx` extension (wrapper + useEffect + title-block mount) | ~32 |
-| `q2-preview/PreviewTitleBlock.tsx` (NEW — title block, `AstProps` shape) | ~70 |
-| `q2-preview/entry.tsx` — `__Q2_PREVIEW_RENDERER__` exposure (5 framework helpers via 6.0c.1; `PreviewTitleBlock` via 7.3.1) | ~7 |
-| Slide-renderer import update (`ReactAstSlideRenderer.tsx:350` lifted to `framework/meta`) | ~3 |
-| `framework/meta.test.ts` (NEW) — unit tests for all three helpers | ~70 |
-| `q2-preview/PreviewDocument.test.tsx` extension — wrapper snapshot tests | ~80 |
-| `q2-preview/custom/PreviewTitleBlock.test.tsx` (NEW) — title-block snapshot tests (incl. composition case) | ~95 |
-| Smoke-all q2-preview fixtures (4 body-container + 2 body-classes + 5 title-block, all single-doc) | ~110 |
-| **Total** | **~525** |
+| `hub-client/src/components/render/framework/plainText.ts` (NEW — moved from `q2-preview/utils.tsx`) | \~110 |
+| `hub-client/src/components/render/framework/meta.ts` (NEW — `extractMetaString` + `extractMetaBool` + `extractMetaStringList`) | \~50 |
+| `framework/index.ts` re-export updates (`meta`, `plainText`, `customNode` bookkeeping fix) | \~5 |
+| `framework/types.ts:163` `FormatRegistry` tightening — typed optional `__fallback__` and `__title_block__` entries (Phase 7.3) | \~6 |
+| `q2-preview/utils.tsx` slim-down (remove the moved walks) + import updates in `Image.tsx` and `Note.tsx` | \~15 |
+| `ReactAstSlideRenderer.tsx` migration to `framework/meta` (replaces private `extractMetaString`; behavior change for inline-markup titles, regression test added) | \~15 |
+| `ReactRenderer.tsx:211` + `getQ2Format.ts` consolidation onto `extractMetaString(meta.format)` | \~10 |
+| `q2-preview/PreviewDocument.tsx` extension (wrapper + useEffect + title-block mount) | \~32 |
+| `q2-preview/PreviewTitleBlock.tsx` (NEW — title block, `AstProps` shape) | \~70 |
+| `q2-preview/entry.tsx` — `__Q2_PREVIEW_RENDERER__` exposure (5 framework helpers via 6.0c.1; `PreviewTitleBlock` via 7.3.1) | \~7 |
+| Slide-renderer import update (`ReactAstSlideRenderer.tsx:350` lifted to `framework/meta`) | \~3 |
+| `framework/meta.test.ts` (NEW) — unit tests for all three helpers | \~70 |
+| `q2-preview/PreviewDocument.test.tsx` extension — wrapper snapshot tests | \~80 |
+| `q2-preview/custom/PreviewTitleBlock.test.tsx` (NEW) — title-block snapshot tests (incl. composition case) | \~95 |
+| Smoke-all q2-preview fixtures (4 body-container + 2 body-classes + 5 title-block, all single-doc) | \~110 |
+| **Total** | **\~525** |
 
 Still comfortable for a focused session. About double the original 2D scope; the title-block work is small but multiplied by the number of conditional branches. **Phase 7 depends on Phase 6**: `<PreviewTitleBlock>` mounts inside Phase 6's `<main class="content">`, and the "skip the wrapper" logic (minimal / theme: none / theme: pandoc) is what makes the title block also disappear in those modes. Phase 6 must land first.
 
@@ -910,7 +910,7 @@ npx playwright test smoke-all \
   - **Mirror Rust quirks deliberately**: date-suppressed-without-author is locked in with an explicit regression-test fixture so a future "fix Rust quirk" plan flips both sides at once. Inline-emphasis stripping in titles is also locked in.
   - **No deliberate divergences** from the Rust HTML format. Multi-author rendering matches Rust's broken-but-consistent behavior (one block, names empty-string-joined to `AliceBob`) so theme CSS doesn't need a q2-preview special case and the proper-multi-author fix lands once on both sides in a future plan.
   - **`<head>` meta tags / abstract block rendering / inline-markup-preserving title rendering / i18n** are explicitly out of scope and listed under §Out of scope so they aren't accidentally pulled in.
-  - Estimated scope grows from ~233 to ~495 LOC; still a single focused session.
+  - Estimated scope grows from \~233 to \~495 LOC; still a single focused session.
 
 - **2026-05-10 (consistency pass)**: review-driven cleanups to the title-block extension:
   - **Reverted multi-author divergence to Rust parity**: `PreviewTitleBlock` emits exactly one `<div class="quarto-title-meta-author">` with names empty-string-joined for list-form authors (matches Rust's `TemplateValue::List` stringification). The "one block per name" idea contradicted the plan's stated mirror-byte-for-byte philosophy and would have created a heading-pluralization design question (`Author` vs `Authors`) that has no Rust precedent to mirror. Multi-author UX is now a single deferred follow-up that lands once on both sides.

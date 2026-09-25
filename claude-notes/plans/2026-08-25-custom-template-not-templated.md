@@ -46,10 +46,10 @@
 ### Task 1: Q-12-24 — detect an untemplated custom template, warn, skip
 
 **Files:**
-- Modify: `crates/quarto-core/src/transforms/listing_render.rs` (the `render_one` Custom arm at ~`:187-200`; `compile_and_render` at ~`:453-497`; tests module from ~`:499`; the existing test `custom_template_with_ejs_md_extension_attempts_load_and_fails_compile` at ~`:1220-1253`)
+- Modify: `crates/quarto-core/src/transforms/listing_render.rs` (the `render_one` Custom arm at \~`:187-200`; `compile_and_render` at \~`:453-497`; tests module from \~`:499`; the existing test `custom_template_with_ejs_md_extension_attempts_load_and_fails_compile` at \~`:1220-1253`)
 - Modify: `crates/quarto-error-catalog/error_catalog.json` (add `Q-12-24` after `Q-12-23`)
 - Create: `docs/errors/listing/Q-12-24.qmd`
-- Modify: `docs/_quarto.yml` (sidebar: add `- errors/listing/Q-12-24.qmd` directly after the `Q-12-23.qmd` line, ~`:213`)
+- Modify: `docs/_quarto.yml` (sidebar: add `- errors/listing/Q-12-24.qmd` directly after the `Q-12-23.qmd` line, \~`:213`)
 
 **Interfaces:**
 - Consumes: `quarto_doctemplate::{Template, TemplateNode}` (both re-exported at the crate root; `Template::nodes(&self) -> &[TemplateNode]` is public), `LoadedCustomTemplate { source, template_path, resolver }`, `push_diag`.
@@ -516,7 +516,7 @@ listing (same path as a Q-12-10 compile error)."
 ### Task 2: Widen Q-12-9 to `.ejs` and reframe it as "Quarto 1 EJS template"
 
 **Files:**
-- Modify: `crates/quarto-core/src/project/listing/config.rs` (`"template"` arm at ~`:515-528`; tests near `template_ejs_md_extension_emits_q_12_9` at ~`:1712`)
+- Modify: `crates/quarto-core/src/project/listing/config.rs` (`"template"` arm at \~`:515-528`; tests near `template_ejs_md_extension_emits_q_12_9` at \~`:1712`)
 - Modify: `crates/quarto-error-catalog/error_catalog.json` (`Q-12-9` entry: `title` and `message_template`)
 - Modify: `docs/errors/listing/Q-12-9.qmd` (full rewrite — the current page says "templates are EJS, full stop", the opposite of the truth)
 

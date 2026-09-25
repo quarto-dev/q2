@@ -264,7 +264,7 @@ Pick the path that matches your appetite for cross-file work in this merge. The 
 import '@quarto/preview-renderer/q2-preview/entry';
 ```
 
-**Main side has the full ~320-line entry implementation** (because the move hadn't happened on main).
+**Main side has the full \~320-line entry implementation** (because the move hadn't happened on main).
 
 **Resolution:** keep feature's stub. **Do not paste main's body in.** Instead, switch your attention to `ts-packages/preview-renderer/src/q2-preview/entry.tsx` (which is the *real* entry now) and verify whether attribution wiring needs to be added there. The conflict in this `hub-client/.../entry.tsx` file is purely an artifact of git not knowing the move happened — `git checkout --ours hub-client/src/components/render/q2-preview/entry.tsx` then `git add`.
 
@@ -359,7 +359,7 @@ export function parseQmdToAst(qmdContent) {
 
 The initial scoping (off the abort output) caught the 9 TS content conflicts above plus the 5 file-location ones. When the merge re-ran, six more content conflicts surfaced that the abort summary truncated. They have the same overall shape — concurrent signature/structure additions on both branches — and most follow the "combine both sets of additions" pattern.
 
-### 10. `crates/quarto-core/src/pipeline.rs` (single conflict, ~line 1157)
+### 10. `crates/quarto-core/src/pipeline.rs` (single conflict, \~line 1157)
 
 `origin/main` inserts two new entries (`"website-favicon"`, `"attribution-viewer"`) into a list of CLI-only transforms — between `<<<<<<<` and `=======` the feature side is empty (these transforms don't exist on this branch yet from the PR-#190 angle, though the comment on main makes clear that `attribution-viewer` is the CLI-side counterpart to the hub-client's `framework/attribution.tsx`).
 
@@ -374,7 +374,7 @@ Both branches added new fields (and constructor / builder methods) to the render
 
 **Resolution:** these are independent additions. Combine both sets of fields/methods. Mirror the pattern from `wasm-quarto-hub-client/src/lib.rs` below: every function that takes `capture: Option<EngineCapture>` on feature now needs to *also* take the attribution param from main.
 
-### 12. `crates/quarto-core/src/stage/mod.rs` (single conflict, ~line 113)
+### 12. `crates/quarto-core/src/stage/mod.rs` (single conflict, \~line 113)
 
 Concurrent additions to a `pub use crate::stage::stages::{...};` re-export list:
 

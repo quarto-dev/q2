@@ -227,7 +227,7 @@ Why this shape:
   resolve a `BrandRef` against their respective filesystems. No
   divergent paths.
 - **Testability.** `ThemeConfig::from_config_value` keeps its
-  ~30 existing pure-function tests untouched; brand resolution gets
+  \~30 existing pure-function tests untouched; brand resolution gets
   its own test surface with a `MockRuntime`.
 - **Cache fingerprinting.** `theme_fingerprint` can hash the
   `BrandRef` (or the resolved `Brand`'s YAML serialization) without

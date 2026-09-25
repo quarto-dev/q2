@@ -151,7 +151,7 @@ Several "pre" filters may have format-specific code:
 
 ### Detailed Analysis: code-annotation.lua
 
-**File**: `quarto-pre/code-annotation.lua` (~600 lines)
+**File**: `quarto-pre/code-annotation.lua` (\~600 lines)
 
 **Purpose**: Process code annotations like `# <1>` in code blocks and convert to definition lists.
 
@@ -290,7 +290,7 @@ Several "pre" filters may have format-specific code:
 
 ### Detailed Analysis: quarto-post/html.lua
 
-**File**: `quarto-post/html.lua` (~138 lines)
+**File**: `quarto-post/html.lua` (\~138 lines)
 
 **Purpose**: HTML-specific fixups for tables, figures, images, and paragraphs.
 
@@ -309,7 +309,7 @@ Several "pre" filters may have format-specific code:
 
 ### Detailed Analysis: quarto-post/responsive.lua
 
-**File**: `quarto-post/responsive.lua` (~62 lines)
+**File**: `quarto-post/responsive.lua` (\~62 lines)
 
 **Purpose**: Make HTML output responsive.
 
@@ -324,7 +324,7 @@ Several "pre" filters may have format-specific code:
 
 ### Detailed Analysis: quarto-post/foldcode.lua
 
-**File**: `quarto-post/foldcode.lua` (~165 lines)
+**File**: `quarto-post/foldcode.lua` (\~165 lines)
 
 **Purpose**: Implement code folding using HTML `<details>` elements.
 
@@ -342,7 +342,7 @@ Several "pre" filters may have format-specific code:
 
 ### Detailed Analysis: quarto-finalize/dependencies.lua
 
-**File**: `quarto-finalize/dependencies.lua` (~16 lines)
+**File**: `quarto-finalize/dependencies.lua` (\~16 lines)
 
 **Purpose**: Process final dependencies into metadata.
 

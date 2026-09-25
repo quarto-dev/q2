@@ -474,7 +474,7 @@ Each phase is independently shippable and leaves the workspace green.
       `error-reporting-core` (catalog-agnostic) + `quarto-error-catalog` (Q-*
       policy) + the `CatalogProvider` registry; turn `quarto-error-reporting` into
       the re-export façade that calls `install()`. Move `json.rs` to its q2 home
-      (Q4). Workspace stays green; ~19 dependents unchanged. **This is the bulk of
+      (Q4). Workspace stays green; \~19 dependents unchanged. **This is the bulk of
       the work and is valuable even if the repo move never happens.**
 - [ ] **P2 — Re-point `quarto-yaml-validation` to library-local ids.** Replace
       `error_code()`’s `Q-1-x` with `code() -> "yaml-schema/*"`; move the
@@ -501,5 +501,5 @@ catalog-pluggable diagnostics stack and decide the repo move on its own merits.
 2. **Q7 naming:** keep `quarto-*` / `quarto-yaml-schema`, or rebrand neutral?
 3. **Publish channel:** crates.io vs. git deps for q2→external consumption (P5).
 4. Whether `quarto-error-reporting` keeps its name as the façade, or the façade is
-   removed and the ~19 dependents migrate to `error-reporting-core` directly
+   removed and the \~19 dependents migrate to `error-reporting-core` directly
    (more churn, cleaner end state).

@@ -304,7 +304,7 @@ Your proposal is **excellent and viable**. The existing architecture naturally s
 - Makes error reporting available to inline functions (bonus!)
 
 ⚠️ **Challenges:**
-- Many call sites to update (~13 block + ~30 inline functions)
+- Many call sites to update (\~13 block + \~30 inline functions)
 - Need to carefully test edge cases (notes, YAML metadata)
 - Some inline functions called from contexts that don't currently have errors
 

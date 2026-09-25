@@ -26,7 +26,7 @@ tracking item, and green-light bd-eb2wnxkp's plan.
 The strand asked for the one thing nobody had: captured failure output (both
 prior sightings were fail-fast full-workspace runs). A 150-iteration stress
 loop of the two `admin_collect_lifecycle` tests on `main` \@ `59bbccb9`
-(macOS/APFS) produced **3 failures in 142 iterations (~2%/iteration)**, all
+(macOS/APFS) produced **3 failures in 142 iterations (\~2%/iteration)**, all
 with the same signature — ids identical in 27 of 28 characters, differing
 **only in the case of character index 1**:
 
@@ -42,7 +42,7 @@ This kills the "timing/state sensitivity under parallel load" hypothesis in
 the strand description: the loop ran the tests **in isolation** (3 tests per
 iteration, no workspace load) and still failed at the background rate. The
 failure is a function of the random doc-id draw, not of load. It *looks*
-load-correlated only because a full-workspace run is one more draw from a ~2-3%
+load-correlated only because a full-workspace run is one more draw from a \~2-3%
 Bernoulli, and full runs are when people watch.
 
 Failure #3 is at `admin_collect_lifecycle.rs:205` — the same line as the
@@ -58,8 +58,8 @@ victims, two signatures.
 
 Note also: all five observed collisions across both strands have a leading
 character in `{2,3}` — the bs58check leading character of a fixed-width
-payload is heavily skewed, which is why the collision rate (~2-3% per store)
-is far above the naive uniform-alphabet estimate (~0.1%/pair). The rate is
+payload is heavily skewed, which is why the collision rate (\~2-3% per store)
+is far above the naive uniform-alphabet estimate (\~0.1%/pair). The rate is
 real; the tests will keep flaking until the recovery lands.
 
 ## Evaluation of the proposed workaround (this session's question)
@@ -84,7 +84,7 @@ Details and corrections:
    first-creator's casing for every id under it. So the case-variant search is
    applied at reconstruction time: generate the ≤4 case variants of the 2-char
    prefix, and let `DocumentId::from_str` (base58**check**, 4-byte checksum)
-   pick the true one — exactly one variant parses, at ~2⁻³² false-accept odds.
+   pick the true one — exactly one variant parses, at \~2⁻³² false-accept odds.
 
 3. **Why the checksum is essential:** two genuinely distinct valid ids can
    differ only in case. Naive case-insensitive matching would conflate them —
@@ -102,7 +102,7 @@ are new from this session and should be folded in):
 - **Level-2 dirs keep true casing** — created fresh under the (possibly
   folded) level-1 dir; APFS/NTFS are case-preserving. Only the 2-char prefix
   needs variants. A level-2 fold requires two docs whose 26-char rests also
-  case-fold (~negligible for random ids); the `Ambiguous`/`Unidentifiable`
+  case-fold (\~negligible for random ids); the `Ambiguous`/`Unidentifiable`
   hard-fail arms catch it if it ever happens.
 - **Variants outside the base58 alphabet** (`0 O I l` excluded): fail to
   parse; natural rejection, no special case.
@@ -151,7 +151,7 @@ Unchanged from bd-eb2wnxkp's plan: `list_doc_ids_filesystem`
 `format!("{prefix}{rest}")` over raw dir names; `normalize_id`
 (`classify.rs:162`) is still a string strip; ids flow as `String` through
 `LoadedDoc`/`live_doc_ids`/`collect`. Reproduced at HEAD (`59bbccb9`) at
-~2%/iteration. Pre-flight `cargo xtask verify --skip-hub-build` green.
+\~2%/iteration. Pre-flight `cargo xtask verify --skip-hub-build` green.
 
 ## Proposed phases (draft)
 

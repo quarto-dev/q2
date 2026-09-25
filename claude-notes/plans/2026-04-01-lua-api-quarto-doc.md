@@ -421,7 +421,7 @@ Plan A does NOT widen the return type of `apply_lua_filter` or
 results are discarded. This means:
 - No changes to `unified_filter.rs`
 - No changes to callers in `quarto-core`
-- No changes to the ~100 filter test sites that destructure tuples
+- No changes to the \~100 filter test sites that destructure tuples
 - `cargo build --workspace` succeeds without touching quarto-core
 
 Plan B introduces a `FilterOutput` struct, widens the return types,

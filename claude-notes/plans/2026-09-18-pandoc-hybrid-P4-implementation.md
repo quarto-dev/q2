@@ -158,7 +158,7 @@ intra-tree module reference (tests below).
 
 ### Refactor-induced vacuity check
 
-- **T1.1's expected value `170`.** The plan carried "~45 `import` lines at `main.lua:13-60`"; the
+- **T1.1's expected value `170`.** The plan carried "\~45 `import` lines at `main.lua:13-60`"; the
   measured count today is 170, spanning `:13-203`. Asserting only "all parsed imports resolve" is
   *non-discriminating against a parser bug*: a regex that matches nothing makes `unresolved` empty
   and the test green. The count assertion is the discriminator; it must be a literal, and a future
@@ -197,7 +197,7 @@ intra-tree module reference (tests below).
   — so the filters tree must sit two levels above the data-dir, i.e. the single-root layout above:
   two source subtrees, **one** materialized root with Q1's own relative shape.
 - `QUARTO_FILTER_DEPENDENCY_FILE` must point at a writable file. Without it, `init.lua`'s
-  dependency-file accessor `fail()`s and pandoc dumps ~35 KB of `init.lua` source to stderr **on an
+  dependency-file accessor `fail()`s and pandoc dumps \~35 KB of `init.lua` source to stderr **on an
   otherwise successful (exit 0) render** (measured). The plan's params table already notes
   `initFilterParams`'s env side effect; this is the observable consequence.
 - `--resource-path` / cwd: `normalize/astpipeline.lua:68` joins `QUARTO_SHARE_PATH` with
@@ -233,7 +233,7 @@ the shim, which is exactly what Task 8's prerequisite note bounds.
   as its documentation, not its guard; see the vacuity check below.
 - T2.4 — Revert the `cmd.env("QUARTO_FILTER_DEPENDENCY_FILE", …)` line →
   `assert!(outcome.stderr.len() < 4096)` in `test_successful_render_stderr_is_quiet` RED (measured:
-  ~35 KB of `init.lua` source appears).
+  \~35 KB of `init.lua` source appears).
 - T2.5 — Revert `ResourceBundle::path`'s `get_or_init` to an unconditional `extract()` →
   `assert_eq!(first, second)` in `test_share_path_is_extracted_once` RED.
 - T2.6 — Revert any `L` test to a skip-shaped body, or delete one →
@@ -251,7 +251,7 @@ the shim, which is exactly what Task 8's prerequisite note bounds.
   contract is transport, not content. The "the Lua actually ran" assertion lives in Task 4 (T4.7,
   the sentinel) and Task 5 (T5.3, an observable param effect). **Do not strengthen T2.2 into a
   content assertion — it would be asserting P5's behaviour from P4.**
-- **T2.4's `4096` bound.** Chosen so the measured ~35 KB failure is caught while the measured
+- **T2.4's `4096` bound.** Chosen so the measured \~35 KB failure is caught while the measured
   77-byte success case (`[WARNING] Could not fetch resource img.png…`) passes. If a future fixture
   legitimately emits more warnings, raise the bound *and* re-confirm the 35 KB case still exceeds it.
 
@@ -333,7 +333,7 @@ test design**:
 
 ## Task 4: The `QUARTO_FILTER_PARAMS` builder — structural + core keys, the synthetic project value, and the two structurally-required keys
 
-**Scope.** Build the blob the plan's re-derivation specifies: `quartoFilterParams`'s ~28 core keys,
+**Scope.** Build the blob the plan's re-derivation specifies: `quartoFilterParams`'s \~28 core keys,
 `extractIncludeParams`'s include plumbing, `layoutFilterParams`, `crossrefFilterParams`'s four
 non-project keys, the top-level literals, and the synthetic single-file "project" value. Plus the
 two keys that are **structurally required**: `quarto-filters` and `language` (P4 owns both — see
@@ -970,7 +970,7 @@ on zero-exit renders. The plan explicitly invites routing these through the exis
 already has real emitters (`crates/pampa/src/lua/diagnostics.rs:379`, `:386`).
 
 **Not all stderr is `[WARNING]`-shaped.** Measured: with `QUARTO_FILTER_DEPENDENCY_FILE` unset, a
-zero-exit render dumps ~35 KB of `init.lua` source to stderr with no `[WARNING]` prefix. A
+zero-exit render dumps \~35 KB of `init.lua` source to stderr with no `[WARNING]` prefix. A
 classifier that keeps only `[WARNING]` lines would swallow it entirely. Task 2's T2.4 catches the
 specific cause; the general "non-`[WARNING]` stderr on a successful render" case needs a verdict —
 see **Missing-test pass**.
@@ -1178,7 +1178,7 @@ against the installed pandoc is explicitly rejected as environment-measuring.
 `import` is `dofile`-based: a typo in the patched path is a load-time failure affecting every render,
 not a per-document bug.
 
-**9. Non-`[WARNING]`-shaped stderr on a *successful* render.** Measured: ~35 KB of `init.lua` source
+**9. Non-`[WARNING]`-shaped stderr on a *successful* render.** Measured: \~35 KB of `init.lua` source
 with no `[WARNING]` prefix when `QUARTO_FILTER_DEPENDENCY_FILE` is unset. T2.4 binds that specific
 cause; the *general* case — should `classify_pandoc_stderr` surface unrecognized stderr on a zero
 exit, or drop it? — is **`accepted-untested` pending a decision, because the plan specifies only the

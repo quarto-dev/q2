@@ -178,12 +178,12 @@ The plan originally proposed storing `AttributionData` at `meta.attribution`
 as a `ConfigValue::Map`, by analogy with the navbar/footer/sidebar pattern.
 That analogy breaks on volume.
 
-`AttributionRun` records scale with document length (typical: ~1 run per
-~100 bytes of prose after RLE coalescing, so ~500 runs for a 50 KB
-chapter, ~10K for a book-length doc). One run as a `ConfigValue::Map`
-costs ~600–800 B (outer Map wrapper + 4 entries × `ConfigMapEntry`,
+`AttributionRun` records scale with document length (typical: \~1 run per
+\~100 bytes of prose after RLE coalescing, so \~500 runs for a 50 KB
+chapter, \~10K for a book-length doc). One run as a `ConfigValue::Map`
+costs \~600–800 B (outer Map wrapper + 4 entries × `ConfigMapEntry`,
 each with its own `SourceInfo`/`MergeOp`/`ConfigValueKind`); the same
-run as `AttributionRun` is ~40 B. That is a **~20× memory multiplier
+run as `AttributionRun` is \~40 B. That is a **\~20× memory multiplier
 on the hottest data structure in the render pipeline**, and the cost
 lands repeatedly — every Finalization-Phase transform that walks
 `ast.meta` (even just to check a key) pays a slice of it.
@@ -192,9 +192,9 @@ Concretely:
 
 | Doc size | Runs | `meta.attribution` cost | sidecar `Vec<AttributionRun>` |
 |----------|-----:|------------------------:|------------------------------:|
-| 5 KB     |   50 |  ~35 KB                 | ~2 KB                          |
-| 50 KB    |  500 |  ~350 KB                | ~20 KB                         |
-| Book     | 10K  |  ~7 MB                  | ~400 KB                        |
+| 5 KB     |   50 |  \~35 KB                 | \~2 KB                          |
+| 50 KB    |  500 |  \~350 KB                | \~20 KB                         |
+| Book     | 10K  |  \~7 MB                  | \~400 KB                        |
 
 The convention argument (Lua filter introspection of `meta.attribution`)
 doesn't survive scrutiny either:
@@ -650,8 +650,8 @@ either can ship without the other.
     method `fn build(&self, ctx: &RenderContext) -> Result<AttributionData>`.
     **The method is sync, not async.** Locked-in rationale:
     - The only blocking implementor is `GitBlameProvider`, which
-      spawns one `git blame --porcelain` subprocess (~tens of ms on
-      typical document-sized files, long-tail ~1s on very large
+      spawns one `git blame --porcelain` subprocess (\~tens of ms on
+      typical document-sized files, long-tail \~1s on very large
       repos). v1's native render is single-document-at-a-time, so
       the calling thread has no other work to compete with.
     - The WASM implementor (`PreBuiltAttributionProvider`) is purely
@@ -666,7 +666,7 @@ either can ship without the other.
     Doc-comment on the method must state: "May block. Implementations
     that spawn subprocesses or do other blocking I/O should document
     expected latency. Currently: `GitBlameProvider` blocks on a
-    `git blame --porcelain` subprocess (tens of ms typical, ~1s on
+    `git blame --porcelain` subprocess (tens of ms typical, \~1s on
     huge repos); `PreBuiltAttributionProvider` is non-blocking."
 
     Each provider returns the data shape that's natural for it
@@ -723,7 +723,7 @@ either can ship without the other.
 **Why a sidecar field on `RenderContext` rather than `meta.attribution`:**
 see the "Why a sidecar, not `meta.attribution`" subsection at the end of
 Vocabulary. Short version: `ConfigValue::Map` representation of `AttributionRun`
-records is ~20× heavier per run than the typed struct, and the
+records is \~20× heavier per run than the typed struct, and the
 hypothetical Lua-filter introspection it would enable wouldn't be useful
 in practice (raw runs aren't a queryable shape; the right Lua surface is
 a `lookup(start, end)` accessor when bd-0fd0 lands). User-authored
@@ -733,7 +733,7 @@ a `lookup(start, end)` accessor when bd-0fd0 lands). User-authored
 
 - [ ] New file `crates/quarto-core/src/transforms/attribution_generate.rs`
   modelled on `navbar_generate.rs`. (The 94-line size cited in an earlier
-  draft is now stale — `navbar_generate.rs` has grown to ~414 lines with
+  draft is now stale — `navbar_generate.rs` has grown to \~414 lines with
   project-index enrichment; attribution-generate has no equivalent
   enrichment step, so target the original "small + tests" footprint, not
   the current navbar size.)
@@ -825,7 +825,7 @@ alternatives:
 
 Shelling out keeps zero new build deps, matches the TS prototype line-for-line,
 honours the user's gitconfig / `.mailmap` / `core.autocrlf`, and adds nothing to
-the WASM build (which doesn't need git). Subprocess overhead (~tens of ms per
+the WASM build (which doesn't need git). Subprocess overhead (\~tens of ms per
 file) is fine for `quarto render`; if project-wide rebuild scaling ever
 matters, revisit then.
 
@@ -987,7 +987,7 @@ matters, revisit then.
   explicitly. The JSON payload is *transport-only* — once parsed it
   lives as a typed Rust struct on the sidecar
   (`ctx.attribution_data`), never visiting `ast.meta`. Pros: no
-  automerge-rs in the WASM bundle (~hundreds of KB saved), no
+  automerge-rs in the WASM bundle (\~hundreds of KB saved), no
   duplicate replay implementations, runs and identities ride one
   channel. Cons: the canonical form is computed in TS, not Rust —
   but the transport JSON is decoded into the same typed shape any
@@ -2283,7 +2283,7 @@ remaining deferred work.
 ## Non-goals for v1
 
 - Caching attribution across renders. Re-blame on every render is fine
-  (git-blame on a 100K-line file completes in ~50 ms).
+  (git-blame on a 100K-line file completes in \~50 ms).
 - Project-wide attribution. Each document's pipeline has its own
   attribution provider; cross-document attribution (a project sidebar
   showing "X contributed to N pages") is a v2 feature that would consume

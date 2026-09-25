@@ -227,7 +227,7 @@ earlier draft lumped both as "blessed same-preimage groups," which conflated an
    block shortcode `{{< lipsum 3 >}}` occupying range `R`) expands to N sibling
    nodes, each stamped `Generated { from: [Invocation -> token@R] }`
    (`crates/quarto-core/src/transforms/shortcode_resolve.rs` `stamp_block` :624,
-   anchor ~:781). All N resolve via
+   anchor \~:781). All N resolve via
    `preimage_in`'s `Generated` arm to the **same** range `R`, so by the literal
    sibling-disjointness rule they maximally overlap. The Phase 6 audit
    (§5 Hole α / L3, premise table P4) established this sharing is **acceptable
@@ -329,7 +329,7 @@ property test (the thing whose absence let this hide).
       range and check disjointness *between units*, not between raw nodes. **Use
       the *same* grouping predicate the writer uses — `PartialEq`-equality on the
       `Invocation` anchor `SourceInfo`** (the writer's multi-inline dedupe at
-      `crates/pampa/src/writers/incremental.rs` ~1357 compares `Invocation`
+      `crates/pampa/src/writers/incremental.rs` \~1357 compares `Invocation`
       anchors with `PartialEq`). Do **not** invent a separate notion of "identity"
       (Arc-pointer equality, or resolved-range equality): the whole point of this
       grouping is that the auditor, the writer, and the contract agree on what
@@ -624,7 +624,7 @@ The content `Plain` keeps `image.source_info` unchanged.
 - [ ] Write a failing tiling-auditor test: parse a single-image paragraph, run the
       auditor, assert no overlap violation is reported. Confirm red before the fix.
 - [ ] In the synthesis: replace `source_info: image.source_info.clone()` on the
-      caption `Plain` (line ~940) with
+      caption `Plain` (line \~940) with
       `source_info: SourceInfo::generated(By::tree_sitter_postprocess())`. Leave
       the content `Plain`'s `source_info` unchanged.
 - [ ] Re-run the auditor (and the failing test); confirm green.
@@ -887,12 +887,12 @@ or `Generated` source_info** is reconciled through the **InlineSplice** path
 (`RecurseIntoContainer` alignment).
 
 **Mechanism (verified).** `assemble_inline_splice`
-(`crates/pampa/src/writers/incremental.rs` ~1287) computes
+(`crates/pampa/src/writers/incremental.rs` \~1287) computes
 `prefix = original_qmd[block_span.start .. inline_start]` where
 `inline_start = inline_source_span(orig_inlines[0]).start`, and
-`inline_source_span` (~1599) reads `SourceInfo::start_offset()`. The relevant
+`inline_source_span` (\~1599) reads `SourceInfo::start_offset()`. The relevant
 accessors return **non-source offsets** for `Concat`/`Generated`
-(`crates/quarto-source-map/src/source_info.rs` ~350-371): `start_offset()` is the
+(`crates/quarto-source-map/src/source_info.rs` \~350-371): `start_offset()` is the
 **sentinel `0`** for both `Concat` and `Generated`; `end_offset()` is `0` for
 `Generated` but the **`Concat`'s own `length()`** (a small positive — *not* `0`,
 correcting an earlier overstatement here). Either way the value bears no relation
@@ -961,7 +961,7 @@ reset it, so every `Str` **after** the first abbreviation-coalesce took the
 `start_info.combine(&end_info)` branch — i.e. `combine(self, self)` on a Str that
 didn't coalesce — producing a **doubled-self `Concat`** (`start_offset()==0`,
 `end_offset()==2*len`, `preimage_in()==None`). Harm: provenance corruption on
-~13 corpus files → annotated-qmd substring-invariant violation, attribution
+\~13 corpus files → annotated-qmd substring-invariant violation, attribution
 drops provenance, and the incremental writer forced into lossy `Rewrite`
 fallback. On `origin/main` (no Phase 8 fix) it is additionally a **live crash +
 silent wrong-output** on edit; on this branch the Phase 8 `preimage_in` guards

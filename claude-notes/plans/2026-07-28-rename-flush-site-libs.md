@@ -274,7 +274,7 @@ whose prefixes case-fold together share one directory, so one reads back
 mis-cased.
 
 Reproduced **on a clean `main` worktree** at **2 failures in 60 iterations
-(~3%)**, with the same signature (`2Kd28qz…` vs `2kd28qz…`). Pre-existing,
+(\~3%)**, with the same signature (`2Kd28qz…` vs `2kd28qz…`). Pre-existing,
 platform-dependent, and unreachable from this branch (no `crates/quarto-hub/`
 file changed). Filed as **bd-eb2wnxkp** with the evidence and a warning that
 verifying any fix needs a stress loop, not a single green run.

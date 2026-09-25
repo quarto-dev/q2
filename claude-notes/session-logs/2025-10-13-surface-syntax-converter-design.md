@@ -66,8 +66,8 @@ markdownForFile(file: string): Promise<MappedString>;
 **Conversion characteristics**:
 | Format | Lines | Complexity | Dependencies |
 |--------|-------|------------|--------------|
-| .ipynb | ~10 | Low | None |
-| Percent | ~60 | Medium | None |
+| .ipynb | \~10 | Low | None |
+| Percent | \~60 | Medium | None |
 | R spin | \~20 | Medium | **R runtime** |
 
 **Current coupling problems**:

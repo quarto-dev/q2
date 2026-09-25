@@ -96,8 +96,8 @@ We write:
 
 From our measurements (100 siblings test):
 - **Current**: 103,677 bytes (51.05x blowup)
-- **Expected with pooling**: ~5,000-8,000 bytes (2.5-4x blowup)
-- **Improvement**: ~93% size reduction
+- **Expected with pooling**: \~5,000-8,000 bytes (2.5-4x blowup)
+- **Improvement**: \~93% size reduction
 
 The remaining blowup comes from:
 - Range/Location structures (2 Locations per SourceInfo)
@@ -450,13 +450,13 @@ cargo test -p quarto-markdown-pandoc -- --ignored
 **Writer**: HashMap<*const SourceInfo, usize>
 - Pointer = 8 bytes
 - usize = 8 bytes
-- ~16 bytes per unique SourceInfo
-- For 1000 unique SourceInfos: ~16KB
+- \~16 bytes per unique SourceInfo
+- For 1000 unique SourceInfos: \~16KB
 
 **Reader**: Vec<SourceInfo>
 - Temporary during deserialization
 - Dropped after AST is built
-- For 1000 SourceInfos with Rc: ~100KB
+- For 1000 SourceInfos with Rc: \~100KB
 
 **Verdict**: Negligible overhead
 
@@ -571,7 +571,7 @@ For WASM boundaries, could use binary encoding:
 - Phase 2 (Reader): 2-3 days
 - Phase 3 (Testing & Snapshots): 1-2 days
 
-**Total**: ~1 week of focused work
+**Total**: \~1 week of focused work
 
 ## Simplified Approach (No Feature Flags)
 

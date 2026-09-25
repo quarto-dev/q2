@@ -117,7 +117,7 @@ excerpt from `root_file_id()` regardless. **[verified]**
 | Y1 | **`parse_with_parent`\'s contract is unchecked** (`parser.rs:92-94`): the parent must describe exactly `content` (origin at byte 0 of `content`, length = `content.len()`), but nothing validates it, `SourceInfo::substring` stores offsets verbatim, and `resolve_byte_range` composes with **no clamp to the parent's end** (`source-map/source_info.rs:400-403`). A misaligned parent yields plausible in-file offsets at the wrong place. **The crate's own doc example violates the contract** (`parser.rs:69-87`: narrates "extracted at offset 10-50" while passing a `0..1000` parent; `rust,no_run` so never executed). q2's two call sites are correct by carefully-maintained convention: `cell_options/mod.rs:203-222` (parallel push loops, no length assertion), `jupyter/text_execute.rs:272-274` (sound only while engine input is byte-identical through the frontmatter). |
 | Y2 | **The `FileId(0)` dummy** (`parser.rs:357,373,483`) — see N3 above. Combined with `get_file`\'s positional fallback this is the crate's contribution to the aliasing hazard. |
 | Y3 | `error.rs`: all variants carry `location: Option<SourceInfo>` but `Display` drops it and the only live error path (`From<ScanError>`, `:67-74`) sets `location: None` — so no wrong-file risk *and* no location at all. Trap for a future fix: `ScanError`\'s index is a **character** index; the parser's own `byte_offset_of_char` (`parser.rs:264-298`) exists for this conversion. |
-| Y4 | `hasher.finish() as usize` truncates to 32 bits on wasm32. `add_file_with_id` **panics** on duplicate ids, so a birthday collision (~2^16 files) becomes a crash in the hub client. q2 guards at exactly one site (`metadata_merge.rs:305-312`). |
+| Y4 | `hasher.finish() as usize` truncates to 32 bits on wasm32. `add_file_with_id` **panics** on duplicate ids, so a birthday collision (\~2^16 files) becomes a crash in the hub client. q2 guards at exactly one site (`metadata_merge.rs:305-312`). |
 | Y5 | Public constructors accept arbitrary span combinations with zero consistency checks: `YamlHashEntry::new` takes five independent spans (`yaml_with_source_info.rs:254-268`); `new_hash`/`new_array` accept children from other files; `with_tag` attaches any span to any node. In-parser use is safe; the API invites hand-assembled inconsistent trees. |
 | Y6 | `create_contiguous_span` (`parser.rs:159-201`): the same-file assert in the Original arm is unreachable today (single builder, fixed parent), but the Substring arm silently drops `end_info`\'s parent — the arm that *would* mint a hybrid span if per-node parents ever appear. |
 
@@ -178,7 +178,7 @@ Honest assessment: this fixes every *known* site and prevents the known
 pattern, but the bad state stays representable; new call sites in new shapes
 (P1 was not a diagnostic site at all) will keep appearing.
 
-### Option B — mid: kill the split at the API seam (quarto-source-map + quarto-yaml, ~1-2 weeks)
+### Option B — mid: kill the split at the API seam (quarto-source-map + quarto-yaml, \~1-2 weeks)
 
 1. **Move the path→id derivation into quarto-source-map.** The filename-hash
    scheme is not YAML-specific. Add `FileId::for_path(&str)` (same recipe,

@@ -231,7 +231,7 @@ where the study only has static reads.
       (code block / attribute / link target / image src / grid table /
       metadata values) deferred with Phase 3 — still unwritten, revisit when
       Phase 3 opens.
-- [~] Real published extensions: `quarto-tiers` (Posit, real-world) verified
+- [\~] Real published extensions: `quarto-tiers` (Posit, real-world) verified
       end-to-end via connect-docs (badge spans render, 0 warnings). Adding
       copied fixtures of fontawesome-class extensions remains open — good
       first item for a follow-up session.

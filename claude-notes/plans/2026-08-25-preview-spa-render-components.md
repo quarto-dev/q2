@@ -69,9 +69,9 @@ just doesn't pass it.
   the parsed `DocumentAst` in hand, so the meta is available for free.
 - `@babel/standalone` (the transpiler hub-client uses): 3.0 MB minified,
   0.6 MB gzipped. The SPA `dist/` (embedded into the `q2` binary via
-  `include_dir!`, with precompressed `.gz` siblings) is ~45 MB today, of
+  `include_dir!`, with precompressed `.gz` siblings) is \~45 MB today, of
   which the WASM is 26 MB. A lazy-loaded babel chunk adds ≈3.7 MB to the
-  binary embed (raw + gz sibling), ~8% growth.
+  binary embed (raw + gz sibling), \~8% growth.
 - Precedent for heavy optional deps: the built-in `MermaidCodeBlock`
   dynamic-imports mermaid **from the CDN at runtime** (nothing bundled;
   diagram-free docs pay nothing; offline preview loses diagrams).

@@ -519,15 +519,15 @@ must be pinned:
 
 | Phase | Lines (rough) |
 |---|---|
-| 1: `AnchorRole::Dispatch` + Anchor constructor + tests | ~80 |
-| 2: SourceContext Lua-file support (probably minimal) | ~40 |
-| 3: Lua bridge FileId threading + byte-range computation | ~200 |
-| 4: `By::filter` signature shrinkage + call-site migration | ~120 |
-| 5: Lua-handler shortcode Dispatch attachment | ~80 |
-| 6: Wire-format clean break + tests | ~80 |
-| 7: Cache-key surface (`filter_sources_hash`) + smoke test | ~40 |
-| Tests across phases | ~350 |
-| **Total** | **~980** |
+| 1: `AnchorRole::Dispatch` + Anchor constructor + tests | \~80 |
+| 2: SourceContext Lua-file support (probably minimal) | \~40 |
+| 3: Lua bridge FileId threading + byte-range computation | \~200 |
+| 4: `By::filter` signature shrinkage + call-site migration | \~120 |
+| 5: Lua-handler shortcode Dispatch attachment | \~80 |
+| 6: Wire-format clean break + tests | \~80 |
+| 7: Cache-key surface (`filter_sources_hash`) + smoke test | \~40 |
+| Tests across phases | \~350 |
+| **Total** | **\~980** |
 
 Two focused sessions likely; high-complexity due to mlua interop
 and the wire-format migration. The Lua engine bridge work in

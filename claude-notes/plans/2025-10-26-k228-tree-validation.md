@@ -267,7 +267,7 @@ Add tree validation calls to existing test files:
 npm test
 ```
 
-Expected: ~20-25 new tests, all passing, total ~138-143 tests.
+Expected: \~20-25 new tests, all passing, total \~138-143 tests.
 
 ## Test Examples
 
@@ -347,7 +347,7 @@ test('extract text content from paragraph', () => {
 - Test file creation: 60 min
 - Enhance existing tests: 30 min
 - Run and verify: 15 min
-- **Total: ~2.5 hours**
+- **Total: \~2.5 hours**
 
 ## Dependencies
 

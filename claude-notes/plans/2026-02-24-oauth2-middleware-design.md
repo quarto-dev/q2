@@ -58,7 +58,7 @@ Google OAuth2 authentication for quarto-hub, enforced at the middleware layer. T
 | Latency | 100-300ms per validation (network round-trip) | Microseconds (CPU only) |
 | Resilience | Fails if Google API is unreachable | Works offline after initial key fetch |
 | User info | Requires separate userinfo API call | Email, name, picture embedded in JWT claims |
-| Lifetime | ~1 hour | ~1 hour |
+| Lifetime | \~1 hour | \~1 hour |
 
 ### Token Transport
 

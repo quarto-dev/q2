@@ -74,7 +74,7 @@ The four items, by payoff-per-effort:
 - [x] **H2 — server-verified `nonce` in the GIS login.**
   Today the hub validates signature/`iss`/`aud`/`exp` but cannot bind an ID
   token to a login attempt: **any captured Google ID token can be replayed to a
-  mint endpoint for its ~1 h validity.** GIS supports a `nonce` at
+  mint endpoint for its \~1 h validity.** GIS supports a `nonce` at
   `google.accounts.id.initialize`; a hub pre-flight makes it verifiable
   server-side with no OAuth-client role.
   *Design:*
@@ -111,7 +111,7 @@ The four items, by payoff-per-effort:
     function over plain http — the callback logs a warning and skips the check
     there, consistent with that flag's existing "never in production" contract.
   - **Scope: Google/callback flow only.** H2 binds the nonce for the GIS →
-    `/auth/callback` path (the audit's target — the ~1 h GIS ID-token replay
+    `/auth/callback` path (the audit's target — the \~1 h GIS ID-token replay
     window). It deliberately does **not** touch `/auth/session` (the Generic
     provider's JSON mint), which stays replay-able within the submitted token's
     validity. That is an accepted scope boundary — the audit targeted the GIS
@@ -295,8 +295,8 @@ the endpoint.
   session mint/verify + revocation this plan hardens around.
 - Key files: `crates/quarto-hub/src/server.rs` (`build_csp` 108,
   `AUTH_COOKIE_NAME` 130, `mint_session_cookie` 316, `auth_callback` 728,
-  `auth_session` 999, routes ~1316), `crates/quarto-hub/src/auth.rs`
-  (`OidcClaims` ~190, `CallbackCsrfMode` ~656), `crates/quarto-hub/src/session.rs`
+  `auth_session` 999, routes \~1316), `crates/quarto-hub/src/auth.rs`
+  (`OidcClaims` \~190, `CallbackCsrfMode` \~656), `crates/quarto-hub/src/session.rs`
   (mint/verify — home for the sealed-state helper),
   `config/local-nginx.conf` (:8080 `server {}` :28, SPA `location /` :86),
   `scripts/local-prod.sh` (+ its

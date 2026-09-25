@@ -380,7 +380,7 @@ fn validation_error_to_diagnostic(
 ### Performance Benchmarks
 - `map_offset()` speed (should be <1μs for typical chains)
 - Serialization size (should be <10KB for typical docs)
-- Memory overhead (SourceInfo should be ~100 bytes max)
+- Memory overhead (SourceInfo should be \~100 bytes max)
 
 ## Dependencies and Compatibility
 

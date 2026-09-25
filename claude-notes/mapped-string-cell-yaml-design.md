@@ -882,7 +882,7 @@ Each piece can have its own SourceInfo chain, so we automatically support:
 | **Debuggability** | ❌ Hard (opaque closures) | ✅ Easy (inspect enum) |
 | **Performance** | ⚠️ Slower (recursive calls) | ✅ Faster (data access) |
 | **Type safety** | ⚠️ Runtime checks | ✅ Compile-time checks |
-| **Code size** | ~450 LOC | ~600 LOC (more explicit) |
+| **Code size** | \~450 LOC | \~600 LOC (more explicit) |
 
 ## Success Criteria
 

@@ -560,7 +560,7 @@ verbose-trace run after Phase 2 lands, before declaring done.
       the fix — its old unconditional `EMIT_TOKEN(CODE_SPAN_START)`
       bypassed any close check.
 - [x] Phase 1 (extra): the first/second SOFT_LINE_ENDING gates in the
-      line-break dispatcher (~scanner.c:2666 / :2799) now bypass the
+      line-break dispatcher (\~scanner.c:2666 / :2799) now bypass the
       paragraph-interruption character checks (`#`, `*`, `-`, fence,
       etc.) when `s->code_span_delimiter_length > 0` so pandoc-style
       "absorb everything except a blank line" behavior holds. `>` is

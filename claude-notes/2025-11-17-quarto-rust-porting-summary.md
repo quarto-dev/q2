@@ -148,7 +148,7 @@ Comprehensive analysis of 4 categories with porting strategies:
 - **Current:** deno-dom (HTML parser with DOM API)
 - **Rust solution:** html5ever + scraper
 - **Effort:** 4-6 weeks
-- **Coverage:** ~21 postprocessor files, ~98 DOM manipulation uses
+- **Coverage:** \~21 postprocessor files, \~98 DOM manipulation uses
 - **Key operations:** querySelector, setAttribute, innerHTML, etc.
 
 #### B. EJS Templating
@@ -566,7 +566,7 @@ Beyond direct porting, Rust enables new capabilities:
 The existing notes demonstrate **exceptional thoroughness**:
 
 ### Strengths
-- **~100+ markdown files** covering all subsystems
+- **\~100+ markdown files** covering all subsystems
 - **Detailed session logs** tracking design evolution
 - **Code examples** in proposed designs (Rust API sketches)
 - **Timing estimates** with risk analyses
@@ -614,7 +614,7 @@ This is **not a rush to "get something working"** - it's building **solid, well-
 - k-256: Enhanced error messages for YAML validation
 - k-200: Performance testing and benchmarking
 
-### Recent Completions (Sample from ~200 closed)
+### Recent Completions (Sample from \~200 closed)
 
 **Major Accomplishments:**
 - k-274 → k-287: Tree-sitter grammar refactoring (complete node system rewrite)
@@ -760,7 +760,7 @@ open quarto-arch.svg
 - **Performance parity** - Some operations may be slower initially
 
 ### Higher Risk ⚠️⚠️
-- **LSP feature parity** - Large surface area (~6,300 LOC)
+- **LSP feature parity** - Large surface area (\~6,300 LOC)
 - **Metadata merging logic** - Intricate rules, many edge cases
 - **Browser automation** - headless_chrome less mature than Puppeteer
 - **Team expertise** - Rust learning curve for maintainers
@@ -793,13 +793,13 @@ open quarto-arch.svg
 
 The Quarto Rust porting study demonstrates **high feasibility** with **clear implementation paths** for all major subsystems. Key advantages:
 
-1. **Markdown parser already exists in Rust** (~11K LOC)
+1. **Markdown parser already exists in Rust** (\~11K LOC)
 2. **Mature Rust ecosystem** for all dependencies
 3. **Detailed designs** validated through prototypes
 4. **No fundamental blockers** identified
 5. **Novel architectural opportunities** (explicit workflows, better parallelization)
 
-**Current progress** (~60% of Phase 1):
+**Current progress** (\~60% of Phase 1):
 - ✅ quarto-yaml crate (parsing with source tracking)
 - ✅ quarto-yaml-validation Phase 1 (validator infrastructure)
 - ✅ quarto-error-reporting Phase 1 (error codes + builder API)

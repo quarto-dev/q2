@@ -241,7 +241,7 @@ public surface (minus the moved catalog *data*).
       nothing → EmptyCatalog" choice. The 2 `quarto-core` data-presence `#[test]`s
       now query
       `quarto_error_catalog::ERROR_CATALOG` directly (dev-dep added). **Audit
-      script + ~25 path references updated** to `crates/quarto-error-catalog/…`;
+      script + \~25 path references updated** to `crates/quarto-error-catalog/…`;
       `scripts/audit-error-codes.py` passes (exit 0). Full workspace nextest:
       **10240 passed**.
 - [x] **2d.** `json.rs` now behind a **default-off `json` feature** (`lib.rs`

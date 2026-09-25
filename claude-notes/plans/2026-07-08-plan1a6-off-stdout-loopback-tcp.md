@@ -215,7 +215,7 @@ not built.
 > exercised the full bind→spawn→accept-poll→token→framed-round-trip path against
 > `deno 2.9.0`, importing the **real** `readFrames`/`writeFrame` unmodified over a
 > `Deno.Conn`. Both failure modes (child-death-before-dial, wrong-token) behaved
-> as designed with no hang. Measured spawn→accept: **~75 ms cold, ~27 ms warm**.
+> as designed with no hang. Measured spawn→accept: **\~75 ms cold, \~27 ms warm**.
 > No design change forced. Two findings folded in below (the reader-handoff rule
 > in step 6, and the generous deadline in step 5). **Caveat (2026-07-22):** the
 > spike's throwaway child sent an eager frame and never blocked its pipes; the
@@ -247,9 +247,9 @@ existing retry contract holds (`ts_process.rs:636-637`):
    child's stdin** (piped, not inherited) — see "Token delivery." `--allow-all`
    already grants net, no perm change.
 4. **Spawn the stderr (and freed-stdout) drain thread(s) BEFORE the accept loop.**
-   This is load-bearing: the accept below can block up to the ~10 s deadline, and
+   This is load-bearing: the accept below can block up to the \~10 s deadline, and
    if nothing is draining the child's pipes, a child that writes more than one pipe
-   buffer (~64 KiB) of diagnostics *before* it dials back blocks on its own
+   buffer (\~64 KiB) of diagnostics *before* it dials back blocks on its own
    `write()`, never dials, and is killed at the deadline — with the very stderr we
    want for the error message stuck in the pipe. Draining concurrently with the
    accept both prevents that deadlock and lets a child-death error carry real
@@ -258,11 +258,11 @@ existing retry contract holds (`ts_process.rs:636-637`):
    where the existing stdio drain is spawned. See "Rust side.")
 5. **Accept with child-liveness polling** (the one pattern with no in-repo
    precedent — composed here): `listener.set_nonblocking(true)`, then loop
-   `accept()` ⇄ `child.try_wait()` on `WouldBlock`, ~20 ms poll, against a
-   **generous ~10 s deadline**. (Spike observed ~75 ms cold / ~27 ms warm, so
-   10 s is ~130× headroom; keep it generous for a cold-cache or loaded CI box —
+   `accept()` ⇄ `child.try_wait()` on `WouldBlock`, \~20 ms poll, against a
+   **generous \~10 s deadline**. (Spike observed \~75 ms cold / \~27 ms warm, so
+   10 s is \~130× headroom; keep it generous for a cold-cache or loaded CI box —
    tunable. Note the deadline is held under the coarse init lock — see "Rust
-   side" — so the worst case stalls concurrent spawns; the normal path is ~75 ms.)
+   side" — so the worst case stalls concurrent spawns; the normal path is \~75 ms.)
    Child exits first → error carrying the (now-populated) `recent_stderr` ring
    (likely a Deno/engine load failure); deadline with child alive → `child.kill()`
    + error; connection arrives → proceed.
@@ -346,7 +346,7 @@ accepted." See the seam table for the corrected assertion.
 **Token generation: `uuid::Uuid::new_v4().to_string()`** — 122 bits of CSPRNG
 entropy, `uuid` is already a workspace dep that `quarto-core` already uses, and
 it is precisely what the cited precedent `daemon.rs:111` uses for its per-session
-key. **No new crate.** Constant-time compare is a ~5-line XOR-fold helper
+key. **No new crate.** Constant-time compare is a \~5-line XOR-fold helper
 (`ct_eq(&[u8], &[u8]) -> bool`), not a new dependency: it is **hygiene, not
 load-bearing** (the listener accepts once, then closes), mirroring
 `loopback.ts:169-179`. Its constant-timeness is deliberately **not** asserted by
@@ -664,7 +664,7 @@ so they reach the cited helper rather than duplicating it.
 | 7 | `console.log` harmless | Integration, deno-gated | transport move + **H-STDOUT** | fixture engine calls `console.log("MARK")` in execute; render over TCP; assert **(i)** render succeeds **and (ii)** "MARK" observed on the stdout drain | real deno fixture engine | revert **D-MAIN** → console.log corrupts frames. **Exercised-guard: (ii) proves the engine actually logged (else vacuous)** |
 | 8 | `connectControl` round-trip | **Deno-native (`.deno-test.ts`, CI-only)** | **D-CONNECT** | stand up a **real** `Deno.listen({ port: 0 })`; feed the token on a real stdin (or the module's injectable token source); call `connectControl`; assert **first bytes on the socket == `token+"\n"` (order-checked)**, then a Request round-trips via real `readFrames`/`writeFrame` over the real `Deno.Conn` | none (real loopback socket) — do **not** mock `Deno.Conn` | revert **D-CONNECT** `writeAll(token+"\n")` → "first bytes==token" RED; revert `{reader: conn.readable}` → round-trip RED. **Runs only in `ts-test-suite` CI, not `cargo xtask verify`** |
 | 9 | E2E Julia over TCP | Full binary | whole stack | `cargo run --bin q2 -- render <julia fixture>`; assert success, **byte-parity vs stdio baseline**, and a tracing marker confirms TCP was used | none (real binary) | revert **H-SPAWN** (omit token-to-stdin write, or omit `--control`) → child never dials → ensure_started times out → render fails. **Exercised-guard: assert the `engine-host connected over loopback TCP` marker (emitted at handshake commit, step 7) — proves TCP was used, not a fallback** |
-| 10 | Large-payload deadlock-freedom | Rust in-proc | continuous-drain over TCP (H-FRAME + demux) | **shrink the in-test peer's `SO_RCVBUF` (and the sender socket's `SO_SNDBUF`) to a small known size via `socket2` (`SockRef::set_recv_buffer_size`/`set_send_buffer_size`)**, then round-trip an Execute-shaped frame whose input **comfortably exceeds that shrunk combined buffer** (e.g. ~256 KB against buffers pinned to a few KB — a deterministic block, not reliant on Linux autotune, which would make a fixed payload against *default* buffers vacuous) **while the peer withholds reads until the sender has attempted the full write**; wrapped in `watchdog`; assert it completes | in-test peer | a `send` that holds the write lock across a socket-full blocking write (or buffers whole msg before the reader drains) → deadlock → watchdog RED |
+| 10 | Large-payload deadlock-freedom | Rust in-proc | continuous-drain over TCP (H-FRAME + demux) | **shrink the in-test peer's `SO_RCVBUF` (and the sender socket's `SO_SNDBUF`) to a small known size via `socket2` (`SockRef::set_recv_buffer_size`/`set_send_buffer_size`)**, then round-trip an Execute-shaped frame whose input **comfortably exceeds that shrunk combined buffer** (e.g. \~256 KB against buffers pinned to a few KB — a deterministic block, not reliant on Linux autotune, which would make a fixed payload against *default* buffers vacuous) **while the peer withholds reads until the sender has attempted the full write**; wrapped in `watchdog`; assert it completes | in-test peer | a `send` that holds the write lock across a socket-full blocking write (or buffers whole msg before the reader drains) → deadlock → watchdog RED |
 | — | `cargo xtask verify` (gate) | gate | **WASM-GATE** | run verify | — | un-gate `ts_process.rs` / leak `std::net` into wasm → wasm build breaks |
 
 ### Refactor-induced vacuity guards (do NOT skip)
@@ -704,7 +704,7 @@ so they reach the cited helper rather than duplicating it.
   **pinned small via `socket2` and the payload sized comfortably above them** (a
   fixed payload against *default* buffers can be vacuous — Linux autotunes loopback
   buffers to multiple MB — so shrink `SO_RCVBUF`/`SO_SNDBUF` to a few KB and send
-  e.g. ~256 KB; then `send` deterministically blocks with no autotune dependence),
+  e.g. \~256 KB; then `send` deterministically blocks with no autotune dependence),
   and (2) the **peer must
   withhold reads** until the sender has attempted the full write — a fast-draining
   peer completes even a buggy whole-message-buffer `send`, hiding the deadlock.
@@ -792,7 +792,7 @@ is **done** (PASS). Remaining is the staged build.
 - [x] Prototype the dial-back end-to-end on macOS: q2 binds, spawns `deno …
       --control/--token`, child dials back and round-trips over TCP using the
       **real `framing.ts`** primitives. **PASS 2026-07-08** (deno 2.9.0;
-      ~75 ms cold / ~27 ms warm; child-death + wrong-token failure modes clean;
+      \~75 ms cold / \~27 ms warm; child-death + wrong-token failure modes clean;
       reader-handoff byte-loss hazard folded into step 6 — **but note (2026-07-22)
       the spike's throwaway child sent an eager frame and never blocked its pipes;
       the real host does neither**, which is why the drain-before-accept and
@@ -872,7 +872,7 @@ revert hunk.
 > otherwise. Seam #8 (`control-transport.deno-test.ts`) drives a real
 > `Deno.listen({ port: 0 })` — no mock `Deno.Conn` — and both fail-on-revert
 > bindings were demonstrated locally: reverting the token pre-line write
-> reddens the "first bytes == token" assertion (bounded timeout, ~3s), and
+> reddens the "first bytes == token" assertion (bounded timeout, \~3s), and
 > reverting `{ reader: conn.readable }` (an empty/fresh `ReadableStream`
 > instead) reddens the round-trip assertion. `deno test --allow-all
 > --sloppy-imports` is the flag set that works (the module's `types.ts`
@@ -1041,12 +1041,12 @@ revert hunk.
 None blocking. Everything below is a tunable or a Phase-4 confirmation, not a
 fork.
 
-- **Accept deadline value** — settled at ~10 s (spike measured ~75 ms cold /
-  ~27 ms warm, so ~130× headroom). Injectable so tests use a short deadline.
+- **Accept deadline value** — settled at \~10 s (spike measured \~75 ms cold /
+  \~27 ms warm, so \~130× headroom). Injectable so tests use a short deadline.
   Held under the coarse init lock (so a hung child stalls concurrent spawns for up
-  to the deadline — acceptable; normal path is ~75 ms). Revisit only if a
+  to the deadline — acceptable; normal path is \~75 ms). Revisit only if a
   cold-cache CI box ever trips it.
-- **Phase-4 `start_with_command`** — the *only* open question is porting its ~8
+- **Phase-4 `start_with_command`** — the *only* open question is porting its \~8
   in-crate call sites to the TCP handshake (they spawn stdio-only children).
   `behave_engine_e2e` is **not** a consumer (resolved 2026-07-22 — it uses the
   production `ensure_started` path, so it flips automatically at Phase 3). Not a
@@ -1077,7 +1077,7 @@ narrowing is a later, enabled-but-separate change).
 
 ## References
 
-> **Line numbers throughout this plan are pinned to a base branch tip (~`afaed2c96`);
+> **Line numbers throughout this plan are pinned to a base branch tip (\~`afaed2c96`);
 > sibling plans (plan6, plan1c3) shift some. Resolve every citation by *symbol name*
 > (grep), not by line — the symbols were all verified present in two independent
 > code-review passes.**

@@ -269,7 +269,7 @@ Plan 3 deliberately scopes to (1) because:
 - (2) isn't exercised by today's pipeline.
 - (2)'s test conflates writer-lossiness with filter-non-idempotence.
 - For built-ins, the universe is small (one Lua filter +
-  ~36 Rust transforms, all under our control), so the accepted-gap
+  \~36 Rust transforms, all under our control), so the accepted-gap
   risk is low.
 
 ## Design decisions (settled in conversation)
@@ -887,7 +887,7 @@ convenience for navigating, not a contract.
   built-in Lua filter today.
 - `claude-notes/plans/lua-filter-pipeline/00-index.md` — Carlos's
   2025-12-21 analysis of **TypeScript Quarto**'s `run_as_extended_ast()`
-  Lua filter pipeline (~78 stages classified by side-effect category).
+  Lua filter pipeline (\~78 stages classified by side-effect category).
   This is porting reference material for the broader epic, **not** the
   inventory Plan 3 tests. Plan 3's universe is enumerated in §"What
   'built-in' covers." Useful when porting an additional TS filter into
@@ -945,7 +945,7 @@ convenience for navigating, not a contract.
   (see §"What gets tested concretely" for the body).
 - [x] Implement `run_single_file(project_dir, active) -> DocumentAst`
   using `ProjectContext::discover` + `build_q2_preview_pipeline_stages`
-  + `run_pipeline`. (~50 lines; the only genuinely new driver.)
+  + `run_pipeline`. (\~50 lines; the only genuinely new driver.)
 - [x] Implement `run_orchestrator(project_dir, active) -> DocumentAst`
   by delegating to the existing `render_active_page_preview` helper
   at `crates/quarto-core/tests/render_page_in_project.rs:660` and
@@ -1168,7 +1168,7 @@ explicitly says so. Do not silently disable.
   scaffolding rather than transform coverage. Mitigation: reuse the
   existing pattern (write `_quarto.yml` + page contents into a
   `TempDir`, call `ProjectContext::discover`) — the same recipe
-  used by ~10 sibling tests in `crates/quarto-core/tests/`. No
+  used by \~10 sibling tests in `crates/quarto-core/tests/`. No
   parameterized builder is needed. See §"Decisions" /
   "ProjectContext setup for website fixtures."
 
@@ -1205,23 +1205,23 @@ has a head start:
 
 | Component | Lines (rough) |
 |---|---|
-| `compute_meta_hash_fresh` + excluding-rendered variant + tests | ~140 |
-| `find_first_divergence` + `DivergencePoint` + tests | ~80 |
-| Test crate scaffolding — `Fixture` struct, `run_single_file`, `run_orchestrator` (thin wrapper over existing helper), `pandoc_to_document_ast` shuffle | ~100 |
-| Per-fixture `.qmd` files / inline literals (~25 fixtures, 5-30 lines each) | ~280 |
-| Per-fixture (fixture, mode) test assertions (mostly one-liners; ~25 fixtures × 1-2 modes ≈ 40 pairs) | ~120 |
-| `idempotence-contract.md` + fixtures README | ~80 |
-| **Total** | **~800** |
+| `compute_meta_hash_fresh` + excluding-rendered variant + tests | \~140 |
+| `find_first_divergence` + `DivergencePoint` + tests | \~80 |
+| Test crate scaffolding — `Fixture` struct, `run_single_file`, `run_orchestrator` (thin wrapper over existing helper), `pandoc_to_document_ast` shuffle | \~100 |
+| Per-fixture `.qmd` files / inline literals (\~25 fixtures, 5-30 lines each) | \~280 |
+| Per-fixture (fixture, mode) test assertions (mostly one-liners; \~25 fixtures × 1-2 modes ≈ 40 pairs) | \~120 |
+| `idempotence-contract.md` + fixtures README | \~80 |
+| **Total** | **\~800** |
 
-The scaffolding line item dropped from an earlier estimate of ~260
-to ~100 after pinning the orchestrator path on the existing
+The scaffolding line item dropped from an earlier estimate of \~260
+to \~100 after pinning the orchestrator path on the existing
 `render_active_page_preview` helper and choosing option (a) for
 `DocumentAst` extraction — neither requires a new orchestrator
 driver, a `make_website_project_ctx` builder, or production
 plumbing changes. `PreviewAstOutput::ast` plumbing is no longer
-needed (was ~20 lines in the earlier draft).
+needed (was \~20 lines in the earlier draft).
 
-**Inventory note**: an earlier draft estimated "~10-20 built-in filters"
+**Inventory note**: an earlier draft estimated "\~10-20 built-in filters"
 in `resources/extensions/`. That was wrong — `resources/extensions/`
 contains one Lua filter (`video-filter.lua`) plus five shortcodes
 (kbd, video, lipsum, version, placeholder). The bulk of the universe

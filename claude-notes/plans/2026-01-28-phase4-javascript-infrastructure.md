@@ -722,8 +722,8 @@ In TS Quarto, Pandoc generates the TOC via `--toc` flag. For Rust Quarto, we hav
 | TS Quarto | Rust Quarto | Notes |
 |-----------|-------------|-------|
 | clipboard.min.js | `navigator.clipboard` API | Modern browsers support natively |
-| anchor.min.js | Custom ~50 lines | Simple DOM manipulation |
-| tabby.js | Custom ~100 lines | Simple state management |
+| anchor.min.js | Custom \~50 lines | Simple DOM manipulation |
+| tabby.js | Custom \~100 lines | Simple state management |
 | tippy.js + popper.js | Deferred | Only if hover features needed |
 
 By using native APIs and small custom implementations, we reduce:

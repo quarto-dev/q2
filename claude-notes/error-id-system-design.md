@@ -341,7 +341,7 @@ pub fn validate_boolean(value: &Yaml) -> Result<(), DiagnosticMessage> {
 ### Step 2: Create Error Catalog (New Issue)
 
 - Create `catalog.rs` with `ErrorCodeInfo` struct
-- Add initial set of ~20-30 common error codes
+- Add initial set of \~20-30 common error codes
 - Implement lookup functions
 
 ### Step 3: Update Rendering (bd-2 / Phase 2)
@@ -409,7 +409,7 @@ pub fn validate_boolean(value: &Yaml) -> Result<(), DiagnosticMessage> {
 | Aspect | TypeScript | Quarto (Proposed) |
 |--------|-----------|-------------------|
 | Format | `TS####` | `Q-####` |
-| Count | ~2000 codes | Start with ~30, grow organically |
+| Count | \~2000 codes | Start with \~30, grow organically |
 | Storage | JSON (`diagnosticMessages.json`) | Rust (initially) |
 | Organization | By code range | By code range |
 | Documentation | TypeScript website | Quarto website |

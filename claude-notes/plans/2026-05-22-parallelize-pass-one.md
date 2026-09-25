@@ -470,7 +470,7 @@ Per the perf-profiling playbook ("don't remove diagnostic counters"):
    fallback 4 on error.** Env override: `QUARTO_JOBS` (generic name,
    reusable for Pass-2 in the future).
 3. **`threads_used` accumulator: `Mutex<HashSet<ThreadId>>`.** Simpler;
-   ~574 lock acquisitions per render is invisible.
+   \~574 lock acquisitions per render is invisible.
 4. **Panic handling:** wrap each worker in `catch_unwind` to convert
    panics to `FileFailure` — matches the per-file `Result::Err`
    isolation we already have.

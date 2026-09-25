@@ -253,7 +253,7 @@ Input:  "## Title\n\nFirst paragraph.\n\nSecond paragraph.\n"
               gap=[9,10)="\n"   gap=[27,28)="\n"
 ```
 
-Each block span includes its own trailing `\n` but NOT the blank-line separator. The gaps are consistently single `\n` characters. **Coverage is ~95%** of the input (the remaining 5% is the inter-block `\n` separators).
+Each block span includes its own trailing `\n` but NOT the blank-line separator. The gaps are consistently single `\n` characters. **Coverage is \~95%** of the input (the remaining 5% is the inter-block `\n` separators).
 
 ### Assembly Strategy for Incremental Writer
 

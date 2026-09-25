@@ -33,7 +33,7 @@ impl WasmStore {
 
 **WASM runtime**: **wasmtime** — a managed runtime (JIT + GC) bundled via the C API. Not a custom runtime; upstream-maintained by Bytecode Alliance.
 
-**Binary size cost**: wasmtime-c-api-impl is ~6–12 MB on Linux/macOS depending on profile. Cranelift codegen adds ~4–6 MB. For a \~50 MB native binary, this is 8–15% overhead. **Modest but measurable**.
+**Binary size cost**: wasmtime-c-api-impl is \~6–12 MB on Linux/macOS depending on profile. Cranelift codegen adds \~4–6 MB. For a \~50 MB native binary, this is 8–15% overhead. **Modest but measurable**.
 
 **Integration path in tree-sitter loader**:
 - `/crates/loader/src/loader.rs:2036–2037`: `use_wasm()` method initializes a WasmStore from an `Engine`.
@@ -163,7 +163,7 @@ Users (or grammar authors on their behalf) run `tree-sitter build --wasm` once, 
 - **First highlight latency** (parse + highlight): <100 ms for typical code samples on modern hardware. WASM is compiled to machine code on first parse (lazy), then cached.
 
 **Browser (web-tree-sitter)**:
-- web-tree-sitter + emscripten WASM core: ~1.2–1.8 MB minified + gzipped.
+- web-tree-sitter + emscripten WASM core: \~1.2–1.8 MB minified + gzipped.
 - Per-grammar `.wasm`: 50–150 KB.
 - **First parse latency**: 50–200 ms (interpreted, but acceptable for UI).
 
@@ -190,7 +190,7 @@ Users (or grammar authors on their behalf) run `tree-sitter build --wasm` once, 
    cp tree-sitter-*.wasm _quarto/grammars/
    ```
 
-**Cost**: ~8–12 MB binary size. Acceptable for a desktop/server tool.
+**Cost**: \~8–12 MB binary size. Acceptable for a desktop/server tool.
 
 ### Phase 2: Browser (Weeks 3–4)
 

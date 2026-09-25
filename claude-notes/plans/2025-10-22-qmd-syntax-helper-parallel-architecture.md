@@ -686,10 +686,10 @@ impl Task for GridTableConversionTask {
 
 | Metric | Current (Sequential) | Target (Parallel) |
 |--------|----------------------|-------------------|
-| 100 files, check mode | ~12 seconds | <1 second |
+| 100 files, check mode | \~12 seconds | <1 second |
 | Parse reuse rate | 0% (3 parses/file) | 100% (1 parse/file) |
-| CPU utilization | ~12% (1/8 cores) | >80% (7-8/8 cores) |
-| Memory usage | ~50MB | <200MB |
+| CPU utilization | \~12% (1/8 cores) | >80% (7-8/8 cores) |
+| Memory usage | \~50MB | <200MB |
 
 ### Correctness
 

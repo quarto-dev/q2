@@ -73,8 +73,8 @@ All referenced paths exist at HEAD (`main` \@ `c7523c2b`, in sync with origin):
   `external-sources/quarto-cli/src/resources/formats/html/_quarto-rules.scss`
   — 774 lines, **144 depth-0 rule blocks** (extracted list committed at
   `claude-notes/plans/quarto-rules-scss-audit-investigation/top-level-selectors.tsv`).
-  The strand's "~80" is the *family-grouped* count: the ANSI-color block is ~36
-  selectors, `table.gt_table` is 7, layout-panel/cell is ~19, etc.
+  The strand's "\~80" is the *family-grouped* count: the ANSI-color block is \~36
+  selectors, `table.gt_table` is 7, layout-panel/cell is \~19, etc.
 - **Q2 SCSS layers to grep for "already present":**
   `resources/scss/bootstrap/_bootstrap-rules.scss` (+ `_bootstrap-variables.scss`),
   `resources/scss/html/templates/{title-block,copy-code,highlight,embed-example}.scss`.

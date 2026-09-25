@@ -157,7 +157,7 @@ this guard once the writer-side round-trip lands.
   starting-point compatible with q2-debug at the iframe surface (same
   `AstIframe` component, same postMessage protocol) but architecturally
   unrelated at the data-source layer — q2-debug skips the entire transform
-  pipeline; q2-preview runs ~19 of the 31 transforms in
+  pipeline; q2-preview runs \~19 of the 31 transforms in
   `build_transform_pipeline`. The "mirror q2-debug" framing applies only
   to the React-side routing; the WASM entry point and renderer are new.
 - **Read-only in v1**: `handleSetAst` early-returns and logs a
@@ -283,7 +283,7 @@ rationale for each decision.)
 
   Tradeoffs vs. the parallel-struct approach: enum adds a
   one-line `match` at the response builder; parallel-struct would
-  require a near-clone of the ~80-line orchestrator helper for
+  require a near-clone of the \~80-line orchestrator helper for
   every additional payload type (q2-slides, dashboards, future
   formats). With only one shared HTML-specific access in the
   current orchestrator (line 1538), the enum's runtime ceremony
@@ -396,7 +396,7 @@ rationale for each decision.)
   dispatch lives **inside** the existing `render_page_in_project`
   function rather than as a separate `render_page_in_project_to_preview_ast`
   export. Why: format detection already happens internally at
-  `lib.rs:1352, 1434`; a separate export would duplicate ~50 lines of
+  `lib.rs:1352, 1434`; a separate export would duplicate \~50 lines of
   project-discovery scaffolding for no boundary-type win (the
   `RenderResponse` envelope already discriminates payload). It also
   keeps Plan 7's eventual write-back work local to one function, not
@@ -453,11 +453,11 @@ rationale for each decision.)
     ABI compat; it doesn't reach the helper.
 
   Net effect on `RenderResponse` construction sites: drops from
-  ~16 inline literals today to ~5 (two success paths in the two
+  \~16 inline literals today to \~5 (two success paths in the two
   helpers + three error helpers `error_response` /
   `render_error_response` / `pass_failure_response`). The
   `ast_json: Option<String>` field added later in Plan 1 only
-  needs populating at those ~5 sites instead of every producer.
+  needs populating at those \~5 sites instead of every producer.
 
   The orchestrator path
   (`render_project_active_page_to_response`, `lib.rs:1416`) is
@@ -498,7 +498,7 @@ rationale for each decision.)
   helpers; each constructs `RenderResponse` and needs the new
   `ast_json: None` field.
 - `hub-client/src/components/render/ReactRenderer.tsx` — format dispatch,
-  `AstIframe` mounting (the `format === 'q2-debug'` branch ~line 141 is
+  `AstIframe` mounting (the `format === 'q2-debug'` branch \~line 141 is
   where the q2-preview branch joins).
 - `hub-client/src/components/render/ReactPreview.tsx` — `doRender` (where
   the data-source switch by format lands) and `handleSetAst` (where the
@@ -880,22 +880,22 @@ iframe simply stops referencing them.
 
 | Component | Lines (rough) |
 |---|---|
-| Prep refactor: `render_qmd` + `render_qmd_content` → `render_single_doc_to_response` (HTML-only, behavior-preserving; lands as first commit) | ~50 (net negative) |
-| `build_q2_preview_transform_pipeline` + drift helper + tests | ~100 |
-| `build_q2_preview_pipeline_stages` + tests | ~80 |
-| `Pass2Payload` enum + `WasmPassTwoOutput` field rename + native-test-fixture updates | ~30 |
-| `RenderToPreviewAstRenderer` impl + `PreviewAstOutput` + `render_qmd_to_preview_ast` entry point | ~120 |
-| Orchestrator response-tail dispatch (single match arm at `lib.rs:1538`) + single-doc format dispatch | ~30 |
-| `RenderResponse` `ast_json` field + producer updates (5 seams post-refactor) | ~30 |
-| Format detection update + `AstTransformsStage` dispatch | ~25 |
-| TS `RenderResponse` type + `ReactPreview` doRender switch + read-only guard | ~40 |
-| End-to-end fixture and tests (incl. page-scoped artifact regression) | ~220 |
-| **Total** | **~725** |
+| Prep refactor: `render_qmd` + `render_qmd_content` → `render_single_doc_to_response` (HTML-only, behavior-preserving; lands as first commit) | \~50 (net negative) |
+| `build_q2_preview_transform_pipeline` + drift helper + tests | \~100 |
+| `build_q2_preview_pipeline_stages` + tests | \~80 |
+| `Pass2Payload` enum + `WasmPassTwoOutput` field rename + native-test-fixture updates | \~30 |
+| `RenderToPreviewAstRenderer` impl + `PreviewAstOutput` + `render_qmd_to_preview_ast` entry point | \~120 |
+| Orchestrator response-tail dispatch (single match arm at `lib.rs:1538`) + single-doc format dispatch | \~30 |
+| `RenderResponse` `ast_json` field + producer updates (5 seams post-refactor) | \~30 |
+| Format detection update + `AstTransformsStage` dispatch | \~25 |
+| TS `RenderResponse` type + `ReactPreview` doRender switch + read-only guard | \~40 |
+| End-to-end fixture and tests (incl. page-scoped artifact regression) | \~220 |
+| **Total** | **\~725** |
 
 Likely fits in one focused implementation session if we don't get sidetracked.
 The enum payload + prep refactor together preserve the original
-~725 estimate: the prep refactor saves ~50 LOC, the enum approach
-saves the parallel-orchestrator-helper duplication (~80 LOC vs.
+\~725 estimate: the prep refactor saves \~50 LOC, the enum approach
+saves the parallel-orchestrator-helper duplication (\~80 LOC vs.
 the parallel-struct alternative). Risk: the `RenderResponse`
 extension touches five seams (two success paths + three error
 helpers) — get all five populating `ast_json: None` for HTML/error

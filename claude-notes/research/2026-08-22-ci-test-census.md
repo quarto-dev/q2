@@ -148,7 +148,7 @@ locally: **44 crates, 20 passed, 5 failed, 68 ignored** — the tier is red toda
 Source shape: **422 fenced blocks** in doc comments across 31 crates (211
 blocks), heavily tagged so they never compile or run — `ignore` (46),
 `rust,ignore` (24), `text` (38), `yaml` (24), plus `json`, `html`,
-`javascript`, `markdown`, `bash`, `qmd`, `xml`, `sh`, `r`, `lua`. Only ~26 are
+`javascript`, `markdown`, `bash`, `qmd`, `xml`, `sh`, `r`, `lua`. Only \~26 are
 live Rust doctests, and only 20 of those pass.
 
 The 5 failures:
@@ -261,7 +261,7 @@ declared in its crate's `main.rs`, and no test module is hidden behind a
 1. **Pure wiring** — green as-is, just needs a CI step: `trace-viewer`,
    `kanban` (unit+integration), `q2-preview-spa` (unit+integration),
    `preview-renderer` unit, `preview-runtime` unit, `quarto-api`,
-   `quarto-automerge-schema`, `wasm-js-bridge`. (~1,200 assertions.)
+   `quarto-automerge-schema`, `wasm-js-bridge`. (\~1,200 assertions.)
 2. **Wiring + build ordering** — `quarto-sync-client`, `quarto-hub-mcp`
    (ts-packages dist build first), `preview-renderer` integration (WASM first).
 3. **Red, needs a fix** — `annotated-qmd` (bd-1d6io), `preview-renderer`

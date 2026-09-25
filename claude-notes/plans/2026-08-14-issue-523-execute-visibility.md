@@ -195,7 +195,7 @@ behaviour, so the tests below assert on semantics, not on Q1's exact fences.
 | cell option vs doc scope | cell wins (`shouldInclude`) | same |
 
 The last two rows are the subtle ones. Q1 builds the div opener but only writes it "if there is
-actually content in the div" (`jupyter.ts` ~1466), so a cell whose code *and* outputs are all
+actually content in the div" (`jupyter.ts` \~1466), so a cell whose code *and* outputs are all
 suppressed leaves no wrapper behind. q2's `render_cell` currently emits the wrapper
 unconditionally, so this is a real behavioural item, not a formatting detail.
 

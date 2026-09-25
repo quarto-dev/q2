@@ -41,7 +41,7 @@ By lint:
 | collapsible_match | 2 | yes |
 | unreadable_literal, unnecessary_map_or, single_component_path_imports, should_implement_trait, print_literal, naive_bytecount | 1 each | mixed |
 
-> ⚠️ Earlier raw counts of ~560 / ~1811 were an artifact of running
+> ⚠️ Earlier raw counts of \~560 / \~1811 were an artifact of running
 > clippy with `-W clippy::all`, which **re-enables the deliberately
 > allowed** architectural lints. Those stay allowed; do not "fix" them.
 

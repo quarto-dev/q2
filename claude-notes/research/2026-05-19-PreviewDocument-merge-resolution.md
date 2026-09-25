@@ -1,7 +1,7 @@
 # PreviewDocument.tsx merge-resolution briefing
 
 **File:** `ts-packages/preview-renderer/src/q2-preview/PreviewDocument.tsx`
-**Conflicts:** 3 regions (lines ~116, ~200, \~237 after the user's other merge work)
+**Conflicts:** 3 regions (lines \~116, \~200, \~237 after the user's other merge work)
 **Hard question raised by user:** "render_page_for_preview doesn't accept attribution params — does that mean PreviewDocument shouldn't take them either? But the conflict shows it apparently does."
 
 ## Short answer to the hard question

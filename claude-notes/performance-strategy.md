@@ -136,8 +136,8 @@ Based on Rust vs Node.js characteristics:
 |--------|------------|---------------|-------------|
 | Startup | 500-1000ms | <100ms | 5-10x |
 | Memory | 50-100MB | 20-40MB | 2-3x |
-| Parse latency | ~50ms | <30ms | 1.5-2x |
-| Response time | ~30ms | <20ms | 1.5x |
+| Parse latency | \~50ms | <30ms | 1.5-2x |
+| Response time | \~30ms | <20ms | 1.5x |
 
 ## Optimization Strategy
 

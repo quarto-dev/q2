@@ -891,7 +891,7 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
   **Registry `Arc` ownership (the Clone-drop already happened in plan1a-engine).**
   plan1a-engine adds `aliases` / `diagnostics` `Mutex` fields (not `Clone`), so
   **plan1a-engine already dropped `#[derive(Clone)]` and introduced
-  `Arc<EngineRegistry>` at the ~25–30 mechanical clone sites** (incl.
+  `Arc<EngineRegistry>` at the \~25–30 mechanical clone sites** (incl.
   `HtmlRenderConfig` / `with_engine_registry` and the `quarto-preview`
   pass-through chain — see plan1a-engine's "Migration from `main`'s registry"
   note for the verified site list; mandatory-to-compile there, not optional
@@ -1270,7 +1270,7 @@ pipeline. For TS engines, this requires the Deno subprocess to be running
   - **File-claim short-circuit**: when `claimed` is `Some(name)`,
     `resolve_engines` returns that single engine as the whole sequence and does
     **not** run the tiers (design doc §8, Q1-faithful). *(This replaces the
-    landed `resolution.rs` seed handling — ~`:344-414`, which marks the seed
+    landed `resolution.rs` seed handling — \~`:344-414`, which marks the seed
     "present" + disables T4 but never short-circuits, leaving a theft hole; the
     revert is a net deletion of the `explicit_with_seed`/seed-present logic.)*
   - **AST language extraction**: extract `(language, first_class)` of executable
@@ -1580,8 +1580,8 @@ send and `TsEngine::launch` are implementable.
 | `runtime_dir` | `quarto_util::quarto_runtime_dir()` (plan1a-host — user-level XDG/cache dir, **not** project-relative; matches construction step 1) | created on demand by the helper. (`project_dir` is per-render under DQ-7, so it cannot live in the process-stable `global`.) |
 | `data_dir` | `quarto_util::quarto_data_dir()` (NEW — `dirs::data_dir()` namespaced under `quarto`, `QUARTO_DATA_DIR` override first; see step 1) | mirrors `quarto_runtime_dir()`'s shape |
 | `pandoc_path` | `ProjectContext`'s `BinaryDependencies.pandoc` (the `pandoc: Option<PathBuf>` field at `render.rs:130`), stringified — discovered by `BinaryDependencies::discover` (`render.rs:150`, which internally calls `runtime.find_binary("pandoc", "QUARTO_PANDOC")` at `render.rs:154`); matches construction step 1 | `Option<String>` — `None` is fine; engines that need pandoc fail with a clear error only if they actually call it. q2 itself does not invoke pandoc on the main render path (pampa replaces it). |
-| `is_interactive_session` | new `SystemRuntime::is_interactive(&self) -> bool` (NativeRuntime checks `IsTerminal` on stdin; WasmRuntime returns `false`) | small new method; ~10 lines |
-| `running_in_ci` | new `SystemRuntime::running_in_ci(&self) -> bool` (reads `CI` env var via existing `env_get`) | small new method; ~5 lines |
+| `is_interactive_session` | new `SystemRuntime::is_interactive(&self) -> bool` (NativeRuntime checks `IsTerminal` on stdin; WasmRuntime returns `false`) | small new method; \~10 lines |
+| `running_in_ci` | new `SystemRuntime::running_in_ci(&self) -> bool` (reads `CI` env var via existing `env_get`) | small new method; \~5 lines |
 
 **`LaunchEngine { project }`** (per render):
 
@@ -1723,7 +1723,7 @@ test-deletion obligation); `read.rs:159` `parse_contributes`).
   (`load_engine_count()`, `markdown_for_file_count()`) and a spawn observable. P1-5/P1-12/P2-17/P3-3
   assert against these committed surfaces — they are no longer "maybe expose."
 - **Pure mock-table tier lives with `resolve_engines`, NOT here.** The plan already says the
-  tier/priority pure-logic tests live with the function (`resolution.rs` unit tests, line ~1092). 1c's
+  tier/priority pure-logic tests live with the function (`resolution.rs` unit tests, line \~1092). 1c's
   resolution seams are the **integration** tier (real registry + real AST). Do **not** restate the
   mock-table priority tests in 1c — P2-3 below is logged as covered-there, not duplicated.
 - **Deno subprocess required** — Phase-3 echo E2E, dynamic-fallback, teardown, crash. These are the

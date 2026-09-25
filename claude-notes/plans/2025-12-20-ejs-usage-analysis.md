@@ -326,7 +326,7 @@ impl EjsRenderer {
 - Good middle ground: use QuickJS only for navigation templates (complex), keep everything else in pure Rust
 - Useful if templates change upstream - no need to re-port
 
-**Binary size note:** QuickJS itself is ~700KB. With rquickjs bindings and Lodash template subset, expect ~1-2MB total impact.
+**Binary size note:** QuickJS itself is \~700KB. With rquickjs bindings and Lodash template subset, expect \~1-2MB total impact.
 
 ---
 
@@ -421,7 +421,7 @@ The EJS templates themselves are well-structured and the logic is straightforwar
 |----------|---------------|-------------|-------------|---------------|
 | Static HTML | Low | Low | None | Minimal |
 | Hardcoded Rust | Medium | Medium | None | Basic |
-| Tera templates | High | Low | ~100KB | Full (ported) |
-| QuickJS + EJS | Medium | Low | ~1-2MB | Exact |
+| Tera templates | High | Low | \~100KB | Full (ported) |
+| QuickJS + EJS | Medium | Low | \~1-2MB | Exact |
 
 **Recommendation:** If staying in sync with upstream quarto-cli templates is important, QuickJS is attractive because template changes can be pulled in without re-porting. If minimal dependencies and binary size are priorities, Tera is the better choice.

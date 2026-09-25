@@ -26,8 +26,8 @@
   machinery that every other HTML output uses, and contributes **no**
   `css_paths` / `script_paths`.
 
-Result: a ~700 KB `slides.html`, and on a website with *N* presentations the
-same ~700 KB of reveal core is **duplicated N times** with no sharing.
+Result: a \~700 KB `slides.html`, and on a website with *N* presentations the
+same \~700 KB of reveal core is **duplicated N times** with no sharing.
 
 ### Why this is wrong (and why the original rationale doesn't hold)
 

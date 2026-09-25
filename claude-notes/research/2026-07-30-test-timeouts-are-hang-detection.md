@@ -27,8 +27,8 @@ Observed durations across nearby runs:
 | PR #438 branch `ebc0c802` | with #438 | 26.5s ✓ | 16.6s ✓ |
 | main `727b0502` (the failure) | with #438 | **30.5s ✗** | 20.1s ✓ |
 
-Diagnosis: **not a broken test.** The batch was already running at ~85–90%
-of its timeout on ubuntu runners; #438 added ~1s (bigger SCSS theme bundle
+Diagnosis: **not a broken test.** The batch was already running at \~85–90%
+of its timeout on ubuntu runners; #438 added \~1s (bigger SCSS theme bundle
 per render), and normal runner-speed variance did the rest. Note the macOS
 column bouncing between 13s and 24s across *green* runs — shared-runner
 variance of 2–3× is normal and irreducible. Any timeout with less than \~2×

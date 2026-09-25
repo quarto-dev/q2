@@ -651,14 +651,14 @@ variant at once.
       - Rewrite the header doc-comment to describe Generated, not
         Synthetic/Derived. The current header cites
         `crates/pampa/src/writers/json.rs:54-91`, which is stale (the
-        wire-format types now live at ~lines 109-207 of that file). The
+        wire-format types now live at \~lines 109-207 of that file). The
         new doc-comment should cite **two** sources of truth: the Rust
         enum `SourceInfo` in
         `crates/quarto-source-map/src/source_info.rs` (canonical
         producer-side definition) and the JSON wire mirror in
         `crates/pampa/src/writers/json.rs` (`SerializableSourceMapping`
-        ~lines 193-207, `SourceInfoJson` ~lines 109-116, code-4
-        serializer in `to_json` ~lines 167-190). Do not bake in exact
+        \~lines 193-207, `SourceInfoJson` \~lines 109-116, code-4
+        serializer in `to_json` \~lines 167-190). Do not bake in exact
         line numbers — cite the type names; they will outlast line
         drift.
 - [x] Update `ts-packages/preview-renderer/src/utils/sourceInfo.ts` per
@@ -1114,14 +1114,14 @@ Phase 6 for test-file placement and per-phase landing.)
 
 | Component | Lines (rough) |
 |---|---|
-| Code 4 writer (with anchor interning) | ~80 |
-| Code 4 reader (with anchor decoding) | ~70 |
-| Code 3 dual-shape legacy reader | ~35 |
-| `AnchorRole` ↔ string serialization | ~20 |
-| Streaming writer parity | ~40 |
-| TypeScript type + utils updates | ~30 |
-| Tests (incl. strict-rejection + stream helper + Concat-of-Generated) | ~290 |
-| **Total** | **~565** |
+| Code 4 writer (with anchor interning) | \~80 |
+| Code 4 reader (with anchor decoding) | \~70 |
+| Code 3 dual-shape legacy reader | \~35 |
+| `AnchorRole` ↔ string serialization | \~20 |
+| Streaming writer parity | \~40 |
+| TypeScript type + utils updates | \~30 |
+| Tests (incl. strict-rejection + stream helper + Concat-of-Generated) | \~290 |
+| **Total** | **\~565** |
 
 One focused session.
 

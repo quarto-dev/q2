@@ -378,7 +378,7 @@ Run [30375857883](https://github.com/quarto-dev/q2/actions/runs/30375857883),
 | `ldd` | *not a dynamic executable* | *not a dynamic executable* |
 
 **The aws-lc-sys question is answered: it is a non-issue.** `aws-lc-sys
-v0.40.0` compiled in **~17s (amd64) / ~16s (arm64)** — orders of magnitude
+v0.40.0` compiled in **\~17s (amd64) / \~16s (arm64)** — orders of magnitude
 below a from-source cmake build of AWS-LC — with **no `bindgen` step, no
 `libclang`, and no packages installed beyond `musl-tools`**. That matches the
 static prediction: the crate ships pregenerated bindings for both musl triples

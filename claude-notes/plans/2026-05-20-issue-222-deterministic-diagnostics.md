@@ -103,7 +103,7 @@ Phase 3 — guardrail.
 2. **Scope of the regression test.** Is it acceptable to add a test
    that loops N times in-process? Two concerns:
    - Slow tests: at the observed pampa parse cost this is negligible
-     (~ms per run), so 20 runs ≈ 20-30 ms. Should be safe.
+     (\~ms per run), so 20 runs ≈ 20-30 ms. Should be safe.
    - Flakiness: if we fix the root cause, the test is deterministic;
      if the fix regresses, it'll fail every time we run CI. Net win.
 

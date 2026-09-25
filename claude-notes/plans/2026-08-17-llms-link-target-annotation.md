@@ -50,7 +50,7 @@ exposes no way to obtain a companion href. It hardcodes Q1's `.llms.md` and
 — resolved as decision 5 (follow-up bd-3n4fpr3g).
 
 Origin context: first proposed as a fix for companion-shadows-source-path
-namespace overlap, and rejected for that (measured ~100% false-positive rate
+namespace overlap, and rejected for that (measured \~100% false-positive rate
 on the Connect docs; full analysis preserved at
 `claude-notes/plans/llms-link-target-annotation-investigation/origin-repro-README.md`).
 The expressiveness gap stands on its own; the strand asks only for that.

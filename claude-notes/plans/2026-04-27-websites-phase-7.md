@@ -168,7 +168,7 @@ Three separate transforms in `crates/quarto-core/src/transforms/`:
 2. `WebsiteFaviconTransform` — appends a `<link>` to `header-includes`.
 3. `WebsiteCanonicalUrlTransform` — sets `canonical-url`.
 
-**Rationale.** Each is ~30–50 lines, has a single responsibility,
+**Rationale.** Each is \~30–50 lines, has a single responsibility,
 and tests independently. Bundling them would force "if any
 website.* key is set" branching for shared work that doesn't exist
 — each transform reads a different config key. Also keeps Phase 7
@@ -278,7 +278,7 @@ The full HTML template already loops over `header-includes` (lines
 | `.jpg` / `.jpeg` | `image/jpeg` |
 | else | `omit type="..." attribute` |
 
-~10-line helper in the favicon transform module. No external dep.
+\~10-line helper in the favicon transform module. No external dep.
 
 **HTML emitted.**
 
@@ -321,7 +321,7 @@ let canonical = format!("{}/{}", site_url.trim_end_matches('/'), output_href);
 meta.canonical-url = canonical;
 ```
 
-**Why include this?** Marginal cost (~30 lines + 3 tests), and
+**Why include this?** Marginal cost (\~30 lines + 3 tests), and
 without it `site-url` is only useful for the sitemap — a half-done
 feature. Q1 does not (yet) emit canonical-url either, so this is a
 small Q2-only win. **User decides: include in Phase 7 or defer to
@@ -405,7 +405,7 @@ runtime.file_write(&project.output_dir.join("sitemap.xml"), xml.as_bytes())?;
 
 Notes:
 - **Encoding.** XML-escape `loc` (`&`, `<`, `>`, `"`, `'`). Q1 uses
-  `lodash.escape`. Inline our own ~10-line escaper — same tactic
+  `lodash.escape`. Inline our own \~10-line escaper — same tactic
   Phase 6 used for path normalization (no new crate dep).
 - **lastmod.** ISO-8601 timestamp from input file mtime.
   `runtime.path_metadata(&profile.source_path)?.mtime()`. If
@@ -435,7 +435,7 @@ Notes:
 </urlset>
 ```
 
-Hand-written formatter, ~25 lines. No XML library dep.
+Hand-written formatter, \~25 lines. No XML library dep.
 
 **Open question (§Open questions): trailing-slash policy on
 `<loc>`.** Q1 emits `https://example.com/index.html` (file URL).

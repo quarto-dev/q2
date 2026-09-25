@@ -349,10 +349,10 @@ Same races, same semantics as hub-client today.
       several sync cycles + SIGINT shutdown, the file's SHA-1
       (`68bf80bd8be8…`) was byte-identical to the pre-session content.
 - [x] E2e SIGINT flush. With `RUST_LOG=quarto_hub=debug`: commit edit →
-      `kill -INT` ~6 s later → log shows `Performing final filesystem sync
+      `kill -INT` \~6 s later → log shows `Performing final filesystem sync
       before shutdown…` / `Final filesystem sync complete synced=1 errors=0`
       and the file contains the edit. **Measured residual race:** in one run
-      the SIGINT landed ~1.5 s after commit and the edit was lost — the WS
+      the SIGINT landed \~1.5 s after commit and the edit was lost — the WS
       frame had not yet reached the server when shutdown began, so there was
       nothing to flush. This is the accepted best-effort window from §6, but
       it is wider than "milliseconds"; the eager-sync follow-up strand should
@@ -369,7 +369,7 @@ Same races, same semantics as hub-client today.
 - [x] Follow-ups filed as discovered-from strands:
       - bd-g4uw7d8g — eager sync trigger (`POST /api/preview/sync-file` +
         SPA flush on visibilitychange) to close the ≤5 s latency and the
-        measured ~1.5 s SIGINT race.
+        measured \~1.5 s SIGINT race.
       - bd-f8d753iq — automated Playwright e2e for the `--allow-edit`
         round-trip against the real binary.
 - [x] Merge topic branch + close strand (Carlos tested and approved,

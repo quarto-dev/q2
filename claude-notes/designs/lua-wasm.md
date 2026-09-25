@@ -378,7 +378,7 @@ pcall, and end-to-end filter through the full render pipeline.
 - **Upstream wasm-bindgen-futures fix**: The `UnwindSafe` bound removal is
   a reasonable change for the `panic=unwind` WASM use case.
 
-- **Binary size**: The WASM binary grew from ~10MB to ~14MB with Lua. Investigate
+- **Binary size**: The WASM binary grew from \~10MB to \~14MB with Lua. Investigate
   what can be trimmed (e.g., `wasm-opt`, LTO, excluding unused Lua source files).
 
 ### Nice to have

@@ -92,10 +92,10 @@ q2 work branch: `braid/marimo-multi-engine-cooperation` (off
       proxy: is-marimo-cell.test.ts + the post-sync render test below.
 - [x] Implement: `claimsFile → false` for `.qmd`/`.md` in marimo `main` `src/marimo-engine.ts`
 - [x] marimo deno suite green (67/67); q2 `engine::resolution` green (36/36)
-- [~] Seam #5 (mixed fixture + e2e): **deferred to Gordon** — ready-to-add
+- [\~] Seam #5 (mixed fixture + e2e): **deferred to Gordon** — ready-to-add
       render test below; add after re-syncing the fixture from
       `q2-bare-sql-interop`.
-- [~] End-to-end real `q2 render`/`q2 preview`: **deferred to Gordon** (fixture
+- [\~] End-to-end real `q2 render`/`q2 preview`: **deferred to Gordon** (fixture
       re-sync gates it). Native resolution + deno unit tiers verified.
 - [ ] Gordon: merge `main`→`q2-bare-sql-interop`, rebuild+re-sync fixture, add
       the render test below, run `QUARTO_SC21_LIVE=1` marimo preview e2e.

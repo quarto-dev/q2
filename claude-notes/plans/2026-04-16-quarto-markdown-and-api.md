@@ -614,8 +614,8 @@ durable justification for those choices.
 ### Why rewrite instead of extract?
 
 Quarto 1's markdown utilities are tangled with the YAML schema/validation
-system (~30+ files), tree-sitter, mapped-text infrastructure, and lodash.
-Clean rewrites of the actual logic are ~50-300 lines per function, vs.
+system (\~30+ files), tree-sitter, mapped-text infrastructure, and lodash.
+Clean rewrites of the actual logic are \~50-300 lines per function, vs.
 extracting would require bringing 30+ files and stubbing their dependencies.
 The logic itself is straightforward — it's the plumbing that's tangled.
 

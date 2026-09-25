@@ -257,7 +257,7 @@ assertion — J3-correction precedent):
       confirmed via `stat`/`ls` before and after (Project.toml/Manifest.toml
       mtimes byte-identical; `julia_transport.txt` absent both times); the
       `IsolatedJuliaServerGuard` reaped every process either run spawned (no new
-      pids after either run). Found, but did NOT touch: ~28 pre-existing
+      pids after either run). Found, but did NOT touch: \~28 pre-existing
       julia/QuartoNotebookRunner processes on the shared transport from
       unrelated (non-isolated, by-design daemon-reuse) test activity spanning the
       day — this is the pre-existing bd-l9jhy5u0 leak, out of scope here, left
@@ -286,7 +286,7 @@ assertion — J3-correction precedent):
       *(Strand → in_review with full outcome (comments c-eps49gsq, c-5ep9kmp7, c-9fvojb24):
       "Bug B" refuted as a delivery defect; user symptom re-attributed to Bug A + Bug C,
       both fixed. Left OPEN pending the user's merge-back decision + acceptance run of the
-      real ~/docs/julia doc (which also needs its project _extensions/julia-engine updated
+      real \~/docs/julia doc (which also needs its project _extensions/julia-engine updated
       from the upstream q2-close-busy-fix branch). Compat log §15 + migration guide
       reconciled at P1, forward-note re upstream tip's errorRunClose added at the final fix
       wave (b67cb48a3). Final whole-branch review: "With fixes", all fixes applied

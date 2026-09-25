@@ -26,8 +26,8 @@ To do that it wraps each commentable block in
 </div>
 ```
 
-(`CommentBlock.tsx` ~981-1010: the wrapper `<div>` with `onMouseMove` /
-`onMouseLeave`; ~1000-1030: the absolutely positioned chrome container.)
+(`CommentBlock.tsx` \~981-1010: the wrapper `<div>` with `onMouseMove` /
+`onMouseLeave`; \~1000-1030: the absolutely positioned chrome container.)
 
 *(verified)* The wrapper is present in the live q2-preview DOM in **both**
 hub-client (editing on) and read-only `q2 preview`: the smoke-all fixture
@@ -137,10 +137,10 @@ from the block's measured rect.
   comments present and absent, and with the bubble visible; the layer holds
   the bubbles; no element between a block and its parent.
 - Rewrite the existing suites\' DOM helpers: `wrapper()` /
-  `wrapperGlows()` in `CommentBlock.resolveLast.integration.test.tsx` (~103-131)
+  `wrapperGlows()` in `CommentBlock.resolveLast.integration.test.tsx` (\~103-131)
   assume `para.parentElement` is the positioned wrapper; the glow assertion
   moves to the overlay outline. `CommentBlock.defensive` (`host = para.parentElement`,
-  line ~96) likewise. `CommentBlock.bubbleText` is mostly bubble-internal and
+  line \~96) likewise. `CommentBlock.bubbleText` is mostly bubble-internal and
   should survive.
 - The parity harness blind spot: add a test that mounts **with**
   `PreviewContext` and compares the article body's element structure against

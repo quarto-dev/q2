@@ -71,7 +71,7 @@ Key code:
 - Helper: `quarto-util/src/path.rs:23` `to_forward_slashes`, `:14` `is_rooted`
   (re-exported `quarto-util/src/lib.rs:8`).
 
-The ~10 failing tests run twice (lib + bin/pampa integration), so ~18-20 visible failures
+The \~10 failing tests run twice (lib + bin/pampa integration), so \~18-20 visible failures
 from one root cause.
 
 ## Proposed phases

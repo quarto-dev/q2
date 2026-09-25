@@ -1790,10 +1790,10 @@ build:wasm`) if it's missing.
 
 - [ ] **File strands for the out-of-scope census findings** (classes 5–7), one
   each:
-  - Rust doctests run nowhere and are red — 5 failures, ~70 compile errors from
+  - Rust doctests run nowhere and are red — 5 failures, \~70 compile errors from
     untagged prose blocks, plus a stale `quarto-sass` doctest calling a two-arg
     `ThemeContext::new` with one argument.
-  - ~80 silent-skip sites let engine tests (jupyter, knitr/R, julia, uv,
+  - \~80 silent-skip sites let engine tests (jupyter, knitr/R, julia, uv,
     dart-sass) pass vacuously in CI; extend the `QUARTO_CI=1` hard-fail pattern
     beyond deno, or install the engines.
   - `tree-sitter-doctemplate`'s 215-line corpus runs in neither CI nor `verify`.

@@ -140,7 +140,7 @@ const displayItems = selectDisplayItems(crumbs, slots); // slots == 1 → curren
 
 `selectDisplayItems(crumbs, 1)` hits the `slots <= 1` branch and returns
 **current-only** (`BreadcrumbChip.tsx:101`), dropping the `❝` ancestor. A
-2-crumb path needs ~32px of gutter to survive; one blockquote provides ~16–30px,
+2-crumb path needs \~32px of gutter to survive; one blockquote provides \~16–30px,
 so it never does. On the blockquote level `surfaceLeft == colLeft` → `gutter 0` →
 again `slots 1` → only `❝`. Hence "one or the other, depending on the level."
 
@@ -228,8 +228,8 @@ const slots = surfaceLeft > 0 ? Math.floor(bandWidth / MIN_GLYPH_W) : crumbCount
   and keep the `displayItems`/`top` assembly in the effect; do **not** try to reuse
   `ChipGeometry` as the pure fn's return type.
 - **Update the now-stale doc comments** in `BreadcrumbChip.tsx`: the header
-  "Layout model" block (lines ~31–48), the `ChipGeometry.chipLeft` /
-  `.bandWidth` field docs (lines ~81–90), and the "Nothing but ◀ is ever in the
+  "Layout model" block (lines \~31–48), the `ChipGeometry.chipLeft` /
+  `.bandWidth` field docs (lines \~81–90), and the "Nothing but ◀ is ever in the
   margin" comment (lines \~172–177) all describe the *old* gutter-only model and
   must describe left-spill (crumbs **do** enter the margin for shallow/zero
   indent).
@@ -472,15 +472,15 @@ Verified against `PreviewRoot.tsx`: `PendingLanding` has two variants — `inten
 {'outerByLine','nest','crumb'}`; `applyNestingRetarget` (clean) serves **both** nest
 **and** crumb callers; `openFromResolved` (dirty) is fed by `executeLanding`.
 
-- **The seam — `openEditTarget` (opts ~436–440, reset line ~481):** add
+- **The seam — `openEditTarget` (opts \~436–440, reset line \~481):** add
   `keepExpanded?: boolean` to opts; change the reset to
   `if (!opts.keepExpanded) editExpandedRef.current = false`. **Also update the stale
-  §7 comment (~477–480)** which currently says reland/nest-retarget "always open
+  §7 comment (\~477–480)** which currently says reland/nest-retarget "always open
   collapsed" — no longer true for nest moves.
 - **Dirty path — `openFromResolved` + `executeLanding`:** give `openFromResolved` a
   `keepExpanded` param forwarded into the `openEditTarget` opts. In `executeLanding`,
   compute `const carryExpanded = pl.spec.kind === 'nest';` **after** the existing
-  `if (pl.intent === 'focus') { … return; }` early-return (~line 724) — that return
+  `if (pl.intent === 'focus') { … return; }` early-return (\~line 724) — that return
   narrows `pl` to `intent:'open'`, so `pl.spec.kind` is type-safe with **no extra
   guard**. *Do not* hoist the computation above the focus guard (it would be a type
   error / undefined access on focus landings). Pass `carryExpanded` into
@@ -957,7 +957,7 @@ Tuned live.
 | T17 ✅ DONE | jsdom **unit** (pure fn) | `computeChipGeometry` (G1 — **extracted** from the `BreadcrumbChip` `useLayoutEffect`) | `BreadcrumbChip.geometry.test.ts`, **no DOM** — call the pure fn over a table of `{surfaceLeft, colLeft, crumbCount}`: (a) deep indent, `gutter ≥ naturalWidth` → `bandWidth === gutter` && `chipLeft === colLeft − OUT_W` (regression pin: old behavior); (b) shallow blockquote, 2 crumbs, `gutter ≈ 24` → `bandWidth === 2·CRUMB_W` && `chipLeft < colLeft − OUT_W` (spilled left) && `slots ≥ 2`; (c) **left-edge right-spill** (small `surfaceLeft`, long path) → `chipLeft === 0` && `bandWidth === crumbCount·CRUMB_W` (kept comfortable, spills right) && `slots ≥ n` (full path, **no** ellipsize); (d) `surfaceLeft <= 0` (jsdom/unmeasured) → `slots === crumbCount`. Expectations derive `naturalWidth` from the exported `CRUMB_W`, so live-tuning the value cannot break them. | none (pure) | Proven fail-on-revert: against the gutter-only body, case (b) reddened (`expected 24 to be 44`) and (with the original clamp) case (c) reddened (`expected 24 to be …`); the left-spill + right-spill body greens all four. |
 | T18 ⏳ TODO | jsdom integration | `BreadcrumbChip` path + display selection (G1) | **Expand `p3-4-breadcrumb.integration.test.tsx`** with a **code-block-in-blockquote** fixture; when editing the code block, **assert BOTH crumb buttons render** — `getByTitle('BlockQuote')` **and** `getByTitle('CodeBlock')` present. | `getBoundingClientRect` (jsdom 0) | **⚠️ REVISED (spike finding):** in jsdom `surfaceLeft <= 0`, so BOTH the gutter-only and left-spill bodies take the `surfaceLeft <= 0 → slots = crumbCount` full-path branch — a geometry revert does **NOT** redden T18. T18 therefore guards only `buildAncestorPath` + `selectDisplayItems` **path/selection** (both titles present), not the px geometry. Its real revert hunk is a `buildAncestorPath` break (drop the `BlockQuote` ancestor) → only `CodeBlock` present → **RED**. The geometry binding lives in T17 (pure) + T19 (Playwright). |
 | T19 ⏳ TODO | **Playwright (real layout)** | `BreadcrumbChip` real px geometry (G1) | **Expand `q2-preview-breadcrumb-geometry.spec.ts`**: (i) code-in-blockquote → **two crumbs visible**, crumb row's right edge ≈ the textarea's left (pivot), leftmost crumb `x ≥ 0` (no horizontal scrollbar on `#root`); (ii) **right-spill case** — a block near the left edge → ◀ at `x ≈ 0` and the band extends **right past** the textarea's left, full path still visible. | real browser layout | Revert geometry to gutter-only → only one crumb visible / pivot wrong → **RED**. *Do not assert px in jsdom (rects 0, vacuous).* |
-| T20 | jsdom **unit** (pure fn) | `abbrevForSourceNode` (G2) | **Expand `nestingNav.test.ts`** (~`:528`): assert `abbrevForSourceNode(Plain) === 'Pl'` **and** (kept distinct) `abbrevForSourceNode(Para) === '¶'`; assert `categoryForSourceNode(Plain) === 'leaf-text'` unchanged (glyph axis ≠ category axis). | none (pure) | Revert the split (`case 'Para': case 'Plain': return '¶'`) → `abbrevForSourceNode(Plain) === '¶'` → the `=== 'Pl'` assertion → **RED**. |
+| T20 | jsdom **unit** (pure fn) | `abbrevForSourceNode` (G2) | **Expand `nestingNav.test.ts`** (\~`:528`): assert `abbrevForSourceNode(Plain) === 'Pl'` **and** (kept distinct) `abbrevForSourceNode(Para) === '¶'`; assert `categoryForSourceNode(Plain) === 'leaf-text'` unchanged (glyph axis ≠ category axis). | none (pure) | Revert the split (`case 'Para': case 'Plain': return '¶'`) → `abbrevForSourceNode(Plain) === '¶'` → the `=== 'Pl'` assertion → **RED**. |
 | T21 | **Playwright (real layout)** | `isOnLastVisualLine` (G3) | **Expand an existing nav e2e** (e.g. `q2-preview-block-nav-p2-5b.spec.ts`): (a) a **single-line** block (tight list item or 1-line para) → ArrowDown **activates the next surface** (steps off); (b) **exercised-the-right-thing guard:** a genuinely **multi-line** block → ArrowDown first moves the caret **within** its lines (does NOT step off until the last visual line), so we didn't over-correct. | real browser (jsdom `offsetTop`/`scrollHeight` are 0 → `isOnLastVisualLine` always true → **vacuous in jsdom**) | Revert `fullHeight = mirror.scrollHeight - parseFloat(cs.paddingBottom)` back to `= mirror.scrollHeight` → single-line false-negative returns → ArrowDown eaten on (a) → **RED**. |
 
 ### Refactor-induced vacuity checks (check 3)

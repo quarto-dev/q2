@@ -358,7 +358,7 @@ lightly). Both reuse the same corpus format where possible.
 — baseline was 11. Track 2 (differential vs pandoc 3.9.0.2) **19/19
 passing** — baseline was 2/8; the corpus has grown to 19 cases and the
 xfail list is empty. The cluster table below predates
-bd-tzwcof0n (which cleared the Attr cluster, ~21 entries). Strands closed so far: bd-0xghpvij
+bd-tzwcof0n (which cleared the Attr cluster, \~21 entries). Strands closed so far: bd-0xghpvij
 (OrderedList ListAttributes), bd-55mb0rjz (__eq + Haskell-show
 tostring), bd-hitjclzp (property cache+readback — the worked example
 is byte-identical to pandoc e2e).
@@ -367,8 +367,8 @@ Remaining failure clusters (60 Track-1 + 4 differential):
 
 | Cluster | Count | Strand | Nature |
 |---|---|---|---|
-| Attr argument shapes | ~21 | bd-tzwcof0n | `pandoc.Attr({…})` rejects table-as-first-arg (8); attributes as list-of-pairs / AttributeList-userdata rejected (6); `AttributeList` constructor missing (3); `attr.classes` not a pandoc List (3, incl. `classes:insert` silently lost — bd-195t residue); + both differential attr cases (constructor attrs silently empty — worst remaining silent-error offenders) |
-| List module parity | ~12 | bd-1fjtodu8 | `List{…}` not callable (10); `Inlines:clone`/`Blocks:clone` shallow, should be deep (2). Also blocks several walk tests that use `List` incidentally |
+| Attr argument shapes | \~21 | bd-tzwcof0n | `pandoc.Attr({…})` rejects table-as-first-arg (8); attributes as list-of-pairs / AttributeList-userdata rejected (6); `AttributeList` constructor missing (3); `attr.classes` not a pandoc List (3, incl. `classes:insert` silently lost — bd-195t residue); + both differential attr cases (constructor attrs silently empty — worst remaining silent-error offenders) |
+| List module parity | \~12 | bd-1fjtodu8 | `List{…}` not callable (10); `Inlines:clone`/`Blocks:clone` shallow, should be deep (2). Also blocks several walk tests that use `List` incidentally |
 | walk semantics | ~~12~~ 0 — CLOSED 2026-07-13 | bd-2j048yfm | list-level `Inlines`/`Blocks` filter functions not invoked by `walk`; subtree restriction; blocks inside Notes; Inline → Inlines → Block → Blocks ordering; topdown truncation C-stack overflow |
 | Table field marshaling | 6 | bd-sgfiiktn | `head`/`foot`/`colspecs`/`caption` property round-trips (helper userdata lack `__eq`/expected shapes); single-body form |
 | Filter-return coercion | 2 (diff.) | bd-23yvjfmm | bare-string return ignored; non-userdata table entries dropped — the remaining big silent class (visible only in Track 2) |
@@ -564,7 +564,7 @@ test exists and breaks, STOP and show it before deleting/updating.
       skips children, list-level `false` halts the list) built on it.
       Entry points: element roots start at the children map (subtree
       rule — kills the C-stack overflow); list roots offer the top
-      list to `Inlines`/`Blocks`. The old ~900 lines of four drifting
+      list to `Inlines`/`Blocks`. The old \~900 lines of four drifting
       hand-rolled recursions in filter.rs (which skipped Table /
       DefinitionList / Figure-caption inline content and Citation
       prefix/suffix entirely) were deleted; `apply_typewise_filter` /
@@ -733,7 +733,7 @@ test exists and breaks, STOP and show it before deleting/updating.
       entry; `divergence_xfails_are_registered` ties both xfail files
       to divergences.md. The 2 upstream error-contract tests FLIPPED
       (Track-1 184 pass / 19 xfail; differential stays 24/24). E2e:
-      all three Q-codes observed through `q2 render`. Remaining ~85
+      all three Q-codes observed through `q2 render`. Remaining \~85
       bare Error::runtime sites → Phase 3.3 rollout strand.
 
 ### Phase 3 — breadth

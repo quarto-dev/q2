@@ -368,7 +368,7 @@ cargo test --test test_treesitter_refactoring
 
 ## Expected Outcome
 
-- **Reduced match statement size**: ~190 lines → ~10 lines (helper calls)
+- **Reduced match statement size**: \~190 lines → \~10 lines (helper calls)
 - **Better organization**: Complex logic separated into focused modules
 - **Easier maintenance**: Changes to handlers isolated in helper files
 - **Consistent pattern**: Follows established helper file pattern

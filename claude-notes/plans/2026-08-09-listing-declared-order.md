@@ -74,8 +74,8 @@ reuse (or share hoisted compiles with) that loop.
 - **Q1's default sort is NOT date-desc**: when `sort:` is absent, title is a
   hydrated field, and sources include document items, Q1 applies
   `[{field: "order", asc}, {field: "title", asc}]` (`website-listing-read.ts`
-  ~line 637). `order` is a front-matter field (`kFieldOrder`) authors use for
-  curated ordering. q2's `listing_generate.rs` ~line 207 applies **date
+  \~line 637). `order` is a front-matter field (`kFieldOrder`) authors use for
+  curated ordering. q2's `listing_generate.rs` \~line 207 applies **date
   desc** with a comment claiming it "Matches Q1 default" — that claim looks
   wrong against current Q1 source. Scope question below.
 - q2's `is_known_sort_field` also doesn't include `order` (nor does

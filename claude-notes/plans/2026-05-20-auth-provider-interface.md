@@ -511,7 +511,7 @@ removal.
      `quarto_hub_token` cookie set, `/auth/me` returns user info,
      SPA shows authenticated UI. (Phase 3 SDK wrap + Phase 4 button
      wiring.)
-  4. Sit on a project tab for ~45 minutes (or use devtools to
+  4. Sit on a project tab for \~45 minutes (or use devtools to
      manually fire the visibility-change path: hide tab → show
      tab → observe One Tap fires). **Expect:** silent renewal
      succeeds, no UI shown, cookie refreshed. (Phase 5

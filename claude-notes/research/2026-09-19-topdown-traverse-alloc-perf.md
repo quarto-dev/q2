@@ -14,7 +14,7 @@ i.e. −16% (user 4.85 s → 4.01 s). A separate earlier baseline run gave
 5.41 s ± 0.09, so the machine drifts by \~5% between sessions; the
 back-to-back pair is the number to trust.
 
-Related: bd-5yektmwt ("AST construction memmove is ~28% of non-SCSS
+Related: bd-5yektmwt ("AST construction memmove is \~28% of non-SCSS
 render CPU"), `claude-notes/research/2026-09-13-connect-docs-render-profile.md`,
 `claude-notes/research/2026-09-17-connect-docs-render-profile.md`. This
 note is the "attribute memmove to callers before designing" step those
@@ -25,13 +25,13 @@ asked for, restricted to the `pampa::filters` traversal.
 - Document: `docs-quarto-2/api/index.qmd` in `cscheid/q2-connect-docs`
   (1.1 MB, generated OpenAPI reference). Rendered as a single file inside
   the project: `q2 render api/index.qmd`, warm SCSS cache.
-- AST size (from `pampa -t json`, counting `t` tags): ~200k inlines
+- AST size (from `pampa -t json`, counting `t` tags): \~200k inlines
   (Str 99,850; Space 82,494; Code 11,621; SoftBreak 3,009; Link 1,146;
-  Strong 931; Span 617), ~25k blocks (Para 14,722; Plain 6,690; Header
-  1,474; Div 1,178; Table 1,012; ~18.5k table cells).
+  Strong 931; Span 617), \~25k blocks (Para 14,722; Plain 6,690; Header
+  1,474; Div 1,178; Table 1,012; \~18.5k table cells).
 - Profile: Carlos's samply capture `warm.json.gz` + `warm.json.syms.json`
   (release-perf build, 1 ms interval, 1,021 samples on the main thread,
-  so the render is ~1 s). The JSON is unsymbolicated in place; the
+  so the render is \~1 s). The JSON is unsymbolicated in place; the
   `.syms.json` carries per-library address → inline-frame chains. I wrote
   a small symbolicator + aggregator (scratch scripts, not kept) to bucket
   samples by inclusive function, leaf, and pipeline stage.
@@ -105,11 +105,11 @@ by-value move of an `Inline` is a 776-byte memcpy; every `Block` move is
 
 1. `walk_vec` starts `result = vec![]` (no capacity) and for each element
    calls `topdown_traverse_inline`, which for *every* node — including
-   the ~185k terminal `Str`/`Space`/`Code`/`SoftBreak` — returns
+   the \~185k terminal `Str`/`Space`/`Code`/`SoftBreak` — returns
    `vec![inline]`: one heap alloc of 776 B, one 776 B copy in.
 2. `result.extend(...)`: another 776 B copy out, then the singleton Vec is
    freed. `result` grows by doubling, so each element is copied again
-   ~once more on average during reallocs.
+   \~once more on average during reallocs.
 3. Every container is rebuilt by value (`Inline::Emph(Emph { content:
    topdown_traverse_inlines(e.content), ..e })`): the old `Vec` is
    consumed and a new one allocated, per container per pass, even when
@@ -131,10 +131,10 @@ code):
 | **all 110 passes**              | **206** | **1.66M** | **175k** | **4.3 GB** |
 
 Whole render: 6.33M allocations, 9.17 GB requested, 734k reallocs, in
-~0.92 s of pass-2 wall time. The traversal alone is 26% of the
+\~0.92 s of pass-2 wall time. The traversal alone is 26% of the
 allocation count and 47% of the bytes. A "pure" pass (one block-type
-filter that changes nothing) costs 29 ms and 268k allocations: ~200k
-singleton Vecs for the inlines, ~25k for the blocks, ~25k+16k container
+filter that changes nothing) costs 29 ms and 268k allocations: \~200k
+singleton Vecs for the inlines, \~25k for the blocks, \~25k+16k container
 Vecs, plus 25k growth reallocs. That is about 145 ns and 3.4 KB of
 allocator traffic per inline node for doing nothing.
 
@@ -238,7 +238,7 @@ This note is arguably that repro. Two caveats from the same notes:
   tree-sitter lock that turned out to be the locale lock in `snprintf`,
   not an allocator problem. Negative result there, positive here.
 - `#[global_allocator]` only covers Rust allocations. tree-sitter's C
-  side (~13% of this profile in `ts_parser_parse`) still calls libc
+  side (\~13% of this profile in `ts_parser_parse`) still calls libc
   `malloc` unless `tree_sitter::set_allocator` is also pointed at
   mimalloc. Worth a follow-up measurement.
 - The release legs are static `*-unknown-linux-musl` built with
@@ -268,8 +268,8 @@ not to be kept): 200k elements in 16-element vectors, 3 passes.
 | 160 B struct        |                                 11.0 ms |               6.5 ms |                      0.9 ms |
 | 40 B struct         |                                  3.9 ms |               2.5 ms |                      0.5 ms |
 
-Two independent multipliers: element size (776 → 160 B is ~6× on the
-rebuild cost) and rebuild-vs-in-place (another ~3–7×). Experiment B moved
+Two independent multipliers: element size (776 → 160 B is \~6× on the
+rebuild cost) and rebuild-vs-in-place (another \~3–7×). Experiment B moved
 us from column 1 to column 2 only.
 
 ## Assessment
@@ -296,7 +296,7 @@ and the cheapest 10% available.
 ## Suggestions, ranked
 
 1. **Land B + D as-is** (after a review pass; they are small, local, and
-   test-clean). ~10% end-to-end on this document, less alloc pressure
+   test-clean). \~10% end-to-end on this document, less alloc pressure
    everywhere `topdown_traverse` is used. Keep the `perf.topdown`
    counters (they follow the `QUARTO_PERF_STATS` convention) but drop the
    backtrace print, the counting allocator, and the size/benchmark test.
@@ -307,14 +307,14 @@ and the cheapest 10% available.
    hard to beat; the only real risk is the build matrix.
 3. **Shrink `Inline`/`Block`.** Options, from least to most invasive:
    - Box the source-info side of `Link`/`Image` (`attr_source`,
-     `target_source`: 456 of the 768 bytes) — `Inline` drops to ~456
+     `target_source`: 456 of the 768 bytes) — `Inline` drops to \~456
      (Span/Code), then boxing `AttrSourceInfo` in `Span`/`Code`/`InlineAttr`
      too brings it near 250. Serialization is unaffected (serde sees
      through `Box`); pattern matches on `attr_source` need `*` in a
      handful of places.
    - Box `Table` (and `Figure`) inside `Block` → `Block` ≈ 480.
    - Shrink `SourceInfo` itself by boxing the `Generated` payload (or
-     making `from` a `Vec`): 136 → ~40 bytes, which halves `Str` and
+     making `from` a `Vec`): 136 → \~40 bytes, which halves `Str` and
      `Space` and cuts every `AttrSourceInfo` in proportion. This is in the
      externalized `quarto-source-map` crate, so it is a cross-repo change,
      but it is the single biggest lever since every node has ≥1
@@ -328,7 +328,7 @@ and the cheapest 10% available.
    in place, `merge_strs` replaces a vector's contents. A
    `fn visit_mut(&mut Block/Inline, ctx) -> Action { Keep, Replace(Vec<_>) }`
    walker with a rare splice path would run these at the "in place"
-   column of the microbenchmark (~5× cheaper than B). This is a new API
+   column of the microbenchmark (\~5× cheaper than B). This is a new API
    surface next to `Filter`, not a rewrite of it; `Filter` can stay for
    the callers that genuinely restructure. Worth doing after (3) — the
    relative win is larger once nodes are small, since the container
@@ -341,8 +341,8 @@ and the cheapest 10% available.
 6. **Out of scope but visible in the same profile:** `LlmsCaptureTransform`
    deep-clones the whole document (83 samples, 8% — the largest single
    transform), and the project-level file walks (`discovery::walk_rec`,
-   `glob::expand::walk_rec`, `dependency_graph`, ~90 samples of `stat`/
-   `open`/`getdirentries`) are ~9% of a single-file render. Neither is a
+   `glob::expand::walk_rec`, `dependency_graph`, \~90 samples of `stat`/
+   `open`/`getdirentries`) are \~9% of a single-file render. Neither is a
    traversal problem, both are bigger than any one pass above.
 
 ## Reproduce

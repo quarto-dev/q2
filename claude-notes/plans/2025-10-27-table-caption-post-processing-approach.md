@@ -120,7 +120,7 @@ if let Some(last_row) = rows.last() {
 - Avoids understanding tree-sitter internals (but we already do!)
 
 **Cons**:
-- Much more complex (~50-100 lines vs ~5-10 lines)
+- Much more complex (\~50-100 lines vs \~5-10 lines)
 - Fragile pattern matching (what if cell has multiple inlines?)
 - Discards working grammar improvements
 - Need to handle edge cases (empty caption, whitespace, etc.)

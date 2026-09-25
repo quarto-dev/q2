@@ -292,7 +292,7 @@ unavailable path skips any doc fetch.
   requirements.
 - **vitest + unhandled rejections — CONFIRMED**: the index-change
   handler calls `syncWithFiles(newFiles)` fire-and-forget (no await,
-  no void; `client.ts` ~578), so today's mid-session failure is an
+  no void; `client.ts` \~578), so today's mid-session failure is an
   *unhandled promise rejection*. Your fix should make that call
   explicitly handled (`void syncWithFiles(...).catch(...)` routing
   into the same unavailable-tolerance), and test 2 should assert no

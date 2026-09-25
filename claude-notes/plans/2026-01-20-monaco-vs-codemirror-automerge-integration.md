@@ -132,9 +132,9 @@ Even with patch-based sync, Monaco still requires the O(n) `offsetToPosition()` 
 
 | Operation | Diff-based | Patch-based |
 |-----------|-----------|-------------|
-| Single char insert | ~0.5ms | ~0.1ms |
-| 10 char insert | ~0.5ms | ~0.1ms |
-| 1KB paste | ~1ms | ~0.2ms |
+| Single char insert | \~0.5ms | \~0.1ms |
+| 10 char insert | \~0.5ms | \~0.1ms |
+| 1KB paste | \~1ms | \~0.2ms |
 
 The absolute times are imperceptible. The diff-based approach is fine for typical documents.
 

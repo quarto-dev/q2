@@ -237,7 +237,7 @@ alongside typst.
   - `crossref/sections.lua:48` — `if not _quarto.format.isEpubOutput() and
     numberSectionsOptionEnabled() ...` — a real epub-specific crossref branch.
   - `customnodes/callout.lua:139-141` — a full `_quarto.ast.add_renderer("Callout", ...)`
-    predicated on `isEpubOutput() or isRevealJsOutput()`, with its own ~40-line render body.
+    predicated on `isEpubOutput() or isRevealJsOutput()`, with its own \~40-line render body.
     This is a dedicated renderer Q2's epub leg needs to exercise, not "attribute cleanup."
   - `customnodes/panel-tabset.lua:264` — epub explicitly routes to
     `render_tabset_with_l4_headings`.

@@ -160,11 +160,11 @@ If a future test wants `cargo run --` style command-driving with output assertio
 
 | Lever | Disk saving | Status |
 |---|---|---|
-| A. `[profile.ci]` debuginfo strip | ~30–50% of `target/` | Done. Biggest single lever, preserves panic backtraces. |
+| A. `[profile.ci]` debuginfo strip | \~30–50% of `target/` | Done. Biggest single lever, preserves panic backtraces. |
 | B. Drop redundant `cargo build` | Multi-GB peak reduction | Done via `cargo nextest run --tests`. |
-| C. `remove_tool_cache: true` on free-disk-space | ~6 GB | Done. Safe — no step uses `/opt/hostedtoolcache/`. |
-| D. `docker image prune` + `docker builder prune` | ~3–8 GB | Done. Pre-pulled docker images aren't used by this job. |
-| E. `remove_swap: true` on free-disk-space | ~4 GB | Held in reserve — small OOM risk for heavy linkers (deno_core, large LTO). |
+| C. `remove_tool_cache: true` on free-disk-space | \~6 GB | Done. Safe — no step uses `/opt/hostedtoolcache/`. |
+| D. `docker image prune` + `docker builder prune` | \~3–8 GB | Done. Pre-pulled docker images aren't used by this job. |
+| E. `remove_swap: true` on free-disk-space | \~4 GB | Held in reserve — small OOM risk for heavy linkers (deno_core, large LTO). |
 | F. `df -h` diagnostic step | 0 GB | Held in reserve — adds log noise; useful for next failure triage if disk pressure returns. |
 | G. Larger runner | 150 GB / 45 GB | Held in reserve — Posit `ubuntu-latest-4x` ($0.012/min) or `ubuntu-24.04-arm` (free for public repos, requires arm64 Rust toolchain). |
 

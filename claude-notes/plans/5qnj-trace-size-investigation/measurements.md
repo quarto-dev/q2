@@ -19,8 +19,8 @@ Output trace at `.quarto/trace/<stem>/latest.json`, written via
 | medium   | 4.5 KB | 15.6 MB        | 845 KB   | (n/m)    | (n/m)       | 3456×      | (n/m)           |
 | big      | 6.1 KB | 16.3 MB        | 926 KB   | 3.16 MB  | 627 KB      | 2660×      | 103×            |
 
-Even the gzipped pretty file is ~150× the source. Minified-then-gzipped
-is ~100× — still large but in a different category, and gzip is
+Even the gzipped pretty file is \~150× the source. Minified-then-gzipped
+is \~100× — still large but in a different category, and gzip is
 schema-neutral (D8 of `2026-04-14-trace-viewer-design.md` already
 plans for `latest.json.gz`).
 

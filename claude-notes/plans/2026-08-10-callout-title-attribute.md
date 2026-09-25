@@ -256,7 +256,7 @@ The fallback is **bounded and safe, not merely tolerable**: unescaping only ever
 shrinks the string, so every mapped offset stays inside the attribute's raw
 extent. The error is at most `1 + #escapes` bytes and can never point at a
 neighbouring attribute. The exact path covers every case in our fixture and all
-~25 affected Connect pages; only a title containing a backslash escape takes
+\~25 affected Connect pages; only a title containing a backslash escape takes
 the approximate path.
 
 Exact non-affine mapping (an offset map through the unescape, emitting

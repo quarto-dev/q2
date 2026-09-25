@@ -484,7 +484,7 @@ Checklist:
 - [x] Component tests (5) mounting the panel with a storage-less Repo
 - [x] Playwright e2e `e2e/debug-inspector.spec.ts` — passing
 - [x] Suites + build:all green; panel splits into its own lazy assets
-      (`DebugInspectorPanel-*.js` ~ separate chunk, not in main bundle)
+      (`DebugInspectorPanel-*.js` \~ separate chunk, not in main bundle)
 - [x] Close bd-lb1cxprv
 
 #### Phase 3 end-to-end evidence (2026-07-30)

@@ -141,7 +141,7 @@ Per the repo's TDD rule, this was verified red-then-green: the two
 the test was confirmed to fail exactly as expected (collision still
 occurs; no recovery log; the run consumes the full poll timeouts), then
 the fix was restored and the test confirmed green — consistently, across
-repeated runs (~0.4–0.6s each, vs. ~10.3s before the fix, spent waiting on
+repeated runs (\~0.4–0.6s each, vs. \~10.3s before the fix, spent waiting on
 a stall that never resolved).
 
 `actor-id-collision.test.ts` separately proves, at the bare-automerge

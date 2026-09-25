@@ -18,7 +18,7 @@ Q2 has **no tabset support at all**: a `::: {.panel-tabset}` Div passes through 
 
 The TOC collector is *not* at fault — `collect_toc_entries` (crates/pampa/src/toc.rs:341) correctly recurses into non-section Divs. Q1 has no TOC-exclusion logic either; its tabset filter simply consumes the Headers before the TOC is built. The fix reproduces that ordering, not a TOC special case.
 
-**Grouped tabsets are in scope, not a nice-to-have** — explicit requirement from the Connect docs port: `group="language"` etc. syncs every same-group tabset on the page and persists the choice in localStorage. ~166 of ~185 tabsets in the Connect docs are grouped. Real-world impact: \~115 of 352 Connect-docs pages have tabsets; this is the single largest chrome-sweep noise source in that port (120 of 123 differing pages in the 0.21.0 triage).
+**Grouped tabsets are in scope, not a nice-to-have** — explicit requirement from the Connect docs port: `group="language"` etc. syncs every same-group tabset on the page and persists the choice in localStorage. \~166 of \~185 tabsets in the Connect docs are grouped. Real-world impact: \~115 of 352 Connect-docs pages have tabsets; this is the single largest chrome-sweep noise source in that port (120 of 123 differing pages in the 0.21.0 triage).
 
 ## Dependency graph
 

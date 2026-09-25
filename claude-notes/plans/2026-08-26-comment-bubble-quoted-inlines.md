@@ -82,14 +82,14 @@ contract and the visual renderer.
 ## Affected surfaces
 
 1. **`CommentBlock.tsx` `commentSpanText`** — the shipped bug: both the
-   compact bubble preview (line ~999) and the expanded rows (line ~912).
+   compact bubble preview (line \~999) and the expanded rows (line \~912).
 2. **`framework/plainText.ts` `Quoted` case** — quote marks missing
    from alt text / tooltips / meta strings (secondary, low-visibility,
    but same "quotes disappear" class; fixing it makes helper and
    renderer agree).
 3. **Experimental render-component examples** (same shallow pattern,
    copy-pasted): `hub-client/src/components/render/experimental-components/comments.tsx.txt`
-   (lines ~40, ~298) and `.../new/comments_rc.jsx` (lines ~40, ~309).
+   (lines \~40, \~298) and `.../new/comments_rc.jsx` (lines \~40, \~309).
    These are user-facing example components, not compiled into the app.
 
 Not affected: pampa HTML writer, `q2 render` output, the AST, the qmd
@@ -171,7 +171,7 @@ report any other snapshot deltas explicitly.
 - Rebuilt the preview chain: `npm run build:all` (includes WASM) →
   `cargo xtask build-q2-preview-spa` → `cargo build --bin q2`.
 - Invocation: `cargo run --bin q2 -- preview
-  ~/Desktop/daily-log/2026/08/26/hello.qmd --no-browser` →
+  \~/Desktop/daily-log/2026/08/26/hello.qmd --no-browser` →
   `http://127.0.0.1:61594/?page=hello.qmd`, inspected in Chrome via
   the devtools MCP.
 - Observed DOM inside the preview iframe (output was inspected):

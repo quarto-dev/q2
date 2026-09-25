@@ -280,7 +280,7 @@ incompatible versions of the same file under the same name).
 
 **Performance cost.** The check is a `Vec<u8>` `==` per drained
 Project artifact per doc. For a 100-doc website with a 200 KB
-theme CSS plus a few extension deps, worst case is ~100 × ~250 KB
+theme CSS plus a few extension deps, worst case is \~100 × \~250 KB
 = \~25 MB of byte comparisons total across the entire build, all
 against already-hot cache lines. This is negligible relative to
 the engine execution and SCSS compilation that dominate render

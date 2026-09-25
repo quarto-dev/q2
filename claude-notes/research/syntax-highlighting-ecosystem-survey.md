@@ -162,7 +162,7 @@ GitHub migrated code highlighting from Linguist (Pygments-based) to tree-sitter-
 5. **Extensibility:** New languages and annotations (via query files) are author-friendly compared to regex lexer authoring.
 
 **Caveats:**
-- Language coverage is smaller than TextMate grammars (~100 vs. ~1000+). Consider a fallback or hybrid strategy if broad language support is critical.
+- Language coverage is smaller than TextMate grammars (\~100 vs. \~1000+). Consider a fallback or hybrid strategy if broad language support is critical.
 - Build-time dependency (tree-sitter parser for each language). Slightly heavier than Prism.js for lightweight deployments, but negligible for modern build pipelines.
 
 ---

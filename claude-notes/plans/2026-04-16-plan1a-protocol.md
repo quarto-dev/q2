@@ -61,8 +61,8 @@ Define the message types used between Rust and Deno. Both sides need matching de
   Every message (except `Shutdown`) carries an `engine: String` field to route
   to the correct engine. Engine lifecycle in the subprocess is **two-step**:
   `LoadEngine` runs the engine module's `import()` and returns its discovery
-  surface (cheap — ~10–50ms); `LaunchEngine` calls `engine.launch(context)` to
-  construct the `ExecutionEngineInstance` object — cheap (~0), matching Q1,
+  surface (cheap — \~10–50ms); `LaunchEngine` calls `engine.launch(context)` to
+  construct the `ExecutionEngineInstance` object — cheap (\~0), matching Q1,
   where `launch()` is a synchronous object-literal construction that starts no
   daemon. The expensive engine startup (Julia control server / Jupyter kernel:
   5+s) happens lazily inside the engine's `execute()` on the **first** call.

@@ -272,7 +272,7 @@ Q1.
 
 - [x] Vendored under `resources/bootstrap-icons/` per the
       "External Sources Policy" in CLAUDE.md. Q1 ships only the
-      `bootstrap-icons.css` (~99 KB) + `bootstrap-icons.woff` (~180
+      `bootstrap-icons.css` (\~99 KB) + `bootstrap-icons.woff` (\~180
       KB) pair; we mirror that exactly. README.md alongside records
       provenance and licensing (matches the existing
       `resources/scss/README.md` convention).

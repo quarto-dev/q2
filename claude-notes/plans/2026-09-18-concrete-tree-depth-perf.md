@@ -109,7 +109,7 @@ soon as it goes over the limit:
 - `read` maps `DepthExceeded` to the same generic error. Delete
   `utils/concrete_tree_depth.rs` and its call site.
 
-- Expected saving: **the whole ~1.6%**, since the separate walk goes away.
+- Expected saving: **the whole \~1.6%**, since the separate walk goes away.
   The extra cost in the bottom-up loop is one increment/decrement and one
   compare per node, which is noise next to the `Vec` pushes it already does.
 - Risk: low to moderate.

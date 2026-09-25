@@ -444,7 +444,7 @@ Rather than maintain two resolvers (one for the editor, the lossy
   could change are the 15 **span-encoding goldens** in
   `crates/quarto-highlight/tests/integration/snapshots/`
   (`integration__golden__*.snap`), which store the encoded
-  `(start, end, capture)` list directly. **Of those 15, only ~4 actually change**
+  `(start, end, capture)` list directly. **Of those 15, only \~4 actually change**
   — `bash`, `julia`, `python`, and `user_grammar_toml`, the only goldens whose
   current output nests; the other 11 are already fully disjoint and stay
   byte-identical under the new resolver (confirm on regen). (Verified 2026-06-16
@@ -712,7 +712,7 @@ code-cell parity by construction (and fixes bd-98k6 everywhere). It replaces
   flatten identically, not half-and-half. (User grammars remain render-path
   only; editor user-grammar support stays the deferred follow-up.)
 - **Regenerate the span-encoding goldens** in
-  `crates/quarto-highlight/tests/integration/snapshots/` — expect **~4 of the 15
+  `crates/quarto-highlight/tests/integration/snapshots/` — expect **\~4 of the 15
   `integration__golden__*.snap` to change** (`bash`, `julia`, `python`,
   `user_grammar_toml`; the other 11 stay byte-identical — rendered `hl-*` HTML is
   not snapshotted) and
@@ -1012,7 +1012,7 @@ case mocking the WASM call (parse + error handling). (Distinct from the Phase-4
     comment-toggle work.
   - **Monarch base (Hybrid-A paint + gap-fill layer).** `setMonarchTokensProvider('qmd', …)`
     with a **markdown-derived** ruleset — seed it from monaco's basic-languages
-    markdown grammar (or a ~40-line subset: headings, emphasis/strong markers,
+    markdown grammar (or a \~40-line subset: headings, emphasis/strong markers,
     inline code, fenced-code regions, frontmatter block, links). This is the
     synchronous layer that paints instantly on open/while typing **and** supplies
     the permanent colour for every byte semantic leaves uncaptured. It is **not
@@ -1228,7 +1228,7 @@ Tests passing is necessary but not sufficient (CLAUDE.md):
    layers (Phases 0, 2, 3; Phase 1 is `tree-sitter test`).
 2. `cargo nextest run --workspace` — no regressions in downstream crates
    (esp. `pampa`, which shares the tree-sitter-qmd crate). The Phase-0 producer
-   switch regenerates **~4 of the 15 span-encoding goldens** in `quarto-highlight`
+   switch regenerates **\~4 of the 15 span-encoding goldens** in `quarto-highlight`
    (`bash`/`julia`/`python`/`toml`; the other 11 byte-identical; rendered `hl-*`
    HTML is not snapshotted); also re-check the hand-written
    `.contains()` assertions in
@@ -1280,7 +1280,7 @@ Tests passing is necessary but not sufficient (CLAUDE.md):
 | --- | --- |
 | `crates/quarto-highlight/src/lib.rs` | **new** shared resolver: `highlight_captures` (`Query.captures()`, node-exact) + `flatten_spans` (innermost-wins); `builtin_configs_have_no_injection_or_locals` guard (the captures-only switch is lossless only while injection/locals stay empty) |
 | `crates/quarto-highlight/src/registry.rs` (+ `user_grammar.rs`) | re-point `Registry::highlight` from `collect_spans` onto `flatten_spans(highlight_captures(…))`; retire `collect_spans` from the production path |
-| `crates/quarto-highlight/tests/integration/snapshots/*.snap` | regenerate the ~4 changed span-encoding goldens (`bash`/`julia`/`python`/`toml`, nested→flat); other 11 byte-identical; writer code unchanged; rendered HTML is not snapshotted |
+| `crates/quarto-highlight/tests/integration/snapshots/*.snap` | regenerate the \~4 changed span-encoding goldens (`bash`/`julia`/`python`/`toml`, nested→flat); other 11 byte-identical; writer code unchanged; rendered HTML is not snapshotted |
 | `crates/quarto-highlight/tests/fixtures/user-grammar-equal-extent/` | **new** synthetic fixture: TOML grammar binary + a `highlights.scm` that double-captures one node, producing a genuine equal-extent collision to pin the `flatten_spans` tie-break (the corpus has none) |
 | `crates/quarto-core/tests/integration/render_to_html_user_grammars.rs` | hand-recheck the `.contains()` `hl-` assertions (`:142,147`) — not a snapshot, won't auto-regenerate |
 | `resources/scss/html/templates/highlight.scss` | unchanged; its 24 `.hl-*` roots are the source of truth that `code_legend_covers_render_css` (Phase 7, Defence 3) reads to lock editor↔render colour coverage together |
@@ -1364,7 +1364,7 @@ Tests passing is necessary but not sufficient (CLAUDE.md):
     resolved, not merely sidestepped; close it when Phase 0 lands.
 - Sub-strands per phase, blocking the parent. **Phase 0 spans the shared
   resolver *and* the render-producer switch + golden regen** (bigger than the
-  editor-only draft, but the regen is small — only ~4 of the 15 goldens change,
+  editor-only draft, but the regen is small — only \~4 of the 15 goldens change,
   all nested→flat; the equal-extent tie-break is exercised by the new synthetic
   `user-grammar-equal-extent` fixture, since no corpus golden contains a genuine
   tie) — call this out in the strand so the span-encoding golden review (and the

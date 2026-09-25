@@ -122,7 +122,7 @@ That 37 overcounts somewhat (it includes in-file `#[cfg(test)]` blocks and sites
 - A `warnings:` key that silently fails to suppress an uncoded warning is a bad user experience, so v1 needs a story: either backfill first, or make the failure legible.
 - Going forward, an xtask lint ("every `DiagnosticMessage::warning`/`::error` must carry a code") would keep the gap from reopening — the same sustainability argument the strict-mode plan made.
 
-**2. Not every user-visible diagnostic flows through the summary.** `crates/quarto/src/commands/render.rs:897-905` prints `underscore_typo_diagnostics`, `project_kind_diagnostics`, and `project.config.config_diagnostics` with a bare `eprintln!("{}", diagnostic.to_text(None))` — **before and outside** `print_render_diagnostics`. A summary-boundary filter would not see them. Either route them into `project_diagnostics` (arguably correct independent of this work) or declare them out of scope in v1. Separately, the strict-mode plan's count of ~552 `eprintln!` / ~63 `tracing::warn!` sites remains true and remains structurally out of reach.
+**2. Not every user-visible diagnostic flows through the summary.** `crates/quarto/src/commands/render.rs:897-905` prints `underscore_typo_diagnostics`, `project_kind_diagnostics`, and `project.config.config_diagnostics` with a bare `eprintln!("{}", diagnostic.to_text(None))` — **before and outside** `print_render_diagnostics`. A summary-boundary filter would not see them. Either route them into `project_diagnostics` (arguably correct independent of this work) or declare them out of scope in v1. Separately, the strict-mode plan's count of \~552 `eprintln!` / \~63 `tracing::warn!` sites remains true and remains structurally out of reach.
 
 **3. There is no config schema layer.** `render.rs:894` says it outright: *"Q2 has no schema layer; unknown keys are otherwise silently ignored."* Good news: a new `_quarto.yml` key costs no schema work. Bad news: a typo in a suppression list is silent unless we validate it ourselves — which makes the "unknown code" validation in the design below load-bearing rather than a nicety.
 
@@ -303,7 +303,7 @@ The rule should also **stay opt-in** for `convert -r all` regardless of the re-k
 1. **Config shape:** per-code map, reason *encouraged* (short form `Q-2-49: off`, long form `{level:, reason:}`). Chosen over a flat `suppress:` list so per-code severity (`error`, `warning`) is reachable later without a second key.
 2. **Sequencing:** minimal suppression (`off` only) **plus** Q-2-49 ship together. Unknown-code validation, unused-suppression reporting, and `--show-suppressed` are deferred to a follow-up strand.
 3. **Scope:** suppression applies **everywhere**, including `q2 preview` and hub-client — deliberately diverging from `--strict`'s Decision-D1 exclusion, because an author who has declared a construct legitimate should not be nagged in the editor.
-4. **Uncoded warnings:** ship anyway; the ~25–30 uncoded warnings are simply unsuppressible in v1, documented as such, with bd-m2w7a linked as `related`. No xtask lint in v1.
+4. **Uncoded warnings:** ship anyway; the \~25–30 uncoded warnings are simply unsuppressible in v1, documented as such, with bd-m2w7a linked as `related`. No xtask lint in v1.
 
 ### What decision 3 changes about the design
 
@@ -342,7 +342,7 @@ Resolution and application are split:
 
 2. **Config shape.** Per-code severity map (`diagnostics: {Q-2-49: off}`, generalizes to `error`/`warning`, clippy/ESLint-shaped) versus a flat list (`diagnostics: {suppress: [Q-2-49]}`, simpler)? And: should a **reason** be *encouraged*, *required*, or *unavailable*? Requiring one is unusual but makes every suppression self-documenting, which is precisely the "a project has no way to say so" gap the strand identifies.
 
-3. **The uncoded-warning gap.** ~25–30 warnings carry no code and would be silently unsuppressible. Options: (a) make bd-m2w7a a hard prerequisite; (b) ship suppression first and let uncoded warnings be unsuppressible, tracked as follow-up; (c) ship a lint requiring codes so the gap stops growing while bd-m2w7a drains it. Recommendation: (c) plus (b), with bd-m2w7a linked as `related`.
+3. **The uncoded-warning gap.** \~25–30 warnings carry no code and would be silently unsuppressible. Options: (a) make bd-m2w7a a hard prerequisite; (b) ship suppression first and let uncoded warnings be unsuppressible, tracked as follow-up; (c) ship a lint requiring codes so the gap stops growing while bd-m2w7a drains it. Recommendation: (c) plus (b), with bd-m2w7a linked as `related`.
 
 4. **Granularity in v1.** Project-wide + per-document (free from the metadata merge) only? Or also per-path globs (`Q-2-49: {level: off, files: ["legacy/**"]}`)? Per-*line* suppression (a `<!-- quarto: allow Q-2-49 -->` comment) is the ergonomic ideal but needs comment-to-node attachment that does not exist — propose deferring, with a note that HTML comments now survive as `RawInline`, so it is reachable later.
 

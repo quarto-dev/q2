@@ -120,7 +120,7 @@ Investigated the possibility of creating a native MCP (Model Context Protocol) s
 - **Phase 2 (Tools)**: 3-4 weeks
 - **Phase 3 (Advanced)**: 3-4 weeks
 - **Phase 4 (Production)**: 2 weeks
-- **Total**: ~12-13 weeks (~3 months)
+- **Total**: \~12-13 weeks (\~3 months)
 
 ### Recommended First Step
 - **2-day spike**: Validate rmcp, build minimal server (1 resource, 1 tool), test with Claude Desktop

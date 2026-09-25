@@ -166,7 +166,7 @@ renders with the entire fence body replaced by the single token `?include`. Q1 s
 
 A `Q-17-4` "Include not expanded" warning does fire, so this is not silent — but its hint ("Put the include shortcode in its own paragraph, surrounded by blank lines") is actively wrong here: the shortcode belongs inside the fence, and following the hint would change what the page means.
 
-**Real-world impact.** Filed against the Posit Connect docs port: 21 files, ~44 listings, ~1300 lines of embedded source — the single largest remaining content loss in that port. Every cookbook integration recipe embeds its `requirements.txt` / `app.py` / `app.R` / `manifest.json` this way, so the recipes lose the code they exist to show. Worst case is `cookbook/content/integrations/databricks/viewer/python/index.qmd` — ten such listings across five framework tabs, all showing `?include`.
+**Real-world impact.** Filed against the Posit Connect docs port: 21 files, \~44 listings, \~1300 lines of embedded source — the single largest remaining content loss in that port. Every cookbook integration recipe embeds its `requirements.txt` / `app.py` / `app.R` / `manifest.json` this way, so the recipes lose the code they exist to show. Worst case is `cookbook/content/integrations/databricks/viewer/python/index.qmd` — ten such listings across five framework tabs, all showing `?include`.
 
 Filed 2026-08-10 by Carlos Scheidegger; status `open`, priority 1, type `bug`, label `parity`. Not stale — filed today.
 
@@ -317,7 +317,7 @@ Branch: `braid/include-in-code-block-f8mvtczn`. D4 settled 2026-08-10: **trim ex
 - [x] `cargo xtask verify` (WASM leg: `quarto-core` is in hub-client's dependency closure) — all 14 steps green
 - [x] End-to-end through the binary on the repro, output inspected (CLAUDE.md requirement)
 - [x] Widen the Q1 comparison: multi-include fences, indented includes, `.qmd`-into-fence, mid-line
-- [x] Re-render the Connect-docs corpus and confirm the ~44 listings come back
+- [x] Re-render the Connect-docs corpus and confirm the \~44 listings come back
 
 **Result (2026-08-10).** 44 fence includes across 20 files, matching the strand's count. Full render: `352 of 352 files`. Corpus-wide `?include` count in the rendered HTML dropped to **1**, and that one is *not* a fence — it is the raw-HTML shape the strand itself calls docs-fixable (`licenses/index.md`: an include directly under an HTML comment with no blank line, swallowed into a `RawBlock`). It still reports `Q-17-4`, and there the existing hint — "put the include in its own paragraph, surrounded by blank lines" — is exactly right. The worst-case page, `cookbook/content/integrations/databricks/viewer/python/index.qmd`, now renders all its listings including a 92-line `app.py`, with zero `?include`.
 

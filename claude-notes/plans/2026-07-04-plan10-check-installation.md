@@ -375,7 +375,7 @@ fn request_streaming_idle_window_resets_per_frame() {
 ### Task 3: `hasCheckInstallation` in the loaded payload (H1)
 
 **Files:**
-- Modify: `ts-packages/quarto-engine-host-deno/src/host.ts` (loadEngine case, ~line 370)
+- Modify: `ts-packages/quarto-engine-host-deno/src/host.ts` (loadEngine case, \~line 370)
 - Modify: `ts-packages/quarto-engine-host-deno/src/types.ts` (LoadEngineResult mirror)
 - Test: `ts-packages/quarto-engine-host-deno/src/host.deno-test.ts` (or the existing fixture-driven deno test file — follow where the current loadEngine tests live)
 
@@ -402,7 +402,7 @@ hasCheckInstallation: typeof discovery.checkInstallation === "function",
 ### Task 4: `checkInstallation` dispatch case + swappable log sink (H2–H4)
 
 **Files:**
-- Modify: `ts-packages/quarto-engine-host-deno/src/deno-host.ts` (log object ~line 251)
+- Modify: `ts-packages/quarto-engine-host-deno/src/deno-host.ts` (log object \~line 251)
 - Modify: `ts-packages/quarto-engine-host-deno/src/host.ts` (new switch case)
 - Test: same deno test file as Task 3
 
@@ -750,7 +750,7 @@ let probe = |content: &str, _language: &str| -> Result<(), String> {
   `std::io::stderr().is_terminal()` (std `IsTerminal`, no new dependency):
   while an engine check is in flight, a small helper animates
   `\r<frame> <last emitted line's text>` on stderr (braille or `|/-\` frames,
-  ~80 ms tick, spawned thread + `AtomicBool` stop flag); every arriving
+  \~80 ms tick, spawned thread + `AtomicBool` stop flag); every arriving
   `CheckLine` clears the animation line (`\r` + spaces + `\r`), prints the
   line, and the spinner resumes on the new text. The first frame arrives
   immediately (the engine's own `withSpinner` start message), so the animated

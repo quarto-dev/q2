@@ -968,15 +968,15 @@ document.qmd:3:21: Expected boolean for 'number-sections', found string "yes"
 ### Memory Profile
 
 **Typical config size**:
-- AnnotatedParse tree: ~2-5 KB per config
-- Merged config: ~5-10 KB (includes source info)
-- Source context: ~1 KB per file
+- AnnotatedParse tree: \~2-5 KB per config
+- Merged config: \~5-10 KB (includes source info)
+- Source context: \~1 KB per file
 
 **Total memory for document render**:
 - 5 config layers × 5 KB = 25 KB
 - Merged result: 10 KB
 - Source context: 5 KB
-- **Total: ~40 KB per document** (acceptable)
+- **Total: \~40 KB per document** (acceptable)
 
 ## Migration Path
 

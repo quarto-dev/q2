@@ -194,8 +194,8 @@ $grid-margin-width:         250px
 $grid-column-gutter-width:  1.5em (~24px)
 ```
 
-Sum: ~1300 px is the "comfortable" full layout.
-At 992 px, sidebar (250) + body (500 min) + margin (~50–250) +
+Sum: \~1300 px is the "comfortable" full layout.
+At 992 px, sidebar (250) + body (500 min) + margin (\~50–250) +
 gutters already overflow what's available — explaining why the
 cliff happens at `lg`.
 
@@ -251,8 +251,8 @@ Probably needs a beads ticket of its own.
 
 Don't switch to mid mode until vp < 800 (or 768). The wide grid
 mixin scales smoothly — at 992 the sidebar is already only 180 px
-wide, and the body still has ~530 px. We could keep the wide
-mixin active down to ~800.
+wide, and the body still has \~530 px. We could keep the wide
+mixin active down to \~800.
 
 Implementation: a custom Bootstrap breakpoint or shifting the
 `media-breakpoint-down(lg)` boundary just for the website

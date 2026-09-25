@@ -102,5 +102,5 @@ Related: bd-ey6jg70f (hub-minted sliding sessions, out of scope here).
   One Tap blocked) was NOT exercised end-to-end in a browser — it needs a live
   Google session. Manual recipe: sign in, delete the `quarto_hub_token` cookie
   in DevTools → Application, restart the hub (drops the established WS); the
-  client should attempt renewal within ~30 s and land on the login screen with
-  the "session expired" message within ~60 s, instead of retrying forever.
+  client should attempt renewal within \~30 s and land on the login screen with
+  the "session expired" message within \~60 s, instead of retrying forever.

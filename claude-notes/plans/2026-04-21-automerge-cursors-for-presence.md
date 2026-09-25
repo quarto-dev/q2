@@ -453,11 +453,11 @@ refactor can't quietly break it.
         locations in the two non-recording tabs so their cursor
         decorations render on the recorder. This exercises the
         per-render resolution loop over multiple peers.
-      - **Document**: use a ~10k-char qmd file (copy a real project
+      - **Document**: use a \~10k-char qmd file (copy a real project
         README or a paragraph-repeated fixture; commit as
         `hub-client/test-fixtures/perf-10k.qmd` if one doesn't exist).
       - **Measurement**: on the recorder, start the Performance panel
-        recording, hold a key to auto-repeat for ~5 s in the editor,
+        recording, hold a key to auto-repeat for \~5 s in the editor,
         stop recording, and read the mean "Scripting" time per
         keystroke.
       - **Target**: the added cost of

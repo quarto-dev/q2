@@ -293,7 +293,7 @@ either way. Action: comment findings on k-42; keep it open for the cleanup;
 
 ## Notes / references (2026-07-17 code study)
 
-- Writer: `crates/pampa/src/writers/json.rs` (~5200 lines; streaming
+- Writer: `crates/pampa/src/writers/json.rs` (\~5200 lines; streaming
   `stream_write_pandoc` :3926 is the production path; Q-3-32 emit :922-934;
   pool `SourceInfoSerializer` :271; meta `write_config_value` :1662).
 - Reader: `crates/pampa/src/readers/json.rs` (strict `read` :1267 / lenient

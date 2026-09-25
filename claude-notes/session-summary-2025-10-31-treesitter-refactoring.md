@@ -188,7 +188,7 @@ According to `claude-notes/plans/2025-10-31-treesitter-grammar-refactoring.md`:
 - Building back up incrementally with tests
 
 ### Why Isolated Test File?
-- Main test suite (`cargo test`) has ~100s of tests that currently fail
+- Main test suite (`cargo test`) has \~100s of tests that currently fail
 - We created `test_treesitter_refactoring.rs` to isolate our new tests
 - Run only new tests: `cargo test --test test_treesitter_refactoring`
 - Once refactoring complete, can integrate back
@@ -197,8 +197,8 @@ According to `claude-notes/plans/2025-10-31-treesitter-grammar-refactoring.md`:
 
 **Main processor**:
 - `crates/quarto-markdown-pandoc/src/pandoc/treesitter.rs`
-  - Contains `native_visitor` function (starting ~line 474)
-  - This is where node handlers go (in the big match statement ~line 513)
+  - Contains `native_visitor` function (starting \~line 474)
+  - This is where node handlers go (in the big match statement \~line 513)
 
 **Helper utilities** (many already exist, may need updating):
 - `crates/quarto-markdown-pandoc/src/pandoc/treesitter_utils/*.rs`
@@ -250,10 +250,10 @@ For each node implementation:
 
 ## Estimated Scope
 
-- Total node types to implement: ~100+
+- Total node types to implement: \~100+
 - Completed so far: 5 (document, section, pandoc_paragraph, pandoc_str, pandoc_space)
-- Remaining: ~95+
-- Current completion: ~5%
+- Remaining: \~95+
+- Current completion: \~5%
 
 The plan organizes these into 8 phases by priority and dependency.
 
@@ -261,7 +261,7 @@ The plan organizes these into 8 phases by priority and dependency.
 
 - The TDD workflow is proven and works well
 - Test isolation approach is working perfectly
-- Each node takes ~10-15 minutes to implement with tests
+- Each node takes \~10-15 minutes to implement with tests
 - Some nodes are trivial (like pandoc_str), others will be complex (like tables)
 - The plan document has all node types categorized by priority
 - Focus on one node at a time, don't try to do too much at once

@@ -317,7 +317,7 @@ section is what to know when the two interact.
   particular `aws-lc-sys` — long feared to be the hard part — is a
   non-issue at v0.40.0: it ships pregenerated bindings for both musl
   triples, so there is **no `bindgen` step and no `libclang`
-  requirement**, and it compiled in ~17 s per leg in the bd-dofxhzaj
+  requirement**, and it compiled in \~17 s per leg in the bd-dofxhzaj
   spike (run 30375857883). If a future `aws-lc-sys` bump ever *does*
   start wanting cmake or libclang, that is a real regression worth
   pinning rather than papering over with extra apt packages.

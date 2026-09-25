@@ -97,11 +97,11 @@ if test coverage goals require them.
 
 | Feature | Tests Affected | Effort | Priority |
 |---------|---------------|--------|----------|
-| HTML entity escaping | ~10 | Low | Medium |
-| Complex initialize="false" | ~6 | Medium | Low |
-| name-part elements | ~15 | Medium-High | Low |
-| Apostrophe handling | ~2 | Low | Low |
+| HTML entity escaping | \~10 | Low | Medium |
+| Complex initialize="false" | \~6 | Medium | Low |
+| name-part elements | \~15 | Medium-High | Low |
+| Apostrophe handling | \~2 | Low | Low |
 
-**Total potential:** ~33 tests
+**Total potential:** \~33 tests
 **Current coverage:** 262/896 (29.2%)
-**After all Phase 1:** ~295/896 (32.9%)
+**After all Phase 1:** \~295/896 (32.9%)

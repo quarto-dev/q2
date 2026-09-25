@@ -21,7 +21,7 @@ document + runtime) is available. CSS compilation results are cached via the
   sits at top level (not nested under `format.html.theme`).
 - **SystemRuntime cache interface** must be implemented first (see
   `claude-notes/plans/2026-03-09-runtime-cache.md`). SASS compilation is
-  expensive (~200-500ms native, ~1-2s WASM) and the existing codebase caches
+  expensive (\~200-500ms native, \~1-2s WASM) and the existing codebase caches
   results. The cache interface provides platform-abstracted persistent caching:
   per-project filesystem at `{project_dir}/.quarto/cache/` on native, IndexedDB
   on WASM. The native runtime is configured with the cache dir after project

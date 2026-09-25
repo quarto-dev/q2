@@ -8,7 +8,7 @@ After studying the failing tests, current implementation, and reference citeproc
 - **858 total** CSL conformance tests
 - **477 passing** (55.6%)
 - **381 failing** (44.4%)
-- **~34 failing** specifically related to disambiguation
+- **\~34 failing** specifically related to disambiguation
 
 ## Issue Categories
 
@@ -108,7 +108,7 @@ The `accessed.season` field in some test data contains a time string, but our pa
 
 ### Phase 1: Core Re-rendering Loop (Highest Impact)
 
-**Estimated tests fixed:** ~15-20
+**Estimated tests fixed:** \~15-20
 
 1. Refactor `process_citations_with_disambiguation_to_outputs` to use an iterative loop:
    ```rust
@@ -143,7 +143,7 @@ The `accessed.season` field in some test data contains a time string, but our pa
 
 ### Phase 2: Fix Add-Names Logic
 
-**Estimated tests fixed:** ~5-8
+**Estimated tests fixed:** \~5-8
 
 1. Make `try_add_names` truly incremental:
    - Start at current `et_al_use_first`
@@ -155,7 +155,7 @@ The `accessed.season` field in some test data contains a time string, but our pa
 
 ### Phase 3: Year Suffix Assignment
 
-**Estimated tests fixed:** ~8-10
+**Estimated tests fixed:** \~8-10
 
 1. Verify year suffix assignment uses bibliography sort order
 2. Verify suffix rendering in date output
@@ -166,7 +166,7 @@ The `accessed.season` field in some test data contains a time string, but our pa
 
 ### Phase 4: Citation-Label
 
-**Estimated tests fixed:** ~3-5
+**Estimated tests fixed:** \~3-5
 
 1. Implement `citation-label` variable generation
 2. Apply year suffixes to citation-labels

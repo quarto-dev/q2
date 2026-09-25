@@ -273,8 +273,8 @@ ensure no interaction. Specifically:
   break. Grep for them and decide per-site whether to update or
   delete.
 - **Hash collisions**: extremely unlikely for distinct file paths
-  (`DefaultHasher` is 64-bit; ~`2^32` distinct paths before a
-  collision becomes ~50% likely). Not worth defending against.
+  (`DefaultHasher` is 64-bit; \~`2^32` distinct paths before a
+  collision becomes \~50% likely). Not worth defending against.
 - **Anonymous ASTContexts collide on FileId**: multiple
   `ASTContext::anonymous()` instances share
   `FileId(hash("<anonymous>"))`. If any code path puts both into

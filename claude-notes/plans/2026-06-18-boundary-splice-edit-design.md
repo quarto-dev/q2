@@ -223,7 +223,7 @@ commit(appendToDoc(md('## Appendix')));
    instead of the cast. Generalizes today's `PreviewNodeEditPayload`; the md/ast
    flavor rides along (it is the `channel` discriminator made first-class).
 3. **Parent handler — `hub-client/src/components/render/ReactPreview.tsx`
-   (`handleSetAst`, ~lines 653–718).** Receives the `Splice`, **normalizes** the
+   (`handleSetAst`, \~lines 653–718).** Receives the `Splice`, **normalizes** the
    flavor (markdown → `parseQmdContentSync`; ast → serialize) — exactly where
    parsing lives today — then calls WASM `apply_node_splice` and routes the result
    through `onContentRewrite(newQmd)` (→ VFS / Automerge). **The backend stays
@@ -273,7 +273,7 @@ new single-block-span guard.
 ## Stale-AST degrade rules
 
 Today, a missing target returns the original `content` unchanged (graceful
-stale-AST race; `apply_node_edit.rs` ~line 142). Generalize uniformly: if **any**
+stale-AST race; `apply_node_edit.rs` \~line 142). Generalize uniformly: if **any**
 boundary fails to resolve (node `si` not found in `A_u`; `ContainerRef` node not
 found; list/def coordinate out of range), or an invariant fails (different
 containers, `from > to`), return `content` unchanged and log to stderr. No

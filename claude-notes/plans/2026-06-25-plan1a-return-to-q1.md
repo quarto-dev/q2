@@ -455,7 +455,7 @@ plans' correction notes) still resolve.
 |---|---|---|---|
 | PROTO-1 | `TsExecuteResult` field disposition — the dropped Q1 fields are now **carried** (`#[serde(default)]`); the `ts_protocol.rs` doc-comment is documented as part of **FC-1**'s code change | FC-1 (below) | folded → FC-1 |
 | PROTO-2 / ENG-3 | `quarto.htmlDependency()` is a per-`Execute` value-constructor returned on `html_dependencies`, not a "registration API" | plan1a-protocol / plan1a-engine correction notes | done (consolidation) |
-| PROTO-3 | `TsHtmlDependency` (3 fields) mirrors q2's own `HtmlDependency` (`pampa/src/lua/quarto_doc.rs`), not Q1 `FormatDependency` (~10). A parity pass is a q2-side `pampa::lua` `HtmlDependency` widening, **not** this epic. | (recorded here) | record-only |
+| PROTO-3 | `TsHtmlDependency` (3 fields) mirrors q2's own `HtmlDependency` (`pampa/src/lua/quarto_doc.rs`), not Q1 `FormatDependency` (\~10). A parity pass is a q2-side `pampa::lua` `HtmlDependency` widening, **not** this epic. | (recorded here) | record-only |
 | HOST-3 | cached launched-instance is stateless (cache invariant) | `engine-host-concurrency.md` | folded |
 | HOST-4 | daemons must be spawned detached (plan1b harness contract; violation = silent lost warmth) | `engine-host-concurrency.md` | folded |
 | HOST-5 | q2 never reads/writes/keys on engine transport files | `engine-host-concurrency.md` | folded |
@@ -519,7 +519,7 @@ can_freeze }`.
 ### ENG-2 — dedup content-check + warning are q2 additions, doc'd as Q1 parity
 
 **Severity:** Low · **Necessary?:** necessary (storage-sink design) · **Touches:** `dependency.rs`
-**doc-comment only** (the "q2 always warns" sentence, ~L67-69). **Behavior is already correct and
+**doc-comment only** (the "q2 always warns" sentence, \~L67-69). **Behavior is already correct and
 both arms are already test-bound** (see below) — so the *code* work here is the doc-comment fix
 alone; no new test. The plan1a-engine doc-half is folded (see Documentation reconciliation).
 
@@ -529,7 +529,7 @@ check** (identical → silent skip; different → drop + **warn**) — *necessar
 artifact store is a name-keyed on-disk sink (two extensions sharing a `name` would silently
 clobber). These are good q2 improvements; we keep them. Only the docs over-claim parity:
 
-- [x] **Doc-comment fix only** (`dependency.rs` ~L67-69): mark the **content check** as a q2 addition
+- [x] **Doc-comment fix only** (`dependency.rs` \~L67-69): mark the **content check** as a q2 addition
       (Q1 never compares bytes); fix **"q2 always warns" → "warns on a name collision with *differing*
       content; identical re-registration is skipped silently."** **No code or test change** — both
       arms are *already* bound: `test_name_collision_first_wins_one_warning` (`dependency.rs:254`)

@@ -767,7 +767,7 @@ against the actual dependency** — note it's the **quarto-dev git fork
 - `Transport` + `Transport::new(stream, sink)` are public
   (`pub use transport::Transport`; `transport.rs:32`). `new` accepts a
   `Stream<Item=Result<Vec<u8>, E>>` + `Sink<Vec<u8>, Error=E>`.
-- The only non-public helper is the ~25-line `ws_to_bytes`
+- The only non-public helper is the \~25-line `ws_to_bytes`
   (`websocket.rs:91`) mapping tungstenite `Message` ↔ bytes; we
   replicate it in our crate (filter Binary, drop Close/Ping/Pong, error
   on Text). Trivial.

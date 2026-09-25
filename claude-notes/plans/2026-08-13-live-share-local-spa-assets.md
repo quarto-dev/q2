@@ -5,7 +5,7 @@
 **Status:** Complete (2026-08-13). Phase 4's real-browser e2e caught
 and fixed a design gap (keep-alive reuse defeated per-connection
 routing — see "Phase 4 results"); with the fix, a hash-matching guest
-serves ~10.77 MB of the boot from its own binary and tunnels ~3 KB,
+serves \~10.77 MB of the boot from its own binary and tunnels \~3 KB,
 and slow-link (10 Mbps / 100 ms) first render is **1.5 s**, measured
 against 9.9 s for the all-tunnel fallback on the identical topology
 (48.0 s at Phase 0). Phase 3 landed `TunnelClient::connect` + the L7
@@ -16,8 +16,8 @@ the wire payload 54.67 → 10.36 MB (5.3×).
 ## Overview
 
 A guest running `q2 preview --join <TICKET>` currently fetches **everything**
-through the iroh tunnel: the SPA (`q2-preview-spa/dist/` is ~50 MB, dominated
-by the ~42 MB `wasm_quarto_hub_client_bg.wasm`), the config endpoints, and the
+through the iroh tunnel: the SPA (`q2-preview-spa/dist/` is \~50 MB, dominated
+by the \~42 MB `wasm_quarto_hub_client_bg.wasm`), the config endpoints, and the
 `/ws` sync. The join payload is the dominant term in first-render latency,
 especially on relay paths.
 
@@ -221,19 +221,19 @@ Findings beyond the byte list:
 spike pair (`spike-tunnel-host` → `spike-tunnel-client --relay-only`;
 the real `--join` has no relay-pinning knob) in front of the real
 preview server; same 54,672,999 B payload; selected path stayed
-`euc1-1.relay.n0.iroh.link` (rtt ~200–256 ms) with **zero DIRECT
+`euc1-1.relay.n0.iroh.link` (rtt \~200–256 ms) with **zero DIRECT
 selections** for the whole boot. Same-machine/fast-uplink number, so it
 understates residential guests; the parent plan's cross-network leg
-(Azure↔residential, all-relay) measured **13.2 s** on a ~47.5 MB
+(Azure↔residential, all-relay) measured **13.2 s** on a \~47.5 MB
 payload — that remains the residential-class reference.
 
 **(c) Simulated slow link (10 Mbps down, 100 ms RTT): first render
 48,041 ms** through the *real* `--share`/`--join` stack, throttle proxy
 between browser and guest port (one shared downstream bucket — a real
 link is shared across Chromium's parallel connections). Theoretical
-floor at 10 Mbps for 54.67 MB is 43.7 s; the ~4.3 s above floor is RTT
+floor at 10 Mbps for 54.67 MB is 43.7 s; the \~4.3 s above floor is RTT
 and queueing. Gate context for Phase 1: ≤ 5 s at 10 Mbps needs ≲ 6 MB
-delivered — brotli on the wasm alone (~3.5–4×) lands \~15 MB total, so
+delivered — brotli on the wasm alone (\~3.5–4×) lands \~15 MB total, so
 compression likely closes most but not all of the gap; that is exactly
 the gate measurement Phase 1 re-runs.
 
@@ -336,8 +336,8 @@ each knob measured independently, then combined; harness
 Final: `lto = true, opt-level = "s", codegen-units = 1` in
 `crates/wasm-quarto-hub-client/Cargo.toml` + `wasm-opt -Oz` as
 `build:wasm` step 3 (wasm-pack order: bindgen first, then opt on the
-`*_bg.wasm`). Fat-over-thin buys 447 KB (1.6%) for ~15 s more build
-time (~80 s vs \~65 s for the profile rebuild) — worth it at these
+`*_bg.wasm`). Fat-over-thin buys 447 KB (1.6%) for \~15 s more build
+time (\~80 s vs \~65 s for the profile rebuild) — worth it at these
 absolute sizes. `wasm-opt` is located by `build-wasm.js` (PATH, then
 the Homebrew binaryen prefix) and checked by `cargo dev-setup`.
 
@@ -499,7 +499,7 @@ does.
 The first real-Chromium boot through the real `--share`/`--join` pair
 *rendered correctly* (798 ms) but the guest's routing log showed only 6
 local serves while three tunneled connections carried
-`from_host=6,813,012 / 1,066,854 / …` — ~8.7 MB of the ~10.4 MB gz
+`from_host=6,813,012 / 1,066,854 / …` — \~8.7 MB of the \~10.4 MB gz
 payload. Cause: local responses carry `Connection: close`, but
 *tunneled* connections stay keep-alive, and Chromium reuses an idle
 tunneled connection for later requests — including manifest-hit assets,
@@ -513,9 +513,9 @@ forces `Connection: close` into every tunneled non-upgrade head
 tunneled connection after one response and every browser request gets
 its own routing decision. Also added a guest-side `debug!` naming each
 tunneled request line, so the routing log accounts for every
-connection. Post-fix, the same boot: **12 local serves (~10.77 MB),
+connection. Post-fix, the same boot: **12 local serves (\~10.77 MB),
 tunnels only `/health` ×2, `/api/preview/config`, `/api/preview/deps`,
-`/api/preview/diagnostics`, `/ws` — ~1.2 KB + ~2 KB of WS sync.**
+`/api/preview/diagnostics`, `/ws` — \~1.2 KB + \~2 KB of WS sync.**
 
 **Leg A — real e2e, two profiles on one machine** (a physical
 two-machine run reuses these exact invocations; the tunnel path is
@@ -551,9 +551,9 @@ guest tunnels everything.
 
 | Leg (10 Mbps / 100 ms on the tunnel) | First render | Tunneled bytes |
 |---|---|---|
-| B: local serving (hash match) | **1,511 ms** | ~3.2 KB |
-| C: all-tunnel fallback (`--preview-dir`) | 9,945 ms | ~10.4 MB |
-| Phase 1 reference (throttle at browser hop) | 10,024 ms | ~10.4 MB |
+| B: local serving (hash match) | **1,511 ms** | \~3.2 KB |
+| C: all-tunnel fallback (`--preview-dir`) | 9,945 ms | \~10.4 MB |
+| Phase 1 reference (throttle at browser hop) | 10,024 ms | \~10.4 MB |
 
 B vs C is a same-topology A/B isolating the serving mode: **6.6×**.
 Leg C reproduces Phase 1's number within noise, validating the
@@ -591,7 +591,7 @@ embedded-asset serving and the slower-but-working mismatch fallback.
   unrecognized path can never be shadowed by a locally synthesized
   `index.html`. (`/auth/*` is the existing case this rule protects.)
 - **Binary-size growth** — embedding `.gz` siblings adds roughly the
-  compressed size of the dist (~a third of identity at gzip -9, so on
+  compressed size of the dist (\~a third of identity at gzip -9, so on
   the order of 15–18 MB) to every `q2` binary. `.gz`-only (no `.br`)
   caps this; Phase 1 records the measured delta.
 - ~~**Browser `br` support on plain HTTP**~~ — moot since the 2026-08-13
@@ -625,7 +625,7 @@ embedded-asset serving and the slower-but-working mismatch fallback.
   potentially-trustworthy-origin caveat, and `flate2` was already in the
   tree — the `brotli` dev-dep added earlier today was removed before
   Phase 1 landed). Supersedes the `.br`-only decision recorded above;
-  the trade is a weaker ratio (~3× vs ~3.5–4× on the WASM), which the
+  the trade is a weaker ratio (\~3× vs \~3.5–4× on the WASM), which the
   Phase 1 gate re-run measures. The wasm-opt/binaryen work is
   unaffected — it shrinks the identity bytes gzip then encodes.
 - 2026-08-13: **Phase 1 complete** (numbers inline above). WASM
@@ -702,7 +702,7 @@ embedded-asset serving and the slower-but-working mismatch fallback.
 - 2026-08-13: **Phase 4 complete** (bd-2mpka14m; numbers inline above).
   The real-browser e2e did its job: it caught the keep-alive gap in
   design decision 3 — Chromium reuses idle *tunneled* keep-alive
-  connections for later requests, so ~8.7 MB of the boot payload
+  connections for later requests, so \~8.7 MB of the boot payload
   crossed the tunnel unrouted despite correct per-connection routing
   (the curl-based Phase 3 e2e and the `Connection: close`-per-request
   integration clients could never see it). Fixed by forcing
@@ -710,7 +710,7 @@ embedded-asset serving and the slower-but-working mismatch fallback.
   (`with_connection_close`; upgrade heads stay byte-identical) — TDD:
   `tunneled_head_carries_connection_close` red on the timeout, green
   after; `upgrade_head_passes_verbatim` guards the WS path. Post-fix
-  browser boot: 12 local serves / ~10.77 MB, ~3 KB tunneled, first
+  browser boot: 12 local serves / \~10.77 MB, \~3 KB tunneled, first
   render 762 ms direct loopback. Throttled-tunnel legs via the Gate-0
   spike host + the new `preview-ticket-from-parts` example: **1,511 ms
   local-serving vs 9,945 ms all-tunnel** at 10 Mbps / 100 ms on the

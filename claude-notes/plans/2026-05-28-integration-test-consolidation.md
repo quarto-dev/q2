@@ -21,7 +21,7 @@ declaring each former file as a `pub mod`. Reported wins:
 
 - Fresh `cargo clean` size: **8.1 GiB → 3.5 GiB** (\~57% reduction)
 - Test-suite compile time on macOS: **88s → 52s** (\~40% faster)
-- Linux CI runner footprint: **15 GB → ~2 GB**
+- Linux CI runner footprint: **15 GB → \~2 GB**
 
 This experiment measures the same change on Q2 from a macOS dev
 machine. We cannot directly measure Linux/Windows CI from here, but
@@ -172,7 +172,7 @@ Out of scope (single-file integration test crates, no benefit):
 This is from pampa *alone* (57/164 ≈ 35 % of all integration test
 files). If the per-binary savings amortize roughly linearly across
 the remaining 12 candidate crates (107 more files → 12 binaries,
-i.e. saving 95 more binaries), Phase 6 should land near a ~50 %
+i.e. saving 95 more binaries), Phase 6 should land near a \~50 %
 reduction in `target/debug` and `target/release` from the baseline.
 The wall-time cost stays small.
 
@@ -302,7 +302,7 @@ fast): all remaining crates are **clean pure-rename migrations**
   accumulates across all branches the user has built locally. The
   experiment uses a fresh build for clean numbers and `cargo clean`
   between each phase. Worth offering to clean it up at the end of
-  the experiment regardless of outcome (would free ~256 GB).
+  the experiment regardless of outcome (would free \~256 GB).
 
 ## Decision log
 

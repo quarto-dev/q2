@@ -275,11 +275,11 @@ pub struct DiagnosticMessage {
 
 ## Metrics
 
-- **Lines of Code**: ~500 LOC (diagnostic.rs: 272, catalog.rs: 136, lib.rs: 61, JSON: 8)
+- **Lines of Code**: \~500 LOC (diagnostic.rs: 272, catalog.rs: 136, lib.rs: 61, JSON: 8)
 - **Tests**: 13 unit tests + 5 doc tests passing
 - **Dependencies**: 3 new (ariadne, once_cell, existing serde/serde_json)
 - **Documentation**: Comprehensive (lib, module, inline, README, design doc)
-- **Time**: ~2 hours (design research + implementation + testing + documentation)
+- **Time**: \~2 hours (design research + implementation + testing + documentation)
 
 ## Lessons Learned
 

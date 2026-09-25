@@ -57,7 +57,7 @@ Each `render_ejs()` or `js_render_simple_template()` call:
 3. **Renders template** (\~1-5ms)
    - The actual work - typically fast
 
-**Total: ~20-35ms per operation**
+**Total: \~20-35ms per operation**
 
 ### Scaling estimates
 
@@ -124,11 +124,11 @@ impl SystemRuntime for NativeRuntime {
 ```
 
 **Characteristics**:
-- First call per thread: ~30ms (creates JsEngine)
-- Subsequent calls: ~5ms (reuses JsEngine)
+- First call per thread: \~30ms (creates JsEngine)
+- Subsequent calls: \~5ms (reuses JsEngine)
 - Thread-safe by construction (each thread has its own)
 - Works naturally with thread pools (tokio, rayon)
-- ~20 lines of change
+- \~20 lines of change
 - **No API changes required**
 
 **Caveats**:
@@ -177,7 +177,7 @@ impl JsExecutor {
 - All JS serialized through one thread
 - Good for consistent memory usage
 - More complex implementation
-- Channel overhead per call (~1-2ms)
+- Channel overhead per call (\~1-2ms)
 
 **When to use**: If memory is constrained and you want predictable JS memory usage.
 
@@ -269,7 +269,7 @@ impl Drop for PooledEngine<'_> {
 
 2. **If >100 templates become common**: Implement thread-local storage (Strategy 1).
    - Transparent change, no API impact
-   - ~20 lines of code
+   - \~20 lines of code
    - 10-50x speedup for repeated operations
 
 3. **If batch operations are identified**: Add batch API (Strategy 3).

@@ -180,7 +180,7 @@ Table (has Attr + attrS)
 | Block types needing attrS | 5 | Add `attrS` field to node |
 | Table components needing attrS | 5 | Add `attrS` field to node |
 | Object types needing field tracking | 1 | Add `citationIdS` field to object |
-| **Total affected node types** | **~15** | |
+| **Total affected node types** | **\~15** | |
 
 ## Type Definitions
 

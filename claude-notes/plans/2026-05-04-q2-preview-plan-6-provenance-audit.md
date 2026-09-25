@@ -21,8 +21,8 @@ Implementation order. The plan body (Scope / Implementation notes / Test plan)
 holds the design details; this list is the work-tracking surface.
 
 ### Phase 0 — prerequisite
-- [x] Add `Inline::source_info_mut` (~33 LOC) + `Block::source_info_mut`
-  (~24 LOC) accessors in `quarto-pandoc-types`, with round-trip unit tests
+- [x] Add `Inline::source_info_mut` (\~33 LOC) + `Block::source_info_mut`
+  (\~24 LOC) accessors in `quarto-pandoc-types`, with round-trip unit tests
   for one representative variant of each.
 
 ### Audit
@@ -204,8 +204,8 @@ impl Block {
 }
 ```
 
-Pure mechanical mirror of the existing read accessors — ~33 LOC for
-`Inline` + ~24 LOC for `Block`. Add a unit test that round-trips a
+Pure mechanical mirror of the existing read accessors — \~33 LOC for
+`Inline` + \~24 LOC for `Block`. Add a unit test that round-trips a
 mutation through the accessor on one representative variant of each.
 
 ## Scope
@@ -623,8 +623,8 @@ below.)
   Figure, Table (cells), Custom (slot contents). The canonical
   reusable shape is in
   `crates/quarto-core/src/transforms/shortcode_resolve.rs`'s own
-  `recurse_inline` (~lines 945-1027) and `resolve_block`
-  (~lines 710-863), which already cover this set including Image's
+  `recurse_inline` (\~lines 945-1027) and `resolve_block`
+  (\~lines 710-863), which already cover this set including Image's
   alt/caption content and Note's nested blocks. Model the new mutable
   walkers on these — drop the async + shortcode-resolution logic,
   keep the match-arm dispatch and Image/Note recursion. The narrower
@@ -741,7 +741,7 @@ Lua-handler filter & shortcode").
 - `crates/quarto-core/src/transforms/footnotes.rs` — container Div
   synthesis (around line 495 / `create_footnotes_section`).
 - `crates/quarto-core/src/transforms/appendix.rs` — appendix container
-  Div synthesis (`create_appendix_container` ~line 257).
+  Div synthesis (`create_appendix_container` \~line 257).
 - `crates/quarto-core/src/transforms/theorem.rs:313` and
   `crates/quarto-core/src/transforms/proof.rs:167` — name-attr title
   extraction in `extract_name_attr`. Both pass `&div.attr_source`
@@ -920,22 +920,22 @@ Lua-handler filter & shortcode").
 
 | Component | Lines (rough) |
 |---|---|
-| Phase 0: `Inline::source_info_mut` + `Block::source_info_mut` accessors + unit tests | ~70 |
-| Audit pass (grep + categorize) | ~30 (mostly notes) |
-| `stamp_shortcode_anchors` helper + mutable recursion walks (modeled on `shortcode_resolve.rs::recurse_inline` / `resolve_block`) | ~220 |
-| Shortcode resolver dispatch-site fixes — 12 production sites: `config_value_to_inlines` ×7, `flatten_blocks_to_inlines` ×1, `lua_result_to_shortcode_result::Text` ×1, `make_error_inline` ×2, `shortcode_to_literal` ×1. Most covered by the stamper; `make_error_inline` and `shortcode_to_literal` need call-site source_info threading. | ~70 |
-| TitleBlock fix | ~20 |
-| Sectionize fix | ~20 |
-| Footnotes fix | ~30 |
-| Appendix fix | ~30 |
-| Theorem + proof title-from-attr fix (thread `attr_source` through `extract_name_attr` in both files) | ~30 |
-| TreeSitter postprocess fix | ~10 |
-| Tests | ~280 |
-| **Total** | **~810** |
+| Phase 0: `Inline::source_info_mut` + `Block::source_info_mut` accessors + unit tests | \~70 |
+| Audit pass (grep + categorize) | \~30 (mostly notes) |
+| `stamp_shortcode_anchors` helper + mutable recursion walks (modeled on `shortcode_resolve.rs::recurse_inline` / `resolve_block`) | \~220 |
+| Shortcode resolver dispatch-site fixes — 12 production sites: `config_value_to_inlines` ×7, `flatten_blocks_to_inlines` ×1, `lua_result_to_shortcode_result::Text` ×1, `make_error_inline` ×2, `shortcode_to_literal` ×1. Most covered by the stamper; `make_error_inline` and `shortcode_to_literal` need call-site source_info threading. | \~70 |
+| TitleBlock fix | \~20 |
+| Sectionize fix | \~20 |
+| Footnotes fix | \~30 |
+| Appendix fix | \~30 |
+| Theorem + proof title-from-attr fix (thread `attr_source` through `extract_name_attr` in both files) | \~30 |
+| TreeSitter postprocess fix | \~10 |
+| Tests | \~280 |
+| **Total** | **\~810** |
 
-The earlier "~540" estimate omitted the Phase-0 mut accessors (~70 LOC),
+The earlier "\~540" estimate omitted the Phase-0 mut accessors (\~70 LOC),
 under-counted the recursion walkers (mutable walks over the full
-inline/block container set are ~220 LOC, not ~80), and missed the
+inline/block container set are \~220 LOC, not \~80), and missed the
 `make_error_inline` / `shortcode_to_literal` / `proof.rs` fix sites.
 
 ## Notes

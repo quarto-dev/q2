@@ -18,7 +18,7 @@ already inside a code-cell output (see the audit table below) — doesn't change
 same day: full audit of the `enable-crossref` gate surface completed — previous update was an
 explicit first pass, not a full audit. The audit found a second, structurally distinct gate
 class the prior draft's framing entirely missed, corrected the "known instances" line citations
-(they pointed at the wrong lines), confirmed the filter catalog's floatreftarget.lua "~9/11"
+(they pointed at the wrong lines), confirmed the filter catalog's floatreftarget.lua "\~9/11"
 claim with an exact per-branch breakdown, and resolved the fallback-policy aspiration with a
 concrete recommendation.) **Also noted in round 4 review (2026-09-18): this plan's line-number
 citations should anchor to `if enableCrossRef then` instead, since P4's splice renumbers the
@@ -127,7 +127,7 @@ reading `main.lua` end-to-end. That's exactly what the prior draft's "first pass
 | `crossref/tables.lua:229` (`float_title_prefix`), `floatreftarget.lua:218`/`272` (subfloat `order == nil`) | downstream nil-guards *inside* the already-gated decoration functions | not a gate — defensive `warn()`-and-skip | **no patch, but this is the regression-check's failure mode**: if P6's wiring misses populating `order` on a labeled node, this silently drops the caption prefix with a warning rather than erroring — the Q2 golden (checklist item 3) must positively assert the prefix text is present, not just that render doesn't crash |
 | `customnodes/proof.lua` | — | **out of scope for this plan** — confirmed by reading its renderer (`add_renderer("Proof", ...)`, lines 76-120+): it never reads `.order` and prints no number, only a name/type label. Proof's crossref-adjacent gap (a missing `plain_data.type` field) is P5's finding, not a numbering-gate issue. | none |
 
-### Cross-check against the filter catalog's "~9/11 format branches are format-not-in-q2" claim
+### Cross-check against the filter catalog's "\~9/11 format branches are format-not-in-q2" claim
 
 Confirmed accurate, with an exact breakdown the catalog didn't give. `floatreftarget.lua` has
 **11** `add_renderer("FloatRefTarget", …)` registrations total (lines 183, 308, 659, 666, 878,
@@ -149,7 +149,7 @@ Confirmed accurate, with an exact breakdown the catalog didn't give. `floatrefta
   crossref-gate sites, no format-not-in-q2 label needed for them separately), `typst` (1002),
   `gfm` (1183).
 
-11 total − 2 relevant = 9, which matches the catalog's "~9/11" — but the catalog's single label
+11 total − 2 relevant = 9, which matches the catalog's "\~9/11" — but the catalog's single label
 `format-not-in-q2` blurs together two different reasons (html is native-writer-covered, not
 format-not-in-q2; the fallback isn't format-specific at all). Worth noting so a future reader
 doesn't over-trust the catalog's one-line summary for this file specifically.
@@ -171,7 +171,7 @@ doesn't over-trust the catalog's one-line summary for this file specifically.
 ## Fallback policy (resolved)
 
 **Recommendation: carry the patch indefinitely; no timebox.** The audit above shows the total
-patch surface is small and stable: **3 files, ~6 edited lines**
+patch surface is small and stable: **3 files, \~6 edited lines**
 (the `if enableCrossRef then` gate at `main.lua:718`; `floatreftarget.lua:196,242,965,982`; `modules/callouts.lua:22`), none of which
 touch logic likely to move under normal Q1 development (they're all top-of-function early-return
 guards or a single `if` around a filter-list append). Opening the upstream PR is still worth
@@ -182,7 +182,7 @@ repo's `wasm-bindgen-futures-patch`, which forks an entire crate because upstrea
 the change) — this is a few local edits to files Q2 already vendors verbatim, low-risk to keep
 indefinitely.
 
-**Correction (2026-09-18, round 4 review) — the "3 files, ~6 lines" accounting above is now
+**Correction (2026-09-18, round 4 review) — the "3 files, \~6 lines" accounting above is now
 stale, for one confirmed reason. (An unsolicited external audit of the real quarto-cli tree also
 claimed this plan "misses" the `layout/ipynb.lua:121,126` sites — checked directly against this
 plan's own audit table above and that claim is wrong: this plan already covers both lines,
@@ -242,7 +242,7 @@ asking for in the same PR rather than as an afterthought once a rename actually 
 This is a judgment call on process, not a technical fork — flagged here for visibility rather
 than as a blocking question, since either answer (indefinite-carry vs. a hard timebox) leaves
 the actual engineering checklist unchanged. Revisit if the patch surface grows materially beyond
-the ~6 lines identified here.
+the \~6 lines identified here.
 
 ## Out of scope
 - Q2-side wiring that *sets* the param and seeds the registry (P6). The shim (P5).

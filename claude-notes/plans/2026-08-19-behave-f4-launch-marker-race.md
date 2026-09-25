@@ -57,10 +57,10 @@ Convert every assertion in `behave_engine_e2e.rs` that counts an
 
 - F4 line \~681 (the CI failure): `BEHAVE_LAUNCH_MARKER:1` == 2 after
   execute-2 — the mandatory fix.
-- F4 lines ~637/~644: crash marker == 1 and `BEHAVE_LAUNCH_MARKER:1` == 1
+- F4 lines \~637/\~644: crash marker == 1 and `BEHAVE_LAUNCH_MARKER:1` == 1
   before execute-2 (same class; replaces the fixed 200 ms sleep).
-- F3 line ~468: `BEHAVE_LAUNCH_MARKER:1` == 1 before execute-2 (same class;
-  replaces the fixed 200 ms sleep). The `:2 == 0` absence check at ~475 keeps
+- F3 line \~468: `BEHAVE_LAUNCH_MARKER:1` == 1 before execute-2 (same class;
+  replaces the fixed 200 ms sleep). The `:2 == 0` absence check at \~475 keeps
   its protection via the preceding wait's trailing settle.
 
 Assertions on `"engine-host spawned"` stay bare — that event is synchronous
@@ -87,7 +87,7 @@ delay injection** in `stderr_loop` (sleep before forwarding lines containing
 - [x] File strand bd-qlnkdw9u; link this plan
 - [x] Worktree `.worktrees/bd-qlnkdw9u-behave-f4-crash-relaunch`
 - [x] Write this plan document
-- [x] Harden F4 pre-execute-2 async checks (~:637, ~:644) with `wait_for_count_containing`
+- [x] Harden F4 pre-execute-2 async checks (\~:637, \~:644) with `wait_for_count_containing`
 - [x] Fail-first: injected stderr delay (750 ms on marker lines) reproduces the
       CI failure exactly — panic at :681, `left: 1, right: 2`, identical
       captured-messages list, hardened pre-checks and the synchronous

@@ -76,7 +76,7 @@ Date formatting is now feature-complete for basic use cases.
 - Many other tests unlocked by this work (locale, name substitute, sort, etc.)
 
 ### Priority 4: Sorting Algorithm ⬜ Not Started
-**Estimated Impact**: ~40-50 additional tests (prerequisite for disambiguation)
+**Estimated Impact**: \~40-50 additional tests (prerequisite for disambiguation)
 
 **Tasks**:
 - [ ] Implement sort key evaluation from CSL `<sort>` element
@@ -88,7 +88,7 @@ Date formatting is now feature-complete for basic use cases.
 **Tests to unlock**: sort_* category
 
 ### Priority 5: Disambiguation Algorithm ⬜ Not Started
-**Estimated Impact**: ~60-70 additional tests
+**Estimated Impact**: \~60-70 additional tests
 
 Complex multi-phase algorithm. Requires sorting to work first.
 
@@ -101,7 +101,7 @@ Complex multi-phase algorithm. Requires sorting to work first.
 **Tests to unlock**: disambiguate_* category
 
 ### Priority 6: Position Tracking ⬜ Not Started
-**Estimated Impact**: ~15-20 additional tests
+**Estimated Impact**: \~15-20 additional tests
 
 **Tasks**:
 - [ ] Track first/subsequent citation positions
@@ -112,7 +112,7 @@ Complex multi-phase algorithm. Requires sorting to work first.
 **Tests to unlock**: position_* category
 
 ### Priority 7: Collapsing ⬜ Not Started
-**Estimated Impact**: ~20 additional tests
+**Estimated Impact**: \~20 additional tests
 
 **Tasks**:
 - [ ] Implement citation number collapsing ([1-3])

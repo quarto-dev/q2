@@ -408,7 +408,7 @@ host shim; deliberately deferred.
 `<div id="cell-1" class="cell">` with the echoed source `1 + 1` and
 `<div class="cell-output cell-output-display">…<code>2</code>…</div>`.
 Cold start: QNR's Julia project was already instantiated on this machine (no
-multi-minute install observed); the control server started in ~4s per render
+multi-minute install observed); the control server started in \~4s per render
 (`daemon: false` → oneShot, server closed after each render — no detached
 server escaped; no transport-file cleanup needed).
 
@@ -554,7 +554,7 @@ Landed as `julia_engine_e2e::j3_exeflags_and_env_through_julia_block`.
 `FOO=BAR`.
 
 **Schema stop-point (resolved).** Confirmed against the INSTALLED
-QuartoNotebookRunner 0.17.4 source (`~/.julia/packages/QuartoNotebookRunner/
+QuartoNotebookRunner 0.17.4 source (`\~/.julia/packages/QuartoNotebookRunner/
 evCNi/src/server.jl`, exactly the version the fixture's `Project.toml` pins):
 `_exeflags_and_env(options)` reads `options["format"]["metadata"]["julia"]
 ["exeflags"]` and `["env"]` (`server.jl:151-168`); `env` entries are
@@ -646,8 +646,8 @@ Observations (full invocations + timings in the 4E task report):
 1. **Cold `daemon: false` render**: q2 starts the DETACHED control server
    anyway (transport file written, server PID 96341, port 8001). First
    attempt failed with `Execution failed in julia: undefined` — the fresh
-   runtime env ran `Pkg.update()` (~2.5 min) and the server needed ~12 s
-   more to write the transport file, exceeding julia-engine.ts's ~10.5 s
+   runtime env ran `Pkg.update()` (\~2.5 min) and the server needed \~12 s
+   more to write the transport file, exceeding julia-engine.ts's \~10.5 s
    15-try poll (`pollTransportFile` rejects with no value → "undefined").
    Environment-induced cold-start flake, exactly the masquerade the plan's
    CI-gating note warns about; retry succeeded (49.6 s — first worker pays

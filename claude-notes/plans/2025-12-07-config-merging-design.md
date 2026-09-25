@@ -695,7 +695,7 @@ Eagerly create a new `YamlWithSourceInfo` tree for every merge.
 - Fast access after merge
 
 **Cons:**
-- ~15% runtime cost (cloning/copying)
+- \~15% runtime cost (cloning/copying)
 - Memory pressure from duplicated trees
 - Doesn't preserve preference tags through multi-layer merge
 

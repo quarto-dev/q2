@@ -21,7 +21,7 @@ This session continued from the quarto-yaml implementation to validate and analy
 - Running and analyzing scaling: 30min
 - Documentation: 40min
 
-**Total: ~3 hours**
+**Total: \~3 hours**
 
 ## Discoveries
 
@@ -122,7 +122,7 @@ Breadth  Total Nodes  Overhead Ratio
 
 ## Files Created
 
-### 1. benches/memory_overhead.rs (~240 lines)
+### 1. benches/memory_overhead.rs (\~240 lines)
 
 Measures absolute memory overhead for realistic YAML structures:
 - Estimates memory usage recursively
@@ -142,7 +142,7 @@ fn estimate_yaml_with_source_memory(yaml: &YamlWithSourceInfo) -> usize {
 
 **Run with**: `cargo bench --bench memory_overhead`
 
-### 2. benches/scaling_overhead.rs (~380 lines)
+### 2. benches/scaling_overhead.rs (\~380 lines)
 
 Tests whether overhead grows linearly with data size:
 - Generates YAML at various sizes
@@ -281,7 +281,7 @@ User expressed satisfaction at multiple points:
 ## Validation of Design Decisions
 
 This session **validated** the owned data approach:
-- ✅ Overhead is acceptable (6.38x → ~64KB for 10KB config)
+- ✅ Overhead is acceptable (6.38x → \~64KB for 10KB config)
 - ✅ Scales linearly (no superlinear growth)
 - ✅ Predictable behavior (stable ratio)
 - ✅ Production-ready (no optimization needed)
@@ -317,7 +317,7 @@ All findings documented:
 
 **Status**: ✅ Ready to use in Quarto CLI
 
-**Time investment**: ~5-6 hours total (including previous implementation session)
+**Time investment**: \~5-6 hours total (including previous implementation session)
 
 **Return on investment**: High-quality YAML parsing with source tracking, validated and benchmarked
 
@@ -329,11 +329,11 @@ All findings documented:
 ## Session Artifacts
 
 **Code**:
-- 2 benchmark files (~620 lines total)
+- 2 benchmark files (\~620 lines total)
 - Tests prove 6.38x overhead and linear scaling
 
 **Documentation**:
-- 2 analysis documents (~150 lines markdown)
+- 2 analysis documents (\~150 lines markdown)
 - This session log
 
 **Knowledge gained**:

@@ -100,7 +100,7 @@ Ready to implement the conversion logic:
 
 - MetaInlines/MetaBlocks preserve JSON array structure in `result` field
 - No text reconstruction needed
-- Simpler implementation (~150 LOC vs ~300 LOC)
+- Simpler implementation (\~150 LOC vs \~300 LOC)
 - Better data fidelity
 
 ## Files Modified/Created

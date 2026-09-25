@@ -132,7 +132,7 @@ themselves executable cells.
 **Correction (found during task 2, bd-rbpkzqjo):** the empty-classes case
 does **not** include a 4-space indented code block — qmd has no
 indented-code-block grammar production at all. `grammar.js`'s
-`_indented_code_block_error` (~1223-1231) documents this as a deliberate,
+`_indented_code_block_error` (\~1223-1231) documents this as a deliberate,
 blanket known limitation, and the scanner emits
 `INDENTED_CODE_BLOCK_DISALLOWED` (`scanner.c:2664`) rather than an
 indented-code-block node — verified to fire in every context (top-level and

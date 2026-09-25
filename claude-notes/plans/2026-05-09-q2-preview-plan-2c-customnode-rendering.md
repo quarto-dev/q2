@@ -613,19 +613,19 @@ All three fixtures use `_quarto.tests.run.requires_js: true` so the CLI smoke-al
 
 | Component | Lines (rough) |
 |---|---|
-| q2-preview/quartoClasses.ts extensions (callout/theorem/proof/quarto-xref) | ~50 |
-| q2-preview/utils.ts extensions (formatRefLabel, composeAttr, renderSlot, makeSlotSetter) | ~75 |
-| q2-preview/custom/*.tsx (6 files + Fallback; Equation grows ~30 LOC for JS-side `\tag{N}` port) | ~340 |
-| q2-preview/theoremEnvs.ts (8-entry refType→env mapping) | ~15 |
-| q2-preview/dispatchers.tsx CustomBlock/CustomInline dispatchers | ~20 |
-| q2-preview/registry.ts spread-and-key extension + entry.tsx mergedRegistry rename + renderSlot exposure on __Q2_PREVIEW_RENDERER__ | ~15 |
-| Vitest integration tests (per-component snapshot + structure, generic fallback, override integration, atomic-via-registry, class-compat, buildCustomRegistry unit, namespace-disjoint policy assertion) | ~265 |
-| customNodeWireFormatProject.wasm.test.ts | ~50 |
-| Smoke-all q2-preview fixtures (3 fixtures: multi-element-doc + multi-element-project + with-render-components + assets) | ~110 |
-| Demo fork (gordon/render-components/) | ~80 |
-| **Total** | **~1020** |
+| q2-preview/quartoClasses.ts extensions (callout/theorem/proof/quarto-xref) | \~50 |
+| q2-preview/utils.ts extensions (formatRefLabel, composeAttr, renderSlot, makeSlotSetter) | \~75 |
+| q2-preview/custom/*.tsx (6 files + Fallback; Equation grows \~30 LOC for JS-side `\tag{N}` port) | \~340 |
+| q2-preview/theoremEnvs.ts (8-entry refType→env mapping) | \~15 |
+| q2-preview/dispatchers.tsx CustomBlock/CustomInline dispatchers | \~20 |
+| q2-preview/registry.ts spread-and-key extension + entry.tsx mergedRegistry rename + renderSlot exposure on __Q2_PREVIEW_RENDERER__ | \~15 |
+| Vitest integration tests (per-component snapshot + structure, generic fallback, override integration, atomic-via-registry, class-compat, buildCustomRegistry unit, namespace-disjoint policy assertion) | \~265 |
+| customNodeWireFormatProject.wasm.test.ts | \~50 |
+| Smoke-all q2-preview fixtures (3 fixtures: multi-element-doc + multi-element-project + with-render-components + assets) | \~110 |
+| Demo fork (gordon/render-components/) | \~80 |
+| **Total** | **\~1020** |
 
-Reasonable for one focused session. (~55 LOC lighter than the pre-unification version: one fewer custom component, one fewer context file.)
+Reasonable for one focused session. (\~55 LOC lighter than the pre-unification version: one fewer custom component, one fewer context file.)
 
 **Sub-ordering**: quartoClasses.ts extensions land first (the enumeration commit) per the "enumeration before consumers" rule. Then theoremEnvs.ts + utils.ts extensions. Then the 6 custom components + Fallback. Then dispatchers.tsx + registry.ts + entry.tsx rename + `__Q2_PREVIEW_RENDERER__` extension. Then verification.
 
@@ -650,13 +650,13 @@ Nothing structurally. Plans 4 / 5 / 6 / 7 / 8 can land in parallel with 2C; they
 
 Tracked work *outside* 2C's scope that 2C's design assumes or that 2C's temporary measures hand off to:
 
-- **bd-1kly** — *Complete `FootnotesTransform` for `reference-location: block`/`section`.* Upstream Rust fix for the gap that Plan 2B's `Note.tsx` tooltip-body fallback works around. When closed, Plan 2B's `Note.tsx`, `NoteNumberingContext`, and the JS-side numbering walk all become inert and can be deleted (~30 LOC removed). Also unblocks the tippy.js popup integration.
+- **bd-1kly** — *Complete `FootnotesTransform` for `reference-location: block`/`section`.* Upstream Rust fix for the gap that Plan 2B's `Note.tsx` tooltip-body fallback works around. When closed, Plan 2B's `Note.tsx`, `NoteNumberingContext`, and the JS-side numbering walk all become inert and can be deleted (\~30 LOC removed). Also unblocks the tippy.js popup integration.
 
 Future plans that decorate the AST 2C renders (Plans 4 / 5 / 6 / 7 / 8) are tracked in §"Soft activation dependencies" rather than here.
 
 ## Notes
 
-- Plan 2C is the second half of a two-plan split that Plan 2B's prior monolithic version (1781 lines, ~2375 LOC implementation surface) outgrew the realistic single-session context budget. Plan 2B (Session A) handles framework recursion semantics + asset manifest + Pandoc-base leaves; Plan 2C (Session B) handles Quarto custom-node renderers + verification. Session-A and Session-B run sequentially, not in parallel. Hand-off is via 2B's checklist completion plus the in-tree state of completed code; 2C's implementor reads 2C + spot-checks 2B's `previewRegistry` + utility files, no transcript needed.
+- Plan 2C is the second half of a two-plan split that Plan 2B's prior monolithic version (1781 lines, \~2375 LOC implementation surface) outgrew the realistic single-session context budget. Plan 2B (Session A) handles framework recursion semantics + asset manifest + Pandoc-base leaves; Plan 2C (Session B) handles Quarto custom-node renderers + verification. Session-A and Session-B run sequentially, not in parallel. Hand-off is via 2B's checklist completion plus the in-tree state of completed code; 2C's implementor reads 2C + spot-checks 2B's `previewRegistry` + utility files, no transcript needed.
 - Following the user's lead: q2-preview is intended to evolve toward a system component (likely a Quarto extension), but the bundling / distribution mechanics are out of scope for 2B and 2C.
 
 ## References
@@ -692,7 +692,7 @@ Future plans that decorate the AST 2C renders (Plans 4 / 5 / 6 / 7 / 8) are trac
 
 ## Revision history
 
-- **2026-05-09**: initial split from Plan 2B. Plan 2B's monolithic version (1781 lines, ~2375 LOC implementation surface) was too large for a single agent session even at 1M-token context. The natural cut is "Pandoc base layer through framework" vs "Quarto custom-node taxonomy + verification" — Plan 2B keeps the former, Plan 2C takes the latter. Two amendments to Plan 2B that this split implies: (1) Plan 2B ships a stub `quartoClasses.ts` with footnote/appendix/section constants only (the ones any non-CustomNode component will reference); 2C fills in the callout/theorem/proof/crossref constants. (2) Plan 2B pulls vitest integration coverage for everything Phase 1-3 touches into its scope (was deferred to Phase 5.1), plus the asset-manifest variant of `assetManifestProject.wasm.test.ts` from 5.3 — so 2B is self-locking and 2C doesn't inherit a verification debt for 2B's work.
+- **2026-05-09**: initial split from Plan 2B. Plan 2B's monolithic version (1781 lines, \~2375 LOC implementation surface) was too large for a single agent session even at 1M-token context. The natural cut is "Pandoc base layer through framework" vs "Quarto custom-node taxonomy + verification" — Plan 2B keeps the former, Plan 2C takes the latter. Two amendments to Plan 2B that this split implies: (1) Plan 2B ships a stub `quartoClasses.ts` with footnote/appendix/section constants only (the ones any non-CustomNode component will reference); 2C fills in the callout/theorem/proof/crossref constants. (2) Plan 2B pulls vitest integration coverage for everything Phase 1-3 touches into its scope (was deferred to Phase 5.1), plus the asset-manifest variant of `assetManifestProject.wasm.test.ts` from 5.3 — so 2B is self-locking and 2C doesn't inherit a verification debt for 2B's work.
 
 - **2026-05-10 (post-2B-implementation amendments)**: cross-checked Plan 2C against what Plan 2B actually shipped on `feature/q2-preview` and the current state of the Rust transform sources. Five mechanical corrections, no design changes. (The first bullet's line-ref claims were themselves incorrect — superseded by the 2026-05-10 second-pass amendment below.)
   - **Stale Rust line refs updated (FIRST PASS — see correction below)** — transforms have shifted since 2C was written 2026-05-09. Initial amendment claimed: `theorem.rs:282-285` → `theorem.rs:145`; `equation_label.rs:215-217` → `equation_label.rs:316` (two occurrences); `crossref_resolve.rs:294-314` → `crossref_resolve.rs:316`. Verified-correct refs not changed: `callout.rs:210`, `proof.rs:145`, `float_ref_target.rs:292-295`, `crossref_render.rs:388-400` (theorem_env_for), `:534-585` (render_proof), `:601-650` (render_equation), pampa wire-format references.
@@ -730,17 +730,17 @@ Future plans that decorate the AST 2C renders (Plans 4 / 5 / 6 / 7 / 8) are trac
   - Risk-area "symmetric merge gotcha" removed (no longer applies).
   - Risk-area "namespace-collision policy" added (the load-bearing invariant under the unified design).
   - Test "CustomNode override integration" simplified to one merge site.
-  - ~30 LOC removed from §Estimated scope.
+  - \~30 LOC removed from §Estimated scope.
 
-  **`IncludeExpansion` deferral**. The earlier plan preregistered an `IncludeExpansion.tsx` with TBD slot shape, "dormant until Plan 8". Replaced with: Plan 8 ships its own `IncludeExpansion.tsx` together with the AST node and the `atomicCustomNodes.ts` addition; until then, `Fallback.tsx` covers the unknown `type_name` gracefully. One fewer per-type component in 2C; one component table row removed; ~30 LOC trimmed. Soft-activation note for Plan 8 updated to reflect.
+  **`IncludeExpansion` deferral**. The earlier plan preregistered an `IncludeExpansion.tsx` with TBD slot shape, "dormant until Plan 8". Replaced with: Plan 8 ships its own `IncludeExpansion.tsx` together with the AST node and the `atomicCustomNodes.ts` addition; until then, `Fallback.tsx` covers the unknown `type_name` gracefully. One fewer per-type component in 2C; one component table row removed; \~30 LOC trimmed. Soft-activation note for Plan 8 updated to reflect.
 
   **`renderSlot` on `__Q2_PREVIEW_RENDERER__`** (item #9). The iframe global already exposes `Node`, `renderChildren`, `renderNode`, `Block`, `Inline`, `previewRegistry`. 2C adds `renderSlot` so user TSX overrides of CustomNodes can recurse into named slots without reimplementing the per-slot setLocalAst plumbing. One-line addition to `entry.tsx`'s `__Q2_PREVIEW_RENDERER__` object literal.
 
-  **`buildCustomRegistry` unit test** (item #12). One new ~10-line test case extending the existing `hub-client/src/utils/customRegistry.test.ts` (shipped by Plan 2A) — asserts a `Callout`-named TSX export reaches the merged map under key `Callout`. Belt-and-suspenders below the smoke-fixture layer so a future `buildCustomRegistry` refactor can't silently break CustomNode overrides.
+  **`buildCustomRegistry` unit test** (item #12). One new \~10-line test case extending the existing `hub-client/src/utils/customRegistry.test.ts` (shipped by Plan 2A) — asserts a `Callout`-named TSX export reaches the merged map under key `Callout`. Belt-and-suspenders below the smoke-fixture layer so a future `buildCustomRegistry` refactor can't silently break CustomNode overrides.
 
   **Plan 8 cross-reference cleanup**. The IncludeExpansion deferral above ripples into Plan 8 (`2026-05-04-q2-preview-plan-8-include-roundtrip.md`), which previously said "Plan 2C ships the per-type IncludeExpansion component" / "Plan 2C lands a placeholder as dormant wiring". Those references were updated alongside this amendment to say Plan 8 ships its own `IncludeExpansion.tsx` (which Plan 8's "Add a React component" item already covered — the cross-reference text just lagged). No substantive Plan 8 scope change; only the framing.
 
-  **Total scope delta**: ~1035 LOC → ~980 LOC (one fewer component, one fewer context file, one new unit-test case in an existing file).
+  **Total scope delta**: \~1035 LOC → \~980 LOC (one fewer component, one fewer context file, one new unit-test case in an existing file).
 
   Informational notes (no plan changes needed):
   - **bd-3gtn fixed in Plan 2B (`c8a684bd`)** — the WASM artifact-flush loop now skips empty-content entries, so user-uploaded image bytes survive across renders. Plan 2C's smoke fixtures with images don't need the post-render-add workaround that 2B's first-pass test originally used.
@@ -762,7 +762,7 @@ Future plans that decorate the AST 2C renders (Plans 4 / 5 / 6 / 7 / 8) are trac
   **Scope additions** (small):
   - **Namespace-disjoint policy assertion landed in 2C** (was deferred in third-pass with a "land if registry exceeds 10 types" threshold). The Rust precedent at `pipeline.rs:1987` (`Q2_PREVIEW_TRANSFORM_EXCLUDED` validation) is a static-set-vs-static-set test running at every build; same pattern, lives in a new `q2-preview/registry.test.ts`. The deferral threshold was overly cautious — silent-shadowing is the only failure mode and the codebase's posture (per Rust precedent) is to catch it at build time. Risk-area entry "Namespace-collision policy" updated to reflect the test landing rather than waiting.
 
-    **Pandoc tag list lives in the test, not the framework.** `framework/types.ts` does not currently export a static set of tag names — `BlockNode` / `InlineNode` are TS unions, not introspectable at runtime. The test file maintains its own ~30-name list (commented with the source line refs `framework/types.ts:60+ / :111+` so updates stay in sync if Pandoc ever adds tags). Cost: ~40 LOC (list + assertion) instead of ~10. Estimated scope total bumped ~980 → ~1020 LOC.
+    **Pandoc tag list lives in the test, not the framework.** `framework/types.ts` does not currently export a static set of tag names — `BlockNode` / `InlineNode` are TS unions, not introspectable at runtime. The test file maintains its own \~30-name list (commented with the source line refs `framework/types.ts:60+ / :111+` so updates stay in sync if Pandoc ever adds tags). Cost: \~40 LOC (list + assertion) instead of \~10. Estimated scope total bumped \~980 → \~1020 LOC.
   - **`notes.qmd` content pinned** to a 4-line stub (frontmatter `title: Notes` + one-line body). Fixture's only requirement is "pass-1 sees more than one file"; pinning the content makes the fixture deterministic.
   - **`ensureHtmlElements` second-array form documented + used**. The runner contract at `parse_ensure_html_elements` accepts `[must_match, must_not_match]`; the smoke fixture spec previously only used must-match. Added must-not-match assertions for `div.q2-preview-placeholder` (no fallback path fired) and `div[data-custom-type]` (no raw CustomNode wrapper leaked through unwrap). Element-and-structure selectors (e.g. `div.callout-note > div.callout-header > div.callout-title-container.flex-fill`) added on the must-match side so the three-deep nesting rule from §"`Callout.tsx`" is locked in the smoke layer.
 

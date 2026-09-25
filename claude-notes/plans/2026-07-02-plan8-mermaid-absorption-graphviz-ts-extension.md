@@ -111,7 +111,7 @@ today **only** by explicit `engine: mermaidjs` because `mermaid` is a
       Match `{mermaid}` + optional attribute list so the *transform* predicate
       matches the *claim* predicate (which is language-only). Without this, an
       attributed cell would be selected but silently passed through unrendered.
-- [ ] **Update the hard-coded lists in `jupyter/text_execute.rs`** (lines ~415,
+- [ ] **Update the hard-coded lists in `jupyter/text_execute.rs`** (lines \~415,
       451, 496, 558) that repeat `["ojs","mermaid","dot"]` — route them through
       the `HANDLED_LANGUAGES` constant (or the ownership projection) so there is
       one source of truth, not three. (These are the leave-alone lists jupyter

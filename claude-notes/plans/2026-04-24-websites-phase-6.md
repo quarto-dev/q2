@@ -1119,7 +1119,7 @@ None — inline asserts over the emitted HTML cover the vocabulary
 7. **Standalone (no `project_index`) render** is a no-op.
 8. **Diagnostic shape**: `source_label = "Body link"`, message
    matches `<label> references unknown document '<path>'`.
-9. **Inline path-normalization helper** (~30 lines) instead of
+9. **Inline path-normalization helper** (\~30 lines) instead of
    adding a `path-clean` crate dep. Walks forward-slash segments
    to dodge OS-specific path surprises.
 10. **Page-relative output URLs** (Q1 parity); the resolver

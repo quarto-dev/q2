@@ -110,7 +110,7 @@ All eight sections (§0–§7) are implemented and green at the jsdom/Rust tier:
   · **§0** list-item surfaces (incl. the A4 dead-code wiring gap caught + fixed) · **§1** line-anchored
   nav (locked behavior-preserving except wrap→clamp) · **§2** roving over the C1 partition · **§6**
   delete-by-emptying (Rust round-trips + frontend, 6.r honestly accepted-untested) · **§7** expand-on-edit.
-- Suites green: **preview-renderer 441 unit / ~444 integration / typecheck clean**; **pampa node_edit
+- Suites green: **preview-renderer 441 unit / \~444 integration / typecheck clean**; **pampa node_edit
   round-trips pass** (1 *pre-existing, unrelated* pampa failure: `test_fenced_div_multiline_child_excluded`).
 - Production build **`npm run build:all` passes (exit 0)**.
 
@@ -478,9 +478,9 @@ positions on the *same* line should not diverge. Candidate causes:
   descent — `readLiveCaret` derives `bufferLine` by counting `\n` bytes only (column-invariant), so
   `Ls` is identical for begin-vs-inside on the same source line; trailing-blank overshoot resolves
   correctly via the nearest-child fallback. Verified independently (opus spec review). Commit `444590db`.
-- [~] **3.b** Clamp the caret-derived `Ls` to the current surface's **trimmed** span — **N/A (Cause 1):**
+- [\~] **3.b** Clamp the caret-derived `Ls` to the current surface's **trimmed** span — **N/A (Cause 1):**
   no overshoot bug exists; `surfaceLineSpan` already trims and the fallback resolves correctly.
-- [~] **3.c** Align/retire the non-trimming byte fallback — **N/A (Cause 1):** the byte-space
+- [\~] **3.c** Align/retire the non-trimming byte fallback — **N/A (Cause 1):** the byte-space
   `childSurfaceToward` fallback is only reached in the **no-caret** branch, so it cannot diverge for a
   trailing-whitespace caret.
 - [x] **3.d** If the repro is cause 1, **don't "fix" it** — document that descent is caret-line-driven
@@ -646,7 +646,7 @@ interaction (typing or in-surface cursoring).
   as long as the editor stays open.
 
 ### Implementation (frontend only)
-- **`EditTarget` type** (`PreviewContext.tsx`, the `contentHeight` struct ~`:51-66`): add
+- **`EditTarget` type** (`PreviewContext.tsx`, the `contentHeight` struct \~`:51-66`): add
   `expandOnOpen?: boolean`. Set `true` at the **keyboard** `activate` site, `false`/absent everywhere
   else.
 - **`activate`** (`useBlockEditHover.tsx:64`): thread an `opts?: { keyboard?: boolean }`. The

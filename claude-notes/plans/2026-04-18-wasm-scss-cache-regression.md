@@ -336,7 +336,7 @@ writing default-theme entries.
    (a).
 
 2. **LRU budget value.** Proposal: 10 MB for `sass`. Rationale:
-   comfortably holds ~25 Bootswatch themes at ~300 KB each (all
+   comfortably holds \~25 Bootswatch themes at \~300 KB each (all
    minified). Revisit if users hit the cap.
 
 3. **Eviction granularity.** Evict to N% under the budget on each

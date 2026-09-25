@@ -263,7 +263,7 @@ So "vendored bytes served to preview as a per-project HTML dependency" is a **ne
 
 ## Open design questions for the user *(answered — see §Resolved decisions)*
 
-1. **Is 2.62 MiB in the `q2` binary acceptable, unconditionally?** `include_str!`/`include_bytes!` is compile-time, so every `q2` binary carries mermaid whether or not the user ever writes a diagram — this is how reveal.js already works, but reveal is ~175 KB and this is ~15×. Debug `q2` is currently 164 MB, so it's small in relative terms; release is the number that matters for the download. Accept it, or is a `--features` / download-on-first-use escape hatch wanted?
+1. **Is 2.62 MiB in the `q2` binary acceptable, unconditionally?** `include_str!`/`include_bytes!` is compile-time, so every `q2` binary carries mermaid whether or not the user ever writes a diagram — this is how reveal.js already works, but reveal is \~175 KB and this is \~15×. Debug `q2` is currently 164 MB, so it's small in relative terms; release is the number that matters for the download. Accept it, or is a `--features` / download-on-first-use escape hatch wanted?
 
 2. **Bundle by default, or opt-in?** The strand floats an opt-in project/format key as a fallback "if bundling by default is judged too heavy." My read is that default-on is the right call — it is what Q1 does, it is what makes a rendered site self-contained, and an opt-in key means the airgapped-docs case stays broken for anyone who doesn't know the key exists. But it is your call, and a `mermaid-runtime: bundled|cdn` key is cheap to add either way.
 

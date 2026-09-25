@@ -380,7 +380,7 @@ After each phase:
 ## Expected Benefits
 
 ### 1. Faster Builds
-- ~50% reduction in tree-sitter compilation time (rough estimate)
+- \~50% reduction in tree-sitter compilation time (rough estimate)
 - Fewer files to track for cargo rerun-if-changed
 
 ### 2. Clearer API
@@ -415,7 +415,7 @@ If something breaks:
 - Phase 8 (archive decision): 15 minutes
 - Phase 9 (README): 15 minutes
 - Testing after each phase: 30 minutes
-- **Total**: ~2-2.5 hours
+- **Total**: \~2-2.5 hours
 
 ## Success Criteria
 

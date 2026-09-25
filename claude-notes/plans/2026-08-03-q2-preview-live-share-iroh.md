@@ -290,7 +290,7 @@ This gate front-loads the bets that would kill or reshape the plan, at
 throwaway-spike cost, before we pay for Phase 1's full TDD surface and five
 phases of implementation.
 
-**Mechanics.** Time-box: ~2 working days. Spike code lives on the gate
+**Mechanics.** Time-box: \~2 working days. Spike code lives on the gate
 strand's branch (`braid/bd-l4j4ky8k-live-share-feasibility-gate`) and is
 **throwaway — it is never merged**; what lands on the integration line is
 this section's findings, the measurements, and the recorded decision.
@@ -342,17 +342,17 @@ it would make the spike unrepresentative).
       on the guest, (b) bytes transferred + effective throughput for the
       asset boot, (c) edit→propagation latency once the session is warm —
       (c) is the steady-state "feels usable" number (sync frames are
-      small, so it should be ~relay RTT; confirm). **Known confounder for
+      small, so it should be \~relay RTT; confirm). **Known confounder for
       (a):** the preview server serves everything uncompressed (verified:
       no CompressionLayer anywhere in the preview/hub stack —
       quarto-hub's tower-http features are only `trace`/`cors`/
-      `set-header`), so the ~38 MB WASM travels at full size; (b) exists
+      `set-header`), so the \~38 MB WASM travels at full size; (b) exists
       to make a breach attributable to tunnel vs. payload. Soft threshold:
       < 30 s time-to-first-render on a residential-class connection;
       worse ⇒ conditional go, mitigation ladder in order of cost:
       (1) HTTP compression on the preview server
       (`tower_http::CompressionLayer` or a precompressed `.wasm.br` —
-      wasm compresses ~3–5×, no version-skew cost), (2) guest-side asset
+      wasm compresses \~3–5×, no version-skew cost), (2) guest-side asset
       serving (risk #5) promoted from follow-up into Phase 1 scope.
 - [x] **Q4 — Is the dependency weight acceptable?** Measure and record
       here: `q2` release binary size and clean-build wall time, before vs.
@@ -437,7 +437,7 @@ project) ← `spike-tunnel-host 127.0.0.1:49583` ← two
 - `curl http://127.0.0.1:9280/health` through the tunnel returned the
   **identical** payload to direct, including
   `"index_document_id":"4ZLBFnLKivaVWXc9HdF2SCACTn2U"`.
-- SPA booted and rendered in both browsers; **~47.5 MB fetched through the
+- SPA booted and rendered in both browsers; **\~47.5 MB fetched through the
   tunnel per guest** (uncompressed, 38.4 MB of it the WASM — the plan's
   no-compression confounder confirmed); first render 1.7 s (Chromium) /
   1.9 s (Firefox) on the direct path.
@@ -465,19 +465,19 @@ the real cross-network session below.
 approximation, (ii) real cross-network leg via a GH Actions guest (below).**
 The spike client's `--relay-only` flag pins path selection to relay paths
 (verified: **zero** DIRECT selections in the client log for the whole leg;
-selected path stayed `euc1-1.relay.n0.iroh.link`, rtt ~31 ms warm). Fresh
+selected path stayed `euc1-1.relay.n0.iroh.link`, rtt \~31 ms warm). Fresh
 Chromium boot through the relay-pinned tunnel:
 - (a) time-to-first-render: **4.07 s** (soft threshold was < 30 s)
-- (b) bytes: ~47.5 MB → ≥ **11.7 MB/s** effective through the real n0 relay
+- (b) bytes: \~47.5 MB → ≥ **11.7 MB/s** effective through the real n0 relay
   (lower bound; includes render time)
-- (c) edit→propagation warm: **1.00 s** (vs ~0.55 s direct — consistent with
+- (c) edit→propagation warm: **1.00 s** (vs \~0.55 s direct — consistent with
   "+relay RTT")
 Honest limitation: both endpoints shared this machine's (fast) connection,
 so (a)/(b) are not a residential-guest measurement — but the traffic did
 transit the real n0 relay, so protocol behavior and rate-limiting posture
 are exercised. Also observed (informs Phase 1 status messaging): on loopback
 the first selected path after connect is RELAY, upgrading to DIRECT within
-~3–6 s — initial connect in 162 ms.
+\~3–6 s — initial connect in 162 ms.
 
 **Q3 cross-network leg — executed and PASSED (2026-08-04, user-approved
 push).** The plan assumed a cloud VM guest "cannot measure browser
@@ -495,15 +495,15 @@ last observed marker). Results:
   relay-pinned — stayed on the relay for their whole run**: hole-punching
   Azure↔residential NAT never yielded a selected direct path, so this
   measured exactly the relay-fallback scenario Q3 exists for.
-  Guest→relay rtt ~130 ms (`euc1-1` from Azure); relays probe at
+  Guest→relay rtt \~130 ms (`euc1-1` from Azure); relays probe at
   200/OK in 0.08–0.5 s from the runner.
 - (a) time-to-first-render: **13.2 s (default) / 13.3 s (relay-pinned)** —
   soft threshold < 30 s, PASS.
-- (b) ~47.5 MB per boot → **~3.7 MB/s sustained through the relay**
+- (b) \~47.5 MB per boot → **\~3.7 MB/s sustained through the relay**
   (uncompressed WASM dominates; the HTTP-compression mitigation would cut
-  the payload ~3–5×).
+  the payload \~3–5×).
 - (c) edit→observed propagation over 6 marker bumps: **0.81–2.34 s,
-  median ~1.1 s** (includes the driver's 150 ms poll grain and host↔runner
+  median \~1.1 s** (includes the driver's 150 ms poll grain and host↔runner
   NTP clock skew).
 - Caveats: runner egress is datacenter-class, not residential; the
   Safari-app and lid-close observations still need a human-driven session.
@@ -548,7 +548,7 @@ iroh 1.0.3 wired reachably into the binary via an env-gated hook).**
   *"no guaranteed uptime"*, and the add-a-relay doc says *"production
   deployments should run their own."* Iroh Services ToS (May 2025) reserves
   unilateral termination, caps liability at US$50. Paid offering exists
-  (Iroh Services; dedicated relays ~$197/mo, free tier 10 concurrent
+  (Iroh Services; dedicated relays \~$197/mo, free tier 10 concurrent
   endpoints). Public-relay sunsets are per-protocol-version on an announced
   schedule (v1.0 relays "until End of Life"). Verdict: ephemeral preview
   sharing is well inside tolerated use — relays are handshake/fallback
@@ -638,7 +638,7 @@ proved them on a throwaway branch that never merges.
       re-measure; **Windows: gate coverage accepted** — user decision
       2026-08-04: no dedicated Windows leg for Phase 0; the gate proved
       the identical dep set on windows-latest (run 30894960520,
-      2026-08-04) and only the ~90-line stub crate is new, so the
+      2026-08-04) and only the \~90-line stub crate is new, so the
       Windows signal rides the release workflow / later CI instead)*
 
 ## Phase 1 — `quarto-p2p` core (TDD)
@@ -724,7 +724,7 @@ from `wasm-quarto-hub-client` still fails — output inspected for all)*
       health polling to keep the tunnel warm
       *(verified by `tunnel::idle_pooled_conn_survives_quic_keepalive`:
       35 s fully-idle pooled HTTP/1.1 conn through default-config hermetic
-      endpoints, then a second request on the same conn succeeds — ~40 s
+      endpoints, then a second request on the same conn succeeds — \~40 s
       runtime by design, the slowest test in the crate)*
 - [x] `client.rs` — endpoint + `MemoryLookup` seeded from the ticket;
       `TcpListener` accept loop; per conn: `open_bi()` on the current
@@ -1025,7 +1025,7 @@ dir.
   gating helper (`wait_until_healthy`) is unit-tested and the opener is
   the same `open_browser_or_log` host mode uses.
 - **Live edit:** host-side `MARKER-0`→`MARKER-1` propagated to the
-  already-open guest page in **~0.6 s** (marker visible 2.2 s after the
+  already-open guest page in **\~0.6 s** (marker visible 2.2 s after the
   edit including a second page's fresh boot + both screenshots); a
   fresh guest boot after the edit rendered `MARKER-1` in 1.45 s.
   Post-edit screenshots inspected on both guests.
@@ -1073,14 +1073,14 @@ downloaded from the `p3-guest-evidence` artifact and inspected.
   `"index_document_id":"4JGt98WMiAbWRuCfaDwmp3NmPuga"`,
   `"qmd_file_count":2`.
 - **Browser (headless Chromium on the runner):** first render through
-  the real n0 relay in **12.7 s**, ~**47.5 MB** fetched (uncompressed
+  the real n0 relay in **12.7 s**, \~**47.5 MB** fetched (uncompressed
   WASM dominates — same payload confounder as Gate 0; its
   HTTP-compression mitigation remains the first lever). Boot
   screenshot shows `MARKER-33` rendered; final shows `MARKER-37`.
 - **Live-edit propagation over 4 marker bumps** (runner-observed ts −
   host bump ts; includes the driver's 150 ms poll grain and
   host↔runner NTP skew): **899 / 979 / 1043 / 1563 ms, median
-  ~1.0 s** — consistent with Gate 0's 0.81–2.34 s and the local leg.
+  \~1.0 s** — consistent with Gate 0's 0.81–2.34 s and the local leg.
 - **n0 relays from the runner:** euc1-1 and use1-1 probed 200/OK in
   0.57 s / 0.32 s.
 - Caveats unchanged from Gate 0: runner egress is datacenter-class,
@@ -1176,7 +1176,7 @@ required: `App.tsx:418-423`).
       *(done; same vite.config.ts, so all 4 entries + the public/ copies
       survive. One addition beyond the plan: `VITE_DISABLE_PWA=1` + a
       matching conditional in vite.config.ts — the PWA service worker
-      would precache the whole ~67 MB bundle (WASM included) into Cache
+      would precache the whole \~67 MB bundle (WASM included) into Cache
       Storage for every ephemeral `q2 preview` origin (each random port
       is its own origin), so the embed build disables it; normal builds
       are untouched. `dist-preview-embed` added to hub-client/.gitignore
@@ -1223,8 +1223,8 @@ required: `App.tsx:418-423`).
       `a075c962…`), and Vite's content hashing even gives it the same
       hashed filename in both (`wasm_quarto_hub_client_bg-B4wtBy8i.wasm`)
       since the hash is content-derived. hub-client dist ≈ 67 MB,
-      q2-preview-spa dist ≈ 45 MB — a naive double-embed adds ~67 MB to
-      `q2`, ~38 MB of it pure duplication. So: serve the `.wasm` from a
+      q2-preview-spa dist ≈ 45 MB — a naive double-embed adds \~67 MB to
+      `q2`, \~38 MB of it pure duplication. So: serve the `.wasm` from a
       single shared embed; the identical content-hashed filename makes
       "strip from one dist, route both asset paths to the shared copy" the
       natural mechanism (exact design in this phase). Still record the
@@ -1237,7 +1237,7 @@ required: `App.tsx:418-423`).
       sass chunk, the 2.7 MB automerge wasm, tree-sitter wasm, KaTeX
       fonts — leaving 23.9 MB embedded. **Release `q2` binary:
       153,127,632 B without the editor dist → 175,353,280 B with it =
-      +22.2 MB** (vs ~+69.6 MB naive; ~47 MB saved). Safety property:
+      +22.2 MB** (vs \~+69.6 MB naive; \~47 MB saved). Safety property:
       only byte-identical files are stripped, so two dists built from
       *different* wasm artifacts embed both copies — fat but correct.
       Operational note: `build:preview-embed` reruns `build:wasm`, and a
@@ -1288,7 +1288,7 @@ for both legs.
   rendered `MARKER-0 here.`. Typed ` EDITED-BY-P4-E2E` at the end of
   the marker line in Monaco → preview pane re-rendered live (checked in
   child frames only — the iframe finding from Gate 0) → **the edit
-  landed in `index.qmd` on disk ~3 s later** (rides the hub's 5 s
+  landed in `index.qmd` on disk \~3 s later** (rides the hub's 5 s
   periodic sync): `MARKER-0 here. EDITED-BY-P4-E2E`. Before/after
   screenshots show Monaco + preview pane both carrying the edit.
 - **Sandbox leg (the 2×2's other corner):** same fixture reset, `q2
@@ -1387,7 +1387,7 @@ Sketch (what research says is feasible):
    quarto-hub's tower-http features are `trace`/`cors`/`set-header` only),
    so the first lever if boot feels bad is HTTP compression
    (`tower_http::CompressionLayer` or precompressed `.wasm.br` — wasm
-   compresses ~3–5×, no version-skew cost). Only after that: serving SPA
+   compresses \~3–5×, no version-skew cost). Only after that: serving SPA
    assets from a guest-side embed while proxying only `/health|/ws|/api|/.quarto`
    — deliberately deferred (version-skew cost).
 6. **Windows** for iroh-dependent tests — Gate 0 checks compile (note:

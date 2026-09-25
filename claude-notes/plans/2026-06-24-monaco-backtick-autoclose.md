@@ -86,7 +86,7 @@ insert a single backtick, matching the user's expectation. Keeping it in
 
 ### Phase 2 — Fix
 - [x] Remove `{ open: '`', close: '`' }` from `autoClosingPairs` in
-      `quartoTheme.ts` (line ~171). Add a short comment explaining why backtick
+      `quartoTheme.ts` (line \~171). Add a short comment explaining why backtick
       is intentionally absent from auto-closing but present in surrounding.
 - [x] Run the test, confirm it now passes. ✅ 5/5 green.
 

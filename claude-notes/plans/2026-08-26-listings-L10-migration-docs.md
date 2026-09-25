@@ -226,7 +226,7 @@ values a template can read, the card example — and links to a new
 `docs/guides/projects/listing-templates.qmd` carrying the two semantics,
 the built-in anatomy, the migration treatment and the worked examples.
 This supersedes the brief's original "extend the section, don't add a
-page": at ~400 lines the migration content would have dominated
+page": at \~400 lines the migration content would have dominated
 `listings.qmd`. The existing `### Migrating a Quarto 1 template`
 subsection **moves** to the new page, leaving a pointer behind.
 

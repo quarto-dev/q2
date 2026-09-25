@@ -718,13 +718,13 @@ mislabeled "sub-sub"):
    **inner** list → nest-out to the parent list → assert the active edit region's
    `boundingBox().height` ≈ the parent list's **original rendered height** (covers parent + child),
    **not** the child-only height. *Fail-on-revert:* restore the live-DOM measure in the landing
-   core's box resolution → the box collapses to ~child height → RED.
+   core's box resolution → the box collapses to \~child height → RED.
    **── EXECUTION FINDING (2026-06-14): NOT REPRODUCIBLE as a fail-on-revert lever; spec dropped. ──**
    A clean nest-**out** destination (the parent container) is **always rendered** — it wraps the
    child's textarea, and the textarea is fixed-height (== the child's captured box), so the parent's
    *live* height ≈ its *original* height. Empirically (chromium, 3-level list): whole-list H0=127.5;
    nest-out edit height = 127.5 **both with and without** `box:'snapshot'` (reverting to
-   measure-or-keep still measures the rendered parent at ~127.5). So `box:'snapshot'` and the live
+   measure-or-keep still measures the rendered parent at \~127.5). So `box:'snapshot'` and the live
    measure are indistinguishable for nest-out → no fail-on-revert assertion exists at this tier; a
    green spec would be **test theater**. The "collapses to child height" premise only holds when the
    parent is NOT found by `outerBlockForAnchorR0` (forcing the `keep` branch), which does not occur
@@ -799,7 +799,7 @@ mislabeled "sub-sub"):
   stale / wrong-block box); alignment + **key-uniqueness** tests. **Acceptance:**
   `q2-preview-nesting-size-out.spec.ts` + `q2-preview-nesting-size-in.spec.ts` (both fail-on-revert).
 
-  **── EXECUTION HANDOFF (2026-06-14, paused at ~40% context per user's 50% gauge) ──**
+  **── EXECUTION HANDOFF (2026-06-14, paused at \~40% context per user's 50% gauge) ──**
   Pre-validated test seams for the next session (decided in the parent context, not to be re-derived):
   - **`snapshotOuterBlockGeometry(openedEl, pool, topBlockR0Num)` → `Map<string,{contentHeight,boxStyle}>`**
     lives in `outerBlocks.ts`. Climb to outermost `[data-block-pool-id]` (reuse `resolveOuterBlock`'s
@@ -814,8 +814,8 @@ mislabeled "sub-sub"):
     produce the same block-relative key (Reflection #10/#13). Fail-on-revert: switch the key to `r0`-only →
     a collision appears on the nested-list fixture.
   - **`editGeometryRef: Map<string,{contentHeight,boxStyle}>` on PreviewRoot.** Capture REPLACES (assigns a
-    fresh Map). Clear paths: the `setEditTarget(null)` **wrapper** (PreviewRoot ~:191, plain close) clears;
-    self-heal (both KEEP and DROP, ~:244-285) clears; commit-and-reland's direct `setEditTargetRaw(null)`
+    fresh Map). Clear paths: the `setEditTarget(null)` **wrapper** (PreviewRoot \~:191, plain close) clears;
+    self-heal (both KEEP and DROP, \~:244-285) clears; commit-and-reland's direct `setEditTargetRaw(null)`
     does NOT clear (reland re-captures). **jsdom test for self-heal-clear:** open editor on a multilevel
     block (capture populates the map) → trigger an external re-render that self-heals KEEP → nest-move →
     assert the consume FELL BACK (used live/keep box), not a stale snapshot box. Fail-on-revert: remove the

@@ -170,7 +170,7 @@ didn't dominate this profile — possibly because `R` is found
 faster on this machine, or its spawn timing landed outside the
 sample window.
 
-**Tree-sitter logger formatting (~580 of 1290 samples ≈ 45 %).**
+**Tree-sitter logger formatting (\~580 of 1290 samples ≈ 45 %).**
 
 ```
 qmd::read → MarkdownParser::parse → ts_parser_parse_with_options
@@ -213,7 +213,7 @@ verification.
 1. **Hoist engine-registry construction to project scope.**
    `EngineRegistry::new()` is currently per-doc inside
    `build_html_pipeline_stages_with_options`. Build it once per
-   project (or once per process) and inject. Expected win: ~37 %
+   project (or once per process) and inject. Expected win: \~37 %
    of main-thread CPU + most of the I/O wait.
 
 2. **Make `find_executable` lazy / cached.**
@@ -226,7 +226,7 @@ verification.
 3. **Stop attaching tree-sitter `set_logger` on the success path.**
    Parse without a logger first. If the resulting tree has error
    nodes, re-parse with the logger attached for diagnostic
-   generation. Expected win: ~45 % of main-thread CPU on
+   generation. Expected win: \~45 % of main-thread CPU on
    error-free renders.
 
 4. **Stream `pass1_failures` / `pass2_failures` to stderr as they
@@ -234,7 +234,7 @@ verification.
    doesn't change wall time but eliminates the silence.
 
 5. **Investigate `ConfigValueKind` drop / `ConfigValue::clone`
-   weight** (~70 samples combined). Likely tied to per-doc
+   weight** (\~70 samples combined). Likely tied to per-doc
    `Pandoc.meta` cloning during pass_one or merge. Probably
    sub-10 % win — lower priority than (1)-(3).
 
@@ -360,7 +360,7 @@ pct  samples  symbol
    jupyter=1 rscript=1` for the full 573-doc render.
 2. **The tree-sitter logger snprintf chain mostly evaporated.**
    Pre-fix had `__vfprintf` (209), `__sfvwrite` (106), `_vsnprintf`
-   (47), `snprintf` (46) — ~478 self-samples combined. Post-fix
+   (47), `snprintf` (46) — \~478 self-samples combined. Post-fix
    has roughly 97+26+16+15+14+12+11 ≈ 191 in unresolved
    `libsystem_c.dylib` frames (some of which may not even be the
    snprintf chain). This is a substantial drop and possibly hints
@@ -374,7 +374,7 @@ pct  samples  symbol
    probably tree-sitter buffer growth or AST cloning. Worth a
    focused follow-up if we want to cut more — but it's not in
    bd-c5u2g's scope.
-4. **File-system syscalls take ~12 % combined** (`mkdir 4.0`,
+4. **File-system syscalls take \~12 % combined** (`mkdir 4.0`,
    `__open 3.3`, `stat 2.3`, `__open_nocancel 1.6`,
    `__getdirentries64 1.3`). Plenty of small I/O per document.
    Candidates for batching or for caching project-walk results.
@@ -403,7 +403,7 @@ attractiveness changes after this fix:
   cheap and removes a class of overhead entirely.
 - (kept) **Parallelize `pass_one` / `pass_two`.** Both are
   currently sequential `for ... .await` loops. With per-doc cost
-  down to ~4 ms and no shared state poisoned by `posix_spawn`
+  down to \~4 ms and no shared state poisoned by `posix_spawn`
   waiting, parallelization should now yield close to a linear
   speedup on multi-core machines. Worth a separate plan.
 - (kept) **Audit `ConfigValueKind` drop / clone weight** — still
@@ -489,12 +489,12 @@ fraction of total work that's still sequential (Amdahl).
 - (kept) **`_platform_memmove` audit.** 2.24% of samples now, mostly
   in PathBuf/String allocations downstream of cache-key construction.
 - (kept) **Stop attaching tree-sitter `set_logger` on success path.**
-  ~0.3% of samples; still cheap to remove.
+  \~0.3% of samples; still cheap to remove.
 - (new) **Reduce per-doc temp-dir creation.** Each
   `StageContext::new` does `runtime.temp_dir(...)` which lands a
   `mkdir` syscall. Pass-1 stages don't appear to use the temp dir at
   all; making the temp-dir creation lazy would remove `mkdir`,
   `__open`, and the FS contention they cause.
 - (new) **Batch profile-cache writes.** Atomic-rename per doc is
-  ~4 syscalls each. Holding writes in memory and committing at
+  \~4 syscalls each. Holding writes in memory and committing at
   pass_one return would cut FS syscalls by 4×.

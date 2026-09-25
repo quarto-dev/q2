@@ -867,7 +867,7 @@ invalid: !expr
 ### Memory Impact
 
 **Additional memory per tagged value**:
-- YamlTag struct: ~48 bytes (2 Strings + overhead)
+- YamlTag struct: \~48 bytes (2 Strings + overhead)
 - Optional wrapper: 8 bytes (Option<YamlTag>)
 
 **Typical case**: Very few tagged values in a config (< 10)

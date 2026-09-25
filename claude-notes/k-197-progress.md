@@ -97,7 +97,7 @@ Term 1
 - `examples/raw-block.qmd` + `.json`
 
 ### Tests:
-- `test/block-types.test.ts` (new file, ~200 lines)
+- `test/block-types.test.ts` (new file, \~200 lines)
 
 ## Next Steps
 

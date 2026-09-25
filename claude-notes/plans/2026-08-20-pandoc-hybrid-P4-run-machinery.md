@@ -38,7 +38,7 @@ grouped by v1 (single-document docx/pptx, no `_quarto.yml` project) relevance:
 | `ipynbFilterParams` | `ipynb-title-block-template`; `enable-crossref: false` + `ipynb-produce-source-notebook: true` when that render flag is set | No — ipynb-only |
 | `projectFilterParams` | delegates to `projType.filterParams` (see Q2 below) + `project-output-dir`/`project-offset` when `options.project` is set | **Partially** — the two additional keys only fire under a real `_quarto.yml` project; N/A for a bare single-doc render |
 | `quartoColumnParams` (`extractColumnParams`) | `reference-location: margin`, `citation-location` | No — HTML/typst margin-notes feature |
-| `quartoFilterParams` | ~28 keys (corrected 2026-09-17 — actual enumerated count, not "~20"): `output-divs`, `mediabag-dir`, `fig-align`/`fig-pos`/`fig-env`, `code-fold`, `html-table-processing`, `use-rsvg-convert`, `tbl-colwidths`, `shortcodes` (+extension-contributed), `html-math-method`, `fig-responsive`, `output-location`, `code-line-numbers`, `keep-hidden`, `remove-hidden`, `clear-hidden-classes`, `unroll-markdown-cells`, `clear-cell-options`, `cite-method`, `pdf-engine`, `has-bootstrap`, `has-resource-path`, `quarto-source`, `quarto-profile`, `quarto-version`, `quarto-cli-path`, `code-annotations` | **Yes, the core set** — format-render/metadata derived, no project dependency. **Reads `options.project.isSingleFile` unconditionally** (`filters.ts:663`) — see the "synthetic project" note below |
+| `quartoFilterParams` | \~28 keys (corrected 2026-09-17 — actual enumerated count, not "\~20"): `output-divs`, `mediabag-dir`, `fig-align`/`fig-pos`/`fig-env`, `code-fold`, `html-table-processing`, `use-rsvg-convert`, `tbl-colwidths`, `shortcodes` (+extension-contributed), `html-math-method`, `fig-responsive`, `output-location`, `code-line-numbers`, `keep-hidden`, `remove-hidden`, `clear-hidden-classes`, `unroll-markdown-cells`, `clear-cell-options`, `cite-method`, `pdf-engine`, `has-bootstrap`, `has-resource-path`, `quarto-source`, `quarto-profile`, `quarto-version`, `quarto-cli-path`, `code-annotations` | **Yes, the core set** — format-render/metadata derived, no project dependency. **Reads `options.project.isSingleFile` unconditionally** (`filters.ts:663`) — see the "synthetic project" note below |
 | `crossrefFilterParams` | `listings`, `number-sections`, `number-offset`, `number-depth`; `crossref-index-file` only when **not** `options.project?.isSingleFile` | **Partially** — the first four are format-agnostic and relevant; `crossref-index-file` is project-scoped (cross-document index), N/A for v1 |
 | `citeIndexFilterParams` | `cites-index-file`, only when `options.project && projectIsBook(...)` | **No for v1** — book-project-only |
 | `layoutFilterParams` | `page-width` (if set), `adaptive-text-highlighting`/`text-highlighting` (bool, if the format has adaptive/text highlighting) | Yes — format-derived, no project dependency. **Corrected 2026-09-17:** only `page-width` is `format.render`-derived; the other two keys are derived from the separate `defaults: FormatPandoc` parameter (`hasAdaptiveTheme(defaults)`/`hasTextHighlighting(defaults)`) — doesn't change relevance/scope, but P4's params-blob builder needs both sources plumbed in, not just `format.render`. |
@@ -87,7 +87,7 @@ when/if that becomes real. Nothing here blocks P4's transport smoke.
 
 **Recommendation for what P4 actually needs to build for the transport smoke and for
 docx/pptx v1**, in priority order:
-1. `quartoFilterParams`'s ~28 keys (corrected 2026-09-17, was "~20" here too — the table above
+1. `quartoFilterParams`'s \~28 keys (corrected 2026-09-17, was "\~20" here too — the table above
    was fixed earlier this pass but this recommendation-list copy wasn't, the same
    never-landed-fix pattern this epic keeps rediscovering) (the core, format-agnostic set) — required.
 2. `languageFilterParams`'s crossref/callout/environment title strings — required (not
@@ -268,7 +268,7 @@ concretely enough to implement without inventing an answer.
    is a Lua global that exists only once the shim file has itself been `import()`ed, and
    `main.lua` loads every sibling file through its own `import()` helper
    (`main.lua:8-11`, `dofile`-based, resolved relative to `PANDOC_SCRIPT_FILE`'s directory) —
-   called from a block of ~45 `import("./…")` lines at `main.lua:13-60`. So the patch needs an
+   called from a block of \~45 `import("./…")` lines at `main.lua:13-60`. So the patch needs an
    `import("./<shim>.lua")` line there **in addition to** the `tappend(quarto_filter_list,
    quarto_pandoc_shim_filters)` line at the splice point below): `tappend(quarto_filter_list,
    quarto_pandoc_shim_filters)`, requiring a **new**, non-upstream Lua file (P5's shim). **The

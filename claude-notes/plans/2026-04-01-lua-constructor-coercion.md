@@ -57,8 +57,8 @@ Source: `pandoc-lua-marshal` Haskell package
 
 ### Where coercion happens in q2
 
-- `crates/pampa/src/lua/types.rs` — `lua_table_to_inlines()` (line ~1343)
-  and `lua_table_to_blocks()` (line ~1367). Both only accept `Value::Table`
+- `crates/pampa/src/lua/types.rs` — `lua_table_to_inlines()` (line \~1343)
+  and `lua_table_to_blocks()` (line \~1367). Both only accept `Value::Table`
   containing the exact userdata type.
 - `crates/pampa/src/lua/constructors.rs` — all constructors call one of
   these two functions. The `pandoc.Inlines()` and `pandoc.Blocks()`

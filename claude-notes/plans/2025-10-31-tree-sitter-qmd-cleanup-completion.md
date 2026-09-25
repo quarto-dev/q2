@@ -221,7 +221,7 @@ exactly where to look (tree-sitter-markdown/grammar.js line 531).
 - Phase 8 (archive): 10 minutes
 - Phase 9 (README): 10 minutes
 - Testing: 20 minutes
-- **Total**: ~1.5 hours (faster than estimated 2-2.5 hours!)
+- **Total**: \~1.5 hours (faster than estimated 2-2.5 hours!)
 
 ## References
 

@@ -240,8 +240,8 @@ Read first:
 - Q1 reference (read-only):
   - `external-sources/quarto-cli/src/project/types/website/listing/website-listing-feed.ts`
     — full Q1 feed implementation. L9 ports the
-    `createFeed` (~`ListingFeedStageTransform`) +
-    `completeStagedFeeds` (~`complete_staged_feeds` in
+    `createFeed` (\~`ListingFeedStageTransform`) +
+    `completeStagedFeeds` (\~`complete_staged_feeds` in
     post_render) split.
   - `external-sources/quarto-cli/src/project/types/website/listing/website-listing-shared.ts:311-597`
     — Q1's `readRenderedContents`. **L9 v1 ports the

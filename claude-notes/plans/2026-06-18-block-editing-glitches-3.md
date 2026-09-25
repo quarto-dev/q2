@@ -44,8 +44,8 @@ should show **no diff** at all.
 
 - [x] **G20 — nested list-item editor opens too tall.** Range path measured the
   leading line with `getBoundingClientRect()` (the union of all client rects,
-  incl. the inter-block gap → ~32.6px) instead of the first client rect
-  (~25.5px). Fix: `getClientRects()[0]`. File: `outerBlocks.ts`.
+  incl. the inter-block gap → \~32.6px) instead of the first client rect
+  (\~25.5px). Fix: `getClientRects()[0]`. File: `outerBlocks.ts`.
 - [x] **G21 — commit navigates focus to the next block.** Post-commit focus
   restore called `outerBlockForAnchorR0` (outer-blocks-only, with a next-block
   fallback) for a nested anchor → jumped past the list. Fix: mode-aware

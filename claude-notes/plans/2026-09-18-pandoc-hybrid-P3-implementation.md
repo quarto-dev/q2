@@ -287,7 +287,7 @@ assign-numbers predicate), and convert the single assignment-group gate (anchor 
    guarded by the new assign-numbers predicate.
 2. The predicates are exactly, per the plan (frozen): `crossref_present() = enableCrossRef or
    param("crossref-numbering", "quarto") == "external"`; assign-numbers `= enableCrossRef and
-   param("crossref-numbering", "quarto") ~= "external"`.
+   param("crossref-numbering", "quarto") \~= "external"`.
 3. T2.1 and T2.2 green; `tests/smoke/crossref/` green in the quarto-cli repo.
 
 **Prerequisite.** A quarto-cli working tree and its Deno test toolchain
@@ -333,7 +333,7 @@ assign-numbers predicate), and convert the single assignment-group gate (anchor 
   and after; what makes T2.2 discriminating is that it is sensitive to A1's polarity, which the
   patch newly puts at risk — the pre-patch code had no polarity to get wrong. What T2.2 does
   **not** discriminate is the `"quarto"` default literal in `param("crossref-numbering",
-  "quarto")`: omitting it makes `param()` return `nil`, and `nil ~= "external"` is true while
+  "quarto")`: omitting it makes `param()` return `nil`, and `nil \~= "external"` is true while
   `nil == "external"` is false, so both predicates behave identically to the `"quarto"` case.
   That is logged as `accepted-untested` in the Missing-test pass with that reasoning, not left
   implied.
@@ -1027,7 +1027,7 @@ explicit `accepted-untested`. Silent omission would read as "covered."
 2. **The *callout* degradation path is not a warn — it is a hard error, and the plan says
    otherwise.** `modules/callouts.lua:6-17` `callout_title_prefix` has **no `order == nil`
    guard**: it calls `titlePrefix(category.ref_type, default, callout.order, withDelimiter)`
-   (`:17`) → `crossref/format.lua:27` `numberOption(ref_type, order)` → `:124` (type ~= "sec") →
+   (`:17`) → `crossref/format.lua:27` `numberOption(ref_type, order)` → `:124` (type \~= "sec") →
    `formatNumberOption` → `local num = order.order`, which raises *attempt to index a nil value*.
    Callout nodes **do** exist under external mode (`callout.lua:36` declares real `class_name`s,
    so the node is parsed in the pre-gate AST pipeline) and `decorate_callout_title_with_crossref`
@@ -1156,7 +1156,7 @@ plan is open.
 
 1. **The upstream PR, as scoped, is untestable end-to-end upstream — because nothing plumbs
    `crossref-numbering` into `QUARTO_FILTER_PARAMS` on the TS side.** P3 scopes the patch as
-   "3 files, ~6 edited lines" of Lua. But the param is only ever read via `param()`, i.e. out of
+   "3 files, \~6 edited lines" of Lua. But the param is only ever read via `param()`, i.e. out of
    the `QUARTO_FILTER_PARAMS` blob that `src/command/render/filters.ts` builds, and **there is no
    TS writer for `crossref-numbering` and no YAML key**. Verified: the only `kEnableCrossRef`
    writer is `filters.ts:534`, and `grep -rn 'crossref-numbering' src/` in quarto-cli returns

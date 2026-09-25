@@ -239,12 +239,12 @@ spread across workers and is not on the critical path.
 
 **Mechanism.** `cache_set_lru` and `cache_get_lru` both do
 load-index → mutate → store-index with no lock. Pass 2 calls them from
-~16 rayon workers (each `pollster::block_on` on its own thread), so
+\~16 rayon workers (each `pollster::block_on` on its own thread), so
 concurrent calls interleave and the last store wins: a set whose
 upsert loses leaves its value on disk **untracked and never evicted**
 (orphan); a get whose touch loses is benign. `cache_get_lru` looks the
 value up by key on the backend, so orphans still serve hits — which
-hid ~30 % of bd-79c4do6g.
+hid \~30 % of bd-79c4do6g.
 
 **Fix, two layers:**
 

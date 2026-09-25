@@ -148,7 +148,7 @@ Or continue with other priorities from the epic (k-274).
 - Initial implementation: 45 minutes
 - Debugging Space injection: 20 minutes
 - Testing and verification: 15 minutes
-- **Total**: ~2.5 hours (within estimate of 2-3 hours)
+- **Total**: \~2.5 hours (within estimate of 2-3 hours)
 
 ## Success Criteria Met
 

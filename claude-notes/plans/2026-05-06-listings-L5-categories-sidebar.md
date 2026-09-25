@@ -1177,7 +1177,7 @@ Two issues to file before impl begins, with
 
 - [x] Insert `CategoriesSidebarTransform` into
       `build_transform_pipeline` between `ListingRender`
-      and `TocRender`. (`pipeline.rs` line ~810; the WASM
+      and `TocRender`. (`pipeline.rs` line \~810; the WASM
       path reuses the same builder via
       `AstTransformsStage::run`, so both native and WASM
       pick it up.)

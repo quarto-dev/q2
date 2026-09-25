@@ -30,7 +30,7 @@ the remaining 2 types have **no existing TS mirror at all** to promote from.
 
 ## The real type inventory (verified against code, not the plan's prior guess)
 
-The plan previously claimed "~12 known types (callout, float, theorem, proof, tabset,
+The plan previously claimed "\~12 known types (callout, float, theorem, proof, tabset,
 panel-layout, decorated-code-block, example-embed, crossref-resolved-ref, …)". That list was
 wrong on both count and membership. Grepping every non-test `CustomNode::new(...)` call site
 (`crates/quarto-core/src/transforms/*.rs`, `crates/quarto-core/src/crossref/*.rs`) gives exactly
@@ -55,7 +55,7 @@ node without cloning, never serialized to the wire format — so it doesn't belo
 inventory above, but a future re-run of this exact grep should expect 9 hits, not 8, and needs
 to recognize and exclude this one rather than treat the count mismatch as new drift.
 
-Two names in the old "~12" list are **fictional** — grepped and confirmed absent from the
+Two names in the old "\~12" list are **fictional** — grepped and confirmed absent from the
 codebase entirely: `PanelLayout`/`panel-layout` (no hits) and `DecoratedCodeBlock` (no
 `CustomNode::new` site; the only hit is a comment at `crates/quarto-core/src/render.rs:364`
 documenting that a `DecoratedCodeBlock` CustomNode was **considered and explicitly rejected** —

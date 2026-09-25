@@ -94,7 +94,7 @@ Measured on the real dists (2026-08-13, this machine):
 
 ## Results (2026-08-13)
 
-- **Embedded preview payload: ~107 MiB → 12.1 MiB**
+- **Embedded preview payload: \~107 MiB → 12.1 MiB**
   (viewer-embed.tar.zst 7.4 MiB + editor-embed.tar.zst 4.7 MiB,
   measured in `target/release/build/quarto-preview-*/out/`).
 - **Release binary: 181.8 → 118.9 MiB (−62.9 MiB, −34.6%)**
@@ -105,7 +105,7 @@ Measured on the real dists (2026-08-13, this machine):
   trace-viewer dist (0.2 MiB). Unrelated drift, not the change
   leaking.
 - Remaining `__const` (47.4 MiB): the two archives (12.1), mcp bundle
-  (10.6), resources (5.3), trace viewer (0.2), ~19 MiB Rust/crypto
+  (10.6), resources (5.3), trace viewer (0.2), \~19 MiB Rust/crypto
   const data predating this change.
 - New dependencies: `tar 0.4`, `zstd 0.13` (zstdmt feature for
   multithreaded build-time compression). `include_dir` dropped from
@@ -118,6 +118,6 @@ Measured on the real dists (2026-08-13, this machine):
 - `strip = "symbols"` in `[profile.release]` (−21.6 MiB, measured).
 - `quarto-trace-server`'s viewer embed is a separate, smaller
   `include_dir!` — same treatment if it grows.
-- Decompress-to-tempfile + mmap if the ~95 MB heap resident set
+- Decompress-to-tempfile + mmap if the \~95 MB heap resident set
   matters (today's embed is demand-paged; the archive trades that for
   binary size).

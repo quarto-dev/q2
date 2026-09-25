@@ -25,11 +25,11 @@ Corpus: the 14 docs in `claude-notes/designs/` (main checkout) plus
 | `block-editing-design.md` (2026-06-06) | **both** | high | Crafted topic/stress prose and deliberate emphasis ("The pool index is not an identity.", "The bug this fixes is real and was live on `main`.") layered over module maps and phase tables with file:line refs. |
 | `lua-wasm.md` | **both** | medium | Genuine causal explanation of why the `catch_unwind`/`LUAI_TRY` mechanism works, "## Key learnings" tribal knowledge; organized around real-vs-stub function catalogs and must/should/nice checklists. |
 | `path-resolution-model.md` | **both** | medium | Opening two-rule explanation is textbook misconception-anticipation ("Not 'relative to the project root' in general — that is only the special case…"); bulk of the (short) doc is a cross-link index to other plans/designs. |
-| `schema-compilation-phase.md` (2025-10-27) | **both** | medium | Human RFC skeleton (problem → solution → Open Questions Q1–Q4 → Decision) but ~60% code/YAML blocks and comparison tables serving as an implementation crib. |
+| `schema-compilation-phase.md` (2025-10-27) | **both** | medium | Human RFC skeleton (problem → solution → Open Questions Q1–Q4 → Decision) but \~60% code/YAML blocks and comparison tables serving as an implementation crib. |
 | `wasm-testing-and-cleanup.md` (2026-04-03) | **llm** | high | Procedural incident log (Symptom/Root cause/Fix × 6), phase checklists with exact file:line edits; a table row literally labels its audience "AI assistants". |
 | `body-link-resolution-contract.md` | **llm** | high | Pure spec: Status/Code header, numbered Algorithm steps, input→output Examples table, "When to bump this contract" checklist; no motivating narrative. |
 | `sidebar-auto-expansion-contract.md` | **llm** | high | Identical contract template to `body-link-resolution-contract.md` — algorithm/table/checklist, no sustained prose. |
-| `document-profile-contract.md` | **llm** | high | Dense linked header + ~20-row per-field Guarantees table + versioned "## Change log" keyed by bd-id/version bump; grep-and-lookup shaped. |
+| `document-profile-contract.md` | **llm** | high | Dense linked header + \~20-row per-field Guarantees table + versioned "## Change log" keyed by bd-id/version bump; grep-and-lookup shaped. |
 | `provenance-contract.md` | **llm** | high | Long numbered rulebook; `By::` constructor catalog keyed by exact source line numbers; standalone "## 10. Do-not list"; follow-ups by bd-id. |
 | `wire-format-source-info-codes.md` | **llm** | medium | Protocol spec: numbered allocation policy, integer-keyed "Current allocations"/"Burnt numbers" tables, 6-step add-a-code procedure. |
 

@@ -247,7 +247,7 @@ Manual verification steps (human operator):
 - [x] `cargo xtask verify` green (full: Rust + WASM + hub-client + trace-viewer). Passed as of commit `2653d6ca` (Phase 4.5).
 - [x] `cd hub-client && npm run test:ci` green — 523 unit + 35 integration + 74 wasm = 632 passing, 0 failing. The formerly-failing `03-user-grammar-toml.qmd` smokeAll fixture now passes.
 - [x] `cd hub-client && npm run build:all` green.
-- [x] Bundle size: web-tree-sitter adds `192 KB` uncompressed as a separate `.wasm` asset (`dist/assets/web-tree-sitter-*.wasm`), plus ~50 KB of JS glue in `main.js`. Hub-client's own wasm (`wasm_quarto_hub_client_bg.wasm`) is unchanged at ~30 MB. Well under the parent plan's 1.5–2 MB budget.
+- [x] Bundle size: web-tree-sitter adds `192 KB` uncompressed as a separate `.wasm` asset (`dist/assets/web-tree-sitter-*.wasm`), plus \~50 KB of JS glue in `main.js`. Hub-client's own wasm (`wasm_quarto_hub_client_bg.wasm`) is unchanged at \~30 MB. Well under the parent plan's 1.5–2 MB budget.
 - [x] Parent plan's Phase 4 checklist is updated as each sub-phase landed; no additional cleanup needed (Phase 6 was retired in the initial Phase 4 planning commit).
 - [ ] Phase 4.6 manual verification (above) is user-driven and outstanding.
 - [ ] Staged and committed; awaiting push approval.

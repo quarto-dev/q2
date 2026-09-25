@@ -740,11 +740,11 @@ let yaml = YamlWithSourceInfo {
 ```
 
 **Rough overhead estimate**:
-- Small config (~50 keys): ~5KB raw YAML → \~15KB in memory (3x overhead)
-- Large config (~500 keys): ~50KB raw YAML → \~150KB in memory (3x overhead)
+- Small config (\~50 keys): \~5KB raw YAML → \~15KB in memory (3x overhead)
+- Large config (\~500 keys): \~50KB raw YAML → \~150KB in memory (3x overhead)
 
 **Is this acceptable?**
-- ✅ Yes for Quarto: Configs are typically <10KB, overhead is ~20-30KB per document
+- ✅ Yes for Quarto: Configs are typically <10KB, overhead is \~20-30KB per document
 - ✅ Modern machines have GB of RAM, KB duplication is negligible
 - ✅ Trade-off enables: direct Yaml access + source tracking + config merging
 - ✅ Alternative (no duplication) would require complex lifetime management or repeated reconstruction
@@ -931,6 +931,6 @@ The `YamlWithSourceInfo` design with owned data and parallel children provides t
 3. **Dual access patterns** - raw Yaml for performance, source-tracked for errors
 4. **Simple API** - no lifetime parameters, straightforward to use
 
-The memory overhead (~3x) is acceptable given the size of configs and the benefits gained. The alternative (lifetimes) would prevent config merging, which is essential.
+The memory overhead (\~3x) is acceptable given the size of configs and the benefits gained. The alternative (lifetimes) would prevent config merging, which is essential.
 
 **Recommendation**: Proceed with implementation following the 3-4 week plan.

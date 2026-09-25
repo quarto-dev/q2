@@ -169,7 +169,7 @@ pub struct CustomProjectType {
 ```
 
 Rationale: `ProjectKind::Custom(String)` would break `Copy` and
-propagate through ~7 dispatch sites for no benefit — nothing downstream
+propagate through \~7 dispatch sites for no benefit — nothing downstream
 ever needs to behave differently for `posit-docs` vs `website` once the
 config is merged. The record exists for diagnostics ("type: posit-docs
 (website, from extension posit-dev/posit-docs)") and future features.

@@ -140,7 +140,7 @@ mechanism, and the "no MappedString provenance" simplification are **confirmed a
   entirely**. `text/latex` is added **only** for `toLatex`. An html-table special case force-adds
   `text/html`.
 - **Gap:** a from-scratch impl built to L116 mis-ranks outputs for every format and never renders
-  widgets. This is the critic's headline find, in a module the boundary detectors dismissed as "~150
+  widgets. This is the critic's headline find, in a module the boundary detectors dismissed as "\~150
   lines, pure."
 - **Action:** port `displayDataMimeType`'s dynamic algorithm; do not encode a fixed list.
 
@@ -179,7 +179,7 @@ mechanism, and the "no MappedString provenance" simplification are **confirmed a
   `isPercentScript(file, [".jl"])` and `markdownForFile` → `percentScriptToMarkdown` (`julia:95,164,167`).
 - Also (agent-grounded, `percent.ts:12`) `markdownFromJupyterPercentScript` imports
   `mdRawOutput`/`mdFormatOutput` from `jupyter.ts` — so percent-script **couples to to-markdown**,
-  contradicting the plan's "self-contained ~80-line module" framing (L62, L247-261).
+  contradicting the plan's "self-contained \~80-line module" framing (L62, L247-261).
 - **Action:** correct the percent-script description (marker requirement, language comment chars,
   to-markdown dependency); ground the content branch (resolves the inherited 1c-GAP-A).
 

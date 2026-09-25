@@ -345,7 +345,7 @@ The `DoubleBufferedIframe` component (used by Preview) injects a unique
 
 1. Wait for `iframe.preview-active` to exist in the DOM
 2. Wait for a `<!-- render-XXX -->` comment to appear in its content
-3. Allow ~50ms for CSS post-processing (data URI conversion by `iframePostProcessor.ts`)
+3. Allow \~50ms for CSS post-processing (data URI conversion by `iframePostProcessor.ts`)
 
 The Preview component also has a state machine (`START` → `GOOD` | `ERROR_AT_START`)
 but the render comment is more directly observable from Playwright.

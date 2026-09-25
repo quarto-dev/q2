@@ -67,17 +67,17 @@ bytes + tag). Estimated downstream effect with **no change to
 | `Str`             |  160 |    56 |
 | `AttrSourceInfo`  |  184 |    80 |
 | `TargetSourceInfo`|  272 |    64 |
-| `Link` / `Image`  |  768 |  ~352 |
-| `Inline`          |  776 |  ~360 |
-| `Table`           | 1552 |  ~830 |
-| `Block`           | 1552 |  ~830 |
+| `Link` / `Image`  |  768 |  \~352 |
+| `Inline`          |  776 |  \~360 |
+| `Table`           | 1552 |  \~830 |
+| `Block`           | 1552 |  \~830 |
 
 The microbenchmark in the research note says walk cost scales roughly
 linearly with element size, so this is expected to be worth more than
 PR #698's traversal change, and it compounds with it. Boxing
 `Link`/`Image` source infos and `Table` afterwards (a separate,
-`quarto-pandoc-types`-only change) would take `Inline` to ~250 and
-`Block` to ~330.
+`quarto-pandoc-types`-only change) would take `Inline` to \~250 and
+`Block` to \~330.
 
 ## Design
 

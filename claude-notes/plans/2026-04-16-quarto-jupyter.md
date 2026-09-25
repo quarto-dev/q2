@@ -100,8 +100,8 @@ below):
 
 > **Seam-name mapping (don't grep for `*Sync`).** The Q1 references above use
 > Deno's `*Sync` names; the landed `PlatformHost.fs`
-> (`ts-packages/quarto-api/src/platform/index.ts`, the `fs` block ~93-119;
-> `walk` ~115-118) uses bare,
+> (`ts-packages/quarto-api/src/platform/index.ts`, the `fs` block \~93-119;
+> `walk` \~115-118) uses bare,
 > all-synchronous names: `readTextFileSync`, `writeFileSync(string |
 > Uint8Array)`, `exists`, `ensureDir`, `makeTempDir`, `makeTempFile`, `remove`.
 > Map Q1 → seam: `readTextFileSync`→`readTextFileSync`,
@@ -296,7 +296,7 @@ Small, focused modules that `toMarkdown` depends on. Each is self-contained.
     latex → markdown slot → math; non-math latex → stays latex → `{=tex}`
     block.** `text/latex` is not unconditionally math.
   - Reference: Quarto 1's `external-sources/quarto-cli/src/core/jupyter/display-data.ts`
-  - ~150 lines
+  - \~150 lines
 
 - [x] Create `src/jupyter/tags.ts` — cell visibility logic:
   - `hideCell(options)`, `hideCode(options)`, `hideOutput(options)`, `hideWarnings(options)`
@@ -308,7 +308,7 @@ Small, focused modules that `toMarkdown` depends on. Each is self-contained.
     (`tags.ts:39-44,93-101`), not just a flat per-cell read.
   - Based on cell-level `echo`, `include`, `output`, `warning` options
   - Reference: Quarto 1's `external-sources/quarto-cli/src/core/jupyter/tags.ts`
-  - ~100 lines
+  - \~100 lines
 
 - [x] Create `src/jupyter/labels.ts` — cell label and caption handling
   (corrected roster, P3-11 — the earlier draft invented `cellLabelClass`, which
@@ -324,7 +324,7 @@ Small, focused modules that `toMarkdown` depends on. Each is self-contained.
     `pandocAutoIdentifier`.
   - Remove the invented `cellLabelClass`.
   - Reference: Quarto 1's `external-sources/quarto-cli/src/core/jupyter/labels.ts`
-  - ~100 lines
+  - \~100 lines
 
 - [x] Create `src/jupyter/preserve.ts` — HTML preservation (corrected
   signature, P3-13, `preserve.ts:12-42`):
@@ -349,7 +349,7 @@ Small, focused modules that `toMarkdown` depends on. Each is self-contained.
     postprocessor. If a future change makes `isPreservedHtml` live, the restorer
     must land with it or output ships literal `preserve<uuid>` tokens.
   - Reference: Quarto 1's `external-sources/quarto-cli/src/core/jupyter/preserve.ts`
-  - ~80 lines
+  - \~80 lines
 
 - [x] Create `src/jupyter/widgets.ts` — Jupyter widget dependency extraction:
   - `widgetDependencies(nb)` — find widget state in output MIME bundles. In Q1
@@ -396,7 +396,7 @@ Small, focused modules that `toMarkdown` depends on. Each is self-contained.
       is D.2 drift owned by Plan 2 Phase B; the **exposure + real body** are this
       plan's.)
   - Reference: Quarto 1's `external-sources/quarto-cli/src/core/jupyter/widgets.ts`
-  - ~100 lines
+  - \~100 lines
 
 - [x] Create `src/jupyter/pandoc-id.ts` — identifier generation:
   - `pandocAutoIdentifier(text, asciify)` — generate Pandoc-style IDs from
@@ -410,7 +410,7 @@ Small, focused modules that `toMarkdown` depends on. Each is self-contained.
   - Note: lives under `jupyter/` for now because jupyter is the only
     consumer. If other consumers emerge, promote to a top-level `pandoc/`
     subpath — cheap move, cheap rename.
-  - ~50 lines
+  - \~50 lines
 
 - [x] Create `src/jupyter/cell-options.ts` — simplified cell options parsing:
   - **Signature/return shape (specify — the earlier draft left this blank):**
@@ -430,7 +430,7 @@ Small, focused modules that `toMarkdown` depends on. Each is self-contained.
     **run `parseCellOptions` first and upgrade `JupyterCell → JupyterCellWithOptions`
     per code cell BEFORE calling `tags.*`**. State this ordering in the walk
     (Phase 3C) so tags never read an absent `.options`.
-  - ~100 lines
+  - \~100 lines
 
 ### Phase 3C: Core toMarkdown function
 
@@ -618,7 +618,7 @@ The main conversion function. Takes a `JupyterNotebook` and options, returns a
     bold-class swap; add later if HTML-output color fidelity is wanted. (Earlier
     notes that "Q1 uses ansi_up, not deno-dom" were inaccurate — Q1 uses both.)
 
-- [x] Reference: Quarto 1's `external-sources/quarto-cli/src/core/jupyter/jupyter.ts` function `jupyterToMarkdown` (~lines 380-700)
+- [x] Reference: Quarto 1's `external-sources/quarto-cli/src/core/jupyter/jupyter.ts` function `jupyterToMarkdown` (\~lines 380-700)
 
 ### Phase 3D: Utility functions
 
@@ -644,7 +644,7 @@ The simpler methods that the Julia engine also calls.
   - `percentScriptToMarkdown` — read file + convert percent-format to markdown:
     - language-comment `%%+ [markdown]` → markdown cells; `[raw]` → raw cells
     - other `%%`-delimited content → code cells
-    - **Not a self-contained ~80-line regex module:** Q1's
+    - **Not a self-contained \~80-line regex module:** Q1's
       `markdownFromJupyterPercentScript` imports `mdRawOutput`/`mdFormatOutput`
       from `jupyter.ts` (`percent.ts:12`), so percent-script **couples to the
       to-markdown module**. Plan accordingly (shared output-formatting helpers,
@@ -654,7 +654,7 @@ The simpler methods that the Julia engine also calls.
   - The public `makeJupyter(host)` factory binds `host` so callers see the
     natural 1-arg / 2-arg signatures.
   - Reference: Quarto 1's `external-sources/quarto-cli/src/core/jupyter/percent.ts`
-  - ~80-120 lines
+  - \~80-120 lines
 
 - [x] Create `src/jupyter/assets.ts` — **host-dependent** (P3-2). It is not a
   pure path computation: Q1's `jupyterAssets` (`jupyter.ts:665-696`) does FS I/O
@@ -696,7 +696,7 @@ The simpler methods that the Julia engine also calls.
     the integration line. `assets` here is a pure consumer. See the "Seam-name
     mapping" note under *Platform dependencies*. Unit-test `assets` with a mock
     host that stubs `walk`.
-  - ~40 lines (incl. the dir creation + supporting-dir walk)
+  - \~40 lines (incl. the dir creation + supporting-dir walk)
 
 - [x] Create `src/jupyter/result-helpers.ts`:
   - `resultIncludes(host, tempDir, deps?)` — **host-dependent** (P3-3). It reuses
@@ -713,7 +713,7 @@ The simpler methods that the Julia engine also calls.
     `jupyter.ts:2177-2185`). Return type is `Array<JupyterWidgetDependencies> |
     undefined` (namespace `quarto-api.ts:368-370`) — a bare `return deps` is both
     a type error and wrong behavior. The one genuinely pure method; no host.
-  - ~50 lines
+  - \~50 lines
 
 - [x] Create `src/jupyter/index.ts` — exports the `makeJupyter(host)`
   factory and **re-exports the public types from `@quarto/types`**
@@ -917,8 +917,8 @@ Key simplifications in our rewrite:
    Julia consumer reads. The redraft narrowed/mistyped the contract and broke
    Julia at runtime (P3-1/2/4). See the reconciliation banner at the top.
 
-The first four simplifications keep this to ~1300 lines of clean code vs.
-~5000+ lines of tangled Quarto 1 code. The dependency-explosion concern that
+The first four simplifications keep this to \~1300 lines of clean code vs.
+\~5000+ lines of tangled Quarto 1 code. The dependency-explosion concern that
 motivated #5 is solved by the vendored types, not by redrafting.
 
 ### Dependency on `@quarto/api/text` or `@quarto/api/markdown`

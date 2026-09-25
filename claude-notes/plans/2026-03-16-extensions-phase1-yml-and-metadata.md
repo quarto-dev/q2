@@ -737,7 +737,7 @@ Extension format metadata is stored as `ConfigValue` directly. This means:
 
 ### How read_extension() should parse YAML
 
-Follow the pattern in `project.rs` (`parse_project_config`, line ~490):
+Follow the pattern in `project.rs` (`parse_project_config`, line \~490):
 
 ```rust
 pub fn read_extension(extension_file: &Path, runtime: &dyn SystemRuntime) -> Result<Extension> {

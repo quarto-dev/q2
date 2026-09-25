@@ -310,7 +310,7 @@ with the attribution info line. Previously it pointed at
    (project_resources) as a follow-up, or fold it into the same PR
    since it reuses the same helper + `ProjectConfig` field? My
    recommendation: same PR — the helper lands once, the second
-   consumer is ~10 lines and shares the test fixture shape.
+   consumer is \~10 lines and shares the test fixture shape.
 2. **Diagnostic wording**: when the script comes from an extension, the
    corrected snippet already names `_extension.yml` in the ariadne
    header. Should the problem text *additionally* say "contributed by

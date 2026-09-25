@@ -266,7 +266,7 @@ them into a CI-resident artifact.
       restored, all 44 green. The guard is bound to the fix, not decorative.
 - [x] **Cross-platform**: these fixtures record byte offsets *and*
       `astContext.files[].line_breaks`, so a CRLF checkout shifts everything
-      and the guard would fail as ~20 opaque mismatches on Windows. Pinned the
+      and the guard would fail as \~20 opaque mismatches on Windows. Pinned the
       sources with `ts-packages/annotated-qmd/examples/*.qmd text eol=lf` in
       `.gitattributes`, and added the LF assertion above so the pin failing is
       reported as itself rather than as fixture drift.
@@ -341,7 +341,7 @@ documents** — its only caller was 11 hand-written snippets in
 function call away.
 
 - [x] Added `tests/integration/tiling_corpus_tests.rs`: runs the auditor over
-      ~170 documents (annotated-qmd examples, pandoc-match-corpus, smoke,
+      \~170 documents (annotated-qmd examples, pandoc-match-corpus, smoke,
       writers, claude-examples), asserting zero findings. Guards against a
       vacuous pass (corpus size and parsed-count floors). `KNOWN` list requires
       a strand per entry; it has exactly **one**: an `AttrAlignmentSkipped`
@@ -413,7 +413,7 @@ independently re-derived the fixture categorization.
       forward slashes, so the round-trip matches.
 - [x] **Vacuity guards were looser than they looked.** Replaced the `> 100`
       floors with (a) a per-root non-emptiness assertion — losing the
-      annotated-qmd root entirely still left ~155 files, comfortably over any
+      annotated-qmd root entirely still left \~155 files, comfortably over any
       total floor, and `collect_qmd` skips an unreadable directory silently —
       and (b) an exact `EXPECTED_UNPARSEABLE` set instead of a count, so a new
       unparseable or panicking document names itself.

@@ -110,7 +110,7 @@ already hold a `runtime: &dyn SystemRuntime` exposing
 identical** to "collection time" from the user's perspective — the check
 happens *before any copy is attempted* — but sites the I/O where a runtime
 already exists. It is therefore the originally-described "option C" semantics at
-**~the same cost as option B** (the only real cost is threading the span, which
+**\~the same cost as option B** (the only real cost is threading the span, which
 B needs anyway; the stat itself is one `runtime.is_file(src)` call). My earlier
 "C is the most work" assessment wrongly assumed the stat had to live inside the
 transform.

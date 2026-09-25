@@ -18,7 +18,7 @@ warning once per rendered page when the underlying problem lives in a
   15×), listing `sort:` warnings (\~10×), and unknown-shortcode warnings
   re-reported per includer when the shortcode lives in a shared include
   file (`{{< include ../include/_common.qmd >}}`).
-- (The bulk of the ~75 unknown-shortcode and ~88 `Q-2-9` warnings are
+- (The bulk of the \~75 unknown-shortcode and \~88 `Q-2-9` warnings are
   *distinct* source locations — legitimately separate diagnostics, out
   of scope.)
 

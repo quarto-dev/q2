@@ -17,9 +17,9 @@ phase B, stage 1 of highlight-style support)
 Stage 1 (phase B) shipped a working `highlight-style:` reader with a
 **three-palette catalog**: `default`, `a11y-light`, `a11y-dark`
 (hand-translated from Q1's `.theme` JSON onto q2's tree-sitter `hl-*` class
-vocabulary). Quarto 1 ships ~26 palette names, 8 of them **adaptive pairs**
+vocabulary). Quarto 1 ships \~26 palette names, 8 of them **adaptive pairs**
 (`a11y`, `arrow`, `atom-one`, `ayu`, `breeze`, `github`, `gruvbox`,
-`monochrome`). Any ported project naming one of the other ~23 gets a Q-14-5
+`monochrome`). Any ported project naming one of the other \~23 gets a Q-14-5
 warning and the default palette.
 
 This strand builds the **general translator** so the full catalog ships, plus
@@ -296,9 +296,9 @@ runtime. (Question 1 below.)
    palettes, with **dotted-name fallback** (`function.builtin` inherits
    `function`\'s bucket unless specifically mapped, so new upstream grammar
    captures degrade gracefully). Rationale: `.theme` files carry nothing
-   finer than Pandoc's ~30 token names, so a single table hits the quality
+   finer than Pandoc's \~30 token names, so a single table hits the quality
    ceiling (Q1 parity) by construction — there is no per-palette information
-   to lose. The judgment lives in bucket assignment (which of the ~67 known
+   to lose. The judgment lives in bucket assignment (which of the \~67 known
    `hl-*` classes counts as Function-like, etc.), which is
    palette-independent; the stage-1 hand translations already applied
    exactly such a table (documented in their file headers). Better-than-Q1

@@ -38,7 +38,7 @@ Implemented complete schema type system (\~300 LOC):
 
 ### 3. Error Types (error.rs)
 
-Implemented comprehensive error system (~200 LOC):
+Implemented comprehensive error system (\~200 LOC):
 
 **Core Types:**
 - `ValidationError` with message, paths, YAML node, and source location

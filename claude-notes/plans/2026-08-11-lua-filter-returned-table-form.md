@@ -506,7 +506,7 @@ until it is listed, and the constant cannot disagree with the dispatch because
 both come from the same lines. Drift is now unrepresentable rather than merely
 detected.
 
-`get_filter_table`'s ~50-name whitelist is deleted in favor of
+`get_filter_table`'s \~50-name whitelist is deleted in favor of
 `recognized_handler_names()` over those constants plus the seven catch-alls.
 That fixes **bd-18a2r2lp** as a side effect: `pampa note.md -F whitelist-gap.lua`
 now prints `GLOBAL NoteDefinitionPara FIRED` where it printed nothing before.

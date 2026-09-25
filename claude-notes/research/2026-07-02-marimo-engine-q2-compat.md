@@ -632,7 +632,7 @@ output HTML directly:
 
 - `<head>` (routed via `includes["include-in-header"]`, a `PandocIncludes`
   temp file the engine's bundled `execute()` writes `marimoExecution.header`
-  into — corresponds to upstream `marimo-engine.ts` ~300-310): contains the
+  into — corresponds to upstream `marimo-engine.ts` \~300-310): contains the
   `__MARIMO_EXPORT_CONTEXT__` trust-marker `<script>` and a
   `<marimo-code hidden>...</marimo-code>` tag carrying the URL-encoded
   notebook source, plus the islands runtime `<script type="module"
@@ -671,7 +671,7 @@ SC8/SC9 discriminator-pair style:
 committed `crates/quarto-core/tests/fixtures/extensions/marimo/` stayed
 `git diff`-clean throughout), neutered the engine's `include-in-header`
 population in the bundled `marimo-engine.js` (corresponding to upstream
-`marimo-engine.ts` ~300-310):
+`marimo-engine.ts` \~300-310):
 
 ```diff
 -          if (outputFormat === "html" && marimoExecution.header) {
@@ -764,7 +764,7 @@ to any TS engine whose `_extension.yml` omits `claims-files:`.
 syntax errors; marimo's own per-cell isolation gets there first
 
 SC18's frozen row names `execute()`'s outer try/catch (marimo-engine.ts
-~319-329) and suggests a syntactically-bad cell body (`def (:`) as the
+\~319-329) and suggests a syntactically-bad cell body (`def (:`) as the
 trigger. Empirically, that trigger does NOT reach the outer catch: a
 `{python .marimo}` cell containing `def (:` renders successfully (exit 0)
 and produces `<pre class="marimo-error">SyntaxError: invalid syntax

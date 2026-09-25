@@ -233,7 +233,7 @@ Mount-effect fallback chain (inside the existing rAF):
   passed, 0 failed).
 - [x] `npm run test:ci` (hub-client): unit + integration legs green; the
   `test:wasm` leg fails on the PRE-EXISTING `changelog.md renders
-  successfully` test — the 2026-07-07 changelog entry's literal `~37MB`
+  successfully` test — the 2026-07-07 changelog entry's literal `\~37MB`
   parses as an unclosed subscript (Q-2-17). Broken on main (commit
   `6cd4dd5a`), unrelated to this strand; an open PR already fixes it
   (bd-5px05kui filed and closed as duplicate).

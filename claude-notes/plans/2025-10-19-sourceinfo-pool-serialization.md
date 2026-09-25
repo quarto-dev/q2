@@ -443,4 +443,4 @@ Since this is an internal format change:
 - Day 5: Phase 4.5-4.6 (Integration tests, snapshots)
 - Day 6: Phase 5 (Documentation, cleanup)
 
-**Total**: ~6 days focused work
+**Total**: \~6 days focused work

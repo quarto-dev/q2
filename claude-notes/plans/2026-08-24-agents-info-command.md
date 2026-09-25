@@ -30,7 +30,7 @@ commits `2c144619` + `b7bfeef8`; closed 2026-08-24): rendering `docs/` writes
 - `_site/llms-full.txt` — reading-order concatenation (\~544 KB).
 
 This feature is therefore **staging + embedding + CLI plumbing** — no new
-document processing. ~1.7 MB of raw text is noise next to the ~40 MB embedded
+document processing. \~1.7 MB of raw text is noise next to the \~40 MB embedded
 preview-SPA WASM.
 
 **Prior art.** `braid agents-info` (naming precedent); the llms.txt convention

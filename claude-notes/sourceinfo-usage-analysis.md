@@ -364,8 +364,8 @@ But this isn't needed now.
 | Variant | Production Uses | Can Resolve to Original? | Needed? |
 |---------|----------------|-------------------------|---------|
 | **Original** | Heavy (hundreds) | N/A - already Original | ✅ Yes |
-| **Substring** | Heavy (~10 sites) | ✅ Yes, always | ✅ Yes |
-| **Concat** | Moderate (~2 sites) | ✅ Yes (each piece resolves) | ✅ Yes |
+| **Substring** | Heavy (\~10 sites) | ✅ Yes, always | ✅ Yes |
+| **Concat** | Moderate (\~2 sites) | ✅ Yes (each piece resolves) | ✅ Yes |
 | **Transformed** | **ZERO** | ❌ Not for different line breaks | ❌ No |
 
 ## Conclusion

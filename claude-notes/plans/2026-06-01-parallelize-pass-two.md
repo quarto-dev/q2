@@ -147,8 +147,8 @@ matches the "orchestrator is the only mutator" invariant). Chosen over
 
 - `cargo nextest run --workspace`, then `cargo xtask verify` (pampa /
   quarto-core feed the WASM leg).
-- Expected: end-to-end `q2 render` of qmd-plans drops from ~3.5 s
-  (serial, post-bd-2ercw) toward ~0.7–1.0 s on a 16-core box if Pass 2
+- Expected: end-to-end `q2 render` of qmd-plans drops from \~3.5 s
+  (serial, post-bd-2ercw) toward \~0.7–1.0 s on a 16-core box if Pass 2
   scales like the parse experiment (7.1×) — Pass 2 is \~98% of wall, so
   the project-level speedup tracks the per-doc render speedup minus the
   serial post-render tail (sitemap/favicon/site_libs flush).

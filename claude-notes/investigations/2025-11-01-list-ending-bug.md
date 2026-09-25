@@ -311,7 +311,7 @@ List items require continuation content to be indented by at least 2 spaces (for
 - Test 8: Blank line + list marker should be one list, creates two ✗
 - Various GFM spec tests (exact count TBD) ✗
 
-**Overall Test Suite**: ~25 failures out of ~365 tests
+**Overall Test Suite**: \~25 failures out of \~365 tests
 
 ## Possible Solutions
 

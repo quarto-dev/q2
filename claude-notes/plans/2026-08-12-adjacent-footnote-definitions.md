@@ -81,8 +81,8 @@ described shape (line numbers have drifted since filing):
 | Description says | Actually at HEAD |
 | --- | --- |
 | `inline_ref_def: seq(ref_id_specifier, _whitespace, pandoc_paragraph)` \@ grammar.js:283 | grammar.js:283 — **exact match** |
-| gate 1 leader list \@ scanner.c ~2939-2945 | scanner.c:2940-2947 |
-| gate 2 leader list \@ scanner.c ~3120-3123 | scanner.c:3118-3125 |
+| gate 1 leader list \@ scanner.c \~2939-2945 | scanner.c:2940-2947 |
+| gate 2 leader list \@ scanner.c \~3120-3123 | scanner.c:3118-3125 |
 | `parse_ref_id_specifier` \@ scanner.c:1795 | scanner.c:1795 — **exact match** |
 | `peek_ordered_marker` / `peek_dash_plus_opens_block` | scanner.c:1359 / 1400 |
 
@@ -433,7 +433,7 @@ relative to `BASH_SOURCE`, so it always sweeps the checkout it lives in.
    already lets `#` and `-` interrupt a note body where Pandoc absorbs them.
    Concretely, after the fix, what should `hello there.` / `[^b]: two.`
    produce — one paragraph (Pandoc parity, needs scanner state that does not
-   exist) or a paragraph + a definition (consistent with q2's own model, ~30
+   exist) or a paragraph + a definition (consistent with q2's own model, \~30
    lines)? **My recommendation: the latter**, documented as a deliberate
    divergence.
 

@@ -40,11 +40,11 @@ Progress log:
   source-free serialization) and Haskell-show `tostring`
   (`crates/pampa/src/lua/show.rs`, formats probed against pandoc
   3.9.0.2). Track-1 xfail **122 → 64**, zero new failures. The
-  post-fix residue clusters: Attr shapes ~17 (bd-tzwcof0n), List not
+  post-fix residue clusters: Attr shapes \~17 (bd-tzwcof0n), List not
   callable 7 (bd-1fjtodu8), setters 6 (bd-0g2yp61w), missing
-  constructors/peekers ~7 (bd-sgfiiktn), walk semantics ~6 (was
+  constructors/peekers \~7 (bd-sgfiiktn), walk semantics \~6 (was
   masked by eq; revisit strand split when attacking it),
-  content-mutation persistence ~5 (bd-hitjclzp), error-message
+  content-mutation persistence \~5 (bd-hitjclzp), error-message
   contracts 2 (bd-9p2686pc), classes-proxy vs List table \~3
   (bd-tzwcof0n).
 

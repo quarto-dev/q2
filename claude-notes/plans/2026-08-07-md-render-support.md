@@ -630,10 +630,10 @@ re-render on edit.
 **Code sites** (line numbers from the 2026-08-07 survey — re-grep, they
 drift):
 
-- `crates/quarto-hub/src/discovery.rs` (~:122-131): VFS sync — only
-  `ext == Some("qmd")` lands in `qmd_files`; single-file mode at ~:177.
-- `crates/quarto-hub/src/watch.rs` (~:244-247): `is_qmd_file`, used by
-  `WatchFilter::QmdOnly` (~:56) and `is_preview_relevant` (~:256).
+- `crates/quarto-hub/src/discovery.rs` (\~:122-131): VFS sync — only
+  `ext == Some("qmd")` lands in `qmd_files`; single-file mode at \~:177.
+- `crates/quarto-hub/src/watch.rs` (\~:244-247): `is_qmd_file`, used by
+  `WatchFilter::QmdOnly` (\~:56) and `is_preview_relevant` (\~:256).
   **Existing tests pin the old behavior** — `test_watcher_ignores_non_qmd_files`
   and siblings in `watch.rs` will need their semantics revisited, not just
   made green.

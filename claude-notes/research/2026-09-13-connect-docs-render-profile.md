@@ -28,8 +28,8 @@ directory gets its own key and the 10 MB LRU thrashes:
 perf.sass hits=22 compiles=682 uncached=0     # 704 variant-compiles, 352 docs × {light, dark}
 ```
 
-Fixing the key (bd-79c4do6g) should take the serial render from ~42 s to
-roughly 9 s and the parallel render from ~4 s to well under 2 s on this
+Fixing the key (bd-79c4do6g) should take the serial render from \~42 s to
+roughly 9 s and the parallel render from \~4 s to well under 2 s on this
 machine, with no other change. Three smaller findings fell out on the way:
 the LRU index loses updates under parallel Pass 2 and leaks orphan cache
 files (bd-ddahjqr1, 101 MB observed); peak RSS is \~1000× the source size
@@ -79,8 +79,8 @@ Per `claude-notes/instructions/performance-profiling.md`:
 
 | run                                  | wall    | user   | max RSS |
 |--------------------------------------|--------:|-------:|--------:|
-| cold (`--clean-cache`), 16 workers   | 5.1–6.3 s | ~56 s | 3.1–3.6 GB |
-| warm, 16 workers                     | 3.5–4.3 s | ~46 s | 3.1 GB |
+| cold (`--clean-cache`), 16 workers   | 5.1–6.3 s | \~56 s | 3.1–3.6 GB |
+| warm, 16 workers                     | 3.5–4.3 s | \~46 s | 3.1 GB |
 | warm, `QUARTO_JOBS=1`                | 29.8 s  | 28.5 s | 2.0 GB |
 | warm, `QUARTO_JOBS=1`, **sass cache cleared first** | **42.0 s** | 40.2 s | 2.5 GB |
 | warm, 16 workers, sass cache cleared first | 4.55 s | 60.5 s | 3.6 GB |
@@ -204,8 +204,8 @@ documents in subdirectories". So each page's merged metadata carries a
 for content that is byte-identical (the compiled CSS has exactly two
 distinct outputs per variant across the whole site; see below).
 
-The 10 MB LRU holds 31 entries of ~337 KB, so the miss rate is 97 %:
-`hits=22 compiles=682`. At ~48 ms per grass compile (small-doc run:
+The 10 MB LRU holds 31 entries of \~337 KB, so the miss rate is 97 %:
+`hits=22 compiles=682`. At \~48 ms per grass compile (small-doc run:
 34 compiles in 1.3 s) that is \~33 s of the 42 s serial render.
 
 Evidence chain: samply → `compile_theme_css` 78 % inclusive → cache dir
@@ -282,11 +282,11 @@ dominant term once finding 1 lands. Attribute `memmove` to callers
 
 | bucket               | 2026-06-01 (qmd-plans, cosmo) | 2026-09-13 (Connect, excl. SCSS) |
 |----------------------|------------------------------:|---------------------------------:|
-| tree-sitter parse    | ~29 % | ~15 % |
-| memmove / AST build  | ~13 % | ~28 % (+17.5 % malloc) |
-| filesystem syscalls  | ~14 % | ~7 % |
+| tree-sitter parse    | \~29 % | \~15 % |
+| memmove / AST build  | \~13 % | \~28 % (+17.5 % malloc) |
+| filesystem syscalls  | \~14 % | \~7 % |
 | regex compilation    | fixed | absent |
-| SHA-256 cache keys   | ~1.7 % | <1 % |
+| SHA-256 cache keys   | \~1.7 % | <1 % |
 
 The June profile used a built-in Bootswatch theme, for which the cache
 key is `builtin:<name>` and never varies — finding 1 is specific to

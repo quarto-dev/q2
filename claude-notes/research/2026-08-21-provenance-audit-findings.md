@@ -248,7 +248,7 @@ invariant that no test exercises**.
 
 145 hits across 69 files; **17 production across 10 files.** 128 are test code
 (inside a `#[cfg(test)]` module, under `tests/`, or in `*_tests.rs`). The
-original draft's "~132 untriaged across ~53 files" was a `grep -c` line count.
+original draft's "\~132 untriaged across \~53 files" was a `grep -c` line count.
 
 | verdict | sites |
 |---|---|

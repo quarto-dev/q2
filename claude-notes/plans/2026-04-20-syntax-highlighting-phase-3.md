@@ -53,7 +53,7 @@ Explicitly out of scope for Phase 3: user grammars on wasm32 (Phase 4), Playwrig
   - Changed `fputc`/`fputs`/`fwrite` from panic to no-op returning success-like values, matching upstream `tree-sitter-language` convention.
 - [x] `cargo build --workspace` green.
 - [x] `cargo nextest run --workspace` green (7626 tests pass, up from 7597 — +29 wasm-printf-fmt tests).
-- [x] `cargo build --target wasm32-unknown-unknown --release` green for `wasm-quarto-hub-client`. Bundle size: **32.8 MB** uncompressed (~16 MB larger than the 17 MB pre-highlighting baseline from the research note, which matches the per-grammar estimate of ~1.5 MB × 12 grammars).
+- [x] `cargo build --target wasm32-unknown-unknown --release` green for `wasm-quarto-hub-client`. Bundle size: **32.8 MB** uncompressed (\~16 MB larger than the 17 MB pre-highlighting baseline from the research note, which matches the per-grammar estimate of \~1.5 MB × 12 grammars).
 - [ ] Add `towupper` (c_int → c_int) implementation to `wasm-quarto-hub-client/src/c_shim.rs` using `char::to_uppercase` on the ASCII-or-passthrough case, matching the existing `towlower` shim shape.
 - [ ] Add `wint_t towupper(wint_t wc);` declaration to `wasm-quarto-hub-client/wasm-sysroot/wctype.h`.
 - [ ] Move `quarto-highlight` out of `target.'cfg(not(target_arch = "wasm32"))'.dependencies` and into unconditional `[dependencies]` in `crates/quarto-core/Cargo.toml`. Update the comment above the block to reflect the new reality.
@@ -87,7 +87,7 @@ Explicitly out of scope for Phase 3: user grammars on wasm32 (Phase 4), Playwrig
 
 ### Phase 3.4 — Wrap-up
 
-- [x] Recorded bundle size: WASM binary ~32.8 MB (~16 MB over the 17 MB pre-highlighting baseline). Matches the per-grammar estimate from the research note. No numeric threshold was set per user guidance.
+- [x] Recorded bundle size: WASM binary \~32.8 MB (\~16 MB over the 17 MB pre-highlighting baseline). Matches the per-grammar estimate from the research note. No numeric threshold was set per user guidance.
 - [x] End-to-end verification recorded:
   - `cd hub-client && npm run dev:fresh` used to rebuild WASM + start dev server.
   - User loaded `claude-notes/fixtures/phase3-highlight-check.qmd` (no `theme:` frontmatter) in Firefox.
@@ -121,7 +121,7 @@ Two-step fix:
 
 ### Unplanned 4a: Attempted cache-warm at WASM init broke Monaco
 
-A follow-on attempt to hide the per-deploy recompile cost: fire `compile_default_bootstrap_css(true)` during `initWasm()` as a fire-and-forget warm. On both Firefox and Chrome, this produced "too much recursion" errors inside Monaco's chunk — the warm forced `import("sass")` (a ~5 MB dynamic import that `sass.js` is specifically designed to lazy-load) to race with Monaco's own ~3 MB CDN load via Vite's module graph.
+A follow-on attempt to hide the per-deploy recompile cost: fire `compile_default_bootstrap_css(true)` during `initWasm()` as a fire-and-forget warm. On both Firefox and Chrome, this produced "too much recursion" errors inside Monaco's chunk — the warm forced `import("sass")` (a \~5 MB dynamic import that `sass.js` is specifically designed to lazy-load) to race with Monaco's own \~3 MB CDN load via Vite's module graph.
 
 Reverted in `35eb3828`. A comment in `wasmRenderer.ts` (`5b79af69`) warns future contributors not to re-add warm hooks at init-time.
 

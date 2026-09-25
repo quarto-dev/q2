@@ -478,7 +478,7 @@ interactive structural-edit round-trip tests).
 
 **Risks / open tensions for Phase 1:**
 
-- **Exact visual parity is a long tail.** ~95% free for prose; pixel-exact needs
+- **Exact visual parity is a long tail.** \~95% free for prose; pixel-exact needs
   iteration, and attributed blocks (`{.lead}`, classed lists) only match if we
   carry their classes onto the editor's root node.
 - **Interactive structural edits are new** (1c). ProseMirror creates/splits nodes

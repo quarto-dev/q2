@@ -116,7 +116,7 @@ Recorded so the decisions are durable.
     `extract.py` receives raw markdown on stdin with **no** ownership signal, so
     the ownership gate must be threaded **TS-side** (see 4c0-eng).
 
-12. **Spike (2026-07-02) — bare-`{sql}` execution is FEASIBLE with a ~3-line
+12. **Spike (2026-07-02) — bare-`{sql}` execution is FEASIBLE with a \~3-line
     `extract.py` change; `{sql .marimo}`/`{sql.marimo}` already execute today.**
     `extract.py` hands the doc to marimo's own parser (`MarimoMdParser`) — there
     is **no `.marimo` gate in `extract.py`**; the gate is entirely TS-side
@@ -297,7 +297,7 @@ builtins are the units.
       Vec at **both** sites. The `lookup_static_claim` callers at `256`/`603`
       themselves are otherwise logic-unaffected (signature unchanged).
 - [x] `ts_engine.rs` map type at `141`/`170` + test helpers `935`/`961-975`:
-      **keep `single_claim`** (return a 1-element-Vec map — ~6 existing tests use
+      **keep `single_claim`** (return a 1-element-Vec map — \~6 existing tests use
       it: `test_p1_12`, `test_hint_prefilter_no_load`, …) **and add `multi_claim`**
       for the Vec cases.
 - [x] `cargo nextest run -p quarto-core` green; document the Vec form + combine
@@ -352,7 +352,7 @@ Upstreamable. No marimo-internal work.
 - [x] **Python `extract.py`**: add a `BARE_SQL_FENCE_REGEX` sibling to the
       existing `SQL_DOT_FENCE_REGEX`, rewriting a bare `{sql …}` fence (no
       `.marimo`) into marimo's qmd-form `sql {.marimo …}`, applied in
-      `convert_from_md_to_pandoc_export` before the existing SQL rewrite. ~3 lines
+      `convert_from_md_to_pandoc_export` before the existing SQL rewrite. \~3 lines
       atop the already-complete SQL bridge (`sql_code_to_python`). Use lookaheads
       `(?![\w.])` and `(?![^}]*\.marimo)` so `{sql.marimo}`, `{sqlfoo}`,
       `{python}`, and already-qmd-form `sql {.marimo}` are left untouched (exact
@@ -512,7 +512,7 @@ controller triage, full evidence in `.superpowers/sdd/task-4cB-report.md`.
   `marimo-engine.ts`'s header-construction is correct; the break is entirely
   in how q2 consumes `ExecuteResult.includes["include-in-header"]`.
 - Root cause: `crates/quarto-core/src/engine/ts_engine.rs::translate_includes`
-  (~line 440) passes each wire string straight through into
+  (\~line 440) passes each wire string straight through into
   `PandocIncludes.header_includes` with no file read. This is CORRECT per the
   current architecture: `IncludeResolveStage`'s module doc
   (`crates/quarto-core/src/stage/stages/include_resolve.rs:1-56`) explicitly
@@ -522,7 +522,7 @@ controller triage, full evidence in `.superpowers/sdd/task-4cB-report.md`.
   `append_pandoc_includes`, `include_resolve.rs:262-278`, called from both
   `IncludeResolveStage` and `ApplyTemplateStage`'s late drain — neither path
   reads files for this channel).
-- But `marimo-engine.ts`'s `execute()` (line ~340-346) writes header content
+- But `marimo-engine.ts`'s `execute()` (line \~340-346) writes header content
   to a temp file and sends **the file's path** as the wire value — "(like
   Jupyter does)", per its own comment — i.e. it assumes Q1/Pandoc-style
   file-path semantics (matching knitr's native-Rust `convert_includes`,
@@ -691,7 +691,7 @@ reported here for controller triage, full evidence in
       RED-by-revert: in a TEMPDIR-ONLY bundle copy, neutered the engine's
       `include-in-header` population (`if (outputFormat === "html" &&
       marimoExecution.header)` → `if (false && ...)`, corresponding to
-      upstream `marimo-engine.ts` ~300-310) — re-render still SUCCEEDS
+      upstream `marimo-engine.ts` \~300-310) — re-render still SUCCEEDS
       (unlike SC8/SC9's revert) but `<head>` loses both header markers while
       `<body>` still shows the island, reproducing the exact
       conjunctive-assertion failure the test is written to catch (verbatim

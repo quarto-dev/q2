@@ -297,7 +297,7 @@ relevant item only if a spike contradicts an assumption.
 - [x] PKCE primitives. Reuse `oauth4webapi` (already a project dep):
       `generateRandomCodeVerifier()`, `calculatePKCECodeChallenge()`,
       `generateRandomState()`. Rationale: the rest of the auth code
-      already routes through `oauth4webapi`; rolling our own ~20-line
+      already routes through `oauth4webapi`; rolling our own \~20-line
       version with Node `crypto` would diverge from the established
       pattern for no gain. Wrap in a thin `src/auth/pkce.ts` only if
       a stable surface is needed for tests.
@@ -366,7 +366,7 @@ relevant item only if a spike contradicts an assumption.
     A test fixture asserting the constructed argv vector matches the
     expected `['/c', 'start', '', '<url-with-&-and-=>']` form is the
     cheapest way to keep this from regressing.
-  - Default to in-tree ~15-line helper using `child_process.spawn`;
+  - Default to in-tree \~15-line helper using `child_process.spawn`;
     revisit bundling the `open` npm package if corner cases warrant.
   - **Failure handling does not change the control flow** — the
     listener is bound *before* the browser is launched and the
@@ -449,7 +449,7 @@ relevant item only if a spike contradicts an assumption.
     `refresh_token` when this is set; the default (`online`) returns
     an `id_token` but no `refresh_token`, which would silently break
     every code path in `refresh-manager.ts` and force the user to
-    re-authenticate each time the ID token expires (~1 h). Add a
+    re-authenticate each time the ID token expires (\~1 h). Add a
     Phase 1 token-exchange test that asserts the response body
     contains a non-empty `refresh_token` — this is the regression
     guard for accidentally dropping the param.
@@ -484,7 +484,7 @@ relevant item only if a spike contradicts an assumption.
 - [x] Refresh-token handling: **unchanged** (Amendment 2026-05-28).
       `src/auth/refresh-manager.ts` keeps calling
       `oauth.ClientSecretPost(this.deps.config.clientSecret)` at
-      line ~127 — the Desktop-app client is confidential to Google
+      line \~127 — the Desktop-app client is confidential to Google
       and the secret is required on the refresh grant, same as today.
       `clientSecret` stays in `RefreshClientConfig`
       (refresh-manager.ts:49) and in `AuthFlowConfig`
@@ -701,7 +701,7 @@ relevant item only if a spike contradicts an assumption.
   - `src/tools.ts:386–393` — the dispatcher branch matches
     `'authenticate_start' | 'authenticate_finish' | 'authenticate_clear'`;
     collapse to `'authenticate' | 'authenticate_clear'`.
-  - `src/auth/auth-tools.ts` `AUTH_TOOL_DEFINITIONS` (lines ~80–130)
+  - `src/auth/auth-tools.ts` `AUTH_TOOL_DEFINITIONS` (lines \~80–130)
     — replace the two old `Tool` entries with a single
     `authenticate` entry; the `authenticate_clear` entry stays but
     its description needs two changes (covered in detail by the
@@ -724,7 +724,7 @@ relevant item only if a spike contradicts an assumption.
       with the existing `MissingOAuthConfigError` naming the missing
       var. No removal, no migration-pointer error for the secret.
 - [x] Leave `hasAuthEnv` in `src/index.ts` (currently
-      `CLIENT_ID || CLIENT_SECRET` at line ~99) **as-is** — both vars
+      `CLIENT_ID || CLIENT_SECRET` at line \~99) **as-is** — both vars
       still participate. The "either var present → attempt auth
       bootstrap; neither present → run no-auth" behaviour is
       unchanged, and `loadOAuthConfigFromEnv` remains the single point
@@ -753,7 +753,7 @@ relevant item only if a spike contradicts an assumption.
   - `src/auth/refresh-manager.test.ts` (524 lines) — **no change**
     required (Amendment 2026-05-28). It asserts the refresh request
     includes `client_secret` via `ClientSecretPost`, which remains
-    correct. The `FAKE_CLIENT_SECRET` fixture (line ~31) stays.
+    correct. The `FAKE_CLIENT_SECRET` fixture (line \~31) stays.
   - `src/auth/device-flow.test.ts` (535 lines) — deleted wholesale
     in Phase 3 alongside `device-flow.ts`. Anything still useful
     (e.g. the `redactTokens` known-answer cases) gets lifted into a
@@ -1029,7 +1029,7 @@ relevant item only if a spike contradicts an assumption.
 ## Open questions
 
 - **Bundled `open` package vs in-tree browser launcher?** Default to
-  in-tree (~15 lines, no new dep). Revisit if a corner case argues
+  in-tree (\~15 lines, no new dep). Revisit if a corner case argues
   otherwise.
 
 Resolved (recorded for posterity):

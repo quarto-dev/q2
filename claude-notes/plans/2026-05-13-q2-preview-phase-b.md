@@ -75,7 +75,7 @@ incrementally.
 
 **Recommendation:** rebuild on every change to a `.qmd` /
 `_quarto.yml` / `_metadata.yml`. Phase A's render is fast (<200ms
-for trivial fixtures, ~1s for non-trivial ones), and a stale
+for trivial fixtures, \~1s for non-trivial ones), and a stale
 dep-graph is worse than a slightly slow re-render. Optimize only
 if profile data says so.
 

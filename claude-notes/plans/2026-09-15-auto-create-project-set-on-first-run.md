@@ -42,10 +42,10 @@ connect → "No projects yet".
 | --- | --- | --- |
 | Status machine | `hub-client/src/hooks/useCollectionSets.ts` | `loading → needs-setup \| needs-migration \| connecting → connected \| error`. `needs-setup` = no pointers and no legacy IDB projects. |
 | Setup actions | same file | `createProjectSet(syncServer)`, `linkProjectSet`, `migrateProjects`, `mergeIntoProjectSet`; all call `establishRoot` (pointer array + legacy singleton). |
-| Gate | `hub-client/src/App.tsx` ~L1043–L1080 | Renders `ProjectSetSetup` on `needs-setup`/`needs-migration` unless `ephemeralHub`; renders it again (fresh mode, with the error) on `error`. |
+| Gate | `hub-client/src/App.tsx` \~L1043–L1080 | Renders `ProjectSetSetup` on `needs-setup`/`needs-migration` unless `ephemeralHub`; renders it again (fresh mode, with the error) on `error`. |
 | Screen | `hub-client/src/components/ProjectSetSetup.tsx` (353 lines) + `.css` (198) | Four modes: fresh, link, migration, merge. |
-| Silent copies | `App.tsx` ~L349 (invite) and ~L451 (ephemeral) | Same effect body, two refs, two `eslint-disable` lines. |
-| Inbound linking | `App.tsx` ~L597, route `#/link-project-set/<id>?server=` | Route handler calls `linkProjectSet`/`mergeIntoProjectSet`, which *establish the root*. Built by "Link another browser…" in the ProjectsHome avatar menu. |
+| Silent copies | `App.tsx` \~L349 (invite) and \~L451 (ephemeral) | Same effect body, two refs, two `eslint-disable` lines. |
+| Inbound linking | `App.tsx` \~L597, route `#/link-project-set/<id>?server=` | Route handler calls `linkProjectSet`/`mergeIntoProjectSet`, which *establish the root*. Built by "Link another browser…" in the ProjectsHome avatar menu. |
 | Dev harness | `DevHarness.tsx` pages `setup-fresh`, `setup-migration`, `setup-migration-error` | Scanned by `e2e/baseline-a11y.harness.spec.ts`. |
 | E2E bootstrap | `e2e/helpers/projectFactory.ts` (`bootstrapProjectSetVariant`), `e2e/import-zip.spec.ts`, `e2e/share-link-project-set.spec.ts` | Fill `#setup-sync-server` with the local hub URL, click **Create New Project Set**. 31 spec files go through the shared helper. |
 | Default server | `hub-client/.env` → `wss://sync.automerge.org`; production build sets `VITE_DEFAULT_SYNC_SERVER=wss://public-preview.quarto-hub.com/ws`; preview-embed sets `/ws` | The e2e build does **not** override it — tests reach the local hub only by typing its URL into the setup input. |
@@ -169,7 +169,7 @@ connect → "No projects yet".
 - [x] Add `useAutoEstablishRoot` hook; wire it in `App.tsx` with
       `enabled: bootRoute.type !== 'link-project-set'` (boot route
       captured once in `useState`, next to `ephemeralHub`).
-- [x] Delete the invite (~L349) and ephemeral (~L451) effects and their
+- [x] Delete the invite (\~L349) and ephemeral (\~L451) effects and their
       refs/`eslint-disable` lines.
 - [x] Add `retry` to `CollectionSetsActions`; reset `initRef` and re-run
       the init body (factor the init body into a `useCallback`).

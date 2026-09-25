@@ -245,7 +245,7 @@ Each test scenario from the design:
 - ✅ **Debuggable**: Can inspect enum structure
 - ✅ **Type-safe**: Compile-time guarantees
 - ✅ **Multi-file**: FileId system scales better
-- ⚠️ **More code**: ~600 LOC vs ~450 LOC (but clearer)
+- ⚠️ **More code**: \~600 LOC vs \~450 LOC (but clearer)
 
 ### vs. Always Parsing in Context
 **Alternative**: Keep text in original context, don't extract

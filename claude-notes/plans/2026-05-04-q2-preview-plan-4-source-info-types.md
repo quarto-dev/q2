@@ -1074,17 +1074,17 @@ contiguity, lives in `quarto-source-map/src/source_info.rs`.
 
 | Component | Lines (rough) |
 |---|---|
-| `Generated` variant + `Anchor` + `AnchorRole` types | ~80 |
-| Accessors (invocation_anchor, value_source_anchor, etc.) | ~60 |
-| `By` struct + builders + `is_atomic_kind` | ~120 |
-| `resolve_byte_range` / `map_offset` / `remap_file_ids` updates | ~40 |
-| `root_file_id` + `collect_file_ids` accessors | ~50 |
+| `Generated` variant + `Anchor` + `AnchorRole` types | \~80 |
+| Accessors (invocation_anchor, value_source_anchor, etc.) | \~60 |
+| `By` struct + builders + `is_atomic_kind` | \~120 |
+| `resolve_byte_range` / `map_offset` / `remap_file_ids` updates | \~40 |
+| `root_file_id` + `collect_file_ids` accessors | \~50 |
 | File-id walker consolidation (6 sites → 2 methods, net delete) | **-30** |
-| Pattern-match migrations (~9 files, ~21 occurrences post-consolidation) | ~140 |
-| FilterProvenance construction site migrations | ~30 |
-| Lua serde extension + back-compat | ~80 |
-| Test updates and new tests | ~280 |
-| **Total** | **~850** |
+| Pattern-match migrations (\~9 files, \~21 occurrences post-consolidation) | \~140 |
+| FilterProvenance construction site migrations | \~30 |
+| Lua serde extension + back-compat | \~80 |
+| Test updates and new tests | \~280 |
+| **Total** | **\~850** |
 
 One to two focused sessions. The unified-variant design reduces the
 total cost vs. the previous Synthetic-plus-Derived dual-variant draft
@@ -1105,7 +1105,7 @@ Plan 5+ readers can adjust expectations.
 
 - **Phase 1's "compiles cleanly" holds only for `quarto-source-map`,
   not the workspace.** Adding the `Generated` variant immediately
-  triggered non-exhaustive-match errors across ~10 crates. Phase 3's
+  triggered non-exhaustive-match errors across \~10 crates. Phase 3's
   six-walker consolidation rescues part of it, but the workspace
   doesn't build green again until **Phase 5** lands. The phase boundary
   semantics are "the source-map crate plus directly-touched

@@ -11,8 +11,8 @@ grand plan's sub-plans table still lists **both Plan 3 and Plan 4** as remaining
 — stale, fix when touching that file.)
 **Blocks:** Plan 6 execution (ratified sequencing 2026-07-06: this plan runs
 first — see § Coordination with Plan 6 in Phase 4b-C). Otherwise nothing.
-**Estimated sessions:** 3–4 (revised up from 2–3 — Phase A ships ~7 fixtures, each with a
-committed `q2 build-ts-extension` bundle, feeding ~30 assertions plus Phase C's implementation
+**Estimated sessions:** 3–4 (revised up from 2–3 — Phase A ships \~7 fixtures, each with a
+committed `q2 build-ts-extension` bundle, feeding \~30 assertions plus Phase C's implementation
 leg; two independent reviews flagged the original estimate as optimistic).
 
 ## Overview

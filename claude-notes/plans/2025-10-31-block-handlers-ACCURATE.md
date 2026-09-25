@@ -315,27 +315,27 @@ For each of the 7 handlers:
 
 Given that helpers exist and are presumably working:
 
-- **Phase 1** (Basic Containers): ~2-3 hours
+- **Phase 1** (Basic Containers): \~2-3 hours
   - Block quote: 30 min
   - Horizontal rule: 15 min
   - Code block: 1-1.5 hours
 
-- **Phase 2** (Lists): ~2-3 hours
+- **Phase 2** (Lists): \~2-3 hours
   - Basic lists: 1 hour
   - Nested lists: 1 hour
   - Edge cases: 1 hour
 
-- **Phase 3** (Divs): ~2-3 hours
+- **Phase 3** (Divs): \~2-3 hours
   - Basic div: 1 hour
   - Note definition: 1 hour
   - Edge cases: 1 hour
 
-- **Phase 4** (Tables): ~3-4 hours
+- **Phase 4** (Tables): \~3-4 hours
   - Basic table: 1 hour
   - Alignment/caption: 1 hour
   - Edge cases: 1-2 hours
 
-**Total**: ~9-13 hours of focused work
+**Total**: \~9-13 hours of focused work
 
 ## Success Criteria
 

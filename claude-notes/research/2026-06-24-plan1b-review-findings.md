@@ -241,7 +241,7 @@ design doc.
 ## Meta
 
 - **"Estimated sessions: 1" (line 14) is unrealistic.** The live plan now spans 7 Phase-0 seams +
-  ~12 contract tests, multiplexed dispatch, cooperative cancel, poison/re-launch, `framing.ts`, a new
+  \~12 contract tests, multiplexed dispatch, cooperative cancel, poison/re-launch, `framing.ts`, a new
   `cargo xtask` bundle step, a staleness diagnostic, and a CI freshness check. Re-estimate.
 - **Dependency header (line 4) is slightly stale**: "plan1a-host… runs in parallel with 1b" — 1a-host
   is already **landed** on this branch (Part 1+2). Harmless, but worth a touch-up.
