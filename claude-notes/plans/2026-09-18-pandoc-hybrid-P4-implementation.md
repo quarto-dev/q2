@@ -164,7 +164,7 @@ intra-tree module reference (tests below).
   and the test green. The count assertion is the discriminator; it must be a literal, and a future
   re-vendor that changes it is a deliberate edit. Keep both assertions.
 - **T1.3 is shape-only, not behaviour.** It cannot detect that the *copied bytes* came from a
-  different tag — only that the README and the constants agree. The bytes' provenance is
+  different tag — only that the README and the constants agree. The bytes\' provenance is
   `accepted-untested`; see **Missing-test pass**.
 
 ---
@@ -190,16 +190,16 @@ intra-tree module reference (tests below).
 
 **The layout and env contract, measured.** `--data-dir` alone is **not** sufficient:
 - `init.lua:123-132` reads `os.getenv("QUARTO_SHARE_PATH")` and, only if non-nil, appends
-  `<share>/pandoc/datadir/?.lua` to `package.path`. Without it, `init.lua`'s own
+  `<share>/pandoc/datadir/?.lua` to `package.path`. Without it, `init.lua`\'s own
   `local format = require '_format'` (`init.lua:149`) fails and pandoc refuses to run any filter:
   `Couldn't load 'init.lua': … module '_format' not found`, **exit 83** (measured, pandoc 3.8.1).
 - `init.lua:257` appends `pandoc.path.normalize(PANDOC_STATE.user_data_dir .. '/../../filters/?.lua')`
   — so the filters tree must sit two levels above the data-dir, i.e. the single-root layout above:
   two source subtrees, **one** materialized root with Q1's own relative shape.
-- `QUARTO_FILTER_DEPENDENCY_FILE` must point at a writable file. Without it, `init.lua`'s
+- `QUARTO_FILTER_DEPENDENCY_FILE` must point at a writable file. Without it, `init.lua`\'s
   dependency-file accessor `fail()`s and pandoc dumps \~35 KB of `init.lua` source to stderr **on an
   otherwise successful (exit 0) render** (measured). The plan's params table already notes
-  `initFilterParams`'s env side effect; this is the observable consequence.
+  `initFilterParams`\'s env side effect; this is the observable consequence.
 - `--resource-path` / cwd: `normalize/astpipeline.lua:68` joins `QUARTO_SHARE_PATH` with
   `scripts/juice.ts` (HTML-only, not reached for docx/pptx) — the only other `QUARTO_SHARE_PATH`
   consumer in the filters tree. Record it; do not vendor `scripts/`.
@@ -223,7 +223,7 @@ the shim, which is exactly what Task 8's prerequisite note bounds.
 | T2.6 | U | the `L`-tier census | Count `#[test]` fns carrying the `L` marker across `crates/quarto-core/tests/integration/pandoc_*.rs` → assert `== L_TIER_TEST_COUNT` | filesystem read of the crate's own test sources | any `L` test converted to a `return`-if-absent skip, or deleted |
 
 **Revert hunks, stated exactly:**
-- T2.1 — Revert `bundle.rs`'s single-root destination (extract the two trees to two independent
+- T2.1 — Revert `bundle.rs`\'s single-root destination (extract the two trees to two independent
   temp roots) → `assert_eq!(filters_root.parent(), datadir_root.parent().and_then(Path::parent))`
   in `test_materialized_layout_is_single_rooted` RED.
 - T2.2 — Revert the `cmd.env("QUARTO_SHARE_PATH", share_path())` line in `run_main_lua` →
@@ -234,7 +234,7 @@ the shim, which is exactly what Task 8's prerequisite note bounds.
 - T2.4 — Revert the `cmd.env("QUARTO_FILTER_DEPENDENCY_FILE", …)` line →
   `assert!(outcome.stderr.len() < 4096)` in `test_successful_render_stderr_is_quiet` RED (measured:
   \~35 KB of `init.lua` source appears).
-- T2.5 — Revert `ResourceBundle::path`'s `get_or_init` to an unconditional `extract()` →
+- T2.5 — Revert `ResourceBundle::path`\'s `get_or_init` to an unconditional `extract()` →
   `assert_eq!(first, second)` in `test_share_path_is_extracted_once` RED.
 - T2.6 — Revert any `L` test to a skip-shaped body, or delete one →
   `assert_eq!(found, L_TIER_TEST_COUNT)` in `test_l_tier_census` RED.
@@ -333,8 +333,8 @@ test design**:
 
 ## Task 4: The `QUARTO_FILTER_PARAMS` builder — structural + core keys, the synthetic project value, and the two structurally-required keys
 
-**Scope.** Build the blob the plan's re-derivation specifies: `quartoFilterParams`'s \~28 core keys,
-`extractIncludeParams`'s include plumbing, `layoutFilterParams`, `crossrefFilterParams`'s four
+**Scope.** Build the blob the plan's re-derivation specifies: `quartoFilterParams`\'s \~28 core keys,
+`extractIncludeParams`\'s include plumbing, `layoutFilterParams`, `crossrefFilterParams`\'s four
 non-project keys, the top-level literals, and the synthetic single-file "project" value. Plus the
 two keys that are **structurally required**: `quarto-filters` and `language` (P4 owns both — see
 the Upstream anchors below).
@@ -422,7 +422,7 @@ an injected test contributor's keys reach the blob.
 | T4.3 | U | `FilterParamsBuilder::build` | Assert `blob["quarto-filters"]["entryPoints"]` is an empty JSON array (type-checked, not just non-null) | fixture | the `insert("quarto-filters", json!({"entryPoints": []}))` line |
 | T4.4 | **L** | the real `main.lua:735` / `emulatedfilter.lua:45` | `run_main_lua` with `quarto-filters` **removed** from the built blob → assert exit `83` and `stderr.contains("emulatedfilter.lua:45")` | none | the same `insert("quarto-filters", …)` line |
 | T4.5 | U | `FilterParamsBuilder::build` + `LanguageTerms` | Assert `blob["language"]` is a JSON object with `>= 100` keys and contains `"source-notebooks-prefix"` and `"title-block-author-single"` | a real `LanguageTerms` loaded from `resources/language/_language.yml` | the `insert("language", terms.to_config_value())` line |
-| T4.6 | **L** | the real `layout/manuscript.lua:29-30` (via `main.lua`'s `quarto_layout_filters`, `main.lua:630-634`) | `run_main_lua` with `language` **removed** → assert exit `83` and `stderr.contains("manuscript.lua")` | none | the same `insert("language", …)` line |
+| T4.6 | **L** | the real `layout/manuscript.lua:29-30` (via `main.lua`\'s `quarto_layout_filters`, `main.lua:630-634`) | `run_main_lua` with `language` **removed** → assert exit `83` and `stderr.contains("manuscript.lua")` | none | the same `insert("language", …)` line |
 | T4.7 | **L** | the full builder + the real `init.lua` `param()` | `run_main_lua` with the built blob and a probe filter reading `param("quarto2-sentinel")` → assert the uuid reaches stderr **and** `status.success()` | none | the `insert("quarto2-sentinel", …)` line, or Task 3's encoder engine |
 | T4.8 | U | `FilterParamsBuilder::build` | Assert each of `ipynb-title-block-template`, `jats-subarticle-id`, `notebook-context`, `cites-index-file`, `quarto-custom-format`, `reference-location` is **absent** | fixture | any stub contributor added for a deferred key |
 | T4.9 | U | `FilterParamsBuilder::build` | Assert `number-sections`, `number-offset`, `number-depth` are **present** (API completeness per design §11) | fixture | the `crossrefFilterParams`-equivalent contributor's three-key insert |
@@ -631,7 +631,7 @@ of a new `Q-18-*`; `Q-11-1` (`error_catalog.json:891`) already has two real emit
 |---|---|---|---|---|---|
 | T6.1 | X | `xtask::lint::error_docs::check(workspace_root)` | Run against the real `workspace_root` → zero violations | none | any `docs/errors/pandoc/Q-18-<n>.qmd` page deleted |
 | T6.2 | X | `xtask::lint::error_docs_sidebar::check(workspace_root)` | Run against the real `workspace_root` → zero violations | none | the `- section: "pandoc"` block in `docs/_quarto.yml` |
-| T6.3 | U | the catalog data + `quarto-error-catalog`'s own provider | Load the catalog → assert every `Q-18-*` code has `subsystem == "pandoc"` and `docs_url == format!("https://quarto.org/docs/errors/pandoc/{code}")` | none | any `Q-18-*` entry's `subsystem` or `docs_url` field |
+| T6.3 | U | the catalog data + `quarto-error-catalog`\'s own provider | Load the catalog → assert every `Q-18-*` code has `subsystem == "pandoc"` and `docs_url == format!("https://quarto.org/docs/errors/pandoc/{code}")` | none | any `Q-18-*` entry's `subsystem` or `docs_url` field |
 | T6.4 | U | the catalog data | Assert no subsystem name maps to more than one number and `"pandoc" -> 18` | none | the subsystem number in the new entries |
 
 **Revert hunks, stated exactly:**
@@ -652,7 +652,7 @@ of a new `Q-18-*`; `Q-11-1` (`error_catalog.json:891`) already has two real emit
   A `U` test asserting "the file `docs/errors/pandoc/Q-18-1.qmd` exists" would duplicate the rule
   and drift from it. The rules already have their own unit tests (`error_docs.rs`,
   `error_docs_sidebar.rs` both carry `#[cfg(test)] mod tests`, and `error_docs_sidebar.rs:535,538`
-  already use `Q-11-1` as fixture data); this task adds no new rule, so **the rules' existing unit
+  already use `Q-11-1` as fixture data); this task adds no new rule, so **the rules\' existing unit
   tests are the seam** and Tasks 6's own tests are the two positive-direction runs plus the data
   assertions.
 - **T6.4's expected value `18` is frozen, not derived.** It must be a literal, not
@@ -725,7 +725,7 @@ version agree.
 - T7.5 — Revert the preflight call in `verify::run` →
   `assert!(preflight(Some("3.6.0")).is_err())` in `test_verify_pandoc_preflight` RED (the helper is
   still tested; the *wiring* is what the revert removes, so the test must assert the helper is
-  reachable from `run`'s step list — see the vacuity note).
+  reachable from `run`\'s step list — see the vacuity note).
 
 ### Refactor-induced vacuity check
 
@@ -737,7 +737,7 @@ version agree.
   T7.5's preflight wiring and the `L`-tier gate, where failing loudly is the intent.
 - **T7.5's revert is a wiring revert, so the assertion must reach the wiring.** Asserting only
   `preflight(...)` behaviour survives removing the call from `verify::run`. The test must therefore
-  also assert the preflight appears in `verify`'s ordered step inventory (or that `TOTAL_STEPS`
+  also assert the preflight appears in `verify`\'s ordered step inventory (or that `TOTAL_STEPS`
   incremented to `15` and the preflight owns one of them). Without that second assertion T7.5 is
   vacuous against exactly the CLAUDE.md failure this repo has already had (the CSS lint reaching CI
   twelve days before `verify`, bd-4bu7vwi5).
@@ -763,16 +763,16 @@ defines the global the splice references. Nothing about conversion — the shim'
   2. `tappend(quarto_filter_list, quarto_pandoc_shim_filters)` **between**
      `tappend(quarto_filter_list, quarto_init_filters)` (`main.lua:712`) and
      `tappend(quarto_filter_list, quarto_normalize_filters)` (`main.lua:713`).
-     The marked-patch comment must anchor by **group name**, not line number — `main.lua`'s group
+     The marked-patch comment must anchor by **group name**, not line number — `main.lua`\'s group
      *contents* have been refactored twice in two years while the top-level group *order* has been
      stable since 2023.
 - `resources/pandoc-filters/filters/quarto2-shim.lua` — **ours, inside the vendored tree** (the
-  inside-the-tree placement is forced: `import()` resolves relative to `PANDOC_SCRIPT_FILE`'s own
+  inside-the-tree placement is forced: `import()` resolves relative to `PANDOC_SCRIPT_FILE`\'s own
   directory, and no `package.path` setup for an outside placement has been scoped). P4 ships the
   **placeholder**; P5 replaces its body.
 
 **The filter-group literal P5 asks P4 to show concretely** (not just the `tappend` line). The entry
-shape is taken from `main.lua`'s own groups, e.g. `quarto_normalize_filters` (`main.lua:257-278`):
+shape is taken from `main.lua`\'s own groups, e.g. `quarto_normalize_filters` (`main.lua:257-278`):
 
 ```lua
 -- QUARTO2-PATCH (q2 pandoc-hybrid, P4): placeholder for P5's wire-format shim.
@@ -838,7 +838,7 @@ fixture must therefore be chosen to contain no wire-format custom nodes; see Tas
   `assert!(!shim_src.contains("traverse = 'topdown'"))` in
   `test_shim_group_is_bottom_up` RED.
 - T8.4 — Revert (delete) `quarto2-shim.lua` → `assert!(outcome.status.success())` in
-  `test_patched_main_lua_still_runs` RED (`import`'s `dofile` on a missing file, pandoc exit 83).
+  `test_patched_main_lua_still_runs` RED (`import`\'s `dofile` on a missing file, pandoc exit 83).
 - T8.5 — Revert the `QUARTO2-PATCH` marker comment →
   `assert!(marker_names_both_boundaries)` in `test_patch_markers_anchor_by_group_name` RED.
 - T8.6 — Revert either README `## Ours vs. pinned` entry →
@@ -907,12 +907,12 @@ list that plugs `PandocWriteStage` in.
 
 | # | Tier | Real unit exercised | Seam (invoked → asserted) | Mock boundary | Named revert hunk |
 |---|---|---|---|---|---|
-| T9.1 | U | `PandocWriteStage`'s serializer call | Serialize a fixture AST → assert the JSON has a top-level `pandoc-api-version` key and **no** `pampa-json-format` envelope key | none | the `JsonConfig { raw: false, .. }` construction |
-| T9.2 | U | `PandocWriteStage::run`'s return value | Run against a stub `pandoc` path that writes a known file → assert `RenderedOutput.content.is_empty()` and `output_path` equals the requested path | **the `pandoc` binary path only** (a fixture script standing in for the engine, used *solely* to bind the return-value contract — T9.4 does the real run) | the `content: String::new()` assignment, or threading bytes into it |
+| T9.1 | U | `PandocWriteStage`\'s serializer call | Serialize a fixture AST → assert the JSON has a top-level `pandoc-api-version` key and **no** `pampa-json-format` envelope key | none | the `JsonConfig { raw: false, .. }` construction |
+| T9.2 | U | `PandocWriteStage::run`\'s return value | Run against a stub `pandoc` path that writes a known file → assert `RenderedOutput.content.is_empty()` and `output_path` equals the requested path | **the `pandoc` binary path only** (a fixture script standing in for the engine, used *solely* to bind the return-value contract — T9.4 does the real run) | the `content: String::new()` assignment, or threading bytes into it |
 | T9.3 | I | the Pandoc-leg stage list builder | Build the list for `Pandoc("docx")` → assert it contains `PandocWriteStage` and contains no HTML-writer stage | none | the `PandocWriteStage` push in the stage-list builder |
 | T9.4 | **L** | `render_qmd_to_pandoc` end to end, real `pandoc` | Call it on a minimal fixture with `--to docx` → assert the file exists, first 4 bytes `PK\x03\x04`, and `RenderedOutput.content.is_empty()` | **nothing mocked** | the `Command::new(pandoc).arg("-L").arg(main_lua)` invocation |
 | T9.5 | U | the temp-JSON path derivation | Run → assert the serialized JSON was written inside a per-render temp directory, not the output directory or CWD | none | the temp-dir construction |
-| T9.6 | U | `PandocWriteStage`'s argument assembly | Assert the assembled argv contains, in order, `-f json`, `-t docx`, `--data-dir <share>/pandoc/datadir`, `-L <share>/filters/main.lua`, `-o <output>` | none | any one argument in the assembly |
+| T9.6 | U | `PandocWriteStage`\'s argument assembly | Assert the assembled argv contains, in order, `-f json`, `-t docx`, `--data-dir <share>/pandoc/datadir`, `-L <share>/filters/main.lua`, `-o <output>` | none | any one argument in the assembly |
 
 **Revert hunks, stated exactly:**
 - T9.1 — Revert `JsonConfig { raw: false }` to `raw: true` →
@@ -989,7 +989,7 @@ on this diagnostic by name; P4 owns the channel, P5 owns the fixture —
 | # | Tier | Real unit exercised | Seam (invoked → asserted) | Mock boundary | Named revert hunk |
 |---|---|---|---|---|---|
 | T10.1 | U | `classify_pandoc_stderr` | Feed `"[WARNING] Could not fetch resource img.png…\n"` with **exit status 0** → assert exactly one diagnostic, warning severity, message containing the line verbatim | the stderr text and exit code are injected | the `if !status.success()` guard around the capture/classify call in `pandoc_write.rs` |
-| T10.2 | U | the nonzero-exit handler | Feed a multi-line Lua traceback with exit 83 → assert the returned `Err`'s payload `.contains()` **every** line of the input, byte-for-byte | injected text/code | the `.stderr(stderr_text)` field on the error construction |
+| T10.2 | U | the nonzero-exit handler | Feed a multi-line Lua traceback with exit 83 → assert the returned `Err`\'s payload `.contains()` **every** line of the input, byte-for-byte | injected text/code | the `.stderr(stderr_text)` field on the error construction |
 | T10.3 | U | the temp-JSON retention policy | Exit 83 → assert the temp JSON path still exists and the error message names it; exit 0 → assert it is gone | injected exit code, real temp files | the `if status.success() { remove_file(json) }` branch |
 | T10.4 | **L** | the real pandoc + real Lua, failing | `run_main_lua` with `language` removed from the blob (the measured `manuscript.lua` crash, exit 83) → assert the surfaced error contains `"manuscript.lua"` **and** the temp JSON is retained | none | the `.stderr(...)` field, or the retention branch |
 | T10.5 | **L** | the real pandoc, **succeeding with a warning** | `run_main_lua` on the missing-image fixture → assert `status.success()` **and** that at least one warning diagnostic was produced carrying `"Could not fetch resource"` | none | the `if !status.success()` guard around the capture |
@@ -1110,7 +1110,7 @@ Behaviour with no test above, each given a bound seam or an explicit `accepted-u
 mandated verdicts first.
 
 **1. `pandoc` not found on `PATH`.** **Bound** — T7.3 (`U`), injecting `None` to mirror
-`SystemRuntime::find_binary`'s `Option<PathBuf>` (`traits.rs:556`). The *discovery* path itself
+`SystemRuntime::find_binary`\'s `Option<PathBuf>` (`traits.rs:556`). The *discovery* path itself
 (`BinaryDependencies::discover`, `render.rs:150-154`) is pre-existing and already covered by its own
 crate's tests; P4 adds only the gate.
 

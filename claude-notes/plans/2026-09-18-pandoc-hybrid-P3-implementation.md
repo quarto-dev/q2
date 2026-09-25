@@ -298,7 +298,7 @@ assign-numbers predicate), and convert the single assignment-group gate (anchor 
 | # | Tier | Real unit exercised | Seam (invoked → asserted) | Mock boundary | Named revert hunk |
 |---|---|---|---|---|---|
 | T2.1 | Q | the two real predicate functions, `require`d from their module | new `quarto-cli/tests/unit-lua/crossref-numbering.test.lua`, registered in `LUA_TESTS` in `tests/smoke/lua-unit/lua-unit.test.ts:29-33`; drives the 2×2 cross-product plus an unknown-value row → asserts each predicate's boolean | `param()` only (the luaunit harness's documented convention: "Mocks any filter-runtime globals it needs (param, tcontains, …)"). The predicates themselves are real. | the `or param("crossref-numbering","quarto") == "external"` disjunct; the `and param(…) ~= "external"` conjunct |
-| T2.2 | Q | `main.lua`'s real filter-list construction + the whole crossref assignment group, through a real `quarto render … --to docx` | **existing** `quarto-cli/tests/smoke/crossref/docx.test.ts` over `tests/docs/crossrefs/all-docx.qmd` → `ensureDocxRegexMatches` (`tests/verify.ts:1072`) asserts `>Figure 1: Elephant<` and `>Table 1: My Caption<` in `word/document.xml` | none — real `quarto`, real pandoc, real docx | anchor A1's polarity |
+| T2.2 | Q | `main.lua`\'s real filter-list construction + the whole crossref assignment group, through a real `quarto render … --to docx` | **existing** `quarto-cli/tests/smoke/crossref/docx.test.ts` over `tests/docs/crossrefs/all-docx.qmd` → `ensureDocxRegexMatches` (`tests/verify.ts:1072`) asserts `>Figure 1: Elephant<` and `>Table 1: My Caption<` in `word/document.xml` | none — real `quarto`, real pandoc, real docx | anchor A1's polarity |
 
 **Revert hunks, stated exactly:**
 
@@ -355,7 +355,7 @@ assign-numbers predicate), and convert the single assignment-group gate (anchor 
 ## Task 3: Convert the four present-numbers render-decoration gate sites
 
 **Scope.** Mechanical, same-shape conversion of the four real render-decoration gates to
-`crossref_present()` — one task, not four, per `superpowers:subagent-driven-development`'s
+`crossref_present()` — one task, not four, per `superpowers:subagent-driven-development`\'s
 grouping preference. The ipynb pair becomes a `crossref_present()` / `not crossref_present()`
 pair. `layout/ipynb.lua:121,126` is **not** touched (verified no-op, both branches dispatch the
 identical callback).
@@ -458,7 +458,7 @@ Task 7's matrix, whose fixture A7 unblocks.
   load-bearing one — a test that asserted only "no prefix appears in the output" would be
   satisfied by the crash too, since a crashed render produces no output at all.
 - T3.6 — Revert by **inverting** A7's predicate to `if callout.order ~= nil then` →
-  `tests/smoke/crossref/docx.test.ts`'s callout-prefix expectations RED (every labeled callout
+  `tests/smoke/crossref/docx.test.ts`\'s callout-prefix expectations RED (every labeled callout
   upstream *has* an order, so the inverted guard fires on all of them and strips every prefix).
   **Deleting A7 does not redden T3.6**, and that is the point of stating this hunk separately:
   A7's whole justification is that it is unreachable upstream, so "upstream is unchanged" is true
@@ -471,7 +471,7 @@ Task 7's matrix, whose fixture A7 unblocks.
   (`layout/lightbox.lua:171`, `else return {} end` at `:424-425`). `enable-crossref` is only ever
   false on the ipynb source-notebook path, which is never `html:js`; and Q2 never routes HTML
   through this Lua path at all (it has its own writer — the same reason P3's audit classes
-  `floatreftarget.lua:659`'s html renderer as irrelevant). So no reachable input distinguishes
+  `floatreftarget.lua:659`\'s html renderer as irrelevant). So no reachable input distinguishes
   A3-patched from A3-unpatched. Patch it anyway for upstream consistency (the plan says so, and
   a future lightbox-for-typst would make it live); assert nothing.
 
@@ -584,7 +584,7 @@ and the two upstream smoke tests that drive them. Task 8 is numbered after this 
 before it; see its own numbering note. Without it the PR's "front end supplies numbers" pitch is
 not actually reachable by a quarto-cli user, only by a consumer that builds the params blob itself.
 
-**Files** (all **upstream quarto-cli**), with the eight functions' real homes verified 2026-09-18:
+**Files** (all **upstream quarto-cli**), with the eight functions\' real homes verified 2026-09-18:
 - `src/resources/filters/crossref/format.lua` — `titlePrefix` (`:17`), `subrefNumber` (`:51`),
   `refPrefix` (`:66`), `refDelim` (`:98`), `refHyperlink` (`:102`), `refNumberOption` (`:106`).
 - `src/resources/filters/crossref/options.lua` — `crossrefOption` (`:17`).
@@ -597,7 +597,7 @@ not actually reachable by a quarto-cli user, only by a consumer that builds the 
 **Acceptance criterion.** The PR exists, its number is recorded in P3's plan, and every
 `QUARTO-PATCH(...)` marker Task 6 writes cites that number. T5.1 green. Precedent-consistency:
 each export sits adjacent to its definition with a one-line comment naming the consumer, matching
-`floatreftarget.lua:237-239`'s shape.
+`floatreftarget.lua:237-239`\'s shape.
 
 **Prerequisite.** Tasks 2, 3, 4. Also relevant, not blocking: upstream's active
 `_quarto.modules` migration (quarto-cli `#14702`) has not reached `crossref/` yet — this ask is
@@ -673,7 +673,7 @@ task needs no pandoc, no transport, no shim.
 |---|---|---|---|---|---|
 | T6.1a | I | the vendored tree's marker inventory | `crates/quarto-core/tests/integration/pandoc_filters_patch.rs` reads the three vendored files from disk → asserts each contains `QUARTO-PATCH(upstream PR quarto-dev/quarto-cli#` followed by digits (**not** the literal `#<N>`), and that the set of marker-bearing files equals a hard-coded expected list | none — real `std::fs` read of the real vendored tree | the `QUARTO-PATCH` comment at each of A1, A2, A3, A4/A5, A6 |
 | T6.1b | I | the vendored `main.lua`'s assignment gate, structurally | same file → asserts `main.lua` contains the new predicate call at the gate **and** does **not** contain the bare line `if enableCrossRef then` | none | A1 |
-| T6.1c | I | the vendored tree's *whole* gate surface, exhaustively | same file → walks every `.lua` under the vendored filters root; asserts `crossref_present()` appears in `floatreftarget.lua` and `modules/callouts.lua`, **and** that the complete set of occurrences of the substring `param("enable-crossref"` equals exactly the three allow-listed ones (`main.lua`'s param read; `layout/ipynb.lua` ×2) | none | A2, A4, A5, A6; and any *fifth* site a future re-pin introduces |
+| T6.1c | I | the vendored tree's *whole* gate surface, exhaustively | same file → walks every `.lua` under the vendored filters root; asserts `crossref_present()` appears in `floatreftarget.lua` and `modules/callouts.lua`, **and** that the complete set of occurrences of the substring `param("enable-crossref"` equals exactly the three allow-listed ones (`main.lua`\'s param read; `layout/ipynb.lua` ×2) | none | A2, A4, A5, A6; and any *fifth* site a future re-pin introduces |
 | T6.2 | L | behavioral drift after a re-pin | `seam deferred until P5's Layer-1/Layer-2 contract tests` — P3's checklist item 6 says "confirm P5's contract test covers drift detection (no new mechanism needed beyond P5's existing plan)", and P5's plan agrees ("the same behavioral-tripwire philosophy P3 already established for its own 3-file patch"). **P5 is scheduled after P3.** See the Missing-test pass for the verdict on that ordering. | — | — |
 
 **Revert hunks, stated exactly:**
@@ -991,7 +991,7 @@ change P3's position in the graph.
   regression guard, not a binding — and the *discriminating* mutation is the one named above
   (emit unconditionally), not deleting the feature.
 - **T8.2's fixture must not reuse `all-docx.qmd`.** That fixture is the subject of
-  `docx.test.ts`'s existing expectations; adding `numbering: external` to it would flip those
+  `docx.test.ts`\'s existing expectations; adding `numbering: external` to it would flip those
   expectations and couple two tests to one file. A new single-figure fixture keeps T8.2's RED
   attributable to this task's hunk.
 - **T8.2 asserts the absence of a prefix, which is satisfiable by an empty render.** Paired with

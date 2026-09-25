@@ -1014,7 +1014,7 @@ pinned version assert (`:1460`) live in the crate root
 - [x] **Cache key (decision 9)** — **do the Warning's "Provenance plumbing"
       sub-item first**: this item consumes the `(name, _extension.yml path)`
       pairs that sub-item adds to the registry. Gather `(extension-name,
-      _extension.yml raw bytes)` pairs for every engine-contributing
+      \_extension.yml raw bytes)` pairs for every engine-contributing
       extension, sorted by name, and pass them as
       `Pass1KeyInputs.extension_contributions` (currently hardcoded empty at
       `orchestrator.rs:1639`). **Byte source:** the registry exposes the

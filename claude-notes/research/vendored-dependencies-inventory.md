@@ -189,7 +189,7 @@ Each entry uses the following fields:
   Copy `bootstrap-icons.css` and `bootstrap-icons.woff` together (CSS
   references woff by hashed query string).
 - **Verification:** website render (`cargo run --bin q2 -- render
-  examples/websites/<fixture>`), inspect `_site/site_libs/bootstrap/`
+  examples/websites/<fixture>`), inspect `\_site/site_libs/bootstrap/`
   for the pair, and confirm icons render in browser.
 - **License:** MIT.
 - **Current version:** 1.13.1 (header comment in

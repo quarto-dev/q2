@@ -819,7 +819,7 @@ sessions) → Plan 4 (1-2 sessions) = **6-10 sessions elapsed**.
 | Component | Path |
 |-----------|------|
 | Julia engine | `src/resources/extension-subtrees/julia-engine/src/julia-engine.ts` |
-| Julia _extension.yml | `src/resources/extension-subtrees/julia-engine/_extensions/julia-engine/_extension.yml` |
+| Julia \_extension.yml | `src/resources/extension-subtrees/julia-engine/_extensions/julia-engine/_extension.yml` |
 | @quarto/types | `packages/quarto-types/` |
 | QuartoAPI types | `packages/quarto-types/src/quarto-api.ts` |
 | ExecutionEngineDiscovery | `src/execute/types.ts` |

@@ -258,7 +258,7 @@ public surface (minus the moved catalog *data*).
 - [x] **2f.** `cargo xtask verify` **GREEN — all 14 steps** (incl. WASM build +
       hub-client tests). Two failures found + fixed en route: (1) two clippy lints
       in the new code (Step 1); (2) the WASM build (Step 7) broke hub-client's vite
-      PWA step — wiring `install()` into the WASM bootstrap `include_str!`'d the
+      PWA step — wiring `install()` into the WASM bootstrap `include_str!`\'d the
       46 KB catalog and forced it past the 35 MiB precache limit (`vite.config.ts`
       `maximumFileSizeToCacheInBytes`). Fixed *soundly* (not by raising the limit):
       removed the WASM `install()` + `quarto-error-catalog` dep, since the WASM
@@ -420,7 +420,7 @@ Open forks (settle before 1a / 3a):
 
 - *Behaviour-preservation (Phase 2):* the 2a tests — installed catalog reproduces
   today's `docs_url`; empty catalog returns `None`.
-- *Catalog-agnostic (Phase 3):* `quarto-error-reporting`'s own test suite passes
+- *Catalog-agnostic (Phase 3):* `quarto-error-reporting`\'s own test suite passes
   with `EmptyCatalog` and **no** dependency on any `Q-*` data.
 - *External-consumer smoke (3c):* a throwaway crate builds a `DiagnosticMessage`,
   installs a trivial `CatalogProvider`, and renders — proving the published API is

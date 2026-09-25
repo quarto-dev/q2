@@ -57,7 +57,7 @@ to base CSS (`compile_theme_css.rs:547`). Chain:
    `\vendor/rfs.scss` never matches `vendor/rfs.scss` → miss.
 
 Empirically verified: `PathBuf::from("/__quarto_resources__/bootstrap/scss")
-.join("vendor/_rfs.scss").to_string_lossy()` = `…/scss\vendor/_rfs.scss` on
+.join("vendor/\_rfs.scss").to_string_lossy()` = `…/scss\vendor/\_rfs.scss` on
 Windows; `str::lines`-style stripping leaves the leading `\`. Real OS load
 paths (custom themes, reveal SCSS) are immune — `RuntimeFs`\'s `std::fs`
 fallback is separator-tolerant on Windows, and reveal SCSS is fully inlined

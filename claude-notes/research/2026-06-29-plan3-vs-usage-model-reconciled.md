@@ -142,7 +142,7 @@ mechanism, and the "no MappedString provenance" simplification are **confirmed a
 - **Gap:** a from-scratch impl built to L116 mis-ranks outputs for every format and never renders
   widgets. This is the critic's headline find, in a module the boundary detectors dismissed as "\~150
   lines, pure."
-- **Action:** port `displayDataMimeType`'s dynamic algorithm; do not encode a fixed list.
+- **Action:** port `displayDataMimeType`\'s dynamic algorithm; do not encode a fixed list.
 
 ### P3-10 — `application/json` and `text/latex`→math dispatch are wrong (MED, agent-grounded)
 - `application/json → code block` (L218) is wrong: Q1 has no generic json path; `displayDataIsJson`

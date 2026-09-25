@@ -867,7 +867,7 @@ works; it doesn't yet prove the full WASM-bridge setup.
         `@testing-library/react` helpers and `visibility.ts`.
 - [x] Update `hub-client/changelog.md` per the project's
       hub-client commit convention. (One entry per phase commit.)
-- [ ] Optional: update `CLAUDE.md`'s "Workspace structure"
+- [ ] Optional: update `CLAUDE.md`\'s "Workspace structure"
       section to reflect the two new packages and the SPA.
       *(Deferred — not blocking the sub-epic. File a follow-up
       if needed.)*

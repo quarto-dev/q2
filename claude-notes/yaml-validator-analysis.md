@@ -236,9 +236,9 @@ interface SchemaAnnotations {
 
 **Key schema files**:
 - `front-matter.ts` - Document frontmatter schema
-- `project-config.ts` - _quarto.yml project config
+- `project-config.ts` - \_quarto.yml project config
 - `chunk-metadata.ts` - Code cell options (#| key: value)
-- `brand.ts` - _brand.yml brand configuration
+- `brand.ts` - \_brand.yml brand configuration
 - `format-schemas.ts` - Format-specific schemas (html, pdf, docx, etc.)
 - `definitions.ts` - Shared schema definitions
 - `from-yaml.ts` - Load schemas from YAML files
@@ -328,10 +328,10 @@ interface EditorContext {
 ### With CLI
 
 CLI uses validation for:
-- Project config validation (_quarto.yml)
+- Project config validation (\_quarto.yml)
 - Document frontmatter validation
-- Extension validation (_extension.yml)
-- Brand validation (_brand.yml)
+- Extension validation (\_extension.yml)
+- Brand validation (\_brand.yml)
 
 Errors are formatted as TidyverseError and displayed to user.
 

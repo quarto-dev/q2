@@ -145,7 +145,7 @@ The disk wins are unambiguous and consistent across debug and
 release: pampa's 57 integration test binaries collapse into one
 `integration` binary, eliminating exactly 56 executables and
 \~2.5 GiB of duplicated dependency-closure linkage. Extrapolated
-across the other 12 candidate crates' 107 integration test files,
+across the other 12 candidate crates\' 107 integration test files,
 target/debug at the end of Phase 5 should land in the 13-15 GB
 range vs. the 21 GB baseline.
 
@@ -184,7 +184,7 @@ level required changing the 3 occurrences to `../../snapshots/…` to
 keep pointing at `crates/pampa/snapshots/`.
 
 This is the same kind of edit that the Phase 5 audit flagged for
-`quarto/tests/trace_cli.rs`'s `#[path = "../src/commands/trace.rs"]`
+`quarto/tests/trace_cli.rs`\'s `#[path = "../src/commands/trace.rs"]`
 — any source-file-relative path inside an integration test needs
 one more `../` after consolidation. We should grep for these
 patterns proactively before each Phase 5 crate migration to avoid

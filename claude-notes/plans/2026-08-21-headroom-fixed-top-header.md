@@ -80,11 +80,11 @@ Q1's behaviour is two cooperating layers (full quotes in the reference doc):
    direction, `tolerance: 5`. Pure class toggling; the visual is
    `quarto-nav.scss:100-114` (`transform: translateY(-100%)` with a 200 ms
    transition).
-2. **`quarto-nav.js`'s `updateDocumentOffset`** — because the header is
+2. **`quarto-nav.js`\'s `updateDocumentOffset`** — because the header is
    `position: fixed`, *something* has to push the page down by the header's
    measured height. Q1 does this in JS, on load and on every pin/unpin and
    on a `ResizeObserver` of the header: sets `body.style.paddingTop`,
-   every `.sidebar` / `.headroom-target`'s `style.top` + `maxHeight`
+   every `.sidebar` / `.headroom-target`\'s `style.top` + `maxHeight`
    (0 / 100vh when unpinned, headerHeight / `calc(100vh - h)` when pinned),
    `.quarto-container` `minHeight`, and a `section:target::before` spacer
    in a dynamic `<style id="quarto-target-style">` for anchor-jump
@@ -453,7 +453,7 @@ must be cheap to unwind. Concretely:
   `nav-fixed` / body padding live together (one module per surface) and are
   named so B's author can find and flip them wholesale, the way this strand
   flips bd-26bf3j1y's absence pins.
-- **The stage/predicate survives B.** `HeadroomJsStage`'s predicate
+- **The stage/predicate survives B.** `HeadroomJsStage`\'s predicate
   (website + navbar/sidebar, `pinned:` opt-out) is mechanism-independent;
   B only changes *which* files it ships.
 

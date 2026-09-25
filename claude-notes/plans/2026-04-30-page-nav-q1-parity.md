@@ -308,7 +308,7 @@ Q1.
       single-row, "Home ←" left-aligned, "→ API Reference"
       right-aligned, both glyphs visible (Bootstrap Icons font
       loaded successfully), links muted-grey per Q1's styling.
-      File system: `_site/site_libs/bootstrap/{bootstrap-icons.css,
+      File system: `\_site/site_libs/bootstrap/{bootstrap-icons.css,
       bootstrap-icons.woff}` both present. Head links: a single
       `<link rel="stylesheet" href="site_libs/bootstrap/bootstrap-icons.css">`
       on the root page; nested page (`docs/api.html`, tested via
@@ -425,7 +425,7 @@ the site title).
       arrow glyphs visible, links muted-grey per Q1 styling.
 - [x] The same example without the opt-in renders zero
       `page-navigation` markup (`grep -c page-navigation
-      _site/*.html` → 0 on every page) — Q1-parity confirmed.
+      \_site/*.html` → 0 on every page) — Q1-parity confirmed.
 - [x] `bd-bsut` closed; `bd-nf50` closed (the new
       docs/navigation.qmd subsection covers all four flatten/dedupe/
       separator/section-header rules it called for).

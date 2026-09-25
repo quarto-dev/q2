@@ -1219,7 +1219,7 @@ Two issues to file before impl begins, with
 ### TDD phase 9 — Snapshot + integration
 
 - [x] Write snapshot tests #30–33. Added `insta.workspace = true`
-      to `quarto-core`'s dev-deps (matches the convention used in
+      to `quarto-core`\'s dev-deps (matches the convention used in
       `pampa`, `quarto-highlight`, etc.) and wrote four
       end-to-end snapshot tests in `tests/listing_pipeline.rs`,
       each driving the full `ProjectPipeline` and snapshotting
@@ -1248,7 +1248,7 @@ matched only `Scalar(Yaml::String)` / `Glob` / `Array`,
 silently dropping the explicit contents and letting
 `apply_type_defaults` overwrite with the sibling-only `*.qmd`
 default. The fix routes `parse_contents` through
-`as_plain_text` first (matching `parse_listings`'s
+`as_plain_text` first (matching `parse_listings`\'s
 shorthand-string handling), with two new unit tests covering
 the `PandocInlines` paths. The broader audit of sibling parser
 branches that may share the same vulnerability is filed as
@@ -1310,7 +1310,7 @@ To be filed at start of impl with
 1. **Localize listing category sidebar labels** — task, p3.
    Today's hardcoded English "Categories" / "All" should
    route through whatever localization pattern Q2 settles on
-   (cf. `crossref_render.rs`'s localization comment). Not
+   (cf. `crossref_render.rs`\'s localization comment). Not
    blocking; Q1's defaults are also English.
 
 2. **Review category click-handler encoding scheme** —

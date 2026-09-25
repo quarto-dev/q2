@@ -77,7 +77,7 @@ source through the existing `apply_node_edit` incremental-write machinery.
 
 ## Phase 5 — SCSS (the bd-obkvhlam CSS follow-through)
 
-- [x] Port `ul.task-list { padding-left: 1em }` (_quarto-rules.scss:338) and
+- [x] Port `ul.task-list { padding-left: 1em }` (\_quarto-rules.scss:338) and
       `input[type="checkbox"] { margin-right: 0.5ch }` (:697) with provenance
       comments; re-capture phase5 baseline hash if styles.css shifts.
 

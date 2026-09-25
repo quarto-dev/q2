@@ -775,7 +775,7 @@ before the code that makes it pass.
 Add new test file `sidebar_pipeline.rs`:
 
 36. **`pipeline_renders_sidebar_for_two_page_website`** — fixture with
-    `_quarto.yml: { project: { type: website }, website: { sidebar:
+    `\_quarto.yml: { project: { type: website }, website: { sidebar:
     { contents: [index.qmd, about.qmd] } } }`; render both pages;
     assert each output HTML contains `<nav id="quarto-sidebar"`, with
     the current page's link carrying `active`, and the other not.

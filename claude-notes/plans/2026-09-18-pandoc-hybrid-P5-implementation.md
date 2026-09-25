@@ -972,7 +972,7 @@ Route-N global the shim depends on exists and accepts the expected arity.
 `Inline` and `Block` (by class name) and `by_ast_name` (all handlers) — created by
 `construct_extended_ast_handler_state()` (`ast/customnodes.lua:552-574`) and populated one entry
 per `_quarto.ast.add_handler` call at `:462` (`state.handlers.by_ast_name[handler.ast_name] =
-handler`). The public accessor is `_quarto.ast.resolve_handler(name, key)` (`:488-499`). Each
+handler`). The public accessor is `\_quarto.ast.resolve_handler(name, key)` (`:488-499`). Each
 handler carries `ast_name`, `kind`, `class_name`, `constructor`, `parse`, and **optionally**
 `slots` — `panel-tabset.lua` declares none at all (D6), and `customnodes.lua:438-447` treats a
 missing `slots` as "no forwarder", warning only if it is present and not an array.

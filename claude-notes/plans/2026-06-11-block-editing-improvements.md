@@ -58,7 +58,7 @@ The plan is reasoned a priori; these four assertions are load-bearing. All are v
   would misclassify it; (ii) true coincidence is **exactly 0px** and the nearest deciding edge in
   any "differ" case is ≥\~12px, so the epsilon is **tight (\~1px)**, not the old loose "\~1–2px."
 - [x] **B. `r[0]` uniqueness** — in real Q2 pool output, a container and its first child
-  have **distinct** `r[0]`, and all Original blocks' `r[0]` are unique. *Underpins the
+  have **distinct** `r[0]`, and all Original blocks\' `r[0]` are unique. *Underpins the
   `anchorR0` identity (§2b).* **VERIFIED 2026-06-12** via `cargo run --bin pampa -- f.qmd
   -t json` (pool at `.astContext.p`): Div `0` vs Para `7`; BlockQuote `0` vs Para `2`;
   list `0` vs items `2/8/14` — all distinct, container range opens at its marker before
@@ -528,7 +528,7 @@ longer re-writes the wrong block on blur).
   hairline-border fixture (→ leaf). *(Confirmed 2026-06-13: blockquote is atomic in
   locked mode like lists; the earlier "blockquote text → child" line was stale — full
   per-layer descent is the Phase 3 unlock. Reason: only the outermost prefixing
-  container has a clean byte-slice; inner targets' slices carry the outer `> `/indent.)*
+  container has a clean byte-slice; inner targets\' slices carry the outer `> `/indent.)*
 - [x] **Ordered tiles** (RTL; enumerate P2.2, next/prev scan P2.4b): next/prev derived from live `[data-block-pool-id]` at
   event time, locked-resolved, linear-scanned; a `HorizontalRule` between paras is
   skipped; partition has no container-then-child redundancy.
@@ -617,7 +617,7 @@ data-integrity feature is broken in production. Two bugs:
   already correct) vs *"is my block currently visible?"* (DOM). Step 2's visibility check must use
   the active editor's **own wrapper** via `activeEditRegionRef` (set by the Phase-1 fix), **not**
   `tileForAnchorR0`. And it must run **after** the re-anchor (re)mounts the textarea — i.e. a
-  **follow-up layout effect** keyed on the open editor, checking `activeEditRegionRef.current`'s box
+  **follow-up layout effect** keyed on the open editor, checking `activeEditRegionRef.current`\'s box
   (`offsetParent`/zero-rect = collapsed region → drop). The self-heal effect itself just re-anchors
   (KEEP) or drops on content-mismatch/no-candidate — no DOM visibility check inline.
   *(Fallback if the follow-up timing proves fiddly: ship KEEP-correctness first by removing the
@@ -670,7 +670,7 @@ and the writer uses the un-healed one.
   genuine focus-leaves-to-elsewhere, an explicit move/click-switch) from a React-unmount `blur`; the
   latter must never write.
 
-**Scope:** small + localized — the commit call sites (`EditTextarea`'s commit, `commitSubtreeEdit`)
+**Scope:** small + localized — the commit call sites (`EditTextarea`\'s commit, `commitSubtreeEdit`)
 + the lifecycle gating. Not a rearchitecture; it **completes** the identity migration that reads
 already finished. **Phase 3 should adopt this from the start:** the regenerated-buffer commit (§3c)
 is a *new* write path — wire it to the live identity, don't inherit the closure pattern.
@@ -754,7 +754,7 @@ editor. **Only here is AST regeneration reachable, so only here is its cost paid
   `usePreference`** (per-device localStorage, like `errorOverlayCollapsed`), *not* a server
   flag. The new work is the **`ReactPreview` → `ReactRenderer` → `Q2PreviewIframe`** pass-through:
   hub-client threads no such flag today (only the SPA does, and it bypasses `ReactRenderer`),
-  so `ReactRenderer`'s props interface gains its first preference-driven row. `usePreference`
+  so `ReactRenderer`\'s props interface gains its first preference-driven row. `usePreference`
   is reactive (`ReactPreview.tsx:266` precedent), so toggling mid-session re-renders and posts
   a fresh `UPDATE_AST`.
 - **Both hosts opt in — hub-client via the setting, the SPA via a query param** *(revised
@@ -830,7 +830,7 @@ Regenerate a clean buffer from the AST instead (reformatting accepted).
   **once at click time** (current render → correct `siKey`); the draft then lives in state and
   is never re-derived from the shifting table. So the shift is a non-issue for the active editor.
 - **Plumbing:** `nestedEditBuffers?: Record<string,string>` (and `unlockNestingCursor?: boolean`) are
-  **optional** fields onto `Q2PreviewIframe`'s UPDATE_AST payload + deps, through
+  **optional** fields onto `Q2PreviewIframe`\'s UPDATE_AST payload + deps, through
   `entry.tsx`/`PreviewContext`. **Each host computes/passes them when ITS opt-in is on, else omits
   them** (omitted optional field → iframe reads as locked → zero-touch). Compute via the same gated
   `useMemo` on both hosts: `unlockNestingCursor && rendered ? regenerateNestedBuffers(content,

@@ -292,7 +292,7 @@ Expect **no `docs/` change** — no user-facing symbol here. Confirm and move on
 because bd-3gtn established that empty content means "manifest entry"
 (`Artifact::from_path`) whose destination "can alias the user's upload location —
 they must never be written." Neither `flush_site_libs` nor `enqueue_artifacts`
-has that skip; they rely on `OutputSink`'s allowed-roots validation instead.
+has that skip; they rely on `OutputSink`\'s allowed-roots validation instead.
 For a manifest entry with a *relative* path inside an allowed root, the
 `OutputSink` paths would write 0 bytes over it — the same class of bug bd-cfl67
 fixed. bd-cfl67 removed the producer (`ResourceCollectorTransform` no longer

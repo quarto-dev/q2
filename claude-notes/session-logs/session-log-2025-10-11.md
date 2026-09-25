@@ -1017,7 +1017,7 @@ pub async fn update_sitemap(
 - XML generation (for sitemap)
 - EJS-compatible templating (tera recommended) for navigation templates
 - Incremental rendering support (diff existing sitemap/search entries)
-- Project context detection (walk up directory tree for _quarto.yml)
+- Project context detection (walk up directory tree for \_quarto.yml)
 
 ### 7. Book Project Rendering Analysis
 

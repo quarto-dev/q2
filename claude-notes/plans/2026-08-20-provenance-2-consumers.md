@@ -887,7 +887,7 @@ this plan uses "founding" for both and they are not interchangeable.
 >
 > Verified twice, mechanically, not by re-reading: reverting the fix makes a focused
 > unit test against `bind_source_candidates` fail (`left: None, right:
-> Some(.../_quarto.yml)`) while **the CLI fixture passes identically before and
+> Some(.../\_quarto.yml)`) while **the CLI fixture passes identically before and
 > after** — direct proof that a CLI-level test cannot distinguish the two
 > implementations here.
 >

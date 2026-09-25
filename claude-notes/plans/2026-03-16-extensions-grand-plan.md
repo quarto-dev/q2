@@ -317,7 +317,7 @@ before file discovery.
 
 ## Implementation Phases
 
-### Phase 1: _extension.yml Parsing and Metadata Contributions
+### Phase 1: \_extension.yml Parsing and Metadata Contributions
 
 **Split out to**: `claude-notes/plans/2026-03-16-extensions-phase1-yml-and-metadata.md`
 
@@ -451,7 +451,7 @@ custom writer via `writer: x.lua`; this phase handles that `.lua`-writer path.
 **Goal**: Extensions can contribute reveal.js plugins via
 `contributes: revealjs-plugins:` (Q1 shape: plugin `name` + `script[]` +
 `stylesheet[]`, with a `plugin.yml` carrying name/scripts/stylesheets/config).
-At render, the listed plugins' assets are registered and their globals injected
+At render, the listed plugins\' assets are registered and their globals injected
 into the `Reveal.initialize({ plugins: [...] })` call, with config merged
 (plugin defaults → user front-matter).
 

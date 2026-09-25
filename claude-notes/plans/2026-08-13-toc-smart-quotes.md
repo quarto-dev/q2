@@ -233,7 +233,7 @@ consolidation tractable:
 
 | axis | verdict |
 |---|---|
-| `Quoted` glyphs (curly / ASCII / none) | **incidental** — curly is right everywhere. `template.rs`'s ASCII is a bug; even `autoid` can take curly, since its slug filter strips non-alphanumerics anyway |
+| `Quoted` glyphs (curly / ASCII / none) | **incidental** — curly is right everywhere. `template.rs`\'s ASCII is a bug; even `autoid` can take curly, since its slug filter strips non-alphanumerics anyway |
 | unknown-kind handling (`_ => {}` vs exhaustive) | **incidental** — should be exhaustive everywhere; that is what stops the next new inline kind from silently regressing this class |
 | HTML escaping (`html.rs:1253`) | **not an axis** — a sink concern, `escape(flatten(x))` |
 | `Code` as `` `code` `` vs bare | **essential** — `plaintext.rs` is deliberately markdown-flavored ("mimics markdown writer") for `<title>` / meta tags |

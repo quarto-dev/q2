@@ -144,12 +144,12 @@ markdown, include stubs, etc.).
 
 ### The closures add their own waste
 
-- `postprocess`'s `with_inlines` step 0 did `break_cleaned.push(inlines[i].clone())`
+- `postprocess`\'s `with_inlines` step 0 did `break_cleaned.push(inlines[i].clone())`
   for every element — a **deep clone of every inline in the document**,
   at every nesting level — and step 1 cloned each element again into
   `math_processed`. Since containers are visited recursively, nested
   content was cloned once per ancestor level.
-- `merge_strs` cloned every `Str`'s text (`s.text.clone()`) before
+- `merge_strs` cloned every `Str`\'s text (`s.text.clone()`) before
   deciding whether to merge it, and built `result` without capacity; then
   `coalesce_abbreviations` builds a third vector.
 - `dedup_scoped_heading_ids` runs two full tree-rebuilding passes to

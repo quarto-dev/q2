@@ -193,7 +193,7 @@ is the real cost, not "breaking an external API"):
 - Test ripple depends on *where* the new param lands. The signal has to reach the CLI
   through `run` → `run_with_on_ready` → `run_server_with`. `PreviewConfig` is built
   with full struct literals in the integration tests (no `..Default::default()`), so:
-  - param on `run_with_on_ready`'s signature **or** on `PreviewConfig` → breaks every
+  - param on `run_with_on_ready`\'s signature **or** on `PreviewConfig` → breaks every
     builder: `config_endpoint.rs`, `diagnostics_capture_failure.rs`,
     `diagnostics_endpoint.rs`, `eager_capture.rs`, `staleness.rs`, plus `boot.rs` —
     **≈6 test files** of mechanical edits.
@@ -206,7 +206,7 @@ is the real cost, not "breaking an external API"):
 callback — `on_ready` fires at `server.rs:1186`, *before* bind, so reusing it leaves
 the exact connection-refused window we're fixing. Bind is the correct threshold (not,
 as an earlier draft of this plan claimed, "after `axum::serve` is polled once"):
-`tokio`'s `TcpListener::bind` performs both `bind()` and `listen()`, so once it returns
+`tokio`\'s `TcpListener::bind` performs both `bind()` and `listen()`, so once it returns
 the kernel completes TCP handshakes into the accept backlog on its own. A client that
 connects between line 1204 and the `axum::serve` accept loop at line 1273 gets a
 *successful* connection whose request just waits a few ms in the backlog — not a

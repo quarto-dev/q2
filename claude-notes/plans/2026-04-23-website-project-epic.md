@@ -663,7 +663,7 @@ phases above.
       resolver), 9.3 (`render_page_in_project` WASM entry point
       with new `RenderMode::ActivePage` variant), 9.4 (hub-client
       switch — `renderToHtml` now drives the project-aware
-      renderer; `Preview`'s re-render `useEffect` depends on
+      renderer; `Preview`\'s re-render `useEffect` depends on
       `fileContents` so any sibling edit triggers a re-render),
       9.5 (hub-smoke fixture + native integration tests
       pinning the WASM code path), 9.6 (close-out). Closes
@@ -726,7 +726,7 @@ relevant design work starts.
   Phase 4 scoping (see `2026-04-24-websites-phase-4.md` Decision 9).
   The flatten-the-sidebar / dedupe-by-href / separator-as-boundary /
   section-header-as-neighbor rules are all non-obvious. Should land
-  in `bd-tr81`'s docs site. Not a blocker for the epic; user
+  in `bd-tr81`\'s docs site. Not a blocker for the epic; user
   explicitly flagged the need.
 - ~~**`br` tool blocked on stale `k-02o9` JSONL entry.**~~
   *Resolved 2026-04-24.* `br` was upgraded from 0.1.28 → 0.1.45;

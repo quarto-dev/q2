@@ -201,7 +201,7 @@ Reuse existing infrastructure from `ts-packages/sync-test-harness/`.
       dynamic import (`await import('/src/services/projectStorage.ts')`).
       Returns `entry.id` (the local UUID used in URLs).
 - [x] Write `e2e/project-loading.spec.ts` that:
-      1. Creates a simple project (single .qmd + _quarto.yml) on the server
+      1. Creates a simple project (single .qmd + \_quarto.yml) on the server
       2. Navigates to app root (`/`) first to initialize the page
       3. Seeds the project in the browser's IndexedDB
       4. Navigates to `#/project/<localId>/file/index.qmd`

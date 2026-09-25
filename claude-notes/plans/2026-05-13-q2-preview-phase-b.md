@@ -155,8 +155,8 @@ integration):**
   filter=PreviewBroad` — confirms `quarto-preview` is passing the
   broad filter through `HubConfig` end-to-end.
 - After editing `_quarto.yml`: `DEBUG File change detected
-  path=…/_quarto.yml` → `INFO Sync complete: filesystem →
-  automerge path=…/_quarto.yml new_len=48`.
+  path=…/\_quarto.yml` → `INFO Sync complete: filesystem →
+  automerge path=…/\_quarto.yml new_len=48`.
 - The samod-side propagation is what B.3/B.4 will verify drives a
   browser re-render. The watcher slice is verified end-to-end.
 

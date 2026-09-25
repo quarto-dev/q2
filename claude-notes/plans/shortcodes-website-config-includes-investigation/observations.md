@@ -76,7 +76,7 @@ rendered envelope element's `innerText` — `website-meta.ts`); the navbar keeps
 as markup.
 
 Include files are substituted but **not** markdown-parsed: appending
-`**md-test** \`code-test\`` to `_banner.html` and re-rendering leaves both literal
+`**md-test** \`code-test\`` to `\_banner.html` and re-rendering leaves both literal
 while the shortcode still substitutes. Mechanism: `quarto-init/includes.lua` reads
 include files into metadata as raw blocks; the shortcode filter's jog traversal walks
 meta and applies text-level `apply_code_shortcode` to raw-block text.

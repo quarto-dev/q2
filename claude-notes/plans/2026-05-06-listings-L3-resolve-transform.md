@@ -1481,7 +1481,7 @@ Per D5: ship `list.min.js`, `quarto-listing.js`, and
       registered both as `Project`-scoped artifacts
       keyed `js:listing:<name>` from
       `ListingRenderTransform` (only when at least one
-      listing is rendered). `ApplyTemplateStage`'s
+      listing is rendered). `ApplyTemplateStage`\'s
       Phase-5 auto-emission picks up the `js:` prefix
       and emits `<script>` tags via the resolver, so
       depth-N pages get relative `../site_libs/...`
@@ -1670,7 +1670,7 @@ they trigger)
    rewrites it via the active resolver:
    - native CLI → page-relative `.html`
    - hub-client / VFS resolver → artifact-rooted URL
-     that `iframePostProcessor.ts`'s case-3 anchor handler
+     that `iframePostProcessor.ts`\'s case-3 anchor handler
      reverse-maps to `.qmd` for in-app navigation.
    `outputHref` is preserved separately for templates
    that need the post-render URL (L7 description
@@ -1688,7 +1688,7 @@ they trigger)
      hardcoded inside `createNewProject`.
    - Has a `--verify` flag that does a fresh-client
      round-trip read-back as a safety check.
-   - Has known quirks with `wss://sync.automerge.org`'s
+   - Has known quirks with `wss://sync.automerge.org`\'s
      latency: the internal 1-second peer-wait timeout
      fires almost always, the script handles the
      offline-mode-then-reconnect path correctly. The

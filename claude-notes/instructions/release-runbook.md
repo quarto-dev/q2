@@ -301,7 +301,7 @@ section is what to know when the two interact.
   no glibc floor, Alpine works with no `gcompat` shim. **There is no gnu
   artifact** — anyone who needs a dynamically-linked build uses
   `install.sh --from-source`. Both legs build *natively*, so
-  `musl-tools`' `musl-gcc` is the right compiler on each runner; the
+  `musl-tools`\' `musl-gcc` is the right compiler on each runner; the
   `Install musl-tools` step is gated `if: contains(matrix.target,
   'musl')`. History worth knowing: musl was originally blocked by
   `rusty_v8` (via `deno_core` → `quarto-system-runtime`), which shipped

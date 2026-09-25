@@ -165,7 +165,7 @@ with a garbage span. Nothing here is testable until that changes, and the
 helper is worth having independently of both fixes (it is what would catch a
 regression from a future quarto-yaml/quarto-source-map bump).
 
-- [x] Add a test helper that resolves a `DiagnosticMessage`'s `SourceInfo`
+- [x] Add a test helper that resolves a `DiagnosticMessage`\'s `SourceInfo`
       to a concrete `(file, line, column, underlined text)` and asserts on
       it. → `crates/quarto-config/src/span_assert.rs`, behind a
       `span-assert` cargo feature that `quarto-core` enables as a
@@ -183,7 +183,7 @@ regression from a future quarto-yaml/quarto-source-map bump).
       before resolving, and a unit test pins that behavior so the helper
       can't silently regress into leniency.
 - [x] Add a minimal in-repo fixture. → Inline in the test rather than
-      on-disk: `parse_from_yaml` in `config.rs`'s test module drives the
+      on-disk: `parse_from_yaml` in `config.rs`\'s test module drives the
       **real** path (YAML → `yaml_to_config_value` → `MergedConfig` →
       `materialize` → `parse_listings`), matching what
       `transforms/listing_generate.rs:72` reads at render time. Going

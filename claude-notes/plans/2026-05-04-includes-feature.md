@@ -334,7 +334,7 @@ layers:
    - End-to-end render via `render_qmd_to_html` (or
      `render_document_to_file` for CLI parity, per CLAUDE.md
      §End-to-end verification) showing that `include-in-header:
-     foo.html` results in `foo.html`'s content appearing inside
+     foo.html` results in `foo.html`\'s content appearing inside
      `<head>` of the produced HTML.
    - Same for `include-before-body`, `include-after-body`.
    - Smart-include object forms.
@@ -343,7 +343,7 @@ layers:
      migration).
 
 3. **Fixture-based CLI smoke** under `crates/quarto/tests/smoke-all/`:
-   - A fixture document with all three include-* keys set, plus
+   - A fixture document with all three include-\* keys set, plus
      legacy `header-includes`, plus a custom favicon. Snapshot the
      rendered HTML. Phase 7's `/tmp/q2-phase7-smoke/` style
      end-to-end inspection per CLAUDE.md.

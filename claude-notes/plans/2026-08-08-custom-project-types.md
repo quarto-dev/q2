@@ -530,7 +530,7 @@ Full workspace suite: 11,099 passed.
       the **bottom** of the merge stack (below project config)
 - [x] End-to-end: real Connect docs copy with scripts enabled prints
       `Running pre-render script:
-      _extensions/posit-dev/quarto-openapi/openapi-to-markdown.ts` —
+      \_extensions/posit-dev/quarto-openapi/openapi-to-markdown.ts` —
       the contribution lands in project config and drives execution;
       the script then fails on Deno-style imports under Node, which is
       the separate `.ts`-runtime gap (bd-wch2dotq)

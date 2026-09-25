@@ -437,7 +437,7 @@ import { getActorId } from '../services/automergeSync';
 | Rust + extra TS content conflicts surfaced after the merge ran (you resolve) | 6 |
 | **Total content conflicts requiring your attention** | **15** |
 
-The 6 extra conflicts (sections 10–15 above) follow the same overall pattern as the original 9: combine both sides' additions rather than picking one. The Rust ones (`pass2_renderer.rs`, `wasm-quarto-hub-client/src/lib.rs`) are mechanical concurrent-parameter-addition merges and shouldn't require re-thinking either feature.
+The 6 extra conflicts (sections 10–15 above) follow the same overall pattern as the original 9: combine both sides\' additions rather than picking one. The Rust ones (`pass2_renderer.rs`, `wasm-quarto-hub-client/src/lib.rs`) are mechanical concurrent-parameter-addition merges and shouldn't require re-thinking either feature.
 
 ---
 

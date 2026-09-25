@@ -168,7 +168,7 @@ website-basics.qmd` ("the name will be used as the directory name").
    `index.qmd` + `about.qmd`, `format.html: {theme: cosmo, css: styles.css,
    toc: true}`; add `about.qmd.template` and static `styles.css`. The
    scaffolded `_quarto.yml` also declares `project.resources:
-   [styles.css]` — required for the stylesheet to reach `_site/` until
+   [styles.css]` — required for the stylesheet to reach `\_site/` until
    bd-b87tmmi4 (Q2 doesn't auto-copy `css:`-referenced files) is fixed,
    and harmless after. Two deliberate deviations, called out per-file in
    the tests:
@@ -217,7 +217,7 @@ website-basics.qmd` ("the name will be used as the directory name").
      for default projects output lands in the project root, same as Q1.
    - `q2 preview` writes nothing into the project tree (state lives in a
      `q2-preview-*` system tempdir, `crates/quarto/src/commands/
-     preview.rs:93`), and `_freeze/` is doc-comment-only today — nothing
+     preview.rs:93`), and `\_freeze/` is doc-comment-only today — nothing
      to ignore from either.
 5. **Directory semantics:** exact Q1 parity — create-or-reuse dir, error iff
    `_quarto.yml|_quarto.yaml` present, per-file skip-if-exists.

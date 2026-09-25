@@ -254,7 +254,7 @@ the \~6 lines identified here.
 ## Coarse checklist
 - [x] Full audit of `enable-crossref` gate sites (all 8 literal-string hits plus the
       variable-only `if enableCrossRef then` gate site (`main.lua:718`) the literal grep misses); cross-checked against
-      `floatreftarget.lua`'s 11 format branches (exact 2-relevant / 1-native-writer /
+      `floatreftarget.lua`\'s 11 format branches (exact 2-relevant / 1-native-writer /
       1-fallback / 7-format-not-in-q2 breakdown).
 - [x] Implement `assignCrossrefNumbers` (at `if enableCrossRef then`, `main.lua:718`) and `crossref_present()` at the 4
       render-decoration sites; Q1 tests bit-for-bit on default **and** on
@@ -270,7 +270,7 @@ the \~6 lines identified here.
 - [x] Decide and document the upstream-stall fallback policy: carry indefinitely, no timebox
       (see "Fallback policy" above).
 - [x] **New (2026-09-18, round 4 review): cite this plan's patch sites by anchor text, not line
-      number**, and note in the vendoring README (P4) that the tree carries two plans' edits in
+      number**, and note in the vendoring README (P4) that the tree carries two plans\' edits in
       two marker categories (upstreamable-PR-linked for this plan's edits; Q2-local-permanent for
       P4's shim-loading splice) — P4's splice renumbers this plan's `if enableCrossRef then` gate site from `main.lua:718` to `719`
       with nothing to flag it otherwise. Done (Task 1, q2 worktree `pandoc-hybrid-p3` commit
@@ -280,7 +280,7 @@ the \~6 lines identified here.
       contract test covers drift detection (no new mechanism needed beyond P5's existing plan).
       PR open: https://github.com/quarto-dev/quarto-cli/pull/14913. Vendored-tree markers landed
       on **6 files**, not the 3 this item originally named (Task 6, commit `9dae23206` —
-      `modules/crossref_numbering.lua`'s introduction added touch points this plan didn't
+      `modules/crossref_numbering.lua`\'s introduction added touch points this plan didn't
       anticipate). P5 drift-detection confirmation: recorded in Task 6's own ledger entry.
 - [x] **New (2026-09-18, round 4 review): fold a request into the same PR to expose P5's Route-N
       functions** (`refPrefix`, `crossrefOption`, `refHyperlink`, `renderEquation`,

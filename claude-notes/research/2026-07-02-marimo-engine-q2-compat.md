@@ -822,8 +822,8 @@ insertions/18 deletions, `diff -u` confirms the pre-refactor inline
 `if (useExternalEnv) {...} else {...}` block became a call to a new
 exported `buildCommand(metadata, extractPath, getUvFlags = 
 constructUvCommand)`); `lib/cell-execution-regex.ts`,
-`lib/is-marimo-cell.ts`, `lib/render-output.ts`, `_extensions/marimo/
-command.py`, `_extensions/marimo/extract.py` are all byte-identical
+`lib/is-marimo-cell.ts`, `lib/render-output.ts`, `\_extensions/marimo/
+command.py`, `\_extensions/marimo/extract.py` are all byte-identical
 (`diff` empty) — confirms the brief's prediction that `2a2f312` "touched
 only marimo-engine.ts + a new test file."
 

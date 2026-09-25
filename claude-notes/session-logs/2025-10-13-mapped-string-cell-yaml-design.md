@@ -4,7 +4,7 @@
 
 Design a comprehensive solution for MappedString/SourceInfo that handles location tracking for YAML parsing across three increasingly complex scenarios in Quarto:
 
-1. Standalone YAML files (_quarto.yml, _variables.yml)
+1. Standalone YAML files (\_quarto.yml, \_variables.yml)
 2. YAML metadata blocks in .qmd files
 3. YAML in executable code cell options (the hardest case: non-contiguous text extraction)
 

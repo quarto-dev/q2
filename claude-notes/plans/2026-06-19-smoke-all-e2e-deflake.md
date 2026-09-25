@@ -191,7 +191,7 @@ background; re-subscribe via the index `change` handler when they arrive).
 
 The first barrier waited up to 30s for ALL discovered project files. The
 \~20 q2-preview/ fixtures over-include unrelated sibling-project files
-(no _quarto.yml at that dir → roots at parent) that sync slowly/never, so
+(no \_quarto.yml at that dir → roots at parent) that sync slowly/never, so
 each paid the full 30s → smoke-all step ballooned far past its fast
 baseline. Fixed by bounding the barrier (commit 26ab9810):
 - return on exact-match (fast path) OR VFS-count quiesce (escape hatch);

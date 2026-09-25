@@ -1,4 +1,4 @@
-# Directory Metadata (_metadata.yml) Support
+# Directory Metadata (\_metadata.yml) Support
 
 **Date**: 2026-02-17
 **Status**: Core Implementation Complete (Path Resolution Deferred)
@@ -784,7 +784,7 @@ export async function directoryMetadataForInputFile(
 **Key observations:**
 1. Takes `inputDir` (document's parent directory), NOT the document path itself
 2. Walks each directory component from project root to inputDir
-3. Does NOT include project root's _metadata.yml (starts walking from first subdir)
+3. Does NOT include project root's \_metadata.yml (starts walking from first subdir)
 4. Uses `mergeConfigs` which does deep merge - later values override earlier for scalars, arrays concatenate
 
 ### toInputRelativePaths (project-shared.ts:137-206)

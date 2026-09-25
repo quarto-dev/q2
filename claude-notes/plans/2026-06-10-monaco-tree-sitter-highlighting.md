@@ -124,7 +124,7 @@ Braid epic: **bd-t4ezufyg**. Sub-strands: Phase 0 `bd-mawltv3x`, Phase 1
     uniform default foreground. (`qmd.punctuation.bracket` stays a reserved
     legend entry / theme rule for when the grammar can split `](`.) Requires a
     WASM rebuild + browser hard-refresh.
-  - **Pre-existing, unrelated failure:** `@quarto/hub-mcp`'s `hub-mcp.test.ts`
+  - **Pre-existing, unrelated failure:** `@quarto/hub-mcp`\'s `hub-mcp.test.ts`
     (19/22) fails in this sandbox — `live:` tests needing an automerge server +
     MCP child-process spawn. Untouched package; orthogonal to this work.
 
@@ -305,7 +305,7 @@ legend.**
   `markup.heading.1`, `punctuation.special`, … — and **are themselves the legend
   entries** (modulo dotted-prefix collapse, e.g. `markup.heading.1..6` →
   `markup.heading`). There is no separate structural vocabulary to rename.
-- **Code captures** (from `quarto-highlight`'s per-language `highlights.scm`,
+- **Code captures** (from `quarto-highlight`\'s per-language `highlights.scm`,
   including yaml) are the standard tree-sitter programming names: `keyword`,
   `function`, `function.builtin`, `string`, `string.escape`, `comment`,
   `number`, `constant`, `variable`, `type`, `operator`, `property`,
@@ -427,7 +427,7 @@ This makes "fix bd-98k6 for the editor" and "feed Monaco" the *same* work
 (bd-98k6 fix-path (a)) — **and the render/HTML path converges onto it too.**
 Rather than maintain two resolvers (one for the editor, the lossy
 `collect_spans` for render), Phase 0 switches the render producer
-(`Registry::highlight`, which `quarto-highlight`'s `annotate_pandoc` at
+(`Registry::highlight`, which `quarto-highlight`\'s `annotate_pandoc` at
 `crates/quarto-highlight/src/annotate.rs:222` consumes — driven by the
 `code_highlight` render stage) onto the same
 `highlight_captures` + `flatten_spans`. Consequences:
@@ -605,7 +605,7 @@ are untouched. `tokens_never_span_a_line` (above) pins it.
   `QueryCursor`).
 - **`quarto-highlight`** — `highlight(class, source) -> Result<Option<String>, HighlightError>`
   (JSON encoding) built on an internal `collect_spans` that walks
-  `tree-sitter-highlight`'s event stream (native `user_grammar.rs:274`, wasm
+  `tree-sitter-highlight`\'s event stream (native `user_grammar.rs:274`, wasm
   `registry.rs:111`). `collect_spans` is **lossy for same-start nested
   captures** (drops the inner end boundary — bd-98k6), so Phase 0 **replaces it
   as the resolver** with a `Query.captures()`-based `highlight_captures` +
@@ -700,7 +700,7 @@ code-cell parity by construction (and fixes bd-98k6 everywhere). It replaces
   shared innermost-wins flatten (see Flatten). Lives here so both `pampa` and
   `quarto-lsp-core` can call it without an LSP-crate dependency.
 - **Switch the render producer.** Re-point `Registry::highlight` (consumed by
-  `quarto-highlight`'s `annotate_pandoc`,
+  `quarto-highlight`\'s `annotate_pandoc`,
   `crates/quarto-highlight/src/annotate.rs:222`, via the `code_highlight` render
   stage) from `collect_spans` to
   `flatten_spans(highlight_captures(...))` → `encode`. The producer now emits
@@ -720,7 +720,7 @@ code-cell parity by construction (and fixes bd-98k6 everywhere). It replaces
   nested→flat change, flag any surprise — a "disjoint" golden that unexpectedly
   moves means the query double-captures a node). Read each diff as a *span-shape*
   change; per-byte visible colour is preserved for the pure-nesting goldens
-  (`bash`/`julia`/`python`) by innermost-wins, while `user_grammar_toml`'s
+  (`bash`/`julia`/`python`) by innermost-wins, while `user_grammar_toml`\'s
   gap-byte recolour is the intended bd-98k6 fix (see Flatten). **Re-check by
   hand** the
   `.contains()` assertion at
@@ -777,7 +777,7 @@ emit a distinct name wherever two constructs need distinct colours):
 - `pandoc_image` (`![content](target)`) reuses the same `target` — there is no
   separate image-url node. The `![` opener is one fused token →
   `@punctuation.special.image`; `content` → `@markup.image.label`; the
-  `target`'s `url` → `@markup.image.url`. (Distinct `markup.image.*` names — not
+  `target`\'s `url` → `@markup.image.url`. (Distinct `markup.image.*` names — not
   `markup.link.*.image`, which would collapse into the link entries under
   longest-prefix — so the theme *can* mirror link colours yet keep the option to
   diverge.)
@@ -981,7 +981,7 @@ case mocking the WASM call (parse + error handling). (Distinct from the Phase-4
   and UTF-8 because Monaco holds it).
 - `QMD_TOKEN_LEGEND: readonly string[]` — a **checked-in TS compile-time
   constant** mirroring the Rust legend, with a JSDoc note pointing at
-  `quarto-lsp-core`'s `QMD_TOKEN_LEGEND` as the source of truth. `getLegend()`
+  `quarto-lsp-core`\'s `QMD_TOKEN_LEGEND` as the source of truth. `getLegend()`
   (Phase 6) reads it synchronously; the Phase-4 drift test guards it against the
   Rust const. Also export the `SemanticToken` **type** for callers. No async
   WASM call sits on the registration path.

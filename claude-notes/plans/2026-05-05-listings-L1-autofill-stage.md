@@ -770,7 +770,7 @@ success":
   effect of the new stage.** *Mitigation:* L1 doesn't mutate
   AST blocks, only metadata not consumed by render today. If
   snapshots move, investigate per CLAUDE.md before proceeding.
-- **Risk: `metadata_normalize::inlines_to_plain_text`'s
+- **Risk: `metadata_normalize::inlines_to_plain_text`\'s
   decision to recurse into footnotes and to wrap
   `Inline::Quoted` in quote characters surprises listings
   consumers later.** *Mitigation:* L1's word-count walker

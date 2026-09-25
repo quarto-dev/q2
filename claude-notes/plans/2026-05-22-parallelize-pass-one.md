@@ -436,7 +436,7 @@ Per the perf-profiling playbook ("don't remove diagnostic counters"):
       Pass-1 2230 → 1280 ms (1.74×), total 3.73 → 2.81 s (1.33×).
       Warm cache: Pass-1 800 → 520 ms (1.54×), total 2.29 → 2.03 s
       (1.13×). Lower than the optimistic 8× target — Pass-1 is now
-      FS-bound (cache atomic-rename per doc, source/_metadata.yml
+      FS-bound (cache atomic-rename per doc, source/\_metadata.yml
       reads), and the still-sequential Pass-2 caps overall speedup
       (Amdahl).
 - [x] samply profile captured at

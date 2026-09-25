@@ -87,18 +87,18 @@ when/if that becomes real. Nothing here blocks P4's transport smoke.
 
 **Recommendation for what P4 actually needs to build for the transport smoke and for
 docx/pptx v1**, in priority order:
-1. `quartoFilterParams`'s \~28 keys (corrected 2026-09-17, was "\~20" here too — the table above
+1. `quartoFilterParams`\'s \~28 keys (corrected 2026-09-17, was "\~20" here too — the table above
    was fixed earlier this pass but this recommendation-list copy wasn't, the same
    never-landed-fix pattern this epic keeps rediscovering) (the core, format-agnostic set) — required.
-2. `languageFilterParams`'s crossref/callout/environment title strings — required (not
+2. `languageFilterParams`\'s crossref/callout/environment title strings — required (not
    optional; without them Q1's category init has nothing to read for caption prefixes).
    **Sourced from Q2's `RefTypeRegistry`** (see the finding below), not from Q1's own vendored
    locale YAML — this is the mechanism, decided with Gordon, that resolves P5's Theorem-`kind`
    question and the general "who owns presentation defaults" policy question.
-3. `crossrefFilterParams`'s 4 non-project keys (`listings`, `number-sections`,
+3. `crossrefFilterParams`\'s 4 non-project keys (`listings`, `number-sections`,
    `number-offset`, `number-depth`) — required once P3's `crossref-numbering` param is added
    alongside them.
-4. `extractIncludeParams`'s include-file plumbing — required (generic).
+4. `extractIncludeParams`\'s include-file plumbing — required (generic).
 5. The top-level literals `results-file`, `format-identifier`, `execution-engine`,
    `quarto-environment` — required (structural, not format-specific).
 6. Everything else in the table (ipynb, columns, custom-format, typst, jats, notebook-context,
@@ -109,7 +109,7 @@ docx/pptx v1**, in priority order:
 
 **The `quarto-filters` note the table above points to (added 2026-09-17 — the table's "N/A, see
 below" pointed at nothing; found by an epic-wide review, I9).** `quarto-filters` carries the
-filter-spec Q1 TS uses to splice **user Lua filters** into `main.lua`'s pipeline via
+filter-spec Q1 TS uses to splice **user Lua filters** into `main.lua`\'s pipeline via
 `inject_user_filters_at_entry_points`. Q2 has its own, independent user-filter mechanism
 (`UserFiltersStage::pre()`/`post()`, bracketing the transform pipeline) and doesn't run user
 filters through Q1's Lua at all — so this key is genuinely N/A, not a gap. **But this has a
@@ -173,7 +173,7 @@ systems that happen to agree today (in English), with no construction forcing th
 agreeing.
 
 **The mechanism is not the constructor.** The obvious-looking fix — pass Q2's `kind` through as
-`theorem.lua`'s `name` field — is wrong: reading `captionPrefix` (`crossref/theorems.lua:79-90`,
+`theorem.lua`\'s `name` field — is wrong: reading `captionPrefix` (`crossref/theorems.lua:79-90`,
 the function that builds the caption for every non-LaTeX/Typst/JATS format, i.e. docx/pptx too)
 shows `name` is an **optional parenthetical suffix** ("Theorem 1 (My Special Title)"), never a
 replacement for the type label. Forcing `kind` through it would render "Theorem 1 (Theorem)" —
@@ -328,7 +328,7 @@ concretely enough to implement without inventing an answer.
    retired-or-reusable, so `18` is the unambiguous next number, not a judgment call between a gap
    and the top). This repo's lint rules require **two** things in the same commit as the first
    code, not one: a `docs/errors/pandoc/<code>.qmd` page (`error-docs-page-missing`) **and** a new
-   `- section: "pandoc"` block in `docs/_quarto.yml`'s errors sidebar (`error-docs-sidebar-unlisted`
+   `- section: "pandoc"` block in `docs/_quarto.yml`\'s errors sidebar (`error-docs-sidebar-unlisted`
    — this is the exact scenario that rule was created for: `crossref`/`extension` once had no
    `- section:` block at all, making every one of their pages unreachable by navigation). The
    single most load-bearing case to specify: **when the `pandoc` subprocess exits nonzero**, wrap
@@ -377,7 +377,7 @@ concretely enough to implement without inventing an answer.
    implementation: state a bound + fallback (e.g. a temp file + a path param instead of inline
    text past some size) or an explicit accepted limitation — don't leave it undiscovered until a
    real user hits it. Note this risk lives on the one platform (Windows) with no CI test leg at
-   all in this repo today (`test-suite.yml`'s matrix is `[ubuntu-latest, macos-latest]`), so make
+   all in this repo today (`test-suite.yml`\'s matrix is `[ubuntu-latest, macos-latest]`), so make
    the bound check a unit-testable pure function so it's at least covered by
    `cargo nextest run --workspace` on the platforms CI does run.
 
@@ -390,7 +390,7 @@ concretely enough to implement without inventing an answer.
   runtime. Vendor into an in-repo dir (mirror `resources/scss/`, e.g. `resources/pandoc-filters/`)
   + `include_dir!`; pass `cargo xtask lint` (external-sources-in-macro). Include `init.lua` (or a
   trimmed `param()`-only variant). **Two vendoring roots needed, not one — see Finding 1 above**
-  (`init.lua`'s actual tree is `src/resources/pandoc/datadir/`, separate from `src/resources/
+  (`init.lua`\'s actual tree is `src/resources/pandoc/datadir/`, separate from `src/resources/
   filters/`); use `ResourceBundle` to materialize both to disk at invocation time, per Finding 1.
 - **Pin the vendored source to a quarto-cli *release*, not a dev commit** (resolved 2026-09-17,
   decided with Gordon — originally a P5 open question, resolved here since P4 owns the actual
@@ -398,7 +398,7 @@ concretely enough to implement without inventing an answer.
   doc-only commit (`git describe`: `v1.11.3-1-gdcffbfade`; the one commit ahead touches only
   `.claude/rules/filters/overview.md`, zero diff under `src/resources/filters/`) — so **vendor
   from tag `v1.11.3`**, byte-identical to what's on disk today, no dev drift to absorb. Create
-  `resources/pandoc-filters/README.md` mirroring `resources/scss/README.md`'s Source/Updating
+  `resources/pandoc-filters/README.md` mirroring `resources/scss/README.md`\'s Source/Updating
   structure, recording the pinned tag (Bootstrap pins a release *number*; this pins a release
   *tag*, since quarto-cli's Lua filters have no per-file version). Drift detection needs no
   separate mechanism — P5's Layer-1/Layer-2 contract tests are the tripwire (same philosophy as
@@ -462,7 +462,7 @@ concretely enough to implement without inventing an answer.
       degradation (P3) and P5's unrecognized-`type_name` warning, has no delivery channel; (b) put
       the error-docs work explicitly on this checklist, not just in the Finding prose: author
       `docs/errors/pandoc/` pages for the initial code set, add the new `- section: "pandoc"`
-      block to `docs/_quarto.yml`'s errors sidebar, confirm `cargo xtask lint` green — this is the
+      block to `docs/_quarto.yml`\'s errors sidebar, confirm `cargo xtask lint` green — this is the
       exact "no `- section:` block at all" scenario the sidebar lint rule was created to catch,
       and a Finding-only acknowledgment (as this item previously was) is where obligations in this
       epic have repeatedly gone to be forgotten. **Done: Task 6 (catalog subsystem 18 + docs pages

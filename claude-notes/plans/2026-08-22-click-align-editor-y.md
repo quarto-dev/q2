@@ -178,7 +178,7 @@ and focus alone.
 - **`hostY` comes from widening `onSelectionChange` to `(startPos, endPos, hostY?)`**,
   computed inline in `MorphIframe.handleSelectionChange` as
   `anchorNode.parentElement.getBoundingClientRect().top + iframeRef.getBoundingClientRect().top`
-  — symmetric with `Q2PreviewIframe`'s existing `blockTop + iframeTop`. The
+  — symmetric with `Q2PreviewIframe`\'s existing `blockTop + iframeTop`. The
   alternative (compute in `useSelectionSync` from `previewRef`) was rejected:
   `MorphIframeHandle` exposes only imperative methods, so it would mean adding one
   purely to read back a value computed a line earlier.

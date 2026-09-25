@@ -3,7 +3,7 @@
 ## Executive Summary
 
 This document presents a comprehensive design for location tracking in YAML parsing that handles three increasingly complex scenarios:
-1. Standalone YAML files (_quarto.yml)
+1. Standalone YAML files (\_quarto.yml)
 2. YAML metadata blocks in .qmd files
 3. YAML in executable code cell options (the hardest case)
 

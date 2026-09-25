@@ -66,7 +66,7 @@ title: This is **strong**, and [this is a link](https://example.com)
 ---
 ```
 
-In _quarto.yml, these values are represented as strings by default. merge_configs will choose
+In \_quarto.yml, these values are represented as strings by default. merge_configs will choose
 concat vs prefer depending on context, and also allow explicit semantics. Similarly, I think that our configuration system should have default behaviors depending on context, and also allow explicitly determining value interpretation rules.
 
 This already exists in the .qmd files: values in the front matter can have `!md` and `!str` to control their interpretation. We should allow these tags (and potentially others) to be used in regular quarto-yaml objects, so that when a "plain" quarto-yaml configuration is added to a .qmd document, we have the ability to interpret those values as either markdown or other values.

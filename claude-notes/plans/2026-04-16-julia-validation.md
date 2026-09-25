@@ -393,8 +393,8 @@ specific logic, so this phase is a smoke test of the integration.
   as insufficient for Plots\' `text/html`-showable default).
   ```
   crates/quarto-core/tests/fixtures/extensions/julia-website/
-    _quarto.yml             # project.type: website
-    _extensions/julia-engine/   # populated from ../julia-engine/_extensions/julia-engine
+    \_quarto.yml             # project.type: website
+    \_extensions/julia-engine/   # populated from ../julia-engine/\_extensions/julia-engine
     index.qmd               # markdown only
     plot.qmd                # ```{julia} plot(...) ``` with figures
   ```

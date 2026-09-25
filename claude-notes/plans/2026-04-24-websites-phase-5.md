@@ -89,7 +89,7 @@ This phase does **not** implement:
     prepending `self.config.resource_prefix`. This is the main
     integration point.
   - `crates/quarto-core/src/render_to_file.rs:219-279` —
-    **writer**. Computes `resource_prefix = format!("{}_files/",
+    **writer**. Computes `resource_prefix = format!("{}\_files/",
     output_stem)`, calls `prepare_html_resources` (which creates
     `{stem}_files/`), writes `css:default` to
     `{stem}_files/styles.css`, then iterates remaining `css:*` /

@@ -275,7 +275,7 @@ existing retry contract holds (`ts_process.rs:636-637`):
    accepted stream, read the token line with `read_line`, then reuse that *same*
    `BufReader` for every subsequent frame.** This is load-bearing hygiene:
    whenever the child's first *response* (or any pipelined request) rides the same
-   TCP segment as bytes past the token's `\n`, those bytes sit in the `BufReader`'s
+   TCP segment as bytes past the token's `\n`, those bytes sit in the `BufReader`\'s
    buffer — a *fresh* reader would silently drop them. So `TcpReadHalf` must be
    constructed *from the handshake `BufReader`*, never from the raw stream.
    **(Correction to the earlier rationale:** the real host is purely reactive —

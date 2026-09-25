@@ -865,7 +865,7 @@ robots.txt cover the vocabulary. Consistent with Phases 2–6.
       Matches the plan example table 1:1.
 - [x] Broken-favicon smoke at `/tmp/q2-phase7-broken-smoke/`:
       stderr printed `Warning: website.favicon refers to missing
-      file 'nope.ico'`, `_site/index.html` still has
+      file 'nope.ico'`, `\_site/index.html` still has
       `<link rel="icon" href="nope.ico">`, `_site/nope.ico`
       does not exist.
 - [ ] `cargo build --workspace`.

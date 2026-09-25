@@ -118,7 +118,7 @@ nothing in q2-preview to cross-check once authored, for either type.
 **Cross-plan resolution:** P1 (2026-09-16 rework) now has a concrete `Pandoc`-kind exclude-list
 derived from the design doc's §6 bucket table, which excludes `panel-tabset-resolve`,
 `example-embed-render`, `callout-resolve`, and the rest of B2/B4/Navigation, while *keeping*
-`panel-tabset`'s sugar half enabled (Pandoc needs the raw `Tabset` CustomNode P5's shim routes,
+`panel-tabset`\'s sugar half enabled (Pandoc needs the raw `Tabset` CustomNode P5's shim routes,
 unlike Preview). See P1 for the full list and reasoning; not re-derived here.
 
 ## Corrections owed to the design doc (§3 Route table) — flag only, fix during execution
@@ -136,7 +136,7 @@ bugs found during review are flagged and checklisted, not silently patched mid-r
   custom node at all** for equations; it's a plain Pandoc filter over `Para`/`Plain` blocks that
   detects `DisplayMath` inline content and does format-specific `RawInline` injection (LaTeX
   `\label{}`, Typst `#math.equation(numbering:...)`) directly on the existing `Math` inline —
-  there is no constructor to route into. Add `Tabset`'s row too, reclassified from `PanelTabset`/L
+  there is no constructor to route into. Add `Tabset`\'s row too, reclassified from `PanelTabset`/L
   to `Tabset`/**R** (see P5 for the evidence — its wire shape matches Q1's `constructor`, not its
   `parse`).
 
@@ -165,7 +165,7 @@ deciding, not as a preference call:
   it's pure hand-written TS with no Rust producer — it doesn't establish a Rust→TS codegen
   precedent, only the "single source, version const" shape P2 already wants.
 - **The drift this plan worries about already exists, with only 2 consumers, before Lua exists.**
-  `Callout.tsx`'s hand-written `CalloutPlainData` interface declares
+  `Callout.tsx`\'s hand-written `CalloutPlainData` interface declares
   `type, appearance, collapse, collapse_starts_collapsed, icon, ref_type` — but the real Rust
   `plain_data` (`callout.rs:276-294`) also sets `kind` and `identifier` when crossref-eligible.
   Neither field is in the TS interface today. **The demonstrated bug is "no test," not "no
@@ -198,7 +198,7 @@ JSON file (works everywhere with zero new dependencies). **Decided: JSON**, sinc
 already *is* JSON at the wire format, and all three consumers can load it with what they already
 have — `serde_json` (Rust, already a dependency), `JSON.parse` (TS, native), and Q1's own vendored
 `_json.lua` decoder (`src/resources/pandoc/datadir/_json.lua` — P4 already traces this tree for
-`init.lua`'s dependencies, so it costs P5's Lua contract test nothing new).
+`init.lua`\'s dependencies, so it costs P5's Lua contract test nothing new).
 
 - **Path:** `crates/quarto-pandoc-types/resources/custom-node-schema.json`, loaded via
   `include_str!` in Rust (both the producer-side test and any future consumer), fetched/embedded
@@ -244,7 +244,7 @@ have — `serde_json` (Rust, already a dependency), `JSON.parse` (TS, native), a
   `node.plain_data` for every node passing `has_crossref_plain_data` (FloatRefTarget, Theorem,
   and crossref-id'd Callout); `crossref_resolve.rs:316-317` does the same for
   `CrossrefResolvedRef`. Add the `order` field (per the shape above) to `Callout`,
-  `FloatRefTarget`, `Theorem`, and `CrossrefResolvedRef`'s schema entries. `Proof` correctly gets
+  `FloatRefTarget`, `Theorem`, and `CrossrefResolvedRef`\'s schema entries. `Proof` correctly gets
   none — design §3 says it "deliberately carries no `ref_type`," and `crossref_index.rs:255`
   early-returns without one.
   **This also means the schema needs a producer-stage notion, not just `required`/`when`:**
@@ -279,7 +279,7 @@ have — `serde_json` (Rust, already a dependency), `JSON.parse` (TS, native), a
   "The prefix is dropped because crossref references usually don't carry a leading textual
   prefix"), and `build_resolved_ref` (`crossref_resolve.rs:286-320`) never records citation mode
   or the label's original case. Without these three fields, the "Q1 is normative" decision cannot
-  actually be implemented as stated — add them to `CrossrefResolvedRef`'s schema entry (`required:
+  actually be implemented as stated — add them to `CrossrefResolvedRef`\'s schema entry (`required:
   false`, since HTML's own resolution has no matching concept for any of the three today).
 - Define a **single source of truth** for the per-type schema: `type_name → { slots, plain_data
   fields, route (L/R/N) }` — **corrected 2026-09-17** (was `(L/R)`, which can't express the two
@@ -372,7 +372,7 @@ have — `serde_json` (Rust, already a dependency), `JSON.parse` (TS, native), a
   - `FloatRefTarget` needs nothing — its Q1 constructor is unfiltered passthrough
     (`floatreftarget.lua:96-107`); confirmed mechanical.
   - **`Tabset` (Route R, decided) needs no new field either.** Audited against
-    `panel-tabset.lua`'s real `constructor(params)` (`params.level`, `params.attr`,
+    `panel-tabset.lua`\'s real `constructor(params)` (`params.level`, `params.attr`,
     `params.tabs` — a list of `{title, content, active}`): Q2's wire shape
     (`{level, tab_count, actives}` + `title-{i}`/`content-{i}` slots) zips cleanly into that
     list with no missing field. The extra `plain_data.group` Q2 sometimes sets is an HTML-only

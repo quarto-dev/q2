@@ -1,4 +1,4 @@
-# _brand.yml support in Quarto 2
+# \_brand.yml support in Quarto 2
 
 **Created**: 2026-05-20
 **Status**: DRAFT — design questions resolved 2026-05-20, awaiting
@@ -230,7 +230,7 @@ Why this shape:
   \~30 existing pure-function tests untouched; brand resolution gets
   its own test surface with a `MockRuntime`.
 - **Cache fingerprinting.** `theme_fingerprint` can hash the
-  `BrandRef` (or the resolved `Brand`'s YAML serialization) without
+  `BrandRef` (or the resolved `Brand`\'s YAML serialization) without
   needing the runtime to look up files during fingerprinting.
 
 `from_config_value` reads `brand:` from the merged config:
@@ -309,7 +309,7 @@ Three touch points in `quarto-core`:
    logic gets a third condition: also-not-brand-only-empty.
 3. `theme_fingerprint` (the cache key) must include the brand
    contents — otherwise the cache lies. Easiest: hash the parsed
-   `Brand`'s YAML serialization into the existing fingerprint.
+   `Brand`\'s YAML serialization into the existing fingerprint.
 
 ### CLI surface
 
@@ -552,5 +552,5 @@ only is the schema validator's regex (already cross-platform in
   fixture
 
 ### External
-- [_brand.yml spec on posit-dev/brand-yml](https://posit-dev.github.io/brand-yml/) —
+- [\_brand.yml spec on posit-dev/brand-yml](https://posit-dev.github.io/brand-yml/) —
   cross-product spec (Quarto / Shiny / Posit Connect)

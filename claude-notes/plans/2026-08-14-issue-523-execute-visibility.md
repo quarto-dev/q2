@@ -263,7 +263,7 @@ plus everything nested in it.
 - [x] Populate it in `engine_execution.rs` from the merged metadata already held there — read
       per-iteration from `ast.meta`, so a second engine in a sequence sees the front matter of
       the input it is actually handed (exactly what the old re-parse gave it).
-- [x] Retire `text_execute.rs::document_execute_scope()`'s front-matter re-parse in favour of the
+- [x] Retire `text_execute.rs::document_execute_scope()`\'s front-matter re-parse in favour of the
       field. `front_matter_range` had no other consumer; both are deleted (−1940 bytes), along
       with the now-unused `InterpretationContext` import.
 
@@ -300,7 +300,7 @@ plus everything nested in it.
 
 - [x] `cargo nextest run --workspace` — **11954 passed**, 197 skipped, 0 failed.
 - [x] Full `cargo xtask verify` (not `--skip-hub-build`, since `ExecutionContext` is in
-      `wasm-quarto-hub-client`'s dependency closure) — **all 14 steps passed**.
+      `wasm-quarto-hub-client`\'s dependency closure) — **all 14 steps passed**.
 - [x] **End-to-end through the binary** — see the evidence section below.
 - [x] Spot-check `q2 preview` on a visibility-bearing document (full WASM chain via
       `cargo xtask verify`, then `cargo build --bin q2` to re-embed) — see below.
@@ -356,7 +356,7 @@ splitting content markers across a concatenation — the e2e fixture should have
 
 - Add `execute_scope: Option<ConfigValue>` + `with_execute_scope()` to `ExecutionContext`.
 - Populate it in `engine_execution.rs` from the merged metadata already held there.
-- Retire `text_execute.rs::document_execute_scope()`'s front-matter re-parse in favour of the
+- Retire `text_execute.rs::document_execute_scope()`\'s front-matter re-parse in favour of the
   field (it exists only because the field did not). Keep `front_matter_range` if still used
   elsewhere; delete if not.
 

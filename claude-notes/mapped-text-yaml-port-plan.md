@@ -243,11 +243,11 @@ pub struct SchemaAnnotations {
 
 **Priority order**:
 1. [ ] Frontmatter schema (most common)
-2. [ ] Project config schema (_quarto.yml)
+2. [ ] Project config schema (\_quarto.yml)
 3. [ ] HTML format schema
 4. [ ] Code cell options schema
 5. [ ] Other format schemas (pdf, docx, etc.)
-6. [ ] Brand schema (_brand.yml)
+6. [ ] Brand schema (\_brand.yml)
 
 **Strategy**:
 - Start by translating TypeScript schemas to Rust

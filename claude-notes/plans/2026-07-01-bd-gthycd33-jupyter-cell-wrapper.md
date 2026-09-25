@@ -375,7 +375,7 @@ here, tolerated deliberately, or filed as a follow-up.
 - [x] Grep for consumers assuming jupyter's old bare-fence shape: **none**.
       All `cell-output` consumers found expect the *div* form and start
       matching better with this fix: `resources/scss/bootstrap/
-      _bootstrap-rules.scss` (`.cell .cell-output-stdout pre code`),
+      \_bootstrap-rules.scss` (`.cell .cell-output-stdout pre code`),
       `quarto-core/src/project/listing/post_render_upgrade/reader.rs`
       (`div.preview-image div.cell-output-display img`), plus an inert
       fixture string in `quarto-test/src/assertions/html_elements.rs`.

@@ -116,7 +116,7 @@ Measured on the real dists (2026-08-13, this machine):
 - Background gzip warm-up at server start (erases the 1.5 s worst-case
   first-hit on the wasm).
 - `strip = "symbols"` in `[profile.release]` (−21.6 MiB, measured).
-- `quarto-trace-server`'s viewer embed is a separate, smaller
+- `quarto-trace-server`\'s viewer embed is a separate, smaller
   `include_dir!` — same treatment if it grows.
 - Decompress-to-tempfile + mmap if the \~95 MB heap resident set
   matters (today's embed is demand-paged; the archive trades that for

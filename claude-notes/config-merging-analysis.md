@@ -37,7 +37,7 @@ final configuration
 
 ### Example Scenario
 
-**_quarto.yml** (project config):
+**\_quarto.yml** (project config):
 ```yaml
 format:
   html:
@@ -1187,7 +1187,7 @@ fn test_validation_with_merged_config() {
 
 ### Q5: Handling circular includes?
 
-**Question**: What if _metadata.yml includes another file that includes _metadata.yml?
+**Question**: What if \_metadata.yml includes another file that includes \_metadata.yml?
 
 **Options**:
 1. Detect cycles and error

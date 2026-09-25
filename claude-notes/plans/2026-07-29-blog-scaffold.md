@@ -179,7 +179,7 @@ back-slashes.
 - [x] D3 **End-to-end (record here):** `cargo run --bin q2 -- create
       project blog myblog "My Blog"` → inspect every file on disk
       (binary jpgs byte-identical to Q1's); `cargo run --bin q2 --
-      render myblog` → inspect `_site/index.html` (both posts listed,
+      render myblog` → inspect `\_site/index.html` (both posts listed,
       dates ordered desc, categories chips + sidebar, thumbnail +
       image srcs resolve, files copied), `_site/index.xml` feed,
       `about.html`. Also the `--json` directive path and `--dry-run`.

@@ -339,7 +339,7 @@ filter-aware notebook conversion folds into `markdown_for_file`. See
   **`HtmlDependency`, `TextInclude`, *and* `IncludeLocation` must gain
   `Serialize` / `Deserialize` derives (added in `quarto_doc.rs`).** (`TextInclude`
   contains `IncludeLocation`, so the enum needs the derives too or
-  `TextInclude`'s won't compile; today all three derive only `Debug, Clone` —
+  `TextInclude`\'s won't compile; today all three derive only `Debug, Clone` —
   `IncludeLocation` also `PartialEq, Eq`.) `pampa` already has `serde` with the
   `derive` feature (`Cargo.toml:58`) and `serde_json` (`:59`), so the derives are
   trivially available. `ExecuteResult` is already `Serialize`/`Deserialize` on
@@ -1081,8 +1081,8 @@ The Rust struct that implements `ExecutionEngine` by delegating to the shared su
   **Name validation at load time:** when `name_declared` is true,
   assert `LoadEngineResult.name == self.name`. Mismatch is a hard
   error pointing at the YAML: `Engine extension declares 'name: {self.name}'
-  in _extension.yml but the loaded module reports 'name: {actual}'.
-  Update _extension.yml or the engine module's name property.`
+  in \_extension.yml but the loaded module reports 'name: {actual}'.
+  Update \_extension.yml or the engine module's name property.`
   When `name_declared` is false, the registry's `aliases` map is
   updated with `LoadEngineResult.name → self.name` so subsequent
   lookups by runtime name resolve to this engine. **Insertion is

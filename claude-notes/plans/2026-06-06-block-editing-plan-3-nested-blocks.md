@@ -228,7 +228,7 @@ below.
   non-test caller) and `crates/pampa/tests/integration/node_edit_tests.rs` (lookup
   tests + the `edit_block` helper; the `Some(0)`/`Some(1)` asserts at \~181/190/
   212–213 — see the U4 test item). **No `quarto-core`/WASM callers**, and
-  `apply_node_edit`'s WASM signature is unchanged (the path is internal). Re-grep
+  `apply_node_edit`\'s WASM signature is unchanged (the path is internal). Re-grep
   to confirm nothing new landed.
 - [x] `crates/pampa/src/node_lookup.rs` — recursive lookup returning a path.
   **`NodePath` shape (U3)** — a sequence of container steps plus a final leaf

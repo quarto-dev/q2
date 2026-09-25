@@ -463,7 +463,7 @@ this phase; the third is bd-9t5nmq81.
 - **`.hep` was not a binary extension.** Which project files sync into
   the preview VFS as *binary* documents is decided by an extension
   allowlist — `BINARY_EXTENSIONS` in `crates/quarto-hub/src/resource.rs`
-  (hub discovery, sync, and `q2 preview`'s single-file closure all use
+  (hub discovery, sync, and `q2 preview`\'s single-file closure all use
   it) with a hand-kept mirror in `ts-packages/quarto-automerge-schema`
   (`isBinaryExtension` / `inferMimeType`, used by hub-client uploads).
   Neither knew `hep`, so the first browser check showed "bad magic" for

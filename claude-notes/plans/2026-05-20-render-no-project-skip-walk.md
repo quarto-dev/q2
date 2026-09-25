@@ -244,7 +244,7 @@ note.
       | `q2 render` in `docs/<sub>/`   | n/a     | renders |
 
       Error text in the two error scenarios is byte-identical:
-      `Error: No input given and no \`_quarto.yml\` found at or above <cwd>`.
+      `Error: No input given and no \`\_quarto.yml\` found at or above <cwd>`.
       The 15× speedup is the warm-cache delta — the cold-cache
       delta (where `target/` was the user-reported "freeze") is
       orders of magnitude larger.

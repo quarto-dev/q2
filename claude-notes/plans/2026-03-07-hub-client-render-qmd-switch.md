@@ -165,7 +165,7 @@ Automerge work consistently — no `/project/` prefix needed from TypeScript.
 - [x] **WASM integration: render_qmd with project context**
   - Done in `e7f1e61d` — tests verify runtime metadata overrides project and document
 
-- [x] **WASM integration: render_qmd picks up _metadata.yml**
+- [x] **WASM integration: render_qmd picks up \_metadata.yml**
   - Populate VFS with `_quarto.yml`, `chapters/_metadata.yml` (`author: "Dir Author"`),
     and `chapters/doc.qmd`
   - Call `render_qmd("/project/chapters/doc.qmd")`
@@ -217,4 +217,4 @@ Automerge work consistently — no `/project/` prefix needed from TypeScript.
 - `hub-client/src/components/Preview.tsx` — render call changes
 - `hub-client/src/components/tabs/AboutTab.tsx` — keep standalone render path
 - `hub-client/src/test-utils/mockWasm.ts` — mock updates
-- `hub-client/src/services/runtimeMetadata.wasm.test.ts` — may extend with _metadata.yml test
+- `hub-client/src/services/runtimeMetadata.wasm.test.ts` — may extend with \_metadata.yml test

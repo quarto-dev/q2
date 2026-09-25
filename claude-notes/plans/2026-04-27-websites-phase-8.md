@@ -1070,7 +1070,7 @@ None — inline asserts cover the vocabulary.
       intersects `targets` join the render set.
 - [x] Orchestrator profile cache wiring: `pass_one` calls
       `profile_with_cache`, which computes the cache key from
-      source bytes + layered _metadata.yml + _quarto.yml +
+      source bytes + layered \_metadata.yml + \_quarto.yml +
       format id + source path, looks up via
       `profile_cache::load` (with include verification), and
       falls back to a live head pipeline on miss.
@@ -1228,7 +1228,7 @@ None — inline asserts cover the vocabulary.
       format-resolution tests.
 
 ### Sub-phase 8.5 — Integration tests + smoke
-- [x] Mode A tests 41–45 (cold + warm + body-edit + _metadata.yml
+- [x] Mode A tests 41–45 (cold + warm + body-edit + \_metadata.yml
       subtree + transitive-include invalidation). Land in
       `crates/quarto-core/tests/incremental_rebuild.rs` —
       pre-existing 8.2 coverage was extended with

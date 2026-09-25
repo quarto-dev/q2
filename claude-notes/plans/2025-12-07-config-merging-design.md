@@ -676,7 +676,7 @@ Use tags to override the default:
 
 | Situation | Tag | Result |
 |-----------|-----|--------|
-| Want markdown in _quarto.yml | `!md` | Parsed as markdown |
+| Want markdown in \_quarto.yml | `!md` | Parsed as markdown |
 | Want plain string in .qmd | `!str` | Kept as literal |
 | Want to override AND markdown | `!prefer_md` | Reset + parse as markdown |
 
@@ -964,7 +964,7 @@ pub fn validate_config(
 - [ ] Handle `Interpretation::Markdown` with existing parser
 - [ ] Handle `Interpretation::PlainString` bypass
 - [ ] Update document rendering to use `MergedConfig`
-- [ ] Integration tests with real .qmd files and _quarto.yml
+- [ ] Integration tests with real .qmd files and \_quarto.yml
 
 ### Phase 6: Performance & Polish
 

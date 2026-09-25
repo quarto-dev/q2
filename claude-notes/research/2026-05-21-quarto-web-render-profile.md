@@ -292,7 +292,7 @@ Sample file used here: `/tmp/q2-sample.txt` (not committed; 425 KB,
 
 ## 2026-05-22 follow-up: post-fix profile after bd-c5u2g
 
-`bd-c5u2g` replaced `JupyterEngine`'s `sh -c "command -v jupyter"`
+`bd-c5u2g` replaced `JupyterEngine`\'s `sh -c "command -v jupyter"`
 subprocess spawn with `which::which` (in-process PATH walk),
 matching what `KnitrEngine`/`find_rscript` already did, and added
 `OnceLock`-backed memoization for both. See

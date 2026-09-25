@@ -260,7 +260,7 @@ Nothing immediately. Possible follow-ups it unblocks:
 - **External-consumer signature drift**. Phase 10.13 keeps the old `renderBlock(block, key, currentFilePath, onNavigateToDocument) → ReactNode` signature exposed for `useSlideThumbnails`'s use. After Phase 11.4 nothing should be calling that old signature, but the q2-slides `index.ts` continues to export it as a thumbnail-rendering helper. If a future plan wants to switch thumbnails to the registry-based dispatch, that's the natural follow-up; until then the imperative export is a deliberate convenience. Document the dual contract in `index.ts`'s doc-comment.
 - **Slide-control state ownership**. The parent (`Editor.tsx`) owns `currentSlideIndex` state today and threads it through `ReactPreview` → `ReactRenderer` → `SlideAst` / `RevealjsSlideAst` as props. Switching to `SlideContext` keeps the parent ownership but moves the read-side from props to context. Verify there's no stale-closure bug when `currentSlideIndex` updates while a leaf is mid-render. (Should be fine — context updates re-render consumers; the existing prop-drilling did the same.)
 - **AspectRatioScaler tests**. The top-level `ReactRenderer.integration.test.tsx` references `AspectRatioScaler` directly. After Phase 12.1's move, the import path changes. Verify the test still passes against the new location.
-- **Reveal.js dependency footprint**. `revealjsRegistry`'s `Ast: RevealjsAst` static-imports `@revealjs/react`, reveal.js plugins, and reveal.js CSS. Even if a user only ever opens `format: q2-slides` documents, the bundle pulls reveal.js because `q2-slides/registry.ts` exports both registries side-by-side. Today's tree has the same coupling (`ReactRenderer.tsx` imports `RevealjsSlideAst` unconditionally), so this is not a regression — just a known cost of the unified module. If bundle size becomes a concern, dynamic-import `RevealjsAst` in a follow-up.
+- **Reveal.js dependency footprint**. `revealjsRegistry`\'s `Ast: RevealjsAst` static-imports `@revealjs/react`, reveal.js plugins, and reveal.js CSS. Even if a user only ever opens `format: q2-slides` documents, the bundle pulls reveal.js because `q2-slides/registry.ts` exports both registries side-by-side. Today's tree has the same coupling (`ReactRenderer.tsx` imports `RevealjsSlideAst` unconditionally), so this is not a regression — just a known cost of the unified module. If bundle size becomes a concern, dynamic-import `RevealjsAst` in a follow-up.
 - **Title-slide rendering shared between SlideAst and RevealjsAst**. Pulled into a local helper in 10.10 / 10.11. Verify the helper doesn't accidentally pull format-specific styling from one chrome that doesn't apply in the other.
 
 ## References
@@ -278,7 +278,7 @@ Nothing immediately. Possible follow-ups it unblocks:
 
 ### hub-client side (read-only references during implementation)
 
-- `hub-client/src/components/render/q2-preview/PreviewContext.tsx` — precedent for `SlideContext`'s shape.
+- `hub-client/src/components/render/q2-preview/PreviewContext.tsx` — precedent for `SlideContext`\'s shape.
 - `hub-client/src/components/render/q2-preview/registry.ts` — precedent for the registry layout (single registry; q2-slides has two but the layout is parallel).
 - `hub-client/src/components/render/q2-debug/registry.ts` — second precedent.
 - `hub-client/src/components/render/framework/index.ts` — what the leaves and dispatchers consume (`Node`, `renderChildren`, `RegistryContext`, `extractMetaString` post-2D 6.0).

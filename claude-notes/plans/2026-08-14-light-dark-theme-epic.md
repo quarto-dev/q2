@@ -82,7 +82,7 @@ into that tree.)
   documents. Icon on/off state is pure CSS keyed on `.alternate`.
 - Component adaptation: (a) CSS custom properties recompiled per variant (mermaid
   `--mermaid-*`, Bootstrap `--bs-*`); (b) `body.quarto-light .dark-content
-  {display:none}` content-swap rules (`_quarto-rules.scss:766-774`); (c) giscus
+  {display:none}` content-swap rules (`\_quarto-rules.scss:766-774`); (c) giscus
   gets an explicit postMessage; (d) a `resize` event is dispatched on toggle.
 
 ### highlight-style

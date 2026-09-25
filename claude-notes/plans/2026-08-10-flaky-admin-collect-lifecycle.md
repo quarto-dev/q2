@@ -236,5 +236,5 @@ Unchanged from bd-eb2wnxkp's plan: `list_doc_ids_filesystem`
 
 - Closing this strand without the stress-loop phase would repeat the original
   trap: at a 2-3% rate, a single green run means nothing.
-- The eb2wnxkp branch is 13 days old (based on `main` @ `270d58b5`); expect a
+- The eb2wnxkp branch is 13 days old (based on `main` \@ `270d58b5`); expect a
   rebase before implementation.

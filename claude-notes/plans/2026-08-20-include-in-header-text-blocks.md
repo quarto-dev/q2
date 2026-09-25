@@ -149,7 +149,7 @@ fix with Q-5-5, pass after.
 Real binary, repro project:
 
     cargo run --bin q2 -- render claude-notes/plans/include-in-header-text-blocks-investigation/repro
-    grep -o 'marker-[a-d]' _site/*.html
+    grep -o 'marker-[a-d]' \_site/*.html
 
     index (fence):      marker-a   (was: none + Q-5-5)
     multi-para:         marker-d   (was: none + Q-5-5)

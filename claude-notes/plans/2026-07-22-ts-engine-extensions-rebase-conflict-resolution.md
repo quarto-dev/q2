@@ -315,7 +315,7 @@ This is the core of the merge. Apply the resolution rule: **branch structure
 > constraint). Do the steps in *stop order*, not numeric order:
 > - **At stop A (06-24, the Arc/transport bucket):** Steps 3, 5, 7 — the
 >   `Arc`/field-type half. `stage/mod.rs` here is a light transport-wiring
->   union (take both sides' additions); `EngineClaimsFileStage` does not exist
+>   union (take both sides\' additions); `EngineClaimsFileStage` does not exist
 >   yet, so leave the import/length work for stop B.
 > - **At stop B (06-30, the stateless-stage/claims bucket):** Steps 1, 2, 4, 6 —
 >   the structural half.
@@ -547,14 +547,14 @@ git add crates/quarto-core/src/engine/jupyter/text_execute.rs
 
 **Files:**
 - `crates/quarto-core/tests/integration/main.rs` — `pub mod` list: keep **both**
-  sides' new module declarations, alphabetized.
+  sides\' new module declarations, alphabetized.
 - `crates/quarto-util/src/lib.rs` — keep main's widened export
   `pub use path::{is_rooted, to_forward_slashes};` (superset of base). Confirm
   the branch did not intentionally remove an export; if unsure, keep the union.
-- `crates/xtask/src/dev_setup.rs` — keep **both** sides' added setup steps
+- `crates/xtask/src/dev_setup.rs` — keep **both** sides\' added setup steps
   (additive list; take the union).
-- `.github/workflows/test-suite.yml` — keep both sides' job/step additions.
-- `hub-client/vite.config.ts` — keep both sides' config additions.
+- `.github/workflows/test-suite.yml` — keep both sides\' job/step additions.
+- `hub-client/vite.config.ts` — keep both sides\' config additions.
 
 - [ ] **Step 1: Resolve each by taking the union of both additions** (drop
   markers; no side is discarded). For `quarto-util`, prefer main's

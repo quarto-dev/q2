@@ -234,7 +234,7 @@ alongside typst.
   panel/figure CSS).
 - **But dedicated epub-conditional logic *does* exist inside shared filters — corrected,
   Rev 1's "no `isEpubOutput()` branch" claim was false:**
-  - `crossref/sections.lua:48` — `if not _quarto.format.isEpubOutput() and
+  - `crossref/sections.lua:48` — `if not \_quarto.format.isEpubOutput() and
     numberSectionsOptionEnabled() ...` — a real epub-specific crossref branch.
   - `customnodes/callout.lua:139-141` — a full `_quarto.ast.add_renderer("Callout", ...)`
     predicated on `isEpubOutput() or isRevealJsOutput()`, with its own \~40-line render body.

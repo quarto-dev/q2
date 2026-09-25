@@ -208,7 +208,7 @@ Nothing. This plan is independent.
 
 ## Related work
 
-- **bd-3day** — `customRegistry` accumulator bug. Same code area (`ast-renderer-entry.tsx`'s `loadCustomComponents`), different correctness issue. Independent fix; could land alongside this plan or separately.
+- **bd-3day** — `customRegistry` accumulator bug. Same code area (`ast-renderer-entry.tsx`\'s `loadCustomComponents`), different correctness issue. Independent fix; could land alongside this plan or separately.
 - **Plan 2A item 9** — q2-preview's `entry.tsx` mirrors q2-debug's pattern but with the bd-3day fix. This plan's iframe-re-render-trigger work (if needed) applies to both entries.
 
 ## Notes

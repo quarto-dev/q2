@@ -211,7 +211,7 @@ renders an error rather than a nonce-less button if it fails. A test pins
 that ordering explicitly (`does not render GIS before the nonce arrives`)
 because it would otherwise look like a removable loading state.
 
-Note: `GoogleOAuthProvider`'s own `nonce` prop is unrelated — it sets the
+Note: `GoogleOAuthProvider`\'s own `nonce` prop is unrelated — it sets the
 CSP nonce on the injected `<script>` tag. Do not pass the login nonce
 there.
 

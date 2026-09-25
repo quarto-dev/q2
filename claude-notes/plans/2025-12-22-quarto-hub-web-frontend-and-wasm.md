@@ -1047,7 +1047,7 @@ The `wasm-quarto-hub-client` crate uses `wasm32-unknown-emscripten`, which enabl
 | 150 | `path.canonicalize()` | Resolve symlinks |
 | 154 | `path.is_file()` | Check path type |
 | 161 | `path.is_dir()` | Check path type |
-| 231 | `config_path.exists()` | Find _quarto.yml |
+| 231 | `config_path.exists()` | Find \_quarto.yml |
 | 256 | `fs::read_to_string(path)` | Read config |
 
 ### quarto-core/src/render.rs

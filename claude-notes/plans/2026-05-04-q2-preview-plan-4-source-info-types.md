@@ -1119,7 +1119,7 @@ Plan 5+ readers can adjust expectations.
   callers were the function's four dedicated tests plus one
   commented-out reference in `pampa/src/writers/json.rs`. Deleted the
   function and the four tests entirely; the equivalent coverage now
-  lives in `quarto-source-map`'s `test_root_file_id_per_variant`.
+  lives in `quarto-source-map`\'s `test_root_file_id_per_variant`.
   Cleaner than the plan anticipated. Future grep-and-replace plans
   should re-verify caller counts at start-of-implementation, not just
   at planning time.

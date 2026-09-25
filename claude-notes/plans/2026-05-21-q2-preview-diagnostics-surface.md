@@ -159,11 +159,11 @@ Recorded 2026-05-21 from user sign-off:
    q2-preview's needs. Hub-client's overlay stays unchanged.
    Whether the two re-converge later is a separate decision and
    easier to make once both are mature; coupling them now would
-   tax both UXes' evolution.
+   tax both UXes\' evolution.
 4. **Per-page only for MVP.** Project-wide diagnostic aggregation
    is a deliberate follow-up — it's a UX problem (when to clear
    project diagnostics on page switch, single overlay vs split
-   surfaces) that's better deferred until per-page is in users'
+   surfaces) that's better deferred until per-page is in users\'
    hands.
 
 ## Proposed mechanism
@@ -200,7 +200,7 @@ seeded as a copy of
 free to diverge for q2-preview's UX needs. All current uses of
 `PreviewErrorOverlay` inside `q2-preview-spa/` migrate to the new
 component (three call sites in `PreviewApp.tsx`: boot-error,
-first-render terminal, on-top overlay). `@quarto/preview-renderer`'s
+first-render terminal, on-top overlay). `@quarto/preview-renderer`\'s
 copy is untouched — hub-client keeps using it.
 
 The fork extends the shared component's prop surface with two
@@ -347,7 +347,7 @@ will emit after migration):
 |---|---|---|
 | `capture_driver.rs:114-120` (eager-capture failure for sibling) | `tracing::warn!()` | `sink.emit(rel_path, DiagnosticMessage::warning("Engine capture failed"). with_problem(err.to_string()).build())` |
 | `deps.rs:100-107, 141-147` (dep parse failure) | log + downgrade to empty deps | `sink.emit(rel_path, DiagnosticMessage::warning("Could not analyze includes").with_problem(...).build())` — keeps the "fail-open" semantic; the user just sees *why* the dep analysis was incomplete |
-| `re_execute.rs:250-264` (engine re-execute failure) | sets `CaptureRef.lastError` only | Continue setting `lastError` (so `StaleCaptureOverlay`'s existing wiring keeps working) AND emit a structured diagnostic to the sink |
+| `re_execute.rs:250-264` (engine re-execute failure) | sets `CaptureRef.lastError` only | Continue setting `lastError` (so `StaleCaptureOverlay`\'s existing wiring keeps working) AND emit a structured diagnostic to the sink |
 
 Each callsite's lifecycle is:
 
@@ -402,7 +402,7 @@ project.
      (the `parking_lot::RwLock` makes this trivial; the test
      pins the contract).
    - `tracing_warn_still_fires` — captures `tracing` output via
-     `tracing-subscriber`'s test sink and asserts the
+     `tracing-subscriber`\'s test sink and asserts the
      human-readable line is still emitted (regression guard:
      migrating callsites must not silence stdout).
 
@@ -432,7 +432,7 @@ project.
 
 5. **Existing preview integration tests must keep passing** —
    notably the engine `lastError` path (`re_execute.rs`) still
-   populates `CaptureRef.lastError` so `StaleCaptureOverlay`'s
+   populates `CaptureRef.lastError` so `StaleCaptureOverlay`\'s
    wiring (Phase C.5) is unchanged; the sink emission is
    additive.
 
@@ -517,20 +517,20 @@ project.
   the endpoint can take a wildcard or be split into a separate
   `/api/preview/diagnostics/all`), but the UX questions (single
   overlay vs split surfaces, page-switch clear semantics) are
-  better answered after per-page is in users' hands.
+  better answered after per-page is in users\' hands.
 - **Richer engine diagnostics** — today an engine failure becomes
   a string `lastError`; lifting that to a structured
   `DiagnosticMessage` with source locations is its own work
-  (and benefits from `bd-6daf`'s engine-output source-location
+  (and benefits from `bd-6daf`\'s engine-output source-location
   reconciliation).
 - **CLI parity** — `q2 preview --print-diagnostics` or similar
   to echo the merged diagnostic stream on the terminal where the
   server runs. The sink makes this trivial to bolt on; the
   question is whether anyone wants it.
-- **`bd-m9rm`'s project-level diagnostic surface** — that issue
+- **`bd-m9rm`\'s project-level diagnostic surface** — that issue
   asks for a CLI- + hub-shared project-level diagnostic
   mechanism. The sink we land here is a candidate building
-  block; whether `bd-m9rm`'s eventual design adopts it or
+  block; whether `bd-m9rm`\'s eventual design adopts it or
   evolves something more general is a separate conversation.
 - **Re-converging the forked overlay with hub-client's** — see
   Decision 3. Re-evaluate once both surfaces are mature.
@@ -595,7 +595,7 @@ mid-stream interruption never leaves the tree broken.
    `PreviewDiagnosticsOverlay.tsx` + its unit tests (test 6
    green). No `PreviewApp.tsx` changes yet — the fork sits
    beside.
-6. **SPA wiring.** Swap `PreviewApp.tsx`'s three call sites to
+6. **SPA wiring.** Swap `PreviewApp.tsx`\'s three call sites to
    the fork, plumb state, add the server-diagnostics fetch
    effect. Tests 7–13 go green; D.4's existing tests still pass.
 7. **Playwright spec** (test 15) lands once 1–6 are green.

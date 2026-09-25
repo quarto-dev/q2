@@ -158,7 +158,7 @@ reach for **does not work** against a real upstream Q1 extension repo layout
    extension repo**, where `src/` sits at the repo root, sibling to
    `_extensions/` (exactly `~/src/quarto-julia-engine`\'s own layout, which
    the plan explicitly preserved rather than reshaping). `q2
-   build-ts-extension _extensions/julia-engine` fails with "No TypeScript
+   build-ts-extension \_extensions/julia-engine` fails with "No TypeScript
    entry point found. Expected `src/julia-engine.ts` inside
    `_extensions/julia-engine`."
 

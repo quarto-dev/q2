@@ -336,11 +336,11 @@ phase's tests are written and observed failing before implementation.
      alias collisions (Q-5-23…Q-5-26) for the same "silently wrong file
      is worse than failing" rationale. Fallback policy if the error
      proves too harsh in practice: warn + omit the page from the index.
-   - `discovery.rs`'s `*.llms.md` source-side exclusion stays untouched;
+   - `discovery.rs`\'s `*.llms.md` source-side exclusion stays untouched;
      the output dir is already excluded from discovery.
 
 3. **`llms-full.txt` (resolved 2026-08-14): in scope.** Concatenate the
-   per-page markdown in index order (same order as `llms.txt`'s
+   per-page markdown in index order (same order as `llms.txt`\'s
    sections), with per-page separators carrying title + canonical URL.
 
 4. **Internal links inside companions (resolved 2026-08-14): rewrite to

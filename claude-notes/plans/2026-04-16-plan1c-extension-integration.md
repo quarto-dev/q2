@@ -309,7 +309,7 @@ loudly, pointing the user to the build command. Aligns with Quarto 1.
     `.ts`, etc. with the same actionable error: `Engine extension
     '{name}' has 'path: {path}'; only pre-built lowercase '.js' bundles
     are loadable. Run 'q2 build-ts-extension' to produce
-    {expected_js_path} and update _extension.yml.` The runtime subprocess
+    {expected_js_path} and update \_extension.yml.` The runtime subprocess
     uses `deno run --allow-all <engine-host.js>` with no import map; a
     raw `.ts` (or `.mjs`/etc.) path would fail to resolve `@quarto/api`,
     `@quarto/types`, and other engine-extension imports.
