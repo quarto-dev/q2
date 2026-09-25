@@ -9,33 +9,7 @@ project:
     - "**/*.md"
     # session-specific symlink to the active plan (gitignored)
     - "!plans/CURRENT.md"
-    # TEMPORARY: nested repro projects (directories with their own
-    # _quarto.yml) that contain .md files. The q2 nightly we render with
-    # (0.33.0-nightly.20260922) absorbs nested projects into the outer site;
-    # bd-nested-projects-xyb28wnl makes the implicit walk stop at project
-    # boundaries. Delete this list once a nightly with that fix is installed.
-    - "!plans/2026-08-11-lua-filter-returned-table-form-investigation/repro/**"
-    - "!plans/add-html-dependency-version-investigation/repro/**"
-    - "!plans/aliases-redirect-stubs-investigation/repro/**"
-    - "!plans/environment-files-loading-investigation/repro/**"
-    - "!plans/footer-link-attrs-investigation/repro/**"
-    - "!plans/heading-id-drops-inline-content-investigation/**"
-    - "!plans/index-miss-relativize-investigation/breadcrumbs/**"
-    - "!plans/index-miss-relativize-investigation/repro/**"
-    - "!plans/listing-declared-order-investigation/repro/**"
-    - "!plans/listing-table-fields-investigation/repro/**"
-    - "!plans/llms-link-target-annotation-investigation/repro/**"
-    - "!plans/llms-txt-website-support-investigation/repro/**"
-    - "!plans/page-footer-image-items-investigation/repro/**"
-    - "!plans/sidebar-contents-dir-shorthand-investigation/multi-sidebar-auto/**"
-    - "!plans/sidebar-dir-index-md-investigation/repro/**"
-    - "!plans/sidebar-section-text-fallback-investigation/repro/**"
-    - "!plans/tabset-headings-in-toc-investigation/div-recursion-probe/**"
-    - "!plans/tabset-headings-in-toc-investigation/div-toc-probe/**"
-    - "!plans/tabset-panel-tabset-investigation/**"
-    - "!plans/theme-scss-compile-error-swallowed-investigation/repro/**"
-    - "!plans/toc-location-investigation/repro/**"
-    - "!plans/toc-smart-quotes-investigation/repro/**"
+
 
 website:
   title: "q2 claude-notes"
