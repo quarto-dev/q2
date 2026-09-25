@@ -3658,7 +3658,7 @@
         },
         {
           "type": "SYMBOL",
-          "name": "_pandoc_lt_str"
+          "name": "_pandoc_literal_str"
         }
       ]
     },
@@ -5455,7 +5455,7 @@
     },
     {
       "type": "SYMBOL",
-      "name": "_pandoc_lt_str"
+      "name": "_pandoc_literal_str"
     },
     {
       "type": "SYMBOL",
