@@ -1,0 +1,199 @@
+================================================================================
+nonascii-punct-as-str — mathematical angle brackets (bd-angle-bracket-u27e8-parse-error-r6l55zmh)
+================================================================================
+a ⟨b
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_str))))
+
+================================================================================
+nonascii-punct-as-str — angle-bracketed placeholder in prose
+================================================================================
+Revert ⟨hunk⟩ then RED
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+nonascii-punct-as-str — Ps/Pe math brackets: ceiling, floor, white square, double angle
+================================================================================
+⌈x⌉ ⌊y⌋ ⟦z⟧ ⟪w⟫
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str))))
+
+================================================================================
+nonascii-punct-as-str — superscript/subscript parentheses and technical angle brackets
+================================================================================
+x⁽²⁾ y₍₁₎ 〈v〉
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str))))
+
+================================================================================
+nonascii-punct-as-str — CJK corner brackets and lenticular brackets
+================================================================================
+「引用」『書名』【注】
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str))))
+
+================================================================================
+nonascii-punct-as-str — CJK full-width parentheses, brackets, braces
+================================================================================
+（注）［1］｛a｝
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str))))
+
+================================================================================
+nonascii-punct-as-str — CJK angle and tortoise-shell brackets, double prime quotes
+================================================================================
+《书》〈章〉〔注〕〝引〞
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str))))
+
+================================================================================
+nonascii-punct-as-str — Pi/Pf editorial brackets
+================================================================================
+⸂a⸃ ⸄b⸅ ⸜c⸝
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str))))
+
+================================================================================
+nonascii-punct-as-str — Unicode 14 Po punctuation and German penny sign (enumeration drift)
+================================================================================
+why⹔ 3₰
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_str))))
+
+================================================================================
+nonascii-punct-as-str — contractions with typographic apostrophe stay one token
+================================================================================
+don’t ‘quoted’
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+nonascii-punct-as-str — ascii markup delimiters still reserved (regression)
+================================================================================
+*x* [y]{.z}
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_emph
+        (emphasis_delimiter)
+        (pandoc_str)
+        (emphasis_delimiter))
+      (pandoc_space)
+      (pandoc_span
+        (content
+          (pandoc_str))
+        (attribute_specifier
+          (commonmark_specifier
+            (attribute_class)))))))

@@ -7103,7 +7103,6 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
         '#', 2104,
         '$', 2039,
         '&', 2090,
-        '-', 2098,
         '.', 2100,
         '[', 2029,
         '\\', 2018,
@@ -7113,17 +7112,18 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
         0x2139, 2091,
       );
       if (('0' <= lookahead && lookahead <= '9')) ADVANCE(2092);
-      if (lookahead == 0xa0 ||
+      if (lookahead == '-' ||
           lookahead == 0xab ||
           lookahead == 0xbb ||
+          (0x2018 <= lookahead && lookahead <= 0x201f) ||
+          lookahead == 0x2039 ||
+          lookahead == 0x203a) ADVANCE(2098);
+      if (lookahead == 0xa0 ||
           lookahead == 0x1680 ||
           (0x2000 <= lookahead && lookahead <= 0x200a) ||
-          (0x2018 <= lookahead && lookahead <= 0x201f) ||
           lookahead == 0x2028 ||
           lookahead == 0x2029 ||
           lookahead == 0x202f ||
-          lookahead == 0x2039 ||
-          lookahead == 0x203a ||
           lookahead == 0x205f ||
           lookahead == 0x3000) ADVANCE(2098);
       if ((0x1f02c <= lookahead && lookahead <= 0x1f02f) ||
@@ -7197,9 +7197,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x591 <= lookahead && lookahead <= 0x5c7) ||
           lookahead == 0x5f3 ||
           lookahead == 0x5f4 ||
-          (0x600 <= lookahead && lookahead <= 0x61c) ||
-          lookahead == 0x61e ||
-          lookahead == 0x61f ||
+          (0x600 <= lookahead && lookahead <= 0x61f) ||
           (0x64b <= lookahead && lookahead <= 0x65f) ||
           (0x66a <= lookahead && lookahead <= 0x66d) ||
           lookahead == 0x670 ||
@@ -7333,9 +7331,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0xeb4 <= lookahead && lookahead <= 0xebc) ||
           (0xec8 <= lookahead && lookahead <= 0xece) ||
           (0xf01 <= lookahead && lookahead <= 0xf1f) ||
-          (0xf34 <= lookahead && lookahead <= 0xf39) ||
-          lookahead == 0xf3e ||
-          lookahead == 0xf3f ||
+          (0xf34 <= lookahead && lookahead <= 0xf3f) ||
           (0xf71 <= lookahead && lookahead <= 0xf87) ||
           (0xf8d <= lookahead && lookahead <= 0xf97) ||
           (0xf99 <= lookahead && lookahead <= 0xfbc) ||
@@ -7357,6 +7353,8 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           lookahead == 0x1400 ||
           lookahead == 0x166d ||
           lookahead == 0x166e ||
+          lookahead == 0x169b ||
+          lookahead == 0x169c ||
           (0x16eb <= lookahead && lookahead <= 0x16ed) ||
           (0x1712 <= lookahead && lookahead <= 0x1715) ||
           (0x1732 <= lookahead && lookahead <= 0x1736) ||
@@ -7388,8 +7386,9 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x1ab0 <= lookahead && lookahead <= 0x1ace) ||
           (0x1b00 <= lookahead && lookahead <= 0x1b04) ||
           (0x1b34 <= lookahead && lookahead <= 0x1b44) ||
-          (0x1b5a <= lookahead && lookahead <= 0x1b7c) ||
-          (0x1b80 <= lookahead && lookahead <= 0x1b82) ||
+          lookahead == 0x1b4e ||
+          lookahead == 0x1b4f ||
+          (0x1b5a <= lookahead && lookahead <= 0x1b82) ||
           (0x1ba1 <= lookahead && lookahead <= 0x1bad) ||
           (0x1be6 <= lookahead && lookahead <= 0x1bf3) ||
           (0x1bfc <= lookahead && lookahead <= 0x1bff) ||
@@ -7410,13 +7409,11 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x1fed <= lookahead && lookahead <= 0x1fef) ||
           lookahead == 0x1ffd ||
           lookahead == 0x1ffe ||
-          (0x200b <= lookahead && lookahead <= 0x2044) ||
-          (0x2047 <= lookahead && lookahead <= 0x2064) ||
+          (0x200b <= lookahead && lookahead <= 0x2064) ||
           (0x2066 <= lookahead && lookahead <= 0x206f) ||
-          (0x207a <= lookahead && lookahead <= 0x207c) ||
-          (0x208a <= lookahead && lookahead <= 0x208c) ||
-          (0x20a0 <= lookahead && lookahead <= 0x20af) ||
-          (0x20b1 <= lookahead && lookahead <= 0x20c0) ||
+          (0x207a <= lookahead && lookahead <= 0x207e) ||
+          (0x208a <= lookahead && lookahead <= 0x208e) ||
+          (0x20a0 <= lookahead && lookahead <= 0x20c0) ||
           (0x20d0 <= lookahead && lookahead <= 0x20f0) ||
           lookahead == 0x2100 ||
           lookahead == 0x2101 ||
@@ -7437,18 +7434,11 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           lookahead == 0x214f ||
           lookahead == 0x218a ||
           lookahead == 0x218b ||
-          (0x2190 <= lookahead && lookahead <= 0x2307) ||
-          (0x230c <= lookahead && lookahead <= 0x2327) ||
-          (0x232b <= lookahead && lookahead <= 0x2429) ||
+          (0x2190 <= lookahead && lookahead <= 0x2429) ||
           (0x2440 <= lookahead && lookahead <= 0x244a) ||
           (0x249c <= lookahead && lookahead <= 0x24e9) ||
-          (0x2500 <= lookahead && lookahead <= 0x2762) ||
-          (0x2794 <= lookahead && lookahead <= 0x27c4) ||
-          (0x27c7 <= lookahead && lookahead <= 0x27e5) ||
-          (0x27f0 <= lookahead && lookahead <= 0x2982) ||
-          (0x2999 <= lookahead && lookahead <= 0x29d7) ||
-          (0x29dc <= lookahead && lookahead <= 0x29fb) ||
-          (0x29fe <= lookahead && lookahead <= 0x2b73) ||
+          (0x2500 <= lookahead && lookahead <= 0x2775) ||
+          (0x2794 <= lookahead && lookahead <= 0x2b73) ||
           (0x2b76 <= lookahead && lookahead <= 0x2b95) ||
           (0x2b97 <= lookahead && lookahead <= 0x2bff) ||
           (0x2ce5 <= lookahead && lookahead <= 0x2cea) ||
@@ -7458,24 +7448,13 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           lookahead == 0x2cff ||
           lookahead == 0x2d70 ||
           lookahead == 0x2d7f ||
-          (0x2de0 <= lookahead && lookahead <= 0x2e01) ||
-          (0x2e06 <= lookahead && lookahead <= 0x2e08) ||
-          lookahead == 0x2e0b ||
-          (0x2e0e <= lookahead && lookahead <= 0x2e1b) ||
-          lookahead == 0x2e1e ||
-          lookahead == 0x2e1f ||
-          (0x2e2a <= lookahead && lookahead <= 0x2e2e) ||
-          (0x2e30 <= lookahead && lookahead <= 0x2e41) ||
-          (0x2e43 <= lookahead && lookahead <= 0x2e52) ||
-          lookahead == 0x2e5d ||
+          (0x2de0 <= lookahead && lookahead <= 0x2e2e) ||
+          (0x2e30 <= lookahead && lookahead <= 0x2e5d) ||
           (0x2e80 <= lookahead && lookahead <= 0x2e99) ||
           (0x2e9b <= lookahead && lookahead <= 0x2ef3) ||
           (0x2f00 <= lookahead && lookahead <= 0x2fd5) ||
           (0x2ff0 <= lookahead && lookahead <= 0x3004) ||
-          lookahead == 0x3012 ||
-          lookahead == 0x3013 ||
-          lookahead == 0x301c ||
-          lookahead == 0x3020 ||
+          (0x3008 <= lookahead && lookahead <= 0x3020) ||
           (0x302a <= lookahead && lookahead <= 0x302f) ||
           lookahead == 0x3036 ||
           lookahead == 0x3037 ||
@@ -7558,28 +7537,17 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           lookahead == 0xfb1e ||
           lookahead == 0xfb29 ||
           (0xfbb2 <= lookahead && lookahead <= 0xfbc2) ||
-          (0xfd40 <= lookahead && lookahead <= 0xfd4f) ||
+          (0xfd3e <= lookahead && lookahead <= 0xfd4f) ||
           lookahead == 0xfdcf ||
-          (0xfdfc <= lookahead && lookahead <= 0xfe16) ||
-          lookahead == 0xfe19 ||
-          (0xfe20 <= lookahead && lookahead <= 0xfe34) ||
-          lookahead == 0xfe45 ||
-          lookahead == 0xfe46 ||
-          (0xfe49 <= lookahead && lookahead <= 0xfe52) ||
-          (0xfe54 <= lookahead && lookahead <= 0xfe58) ||
-          (0xfe5f <= lookahead && lookahead <= 0xfe66) ||
+          (0xfdfc <= lookahead && lookahead <= 0xfe19) ||
+          (0xfe20 <= lookahead && lookahead <= 0xfe52) ||
+          (0xfe54 <= lookahead && lookahead <= 0xfe66) ||
           (0xfe68 <= lookahead && lookahead <= 0xfe6b) ||
           lookahead == 0xfeff ||
-          (0xff01 <= lookahead && lookahead <= 0xff07) ||
-          (0xff0a <= lookahead && lookahead <= 0xff0f) ||
+          (0xff01 <= lookahead && lookahead <= 0xff0f) ||
           (0xff1a <= lookahead && lookahead <= 0xff20) ||
-          lookahead == 0xff3c ||
-          (0xff3e <= lookahead && lookahead <= 0xff40) ||
-          lookahead == 0xff5c ||
-          lookahead == 0xff5e ||
-          lookahead == 0xff61 ||
-          lookahead == 0xff64 ||
-          lookahead == 0xff65 ||
+          (0xff3b <= lookahead && lookahead <= 0xff40) ||
+          (0xff5b <= lookahead && lookahead <= 0xff65) ||
           (0xffe0 <= lookahead && lookahead <= 0xffe6) ||
           (0xffe8 <= lookahead && lookahead <= 0xffee) ||
           (0xfff9 <= lookahead && lookahead <= 0xfffd) ||
@@ -7616,11 +7584,13 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x10b99 <= lookahead && lookahead <= 0x10b9c) ||
           (0x10d24 <= lookahead && lookahead <= 0x10d27) ||
           (0x10d69 <= lookahead && lookahead <= 0x10d6e) ||
+          lookahead == 0x10d8e ||
+          lookahead == 0x10d8f ||
           (0x10eab <= lookahead && lookahead <= 0x10ead) ||
           (0x10efc <= lookahead && lookahead <= 0x10eff) ||
           (0x10f46 <= lookahead && lookahead <= 0x10f50) ||
           (0x10f55 <= lookahead && lookahead <= 0x10f59) ||
-          (0x10f82 <= lookahead && lookahead <= 0x10f85) ||
+          (0x10f82 <= lookahead && lookahead <= 0x10f89) ||
           (0x11000 <= lookahead && lookahead <= 0x11002) ||
           (0x11038 <= lookahead && lookahead <= 0x1104d) ||
           lookahead == 0x11070 ||
@@ -7662,6 +7632,10 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x113c7 <= lookahead && lookahead <= 0x113ca) ||
           (0x113cc <= lookahead && lookahead <= 0x113d0) ||
           lookahead == 0x113d2 ||
+          lookahead == 0x113d4 ||
+          lookahead == 0x113d5 ||
+          lookahead == 0x113d7 ||
+          lookahead == 0x113d8 ||
           lookahead == 0x113e1 ||
           lookahead == 0x113e2 ||
           (0x11435 <= lookahead && lookahead <= 0x11446) ||
@@ -7679,6 +7653,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x11630 <= lookahead && lookahead <= 0x11643) ||
           (0x11660 <= lookahead && lookahead <= 0x1166c) ||
           (0x116ab <= lookahead && lookahead <= 0x116b7) ||
+          lookahead == 0x116b9 ||
           (0x1171d <= lookahead && lookahead <= 0x1172b) ||
           (0x1173c <= lookahead && lookahead <= 0x1173f) ||
           (0x1182c <= lookahead && lookahead <= 0x1183b) ||
@@ -7698,6 +7673,8 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x11a51 <= lookahead && lookahead <= 0x11a5b) ||
           (0x11a8a <= lookahead && lookahead <= 0x11a9c) ||
           (0x11a9e <= lookahead && lookahead <= 0x11aa2) ||
+          (0x11b00 <= lookahead && lookahead <= 0x11b09) ||
+          lookahead == 0x11be1 ||
           (0x11c2f <= lookahead && lookahead <= 0x11c36) ||
           (0x11c38 <= lookahead && lookahead <= 0x11c3f) ||
           (0x11c41 <= lookahead && lookahead <= 0x11c45) ||
@@ -7720,11 +7697,13 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           lookahead == 0x11f01 ||
           lookahead == 0x11f03 ||
           (0x11f34 <= lookahead && lookahead <= 0x11f3a) ||
-          (0x11f3e <= lookahead && lookahead <= 0x11f42) ||
+          (0x11f3e <= lookahead && lookahead <= 0x11f4f) ||
           lookahead == 0x11f5a ||
           (0x11fd5 <= lookahead && lookahead <= 0x11ff1) ||
           lookahead == 0x11fff ||
           (0x12470 <= lookahead && lookahead <= 0x12474) ||
+          lookahead == 0x12ff1 ||
+          lookahead == 0x12ff2 ||
           (0x13430 <= lookahead && lookahead <= 0x13440) ||
           (0x13447 <= lookahead && lookahead <= 0x13455) ||
           (0x1611e <= lookahead && lookahead <= 0x1612f) ||
@@ -7734,6 +7713,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x16b30 <= lookahead && lookahead <= 0x16b3f) ||
           lookahead == 0x16b44 ||
           lookahead == 0x16b45 ||
+          (0x16d6d <= lookahead && lookahead <= 0x16d6f) ||
           (0x16e97 <= lookahead && lookahead <= 0x16e9a) ||
           lookahead == 0x16f4f ||
           (0x16f51 <= lookahead && lookahead <= 0x16f87) ||
@@ -7781,6 +7761,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x1e4ec <= lookahead && lookahead <= 0x1e4ef) ||
           lookahead == 0x1e5ee ||
           lookahead == 0x1e5ef ||
+          lookahead == 0x1e5ff ||
           (0x1e8d0 <= lookahead && lookahead <= 0x1e8d6) ||
           (0x1e944 <= lookahead && lookahead <= 0x1e94a) ||
           lookahead == 0x1e95e ||
@@ -7803,7 +7784,6 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
         '#', 2104,
         '$', 2039,
         '&', 2090,
-        '-', 2098,
         '.', 2100,
         '[', 2029,
         '\\', 2018,
@@ -7815,17 +7795,18 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
         ' ', 2110,
       );
       if (('0' <= lookahead && lookahead <= '9')) ADVANCE(2092);
-      if (lookahead == 0xa0 ||
+      if (lookahead == '-' ||
           lookahead == 0xab ||
           lookahead == 0xbb ||
+          (0x2018 <= lookahead && lookahead <= 0x201f) ||
+          lookahead == 0x2039 ||
+          lookahead == 0x203a) ADVANCE(2098);
+      if (lookahead == 0xa0 ||
           lookahead == 0x1680 ||
           (0x2000 <= lookahead && lookahead <= 0x200a) ||
-          (0x2018 <= lookahead && lookahead <= 0x201f) ||
           lookahead == 0x2028 ||
           lookahead == 0x2029 ||
           lookahead == 0x202f ||
-          lookahead == 0x2039 ||
-          lookahead == 0x203a ||
           lookahead == 0x205f ||
           lookahead == 0x3000) ADVANCE(2098);
       if ((0x1f02c <= lookahead && lookahead <= 0x1f02f) ||
@@ -7899,9 +7880,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x591 <= lookahead && lookahead <= 0x5c7) ||
           lookahead == 0x5f3 ||
           lookahead == 0x5f4 ||
-          (0x600 <= lookahead && lookahead <= 0x61c) ||
-          lookahead == 0x61e ||
-          lookahead == 0x61f ||
+          (0x600 <= lookahead && lookahead <= 0x61f) ||
           (0x64b <= lookahead && lookahead <= 0x65f) ||
           (0x66a <= lookahead && lookahead <= 0x66d) ||
           lookahead == 0x670 ||
@@ -8035,9 +8014,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0xeb4 <= lookahead && lookahead <= 0xebc) ||
           (0xec8 <= lookahead && lookahead <= 0xece) ||
           (0xf01 <= lookahead && lookahead <= 0xf1f) ||
-          (0xf34 <= lookahead && lookahead <= 0xf39) ||
-          lookahead == 0xf3e ||
-          lookahead == 0xf3f ||
+          (0xf34 <= lookahead && lookahead <= 0xf3f) ||
           (0xf71 <= lookahead && lookahead <= 0xf87) ||
           (0xf8d <= lookahead && lookahead <= 0xf97) ||
           (0xf99 <= lookahead && lookahead <= 0xfbc) ||
@@ -8059,6 +8036,8 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           lookahead == 0x1400 ||
           lookahead == 0x166d ||
           lookahead == 0x166e ||
+          lookahead == 0x169b ||
+          lookahead == 0x169c ||
           (0x16eb <= lookahead && lookahead <= 0x16ed) ||
           (0x1712 <= lookahead && lookahead <= 0x1715) ||
           (0x1732 <= lookahead && lookahead <= 0x1736) ||
@@ -8090,8 +8069,9 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x1ab0 <= lookahead && lookahead <= 0x1ace) ||
           (0x1b00 <= lookahead && lookahead <= 0x1b04) ||
           (0x1b34 <= lookahead && lookahead <= 0x1b44) ||
-          (0x1b5a <= lookahead && lookahead <= 0x1b7c) ||
-          (0x1b80 <= lookahead && lookahead <= 0x1b82) ||
+          lookahead == 0x1b4e ||
+          lookahead == 0x1b4f ||
+          (0x1b5a <= lookahead && lookahead <= 0x1b82) ||
           (0x1ba1 <= lookahead && lookahead <= 0x1bad) ||
           (0x1be6 <= lookahead && lookahead <= 0x1bf3) ||
           (0x1bfc <= lookahead && lookahead <= 0x1bff) ||
@@ -8112,13 +8092,11 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x1fed <= lookahead && lookahead <= 0x1fef) ||
           lookahead == 0x1ffd ||
           lookahead == 0x1ffe ||
-          (0x200b <= lookahead && lookahead <= 0x2044) ||
-          (0x2047 <= lookahead && lookahead <= 0x2064) ||
+          (0x200b <= lookahead && lookahead <= 0x2064) ||
           (0x2066 <= lookahead && lookahead <= 0x206f) ||
-          (0x207a <= lookahead && lookahead <= 0x207c) ||
-          (0x208a <= lookahead && lookahead <= 0x208c) ||
-          (0x20a0 <= lookahead && lookahead <= 0x20af) ||
-          (0x20b1 <= lookahead && lookahead <= 0x20c0) ||
+          (0x207a <= lookahead && lookahead <= 0x207e) ||
+          (0x208a <= lookahead && lookahead <= 0x208e) ||
+          (0x20a0 <= lookahead && lookahead <= 0x20c0) ||
           (0x20d0 <= lookahead && lookahead <= 0x20f0) ||
           lookahead == 0x2100 ||
           lookahead == 0x2101 ||
@@ -8139,18 +8117,11 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           lookahead == 0x214f ||
           lookahead == 0x218a ||
           lookahead == 0x218b ||
-          (0x2190 <= lookahead && lookahead <= 0x2307) ||
-          (0x230c <= lookahead && lookahead <= 0x2327) ||
-          (0x232b <= lookahead && lookahead <= 0x2429) ||
+          (0x2190 <= lookahead && lookahead <= 0x2429) ||
           (0x2440 <= lookahead && lookahead <= 0x244a) ||
           (0x249c <= lookahead && lookahead <= 0x24e9) ||
-          (0x2500 <= lookahead && lookahead <= 0x2762) ||
-          (0x2794 <= lookahead && lookahead <= 0x27c4) ||
-          (0x27c7 <= lookahead && lookahead <= 0x27e5) ||
-          (0x27f0 <= lookahead && lookahead <= 0x2982) ||
-          (0x2999 <= lookahead && lookahead <= 0x29d7) ||
-          (0x29dc <= lookahead && lookahead <= 0x29fb) ||
-          (0x29fe <= lookahead && lookahead <= 0x2b73) ||
+          (0x2500 <= lookahead && lookahead <= 0x2775) ||
+          (0x2794 <= lookahead && lookahead <= 0x2b73) ||
           (0x2b76 <= lookahead && lookahead <= 0x2b95) ||
           (0x2b97 <= lookahead && lookahead <= 0x2bff) ||
           (0x2ce5 <= lookahead && lookahead <= 0x2cea) ||
@@ -8160,24 +8131,13 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           lookahead == 0x2cff ||
           lookahead == 0x2d70 ||
           lookahead == 0x2d7f ||
-          (0x2de0 <= lookahead && lookahead <= 0x2e01) ||
-          (0x2e06 <= lookahead && lookahead <= 0x2e08) ||
-          lookahead == 0x2e0b ||
-          (0x2e0e <= lookahead && lookahead <= 0x2e1b) ||
-          lookahead == 0x2e1e ||
-          lookahead == 0x2e1f ||
-          (0x2e2a <= lookahead && lookahead <= 0x2e2e) ||
-          (0x2e30 <= lookahead && lookahead <= 0x2e41) ||
-          (0x2e43 <= lookahead && lookahead <= 0x2e52) ||
-          lookahead == 0x2e5d ||
+          (0x2de0 <= lookahead && lookahead <= 0x2e2e) ||
+          (0x2e30 <= lookahead && lookahead <= 0x2e5d) ||
           (0x2e80 <= lookahead && lookahead <= 0x2e99) ||
           (0x2e9b <= lookahead && lookahead <= 0x2ef3) ||
           (0x2f00 <= lookahead && lookahead <= 0x2fd5) ||
           (0x2ff0 <= lookahead && lookahead <= 0x3004) ||
-          lookahead == 0x3012 ||
-          lookahead == 0x3013 ||
-          lookahead == 0x301c ||
-          lookahead == 0x3020 ||
+          (0x3008 <= lookahead && lookahead <= 0x3020) ||
           (0x302a <= lookahead && lookahead <= 0x302f) ||
           lookahead == 0x3036 ||
           lookahead == 0x3037 ||
@@ -8260,28 +8220,17 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           lookahead == 0xfb1e ||
           lookahead == 0xfb29 ||
           (0xfbb2 <= lookahead && lookahead <= 0xfbc2) ||
-          (0xfd40 <= lookahead && lookahead <= 0xfd4f) ||
+          (0xfd3e <= lookahead && lookahead <= 0xfd4f) ||
           lookahead == 0xfdcf ||
-          (0xfdfc <= lookahead && lookahead <= 0xfe16) ||
-          lookahead == 0xfe19 ||
-          (0xfe20 <= lookahead && lookahead <= 0xfe34) ||
-          lookahead == 0xfe45 ||
-          lookahead == 0xfe46 ||
-          (0xfe49 <= lookahead && lookahead <= 0xfe52) ||
-          (0xfe54 <= lookahead && lookahead <= 0xfe58) ||
-          (0xfe5f <= lookahead && lookahead <= 0xfe66) ||
+          (0xfdfc <= lookahead && lookahead <= 0xfe19) ||
+          (0xfe20 <= lookahead && lookahead <= 0xfe52) ||
+          (0xfe54 <= lookahead && lookahead <= 0xfe66) ||
           (0xfe68 <= lookahead && lookahead <= 0xfe6b) ||
           lookahead == 0xfeff ||
-          (0xff01 <= lookahead && lookahead <= 0xff07) ||
-          (0xff0a <= lookahead && lookahead <= 0xff0f) ||
+          (0xff01 <= lookahead && lookahead <= 0xff0f) ||
           (0xff1a <= lookahead && lookahead <= 0xff20) ||
-          lookahead == 0xff3c ||
-          (0xff3e <= lookahead && lookahead <= 0xff40) ||
-          lookahead == 0xff5c ||
-          lookahead == 0xff5e ||
-          lookahead == 0xff61 ||
-          lookahead == 0xff64 ||
-          lookahead == 0xff65 ||
+          (0xff3b <= lookahead && lookahead <= 0xff40) ||
+          (0xff5b <= lookahead && lookahead <= 0xff65) ||
           (0xffe0 <= lookahead && lookahead <= 0xffe6) ||
           (0xffe8 <= lookahead && lookahead <= 0xffee) ||
           (0xfff9 <= lookahead && lookahead <= 0xfffd) ||
@@ -8318,11 +8267,13 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x10b99 <= lookahead && lookahead <= 0x10b9c) ||
           (0x10d24 <= lookahead && lookahead <= 0x10d27) ||
           (0x10d69 <= lookahead && lookahead <= 0x10d6e) ||
+          lookahead == 0x10d8e ||
+          lookahead == 0x10d8f ||
           (0x10eab <= lookahead && lookahead <= 0x10ead) ||
           (0x10efc <= lookahead && lookahead <= 0x10eff) ||
           (0x10f46 <= lookahead && lookahead <= 0x10f50) ||
           (0x10f55 <= lookahead && lookahead <= 0x10f59) ||
-          (0x10f82 <= lookahead && lookahead <= 0x10f85) ||
+          (0x10f82 <= lookahead && lookahead <= 0x10f89) ||
           (0x11000 <= lookahead && lookahead <= 0x11002) ||
           (0x11038 <= lookahead && lookahead <= 0x1104d) ||
           lookahead == 0x11070 ||
@@ -8364,6 +8315,10 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x113c7 <= lookahead && lookahead <= 0x113ca) ||
           (0x113cc <= lookahead && lookahead <= 0x113d0) ||
           lookahead == 0x113d2 ||
+          lookahead == 0x113d4 ||
+          lookahead == 0x113d5 ||
+          lookahead == 0x113d7 ||
+          lookahead == 0x113d8 ||
           lookahead == 0x113e1 ||
           lookahead == 0x113e2 ||
           (0x11435 <= lookahead && lookahead <= 0x11446) ||
@@ -8381,6 +8336,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x11630 <= lookahead && lookahead <= 0x11643) ||
           (0x11660 <= lookahead && lookahead <= 0x1166c) ||
           (0x116ab <= lookahead && lookahead <= 0x116b7) ||
+          lookahead == 0x116b9 ||
           (0x1171d <= lookahead && lookahead <= 0x1172b) ||
           (0x1173c <= lookahead && lookahead <= 0x1173f) ||
           (0x1182c <= lookahead && lookahead <= 0x1183b) ||
@@ -8400,6 +8356,8 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x11a51 <= lookahead && lookahead <= 0x11a5b) ||
           (0x11a8a <= lookahead && lookahead <= 0x11a9c) ||
           (0x11a9e <= lookahead && lookahead <= 0x11aa2) ||
+          (0x11b00 <= lookahead && lookahead <= 0x11b09) ||
+          lookahead == 0x11be1 ||
           (0x11c2f <= lookahead && lookahead <= 0x11c36) ||
           (0x11c38 <= lookahead && lookahead <= 0x11c3f) ||
           (0x11c41 <= lookahead && lookahead <= 0x11c45) ||
@@ -8422,11 +8380,13 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           lookahead == 0x11f01 ||
           lookahead == 0x11f03 ||
           (0x11f34 <= lookahead && lookahead <= 0x11f3a) ||
-          (0x11f3e <= lookahead && lookahead <= 0x11f42) ||
+          (0x11f3e <= lookahead && lookahead <= 0x11f4f) ||
           lookahead == 0x11f5a ||
           (0x11fd5 <= lookahead && lookahead <= 0x11ff1) ||
           lookahead == 0x11fff ||
           (0x12470 <= lookahead && lookahead <= 0x12474) ||
+          lookahead == 0x12ff1 ||
+          lookahead == 0x12ff2 ||
           (0x13430 <= lookahead && lookahead <= 0x13440) ||
           (0x13447 <= lookahead && lookahead <= 0x13455) ||
           (0x1611e <= lookahead && lookahead <= 0x1612f) ||
@@ -8436,6 +8396,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x16b30 <= lookahead && lookahead <= 0x16b3f) ||
           lookahead == 0x16b44 ||
           lookahead == 0x16b45 ||
+          (0x16d6d <= lookahead && lookahead <= 0x16d6f) ||
           (0x16e97 <= lookahead && lookahead <= 0x16e9a) ||
           lookahead == 0x16f4f ||
           (0x16f51 <= lookahead && lookahead <= 0x16f87) ||
@@ -8483,6 +8444,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x1e4ec <= lookahead && lookahead <= 0x1e4ef) ||
           lookahead == 0x1e5ee ||
           lookahead == 0x1e5ef ||
+          lookahead == 0x1e5ff ||
           (0x1e8d0 <= lookahead && lookahead <= 0x1e8d6) ||
           (0x1e944 <= lookahead && lookahead <= 0x1e94a) ||
           lookahead == 0x1e95e ||
@@ -8505,7 +8467,6 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
         '#', 2104,
         '$', 2039,
         '&', 2090,
-        '-', 2098,
         '.', 2100,
         '[', 2029,
         '\\', 2018,
@@ -8517,17 +8478,18 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
         ' ', 2111,
       );
       if (('0' <= lookahead && lookahead <= '9')) ADVANCE(2092);
-      if (lookahead == 0xa0 ||
+      if (lookahead == '-' ||
           lookahead == 0xab ||
           lookahead == 0xbb ||
+          (0x2018 <= lookahead && lookahead <= 0x201f) ||
+          lookahead == 0x2039 ||
+          lookahead == 0x203a) ADVANCE(2098);
+      if (lookahead == 0xa0 ||
           lookahead == 0x1680 ||
           (0x2000 <= lookahead && lookahead <= 0x200a) ||
-          (0x2018 <= lookahead && lookahead <= 0x201f) ||
           lookahead == 0x2028 ||
           lookahead == 0x2029 ||
           lookahead == 0x202f ||
-          lookahead == 0x2039 ||
-          lookahead == 0x203a ||
           lookahead == 0x205f ||
           lookahead == 0x3000) ADVANCE(2098);
       if ((0x1f02c <= lookahead && lookahead <= 0x1f02f) ||
@@ -8601,9 +8563,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x591 <= lookahead && lookahead <= 0x5c7) ||
           lookahead == 0x5f3 ||
           lookahead == 0x5f4 ||
-          (0x600 <= lookahead && lookahead <= 0x61c) ||
-          lookahead == 0x61e ||
-          lookahead == 0x61f ||
+          (0x600 <= lookahead && lookahead <= 0x61f) ||
           (0x64b <= lookahead && lookahead <= 0x65f) ||
           (0x66a <= lookahead && lookahead <= 0x66d) ||
           lookahead == 0x670 ||
@@ -8737,9 +8697,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0xeb4 <= lookahead && lookahead <= 0xebc) ||
           (0xec8 <= lookahead && lookahead <= 0xece) ||
           (0xf01 <= lookahead && lookahead <= 0xf1f) ||
-          (0xf34 <= lookahead && lookahead <= 0xf39) ||
-          lookahead == 0xf3e ||
-          lookahead == 0xf3f ||
+          (0xf34 <= lookahead && lookahead <= 0xf3f) ||
           (0xf71 <= lookahead && lookahead <= 0xf87) ||
           (0xf8d <= lookahead && lookahead <= 0xf97) ||
           (0xf99 <= lookahead && lookahead <= 0xfbc) ||
@@ -8761,6 +8719,8 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           lookahead == 0x1400 ||
           lookahead == 0x166d ||
           lookahead == 0x166e ||
+          lookahead == 0x169b ||
+          lookahead == 0x169c ||
           (0x16eb <= lookahead && lookahead <= 0x16ed) ||
           (0x1712 <= lookahead && lookahead <= 0x1715) ||
           (0x1732 <= lookahead && lookahead <= 0x1736) ||
@@ -8792,8 +8752,9 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x1ab0 <= lookahead && lookahead <= 0x1ace) ||
           (0x1b00 <= lookahead && lookahead <= 0x1b04) ||
           (0x1b34 <= lookahead && lookahead <= 0x1b44) ||
-          (0x1b5a <= lookahead && lookahead <= 0x1b7c) ||
-          (0x1b80 <= lookahead && lookahead <= 0x1b82) ||
+          lookahead == 0x1b4e ||
+          lookahead == 0x1b4f ||
+          (0x1b5a <= lookahead && lookahead <= 0x1b82) ||
           (0x1ba1 <= lookahead && lookahead <= 0x1bad) ||
           (0x1be6 <= lookahead && lookahead <= 0x1bf3) ||
           (0x1bfc <= lookahead && lookahead <= 0x1bff) ||
@@ -8814,13 +8775,11 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x1fed <= lookahead && lookahead <= 0x1fef) ||
           lookahead == 0x1ffd ||
           lookahead == 0x1ffe ||
-          (0x200b <= lookahead && lookahead <= 0x2044) ||
-          (0x2047 <= lookahead && lookahead <= 0x2064) ||
+          (0x200b <= lookahead && lookahead <= 0x2064) ||
           (0x2066 <= lookahead && lookahead <= 0x206f) ||
-          (0x207a <= lookahead && lookahead <= 0x207c) ||
-          (0x208a <= lookahead && lookahead <= 0x208c) ||
-          (0x20a0 <= lookahead && lookahead <= 0x20af) ||
-          (0x20b1 <= lookahead && lookahead <= 0x20c0) ||
+          (0x207a <= lookahead && lookahead <= 0x207e) ||
+          (0x208a <= lookahead && lookahead <= 0x208e) ||
+          (0x20a0 <= lookahead && lookahead <= 0x20c0) ||
           (0x20d0 <= lookahead && lookahead <= 0x20f0) ||
           lookahead == 0x2100 ||
           lookahead == 0x2101 ||
@@ -8841,18 +8800,11 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           lookahead == 0x214f ||
           lookahead == 0x218a ||
           lookahead == 0x218b ||
-          (0x2190 <= lookahead && lookahead <= 0x2307) ||
-          (0x230c <= lookahead && lookahead <= 0x2327) ||
-          (0x232b <= lookahead && lookahead <= 0x2429) ||
+          (0x2190 <= lookahead && lookahead <= 0x2429) ||
           (0x2440 <= lookahead && lookahead <= 0x244a) ||
           (0x249c <= lookahead && lookahead <= 0x24e9) ||
-          (0x2500 <= lookahead && lookahead <= 0x2762) ||
-          (0x2794 <= lookahead && lookahead <= 0x27c4) ||
-          (0x27c7 <= lookahead && lookahead <= 0x27e5) ||
-          (0x27f0 <= lookahead && lookahead <= 0x2982) ||
-          (0x2999 <= lookahead && lookahead <= 0x29d7) ||
-          (0x29dc <= lookahead && lookahead <= 0x29fb) ||
-          (0x29fe <= lookahead && lookahead <= 0x2b73) ||
+          (0x2500 <= lookahead && lookahead <= 0x2775) ||
+          (0x2794 <= lookahead && lookahead <= 0x2b73) ||
           (0x2b76 <= lookahead && lookahead <= 0x2b95) ||
           (0x2b97 <= lookahead && lookahead <= 0x2bff) ||
           (0x2ce5 <= lookahead && lookahead <= 0x2cea) ||
@@ -8862,24 +8814,13 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           lookahead == 0x2cff ||
           lookahead == 0x2d70 ||
           lookahead == 0x2d7f ||
-          (0x2de0 <= lookahead && lookahead <= 0x2e01) ||
-          (0x2e06 <= lookahead && lookahead <= 0x2e08) ||
-          lookahead == 0x2e0b ||
-          (0x2e0e <= lookahead && lookahead <= 0x2e1b) ||
-          lookahead == 0x2e1e ||
-          lookahead == 0x2e1f ||
-          (0x2e2a <= lookahead && lookahead <= 0x2e2e) ||
-          (0x2e30 <= lookahead && lookahead <= 0x2e41) ||
-          (0x2e43 <= lookahead && lookahead <= 0x2e52) ||
-          lookahead == 0x2e5d ||
+          (0x2de0 <= lookahead && lookahead <= 0x2e2e) ||
+          (0x2e30 <= lookahead && lookahead <= 0x2e5d) ||
           (0x2e80 <= lookahead && lookahead <= 0x2e99) ||
           (0x2e9b <= lookahead && lookahead <= 0x2ef3) ||
           (0x2f00 <= lookahead && lookahead <= 0x2fd5) ||
           (0x2ff0 <= lookahead && lookahead <= 0x3004) ||
-          lookahead == 0x3012 ||
-          lookahead == 0x3013 ||
-          lookahead == 0x301c ||
-          lookahead == 0x3020 ||
+          (0x3008 <= lookahead && lookahead <= 0x3020) ||
           (0x302a <= lookahead && lookahead <= 0x302f) ||
           lookahead == 0x3036 ||
           lookahead == 0x3037 ||
@@ -8962,28 +8903,17 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           lookahead == 0xfb1e ||
           lookahead == 0xfb29 ||
           (0xfbb2 <= lookahead && lookahead <= 0xfbc2) ||
-          (0xfd40 <= lookahead && lookahead <= 0xfd4f) ||
+          (0xfd3e <= lookahead && lookahead <= 0xfd4f) ||
           lookahead == 0xfdcf ||
-          (0xfdfc <= lookahead && lookahead <= 0xfe16) ||
-          lookahead == 0xfe19 ||
-          (0xfe20 <= lookahead && lookahead <= 0xfe34) ||
-          lookahead == 0xfe45 ||
-          lookahead == 0xfe46 ||
-          (0xfe49 <= lookahead && lookahead <= 0xfe52) ||
-          (0xfe54 <= lookahead && lookahead <= 0xfe58) ||
-          (0xfe5f <= lookahead && lookahead <= 0xfe66) ||
+          (0xfdfc <= lookahead && lookahead <= 0xfe19) ||
+          (0xfe20 <= lookahead && lookahead <= 0xfe52) ||
+          (0xfe54 <= lookahead && lookahead <= 0xfe66) ||
           (0xfe68 <= lookahead && lookahead <= 0xfe6b) ||
           lookahead == 0xfeff ||
-          (0xff01 <= lookahead && lookahead <= 0xff07) ||
-          (0xff0a <= lookahead && lookahead <= 0xff0f) ||
+          (0xff01 <= lookahead && lookahead <= 0xff0f) ||
           (0xff1a <= lookahead && lookahead <= 0xff20) ||
-          lookahead == 0xff3c ||
-          (0xff3e <= lookahead && lookahead <= 0xff40) ||
-          lookahead == 0xff5c ||
-          lookahead == 0xff5e ||
-          lookahead == 0xff61 ||
-          lookahead == 0xff64 ||
-          lookahead == 0xff65 ||
+          (0xff3b <= lookahead && lookahead <= 0xff40) ||
+          (0xff5b <= lookahead && lookahead <= 0xff65) ||
           (0xffe0 <= lookahead && lookahead <= 0xffe6) ||
           (0xffe8 <= lookahead && lookahead <= 0xffee) ||
           (0xfff9 <= lookahead && lookahead <= 0xfffd) ||
@@ -9020,11 +8950,13 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x10b99 <= lookahead && lookahead <= 0x10b9c) ||
           (0x10d24 <= lookahead && lookahead <= 0x10d27) ||
           (0x10d69 <= lookahead && lookahead <= 0x10d6e) ||
+          lookahead == 0x10d8e ||
+          lookahead == 0x10d8f ||
           (0x10eab <= lookahead && lookahead <= 0x10ead) ||
           (0x10efc <= lookahead && lookahead <= 0x10eff) ||
           (0x10f46 <= lookahead && lookahead <= 0x10f50) ||
           (0x10f55 <= lookahead && lookahead <= 0x10f59) ||
-          (0x10f82 <= lookahead && lookahead <= 0x10f85) ||
+          (0x10f82 <= lookahead && lookahead <= 0x10f89) ||
           (0x11000 <= lookahead && lookahead <= 0x11002) ||
           (0x11038 <= lookahead && lookahead <= 0x1104d) ||
           lookahead == 0x11070 ||
@@ -9066,6 +8998,10 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x113c7 <= lookahead && lookahead <= 0x113ca) ||
           (0x113cc <= lookahead && lookahead <= 0x113d0) ||
           lookahead == 0x113d2 ||
+          lookahead == 0x113d4 ||
+          lookahead == 0x113d5 ||
+          lookahead == 0x113d7 ||
+          lookahead == 0x113d8 ||
           lookahead == 0x113e1 ||
           lookahead == 0x113e2 ||
           (0x11435 <= lookahead && lookahead <= 0x11446) ||
@@ -9083,6 +9019,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x11630 <= lookahead && lookahead <= 0x11643) ||
           (0x11660 <= lookahead && lookahead <= 0x1166c) ||
           (0x116ab <= lookahead && lookahead <= 0x116b7) ||
+          lookahead == 0x116b9 ||
           (0x1171d <= lookahead && lookahead <= 0x1172b) ||
           (0x1173c <= lookahead && lookahead <= 0x1173f) ||
           (0x1182c <= lookahead && lookahead <= 0x1183b) ||
@@ -9102,6 +9039,8 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x11a51 <= lookahead && lookahead <= 0x11a5b) ||
           (0x11a8a <= lookahead && lookahead <= 0x11a9c) ||
           (0x11a9e <= lookahead && lookahead <= 0x11aa2) ||
+          (0x11b00 <= lookahead && lookahead <= 0x11b09) ||
+          lookahead == 0x11be1 ||
           (0x11c2f <= lookahead && lookahead <= 0x11c36) ||
           (0x11c38 <= lookahead && lookahead <= 0x11c3f) ||
           (0x11c41 <= lookahead && lookahead <= 0x11c45) ||
@@ -9124,11 +9063,13 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           lookahead == 0x11f01 ||
           lookahead == 0x11f03 ||
           (0x11f34 <= lookahead && lookahead <= 0x11f3a) ||
-          (0x11f3e <= lookahead && lookahead <= 0x11f42) ||
+          (0x11f3e <= lookahead && lookahead <= 0x11f4f) ||
           lookahead == 0x11f5a ||
           (0x11fd5 <= lookahead && lookahead <= 0x11ff1) ||
           lookahead == 0x11fff ||
           (0x12470 <= lookahead && lookahead <= 0x12474) ||
+          lookahead == 0x12ff1 ||
+          lookahead == 0x12ff2 ||
           (0x13430 <= lookahead && lookahead <= 0x13440) ||
           (0x13447 <= lookahead && lookahead <= 0x13455) ||
           (0x1611e <= lookahead && lookahead <= 0x1612f) ||
@@ -9138,6 +9079,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x16b30 <= lookahead && lookahead <= 0x16b3f) ||
           lookahead == 0x16b44 ||
           lookahead == 0x16b45 ||
+          (0x16d6d <= lookahead && lookahead <= 0x16d6f) ||
           (0x16e97 <= lookahead && lookahead <= 0x16e9a) ||
           lookahead == 0x16f4f ||
           (0x16f51 <= lookahead && lookahead <= 0x16f87) ||
@@ -9185,6 +9127,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x1e4ec <= lookahead && lookahead <= 0x1e4ef) ||
           lookahead == 0x1e5ee ||
           lookahead == 0x1e5ef ||
+          lookahead == 0x1e5ff ||
           (0x1e8d0 <= lookahead && lookahead <= 0x1e8d6) ||
           (0x1e944 <= lookahead && lookahead <= 0x1e94a) ||
           lookahead == 0x1e95e ||
@@ -9207,7 +9150,6 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
         '#', 2104,
         '$', 2039,
         '&', 2090,
-        '-', 2098,
         '.', 2100,
         '[', 2030,
         '\\', 2018,
@@ -9218,17 +9160,18 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
         ' ', 2112,
       );
       if (('0' <= lookahead && lookahead <= '9')) ADVANCE(2092);
-      if (lookahead == 0xa0 ||
+      if (lookahead == '-' ||
           lookahead == 0xab ||
           lookahead == 0xbb ||
+          (0x2018 <= lookahead && lookahead <= 0x201f) ||
+          lookahead == 0x2039 ||
+          lookahead == 0x203a) ADVANCE(2098);
+      if (lookahead == 0xa0 ||
           lookahead == 0x1680 ||
           (0x2000 <= lookahead && lookahead <= 0x200a) ||
-          (0x2018 <= lookahead && lookahead <= 0x201f) ||
           lookahead == 0x2028 ||
           lookahead == 0x2029 ||
           lookahead == 0x202f ||
-          lookahead == 0x2039 ||
-          lookahead == 0x203a ||
           lookahead == 0x205f ||
           lookahead == 0x3000) ADVANCE(2098);
       if ((0x1f02c <= lookahead && lookahead <= 0x1f02f) ||
@@ -9302,9 +9245,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x591 <= lookahead && lookahead <= 0x5c7) ||
           lookahead == 0x5f3 ||
           lookahead == 0x5f4 ||
-          (0x600 <= lookahead && lookahead <= 0x61c) ||
-          lookahead == 0x61e ||
-          lookahead == 0x61f ||
+          (0x600 <= lookahead && lookahead <= 0x61f) ||
           (0x64b <= lookahead && lookahead <= 0x65f) ||
           (0x66a <= lookahead && lookahead <= 0x66d) ||
           lookahead == 0x670 ||
@@ -9438,9 +9379,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0xeb4 <= lookahead && lookahead <= 0xebc) ||
           (0xec8 <= lookahead && lookahead <= 0xece) ||
           (0xf01 <= lookahead && lookahead <= 0xf1f) ||
-          (0xf34 <= lookahead && lookahead <= 0xf39) ||
-          lookahead == 0xf3e ||
-          lookahead == 0xf3f ||
+          (0xf34 <= lookahead && lookahead <= 0xf3f) ||
           (0xf71 <= lookahead && lookahead <= 0xf87) ||
           (0xf8d <= lookahead && lookahead <= 0xf97) ||
           (0xf99 <= lookahead && lookahead <= 0xfbc) ||
@@ -9462,6 +9401,8 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           lookahead == 0x1400 ||
           lookahead == 0x166d ||
           lookahead == 0x166e ||
+          lookahead == 0x169b ||
+          lookahead == 0x169c ||
           (0x16eb <= lookahead && lookahead <= 0x16ed) ||
           (0x1712 <= lookahead && lookahead <= 0x1715) ||
           (0x1732 <= lookahead && lookahead <= 0x1736) ||
@@ -9493,8 +9434,9 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x1ab0 <= lookahead && lookahead <= 0x1ace) ||
           (0x1b00 <= lookahead && lookahead <= 0x1b04) ||
           (0x1b34 <= lookahead && lookahead <= 0x1b44) ||
-          (0x1b5a <= lookahead && lookahead <= 0x1b7c) ||
-          (0x1b80 <= lookahead && lookahead <= 0x1b82) ||
+          lookahead == 0x1b4e ||
+          lookahead == 0x1b4f ||
+          (0x1b5a <= lookahead && lookahead <= 0x1b82) ||
           (0x1ba1 <= lookahead && lookahead <= 0x1bad) ||
           (0x1be6 <= lookahead && lookahead <= 0x1bf3) ||
           (0x1bfc <= lookahead && lookahead <= 0x1bff) ||
@@ -9515,13 +9457,11 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x1fed <= lookahead && lookahead <= 0x1fef) ||
           lookahead == 0x1ffd ||
           lookahead == 0x1ffe ||
-          (0x200b <= lookahead && lookahead <= 0x2044) ||
-          (0x2047 <= lookahead && lookahead <= 0x2064) ||
+          (0x200b <= lookahead && lookahead <= 0x2064) ||
           (0x2066 <= lookahead && lookahead <= 0x206f) ||
-          (0x207a <= lookahead && lookahead <= 0x207c) ||
-          (0x208a <= lookahead && lookahead <= 0x208c) ||
-          (0x20a0 <= lookahead && lookahead <= 0x20af) ||
-          (0x20b1 <= lookahead && lookahead <= 0x20c0) ||
+          (0x207a <= lookahead && lookahead <= 0x207e) ||
+          (0x208a <= lookahead && lookahead <= 0x208e) ||
+          (0x20a0 <= lookahead && lookahead <= 0x20c0) ||
           (0x20d0 <= lookahead && lookahead <= 0x20f0) ||
           lookahead == 0x2100 ||
           lookahead == 0x2101 ||
@@ -9542,18 +9482,11 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           lookahead == 0x214f ||
           lookahead == 0x218a ||
           lookahead == 0x218b ||
-          (0x2190 <= lookahead && lookahead <= 0x2307) ||
-          (0x230c <= lookahead && lookahead <= 0x2327) ||
-          (0x232b <= lookahead && lookahead <= 0x2429) ||
+          (0x2190 <= lookahead && lookahead <= 0x2429) ||
           (0x2440 <= lookahead && lookahead <= 0x244a) ||
           (0x249c <= lookahead && lookahead <= 0x24e9) ||
-          (0x2500 <= lookahead && lookahead <= 0x2762) ||
-          (0x2794 <= lookahead && lookahead <= 0x27c4) ||
-          (0x27c7 <= lookahead && lookahead <= 0x27e5) ||
-          (0x27f0 <= lookahead && lookahead <= 0x2982) ||
-          (0x2999 <= lookahead && lookahead <= 0x29d7) ||
-          (0x29dc <= lookahead && lookahead <= 0x29fb) ||
-          (0x29fe <= lookahead && lookahead <= 0x2b73) ||
+          (0x2500 <= lookahead && lookahead <= 0x2775) ||
+          (0x2794 <= lookahead && lookahead <= 0x2b73) ||
           (0x2b76 <= lookahead && lookahead <= 0x2b95) ||
           (0x2b97 <= lookahead && lookahead <= 0x2bff) ||
           (0x2ce5 <= lookahead && lookahead <= 0x2cea) ||
@@ -9563,24 +9496,13 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           lookahead == 0x2cff ||
           lookahead == 0x2d70 ||
           lookahead == 0x2d7f ||
-          (0x2de0 <= lookahead && lookahead <= 0x2e01) ||
-          (0x2e06 <= lookahead && lookahead <= 0x2e08) ||
-          lookahead == 0x2e0b ||
-          (0x2e0e <= lookahead && lookahead <= 0x2e1b) ||
-          lookahead == 0x2e1e ||
-          lookahead == 0x2e1f ||
-          (0x2e2a <= lookahead && lookahead <= 0x2e2e) ||
-          (0x2e30 <= lookahead && lookahead <= 0x2e41) ||
-          (0x2e43 <= lookahead && lookahead <= 0x2e52) ||
-          lookahead == 0x2e5d ||
+          (0x2de0 <= lookahead && lookahead <= 0x2e2e) ||
+          (0x2e30 <= lookahead && lookahead <= 0x2e5d) ||
           (0x2e80 <= lookahead && lookahead <= 0x2e99) ||
           (0x2e9b <= lookahead && lookahead <= 0x2ef3) ||
           (0x2f00 <= lookahead && lookahead <= 0x2fd5) ||
           (0x2ff0 <= lookahead && lookahead <= 0x3004) ||
-          lookahead == 0x3012 ||
-          lookahead == 0x3013 ||
-          lookahead == 0x301c ||
-          lookahead == 0x3020 ||
+          (0x3008 <= lookahead && lookahead <= 0x3020) ||
           (0x302a <= lookahead && lookahead <= 0x302f) ||
           lookahead == 0x3036 ||
           lookahead == 0x3037 ||
@@ -9663,28 +9585,17 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           lookahead == 0xfb1e ||
           lookahead == 0xfb29 ||
           (0xfbb2 <= lookahead && lookahead <= 0xfbc2) ||
-          (0xfd40 <= lookahead && lookahead <= 0xfd4f) ||
+          (0xfd3e <= lookahead && lookahead <= 0xfd4f) ||
           lookahead == 0xfdcf ||
-          (0xfdfc <= lookahead && lookahead <= 0xfe16) ||
-          lookahead == 0xfe19 ||
-          (0xfe20 <= lookahead && lookahead <= 0xfe34) ||
-          lookahead == 0xfe45 ||
-          lookahead == 0xfe46 ||
-          (0xfe49 <= lookahead && lookahead <= 0xfe52) ||
-          (0xfe54 <= lookahead && lookahead <= 0xfe58) ||
-          (0xfe5f <= lookahead && lookahead <= 0xfe66) ||
+          (0xfdfc <= lookahead && lookahead <= 0xfe19) ||
+          (0xfe20 <= lookahead && lookahead <= 0xfe52) ||
+          (0xfe54 <= lookahead && lookahead <= 0xfe66) ||
           (0xfe68 <= lookahead && lookahead <= 0xfe6b) ||
           lookahead == 0xfeff ||
-          (0xff01 <= lookahead && lookahead <= 0xff07) ||
-          (0xff0a <= lookahead && lookahead <= 0xff0f) ||
+          (0xff01 <= lookahead && lookahead <= 0xff0f) ||
           (0xff1a <= lookahead && lookahead <= 0xff20) ||
-          lookahead == 0xff3c ||
-          (0xff3e <= lookahead && lookahead <= 0xff40) ||
-          lookahead == 0xff5c ||
-          lookahead == 0xff5e ||
-          lookahead == 0xff61 ||
-          lookahead == 0xff64 ||
-          lookahead == 0xff65 ||
+          (0xff3b <= lookahead && lookahead <= 0xff40) ||
+          (0xff5b <= lookahead && lookahead <= 0xff65) ||
           (0xffe0 <= lookahead && lookahead <= 0xffe6) ||
           (0xffe8 <= lookahead && lookahead <= 0xffee) ||
           (0xfff9 <= lookahead && lookahead <= 0xfffd) ||
@@ -9721,11 +9632,13 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x10b99 <= lookahead && lookahead <= 0x10b9c) ||
           (0x10d24 <= lookahead && lookahead <= 0x10d27) ||
           (0x10d69 <= lookahead && lookahead <= 0x10d6e) ||
+          lookahead == 0x10d8e ||
+          lookahead == 0x10d8f ||
           (0x10eab <= lookahead && lookahead <= 0x10ead) ||
           (0x10efc <= lookahead && lookahead <= 0x10eff) ||
           (0x10f46 <= lookahead && lookahead <= 0x10f50) ||
           (0x10f55 <= lookahead && lookahead <= 0x10f59) ||
-          (0x10f82 <= lookahead && lookahead <= 0x10f85) ||
+          (0x10f82 <= lookahead && lookahead <= 0x10f89) ||
           (0x11000 <= lookahead && lookahead <= 0x11002) ||
           (0x11038 <= lookahead && lookahead <= 0x1104d) ||
           lookahead == 0x11070 ||
@@ -9767,6 +9680,10 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x113c7 <= lookahead && lookahead <= 0x113ca) ||
           (0x113cc <= lookahead && lookahead <= 0x113d0) ||
           lookahead == 0x113d2 ||
+          lookahead == 0x113d4 ||
+          lookahead == 0x113d5 ||
+          lookahead == 0x113d7 ||
+          lookahead == 0x113d8 ||
           lookahead == 0x113e1 ||
           lookahead == 0x113e2 ||
           (0x11435 <= lookahead && lookahead <= 0x11446) ||
@@ -9784,6 +9701,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x11630 <= lookahead && lookahead <= 0x11643) ||
           (0x11660 <= lookahead && lookahead <= 0x1166c) ||
           (0x116ab <= lookahead && lookahead <= 0x116b7) ||
+          lookahead == 0x116b9 ||
           (0x1171d <= lookahead && lookahead <= 0x1172b) ||
           (0x1173c <= lookahead && lookahead <= 0x1173f) ||
           (0x1182c <= lookahead && lookahead <= 0x1183b) ||
@@ -9803,6 +9721,8 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x11a51 <= lookahead && lookahead <= 0x11a5b) ||
           (0x11a8a <= lookahead && lookahead <= 0x11a9c) ||
           (0x11a9e <= lookahead && lookahead <= 0x11aa2) ||
+          (0x11b00 <= lookahead && lookahead <= 0x11b09) ||
+          lookahead == 0x11be1 ||
           (0x11c2f <= lookahead && lookahead <= 0x11c36) ||
           (0x11c38 <= lookahead && lookahead <= 0x11c3f) ||
           (0x11c41 <= lookahead && lookahead <= 0x11c45) ||
@@ -9825,11 +9745,13 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           lookahead == 0x11f01 ||
           lookahead == 0x11f03 ||
           (0x11f34 <= lookahead && lookahead <= 0x11f3a) ||
-          (0x11f3e <= lookahead && lookahead <= 0x11f42) ||
+          (0x11f3e <= lookahead && lookahead <= 0x11f4f) ||
           lookahead == 0x11f5a ||
           (0x11fd5 <= lookahead && lookahead <= 0x11ff1) ||
           lookahead == 0x11fff ||
           (0x12470 <= lookahead && lookahead <= 0x12474) ||
+          lookahead == 0x12ff1 ||
+          lookahead == 0x12ff2 ||
           (0x13430 <= lookahead && lookahead <= 0x13440) ||
           (0x13447 <= lookahead && lookahead <= 0x13455) ||
           (0x1611e <= lookahead && lookahead <= 0x1612f) ||
@@ -9839,6 +9761,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x16b30 <= lookahead && lookahead <= 0x16b3f) ||
           lookahead == 0x16b44 ||
           lookahead == 0x16b45 ||
+          (0x16d6d <= lookahead && lookahead <= 0x16d6f) ||
           (0x16e97 <= lookahead && lookahead <= 0x16e9a) ||
           lookahead == 0x16f4f ||
           (0x16f51 <= lookahead && lookahead <= 0x16f87) ||
@@ -9886,6 +9809,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x1e4ec <= lookahead && lookahead <= 0x1e4ef) ||
           lookahead == 0x1e5ee ||
           lookahead == 0x1e5ef ||
+          lookahead == 0x1e5ff ||
           (0x1e8d0 <= lookahead && lookahead <= 0x1e8d6) ||
           (0x1e944 <= lookahead && lookahead <= 0x1e94a) ||
           lookahead == 0x1e95e ||
@@ -18007,7 +17931,6 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
         '$', 2039,
         '&', 2090,
         '\'', 2059,
-        '-', 2098,
         '.', 2100,
         '[', 2029,
         '\\', 2018,
@@ -18019,17 +17942,18 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
         ' ', 2112,
       );
       if (('0' <= lookahead && lookahead <= '9')) ADVANCE(2092);
-      if (lookahead == 0xa0 ||
+      if (lookahead == '-' ||
           lookahead == 0xab ||
           lookahead == 0xbb ||
+          (0x2018 <= lookahead && lookahead <= 0x201f) ||
+          lookahead == 0x2039 ||
+          lookahead == 0x203a) ADVANCE(2098);
+      if (lookahead == 0xa0 ||
           lookahead == 0x1680 ||
           (0x2000 <= lookahead && lookahead <= 0x200a) ||
-          (0x2018 <= lookahead && lookahead <= 0x201f) ||
           lookahead == 0x2028 ||
           lookahead == 0x2029 ||
           lookahead == 0x202f ||
-          lookahead == 0x2039 ||
-          lookahead == 0x203a ||
           lookahead == 0x205f ||
           lookahead == 0x3000) ADVANCE(2098);
       if ((0x1f02c <= lookahead && lookahead <= 0x1f02f) ||
@@ -18101,9 +18025,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x591 <= lookahead && lookahead <= 0x5c7) ||
           lookahead == 0x5f3 ||
           lookahead == 0x5f4 ||
-          (0x600 <= lookahead && lookahead <= 0x61c) ||
-          lookahead == 0x61e ||
-          lookahead == 0x61f ||
+          (0x600 <= lookahead && lookahead <= 0x61f) ||
           (0x64b <= lookahead && lookahead <= 0x65f) ||
           (0x66a <= lookahead && lookahead <= 0x66d) ||
           lookahead == 0x670 ||
@@ -18237,9 +18159,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0xeb4 <= lookahead && lookahead <= 0xebc) ||
           (0xec8 <= lookahead && lookahead <= 0xece) ||
           (0xf01 <= lookahead && lookahead <= 0xf1f) ||
-          (0xf34 <= lookahead && lookahead <= 0xf39) ||
-          lookahead == 0xf3e ||
-          lookahead == 0xf3f ||
+          (0xf34 <= lookahead && lookahead <= 0xf3f) ||
           (0xf71 <= lookahead && lookahead <= 0xf87) ||
           (0xf8d <= lookahead && lookahead <= 0xf97) ||
           (0xf99 <= lookahead && lookahead <= 0xfbc) ||
@@ -18261,6 +18181,8 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           lookahead == 0x1400 ||
           lookahead == 0x166d ||
           lookahead == 0x166e ||
+          lookahead == 0x169b ||
+          lookahead == 0x169c ||
           (0x16eb <= lookahead && lookahead <= 0x16ed) ||
           (0x1712 <= lookahead && lookahead <= 0x1715) ||
           (0x1732 <= lookahead && lookahead <= 0x1736) ||
@@ -18292,8 +18214,9 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x1ab0 <= lookahead && lookahead <= 0x1ace) ||
           (0x1b00 <= lookahead && lookahead <= 0x1b04) ||
           (0x1b34 <= lookahead && lookahead <= 0x1b44) ||
-          (0x1b5a <= lookahead && lookahead <= 0x1b7c) ||
-          (0x1b80 <= lookahead && lookahead <= 0x1b82) ||
+          lookahead == 0x1b4e ||
+          lookahead == 0x1b4f ||
+          (0x1b5a <= lookahead && lookahead <= 0x1b82) ||
           (0x1ba1 <= lookahead && lookahead <= 0x1bad) ||
           (0x1be6 <= lookahead && lookahead <= 0x1bf3) ||
           (0x1bfc <= lookahead && lookahead <= 0x1bff) ||
@@ -18314,13 +18237,11 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x1fed <= lookahead && lookahead <= 0x1fef) ||
           lookahead == 0x1ffd ||
           lookahead == 0x1ffe ||
-          (0x200b <= lookahead && lookahead <= 0x2044) ||
-          (0x2047 <= lookahead && lookahead <= 0x2064) ||
+          (0x200b <= lookahead && lookahead <= 0x2064) ||
           (0x2066 <= lookahead && lookahead <= 0x206f) ||
-          (0x207a <= lookahead && lookahead <= 0x207c) ||
-          (0x208a <= lookahead && lookahead <= 0x208c) ||
-          (0x20a0 <= lookahead && lookahead <= 0x20af) ||
-          (0x20b1 <= lookahead && lookahead <= 0x20c0) ||
+          (0x207a <= lookahead && lookahead <= 0x207e) ||
+          (0x208a <= lookahead && lookahead <= 0x208e) ||
+          (0x20a0 <= lookahead && lookahead <= 0x20c0) ||
           (0x20d0 <= lookahead && lookahead <= 0x20f0) ||
           lookahead == 0x2100 ||
           lookahead == 0x2101 ||
@@ -18341,18 +18262,11 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           lookahead == 0x214f ||
           lookahead == 0x218a ||
           lookahead == 0x218b ||
-          (0x2190 <= lookahead && lookahead <= 0x2307) ||
-          (0x230c <= lookahead && lookahead <= 0x2327) ||
-          (0x232b <= lookahead && lookahead <= 0x2429) ||
+          (0x2190 <= lookahead && lookahead <= 0x2429) ||
           (0x2440 <= lookahead && lookahead <= 0x244a) ||
           (0x249c <= lookahead && lookahead <= 0x24e9) ||
-          (0x2500 <= lookahead && lookahead <= 0x2762) ||
-          (0x2794 <= lookahead && lookahead <= 0x27c4) ||
-          (0x27c7 <= lookahead && lookahead <= 0x27e5) ||
-          (0x27f0 <= lookahead && lookahead <= 0x2982) ||
-          (0x2999 <= lookahead && lookahead <= 0x29d7) ||
-          (0x29dc <= lookahead && lookahead <= 0x29fb) ||
-          (0x29fe <= lookahead && lookahead <= 0x2b73) ||
+          (0x2500 <= lookahead && lookahead <= 0x2775) ||
+          (0x2794 <= lookahead && lookahead <= 0x2b73) ||
           (0x2b76 <= lookahead && lookahead <= 0x2b95) ||
           (0x2b97 <= lookahead && lookahead <= 0x2bff) ||
           (0x2ce5 <= lookahead && lookahead <= 0x2cea) ||
@@ -18362,24 +18276,13 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           lookahead == 0x2cff ||
           lookahead == 0x2d70 ||
           lookahead == 0x2d7f ||
-          (0x2de0 <= lookahead && lookahead <= 0x2e01) ||
-          (0x2e06 <= lookahead && lookahead <= 0x2e08) ||
-          lookahead == 0x2e0b ||
-          (0x2e0e <= lookahead && lookahead <= 0x2e1b) ||
-          lookahead == 0x2e1e ||
-          lookahead == 0x2e1f ||
-          (0x2e2a <= lookahead && lookahead <= 0x2e2e) ||
-          (0x2e30 <= lookahead && lookahead <= 0x2e41) ||
-          (0x2e43 <= lookahead && lookahead <= 0x2e52) ||
-          lookahead == 0x2e5d ||
+          (0x2de0 <= lookahead && lookahead <= 0x2e2e) ||
+          (0x2e30 <= lookahead && lookahead <= 0x2e5d) ||
           (0x2e80 <= lookahead && lookahead <= 0x2e99) ||
           (0x2e9b <= lookahead && lookahead <= 0x2ef3) ||
           (0x2f00 <= lookahead && lookahead <= 0x2fd5) ||
           (0x2ff0 <= lookahead && lookahead <= 0x3004) ||
-          lookahead == 0x3012 ||
-          lookahead == 0x3013 ||
-          lookahead == 0x301c ||
-          lookahead == 0x3020 ||
+          (0x3008 <= lookahead && lookahead <= 0x3020) ||
           (0x302a <= lookahead && lookahead <= 0x302f) ||
           lookahead == 0x3036 ||
           lookahead == 0x3037 ||
@@ -18462,28 +18365,17 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           lookahead == 0xfb1e ||
           lookahead == 0xfb29 ||
           (0xfbb2 <= lookahead && lookahead <= 0xfbc2) ||
-          (0xfd40 <= lookahead && lookahead <= 0xfd4f) ||
+          (0xfd3e <= lookahead && lookahead <= 0xfd4f) ||
           lookahead == 0xfdcf ||
-          (0xfdfc <= lookahead && lookahead <= 0xfe16) ||
-          lookahead == 0xfe19 ||
-          (0xfe20 <= lookahead && lookahead <= 0xfe34) ||
-          lookahead == 0xfe45 ||
-          lookahead == 0xfe46 ||
-          (0xfe49 <= lookahead && lookahead <= 0xfe52) ||
-          (0xfe54 <= lookahead && lookahead <= 0xfe58) ||
-          (0xfe5f <= lookahead && lookahead <= 0xfe66) ||
+          (0xfdfc <= lookahead && lookahead <= 0xfe19) ||
+          (0xfe20 <= lookahead && lookahead <= 0xfe52) ||
+          (0xfe54 <= lookahead && lookahead <= 0xfe66) ||
           (0xfe68 <= lookahead && lookahead <= 0xfe6b) ||
           lookahead == 0xfeff ||
-          (0xff01 <= lookahead && lookahead <= 0xff07) ||
-          (0xff0a <= lookahead && lookahead <= 0xff0f) ||
+          (0xff01 <= lookahead && lookahead <= 0xff0f) ||
           (0xff1a <= lookahead && lookahead <= 0xff20) ||
-          lookahead == 0xff3c ||
-          (0xff3e <= lookahead && lookahead <= 0xff40) ||
-          lookahead == 0xff5c ||
-          lookahead == 0xff5e ||
-          lookahead == 0xff61 ||
-          lookahead == 0xff64 ||
-          lookahead == 0xff65 ||
+          (0xff3b <= lookahead && lookahead <= 0xff40) ||
+          (0xff5b <= lookahead && lookahead <= 0xff65) ||
           (0xffe0 <= lookahead && lookahead <= 0xffe6) ||
           (0xffe8 <= lookahead && lookahead <= 0xffee) ||
           (0xfff9 <= lookahead && lookahead <= 0xfffd) ||
@@ -18520,11 +18412,13 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x10b99 <= lookahead && lookahead <= 0x10b9c) ||
           (0x10d24 <= lookahead && lookahead <= 0x10d27) ||
           (0x10d69 <= lookahead && lookahead <= 0x10d6e) ||
+          lookahead == 0x10d8e ||
+          lookahead == 0x10d8f ||
           (0x10eab <= lookahead && lookahead <= 0x10ead) ||
           (0x10efc <= lookahead && lookahead <= 0x10eff) ||
           (0x10f46 <= lookahead && lookahead <= 0x10f50) ||
           (0x10f55 <= lookahead && lookahead <= 0x10f59) ||
-          (0x10f82 <= lookahead && lookahead <= 0x10f85) ||
+          (0x10f82 <= lookahead && lookahead <= 0x10f89) ||
           (0x11000 <= lookahead && lookahead <= 0x11002) ||
           (0x11038 <= lookahead && lookahead <= 0x1104d) ||
           lookahead == 0x11070 ||
@@ -18566,6 +18460,10 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x113c7 <= lookahead && lookahead <= 0x113ca) ||
           (0x113cc <= lookahead && lookahead <= 0x113d0) ||
           lookahead == 0x113d2 ||
+          lookahead == 0x113d4 ||
+          lookahead == 0x113d5 ||
+          lookahead == 0x113d7 ||
+          lookahead == 0x113d8 ||
           lookahead == 0x113e1 ||
           lookahead == 0x113e2 ||
           (0x11435 <= lookahead && lookahead <= 0x11446) ||
@@ -18583,6 +18481,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x11630 <= lookahead && lookahead <= 0x11643) ||
           (0x11660 <= lookahead && lookahead <= 0x1166c) ||
           (0x116ab <= lookahead && lookahead <= 0x116b7) ||
+          lookahead == 0x116b9 ||
           (0x1171d <= lookahead && lookahead <= 0x1172b) ||
           (0x1173c <= lookahead && lookahead <= 0x1173f) ||
           (0x1182c <= lookahead && lookahead <= 0x1183b) ||
@@ -18602,6 +18501,8 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x11a51 <= lookahead && lookahead <= 0x11a5b) ||
           (0x11a8a <= lookahead && lookahead <= 0x11a9c) ||
           (0x11a9e <= lookahead && lookahead <= 0x11aa2) ||
+          (0x11b00 <= lookahead && lookahead <= 0x11b09) ||
+          lookahead == 0x11be1 ||
           (0x11c2f <= lookahead && lookahead <= 0x11c36) ||
           (0x11c38 <= lookahead && lookahead <= 0x11c3f) ||
           (0x11c41 <= lookahead && lookahead <= 0x11c45) ||
@@ -18624,11 +18525,13 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           lookahead == 0x11f01 ||
           lookahead == 0x11f03 ||
           (0x11f34 <= lookahead && lookahead <= 0x11f3a) ||
-          (0x11f3e <= lookahead && lookahead <= 0x11f42) ||
+          (0x11f3e <= lookahead && lookahead <= 0x11f4f) ||
           lookahead == 0x11f5a ||
           (0x11fd5 <= lookahead && lookahead <= 0x11ff1) ||
           lookahead == 0x11fff ||
           (0x12470 <= lookahead && lookahead <= 0x12474) ||
+          lookahead == 0x12ff1 ||
+          lookahead == 0x12ff2 ||
           (0x13430 <= lookahead && lookahead <= 0x13440) ||
           (0x13447 <= lookahead && lookahead <= 0x13455) ||
           (0x1611e <= lookahead && lookahead <= 0x1612f) ||
@@ -18638,6 +18541,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x16b30 <= lookahead && lookahead <= 0x16b3f) ||
           lookahead == 0x16b44 ||
           lookahead == 0x16b45 ||
+          (0x16d6d <= lookahead && lookahead <= 0x16d6f) ||
           (0x16e97 <= lookahead && lookahead <= 0x16e9a) ||
           lookahead == 0x16f4f ||
           (0x16f51 <= lookahead && lookahead <= 0x16f87) ||
@@ -18685,6 +18589,7 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
           (0x1e4ec <= lookahead && lookahead <= 0x1e4ef) ||
           lookahead == 0x1e5ee ||
           lookahead == 0x1e5ef ||
+          lookahead == 0x1e5ff ||
           (0x1e8d0 <= lookahead && lookahead <= 0x1e8d6) ||
           (0x1e944 <= lookahead && lookahead <= 0x1e94a) ||
           lookahead == 0x1e95e ||

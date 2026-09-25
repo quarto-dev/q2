@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import type { NodeArgs, RawInlineInline } from '../../framework';
 
 /**
@@ -9,8 +10,12 @@ import type { NodeArgs, RawInlineInline } from '../../framework';
  */
 export const RawInline = ({ node }: NodeArgs<RawInlineInline>) => {
     const [format, content] = node.c;
+    // Memoized per content string: React 19 re-sets innerHTML whenever the
+    // object identity changes, which would tear down the injected DOM on
+    // every re-render (see RawBlock).
+    const innerHtml = useMemo(() => ({ __html: content }), [content]);
     if (format === 'html' || format === 'html5') {
-        return <span dangerouslySetInnerHTML={{ __html: content }} />;
+        return <span dangerouslySetInnerHTML={innerHtml} />;
     }
     return <code>{content}</code>;
 };

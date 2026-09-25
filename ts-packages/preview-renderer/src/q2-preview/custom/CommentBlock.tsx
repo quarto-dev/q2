@@ -1344,10 +1344,9 @@ const CommentWrapper = ({
                             // Near-white with just a hint of blue.
                             backgroundColor: '#f7faff',
                             color: CHROME_BLUE,
-                            padding: '2px 6px',
                             borderRadius: '5px',
                             border: `1px solid ${CHROME_BLUE}`,
-                            fontSize: '0.7rem',
+                            fontSize: expanded ? '0.75rem' : '0.7rem',
                             cursor: 'pointer',
                             // Chip-level containment (bd-y66gbfs4): no
                             // rendered comment content of any kind may
@@ -1355,6 +1354,13 @@ const CommentWrapper = ({
                             // content widths (expanded rows ≈ 220px) so
                             // it only bites on oversized content.
                             maxWidth: '260px',
+                            // The bubble stays shrink-to-fit: expanded
+                            // rows are only as wide as their text. The
+                            // add-comment input below sets its own
+                            // min-width so the chrome can't collapse to
+                            // a sliver when the textarea is all it holds.
+                            boxSizing: 'border-box',
+                            padding: expanded ? '4px 8px' : '2px 6px',
                             overflow: 'hidden',
                             // Block hover puts an offset-free light
                             // blue glow on the bubble.
@@ -1406,8 +1412,9 @@ const CommentWrapper = ({
                                             <span style={{
                                                 flex: 1,
                                                 minWidth: 0,
-                                                maxWidth: '160px',
+                                                maxWidth: '200px',
                                                 overflowWrap: 'break-word',
+                                                lineHeight: 1.4,
                                             }}>
                                                 <CommentSpanContent span={c} onNavigateToDocument={onNavigateToDocument} />
                                             </span>
@@ -1442,14 +1449,14 @@ const CommentWrapper = ({
                                 {showInlineInput && (
                                     <div style={{
                                         borderTop: comments.length > 0 ? DIVIDER : 'none',
-                                        marginTop: '2px',
-                                        paddingTop: '5px',
+                                        marginTop: comments.length > 0 ? '4px' : 0,
+                                        paddingTop: comments.length > 0 ? '6px' : '2px',
                                         paddingBottom: '2px',
                                     }}>
                                         <textarea
                                             ref={inlineInputRef}
                                             className="q2-comment-input"
-                                            rows={1}
+                                            rows={2}
                                             value={commentText}
                                             onChange={(e) => setCommentText(e.target.value)}
                                             onKeyDown={(e) => {
@@ -1466,13 +1473,19 @@ const CommentWrapper = ({
                                                     setSelfExpanded(false);
                                                 }
                                             }}
-                                            placeholder="type comment here"
+                                            placeholder="Add a comment…"
                                             style={{
                                                 display: 'block',
                                                 width: '100%',
-                                                padding: '3px 2px',
+                                                // The chrome is a shrink-to-fit
+                                                // box; with no comment rows the
+                                                // textarea is the only thing
+                                                // giving it a width.
+                                                minWidth: '200px',
+                                                padding: '5px 7px',
                                                 fontFamily: 'inherit',
                                                 fontSize: 'inherit',
+                                                lineHeight: 1.4,
                                                 // Blend into the bubble like
                                                 // the comment rows do.
                                                 backgroundColor: 'transparent',
@@ -1485,6 +1498,14 @@ const CommentWrapper = ({
                                                 boxSizing: 'border-box',
                                             }}
                                         />
+                                        <div style={{
+                                            marginTop: '3px',
+                                            fontSize: '0.85em',
+                                            color: '#6699cc',
+                                            textAlign: 'right',
+                                        }}>
+                                            Enter to add · Esc to close
+                                        </div>
                                     </div>
                                 )}
                             </>

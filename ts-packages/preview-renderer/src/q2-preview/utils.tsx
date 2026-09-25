@@ -5,6 +5,8 @@
  *    fallback to the original URL on miss (broken-image affordance).
  *  - `formatRefLabel`: Theorem-style "Theorem 1 (Pythagoras)" labels.
  *  - `composeAttr`: non-mutating add-classes / add-kvs onto an Attr.
+ *  - `cssStringToObject`: CSS declaration string → React style object,
+ *    for `style="…"` attributes carried in an Attr's key-value pairs.
  *  - `renderSlot`: slot-kind dispatcher that mounts <Node> with a
  *    copy-on-write `setLocalAst` for each slot value. Mirrors
  *    `renderCustomNodeChildren` in `framework/dispatch.tsx` but is the
@@ -22,7 +24,7 @@
  * them via the `framework` barrel.
  */
 
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import type {
     BlockNode,
     CustomBlockNode,
@@ -88,6 +90,29 @@ export function formatRefLabel(
     let label = number !== undefined ? `${kind} ${number}` : kind;
     if (title && title.length > 0) label += ` (${title})`;
     return label;
+}
+
+/**
+ * Convert a CSS declaration string (`"flex-basis: 40%; color: red"`) to the
+ * React style object React requires. Property names are camelCased; custom
+ * properties (`--foo`) are left as-is. Used wherever an Attr carries a
+ * `style` key-value (Div, Span) — the native writer emits it as-is, so the
+ * preview must apply it for layout parity.
+ */
+export function cssStringToObject(css: string): CSSProperties {
+    const style: Record<string, string> = {};
+    for (const decl of css.split(';')) {
+        const idx = decl.indexOf(':');
+        if (idx === -1) continue;
+        const prop = decl.slice(0, idx).trim();
+        const value = decl.slice(idx + 1).trim();
+        if (!prop || !value) continue;
+        const key = prop.startsWith('--')
+            ? prop
+            : prop.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+        style[key] = value;
+    }
+    return style as CSSProperties;
 }
 
 /**

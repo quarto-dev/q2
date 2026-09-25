@@ -132,6 +132,7 @@ pub mod test_treesitter_coverage;
 pub mod test_treesitter_refactoring;
 pub mod test_unclosed_attr_specifier;
 pub mod test_unicode_error_offsets;
+pub mod test_unicode_punctuation;
 pub mod test_unicode_whitespace;
 pub mod test_warnings;
 pub mod test_wasm_entrypoints;
