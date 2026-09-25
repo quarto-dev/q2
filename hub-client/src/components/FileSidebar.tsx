@@ -18,11 +18,9 @@ import {
 } from '../utils/fileTree';
 import { resolveDefaultDestination } from './fileUpload';
 import { buildSnippet, type SearchFiles, type SearchResult } from '../services/search';
-import { openPrintableDocument } from '../services/printableDocument';
 import {
   FilePlusIcon,
   UploadIcon,
-  PrintIcon,
   FolderPlusIcon,
   DownloadIcon,
 } from './icons';
@@ -31,7 +29,7 @@ import MoreActionsIconButton from './MoreActionsIconButton';
 import { getFileIcon, treeRowIndent } from './fileTreeRowHelpers';
 import { Menu, MenuItem } from './Menu';
 import Tooltip from './Tooltip';
-import { common, fileSidebar } from '../strings';
+import { fileSidebar } from '../strings';
 import './FileSidebar.css';
 
 export interface FileSidebarProps {
@@ -64,12 +62,6 @@ export interface FileSidebarProps {
   onOpenInNewTab?: (file: FileEntry) => void;
   /** Copy a link to a file to clipboard */
   onCopyLink?: (file: FileEntry) => void;
-  /**
-   * Preview format of the current file (e.g. `q2-preview`, `q2-slides`,
-   * `revealjs`, or `null`). Drives the "Open printable version" button:
-   * shown only for formats that produce a printable standalone document.
-   */
-  currentFormat?: string | null;
   /**
    * Full-text search over the open project. When provided, a search box is
    * shown and a query replaces the file tree with ranked results. Absent
@@ -142,7 +134,6 @@ export default function FileSidebar({
   onRenameFile,
   onOpenInNewTab,
   onCopyLink,
-  currentFormat,
   searchFiles,
   fileContents,
 }: FileSidebarProps) {
@@ -181,31 +172,6 @@ export default function FileSidebar({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
-
-  // "Open printable version" (issue #315). The React preview formats
-  // can't be printed in place (sandboxed iframe → clipped single page).
-  // Instead we render a standalone, self-contained document and open it
-  // in a new tab. Shown only for formats that yield a printable document.
-  const [isPreparingPrintable, setIsPreparingPrintable] = useState(false);
-  const [printableError, setPrintableError] = useState<string | null>(null);
-  const canOpenPrintable =
-    !!currentFile &&
-    (currentFormat === 'q2-preview' ||
-      currentFormat === 'q2-slides' ||
-      currentFormat === 'revealjs');
-  const handleOpenPrintable = useCallback(() => {
-    const path = currentFile?.path;
-    if (!path) return;
-    setPrintableError(null);
-    setIsPreparingPrintable(true);
-    openPrintableDocument(path, currentFormat ?? null)
-      .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error('[printable] failed to open printable version:', err);
-        setPrintableError(message);
-      })
-      .finally(() => setIsPreparingPrintable(false));
-  }, [currentFile?.path, currentFormat]);
 
   // Build file tree from flat file list
   const fileTree = useMemo(() => buildFileTree(files, folders), [files, folders]);
@@ -905,31 +871,7 @@ export default function FileSidebar({
             <UploadIcon />
           </button>
         </Tooltip>
-        {canOpenPrintable && (
-          <Tooltip content={fileSidebar.printableTooltip}>
-            <button
-              className="qh-btn small outline print-file-btn"
-              onClick={handleOpenPrintable}
-              disabled={isPreparingPrintable}
-              aria-label={fileSidebar.printableLabel}
-            >
-              {isPreparingPrintable ? '…' : <PrintIcon />}
-            </button>
-          </Tooltip>
-        )}
       </div>
-      {printableError && (
-        <div className="sidebar-printable-error" role="alert">
-          {printableError}
-          <button
-            className="sidebar-printable-error-dismiss"
-            onClick={() => setPrintableError(null)}
-            aria-label={common.dismiss}
-          >
-            ✕
-          </button>
-        </div>
-      )}
 
       {searchFiles && (
         <div className="sidebar-search">

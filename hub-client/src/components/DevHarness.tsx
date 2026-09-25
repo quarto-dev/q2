@@ -190,7 +190,6 @@ function StatefulSidebarSections({ files = FAKE_FILES }: { files?: FileEntry[] }
               onRenameFile={(f, p) => setLastAction(`rename:${f.path}->${p}`)}
               onOpenInNewTab={(f) => setLastAction(`new-tab:${f.path}`)}
               onCopyLink={(f) => setLastAction(`copy:${f.path}`)}
-              currentFormat="q2-preview"
               searchFiles={fakeSearchFiles}
             />
           ) : sectionId === 'outline' ? (

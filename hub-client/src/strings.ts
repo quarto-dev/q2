@@ -47,6 +47,9 @@ export const header = {
   switchProject: 'Switch project',
   shareProject: 'Share this project',
   fullscreenPreview: 'Fullscreen preview',
+  printableTooltip:
+    "Open a printable version in a new tab (use the browser's Print to save as PDF)",
+  printableLabel: 'Open printable version in a new tab',
   toggleSidebar: 'Toggle sidebar',
   sidebarDrawerLabel: 'Sidebar',
   noFileSelected: 'No file selected',
@@ -69,9 +72,6 @@ export const fileSidebar = {
   treeLabel: 'Files',
   newFile: 'New file',
   addAsset: 'Add asset',
-  printableTooltip:
-    "Open a printable version in a new tab (use the browser's Print to save as PDF)",
-  printableLabel: 'Open printable version in a new tab',
   searchPlaceholder: 'Search files…',
   searchLabel: 'Search files',
   clearSearch: 'Clear search',

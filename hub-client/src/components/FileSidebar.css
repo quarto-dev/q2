@@ -28,37 +28,12 @@
    inline-flex centers the SVG glyph. */
 .sidebar-header .new-file-btn,
 .sidebar-header .new-folder-btn,
-.sidebar-header .upload-asset-btn,
-.sidebar-header .print-file-btn {
+.sidebar-header .upload-asset-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   line-height: 1.5;
   transition: all 0.2s;
-}
-
-.sidebar-printable-error {
-  position: relative;
-  margin: 6px 12px;
-  padding: 8px 26px 8px 10px;
-  background: var(--error-bg-subtle);
-  color: var(--error-text);
-  font-size: 12px;
-  line-height: 1.35;
-  border-radius: var(--radius-xs);
-}
-
-.sidebar-printable-error-dismiss {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  background: transparent;
-  border: none;
-  color: var(--error-text);
-  font-size: 12px;
-  cursor: pointer;
-  padding: 2px 4px;
-  line-height: 1;
 }
 
 .file-list {

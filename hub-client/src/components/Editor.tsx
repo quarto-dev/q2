@@ -1271,7 +1271,6 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
                         onRenameFile={handleRenameFile}
                         onOpenInNewTab={handleOpenInNewTab}
                         onCopyLink={handleCopyLink}
-                        currentFormat={currentFormat}
                         searchFiles={searchFiles}
                         fileContents={fileContents}
                       />
@@ -1328,6 +1327,7 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
           <div className="header-wrapper">
             <DocumentTopBar
               currentFilePath={currentFile?.path ?? null}
+              currentFormat={currentFormat}
               onToggleFullscreenPreview={handleToggleFullscreenPreview}
               isFullscreenPreview={isFullscreenPreview}
               sidebarOpen={sidebarDrawer.sidebarVisible}
