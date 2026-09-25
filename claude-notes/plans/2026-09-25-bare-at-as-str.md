@@ -404,6 +404,12 @@ lexes `user@example.com`, `mermaid@11`, `a@` and `a@.` as word text.
       `grammar.js`, then `tree-sitter generate` and `tree-sitter test`
       with an isolated `TREE_SITTER_LIBDIR` (bd-agsgrbfn: the default
       grammar cache is shared across checkouts).
+- [x] #732 landed on main first. Merged main into this branch
+      (`6ef88b664`): only the generated files conflicted and were
+      regenerated from the auto-merged `grammar.js`. tree-sitter test
+      819/819 (isolated lib dir). Full `cargo xtask verify` green: 15015
+      Rust tests plus CRLF parity and all hub/TS suites. claude-notes:
+      771/1445 clean with both changes.
 - [x] Comment on the strand with the results.
 
 ## Decisions (2026-09-25)
