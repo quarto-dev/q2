@@ -476,6 +476,24 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
   const [isEditorDragOver, setIsEditorDragOver] = useState(false);
   const pendingDropPositionRef = useRef<Monaco.IPosition | null>(null);
 
+  // Editor drag-drop/paste listeners are attached to Monaco's DOM node
+  // once, at mount, as these stable wrappers. The wrappers read the
+  // latest handlers from a ref (synced by an effect below), so handler
+  // identity can change with `currentFile`/`files` without the listeners
+  // ever being detached — previously a cleanup effect removed them on the
+  // first such change and nothing re-added them, so only the first drop
+  // after mount worked.
+  const editorDndHandlersRef = useRef<{
+    dragOver: (e: DragEvent) => void;
+    dragLeave: (e: DragEvent) => void;
+    drop: (e: DragEvent) => void;
+    paste: (e: ClipboardEvent) => void;
+  }>({ dragOver: () => {}, dragLeave: () => {}, drop: () => {}, paste: () => {} });
+  const stableEditorDragOver = useCallback((e: DragEvent) => editorDndHandlersRef.current.dragOver(e), []);
+  const stableEditorDragLeave = useCallback((e: DragEvent) => editorDndHandlersRef.current.dragLeave(e), []);
+  const stableEditorDrop = useCallback((e: DragEvent) => editorDndHandlersRef.current.drop(e), []);
+  const stableEditorPaste = useCallback((e: ClipboardEvent) => editorDndHandlersRef.current.paste(e), []);
+
   // Fullscreen preview mode
   const [isFullscreenPreview, setIsFullscreenPreview] = useState(false);
 
@@ -832,14 +850,14 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
     // Attach drag-drop and paste handlers to editor container
     const domNode = editor.getDomNode();
     if (domNode) {
-      domNode.addEventListener('dragover', handleEditorDragOver);
-      domNode.addEventListener('dragleave', handleEditorDragLeave);
-      domNode.addEventListener('drop', handleEditorDrop);
+      domNode.addEventListener('dragover', stableEditorDragOver);
+      domNode.addEventListener('dragleave', stableEditorDragLeave);
+      domNode.addEventListener('drop', stableEditorDrop);
       // Capture phase: the paste event targets Monaco's hidden textarea,
       // and Monaco's own listener (which preventDefaults and re-implements
       // text paste) sits on that textarea — capture on the container runs
       // first, so image payloads can be intercepted (bd-706b0ixu).
-      domNode.addEventListener('paste', handleEditorPaste, true);
+      domNode.addEventListener('paste', stableEditorPaste, true);
     }
 
     // Signal that editor is ready for scroll sync
@@ -978,161 +996,6 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
     // uploads happen inside handleUploadAsset and clear it after insertion.
   }, []);
 
-  // Editor drag-drop handlers for image/file insertion
-  const handleEditorDragOver = useCallback((e: DragEvent) => {
-    // Handle external files OR internal file drags from sidebar
-    const hasFiles = e.dataTransfer?.types.includes('Files');
-    const hasInternalFile = e.dataTransfer?.types.includes('application/x-hub-file');
-
-    if (!hasFiles && !hasInternalFile) return;
-
-    e.preventDefault();
-    e.stopPropagation();
-    setIsEditorDragOver(true);
-  }, []);
-
-  const handleEditorDragLeave = useCallback((e: DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsEditorDragOver(false);
-  }, []);
-
-  const handleEditorDrop = useCallback((e: DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsEditorDragOver(false);
-
-    // Check for internal file drag from sidebar first
-    const internalData = e.dataTransfer?.getData('application/x-hub-file');
-    if (internalData && editorRef.current) {
-      try {
-        const { path, type } = JSON.parse(internalData) as { path: string; type: 'image' | 'qmd' | 'other' };
-
-        // Get editor position at drop point
-        const target = editorRef.current.getTargetAtClientPoint(e.clientX, e.clientY);
-        const position = target?.position ?? editorRef.current.getPosition();
-
-        if (position && (type === 'image' || type === 'qmd')) {
-          // Sidebar paths are project-root relative; the markdown target
-          // must be relative to the current file's directory.
-          const markdown = buildDropMarkdown(
-            type === 'image' ? 'image' : 'link',
-            currentFile?.path ?? null,
-            path
-          );
-
-          // Insert markdown at drop position
-          editorRef.current.executeEdits('file-drop', [{
-            range: {
-              startLineNumber: position.lineNumber,
-              startColumn: position.column,
-              endLineNumber: position.lineNumber,
-              endColumn: position.column,
-            },
-            text: markdown,
-            forceMoveMarkers: true,
-          }]);
-          // Monaco's onChange fires synchronously from executeEdits,
-          // updating both React state and CRDT via the splice path.
-        }
-        return; // Internal drag handled, don't process as external
-      } catch {
-        // Failed to parse internal data, fall through to external handling
-      }
-    }
-
-    // Handle external file drop (from desktop). All editor drops route to
-    // the asset dialog. For image drops we stash the drop position so that
-    // after the upload completes, handleUploadAsset can insert a markdown
-    // image reference at the drop point.
-    const files = Array.from(e.dataTransfer?.files ?? []);
-    if (files.length === 0) return;
-
-    const hasImages = files.some(f => f.type.startsWith('image/'));
-    if (hasImages && editorRef.current) {
-      const target = editorRef.current.getTargetAtClientPoint(e.clientX, e.clientY);
-      pendingDropPositionRef.current = target?.position ?? editorRef.current.getPosition();
-    }
-
-    setAssetInitialFiles(files);
-    // Default the upload next to the document being edited, so the common
-    // case yields a same-directory reference.
-    setAssetDestination(resolveDefaultDestination({ selection: currentFile?.path ?? null }));
-    setShowNewAssetDialog(true);
-  }, [currentFile]);
-
-  // Clipboard image paste (bd-706b0ixu, see
-  // claude-notes/plans/2026-08-27-paste-image-clipboard.md): silent
-  // ingest — content-hash-named file next to the current document, then
-  // a markdown reference at the cursor. Every dep reads through a ref or
-  // a stable callback, so both callbacks below are identity-stable and
-  // the DOM listener can be attached once at editor mount.
-  const pasteImageIngest = useMemo(
-    () =>
-      createPasteImageHandler({
-        getCurrentFilePath,
-        getEditor: () => {
-          const editor = editorRef.current;
-          if (!editor) return null;
-          return {
-            getSelection: () => editor.getSelection(),
-            getTextInRange: (range) =>
-              editor.getModel()?.getValueInRange(range) ?? '',
-            replaceRange: (range, text) => {
-              // Monaco's onChange fires synchronously from executeEdits,
-              // updating both React state and CRDT via the splice path.
-              editor.executeEdits('image-paste', [
-                { range, text, forceMoveMarkers: true },
-              ]);
-            },
-          };
-        },
-        processFile: processFileForUpload,
-        createBinaryFile,
-        maxFileSize: FILE_SIZE_LIMITS.MAX_FILE_SIZE,
-        onError: (message) => console.error(message),
-      }),
-    [getCurrentFilePath]
-  );
-
-  const handleEditorPaste = useCallback(
-    (e: ClipboardEvent) => {
-      const clipboard = e.clipboardData;
-      if (!clipboard) return;
-      const files = Array.from(clipboard.files);
-      if (
-        classifyPastePayload({
-          files: files.map((f) => ({ name: f.name, type: f.type, size: f.size })),
-          text: clipboard.getData('text/plain'),
-        }) !== 'take-over'
-      ) {
-        return; // text and mixed payloads: Monaco's paste handling runs
-      }
-      // Taking over: stop Monaco's own handler (it would insert the
-      // filename rider as stray text) before the async ingest starts.
-      e.preventDefault();
-      e.stopPropagation();
-      void pasteImageIngest(files);
-    },
-    [pasteImageIngest]
-  );
-
-  // Cleanup editor drag-drop/paste listeners on unmount. Note:
-  // intelligence-provider disposal lives in useIntelligenceProviders
-  // (mount-only) — it must NOT be coupled to `handleEditorDrop`, whose
-  // identity changes with `currentFile`.
-  useEffect(() => {
-    return () => {
-      const domNode = editorRef.current?.getDomNode();
-      if (domNode) {
-        domNode.removeEventListener('dragover', handleEditorDragOver);
-        domNode.removeEventListener('dragleave', handleEditorDragLeave);
-        domNode.removeEventListener('drop', handleEditorDrop);
-        domNode.removeEventListener('paste', handleEditorPaste, true);
-      }
-    };
-  }, [handleEditorDragOver, handleEditorDragLeave, handleEditorDrop, handleEditorPaste]);
-
   // Handle creating a new text file
   const handleCreateTextFile = useCallback(async (rawPath: string, initialContent: string) => {
     const path = normalizeProjectPath(rawPath);
@@ -1216,6 +1079,169 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
     [files, handleUploadAsset, enqueuePlace]
   );
 
+
+  // Editor drag-drop handlers for image/file insertion
+  const handleEditorDragOver = useCallback((e: DragEvent) => {
+    // Handle external files OR internal file drags from sidebar
+    const hasFiles = e.dataTransfer?.types.includes('Files');
+    const hasInternalFile = e.dataTransfer?.types.includes('application/x-hub-file');
+
+    if (!hasFiles && !hasInternalFile) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    setIsEditorDragOver(true);
+  }, []);
+
+  const handleEditorDragLeave = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsEditorDragOver(false);
+  }, []);
+
+  const handleEditorDrop = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsEditorDragOver(false);
+
+    // Check for internal file drag from sidebar first
+    const internalData = e.dataTransfer?.getData('application/x-hub-file');
+    if (internalData && editorRef.current) {
+      try {
+        const { path, type } = JSON.parse(internalData) as { path: string; type: 'image' | 'qmd' | 'other' };
+
+        // Get editor position at drop point
+        const target = editorRef.current.getTargetAtClientPoint(e.clientX, e.clientY);
+        const position = target?.position ?? editorRef.current.getPosition();
+
+        if (position && (type === 'image' || type === 'qmd')) {
+          // Sidebar paths are project-root relative; the markdown target
+          // must be relative to the current file's directory.
+          const markdown = buildDropMarkdown(
+            type === 'image' ? 'image' : 'link',
+            currentFile?.path ?? null,
+            path
+          );
+
+          // Insert markdown at drop position
+          editorRef.current.executeEdits('file-drop', [{
+            range: {
+              startLineNumber: position.lineNumber,
+              startColumn: position.column,
+              endLineNumber: position.lineNumber,
+              endColumn: position.column,
+            },
+            text: markdown,
+            forceMoveMarkers: true,
+          }]);
+          // Monaco's onChange fires synchronously from executeEdits,
+          // updating both React state and CRDT via the splice path.
+        }
+        return; // Internal drag handled, don't process as external
+      } catch {
+        // Failed to parse internal data, fall through to external handling
+      }
+    }
+
+    // Handle external file drop (from desktop). All editor drops route to
+    // the asset dialog. For image drops we stash the drop position so that
+    // after the upload completes, handleUploadAsset can insert a markdown
+    // image reference at the drop point.
+    const files = Array.from(e.dataTransfer?.files ?? []);
+    if (files.length === 0) return;
+
+    const hasImages = files.some(f => f.type.startsWith('image/'));
+    if (hasImages && editorRef.current) {
+      const target = editorRef.current.getTargetAtClientPoint(e.clientX, e.clientY);
+      pendingDropPositionRef.current = target?.position ?? editorRef.current.getPosition();
+    }
+
+    // Add next to the document being edited, so the common case yields a
+    // same-directory reference. Same direct-add path as a sidebar drop:
+    // no dialog unless a name is already taken.
+    handleDropFiles(files, resolveDefaultDestination({ selection: currentFile?.path ?? null }));
+  }, [currentFile, handleDropFiles]);
+
+  // Clipboard image paste (bd-706b0ixu, see
+  // claude-notes/plans/2026-08-27-paste-image-clipboard.md): silent
+  // ingest — content-hash-named file next to the current document, then
+  // a markdown reference at the cursor. Every dep reads through a ref or
+  // a stable callback, so both callbacks below are identity-stable and
+  // the DOM listener can be attached once at editor mount.
+  const pasteImageIngest = useMemo(
+    () =>
+      createPasteImageHandler({
+        getCurrentFilePath,
+        getEditor: () => {
+          const editor = editorRef.current;
+          if (!editor) return null;
+          return {
+            getSelection: () => editor.getSelection(),
+            getTextInRange: (range) =>
+              editor.getModel()?.getValueInRange(range) ?? '',
+            replaceRange: (range, text) => {
+              // Monaco's onChange fires synchronously from executeEdits,
+              // updating both React state and CRDT via the splice path.
+              editor.executeEdits('image-paste', [
+                { range, text, forceMoveMarkers: true },
+              ]);
+            },
+          };
+        },
+        processFile: processFileForUpload,
+        createBinaryFile,
+        maxFileSize: FILE_SIZE_LIMITS.MAX_FILE_SIZE,
+        onError: (message) => console.error(message),
+      }),
+    [getCurrentFilePath]
+  );
+
+  const handleEditorPaste = useCallback(
+    (e: ClipboardEvent) => {
+      const clipboard = e.clipboardData;
+      if (!clipboard) return;
+      const files = Array.from(clipboard.files);
+      if (
+        classifyPastePayload({
+          files: files.map((f) => ({ name: f.name, type: f.type, size: f.size })),
+          text: clipboard.getData('text/plain'),
+        }) !== 'take-over'
+      ) {
+        return; // text and mixed payloads: Monaco's paste handling runs
+      }
+      // Taking over: stop Monaco's own handler (it would insert the
+      // filename rider as stray text) before the async ingest starts.
+      e.preventDefault();
+      e.stopPropagation();
+      void pasteImageIngest(files);
+    },
+    [pasteImageIngest]
+  );
+
+  // Keep the stable listener wrappers pointing at the latest handlers.
+  useEffect(() => {
+    editorDndHandlersRef.current = {
+      dragOver: handleEditorDragOver,
+      dragLeave: handleEditorDragLeave,
+      drop: handleEditorDrop,
+      paste: handleEditorPaste,
+    };
+  }, [handleEditorDragOver, handleEditorDragLeave, handleEditorDrop, handleEditorPaste]);
+
+  // Detach the editor drag-drop/paste listeners on unmount only. Note:
+  // intelligence-provider disposal lives in useIntelligenceProviders
+  // (mount-only).
+  useEffect(() => {
+    return () => {
+      const domNode = editorRef.current?.getDomNode();
+      if (domNode) {
+        domNode.removeEventListener('dragover', stableEditorDragOver);
+        domNode.removeEventListener('dragleave', stableEditorDragLeave);
+        domNode.removeEventListener('drop', stableEditorDrop);
+        domNode.removeEventListener('paste', stableEditorPaste, true);
+      }
+    };
+  }, [stableEditorDragOver, stableEditorDragLeave, stableEditorDrop, stableEditorPaste]);
 
   // Handle deleting a file
   const handleDeleteFile = useCallback((file: FileEntry) => {
