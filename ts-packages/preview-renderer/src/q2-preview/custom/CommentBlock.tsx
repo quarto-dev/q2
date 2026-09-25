@@ -1354,13 +1354,11 @@ const CommentWrapper = ({
                             // content widths (expanded rows ≈ 220px) so
                             // it only bites on oversized content.
                             maxWidth: '260px',
-                            // Expanded (thread rows and/or the add-comment
-                            // input): a fixed width. The chrome is an
-                            // absolutely positioned shrink-to-fit box, so
-                            // with only the `width: 100%` textarea inside
-                            // it (the "+ just clicked" state) it would
-                            // otherwise collapse to a sliver.
-                            width: expanded ? '240px' : undefined,
+                            // The bubble stays shrink-to-fit: expanded
+                            // rows are only as wide as their text. The
+                            // add-comment input below sets its own
+                            // min-width so the chrome can't collapse to
+                            // a sliver when the textarea is all it holds.
                             boxSizing: 'border-box',
                             padding: expanded ? '4px 8px' : '2px 6px',
                             overflow: 'hidden',
@@ -1414,6 +1412,7 @@ const CommentWrapper = ({
                                             <span style={{
                                                 flex: 1,
                                                 minWidth: 0,
+                                                maxWidth: '200px',
                                                 overflowWrap: 'break-word',
                                                 lineHeight: 1.4,
                                             }}>
@@ -1478,6 +1477,11 @@ const CommentWrapper = ({
                                             style={{
                                                 display: 'block',
                                                 width: '100%',
+                                                // The chrome is a shrink-to-fit
+                                                // box; with no comment rows the
+                                                // textarea is the only thing
+                                                // giving it a width.
+                                                minWidth: '200px',
                                                 padding: '5px 7px',
                                                 fontFamily: 'inherit',
                                                 fontSize: 'inherit',
