@@ -15,7 +15,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use quarto_error_reporting::DiagnosticMessage;
+use pampa::citeproc_filter::ChapterCitationManifest;
+use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_source_map::FileId;
 use quarto_system_runtime::SystemRuntime;
 
@@ -30,7 +31,8 @@ use crate::pipeline::{
     BookChapterPauseState, RenderOutput, build_html_pipeline_finishing_stages,
     render_qmd_to_ast_partial, run_pipeline_from_ast,
 };
-use crate::project::book::render_item::BookRenderItem;
+use crate::project::book::render_item::{BookRenderItem, BookRenderItemKind};
+use crate::project::book::{aggregate_chapter_citations, build_merged_bibliography};
 use crate::project::index::ProjectIndex;
 use crate::project::orchestrator::{FileFailure, file_failure_from_error};
 use crate::project::{DocumentInfo, ProjectContext};
@@ -59,6 +61,34 @@ struct HeldChapter {
     resources_dir: PathBuf,
     resolver: ResourceResolverContext,
     chapter_seed: Option<ChapterSeed>,
+    /// Book-projects P6: whether this is the designated
+    /// `BookRenderItemKind::References` chapter — the one whose paused AST
+    /// gets the project-wide merged bibliography spliced in before resume.
+    is_references: bool,
+}
+
+/// `Q-23-1`: a book chapter's `filters:` config places the built-in
+/// `citeproc` filter into `.post` (after the `quarto` sentinel), so its
+/// citations resolve after this chapter pauses for project-wide
+/// crossref/bibliography aggregation — its references would otherwise
+/// silently never reach the merged bibliography (book-projects P6, plan
+/// "Decisions" — Bibliography, fifteenth pass).
+fn citeproc_post_ordering_diagnostic(input_path: &std::path::Path) -> DiagnosticMessage {
+    DiagnosticMessageBuilder::error("Citeproc Resolves After Book Merge Point")
+        .with_code("Q-23-1")
+        .problem(format!(
+            "The book chapter `{}` orders the built-in `citeproc` filter into \
+             `.post` (after the `quarto` sentinel in `filters:`), so its citations \
+             resolve after this chapter pauses for project-wide crossref/bibliography \
+             aggregation. Its references will not appear in this book's merged \
+             bibliography.",
+            input_path.display()
+        ))
+        .add_hint(
+            "Move `citeproc` before the `quarto` sentinel in this chapter's (or the \
+             project's) `filters:` list so it resolves in `.pre`.",
+        )
+        .build()
 }
 
 /// Render a book project to multi-file HTML with project-wide crossref
@@ -110,6 +140,7 @@ pub(crate) async fn render_book_multi_file_html(
 
     let mut held: Vec<HeldChapter> = Vec::with_capacity(book_items.len());
     let mut inventories: Vec<ChapterCrossrefInventory> = Vec::with_capacity(book_items.len());
+    let mut citation_manifests: Vec<ChapterCitationManifest> = Vec::with_capacity(book_items.len());
     let mut outputs: Vec<RenderToFileResult> = Vec::new();
     let mut failures: Vec<FileFailure> = Vec::new();
 
@@ -143,6 +174,11 @@ pub(crate) async fn render_book_multi_file_html(
             .unwrap_or_else(|_| input_path.clone());
         let chapter_seed = seeds.get(&seed_key).copied();
         let doc_info = DocumentInfo::from_path(&input_path);
+        // Book-projects P6: only the designated references chapter keeps
+        // its own per-chapter citeproc-generated bibliography div; every
+        // other chapter gets `suppress-bibliography: true` so it does not
+        // also grow its own duplicate, unmerged local bibliography.
+        let is_references = item.kind == BookRenderItemKind::References;
 
         let document_format = std::str::from_utf8(&content)
             .ok()
@@ -243,6 +279,7 @@ pub(crate) async fn render_book_multi_file_html(
         }
         ctx.project_index = Some(index.clone());
         ctx.resource_resolver = Some(resolver.clone());
+        ctx.suppress_book_bibliography = !is_references;
         // bd-sl79jjiq: thread the render's engine-registry override /
         // execution policy onto each chapter's context exactly like the
         // single-document path does.
@@ -263,7 +300,7 @@ pub(crate) async fn render_book_multi_file_html(
             ctx.attribution_provider = Some(Arc::new(crate::attribution::GitBlameProvider::new()));
         }
 
-        let (paused_ast, pause_diagnostics) = match render_qmd_to_ast_partial(
+        let (paused_ast, mut pause_diagnostics) = match render_qmd_to_ast_partial(
             &content,
             &input_path.to_string_lossy(),
             &mut ctx,
@@ -282,6 +319,17 @@ pub(crate) async fn render_book_multi_file_html(
             }
         };
         let state = BookChapterPauseState::extract_from(&mut ctx);
+
+        // Book-projects P6: a chapter whose `filters:` placed `citeproc`
+        // into `.post` never captured a citation manifest — diagnose it by
+        // name rather than silently dropping its references from the
+        // merged bibliography.
+        if state.citeproc_filter_in_post {
+            pause_diagnostics.push(citeproc_post_ordering_diagnostic(&input_path));
+        }
+        if let Some(manifest) = state.citation_manifest.clone() {
+            citation_manifests.push(manifest);
+        }
 
         // Harvest the chapter's crossref inventory at the pause point.
         // Clone, not take: the resume leg's `CrossrefRenderTransform` needs
@@ -308,6 +356,7 @@ pub(crate) async fn render_book_multi_file_html(
             resources_dir: resource_paths.resource_dir,
             resolver,
             chapter_seed,
+            is_references,
         });
         if fail_fast && !failures.is_empty() {
             break;
@@ -317,6 +366,38 @@ pub(crate) async fn render_book_multi_file_html(
     // ── Aggregate: one project-wide registry from every chapter ─────
     let (registry_index, aggregate_diagnostics) = aggregate_chapter_inventories(&inventories);
     let registry = Arc::new(registry_index);
+
+    // ── Bibliography aggregate: one merged, deduplicated bibliography,
+    // spliced into the designated references chapter's paused AST before
+    // it resumes (book-projects P6). No-op when no chapter cited anything,
+    // or when the book declares no `book.references` chapter.
+    if !citation_manifests.is_empty()
+        && let Some(references_chapter) = held.iter_mut().find(|c| c.is_references)
+    {
+        let (cited_order, references) = aggregate_chapter_citations(&citation_manifests);
+        let config = pampa::citeproc_filter::extract_config(&references_chapter.paused.ast);
+        let base_dir = references_chapter
+            .input_path
+            .parent()
+            .map_or_else(|| project.dir.clone(), |p| p.to_path_buf());
+        match build_merged_bibliography(&config, &base_dir, &cited_order, references) {
+            Ok(bib_blocks) => {
+                pampa::citeproc_filter::insert_bibliography(
+                    &mut references_chapter.paused.ast.blocks,
+                    bib_blocks,
+                );
+            }
+            Err(e) => {
+                failures.push(file_failure_from_error(
+                    references_chapter.input_path.clone(),
+                    e,
+                ));
+                if fail_fast {
+                    return Ok((outputs, failures, aggregate_diagnostics));
+                }
+            }
+        }
+    }
 
     // ── Resume leg: every held chapter from Finalization.. ──────────
     for chapter in held {

@@ -281,7 +281,7 @@ pub(crate) async fn render_book_single_file(
     // chapter, so the Option always has a value here.
     let citeproc_base_dir = first_chapter_dir.unwrap_or_else(|| project.dir.clone());
     let ast_context = pampa::pandoc::ASTContext::default();
-    let (mut merged, _ast_context, citeproc_diagnostics) =
+    let (mut merged, _ast_context, citeproc_diagnostics, _citation_manifest) =
         pampa::citeproc_filter::apply_citeproc_filter(
             merged,
             ast_context,

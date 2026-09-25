@@ -47,6 +47,10 @@ pub struct FilterOutput {
     /// (`bd-o8pr` Phase 3). Only populated by Lua filters.
     #[cfg(feature = "lua-filter")]
     pub resources: Vec<PathBuf>,
+    /// Book-projects P6: this chapter's harvested citation manifest,
+    /// populated only by the built-in `Citeproc` filter (`None` for Lua/JSON
+    /// filters and for a `Citeproc` pass that resolved no citations).
+    pub citation_manifest: Option<crate::citeproc_filter::ChapterCitationManifest>,
 }
 
 /// A filter specification parsed from a command-line argument.
@@ -226,7 +230,7 @@ pub async fn apply_filter(
 ) -> Result<FilterOutput, FilterError> {
     match filter {
         FilterSpec::Citeproc => {
-            let (new_pandoc, new_context, diagnostics) =
+            let (new_pandoc, new_context, diagnostics, citation_manifest) =
                 crate::citeproc_filter::apply_citeproc_filter(
                     pandoc,
                     context,
@@ -243,6 +247,7 @@ pub async fn apply_filter(
                 text_includes: Vec::new(),
                 #[cfg(feature = "lua-filter")]
                 resources: Vec::new(),
+                citation_manifest,
             })
         }
 
@@ -264,6 +269,7 @@ pub async fn apply_filter(
                 html_dependencies: lua_output.html_dependencies,
                 text_includes: lua_output.text_includes,
                 resources: lua_output.resources,
+                citation_manifest: None,
             })
         }
 
@@ -287,6 +293,7 @@ pub async fn apply_filter(
                 text_includes: Vec::new(),
                 #[cfg(feature = "lua-filter")]
                 resources: Vec::new(),
+                citation_manifest: None,
             })
         }
 
@@ -326,6 +333,7 @@ pub async fn apply_filters(
     let mut all_text_includes = Vec::new();
     #[cfg(feature = "lua-filter")]
     let mut all_resources = Vec::new();
+    let mut citation_manifest = None;
 
     for filter in filters {
         let output = apply_filter(
@@ -347,6 +355,9 @@ pub async fn apply_filters(
         all_text_includes.extend(output.text_includes);
         #[cfg(feature = "lua-filter")]
         all_resources.extend(output.resources);
+        if output.citation_manifest.is_some() {
+            citation_manifest = output.citation_manifest;
+        }
     }
 
     Ok(FilterOutput {
@@ -359,6 +370,7 @@ pub async fn apply_filters(
         text_includes: all_text_includes,
         #[cfg(feature = "lua-filter")]
         resources: all_resources,
+        citation_manifest,
     })
 }
 

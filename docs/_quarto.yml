@@ -400,6 +400,9 @@ website:
             - errors/math/Q-22-11.qmd
             - errors/math/Q-22-12.qmd
             - errors/math/Q-22-13.qmd
+        - section: "citeproc"
+          contents:
+            - errors/citeproc/Q-23-1.qmd
 
 format:
   html:

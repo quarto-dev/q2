@@ -108,6 +108,16 @@ impl PipelineStage for UserFiltersStage {
             crate::project::book::strip_citeproc_from_filters(&mut doc.ast.meta);
         }
 
+        // book-projects P6: a non-references book chapter gets
+        // `suppress-bibliography: true` written into its metadata before
+        // filter resolution reads it, so its own per-chapter citeproc pass
+        // renders in-text citations normally but appends no local
+        // bibliography div — the project-wide merge owns the one true
+        // bibliography, installed later into the references chapter only.
+        if matches!(self.position, FilterPosition::Pre) && ctx.suppress_book_bibliography {
+            crate::project::book::set_suppress_bibliography(&mut doc.ast.meta);
+        }
+
         // Resolve filters from merged metadata
         let document_dir = ctx
             .document
@@ -121,6 +131,17 @@ impl PipelineStage for UserFiltersStage {
             &ctx.extensions,
             ctx.runtime.as_ref(),
         );
+
+        // book-projects P6: record whether filter resolution placed
+        // `"citeproc"` into `.post` — computed once, from the `Pre` pass
+        // only (both passes resolve independently from the same
+        // metadata, so `Pre` seeing it first is enough; `Post`'s own
+        // resolution below would just repeat the same answer).
+        if matches!(self.position, FilterPosition::Pre) {
+            ctx.citeproc_filter_in_post = resolved
+                .post
+                .contains(&pampa::unified_filter::FilterSpec::Citeproc);
+        }
 
         // book-projects P2b: on a Pandoc-hybrid target, `Position::Post`
         // filters are forwarded into `main.lua`'s own entry-point
@@ -233,6 +254,13 @@ impl PipelineStage for UserFiltersStage {
         doc.ast = output.pandoc;
         doc.ast_context = output.context;
         ctx.diagnostics.extend(output.diagnostics);
+        // book-projects P6: harvest this chapter's citation manifest
+        // alongside the citeproc filter's own unchanged pass. `None` when
+        // no filter in this position's list was `Citeproc`, or `Citeproc`
+        // ran but resolved no citations.
+        if output.citation_manifest.is_some() {
+            ctx.citation_manifest = output.citation_manifest;
+        }
 
         // Store HTML dependencies as artifacts and push text includes
         let mut dep_diagnostics = Vec::new();
@@ -852,6 +880,32 @@ mod tests {
         assert!(
             result.is_err(),
             "without defer_citeproc, citeproc must run and fail on the missing bibliography"
+        );
+    }
+
+    /// book-projects P6 regression: a non-book (or ordinary) render leaves
+    /// `ctx.suppress_book_bibliography` at its default (`false`), and
+    /// `UserFiltersStage::pre()` must not inject `suppress-bibliography`
+    /// into the document's metadata in that case — only the book
+    /// orchestrator setting the flag should trigger the injection from
+    /// `crate::project::book::set_suppress_bibliography`.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn pre_stage_does_not_inject_suppress_bibliography_when_flag_unset() {
+        let mut ctx = make_ctx();
+        assert!(!ctx.suppress_book_bibliography);
+        let stage = UserFiltersStage::pre();
+        let meta = cv_map(vec![]);
+        let doc = make_doc_ast(meta);
+        let input = PipelineData::DocumentAst(doc);
+        let output = stage
+            .run(input, &mut ctx)
+            .await
+            .expect("no filters configured, so the stage must not error");
+        let out_doc = output.into_document_ast().unwrap();
+        assert!(
+            out_doc.ast.meta.get("suppress-bibliography").is_none(),
+            "suppress-bibliography must not be injected when \
+             ctx.suppress_book_bibliography is false"
         );
     }
 }

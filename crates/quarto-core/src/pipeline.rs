@@ -1074,6 +1074,10 @@ fn stage_context_from_render_context(
     // `Arc`, cloned) — `CrossChapterCrossrefResolveTransform` reads it;
     // nothing mutates it.
     stage_ctx.cross_chapter_crossref_registry = ctx.cross_chapter_crossref_registry.clone();
+    // book-projects P6: suppress-bibliography is an input-only render
+    // option (like `defer_citeproc`) — consumed by `UserFiltersStage::pre()`,
+    // never mutated by stages — bridged one-way and not restored.
+    stage_ctx.suppress_book_bibliography = ctx.suppress_book_bibliography;
     // book-projects P5: a *finishing* pipeline (driven by
     // `run_pipeline_from_ast`) must see the state a *pausing* caller
     // holds on the outer ctx across the pause — none of it is re-derived
@@ -1143,6 +1147,12 @@ fn restore_render_context(ctx: &mut RenderContext<'_>, stage_ctx: &mut StageCont
     ctx.includes = std::mem::take(&mut stage_ctx.includes);
     ctx.code_block_decorations = std::mem::take(&mut stage_ctx.code_block_decorations);
     ctx.attribution_data = stage_ctx.attribution_data.take();
+    // book-projects P6: hand back the citation manifest `UserFiltersStage`
+    // populated during this pipeline run, and the `.post`-ordering flag it
+    // set alongside it — both output-only, like `crossref_index`/
+    // `execution_skipped` above.
+    ctx.citation_manifest = stage_ctx.citation_manifest.take();
+    ctx.citeproc_filter_in_post = stage_ctx.citeproc_filter_in_post;
 }
 
 /// Apply the diagnostic-suppression policy and map a pipeline result into
@@ -1448,6 +1458,16 @@ pub struct BookChapterPauseState {
     pub execution_skipped: bool,
     pub format_options: crate::render::FormatOptions,
     pub document_profile: Option<crate::document_profile::DocumentProfile>,
+    /// Book-projects P6: this chapter's harvested citation manifest,
+    /// populated by `UserFiltersStage` during the pause leg — see
+    /// `RenderContext::citation_manifest`.
+    pub citation_manifest: Option<pampa::citeproc_filter::ChapterCitationManifest>,
+    /// Book-projects P6: whether filter resolution placed `"citeproc"`
+    /// into `.post` for this chapter's pause-leg render. Output-only,
+    /// like `execution_skipped` — the orchestrator reads it after
+    /// `extract_from` to diagnose a chapter whose citations never reached
+    /// `citation_manifest`.
+    pub citeproc_filter_in_post: bool,
 }
 
 impl BookChapterPauseState {
@@ -1477,6 +1497,8 @@ impl BookChapterPauseState {
             execution_skipped: false,
             format_options: crate::render::FormatOptions::default(),
             document_profile: None,
+            citation_manifest: None,
+            citeproc_filter_in_post: false,
         }
     }
 
@@ -1513,6 +1535,7 @@ impl BookChapterPauseState {
         ctx.attribution_data = self.attribution_data.clone();
         ctx.format_options = self.format_options.clone();
         ctx.document_profile = self.document_profile.take();
+        ctx.citation_manifest = self.citation_manifest.take();
         ctx
     }
 
@@ -1541,6 +1564,8 @@ impl BookChapterPauseState {
             execution_skipped: ctx.execution_skipped,
             format_options: ctx.format_options.clone(),
             document_profile: ctx.document_profile.take(),
+            citation_manifest: ctx.citation_manifest.take(),
+            citeproc_filter_in_post: ctx.citeproc_filter_in_post,
         }
     }
 }

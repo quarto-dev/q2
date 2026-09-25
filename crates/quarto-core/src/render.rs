@@ -473,6 +473,36 @@ pub struct RenderContext<'a> {
     /// pipeline is safe. See
     /// `claude-notes/plans/2026-09-21-book-projects-P5-crossref-registry.md`.
     pub cross_chapter_crossref_registry: Option<std::sync::Arc<ProjectCrossrefIndex>>,
+
+    /// This chapter's harvested citation manifest (book-projects P6),
+    /// populated by `UserFiltersStage::pre()`/`post()` alongside a
+    /// chapter's own unchanged per-document citeproc pass. `None` when
+    /// citeproc did not run or resolved no citations. Bridged to/from
+    /// `StageContext` by [`crate::pipeline::stage_context_from_render_context`]/
+    /// [`crate::pipeline::restore_render_context`], the same shape as
+    /// `crossref_index`.
+    pub citation_manifest: Option<pampa::citeproc_filter::ChapterCitationManifest>,
+
+    /// Book-projects P6 input: when `true`, `UserFiltersStage::pre()` sets
+    /// `suppress-bibliography: true` in this chapter's metadata before
+    /// filter resolution reads it, so this chapter's own per-chapter
+    /// citeproc pass renders in-text citations but appends no local
+    /// bibliography div (`insert_bibliography`'s auto-append path would
+    /// otherwise leave every non-references chapter with its own
+    /// duplicate, unmerged bibliography). Input-only, like
+    /// `defer_citeproc`/`chapter_seed` — the book orchestrator sets it
+    /// fresh per chapter before each pause-leg render; nothing restores it.
+    pub suppress_book_bibliography: bool,
+
+    /// Book-projects P6 output: set by `UserFiltersStage::pre()` when
+    /// filter resolution placed `"citeproc"` into the `.post` group
+    /// (after the `quarto` sentinel) rather than `.pre` — meaning this
+    /// chapter's citations resolve *after* `AstTransformsStage`/the pause
+    /// point, so `citation_manifest` above was never captured for it. The
+    /// book orchestrator turns this into a diagnostic naming the chapter
+    /// rather than silently dropping its references from the merged
+    /// bibliography. Output-only, like `execution_skipped`.
+    pub citeproc_filter_in_post: bool,
 }
 
 /// Seed for a book chapter's section numbering: render this document as if
@@ -546,6 +576,9 @@ impl<'a> RenderContext<'a> {
             chapter_seed: None,
             defer_citeproc: false,
             cross_chapter_crossref_registry: None,
+            citation_manifest: None,
+            suppress_book_bibliography: false,
+            citeproc_filter_in_post: false,
         }
     }
 

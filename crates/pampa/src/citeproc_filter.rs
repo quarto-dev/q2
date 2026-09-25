@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use quarto_citeproc::{Citation, CitationItem, Processor, Reference};
 use quarto_csl::parse_csl;
 use quarto_error_reporting::DiagnosticMessage;
+use serde::{Deserialize, Serialize};
 
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::{Block, Div, Inline, Pandoc};
@@ -59,6 +60,22 @@ impl Default for CiteprocConfig {
     }
 }
 
+/// One chapter's harvested citation manifest (book-projects P6): the
+/// reference ids this chapter actually cited (deduplicated, in first-cited
+/// order) plus the full [`Reference`] objects for those ids, so a later
+/// project-wide merge can build one bibliography without re-loading any
+/// chapter's bibliography files. Captured alongside a chapter's own
+/// unchanged per-chapter citeproc pass — see
+/// `claude-notes/plans/2026-09-21-book-projects-P6-bibliography.md`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ChapterCitationManifest {
+    /// Cited reference ids, deduplicated, in first-cited-in-this-chapter
+    /// order.
+    pub cited_ids: Vec<String>,
+    /// The full `Reference` for each id in `cited_ids` (same order).
+    pub references: Vec<Reference>,
+}
+
 /// Apply the citeproc filter to a document.
 ///
 /// This is the main entry point for citation processing. It:
@@ -73,18 +90,33 @@ impl Default for CiteprocConfig {
 /// render, the merged document's anchor directory for a book. Resolving
 /// against the process CWD here (the historical behavior) broke any render
 /// whose CWD wasn't the declaration site.
+///
+/// The fourth element of the return tuple is book-projects P6's per-chapter
+/// [`ChapterCitationManifest`] — `Some` whenever this chapter actually cited
+/// at least one reference (regardless of `suppress_bibliography`, which only
+/// gates the bibliography *block*, not citation resolution), `None` when
+/// citeproc did not run at all (no bibliography/references configured) or
+/// ran but resolved no citations. Non-book callers may ignore it.
 pub fn apply_citeproc_filter(
     pandoc: Pandoc,
     context: ASTContext,
     _target_format: &str,
     base_dir: &Path,
-) -> Result<(Pandoc, ASTContext, Vec<DiagnosticMessage>), CiteprocFilterError> {
+) -> Result<
+    (
+        Pandoc,
+        ASTContext,
+        Vec<DiagnosticMessage>,
+        Option<ChapterCitationManifest>,
+    ),
+    CiteprocFilterError,
+> {
     // Extract configuration from document metadata
     let config = extract_config(&pandoc);
 
     // If no bibliography or references are specified, pass through unchanged
     if config.bibliography.is_empty() && config.references.is_empty() {
-        return Ok((pandoc, context, vec![]));
+        return Ok((pandoc, context, vec![], None));
     }
 
     // Load CSL style
@@ -106,6 +138,30 @@ pub fn apply_citeproc_filter(
 
     // Collect all citations from the document
     let citations = collect_citations(&pandoc);
+
+    // book-projects P6: harvest the cited ids (deduplicated, first-cited
+    // order) and their full References before disambiguation mutates the
+    // processor further — `get_reference` only needs what `add_references`
+    // already installed above.
+    let mut cited_ids: Vec<String> = Vec::new();
+    for citation in &citations {
+        for item in &citation.items {
+            if !cited_ids.contains(&item.id) {
+                cited_ids.push(item.id.clone());
+            }
+        }
+    }
+    let citation_manifest = if cited_ids.is_empty() {
+        None
+    } else {
+        Some(ChapterCitationManifest {
+            references: cited_ids
+                .iter()
+                .filter_map(|id| processor.get_reference(id).cloned())
+                .collect(),
+            cited_ids,
+        })
+    };
 
     // Process citations with disambiguation
     let rendered_citations = processor
@@ -133,7 +189,7 @@ pub fn apply_citeproc_filter(
         }
     }
 
-    Ok((pandoc, context, vec![]))
+    Ok((pandoc, context, vec![], citation_manifest))
 }
 
 /// Resolve a declared `bibliography`/`csl` path against `base_dir`
@@ -150,7 +206,11 @@ fn resolve_against_base(base_dir: &Path, declared: &str) -> PathBuf {
 }
 
 /// Load the CSL style from file or use the default.
-fn load_csl_style(
+///
+/// Exposed (book-projects P6) so the project-wide bibliography merge can
+/// load the same style a chapter's own citeproc pass used, without
+/// duplicating the file-resolution logic.
+pub fn load_csl_style(
     config: &CiteprocConfig,
     base_dir: &Path,
 ) -> Result<quarto_csl::Style, CiteprocFilterError> {
@@ -572,7 +632,11 @@ fn transform_inlines(
 }
 
 /// Generate bibliography blocks.
-fn generate_bibliography(processor: &mut Processor) -> Result<Vec<Block>, CiteprocFilterError> {
+///
+/// Exposed (book-projects P6) so the project-wide merge can format the
+/// merged bibliography through the same `Div`-wrapping shape a chapter's
+/// own per-document pass uses.
+pub fn generate_bibliography(processor: &mut Processor) -> Result<Vec<Block>, CiteprocFilterError> {
     let entries = processor
         .generate_bibliography_to_outputs()
         .map_err(|e| CiteprocFilterError::ProcessingError(e.to_string()))?;
@@ -607,28 +671,47 @@ fn generate_bibliography(processor: &mut Processor) -> Result<Vec<Block>, Citepr
     Ok(bib_blocks)
 }
 
+/// Recursively find a Div with id="refs", searching into nested Div content.
+fn find_refs_div(blocks: &mut [Block]) -> Option<&mut Div> {
+    for block in blocks.iter_mut() {
+        if let Block::Div(d) = block {
+            if d.attr.0 == "refs" {
+                return Some(d);
+            }
+            if let Some(found) = find_refs_div(&mut d.content) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
 /// Insert bibliography into the document.
 ///
 /// If a Div with id="refs" exists, replace its contents.
 /// Otherwise, append a new Div at the end of the document.
-fn insert_bibliography(blocks: &mut Vec<Block>, bib_blocks: Vec<Block>) {
-    // Look for existing #refs div
-    // Attr is a tuple: (id, classes, attributes)
-    for block in blocks.iter_mut() {
-        if let Block::Div(d) = block
-            && d.attr.0 == "refs"
-        {
-            // Replace contents of existing #refs div
-            d.content = bib_blocks;
-            // Add required classes if not present
-            if !d.attr.1.contains(&"references".to_string()) {
-                d.attr.1.push("references".to_string());
-            }
-            if !d.attr.1.contains(&"csl-bib-body".to_string()) {
-                d.attr.1.push("csl-bib-body".to_string());
-            }
-            return;
+///
+/// Exposed (book-projects P6) so the book orchestrator can replace a
+/// designated references chapter's own (unmerged) bibliography div with
+/// the project-wide merged one, using the identical find-or-append shape.
+pub fn insert_bibliography(blocks: &mut Vec<Block>, bib_blocks: Vec<Block>) {
+    // Look for an existing #refs div, searching recursively into nested
+    // Divs. A chapter's own citeproc pass runs before AstTransformsStage,
+    // so its #refs div is still top-level; but book-projects P6 splices
+    // into a paused AST captured after SectionizeTransform has already
+    // wrapped headings + content into nested section Divs, so the #refs
+    // div may be nested one (or more) levels deep by then.
+    if let Some(d) = find_refs_div(blocks) {
+        // Replace contents of existing #refs div
+        d.content = bib_blocks;
+        // Add required classes if not present
+        if !d.attr.1.contains(&"references".to_string()) {
+            d.attr.1.push("references".to_string());
         }
+        if !d.attr.1.contains(&"csl-bib-body".to_string()) {
+            d.attr.1.push("csl-bib-body".to_string());
+        }
+        return;
     }
 
     // No #refs div found, create one at the end
@@ -646,7 +729,11 @@ fn insert_bibliography(blocks: &mut Vec<Block>, bib_blocks: Vec<Block>) {
 }
 
 /// Extract citeproc configuration from document metadata.
-fn extract_config(pandoc: &Pandoc) -> CiteprocConfig {
+///
+/// Exposed (book-projects P6) so the project-wide bibliography merge can
+/// read the references chapter's own `csl`/`bibliography` declarations
+/// when building the merged `Processor`.
+pub fn extract_config(pandoc: &Pandoc) -> CiteprocConfig {
     let meta = &pandoc.meta;
     let mut config = CiteprocConfig::default();
 
@@ -3061,7 +3148,7 @@ mod tests {
 
         let result = apply_citeproc_filter(pandoc.clone(), context, "html", Path::new("."));
         assert!(result.is_ok());
-        let (result_pandoc, _, _) = result.unwrap();
+        let (result_pandoc, _, _, _manifest) = result.unwrap();
         // Should pass through unchanged since no bibliography
         assert_eq!(result_pandoc.blocks.len(), 1);
     }
@@ -3122,7 +3209,7 @@ mod tests {
 
         let result = apply_citeproc_filter(pandoc, context, "html", Path::new("."));
         assert!(result.is_ok());
-        let (result_pandoc, _, _) = result.unwrap();
+        let (result_pandoc, _, _, _manifest) = result.unwrap();
 
         // Should have bibliography at the end (refs div)
         assert!(!result_pandoc.blocks.is_empty());

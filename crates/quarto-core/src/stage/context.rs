@@ -329,6 +329,28 @@ pub struct StageContext {
     /// default (citeproc runs when `"citeproc"` appears in
     /// `meta["filters"]`).
     pub defer_citeproc: bool,
+
+    /// This chapter's harvested citation manifest (book-projects P6),
+    /// set by [`crate::stage::stages::UserFiltersStage`] from the
+    /// citeproc filter's output alongside its existing, unchanged
+    /// per-chapter citeproc pass. `None` when citeproc did not run or
+    /// resolved no citations. Bridged to/from
+    /// [`crate::render::RenderContext::citation_manifest`] by
+    /// [`crate::pipeline::stage_context_from_render_context`]/
+    /// [`crate::pipeline::restore_render_context`].
+    pub citation_manifest: Option<pampa::citeproc_filter::ChapterCitationManifest>,
+
+    /// Book-projects P6 input, bridged one-way from
+    /// [`crate::render::RenderContext::suppress_book_bibliography`] — see
+    /// that field for semantics. `false` by default.
+    pub suppress_book_bibliography: bool,
+
+    /// Book-projects P6 output, set by
+    /// [`crate::stage::stages::UserFiltersStage::pre`] when filter
+    /// resolution placed `"citeproc"` into the `.post` group. Bridged
+    /// one-way to [`crate::render::RenderContext::citeproc_filter_in_post`]
+    /// by [`crate::pipeline::restore_render_context`].
+    pub citeproc_filter_in_post: bool,
 }
 
 impl StageContext {
@@ -417,6 +439,9 @@ impl StageContext {
             defer_citeproc: false,
             chapter_seed: None,
             cross_chapter_crossref_registry: None,
+            citation_manifest: None,
+            suppress_book_bibliography: false,
+            citeproc_filter_in_post: false,
         })
     }
 

@@ -6,6 +6,7 @@
  * `src/project/types/book/`.
  */
 
+pub mod bibliography;
 pub mod citeproc;
 pub mod config;
 pub mod links;
@@ -22,7 +23,8 @@ pub mod render_item;
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod single_file_render;
 
-pub use citeproc::strip_citeproc_from_filters;
+pub use bibliography::{aggregate_chapter_citations, build_merged_bibliography};
+pub use citeproc::{set_suppress_bibliography, strip_citeproc_from_filters};
 pub use links::resolve_cross_chapter_links;
 pub use merge::merge_book_chapters;
 pub use project_type::{BookProjectType, is_supported_format};

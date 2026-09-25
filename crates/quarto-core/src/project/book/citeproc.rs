@@ -33,6 +33,7 @@
 
 use quarto_pandoc_types::ConfigValue;
 use quarto_pandoc_types::config_value::ConfigValueKind;
+use quarto_source_map::{By, SourceInfo};
 
 /// Remove every `"citeproc"` entry from `meta["filters"]` (whatever
 /// its position relative to the `quarto` sentinel — users can order
@@ -63,6 +64,24 @@ pub fn strip_citeproc_from_filters(meta: &mut ConfigValue) -> bool {
     stripped
 }
 
+/// Set `suppress-bibliography: true` in this chapter's metadata
+/// (book-projects P6, plan "Decisions" — Bibliography). Invoked by
+/// `UserFiltersStage::pre()` whenever the render context's
+/// `suppress_book_bibliography` flag is set — the multi-file-HTML book
+/// orchestrator sets that flag on every chapter except the designated
+/// `BookRenderItemKind::References` one, so `apply_citeproc_filter`'s
+/// `insert_bibliography` auto-append path never gives an ordinary chapter
+/// its own duplicate, unmerged local bibliography. Overwrites any existing
+/// `suppress-bibliography` value — a book chapter has no legitimate reason
+/// to set this key itself.
+pub fn set_suppress_bibliography(meta: &mut ConfigValue) {
+    let source_info = SourceInfo::generated(By::programmatic_config());
+    meta.insert_path(
+        &["suppress-bibliography"],
+        ConfigValue::new_bool(true, source_info),
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -79,6 +98,24 @@ mod tests {
 
     fn arr(items: Vec<ConfigValue>) -> ConfigValue {
         ConfigValue::new_array(items, si())
+    }
+
+    fn cv_bool(b: bool) -> ConfigValue {
+        ConfigValue::new_bool(b, si())
+    }
+
+    fn cv_map(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
+        ConfigValue::new_map(
+            entries
+                .into_iter()
+                .map(|(k, v)| ConfigMapEntry {
+                    key: k.to_string(),
+                    key_source: si(),
+                    value: v,
+                })
+                .collect(),
+            si(),
+        )
     }
 
     fn meta_with_filters(filters: ConfigValue) -> ConfigValue {
@@ -138,5 +175,36 @@ mod tests {
         assert_eq!(filter_strings(&meta), Vec::<String>::new());
         // The key stays (as an empty array) — resolves to no filters.
         assert!(meta.get("filters").is_some());
+    }
+
+    #[test]
+    fn suppress_bibliography_sets_key_true_on_empty_meta() {
+        let mut meta = ConfigValue::new_map(Vec::<ConfigMapEntry>::new(), si());
+        set_suppress_bibliography(&mut meta);
+        assert_eq!(
+            meta.get("suppress-bibliography").and_then(|v| v.as_bool()),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn suppress_bibliography_overwrites_existing_false_value() {
+        let mut meta = cv_map(vec![("suppress-bibliography", cv_bool(false))]);
+        set_suppress_bibliography(&mut meta);
+        assert_eq!(
+            meta.get("suppress-bibliography").and_then(|v| v.as_bool()),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn suppress_bibliography_leaves_other_keys_untouched() {
+        let mut meta = meta_with_filters(arr(vec![s("citeproc")]));
+        set_suppress_bibliography(&mut meta);
+        assert_eq!(filter_strings(&meta), vec!["citeproc".to_string()]);
+        assert_eq!(
+            meta.get("suppress-bibliography").and_then(|v| v.as_bool()),
+            Some(true)
+        );
     }
 }
