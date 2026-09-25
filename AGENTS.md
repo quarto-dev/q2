@@ -58,14 +58,7 @@ braid stores all issues for the project in a **skein** (a single
 [automerge](https://automerge.org) CRDT document); a single issue is a
 **strand**. The skein — synced through a sync server — is the **source of
 truth**. There is no git involvement and no `.beads/`-style JSONL to commit:
-edits converge through the CRDT, not through merge tooling. (We migrated off
-beads_rust on 2026-06-08; see `claude-notes/plans/2026-06-08-braid-migration.md`.)
-
-**`braid` is non-invasive and never executes git commands.** Unlike the old
-`br sync --flush-only; git add .beads/` dance, there is **nothing to commit**
-after issue work — the skein syncs itself. (A `.braid/snapshot.jsonl` backup
-*is* committed periodically, but it is **backup-only and one-directional** —
-see the snapshot policy below. Never `braid import` it back.)
+edits converge through the CRDT, not through merge tooling.
 
 For the authoritative, version-matched command guide, run `braid agents-info`
 (or invoke the `/braid` skill). The quick reference below is a convenience
@@ -89,20 +82,6 @@ As you work through a plan:
 2. **Check off items** by changing `- [ ]` to `- [x]`
 3. **Keep the plan file current** - it serves as both a roadmap and progress tracker
 4. **Add new items** if you discover additional work during implementation
-
-### Excerpt from a simple Plan File
-
-```markdown
-...
-
-## Work Items
-
-- [x] Review current runtime service implementations
-- [x] Identify common patterns
-- [ ] Update StandalonePlatform to use shared base
-- [ ] Update tests
-- [ ] Update documentation
-```
 
 ### When to Use Plan Files
 
@@ -146,15 +125,6 @@ braid show <id> --json
 # Backup snapshot (one-directional — see snapshot policy; NEVER import it back)
 braid export > .braid/snapshot.jsonl
 ```
-
-Notes on the move from beads:
-- **No explicit `--id`.** braid assigns collision-free ids; with a CRDT,
-  parallel workers never need to pre-agree on ids. (The migration *preserved*
-  every existing `bd-XXXX` id via `braid import`, so source references stay
-  valid.)
-- **No `br create -f <file>` bulk create.** Use `braid import <jsonl>` for bulk.
-- **No `br sync --flush-only` / `git add .beads/`.** The skein is the source of
-  truth; there is nothing to commit after issue work.
 
 ### Workflow
 
@@ -202,10 +172,6 @@ strand unready while their target is active. `parent-child` does **not** block
 the child (children stay workable); instead an open child blocks the *parent's*
 close. `related`/`discovered-from` and the rest are informational.
 
-> Note: this differs subtly from beads, where `parent-child` could make a child
-> read as blocked. In braid the child is always workable and the parent refuses
-> to close while children are open — the intended epic semantics.
-
 ### Snapshot backup policy (READ THIS)
 
 The skein (automerge CRDT) is the **single source of truth**. We additionally
@@ -222,9 +188,6 @@ greppable in PRs, diffable in git history, and recoverable. This snapshot is
   branch may show strand state created on another — "cross-branch
   contamination" is expected and fine, because the snapshot is not the truth.)
 - The snapshot lives on whatever work branch you're on; it is not special.
-
-The only time JSONL is ever imported is the **one-time migration** (beads'
-`.beads/issues.jsonl` → braid), which is already done.
 
 ## Where information lives (memory vs. repo)
 
@@ -289,7 +252,7 @@ When fixing ANY bug:
 ### `crates/` - all Rust crates in the workspace
 
 **Binaries:**
-- `quarto`: main entry point for the `quarto` command line binary (includes `quarto hub` subcommand)
+- `quarto`: main entry point for the `q2` command line binary (includes `quarto hub` subcommand)
 - `hub`: collaborative editing server for Quarto projects (also available as `quarto hub`)
 - `pampa`: parse qmd text and produce Pandoc AST and other formats
 - `qmd-syntax-helper`: help users convert qmd files to the new syntax
@@ -463,12 +426,6 @@ Tests passing is **necessary but not sufficient** to declare a feature complete.
 
 If you cannot test a feature end-to-end (e.g. no access to a browser for a hub-client change), **say so explicitly** rather than claiming success based on unit tests alone. "Tests pass, I did not verify the real render path" is a valid and honest status update.
 
-**Why this matters:** tests verify the contract the test author had in mind. Real invocations verify the contract the user is relying on. These are not the same thing.
-
-Past incidents where they diverged:
-- **2026-04-20**: `CodeHighlightStage` never ran under `quarto render` because the CLI path used a different branch of `render_qmd_to_html` than the tests. Every test passed; no rendered document had highlighting. See `claude-notes/plans/2026-04-19-syntax-highlighting-design.md` ("Phase 2 post-mortem") and the process-improvement plan at `claude-notes/plans/2026-04-20-end-to-end-verification-process.md`.
-- **2026-05-20**: `q2 preview` silently served a stale render after Rust changes to `quarto-core`. `cargo build --bin q2` succeeded and the preview *ran*, but the iframe loaded a WASM image built before the changes — the embedded SPA's `wasm-quarto-hub-client_bg.wasm` is only refreshed when the WASM is rebuilt explicitly. See **Verifying Rust changes in `q2 preview`** below.
-
 ## Verifying Rust changes in `q2 preview`
 
 `q2 preview` embeds the SPA bundle at `q2-preview-spa/dist/` into the
@@ -549,7 +506,6 @@ leg whose binary reports a placeholder or a foreign commit. Design:
 ## Build Commands
 
 - WASM build: `npm run build:all` (NOT `cargo build --target wasm32-unknown-unknown`)
-- Always verify WASM changes with the correct build command
 - Fresh clone builds require dist/ directories to exist; run full build before testing
 
 ## Cutting a release
@@ -597,9 +553,7 @@ cargo xtask verify --e2e                # Include slower e2e browser tests
 **Keep `verify` and CI in sync: when you add a gating step to a CI
 workflow, add its `cargo xtask verify` counterpart in the same commit.**
 `verify` is the local mirror of CI, and nothing reconciles the two
-automatically. The CSS lint was wired into `ts-test-suite.yml` twelve days
-before it reached `verify`; in between, PR #667 passed the full local gate
-and failed both CI legs on a `margin-left: 0` (bd-4bu7vwi5). Known
+automatically. Known
 remaining drift is tracked as bd-l7mcijfe (Node-only test suites) and
 bd-ya2nacaa (legs needing Deno / wasm32 / the hub binary). The release
 pipeline (`release-pipeline.yml`, called by `release.yml` and the
