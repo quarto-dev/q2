@@ -3,7 +3,16 @@
 **Date:** 2026-09-25
 **Braid:** bd-angle-bracket-u27e8-parse-error-r6l55zmh (child of epic bd-uk8zgkha)
 **Branch:** `braid/r6l55zmh-angle-bracket-parse-error` (topic branch in the main checkout, based on `main` at `ce01489c4`)
-**Status:** Investigation, pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design settled 2026-09-25; implementing option (b).
+
+## Decisions (2026-09-25, with user)
+
+1. Option (b): replace the enumerated P/S classes with one set-operation
+   class `[[\p{P}\p{S}]&&[^\x00-\x7F]]`. Revisit (a) only if (b) fails.
+2. No non-ASCII punctuation will be reserved as q2 syntax. The policy is that
+   *every* non-ASCII P/S code point is Str.
+3. A curated regression test is enough; no full sweep in CI. The sweep
+   scripts stay under the investigation folder as a manual tool.
 
 ## Triage verdict
 
@@ -176,3 +185,34 @@ with no enumeration and no generator script.
   harmless.
 - **Generated-file churn.** `parser.c` and `grammar.json` will diff heavily.
   Lexer size may shrink with (b), since fewer ranges means fewer states.
+
+## Work log (2026-09-25)
+
+- Phase 0: added `test/corpus/nonascii-punct-as-str.txt` (11 cases) and
+  `crates/pampa/tests/integration/test_unicode_punctuation.rs` (5 tests:
+  strand repros, CJK, a curated per-family list parsed at token start /
+  mid-word / word end, qmd round trip, ASCII markup regression). 9 corpus
+  cases failed before the change, as expected.
+- Phase 1: `grammar.js` now uses one class,
+  `PANDOC_NON_ASCII_PUNCT_SYMBOL = [[\p{P}\p{S}]&&[^\x00-\x7F]]`, plus an
+  ASCII-only `PANDOC_PUNCTUATION = "#%&()/:+=-"`. That replaces
+  `PANDOC_VALID_OTHER_PUNCTUATION`, `PANDOC_VALID_SYMBOLS` (the Sm/Sk/Sc
+  tables plus `\p{So}`) and `\p{Pd}`. `=` came from the old Sm table and had
+  to stay explicitly. `pandoc_str` uses `RustRegex` instead of
+  `new RegExp(..., 'u')`: JS's `u` flag rejects `&&`, and `RustRegex` passes
+  the pattern to tree-sitter without JS validation (already used for
+  `shortcode_name`). Deleted `scripts/unicode-ranges.py`, which is no longer
+  used.
+- Result: tree-sitter corpus 732/732. `parser.c` is 20 KB smaller, with the
+  same state and token counts. `dynamic_sweep.py`: **0 failures** out of
+  149,718 code points (was 196).
+- Round trip is AST-stable, not byte-identical, for `…` and `—`. The qmd
+  writer spells smart typography in ASCII (`...`, `---`, `'`), exactly like
+  Pandoc's markdown writer, and the reader converts it back. That behavior
+  already existed and is intended (`writers/qmd.rs` `escape_markdown`).
+- Environment trap found while verifying: tree-sitter's compiled-grammar
+  cache is shared by every checkout on the machine, so another room's
+  grammar was being tested here. Filed as bd-agsgrbfn. Verified with
+  `TREE_SITTER_LIBDIR=$PWD/target/tree-sitter-lib`.
+- Also seen: a flaky `quarto-hub-mcp` `live:` test timed out once under
+  load. It passed on rerun.
