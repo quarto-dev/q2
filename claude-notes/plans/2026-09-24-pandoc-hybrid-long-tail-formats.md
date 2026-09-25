@@ -1,7 +1,7 @@
 # Pandoc-Hybrid Long-Tail Formats
 
 **Status:** Plan (Phase 0 complete; all Gordon decisions resolved 2026-09-24 — ready for Phase 1)
-**Branch:** `pandoc-hybrid-long-tail` (workspace-7, off `origin/main` @ `790eaf89f`)
+**Branch:** `feature/pandoc-many-formats` (workspace-7, off `origin/main` @ `790eaf89f`)
 **Date:** 2026-09-24
 
 ## Overview
@@ -332,6 +332,12 @@ once per phase boundary.
       rows), then add the variants.
 - [x] Add `FormatIdentifier::is_pandoc_hybrid()`; replace the `render.rs`
       gate's `matches!` clause; update the not-yet-supported error text.
+      **Correction (Phase 6 session):** Phase 1 replaced the predicate
+      but left the text stale — still claiming "Only HTML and revealjs
+      are available" (byte-identical to the branch parent). Fixed in
+      commit `7e86f0c63`: the message now says only "not yet supported"
+      (the refused set is pdf + future additions, so no enumeration that
+      rots), and the gate comment's stale variant list is gone.
 - [x] Re-key `format_pandoc_defaults`, `format_execute_defaults`,
       `insert_active_filters` to `FormatIdentifier`; unify the two
       `format_pandoc_defaults` call sites (extension at `params.rs:172`,
@@ -532,42 +538,125 @@ once per phase boundary.
 
 ### Phase 5 — Tier D JS slide formats (4 variants)
 
-- [ ] **Test spec first:** per-variant test asserting the standalone
-      deck references the format's JS asset (`slides.js`/`slidy.js`/
-      `slideous.js`/dzslides' `reveal.js` shim) and has
-      `class="slide…"` structure; execute-scope test pinning
-      echo/warning false + fig 9.5×6.5; params-blob test asserting
-      `crossref-numbering: external`.
-- [ ] Variants + mappings; `format_execute_defaults` presentation rows;
+- [x] **Test spec first:** per-variant test asserting the standalone
+      deck references the format's JS asset and has `class="slide…"`
+      structure; execute-scope test pinning echo/warning false + fig
+      9.5×6.5; params-blob test asserting `crossref-numbering: external`.
+      Written as 12 red tests (all failing `Unknown format: s5`), then
+      made green: `test_tier_d_*` ×6 in `format.rs` (parse/canonical,
+      ext `html` ×4, writer names, hybrid/not-markdown, invocation args
+      `["--standalone","--wrap","none"]` exact, png defaults row),
+      `test_tier_d_sets_external_crossref_numbering` in `params.rs`,
+      `tier_d_execute_defaults_reach_engine` in
+      `pandoc_execute_defaults.rs` (probe engine observes fig 9.5×6.5 +
+      echo/warning false through the real stage merge),
+      `tier_d_smoke_all_variants` in `pandoc_long_tail_formats.rs`,
+      `e2e_render_slidy` + `e2e_render_s5` in
+      `render_pandoc_formats_e2e.rs`, and
+      `test_parse_format_descriptor_tier_d_bases` in `discover.rs`.
+      **Correction to this checklist's expectations, from measuring
+      pandoc 3.11 standalone output:** s5's assets live under
+      `s5/default/` (`slides.css`/`slides.js`, matching Phase 0), and
+      **dzslides has no external asset at all** — its template inlines
+      the whole shim (the plan's "reveal.js shim" guess was wrong), so
+      the per-format marker is the literal `dzslides` string in the
+      inlined template. slidy → W3C CDN `slidy.js`; slideous →
+      `slideous/slideous.js`. All decks carry `class="slide` structure
+      and the body text.
+- [x] Variants + mappings; `format_execute_defaults` presentation rows;
       `pandoc_invocation_args_for` `--standalone --wrap none`
       (`--default-image-extension png` comes from
       `format_pandoc_defaults`, single sink); `crossref-numbering:
-      external` for all four.
-- [ ] `KNOWN_BASE_FORMATS`: add the Tier D bases.
-- [ ] **Live verification through the real binary** (CLAUDE.md e2e
-      rule): `cargo run --bin q2 -- render <deck.qmd> --to slidy` (and
-      one other), open the output, confirm slide structure + that the
-      deck is self-contained modulo pandoc's CDN/asset refs. Record
-      invocation + snippet here.
-- [ ] Workspace nextest; commit.
+      external` for all four. Landed: `S5`/`Dzslides`/`Slidy`/`Slideous`
+      variants with explicit arms in `as_str`/`TryFrom`/
+      `is_pandoc_hybrid`/`output_extension_for` (all `html`)/
+      `pandoc_writer_name_for` (all explicit — the extension fall-through
+      would send `-t html`, a plain non-deck document); pptx-shaped
+      execute rows (fig 9.5×6.5, echo/warning false); Tier D arm in
+      `insert_crossref_numbering_mode`; png-only row in
+      `format_pandoc_defaults`.
+- [x] `KNOWN_BASE_FORMATS`: added `s5`/`dzslides`/`slidy`/`slideous`
+      (+ descriptor test; `acm-slidy` → base `slidy`).
+- [x] **Live verification through the real binary** (CLAUDE.md e2e
+      rule): `cargo run --bin q2 -- render target/e2e-tierd/deck.qmd
+      --to slidy` and `--to s5` (deck fixture: title + two `#` sections
+      + a knitr `{r}` cell — knitr *is* available in this environment,
+      and executed end-to-end). Output inspected (no browser opened —
+      HTML inspection only):
+      - slidy → `deck.html`, 2 × `class="slide` (`slide titlepage` +
+        `slide section level1`), `<title>TierDLiveDeck</title>`, W3C CDN
+        `w3.org/Talks/Tools/Slidy2/scripts/slidy.js` + `styles/slidy.css`.
+      - s5 → bundled `s5/default/slides.css` ×4 + `s5/default/slides.js`,
+        `class="slide section level1"`.
+      - **execute defaults confirmed live:** the s5 deck's cell shows
+        only `<pre class="code-with-copy"><code>[1] 2</code></pre>` —
+        knitr output with **no source block** — proving the Tier D
+        `echo: false` default reached the engine through the real
+        pipeline.
+- [x] Workspace nextest; commit. (14,798 run / 14,798 passed / 200
+      skipped / 0 failed, measured 2026-09-24 on this branch; delta vs
+      the Phase 4 baseline (14,786 run) = **+12**, all accounted for by
+      this phase's new `#[test]` fns: 6 in format.rs, 1 in params.rs,
+      1 in discover.rs, 1 in pandoc_execute_defaults.rs, 1 in
+      pandoc_long_tail_formats.rs, 2 in the e2e file. Skipped
+      unchanged, no snapshot changes. Commit `ff2de1f3a`.)
 
 ### Phase 6 — docs + wrap-up
 
-- [ ] `docs/` format reference: list the new formats, the Q1-parity
-      degradations section above (FloatRefTarget placeholders, no
-      mermaid fallback, output-divs), per-tier notes (chunkedhtml zip,
-      ansi nature), and the **Tier C filename change for Q1 migrants**
-      (djot/t2t/xml now get pandoc-conventional extensions instead of
-      Q1's blanket `.txt`; gfm/commonmark are newly reachable, with gfm
-      output a documented *superset* of Q1's — bare `-t gfm` per D7
-      adds GH alerts, `tex_math_gfm`, `yaml_metadata_block`,
-      `auto_identifiers` vs Q1's frozen 2022 extension list).
+- [x] `docs/` format reference: `docs/guides/formats/pandoc/index.qmd`
+      ("Other output formats") + sidebar entry in `docs/_quarto.yml`
+      after the typst entry. User-facing framing (no tier jargon):
+      pandoc prerequisite (3.11 floor, `QUARTO_PANDOC`), grouped format
+      tables with extensions, slide-show asset notes (dzslides inline,
+      slidy W3C CDN), chunkedhtml zip structure, ansi terminal-escape
+      note, AST-dump formats, float-placeholder degradation (full
+      numbering only for odt/gfm/slides; chunkedhtml called out as
+      placeholder despite HTML), callout/theorem chrome dropped except
+      slides, mermaid/OJS unsupported, Q1-migrant notes (Tier C
+      filename changes, gfm superset incl. GH alerts/`$` math/YAML
+      block/auto identifiers, `number-sections` not forwarded to
+      markdown writers). **Verified through the real binary**:
+      `cargo run --bin q2 -- render docs/guides/formats/pandoc/index.qmd`
+      → exit 0; built `docs/_site/guides/formats/pandoc/index.html`
+      inspected (title, all sections, sidebar EPUB→Typst→Other active).
+      Correction found while writing: pandoc's bare `docbook` writer is
+      an alias of `docbook5` (namespaced DocBook 5) — measured via
+      `pandoc -t docbook` vs `-t docbook4`/`-t docbook5` root elements;
+      the docs table states the alias. (Note for future sessions:
+      `cargo xtask stage-doc-examples` resolves `repo_root()` via
+      `--git-common-dir`, which from a worktree is the *main* repo —
+      don't run it from a worktree to satisfy the docs project's
+      `resources:` check; `mkdir -p docs/examples` suffices.)
 - [ ] Optionally file Q1's `"texttile"` typo upstream at quarto-cli.
-- [ ] Reconcile this checklist with reality (per global rule), commit
-      the plan file.
-- [ ] **Full `cargo xtask verify`** green before asking to push — repo
+- [x] Reconcile this checklist with reality (per global rule), commit
+      the plan file. Reconciled 2026-09-24 (Phase 6 session): every
+      code claim re-checked against the shipped tree — CLI gate uses
+      `is_pandoc_hybrid()` (`quarto/src/commands/render.rs:938`),
+      `canonical_name()` feeds `base-format` (`params.rs:159`),
+      `KNOWN_BASE_FORMATS` holds pptx + all tier bases
+      (`discover.rs:249-312`), shortcode unescape postprocessor in
+      `pandoc_write.rs:814`, odt/gfm/docx/typst-negative + s5
+      external-numbering tests in `params.rs`, per-variant extension
+      table matches `output_extension_for`. Corrections made: Phase 5
+      test count ×7 → ×6 in format.rs (12 total across files); Phase 1's
+      "error text updated" claim was false — the stale text slipped
+      through, fixed in `7e86f0c63` (see the Phase 1 correction note).
+      Remaining open item: the optional upstream `texttile` issue
+      (Gordon's call — needs his approval to file on quarto-cli).
+- [x] **Full `cargo xtask verify`** green before asking to push — repo
       policy requires the WASM leg for any change under `quarto-core`,
-      and this plan adds 48 enum variants there.
+      and this plan adds 48 enum variants there. Green on 2026-09-24:
+      all 14 steps, `exit=0`; Rust 14,798 run / 14,798 passed / 200
+      skipped; ts-packages, hub-client build:all (WASM), and hub-client
+      tests all passed. First attempt failed the ts-packages leg with
+      errors in packages this branch never touches (`hephaestus-svg-wasm`
+      TS2307, `FindProgress.peek` TS2339): the repurposed worktree's
+      `node_modules` predated those deps (automerge 3.4.1 installed vs
+      3.5.0 locked). Fixed with `npm install` from the worktree root;
+      main's ts-test-suite CI was green throughout, confirming the
+      source tree was never at fault. npm's concurrent package-lock.json
+      rewrite (platform-optional esbuild pruning) was reverted — it
+      would have broken Linux `npm ci`.
 
 ## Decisions (resolved)
 
