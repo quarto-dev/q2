@@ -225,6 +225,10 @@ impl PipelineStage for AstTransformsStage {
         render_ctx.ref_type_registry = ctx.ref_type_registry.take();
         render_ctx.crossref_index = ctx.crossref_index.take();
         render_ctx.observer = ctx.observer.clone();
+        // book-projects P4: the per-chapter seed rides one-way into the
+        // inner context — the crossref index/render transforms read it;
+        // nothing mutates it, so nothing bridges it back.
+        render_ctx.chapter_seed = ctx.chapter_seed;
         // `project_index` is read-only to transforms, so we clone the
         // `Arc` instead of moving it. Leaving `ctx.project_index`
         // untouched means later stages in the pipeline still see it.

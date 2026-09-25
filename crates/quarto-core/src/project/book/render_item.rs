@@ -9,6 +9,7 @@
  * `book-shared.ts` / `pandoc-partition.ts`.
  */
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use quarto_error_reporting::DiagnosticMessageBuilder;
@@ -16,6 +17,7 @@ use quarto_pandoc_types::config_value::ConfigValue;
 use quarto_system_runtime::SystemRuntime;
 
 use crate::error::{ParseError, QuartoError, Result};
+use crate::render::ChapterSeed;
 
 /// What a single entry in a book's render list is.
 ///
@@ -285,6 +287,38 @@ fn find_inputs(
         });
     }
     Ok(())
+}
+
+/// Per-chapter seeds for multi-file HTML rendering (book-projects P4):
+/// one [`ChapterSeed`] per file-bearing, numbered render item, keyed by
+/// the chapter's absolute input path (canonicalized to match the
+/// `DocumentInfo.input` form the batch dispatch looks up). Unnumbered
+/// items — `.unnumbered` chapters, dividers, parts — get no seed: their
+/// content numbers flat and consumes no slot, per the numbering contract
+/// grounded in the `scratchpad/minibook` experiments (P4 plan appendix).
+///
+/// The seed rides P0's `RenderContext.chapter_seed` mechanism; P4's
+/// `format_crossref_number` composes the display numbers from it.
+pub fn chapter_seed_map(
+    project_dir: &Path,
+    items: &[BookRenderItem],
+) -> HashMap<PathBuf, ChapterSeed> {
+    items
+        .iter()
+        .filter_map(|item| {
+            let number = item.number?;
+            let file = item.file.as_ref()?;
+            let path = project_dir.join(file);
+            let key = path.canonicalize().unwrap_or(path);
+            Some((
+                key,
+                ChapterSeed {
+                    chapter_number: number,
+                    is_appendix: item.kind == BookRenderItemKind::Appendix,
+                },
+            ))
+        })
+        .collect()
 }
 
 /// Is this chapter numbered? Port of Q1's `isNumberedChapter`
@@ -738,5 +772,63 @@ mod tests {
     #[test]
     fn no_heading_at_all_is_numbered() {
         assert!(chapter_is_numbered("Just some text.\n"));
+    }
+
+    // === chapter_seed_map (book-projects P4) ===
+
+    #[test]
+    fn seed_map_covers_numbered_files_and_skips_unnumbered() {
+        let dir = book_dir(&[
+            ("index.qmd", "# Preface {.unnumbered}\n"),
+            ("ch1.qmd", "# One\n"),
+            ("interlude.qmd", "# Interlude {.unnumbered}\n"),
+            ("ch2.qmd", "# Two\n"),
+            ("app-a.qmd", "# Appendix A\n"),
+        ]);
+        let book = map(vec![
+            (
+                "chapters",
+                arr(vec![
+                    s("index.qmd"),
+                    s("ch1.qmd"),
+                    s("interlude.qmd"),
+                    s("ch2.qmd"),
+                ]),
+            ),
+            ("appendices", arr(vec![s("app-a.qmd")])),
+        ]);
+        let items = render_items(dir.path(), &book).unwrap();
+        let seeds = chapter_seed_map(dir.path(), &items);
+        // Keys are canonicalized (matching `DocumentInfo.input`); on macOS
+        // the TempDir path is a symlink away from that form.
+        let dir = dir.path().canonicalize().unwrap();
+
+        assert_eq!(
+            seeds.len(),
+            3,
+            "unnumbered index and interlude get no seed: {seeds:?}"
+        );
+        assert_eq!(
+            seeds.get(&dir.join("ch1.qmd")),
+            Some(&ChapterSeed {
+                chapter_number: 1,
+                is_appendix: false
+            })
+        );
+        assert_eq!(
+            seeds.get(&dir.join("ch2.qmd")),
+            Some(&ChapterSeed {
+                chapter_number: 2,
+                is_appendix: false
+            })
+        );
+        assert_eq!(
+            seeds.get(&dir.join("app-a.qmd")),
+            Some(&ChapterSeed {
+                chapter_number: 1,
+                is_appendix: true
+            }),
+            "appendix seeds carry their own fresh sequence number + the flag"
+        );
     }
 }

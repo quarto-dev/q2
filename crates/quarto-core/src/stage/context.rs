@@ -133,6 +133,13 @@ pub struct StageContext {
     /// renderers. Bridged to/from `RenderContext` by `AstTransformsStage`.
     pub crossref_index: Option<CrossrefIndex>,
 
+    /// This document's book chapter seed (book-projects P4): chapter
+    /// number + appendix flag, consumed by the crossref index/render
+    /// transforms (`None` for every non-book render). Bridged one-way
+    /// from [`crate::render::RenderContext::chapter_seed`] — read-only
+    /// input to transforms, never mutated, so nothing restores it.
+    pub chapter_seed: Option<crate::render::ChapterSeed>,
+
     /// Per-document resource report (`bd-o8pr`). Engine stages and
     /// (Phase 3) Lua-filter post-drain push raw paths into this; the
     /// orchestrator drains it after Pass-2 render and resolves
@@ -384,6 +391,7 @@ impl StageContext {
             format_options: crate::render::FormatOptions::default(),
             user_grammar_provider: None,
             defer_citeproc: false,
+            chapter_seed: None,
         })
     }
 

@@ -48,6 +48,7 @@ mod roundtrip_tests;
 pub use index::{CrossrefEntry, CrossrefIndex, HeadingRecord, Order, PromisedId, PromisedIdSource};
 pub use metadata::{CrossrefMetadata, MetadataError};
 pub use registry::{RefTypeDef, RefTypeRegistry, RefTypeSource};
+pub(crate) use section_number::format_chapter_index;
 pub use section_number::format_section_number;
 pub use target::{
     CrossrefTargetView, crossref_target_view, crossref_target_view_inline, identifier_of,

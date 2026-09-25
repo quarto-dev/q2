@@ -48,7 +48,7 @@ use quarto_source_map::SourceInfo;
 use crate::Result;
 use crate::crossref::{
     CROSSREF_RESOLVED_REF, EQ_NUMBER_ATTR, EQUATION, FLOAT_REF_TARGET, PROOF, THEOREM,
-    format_section_number,
+    format_chapter_index, format_section_number,
 };
 use crate::language::LanguageTerms;
 use crate::render::RenderContext;
@@ -99,7 +99,7 @@ impl AstTransform for CrossrefRenderTransform {
             used_ids: collect_document_ids(&ast.blocks),
             chapters,
             max_heading,
-            appendix: ctx.chapter_seed.as_ref().is_some_and(|s| s.is_appendix),
+            chapter_seed: ctx.chapter_seed,
         };
         render_blocks(&mut ast.blocks, terms.as_ref(), &mut fs);
         Ok(())
@@ -175,7 +175,7 @@ fn render_block(block: &mut Block, terms: Option<&LanguageTerms>, fs: &mut Float
             let replacement = render_float_ref_target(take_custom_node(node), fs);
             *block = replacement;
         } else if node.type_name == THEOREM {
-            let replacement = render_theorem(take_custom_node(node));
+            let replacement = render_theorem(take_custom_node(node), fs);
             *block = replacement;
         } else if node.type_name == PROOF {
             let replacement = render_proof(take_custom_node(node), terms);
@@ -236,7 +236,7 @@ fn inject_header_number(h: &mut Header, terms: Option<&LanguageTerms>, fs: &Floa
         source_info: source_info.clone(),
         attr_source: AttrSourceInfo::empty(),
     });
-    let mut prefix = if h.level == 1 && fs.appendix {
+    let mut prefix = if h.level == 1 && fs.chapter_seed.as_ref().is_some_and(|s| s.is_appendix) {
         let title = terms
             .and_then(|t| t.crossref_prefix("apx"))
             .map_or_else(|| "Appendix".to_string(), str::to_string);
@@ -353,7 +353,7 @@ fn render_inline(inline: &mut Inline, terms: Option<&LanguageTerms>, fs: &mut Fl
         if node.type_name == CROSSREF_RESOLVED_REF {
             *inline = render_resolved_ref(take_custom_node(node), terms, fs);
         } else if node.type_name == EQUATION {
-            *inline = render_equation(take_custom_node(node));
+            *inline = render_equation(take_custom_node(node), fs);
         }
     }
 }
@@ -375,11 +375,36 @@ struct FloatState {
     /// config for the same reason as `chapters`. Defaults to 7 when no
     /// index ran (direct unit tests).
     max_heading: u32,
-    /// Per-file appendix state from the chapter seed (book-projects P0),
-    /// mirroring `chapters`/`max_heading` above — consulted by the header
-    /// number injection to pick the "Appendix A —" shape for a level-1
-    /// heading.
-    appendix: bool,
+    /// The per-file chapter seed (book-projects P0/P4) — rides along for
+    /// the same reason as `chapters`/`max_heading`: the header number
+    /// injection reads its `is_appendix` ("Appendix A —" shape for a
+    /// level-1 heading) and the float/equation/ref display numbers read
+    /// its `chapter_number` (`format_crossref_number`).
+    chapter_seed: Option<crate::render::ChapterSeed>,
+}
+
+/// Compose a crossref *display* number from the flat per-type counter and
+/// the per-file chapter seed (book-projects P4).
+///
+/// `None` → today's exact bare `"{order}"` (non-book renders, byte-for-byte);
+/// `Some(seed)` → `"{chapter}.{order}"`, with the chapter component a letter
+/// when the seed is an appendix seed — the same letter conversion the
+/// `@sec-` presentation path uses
+/// ([`format_chapter_index`], Q1's `formatChapterIndex`).
+///
+/// This is the display-side half of chapter-local numbering: the counter
+/// (`order.order`) keeps counting flat across the whole chapter file; only
+/// the *presented* number is chapter-scoped. Matches Q1, where the Lua
+/// `order` counter is flat and `file.bookItemNumber` supplies the chapter
+/// prefix at display time.
+fn format_crossref_number(order: u32, chapter_seed: Option<&crate::render::ChapterSeed>) -> String {
+    match chapter_seed {
+        None => order.to_string(),
+        Some(seed) => format!(
+            "{}.{order}",
+            format_chapter_index(seed.chapter_number, seed.is_appendix)
+        ),
+    }
 }
 
 /// Collect every element id in the document (block and inline attrs).
@@ -639,7 +664,11 @@ fn render_float_ref_target(node: CustomNode, fs: &mut FloatState) -> Block {
     };
 
     let is_uncaptioned = caption_long.is_empty();
-    let numbered_caption = prefix_caption(caption_long.clone(), &kind, number);
+    let numbered_caption = prefix_caption(
+        caption_long.clone(),
+        &kind,
+        number.map(|n| format_crossref_number(n, fs.chapter_seed.as_ref())),
+    );
 
     // Only genuine float kinds get the Q1 float DOM. FloatRefTarget nodes
     // also exist for non-float registered prefixes (`sec` sections, `demo`
@@ -853,7 +882,7 @@ fn render_float_ref_target(node: CustomNode, fs: &mut FloatState) -> Block {
 ///   The label is then prepended into that first Paragraph. This keeps
 ///   the label in the normal paragraph flow instead of stranded as its
 ///   own block.
-fn render_theorem(node: CustomNode) -> Block {
+fn render_theorem(node: CustomNode, fs: &FloatState) -> Block {
     let kind = node
         .plain_data
         .get("kind")
@@ -896,7 +925,12 @@ fn render_theorem(node: CustomNode) -> Block {
         _ => None,
     };
 
-    let label = theorem_label_inlines(&kind, number, title.as_deref(), source_info.clone());
+    let label = theorem_label_inlines(
+        &kind,
+        number.map(|n| format_crossref_number(n, fs.chapter_seed.as_ref())),
+        title.as_deref(),
+        source_info.clone(),
+    );
 
     // Ensure the first block is a Paragraph so the label can be prepended
     // into inline context (not stranded as a standalone block). See doc
@@ -966,7 +1000,7 @@ fn ensure_leading_paragraph_nbsp(mut content: Blocks, source_info: SourceInfo) -
 /// Q1 doesn't emit one and some CSS rules assume its absence.
 fn theorem_label_inlines(
     kind: &str,
-    number: Option<u32>,
+    number: Option<String>,
     title: Option<&[Inline]>,
     source_info: SourceInfo,
 ) -> Inlines {
@@ -984,7 +1018,7 @@ fn theorem_label_inlines(
         if !head_text.is_empty() {
             head_text.push('\u{a0}');
         }
-        head_text.push_str(&n.to_string());
+        head_text.push_str(&n);
     }
 
     let mut strong_content: Inlines = Vec::new();
@@ -1146,7 +1180,7 @@ fn render_proof(node: CustomNode, terms: Option<&LanguageTerms>) -> Block {
 /// filter can rewrite or delete the attribute) and removes the attribute.
 /// The Span wrapper carries the id for anchor linking from `@eq-xxx`
 /// references.
-fn render_equation(node: CustomNode) -> Inline {
+fn render_equation(node: CustomNode, fs: &FloatState) -> Inline {
     let number = node
         .plain_data
         .get("order")
@@ -1157,7 +1191,10 @@ fn render_equation(node: CustomNode) -> Inline {
     let source_info = node.source_info.clone();
     let mut attr = node.attr.clone();
     if let Some(n) = number {
-        attr.2.insert(EQ_NUMBER_ATTR.to_string(), n.to_string());
+        attr.2.insert(
+            EQ_NUMBER_ATTR.to_string(),
+            format_crossref_number(n, fs.chapter_seed.as_ref()),
+        );
     }
 
     // Extract the math inline from the content slot. The math text is
@@ -1233,7 +1270,12 @@ fn render_resolved_ref(node: CustomNode, terms: Option<&LanguageTerms>, fs: &Flo
             sec_ref_text(&node, &kind, terms, fs)
         } else {
             match number {
-                Some(n) => format!("{kind}\u{a0}{n}"),
+                Some(n) => {
+                    format!(
+                        "{kind}\u{a0}{}",
+                        format_crossref_number(n, fs.chapter_seed.as_ref())
+                    )
+                }
                 None => kind.clone(),
             }
         }
@@ -1340,7 +1382,7 @@ fn sec_ref_text(
 /// first block carries no inlines at all (a code block, a nested div), a
 /// label-only `Plain` is inserted in front rather than dropping the prefix
 /// (bd-n3sark9b — the Paragraph-only match used to silently skip Plain).
-fn prefix_caption(caption: Blocks, kind: &str, number: Option<u32>) -> Blocks {
+fn prefix_caption(caption: Blocks, kind: &str, number: Option<String>) -> Blocks {
     if kind.is_empty() || caption.is_empty() {
         return caption;
     }
@@ -1417,6 +1459,18 @@ mod tests {
 
     fn attr_id(id: &str) -> Attr {
         (id.to_string(), Vec::new(), LinkedHashMap::new())
+    }
+
+    /// A default `FloatState` for direct unit tests of the walk's leaf
+    /// renderers (`render_equation` etc.) — no seed, non-chapter config.
+    fn float_state_for_tests() -> FloatState {
+        FloatState {
+            html_float_dom: true,
+            used_ids: Default::default(),
+            chapters: false,
+            max_heading: 7,
+            chapter_seed: None,
+        }
     }
 
     fn str_inline(s: &str) -> Inline {
@@ -2409,6 +2463,159 @@ mod tests {
         assert_eq!(s.text, "Alpha");
     }
 
+    // ── P4: chapter title decoration (`withChapterMetadata` port) ───
+    //
+    // Q1 decorates a book chapter's page title by prepending its chapter
+    // number ("Appendix A — Title" for appendix chapters; plain for
+    // `.unnumbered`). q2 re-expresses that as the header-number injection
+    // above, seeded per chapter. These tests pin the two decoration cases
+    // the P0 tests don't: the seeded *numbered* chapter, and the
+    // deliberate `.unlisted` non-suppression.
+
+    #[tokio::test]
+    async fn seeded_numbered_chapter_h1_decorates_with_chapter_number() {
+        // A book chapter's H1 carries the chapter-scoped number (seed 2 →
+        // span "2"), with no appendix prefix — Q1's numbered-chapter
+        // `formatChapterTitle` arm.
+        let ast = run_full_opts(
+            vec![header(1, "sec-a", "Alpha")],
+            number_sections_meta(),
+            Some(crate::render::ChapterSeed {
+                chapter_number: 2,
+                is_appendix: false,
+            }),
+        )
+        .await;
+        let Block::Header(h) = &ast.blocks[0] else {
+            panic!()
+        };
+        assert_number_span(&h.content[0], "2");
+        assert!(matches!(h.content[1], Inline::Space(_)));
+        let Inline::Str(s) = &h.content[2] else {
+            panic!()
+        };
+        assert_eq!(s.text, "Alpha");
+        let joined: String = h
+            .content
+            .iter()
+            .map(|i| match i {
+                Inline::Str(s) => s.text.clone(),
+                Inline::Space(_) => " ".to_string(),
+                _ => String::new(),
+            })
+            .collect();
+        assert!(
+            !joined.contains("Appendix") && !joined.contains("—"),
+            "a numbered (non-appendix) chapter must not get the appendix prefix: {joined:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn unlisted_class_does_not_suppress_decoration() {
+        // Q1's contract: `.unlisted` gates only the toc default
+        // (`isListedChapter`); `chapterInfoForInput` never consults it, so
+        // a listed-but-unlisted chapter still gets its number decoration.
+        // q2 keeps that split: the number stash skips only `.unnumbered`
+        // (crossref_index), and the injection never consults classes —
+        // listing is P1's sidebar translation's concern.
+        let mut h = header(1, "sec-u", "Unlisted but numbered");
+        if let Block::Header(inner) = &mut h {
+            inner.attr.1.push("unlisted".to_string());
+        }
+        let ast = run_full_opts(
+            vec![h],
+            number_sections_meta(),
+            Some(crate::render::ChapterSeed {
+                chapter_number: 3,
+                is_appendix: false,
+            }),
+        )
+        .await;
+        let Block::Header(h) = &ast.blocks[0] else {
+            panic!()
+        };
+        assert_number_span(&h.content[0], "3");
+    }
+
+    // ── P4: chapter-scoped display numbers (book-projects) ──────────
+    //
+    // The chapter seed (book-projects P0) already seeds the section
+    // counter; these tests pin the *display* half — float/equation/ref
+    // numbers compose the seed's chapter number with the flat counter
+    // ("Figure 2.1", "Figure C.1") instead of showing the bare counter.
+
+    #[tokio::test]
+    async fn chapter_two_seed_shows_h1_two_and_figure_two_one() {
+        // A chapter-2 seed seeds the counter at [1] before the walk, so
+        // the chapter's own H1 numbers "2"; a figure under it displays
+        // the chapter-scoped "Figure 2.1", not the flat "Figure 1"
+        // (observed against a real Q1 render: scratchpad/minibook).
+        let ast = run_full_opts(
+            vec![
+                header(1, "sec-ch2", "Two"),
+                fig_div("fig-ch2", "A figure in chapter two"),
+            ],
+            number_sections_meta(),
+            Some(crate::render::ChapterSeed {
+                chapter_number: 2,
+                is_appendix: false,
+            }),
+        )
+        .await;
+        // H1 becomes section "2" (the seeding half — landed in P0).
+        let Block::Header(h1) = &ast.blocks[0] else {
+            panic!()
+        };
+        assert_number_span(&h1.content[0], "2");
+        // The figure under it displays chapter-scoped "Figure 2.1: "
+        // (the display half — the fix this test drives).
+        let (outer, f) = float_shape(&ast.blocks[1]);
+        assert_eq!(outer.attr.0, "fig-ch2");
+        let long = f.caption.long.as_ref().unwrap();
+        let Block::Plain(p) = &long[0] else { panic!() };
+        let Inline::Str(s) = &p.content[0] else {
+            panic!()
+        };
+        assert_eq!(s.text, "Figure\u{a0}2.1: ");
+    }
+
+    #[tokio::test]
+    async fn appendix_seed_numbers_floats_letter_scoped() {
+        // An appendix chapter's seed carries its *appendix-local* number
+        // (P1's BookRenderItem numbering — the third appendix is 3), and
+        // display numbers use the letter "C.1", independent of how many
+        // main chapters precede it (Q1: a separate letter sequence, not
+        // a continuation of the numeric chapters).
+        let ast = run_full_opts(
+            vec![
+                fig_div("fig-app", "An appendix figure"),
+                Block::Paragraph(Paragraph {
+                    content: vec![str_inline("see "), cite("fig-app")],
+                    source_info: si(),
+                }),
+            ],
+            quarto_pandoc_types::ConfigValue::default(),
+            Some(crate::render::ChapterSeed {
+                chapter_number: 3,
+                is_appendix: true,
+            }),
+        )
+        .await;
+        let (outer, f) = float_shape(&ast.blocks[0]);
+        assert_eq!(outer.attr.0, "fig-app");
+        let long = f.caption.long.as_ref().unwrap();
+        let Block::Plain(p) = &long[0] else { panic!() };
+        let Inline::Str(s) = &p.content[0] else {
+            panic!()
+        };
+        assert_eq!(s.text, "Figure\u{a0}C.1: ");
+        // The in-text ref shows the same letter-scoped number.
+        let Block::Paragraph(rp) = &ast.blocks[1] else {
+            panic!()
+        };
+        assert_eq!(ref_link_text(&rp.content, 1), "Figure\u{a0}C.1");
+    }
+
     #[tokio::test]
     async fn float_ref_target_with_no_caption_renders_figure_with_empty_caption() {
         let blocks = vec![Block::Div(Div {
@@ -2437,7 +2644,7 @@ mod tests {
             content: vec![str_inline("Hello")],
             source_info: si(),
         })];
-        let out = prefix_caption(cap, "Figure", Some(3));
+        let out = prefix_caption(cap, "Figure", Some("3".to_string()));
         let Block::Paragraph(p) = &out[0] else {
             panic!();
         };
@@ -2473,7 +2680,7 @@ mod tests {
             content: vec![str_inline("Hello")],
             source_info: si(),
         })];
-        let out = prefix_caption(cap, "Figure", Some(3));
+        let out = prefix_caption(cap, "Figure", Some("3".to_string()));
         assert_eq!(out.len(), 1);
         let Block::Plain(p) = &out[0] else {
             panic!("expected Plain to be preserved, got {:?}", out[0]);
@@ -2499,7 +2706,7 @@ mod tests {
             source_info: si(),
             attr_source: AttrSourceInfo::empty(),
         })];
-        let out = prefix_caption(cap, "Figure", Some(3));
+        let out = prefix_caption(cap, "Figure", Some("3".to_string()));
         assert_eq!(out.len(), 2);
         let Block::Plain(p) = &out[0] else {
             panic!("expected inserted Plain, got {:?}", out[0]);
@@ -2641,13 +2848,7 @@ mod tests {
             .slots
             .insert("content".into(), Slot::Blocks(vec![para("inside")]));
         let mut block = Block::Custom(callout);
-        let mut fs = FloatState {
-            html_float_dom: true,
-            used_ids: std::collections::HashSet::new(),
-            chapters: false,
-            max_heading: 7,
-            appendix: false,
-        };
+        let mut fs = float_state_for_tests();
         render_block(&mut block, None, &mut fs);
         match block {
             Block::Custom(n) => assert_eq!(n.type_name, "Callout"),
@@ -2967,7 +3168,7 @@ mod tests {
             ),
             source_info: si(),
         };
-        let Inline::Span(span) = render_equation(node) else {
+        let Inline::Span(span) = render_equation(node, &float_state_for_tests()) else {
             panic!("expected Span");
         };
         assert!(!span.attr.2.contains_key(EQ_NUMBER_ATTR));

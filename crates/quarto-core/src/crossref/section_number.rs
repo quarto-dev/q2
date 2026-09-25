@@ -59,7 +59,11 @@ pub fn format_section_number(section: &[u32], max_heading: u32, is_appendix: boo
 /// Beyond 26 appendix chapters Q1's `string.char(64 + n)` drifts out of the
 /// alphabet ("[", "\", …); we mirror it literally rather than invent a
 /// correction Q1 doesn't have.
-fn format_chapter_index(index: u32, is_appendix: bool) -> String {
+///
+/// Shared with the float/equation/ref display numbers
+/// ([`crate::transforms::crossref_render`]`::format_crossref_number`,
+/// book-projects P4) so the letter-vs-numeral choice has one owner.
+pub(crate) fn format_chapter_index(index: u32, is_appendix: bool) -> String {
     if is_appendix {
         char::from_u32(64u32.saturating_add(index))
             .unwrap_or('?')

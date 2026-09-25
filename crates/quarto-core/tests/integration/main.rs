@@ -16,6 +16,7 @@ pub mod book_appendix_letter_parity;
 pub mod book_citations;
 pub mod book_cross_chapter_links;
 pub mod book_epub;
+pub mod book_multifile_html;
 pub mod book_numbering_lua;
 pub mod book_numbering_pipeline;
 pub mod book_numbering_torture;

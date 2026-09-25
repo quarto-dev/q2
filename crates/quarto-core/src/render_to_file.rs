@@ -123,6 +123,15 @@ pub struct RenderToFileOptions {
     ///
     /// [`GitBlameProvider`]: crate::attribution::GitBlameProvider
     pub attribution: Option<crate::attribution::AttributionMode>,
+
+    /// This document's book chapter seed (book-projects P4): the
+    /// chapter number / appendix flag the crossref index transform
+    /// seeds its section counter from and the crossref render transform
+    /// composes chapter-local display numbers with. `None` (the
+    /// default) for every non-book render — the context gets no seed
+    /// and behaves exactly as before. Set per-chapter by the book
+    /// orchestration via the renderer's `chapter_seeds` map.
+    pub chapter_seed: Option<crate::render::ChapterSeed>,
 }
 
 /// Result of rendering a document to a file.
@@ -319,6 +328,12 @@ pub fn render_document_to_file(
     // `GitBlameProvider`) is populated alongside pandoc/typst/etc.
     let binaries = BinaryDependencies::discover(runtime.as_ref());
     let mut ctx = RenderContext::new(project, &doc_info, &render_format, &binaries);
+    // Book mode (P4): a per-chapter seed rides the options into the
+    // context, where the crossref index/render transforms consume it.
+    // `None` for non-book renders — no change to their behavior.
+    if let Some(seed) = options.chapter_seed {
+        ctx = ctx.with_chapter_seed(seed);
+    }
     if let Some(index) = project_index {
         ctx.project_index = Some(index);
     }

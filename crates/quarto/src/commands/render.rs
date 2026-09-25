@@ -970,6 +970,7 @@ pub fn render_once(
         // until project YAML schema work; the resolver matrix is still
         // exercised end-to-end by Phase 0 test #9b).
         attribution: args.attribution,
+        chapter_seed: None,
     };
 
     match target {

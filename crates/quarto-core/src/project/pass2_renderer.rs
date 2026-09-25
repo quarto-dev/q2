@@ -34,7 +34,7 @@
 //! [`ProjectPipeline`]: crate::project::orchestrator::ProjectPipeline
 
 use std::cell::RefCell;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -215,6 +215,18 @@ pub trait Pass2Renderer {
     ) -> Option<&crate::project_resources::DocumentResourceReport> {
         None
     }
+
+    /// Book-projects P4: install the per-chapter seed map
+    /// (chapter number + appendix flag, keyed by input path) computed
+    /// from `pre_render`'s `BookRenderItem` list. Called by the
+    /// orchestrator between `pre_render` and Pass 2. Default: no-op —
+    /// only the native [`RenderToFileRenderer`] carries book state, so
+    /// the WASM/preview renderers need no changes for book support.
+    fn install_book_chapter_seeds(
+        &mut self,
+        _seeds: std::collections::HashMap<PathBuf, crate::render::ChapterSeed>,
+    ) {
+    }
 }
 
 // ───────────────────────────────────────────────────────────────────
@@ -243,6 +255,19 @@ pub struct RenderToFileRenderer<'a> {
     /// `format:` declarations win. Set via
     /// `ProjectPipeline::with_format_override`.
     pub format_override: Option<String>,
+    /// Per-chapter seeds for book projects (book-projects P4), keyed by
+    /// each chapter's input path. Book orchestration computes the map
+    /// once from P1's `BookRenderItem` list and installs it here; the
+    /// batch free functions look up each document's seed and, when one
+    /// exists, pass a cloned-and-overridden options value into
+    /// `render_document_to_file`. Empty for every non-book project —
+    /// the shared options reference flows through unchanged.
+    ///
+    /// This state lives on the concrete renderer; the [`Pass2Renderer`]
+    /// trait carries only a defaulted no-op installer
+    /// (`install_book_chapter_seeds`), so the WASM/preview renderers
+    /// need no changes for book support.
+    pub chapter_seeds: std::collections::HashMap<PathBuf, crate::render::ChapterSeed>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -254,6 +279,7 @@ impl<'a> RenderToFileRenderer<'a> {
         Self {
             options,
             format_override: None,
+            chapter_seeds: std::collections::HashMap::new(),
         }
     }
 }
@@ -273,6 +299,21 @@ impl<'a> Pass2Renderer for RenderToFileRenderer<'a> {
         runtime: Arc<dyn SystemRuntime>,
         project_artifacts: &mut ArtifactStore,
     ) -> Result<Self::Output> {
+        // Book mode (P4): a seed for this path rides a cloned options
+        // value; the common non-book path passes the shared reference
+        // unchanged (no clone).
+        let owned;
+        let doc_options = match self.chapter_seeds.get(&doc_info.input) {
+            Some(seed) => {
+                owned = {
+                    let mut o = self.options.clone();
+                    o.chapter_seed = Some(*seed);
+                    o
+                };
+                &owned
+            }
+            None => self.options,
+        };
         // `render_document_to_file` is sync (it calls
         // `pollster::block_on` internally for the head pipeline);
         // we run it inside an `async fn` so callers can `await` the
@@ -280,7 +321,7 @@ impl<'a> Pass2Renderer for RenderToFileRenderer<'a> {
         crate::render_to_file::render_document_to_file(
             &doc_info.input,
             format_str,
-            self.options,
+            doc_options,
             Some(project),
             runtime,
             Some(index),
@@ -316,6 +357,7 @@ impl<'a> Pass2Renderer for RenderToFileRenderer<'a> {
         if workers <= 1 || docs.len() <= 1 {
             return render_batch_serial(
                 self.options,
+                &self.chapter_seeds,
                 docs,
                 format_str,
                 project,
@@ -328,6 +370,7 @@ impl<'a> Pass2Renderer for RenderToFileRenderer<'a> {
         }
         render_batch_parallel(
             self.options,
+            &self.chapter_seeds,
             docs,
             format_str,
             project,
@@ -357,6 +400,13 @@ impl<'a> Pass2Renderer for RenderToFileRenderer<'a> {
     ) -> Option<&crate::project_resources::DocumentResourceReport> {
         Some(&output.resource_report)
     }
+
+    fn install_book_chapter_seeds(
+        &mut self,
+        seeds: std::collections::HashMap<PathBuf, crate::render::ChapterSeed>,
+    ) {
+        self.chapter_seeds = seeds;
+    }
 }
 
 // ───────────────────────────────────────────────────────────────────
@@ -373,6 +423,7 @@ impl<'a> Pass2Renderer for RenderToFileRenderer<'a> {
 #[allow(clippy::too_many_arguments)]
 fn render_batch_serial(
     options: &crate::render_to_file::RenderToFileOptions,
+    chapter_seeds: &std::collections::HashMap<PathBuf, crate::render::ChapterSeed>,
     docs: &[&DocumentInfo],
     format_str: &str,
     project: &ProjectContext,
@@ -390,10 +441,25 @@ fn render_batch_serial(
     let mut outputs = Vec::with_capacity(docs.len());
     let mut failures = Vec::new();
     for doc in docs {
+        // Book mode (P4): a seed for this path rides a cloned options
+        // value; the common non-book path passes the shared reference
+        // unchanged (no clone).
+        let owned;
+        let doc_options = match chapter_seeds.get(&doc.input) {
+            Some(seed) => {
+                owned = {
+                    let mut o = options.clone();
+                    o.chapter_seed = Some(*seed);
+                    o
+                };
+                &owned
+            }
+            None => options,
+        };
         match crate::render_to_file::render_document_to_file(
             &doc.input,
             format_str,
-            options,
+            doc_options,
             Some(project),
             runtime.clone(),
             Some(index.clone()),
@@ -431,6 +497,7 @@ fn render_batch_serial(
 #[allow(clippy::too_many_arguments)]
 fn render_batch_parallel(
     options: &crate::render_to_file::RenderToFileOptions,
+    chapter_seeds: &std::collections::HashMap<PathBuf, crate::render::ChapterSeed>,
     docs: &[&DocumentInfo],
     format_str: &str,
     project: &ProjectContext,
@@ -470,6 +537,7 @@ fn render_batch_parallel(
         Err(_) => {
             return render_batch_serial(
                 options,
+                chapter_seeds,
                 docs,
                 format_str,
                 project,
@@ -495,12 +563,27 @@ fn render_batch_parallel(
                 // Record this worker thread for the `perf.pass2`
                 // threads_used gauge.
                 crate::project::orchestrator::pass2_threads_record();
+                // Book mode (P4): a seed for this path rides a cloned
+                // options value; the common non-book path passes the
+                // shared reference unchanged (no clone).
+                let owned;
+                let doc_options = match chapter_seeds.get(&doc.input) {
+                    Some(seed) => {
+                        owned = {
+                            let mut o = options.clone();
+                            o.chapter_seed = Some(*seed);
+                            o
+                        };
+                        &owned
+                    }
+                    None => options,
+                };
                 let mut doc_store = ArtifactStore::new();
                 let rendered = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     crate::render_to_file::render_document_to_file(
                         &doc.input,
                         format_str,
-                        options,
+                        doc_options,
                         Some(project),
                         runtime.clone(),
                         Some(index.clone()),

@@ -1395,6 +1395,19 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
             .await
             .map_err(|e| QuartoError::other(format!("pre_render failed: {e}")))?;
 
+        // Book multi-file HTML (P4): pre_render populated the book
+        // render list; derive the per-chapter seed map from it and hand
+        // it to the Pass-2 renderer (a no-op for renderers without book
+        // state). Only book HTML reaches `run_inner` — Typst/EPUB divert
+        // to the single-file merge — and `book_render_items` stays
+        // `None` for every non-book project, so both gates collapse to
+        // this one `if let`.
+        if let Some(items) = &self.project.book_render_items {
+            let seeds =
+                crate::project::book::render_item::chapter_seed_map(&self.project.dir, items);
+            self.renderer.install_book_chapter_seeds(seeds);
+        }
+
         // Phase 8.2: in Mode B, build the dependency graph from
         // the freshly-loaded profiles, augment the user-named
         // targets with always-render dependents, and tell pass_two

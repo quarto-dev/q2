@@ -77,22 +77,22 @@ use crate::stage::{
 use crate::transform::TransformPipeline;
 use crate::transforms::{
     AppendixStructureTransform, AttributionRenderTransform, AttributionViewerTransform,
-    AuthorsNormalizeTransform, BreadcrumbsRenderTransform, CalloutResolveTransform,
-    CalloutTransform, CategoriesSidebarTransform, CodeBlockGenerateTransform,
-    CodeBlockRenderTransform, ConditionalContentTransform, CrossrefIndexTransform,
-    CrossrefRenderTransform, CrossrefResolveTransform, DateNormalizeTransform, DraftAlertTransform,
-    EquationLabelTransform, ExampleEmbedRenderTransform, ExampleEmbedTransform,
-    FloatRefTargetSugarTransform, FooterGenerateTransform, FooterRenderTransform,
-    FootnotesResolveTransform, FootnotesTransform, LinkRewriteTransform, ListingGenerateTransform,
-    ListingRenderTransform, MermaidRenderTransform, MetadataNormalizeTransform,
-    NavbarGenerateTransform, NavbarRenderTransform, PageNavGenerateTransform,
-    PageNavRenderTransform, ProofSugarTransform, ReferenceLinkDiagnosticsTransform,
-    RepoActionsRenderTransform, ResourceCollectorTransform, ResponsiveImageTransform,
-    SectionizeTransform, ShortcodeResolveTransform, SidebarGenerateTransform,
-    SidebarRenderTransform, TableBootstrapClassTransform, TheoremSugarTransform,
-    TitleBannerTransform, TitleBlockTransform, TocGenerateTransform, TocLocationTransform,
-    TocRenderTransform, WebsiteBootstrapIconsTransform, WebsiteCanonicalUrlTransform,
-    WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
+    AuthorsNormalizeTransform, BookCoverImageTransform, BreadcrumbsRenderTransform,
+    CalloutResolveTransform, CalloutTransform, CategoriesSidebarTransform,
+    CodeBlockGenerateTransform, CodeBlockRenderTransform, ConditionalContentTransform,
+    CrossrefIndexTransform, CrossrefRenderTransform, CrossrefResolveTransform,
+    DateNormalizeTransform, DraftAlertTransform, EquationLabelTransform,
+    ExampleEmbedRenderTransform, ExampleEmbedTransform, FloatRefTargetSugarTransform,
+    FooterGenerateTransform, FooterRenderTransform, FootnotesResolveTransform, FootnotesTransform,
+    LinkRewriteTransform, ListingGenerateTransform, ListingRenderTransform, MermaidRenderTransform,
+    MetadataNormalizeTransform, NavbarGenerateTransform, NavbarRenderTransform,
+    PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
+    ReferenceLinkDiagnosticsTransform, RepoActionsRenderTransform, ResourceCollectorTransform,
+    ResponsiveImageTransform, SectionizeTransform, ShortcodeResolveTransform,
+    SidebarGenerateTransform, SidebarRenderTransform, TableBootstrapClassTransform,
+    TheoremSugarTransform, TitleBannerTransform, TitleBlockTransform, TocGenerateTransform,
+    TocLocationTransform, TocRenderTransform, WebsiteBootstrapIconsTransform,
+    WebsiteCanonicalUrlTransform, WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -1067,6 +1067,9 @@ fn stage_context_from_render_context(
     // `UserFiltersStage::pre()`, never mutated by stages), so it is
     // bridged one-way and not restored.
     stage_ctx.defer_citeproc = ctx.defer_citeproc;
+    // book-projects P4: the per-chapter seed is likewise input-only for
+    // the crossref transforms — bridged one-way, never restored.
+    stage_ctx.chapter_seed = ctx.chapter_seed;
 
     Ok(stage_ctx)
 }
@@ -1859,6 +1862,10 @@ pub fn build_transform_pipeline(
         // relative to slide construction is irrelevant).
         pipeline.push(Box::new(crate::revealjs::RevealFooterAliasTransform::new()));
     } else {
+        // The book cover must land before SectionizeTransform so the
+        // inserted paragraph is wrapped inside the first section (Q1's
+        // net shape after its DOM postprocessor).
+        pipeline.push(Box::new(BookCoverImageTransform::new()));
         pipeline.push(Box::new(TitleBlockTransform::new()));
         pipeline.push(Box::new(SectionizeTransform::new()));
     }
@@ -2308,6 +2315,7 @@ const PANDOC_TRANSFORM_EXCLUDED: &[&str] = &[
     // B2: HTML scaffolding / website chrome producers with no Pandoc-writer
     // analog.
     "title-block",
+    "book-cover-image",
     "sectionize",
     "title-banner",
     "website-title-prefix",
@@ -2475,6 +2483,10 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     // Synthesizes an HTML title-block container from Meta; Pandoc's own
     // templates build the equivalent from the same Meta.
     ("title-block", Bucket::B2),
+    // Inserts the book cover image on a book index page — pure AST
+    // synthesis from config, sibling of `title-block` (runs just before
+    // it so `SectionizeTransform` wraps the result).
+    ("book-cover-image", Bucket::B2),
     // `--section-divs` is an HTML-writer concern.
     ("sectionize", Bucket::B2),
     // --- B3: shared post-core services ------------------------------------
@@ -5551,6 +5563,7 @@ mod tests {
                 "website-canonical-url",
                 "format-css",
                 "draft-alert",
+                "book-cover-image",
                 "title-block",
                 "sectionize",
                 "footnotes",
@@ -6007,6 +6020,7 @@ mod tests {
                 "website-canonical-url",
                 "format-css",
                 "draft-alert",
+                "book-cover-image",
                 "sectionize",
                 "footnotes",
                 "footnotes-resolve",
