@@ -32,11 +32,18 @@ from pathlib import Path
 #   "opener": the detail whose content mentions "opening"; for "unclosed"
 #             errors the main start position is the end of the block.
 #   "start":  the diagnostic's own start position.
+#   "start-1": one column before the diagnostic's start.
 RULES = {
     "Q-2-17": ("~", "opener"),   # Unclosed Subscript: `~16`
     "Q-2-16": ("^", "opener"),   # Unclosed Superscript
     "Q-2-7": ("'", "opener"),    # Unclosed Single Quote: `a.rs`'s
     "Q-2-12": ("*", "opener"),   # Unclosed Star Emphasis: O(N * D)
+    "Q-2-13": ("**", "opener"),  # Unclosed Strong Star Emphasis
+    "Q-2-10": ("'", "opener"),   # Closed Quote Without Matching Open Quote: engines'
+    # Uncoded "Parse error" reported just after a bare `@` (`main` @ `sha`);
+    # bd-bare-at-literal-w3ytmu8e will make it a literal. Other uncoded
+    # parse errors are not this rule's business and are ignored silently.
+    "bare-@": ("@", "start-1"),
     "Q-2-5": ("_", "opener"),    # Unclosed Underscore Emphasis
     "Q-2-11": ('"', "opener"),   # Unclosed Double Quote
 }
@@ -56,6 +63,10 @@ def positions(text, code):
             continue
         d = json.loads(raw)
         for x in d.get("diagnostics") or []:
+            if where == "start-1":
+                if x.get("code") is None:
+                    yield d["source_file"], x["start_line"], x["start_column"] - 1
+                continue
             if x.get("code") != code:
                 continue
             if where == "start":
@@ -71,17 +82,22 @@ def positions(text, code):
                 yield d["source_file"], x["start_line"], -x["start_column"]
 
 
-def locate(line, col, ch):
-    """0-based index of `ch` at 1-based `col`, skipping leading whitespace
-    (Q-2-17's opener span starts at the whitespace before the `~`)."""
+def locate(line, col, delim):
+    """0-based index of `delim` at 1-based `col`, skipping leading whitespace
+    (some opener spans, e.g. Q-2-17's and Q-2-13's, start at the whitespace
+    before the delimiter)."""
     if col < 0:
         return None
     i = col - 1
     while 0 <= i < len(line) and line[i] in " \t":
         i += 1
-    if 0 <= i < len(line) and line[i] == ch and (i == 0 or line[i - 1] != "\\"):
+    if 0 <= i and line[i:i + len(delim)] == delim and (i == 0 or line[i - 1] != "\\"):
         return i
     return None
+
+
+def escaped(delim):
+    return "".join("\\" + c for c in delim)
 
 
 CODE_SPAN = re.compile(r"(`+)(?:.*?[^`])?\1(?!`)")
@@ -121,12 +137,19 @@ def main():
     ap.add_argument("--q2", default="q2")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--max-rounds", type=int, default=10)
+    ap.add_argument("--only-context", metavar="REGEX",
+                    help="escape only where REGEX matches at the delimiter's position "
+                         "(lookbehind sees the rest of the line); other occurrences are "
+                         "listed for manual review instead")
     ap.add_argument("--block-pattern", metavar="REGEX",
                     help="for diagnostics without an opener position, escape every match of "
                          "REGEX (outside code spans) in the enclosing block; the match start is "
                          "the escaped character. E.g. '~' for Q-2-17, \"(?<=`)'(?=\\w)\" for Q-2-7")
     args = ap.parse_args()
     block_re = re.compile(args.block_pattern) if args.block_pattern else None
+    only_re = re.compile(args.only_context) if args.only_context else None
+    review = []
+    seen_review = set()
     ch, _ = RULES[args.code]
 
     total = 0
@@ -145,6 +168,11 @@ def main():
             for ln, col in sorted(locs, key=lambda t: (t[0], -t[1])):
                 line = lines[ln - 1]
                 i = locate(line, col, ch)
+                if i is not None and any(a <= i < b for a, b in
+                                         (m.span() for m in CODE_SPAN.finditer(line))):
+                    # inside a code span a backslash would render literally;
+                    # the diagnostic is a knock-on from an earlier error
+                    i = None
                 if i is None and col < 0 and block_re is not None:
                     n = block_escape(lines, ln, block_re)
                     if n:
@@ -153,14 +181,21 @@ def main():
                         changed = True
                         edits += n
                         continue
+                if i is None and RULES[args.code][1] == "start-1":
+                    continue
                 if i is None:
                     if (f, ln, col) not in seen_skips:
                         seen_skips.add((f, ln, col))
                         skipped.append(f"{f}:{ln}:{abs(col)}: {line.strip()[:120]}")
                     continue
+                if only_re is not None and not only_re.match(line, i):
+                    if (f, ln, i) not in seen_review:
+                        seen_review.add((f, ln, i))
+                        review.append(f"{f}:{ln}:{i + 1}: {line[max(0, i - 50):i]}[{ch}]{line[i + len(ch):i + 50]}")
+                    continue
                 if args.dry_run:
-                    print(f"{f}:{ln}: {line[max(0, i - 40):i]}[\\{ch}]{line[i + 1:i + 40]}")
-                lines[ln - 1] = line[:i] + "\\" + line[i:]
+                    print(f"{f}:{ln}: {line[max(0, i - 40):i]}[{escaped(ch)}]{line[i + len(ch):i + 40]}")
+                lines[ln - 1] = line[:i] + escaped(ch) + line[i + len(ch):]
                 changed = True
                 edits += 1
             if changed and not args.dry_run:
@@ -171,6 +206,10 @@ def main():
             break
 
     print(f"total escapes: {total}", file=sys.stderr)
+    if review:
+        print(f"needs review ({len(review)}; --only-context did not match):", file=sys.stderr)
+        for r in review:
+            print("  " + r, file=sys.stderr)
     if skipped:
         print(f"skipped (expected {ch!r} not found at reported position; fix by hand):", file=sys.stderr)
         for s in skipped:
