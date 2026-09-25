@@ -61,6 +61,15 @@ pub struct ChapterCrossrefInventory {
     /// `"ch1.html"`, `"chapters/intro.html"`). Becomes each harvested
     /// entry's [`ProjectCrossrefEntry::owning_chapter_href`].
     pub output_href: String,
+
+    /// Project-relative source path of the chapter (e.g. `"chapters/ch2.qmd"`),
+    /// for hub-client's document-based navigation (book-projects P8).
+    /// Deliberately distinct from `output_href` (the rendered *output*
+    /// path, meaningless to preview) — becomes each harvested entry's
+    /// [`ProjectCrossrefEntry::owning_chapter_path`]. `None` for every
+    /// real (non-preview) book render; `StaticProjectAnalyzer` is the only
+    /// producer that sets it.
+    pub owning_chapter_path: Option<String>,
 }
 
 /// One cross-chapter target in the project-wide registry.
@@ -87,6 +96,11 @@ pub struct ProjectCrossrefEntry {
     /// Whether the target sits under an appendix section (as recorded by
     /// the owning chapter's index pass).
     pub in_appendix: bool,
+
+    /// Project-relative source path of the owning chapter (book-projects
+    /// P8), copied from [`ChapterCrossrefInventory::owning_chapter_path`].
+    /// `None` for every real (non-preview) book render.
+    pub owning_chapter_path: Option<String>,
 }
 
 /// The project-wide registry: every chapter's crossref targets, keyed by
@@ -153,6 +167,7 @@ fn aggregate_impl(
                     ref_type: entry.ref_type.clone(),
                     order: entry.order.clone(),
                     in_appendix: entry.in_appendix,
+                    owning_chapter_path: inv.owning_chapter_path.clone(),
                 },
             );
             first_sources.insert(identifier.clone(), entry.source_info.clone());
@@ -258,6 +273,7 @@ mod tests {
             index,
             chapter_seed,
             output_href: href.to_string(),
+            owning_chapter_path: None,
         }
     }
 

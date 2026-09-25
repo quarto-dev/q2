@@ -2403,6 +2403,7 @@ mod tests {
                 is_appendix: false,
             }),
             output_href: "ch2.html".to_string(),
+            owning_chapter_path: None,
         };
         let link = render_cross_chapter(
             vec![ch2],
@@ -2453,6 +2454,7 @@ mod tests {
                 is_appendix: true,
             }),
             output_href: "app-a.html".to_string(),
+            owning_chapter_path: None,
         };
         let link = render_cross_chapter(
             vec![app],
@@ -2552,6 +2554,38 @@ mod tests {
             panic!();
         };
         assert_eq!(ref_link_text(&p.content, 1), "Appendix\u{a0}A");
+    }
+
+    #[tokio::test]
+    async fn local_figure_ref_renders_identically_whether_number_is_composed_early_or_late() {
+        // book-projects P8: CrossrefResolveTransform now composes
+        // `resolved_number` for local (same-chapter) resolutions too, so
+        // q2 preview (which excludes this Finalization-phase transform)
+        // still shows a chapter-scoped number. This is the real-render
+        // regression guard: running the full Crossref→Finalization
+        // pipeline with a ChapterSeed must produce the exact same text a
+        // render that only composed the number at Finalization would have
+        // — "Figure 2.1", not some other value from double-composition or
+        // a seed mismatch.
+        let ast = run_full_opts(
+            vec![
+                fig_div("fig-one", "Caption"),
+                Block::Paragraph(Paragraph {
+                    content: vec![str_inline("see "), cite("fig-one")],
+                    source_info: si(),
+                }),
+            ],
+            quarto_pandoc_types::ConfigValue::default(),
+            Some(crate::render::ChapterSeed {
+                chapter_number: 2,
+                is_appendix: false,
+            }),
+        )
+        .await;
+        let Block::Paragraph(p) = &ast.blocks[1] else {
+            panic!();
+        };
+        assert_eq!(ref_link_text(&p.content, 1), "Figure\u{a0}2.1");
     }
 
     #[tokio::test]

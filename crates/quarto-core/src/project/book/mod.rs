@@ -17,6 +17,7 @@ pub mod merge;
 pub(crate) mod multi_file_html;
 pub mod project_type;
 pub mod render_item;
+pub mod static_analyzer;
 
 // Native-only: drives the render-to-file tail (`crate::render_to_file` is
 // gated out for wasm; WASM preview renders single documents, never books).
@@ -29,3 +30,4 @@ pub use links::resolve_cross_chapter_links;
 pub use merge::merge_book_chapters;
 pub use project_type::{BookProjectType, is_supported_format};
 pub use render_item::{BookRenderItem, BookRenderItemKind, book_render_items, chapter_is_numbered};
+pub(crate) use static_analyzer::analyze_book_project_statically;

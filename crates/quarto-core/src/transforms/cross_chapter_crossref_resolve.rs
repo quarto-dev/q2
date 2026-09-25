@@ -177,6 +177,12 @@ fn resolve_node(
         serde_json::json!({"section": entry.order.section, "order": entry.order.order}),
     );
     obj.insert("in_appendix".into(), serde_json::json!(entry.in_appendix));
+    // book-projects P8: hub-client document-based navigation target.
+    // `None` for every real (non-preview) book render — `StaticProjectAnalyzer`
+    // is the only producer that sets this on the registry entry.
+    if let Some(path) = &entry.owning_chapter_path {
+        obj.insert("owning_chapter_path".into(), serde_json::json!(path));
+    }
 }
 
 #[cfg(test)]
@@ -233,6 +239,7 @@ mod tests {
             index,
             chapter_seed: Some(chapter_seed),
             output_href: href.to_string(),
+            owning_chapter_path: None,
         }
     }
 

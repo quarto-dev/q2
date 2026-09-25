@@ -22,6 +22,7 @@ pub mod book_numbering_lua;
 pub mod book_numbering_pipeline;
 pub mod book_numbering_torture;
 pub mod book_part_appendix;
+pub mod book_preview;
 pub mod book_project_type;
 pub mod book_single_file_merge;
 pub mod book_theorem_crossref;

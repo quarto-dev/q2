@@ -192,6 +192,24 @@
           "when": "crossref-resolve inserts in_appendix iff a matching CrossrefEntry was found for the identifier (same condition as order); absent when the reference did not resolve to a registered id",
           "producer": "crossref-resolve (post-construction)",
           "shape": "bool"
+        },
+        "resolved_number": {
+          "required": false,
+          "when": "present for a resolved reference under a book ChapterSeed (local, non-sec resolution) or a cross-chapter resolution from the project-wide registry; absent for an unresolved reference, a resolved sec-type reference (already chapter-scoped via its raw order), and any non-book resolution",
+          "producer": "crossref-resolve (local, book-seeded) or cross-chapter-crossref-resolve (cross-chapter)",
+          "shape": "string"
+        },
+        "target_href": {
+          "required": false,
+          "when": "present only for a cross-chapter-resolved reference (real multi-file book render or book preview's StaticProjectAnalyzer sweep); absent for a same-chapter (local) resolution",
+          "producer": "cross-chapter-crossref-resolve",
+          "shape": "string"
+        },
+        "owning_chapter_path": {
+          "required": false,
+          "when": "present only for a cross-chapter-resolved reference in book preview (StaticProjectAnalyzer sweep); absent for a real (non-preview) book render and for a same-chapter (local) resolution",
+          "producer": "cross-chapter-crossref-resolve (book preview only)",
+          "shape": "string"
         }
       }
     }

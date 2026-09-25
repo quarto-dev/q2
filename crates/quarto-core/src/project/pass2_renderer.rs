@@ -1080,6 +1080,15 @@ pub struct RenderToPreviewAstRenderer {
     /// *inside* [`Self::render`] so direct ctx-side install isn't
     /// possible from the WASM call site.
     attribution_json: Option<String>,
+    /// Per-chapter seeds for book projects (book-projects P8), keyed by
+    /// each chapter's input path. Installed by the orchestrator via
+    /// [`Self::install_book_chapter_seeds`] between `pre_render` and
+    /// Pass 2 — mirrors [`RenderToFileRenderer::chapter_seeds`], the
+    /// P4 native precedent this field is modeled on. Empty for every
+    /// non-book project and for a book preview's `ActivePage` render
+    /// when the active page isn't a seeded chapter (unnumbered/divider
+    /// items get no seed map entry).
+    chapter_seeds: std::collections::HashMap<PathBuf, crate::render::ChapterSeed>,
 }
 
 impl RenderToPreviewAstRenderer {
@@ -1091,6 +1100,7 @@ impl RenderToPreviewAstRenderer {
             vfs_url_root: None,
             attribution_json: None,
             captures: Vec::new(),
+            chapter_seeds: std::collections::HashMap::new(),
         }
     }
 
@@ -1185,6 +1195,40 @@ impl Pass2Renderer for RenderToPreviewAstRenderer {
             RenderContext::new(project, doc_info, format, &binaries).with_options(options);
         ctx.project_index = Some(index);
         ctx.resource_resolver = Some(resolver.clone());
+        // Book mode (P8): a seed for this path was installed by the
+        // orchestrator via `install_book_chapter_seeds` between
+        // `pre_render` and Pass 2 (mirrors `RenderToFileRenderer::render`'s
+        // P4 handling, minus the options-clone — q2-preview builds its
+        // `RenderContext` directly, so the seed lands on `ctx` itself).
+        if let Some(seed) = self.chapter_seeds.get(&doc_info.input) {
+            ctx.chapter_seed = Some(*seed);
+        }
+        // Book mode (P8): give this preview an approximate, cross-chapter-
+        // aware crossref resolution by sweeping every sibling chapter
+        // pre-engine (`StaticProjectAnalyzer`) and populating the same
+        // `RenderContext` field P5's real (post-engine) aggregation would —
+        // `CrossChapterCrossrefResolveTransform` (registered unconditionally
+        // in the shared pipeline) consumes it unmodified. `None` for every
+        // non-book project (the field stays `None`, matching today's
+        // behavior exactly). Diagnostics from the sweep (unreadable
+        // sibling, duplicate id across chapters) are merged into this
+        // page's own diagnostics below — `ctx.diagnostics` isn't bridged
+        // into the pipeline this renderer drives, so they're collected here
+        // instead and merged into `preview_output.diagnostics` once it
+        // exists.
+        let mut static_sweep_diagnostics = Vec::new();
+        if let Some(items) = &project.book_render_items {
+            let (registry, sweep_diagnostics) =
+                crate::project::book::analyze_book_project_statically(
+                    &project.dir,
+                    items,
+                    &self.chapter_seeds,
+                    runtime.clone(),
+                )
+                .await;
+            ctx.cross_chapter_crossref_registry = Some(Arc::new(registry));
+            static_sweep_diagnostics = sweep_diagnostics;
+        }
         // Install the pre-built attribution provider when the renderer
         // was configured with a transport JSON payload. JSON parse +
         // interning is lazy inside `build()`, so this is cheap and
@@ -1213,6 +1257,7 @@ impl Pass2Renderer for RenderToPreviewAstRenderer {
             self.captures.clone(),
         )
         .await?;
+        preview_output.diagnostics.extend(static_sweep_diagnostics);
 
         // Drain Project-scoped artifacts. Same routing as
         // `RenderToHtmlRenderer`, via the shared
@@ -1314,5 +1359,12 @@ impl Pass2Renderer for RenderToPreviewAstRenderer {
         // using this resolver, so the iframe sees URLs that resolve
         // to the matching VFS path.
         self.build_resolver()
+    }
+
+    fn install_book_chapter_seeds(
+        &mut self,
+        seeds: std::collections::HashMap<PathBuf, crate::render::ChapterSeed>,
+    ) {
+        self.chapter_seeds = seeds;
     }
 }

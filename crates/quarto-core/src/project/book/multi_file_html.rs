@@ -343,6 +343,7 @@ pub(crate) async fn render_book_multi_file_html(
             index: chapter_index,
             chapter_seed,
             output_href: output_href.clone(),
+            owning_chapter_path: None,
         });
 
         held.push(HeldChapter {
