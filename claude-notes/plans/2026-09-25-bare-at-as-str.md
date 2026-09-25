@@ -1,7 +1,8 @@
 # Bare `@` (not a citation) is literal text, where it cannot be a typo
 
-**Status:** implementation in progress (go-ahead 2026-09-25) on
-`braid/bd-bare-at-literal-w3ytmu8e-bare-not-citation-uncoded`.
+**Status:** implemented and verified 2026-09-25 on
+`braid/bd-bare-at-literal-w3ytmu8e-bare-not-citation-uncoded`. Committed
+locally, not pushed.
 **Tracking issue:** bd-bare-at-literal-w3ytmu8e (filed 2026-09-23 as a child of
 bd-uk8zgkha; this plan attaches to it rather than filing a duplicate)
 **Follow-ups filed:** bd-2o8rq2xj (Q-code + `\@` hint for the kept `@`
@@ -216,7 +217,7 @@ else                                                                  -> as toda
   Across lines it relies on line breaks being external tokens.
   Residual, documented in the code: an internal token spanning a newline
   (multi-line display math, a quoted shortcode string) could leave a
-  stale anchor equal to a later `@`'s column. The only possible effect
+  stale anchor equal to the column of a later `@`. The only possible effect
   is reading that `@` as literal text, which pandoc does too.
 
   The emphasis flanking rules still use `delimiter_preceded_by_ws` and
@@ -345,20 +346,48 @@ lexes `user@example.com`, `mermaid@11`, `a@` and `a@.` as word text.
       convenient input. They now use `Hi(@cite)` and
       `A(@cite1) B @cite2(@cite3) D` (both match pandoc), keeping
       their intent.
-- [ ] pampa integration test `tests/integration/test_bare_at.rs`
-      (register it in `main.rs`, alphabetized). Pin the A1 native
-      output to the pandoc column, the A2 cases as errors, and the
-      table B cases as `Str`. Add source-range checks for `a @ b`,
-      `first @\nsecond`, and `user@example.com`.
-- [ ] Round-trip fixtures `roundtrip_tests/qmd-json-qmd/at_spaced.qmd`,
-      `at_eol.qmd`, and `at_email.qmd`.
-- [ ] Update the writer comment.
-- [ ] Rescan `claude-notes/`. Expect ≈768 clean.
-- [ ] `tree-sitter test` (incl. CRLF), `cargo nextest run -p pampa -p
-      qmd-syntax-helper -p quarto-lsp-core`, then the full
-      `cargo xtask verify` (both halves; run it bare, no pipe).
+- [x] pampa integration test `tests/integration/test_bare_at_str.rs`
+      (named after its sibling `test_bare_lt_str.rs`, registered in
+      `main.rs`). 14 tests covering the A1 shapes (including line-content
+      start after `>`, `-`, `1.`, `#` and indented continuation lines),
+      table B, citation guards, the kept A2 errors (asserted as failing;
+      bd-2o8rq2xj should tighten them to its Q-code), leak probes,
+      `word@{key}` → Q-2-41, source ranges (the `@` Str covers only the
+      `@`; the folded whitespace becomes the Space), and writer round
+      trips (`a \@ b`, `user\@example.com`).
+- [x] **Found and fixed in passing: ATX headings starting with a
+      literal-Str token got a leading Space.** `# @ b`, and
+      *pre-existing* `# < b` (bd-j9cf) and `# * b` (#731), gave
+      `Header [Space, Str "@", …]`: the literal token folds the space
+      after `#` into its range, and the `pandoc_str` handler splits it
+      back out. `process_atx_heading` already stripped *trailing*
+      Spaces for pandoc parity; it now strips leading ones too, and all
+      cases match pandoc. Pinned in
+      `heading_starting_with_a_literal_str_has_no_leading_space`.
+- [x] Round-trip fixtures `roundtrip_tests/qmd-json-qmd/bare_at_spaced.qmd`,
+      `bare_at_eol.qmd`, `bare_at_word.qmd`, `bare_at_line_start.qmd`
+      (named after the `bare_lt_*` ones). `test_qmd_roundtrip_consistency`
+      passes.
+- [x] Writer comment updated (`qmd.rs`, the `'@'` escape arm). It still
+      always escapes.
+- [x] Rescanned `claude-notes/` (1444 files, including this plan):
+      **718 → 770 clean.** 51 of the old files became clean, 0 became
+      failing, and no file's first error sits on an `@` anymore. This
+      plan itself parses clean, which exercises most shapes in the
+      tables above (one `` `@`'s `` was rephrased; that was a Q-2-7
+      apostrophe issue, not `@`). Top remaining first errors: Q-2-7
+      (409), uncoded (77), Q-2-10 (56), Q-2-12 (37).
+- [x] Full `cargo xtask verify` (run under the pinned Node 24 via
+      `fnm exec --using=24`, bare, log read afterwards): **all 14 steps
+      passed** on 2026-09-25. That covers clippy, fmt, the warnings-denied
+      build, the tree-sitter corpus plus the CRLF parity rerun, 15010 Rust
+      tests (201 skipped), the hub-client build incl. WASM with 1243 + 147
+      + 153 tests, trace-viewer, shared preview packages, hub MCP
+      packages, and the q2-preview-spa build. After verify, a comment
+      reflow in `scanner.c` and one extra assertion (`>@ b`); the corpus
+      and `test_bare_at_str` were rerun green.
 - [x] Follow-up strands filed (bd-2o8rq2xj, bd-0idqzj33, bd-5qmh5acq).
-- [ ] Comment on the strand with the results.
+- [x] Comment on the strand with the results.
 
 ## Decisions (2026-09-25)
 

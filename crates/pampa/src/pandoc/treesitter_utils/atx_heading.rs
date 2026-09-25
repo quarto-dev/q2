@@ -69,6 +69,16 @@ pub fn process_atx_heading(
             break;
         }
     }
+    // Strip leading Space nodes too. The space after the `#` marker is
+    // normally outside every inline node, but a literal-Str token (`# < b`,
+    // `# * b`, `# @ b`) folds the whitespace in front of it into its range,
+    // and the pandoc_str handler splits that back out as a Space. Pandoc
+    // strips both ends of the heading content.
+    let leading = content
+        .iter()
+        .take_while(|inline| matches!(inline, Inline::Space(_)))
+        .count();
+    content.drain(..leading);
 
     PandocNativeIntermediate::IntermediateBlock(Block::Header(Header {
         level,

@@ -1786,9 +1786,11 @@ fn escape_markdown(
             '|' => result.push_str("\\|"), // Tables
             '~' => result.push_str("\\~"), // Subscript, strikeout
             '^' => result.push_str("\\^"), // Superscript
-            '@' => result.push_str("\\@"), // Citations: every bare @ in
-            // a Str is either a citation start (when followed by alnum/_/{)
-            // or an outright parse error (any other position). Always escape.
+            '@' => result.push_str("\\@"), // Citations: a bare @ in a Str
+            // may start a citation (followed by alnum/_/{) or be an error
+            // (a likely citation typo such as `@-foo`); only some positions
+            // read back as literal text (bd-bare-at-literal-w3ytmu8e).
+            // Escaping is always correct, so always escape.
             '{' => result.push_str("\\{"), // Attribute span open: bare { in
             '}' => result.push_str("\\}"), // a Str body is always a parse
             // error in qmd. Always escape.

@@ -425,8 +425,8 @@ typedef struct {
     // and indentation, whitespace included, so the first inline token
     // after them sees ws_before_token == 0 and a nonzero column even
     // though, as in CommonMark, it is at line start. See
-    // at_ws_or_line_content_start. Serialized: tree-sitter restores the state of
-    // the last emitted external token before every scan() call.
+    // at_ws_or_line_content_start. Serialized: tree-sitter restores the
+    // state of the last emitted external token before every scan() call.
     uint8_t line_content_column;
     // Per-call scratch: the value note_line_content_start recorded for the
     // token this call emits (0 if none). Copied into line_content_column
