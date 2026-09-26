@@ -86,6 +86,15 @@ const PANDOC_COMBINING_MARKS = "\\p{M}\\p{Cf}";
 const startStrRegex = regexOr(
     "[" + PANDOC_NON_ASCII_WHITESPACE + PANDOC_ALPHA_NUM + PANDOC_SMART_QUOTES + "-]");
 const afterUnderscoreRegex = "[" + PANDOC_ALPHA_NUM + "]";
+// An `@` directly after a letter or digit continues the word: `user@example.com`,
+// `mermaid@11`, `word@` are one Str, as in Pandoc (a textual citation cannot
+// follow a Str). Pairing the `@` with the alphanumeric in front of it is how a
+// regex says "only after an alphanumeric"; it is both a start alternative
+// (`a@`) and a continuation item (`foo@bar`). Because the word is lexed before
+// the external scanner reaches its `@`, a word-internal `@` never becomes a
+// citation delimiter. A standalone `@` is the scanner's business
+// (parse_cite_author_in_text, bd-bare-at-literal-w3ytmu8e).
+const wordAtRegex = "[" + PANDOC_ALPHA_NUM + "]@";
 
 // Thanks, Claude
 const EMOJI_REGEX = "(\\p{Extended_Pictographic}(\\p{Emoji_Modifier}|\uFE0F)?(\u200D\\p{Extended_Pictographic}(\\p{Emoji_Modifier}|\uFE0F)?)*)";
@@ -123,12 +132,13 @@ const PANDOC_REGEX_STR =
             // three-at-a-time rule.
             "[.]+",
             "[>.,;!?]",
-            startStrRegex +
+            regexOr(startStrRegex, wordAtRegex) +
             regexOr(
                 "[!,.;?" + PANDOC_NON_ASCII_WHITESPACE + PANDOC_ALPHA_NUM + PANDOC_SMART_QUOTES + PANDOC_COMBINING_MARKS + "-]",
                 // "\\\\.",
                 "['\\u{2018}\\u{2019}][\\p{L}\\p{N}]",
-                regexBracket("[_]" + afterUnderscoreRegex)
+                regexBracket("[_]" + afterUnderscoreRegex),
+                wordAtRegex
             ) + "*");
 
 // DESIGN INVARIANT — no `conflicts:`.
