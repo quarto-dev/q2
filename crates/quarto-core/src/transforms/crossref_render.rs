@@ -41,7 +41,7 @@ use quarto_pandoc_types::attr::{Attr, AttrSourceInfo, TargetSourceInfo};
 use quarto_pandoc_types::block::{Block, Blocks, Div, Figure, Header};
 use quarto_pandoc_types::caption::Caption;
 use quarto_pandoc_types::custom::{CustomNode, Slot};
-use quarto_pandoc_types::inline::{Inline, Inlines, Link, Math, Space, Span, Str};
+use quarto_pandoc_types::inline::{Inline, Inlines, Link, Space, Span, Str};
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_source_map::SourceInfo;
 
