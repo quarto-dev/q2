@@ -306,30 +306,27 @@ async function bootstrapProjectSetVariant(
 }
 
 /**
- * Wait for the root project set to connect and return its document id,
- * bare (no `automerge:` prefix).
+ * Wait for the root project set to be fully connected and return its
+ * document id, bare (no `automerge:` prefix).
  *
- * The home renders before the root connects, so `getProjectSetDocId()` can
- * still be null right after it appears. Read the id through this helper,
- * never with a one-shot `page.evaluate`.
+ * Waits on the app's own status (`data-project-set-status` on `<html>`,
+ * published by App.tsx). Neither a visible home nor a non-null
+ * `getProjectSetDocId()` is enough: the home renders while the root is
+ * still connecting, and the root's connection (and doc id) exists before
+ * its pointers are saved and the status reaches 'connected'.
  */
 export async function waitForProjectSetDocId(page: Page, timeout = 20000): Promise<string> {
-  const latest: { id: string | null } = { id: null };
-  await expect
-    .poll(
-      async () => {
-        latest.id = await page.evaluate(async () => {
-          await window.__quartoTestReady;
-          const hooks = window.__quartoTest;
-          if (!hooks) throw new Error('__quartoTest missing — rebuild with VITE_E2E=1');
-          return hooks.projectSet.getProjectSetDocId();
-        });
-        return latest.id;
-      },
-      { timeout, message: 'root project set never connected' },
-    )
-    .not.toBeNull();
-  return latest.id!.replace(/^automerge:/, '');
+  await expect(page.locator('html')).toHaveAttribute('data-project-set-status', 'connected', {
+    timeout,
+  });
+  const id = await page.evaluate(async () => {
+    await window.__quartoTestReady;
+    const hooks = window.__quartoTest;
+    if (!hooks) throw new Error('__quartoTest missing — rebuild with VITE_E2E=1');
+    return hooks.projectSet.getProjectSetDocId();
+  });
+  if (id === null) throw new Error("project set status is 'connected' but it has no root doc id");
+  return id.replace(/^automerge:/, '');
 }
 
 /**

@@ -4,6 +4,8 @@ paths:
   - "hub-client/src/**/*.test.tsx"
   - "hub-client/src/test-utils/**"
   - "hub-client/vitest*.ts"
+  - "hub-client/e2e/**"
+  - "hub-client/playwright*.ts"
 ---
 
 # hub-client tests
@@ -65,3 +67,31 @@ explicit wait (e.g. `await waitFor(...)`) before the test returns.
    that started the work. That is the leak.
 3. Mock the source or wait for it in the test. Don't silence the log or
    set `dangerouslyIgnoreUnhandledErrors`; that hides the next one too.
+
+## Playwright: wait on the state you assert, not on a proxy for it
+
+The E2E version of the same mistake: a spec waits for something visible,
+then reads app state *once* and asserts on it, assuming the visible thing
+implies the state has settled. `first-run.spec.ts` flaked this way (PR
+#734). It waited for the projects home, then read the root doc id and got
+`null`, because the home renders while the project set is still
+connecting.
+
+- **Read settling state with retrying assertions.** Use web-first
+  assertions (`await expect(locator).toHaveText(...)`) or
+  `await expect.poll(() => page.evaluate(...))`. Avoid
+  `expect(await page.evaluate(...))` and `expect(await locator.textContent())`
+  on anything asynchronous.
+- **Make the wait discriminate.** Waiting for text that is present both
+  before and after the change, or for an element that already existed
+  before the click, passes immediately and synchronizes nothing.
+- **Don't use `page.waitForTimeout` as a synchronization point.** A fixed
+  sleep is a guess that fails under CI load.
+- **Project-set readiness:** the bootstrap helpers in
+  `e2e/helpers/projectFactory.ts` return only once the set is
+  `connected`. Read the root id with `waitForProjectSetDocId(page)`, which
+  waits on the `data-project-set-status` attribute App.tsx publishes on
+  `<html>`. Don't read `getProjectSetDocId()` directly.
+- **Keep helper comments honest.** If a helper's docstring claims an
+  ordering ("lands on the home once connected"), check that the app still
+  provides it. A stale claim like that is what hid the first-run race.
