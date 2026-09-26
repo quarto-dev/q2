@@ -287,8 +287,9 @@ async function bootstrapProjectSetVariant(
     );
   }
 
-  // The app creates the project set on its own and lands on the home once
-  // the set is connected (the collections status gates the render).
+  // The app creates the project set on its own. The home renders while the
+  // set is still connecting (its skeleton covers 'connecting'), so a visible
+  // home is not yet a connected root: wait for both.
   if (variant === 'classic') {
     await expect(
       page.getByRole('heading', { name: 'Your Projects' }),
@@ -301,6 +302,34 @@ async function bootstrapProjectSetVariant(
       page.getByPlaceholder('Search projects…'),
     ).toBeVisible({ timeout: 20000 });
   }
+  await waitForProjectSetDocId(page);
+}
+
+/**
+ * Wait for the root project set to connect and return its document id,
+ * bare (no `automerge:` prefix).
+ *
+ * The home renders before the root connects, so `getProjectSetDocId()` can
+ * still be null right after it appears. Read the id through this helper,
+ * never with a one-shot `page.evaluate`.
+ */
+export async function waitForProjectSetDocId(page: Page, timeout = 20000): Promise<string> {
+  const latest: { id: string | null } = { id: null };
+  await expect
+    .poll(
+      async () => {
+        latest.id = await page.evaluate(async () => {
+          await window.__quartoTestReady;
+          const hooks = window.__quartoTest;
+          if (!hooks) throw new Error('__quartoTest missing — rebuild with VITE_E2E=1');
+          return hooks.projectSet.getProjectSetDocId();
+        });
+        return latest.id;
+      },
+      { timeout, message: 'root project set never connected' },
+    )
+    .not.toBeNull();
+  return latest.id!.replace(/^automerge:/, '');
 }
 
 /**
