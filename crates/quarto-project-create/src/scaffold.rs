@@ -395,8 +395,43 @@ pub fn get_scaffold(target: &ProjectTypeWithTemplate) -> Option<ProjectScaffold>
                 Some(_) => None, // Unknown template
             }
         }
+        ProjectType::Book => match target.template.as_deref() {
+            None => Some(
+                ProjectScaffold::new(ProjectType::Book)
+                    .add_file(ScaffoldFileDef::template(
+                        "_quarto.yml",
+                        templates::book::QUARTO_YML,
+                    ))
+                    .add_file(ScaffoldFileDef::static_text(
+                        "index.qmd",
+                        templates::book::INDEX_QMD,
+                    ))
+                    .add_file(ScaffoldFileDef::static_text(
+                        "intro.qmd",
+                        templates::book::INTRO_QMD,
+                    ))
+                    .add_file(ScaffoldFileDef::static_text(
+                        "summary.qmd",
+                        templates::book::SUMMARY_QMD,
+                    ))
+                    .add_file(ScaffoldFileDef::static_text(
+                        "references.qmd",
+                        templates::book::REFERENCES_QMD,
+                    ))
+                    .add_file(ScaffoldFileDef::static_text(
+                        "references.json",
+                        templates::book::REFERENCES_JSON,
+                    ))
+                    .add_file(ScaffoldFileDef::binary(
+                        "cover.png",
+                        templates::book::COVER_PNG,
+                        "image/png",
+                    )),
+            ),
+            Some(_) => None, // Unknown template
+        },
         // Not yet implemented
-        ProjectType::Blog | ProjectType::Manuscript | ProjectType::Book => None,
+        ProjectType::Blog | ProjectType::Manuscript => None,
     }
 }
 

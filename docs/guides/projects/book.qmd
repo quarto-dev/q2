@@ -1,0 +1,167 @@
+---
+title: Book projects
+---
+
+## Overview
+
+A `book` project renders a set of chapters as a single, numbered work:
+chapters and appendices number automatically, cross-references resolve
+across chapter boundaries, and citations merge into one book-wide
+bibliography. It reuses the `website` project's sidebar navigation: a
+table of contents down the side, chapter by chapter.
+
+```bash
+q2 create project book mybook
+```
+
+```default
+Created project in mybook:
+
+  created  _quarto.yml
+  created  index.qmd
+  created  intro.qmd
+  created  summary.qmd
+  created  references.qmd
+  created  references.json
+  created  cover.png
+  created  .gitignore
+
+To render it: q2 render mybook
+```
+
+The scaffold is a starting point you edit: an unnumbered Preface
+(`index.qmd`), an `Introduction` chapter, a `Summary` chapter, and an
+unnumbered `References` chapter, plus a `cover.png` and a starter
+bibliography.
+
+## `_quarto.yml` shape
+
+```yaml
+project:
+  type: book
+
+book:
+  title: "My Book"
+  author: "Norah Jones"
+  chapters:
+    - index.qmd
+    - intro.qmd
+    - summary.qmd
+  references: references.qmd
+
+bibliography: references.json
+filters:
+  - citeproc
+```
+
+`book.chapters` lists the files to render, in book order. The first
+entry named `index.*` becomes the book's home page automatically,
+wherever it appears in the list. A chapter is numbered unless its
+front-matter `title:` or its first heading carries the `.unnumbered`
+class — the scaffold's Preface uses this to stay out of the chapter
+count:
+
+```markdown
+# Preface {.unnumbered}
+```
+
+`book.references` names the one chapter that holds the merged
+bibliography's `{#refs}` div, numbered in the same sequence as
+`book.chapters` — so, like the scaffold's References chapter, it's
+usually marked `.unnumbered` too.
+
+### Parts and appendices
+
+Group chapters under a titled divider using `part`:
+
+```yaml
+book:
+  chapters:
+    - index.qmd
+    - part: "Part I: Getting Started"
+      chapters:
+        - installation.qmd
+        - quickstart.qmd
+```
+
+Parts nest one level only — a `part:` entry cannot contain another
+`part:` entry.
+
+`book.appendices` is a second, separate chapter list that numbers
+independently (rendered as letters — Appendix A, B, …) and appears
+under its own "Appendices" divider in the sidebar:
+
+```yaml
+book:
+  chapters:
+    - index.qmd
+    - intro.qmd
+  appendices:
+    - installation-details.qmd
+```
+
+## Output formats
+
+Which format you render to changes how chapters combine:
+
+- **HTML** (the default) renders each chapter as its own page —
+  `intro.qmd` becomes `intro.html`, and so on — with chapter-aware
+  numbering, and cross-references and citations resolved across the
+  whole project.
+- **Typst and EPUB** merge every chapter into a single document before
+  compiling, so `q2 render mybook --to typst` produces one PDF and
+  `--to epub` produces one `.epub`; the target format itself keeps
+  chapter numbering continuous across the book, rather than restarting
+  per chapter the way HTML does.
+
+  Render to Typst without configuring an explicit extension, and Quarto
+  auto-resolves to the bundled `orange-book` extension — the same
+  zero-config default Quarto 1 uses — so `q2 render mybook --to typst`
+  works out of the box. You can configure a *different* Typst book
+  extension explicitly; only `orange-book` auto-loads on its own.
+- **DOCX, PPTX, and LaTeX** are not supported book targets. DOCX and
+  PPTX fail with a clear [`Q-5-33`](../../errors/project/Q-5-33.qmd)
+  diagnostic naming the problem rather than silently rendering
+  chapters as unrelated documents. LaTeX/PDF book output isn't
+  implemented at all yet — Quarto 2 has no LaTeX output for any
+  project type, not just books.
+
+## Known limitations
+
+Book projects are new in this release. A few gaps are worth knowing
+about up front, rather than discovering them mid-project:
+
+- **Per-chapter front matter beyond the title is dropped in multi-file
+  HTML.** A chapter's `subtitle`, `author`, `date`, and `abstract`
+  fields don't render — only the book-level versions of these fields
+  do.
+- **Numeric citation styles renumber independently per chapter in
+  multi-file HTML.** The bibliography itself merges correctly across
+  chapters, but a numeric CSL style (`[1]`, `[2]`, …) numbers each
+  chapter's in-text citations starting from its own count, not one
+  continuous sequence across the book. Author-date styles are
+  unaffected. (Single-file Typst/EPUB output doesn't have this
+  limitation — the whole book is one document there.)
+- **No incremental rebuilds.** Every render processes every chapter;
+  there's no caching of unchanged chapters yet.
+- **Every chapter's data is held in memory for the whole render**,
+  for both single-file merge and multi-file HTML. This is fine at the
+  scale of a typical book; it hasn't been verified at 50+ chapters.
+- **A duplicate cross-reference ID across chapters previews cleanly**
+  — `q2 preview` lets the first chapter in book order win, non-fatally
+  — **but is a hard error on a real render.** A real duplicate can
+  look fine while you're editing and only surface once you render.
+- **Cross-chapter reference resolution in `q2 preview` is
+  approximate** and recomputed on every preview, adding latency on top
+  of the editor's own per-file analysis. It's uncached and unverified
+  at large book sizes.
+- **Preview shows neither a merged bibliography nor a single-file
+  merge.** `q2 preview` always shows one chapter as ordinary HTML, so
+  it can't show a Typst/EPUB single-file render or the merged,
+  book-wide bibliography.
+- **Multi-file HTML doesn't write all chapters atomically.** Chapters
+  are written to disk one at a time as rendering proceeds. If a later
+  chapter fails, the render still reports failure overall — it isn't
+  silent — but an earlier chapter already on disk may reference
+  content from the chapter that failed, leaving stale output until the
+  next full re-render.

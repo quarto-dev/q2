@@ -552,7 +552,7 @@ fn resolve_custom_project_type(
             ));
         }
         Some(Some(base)) => match ProjectKind::try_from(base.as_str()) {
-            Ok(kind @ (ProjectKind::Book | ProjectKind::Manuscript)) => {
+            Ok(kind @ ProjectKind::Manuscript) => {
                 return Err(project_contribution_error(
                     ext,
                     format!(
@@ -572,8 +572,8 @@ fn resolve_custom_project_type(
                     format!(
                         "Extension `{}` declares base project type `{base}`, which \
                          is not a built-in project type. A custom project type must \
-                         name a built-in base (`default` or `website`); chaining \
-                         custom types is not supported.",
+                         name a built-in base (`default`, `website`, or `book`); \
+                         chaining custom types is not supported.",
                         ext.id
                     ),
                 ));
