@@ -1224,6 +1224,13 @@
     "docs_url": "https://quarto.org/docs/errors/crossref/Q-15-1",
     "since_version": "99.9.9"
   },
+  "Q-15-2": {
+    "subsystem": "crossref",
+    "title": "Duplicate Crossref Identifier Across Chapters",
+    "message_template": "A crossref identifier (e.g. a `fig-`/`tbl-` label or an explicit `#id`) is defined in more than one chapter of the same book. A reference like `@fig-foo` must resolve to exactly one target, so each crossref id must be unique across all chapters. Quarto keeps the first chapter's definition; give one of the duplicates a different label.",
+    "docs_url": "https://quarto.org/docs/errors/crossref/Q-15-2",
+    "since_version": "99.9.9"
+  },
   "Q-5-8": {
     "subsystem": "project",
     "title": "Project Render Script Failed",
@@ -1644,6 +1651,34 @@
     "docs_url": "https://quarto.org/docs/errors/project/Q-5-32",
     "since_version": "99.9.9"
   },
+  "Q-5-33": {
+    "subsystem": "project",
+    "title": "Format Not Supported by Book Projects",
+    "message_template": "Book projects render only to formats with book support (`html`, `typst`, and `epub` in this version). Rendering a book to any other format would produce disconnected per-chapter files with no book structure, so it is rejected instead.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-33",
+    "since_version": "99.9.9"
+  },
+  "Q-5-34": {
+    "subsystem": "project",
+    "title": "Book Parts Cannot Be Nested",
+    "message_template": "A `part:` entry inside another part's `chapters:` list is not supported. Book structure allows parts at the top level of `book.chapters` or `book.appendices` only. Move the nested part to the top level or flatten it into a chapter.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-34",
+    "since_version": "99.9.9"
+  },
+  "Q-5-35": {
+    "subsystem": "project",
+    "title": "Book Chapter File Not Found",
+    "message_template": "A file listed in `book.chapters`, `book.appendices`, or `book.references` does not exist on disk. Book projects render exactly the files these keys name, so every entry must point at a real file. Fix the path or remove the entry.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-35",
+    "since_version": "99.9.9"
+  },
+  "Q-5-36": {
+    "subsystem": "project",
+    "title": "Book Has No Home Page",
+    "message_template": "A book project's chapter list must include a home page: a file whose name starts with `index.` (for example `index.qmd`), serving as the book's landing page. Add an index file to `book.chapters`.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-36",
+    "since_version": "99.9.9"
+  },
   "Q-13-8": {
     "subsystem": "navigation",
     "title": "Unsupported toc-location value",
@@ -1852,6 +1887,13 @@
     "title": "Math Syntax Error",
     "message_template": "The math expression contains a construct the parser could not interpret: an alignment `&` outside an environment, a stray `\\begin`/`\\end`, or another malformed piece of syntax.",
     "docs_url": "https://quarto.org/docs/errors/math/Q-22-13",
+    "since_version": "99.9.9"
+  },
+  "Q-23-1": {
+    "subsystem": "citeproc",
+    "title": "Citeproc Resolves After Book Merge Point",
+    "message_template": "A book chapter orders the built-in citeproc filter into `.post` (after the `quarto` sentinel in `filters:`), so its citations resolve after this chapter pauses for project-wide crossref/bibliography aggregation. Its references will not appear in the book's merged bibliography.",
+    "docs_url": "https://quarto.org/docs/errors/citeproc/Q-23-1",
     "since_version": "99.9.9"
   }
 }

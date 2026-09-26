@@ -66,62 +66,77 @@ function book_numbering()
       return meta
     end,
 
+    -- QUARTO2-PATCH: read the quarto-book-item-* Pandoc attributes the Q2
+    -- single-file merge step stamps on every chapter/divider heading,
+    -- instead of currentFileMetadataState().file (Q1's own mechanism,
+    -- populated by common/filemetadata.lua from the paired
+    -- <!-- quarto-file-metadata: ... --> comment markers). This is
+    -- additive, not a replacement: the merge step still emits both forms
+    -- from the same source data (see claude-notes/plans/
+    -- 2026-09-21-book-projects-P2-single-file-merge.md) -- the comment
+    -- markers remain the *only* channel the unpatched orange-book Typst
+    -- extension's own filter reads via quarto.doc.file_metadata(). This
+    -- patch fixes a genuinely dead Q1 read along the way: Q1's
+    -- bookItemMetadata (book-render.ts) never sets a `file.appendix`
+    -- field, so the "mark appendix chapters for epub" rule below was
+    -- unreachable in Q1 too. quarto-book-item-appendix (set only on
+    -- appendix chapters, kind Appendix + file Some) is what makes it live.
     Header = function(el)
-      local file = currentFileMetadataState().file
-      if file ~= nil then
-        local bookItemType = file.bookItemType
-        local bookItemDepth = file.bookItemDepth
-        if bookItemType ~= nil then
-          -- if we are in an unnumbered chapter then add unnumbered class
-          if bookItemType == "chapter" and file.bookItemNumber == nil then
-            el.attr.classes:insert('unnumbered')
-          end
+      local bookItemType = el.attr.attributes["quarto-book-item-type"]
+      if bookItemType ~= nil then
+        local bookItemDepth = tonumber(el.attr.attributes["quarto-book-item-depth"])
+        local bookItemAppendix = el.attr.attributes["quarto-book-item-appendix"] == "true"
 
-          -- handle latex "part" and "appendix" headers
-          if el.level == 1 and _quarto.format.isLatexOutput() then
-            if bookItemType == "part" then
-              local partPara = pandoc.Para({
-                pandoc.RawInline('latex', '\\part{')
-              })
-              tappend(partPara.content, el.content)
-              partPara.content:insert( pandoc.RawInline('latex', '}'))
-              return partPara
-            elseif bookItemType == "appendix" then
-              local appendixPara = pandoc.Para({
-                pandoc.RawInline('latex', '\\cleardoublepage\n\\phantomsection\n\\addcontentsline{toc}{part}{')
-              })
-              tappend(appendixPara.content, el.content)
-              appendixPara.content:insert(pandoc.RawInline('latex', '}\n\\appendix'))
-              return appendixPara
-            elseif bookItemType == "chapter" and bookItemDepth == 0 then
-              quarto_global_state.usingBookmark = true
-              local bookmarkReset = pandoc.Div({
-                pandoc.RawInline('latex', '\\bookmarksetup{startatroot}\n'),
-                el
-              })
-              return bookmarkReset
-            end
-          end
-
-          -- Typst part/appendix handling is delegated to book extensions
-          -- (each Typst book package has different syntax for parts and appendices)
-
-          -- mark appendix chapters for epub
-          if el.level == 1 and _quarto.format.isEpubOutput() then
-            if file.appendix == true and bookItemType == "chapter" then
-              el.attr.attributes["epub:type"] = "appendix"
-            end
-          end
-
-          -- part cover pages have unnumbered headings
-          if (bookItemType == "part") then
-            el.attr.classes:insert("unnumbered")
-          end
-
-          -- return potentially modified heading el
-          return el
+        -- if we are in an unnumbered chapter then add unnumbered class
+        if bookItemType == "chapter" and el.attr.attributes["quarto-book-item-number"] == nil then
+          el.attr.classes:insert('unnumbered')
         end
+
+        -- handle latex "part" and "appendix" headers
+        if el.level == 1 and _quarto.format.isLatexOutput() then
+          if bookItemType == "part" then
+            local partPara = pandoc.Para({
+              pandoc.RawInline('latex', '\\part{')
+            })
+            tappend(partPara.content, el.content)
+            partPara.content:insert( pandoc.RawInline('latex', '}'))
+            return partPara
+          elseif bookItemType == "appendix" then
+            local appendixPara = pandoc.Para({
+              pandoc.RawInline('latex', '\\cleardoublepage\n\\phantomsection\n\\addcontentsline{toc}{part}{')
+            })
+            tappend(appendixPara.content, el.content)
+            appendixPara.content:insert(pandoc.RawInline('latex', '}\n\\appendix'))
+            return appendixPara
+          elseif bookItemType == "chapter" and bookItemDepth == 0 then
+            quarto_global_state.usingBookmark = true
+            local bookmarkReset = pandoc.Div({
+              pandoc.RawInline('latex', '\\bookmarksetup{startatroot}\n'),
+              el
+            })
+            return bookmarkReset
+          end
+        end
+
+        -- Typst part/appendix handling is delegated to book extensions
+        -- (each Typst book package has different syntax for parts and appendices)
+
+        -- mark appendix chapters for epub
+        if el.level == 1 and _quarto.format.isEpubOutput() then
+          if bookItemAppendix and bookItemType == "chapter" then
+            el.attr.attributes["epub:type"] = "appendix"
+          end
+        end
+
+        -- part cover pages have unnumbered headings
+        if (bookItemType == "part") then
+          el.attr.classes:insert("unnumbered")
+        end
+
+        -- return potentially modified heading el
+        return el
       end
     end
+    -- END QUARTO2-PATCH
   }
 end

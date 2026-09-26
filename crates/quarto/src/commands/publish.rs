@@ -292,7 +292,7 @@ impl PublishRenderer for ProjectPublishRenderer {
                 runtime.clone(),
             );
             let summary = pipeline
-                .run()
+                .run_with_book_support()
                 .await
                 .map_err(|e| PublishError::Other(anyhow::anyhow!("{e}")))?;
 

@@ -1,0 +1,65 @@
+---
+title: "Duplicate Crossref Identifier Across Chapters"
+description: "A crossref identifier (such as a `fig-`/`tbl-` label or an explicit `#id`) is defined in more than one chapter of the same book."
+code: Q-15-2
+subsystem: crossref
+status: stub
+since: "99.9.9"
+categories:
+  - crossref
+---
+
+# `Q-15-2` — Duplicate Crossref Identifier Across Chapters
+
+> A crossref identifier (such as a `fig-`/`tbl-` label or an
+> explicit `#id`) is defined in more than one chapter of the same
+> book.
+
+## What this means
+
+In a multi-file book, every chapter's cross-reference targets share
+one project-wide namespace: a reference like `@fig-plot` written in
+*any* chapter must resolve to exactly one element in the whole book.
+Each crossref id must therefore be **unique across all chapters**,
+not just within the chapter that defines it.
+
+This error fires when two different chapters define the same id —
+for example, both `chapter1.qmd` and `chapter3.qmd` contain a figure
+labeled `#| label: fig-plot`. The diagnostic underlines **both**
+occurrences (the first definition and the duplicate) and names the
+chapters involved.
+
+Quarto keeps the **first** chapter's definition (in book chapter
+order) and ignores the duplicate, so the render still completes —
+but references to that id resolve to the first chapter's target,
+which may not be the one you meant.
+
+## Why this happens
+
+Common causes:
+
+- **Copy-paste between chapters** — a figure or table block was
+  copied into another chapter and its `label:` / `#id` was not
+  changed.
+- **Parallel structure** — chapters that intentionally mirror each
+  other (e.g. one figure per case study) reusing the same labels.
+- **A template or include** that carries a labeled element being
+  pulled into more than one chapter.
+
+## How to fix
+
+Give one of the targets a different identifier so each is unique
+across the book:
+
+- For computational figures/tables, change the `#| label:` option
+  in one of the chapters (e.g. `fig-plot` and `fig-plot-survey`).
+- For explicit ids, change the `{#fig-plot}` attribute.
+
+Then update any `@`-references that should point at the other
+target. If the duplicated element does not need to be
+cross-referenceable, removing its label also resolves the error.
+
+## Related
+
+- `Q-15-1` — the same uniqueness requirement, within a single
+  document.

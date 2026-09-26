@@ -7,7 +7,7 @@
 
 use async_trait::async_trait;
 
-use crate::filter_resolve::{ResolvedFilters, resolve_filters};
+use crate::filter_resolve::resolve_filters;
 use crate::stage::{
     EventLevel, PipelineData, PipelineDataKind, PipelineError, PipelineStage, StageContext,
 };
@@ -54,16 +54,19 @@ impl UserFiltersStage {
             position: FilterPosition::Post,
         }
     }
+}
 
-    fn select_filters<'a>(
-        &self,
-        resolved: &'a ResolvedFilters,
-    ) -> &'a [pampa::unified_filter::FilterSpec] {
-        match self.position {
-            FilterPosition::Pre => &resolved.pre,
-            FilterPosition::Post => &resolved.post,
-        }
-    }
+/// Whether `format` renders through a real `pandoc` subprocess with Q1's
+/// `main.lua` filter chain (docx, pptx, typst, …), as opposed to Q2's
+/// native HTML writer. book-projects P2b: only Pandoc-hybrid targets have
+/// a `main.lua` entry-point mechanism for `UserFiltersStage::post()` to
+/// redirect `Position::Post` filters into — HTML has no `main.lua` leg at
+/// all, so it must keep running them via pampa exactly as before.
+fn is_pandoc_hybrid(format: &crate::format::Format) -> bool {
+    matches!(
+        crate::format::PipelineProfile::from_format(&format.target_format),
+        crate::format::PipelineProfile::Pandoc(_)
+    )
 }
 
 #[async_trait(?Send)]
@@ -96,6 +99,25 @@ impl PipelineStage for UserFiltersStage {
             ));
         };
 
+        // book-projects P2 citeproc deferral: a render that defers
+        // citeproc (the book single-file merge runs it once on the
+        // merged document instead of per chapter) strips `"citeproc"`
+        // from the metadata *before* filter resolution reads it — the
+        // stage that owns resolution owns the deferral point.
+        if matches!(self.position, FilterPosition::Pre) && ctx.defer_citeproc {
+            crate::project::book::strip_citeproc_from_filters(&mut doc.ast.meta);
+        }
+
+        // book-projects P6: a non-references book chapter gets
+        // `suppress-bibliography: true` written into its metadata before
+        // filter resolution reads it, so its own per-chapter citeproc pass
+        // renders in-text citations normally but appends no local
+        // bibliography div — the project-wide merge owns the one true
+        // bibliography, installed later into the references chapter only.
+        if matches!(self.position, FilterPosition::Pre) && ctx.suppress_book_bibliography {
+            crate::project::book::set_suppress_bibliography(&mut doc.ast.meta);
+        }
+
         // Resolve filters from merged metadata
         let document_dir = ctx
             .document
@@ -110,10 +132,39 @@ impl PipelineStage for UserFiltersStage {
             ctx.runtime.as_ref(),
         );
 
-        let filters = self.select_filters(&resolved);
+        // book-projects P6: record whether filter resolution placed
+        // `"citeproc"` into `.post` — computed once, from the `Pre` pass
+        // only (both passes resolve independently from the same
+        // metadata, so `Pre` seeing it first is enough; `Post`'s own
+        // resolution below would just repeat the same answer).
+        if matches!(self.position, FilterPosition::Pre) {
+            ctx.citeproc_filter_in_post = resolved
+                .post
+                .contains(&pampa::unified_filter::FilterSpec::Citeproc);
+        }
+
+        // book-projects P2b: on a Pandoc-hybrid target, `Position::Post`
+        // filters are forwarded into `main.lua`'s own entry-point
+        // mechanism by `PandocWriteStage` (see
+        // `QuartoFilterEntryPointsContributor`) instead of running here
+        // via pampa — pampa's Lua engine never implemented the Q1-ported
+        // pure-Lua helpers (`quarto.utils.file_metadata_filter` etc.)
+        // those filters may rely on. Running them here too would
+        // double-execute them. HTML targets have no `main.lua` leg at
+        // all, so they keep running `Position::Post` filters here
+        // exactly as before.
+        if matches!(self.position, FilterPosition::Post) && is_pandoc_hybrid(&ctx.format) {
+            return Ok(PipelineData::DocumentAst(doc));
+        }
+
+        let filters: Vec<pampa::unified_filter::FilterSpec> = match self.position {
+            FilterPosition::Pre => resolved.pre.clone(),
+            FilterPosition::Post => resolved.post.clone(),
+        };
         if filters.is_empty() {
             return Ok(PipelineData::DocumentAst(doc));
         }
+        let filters = filters.as_slice();
 
         trace_event!(
             ctx,
@@ -150,6 +201,14 @@ impl PipelineStage for UserFiltersStage {
                 )) as std::sync::Arc<dyn pampa::attribution::AttributionLookup>
             });
 
+        // bd-oqoozmtr: citeproc's relative `bibliography`/`csl` resolve
+        // against the document's own directory — the declaration site for
+        // front-matter values. Captured before `doc.ast` is moved below.
+        let doc_dir = doc
+            .path
+            .parent()
+            .map_or_else(|| std::path::PathBuf::from("."), |p| p.to_path_buf());
+
         // The Lua filter future is !Send (mlua::Lua is !Send), but this
         // pipeline stage runs under #[async_trait] which requires Send on native.
         // On WASM (single-threaded, ?Send), we can .await directly.
@@ -172,6 +231,7 @@ impl PipelineStage for UserFiltersStage {
                     target_format,
                     runtime,
                     attribution,
+                    &doc_dir,
                 ))
                 .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))
             })
@@ -184,6 +244,7 @@ impl PipelineStage for UserFiltersStage {
             target_format,
             ctx.runtime.clone(),
             attribution,
+            &doc_dir,
         )
         .await
         .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()));
@@ -193,6 +254,13 @@ impl PipelineStage for UserFiltersStage {
         doc.ast = output.pandoc;
         doc.ast_context = output.context;
         ctx.diagnostics.extend(output.diagnostics);
+        // book-projects P6: harvest this chapter's citation manifest
+        // alongside the citeproc filter's own unchanged pass. `None` when
+        // no filter in this position's list was `Citeproc`, or `Citeproc`
+        // ran but resolved no citations.
+        if output.citation_manifest.is_some() {
+            ctx.citation_manifest = output.citation_manifest;
+        }
 
         // Store HTML dependencies as artifacts and push text includes
         let mut dep_diagnostics = Vec::new();
@@ -374,6 +442,163 @@ mod tests {
         }
     }
 
+    /// Like [`MockRuntime`], but records every `file_read` path — book-
+    /// projects P2b's negative controls need to distinguish "pampa never
+    /// touched this filter" from "pampa touched it and happened to
+    /// succeed" (a `MockRuntime` returns `Ok(vec![])` for *any* path, so
+    /// even a "nonexistent" filter loads as an empty, successful no-op
+    /// Lua script — `Result::is_err()` can't tell the two cases apart).
+    struct SpyRuntime {
+        inner: MockRuntime,
+        file_reads: std::sync::Arc<std::sync::Mutex<Vec<PathBuf>>>,
+    }
+
+    impl SpyRuntime {
+        fn new() -> (Arc<Self>, std::sync::Arc<std::sync::Mutex<Vec<PathBuf>>>) {
+            let file_reads = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+            (
+                Arc::new(Self {
+                    inner: MockRuntime,
+                    file_reads: file_reads.clone(),
+                }),
+                file_reads,
+            )
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl quarto_system_runtime::SystemRuntime for SpyRuntime {
+        fn file_read(
+            &self,
+            path: &std::path::Path,
+        ) -> quarto_system_runtime::RuntimeResult<Vec<u8>> {
+            self.file_reads.lock().unwrap().push(path.to_path_buf());
+            self.inner.file_read(path)
+        }
+        fn file_write(
+            &self,
+            path: &std::path::Path,
+            contents: &[u8],
+        ) -> quarto_system_runtime::RuntimeResult<()> {
+            self.inner.file_write(path, contents)
+        }
+        fn path_exists(
+            &self,
+            path: &std::path::Path,
+            kind: Option<quarto_system_runtime::PathKind>,
+        ) -> quarto_system_runtime::RuntimeResult<bool> {
+            self.inner.path_exists(path, kind)
+        }
+        fn canonicalize(
+            &self,
+            path: &std::path::Path,
+        ) -> quarto_system_runtime::RuntimeResult<PathBuf> {
+            self.inner.canonicalize(path)
+        }
+        fn path_metadata(
+            &self,
+            path: &std::path::Path,
+        ) -> quarto_system_runtime::RuntimeResult<quarto_system_runtime::PathMetadata> {
+            self.inner.path_metadata(path)
+        }
+        fn file_copy(
+            &self,
+            src: &std::path::Path,
+            dst: &std::path::Path,
+        ) -> quarto_system_runtime::RuntimeResult<()> {
+            self.inner.file_copy(src, dst)
+        }
+        fn path_rename(
+            &self,
+            old: &std::path::Path,
+            new: &std::path::Path,
+        ) -> quarto_system_runtime::RuntimeResult<()> {
+            self.inner.path_rename(old, new)
+        }
+        fn file_remove(&self, path: &std::path::Path) -> quarto_system_runtime::RuntimeResult<()> {
+            self.inner.file_remove(path)
+        }
+        fn dir_create(
+            &self,
+            path: &std::path::Path,
+            recursive: bool,
+        ) -> quarto_system_runtime::RuntimeResult<()> {
+            self.inner.dir_create(path, recursive)
+        }
+        fn dir_remove(
+            &self,
+            path: &std::path::Path,
+            recursive: bool,
+        ) -> quarto_system_runtime::RuntimeResult<()> {
+            self.inner.dir_remove(path, recursive)
+        }
+        fn dir_list(
+            &self,
+            path: &std::path::Path,
+        ) -> quarto_system_runtime::RuntimeResult<Vec<PathBuf>> {
+            self.inner.dir_list(path)
+        }
+        fn cwd(&self) -> quarto_system_runtime::RuntimeResult<PathBuf> {
+            self.inner.cwd()
+        }
+        fn temp_dir(&self, template: &str) -> quarto_system_runtime::RuntimeResult<TempDir> {
+            self.inner.temp_dir(template)
+        }
+        fn exec_pipe(
+            &self,
+            command: &str,
+            args: &[&str],
+            stdin: &[u8],
+        ) -> quarto_system_runtime::RuntimeResult<Vec<u8>> {
+            self.inner.exec_pipe(command, args, stdin)
+        }
+        fn exec_command(
+            &self,
+            command: &str,
+            args: &[&str],
+            stdin: Option<&[u8]>,
+        ) -> quarto_system_runtime::RuntimeResult<quarto_system_runtime::CommandOutput> {
+            self.inner.exec_command(command, args, stdin)
+        }
+        fn env_get(&self, name: &str) -> quarto_system_runtime::RuntimeResult<Option<String>> {
+            self.inner.env_get(name)
+        }
+        fn env_all(
+            &self,
+        ) -> quarto_system_runtime::RuntimeResult<std::collections::HashMap<String, String>>
+        {
+            self.inner.env_all()
+        }
+        async fn fetch_url(
+            &self,
+            url: &str,
+        ) -> quarto_system_runtime::RuntimeResult<(Vec<u8>, String)> {
+            self.inner.fetch_url(url).await
+        }
+        fn os_name(&self) -> &'static str {
+            self.inner.os_name()
+        }
+        fn arch(&self) -> &'static str {
+            self.inner.arch()
+        }
+        fn cpu_time(&self) -> quarto_system_runtime::RuntimeResult<u64> {
+            self.inner.cpu_time()
+        }
+        fn xdg_dir(
+            &self,
+            kind: quarto_system_runtime::XdgDirKind,
+            subpath: Option<&std::path::Path>,
+        ) -> quarto_system_runtime::RuntimeResult<PathBuf> {
+            self.inner.xdg_dir(kind, subpath)
+        }
+        fn stdout_write(&self, data: &[u8]) -> quarto_system_runtime::RuntimeResult<()> {
+            self.inner.stdout_write(data)
+        }
+        fn stderr_write(&self, data: &[u8]) -> quarto_system_runtime::RuntimeResult<()> {
+            self.inner.stderr_write(data)
+        }
+    }
+
     fn make_ctx() -> StageContext {
         let runtime = Arc::new(MockRuntime);
         let project = ProjectContext {
@@ -469,6 +694,114 @@ mod tests {
         assert!(output.into_document_ast().is_some());
     }
 
+    /// book-projects P2b, negative control: an HTML target has no
+    /// `main.lua` leg, so `Position::Post` filters must keep running via
+    /// pampa exactly as before the redirect — proven by a `SpyRuntime`
+    /// that records `file_read` calls: pampa must actually attempt to
+    /// load the filter. (`Result::is_err()` can't distinguish this from
+    /// "skipped" because `MockRuntime`/`SpyRuntime` return `Ok(vec![])`
+    /// for any path, which pampa's Lua engine happily parses as an empty,
+    /// successful no-op filter.)
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn post_stage_html_target_still_runs_filters_via_pampa() {
+        let mut ctx = make_ctx();
+        assert!(
+            !is_pandoc_hybrid(&ctx.format),
+            "make_ctx()'s default format must be HTML for this to be a negative control"
+        );
+        let (spy, file_reads) = SpyRuntime::new();
+        ctx.runtime = spy;
+        let stage = UserFiltersStage::post();
+        // A bare (no-sentinel) filter list defaults to Pre, so put the
+        // "quarto" sentinel first — everything after it lands in Post.
+        let meta = cv_map(vec![(
+            "filters",
+            cv_array(vec![cv_str("quarto"), cv_str("/some/dir/post.lua")]),
+        )]);
+        let doc = make_doc_ast(meta);
+        let input = PipelineData::DocumentAst(doc);
+        stage
+            .run(input, &mut ctx)
+            .await
+            .expect("SpyRuntime's file_read always succeeds, so the stage itself must not error");
+        assert!(
+            file_reads
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|p| p.ends_with("post.lua")),
+            "HTML target must still dispatch Post filters to pampa, which reads the filter file: {:?}",
+            file_reads.lock().unwrap()
+        );
+    }
+
+    /// book-projects P2b: on a Pandoc-hybrid target (docx here), a
+    /// `Position::Post` filter must be skipped entirely by
+    /// `UserFiltersStage::post()` — pampa must never even read the filter
+    /// file, because `PandocWriteStage` forwards it into `main.lua`'s own
+    /// entry-point mechanism instead.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn post_stage_pandoc_hybrid_target_skips_pampa_dispatch() {
+        let mut ctx = make_ctx();
+        ctx.format = crate::format::Format::docx();
+        assert!(is_pandoc_hybrid(&ctx.format));
+        let (spy, file_reads) = SpyRuntime::new();
+        ctx.runtime = spy;
+        let stage = UserFiltersStage::post();
+        // "quarto" sentinel first so the filter path lands in Post, not
+        // the no-sentinel-means-Pre default.
+        let meta = cv_map(vec![(
+            "filters",
+            cv_array(vec![cv_str("quarto"), cv_str("/some/dir/post.lua")]),
+        )]);
+        let doc = make_doc_ast(meta);
+        let input = PipelineData::DocumentAst(doc);
+        let output = stage
+            .run(input, &mut ctx)
+            .await
+            .expect("Pandoc-hybrid target must skip pampa dispatch for Post filters entirely");
+        assert!(output.into_document_ast().is_some());
+        assert!(
+            file_reads.lock().unwrap().is_empty(),
+            "pampa must never read a Post filter's file for a Pandoc-hybrid target: {:?}",
+            file_reads.lock().unwrap()
+        );
+    }
+
+    /// book-projects P2b, negative control: `Position::Pre` filters are
+    /// untouched by the redirect for *any* target, Pandoc-hybrid included
+    /// — they keep running via pampa because `AstTransformsStage` (and
+    /// thus any pandoc handoff) hasn't happened yet.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn pre_stage_runs_via_pampa_regardless_of_pandoc_hybrid_target() {
+        let mut ctx = make_ctx();
+        ctx.format = crate::format::Format::docx();
+        assert!(is_pandoc_hybrid(&ctx.format));
+        let (spy, file_reads) = SpyRuntime::new();
+        ctx.runtime = spy;
+        let stage = UserFiltersStage::pre();
+        let meta = cv_map(vec![(
+            "filters",
+            cv_array(vec![cv_str("/some/dir/pre.lua")]),
+        )]);
+        let doc = make_doc_ast(meta);
+        let input = PipelineData::DocumentAst(doc);
+        stage
+            .run(input, &mut ctx)
+            .await
+            .expect("SpyRuntime's file_read always succeeds, so the stage itself must not error");
+        assert!(
+            file_reads
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|p| p.ends_with("pre.lua")),
+            "Pre-position filters must still run via pampa even for a \
+             Pandoc-hybrid target: {:?}",
+            file_reads.lock().unwrap()
+        );
+    }
+
     #[test]
     fn stage_names_are_distinct() {
         let pre = UserFiltersStage::pre();
@@ -483,5 +816,96 @@ mod tests {
         let stage = UserFiltersStage::pre();
         assert_eq!(stage.input_kind(), PipelineDataKind::DocumentAst);
         assert_eq!(stage.output_kind(), PipelineDataKind::DocumentAst);
+    }
+
+    /// book-projects P2 citeproc deferral: when the caller sets
+    /// `ctx.defer_citeproc` (a book single-file merge that runs citeproc
+    /// once on the merged document instead), `UserFiltersStage::pre()`
+    /// must strip `"citeproc"` from `meta["filters"]` *before* filter
+    /// resolution reads it — so the chapter's declared (here deliberately
+    /// missing) bibliography is never touched.
+    ///
+    /// `multi_thread` because the pre-deferral code path under test
+    /// reaches `tokio::task::block_in_place`, which panics on a
+    /// current-thread runtime.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn pre_stage_strips_citeproc_when_deferral_flag_set() {
+        let mut ctx = make_ctx();
+        ctx.defer_citeproc = true;
+        let stage = UserFiltersStage::pre();
+        let meta = cv_map(vec![
+            ("bibliography", cv_str("/nonexistent/path/refs.json")),
+            ("filters", cv_array(vec![cv_str("citeproc")])),
+        ]);
+        let doc = make_doc_ast(meta);
+        let input = PipelineData::DocumentAst(doc);
+        let output = stage
+            .run(input, &mut ctx)
+            .await
+            .expect("deferred citeproc must not touch the missing bibliography");
+        let out_doc = output.into_document_ast().unwrap();
+        let filters = out_doc
+            .ast
+            .meta
+            .get("filters")
+            .expect("filters key remains after stripping");
+        let quarto_pandoc_types::config_value::ConfigValueKind::Array(items) = &filters.value
+        else {
+            panic!("filters must stay an array after stripping: {filters:?}")
+        };
+        assert!(
+            items
+                .iter()
+                .all(|i| i.as_plain_text().is_none_or(|s| s != "citeproc")),
+            "citeproc must be stripped from meta filters, got: {filters:?}"
+        );
+    }
+
+    /// Negative control for the deferral test above: with the flag at
+    /// its default (`false`), the same input DOES resolve and run
+    /// citeproc — which fails on the deliberately missing bibliography.
+    /// The flag, not some incidental pass-through, is what carries the
+    /// deferral.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn pre_stage_runs_citeproc_when_deferral_flag_unset() {
+        let mut ctx = make_ctx();
+        let stage = UserFiltersStage::pre();
+        let meta = cv_map(vec![
+            ("bibliography", cv_str("/nonexistent/path/refs.json")),
+            ("filters", cv_array(vec![cv_str("citeproc")])),
+        ]);
+        let doc = make_doc_ast(meta);
+        let input = PipelineData::DocumentAst(doc);
+        let result = stage.run(input, &mut ctx).await;
+        assert!(
+            result.is_err(),
+            "without defer_citeproc, citeproc must run and fail on the missing bibliography"
+        );
+    }
+
+    /// book-projects P6 regression: a non-book (or ordinary) render leaves
+    /// `ctx.suppress_book_bibliography` at its default (`false`), and
+    /// `UserFiltersStage::pre()` must not inject `suppress-bibliography`
+    /// into the document's metadata in that case — only the book
+    /// orchestrator setting the flag should trigger the injection from
+    /// `crate::project::book::set_suppress_bibliography`.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn pre_stage_does_not_inject_suppress_bibliography_when_flag_unset() {
+        let mut ctx = make_ctx();
+        assert!(!ctx.suppress_book_bibliography);
+        let stage = UserFiltersStage::pre();
+        let meta = cv_map(vec![]);
+        let doc = make_doc_ast(meta);
+        let input = PipelineData::DocumentAst(doc);
+        let output = stage
+            .run(input, &mut ctx)
+            .await
+            .expect("no filters configured, so the stage must not error");
+        let out_doc = output.into_document_ast().unwrap();
+        assert!(
+            out_doc.ast.meta.get("suppress-bibliography").is_none(),
+            "suppress-bibliography must not be injected when \
+             ctx.suppress_book_bibliography is false"
+        );
     }
 }

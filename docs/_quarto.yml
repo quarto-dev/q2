@@ -30,6 +30,7 @@ website:
           contents:
             - guides/authoring/index.qmd
             - guides/projects/create.qmd
+            - guides/projects/book.qmd
             - guides/projects/preview.qmd
             - guides/projects/paths.qmd
             - guides/projects/listings.qmd
@@ -307,6 +308,10 @@ website:
             - errors/project/Q-5-30.qmd
             - errors/project/Q-5-31.qmd
             - errors/project/Q-5-32.qmd
+            - errors/project/Q-5-33.qmd
+            - errors/project/Q-5-34.qmd
+            - errors/project/Q-5-35.qmd
+            - errors/project/Q-5-36.qmd
         - section: "include"
           contents:
             - errors/include/Q-17-1.qmd
@@ -341,6 +346,7 @@ website:
         - section: "crossref"
           contents:
             - errors/crossref/Q-15-1.qmd
+            - errors/crossref/Q-15-2.qmd
         - section: "extension"
           contents:
             - errors/extension/Q-16-1.qmd
@@ -395,6 +401,9 @@ website:
             - errors/math/Q-22-11.qmd
             - errors/math/Q-22-12.qmd
             - errors/math/Q-22-13.qmd
+        - section: "citeproc"
+          contents:
+            - errors/citeproc/Q-23-1.qmd
 
 format:
   html:

@@ -76,6 +76,12 @@ mod pandoc_write;
 mod parse_document;
 mod pre_engine_sugaring;
 mod render_html;
+// book-projects P2c: flushes queued resource copies (images, etc.)
+// through a real `OutputSink` before `TypstCompileStage` shells out to
+// `typst compile`. Native-only, like `pandoc_write`/`typst_compile` —
+// exists only on the Pandoc-hybrid Typst leg.
+#[cfg(not(target_arch = "wasm32"))]
+mod resource_copy_flush;
 mod resource_report;
 // Tabsets-sync JS injection (bd-toc-tabset-titles-zq93gjvf): vendors
 // the grouped-tabset sync module as a Project-scoped artifact whenever
@@ -132,6 +138,8 @@ pub use pandoc_write::{
 pub use parse_document::ParseDocumentStage;
 pub use pre_engine_sugaring::PreEngineSugaringStage;
 pub use render_html::RenderHtmlBodyStage;
+#[cfg(not(target_arch = "wasm32"))]
+pub use resource_copy_flush::ResourceCopyFlushStage;
 pub use resource_report::ResourceReportStage;
 pub use source_conversion::SourceConversionStage;
 #[cfg(not(target_arch = "wasm32"))]

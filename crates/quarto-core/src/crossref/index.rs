@@ -56,6 +56,19 @@ pub struct CrossrefIndex {
     /// Static manifest of ids promised by `output: asis` blocks via
     /// `crossref.ids` in document metadata. See design plan D6.
     pub promised_ids: Vec<PromisedId>,
+
+    /// Q1's `crossref.maxHeading` (options.lua + normalize/flags.lua):
+    /// `min(7, shallowest header level)`, forced to 1 when
+    /// `crossref.chapters` is set. Computed by the index builder's pre-scan;
+    /// consumed by `format_section_number` to decide whether the top
+    /// component of a section path is rendered.
+    #[serde(default = "default_max_heading")]
+    pub max_heading: u32,
+}
+
+/// Q1's non-chapters cap (options.lua: `crossref.maxHeading = 7`).
+fn default_max_heading() -> u32 {
+    7
 }
 
 impl CrossrefIndex {
@@ -68,6 +81,7 @@ impl CrossrefIndex {
             next_order: HashMap::new(),
             headings: Vec::new(),
             promised_ids: Vec::new(),
+            max_heading: default_max_heading(),
         }
     }
 

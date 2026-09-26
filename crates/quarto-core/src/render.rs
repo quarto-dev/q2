@@ -28,7 +28,7 @@ use std::collections::HashMap;
 use crate::attribution::{
     AttributionData, AttributionRecord, AttributionSourceProvider, IdentityMap,
 };
-use crate::crossref::{CrossrefIndex, RefTypeRegistry};
+use crate::crossref::{CrossrefIndex, RefTypeRegistry, project_index::ProjectCrossrefIndex};
 use crate::format::{Format, PipelineProfile};
 use crate::project::index::ProjectIndex;
 use crate::project::{DocumentInfo, ProjectContext};
@@ -436,6 +436,89 @@ pub struct RenderContext<'a> {
     ///
     /// [`DocumentProfile`]: crate::document_profile::DocumentProfile
     pub document_profile: Option<crate::document_profile::DocumentProfile>,
+
+    /// Book chapter seed for this document: the 1-based chapter number
+    /// (appendix-local for appendix chapters) the section counter should
+    /// start from, plus whether this chapter is an appendix (which switches
+    /// `Chapter N`/section-number presentation to `Appendix <letter>`).
+    ///
+    /// `None` for ordinary (non-book, or unseeded) renders — the section
+    /// counter then starts at zero, today's behavior. Book mode (P4) sets
+    /// one seed per chapter via `RenderToFileOptions`; P0 builds the
+    /// mechanism itself and P4 is its first real consumer. See
+    /// `claude-notes/plans/2026-09-21-book-projects-P0-number-sections.md`.
+    pub chapter_seed: Option<ChapterSeed>,
+
+    /// Defer citeproc out of this render's `UserFiltersStage::pre()`.
+    ///
+    /// `false` (the default) runs citeproc normally when `"citeproc"`
+    /// appears in `meta["filters"]`. `true` makes the stage strip the
+    /// entry before filter resolution reads it — the caller takes
+    /// responsibility for running citeproc itself, later. book-projects
+    /// P2's single-file merge sets this on every per-chapter paused
+    /// render and runs `pampa::citeproc_filter::apply_citeproc_filter`
+    /// once on the merged document, so the book gets one deduplicated
+    /// bibliography and one citation-numbering pass instead of N
+    /// per-chapter ones.
+    pub defer_citeproc: bool,
+
+    /// Project-wide crossref registry for multi-file books (book-projects
+    /// P5): every chapter's crossref targets, keyed by identifier, built by
+    /// aggregating all chapters' inventories after they pause post-Navigation
+    /// and before any chapter resumes into Finalization.
+    ///
+    /// `None` (the default) for every non-book render — the
+    /// `CrossChapterCrossrefResolveTransform` that consults it no-ops, so
+    /// registering that transform unconditionally in the shared transform
+    /// pipeline is safe. See
+    /// `claude-notes/plans/2026-09-21-book-projects-P5-crossref-registry.md`.
+    pub cross_chapter_crossref_registry: Option<std::sync::Arc<ProjectCrossrefIndex>>,
+
+    /// This chapter's harvested citation manifest (book-projects P6),
+    /// populated by `UserFiltersStage::pre()`/`post()` alongside a
+    /// chapter's own unchanged per-document citeproc pass. `None` when
+    /// citeproc did not run or resolved no citations. Bridged to/from
+    /// `StageContext` by [`crate::pipeline::stage_context_from_render_context`]/
+    /// [`crate::pipeline::restore_render_context`], the same shape as
+    /// `crossref_index`.
+    pub citation_manifest: Option<pampa::citeproc_filter::ChapterCitationManifest>,
+
+    /// Book-projects P6 input: when `true`, `UserFiltersStage::pre()` sets
+    /// `suppress-bibliography: true` in this chapter's metadata before
+    /// filter resolution reads it, so this chapter's own per-chapter
+    /// citeproc pass renders in-text citations but appends no local
+    /// bibliography div (`insert_bibliography`'s auto-append path would
+    /// otherwise leave every non-references chapter with its own
+    /// duplicate, unmerged bibliography). Input-only, like
+    /// `defer_citeproc`/`chapter_seed` — the book orchestrator sets it
+    /// fresh per chapter before each pause-leg render; nothing restores it.
+    pub suppress_book_bibliography: bool,
+
+    /// Book-projects P6 output: set by `UserFiltersStage::pre()` when
+    /// filter resolution placed `"citeproc"` into the `.post` group
+    /// (after the `quarto` sentinel) rather than `.pre` — meaning this
+    /// chapter's citations resolve *after* `AstTransformsStage`/the pause
+    /// point, so `citation_manifest` above was never captured for it. The
+    /// book orchestrator turns this into a diagnostic naming the chapter
+    /// rather than silently dropping its references from the merged
+    /// bibliography. Output-only, like `execution_skipped`.
+    pub citeproc_filter_in_post: bool,
+}
+
+/// Seed for a book chapter's section numbering: render this document as if
+/// all chapters before it had already advanced the top-level section
+/// counter. See [`RenderContext::chapter_seed`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ChapterSeed {
+    /// 1-based chapter number this document should start numbering from
+    /// (its own first level-1 heading becomes this number). For appendix
+    /// chapters this is the 1-based *appendix-local* number (1 → "A").
+    pub chapter_number: u32,
+
+    /// Whether this chapter is an appendix. Switches the level-1 heading's
+    /// presentation from "Chapter N" to "Appendix <letter>" and formats the
+    /// top level of section addresses as a letter (`A.1`, not `N.1`).
+    pub is_appendix: bool,
 }
 
 /// Options for rendering
@@ -490,6 +573,12 @@ impl<'a> RenderContext<'a> {
             execution_policy: crate::engine::ExecutionPolicy::default(),
             execution_skipped: false,
             document_profile: None,
+            chapter_seed: None,
+            defer_citeproc: false,
+            cross_chapter_crossref_registry: None,
+            citation_manifest: None,
+            suppress_book_bibliography: false,
+            citeproc_filter_in_post: false,
         }
     }
 
@@ -519,6 +608,33 @@ impl<'a> RenderContext<'a> {
     /// Create with custom options
     pub fn with_options(mut self, options: RenderOptions) -> Self {
         self.options = options;
+        self
+    }
+
+    /// Attach a book [`ChapterSeed`] to this context.
+    ///
+    /// Book mode (P4) calls this with the chapter's computed number before
+    /// rendering; the crossref index transform reads it to seed the section
+    /// counter and to switch level-1-heading presentation between
+    /// "Chapter N" and "Appendix <letter>". Matches the
+    /// [`with_project_index`](Self::with_project_index) builder idiom.
+    pub fn with_chapter_seed(mut self, seed: ChapterSeed) -> Self {
+        self.chapter_seed = Some(seed);
+        self
+    }
+
+    /// Attach the project-wide crossref registry to this context.
+    ///
+    /// Book mode (P5) calls this on each chapter's reconstructed resume
+    /// context, after all chapters have paused and the registry has been
+    /// aggregated; P8's preview analyzer will feed the same field from a
+    /// cheaper pre-engine producer. Matches the
+    /// [`with_chapter_seed`](Self::with_chapter_seed) builder idiom.
+    pub fn with_cross_chapter_crossref_registry(
+        mut self,
+        registry: std::sync::Arc<ProjectCrossrefIndex>,
+    ) -> Self {
+        self.cross_chapter_crossref_registry = Some(registry);
         self
     }
 

@@ -1,0 +1,69 @@
+---
+title: "Citeproc Resolves After Book Merge Point"
+description: "A book chapter orders the built-in citeproc filter into `.post`, so its citations resolve after this chapter pauses for project-wide bibliography aggregation."
+code: Q-23-1
+subsystem: citeproc
+status: stub
+since: "99.9.9"
+categories:
+  - citeproc
+  - book
+---
+
+# `Q-23-1` — Citeproc Resolves After Book Merge Point
+
+> A book chapter orders the built-in `citeproc` filter into `.post`
+> (after the `quarto` sentinel in `filters:`), so its citations
+> resolve after this chapter pauses for project-wide
+> crossref/bibliography aggregation.
+
+## What this means
+
+A multi-file HTML book renders every chapter through
+Normalization → Crossref → Navigation, then pauses so a
+project-wide crossref registry and a merged, deduplicated
+bibliography can be built from every chapter's contribution before
+any chapter resumes into Finalization. Harvesting a chapter's cited
+references for that merge happens at the same pause point, right
+after this chapter's own `citeproc` filter pass runs.
+
+The `filters:` metadata key controls where each filter runs relative
+to Quarto's own built-in processing, using the `quarto` sentinel:
+filters listed before it run in `.pre` (before this pause point),
+filters listed after it run in `.post` (after it). When `citeproc`
+is ordered into `.post`, this chapter's citations are not resolved
+yet when the pause happens — so its cited references are silently
+missing from the book's merged bibliography, even though the
+chapter's own in-text citations render normally later.
+
+## Why this happens
+
+- A chapter (or the project's shared `filters:` config) explicitly
+  lists `citeproc` after the `quarto` sentinel — usually because a
+  custom filter needs to run before citeproc and the whole list was
+  written in one order without considering book-merge timing.
+
+## How to fix
+
+Move `citeproc` before the `quarto` sentinel in the `filters:` list
+(in the chapter's own front matter, or the project's, whichever
+declares it):
+
+```yaml
+filters:
+  - citeproc
+  - quarto
+  - my-custom-filter.lua
+```
+
+If a custom filter genuinely needs to run *after* citeproc for a
+single-document render, that ordering is not currently supported for
+a book-merge or multi-file-HTML book chapter — citeproc must resolve
+in `.pre` for this book's bibliography merge to see the chapter's
+citations.
+
+## Related
+
+- `Q-15-2` — the same "book-wide aggregation needs every chapter's
+  contribution before any chapter resumes" shape, for cross-chapter
+  crossref ids instead of citations.

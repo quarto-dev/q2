@@ -45,8 +45,10 @@ use crate::transform::{AstTransform, TransformPhase};
 /// (decision pinned in
 /// `claude-notes/plans/2026-05-19-code-block-features.md`). Generate
 /// populates the map; Render reads it. Both transforms run inside
-/// `AstTransformsStage` so they share the same `RenderContext` —
-/// no `StageContext` bridge needed.
+/// `AstTransformsStage` so they share the same `RenderContext` within
+/// one stage-list call; across a book chapter's pause/resume split
+/// (book-projects P5) the map survives on the `StageContext` bridge
+/// between the two calls.
 ///
 /// Per-feature fields land in Phases 1 – 3:
 /// - Phase 1 (filename): see `filename` below.

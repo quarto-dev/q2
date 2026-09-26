@@ -43,7 +43,9 @@
 //! ))?;
 //! ```
 
+use std::cell::RefCell;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use quarto_error_reporting::DiagnosticMessage;
@@ -61,6 +63,8 @@ use crate::stage::stages::ClipboardJsStage;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::stage::stages::PandocWriteStage;
 #[cfg(not(target_arch = "wasm32"))]
+use crate::stage::stages::ResourceCopyFlushStage;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::stage::stages::TypstCompileStage;
 use crate::stage::{
     ApplyTemplateStage, AstTransformsStage, AttributionGenerateStage, CompileThemeCssStage,
@@ -73,22 +77,22 @@ use crate::stage::{
 use crate::transform::TransformPipeline;
 use crate::transforms::{
     AppendixStructureTransform, AttributionRenderTransform, AttributionViewerTransform,
-    AuthorsNormalizeTransform, BreadcrumbsRenderTransform, CalloutResolveTransform,
-    CalloutTransform, CategoriesSidebarTransform, CodeBlockGenerateTransform,
-    CodeBlockRenderTransform, ConditionalContentTransform, CrossrefIndexTransform,
-    CrossrefRenderTransform, CrossrefResolveTransform, DateNormalizeTransform, DraftAlertTransform,
-    EquationLabelTransform, ExampleEmbedRenderTransform, ExampleEmbedTransform,
-    FloatRefTargetSugarTransform, FooterGenerateTransform, FooterRenderTransform,
-    FootnotesResolveTransform, FootnotesTransform, LinkRewriteTransform, ListingGenerateTransform,
-    ListingRenderTransform, MermaidRenderTransform, MetadataNormalizeTransform,
-    NavbarGenerateTransform, NavbarRenderTransform, PageNavGenerateTransform,
-    PageNavRenderTransform, ProofSugarTransform, ReferenceLinkDiagnosticsTransform,
-    RepoActionsRenderTransform, ResourceCollectorTransform, ResponsiveImageTransform,
-    SectionizeTransform, ShortcodeResolveTransform, SidebarGenerateTransform,
-    SidebarRenderTransform, TableBootstrapClassTransform, TheoremSugarTransform,
-    TitleBannerTransform, TitleBlockTransform, TocGenerateTransform, TocLocationTransform,
-    TocRenderTransform, WebsiteBootstrapIconsTransform, WebsiteCanonicalUrlTransform,
-    WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
+    AuthorsNormalizeTransform, BookCoverImageTransform, BreadcrumbsRenderTransform,
+    CalloutResolveTransform, CalloutTransform, CategoriesSidebarTransform,
+    CodeBlockGenerateTransform, CodeBlockRenderTransform, ConditionalContentTransform,
+    CrossrefIndexTransform, CrossrefRenderTransform, CrossrefResolveTransform,
+    DateNormalizeTransform, DraftAlertTransform, EquationLabelTransform,
+    ExampleEmbedRenderTransform, ExampleEmbedTransform, FloatRefTargetSugarTransform,
+    FooterGenerateTransform, FooterRenderTransform, FootnotesResolveTransform, FootnotesTransform,
+    LinkRewriteTransform, ListingGenerateTransform, ListingRenderTransform, MermaidRenderTransform,
+    MetadataNormalizeTransform, NavbarGenerateTransform, NavbarRenderTransform,
+    PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
+    ReferenceLinkDiagnosticsTransform, RepoActionsRenderTransform, ResourceCollectorTransform,
+    ResponsiveImageTransform, SectionizeTransform, ShortcodeResolveTransform,
+    SidebarGenerateTransform, SidebarRenderTransform, TableBootstrapClassTransform,
+    TheoremSugarTransform, TitleBannerTransform, TitleBlockTransform, TocGenerateTransform,
+    TocLocationTransform, TocRenderTransform, WebsiteBootstrapIconsTransform,
+    WebsiteCanonicalUrlTransform, WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -561,9 +565,114 @@ pub fn build_pandoc_pipeline_stages(
     stages.retain(|s| !PANDOC_STAGE_EXCLUDED.contains(&s.name()));
     stages.push(Box::new(PandocWriteStage::new()));
     if format_identifier == crate::format::FormatIdentifier::Typst {
+        // book-projects P2c: flush `ctx.resource_copies` (images, etc.)
+        // to the output directory *before* `TypstCompileStage` shells out
+        // to `typst compile`, which reads them off disk relative to the
+        // output directory. `finalize_rendered_output`'s own end-of-render
+        // flush is too late for this — see `ResourceCopyFlushStage`'s
+        // module docs. docx/pptx never needed this: pandoc's own writer
+        // embeds images directly at write time.
+        stages.push(Box::new(ResourceCopyFlushStage::new()));
         stages.push(Box::new(TypstCompileStage::new()));
     }
     stages
+}
+
+// === book-projects P2/P5: phase-bounded stage lists ===
+//
+// Two constructors derived from an existing full stage list, sharing the
+// one parameterized primitive (`AstTransformsStage::for_range`). Neither
+// duplicates the stage list by hand — both splice a range-bounded
+// `AstTransformsStage` into the real list so the surrounding stages can
+// never drift from the production pipeline (the same reason
+// `build_html_pipeline_stages_with_options` exists: see its docs).
+//
+// - *pause*: the prefix through a range-bounded `AstTransformsStage`, and
+//   nothing after it. P2's per-chapter partial render uses
+//   `..=Normalization`; P5's initial per-chapter render uses
+//   `..=Navigation`.
+// - *finishing*: starts directly with a range-bounded `AstTransformsStage`,
+//   then the real, unchanged tail. P2's merged document finishes with
+//   `Crossref..` (tail = `UserFiltersStage::post → ResourceReportStage →
+//   PandocWriteStage → TypstCompileStage` for a Typst target); P5 resumes
+//   each chapter with `Finalization..`.
+
+/// Prefix of `stages` through a range-bounded [`AstTransformsStage`]
+/// (`..=upper_bound`), dropping every stage after it. The stage list must
+/// contain an `ast-transforms` stage.
+fn pause_stages_from(
+    mut stages: Vec<Box<dyn PipelineStage>>,
+    upper_bound: crate::transform::TransformPhase,
+) -> Vec<Box<dyn PipelineStage>> {
+    let pos = stages
+        .iter()
+        .position(|s| s.name() == "ast-transforms")
+        .expect("pause stage list must contain an ast-transforms stage");
+    stages.truncate(pos);
+    stages.push(Box::new(AstTransformsStage::for_range(..=upper_bound)));
+    stages
+}
+
+/// Suffix of `stages` starting with a range-bounded [`AstTransformsStage`]
+/// (`lower_bound..`), dropping every stage before it. The stage list must
+/// contain an `ast-transforms` stage.
+fn finishing_stages_from(
+    stages: Vec<Box<dyn PipelineStage>>,
+    lower_bound: crate::transform::TransformPhase,
+) -> Vec<Box<dyn PipelineStage>> {
+    let pos = stages
+        .iter()
+        .position(|s| s.name() == "ast-transforms")
+        .expect("finishing stage list must contain an ast-transforms stage");
+    let mut tail: Vec<Box<dyn PipelineStage>> = stages.into_iter().skip(pos + 1).collect();
+    tail.insert(0, Box::new(AstTransformsStage::for_range(lower_bound..)));
+    tail
+}
+
+/// The HTML stage list paused after `upper_bound` — P5's per-chapter
+/// partial render uses this with `TransformPhase::Navigation`.
+pub fn build_html_pipeline_pause_stages(
+    upper_bound: crate::transform::TransformPhase,
+) -> Vec<Box<dyn PipelineStage>> {
+    pause_stages_from(build_html_pipeline_stages_with_options(None), upper_bound)
+}
+
+/// The HTML stage list resuming at `lower_bound` — P5's per-chapter resume
+/// uses this with `TransformPhase::Finalization`. Starts with
+/// [`AstTransformsStage`] (input kind `DocumentAst`), so it must be driven
+/// by [`run_pipeline_from_ast`], not [`run_pipeline`].
+pub fn build_html_pipeline_finishing_stages(
+    lower_bound: crate::transform::TransformPhase,
+) -> Vec<Box<dyn PipelineStage>> {
+    finishing_stages_from(build_html_pipeline_stages_with_options(None), lower_bound)
+}
+
+/// The Pandoc-hybrid stage list paused after `upper_bound` — P2's
+/// per-chapter partial render uses this with `TransformPhase::Normalization`.
+///
+/// Native-only, like [`build_pandoc_pipeline_stages`].
+#[cfg(not(target_arch = "wasm32"))]
+pub fn build_pandoc_pipeline_pause_stages(
+    upper_bound: crate::transform::TransformPhase,
+    format_identifier: crate::format::FormatIdentifier,
+) -> Vec<Box<dyn PipelineStage>> {
+    pause_stages_from(build_pandoc_pipeline_stages(format_identifier), upper_bound)
+}
+
+/// The Pandoc-hybrid stage list resuming at `lower_bound` — P2's merged
+/// book document finishes with `TransformPhase::Crossref`, running the
+/// unchanged tail (`UserFiltersStage::post → ResourceReportStage →
+/// PandocWriteStage`, plus `TypstCompileStage` for Typst). Starts with
+/// [`AstTransformsStage`] (input kind `DocumentAst`), so it must be driven
+/// by [`run_pipeline_from_ast`], not [`run_pipeline`].
+///
+/// Native-only, like [`build_pandoc_pipeline_stages`].
+#[cfg(not(target_arch = "wasm32"))]
+pub fn build_pandoc_pipeline_finishing_stages(
+    lower_bound: crate::transform::TransformPhase,
+    format_identifier: crate::format::FormatIdentifier,
+) -> Vec<Box<dyn PipelineStage>> {
+    finishing_stages_from(build_pandoc_pipeline_stages(format_identifier), lower_bound)
 }
 
 /// Insert a [`crate::stage::CaptureSpliceStage`] immediately *before*
@@ -778,6 +887,120 @@ pub async fn run_pipeline(
     runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
     stages: Vec<Box<dyn PipelineStage>>,
 ) -> Result<(PipelineData, Vec<DiagnosticMessage>)> {
+    let mut stage_ctx = stage_context_from_render_context(ctx, runtime)?;
+
+    // Create input from content
+    let input = PipelineData::LoadedSource(LoadedSource::new(
+        PathBuf::from(source_name),
+        content.to_vec(),
+    ));
+
+    let pipeline = Pipeline::new(stages).expect("Pipeline stages should be compatible");
+
+    let result = pipeline.run(input, &mut stage_ctx).await;
+
+    restore_render_context(ctx, &mut stage_ctx);
+
+    // Plan 7c seam 2: the conversion provenance ParseDocumentStage stashed on
+    // the stage context, consumed below to rebuild a SourceContext that
+    // matches what a successful parse would have produced.
+    let conversion_stash = stage_ctx.conversion_stash.take();
+
+    finish_pipeline_result(result, stage_ctx, || {
+        let mut source_context = SourceContext::new();
+        let content_str = String::from_utf8_lossy(content).to_string();
+        match conversion_stash {
+            // The parse ran on engine-converted text, so FileId(0)
+            // must be the converted buffer under the same
+            // synthetic name ParseDocumentStage uses — otherwise
+            // diagnostics pointing into the converted text are
+            // labeled with the original file's name. When the
+            // converter also produced a faithful mapping,
+            // registering converted → original → cells *in that
+            // order* lands each file on the exact FileId the
+            // Concat pieces point at (ORIGINAL_FILE_ID, then the
+            // contiguous cells), because `add_file` assigns ids
+            // sequentially.
+            Some(stash) => {
+                source_context.add_file(
+                    format!("<{source_name} (converted by {})>", stash.engine),
+                    Some(stash.converted),
+                );
+                if stash.source_info.is_some() {
+                    source_context.add_file(source_name.to_string(), Some(content_str));
+                    for (i, cell_file) in stash.files.into_iter().enumerate() {
+                        let file_id =
+                            source_context.add_file(cell_file.label, Some(cell_file.text));
+                        // Mirror ParseDocumentStage's success-path
+                        // registration (plan 7c Phase 4): the
+                        // rebuilt context must match what a
+                        // successful parse would have produced.
+                        if let Some(f) = source_context.get_file_mut(file_id) {
+                            f.metadata.origin = Some(quarto_source_map::FileOrigin::NotebookCell {
+                                notebook_path: source_name.to_string(),
+                                cell_index: i + 1,
+                                cell_id: cell_file.cell_id,
+                                cell_type: cell_file.cell_type,
+                            });
+                        }
+                    }
+                }
+            }
+            None => {
+                source_context.add_file(source_name.to_string(), Some(content_str));
+            }
+        }
+        source_context
+    })
+}
+
+/// Run a stage list starting from an already-built
+/// [`PipelineData::DocumentAst`] instead of raw QMD bytes.
+///
+/// book-projects P2/P5: P2's merged book document (several chapters'
+/// post-Normalization bodies concatenated into one `Pandoc`) finishes
+/// through the unmodified single-document pipeline starting at the
+/// Crossref phase; P5's paused chapters resume at Finalization. Both feed
+/// a `DocumentAst` they already hold into a finishing stage list built by
+/// [`build_html_pipeline_finishing_stages`] /
+/// [`build_pandoc_pipeline_finishing_stages`] — every other entry point
+/// hardcodes `LoadedSource` as the initial input, which would re-parse and
+/// re-execute engines on text that no longer exists.
+///
+/// The `RenderContext↔StageContext` bridge and diagnostic-policy handling
+/// are the same shared helpers [`run_pipeline`] uses; the only difference
+/// is the initial input and the error-reporting `SourceContext`, which
+/// here comes from the `DocumentAst`'s own (the merged AST carries the
+/// source context of the chapters it was assembled from).
+pub async fn run_pipeline_from_ast(
+    doc: crate::stage::DocumentAst,
+    ctx: &mut RenderContext<'_>,
+    runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
+    stages: Vec<Box<dyn PipelineStage>>,
+) -> Result<(PipelineData, Vec<DiagnosticMessage>)> {
+    let error_source_context = doc.source_context.clone();
+    let mut stage_ctx = stage_context_from_render_context(ctx, runtime)?;
+
+    let pipeline = Pipeline::new(stages).expect("Pipeline stages should be compatible");
+
+    let result = pipeline
+        .run(PipelineData::DocumentAst(doc), &mut stage_ctx)
+        .await;
+
+    restore_render_context(ctx, &mut stage_ctx);
+
+    finish_pipeline_result(result, stage_ctx, || error_source_context)
+}
+
+/// Build a [`StageContext`] from a [`RenderContext`], transferring the
+/// mutable state the pipeline stages expect to own mid-run.
+///
+/// Shared by [`run_pipeline`] and [`run_pipeline_from_ast`] — the bridge
+/// is identical; only the initial [`PipelineData`] differs.
+fn stage_context_from_render_context(
+    ctx: &mut RenderContext<'_>,
+    runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
+) -> Result<StageContext> {
     // Create StageContext from RenderContext data
     let mut stage_ctx = StageContext::new(
         runtime,
@@ -825,25 +1048,76 @@ pub async fn run_pipeline(
         stage_ctx.registry = override_reg.clone();
     }
     stage_ctx.execution_policy = ctx.execution_policy.clone();
+    // book-projects P2/P5: a *finishing* pipeline (driven by
+    // `run_pipeline_from_ast`) never re-runs `PreEngineSugaringStage`, so
+    // the registry/index it seeded must be carried in from the caller's
+    // context instead. For `run_pipeline` callers these are `None` at
+    // entry (the stage seeds them inside the pipeline), so the `take()`
+    // is a no-op there.
+    stage_ctx.ref_type_registry = ctx.ref_type_registry.take();
+    stage_ctx.crossref_index = ctx.crossref_index.take();
+    // Bridge the caller-installed observer so transform-level events are
+    // visible outside the stage pipeline (tests, and P2/P5's book
+    // orchestration observing paused/finishing renders). Default callers
+    // carry the `NoopObserver`, and `MetadataMergeStage` still replaces
+    // the observer when `trace: true` is set — both unchanged from today.
+    stage_ctx.observer = ctx.observer.clone();
+    // book-projects P2: citeproc deferral is an input-only render option
+    // (like `engine_registry_override` — consumed by
+    // `UserFiltersStage::pre()`, never mutated by stages), so it is
+    // bridged one-way and not restored.
+    stage_ctx.defer_citeproc = ctx.defer_citeproc;
+    // book-projects P4: the per-chapter seed is likewise input-only for
+    // the crossref transforms — bridged one-way, never restored.
+    stage_ctx.chapter_seed = ctx.chapter_seed;
+    // book-projects P5: so is the project-wide crossref registry (an
+    // `Arc`, cloned) — `CrossChapterCrossrefResolveTransform` reads it;
+    // nothing mutates it.
+    stage_ctx.cross_chapter_crossref_registry = ctx.cross_chapter_crossref_registry.clone();
+    // book-projects P6: suppress-bibliography is an input-only render
+    // option (like `defer_citeproc`) — consumed by `UserFiltersStage::pre()`,
+    // never mutated by stages — bridged one-way and not restored.
+    stage_ctx.suppress_book_bibliography = ctx.suppress_book_bibliography;
+    // book-projects P5: a *finishing* pipeline (driven by
+    // `run_pipeline_from_ast`) must see the state a *pausing* caller
+    // holds on the outer ctx across the pause — none of it is re-derived
+    // by the finishing stages themselves:
+    // - `includes`: populated pause-side (engine execution / Lua
+    //   filters); `ApplyTemplateStage`'s late drain is the resume-side
+    //   consumer. Restore moves back whatever the drain left.
+    // - `code_block_decorations`: written pause-side by
+    //   `code-block-generate`, read resume-side by `code-block-render`.
+    // - `attribution_data`: generated pause-side by
+    //   `AttributionGenerateStage`, consumed resume-side by
+    //   `AttributionRenderTransform`. Cloned (an `Option<Arc>`); the
+    //   restore hands the caller's copy back below.
+    // - `format_options` / `document_profile`: restore always carried
+    //   these *out*; seeding them *in* here is what keeps a caller-held
+    //   value from being clobbered by the stage default at restore time
+    //   (nothing in the resume list re-populates them).
+    // For a full `run_pipeline` render all five are at their defaults at
+    // entry, so every transfer below is a no-op there.
+    stage_ctx.includes = std::mem::take(&mut ctx.includes);
+    stage_ctx.code_block_decorations = std::mem::take(&mut ctx.code_block_decorations);
+    stage_ctx.attribution_data = ctx.attribution_data.clone();
+    stage_ctx.format_options = std::mem::take(&mut ctx.format_options);
+    stage_ctx.document_profile = ctx.document_profile.take();
 
-    // Create input from content
-    let input = PipelineData::LoadedSource(LoadedSource::new(
-        PathBuf::from(source_name),
-        content.to_vec(),
-    ));
+    Ok(stage_ctx)
+}
 
-    let pipeline = Pipeline::new(stages).expect("Pipeline stages should be compatible");
-
-    let result = pipeline.run(input, &mut stage_ctx).await;
-
+/// Move the pipeline-mutated state from a finished [`StageContext`] back
+/// into the caller's [`RenderContext`]. Shared by [`run_pipeline`] and
+/// [`run_pipeline_from_ast`].
+fn restore_render_context(ctx: &mut RenderContext<'_>, stage_ctx: &mut StageContext) {
     // Transfer artifacts back to RenderContext
-    ctx.artifacts = stage_ctx.artifacts;
+    ctx.artifacts = std::mem::take(&mut stage_ctx.artifacts);
     // bd-o8pr Phase 2: transfer engine/filter-collected resources
     // back to the caller (`render_document_to_file` reads this).
-    ctx.resource_report = stage_ctx.resource_report;
+    ctx.resource_report = std::mem::take(&mut stage_ctx.resource_report);
     // bd-cfl67: bridge transform-collected copy intents back to the
     // outer renderer for the sink-flush step.
-    ctx.resource_copies = stage_ctx.resource_copies;
+    ctx.resource_copies = std::mem::take(&mut stage_ctx.resource_copies);
     // Transfer writer-side `format_options` populated by transforms
     // running inside the pipeline (e.g. `AttributionRenderTransform`
     // writes `attribution_by_node` / `attribution_actors` here). The
@@ -851,13 +1125,46 @@ pub async fn run_pipeline(
     // so it reads the populated data from the outer ctx after the
     // pipeline returns. Pre-pipeline callers don't write
     // `ctx.format_options`, so the overwrite is safe.
-    ctx.format_options = stage_ctx.format_options;
+    ctx.format_options = std::mem::take(&mut stage_ctx.format_options);
     // Bridge the document profile stashed by `UnwrapProfileStage`
     // (bd-0rsk07il) so response builders can read it after a full
     // render. `None` for pipelines that stop before the unwrap stage.
-    ctx.document_profile = stage_ctx.document_profile;
+    ctx.document_profile = stage_ctx.document_profile.take();
     ctx.execution_skipped = stage_ctx.execution_skipped;
+    // book-projects P2/P5: bridge the crossref registry/index back out so
+    // a *pausing* caller (per-chapter partial render) can extract them
+    // into its per-chapter owned state and hand them to the finishing
+    // pipeline later. For a full `run_pipeline` render these were `None`
+    // in the caller's context at entry, so this is purely additive there.
+    ctx.ref_type_registry = stage_ctx.ref_type_registry.take();
+    ctx.crossref_index = stage_ctx.crossref_index.take();
+    // book-projects P5: hand back the pause-surviving state seeded by
+    // `stage_context_from_render_context` (see the comment there for the
+    // per-field rationale). `includes` is usually empty here —
+    // `ApplyTemplateStage`'s late drain already consumed it — but the
+    // symmetric take keeps the bridge honest if the finishing list ever
+    // changes shape.
+    ctx.includes = std::mem::take(&mut stage_ctx.includes);
+    ctx.code_block_decorations = std::mem::take(&mut stage_ctx.code_block_decorations);
+    ctx.attribution_data = stage_ctx.attribution_data.take();
+    // book-projects P6: hand back the citation manifest `UserFiltersStage`
+    // populated during this pipeline run, and the `.post`-ordering flag it
+    // set alongside it — both output-only, like `crossref_index`/
+    // `execution_skipped` above.
+    ctx.citation_manifest = stage_ctx.citation_manifest.take();
+    ctx.citeproc_filter_in_post = stage_ctx.citeproc_filter_in_post;
+}
 
+/// Apply the diagnostic-suppression policy and map a pipeline result into
+/// the public `(PipelineData, diagnostics)` shape. `error_source_context`
+/// builds the `SourceContext` for the parse-error wrapper and is only
+/// called on the error path. Shared by [`run_pipeline`] and
+/// [`run_pipeline_from_ast`].
+fn finish_pipeline_result(
+    result: std::result::Result<PipelineData, crate::stage::PipelineError>,
+    stage_ctx: StageContext,
+    error_source_context: impl FnOnce() -> SourceContext,
+) -> Result<(PipelineData, Vec<DiagnosticMessage>)> {
     // Apply the `diagnostics:` suppression policy resolved by
     // `MetadataMergeStage`. This is deliberately the *only* place
     // suppression happens: every per-document diagnostic — from stages,
@@ -877,11 +1184,6 @@ pub async fn run_pipeline(
     // survives.
     let policy = stage_ctx.diagnostic_policy;
 
-    // Plan 7c seam 2: the conversion provenance ParseDocumentStage stashed on
-    // the stage context, consumed by the StageError arm below to rebuild a
-    // SourceContext that matches what a successful parse would have produced.
-    let conversion_stash = stage_ctx.conversion_stash.take();
-
     result
         .map_err({
             let policy = policy.clone();
@@ -899,54 +1201,9 @@ pub async fn run_pipeline(
                     mut diagnostics, ..
                 } if !diagnostics.is_empty() => {
                     policy.apply(&mut diagnostics);
-                    // Create a SourceContext for the parse error
-                    let mut source_context = SourceContext::new();
-                    let content_str = String::from_utf8_lossy(content).to_string();
-                    match conversion_stash {
-                        // The parse ran on engine-converted text, so FileId(0)
-                        // must be the converted buffer under the same
-                        // synthetic name ParseDocumentStage uses — otherwise
-                        // diagnostics pointing into the converted text are
-                        // labeled with the original file's name. When the
-                        // converter also produced a faithful mapping,
-                        // registering converted → original → cells *in that
-                        // order* lands each file on the exact FileId the
-                        // Concat pieces point at (ORIGINAL_FILE_ID, then the
-                        // contiguous cells), because `add_file` assigns ids
-                        // sequentially.
-                        Some(stash) => {
-                            source_context.add_file(
-                                format!("<{source_name} (converted by {})>", stash.engine),
-                                Some(stash.converted),
-                            );
-                            if stash.source_info.is_some() {
-                                source_context.add_file(source_name.to_string(), Some(content_str));
-                                for (i, cell_file) in stash.files.into_iter().enumerate() {
-                                    let file_id = source_context
-                                        .add_file(cell_file.label, Some(cell_file.text));
-                                    // Mirror ParseDocumentStage's success-path
-                                    // registration (plan 7c Phase 4): the
-                                    // rebuilt context must match what a
-                                    // successful parse would have produced.
-                                    if let Some(f) = source_context.get_file_mut(file_id) {
-                                        f.metadata.origin =
-                                            Some(quarto_source_map::FileOrigin::NotebookCell {
-                                                notebook_path: source_name.to_string(),
-                                                cell_index: i + 1,
-                                                cell_id: cell_file.cell_id,
-                                                cell_type: cell_file.cell_type,
-                                            });
-                                    }
-                                }
-                            }
-                        }
-                        None => {
-                            source_context.add_file(source_name.to_string(), Some(content_str));
-                        }
-                    }
                     crate::error::QuartoError::Parse(crate::error::ParseError::new(
                         diagnostics,
-                        source_context,
+                        error_source_context(),
                     ))
                 }
                 other => crate::error::QuartoError::Other(other.to_string()),
@@ -957,6 +1214,360 @@ pub async fn run_pipeline(
             policy.apply(&mut diagnostics);
             (d, diagnostics)
         })
+}
+
+/// Render a document partway: raw QMD in, transformed AST out, with the
+/// transform pipeline stopped after `upper_bound`.
+///
+/// book-projects P2/P5's per-chapter partial-render entry point — a thin
+/// sibling of [`render_qmd_to_html`]/[`render_qmd_to_pandoc`] that builds
+/// the *pause* stage list (the production prefix through a phase-bounded
+/// [`AstTransformsStage`], nothing after it) instead of the full list, so
+/// no output-writing stage ever runs. P2 calls it with
+/// `TransformPhase::Normalization` per chapter before merging; P5 calls it
+/// with `TransformPhase::Navigation` per chapter before Pass-3
+/// aggregation. The stage-list flavor follows the document's
+/// [`crate::format::PipelineProfile`]: Pandoc-hybrid targets get the
+/// Pandoc stage list, everything else the HTML one.
+///
+/// Like its siblings, this function does not own or construct
+/// `RenderContext` — the caller does, per chapter, and copies the mutated
+/// owned fields back out afterward (see design doc §6 of
+/// `claude-notes/designs/book-projects-architecture.md`).
+///
+/// # Errors
+///
+/// Returns an error if parsing, engine execution, or a transform fails.
+pub async fn render_qmd_to_ast_partial(
+    content: &[u8],
+    source_name: &str,
+    ctx: &mut RenderContext<'_>,
+    runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
+    upper_bound: crate::transform::TransformPhase,
+) -> Result<(crate::stage::DocumentAst, Vec<DiagnosticMessage>)> {
+    let stages = partial_stage_list(ctx, upper_bound);
+    let (output, diagnostics) = run_pipeline(content, source_name, ctx, runtime, stages).await?;
+    let doc_ast = output.into_document_ast().ok_or_else(|| {
+        crate::error::QuartoError::Other("Partial pipeline did not produce DocumentAst".to_string())
+    })?;
+    Ok((doc_ast, diagnostics))
+}
+
+/// The pause stage list for [`render_qmd_to_ast_partial`], chosen by the
+/// document's pipeline profile.
+#[cfg(not(target_arch = "wasm32"))]
+fn partial_stage_list(
+    ctx: &RenderContext<'_>,
+    upper_bound: crate::transform::TransformPhase,
+) -> Vec<Box<dyn PipelineStage>> {
+    match crate::format::PipelineProfile::from_format(&ctx.format.target_format) {
+        crate::format::PipelineProfile::Pandoc(_) => {
+            build_pandoc_pipeline_pause_stages(upper_bound, ctx.format.identifier)
+        }
+        _ => build_html_pipeline_pause_stages(upper_bound),
+    }
+}
+
+/// WASM fallback: the Pandoc-hybrid stage list (and its write stages) is
+/// native-only, so a partial render there always uses the HTML list —
+/// Pandoc-profile documents can't render on WASM in the first place.
+#[cfg(target_arch = "wasm32")]
+fn partial_stage_list(
+    ctx: &RenderContext<'_>,
+    upper_bound: crate::transform::TransformPhase,
+) -> Vec<Box<dyn PipelineStage>> {
+    let _ = ctx;
+    build_html_pipeline_pause_stages(upper_bound)
+}
+
+/// Plain owned per-chapter state a book-merge orchestrator carries across
+/// a paused partial render, instead of holding a constructed
+/// `RenderContext<'a>` across the pause (design doc §6). Built fresh (or
+/// extracted from a previous boundary) before each call into
+/// [`render_qmd_to_ast_partial`]/[`run_pipeline_from_ast`], via a
+/// short-lived `RenderContext<'_>` [`Self::build_context`] borrows into
+/// existence and [`Self::extract_from`] tears back down afterward.
+///
+/// This is **book-projects P2's own short field list** (design doc §6):
+/// `artifacts`, `diagnostics`, `project_index`, `resource_resolver`, plus
+/// the seven fields that are never mutated by any `AstTransform` but must
+/// still be threaded through because the stage that originally set them
+/// (`PreEngineSugaringStage`, for `ref_type_registry`) doesn't run again
+/// in a from-AST finishing pipeline. P5's own struct is the full
+/// sixteen-field superset (`crossref_index`, `resource_copies`,
+/// `code_block_decorations`, `attribution_provider`, `attribution_data`
+/// besides) — see its own plan; do not extend this one to match, those
+/// five fields are dead for P2's Typst/EPUB targets specifically.
+pub struct ChapterPauseState {
+    pub artifacts: crate::artifact::ArtifactStore,
+    pub diagnostics: Vec<DiagnosticMessage>,
+    pub project_index: Option<Arc<crate::project::index::ProjectIndex>>,
+    pub resource_resolver: Option<crate::resource_resolver::ResourceResolverContext>,
+    pub ref_type_registry: Option<crate::crossref::RefTypeRegistry>,
+    pub options: crate::render::RenderOptions,
+    pub includes: crate::stage::PandocIncludes,
+    pub pipeline_profile: crate::format::PipelineProfile,
+    pub observer: Arc<dyn crate::stage::PipelineObserver>,
+    pub user_grammar_provider: Option<Rc<RefCell<dyn quarto_highlight::UserGrammarProvider>>>,
+    pub resource_report: crate::project_resources::DocumentResourceReport,
+    /// Whether this chapter's own partial render skipped a code-executing
+    /// engine because the render's `ExecutionPolicy` excluded it
+    /// (bd-sl79jjiq) — mirrors `RenderContext::execution_skipped`/
+    /// `RenderOutput::execution_skipped`. Output-only: always `false` in a
+    /// freshly built context (`RenderContext::new`'s own default), so
+    /// `build_context` has nothing to restore here; `extract_from` reads
+    /// whatever the paused render's `restore_render_context` call set.
+    pub execution_skipped: bool,
+}
+
+impl ChapterPauseState {
+    /// A fresh instance with every field at its default/empty state — the
+    /// shape a chapter's owned state starts in before any partial render
+    /// has run, or before the project-level fields have been seeded once
+    /// at book level (design doc §6's "compute once, source from any one
+    /// chapter" note — that seeding is the caller's job, not this type's).
+    pub fn new(pipeline_profile: crate::format::PipelineProfile) -> Self {
+        Self {
+            artifacts: crate::artifact::ArtifactStore::default(),
+            diagnostics: Vec::new(),
+            project_index: None,
+            resource_resolver: None,
+            ref_type_registry: None,
+            options: crate::render::RenderOptions::default(),
+            includes: crate::stage::PandocIncludes::default(),
+            pipeline_profile,
+            observer: Arc::new(crate::stage::NoopObserver),
+            user_grammar_provider: None,
+            resource_report: crate::project_resources::DocumentResourceReport::default(),
+            execution_skipped: false,
+        }
+    }
+
+    /// Reconstruct a short-lived `RenderContext` borrowing `self`'s owned
+    /// fields plus the always-shared, never-chapter-mutated
+    /// project/document/format/binaries references — the same shape
+    /// `render_document_to_file` already uses locally (owns
+    /// `doc_info`/`binaries`, borrows into `RenderContext` locally), just
+    /// with the owning scope moved up to the book orchestrator's
+    /// per-chapter loop.
+    pub fn build_context<'a>(
+        &mut self,
+        project: &'a crate::project::ProjectContext,
+        document: &'a crate::project::DocumentInfo,
+        format: &'a crate::format::Format,
+        binaries: &'a crate::render::BinaryDependencies,
+    ) -> RenderContext<'a> {
+        let mut ctx = RenderContext::new(project, document, format, binaries);
+        ctx.artifacts = std::mem::take(&mut self.artifacts);
+        ctx.diagnostics = std::mem::take(&mut self.diagnostics);
+        ctx.project_index = self.project_index.take();
+        ctx.resource_resolver = self.resource_resolver.take();
+        ctx.ref_type_registry = self.ref_type_registry.take();
+        ctx.options = self.options.clone();
+        ctx.includes = std::mem::take(&mut self.includes);
+        ctx.pipeline_profile = self.pipeline_profile.clone();
+        ctx.observer = self.observer.clone();
+        ctx.user_grammar_provider = self.user_grammar_provider.clone();
+        ctx.resource_report = std::mem::take(&mut self.resource_report);
+        ctx
+    }
+
+    /// Extract this phase's owned fields back out of `ctx` after a
+    /// partial render, leaving the source `RenderContext` at its
+    /// default/empty state for those fields (it is meant to be dropped
+    /// next, not read again).
+    pub fn extract_from(ctx: &mut RenderContext<'_>) -> Self {
+        Self {
+            artifacts: std::mem::take(&mut ctx.artifacts),
+            diagnostics: std::mem::take(&mut ctx.diagnostics),
+            project_index: ctx.project_index.take(),
+            resource_resolver: ctx.resource_resolver.take(),
+            ref_type_registry: ctx.ref_type_registry.take(),
+            options: ctx.options.clone(),
+            includes: std::mem::take(&mut ctx.includes),
+            pipeline_profile: ctx.pipeline_profile.clone(),
+            observer: ctx.observer.clone(),
+            user_grammar_provider: ctx.user_grammar_provider.clone(),
+            resource_report: std::mem::take(&mut ctx.resource_report),
+            execution_skipped: ctx.execution_skipped,
+        }
+    }
+}
+
+/// Book-projects P5's per-chapter owned state: the **full** field superset
+/// [`ChapterPauseState`] deliberately does not carry (see its doc comment),
+/// held by the book orchestrator for all N chapters **simultaneously** in a
+/// book-scoped `Vec` — unlike P2's one-at-a-time, drop-after-use pattern
+/// (design doc §6). A chapter's instance lives from before its pause-side
+/// partial render (`..=Navigation`) until after its independent resume
+/// (`run_pipeline_from_ast` with `Finalization..`), and its fields must come
+/// back attributed to *that* chapter, never cross-wired with a sibling's.
+///
+/// The sixteen audited `RenderContext`-owned fields are the plan's full list
+/// (artifacts, diagnostics, crossref_index, ref_type_registry, project_index,
+/// resource_resolver, options, includes, pipeline_profile, observer,
+/// user_grammar_provider, resource_report, resource_copies,
+/// code_block_decorations, attribution_provider, attribution_data), plus
+/// P2's output-only `execution_skipped`, plus `format_options` and
+/// `document_profile` — both proven by the item-45 bridge round-trip to
+/// survive a resume only if the caller seeds them back in.
+///
+/// Deliberately **not** serializable: `observer`/`user_grammar_provider`
+/// contain trait objects (an `Rc`/`Arc`), so — unlike
+/// `ChapterCrossrefInventory`/`ProjectCrossrefIndex` — this type keeps no
+/// serde derives. The serializable-for-day-one decision applies to the
+/// inventory types, not to the live render state.
+///
+/// Forward-compatibility (P6): the unified-bibliography phase wires a
+/// `ChapterCitationManifest` into this struct as one more named field — the
+/// named-field shape is the contract; do not restructure into a tuple or a
+/// side-table when adding it.
+///
+/// Not carried, on purpose: the orchestrator-controlled inputs that are
+/// identical for pause and resume and are set fresh on each reconstructed
+/// context — `chapter_seed`, `defer_citeproc`, `execution_policy`,
+/// `engine_registry_override`, and (resume-only, post-aggregation)
+/// `cross_chapter_crossref_registry` — plus the borrowed `project`/
+/// `document`/`format`/`binaries` that [`Self::build_context`]'s caller
+/// owns. `resource_resolver` *is* carried (it is on the audited list), but
+/// note the plan's recompute-don't-carry decision still applies to
+/// `output_path`/`resource_paths`, which are derived at write time, not
+/// carried here.
+pub struct BookChapterPauseState {
+    pub artifacts: crate::artifact::ArtifactStore,
+    pub diagnostics: Vec<DiagnosticMessage>,
+    pub crossref_index: Option<crate::crossref::CrossrefIndex>,
+    pub ref_type_registry: Option<crate::crossref::RefTypeRegistry>,
+    pub project_index: Option<Arc<crate::project::index::ProjectIndex>>,
+    pub resource_resolver: Option<crate::resource_resolver::ResourceResolverContext>,
+    pub options: crate::render::RenderOptions,
+    pub includes: crate::stage::PandocIncludes,
+    pub pipeline_profile: crate::format::PipelineProfile,
+    pub observer: Arc<dyn crate::stage::PipelineObserver>,
+    pub user_grammar_provider: Option<Rc<RefCell<dyn quarto_highlight::UserGrammarProvider>>>,
+    pub resource_report: crate::project_resources::DocumentResourceReport,
+    pub resource_copies: Vec<crate::render::ResourceCopyIntent>,
+    pub code_block_decorations: std::collections::HashMap<
+        crate::transforms::CodeBlockDecorationKey,
+        crate::transforms::CodeBlockDecoration,
+    >,
+    pub attribution_provider: Option<Arc<dyn crate::attribution::AttributionSourceProvider>>,
+    pub attribution_data: Option<Arc<crate::attribution::AttributionData>>,
+    /// Mirrors [`ChapterPauseState::execution_skipped`]: output-only, set by
+    /// the paused render's `restore_render_context`; nothing to restore.
+    pub execution_skipped: bool,
+    pub format_options: crate::render::FormatOptions,
+    pub document_profile: Option<crate::document_profile::DocumentProfile>,
+    /// Book-projects P6: this chapter's harvested citation manifest,
+    /// populated by `UserFiltersStage` during the pause leg — see
+    /// `RenderContext::citation_manifest`.
+    pub citation_manifest: Option<pampa::citeproc_filter::ChapterCitationManifest>,
+    /// Book-projects P6: whether filter resolution placed `"citeproc"`
+    /// into `.post` for this chapter's pause-leg render. Output-only,
+    /// like `execution_skipped` — the orchestrator reads it after
+    /// `extract_from` to diagnose a chapter whose citations never reached
+    /// `citation_manifest`.
+    pub citeproc_filter_in_post: bool,
+}
+
+impl BookChapterPauseState {
+    /// A fresh instance with every field at its default/empty state — the
+    /// shape a chapter's owned state starts in before its partial render has
+    /// run. Project-level fields (`project_index`, `resource_resolver`,
+    /// `user_grammar_provider`, …) are seeded once at book level by the
+    /// orchestrator, the same compute-once source every chapter reads.
+    pub fn new(pipeline_profile: crate::format::PipelineProfile) -> Self {
+        Self {
+            artifacts: crate::artifact::ArtifactStore::default(),
+            diagnostics: Vec::new(),
+            crossref_index: None,
+            ref_type_registry: None,
+            project_index: None,
+            resource_resolver: None,
+            options: crate::render::RenderOptions::default(),
+            includes: crate::stage::PandocIncludes::default(),
+            pipeline_profile,
+            observer: Arc::new(crate::stage::NoopObserver),
+            user_grammar_provider: None,
+            resource_report: crate::project_resources::DocumentResourceReport::default(),
+            resource_copies: Vec::new(),
+            code_block_decorations: std::collections::HashMap::new(),
+            attribution_provider: None,
+            attribution_data: None,
+            execution_skipped: false,
+            format_options: crate::render::FormatOptions::default(),
+            document_profile: None,
+            citation_manifest: None,
+            citeproc_filter_in_post: false,
+        }
+    }
+
+    /// Reconstruct a short-lived `RenderContext` borrowing `self`'s owned
+    /// fields plus the always-shared, never-chapter-mutated
+    /// project/document/format/binaries references — the same shape
+    /// [`ChapterPauseState::build_context`] uses, just with the full field
+    /// list. The caller sets the orchestrator-controlled inputs
+    /// (`chapter_seed`, `cross_chapter_crossref_registry`, …) on the
+    /// returned context afterward, per the struct's doc comment.
+    pub fn build_context<'a>(
+        &mut self,
+        project: &'a crate::project::ProjectContext,
+        document: &'a crate::project::DocumentInfo,
+        format: &'a crate::format::Format,
+        binaries: &'a crate::render::BinaryDependencies,
+    ) -> RenderContext<'a> {
+        let mut ctx = RenderContext::new(project, document, format, binaries);
+        ctx.artifacts = std::mem::take(&mut self.artifacts);
+        ctx.diagnostics = std::mem::take(&mut self.diagnostics);
+        ctx.project_index = self.project_index.take();
+        ctx.resource_resolver = self.resource_resolver.take();
+        ctx.ref_type_registry = self.ref_type_registry.take();
+        ctx.options = self.options.clone();
+        ctx.includes = std::mem::take(&mut self.includes);
+        ctx.pipeline_profile = self.pipeline_profile.clone();
+        ctx.observer = self.observer.clone();
+        ctx.user_grammar_provider = self.user_grammar_provider.clone();
+        ctx.resource_report = std::mem::take(&mut self.resource_report);
+        ctx.crossref_index = self.crossref_index.take();
+        ctx.resource_copies = std::mem::take(&mut self.resource_copies);
+        ctx.code_block_decorations = std::mem::take(&mut self.code_block_decorations);
+        ctx.attribution_provider = self.attribution_provider.clone();
+        ctx.attribution_data = self.attribution_data.clone();
+        ctx.format_options = self.format_options.clone();
+        ctx.document_profile = self.document_profile.take();
+        ctx.citation_manifest = self.citation_manifest.take();
+        ctx
+    }
+
+    /// Extract the full field list back out of `ctx` after a pause-side or
+    /// resume-side call, leaving the source `RenderContext` at its
+    /// default/empty state for those fields (it is meant to be dropped
+    /// next, not read again).
+    pub fn extract_from(ctx: &mut RenderContext<'_>) -> Self {
+        Self {
+            artifacts: std::mem::take(&mut ctx.artifacts),
+            diagnostics: std::mem::take(&mut ctx.diagnostics),
+            crossref_index: ctx.crossref_index.take(),
+            ref_type_registry: ctx.ref_type_registry.take(),
+            project_index: ctx.project_index.take(),
+            resource_resolver: ctx.resource_resolver.take(),
+            options: ctx.options.clone(),
+            includes: std::mem::take(&mut ctx.includes),
+            pipeline_profile: ctx.pipeline_profile.clone(),
+            observer: ctx.observer.clone(),
+            user_grammar_provider: ctx.user_grammar_provider.clone(),
+            resource_report: std::mem::take(&mut ctx.resource_report),
+            resource_copies: std::mem::take(&mut ctx.resource_copies),
+            code_block_decorations: std::mem::take(&mut ctx.code_block_decorations),
+            attribution_provider: ctx.attribution_provider.clone(),
+            attribution_data: ctx.attribution_data.take(),
+            execution_skipped: ctx.execution_skipped,
+            format_options: ctx.format_options.clone(),
+            document_profile: ctx.document_profile.take(),
+            citation_manifest: ctx.citation_manifest.take(),
+            citeproc_filter_in_post: ctx.citeproc_filter_in_post,
+        }
+    }
 }
 
 pub async fn parse_qmd_to_ast(
@@ -1291,8 +1902,11 @@ fn capture_untransformed_ast_json(content: &[u8], source_name: &str) -> Option<S
 /// ## Finalization Phase
 /// 17. `LinkRewriteTransform` - Rewrite body-content `.qmd` links to relative output URLs (Phase 6)
 /// 18. `AppendixStructureTransform` - Consolidate appendix content into container
-/// 19. `CrossrefRenderTransform` - Resolve crossref custom nodes to final HTML structure
-/// 20. `ResourceCollectorTransform` - Collect image dependencies
+/// 19. `CrossChapterCrossrefResolveTransform` - Patch cross-chapter crossref
+///     numbers/targets from the project-wide registry (book-projects P5;
+///     no-op without the registry)
+/// 20. `CrossrefRenderTransform` - Resolve crossref custom nodes to final HTML structure
+/// 21. `ResourceCollectorTransform` - Collect image dependencies
 /// Select the format-specific footer-render stage.
 ///
 /// Footer *generation* is format-agnostic (`FooterGenerateTransform` →
@@ -1474,6 +2088,10 @@ pub fn build_transform_pipeline(
         // relative to slide construction is irrelevant).
         pipeline.push(Box::new(crate::revealjs::RevealFooterAliasTransform::new()));
     } else {
+        // The book cover must land before SectionizeTransform so the
+        // inserted paragraph is wrapped inside the first section (Q1's
+        // net shape after its DOM postprocessor).
+        pipeline.push(Box::new(BookCoverImageTransform::new()));
         pipeline.push(Box::new(TitleBlockTransform::new()));
         pipeline.push(Box::new(SectionizeTransform::new()));
     }
@@ -1671,6 +2289,14 @@ pub fn build_transform_pipeline(
     // `claude-notes/plans/2026-04-24-websites-phase-6.md`.
     pipeline.push(Box::new(LinkRewriteTransform::new()));
     pipeline.push(Box::new(AppendixStructureTransform::new()));
+    // Cross-chapter crossref resolution (book-projects P5). Must run
+    // *before* `CrossrefRenderTransform`, which renders the node shape this
+    // patches. Registered unconditionally: it is a true no-op unless the
+    // book orchestrator attached a project-wide registry to the context,
+    // so non-book renders never run the walk.
+    pipeline.push(Box::new(
+        crate::transforms::cross_chapter_crossref_resolve::CrossChapterCrossrefResolveTransform::new(),
+    ));
     pipeline.push(Box::new(CrossrefRenderTransform::new()));
     // Example-embed render (bd-t3cert81). Runs right after
     // `CrossrefRenderTransform` so the per-`demo` `order` the index assigned
@@ -1914,11 +2540,16 @@ const PANDOC_TRANSFORM_EXCLUDED: &[&str] = &[
     // shapes — HTML-only rendering of custom nodes and HTML decoration.
     "crossref-render",
     "mermaid-render",
+    // `.hep` plot → SVG artifact is an HTML-family answer (self-gated at
+    // runtime today; excluding here means the no-op never runs). A future
+    // PDF branch would need to leave this list and be reclassified.
+    "hephaestus-render",
     "code-block-render",
     "table-bootstrap-class",
     // B2: HTML scaffolding / website chrome producers with no Pandoc-writer
     // analog.
     "title-block",
+    "book-cover-image",
     "sectionize",
     "title-banner",
     "website-title-prefix",
@@ -2086,11 +2717,22 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     // Synthesizes an HTML title-block container from Meta; Pandoc's own
     // templates build the equivalent from the same Meta.
     ("title-block", Bucket::B2),
+    // Inserts the book cover image on a book index page — pure AST
+    // synthesis from config, sibling of `title-block` (runs just before
+    // it so `SectionizeTransform` wraps the result).
+    ("book-cover-image", Bucket::B2),
     // `--section-divs` is an HTML-writer concern.
     ("sectionize", Bucket::B2),
     // --- B3: shared post-core services ------------------------------------
     ("link-rewrite", Bucket::B3),
     ("appendix-structure", Bucket::B3),
+    // Cross-chapter crossref resolution (book-projects P5). A shared
+    // service, sibling of `link-rewrite`: it mutates `plain_data` on
+    // unresolved `CrossrefResolvedRef` nodes only, is a true no-op unless
+    // the book orchestrator attached the project-wide registry, and never
+    // bakes format presentation — a Pandoc writer must see the patched
+    // numbers too.
+    ("cross-chapter-crossref-resolve", Bucket::B3),
     ("resource-collector", Bucket::B3),
     // Captures the markdown companion for llms.txt. A service, not
     // presentation of the current format; self-gates on `llms_view_active`
@@ -2136,6 +2778,13 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     // shim would have nothing left to route.
     ("crossref-render", Bucket::B4),
     ("mermaid-render", Bucket::B4),
+    // The `.hep` analog of `mermaid-render`: swaps a plot document's
+    // `Image` for a rendered SVG artifact under `figure-html/`. Self-gates
+    // to the HTML family ("SVG in an <img> is an HTML-family answer" — a
+    // PDF branch is a future, explicitly-anticipated change that would
+    // also require reclassification) and excluded at the Pandoc cut like
+    // every other B4 presentation transform.
+    ("hephaestus-render", Bucket::B4),
     ("code-block-render", Bucket::B4),
     ("table-bootstrap-class", Bucket::B4),
     // Swaps a `.hep` plot-document reference for a rendered SVG artifact —
@@ -4433,6 +5082,818 @@ mod tests {
         }
     }
 
+    // === book-projects P2: `execute_range` (phase-bounded transform execution) ===
+    //
+    // These tests run against a *real* pipeline built by
+    // `build_transform_pipeline`, not a toy list, so the phase filter is
+    // proven against the production transform set and its real `phase()`
+    // declarations. See
+    // `claude-notes/plans/2026-09-21-book-projects-P2-single-file-merge.md`.
+
+    use crate::transform::TransformPhase;
+
+    /// Records the names of transforms that actually executed, via the
+    /// observer callback `TransformPipeline::execute*` fires after each one.
+    #[derive(Default)]
+    struct RecordingObserver(std::sync::Mutex<Vec<String>>);
+    impl crate::stage::PipelineObserver for RecordingObserver {
+        fn on_transform_data(
+            &self,
+            name: &str,
+            _index: usize,
+            _total: usize,
+            _ast: &quarto_pandoc_types::pandoc::Pandoc,
+            _ast_context: &pampa::pandoc::ASTContext,
+        ) {
+            self.0.lock().unwrap().push(name.to_string());
+        }
+    }
+
+    /// Run `range` over a fresh real HTML transform pipeline on a minimal
+    /// document; return the names of the transforms that ran, in order.
+    async fn run_real_pipeline_range(
+        range: (
+            std::ops::Bound<TransformPhase>,
+            std::ops::Bound<TransformPhase>,
+        ),
+    ) -> Vec<String> {
+        let pipeline = build_transform_pipeline(
+            vec![],
+            vec![],
+            make_test_runtime(),
+            "html".to_string(),
+            crate::format::PipelineProfile::HtmlRender,
+            None,
+            Default::default(),
+            None,
+        );
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        ctx.ref_type_registry = Some(crate::crossref::RefTypeRegistry::builtin());
+        let observer = Arc::new(RecordingObserver::default());
+        ctx.observer = observer.clone();
+
+        let mut ast = quarto_pandoc_types::pandoc::Pandoc::default();
+        let ast_context = pampa::pandoc::ASTContext::default();
+        pipeline
+            .execute_range(&mut ast, &ast_context, &mut ctx, range)
+            .await
+            .unwrap();
+
+        observer.0.lock().unwrap().clone()
+    }
+
+    #[tokio::test]
+    async fn execute_range_upper_bound_runs_exactly_normalization_phase() {
+        let pipeline = build_transform_pipeline(
+            vec![],
+            vec![],
+            make_test_runtime(),
+            "html".to_string(),
+            crate::format::PipelineProfile::HtmlRender,
+            None,
+            Default::default(),
+            None,
+        );
+        let expected: Vec<&str> = pipeline
+            .iter()
+            .filter(|t| t.phase() == TransformPhase::Normalization)
+            .map(|t| t.name())
+            .collect();
+        assert!(!expected.is_empty());
+
+        let ran = run_real_pipeline_range((
+            std::ops::Bound::Unbounded,
+            std::ops::Bound::Included(TransformPhase::Normalization),
+        ))
+        .await;
+        assert_eq!(
+            ran, expected,
+            "`..=Normalization` must run exactly the Normalization-phase transforms"
+        );
+    }
+
+    /// P2 itself only needs the upper-bound form; this proves the
+    /// lower-bound half of the shared contract before P5 becomes the first
+    /// real caller that depends on it.
+    #[tokio::test]
+    async fn execute_range_lower_bound_runs_exactly_finalization_phase() {
+        let pipeline = build_transform_pipeline(
+            vec![],
+            vec![],
+            make_test_runtime(),
+            "html".to_string(),
+            crate::format::PipelineProfile::HtmlRender,
+            None,
+            Default::default(),
+            None,
+        );
+        let expected: Vec<&str> = pipeline
+            .iter()
+            .filter(|t| t.phase() == TransformPhase::Finalization)
+            .map(|t| t.name())
+            .collect();
+        assert!(!expected.is_empty());
+
+        let ran = run_real_pipeline_range((
+            std::ops::Bound::Included(TransformPhase::Finalization),
+            std::ops::Bound::Unbounded,
+        ))
+        .await;
+        assert_eq!(
+            ran, expected,
+            "`Finalization..` must run exactly the Finalization-phase transforms"
+        );
+    }
+
+    /// An unbounded `execute_range(..)` must be byte-identical to today's
+    /// `execute()` — the book-merge path must not perturb the ordinary
+    /// full-pipeline case it shares the loop with.
+    #[tokio::test]
+    async fn execute_range_unbounded_matches_execute() {
+        // A small non-book fixture with enough content for Normalization-
+        // and Crossref-phase transforms to actually do work.
+        let make_ast = || {
+            let qmd = "---\ntitle: T\n---\n\n# Intro {#sec-intro}\n\nSee @fig-a.\n\n![A figure](img.png){#fig-a}\n";
+            let mut sink = Vec::new();
+            let (ast, ast_context, _diags) =
+                pampa::readers::qmd::read(qmd.as_bytes(), false, "test.qmd", &mut sink, true, None)
+                    .expect("fixture parses");
+            (ast, ast_context)
+        };
+
+        let run_full = |use_range: bool| {
+            let pipeline = build_transform_pipeline(
+                vec![],
+                vec![],
+                make_test_runtime(),
+                "html".to_string(),
+                crate::format::PipelineProfile::HtmlRender,
+                None,
+                Default::default(),
+                None,
+            );
+            let project = make_test_project();
+            let doc = DocumentInfo::from_path("/project/test.qmd");
+            let format = Format::html();
+            let binaries = BinaryDependencies::new();
+            let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+            ctx.ref_type_registry = Some(crate::crossref::RefTypeRegistry::builtin());
+            let observer = Arc::new(RecordingObserver::default());
+            ctx.observer = observer.clone();
+
+            let (mut ast, ast_context): (Pandoc, _) = make_ast();
+            pollster::block_on(async {
+                if use_range {
+                    pipeline
+                        .execute_range(&mut ast, &ast_context, &mut ctx, ..)
+                        .await
+                } else {
+                    pipeline.execute(&mut ast, &ast_context, &mut ctx).await
+                }
+            })
+            .unwrap();
+            let names = observer.0.lock().unwrap().clone();
+            (ast, names)
+        };
+
+        let (ast_execute, names_execute) = run_full(false);
+        let (ast_range, names_range) = run_full(true);
+        assert_eq!(
+            names_execute, names_range,
+            "unbounded execute_range must run the same transforms as execute"
+        );
+        assert_eq!(
+            ast_execute, ast_range,
+            "unbounded execute_range must produce a byte-identical AST to execute"
+        );
+    }
+
+    // === book-projects P2: phase-bounded stage lists + partial-render entry ===
+
+    /// The Pandoc-hybrid *pause* list (P2's per-chapter partial render,
+    /// `..=Normalization`) is the production stage list truncated right
+    /// after a range-bounded `ast-transforms`: engine execution and
+    /// `user-filters-pre` run, no post-transform or output-writing stage
+    /// does.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn pandoc_pause_stage_list_stops_after_bounded_ast_transforms() {
+        let stages = build_pandoc_pipeline_pause_stages(
+            TransformPhase::Normalization,
+            crate::format::FormatIdentifier::Typst,
+        );
+        let names: Vec<&str> = stages.iter().map(|s| s.name()).collect();
+        assert_eq!(names.first(), Some(&"source-conversion"));
+        assert_eq!(names.last(), Some(&"ast-transforms"));
+        assert!(
+            names.contains(&"user-filters-pre"),
+            "per-chapter filters still run: {names:?}"
+        );
+        for excluded in [
+            "user-filters-post",
+            "resource-report",
+            "pandoc-write",
+            "typst-compile",
+            // Pandoc-leg exclusions must survive the splice, not just the cut.
+            "compile-theme-css",
+            "code-highlight",
+            "render-html-body",
+            "apply-template",
+        ] {
+            assert!(
+                !names.contains(&excluded),
+                "`{excluded}` must not be in the pause list: {names:?}"
+            );
+        }
+    }
+
+    /// The Pandoc-hybrid *finishing* list (P2's merged-document run,
+    /// `Crossref..`) starts directly with a range-bounded `ast-transforms`
+    /// and then the real, unchanged tail.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn pandoc_finishing_stage_list_is_bounded_transforms_then_real_tail() {
+        let stages = build_pandoc_pipeline_finishing_stages(
+            TransformPhase::Crossref,
+            crate::format::FormatIdentifier::Typst,
+        );
+        let names: Vec<&str> = stages.iter().map(|s| s.name()).collect();
+        assert_eq!(
+            names,
+            vec![
+                "ast-transforms",
+                "user-filters-post",
+                "resource-report",
+                "equation-number",
+                "pandoc-write",
+                "resource-copy-flush",
+                "typst-compile",
+            ]
+        );
+    }
+
+    /// Same contract for the HTML flavor (P5's pause/resume shape).
+    #[test]
+    fn html_pause_and_finishing_stage_lists() {
+        let pause = build_html_pipeline_pause_stages(TransformPhase::Navigation);
+        let names: Vec<&str> = pause.iter().map(|s| s.name()).collect();
+        assert_eq!(names.first(), Some(&"source-conversion"));
+        assert_eq!(names.last(), Some(&"ast-transforms"));
+        assert!(names.contains(&"compile-theme-css"));
+
+        let finish = build_html_pipeline_finishing_stages(TransformPhase::Finalization);
+        let names: Vec<&str> = finish.iter().map(|s| s.name()).collect();
+        assert_eq!(
+            names,
+            vec![
+                "ast-transforms",
+                "user-filters-post",
+                "resource-report",
+                "equation-number",
+                "math-ml",
+                "code-highlight",
+                "math-js",
+                "render-html-body",
+                "apply-template",
+            ]
+        );
+    }
+
+    /// The per-chapter partial render runs *exactly* the Normalization-phase
+    /// transforms of the real Pandoc-profile transform pipeline — not a
+    /// hand-maintained subset — and stops there: the figure is sugared to
+    /// its `FloatRefTarget` custom node (Normalization) but not yet
+    /// crossref-rendered to a `Figure` (Finalization).
+    #[cfg(not(target_arch = "wasm32"))]
+    #[tokio::test]
+    async fn partial_render_runs_exactly_normalization_transforms_for_pandoc_profile() {
+        let qmd = "---\ntitle: T\nformat: typst\n---\n\n# Intro {#sec-intro}\n\n![A figure](img.png){#fig-a}\n";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::from_format_string("typst").unwrap();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        let observer = Arc::new(RecordingObserver::default());
+        ctx.observer = observer.clone();
+
+        let (doc_ast, _diagnostics) = render_qmd_to_ast_partial(
+            qmd.as_bytes(),
+            "test.qmd",
+            &mut ctx,
+            make_test_runtime(),
+            TransformPhase::Normalization,
+        )
+        .await
+        .unwrap();
+
+        let pipeline = build_transform_pipeline(
+            vec![],
+            vec![],
+            make_test_runtime(),
+            "typst".to_string(),
+            crate::format::PipelineProfile::from_format("typst"),
+            None,
+            Default::default(),
+            None,
+        );
+        let expected: Vec<&str> = pipeline
+            .iter()
+            .filter(|t| t.phase() == TransformPhase::Normalization)
+            .map(|t| t.name())
+            .collect();
+        assert_eq!(
+            observer.0.lock().unwrap().clone(),
+            expected,
+            "partial render must run exactly the Normalization-phase transforms"
+        );
+
+        let has_float_node = doc_ast.ast.blocks.iter().any(|b| {
+            matches!(
+                b,
+                quarto_pandoc_types::Block::Custom(node) if node.type_name == "FloatRefTarget"
+            )
+        });
+        assert!(
+            has_float_node,
+            "Normalization must sugar the figure div into a FloatRefTarget node"
+        );
+        let has_figure = doc_ast
+            .ast
+            .blocks
+            .iter()
+            .any(|b| matches!(b, quarto_pandoc_types::Block::Figure(_)));
+        assert!(
+            !has_figure,
+            "Finalization (crossref-render) must NOT have run in a partial render"
+        );
+    }
+
+    /// Pause → finish round-trip through a real `DocumentAst` hand-off
+    /// (HTML flavor — the Pandoc flavor's write/compile tail needs external
+    /// binaries; the shared mechanism is what's under test here): a document
+    /// paused at Normalization, resumed with `build_html_pipeline_finishing_stages`
+    /// from Crossref via `run_pipeline_from_ast`, produces fully rendered
+    /// output. This also exercises the registry carry-over: the finishing
+    /// pipeline never runs `PreEngineSugaringStage`, so the crossref
+    /// registry/index must come from the caller's context — a figure paused
+    /// before Crossref must still come out numbered.
+    #[tokio::test]
+    async fn pause_then_finish_roundtrip_renders_crossref_numbered_figure() {
+        let qmd = "---\ntitle: T\n---\n\n# Intro {#sec-intro}\n\nSee @fig-a.\n\n![A figure](img.png){#fig-a}\n";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let runtime = make_test_runtime();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let (doc_ast, _diagnostics) = render_qmd_to_ast_partial(
+            qmd.as_bytes(),
+            "test.qmd",
+            &mut ctx,
+            runtime.clone(),
+            TransformPhase::Normalization,
+        )
+        .await
+        .unwrap();
+
+        let (output, _diagnostics) = run_pipeline_from_ast(
+            doc_ast,
+            &mut ctx,
+            runtime,
+            build_html_pipeline_finishing_stages(TransformPhase::Crossref),
+        )
+        .await
+        .unwrap();
+
+        let rendered = output.into_rendered_output().unwrap_or_else(|| {
+            panic!("finishing pipeline must produce RenderedOutput");
+        });
+        assert!(
+            rendered.content.contains("Figure"),
+            "crossref-render must have run in the finishing pass; got:\n{}",
+            &rendered.content[..rendered.content.len().min(2000)]
+        );
+    }
+
+    /// Targets the owned-struct/reconstruction mechanism itself (book-projects
+    /// P2), not just the merge outcome it enables:
+    /// [`ChapterPauseState::build_context`] reconstructs a `RenderContext`
+    /// from a plain owned struct, [`render_qmd_to_ast_partial`] runs a real
+    /// partial render against it, and
+    /// [`ChapterPauseState::extract_from`] tears the mutated fields back
+    /// out. Every field in P2's own short list must come out present and
+    /// correct, independent of whether a merge step downstream does
+    /// anything sensible with them.
+    #[tokio::test]
+    async fn chapter_pause_state_round_trips_all_p2_owned_fields() {
+        use crate::format::PipelineProfile;
+        use crate::project::index::ProjectIndex;
+        use crate::resource_resolver::ResourceResolverContext;
+
+        let qmd = "# One\n\nBody.\n";
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/chapter.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let runtime = make_test_runtime();
+
+        let mut state = ChapterPauseState::new(PipelineProfile::HtmlRender);
+        // Seed the two `Option` fields that would otherwise be
+        // indistinguishable from "never touched": a real value must
+        // round-trip unchanged, since nothing in a Normalization-only
+        // partial render writes either of them.
+        state.project_index = Some(Arc::new(ProjectIndex::new(vec![])));
+        state.resource_resolver = Some(ResourceResolverContext::single_doc(
+            "/out/chapter.html",
+            "chapter",
+        ));
+        state.options.verbose = true;
+
+        let mut ctx = state.build_context(&project, &doc, &format, &binaries);
+
+        let (_doc_ast, diagnostics) = render_qmd_to_ast_partial(
+            qmd.as_bytes(),
+            "chapter.qmd",
+            &mut ctx,
+            runtime,
+            TransformPhase::Normalization,
+        )
+        .await
+        .unwrap();
+        assert!(
+            diagnostics.is_empty(),
+            "unexpected diagnostics: {diagnostics:?}"
+        );
+
+        let extracted = ChapterPauseState::extract_from(&mut ctx);
+
+        // Mutated field: `PreEngineSugaringStage` populates
+        // `ref_type_registry` before `AstTransformsStage` even starts, so
+        // it must come out `Some` even though the partial render never
+        // reached Crossref.
+        assert!(
+            extracted.ref_type_registry.is_some(),
+            "ref_type_registry must be populated before AstTransformsStage runs"
+        );
+        // Static passthroughs round-trip unchanged through the pause.
+        assert!(extracted.project_index.is_some());
+        assert!(extracted.resource_resolver.is_some());
+        assert!(extracted.options.verbose);
+        assert_eq!(extracted.pipeline_profile, PipelineProfile::HtmlRender);
+        // Always-present fields: real, usable values regardless of whether
+        // this particular fixture happens to populate them.
+        assert_eq!(extracted.diagnostics, Vec::new());
+        assert!(extracted.resource_report.entries.is_empty());
+    }
+
+    /// book-projects P5 (plan item 45): `run_pipeline_from_ast`'s
+    /// `RenderContext`↔`StageContext` bridge must round-trip every field the
+    /// pause/resume split now straddles — seeded *in* at the resume call and
+    /// carried back *out* before the caller reads the ctx. A pause at
+    /// Navigation leaves these on the *outer* ctx; the finishing pipeline's
+    /// stages read them from the *stage* ctx, so a missing bridge leg
+    /// silently drops state:
+    ///
+    /// - `code_block_decorations`: `code-block-generate` (Normalization,
+    ///   pause-side) writes the sideband; `code-block-render` (Finalization,
+    ///   resume-side) reads it. The field historically had no `StageContext`
+    ///   counterpart at all — the inner bridge drops it on both legs.
+    /// - `includes`: engine execution (pause-side) populates them;
+    ///   `ApplyTemplateStage`'s late drain is the resume-side consumer.
+    /// - `format_options` / `document_profile`: restore always carried them
+    ///   *out*, but nothing seeded them *in* — so a caller-held value was
+    ///   clobbered by the stage's default at restore time.
+    #[tokio::test]
+    async fn finishing_pipeline_bridge_round_trips_seeded_fields() {
+        use crate::document_profile::DocumentProfile;
+        use crate::render::FormatOptions;
+
+        // A fenced code block with a `filename` attribute: the pause-side
+        // code-block-generate turns that into a decoration entry, which the
+        // resume-side code-block-render must still see.
+        let qmd =
+            "---\ntitle: T\n---\n\n# Intro\n\n``` {filename=\"p5-bridge.rs\"}\nlet x = 1;\n```\n";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let runtime = make_test_runtime();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let (doc_ast, _diagnostics) = render_qmd_to_ast_partial(
+            qmd.as_bytes(),
+            "test.qmd",
+            &mut ctx,
+            runtime.clone(),
+            TransformPhase::Navigation,
+        )
+        .await
+        .unwrap();
+
+        assert!(
+            !ctx.code_block_decorations.is_empty(),
+            "the pause must harvest code-block-generate's sideband into the \
+             caller's context (inner + outer bridge, outbound leg)"
+        );
+
+        // Seed the fields whose bridge legs are under test. All are values
+        // a book orchestrator holds across the pause; none are written by
+        // the finishing stages themselves.
+        ctx.includes
+            .header_includes
+            .push("<meta name=\"p5-bridge-probe\" content=\"include-survived\">".to_string());
+        let mut seeded_format_options = FormatOptions::default();
+        seeded_format_options.html.attribution_viewer_enabled = false;
+        ctx.format_options = seeded_format_options;
+        ctx.document_profile = Some(DocumentProfile::default());
+
+        let (output, _diagnostics) = run_pipeline_from_ast(
+            doc_ast,
+            &mut ctx,
+            runtime,
+            build_html_pipeline_finishing_stages(TransformPhase::Finalization),
+        )
+        .await
+        .unwrap();
+
+        let rendered = output
+            .into_rendered_output()
+            .unwrap_or_else(|| panic!("finishing pipeline must produce RenderedOutput"));
+        let head = &rendered.content[..rendered.content.len().min(2000)];
+
+        assert!(
+            rendered.content.contains("p5-bridge-probe"),
+            "the seeded header include must reach the template \
+             (ApplyTemplateStage's late drain); got:\n{head}"
+        );
+        assert!(
+            rendered.content.contains("code-with-filename")
+                && rendered.content.contains("p5-bridge.rs"),
+            "the pause-side code-block decoration must drive the resume-side \
+             filename wrapper; got:\n{head}"
+        );
+        assert!(
+            !ctx.format_options.html.attribution_viewer_enabled,
+            "the seeded format_options must survive the round trip instead of \
+             being clobbered by the stage's default"
+        );
+        assert!(
+            ctx.document_profile.is_some(),
+            "the seeded document_profile must survive the round trip instead \
+             of being clobbered by None at restore time"
+        );
+    }
+
+    /// book-projects P5 (plan item 45, attribution leg): `attribution_data`
+    /// is *generated* by `AttributionGenerateStage` in the pause-side stage
+    /// list and *consumed* by `AttributionRenderTransform` (Finalization) in
+    /// the resume leg. Both bridge directions must carry it: in (the render
+    /// transform sees the sidecar and bakes the writer-side lookup into
+    /// `format_options`) and out (the caller's held sidecar survives restore
+    /// instead of being dropped).
+    #[tokio::test]
+    async fn finishing_pipeline_bridge_carries_attribution_data_both_ways() {
+        use crate::attribution::AttributionData;
+
+        let qmd = "---\ntitle: T\n---\n\n# Intro\n\nBody.\n";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let runtime = make_test_runtime();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let (doc_ast, _diagnostics) = render_qmd_to_ast_partial(
+            qmd.as_bytes(),
+            "test.qmd",
+            &mut ctx,
+            runtime.clone(),
+            TransformPhase::Navigation,
+        )
+        .await
+        .unwrap();
+
+        // What AttributionGenerateStage would have produced pre-pause.
+        ctx.attribution_data = Some(Arc::new(AttributionData::default()));
+
+        let (_output, _diagnostics) = run_pipeline_from_ast(
+            doc_ast,
+            &mut ctx,
+            runtime,
+            build_html_pipeline_finishing_stages(TransformPhase::Finalization),
+        )
+        .await
+        .unwrap();
+
+        assert!(
+            ctx.format_options.html.attribution_lookup.is_some(),
+            "AttributionRenderTransform must see the bridged-in sidecar and \
+             bake the writer-side lookup"
+        );
+        assert!(
+            ctx.attribution_data.is_some(),
+            "the caller-held sidecar must survive restore instead of being \
+             dropped"
+        );
+    }
+
+    /// book-projects P5 (plan item 43): the N-at-once version of
+    /// `chapter_pause_state_round_trips_all_p2_owned_fields`. Three chapters'
+    /// owned structs are held **simultaneously**, each paused at
+    /// `..=Navigation`, then resumed independently via
+    /// `run_pipeline_from_ast(Finalization..)`. Every distinctive marker
+    /// must come back attributed to its own chapter — a field dropped or
+    /// cross-wired by `build_context`/`extract_from` shows up as the wrong
+    /// chapter's value (or no value) in the resumed render. The plan's
+    /// sharpest cases get direct assertions: `attribution_data`,
+    /// `code_block_decorations`, and `crossref_index` are read only in the
+    /// resumed Finalization phase (or by the aggregation step), so a
+    /// pause-side drop surfaces only here, not at the pause.
+    #[tokio::test]
+    async fn book_chapter_pause_state_holds_three_chapters_without_cross_contamination() {
+        use crate::crossref::CrossrefIndex;
+        use quarto_source_map::FileId;
+
+        struct Held {
+            n: u32,
+            doc: DocumentInfo,
+            ast: crate::stage::DocumentAst,
+            state: BookChapterPauseState,
+            attribution: Arc<crate::attribution::AttributionData>,
+        }
+
+        let project = make_test_project();
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+
+        // --- Pause: all three chapters render through Navigation, each
+        // into its own held struct ---
+        let mut held: Vec<Held> = Vec::new();
+        for n in 1..=3u32 {
+            let qmd = format!(
+                "---\ntitle: Chapter {n}\n---\n\n# Chapter {n}\n\n\
+                 ``` {{filename=\"ch{n}-deco.txt\"}}\nlet x{n} = {n};\n```\n"
+            );
+            let doc = DocumentInfo::from_path(format!("/project/ch{n}.qmd"));
+            let mut state = BookChapterPauseState::new(crate::format::PipelineProfile::HtmlRender);
+            // Distinct markers, concentrated on the fields P2's short list
+            // does not carry — those are the ones a naive P2-pattern copy
+            // silently drops.
+            state.artifacts.store_text(
+                format!("held-by-ch{n}"),
+                format!("value-{n}"),
+                "text/plain",
+            );
+            state
+                .includes
+                .header_includes
+                .push(format!("<meta name=\"ch{n}-held\" content=\"paused\">"));
+            state.crossref_index = Some(CrossrefIndex::new(FileId(n as usize)));
+            // Chapter 3 runs attribution-off: its sidecar stays `None`, so
+            // `AttributionRenderTransform` early-returns and the seeded
+            // `viewer_enabled = false` must survive the resume untouched.
+            // Chapters 1–2 carry real sidecars; the transform then writes
+            // its lookup *onto* the round-tripped struct, asserted below.
+            if n == 3 {
+                state.format_options.html.attribution_viewer_enabled = false;
+            }
+            let attribution = Arc::new(crate::attribution::AttributionData::default());
+            if n != 3 {
+                state.attribution_data = Some(attribution.clone());
+            }
+
+            let mut ctx = state.build_context(&project, &doc, &format, &binaries);
+            let (ast, diagnostics) = render_qmd_to_ast_partial(
+                qmd.as_bytes(),
+                &format!("ch{n}.qmd"),
+                &mut ctx,
+                make_test_runtime(),
+                TransformPhase::Navigation,
+            )
+            .await
+            .unwrap();
+            assert!(
+                diagnostics.is_empty(),
+                "ch{n}: unexpected diagnostics: {diagnostics:?}"
+            );
+            let state = BookChapterPauseState::extract_from(&mut ctx);
+            held.push(Held {
+                n,
+                doc,
+                ast,
+                state,
+                attribution,
+            });
+        }
+
+        // --- Resume: each chapter independently, from its own held struct ---
+        for Held {
+            n,
+            doc,
+            mut ast,
+            mut state,
+            attribution,
+        } in held
+        {
+            let mut ctx = state.build_context(&project, &doc, &format, &binaries);
+            let (output, diagnostics) = run_pipeline_from_ast(
+                std::mem::take(&mut ast),
+                &mut ctx,
+                make_test_runtime(),
+                build_html_pipeline_finishing_stages(TransformPhase::Finalization),
+            )
+            .await
+            .unwrap();
+            assert!(
+                diagnostics.is_empty(),
+                "ch{n} resume: unexpected diagnostics: {diagnostics:?}"
+            );
+
+            // The sidecar must come back as *this chapter's* Arc — or, for
+            // the attribution-off chapter, must stay absent.
+            if n == 3 {
+                assert!(
+                    ctx.attribution_data.is_none(),
+                    "ch3: the attribution-off chapter must not acquire a sidecar"
+                );
+            } else {
+                assert!(
+                    ctx.attribution_data
+                        .as_ref()
+                        .is_some_and(|a| Arc::ptr_eq(a, &attribution)),
+                    "ch{n}: attribution_data must round-trip as the chapter's own sidecar"
+                );
+            }
+            // The index must come back as *this chapter's* index.
+            assert_eq!(
+                ctx.crossref_index.as_ref().map(|i| i.file_id),
+                Some(FileId(n as usize)),
+                "ch{n}: crossref_index must round-trip with its own file id"
+            );
+            // Writer-side options seeded before the pause must not be
+            // clobbered by the finishing pipeline's defaults: ch3's seed
+            // survives (its transform early-returns), ch1–2 prove the
+            // transform wrote *onto* the round-tripped struct.
+            if n == 3 {
+                assert!(
+                    !ctx.format_options.html.attribution_viewer_enabled,
+                    "ch3: the seeded attribution-off option must round-trip, not reset"
+                );
+            } else {
+                assert!(
+                    ctx.format_options.html.attribution_lookup.is_some(),
+                    "ch{n}: AttributionRenderTransform must write onto the \
+                     round-tripped format_options"
+                );
+            }
+            // The artifact seeded on the held struct must still be there —
+            // and no sibling's artifact may have leaked in.
+            assert_eq!(
+                ctx.artifacts
+                    .get(&format!("held-by-ch{n}"))
+                    .and_then(|a| a.as_str()),
+                Some(format!("value-{n}").as_str()),
+                "ch{n}: the chapter's own held artifact must survive the round trip"
+            );
+            for other in 1..=3u32 {
+                if other != n {
+                    assert!(
+                        ctx.artifacts.get(&format!("held-by-ch{other}")).is_none(),
+                        "ch{n}: must not see ch{other}'s artifact"
+                    );
+                }
+            }
+
+            let rendered = output
+                .into_rendered_output()
+                .unwrap_or_else(|| panic!("ch{n}: resume must produce RenderedOutput"));
+            // The pause-harvested decoration (pause-side generate) must
+            // drive the resume-side render's filename wrapper.
+            assert!(
+                rendered.content.contains("code-with-filename")
+                    && rendered.content.contains(&format!("ch{n}-deco.txt")),
+                "ch{n}: the pause-harvested code-block decoration must drive the \
+                 resume-side wrapper",
+            );
+            // The include seeded on the held struct must reach this
+            // chapter's template head.
+            assert!(
+                rendered.content.contains(&format!("ch{n}-held")),
+                "ch{n}: the held include must reach the resumed output",
+            );
+        }
+    }
+
     #[test]
     fn repo_actions_render_sits_between_its_producers_and_consumers() {
         let pipeline = build_transform_pipeline(
@@ -4683,6 +6144,7 @@ mod tests {
                 "website-canonical-url",
                 "format-css",
                 "draft-alert",
+                "book-cover-image",
                 "title-block",
                 "sectionize",
                 "footnotes",
@@ -4716,6 +6178,7 @@ mod tests {
                 "footer-render",
                 "link-rewrite",
                 "appendix-structure",
+                "cross-chapter-crossref-resolve",
                 "crossref-render",
                 "example-embed-render",
                 "mermaid-render",
@@ -4804,6 +6267,7 @@ mod tests {
                 "reveal-footer-logo",
                 "link-rewrite",
                 "appendix-structure",
+                "cross-chapter-crossref-resolve",
                 "crossref-render",
                 "example-embed-render",
                 "reveal-auto-stretch",
@@ -4951,6 +6415,7 @@ mod tests {
                 "crossref-resolve",
                 "link-rewrite",
                 "appendix-structure",
+                "cross-chapter-crossref-resolve",
                 "example-embed-render",
                 "resource-collector",
                 "llms-capture",
@@ -5139,6 +6604,7 @@ mod tests {
                 "website-canonical-url",
                 "format-css",
                 "draft-alert",
+                "book-cover-image",
                 "sectionize",
                 "footnotes",
                 "footnotes-resolve",
@@ -5171,6 +6637,7 @@ mod tests {
                 "footer-render",
                 "link-rewrite",
                 "appendix-structure",
+                "cross-chapter-crossref-resolve",
                 "example-embed-render",
                 "code-block-render",
                 "resource-collector",
@@ -5287,9 +6754,12 @@ mod tests {
     fn typst_stage_list_appends_typst_compile_after_pandoc_write() {
         let stages = build_pandoc_pipeline_stages(crate::format::FormatIdentifier::Typst);
         let names: Vec<&str> = stages.iter().map(|s| s.name()).collect();
+        // book-projects P2c: `resource-copy-flush` sits between the two,
+        // flushing queued image copies before `typst-compile` reads them
+        // off disk.
         assert_eq!(
-            &names[names.len() - 2..],
-            ["pandoc-write", "typst-compile"],
+            &names[names.len() - 3..],
+            ["pandoc-write", "resource-copy-flush", "typst-compile"],
             "got: {names:?}"
         );
     }

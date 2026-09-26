@@ -46,9 +46,10 @@ q2 create project <type> <directory> [title]
 
 - `<type>` is a project type: `default` (a minimal project),
   `website` (a website with navigation), `blog` (a website with the
-  blog template), or `presentation` (a reveal.js slide deck). The
-  types `manuscript` and `book` are recognized but not yet implemented
-  in Quarto 2.
+  blog template applied), `presentation` (a reveal.js slide deck), or
+  `book` (a multi-chapter book — see the [book projects
+  guide](book.qmd)). The type `manuscript` is recognized but not yet
+  implemented in Quarto 2.
 - `<directory>` is where the project is created, relative to the
   current directory. Use `.` to scaffold into the current directory.
 - `[title]` is the project title. When omitted, the title defaults to
@@ -71,7 +72,7 @@ project (Project)
     blog         A blog using the Quarto blog template
     presentation A reveal.js slide deck
     manuscript   An academic manuscript (not yet implemented)
-    book         A multi-chapter book (not yet implemented)
+    book         A multi-chapter book
 
 Usage: q2 create project <type> <directory> [title]
 ```
@@ -105,7 +106,12 @@ format:
 A `default` project is a minimal `_quarto.yml` (just the project
 title) plus a starter `index.qmd`.
 
-Both project types also write a `.gitignore` containing `/.quarto/`,
+A `book` project scaffolds a starter Preface, Introduction, Summary,
+and References chapter, plus a `cover.png` and `references.bib` — see
+the [book projects guide](book.qmd) for the full `_quarto.yml` shape
+and what each file is for.
+
+All project types also write a `.gitignore` containing `/.quarto/`,
 the directory Quarto uses for caches and other machinery it writes
 into the project tree.
 
@@ -223,7 +229,7 @@ and emits a structured error on stderr as a JSON line:
   "$schema": "https://quarto.org/schemas/v1/json-diagnostic.json",
   "kind": "error",
   "title": "Unknown project type 'nope'",
-  "problem": "Valid project types: default, website. Not yet implemented: blog, manuscript, book.",
+  "problem": "Valid project types: default, website, blog, book. Not yet implemented: manuscript.",
   "hints": [],
   "details": []
 }
@@ -264,7 +270,19 @@ type list:
           "id": "blog",
           "name": "Blog",
           "description": "A blog using the Quarto blog template",
+          "implemented": true
+        },
+        {
+          "id": "manuscript",
+          "name": "Manuscript",
+          "description": "An academic manuscript",
           "implemented": false
+        },
+        {
+          "id": "book",
+          "name": "Book",
+          "description": "A multi-chapter book",
+          "implemented": true
         }
       ]
     }
@@ -272,6 +290,5 @@ type list:
 }
 ```
 
-(The full listing also includes `manuscript` and `book`.) Offer only
-choices with `"implemented": true`; the others are reserved and
-rejected if used in a directive.
+Offer only choices with `"implemented": true`; the others are reserved
+and rejected if used in a directive.

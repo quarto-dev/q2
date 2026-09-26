@@ -60,6 +60,8 @@ use quarto_system_runtime::SystemRuntime;
 use crate::error::QuartoError;
 
 use crate::format::Format;
+#[cfg(not(target_arch = "wasm32"))] // only the gated single-file-merge dispatch uses it
+use crate::format::FormatIdentifier;
 
 use super::DocumentInfo;
 
@@ -356,7 +358,17 @@ pub trait ProjectType {
 
     /// Called once per project, after Pass 1 and before Pass 2.
     /// Default: no-op.
-    async fn pre_render(&self, _project: &mut ProjectContext, _index: &ProjectIndex) -> Result<()> {
+    ///
+    /// The `runtime` parameter matches `post_render`/`post_resources`:
+    /// implementations that read project files (e.g. book projects building
+    /// their chapter list) must go through it rather than `std::fs`, so
+    /// the WASM hub-client VFS works the same way.
+    async fn pre_render(
+        &self,
+        _project: &mut ProjectContext,
+        _index: &ProjectIndex,
+        _runtime: &dyn quarto_system_runtime::SystemRuntime,
+    ) -> Result<()> {
         Ok(())
     }
 
@@ -617,14 +629,14 @@ impl ProjectType for WebsiteProjectType {
 ///
 /// Unknown / not-yet-implemented tags fall back to
 /// [`DefaultProjectType`] so Phase 1 doesn't crash on `_quarto.yml`
-/// files declaring `project.type: book` or `project.type: manuscript`
-/// — those kinds are tracked by Phase-1 dispatch but have no behavior
-/// yet.
+/// files declaring `project.type: manuscript` — that kind is tracked
+/// by Phase-1 dispatch but has no behavior yet.
 pub fn project_type_for(project: &ProjectContext) -> Box<dyn ProjectType> {
     match project.project_kind() {
         ProjectKind::Default => Box::new(DefaultProjectType),
         ProjectKind::Website => Box::new(WebsiteProjectType),
-        ProjectKind::Book | ProjectKind::Manuscript => Box::new(DefaultProjectType),
+        ProjectKind::Book => Box::new(crate::project::book::BookProjectType),
+        ProjectKind::Manuscript => Box::new(DefaultProjectType),
     }
 }
 
@@ -987,6 +999,368 @@ impl<'a> ProjectPipeline<'a, RenderToFileRenderer<'a>> {
         self.renderer.format_override = to;
         self
     }
+
+    /// Run the project render with book-aware orchestration.
+    ///
+    /// The native CLI entry points call this instead of [`Self::run`].
+    /// For non-book projects it is exactly `run()`: the same
+    /// [`run_inner`](Self::run_inner) body and the same unconditional
+    /// `shutdown_all()` teardown (TS-engine Deno subprocess reaping)
+    /// afterward. For books it adds the format-support gate (Q-5-33,
+    /// Q1's `projectFormatsOnly` + `isSupportedFormat`) before
+    /// rendering; P2/P4/P5's book orchestration (single-file merge,
+    /// multi-file HTML pass 3) slots into the same branch later.
+    pub async fn run_with_book_support(
+        &mut self,
+    ) -> Result<ProjectRenderSummary<RenderToFileResult>> {
+        let result = if self.project_type.kind() == ProjectKind::Book {
+            // Books render only to formats with book support. Unknown
+            // (extension) format identifiers fall through — they may
+            // be html-based; gating known identifiers is the general
+            // rule P3's docx/pptx diagnostic is one instance of.
+            let unsupported = FormatIdentifier::try_from(self.format_str.as_str())
+                .is_ok_and(|id| !crate::project::book::is_supported_format(&id));
+            // A Subset render (`q2 render ch1.qmd`) stays on the ordinary
+            // per-document path: the P5 book orchestration below always
+            // renders the whole book, while the CLI contract for a
+            // named-file render is exactly that file (pinned by
+            // book_project_type::
+            // single_chapter_subset_render_keeps_one_file_render_set).
+            // Typst/Epub keep P2's committed dispatch (merge always); the
+            // per-document typst path has never carried the book
+            // orchestration and its template invocation is unverified.
+            let full_render = matches!(self.mode, RenderMode::Full);
+            if unsupported {
+                Err(crate::project::book::render_item::book_diagnostic(
+                    "Q-5-33",
+                    format!("Book projects cannot render to `{}`", self.format_str),
+                    format!(
+                        "This book project targets the `{}` format, which has no book \
+                         support. Book projects render only to `html`, `typst`, and `epub`.",
+                        self.format_str
+                    ),
+                    "Render to a supported format (`q2 render --to html`), or change the \
+                     project's `format:` key.",
+                ))
+            } else if matches!(
+                self.format.identifier,
+                FormatIdentifier::Typst | FormatIdentifier::Epub
+            ) {
+                // book-projects P2: single-file merge.
+                self.run_book_single_file_merge().await
+            } else if full_render && self.format.identifier == FormatIdentifier::Html {
+                // book-projects P5: multi-file pass 3 (pause at Navigation
+                // / aggregate the crossref registry / resume from
+                // Finalization) — replaces P4's fall-through to
+                // `run_inner()`.
+                self.run_book_multi_file_html().await
+            } else {
+                self.run_inner().await
+            }
+        } else {
+            self.run_inner().await
+        };
+        if let Err(e) = self.project.registry.shutdown_all() {
+            tracing::warn!("engine registry shutdown_all failed at end of project render: {e}");
+        }
+        result
+    }
+
+    /// book-projects P2: the single-file-merge dispatch
+    /// (`run_with_book_support`'s Typst/EPUB branch).
+    ///
+    /// Pass 1 and `pre_render()` still run exactly as [`Self::run_inner`]
+    /// runs them (plan Decision 2, corrected after reading `run_inner`
+    /// directly: `pre_render` is where `project.book_render_items` and the
+    /// book-wide format defaults get computed, and skipping it would leave
+    /// every chapter's metadata merge unprepared) — only the per-document
+    /// Pass-2 dispatch is replaced, by
+    /// [`crate::project::book::single_file_render::render_book_single_file`]'s
+    /// per-chapter partial-render + merge loop, which produces exactly one
+    /// output instead of one per chapter.
+    ///
+    /// The resource-copy + manifest + `post_resources` tail mirrors
+    /// `run_inner`'s own (format-independent) block so a book's
+    /// `resources:` declarations and `.quarto/render-manifest.json` still
+    /// land correctly; `post_render` is correctly *not* called here —
+    /// `run_inner` itself gates it on `is_html_based()`, `false` for
+    /// Typst/Epub.
+    async fn run_book_single_file_merge(
+        &mut self,
+    ) -> Result<ProjectRenderSummary<RenderToFileResult>> {
+        let (profiles, pass1_failures) = self.pass_one().await;
+        if self.fail_fast && !pass1_failures.is_empty() {
+            return Ok(ProjectRenderSummary {
+                outputs: Vec::new(),
+                pass1_failures,
+                pass2_failures: Vec::new(),
+                project_diagnostics: Vec::new(),
+                stopped_early: true,
+            });
+        }
+        let index = Arc::new(ProjectIndex::new(profiles));
+        self.project_type
+            .pre_render(self.project, &index, self.runtime.as_ref())
+            .await
+            .map_err(|e| QuartoError::other(format!("pre_render failed: {e}")))?;
+
+        let book_items = self.project.book_render_items.clone().unwrap_or_default();
+        let render_result = crate::project::book::single_file_render::render_book_single_file(
+            self.project,
+            &book_items,
+            &self.format,
+            self.runtime.clone(),
+            Some(&mut self.project_artifacts),
+            self.renderer.options,
+        )
+        .await;
+
+        let (outputs, pass2_failures) = match render_result {
+            Ok(r) => (vec![r], Vec::new()),
+            Err(e) => (
+                Vec::new(),
+                vec![file_failure_from_error(self.project.dir.clone(), e)],
+            ),
+        };
+
+        let output_paths: Vec<std::path::PathBuf> =
+            outputs.iter().map(|r| r.output_path.clone()).collect();
+        let mut project_diagnostics: Vec<DiagnosticMessage> = Vec::new();
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let mut resource_diagnostics = Vec::new();
+            let mut resolved = crate::project_resources::collect_static_resources_with_diagnostics(
+                self.project,
+                &index,
+                self.runtime.as_ref(),
+                &mut resource_diagnostics,
+            )
+            .map_err(QuartoError::Parse)?;
+            project_diagnostics.extend(resource_diagnostics);
+            for output in &outputs {
+                if !output.resource_report.is_empty() {
+                    let resolved_report = crate::project_resources::resolve_reported_resources(
+                        &self.project.dir,
+                        &output.resource_report,
+                        self.runtime.as_ref(),
+                    )
+                    .map_err(|e| QuartoError::other(e.to_string()))?;
+                    resolved.extend(resolved_report);
+                }
+            }
+            crate::project_resources::copy_resources_to_output_dir(
+                &resolved,
+                &self.project.output_dir,
+                self.runtime.as_ref(),
+            )?;
+
+            let rendered_files: Vec<String> = output_paths
+                .iter()
+                .map(|p| {
+                    p.strip_prefix(&self.project.output_dir)
+                        .unwrap_or(p)
+                        .to_string_lossy()
+                        .replace('\\', "/")
+                })
+                .collect();
+            let manifest = crate::project_resources::RenderManifest::new(
+                &self.project.dir,
+                rendered_files,
+                &resolved,
+            );
+            crate::project_resources::write_render_manifest(
+                &self.project.dir,
+                &manifest,
+                self.runtime.as_ref(),
+            )?;
+
+            self.project_type
+                .post_resources(
+                    self.project,
+                    &index,
+                    &self.project_artifacts,
+                    self.runtime.as_ref(),
+                    &mut project_diagnostics,
+                )
+                .await
+                .map_err(|e| match e {
+                    QuartoError::Parse(_) => e,
+                    other => QuartoError::other(format!("post_resources failed: {other}")),
+                })?;
+        }
+
+        project_diagnostics.extend(self.drain_registry_diagnostics());
+
+        Ok(ProjectRenderSummary {
+            outputs,
+            pass1_failures,
+            pass2_failures,
+            project_diagnostics,
+            stopped_early: false,
+        })
+    }
+
+    /// book-projects P5: the multi-file-HTML dispatch
+    /// (`run_with_book_support`'s Html branch, replacing P4's
+    /// fall-through to [`Self::run_inner`]).
+    ///
+    /// Pass 1 and `pre_render()` run exactly as `run_inner` runs them;
+    /// only the per-document Pass-2 dispatch is replaced, by
+    /// [`crate::project::book::multi_file_html::render_book_multi_file_html`]'s
+    /// pause / aggregate / resume loop. Unlike the P2 merge, this branch
+    /// DOES call `post_render` (gated on `is_html_based()`, always true
+    /// here — sitemap, robots.txt, alias redirects, feeds: the book type
+    /// delegates to the website implementation) and runs the same
+    /// format-independent resource / manifest / `post_resources` tail.
+    async fn run_book_multi_file_html(
+        &mut self,
+    ) -> Result<ProjectRenderSummary<RenderToFileResult>> {
+        let (profiles, pass1_failures) = self.pass_one().await;
+        if self.fail_fast && !pass1_failures.is_empty() {
+            let mut project_diagnostics = Vec::new();
+            project_diagnostics.extend(self.drain_registry_diagnostics());
+            return Ok(ProjectRenderSummary {
+                outputs: Vec::new(),
+                pass1_failures,
+                pass2_failures: Vec::new(),
+                project_diagnostics,
+                stopped_early: true,
+            });
+        }
+        let index = Arc::new(ProjectIndex::new(profiles));
+        self.project_type
+            .pre_render(self.project, &index, self.runtime.as_ref())
+            .await
+            .map_err(|e| QuartoError::other(format!("pre_render failed: {e}")))?;
+
+        let book_items = self.project.book_render_items.clone().unwrap_or_default();
+        let format_override = self.renderer.format_override();
+        let options = self.renderer.options;
+        let render_result = crate::project::book::multi_file_html::render_book_multi_file_html(
+            self.project,
+            &book_items,
+            &self.format_str,
+            index.clone(),
+            self.runtime.clone(),
+            Some(&mut self.project_artifacts),
+            options,
+            format_override,
+            self.fail_fast,
+        )
+        .await;
+
+        let (outputs, pass2_failures, mut project_diagnostics) = match render_result {
+            Ok((outputs, failures, aggregate_diagnostics)) => {
+                (outputs, failures, aggregate_diagnostics)
+            }
+            Err(e) => (
+                Vec::new(),
+                vec![file_failure_from_error(self.project.dir.clone(), e)],
+                Vec::new(),
+            ),
+        };
+
+        let output_paths: Vec<std::path::PathBuf> =
+            outputs.iter().map(|r| r.output_path.clone()).collect();
+        let lib_dir = self.project_type.lib_dir();
+        let resolver = self.renderer.build_project_resolver(self.project, &lib_dir);
+
+        // The `post_render` hook sequence assumes HTML outputs exist;
+        // every book-HTML output does (see `run_inner`'s gate — mirrored
+        // here so book pages get sitemap/robots/redirects/feeds).
+        if self.format.identifier.is_html_based() {
+            self.project_type
+                .post_render(
+                    self.project,
+                    &index,
+                    &output_paths,
+                    &self.project_artifacts,
+                    &resolver,
+                    self.runtime.as_ref(),
+                    &mut project_diagnostics,
+                )
+                .await
+                .map_err(|e| match e {
+                    QuartoError::Parse(_) => e,
+                    other => QuartoError::other(format!("post_render failed: {other}")),
+                })?;
+        }
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let mut resource_diagnostics = Vec::new();
+            let mut resolved = crate::project_resources::collect_static_resources_with_diagnostics(
+                self.project,
+                &index,
+                self.runtime.as_ref(),
+                &mut resource_diagnostics,
+            )
+            .map_err(QuartoError::Parse)?;
+            project_diagnostics.extend(resource_diagnostics);
+            for output in &outputs {
+                if !output.resource_report.is_empty() {
+                    let resolved_report = crate::project_resources::resolve_reported_resources(
+                        &self.project.dir,
+                        &output.resource_report,
+                        self.runtime.as_ref(),
+                    )
+                    .map_err(|e| QuartoError::other(e.to_string()))?;
+                    resolved.extend(resolved_report);
+                }
+            }
+            crate::project_resources::copy_resources_to_output_dir(
+                &resolved,
+                &self.project.output_dir,
+                self.runtime.as_ref(),
+            )?;
+
+            let rendered_files: Vec<String> = output_paths
+                .iter()
+                .map(|p| {
+                    p.strip_prefix(&self.project.output_dir)
+                        .unwrap_or(p)
+                        .to_string_lossy()
+                        .replace('\\', "/")
+                })
+                .collect();
+            let manifest = crate::project_resources::RenderManifest::new(
+                &self.project.dir,
+                rendered_files,
+                &resolved,
+            );
+            crate::project_resources::write_render_manifest(
+                &self.project.dir,
+                &manifest,
+                self.runtime.as_ref(),
+            )?;
+
+            self.project_type
+                .post_resources(
+                    self.project,
+                    &index,
+                    &self.project_artifacts,
+                    self.runtime.as_ref(),
+                    &mut project_diagnostics,
+                )
+                .await
+                .map_err(|e| match e {
+                    QuartoError::Parse(_) => e,
+                    other => QuartoError::other(format!("post_resources failed: {other}")),
+                })?;
+        }
+
+        project_diagnostics.extend(self.drain_registry_diagnostics());
+
+        let stopped_early = self.fail_fast && !pass2_failures.is_empty();
+        Ok(ProjectRenderSummary {
+            outputs,
+            pass1_failures,
+            pass2_failures,
+            project_diagnostics,
+            stopped_early,
+        })
+    }
 }
 
 impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
@@ -1193,9 +1567,22 @@ impl<'a, R: Pass2Renderer> ProjectPipeline<'a, R> {
         // hook failed. The plan specifies hook failures abort the
         // project render entirely (unlike per-file failures).
         self.project_type
-            .pre_render(self.project, &index)
+            .pre_render(self.project, &index, self.runtime.as_ref())
             .await
             .map_err(|e| QuartoError::other(format!("pre_render failed: {e}")))?;
+
+        // Book multi-file HTML (P4): pre_render populated the book
+        // render list; derive the per-chapter seed map from it and hand
+        // it to the Pass-2 renderer (a no-op for renderers without book
+        // state). Only book HTML reaches `run_inner` — Typst/EPUB divert
+        // to the single-file merge — and `book_render_items` stays
+        // `None` for every non-book project, so both gates collapse to
+        // this one `if let`.
+        if let Some(items) = &self.project.book_render_items {
+            let seeds =
+                crate::project::book::render_item::chapter_seed_map(&self.project.dir, items);
+            self.renderer.install_book_chapter_seeds(seeds);
+        }
 
         // Phase 8.2: in Mode B, build the dependency graph from
         // the freshly-loaded profiles, augment the user-named
@@ -2756,7 +3143,7 @@ mod tests {
             "",
         );
 
-        assert!(t.pre_render(&mut project, &index).await.is_ok());
+        assert!(t.pre_render(&mut project, &index, &runtime).await.is_ok());
         let mut diags: Vec<DiagnosticMessage> = Vec::new();
         assert!(
             t.post_render(
@@ -3047,10 +3434,11 @@ mod tests {
             project_type_for(&make(ProjectKind::Website)).kind(),
             ProjectKind::Website
         );
-        // Book / Manuscript fall back to Default for Phase 1.
+        // Book has a real ProjectType; Manuscript still falls back to
+        // Default for Phase 1.
         assert_eq!(
             project_type_for(&make(ProjectKind::Book)).kind(),
-            ProjectKind::Default
+            ProjectKind::Book
         );
         assert_eq!(
             project_type_for(&make(ProjectKind::Manuscript)).kind(),

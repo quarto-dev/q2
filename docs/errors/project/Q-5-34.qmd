@@ -1,0 +1,49 @@
+---
+title: "Book Parts Cannot Be Nested"
+description: "A `part:` entry inside another part's `chapters:` list is not supported."
+code: Q-5-34
+subsystem: project
+status: complete
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-34` — Book parts cannot be nested
+
+> A `part:` entry inside another part's `chapters:` list is not
+> supported.
+
+## What this means
+
+Book structure is two levels deep: `book.chapters` (and
+`book.appendices`) list chapters, and a `part:` entry groups a run of
+chapters under a divider. A part cannot itself contain another part —
+Quarto 1's book model has no nested-part concept, so Quarto 2 rejects
+the shape rather than silently flattening or mis-rendering it.
+
+## Why this happens
+
+- **An indentation mistake in `_quarto.yml`** — a part entry indented
+  one level too deep, landing inside the previous part's `chapters:`.
+- **A genuinely nested outline** — parts within parts — which book
+  projects do not support.
+
+## How to fix
+
+Move the nested part to the top level of `book.chapters`:
+
+```yaml
+book:
+  chapters:
+    - index.qmd
+    - part: "Part I"
+      chapters:
+        - intro.qmd
+    - part: "Part II"     # top level, not inside Part I's chapters
+      chapters:
+        - advanced.qmd
+```
+
+If you need deeper structure within a part, use ordinary headings
+inside the chapters themselves.

@@ -38,7 +38,9 @@ pub const TRACE_KIND_CROSSREF_INDEX: &str = "CrossrefIndex";
 pub mod codeblock_shorthand;
 pub mod index;
 pub mod metadata;
+pub mod project_index;
 pub mod registry;
+pub mod section_number;
 pub mod target;
 
 #[cfg(test)]
@@ -47,6 +49,8 @@ mod roundtrip_tests;
 pub use index::{CrossrefEntry, CrossrefIndex, HeadingRecord, Order, PromisedId, PromisedIdSource};
 pub use metadata::{CrossrefMetadata, MetadataError};
 pub use registry::{RefTypeDef, RefTypeRegistry, RefTypeSource};
+pub(crate) use section_number::format_chapter_index;
+pub use section_number::format_section_number;
 pub use target::{
     CrossrefTargetView, crossref_target_view, crossref_target_view_inline, identifier_of,
     ref_type_of,

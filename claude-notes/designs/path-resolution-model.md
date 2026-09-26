@@ -164,7 +164,7 @@ Update this table when adding keys or migrating sites.
 | `filter_resolve.rs:255-273` | `filters` | same | bd-rdcvjy2s (base-dir fix: file under bd-hjv5o) |
 | `transforms/title_banner.rs:200` | `title-block-banner` image probe | doc-dir probe, raw string emitted | bd-hjv5o scope |
 | `project_resources.rs:721,835` | engine/filter-declared resources | doc-dir join | bd-hjv5o scope |
-| `pampa/src/citeproc_filter.rs:133,151` | `csl`, `bibliography` | **process-CWD** read (no base at all) | bd-oqoozmtr |
+| ~~`pampa/src/citeproc_filter.rs:133,151`~~ | `csl`, `bibliography` | ~~**process-CWD** read (no base at all)~~ **FIXED 2026-09-24** (book-projects P2): declaration-site base dir threaded into `apply_citeproc_filter` from both call paths (`UserFiltersStage` = document dir; book single-file merge = first file-chapter's dir); both keys added to `FORMAT_PATH_KEYS` (`ExistenceSilent` — URLs stay scalar) | ~~bd-oqoozmtr~~ (closed) |
 
 Related open strands: bd-hjv5o (the generalization audit this table
 operationalizes), bd-r1y48cx0 (`css:` copy — possibly resolved by

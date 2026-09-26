@@ -95,9 +95,19 @@ fn default_project_uses_the_document_term() {
 /// `projectIsWebsite` is true for books too). q2 gets this free from
 /// `ProjectKind::Book` being a distinct variant — pinned so a future
 /// "website-like" helper cannot silently absorb books.
+///
+/// The fixture must be a *valid* book: since P1 of the book-projects
+/// epic, `type: book` has a real `ProjectType` whose pre-render builds
+/// the chapter list, and a book with no `book.chapters` fails with
+/// Q-5-32 exactly as Q1 throws "Book contents must include a home
+/// page" when the list is empty.
 #[test]
 fn book_project_uses_the_document_term() {
-    let html = render_index_with_toc(BODY, "", Some("project:\n  type: book\n"));
+    let html = render_index_with_toc(
+        BODY,
+        "",
+        Some("project:\n  type: book\nbook:\n  chapters:\n    - index.qmd\n"),
+    );
     assert_eq!(
         toc_title(&html),
         "Table of contents",

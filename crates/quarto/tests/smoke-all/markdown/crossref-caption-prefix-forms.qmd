@@ -22,9 +22,9 @@ _quarto:
       noErrors: true
       ensureFileRegexMatches:
         - [
-            "Figure 1: Div form caption",
-            "Figure 2: Attr form caption",
-            "Table 1: Table caption form",
+            "Figure 1: Div form caption",
+            "Figure 2: Attr form caption",
+            "Table 1: Table caption form",
           ]
         # Every figcaption holds bare inlines (Q1 parity): the div-form
         # trailing paragraph is canonicalized to Plain at the sugar boundary,

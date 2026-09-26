@@ -16,7 +16,7 @@ use quarto_core::transform::AstTransform;
 use quarto_core::transforms::{
     CalloutTransform, CrossrefIndexTransform, CrossrefRenderTransform, CrossrefResolveTransform,
     EquationLabelTransform, ExampleEmbedTransform, FloatRefTargetSugarTransform,
-    ProofSugarTransform, TheoremSugarTransform,
+    ProofSugarTransform, SectionizeTransform, TheoremSugarTransform,
 };
 use quarto_pandoc_types::pandoc::Pandoc;
 
@@ -858,6 +858,90 @@ async fn run_crossref_rendered(
     (ast, ctx.crossref_index.unwrap(), ctx.diagnostics)
 }
 
+/// Same as [`run_crossref_rendered`], but with `SectionizeTransform` run
+/// first — the real native-HTML pipeline shape (Normalization phase,
+/// right after `TitleBlockTransform` and before the crossref-phase sugars;
+/// see `pipeline.rs`'s `build_transform_pipeline`), which `run_crossref_rendered`
+/// omits. By the time `CrossrefIndexTransform` runs here, every header's id
+/// has already moved onto its enclosing `Div.section` wrapper, exercising
+/// the id-recovery path (book-projects P0, Amendment A) that the
+/// non-sectionized helper cannot reach.
+async fn run_crossref_rendered_sectionized(
+    qmd: &str,
+) -> (
+    Pandoc,
+    CrossrefIndex,
+    Vec<quarto_error_reporting::DiagnosticMessage>,
+) {
+    let (mut ast, _ast_ctx, _warnings) = pampa::readers::qmd::read(
+        qmd.as_bytes(),
+        false,
+        "<fixture>",
+        &mut std::io::sink(),
+        true,
+        None,
+    )
+    .expect("qmd parse");
+
+    let mut registry = RefTypeRegistry::builtin();
+    let extracted = metadata::read(&ast.meta, &mut registry);
+    registry.extend_from_promised(&extracted.promised_ids);
+
+    quarto_core::crossref::codeblock_shorthand::desugar_blocks(
+        &mut ast.blocks,
+        &registry,
+        &quarto_source_map::SourceContext::new(),
+        &mut Vec::new(),
+    );
+
+    use quarto_core::format::Format;
+    use quarto_core::project::{DocumentInfo, ProjectConfig, ProjectContext};
+    use quarto_core::render::{BinaryDependencies, RenderContext};
+    use std::path::PathBuf;
+
+    let project = ProjectContext {
+        dir: PathBuf::from("/p"),
+        config: ProjectConfig::default(),
+        is_single_file: true,
+        files: vec![],
+        output_dir: PathBuf::from("/p"),
+
+        ..Default::default()
+    };
+    let doc = DocumentInfo::from_path("/p/t.qmd");
+    let format = Format::html();
+    let binaries = BinaryDependencies::new();
+    let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+    ctx.ref_type_registry = Some(registry);
+    ctx.crossref_index = Some({
+        let mut idx = CrossrefIndex::new(quarto_source_map::FileId(0));
+        idx.promised_ids = extracted.promised_ids;
+        idx
+    });
+
+    for (name, transform) in [
+        (
+            "sectionize",
+            Box::new(SectionizeTransform::new()) as Box<dyn AstTransform>,
+        ),
+        ("callout", Box::new(CalloutTransform::new())),
+        ("theorem", Box::new(TheoremSugarTransform::new())),
+        ("proof", Box::new(ProofSugarTransform::new())),
+        ("float", Box::new(FloatRefTargetSugarTransform::new())),
+        ("equation-label", Box::new(EquationLabelTransform::new())),
+        ("index", Box::new(CrossrefIndexTransform::new())),
+        ("resolve", Box::new(CrossrefResolveTransform::new())),
+        ("render", Box::new(CrossrefRenderTransform::new())),
+    ] {
+        transform
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap_or_else(|e| panic!("{name}: {e:?}"));
+    }
+
+    (ast, ctx.crossref_index.unwrap(), ctx.diagnostics)
+}
+
 /// Helper: the rendered float caption text for the float whose outer Div
 /// carries `id` — the flattened inlines of the first caption block of the
 /// inner `Figure`, whichever of `Plain` / `Paragraph` it is.
@@ -910,7 +994,7 @@ Div form caption
     assert!(diags.is_empty(), "diagnostics: {diags:?}");
     assert_eq!(
         rendered_float_caption(&ast, "fig-div"),
-        "Figure 1: Div form caption"
+        "Figure\u{a0}1: Div form caption"
     );
     // The trailing paragraph is canonicalized to Plain at the sugar boundary,
     // so the HTML writer emits bare inlines inside <figcaption> for every
@@ -936,7 +1020,7 @@ title: t
     assert!(diags.is_empty(), "diagnostics: {diags:?}");
     assert_eq!(
         rendered_float_caption(&ast, "fig-attr"),
-        "Figure 1: Attr form caption"
+        "Figure\u{a0}1: Attr form caption"
     );
 }
 
@@ -958,7 +1042,7 @@ title: t
     assert!(diags.is_empty(), "diagnostics: {diags:?}");
     assert_eq!(
         rendered_float_caption(&ast, "tbl-cap"),
-        "Table 1: Table caption form"
+        "Table\u{a0}1: Table caption form"
     );
 }
 
@@ -1358,4 +1442,160 @@ title: t
         idx.entries.is_empty(),
         "unnumbered embed must not be indexed"
     );
+}
+
+// === Book-projects P0, Amendment A: sectionized-pipeline shape ===
+//
+// `run_crossref_rendered` omits `SectionizeTransform`, so it can't exercise
+// the real native-HTML pipeline shape where headers have already had their
+// ids moved onto their enclosing `Div.section` wrapper by the time
+// `CrossrefIndexTransform` runs. These fixtures close that gap.
+
+/// `data-number`-bearing output shape (visible number injection) and
+/// nested `@sec-` resolution in document order, through the real
+/// sectionized pipeline.
+#[tokio::test]
+async fn sectionized_number_sections_shape_and_nested_sec_refs() {
+    let qmd = r#"---
+title: t
+number-sections: true
+---
+
+# Introduction {#sec-intro}
+
+## Deep dive {#sec-deep}
+
+See @sec-intro and @sec-deep.
+"#;
+    let (ast, _idx, diags) = run_crossref_rendered_sectionized(qmd).await;
+    assert!(diags.is_empty(), "diagnostics: {diags:?}");
+
+    use quarto_pandoc_types::block::Block;
+    use quarto_pandoc_types::inline::Inline;
+
+    let Block::Div(outer) = &ast.blocks[0] else {
+        panic!("expected outer section Div, got {:?}", ast.blocks[0]);
+    };
+    assert_eq!(outer.attr.0, "sec-intro");
+    assert!(
+        outer.attr.1.contains(&"section".to_string()),
+        "outer div classes: {:?}",
+        outer.attr.1
+    );
+
+    let Block::Header(h1) = &outer.content[0] else {
+        panic!("expected Header, got {:?}", outer.content[0]);
+    };
+    assert_eq!(h1.attr.2.get("number").map(String::as_str), Some("1"));
+    let Inline::Span(span) = &h1.content[0] else {
+        panic!("expected number span, got {:?}", h1.content[0]);
+    };
+    assert!(
+        span.attr.1.contains(&"header-section-number".to_string()),
+        "span class: {:?}",
+        span.attr.1
+    );
+    assert_eq!(flatten_inlines(&span.content), "1");
+    assert_eq!(flatten_inlines(&h1.content[2..]), "Introduction");
+
+    let Block::Div(inner) = &outer.content[1] else {
+        panic!("expected nested section Div, got {:?}", outer.content[1]);
+    };
+    assert_eq!(inner.attr.0, "sec-deep");
+
+    let Block::Header(h2) = &inner.content[0] else {
+        panic!("expected Header, got {:?}", inner.content[0]);
+    };
+    assert_eq!(h2.attr.2.get("number").map(String::as_str), Some("1.1"));
+
+    let Block::Paragraph(p) = &inner.content[1] else {
+        panic!("expected Paragraph, got {:?}", inner.content[1]);
+    };
+    let Inline::Link(sec_intro) = &p.content[2] else {
+        panic!("expected Link, got {:?}", p.content[2]);
+    };
+    assert_eq!(
+        flatten_inlines(&sec_intro.content),
+        "Section\u{a0}1",
+        "sec-intro ref text"
+    );
+    let Inline::Link(sec_deep) = &p.content[6] else {
+        panic!("expected Link, got {:?}", p.content[6]);
+    };
+    assert_eq!(
+        flatten_inlines(&sec_deep.content),
+        "Section\u{a0}1.1",
+        "sec-deep ref text"
+    );
+}
+
+/// Regression: with no `number-sections` set, headers get no `number` kv
+/// and no visible-number injection — through the real sectionized
+/// pipeline, guarding against accidentally numbering by default.
+/// `@sec-` resolution still works (registration is unconditional; only the
+/// visible number is gated).
+#[tokio::test]
+async fn sectionized_no_number_sections_no_injection() {
+    let qmd = r#"---
+title: t
+---
+
+# Introduction {#sec-intro}
+
+## Deep dive {#sec-deep}
+
+See @sec-intro and @sec-deep.
+"#;
+    let (ast, _idx, diags) = run_crossref_rendered_sectionized(qmd).await;
+    assert!(diags.is_empty(), "diagnostics: {diags:?}");
+
+    use quarto_pandoc_types::block::Block;
+    use quarto_pandoc_types::inline::Inline;
+
+    let Block::Div(outer) = &ast.blocks[0] else {
+        panic!("expected outer section Div, got {:?}", ast.blocks[0]);
+    };
+    let Block::Header(h1) = &outer.content[0] else {
+        panic!("expected Header, got {:?}", outer.content[0]);
+    };
+    assert!(
+        h1.attr.2.get("number").is_none(),
+        "no number kv without number-sections"
+    );
+    assert!(
+        !matches!(h1.content.first(), Some(Inline::Span(_))),
+        "no span injected: {:?}",
+        h1.content
+    );
+    assert_eq!(flatten_inlines(&h1.content), "Introduction");
+
+    let Block::Div(inner) = &outer.content[1] else {
+        panic!("expected nested section Div, got {:?}", outer.content[1]);
+    };
+    let Block::Header(h2) = &inner.content[0] else {
+        panic!("expected Header, got {:?}", inner.content[0]);
+    };
+    assert!(h2.attr.2.get("number").is_none());
+    assert!(
+        !matches!(h2.content.first(), Some(Inline::Span(_))),
+        "no span injected: {:?}",
+        h2.content
+    );
+    assert_eq!(flatten_inlines(&h2.content), "Deep dive");
+
+    let Block::Paragraph(p) = &inner.content[1] else {
+        panic!("expected Paragraph, got {:?}", inner.content[1]);
+    };
+    let Inline::Link(sec_intro) = &p.content[2] else {
+        panic!("expected Link, got {:?}", p.content[2]);
+    };
+    assert_eq!(
+        flatten_inlines(&sec_intro.content),
+        "Section\u{a0}1",
+        "sec- refs still resolve without number-sections"
+    );
+    let Inline::Link(sec_deep) = &p.content[6] else {
+        panic!("expected Link, got {:?}", p.content[6]);
+    };
+    assert_eq!(flatten_inlines(&sec_deep.content), "Section\u{a0}1.1");
 }

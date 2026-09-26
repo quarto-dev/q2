@@ -41,6 +41,7 @@ use quarto_system_runtime::{
 };
 
 use crate::artifact::{Artifact, ArtifactScope};
+use crate::project::ProjectKind;
 use crate::resources::DEFAULT_CSS;
 use crate::stage::{
     EventLevel, PipelineData, PipelineDataKind, PipelineError, PipelineStage, StageContext,
@@ -117,6 +118,19 @@ pub fn derive_doc_scss_layer(meta: &ConfigValue) -> SassLayer {
         ..Default::default()
     }
 }
+
+/// The one rule from Q1's `resources/projects/book/book.scss`, shipped by
+/// `bookScssBundle()` (book.ts) as an extra sass layer on every
+/// Bootstrap-based HTML page of a book project: it colors the decorated
+/// sidebar chapter numbers in the body color. The literal is embedded here
+/// rather than referenced from `external-sources/` (repo policy). Content
+/// changes stay cache-safe because non-empty `doc_vars.rules` is hashed
+/// into the compile's cache key (see `cache_key`).
+const BOOK_SCSS_RULES: &str = "\
+.sidebar-item .chapter-number {
+  color: $body-color;
+}
+";
 
 /// Name of the cache namespace used for compiled SCSS CSS output.
 const SASS_CACHE_NAMESPACE: &str = "sass";
@@ -488,6 +502,19 @@ fn cache_key(
     hasher.update(doc_vars.defaults.as_bytes());
     hasher.update(b"\n");
 
+    // …and its rules section, when non-empty: the book-projects rules
+    // layer (`BOOK_SCSS_RULES`, appended by `run` for book projects)
+    // must discriminate the key, or a cached non-book compile of the
+    // same themes/doc-vars would serve the book page without the rule
+    // (and a cached book compile would leak the rule into non-book
+    // pages). Hashed only when non-empty so every existing (rules-free)
+    // cache key — and its cache entries — stay valid.
+    if !doc_vars.rules.is_empty() {
+        hasher.update(b"doc_rules:");
+        hasher.update(doc_vars.rules.as_bytes());
+        hasher.update(b"\n");
+    }
+
     // Include the highlight palette (bd-0pic6 phase B): the same theme
     // list compiles differently under different `highlight-style`
     // values, so the palette name must discriminate cache entries.
@@ -726,7 +753,21 @@ impl PipelineStage for CompileThemeCssStage {
         // `$sidebar-border` from `website.sidebar.style`; the same
         // hook is the home for future `$sidebar-bg`, `$navbar-bg`,
         // etc. injections — see `derive_doc_scss_layer`.
-        let doc_vars = derive_doc_scss_layer(&doc.ast.meta);
+        let mut doc_vars = derive_doc_scss_layer(&doc.ast.meta);
+
+        // book-projects P4: Q1's `bookScssBundle()` adds one extra rules
+        // layer to every Bootstrap-based HTML page of a book project —
+        // `.sidebar-item .chapter-number { color: $body-color; }` — so
+        // the decorated sidebar chapter numbers render in the body
+        // color. Ported as rules on the doc-vars layer: as the last
+        // user layer its rules section compiles after every Bootstrap
+        // default, so `$body-color` resolves. Variant suppression
+        // (`theme: none`) returns DEFAULT_CSS before this layer is ever
+        // compiled, matching Q1's `formatHasBootstrap` gate in spirit;
+        // revealjs targets returned above for the same reason.
+        if ctx.project.project_kind() == ProjectKind::Book {
+            doc_vars.rules.push_str(BOOK_SCSS_RULES);
+        }
 
         // Ensure the sass namespace matches the current SCSS
         // resources generation — only worth the roundtrip when some
@@ -2257,6 +2298,82 @@ mod tests {
         let doc = DocumentInfo::from_path(&doc_path);
         let format = Format::html();
         StageContext::new(runtime, format, project, doc).unwrap()
+    }
+
+    /// Like [`make_stage_context`], but with a specific project kind —
+    /// the gate for the book-projects `book.scss` rules layer.
+    fn make_stage_context_with_kind(
+        runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
+        kind: crate::project::ProjectKind,
+    ) -> StageContext {
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: crate::project::ProjectConfig {
+                project_kind: kind,
+                ..Default::default()
+            },
+            is_single_file: true,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+
+            ..Default::default()
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+        StageContext::new(runtime, format, project, doc).unwrap()
+    }
+
+    #[tokio::test]
+    async fn book_project_compiles_book_scss_rules_into_theme_css() {
+        // P4: Q1's `bookScssBundle()` ships `.sidebar-item .chapter-number
+        // { color: $body-color; }` on every Bootstrap-based HTML page of a
+        // book project. The port compiles the rule into the theme CSS
+        // (as rules on the doc-vars layer), with `$body-color` resolved
+        // by the surrounding Bootstrap compile — a hard compile error if
+        // it ever stops resolving.
+        let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> =
+            Arc::new(quarto_system_runtime::NativeRuntime::new());
+        let mut ctx = make_stage_context_with_kind(runtime, crate::project::ProjectKind::Book);
+        let stage = CompileThemeCssStage::new();
+        stage
+            .run(make_doc_ast(empty_meta()), &mut ctx)
+            .await
+            .unwrap();
+
+        let css = get_css_artifact(&ctx);
+        let Some(idx) = css.find(".sidebar-item .chapter-number") else {
+            panic!(
+                "book-project theme CSS must carry the book.scss rule: {}",
+                &css[..css.len().min(500)]
+            );
+        };
+        let window_end = (idx + 200).min(css.len());
+        assert!(
+            css[idx..window_end].contains("color:"),
+            "the book rule must carry a resolved color declaration: {}",
+            &css[idx..window_end]
+        );
+    }
+
+    #[tokio::test]
+    async fn non_book_project_does_not_gain_book_scss_rules() {
+        // The rule is book-gated: an otherwise identical non-book compile
+        // must not grow it (websites have `.sidebar-item` too, but no
+        // decorated chapter numbers to color).
+        let runtime: Arc<dyn quarto_system_runtime::SystemRuntime> =
+            Arc::new(quarto_system_runtime::NativeRuntime::new());
+        let mut ctx = make_stage_context(runtime);
+        let stage = CompileThemeCssStage::new();
+        stage
+            .run(make_doc_ast(empty_meta()), &mut ctx)
+            .await
+            .unwrap();
+
+        let css = get_css_artifact(&ctx);
+        assert!(
+            !css.contains(".sidebar-item .chapter-number"),
+            "non-book theme CSS must not gain the book.scss rule"
+        );
     }
 
     #[tokio::test]

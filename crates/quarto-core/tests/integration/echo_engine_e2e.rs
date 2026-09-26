@@ -1207,6 +1207,7 @@ impl ProjectType for IndexCapture {
         &self,
         _project: &mut ProjectContext,
         index: &ProjectIndex,
+        _runtime: &dyn SystemRuntime,
     ) -> quarto_core::Result<()> {
         *self.captured.borrow_mut() = Some(index.clone());
         Ok(())

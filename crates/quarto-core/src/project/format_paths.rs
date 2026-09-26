@@ -134,6 +134,19 @@ const FORMAT_PATH_KEYS: &[(&str, MarkPolicy, KeyForms)] = &[
         KeyForms::Entries,
     ),
     ("template", MarkPolicy::ExistenceSilent, KeyForms::Entries),
+    // bd-oqoozmtr / book-projects P2: pampa's citeproc reads `bibliography`/
+    // `csl` from disk (load_bibliography / load_csl_style). Declaration-site
+    // semantics via the same mechanism as the keys above. `ExistenceSilent`,
+    // not `Always`: both keys also accept URLs (`bibliography: https://…`),
+    // and a still-`Scalar` (unresolved) value must reach citeproc untouched
+    // rather than being rebased to a bogus doc-dir join; citeproc's own
+    // `StyleNotFound`/`BibliographyNotFound` errors name the resolved path.
+    (
+        "bibliography",
+        MarkPolicy::ExistenceSilent,
+        KeyForms::Entries,
+    ),
+    ("csl", MarkPolicy::ExistenceSilent, KeyForms::Entries),
 ];
 
 /// Apply `f` to a value's string-bearing leaves: the scalar forms
