@@ -9,7 +9,7 @@ import { openDB } from 'idb';
 import type { IDBPDatabase } from 'idb';
 import { DB_NAME, STORES } from './types';
 import { CURRENT_DB_VERSION, getStructuralMigrations } from './migrations';
-import { runMigrations } from './migrationRunner';
+import { logMigration, runMigrations } from './migrationRunner';
 import { isEphemeralStorage } from '../ephemeralStorage';
 import { createMemoryHubDatabase } from './memoryDb';
 
@@ -61,7 +61,7 @@ async function openRealDb(): Promise<IDBPDatabase> {
 
       for (const migration of structuralMigrations) {
         if (migration.structural) {
-          console.log(`Running structural migration v${migration.version}: ${migration.description}`);
+          logMigration(`Running structural migration v${migration.version}: ${migration.description}`);
           migration.structural(db, transaction);
         }
       }
@@ -72,6 +72,19 @@ async function openRealDb(): Promise<IDBPDatabase> {
   await runMigrations(db);
 
   return db;
+}
+
+/**
+ * Wait for an in-flight database open, migrations included, to finish.
+ * Resolves immediately if nothing has opened the database; open failures are
+ * swallowed (the caller that triggered the open already sees them).
+ *
+ * The integration-test setup calls this after every test: components open
+ * the database from mount effects without awaiting it, and migration work
+ * that outlives a test file fails the run at worker teardown.
+ */
+export async function settleDb(): Promise<void> {
+  await dbPromise?.catch(() => {});
 }
 
 /**

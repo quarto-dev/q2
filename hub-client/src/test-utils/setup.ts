@@ -6,11 +6,21 @@
  */
 
 import '@testing-library/jest-dom';
-import { vi } from 'vitest';
+import { afterEach, vi } from 'vitest';
 
 // Provide IndexedDB in Node.js environment
 // fake-indexeddb is a drop-in replacement that works with the 'idb' library
 import 'fake-indexeddb/auto';
+import { settleDb } from '../services/storage/db';
+
+// Components open the database from mount effects without awaiting it
+// (ProjectsHome's getUserIdentity(), for one). Drain that work after every
+// test so it cannot outlive the file: a migration still running at worker
+// teardown fails the whole run with "EnvironmentTeardownError: Closing rpc
+// while ... was pending", even when every test passed.
+afterEach(async () => {
+  await settleDb();
+});
 
 // Mock crypto.randomUUID for presence service (modern Node has this, but ensure consistency)
 if (!globalThis.crypto?.randomUUID) {
