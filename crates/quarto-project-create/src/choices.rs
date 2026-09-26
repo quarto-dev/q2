@@ -743,7 +743,10 @@ mod tests {
             ]
         );
         let template_ids: Vec<&str> = hub[0].choices.iter().map(|c| c.id.as_str()).collect();
-        assert_eq!(template_ids, ["default", "website", "blog", "presentation"]);
+        assert_eq!(
+            template_ids,
+            ["default", "website", "blog", "presentation", "book"]
+        );
         let example_ids: Vec<&str> = hub[1].choices.iter().map(|c| c.id.as_str()).collect();
         assert_eq!(example_ids[0], "hub-placeholder");
         assert_eq!(example_ids.len(), 5);
