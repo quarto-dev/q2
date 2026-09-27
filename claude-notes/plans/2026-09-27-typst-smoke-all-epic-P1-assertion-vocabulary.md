@@ -79,48 +79,24 @@ checklist) — worth an explicit note since P2/P3 both need one for their own
 
 ## Checklist
 
-- [ ] Add `ensureTypstFileRegexMatches` assertion type to `spec.rs`'s parser, reusing
-      the `ensureFileRegexMatches` two-array parsing logic (`spec.rs:343-354`) against
-      the render output's `.typ` sibling path (`output_path.with_extension("typ")`).
-      Fail clearly if `keep-typ: true` was not set (mirrors Q1's own hack, documented
-      as a hack, not silently wrong).
-- [ ] **Expected, benign transient state**: once this item lands, `Cargo.lock` will
-      carry two separate `pdf-extract` `[[package]]` entries (one registry-sourced
-      for `quarto-core`'s existing dev-dependency, one for `quarto-test`'s new one)
-      until P3 re-points `quarto-test` at P2's git rev too. Verified this compiles
-      fine — Cargo's `SourceId`-based resolution treats same-name-different-source
-      as genuinely distinct crates by design, no unification is attempted, and
-      nothing here passes a `pdf_extract::*` type across the `quarto-core`/
-      `quarto-test` boundary (both only call `extract_text()` → `String`). If
-      `cargo tree` shows a duplicate `pdf-extract` during this window, that's
-      expected, not a bug to chase.
-- [ ] `quarto-test`'s own `Cargo.toml` has no `pdf-extract` dependency at all today
-      (confirmed by grep — only `quarto-core`'s does, as a `[dev-dependencies]`
-      entry for its own test files). This assertion type lives in `quarto-test`'s
-      `src/` (production code of that crate, not a test file), so it needs
-      `pdf-extract` added as a genuine, non-dev dependency of `quarto-test` itself.
-      Pin it to crates.io `"0.7"` (matching `quarto-core`'s pre-P2 version) for
-      now — this assertion type only needs plain `extract_text`, not P2's MCID fork,
-      so it doesn't need to wait for P2. **P3 will need to re-point this same
-      dependency at P2's git-fork rev** once it starts (to get MCID surfacing in
-      `quarto-test` too) — note that hand-off explicitly in P3 rather than
-      discovering the stale crates.io pin mid-P3.
-- [ ] Add `ensurePdfRegexMatches` assertion type, same two-array shape, against
-      `pdf_extract::extract_text(output_path)`.
-- [ ] Both assertion types need an explicit test (not just exercised transitively
-      via P4/P5's fixtures) — a minimal synthetic `.qmd` + `.typ`/`.pdf` fixture,
-      matches + non-matches. `quarto-test` has no `tests/` directory at all; every
-      existing assertion type is tested via an inline `#[cfg(test)] mod tests` in
-      the module that implements it (see `assertions/file_regex.rs` and siblings).
-      Add the new tests the same way, in the modules implementing
-      `ensureTypstFileRegexMatches`/`ensurePdfRegexMatches`, not a new top-level test
-      file.
-- [ ] Confirm `_quarto.tests.run.skip` (already supported per `spec.rs:24,55-57,89`)
-      composes correctly with these new assertion types for a chapter file — no new
-      code expected here, just a confirming test.
-- [ ] `cargo clippy -p quarto-test --all-targets -- -D warnings` + `cargo nextest run
-      -p quarto-test`.
+- [x] Add `ensureTypstFileRegexMatches` assertion type to `spec.rs`'s parser, reusing
+      the shared two-array parsing logic for `ensureFileRegexMatches`, `ensureCssRegexMatches`,
+      and the new Typst/PDF assertions, against the render output's `.typ` sibling path
+      (`output_path.with_extension("typ")`). Fail clearly if the intermediate is missing,
+      with guidance to set `keep-typ: true`.
+- [x] Add `pdf-extract = "0.7"` as a non-dev `quarto-test` dependency and update `Cargo.lock`.
+      During this bootstrap phase, Cargo resolves the registry package once for both crates;
+      P3 will re-point `quarto-test` at P2's git-fork revision for MCID support. No
+      `pdf_extract::*` types cross the `quarto-core`/`quarto-test` boundary.
+- [x] Add `ensurePdfRegexMatches` assertion type using `pdf_extract::extract_text(output_path)`.
+- [x] Add inline module tests covering successful required-pattern checks, forbidden-pattern
+      rejection, and the Typst missing-intermediate error. PDF tests create minimal synthetic
+      PDFs with `lopdf` re-exported by `pdf-extract`.
+- [x] Test that `_quarto.tests.run.skip` parses and yields the configured skip reason alongside
+      both new assertion types for a chapter path.
+- [x] `cargo clippy -p quarto-test --all-targets -- -D warnings` and `cargo nextest run -p
+      quarto-test` pass (75/75 tests).
 
 ## Status
 
-Not started.
+Complete.
