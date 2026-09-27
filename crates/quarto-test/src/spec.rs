@@ -658,6 +658,26 @@ mod tests {
     }
 
     #[test]
+    fn extension_format_key_is_preserved_for_typst_assertions() {
+        let yaml: Value = serde_yaml::from_str(
+            r#"
+            _quarto:
+              tests:
+                orange-book-typst:
+                  ensureTypstFileRegexMatches:
+                    - ["LOCAL-OVERRIDE-MARKER"]
+            "#,
+        )
+        .unwrap();
+
+        let (_, specs) = parse_test_specs(&yaml, std::path::Path::new("index.qmd")).unwrap();
+        assert_eq!(specs.len(), 1);
+        assert_eq!(specs[0].format, "orange-book-typst");
+        assert_eq!(specs[0].assertions.len(), 1);
+        assert_eq!(specs[0].assertions[0].name(), "ensureTypstFileRegexMatches");
+    }
+
+    #[test]
     fn test_dom_parity_key_is_accepted_and_recorded() {
         let yaml: Value = serde_yaml::from_str(
             r#"

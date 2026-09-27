@@ -8,9 +8,12 @@
  * directory and runs their embedded test specifications via quarto-test.
  */
 
-use std::path::Path;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
-use quarto_test::{TestResult, run_test_file};
+use quarto_core::project::ProjectContext;
+use quarto_system_runtime::NativeRuntime;
+use quarto_test::{ProjectRenderCache, TestResult, run_test_file_with_project_cache};
 use walkdir::WalkDir;
 
 /// Run all smoke-all tests by discovering .qmd files in the smoke-all directory.
@@ -57,6 +60,24 @@ fn smoke_all() {
 
     eprintln!("Running {} smoke-all tests...\n", test_files.len());
 
+    let runtime = NativeRuntime::new();
+    let mut projects: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
+    let mut discovery_failures: HashMap<PathBuf, String> = HashMap::new();
+    for path in &test_files {
+        // `ProjectContext::discover` also provides the canonical project root
+        // for no-project fixtures (a single-file pseudo-project).
+        match ProjectContext::discover(path, &runtime) {
+            Ok(project) if !project.is_single_file => {
+                projects.entry(project.dir).or_default().push(path.clone());
+            }
+            Ok(_) => {}
+            Err(error) => {
+                discovery_failures.insert(path.clone(), error.to_string());
+            }
+        }
+    }
+
+    let mut project_cache = ProjectRenderCache::default();
     let mut passed = 0;
     let mut skipped = 0;
     let mut failures: Vec<(String, String)> = Vec::new();
@@ -69,7 +90,16 @@ fn smoke_all() {
             .display()
             .to_string();
 
-        match run_test_file(path) {
+        if let Some(error) = discovery_failures.get(path) {
+            let detail = format!("    project discovery failed: {error}");
+            eprintln!("  ✗ {}\n{}", rel_path, detail);
+            failures.push((rel_path, detail));
+            continue;
+        }
+        let project_root = projects
+            .iter()
+            .find_map(|(root, files)| files.contains(path).then_some(root.as_path()));
+        match run_test_file_with_project_cache(path, project_root, &mut project_cache) {
             Ok(TestResult::Pass) => {
                 eprintln!("  ✓ {}", rel_path);
                 passed += 1;

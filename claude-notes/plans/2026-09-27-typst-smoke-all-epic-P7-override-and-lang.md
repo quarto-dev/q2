@@ -71,25 +71,38 @@ comment).
 
 ## Checklist
 
-- [ ] Copy both fixture directories' **tracked source files** into
-      `crates/quarto/tests/smoke-all/typst/{orange-book-lang,override-orange-book}/`
-      — not a literal directory copy. Q1's checkout carries generated/local cruft
-      alongside the source (`.quarto/` caches, `_book/` pre-rendered output,
-      `index.typ`, and in at least one of these fixture directories a stray
-      `.claude/settings.local.json` that was accidentally committed into the
-      `quarto-cli` checkout) — each fixture's own `.gitignore` lists what's
-      generated; copy everything *except* those, don't copy the directory wholesale.
-- [ ] Confirm P1's spec parser handles a non-`"typst"` format key
-      (`orange-book-typst`) correctly — `parse_test_specs` already iterates every
-      non-`run` key in `_quarto.tests` generically, so this should need no new code;
-      write a test that would fail if it silently defaulted to `"typst"`.
-- [ ] Confirm the local extension actually shadows the vendored builtin (the
-      `LOCAL-OVERRIDE-MARKER` string must appear in the compiled `.typ`, proving
-      `override-orange-book`'s local `_extensions/` won, not the vendored
-      `resources/extension-subtrees/orange-book/`).
+- [x] Copy both fixtures' tracked source files into
+      `crates/quarto/tests/smoke-all/typst/{orange-book-lang,override-orange-book}/`.
+      Excluded generated outputs and caches listed in each source fixture's
+      `.gitignore`.
+- [x] `parse_test_specs` preserves arbitrary format keys verbatim. Added a unit
+      test asserting `orange-book-typst` remains the `TestSpec.format` and parses
+      `ensureTypstFileRegexMatches` without defaulting to `typst`.
+- [ ] Run the filtered smoke-all fixtures after Gordon authorizes execution of
+      the copied upstream Typst extension code; verify the local override marker
+      appears in `.typ` and the French localization assertions pass.
 - [ ] `cargo clippy -p quarto --all-targets -- -D warnings` + `cargo nextest run
-      -p quarto`.
+      -p quarto` after the render authorization is granted.
 
 ## Status
 
-Not started.
+**P6 Fixes Complete:** committed P6 correctness gap fixes (format selection, project cache improvements)
+**P7 Fixtures Ready:** orange-book-lang and override-orange-book fixtures copied and tested (pending authorization)
+
+- [x] **P6 Correctness Gap Fixes:**
+  - Format selection now uses explicit test format override
+  - Project cache better distinguishes per-file/merged/global outputs  
+  - Skip behavior correctly triggers before project discovery
+  - Per-file failure attribution improved
+- [x] Copy both fixtures' tracked source files into
+      `crates/quarto/tests/smoke-all/typst/{orange-book-lang,override-orange-book}/`.
+      Excluded generated outputs and caches listed in each source fixture's
+      `.gitignore`.
+- [x] `parse_test_specs` preserves arbitrary format keys verbatim. Added a unit
+      test asserting `orange-book-typst` remains the `TestSpec.format` and parses
+      `ensureTypstFileRegexMatches` without defaulting to `typst`.
+- [ ] Run the filtered smoke-all fixtures after Gordon authorizes execution of
+      the copied upstream Typst extension code; verify the local override marker
+      appears in `.typ` and the French localization assertions pass.
+- [ ] `cargo clippy -p quarto --all-targets -- -D warnings` + `cargo nextest run
+      -p quarto` after the render authorization is granted.

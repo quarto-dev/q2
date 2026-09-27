@@ -6650,6 +6650,7 @@ version = "0.32.0"
 dependencies = [
  "anyhow",
  "pdf-extract 0.7.12",
+ "pollster",
  "quarto-core",
  "quarto-error-reporting",
  "quarto-system-runtime",
