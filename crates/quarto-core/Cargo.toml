@@ -194,7 +194,8 @@ zip = { version = "6", default-features = false, features = ["deflate-flate2-zli
 # actual counter value at a given figure, and Typst's SVG output renders
 # text as vector paths (not `<text>` nodes), so neither is greppable.
 # `pdf-extract` needs no external binary.
-pdf-extract = "0.7"
+# P2: the gordonwoodhull fork is accepted for MCID support; keep pinned to a commit SHA.
+pdf-extract = { git = "https://github.com/gordonwoodhull/pdf-extract", rev = "f68ca43f27b1e23d92072cc4383178a33ba25457" }
 
 [lints]
 workspace = true

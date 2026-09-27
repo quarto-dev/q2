@@ -87,29 +87,11 @@ it to surface tagged-PDF marked-content (MCID) data, which is a prerequisite for
 
 ## Checklist
 
-- [ ] Update `crates/quarto-core/Cargo.toml:197` to the git-rev dependency above.
-      This entry is under `[dev-dependencies]` (section starts `Cargo.toml:171`) —
-      confirm the git-rev swap doesn't accidentally move it out of that section;
-      staying dev-dependency-scoped is also why this phase needs no WASM compliance
-      work (see note below).
-- [ ] `cargo build -p quarto-core` — confirm the version jump compiles clean against
-      current usage. A full grep (`grep -rn "pdf_extract::" crates/`, done during
-      plan review) finds **six files**, not two: `book_theorem_crossref.rs`,
-      `book_citations.rs`, `book_appendix_letter_parity.rs` (two call sites),
-      `book_numbering_torture.rs`, `book_part_appendix.rs`, and
-      `book_numbering_pipeline.rs` (four call sites) — ten call sites total. Note
-      this is a *different* six-file set from the epic's "six existing Rust book
-      integration tests" (Decision 6/P10's coexistence scope), which swaps in
-      `orange_book_lua.rs`/`book_numbering_lua.rs` instead of
-      `book_theorem_crossref.rs`/`book_citations.rs` — this phase's regression check
-      covers the `pdf_extract`-calling six, not the coexistence six.
-- [ ] Run `cargo nextest run -p quarto-core` — confirm all six files above still pass
-      byte-for-byte against the same expected strings (no silent text-extraction
-      drift from the 0.7→0.12+ jump).
-- [ ] `cargo clippy -p quarto-core --all-targets -- -D warnings`.
-- [ ] Document the fork dependency's provenance and durability posture (Decision 1 in
-      the epic doc) in a short comment at the `Cargo.toml` pin, so a future reader
-      doesn't mistake it for a typo or temporary state.
+- [x] Updated `crates/quarto-core/Cargo.toml`'s `[dev-dependencies]` entry to the pinned git revision; it remains dev-only.
+- [x] `cargo build -p quarto-core` — passed against the pinned fork and current usage. The regression suite covers the six files using `pdf_extract` (ten call sites): `book_theorem_crossref.rs`, `book_citations.rs`, `book_appendix_letter_parity.rs`, `book_numbering_torture.rs`, `book_part_appendix.rs`, and `book_numbering_pipeline.rs`. This set differs from P10's coexistence set.
+- [x] `cargo nextest run -p quarto-core` — 5,282 passed, 32 skipped, including all six files above; no text-extraction drift.
+- [x] `cargo clippy -p quarto-core --all-targets -- -D warnings` — passed.
+- [x] Documented the accepted personal-fork provenance and commit-SHA pin at the `Cargo.toml` entry (Decision 1).
 
 **WASM / cross-platform compliance**: no action needed. `pdf-extract` lives under
 `[dev-dependencies]`, so it's excluded from every consumer's normal build, wasm32
@@ -118,4 +100,4 @@ bump changes no platform-specific code paths.
 
 ## Status
 
-Not started.
+Complete.
