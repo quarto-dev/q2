@@ -93,36 +93,26 @@ use. Add this to the checklist explicitly so it isn't rediscovered mid-implement
 
 ## Checklist
 
-- [ ] In `smoke_all.rs` (or a new project-aware sibling module — if a new file, it
-      must follow `.claude/rules/integration-tests.md`'s pattern: register it via
-      `pub mod <name>;` in `tests/integration/main.rs`, not a new top-level
-      `tests/<name>.rs`), detect a `_quarto.yml` ancestor for each discovered `.qmd`
-      via `ProjectContext::discover` (`crates/quarto-core/src/project/mod.rs:1887`,
-      already reliably resolves `.dir` to project root from any file inside the
-      tree); group files by project root. A per-file `ProjectContext::discover` call
-      happens twice per file this way (once for grouping, once inside the render
-      call below) — a minor inefficiency, not a correctness issue, worth a comment
-      rather than premature optimization.
-- [ ] Add a dedup cache (per test run) keyed by project root: the first file in a
-      group whose front matter sets `render-project: true` triggers one whole-book
-      render for that project; siblings in the same group reuse the result. No
-      concurrency concerns — `smoke_all()` is a single `#[test] fn` iterating every
-      fixture in one process (`smoke_all.rs:22`), not parallel workers.
-- [ ] Add `render_project_document()` to `crates/quarto-test/src/runner.rs`, calling
-      `ProjectPipeline::new(...).run_with_book_support()` — see "The entry point"
-      above; both are already `pub`, no visibility changes needed. Build the
-      `Format` value via `Format::from_format_string` (`format.rs:1125`, `pub`), not
-      the CLI-only `resolve_format()` wrapper.
-- [ ] Confirm `_quarto.tests.run.skip` (chapters/appendices/references) composes
-      correctly: those files should be discovered (so their project is registered for
-      the dedup cache) but never independently assert-checked.
-- [ ] Zero hits today for `render-project`/`render_project` anywhere in `crates/`
-      outside test fixtures — confirmed by grep. Q2's core render path has no
-      awareness of this metadata key; this phase owns 100% of its interpretation,
-      not a thin wrapper over existing logic.
-- [ ] `cargo clippy -p quarto-test -p quarto --all-targets -- -D warnings` +
+- [x] In `smoke_all.rs`, discover each `.qmd`'s project root via
+      `ProjectContext::discover`, group real project files by root, and report
+      discovery failures as test failures. Single-file pseudo-projects are not
+      grouped. The suite is serial, so grouping has no synchronization concerns.
+- [x] Add a per-run dedup cache keyed by project root: the first non-skipped file
+      with `render-project: true` triggers one full project render; sibling files
+      reuse its output and diagnostics.
+- [x] Add `render_project_document()` to `crates/quarto-test/src/runner.rs`, using
+      `ProjectPipeline::new(...).run_with_book_support()` and
+      `Format::from_format_string`.
+- [x] `_quarto.tests.run.skip` is evaluated before project rendering. Skipped
+      files remain discovered/grouped but neither trigger a project render nor
+      have their assertions checked independently; the cache regression test
+      covers this interaction.
+- [x] `render-project` / `render_project` metadata interpretation is implemented
+      in `quarto-test`; Q2's project render pipeline itself remains unaware of
+      this smoke-test-only switch.
+- [x] `cargo clippy -p quarto-test -p quarto --all-targets -- -D warnings` +
       `cargo nextest run -p quarto-test -p quarto`.
 
 ## Status
 
-Not started.
+Complete.
