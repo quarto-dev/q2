@@ -12,6 +12,7 @@ use std::fs;
 use anyhow::{Context, Result, bail};
 use regex::Regex;
 
+use super::regex_patterns::{compile_patterns, verify_patterns};
 use super::{Assertion, VerifyContext};
 
 /// Assertion that verifies file content matches (or doesn't match) regex patterns.
@@ -33,25 +34,11 @@ impl EnsureFileRegexMatches {
     ///
     /// Patterns are compiled as multiline regexes (so `^` and `$` match line boundaries).
     pub fn new(matches: Vec<String>, no_matches: Vec<String>) -> Result<Self> {
-        let compiled_matches: Result<Vec<Regex>> = matches
-            .iter()
-            .map(|p| {
-                Regex::new(&format!("(?m){}", p))
-                    .with_context(|| format!("invalid regex pattern: {}", p))
-            })
-            .collect();
-
-        let compiled_no_matches: Result<Vec<Regex>> = no_matches
-            .iter()
-            .map(|p| {
-                Regex::new(&format!("(?m){}", p))
-                    .with_context(|| format!("invalid regex pattern: {}", p))
-            })
-            .collect();
+        let (compiled_matches, compiled_no_matches) = compile_patterns(&matches, &no_matches)?;
 
         Ok(Self {
-            matches: compiled_matches?,
-            no_matches: compiled_no_matches?,
+            matches: compiled_matches,
+            no_matches: compiled_no_matches,
             match_patterns: matches,
             no_match_patterns: no_matches,
         })
@@ -76,38 +63,14 @@ impl Assertion for EnsureFileRegexMatches {
             )
         })?;
 
-        let mut failures: Vec<String> = Vec::new();
-
-        // Check patterns that must match
-        for (i, regex) in self.matches.iter().enumerate() {
-            if !regex.is_match(&content) {
-                failures.push(format!(
-                    "Required pattern not found: {}",
-                    self.match_patterns[i]
-                ));
-            }
-        }
-
-        // Check patterns that must NOT match
-        for (i, regex) in self.no_matches.iter().enumerate() {
-            if regex.is_match(&content) {
-                failures.push(format!(
-                    "Illegal pattern found: {}",
-                    self.no_match_patterns[i]
-                ));
-            }
-        }
-
-        if failures.is_empty() {
-            Ok(())
-        } else {
-            bail!(
-                "{} regex mismatch(es) in {}:\n  - {}",
-                failures.len(),
-                context.output_path.display(),
-                failures.join("\n  - ")
-            )
-        }
+        verify_patterns(
+            &content,
+            &self.matches,
+            &self.no_matches,
+            &self.match_patterns,
+            &self.no_match_patterns,
+            &context.output_path.display().to_string(),
+        )
     }
 }
 

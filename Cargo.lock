@@ -6563,6 +6563,7 @@ name = "quarto-test"
 version = "0.32.0"
 dependencies = [
  "anyhow",
+ "pdf-extract",
  "quarto-core",
  "quarto-error-reporting",
  "quarto-system-runtime",

@@ -13,8 +13,9 @@ use anyhow::{Context, Result};
 use serde_yaml::Value;
 
 use crate::assertions::{
-    Assertion, EnsureCssRegexMatches, EnsureFileRegexMatches, EnsureHtmlElements, FileExists,
-    FolderExists, NoErrors, NoErrorsOrWarnings, PathDoesNotExist, PrintsMessage, ShouldError,
+    Assertion, EnsureCssRegexMatches, EnsureFileRegexMatches, EnsureHtmlElements,
+    EnsurePdfRegexMatches, EnsureTypstFileRegexMatches, FileExists, FolderExists, NoErrors,
+    NoErrorsOrWarnings, PathDoesNotExist, PrintsMessage, ShouldError,
 };
 
 /// Configuration for when/whether to run tests.
@@ -202,6 +203,22 @@ fn parse_format_spec(format: &str, value: &Value, _input_path: &Path) -> Result<
                     let assertion = parse_ensure_file_regex_matches(assertion_value)?;
                     assertions.push(Box::new(assertion));
                 }
+                "ensureTypstFileRegexMatches" => {
+                    let assertion = parse_regex_assertion(
+                        assertion_value,
+                        "ensureTypstFileRegexMatches",
+                        EnsureTypstFileRegexMatches::new,
+                    )?;
+                    assertions.push(Box::new(assertion));
+                }
+                "ensurePdfRegexMatches" => {
+                    let assertion = parse_regex_assertion(
+                        assertion_value,
+                        "ensurePdfRegexMatches",
+                        EnsurePdfRegexMatches::new,
+                    )?;
+                    assertions.push(Box::new(assertion));
+                }
                 "ensureCssRegexMatches" => {
                     let assertion = parse_ensure_css_regex_matches(assertion_value)?;
                     assertions.push(Box::new(assertion));
@@ -321,9 +338,15 @@ fn parse_file_exists(value: &Value, assertions: &mut Vec<Box<dyn Assertion>>) ->
 /// Same format as `ensureFileRegexMatches` but checks linked CSS files
 /// instead of the output HTML.
 fn parse_ensure_css_regex_matches(value: &Value) -> Result<EnsureCssRegexMatches> {
+    let (matches, no_matches) = parse_pattern_pair(value, "ensureCssRegexMatches")?;
+    EnsureCssRegexMatches::new(matches, no_matches)
+}
+
+/// Parse regex assertion values using the shared two-array format.
+fn parse_pattern_pair(value: &Value, name: &str) -> Result<(Vec<String>, Vec<String>)> {
     let arr = value
         .as_sequence()
-        .context("ensureCssRegexMatches must be an array")?;
+        .with_context(|| format!("{name} must be an array"))?;
 
     let matches = if !arr.is_empty() {
         parse_pattern_array(&arr[0])?
@@ -337,7 +360,16 @@ fn parse_ensure_css_regex_matches(value: &Value) -> Result<EnsureCssRegexMatches
         vec![]
     };
 
-    EnsureCssRegexMatches::new(matches, no_matches)
+    Ok((matches, no_matches))
+}
+
+fn parse_regex_assertion<T>(
+    value: &Value,
+    name: &str,
+    create: impl FnOnce(Vec<String>, Vec<String>) -> Result<T>,
+) -> Result<T> {
+    let (matches, no_matches) = parse_pattern_pair(value, name)?;
+    create(matches, no_matches)
 }
 
 /// Parse `ensureFileRegexMatches` assertion.
@@ -349,22 +381,7 @@ fn parse_ensure_css_regex_matches(value: &Value) -> Result<EnsureCssRegexMatches
 ///   - ["noMatch1", "noMatch2"]  # must NOT match (optional)
 /// ```
 fn parse_ensure_file_regex_matches(value: &Value) -> Result<EnsureFileRegexMatches> {
-    let arr = value
-        .as_sequence()
-        .context("ensureFileRegexMatches must be an array")?;
-
-    let matches = if !arr.is_empty() {
-        parse_pattern_array(&arr[0])?
-    } else {
-        vec![]
-    };
-
-    let no_matches = if arr.len() > 1 {
-        parse_pattern_array(&arr[1])?
-    } else {
-        vec![]
-    };
-
+    let (matches, no_matches) = parse_pattern_pair(value, "ensureFileRegexMatches")?;
     EnsureFileRegexMatches::new(matches, no_matches)
 }
 
@@ -604,6 +621,40 @@ mod tests {
             "Expected error about unknown assertion, got: {}",
             err
         );
+    }
+
+    #[test]
+    fn test_typst_and_pdf_regex_assertions_parse_and_compose_with_run_skip() {
+        let yaml: Value = serde_yaml::from_str(
+            r##"
+            _quarto:
+              tests:
+                run:
+                  skip: "chapter is covered by the book render"
+                typst:
+                  ensureTypstFileRegexMatches:
+                    - ["#figure", "#set page"]
+                    - ["#forbidden"]
+                  ensurePdfRegexMatches:
+                    - ["Chapter One"]
+                    - ["Forbidden text"]
+            "##,
+        )
+        .unwrap();
+
+        let (run_config, specs) =
+            parse_test_specs(&yaml, std::path::Path::new("chapters/chapter-one.qmd")).unwrap();
+
+        let run_config = run_config.expect("run configuration should be parsed");
+        assert_eq!(
+            run_config.should_skip(),
+            Some("chapter is covered by the book render".to_string())
+        );
+        assert_eq!(specs.len(), 1);
+        assert_eq!(specs[0].format, "typst");
+        assert_eq!(specs[0].assertions.len(), 2);
+        assert_eq!(specs[0].assertions[0].name(), "ensureTypstFileRegexMatches");
+        assert_eq!(specs[0].assertions[1].name(), "ensurePdfRegexMatches");
     }
 
     #[test]
