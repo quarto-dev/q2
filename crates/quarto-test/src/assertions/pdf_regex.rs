@@ -9,7 +9,7 @@
 use anyhow::{Context, Result, bail};
 use regex::Regex;
 
-use super::regex_patterns::{compile_patterns, verify_patterns};
+use super::regex_patterns::{compile_patterns, normalize_pdf_text, verify_patterns};
 use super::{Assertion, VerifyContext};
 
 /// Assertion that verifies extracted PDF text against regex patterns.
@@ -52,6 +52,7 @@ impl Assertion for EnsurePdfRegexMatches {
                 context.output_path.display()
             )
         })?;
+        let text = normalize_pdf_text(&text);
 
         verify_patterns(
             &text,
