@@ -308,28 +308,81 @@ logo-path resolution against a synthetic merged document's directory context.
       deeper (the metadata-*encoding* gap, not just the logo-path
       resolution one that note anticipated).
 
-      Two fix shapes discussed with Gordon, not yet decided: (1) narrow —
-      patch the vendored Lua guard to also accept `pandoc.utils.type(...) ==
-      'string'`, using this project's established `QUARTO2-PATCH` convention
-      for tracked, justified deviations from the vendored Q1 filter chain;
-      scoped to the one known-affected filter. (2) broader — change Q2's
-      `ConfigValue`→`MetaValue` serialization so plain scalar strings always
-      emit `MetaInlines`, matching Q1/pandoc's convention globally; fixes
-      this class of bug everywhere at once but is a core, shared-
-      serialization change with unsurveyed blast radius across every Lua
-      filter/template touching string metadata. Re-added a documented
-      `run.skip` on `index.qmd` for this blocker (superseding the resolved
-      toc-depth skip) — `cargo nextest run -p quarto` green again (602
-      passed, 2 skipped).
+      **Decided (Gordon, 2026-09-28): option (1), the narrow Lua-filter
+      patch.** Added `pandoc.utils.type(meta.brand) == 'string'` to the
+      guard, marked `QUARTO2-PATCH`, and added the file to
+      `resources/pandoc-filters/README.md`'s "Ours vs. pinned" list.
+      Removed the `run.skip`. Regression tests: two new cases in
+      `typst_brand.rs` (`test_logo_map_resolves_named_size_against_images`
+      and `..._explicit_resource_not_treated_as_name_reference` — see bug
+      5 below, added alongside). `cargo clippy -p quarto-core --all-targets
+      -- -D warnings` clean; `cargo nextest run -p quarto-brand -p
+      quarto-core` 5387/5387 passed.
 
-      **Next steps, in order:** (1) decide and land the brand-encoding fix;
-      (2) finish rendering the whole book and reconcile all ~250 assertions;
-      (3) once bd-l6eh1635 actually merges into `feature/typst-testing`,
-      rebase this branch onto it, swap `references.json` back out for
-      `references.bib` in `_quarto.yml`, delete `references.json`, and
-      re-verify. Expect the `fig-visualization`/`sec-embedded-notebooks`
-      assertions (3 lines, see item 3) to still fail on `embed`'s absence;
-      everything else is new ground.
+      **Fifth bug — found and fixed 2026-09-28, immediately after
+      unblocking bug 4.** Past the brand-string crash, typst compile
+      failed with `error: file not found (searched at .../_book/test-logo)`
+      — the fixture's `_brand.yml` sets `logo.medium: test-logo`, a name
+      reference into `logo.images.test-logo` (a real, documented brand.yml
+      convention: "You can also specify named logos under images which
+      you can reference in small, medium and large" — confirmed against
+      Q1's `getLogo`/`getLogoResource` precedence in `brand.ts`, which
+      checks `images` first and only falls back to treating the string as
+      a literal path). Q2's `logo_map` (`typst_brand.rs`) never resolved
+      this: it took `brand.logo("medium")`'s raw `LogoEntry::Single(Path(
+      "test-logo"))` and emitted `"test-logo"` as the literal path
+      verbatim. Same bug in `quarto_brand::Brand::favicon()` and
+      `ResolvedBrand::logo_resource_relative_to()` — neither consulted
+      `images` for a bare-string `small`/`medium`/`large` value either, so
+      this wasn't Typst-specific, just first-exercised there.
+
+      Fix: added `Brand::resolve_named_logo()` (`quarto-brand/src/
+      resolve.rs`) implementing Q1's precedence — a bare `Path(name)` is
+      looked up against `logo.images`; a match wins, an explicit `{path,
+      alt}` value is never treated as a name reference. Threaded through
+      `typst_brand::logo_map`, `Brand::favicon()`, and
+      `ResolvedBrand::logo_resource_relative_to()`. New tests: 2 in
+      `typst_brand.rs`, 2 in `quarto-brand/tests/integration/logo_test.rs`;
+      all existing `resolved_test.rs`/`logo_test.rs` cases (100/100)
+      stayed green, confirming no regression to the `LightDark`/
+      no-fallback semantics those already pinned.
+
+      Once that path resolved, compile failed again — same file, now
+      searched at `.../_book/logo.svg` instead of `.../_book/test-logo`.
+      Root cause: a book render's compiled `.typ` (and PDF) lands in the
+      project's *output* directory (`_book/`), one level below the
+      project root where `_brand.yml` and `logo.svg` actually live; Typst
+      resolves a relative `image()` path against the *including file's*
+      own directory, not the project root. `resolve_typst_brand_param`
+      (`pandoc_write.rs`) was passing `&ctx.project.dir` as the base for
+      `build_brand_param`'s path rewriting — correct for a single-document
+      render (output dir == project dir there, which is why this was
+      invisible until a book render exercised it), wrong for a book.
+      Fixed by computing `output_dir` from `ctx.output_path().parent()`
+      (falling back to `ctx.project.dir` if there's no parent) and passing
+      that instead. New end-to-end test:
+      `book_single_file_merge.rs::book_brand_logo_named_by_images_reference_resolves_relative_to_book_output_dir`
+      — a real book render (via `orange-book`, Q2's default typst-book
+      extension) with `_brand.yml`'s `small: test-logo` reference,
+      asserting the retained `.typ`'s logo path is `"../logo.svg"`, not
+      `"logo.svg"`. `cargo nextest run -p quarto-core -E
+      'test(book_single_file_merge)'` and the full `-p quarto-brand -p
+      quarto-core` suite (5387/5387) both green; `cargo clippy -p
+      quarto-core -p quarto-brand --all-targets -- -D warnings` clean.
+
+      **Next steps, in order:** (1) finish rendering the whole book and
+      reconcile all ~250 assertions — in progress, next blocker found is
+      chapter1.qmd's `fig-cars` R chunk (explicit `#| label: fig-cars`)
+      producing `unnamed-chunk-1-1.svg` instead of `fig-cars-1.svg` in the
+      book-merge render, so the Typst template's `image("chapter1_files/
+      figure-typst/fig-cars-1.svg")` reference 404s — not yet
+      investigated past reproducing it; (2) once bd-l6eh1635 actually
+      merges into `feature/typst-testing`, rebase this branch onto it,
+      swap `references.json` back out for `references.bib` in
+      `_quarto.yml`, delete `references.json`, and re-verify. Expect the
+      `fig-visualization`/`sec-embedded-notebooks` assertions (3 lines,
+      see item 3) to still fail on `embed`'s absence; everything else is
+      new ground.
 - [x] Cross-check against the six existing Rust integration tests
       (`book_numbering_torture.rs` et al.) — any assertion that fails here but passes
       there points at a smoke-all-harness gap, not a rendering regression; triage
@@ -350,17 +403,14 @@ logo-path resolution against a synthetic merged document's directory context.
 
 ## Status
 
-**Blocked on deciding and landing the brand `MetaString`/`MetaInlines`
-mismatch fix (see item 4) before the whole-book render can complete.** This
-is in-scope P8 work, not a digression — it's exactly the kind of gap porting
-Q1's real smoke-all fixtures into Q2 exists to surface, not something to defer
-past this branch. The BibTeX blocker (bd-l6eh1635, workspace-6/
-`braid/bd-l6eh1635-bibtex-citeproc`) is temporarily worked around (a local
-`references.json` conversion, reversible, see item 4) rather than actually
-resolved — that dependency still needs to land and be swapped back in before
-this branch is done.
+**In progress — five real, separate, verified bugs found so far, all five
+fixed.** Blocked next on a sixth (see below), still inside item 4's "finish
+rendering the whole book" work — not a digression. The BibTeX blocker
+(bd-l6eh1635, workspace-6/`braid/bd-l6eh1635-bibtex-citeproc`) is temporarily
+worked around (a local `references.json` conversion, reversible, see item 4)
+rather than actually resolved — that dependency still needs to land and be
+swapped back in before this branch is done.
 
-Three real, separate, verified bugs found so far, two fixed:
 1. **Fixed**: `single_file_render.rs` ran citeproc *before* the merged
    document's Crossref phase instead of after, unlike the single-document
    `.post`-bucket convention. Regression-checked against 63 book-related
@@ -372,16 +422,42 @@ Three real, separate, verified bugs found so far, two fixed:
    via a `$toc-depth$` template variable). Skipped `--toc`/`--toc-depth`
    forwarding for `FormatIdentifier::Typst`, matching this file's existing
    format-conditional-exception pattern. Two new tests, both green.
-3. **Not yet fixed, awaiting a decision — start here on resume.** `brand:
-   _brand.yml` (bare path string) serializes to pandoc as `MetaString`; the
-   vendored `typst-brand-yaml.lua`'s guard only recognizes `MetaInlines`
-   (Q1's convention), so `meta.brand` survives as a raw string and crashes
-   at `meta.brand.typography = ...`. Confirmed this is genuinely first-time
-   territory (no other Typst fixture anywhere in this repo exercises `brand:`
-   as a bare path). Two fix shapes on the table — narrow (patch the vendored
-   Lua guard, `QUARTO2-PATCH` convention) vs. broad (make Q2's `ConfigValue`→
-   `MetaValue` serialization always emit `MetaInlines` for scalar strings,
-   matching Q1/pandoc globally) — full writeup in item 4 above.
+3. **Fixed (Gordon decided option 1, 2026-09-28)**: `brand: _brand.yml`
+   (bare path string) serialized to pandoc as `MetaString`; the vendored
+   `typst-brand-yaml.lua`'s guard only recognized `MetaInlines`. Patched the
+   guard to also accept `pandoc.utils.type(meta.brand) == 'string'`
+   (`QUARTO2-PATCH`, documented in `resources/pandoc-filters/README.md`).
+   Removed the `run.skip`.
+4. **Fixed**: `logo.medium: test-logo` (a name reference into
+   `logo.images`, a real documented brand.yml convention) was treated as a
+   literal path everywhere in `quarto-brand` — `typst_brand::logo_map`,
+   `Brand::favicon()`, `ResolvedBrand::logo_resource_relative_to()`. Added
+   `Brand::resolve_named_logo()` implementing Q1's `getLogoResource`
+   precedence (images-name match wins over literal-path fallback) and
+   threaded it through all three call sites. 4 new tests; all 100 existing
+   `quarto-brand` tests stayed green.
+5. **Fixed**: even after (4), the resolved logo path was still wrong for a
+   *book* render — `resolve_typst_brand_param` rewrote brand-relative paths
+   against `ctx.project.dir`, but a book's compiled `.typ`/PDF lands in the
+   project's output directory (`_book/`), one level down, and Typst
+   resolves relative `image()` paths against the including file's own
+   directory. Fixed by rewriting against `ctx.output_path().parent()`
+   instead (a no-op for single-document renders, where output dir ==
+   project dir — why this was invisible until a book render exercised it).
+   New end-to-end test in `book_single_file_merge.rs` renders a real
+   branded book and asserts the retained `.typ`'s logo path.
+   `cargo nextest run -p quarto-brand -p quarto-core`: 5387/5387 passed;
+   clippy clean on both crates.
+
+**Sixth bug — found, not yet fixed, start here on resume.** Past all five
+logo/brand fixes, typst compile now fails on
+`error: file not found (searched at .../_book/chapter1_files/figure-typst/fig-cars-1.svg)`.
+`chapter1.qmd`'s R chunk explicitly sets `#| label: fig-cars`, but the
+actual generated file is `unnamed-chunk-1-1.svg` — the chunk label isn't
+reaching the R/knitr figure-naming convention in this book-merge render.
+Not yet root-caused (single-document renders with a labelled chunk need
+checking as a comparison point — is this book-merge-specific like bugs
+1/5, or general?).
 
 Also resolved the `requires: jupyter` question from the plan (not needed —
 `embed` is unimplemented, own epic, per D6). Fixture itself is reconciled to

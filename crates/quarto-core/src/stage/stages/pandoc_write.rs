@@ -265,10 +265,25 @@ fn resolve_typst_brand_param(
                 &candidates,
             ))
         })?;
+    // The compiled `.typ` file (and, from it, the final PDF) is written
+    // at `ctx.output_path()`'s directory — for a single document that's
+    // ordinarily the project root, but for a book render it's the
+    // project's output directory (e.g. `_book/`). Typst resolves a
+    // relative logo path against *that* directory (the directory of the
+    // file doing the `image(...)` call), not the project root, so the
+    // brand's own path-rewriting must use the same base or a book
+    // render's brand logo comes out one level too shallow (P8
+    // orange-book: `_book/Test-Typst-Book.typ` importing `logo.svg`
+    // failed to find it at `_book/logo.svg` — the real file is one
+    // level up, at the project root).
+    let output_dir = ctx
+        .output_path()
+        .parent()
+        .map_or_else(|| ctx.project.dir.clone(), std::path::Path::to_path_buf);
     Ok(crate::pandoc_filters::typst_brand::build_brand_param(
         light.as_ref(),
         None,
-        &ctx.project.dir,
+        &output_dir,
     ))
 }
 

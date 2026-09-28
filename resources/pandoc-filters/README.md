@@ -189,6 +189,19 @@ The following files and modifications are *not* from `v1.11.3` and should be pre
   `quarto-book-item-appendix` attribute (set only on appendix chapters —
   kind `Appendix`, `file: Some`) makes it live. Tests:
   `crates/quarto-core/tests/integration/book_numbering_lua.rs`.
+- `resources/pandoc-filters/filters/quarto-post/typst-brand-yaml.lua` —
+  patched (ours, P8 orange-book; no upstream PR — marked `QUARTO2-PATCH`).
+  One site: the `Meta` handler's guard that replaces `meta.brand` with an
+  empty table before building `meta.brand.typography` only recognized
+  `not meta.brand` or `pandoc.utils.type(meta.brand) == 'Inlines'` — Q1's
+  own YAML-metadata-block parser always encodes a scalar front-matter
+  string (e.g. `brand: _brand.yml`, a bare path) as `MetaInlines`. Q2
+  pre-types metadata in Rust from `ConfigValue` and serializes a literal
+  scalar string as `MetaString` instead, which Lua sees as a plain
+  `string`, not `Inlines` — the guard let it through and the next line
+  crashed indexing a string. Added `pandoc.utils.type(meta.brand) ==
+  'string'` to the guard. Tests: the `typst/orange-book` smoke-all
+  fixture (`crates/quarto/tests/smoke-all/typst/orange-book/`).
 
 ## License
 

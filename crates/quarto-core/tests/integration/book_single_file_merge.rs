@@ -175,6 +175,85 @@ fn typst_book_merges_all_chapters_into_one_compiled_pdf() {
     assert!(!project_dir.join("_book/ch2.pdf").exists());
 }
 
+const BOOK_QUARTO_YML_WITH_BRAND: &str = r#"project:
+  type: book
+
+book:
+  title: "Branded Book"
+  author: "Test Author"
+  chapters:
+    - index.qmd
+    - ch1.qmd
+
+brand: _brand.yml
+format:
+  typst:
+    keep-typ: true
+"#;
+
+/// A book project whose `_brand.yml` (at the project root) names a
+/// `small` logo by reference into `logo.images`, mirroring the P8
+/// orange-book fixture's `medium: test-logo` shape.
+fn write_branded_book_fixture(project_dir: &Path) {
+    write(&project_dir.join("_quarto.yml"), BOOK_QUARTO_YML_WITH_BRAND);
+    write(
+        &project_dir.join("_brand.yml"),
+        "logo:\n  small: test-logo\n  images:\n    test-logo:\n      path: logo.svg\n",
+    );
+    write(
+        &project_dir.join("logo.svg"),
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\"></svg>\n",
+    );
+    write(
+        &project_dir.join("index.qmd"),
+        "---\ntitle: Home\n---\n\nWelcome to the branded book.\n",
+    );
+    write(
+        &project_dir.join("ch1.qmd"),
+        "# Chapter One\n\nBody of chapter one.\n",
+    );
+}
+
+/// P8 orange-book, two bugs found together: (1) `logo.small: test-logo`
+/// names an entry under `logo.images`, which must resolve to that
+/// entry's path (`logo_map`'s `resolve_named_logo`) rather than being
+/// treated as a literal path; (2) the compiled `.typ`/PDF for a book
+/// lands in the project's output directory (`_book/`), one level below
+/// the project root where `_brand.yml`'s referenced `logo.svg` lives —
+/// the brand's logo path must be rewritten relative to *that*
+/// directory (`resolve_typst_brand_param`'s `output_dir`), not the
+/// project root, or Typst looks for `logo.svg` inside `_book/` and
+/// fails to find it.
+///
+/// Revert hunk: passing `&ctx.project.dir` instead of `&output_dir` to
+/// `build_brand_param` in `resolve_typst_brand_param` makes the second
+/// assertion RED (`path: "logo.svg"` instead of `path: "../logo.svg"`).
+#[test]
+fn book_brand_logo_named_by_images_reference_resolves_relative_to_book_output_dir() {
+    let (_temp, _project_dir, summary) = render_book_to_typst(write_branded_book_fixture);
+
+    assert_eq!(summary.outputs.len(), 1, "{summary:?}");
+    let output = &summary.outputs[0];
+    assert_eq!(
+        output.output_path.extension().and_then(|e| e.to_str()),
+        Some("pdf"),
+        "a real logo-referencing brand must not break the book compile: {}",
+        output.output_path.display()
+    );
+    assert!(output.output_path.is_file());
+
+    // `keep-typ: true` retains the intermediate `.typ` beside the PDF —
+    // inspect it directly for the resolved logo path.
+    let typ_path = output.output_path.with_extension("typ");
+    let typ_text = std::fs::read_to_string(&typ_path)
+        .unwrap_or_else(|e| panic!("expected retained .typ at {}: {e}", typ_path.display()));
+    assert!(
+        typ_text.contains(r#"path: "../logo.svg""#),
+        "expected the brand logo's path resolved against the book's _book/ \
+         output directory (\"../logo.svg\"), got:\n{typ_text}"
+    );
+}
+
 /// bd-sl79jjiq / `RenderOutput::execution_skipped`: a book render must
 /// report "some chapter's code was excluded" truthfully, not hardcode
 /// `false`. Chapter one declares an executable `fixture-a` cell; the
