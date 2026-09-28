@@ -122,7 +122,11 @@ The fix is two pieces with an ordering question between them.
 The test never builds a URL itself, so there is no tautology with QER's logic. It needs no new dependency (`url` is already a `[dependencies]` entry of `crates/quarto`). It fails on the real regressions: a pseudo-path target, a `file://?/C:/…` verbatim leak (`?` parses as a query), or an added fragment. The cost is a small OSC8 extractor (about 10-15 lines) and a rewritten doc comment at `:510-521`. It no longer pins the exact URL spelling, which is QER's contract, covered by QER's own unit test.
 
 **Plus: strengthen the `notebook_path` assertion (`:~490`)** from `ends_with("broken.ipynb")` to:
-- `!nb_path.starts_with(r"\\?\")`. This is the wire contract applied to this fixture, and it is a no-op on Unix. It holds only if the fixture has a plain form (see § Wire-path contract). Tempfile names start with `.tmp`, so reserved or invalid names cannot occur, and only length can break it. So first assert, as a precondition, that the fixture path is well under 260 UTF-16 units (e.g. `< 200`), with a message that blames the environment's TEMP root. An unusual TEMP then fails as a setup error instead of rejecting behavior the contract allows;
+- `!nb_path.starts_with(r"\\?\")`. This is the wire contract applied to this fixture, and it is a no-op on Unix. It holds only if the fixture has a plain form (see § Wire-path contract). Tempfile names start with `.tmp`, so reserved or invalid names cannot occur, and only length can break it. So first assert two preconditions on the canonical fixture path, with a message that blames the environment's TEMP root:
+- it is well under 260 UTF-16 units (e.g. `< 200`);
+- on Windows its first component is a local drive prefix (`Component::Prefix` with `Prefix::VerbatimDisk`, the drive-letter form of a canonical path), which rules out a TEMP on a network share (`\\?\UNC\…`).
+
+Reserved or invalid names inside the TEMP root itself are assumed away, not checked: normal Windows APIs cannot create such folders, and only `\\?\`-aware tools can. An unusual TEMP then fails as a setup error instead of rejecting behavior the contract allows;
 - `canonicalize(nb_path) == canonical(dir.join("broken.ipynb"))`, i.e. it names the real file.
 
 This assertion **fails on Windows today**, which makes it the genuine RED for the product fix. The same check could apply to `source_file` if the user wants the wire contract pinned there too.
