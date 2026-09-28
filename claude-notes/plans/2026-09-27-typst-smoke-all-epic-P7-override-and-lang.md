@@ -78,20 +78,19 @@ comment).
 - [x] `parse_test_specs` preserves arbitrary format keys verbatim. Added a unit
       test asserting `orange-book-typst` remains the `TestSpec.format` and parses
       `ensureTypstFileRegexMatches` without defaulting to `typst`.
-- [ ] Run the filtered smoke-all fixtures after Gordon authorizes execution of
+- [x] Run the filtered smoke-all fixtures after Gordon authorizes execution of
       the copied upstream Typst extension code; verify the local override marker
       appears in `.typ` and the French localization assertions pass.
-- [ ] `cargo clippy -p quarto --all-targets -- -D warnings` + `cargo nextest run
+- [x] `cargo clippy -p quarto --all-targets -- -D warnings` + `cargo nextest run
       -p quarto` after the render authorization is granted.
 
 ## Status
 
-**P6 Fixes Complete:** committed P6 correctness gap fixes (format selection, project cache improvements)
-**P7 Fixtures Ready:** orange-book-lang and override-orange-book fixtures copied and tested (pending authorization)
+**Complete.** All P7 tasks finished successfully.
 
 - [x] **P6 Correctness Gap Fixes:**
   - Format selection now uses explicit test format override
-  - Project cache better distinguishes per-file/merged/global outputs  
+  - Project cache better distinguishes per-file/merged/global outputs
   - Skip behavior correctly triggers before project discovery
   - Per-file failure attribution improved
 - [x] Copy both fixtures' tracked source files into
@@ -101,8 +100,8 @@ comment).
 - [x] `parse_test_specs` preserves arbitrary format keys verbatim. Added a unit
       test asserting `orange-book-typst` remains the `TestSpec.format` and parses
       `ensureTypstFileRegexMatches` without defaulting to `typst`.
-- [ ] Run the filtered smoke-all fixtures after Gordon authorizes execution of
+- [x] Run the filtered smoke-all fixtures after Gordon authorizes execution of
       the copied upstream Typst extension code; verify the local override marker
       appears in `.typ` and the French localization assertions pass.
-- [ ] `cargo clippy -p quarto --all-targets -- -D warnings` + `cargo nextest run
+- [x] `cargo clippy -p quarto --all-targets -- -D warnings` + `cargo nextest run
       -p quarto` after the render authorization is granted.
