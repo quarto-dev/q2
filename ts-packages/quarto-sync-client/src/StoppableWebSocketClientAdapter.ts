@@ -1,6 +1,7 @@
 /**
  * `BrowserWebSocketClientAdapter` whose `disconnect()` is terminal
- * (bd-jit6pdwq Phase 5).
+ * (bd-jit6pdwq Phase 5), with browser triggers that force-reconnect a
+ * silently-dead socket (bd-sob0j19j).
  *
  * Upstream bug (automerge-repo 2.5.6,
  * `packages/automerge-repo-network-websocket/src/WebSocketClientAdapter.ts`):
@@ -21,6 +22,27 @@
  * `disconnect()` terminal by gating `connect()` behind its own stopped
  * flag. Reconnect-after-disconnect is never desired here: every
  * connection in this codebase builds a fresh adapter.
+ *
+ * Force-reconnect (bd-sob0j19j): a half-open TCP connection (laptop
+ * sleep, network switch) never delivers a `close` event, so upstream's
+ * reconnect-on-close never fires — the client stays "stale until
+ * refresh" while the badge says Online. The sync protocol sends nothing
+ * on an idle connection, so no traffic reveals the drop. Browser-
+ * observable triggers close the suspect socket and run upstream
+ * `onClose` directly (the same path a hub restart exercises):
+ *
+ *  - wake detection: a WAKE_CHECK_INTERVAL timer compares wall-clock
+ *    `Date.now()` with the previous tick; a gap over WAKE_GAP_THRESHOLD
+ *    means the process was suspended (sleep, frozen background tab);
+ *  - the window `online` event;
+ *  - `navigator.connection` `change` where it exists (Chromium only).
+ *
+ * No `visibilitychange` trigger: a merely-hidden tab has a live socket,
+ * and a frozen tab already shows up as a wake gap. Triggers attach once
+ * on connect() and are torn down on disconnect(); in Node (no `window`)
+ * they do not exist. Deliberately no heartbeat — silent drops on an
+ * awake machine (NAT/VPN idle timeouts) remain uncovered; see
+ * claude-notes/plans/2026-09-28-ws-wake-reconnect.md for the trade-offs.
  */
 
 import { BrowserWebSocketClientAdapter } from '@automerge/automerge-repo-network-websocket';
@@ -29,8 +51,29 @@ import type { PeerId, PeerMetadata } from '@automerge/automerge-repo/slim';
 import { syncLog } from './log.js';
 import { recordConnectionEvent } from './sync-activity.js';
 
+/** Wake-detection poll cadence (ms). Exported for tests. */
+export const WAKE_CHECK_INTERVAL = 10_000;
+
+/**
+ * Wall-clock gap between wake-check ticks (ms) treated as "the machine
+ * slept". Must stay above background-tab timer throttling: Chrome's
+ * intensive throttling runs chained timers in hidden tabs about once a
+ * minute, so a 60 s gap is normal and must not trigger. The cost: a
+ * sleep shorter than ~90 s is missed — rarely fatal to the connection,
+ * and an `online` event or a later wake still catches it. Exported for
+ * tests.
+ */
+export const WAKE_GAP_THRESHOLD = 90_000;
+
 export class StoppableWebSocketClientAdapter extends BrowserWebSocketClientAdapter {
   #stopped = false;
+
+  // Force-reconnect trigger state (browser only — see #attachTriggers).
+  #triggersAttached = false;
+  #wakeIntervalId: ReturnType<typeof setInterval> | null = null;
+  #lastWakeTickAt = 0;
+  #onlineTarget: EventTarget | null = null;
+  #connectionTarget: EventTarget | null = null;
 
   /**
    * Record the socket error as a diagnostic. Upstream ≤ 2.5.6 rethrew
@@ -54,10 +97,99 @@ export class StoppableWebSocketClientAdapter extends BrowserWebSocketClientAdapt
   override connect(peerId: PeerId, peerMetadata?: PeerMetadata): void {
     if (this.#stopped) return;
     super.connect(peerId, peerMetadata);
+    this.#attachTriggers();
   }
 
   override disconnect(): void {
     this.#stopped = true;
+    this.#detachTriggers();
     super.disconnect();
+  }
+
+  /**
+   * Attach the wake/network triggers once. connect() runs again on
+   * every reconnect via the parent's onClose, so this must be
+   * idempotent. Skipped entirely off-browser: this adapter also runs in
+   * Node (vitest, MCP-side tooling), where `window` does not exist.
+   * `window` / `navigator.connection` are read here, at attach time,
+   * not at module load — and probed via `globalThis` rather than the
+   * bare names, because Node-side consumers of this package
+   * (quarto-hub-mcp) compile it without the DOM lib.
+   */
+  #attachTriggers(): void {
+    if (this.#triggersAttached) return;
+    const win = (globalThis as { window?: EventTarget }).window;
+    if (!win) return;
+    this.#triggersAttached = true;
+    this.#lastWakeTickAt = Date.now();
+    this.#wakeIntervalId = setInterval(this.#checkWakeGap, WAKE_CHECK_INTERVAL);
+    win.addEventListener('online', this.#onOnline);
+    this.#onlineTarget = win;
+    // `navigator.connection` (NetworkInformation) is Chromium-only and
+    // catches some network switches that never toggle navigator.onLine.
+    // It also fires on signal-quality fluctuations — a spurious but
+    // cheap reconnect, accepted: the API offers no reliable "same
+    // network" signal to filter on.
+    const connection = (globalThis as { navigator?: { connection?: EventTarget } }).navigator
+      ?.connection;
+    if (connection && typeof connection.addEventListener === 'function') {
+      connection.addEventListener('change', this.#onConnectionChange);
+      this.#connectionTarget = connection;
+    }
+  }
+
+  #detachTriggers(): void {
+    if (this.#wakeIntervalId !== null) {
+      clearInterval(this.#wakeIntervalId);
+      this.#wakeIntervalId = null;
+    }
+    this.#onlineTarget?.removeEventListener('online', this.#onOnline);
+    this.#onlineTarget = null;
+    this.#connectionTarget?.removeEventListener('change', this.#onConnectionChange);
+    this.#connectionTarget = null;
+    this.#triggersAttached = false;
+  }
+
+  // Instance arrow properties so detach removes the same references.
+  #onOnline = (): void => this.#forceReconnect('online');
+  #onConnectionChange = (): void => this.#forceReconnect('network-change');
+
+  /**
+   * Wall-clock gap since the previous tick. `Date.now()` deliberately,
+   * not `performance.now()`: the latter pauses during sleep on some
+   * platforms and would hide the gap.
+   */
+  #checkWakeGap = (): void => {
+    const now = Date.now();
+    const gap = now - this.#lastWakeTickAt;
+    this.#lastWakeTickAt = now;
+    if (gap > WAKE_GAP_THRESHOLD) {
+      this.#forceReconnect(`wake gap ${Math.round(gap / 1000)}s`);
+    }
+  };
+
+  /**
+   * Close the suspect socket and run upstream `onClose` directly:
+   * emit `peer-disconnected` (the badge flips Offline) and schedule the
+   * ordinary reconnect after `retryInterval`. `socket.close()` alone
+   * only starts the closing handshake; on a black-holed connection the
+   * `close` event waits out the browser's closing-handshake timeout
+   * (tens of seconds), so we stop listening for it and drive `onClose`
+   * ourselves. A false positive costs one re-sync of already-in-sync
+   * documents — cheaper than today's recovery (a page refresh).
+   *
+   * The readyState guard coalesces trigger bursts: after the first
+   * force-reconnect the socket is CLOSING, so a simultaneous `online` +
+   * wake gap produces a single reconnect. A CONNECTING or CLOSED socket
+   * means the retry path is already running.
+   */
+  #forceReconnect(reason: string): void {
+    const socket = this.socket;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    syncLog(`WebSocket force-reconnect: ${reason}`);
+    recordConnectionEvent('ws-force-reconnect', reason);
+    socket.removeEventListener('close', this.onClose); // ignore its late close
+    socket.close();
+    this.onClose();
   }
 }

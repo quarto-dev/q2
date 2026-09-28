@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-09-28
 
+- [`9fff3e98`](https://github.com/quarto-dev/q2/commits/9fff3e98): Live updates now recover on their own after the computer wakes from sleep or the network changes: the sync connection force-reconnects and open files catch up without a page refresh.
 - [`4d1181fd`](https://github.com/quarto-dev/q2/commits/4d1181fd): Math in the preview now renders with KaTeX 0.18.7, which adds `\reflectbox` and `\mapsfrom` and keeps equation tags on an empty final row of an array.
 
 ### 2026-09-24
