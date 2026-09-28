@@ -51,6 +51,7 @@ expression: keys
     "execution-engine",
     "format-identifier",
     "language",
+    "mediabag-dir",
     "number-depth",
     "number-offset",
     "number-sections",

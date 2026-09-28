@@ -652,3 +652,79 @@ fn render_document_to_file_typst_filters_unavailable_font_family() {
         "the unavailable font must not appear in the emitted font list, got:\n{text}"
     );
 }
+
+/// `mediabag-dir` end to end: a `data:image/...;base64,...` image forces
+/// pandoc to resolve it into its own mediabag
+/// (`render_typst_fixups`'s `Image` handler in `quarto-post/typst.lua`
+/// calls `resolve_image_from_url`), and `quarto-finalize/mediabag.lua`'s
+/// `Image` handler then writes it back out via
+/// `modules/mediabag.lua`'s `write_mediabag_entry`, which reads
+/// `param("mediabag-dir", nil)`. Before the `mediabag-dir` filter param was
+/// wired (`FilterParamsBuilder::insert_mediabag_dir`), that call returned
+/// `nil` and `write_mediabag_entry` crashed inside
+/// `pandoc.path.join{nil, src}` with "string expected, got nil" — not
+/// typst-specific (the finalize filter is unconditional for every
+/// non-Office Pandoc-hybrid format), but reproduced here through typst
+/// since that's the format this epic's fixtures exercise it through
+/// (`crossref-grand-finale.qmd`'s remote-image fixture, out of reach here
+/// without network access — a local `data:` URI triggers the identical
+/// code path with no network dependency).
+///
+/// Revert hunk: removing `mediabag_dir`/`insert_mediabag_dir` wiring in
+/// `PandocWriteStage`/`FilterParamsBuilder` makes this RED (pandoc exits
+/// non-zero, `render_document_to_file` returns an error instead of `Ok`).
+#[test]
+fn render_document_to_file_typst_resolves_data_uri_image_via_mediabag() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = temp.path().canonicalize().unwrap();
+    let input_path = project_dir.join("f.qmd");
+    // A 1x1 transparent PNG, base64-encoded — small enough to inline, real
+    // enough that `should_mediabag`'s `data:image/.+;base64,(.+)` pattern
+    // matches and pandoc actually decodes it into the mediabag.
+    write(
+        &input_path,
+        "---\ntitle: Mediabag Check\n---\n\n\
+         ![alt text](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=)\n",
+    );
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let output_path = project_dir.join("f.typ");
+    let options = RenderToFileOptions {
+        output_path: Some(output_path.clone()),
+        ..Default::default()
+    };
+
+    render_document_to_file(
+        &input_path,
+        "typst",
+        &options,
+        None,
+        runtime,
+        None,
+        None,
+        None,
+    )
+    .expect("typst render should succeed instead of crashing in modules/mediabag.lua");
+
+    let mediabag_dir = project_dir.join("f_files").join("mediabag");
+    assert!(
+        mediabag_dir.is_dir(),
+        "expected mediabag-dir to be created at {}",
+        mediabag_dir.display()
+    );
+    let entries: Vec<_> = std::fs::read_dir(&mediabag_dir)
+        .expect("mediabag dir should be readable")
+        .filter_map(|e| e.ok())
+        .collect();
+    assert!(
+        !entries.is_empty(),
+        "expected at least one file written into {}",
+        mediabag_dir.display()
+    );
+
+    let text = std::fs::read_to_string(&output_path).unwrap();
+    assert!(
+        text.contains("f_files/mediabag") || text.contains("f_files\\mediabag"),
+        "expected the typst output to reference the written mediabag file, got:\n{text}"
+    );
+}
