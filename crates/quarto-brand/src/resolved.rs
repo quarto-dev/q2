@@ -117,7 +117,7 @@ impl ResolvedBrand {
         project_dir: &Path,
     ) -> Option<BrandLogoResource> {
         let resource = match self.brand.logo(name) {
-            Some(named_size) => named_size.single()?,
+            Some(named_size) => self.brand.resolve_named_logo(named_size.single()?),
             None => self.brand.logo_image(name)?,
         };
         let prefix = self.path_prefix_relative_to(project_dir);

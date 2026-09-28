@@ -136,6 +136,7 @@ fn logo_map(brand: &Brand, mode: &str, prefix: &Path) -> Value {
         ("large", brand.logo("large")),
     ] {
         if let Some(resource) = entry.and_then(|e| resource_for_mode(e, mode)) {
+            let resource = brand.resolve_named_logo(resource);
             out.insert(
                 key.to_string(),
                 resource_json(&resource.with_path_relative_to(prefix)),
@@ -294,6 +295,59 @@ logo:
             light["images"]["foo"]["path"],
             json!("brand/images/bar.png")
         );
+    }
+
+    /// P8 orange-book: `medium: test-logo` names an entry under
+    /// `logo.images`, not a literal path — Q1's `getLogoResource`
+    /// precedence (checked against `images` first, falls back to a
+    /// literal path only when no match). Before this fix, `logo_map`
+    /// emitted `medium.path == "test-logo"` verbatim, which the
+    /// vendored template then tried to open as a file and failed.
+    ///
+    /// Revert hunk: removing the `resolve_named_logo` call in
+    /// `logo_map` makes this RED (`medium.path` reverts to the bare
+    /// name instead of the resolved image path).
+    #[test]
+    fn test_logo_map_resolves_named_size_against_images() {
+        let brand = brand_from_yaml(
+            r#"
+logo:
+  medium: test-logo
+  images:
+    test-logo:
+      path: logo.svg
+      alt: "Test Logo"
+"#,
+        );
+        let prefix = PathBuf::from("");
+
+        let light = logo_map(&brand, "light", &prefix);
+        assert_eq!(light["medium"]["path"], json!("logo.svg"));
+        assert_eq!(light["medium"]["alt"], json!("Test Logo"));
+    }
+
+    /// An explicit `{path, alt}` value under `small`/`medium`/`large`
+    /// is never treated as an `images` name reference, even if its
+    /// path string happens to collide with an image name.
+    #[test]
+    fn test_logo_map_explicit_resource_not_treated_as_name_reference() {
+        let brand = brand_from_yaml(
+            r#"
+logo:
+  medium:
+    path: test-logo
+    alt: "Literal path"
+  images:
+    test-logo:
+      path: logo.svg
+      alt: "Test Logo"
+"#,
+        );
+        let prefix = PathBuf::from("");
+
+        let light = logo_map(&brand, "light", &prefix);
+        assert_eq!(light["medium"]["path"], json!("test-logo"));
+        assert_eq!(light["medium"]["alt"], json!("Literal path"));
     }
 
     /// T4: no brand configured on either side yields no `"brand"` key

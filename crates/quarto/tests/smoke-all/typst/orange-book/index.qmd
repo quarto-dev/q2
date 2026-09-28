@@ -3,19 +3,6 @@ keep-typ: true
 _quarto:
   render-project: true
   tests:
-    run:
-      # Blocked on a Q1-vs-Q2 metadata-encoding mismatch, not on this
-      # fixture: `brand: _brand.yml` (a bare path string) serializes to
-      # pandoc as MetaString, but the vendored typst-brand-yaml.lua's
-      # `pandoc.utils.type(meta.brand) == 'Inlines'` guard was written for
-      # Q1's convention (which always encodes scalar front-matter strings
-      # as MetaInlines). No other Typst fixture in this repo exercises
-      # `brand:` as a bare path (only inline brand maps are tested), so
-      # this is genuinely first-time territory, not book-merge-specific.
-      # See the P8 plan's item 4 for the full writeup and fix options
-      # (narrow Lua-filter patch vs. a broader Q2 serialization change) —
-      # awaiting a decision before removing this skip.
-      skip: "Blocked on brand: <path-string> MetaString/MetaInlines mismatch (see P8 plan item 4)"
     typst:
       ensureTypstFileRegexMatches:
         - # matches array (first positional argument)
