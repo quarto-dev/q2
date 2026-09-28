@@ -344,6 +344,12 @@ static bool is_punctuation(char chr) {
            (chr >= '[' && chr <= '`') || (chr >= '{' && chr <= '~');
 }
 
+// ASCII letter — what an HTML tag name must begin with (HTML syntax §13.1.2,
+// CommonMark §6.6 "tag name"). Deliberately not locale-aware `isalpha`.
+static bool is_ascii_alpha(int32_t chr) {
+    return (chr >= 'a' && chr <= 'z') || (chr >= 'A' && chr <= 'Z');
+}
+
 // Returns the indentation level which lines of a list item should have at
 // minimum. Should only be called with blocks for which `is_list_item` returns
 // true.
@@ -2331,7 +2337,27 @@ static bool parse_open_angle_brace(TSLexer *lexer, const bool *valid_symbols) {
     bool html_possible = !(lexer->lookahead == ' ' || lexer->lookahead == '\t' ||
                            lexer->lookahead == '\r' || lexer->lookahead == '\n' ||
                            lexer->eof(lexer));
-    if (!html_possible && !valid_symbols[RAW_SPECIFIER]) {
+
+    // bd-html-element-runaway-k1eo50h8 (rule A): an HTML tag begins with a
+    // tag name, which starts with an ASCII letter, or with '/' (closing tag)
+    // or '?' (processing instruction); '!' was dispatched above. qmd's
+    // '<#id>' anchor shorthand (bd-p2tx) rides on the same token, so '#' is
+    // admitted too. Anything else after '<' — a digit, '-', '=', '(' … —
+    // can never begin a tag, so '<6.1', '<-', '<=b' are literal text, as in
+    // pandoc. Only HTML_ELEMENT is gated on this: a CommonMark email
+    // autolink may begin with a digit ('<1user@example.com>'), so autolinks
+    // keep their own predicate below.
+    bool tag_possible = html_possible &&
+                        (is_ascii_alpha(lexer->lookahead) || lexer->lookahead == '/' ||
+                         lexer->lookahead == '?' || lexer->lookahead == '#');
+
+    // Very first character can't be '/' in autolinks; whitespace/EOF right
+    // after '<' disqualifies them like every other construct.
+    bool could_be_autolink = html_possible && lexer->lookahead != '/';
+
+    // Fast path: nothing can start here. Emit the literal '<' without
+    // scanning ahead (bd-ly83qewg; also avoids an O(n) walk per '<').
+    if (!tag_possible && !could_be_autolink && !valid_symbols[RAW_SPECIFIER]) {
         if (lt_str_valid) {
             EMIT_TOKEN(LITERAL_STR);
         }
@@ -2341,11 +2367,11 @@ static bool parse_open_angle_brace(TSLexer *lexer, const bool *valid_symbols) {
     // consume all characters until one of:
     // - '}': that was a raw specifier
     // - '>': that was an autolink or html_element (unless disqualified by
-    //   whitespace right after '<', see above)
-    // - EOF: no HTML construct matched; emit LITERAL_STR (bd-j9cf) so the
-    //   bare '<' becomes a plain Str instead of a parse error.
+    //   the predicates above)
+    // - a blank line (rule B, below) or EOF: no HTML construct matched; emit
+    //   LITERAL_STR (bd-j9cf) so the bare '<' becomes a plain Str instead of
+    //   a parse error.
 
-    bool could_be_autolink = lexer->lookahead != '/'; // very first character can't be '/' in autolinks.
     bool had_url_like_character = false;
     // bd-email-autolink-dropped-2jj38iiv: '@' qualifies the token as a
     // candidate email autolink (over-approximation — a real HTML open tag
@@ -2362,26 +2388,62 @@ static bool parse_open_angle_brace(TSLexer *lexer, const bool *valid_symbols) {
             had_at_sign = true;
         } else if (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
             could_be_autolink = false;
+        } else if (lexer->lookahead == '\n' || lexer->lookahead == '\r') {
+            // bd-html-element-runaway-k1eo50h8 (rule B): every token this
+            // function can emit is an inline, and no inline survives a
+            // paragraph boundary. A tag may span a newline
+            // ('<div\n  class="x">', bd-ly83qewg) but not a blank line:
+            // stop scanning there and fall through to LITERAL_STR. Without
+            // this bound an unclosed '<foo' ran to the next '>' anywhere in
+            // the file — a pipe-table cell six lines down, in the reported
+            // case — and the resulting parse errors pointed there.
+            bool was_cr = lexer->lookahead == '\r';
+            lexer->advance(lexer, false);
+            if (was_cr && lexer->lookahead == '\n') {
+                lexer->advance(lexer, false);
+            }
+            while (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
+                lexer->advance(lexer, false);
+            }
+            if (lexer->lookahead == '\n' || lexer->lookahead == '\r' || lexer->eof(lexer)) {
+                break;
+            }
+            continue; // the line ending has already been consumed
         } else if (valid_symbols[RAW_SPECIFIER] && lexer->lookahead == '}') {
             lexer->mark_end(lexer);
             EMIT_TOKEN(RAW_SPECIFIER);
-        } else if (valid_symbols[AUTOLINK] && could_be_autolink &&
-                   (had_url_like_character || had_at_sign) && lexer->lookahead == '>') {
-            lexer->advance(lexer, false); // we want to consume '>' for autolinks
-            lexer->mark_end(lexer);
-            EMIT_TOKEN(AUTOLINK);
-        } else if (html_possible && lexer->lookahead == '>') {
-            // this token is never valid, but we emit it for error messages
-            lexer->advance(lexer, false);
-            lexer->mark_end(lexer);
-            EMIT_TOKEN(HTML_ELEMENT);
+        } else if (lexer->lookahead == '>') {
+            if (valid_symbols[AUTOLINK] && could_be_autolink &&
+                (had_url_like_character || had_at_sign)) {
+                lexer->advance(lexer, false); // we want to consume '>' for autolinks
+                lexer->mark_end(lexer);
+                EMIT_TOKEN(AUTOLINK);
+            }
+            if (tag_possible) {
+                // Best-effort tag: pampa turns it into a RawInline/RawBlock
+                // with a Q-2-9 warning, or the <#id> anchor Link.
+                lexer->advance(lexer, false);
+                lexer->mark_end(lexer);
+                EMIT_TOKEN(HTML_ELEMENT);
+            }
+            // This '>' closed nothing, and neither can a later one: an
+            // autolink cannot contain '>', and a tag was ruled out at the
+            // first character.
+            if (!valid_symbols[RAW_SPECIFIER]) {
+                break;
+            }
+        }
+        // Once the autolink reading is gone too, only a raw specifier could
+        // still be found; otherwise there is nothing left to scan for.
+        if (!tag_possible && !could_be_autolink && !valid_symbols[RAW_SPECIFIER]) {
+            break;
         }
         lexer->advance(lexer, false);
     }
 
-    // Reached EOF without finding a closing delimiter. If the grammar
-    // permits a bare '<' as a Str literal here, emit LITERAL_STR —
-    // mark_end is still at '<'+1, so only the '<' character is consumed.
+    // Reached a blank line or EOF without finding a closing delimiter. If
+    // the grammar permits a bare '<' as a Str literal here, emit LITERAL_STR
+    // — mark_end is still at '<'+1, so only the '<' character is consumed.
     if (lt_str_valid) {
         EMIT_TOKEN(LITERAL_STR);
     }

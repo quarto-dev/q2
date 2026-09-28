@@ -241,6 +241,17 @@ parser combinators. In `quarto-markdown`, use the raw block and inline syntax di
 Naked HTML is nonetheless *accepted*, with a `Q-2-9` warning, and the reader
 tries to give it the same shape Pandoc would. Two deliberate gaps remain.
 
+**What counts as a tag.** The lexer only starts an HTML element when the
+character after `<` is a letter, `/`, `?` or `#` (the last for qmd's `<#id>`
+anchor shorthand). `<6.1`, `<-`, `<=b` and the like are literal text, as they
+are in Pandoc and CommonMark. An element may span a newline
+(`<div\n  class="x">`) but not a blank line: a candidate tag still open at a
+paragraph boundary is abandoned and its `<` becomes literal text, the same
+fallback used at end of file. This follows CommonMark rather than Pandoc's
+markdown reader, which lets an inline tag cross a blank line; the bound is
+what keeps an unclosed `<` from swallowing everything up to the next `>` in
+the document (bd-html-element-runaway-k1eo50h8).
+
 **No `native_divs` / `native_spans`.** Pandoc promotes a balanced
 `<div>…</div>` to a `Div` node, which wraps its contents in `<p>`. Finding the
 matching close tag is the backtracking this section rejects, so we do not do
