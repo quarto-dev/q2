@@ -3,7 +3,7 @@
 **Date:** 2026-09-28
 **Braid:** bd-clq56rem (related: bd-1klbq2zd)
 **Worktree:** `.worktrees/bd-clq56rem-windows-jsonerrors-ipynb-hyperlink` (branch `braid/bd-clq56rem-windows-jsonerrors-ipynb-hyperlink`, based on `main` @ `e8379cfe`)
-**Status:** Investigation done (revision 2). The product-vs-test decision is pending with the user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Investigation done (revision 2). Decided 2026-09-28: sequencing S1, and bd-1klbq2zd widened to cover wire output. **Do not start implementation until the user gives the go-ahead.**
 
 ## Overview
 
@@ -45,7 +45,10 @@ No. The consensus is to use verbatim paths only where they are needed (very long
 
 ## Triage verdict
 
-**Needs a decision before implementing.** The failing assertion is a test bug, but fixing only the test would leave a confirmed product gap (verbatim paths in JSON wire output) hidden behind a test that goes green. The open question is sequencing with bd-1klbq2zd; see Open design questions.
+**Ready to implement (S1), pending go-ahead.** The failing assertion is a test bug, but fixing only the test would leave a confirmed product gap (verbatim paths in JSON wire output) hidden behind a test that goes green. Decided 2026-09-28:
+- One branch. First rework the test: a URL round-trip, plus a strengthened `notebook_path` assertion as the Windows RED.
+- Then fix the product at `NativeRuntime::canonicalize` under bd-1klbq2zd.
+- bd-1klbq2zd's scope is widened from display to "q2 must not carry or emit `\\?\` in JSON wire output or status lines".
 
 ## RED (captured 2026-09-28, Windows, HEAD `e8379cfe`)
 
@@ -142,6 +145,8 @@ This is out of scope for this plan to *design*, but it bounds the choice. Candid
 - **S3. Park bd-clq56rem behind bd-1klbq2zd** (`blocks` edge) and do everything in bd-1klbq2zd. This is equivalent to S1, with the test work owned by the product strand.
 
 ## Open design questions for the user
+
+Decided 2026-09-28: question 1 → S1; question 2 → widen. Questions 3 and 4 remain open (defaults: pin `notebook_path` only, and leave the test helpers alone).
 
 1. **Sequencing.** S1 (one branch: test RED → product fix at the runtime seam), S2 (test-only now), or S3 (fold into bd-1klbq2zd)? Recommended: S1.
 2. **bd-1klbq2zd scope.** Widen it from "user-facing display" to "q2 must not emit or carry `\\?\` in wire output (JSON) or status lines", with the `NativeRuntime::canonicalize` seam as the first fix site and the ~186 direct calls as an audit?
