@@ -45,11 +45,18 @@ their respective blockers.
       so repeated engine-registry calls don't re-spawn. Effect on any machine
       with a broken jupyter: engine reports unavailable → jupyter tests take
       their existing skip path instead of hard-failing.
-- [ ] **2. Harden test skip guards (bd-ce4fftg8, bd-zvf3e8n2)** to also probe
+- [x] **2. Harden test skip guards (bd-ce4fftg8, bd-zvf3e8n2)** to also probe
       the `python3` kernelspec (via `find_kernelspec`/`list_kernelspecs`) and
       `eprintln!`-skip on `KernelspecNotFound`. Still needed after item 1: a
       machine with working jupyter but only non-Python kernels (R/Julia-only
       users) is a legitimate setup that should skip, not fail.
+      **Validated 2026-09-28 both directions** (Git Bash, post-PATH-refresh
+      shell): real path — `render_leaves_no_kernel_behind` executes in 14.95s,
+      `jupyter_capture_splices_into_preview_ast` in 5.44s, knitr leg 3.18s, no
+      skip notes; skip path (stub jupyter `--version`-only + redirected
+      `APPDATA`/`JUPYTER_PATH`) — both jupyter tests skip in <0.4s with
+      `KernelspecNotFound` naming the redirected temp dirs and `available
+      kernels: (none)`, knitr leg still runs for real (1.2s).
 
 ### Skip-path validation script (item 2)
 
