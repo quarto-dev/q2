@@ -14,8 +14,8 @@ use serde_yaml::Value;
 
 use crate::assertions::{
     Assertion, EnsureCssRegexMatches, EnsureFileRegexMatches, EnsureHtmlElements,
-    EnsurePdfRegexMatches, EnsureTypstFileRegexMatches, FileExists, FolderExists, NoErrors,
-    NoErrorsOrWarnings, PathDoesNotExist, PrintsMessage, ShouldError,
+    EnsurePdfRegexMatches, EnsurePdfTextPositions, EnsureTypstFileRegexMatches, FileExists,
+    FolderExists, NoErrors, NoErrorsOrWarnings, PathDoesNotExist, PrintsMessage, ShouldError,
 };
 
 /// Configuration for when/whether to run tests.
@@ -218,6 +218,9 @@ fn parse_format_spec(format: &str, value: &Value, _input_path: &Path) -> Result<
                         EnsurePdfRegexMatches::new,
                     )?;
                     assertions.push(Box::new(assertion));
+                }
+                "ensurePdfTextPositions" => {
+                    assertions.push(Box::new(EnsurePdfTextPositions::new(assertion_value)?));
                 }
                 "ensureCssRegexMatches" => {
                     let assertion = parse_ensure_css_regex_matches(assertion_value)?;
@@ -675,6 +678,48 @@ mod tests {
         assert_eq!(specs[0].format, "orange-book-typst");
         assert_eq!(specs[0].assertions.len(), 1);
         assert_eq!(specs[0].assertions[0].name(), "ensureTypstFileRegexMatches");
+    }
+
+    #[test]
+    fn test_pdf_text_positions_parses_both_assertion_arrays_and_ignored_page() {
+        let yaml: Value = serde_yaml::from_str(
+            r#"
+            _quarto:
+              tests:
+                typst:
+                  ensurePdfTextPositions:
+                    -
+                      - subject: { text: "MAIN", role: P, edge: left, granularity: Div }
+                        relation: rightOf
+                        object: { text: "NOTE", role: P, page: 1 }
+                        page: 1
+                    -
+                      - subject: "DECORATION"
+                        relation: below
+                        object: { role: Page, page: 1 }
+            "#,
+        )
+        .unwrap();
+        let (_, specs) = parse_test_specs(&yaml, std::path::Path::new("fixture.qmd")).unwrap();
+        assert_eq!(specs[0].assertions.len(), 1);
+        assert_eq!(specs[0].assertions[0].name(), "ensurePdfTextPositions");
+
+        let without_negative: Value = serde_yaml::from_str(
+            r#"
+            _quarto:
+              tests:
+                typst:
+                  ensurePdfTextPositions:
+                    -
+                      - subject: { text: "X", role: P }
+                        relation: above
+                        object: { text: "Y", role: P }
+            "#,
+        )
+        .unwrap();
+        let (_, specs2) =
+            parse_test_specs(&without_negative, std::path::Path::new("fixture.qmd")).unwrap();
+        assert_eq!(specs2[0].assertions.len(), 1);
     }
 
     #[test]

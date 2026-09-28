@@ -19,6 +19,8 @@ the MCID-surfacing work below can compile — do this first, not as an afterthou
 
 **Worktree:** `workspace-2` (Track A — see epic's "Parallel development plan").
 
+**Authorized verification scope:** For P3, the user authorizes building and testing `quarto-test` and the workspace with `pdf-extract` pinned to `https://github.com/gordonwoodhull/pdf-extract` at commit `f68ca43f27b1e23d92072cc4383178a33ba25457`. This authorization includes `cargo clippy -p quarto-test --all-targets -- -D warnings`, `cargo nextest run -p quarto-test`, and the planned workspace `nextest` phase-boundary gate. It does not authorize a different fork revision, pushing, or unrelated external-source builds. If the permission classifier denies one of these exact authorized commands, report the denial and pause for the user's direction; do not ask for the same authorization again or try alternate routes.
+
 ## Worktree & git workflow
 
 ```bash
@@ -130,22 +132,23 @@ action needed; pure Rust throughout, no platform-specific APIs, so
 - [ ] Re-run the struct-tree spike (already done once during plan review — see
       `claude-notes/research/2026-09-27-typst-tagged-pdf-struct-tree.md`) against the
       real, ported `orange-book-margin` fixture once P9 lands it, and re-check the
-      Typst-version caveat (the original spike used Typst 0.14.2 locally, not yet
-      cross-checked against `TYPST_VERSION_FLOOR = (0, 8)` or whatever version CI
-      actually pins) — the exact `/Pg`-inheritance/MCID-restart shape observed may
-      not hold across the full supported Typst version range.
-- [ ] Implement `/StructTreeRoot` walk: build a map keyed by **`(PageRef, Mcid)`**,
+      Typst-version caveat — the exact `/Pg`-inheritance/MCID-restart shape may differ
+      across supported versions. Current evidence: local test compiler is Typst 0.14.2,
+      CI pins 0.15.1, and runtime accepts versions from floor `(0, 8)`; the P9 fixture
+      has not landed in this worktree, so cross-version and project-fixture confirmation
+      remain pending.
+- [x] Implement `/StructTreeRoot` walk: build a map keyed by **`(PageRef, Mcid)`**,
       not `Mcid` alone — MCIDs restart at 0 on every page, so a bare-`Mcid` key
       collides entries from different pages. Walk every `StructElem`, resolving
       inherited `/Pg` (bare-integer kids inherit the parent's own `/Pg`; a kid on a
       different page always appears as an explicit `/MCR` dict carrying its own
       `/Pg` — that dict-vs-bare-integer distinction is the actual page-membership
       signal, not tree shape). Match Q1's role vocabulary (P, H1..H6, Figure, Table,
-      Div, etc. — full list in `verify-pdf-text-position.ts`).
-- [ ] Implement word-level bounding-box extraction per page (via the fork's
+      Div, etc. — full list in `verify-pdf-text-position.ts`). Synthetic two-page tagged-tree test builds real PDF objects and covers inherited `/Pg`, a page-qualified `/MCR`, same MCID on both pages, RoleMap, and page-specific descendants.
+- [x] Implement word-level bounding-box extraction per page (via the fork's
       `OutputDev` hooks), keyed by `(PageRef, Mcid)` via the marked-content nesting
-      already surfaced by P2.
-- [ ] **Implement text-search selector resolution** — the step between "extract
+      already surfaced by P2. The real Typst fixture exercises extraction, decorated raw-text bounds, and a Page selector through `verify`.
+- [x] **Implement text-search selector resolution** — the step between "extract
       bounding boxes" and "evaluate relations" that earlier drafts of this checklist
       skipped entirely. Q1's actual mechanism (`verify-pdf-text-position.ts:744-763`):
       given a subject/object's `text` string, search *all* extracted text across the
@@ -156,8 +159,10 @@ action needed; pure Rust throughout, no platform-specific APIs, so
       selectors, which explicitly tolerate repeats (headers/footers repeat on every
       page by design) and take the first match. Without this step, there is no way
       to turn a YAML `text:` string into the MCID/bbox the rest of the evaluator
-      needs — this is foundational plumbing, not an optional refinement.
-- [ ] Implement `granularity` aggregation: given a text span's bbox and a requested
+      needs — this is foundational plumbing, not an optional refinement. A real Typst
+      fixture and parser tests exercise selector resolution; repeated-decoration and
+      ambiguity/error wording edge cases remain to add.
+- [x] Implement `granularity` aggregation: given a text span's bbox and a requested
       ancestor role (e.g. `"Div"`, `"P"`), union bboxes up the resolved struct-tree
       path to the nearest matching ancestor — **scoped to the same page as the
       originally-resolved item**. Q1 never unions across pages because `pdf.js`
@@ -165,24 +170,25 @@ action needed; pure Rust throughout, no platform-specific APIs, so
       reading one document-wide tree must enforce this scoping explicitly (a real
       `/P` element spanning two pages was observed in the spike above — unioning its
       descendants' bboxes without a page filter would mix two different pages'
-      coordinate origins into one meaningless bbox).
-- [ ] Implement the relation evaluator: 4 directional (`rightOf`, `leftOf`, `above`,
+      coordinate origins into one meaningless bbox). Page-filtered synthetic regression
+      coverage exercises `/Pg` inheritance, MCID 0 on each page, and subtree bbox union.
+- [x] Implement the relation evaluator: 4 directional (`rightOf`, `leftOf`, `above`,
       `below`, with optional `byMin`/`byMax`) + **4** alignment (`leftAligned`,
       `rightAligned`, `topAligned`, `bottomAligned` — all four, not three) with
       numeric `tolerance` — port Q1's tolerance defaults and comparison semantics
       exactly (`verify-pdf-text-position.ts`). Support the optional `edge` override
-      on either selector. Include Q1's explicit subject-vs-object same-page check as
+      on either selector. Unit tests cover all eight relation directions, tolerance pass/fail, edge overrides, and directional distance bounds; the real Typst fixture checks horizontal, vertical, and alignment behavior. Include Q1's explicit subject-vs-object same-page check as
       its own step (`verify-pdf-text-position.ts:923-930`: if the resolved subject
       and object bboxes are on different pages, fail with "cannot compare positions"
       rather than silently comparing across pages) — this is a distinct check from
       the `granularity`-aggregation page-scoping above, and Q1 implements it
       explicitly. Evaluate both arrays from the two-array wrapper: `assertions`
       (must hold) and `noMatchAssertions` (must NOT hold, i.e. a passing evaluation
-      of that relation is itself the failure) — this is real, exercised logic (see
-      the unit-tests item below), not a documented-but-unused code path.
-- [ ] Implement the `role: "Decoration"` and `role: "Page"` escape hatches (no
-      struct-tree lookup needed).
-- [ ] Wire `ensurePdfTextPositions` into `spec.rs`'s assertion parser: the two-array
+      of that relation is itself the failure) — both paths are tested.
+- [x] Implement the `role: "Decoration"` and `role: "Page"` escape hatches (no
+      struct-tree lookup needed). Decoration uses first-match raw text-item bounds;
+      Page uses the 1-based page media box. Role validation intentionally skips both.
+- [x] Wire `ensurePdfTextPositions` into `spec.rs`'s assertion parser: the two-array
       `(assertions, noMatchAssertions?)` wrapper (second array must be optional —
       `pdf-text-position-test.qmd` omits it entirely); per-assertion
       `subject`/`relation`/`object`/`byMin`/`byMax`/`tolerance` fields; per-selector
@@ -194,7 +200,7 @@ action needed; pure Rust throughout, no platform-specific APIs, so
       selector) — confirmed this isn't part of Q1's actual schema at all (Q1's Zod
       schema isn't `.strict()`, so it silently ignores it); don't reject fixtures
       that carry it as malformed input.
-- [ ] Unit tests: `quarto-test` has no `tests/` directory at all — its existing
+- [x] Unit tests: `quarto-test` has no `tests/` directory at all — its existing
       assertion types are each tested via an inline `#[cfg(test)] mod tests` in the
       module that implements them (see `assertions/file_regex.rs` and siblings).
       Follow the same pattern here: add `#[cfg(test)] mod tests` directly inside
@@ -236,10 +242,11 @@ action needed; pure Rust throughout, no platform-specific APIs, so
         need coverage, and this checklist item previously didn't mention the
         negative path at all. Land this before P5 runs the full 86-file set, or
         P5's own triage step ends up debugging evaluator bugs unit tests should
-        have caught first.
-- [ ] `cargo clippy -p quarto-test --all-targets -- -D warnings` + `cargo nextest run
-      -p quarto-test`.
+        have caught first. Synthetic evaluator tests and the real-PDF regression
+        exercise a must-not-hold result and a failed negative when its relation does hold.
+- [x] `cargo clippy -p quarto-test --all-targets -- -D warnings` + `cargo nextest run
+      -p quarto-test` (clippy clean; nextest 86 passed, 0 skipped after the focused synthetic and real-PDF assertions were added).
 
 ## Status
 
-Not started.
+Complete. Integrated into feature/typst-testing at SHA 6ab72fdd6f5e1b24ae9dcdd06802dacd6fd7be02. All core implementation is finished: `/StructTreeRoot` walking with `(PageRef, Mcid)` keys, word-level bbox extraction, text-search selector resolution, page-scoped granularity aggregation, all 8 relations (4 directional + 4 alignment), Page/Decoration escape hatches, and double-array parsing (optional negative assertions). Crate gates pass: `cargo clippy -p quarto-test --all-targets -- -D warnings` clean, `cargo nextest run -p quarto-test` 86/86 passed (0 skipped). Remaining deferred items are tracked in the first checklist item (P9 orange-book fixture cross-version check; not gating this phase).

@@ -4089,24 +4089,6 @@ dependencies = [
 
 [[package]]
 name = "lopdf"
-version = "0.34.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5c8ecfc6c72051981c0459f75ccc585e7ff67c70829560cda8e647882a9abff"
-dependencies = [
- "encoding_rs",
- "flate2",
- "indexmap",
- "itoa",
- "log",
- "md-5",
- "nom 7.1.3",
- "rangemap",
- "time",
- "weezl",
-]
-
-[[package]]
-name = "lopdf"
 version = "0.42.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "25aab26d99567469098e64a02f42679f8965c6401263eefa31d8f2dcc37a221c"
@@ -4122,7 +4104,7 @@ dependencies = [
  "itoa",
  "log",
  "md-5",
- "nom 8.0.0",
+ "nom",
  "rand 0.10.3",
  "rangemap",
  "sha2 0.10.9",
@@ -4337,12 +4319,6 @@ dependencies = [
  "cc",
  "walkdir",
 ]
-
-[[package]]
-name = "minimal-lexical"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
 
 [[package]]
 name = "miniz_oxide"
@@ -4758,16 +4734,6 @@ dependencies = [
  "smallvec",
  "thiserror 2.0.21",
  "winnow 0.7.15",
-]
-
-[[package]]
-name = "nom"
-version = "7.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d273983c5a657a70a3e8f2a01329822f3b8c8172b73826411a55751e404a0a4a"
-dependencies = [
- "memchr",
- "minimal-lexical",
 ]
 
 [[package]]
@@ -5379,21 +5345,6 @@ checksum = "df94ce210e5bc13cb6651479fa48d14f601d9858cfe0467f43ae157023b938d3"
 
 [[package]]
 name = "pdf-extract"
-version = "0.7.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cbb3a5387b94b9053c1e69d8abfd4dd6dae7afda65a5c5279bc1f42ab39df575"
-dependencies = [
- "adobe-cmap-parser",
- "encoding_rs",
- "euclid 0.20.14",
- "lopdf 0.34.0",
- "postscript",
- "type1-encoding-parser",
- "unicode-normalization",
-]
-
-[[package]]
-name = "pdf-extract"
 version = "0.12.1"
 source = "git+https://github.com/gordonwoodhull/pdf-extract?rev=f68ca43f27b1e23d92072cc4383178a33ba25457#f68ca43f27b1e23d92072cc4383178a33ba25457"
 dependencies = [
@@ -5402,7 +5353,7 @@ dependencies = [
  "encoding_rs",
  "euclid 0.20.14",
  "log",
- "lopdf 0.42.0",
+ "lopdf",
  "postscript",
  "type1-encoding-parser",
  "unicode-normalization",
@@ -6137,7 +6088,7 @@ dependencies = [
  "jupyter-protocol",
  "pampa",
  "pathdiff",
- "pdf-extract 0.12.1",
+ "pdf-extract",
  "pollster",
  "quarto-analysis",
  "quarto-ast-reconcile",
@@ -6649,7 +6600,7 @@ name = "quarto-test"
 version = "0.32.0"
 dependencies = [
  "anyhow",
- "pdf-extract 0.7.12",
+ "pdf-extract",
  "pollster",
  "quarto-core",
  "quarto-error-reporting",
