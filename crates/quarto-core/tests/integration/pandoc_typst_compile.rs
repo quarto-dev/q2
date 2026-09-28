@@ -20,7 +20,7 @@ use std::sync::Arc;
 
 use tempfile::TempDir;
 
-use quarto_core::render_to_file::{RenderToFileOptions, render_document_to_file};
+use quarto_core::render_to_file::{RenderToFileOptions, render_document_to_file, render_to_file};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
 fn write(path: &std::path::Path, contents: &str) {
@@ -86,9 +86,39 @@ fn render_document_to_file_typst_compiles_to_real_pdf() {
     );
 }
 
-/// `keep-typ: true` retains the intermediate `.typ` file alongside the
-/// compiled PDF — the Q1-parity default-off knob (`core/typst.ts`'s
-/// `kKeepTyp`), ported directly.
+/// The public `render_to_file` entry point's explicit `format` argument
+/// must beat conflicting `format:` keys in document frontmatter.
+#[test]
+fn render_to_file_typst_overrides_multiple_frontmatter_formats() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = temp.path().canonicalize().unwrap();
+    let input_path = project_dir.join("f.qmd");
+    write(
+        &input_path,
+        "---\ntitle: Explicit Typst\nformat:\n  html: default\n  typst: {}\n---\n\n# Heading\n\nBody text.\n",
+    );
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let result = render_to_file(
+        &input_path,
+        "typst",
+        &RenderToFileOptions::default(),
+        runtime,
+    )
+    .expect("explicit Typst format should override multi-format frontmatter");
+
+    assert_eq!(
+        result.output_path.extension().and_then(|e| e.to_str()),
+        Some("pdf")
+    );
+    let bytes = std::fs::read(&result.output_path).unwrap();
+    assert!(
+        bytes.starts_with(b"%PDF-"),
+        "explicit Typst render should produce a PDF, got: {:?}",
+        &bytes[..bytes.len().min(20)]
+    );
+}
+
 #[test]
 fn render_document_to_file_typst_keep_typ_retains_intermediate() {
     let temp = TempDir::new().unwrap();

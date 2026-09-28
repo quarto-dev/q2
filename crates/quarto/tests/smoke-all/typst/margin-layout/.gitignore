@@ -1,0 +1,10 @@
+/.quarto/
+/.claude/
+/_site/
+/*.html
+/*.pdf
+/*.typ
+/*_files/
+*.rmarkdown
+*.knit.md
+**/*.quarto_ipynb
