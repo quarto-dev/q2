@@ -542,10 +542,11 @@ mod tests {
         );
     }
 
-    /// The probe result is cached: repeated `is_available()` calls
-    /// (engine registry is re-queried per render) must not re-spawn
-    /// the binary. The stub appends one line to a counter file on
-    /// every invocation; two calls must produce exactly one line.
+    /// The probe result is cached per path, not per engine: the
+    /// registry builds a fresh `JupyterEngine` per render, so two
+    /// engines sharing a path must spawn the binary once. The stub
+    /// appends one line to a counter file on every invocation; the
+    /// calls must produce exactly one line.
     #[test]
     fn is_available_probe_runs_at_most_once_per_path() {
         let tmp = tempfile::tempdir().unwrap();
@@ -561,11 +562,15 @@ mod tests {
             &format!("echo x >> '{}'\nexit 0", counter.display()),
         );
 
-        let engine = JupyterEngine {
+        let first = JupyterEngine {
+            jupyter_path: Some(stub.clone()),
+        };
+        let second = JupyterEngine {
             jupyter_path: Some(stub),
         };
-        assert!(engine.is_available());
-        assert!(engine.is_available());
+        assert!(first.is_available());
+        assert!(first.is_available());
+        assert!(second.is_available());
 
         // A missing counter file means the stub never ran at all
         // (e.g. is_available() short-circuits on path presence) —
@@ -576,7 +581,7 @@ mod tests {
             .count();
         assert_eq!(
             invocations, 1,
-            "repeated is_available() calls must not re-spawn jupyter (probe result cached)"
+            "is_available() on engines sharing a path must not re-spawn jupyter (probe result cached per path)"
         );
     }
 

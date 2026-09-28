@@ -36,8 +36,9 @@ fn jupyter_available() -> bool {
 /// The fixture renders `{python}` cells, which resolve to the
 /// `python3` kernelspec. A working jupyter without a registered
 /// `python3` kernel (an R/Julia-only install is legitimate) must
-/// skip, not fail (bd-ce4fftg8). The error message names the kernel,
-/// the searched dirs, and the kernels that *were* found.
+/// skip, not fail (bd-ce4fftg8); any other discovery error fails the
+/// test. The error message names the kernel, the searched dirs, and
+/// the kernels that *were* found.
 fn python3_kernel_available() -> bool {
     // find_kernelspec is async and runtimelib's `jupyter --paths`
     // probe needs a Tokio reactor; pollster provides none. This test
@@ -50,10 +51,11 @@ fn python3_kernel_available() -> bool {
         .expect("tokio runtime for kernelspec probe");
     match rt.block_on(quarto_core::engine::jupyter::find_kernelspec("python3")) {
         Ok(_) => true,
-        Err(e) => {
+        Err(e @ quarto_core::engine::jupyter::JupyterError::KernelspecNotFound { .. }) => {
             eprintln!("Skipping test: {e}");
             false
         }
+        Err(e) => panic!("kernelspec discovery failed: {e}"),
     }
 }
 
