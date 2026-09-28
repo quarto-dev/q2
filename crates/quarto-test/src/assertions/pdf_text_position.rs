@@ -16,6 +16,7 @@ use pdf_extract::{
 };
 use serde_yaml::Value;
 
+use super::regex_patterns::normalize_pdf_text;
 use super::{Assertion, VerifyContext};
 
 const DEFAULT_ALIGNMENT_TOLERANCE: f64 = 2.0;
@@ -800,6 +801,7 @@ impl TextPositionOutput {
         }
         if !text.trim().is_empty() {
             let mcid = characters.iter().rev().find_map(|character| character.mcid);
+            let text = normalize_pdf_text(&text);
             self.extracted.items.push(TextItem { text, bbox, mcid });
         }
     }
@@ -1701,5 +1703,27 @@ mod tests {
         assert_eq!(errors.len(), 1);
         assert!(errors[0].contains("Cannot compare positions"));
         assert!(evaluate(&assertion, &resolved, true).is_empty());
+    }
+
+    #[test]
+    fn flush_word_normalizes_non_breaking_space_so_literal_space_searches_match() {
+        let mut output = TextPositionOutput::new();
+        let char_bbox = BBox {
+            x: 0.0,
+            y: 0.0,
+            width: 1.0,
+            height: 1.0,
+            page: 1,
+        };
+        for ch in "Figure\u{a0}3:".chars() {
+            output.word.push(CharacterBox {
+                text: ch.to_string(),
+                bbox: char_bbox,
+                mcid: Some(0),
+            });
+        }
+        output.flush_word();
+        assert_eq!(output.extracted.items.len(), 1);
+        assert_eq!(output.extracted.items[0].text, "Figure 3:");
     }
 }

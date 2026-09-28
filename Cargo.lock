@@ -5360,7 +5360,7 @@ checksum = "df94ce210e5bc13cb6651479fa48d14f601d9858cfe0467f43ae157023b938d3"
 [[package]]
 name = "pdf-extract"
 version = "0.12.1"
-source = "git+https://github.com/gordonwoodhull/pdf-extract?rev=f68ca43f27b1e23d92072cc4383178a33ba25457#f68ca43f27b1e23d92072cc4383178a33ba25457"
+source = "git+https://github.com/gordonwoodhull/pdf-extract?rev=b1371931381491fe2557c013d99cc3671f6e28c3#b1371931381491fe2557c013d99cc3671f6e28c3"
 dependencies = [
  "adobe-cmap-parser",
  "cff-parser",
@@ -8382,7 +8382,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",

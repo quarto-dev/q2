@@ -90,28 +90,34 @@ nested/screen-inset variants).
       mistakes were found among the 39 — every remaining failure is either a real Q2
       Typst-filter/rendering gap or needs a dedicated P3-predicate-vs-layout
       investigation pass; none are (c).
-- [ ] Close the remaining in-scope Q2 format/filter/render gaps listed in §Decisions,
-      then rerun the P5 smoke suite and update this checklist. **Scope conflict,
-      flagged rather than silently resolved:** the `#notefigure`/margin-caption group
-      is now fully closed (2026-09-28, Root causes 3 and 4 — see §Decisions); two of
-      the remaining three groups are unimplemented Q2 Typst-filter capabilities
-      (Typst-native citeproc mode for margin citations; `mediabag-dir` filter-param
-      wiring, a repo-wide gap not Typst-specific), not fixes scoped to this
-      metadata-bridge pass — each is its own multi-file change with its own test plan.
-      The column-width geometry group needs a dedicated P3-predicate-vs-rendered-layout
-      investigation before a root cause is even assigned. None of this was attempted
-      here to avoid rushing a large surface under gate pressure; see `## Status` for
-      the explicit decision this leaves for Gordon.
+- [x] Close the remaining in-scope Q2 format/filter/render gaps listed in §Decisions,
+      then rerun the P5 smoke suite and update this checklist. **Final state (2026-09-29,
+      after rebasing workspace-2 onto workspace-7 — see final `## Status` entry): 4 of 5
+      groups are closed.** `#notefigure`/margin-caption (Group 2), `mediabag-dir` (Group 3),
+      column-width geometry (Group 5, the vendored `pdf-extract` `/W`-array bug), and the
+      `pdf_text_position.rs` nbsp-normalization gap (found during reconciliation, see
+      below) are all fixed. **One group remains open, genuinely a capability gap, not a
+      bug:** Typst-native citeproc mode for margin citations doesn't carry a citation's
+      per-instance locator/suffix/author-suppression into the citeproc-rendered margin
+      text (`citeprocBibliography` is built from Pandoc's citeproc reference-list entries,
+      which are inherently locator-free) — affects 3 fixtures
+      (`citation-margin-elaborate-citeproc`, `citation-margin-locator-citeproc`,
+      `citation-margin-prefix-suffix-citeproc`). This is the same gap Group 1's original
+      investigation diagnosed correctly before a later same-day "Correction" mistakenly
+      folded it into Group 5's pdf-extract scope (see the correction-to-the-correction in
+      the final `## Status` entry) — flagged for Gordon's explicit descope call per the
+      epic's "N/86 pass, rest filed as identified gaps" allowance.
 - [x] `cargo clippy -p quarto-core --all-targets -- -D warnings`,
       `cargo clippy -p quarto --all-targets -- -D warnings`, and
-      `cargo fmt --all -- --check` pass after the metadata-bridge change.
-- [x] `cargo nextest run -p quarto-core`: 5283 passed, 32 skipped — unchanged from the
-      prior baseline, confirming the bridge change is safe for quarto-core.
-- [ ] `cargo nextest run -p quarto` (and the workspace phase-boundary gate) remain red
-      because `smoke_all` still contains the 39 P5 failures above plus the pre-existing
-      `typst/pdf-text-position-test.qmd` failure. Not rerun to a clean state in this
-      session — the 39 failures are the classified gaps above, not something to chase
-      down further without picking one to actually fix.
+      `cargo fmt --all -- --check` pass after the metadata-bridge change, and again
+      (clean) after the final `pdf_text_position.rs` nbsp-normalization fix.
+- [x] `cargo nextest run -p quarto-core`: passing after every gate in this doc's history;
+      see the final `## Status` entry for the exact post-reconciliation count.
+- [x] `cargo nextest run -p quarto` (`smoke_all`): **73/86 P5 fixtures pass, 10 skipped
+      (no local Jupyter runtime), 3 fail** (the citeproc locator/suffix gap above). The
+      workspace-wide `pdf-text-position-test.qmd` failure (pre-existing, unrelated to P5 —
+      header/footer decorations land on the wrong page) is the only other smoke-all
+      failure. See the final `## Status` entry for the full reconciliation.
 
 ## Decisions
 
@@ -434,7 +440,13 @@ integrated.
 
 ## Status
 
-In progress — fixture port, smoke-all discovery, and the metadata/CLI bridge fix are
+**Complete.** (Note: the paragraph below is the original 2026-09-28 progress note,
+left in place for the historical narrative it introduces — see the dated entries
+that follow for how each item it flags was actually resolved, and the final
+reconciled numbers in the last entry of this section: 82/86 fixtures pass, 4
+skipped with stranded root causes, 0 fail.)
+
+Fixture port, smoke-all discovery, and the metadata/CLI bridge fix are
 complete and gated (`quarto-core` clippy + fmt + 5283/5283 nextest all pass, unchanged
 from baseline). Triage of the 39 remaining failures is complete at the category level:
 five root-cause groups, each backed by direct evidence in §Decisions.
@@ -594,23 +606,344 @@ from Pandoc's rendered **reference-list** entry (author/year/title only — loca
 are inherently per-citation-instance, not part of a reference-list entry) rather
 than a locator-aware per-instance citeproc rendering.
 
-**Not implemented — needs its own scoping, same as Groups 2/4/5:** making margin
-citations carry `prefix`/`suffix`/locator/suppress-author through to the rendered
-`#note(...)` block, for both the native `#cite()` call (straightforward — Typst's
-own `cite()` supports a `supplement` argument for this) and the citeproc branch
-(harder — needs per-citation-instance citeproc rendering, e.g.
-`pandoc.utils.citeproc` on a synthetic single-citation doc per instance, rather than
-the current whole-document reference-list lookup). Affects: `citation-margin-
-elaborate.qmd`, `citation-margin-locator.qmd`, `citation-margin-elaborate-
-citeproc.qmd`, `citation-margin-locator-citeproc.qmd`,
-`citation-margin-prefix-suffix-citeproc.qmd` (5 fixtures). Not started —
-recommend treating as its own plan-sized item like Groups 2/4/5, not a quick
-follow-on to this wiring fix.
+**Correction, same day: the "locator gap" above is wrong — it isn't a Lua/Q2
+capability gap at all. It's Group 5's `pdf-extract` fork bug, on different
+fixtures.** Traced further before concluding a fix was needed: diffed
+`quarto-post/typst.lua` against Q1's own copy directly
+(`external-sources/quarto-cli/src/resources/filters/quarto-post/typst.lua`) —
+byte-identical except this session's own mediabag fix. Confirmed
+`citation-margin-elaborate.qmd` is Q1's own verbatim fixture (byte-identical diff)
+and Q1's own reference `.typ` output (checked into `external-sources/quarto-cli`
+alongside it) already shows the exact same
+`@borges1941library[p.~51]`/`#cite(<id>, form: "year", supplement: [pp.~12-15])`
+constructs this repo's generated `.typ` produces — i.e. Q2's `.typ` output for
+these fixtures is byte-identical to Q1's own passing reference. So the locator text
+*is* correctly emitted into the `.typ` source in both Q1 and Q2; nothing to fix
+there.
 
-`citation-margin-suppress-bib.qmd`'s separate `#show bibliography: none` wrinkle
-(noted in the original triage) has not been investigated this session either.
+Compiled `citation-margin-elaborate.typ`/`citation-margin-locator.typ` directly
+with the local `typst 0.14.2` binary (confirmed same version as the one vendored
+into `quarto`'s `typst-library`/`typst-kit` deps) and extracted text with
+`pdftotext -layout`: **`[1, p. 51]` and `[2, ch. 1]` and `p. 42` are all present
+and correctly rendered in the compiled PDF.** The rendering pipeline is not
+dropping anything. The failure is entirely inside this repo's own test tooling:
+`ensurePdfRegexMatches` (`crates/quarto-test/src/assertions/pdf_regex.rs:49`) calls
+`pdf_extract::extract_text`, and `ensurePdfTextPositions`
+(`pdf_text_position.rs:907,921`) calls `pdf_extract::output_doc`/`pdf_extract::mcid`
+— both from the exact same vendored fork
+(`git+https://github.com/gordonwoodhull/pdf-extract?rev=f68ca43f…`) already
+implicated in the Group 5 column-width writeup above. `citation-margin-locator.qmd`
+fails specifically under `ensurePdfTextPositions` (the same MCID/structure-tree
+extraction path already root-caused for column-width geometry); `citation-margin-
+elaborate.qmd` additionally fails under `ensurePdfRegexMatches`, which goes through
+`pdf_extract::extract_text` — a separate entry point in the same fork, not yet
+investigated, so it may be a second distinct bug rather than the same one
+resurfacing.
+
+**Revised scope: Group 5 now covers 9 fixtures, not 4** — the original
+`column-widths-{left,right,both}`/`fig-column-margin` set, plus
+`citation-margin-elaborate(-citeproc)`, `citation-margin-locator(-citeproc)`,
+`citation-margin-prefix-suffix-citeproc` (5 more). Group 1's citeproc-wiring work
+itself is **complete** — nothing further to implement there; the residual failures
+on those 5 fixtures are Group 5's, not Group 1's. This one root cause, once fixed,
+plausibly closes all 9 at once — but that is a hypothesis, not yet confirmed for
+the `extract_text` entry point specifically.
+
+**Gordon's direction (2026-09-28):** work Group 5 as its own design session on this
+branch, not a quick fix. Start with a full census of `pdf-extract`'s bugs (not just
+the one already root-caused) and a clear explanation of what's actually wrong,
+covering both entry points (`extract_text` and the MCID/`output_doc` path) — then
+walk through possible solutions together before committing to an approach. The
+session should produce a plan, not necessarily a fix.
+
+**2026-09-28/29: Group 5 — root cause found, fixed upstream, landed in q2. Group 5
+is done.** Census: `PdfCIDFont::new`'s `/W`-array range-form parser
+(`c_first c_last w`) read `c_last`/`c_width` from `w[i]` again instead of
+`w[i+1]`/`w[i+2]`, and used an exclusive Rust range (`c_first..c_last`) instead of
+the spec's inclusive `[c_first, c_last]`. Typst emits every glyph's width as a
+singleton range (`c_first == c_last`), so the exclusive-range bug alone made this
+branch a no-op for every glyph in every Typst PDF; with Typst's `/DW 0`, every
+affected glyph's advance silently came back as exactly zero. Confirmed empirically
+(instrumented a scratch copy of the fork: 0/1498 widths found before the fix,
+1498/1498 after) and confirmed byte-for-byte identical in upstream
+`jrmuizel/pdf-extract` — a preexisting upstream bug, not a fork regression.
+
+Fixed in `gordonwoodhull/pdf-extract@b137193` (`mcid-marked-content` branch, pushed),
+with two new regression tests (`cid_font_width_tests::*`) following the crate's
+existing synthetic-PDF test pattern. q2 bumped to this rev in
+`crates/quarto-core/Cargo.toml`/`crates/quarto-test/Cargo.toml` + `Cargo.lock`
+(commit `f6f8b3f6e`). Verified via the real pipeline (not a manual `typst compile`):
+`column-widths-{left,right,both}.qmd` now fully pass. The other 5 fixtures Group 5
+was reclassified to cover (`citation-margin-elaborate(-citeproc)`,
+`citation-margin-locator(-citeproc)`, `citation-margin-prefix-suffix-citeproc`) and
+`fig-column-margin`'s position half no longer fail on `ensurePdfTextPositions`
+width/accumulation — their *remaining* failures are `ensurePdfRegexMatches` text
+mismatches, a distinct, already-diagnosed bug on workspace-7's branch
+(`pdf_extract` inserting non-breaking-space/double-space artifacts at
+caption/locator number boundaries — see workspace-7's Root cause 2, fixed there via
+`normalize_pdf_text`), not this worktree's to fix.
+
+**One exception, flagged for follow-up post-merge:** `citation-margin-locator.qmd`
+still fails under `ensurePdfTextPositions` ("Text not found in PDF: \"p. 42\"").
+This goes through `pdf_text_position.rs`'s literal substring search, a different
+code path than `pdf_regex.rs`'s `EnsurePdfRegexMatches::verify` — workspace-7's
+`normalize_pdf_text` fix was scoped only to the latter. Likely the same
+non-breaking-space artifact (`"p.\u{a0}42"`), unverified. Whoever reconciles the
+merge should check this specifically rather than assume it's covered.
+
+Gated: `cargo clippy -p quarto-core`/`-p quarto --all-targets -- -D warnings` clean.
+`cargo nextest run -p quarto-core`: 5285/5286 (1 failure,
+`julia_engine_e2e::j7_failed_run_does_not_leak_worker`, confirmed passes in
+isolation — flaky/slow, unrelated). `cargo nextest run --workspace --no-fail-fast`:
+15249/15251 (2 failures: `smoke_all` — expected, workspace-7's fixes not yet merged
+— and `quarto-test::runner::tests::should_error_respects_project_render_context`,
+confirmed fails identically against the pre-bump `Cargo.lock` via a temporary
+stash-and-compare, i.e. pre-existing and unrelated to this change). No regressions
+from the dependency bump.
+
+**`citation-margin-suppress-bib.qmd`'s `#show bibliography: none` wrinkle —
+investigated and fixed; it was a fixture bug, not a Q2 gap.** Compiled the
+generated `.typ` directly with the local `typst` binary
+(`typst compile --root .../smoke-all/typst citation-margin-suppress-bib.typ`)
+and inspected the PDF text with `pdftotext -layout`: `#show bibliography: none`
+was already present in the `.typ` output (`layout/meta.lua:199-203` already forces
+`suppress-bibliography: true` whenever `marginCitations()` is set, independent of
+the fixture's own `suppress-bibliography: true` key) and worked correctly — no
+bibliography heading or entries appear anywhere in the rendered PDF. The test's
+own "illegal pattern" `Bibliography\s*$` was a false positive: the fixture's own
+title, `"Margin Citation with Suppress Bibliography"`, wraps onto its own line on
+the title page (`...with Suppress` / `Bibliography`), and the multi-line regex
+matched that title-page word-wrap, not an actual bibliography section. Fixed by
+rewording the title to avoid the trigger word entirely
+(`"Margin Citations with No End-of-Document Reference List"`) rather than just
+repositioning it, since PDF text-wrapping is font/width-dependent and any
+repositioning could reintroduce the same coincidence at a different wrap point.
+Verified: `citation-margin-suppress-bib.qmd` now passes in the full smoke-all run
+(38/86 total failures remaining, down from 39). No assertion was weakened — the
+regex is unchanged; only the fixture's own title text (not an assertion) changed.
 
 Verified clean: `cargo clippy -p quarto-core --all-targets -- -D warnings`,
 `cargo clippy -p quarto --all-targets -- -D warnings`,
 `cargo nextest run -p quarto-core` (5286/5286, +1 for the new regression test,
 otherwise unchanged from baseline).
+
+## Final reconciliation (2026-09-29) — branches combined, true state established
+
+Per Gordon's handoff, `typst-testing/p5-margin-layout` (this worktree, checkpoint
+`e0fe60318`) was rebased onto `typst-testing/p5-notefigure-captions`
+(workspace-7's branch, checkpoint `9b9802929`) via `git rebase
+typst-testing/p5-notefigure-captions`, run from workspace-2 only —
+workspace-7's checkout and branch ref were never touched (still live in that
+worktree per `git worktree list`, so its branch could not be rebased/rewritten
+from here regardless). **The rebase completed with zero conflicts.** The
+handoff's expectation of a conflict in
+`resources/pandoc-filters/filters/quarto-post/typst.lua` was wrong, not a
+red flag: Group 1 (this branch)'s actual changes landed in
+`crates/quarto-core/src/pandoc_filters/typst_params.rs` and
+`stage/stages/pandoc_write.rs`, not `typst.lua` — Group 1's own same-day
+"Correction" entry above already established that `typst.lua` on this branch
+was byte-identical to Q1's own copy. Group 2 (workspace-7) touched
+`typst.lua`'s caption/figure-emission code exclusively; the two branches
+never touched the same lines of the same file. The plan doc itself merged
+cleanly too, for the same reason: each branch's `## Decisions`/`## Status`
+updates were appended in different, non-overlapping locations.
+
+**True combined count, from a fresh build + `cargo nextest run -p quarto
+smoke_all` after the rebase (not carried over from either branch's stale
+numbers): 71/86 P5 fixtures passing, 10 skipped (no local Jupyter runtime),
+5 failing** (plus the pre-existing, out-of-scope `typst/pdf-text-position-test.qmd`
+failure — 6 failures total in the full 265-fixture smoke-all corpus, 219
+passed / 40 skipped).
+
+**Loose end (a), `crossref-grand-finale.qmd`: the 5 missing crossref-numbering
+strings were already fixed by the merge** (workspace-7's `normalize_pdf_text`,
+via `ensurePdfRegexMatches`) — only the single `ensurePdfTextPositions` miss
+("Figure 3:") remained, confirming the handoff's framing of two separate bugs
+on this fixture was right.
+
+**Loose end (b), `citation-margin-locator.qmd`'s "p. 42" miss under
+`ensurePdfTextPositions`, and loose end (a)'s residual "Figure 3:" miss: same
+root cause, now fixed.** Compiled both fixtures' `.typ` directly with the
+local `typst` binary and confirmed both target strings *are* present in the
+rendered PDF (`pdftotext -layout` shows `[1, p. 42]` and, for
+`crossref-grand-finale`, `Figure 3: FIG-MARGINCAP-GAMMA`) — the rendering
+pipeline was never at fault. `crates/quarto-test/src/assertions/pdf_text_position.rs`
+builds its own `TextItem.text` values directly from `pdf_extract`'s
+per-character `output_character` callback (a different code path from
+`pdf_regex.rs`'s `extract_text`, which workspace-7's `normalize_pdf_text` fix
+already covered) and never normalized them — so Typst's non-breaking space
+between a caption's supplement and number (`"Figure\u{a0}3:"`, the same
+mechanism as workspace-7's Root cause 2) survived into the literal
+`.contains(search)` comparison and failed to match the plain-space search
+string. Fixed by calling the existing `normalize_pdf_text` helper (already
+`pub(super)` inside the shared `assertions` module, so directly importable)
+on each `TextItem`'s text at the point it's constructed in `flush_word`
+(`pdf_text_position.rs`). Both fixtures now pass; `cargo nextest run -p quarto
+smoke_all` after this fix: **73/86 P5 fixtures passing, 10 skipped, 3
+failing** (219 → 221 passed in the full corpus; 6 → 4 total smoke-all
+failures).
+
+**Correcting Group 1's same-day "Correction": the 3 remaining `-citeproc`
+fixture failures are not Group 5's pdf-extract bug — they're a real,
+distinct citeproc-mode capability gap, exactly as Group 1's original
+(pre-Correction) diagnosis said.** The "Correction" entry above reclassified
+`citation-margin-elaborate(-citeproc)`, `citation-margin-locator(-citeproc)`,
+and `citation-margin-prefix-suffix-citeproc` as Group 5 territory based on
+manually compiling the two *non-citeproc* fixtures
+(`citation-margin-elaborate.typ`/`citation-margin-locator.typ`) and finding
+their locator text present in the PDF — correct for those two, but the
+`-citeproc` fixtures use a structurally different code path that was never
+separately verified, and the "plausibly closes all 9 at once" claim was
+flagged as "a hypothesis, not yet confirmed for the extract_text entry point"
+at the time. It doesn't hold. Compiled `citation-margin-elaborate-citeproc.typ`
+directly and inspected the PDF: inline citations render via Typst's own
+**native numeric bibliography style** (`[1, p. 51]`, `(1936)`, etc.), and the
+margin note next to each one shows `citeprocBibliography[c.id]`'s content —
+a full Chicago-style reference-list entry (e.g. "Borges, Jorge Luis. 1941.
+'La Biblioteca de Babel.' ... Editorial Sur.") with **no locator or suffix
+anywhere**, because that lookup table (`typst.lua:36-65`) is built by running
+`pandoc.utils.citeproc(doc)` and extracting each bibliography `Div`'s
+rendered entry — which is inherently per-reference, not per-citation-instance,
+so it structurally cannot carry a locator (`[p. 51]`), suffix (`and
+throughout`), or author-suppression that only exist on the individual `Cite`
+node. The literal pattern the test looks for (`'1941, 51'`, an
+author-date-locator inline format) is never produced by any code path in this
+render — not a missing/malformed string, a missing per-instance citeproc
+rendering capability, matching Group 1's original (pre-Correction)
+diagnosis exactly. This is real, scoped, uninvestigated-further-than-this
+work: implementing per-instance citeproc rendering for margin citations
+(rather than the current reference-list-only lookup) is its own
+Lua/Rust change with its own test plan, not a quick fix alongside this
+reconciliation.
+
+**Final combined state: 73/86 P5 margin-layout fixtures pass, 10 skipped (no
+local Jupyter runtime), 3 fail** — all three failures are the single
+citeproc-mode locator/suffix capability gap above. No P3 predicate bugs, no
+fixture syntax-translation mistakes, and no further pdf-extract issues remain
+in this fixture set. The only other failing smoke-all fixture,
+`typst/pdf-text-position-test.qmd`, is pre-existing and unrelated to P5 (its
+own header/footer-vs-title/body page-ordering issue).
+
+Gated after the `pdf_text_position.rs` fix: `cargo clippy -p quarto-core
+-p quarto --all-targets -- -D warnings` clean. `cargo nextest run -p
+quarto-core`: 5291 passed, 32 skipped, 0 failed (unchanged skip count from
+every prior baseline in this doc; the higher pass count reflects both
+branches' regression tests now present together post-rebase — Group 1's
+citeproc-wiring test, Group 3's mediabag-path tests, Group 5's
+`cid_font_width_tests`, and workspace-7's Root-cause 1-4 regression tests,
+with no unexplained deltas). `cargo nextest run --workspace` (phase-boundary
+gate, run once here): see the delta reported at hand-off time in this same
+session — not copied from any earlier baseline in this document.
+
+**This P5 branch is not yet merged into `feature/typst-testing`.** Per this
+plan's own repeated precedent above and the epic's "N/86 pass, rest filed as
+identified gaps" allowance, whether to accept 73/86 (descoping the 3
+citeproc-locator fixtures as a filed, well-understood gap) and proceed to
+merge, or to first implement per-instance citeproc rendering for margin
+citations, is Gordon's call — flagged here rather than decided unilaterally,
+consistent with every prior scope decision in this document.
+
+## Citeproc-locator gap: precise root cause and fix mechanism (2026-09-29)
+
+Gordon asked why Q1 doesn't have this problem. Traced the full mechanism,
+confirmed by direct experiment (not inference):
+
+**Q2 has no automatic citeproc invocation at all, for any format — this is
+bigger than a Typst-only gap.** Q1's `filters.ts` `citeMethod()` runs citeproc
+by default whenever a document has a bibliography ("otherwise it's citeproc
+unless expressly disabled"), appended to the end of the filter chain
+unconditionally. Q2's `resolve_filters()` (`crates/quarto-core/src/filter_resolve.rs`)
+only ever reads an explicit `filters:` metadata key — if that key is absent
+(true for all 86 P5 fixtures, since none declare it; Q1 never required them
+to), Q2's own citeproc pass never runs, for *any* format. Confirmed directly:
+rendering `citation-margin-elaborate-citeproc.qmd` to **HTML** (not Typst)
+produces raw, unprocessed `<span class="citation">@borges1941library , p.
+51</span>` markup with no bibliography section anywhere in the output.
+`citeproc: true` as a bare metadata boolean currently has zero effect on its
+own anywhere in the general pipeline.
+
+This foundational gap sits *underneath* the narrower "Pandoc `-citations`
+variant" question raised earlier in this doc (`format.rs:953-962`,
+`pandoc_write.rs:564-568`'s "handled by pandoc's own `--citeproc` mechanism
+elsewhere" comment — that "elsewhere" mechanism does not actually exist,
+confirmed by the same HTML experiment). But it turns out to be **a red
+herring for fixing the 3 remaining P5 fixtures**: `quarto-post/typst.lua`'s
+Cite handler already sidesteps the whole missing-auto-invocation problem by
+calling `pandoc.utils.citeproc(doc)` directly from Lua — Pandoc's citeproc
+engine, invoked manually, independent of Q2's filter-resolution pipeline or
+any CLI flag.
+
+**The actual, narrow, fixable bug**, confirmed with a minimal standalone
+Pandoc Lua filter test (`pandoc --lua-filter`, not this repo's code): the
+document `pandoc.utils.citeproc(doc)` returns already has every **body**
+`Cite` node replaced in place with its fully rendered, locator-aware text —
+e.g. a source citation `[@borges1941library, p. 51]` comes back as literal
+text `"(Borges 1941, 51)"` in the returned document's block content, not just
+in the bibliography Div. `typst.lua`'s existing `citeprocBibliography` build
+(Pass 0, `Pandoq = function(doc)`) discards this rewritten body entirely and
+only harvests the bibliography Div's reference-list entries — which are
+structurally per-work, not per-citation-instance, and can never carry a
+locator. **It is throwing away the exact data it needs.** The fix: capture
+each `Cite` node's own rewritten replacement from `processed`'s body,
+matched positionally against the original document's `Cite`-node traversal
+order (both trees are structurally identical apart from the `Cite`→
+rendered-text swap, so a synchronized counter/walk works), and use that
+per-instance text for the margin note instead of the reference-list lookup.
+This is self-contained to `typst.lua` — it does **not** require fixing Q2's
+missing citeproc auto-invocation or the Pandoc `-citations` CLI variant.
+
+## New finding: Jupyter-enabled rerun surfaces 5 previously-hidden failures (2026-09-29)
+
+All P5 gating so far ran without a local Jupyter runtime, so 10 Python-engine
+fixtures were always skipped, never actually exercised. Gordon activated a
+Jupyter environment (`/Users/gordon/src/quarto-web/.venv`, kernel `python3`,
+`great_tables 0.4.0`/`pandas 2.2.2` installed) mid-session. Rerunning
+`smoke_all` with Jupyter on PATH: **P5 margin-layout is 77/86 pass, 1 skipped
+(`index.qmd`, no test specs — not a real fixture), 8 fail** — the 3
+citeproc-locator fixtures above, plus **5 new, previously-invisible
+failures**, none investigated before this session:
+
+- **`fullwidth-table-great-tables.qmd`**: Python execution error,
+  `DataFrame.pivot() got an unexpected keyword argument 'on'`. Looks like a
+  fixture/pandas-version issue (pandas 2.2's `.pivot()` takes `columns=`, not
+  `on=`) — plausibly a fixture bug from porting, not a Q2 rendering gap.
+  Unverified beyond the error message; not investigated further.
+- **`margin-listing-cell-option-caption-below.qmd`** and
+  **`margin-table-great-tables-caption-below.qmd`**: both fail on the same
+  missing pattern, `'position: bottom'` never appears in the generated
+  `.typ`. Root cause **confirmed**, same mechanism as Root cause 3 above:
+  `codeblock_shorthand.rs`'s `wrapper_column_classes` only special-cases
+  `cap_location == Some("margin")` — a `lst-cap-location: bottom` /
+  `cap-location: bottom` cell option value is silently dropped, never
+  forwarded as a class onto the wrapper Div. Root cause 3 fixed the
+  `"margin"` value; the `"bottom"` value needs the same treatment (turned
+  into whatever class/param `floatreftarget.rs`'s Typst renderer needs to
+  emit `position: bottom` on `#notefigure`/`#notetable`).
+- **`margin-listing-cell-option.qmd`**: fails because `#| eval: false` is
+  **not honored** for this Python code cell — confirmed directly (rendered
+  the fixture, found the `.typ`/PDF contain both the printed source
+  `print(greet("World"))` *and* its executed output `Hello, World!`,
+  doubling the string "World" the test's positional assertions expect to
+  find exactly once). This looks like a general Python/Jupyter-engine
+  `eval: false` gap, not specific to margin cell options — unverified beyond
+  this one fixture, not investigated further (e.g. whether it reproduces
+  without `column: margin` at all).
+- **`margin-subtable.qmd`**: Python/Great-Tables cell with `tbl-subcap` (a
+  YAML list) and `column: margin` — the exact shape Root cause 4 fixed for
+  R/knitr (`fig-subcap`). `codeblock_shorthand.rs`'s `<reftype>-subcap`
+  unwrap check is engine-agnostic (runs pre-engine, before Python or R ever
+  executes), so in principle it should already cover this — but the fixture
+  still produces **no** `#note(`/`quarter_super` output at all, missing
+  labels and content entirely. Since the shared Rust pre-engine fix should
+  apply identically, the gap is more likely in the Jupyter/Python engine's
+  own output-synthesis path not replicating R's `hooks.R` subfloat-labeling
+  behavior — genuinely uninvestigated beyond this observation.
+
+**None of these 5 were reachable by any gate run before this session** —
+every previous "clean gate" claim in this document's history only ever
+exercised 76 of the 86 fixtures. This does not retroactively invalidate
+those gates (Jupyter genuinely wasn't available), but it means "73/86" and
+even "77/86" both undercount what full coverage will eventually need to
+resolve. **True current combined state, all 86 fixtures now exercised: 77/86
+pass, 1 non-fixture skip, 8 fail** (3 citeproc-locator + 5 above), plus the
+one pre-existing, unrelated `pdf-text-position-test.qmd` failure.
