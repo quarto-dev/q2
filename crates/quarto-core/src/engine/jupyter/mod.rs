@@ -52,9 +52,11 @@ pub use kernelspec::{ResolvedKernel, find_kernelspec, is_jupyter_language, list_
 pub use session::{KernelInfo, KernelSession, SessionKey};
 pub use stored::IpynbReplayEngine;
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{LazyLock, Mutex, OnceLock};
 
 use super::context::{ExecuteResult as EngineExecuteResult, ExecutionContext};
 use super::error::ExecutionError;
@@ -76,6 +78,49 @@ static FIND_JUPYTER_CALL_COUNT: AtomicUsize = AtomicUsize::new(0);
 /// Initialized lazily on the first call to
 /// [`JupyterEngine::find_jupyter`].
 static JUPYTER_PATH_CACHE: OnceLock<Option<PathBuf>> = OnceLock::new();
+
+/// Process-wide cache of availability probe results, keyed by
+/// executable path. `jupyter --version` runs at most once per
+/// resolved path per process — same rationale as
+/// [`JUPYTER_PATH_CACHE`] (bd-c5u2g): the engine registry is
+/// re-queried per render, and spawning jupyter per document would
+/// dominate multi-document render time. Keyed by path (rather than a
+/// bare `OnceLock<bool>`) so tests can probe their own stub binaries
+/// without polluting each other. Lookup-only; order is never
+/// observed.
+static JUPYTER_PROBE_CACHE: LazyLock<Mutex<HashMap<PathBuf, bool>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Probe whether a jupyter executable actually runs: spawn
+/// `jupyter --version` and require exit status 0. This catches the
+/// stale-shim case (the name resolves on PATH but the binary exits
+/// non-zero, e.g. a tool-manager trampoline pointing at a deleted
+/// environment), which a PATH lookup alone cannot (bd-1eu34vpy).
+fn probe_jupyter(path: &Path) -> bool {
+    Command::new(path)
+        .arg("--version")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+/// [`probe_jupyter`] memoized through [`JUPYTER_PROBE_CACHE`].
+fn probe_jupyter_cached(path: &Path) -> bool {
+    if let Some(&cached) = JUPYTER_PROBE_CACHE.lock().unwrap().get(path) {
+        return cached;
+    }
+    // Probe without holding the lock: a spawn under the lock would
+    // block every other engine's availability check. A duplicate
+    // probe from a racing caller is benign (same result, idempotent).
+    let result = probe_jupyter(path);
+    JUPYTER_PROBE_CACHE
+        .lock()
+        .unwrap()
+        .insert(path.to_path_buf(), result);
+    result
+}
 
 /// Read the current value of [`FIND_JUPYTER_CALL_COUNT`].
 pub fn find_jupyter_call_count() -> usize {
@@ -232,7 +277,13 @@ impl ExecutionEngine for JupyterEngine {
     }
 
     fn is_available(&self) -> bool {
-        self.jupyter_path.is_some()
+        // Path presence alone is not enough: probe that the binary
+        // actually runs so a broken jupyter reports unavailable and
+        // jupyter-gated tests skip instead of hard-failing
+        // (bd-1eu34vpy).
+        self.jupyter_path
+            .as_deref()
+            .is_some_and(probe_jupyter_cached)
     }
 
     fn file_claims(&self) -> Vec<FileClaim> {
