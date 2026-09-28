@@ -63,8 +63,10 @@ their respective blockers.
 Run from the repo root in **Git Bash** (a shell started after
 2026-09-28). A stub jupyter passes the bd-1eu34vpy availability probe
 (`--version` exits 0) but fails everything else, and `APPDATA` /
-`JUPYTER_PATH` are redirected to empty dirs so runtimelib's static
-search finds no kernels — both jupyter-gated tests must
+`JUPYTER_PATH` / `PROGRAMDATA` are redirected to empty dirs — the
+three roots of runtimelib's static search on Windows (user, env,
+system; `dirs.rs` `data_dirs`) — so it finds no kernels. The stub's
+failing `--paths` adds none. Both jupyter-gated tests must
 `eprintln!`-skip with `KernelspecNotFound`, not fail.
 
 ```bash
@@ -73,7 +75,7 @@ set -euo pipefail
 
 SIM="$(mktemp -d)"
 trap 'rm -rf "$SIM"' EXIT
-mkdir -p "$SIM/bin" "$SIM/appdata" "$SIM/jpath"
+mkdir -p "$SIM/bin" "$SIM/appdata" "$SIM/jpath" "$SIM/programdata"
 
 # Stub jupyter: answers `--version` (engine stays available via the
 # bd-1eu34vpy probe), fails `--paths` and everything else.
@@ -87,11 +89,14 @@ exit /b 1
 BAT
 
 # MSYS converts $SIM/bin in PATH when spawning the Windows test
-# binaries; APPDATA/JUPYTER_PATH are read by the Rust process
-# directly, so they must be Windows-style paths.
+# binaries; APPDATA/JUPYTER_PATH/PROGRAMDATA are read by the Rust
+# process directly, so they must be Windows-style paths. Git Bash
+# spells the system var `ProgramData`; exporting `PROGRAMDATA`
+# adds a second entry the child ignores, so reuse the existing name.
 export PATH="$SIM/bin:$PATH"
 export APPDATA="$(cygpath -w "$SIM/appdata")"
 export JUPYTER_PATH="$(cygpath -w "$SIM/jpath")"
+export ProgramData="$(cygpath -w "$SIM/programdata")"
 
 cargo nextest run -p quarto --test integration jupyter_kernel_cleanup --no-capture
 cargo nextest run -p quarto-core --test integration capture_splice_engines --no-capture
