@@ -439,7 +439,7 @@ fn inject_acc_descr(source: &str, description: &str) -> String {
 /// wrapper removed (` ```{python} ` parses to the class `{python}`, and
 /// its options are still `#|`). An unclassed block reports `""`, which
 /// [`comment_syntax_for`] maps to the `#` default.
-fn language_of(cb: &quarto_pandoc_types::block::CodeBlock) -> String {
+pub(crate) fn language_of(cb: &quarto_pandoc_types::block::CodeBlock) -> String {
     let Some(first) = cb.attr.1.first() else {
         return String::new();
     };
