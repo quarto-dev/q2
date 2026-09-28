@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-09-28
+
+- [`4d1181fd`](https://github.com/quarto-dev/q2/commits/4d1181fd): Math in the preview now renders with KaTeX 0.18.7, which adds `\reflectbox` and `\mapsfrom` and keeps equation tags on an empty final row of an array.
+
 ### 2026-09-24
 
 - [`dce0c5a5`](https://github.com/quarto-dev/q2/commits/dce0c5a5): Listing pages whose posts declare a front-matter `image:` (for example the Blog template's `index.qmd`) now render in the preview instead of failing with "output destination ... is not under any allowed root".
