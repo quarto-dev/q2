@@ -259,12 +259,29 @@ pub fn build_forwarded_args(
         args.push(OsString::from("--highlight-style"));
         args.push(OsString::from(v));
     }
-    if meta.get("toc").and_then(|v| v.as_bool()) == Some(true) {
-        args.push(OsString::from("--toc"));
-    }
-    if let Some(n) = meta.get("toc-depth").and_then(|v| v.as_int()) {
-        args.push(OsString::from("--toc-depth"));
-        args.push(OsString::from(n.to_string()));
+    // Typst never consumes pandoc's own `--toc`/`--toc-depth`-driven
+    // internal TOC-insertion (`WriterOptions.writerTableOfContents`/
+    // `writerTOCDepth`) — both `resources/pandoc-filters/typst-template/
+    // typst-template.typ` (Q2's own default template) and every vendored
+    // extension's own `typst-show.typ` (e.g. orange-book) read `toc`/
+    // `toc-depth` purely as `$toc$`/`$toc-depth$` *template variables*,
+    // which pandoc always populates straight from the document's own
+    // metadata regardless of these CLI flags, feeding a native Typst
+    // `#outline(depth: toc_depth)` call directly. Forwarding them is
+    // therefore not just unnecessary but actively harmful: pandoc's CLI
+    // parser hard-validates `--toc-depth` to 1-6 (verified directly), while
+    // Typst's own outline has no such cap — a book with deep heading
+    // nesting (`orange-book`'s smoke-all fixture sets `toc-depth: 17`)
+    // fails to render at all for a restriction that would never have
+    // applied to it.
+    if base_format != FormatIdentifier::Typst {
+        if meta.get("toc").and_then(|v| v.as_bool()) == Some(true) {
+            args.push(OsString::from("--toc"));
+        }
+        if let Some(n) = meta.get("toc-depth").and_then(|v| v.as_int()) {
+            args.push(OsString::from("--toc-depth"));
+            args.push(OsString::from(n.to_string()));
+        }
     }
     if let Some(v) = meta
         .get("reference-location")
@@ -539,6 +556,95 @@ mod tests {
             !joined.iter().any(|a| a == "columns" || a == "72"),
             "columns must not be forwarded: {joined:?}"
         );
+    }
+
+    /// Typst never consumes pandoc's own `--toc`/`--toc-depth`-driven TOC
+    /// insertion — both Q2's own default `typst-template.typ` and every
+    /// vendored extension's `typst-show.typ` read `toc`/`toc-depth` purely
+    /// as template variables. Forwarding them is not just unnecessary but
+    /// actively harmful: pandoc's CLI parser hard-validates `--toc-depth`
+    /// to 1-6, but Typst's own native `#outline()` has no such cap (the
+    /// `orange-book` smoke-all fixture legitimately sets `toc-depth: 17`).
+    /// RED before the fix (both args forwarded, `17` included verbatim —
+    /// would have made pandoc reject the invocation outright).
+    #[test]
+    fn test_toc_args_not_forwarded_for_typst() {
+        use quarto_pandoc_types::ConfigMapEntry;
+        let meta = ConfigValue::new_map(
+            vec![
+                ConfigMapEntry {
+                    key: "toc".to_string(),
+                    key_source: SourceInfo::for_test(),
+                    value: ConfigValue::new_bool(true, SourceInfo::for_test()),
+                },
+                ConfigMapEntry {
+                    key: "toc-depth".to_string(),
+                    key_source: SourceInfo::for_test(),
+                    value: int_value(17),
+                },
+            ],
+            SourceInfo::for_test(),
+        );
+
+        let args = build_forwarded_args(
+            "pandoc-write",
+            Path::new("/doc/dir"),
+            &meta,
+            FormatIdentifier::Typst,
+        )
+        .expect("no path-shaped keys present, must not error");
+        let joined: Vec<String> = args
+            .iter()
+            .map(|s| s.to_string_lossy().into_owned())
+            .collect();
+
+        assert!(
+            !joined
+                .iter()
+                .any(|a| a == "--toc" || a == "--toc-depth" || a == "17"),
+            "toc/toc-depth must not be forwarded for Typst: {joined:?}"
+        );
+    }
+
+    /// Negative control for the test above: a non-Typst Pandoc-hybrid
+    /// format (docx here, matching `test_forwarding_is_allow_listed`'s own
+    /// choice) still gets `--toc`/`--toc-depth` forwarded — pandoc's LaTeX/
+    /// docx/pptx writers genuinely drive their own TOC insertion from these
+    /// flags, unlike Typst.
+    #[test]
+    fn test_toc_args_still_forwarded_for_non_typst() {
+        use quarto_pandoc_types::ConfigMapEntry;
+        let meta = ConfigValue::new_map(
+            vec![
+                ConfigMapEntry {
+                    key: "toc".to_string(),
+                    key_source: SourceInfo::for_test(),
+                    value: ConfigValue::new_bool(true, SourceInfo::for_test()),
+                },
+                ConfigMapEntry {
+                    key: "toc-depth".to_string(),
+                    key_source: SourceInfo::for_test(),
+                    value: int_value(2),
+                },
+            ],
+            SourceInfo::for_test(),
+        );
+
+        let args = build_forwarded_args(
+            "pandoc-write",
+            Path::new("/doc/dir"),
+            &meta,
+            FormatIdentifier::Docx,
+        )
+        .expect("no path-shaped keys present, must not error");
+        let joined: Vec<String> = args
+            .iter()
+            .map(|s| s.to_string_lossy().into_owned())
+            .collect();
+
+        assert!(joined.contains(&"--toc".to_string()));
+        assert!(joined.contains(&"--toc-depth".to_string()));
+        assert!(joined.contains(&"2".to_string()));
     }
 
     /// T4.3: `slide-level` is forwarded for pptx only.
