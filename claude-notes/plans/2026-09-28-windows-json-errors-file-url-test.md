@@ -122,7 +122,7 @@ The fix is two pieces with an ordering question between them.
 The test never builds a URL itself, so there is no tautology with QER's logic. It needs no new dependency (`url` is already a `[dependencies]` entry of `crates/quarto`). It fails on the real regressions: a pseudo-path target, a `file://?/C:/…` verbatim leak (`?` parses as a query), or an added fragment. The cost is a small OSC8 extractor (about 10-15 lines) and a rewritten doc comment at `:510-521`. It no longer pins the exact URL spelling, which is QER's contract, covered by QER's own unit test.
 
 **Plus: strengthen the `notebook_path` assertion (`:~490`)** from `ends_with("broken.ipynb")` to:
-- `!nb_path.starts_with(r"\\?\")`. This is the wire contract applied to this fixture, and it is a no-op on Unix. It is correct here because a short temp-dir path always has a plain form (see § Wire-path contract);
+- `!nb_path.starts_with(r"\\?\")`. This is the wire contract applied to this fixture, and it is a no-op on Unix. It holds only if the fixture has a plain form (see § Wire-path contract). Tempfile names start with `.tmp`, so reserved or invalid names cannot occur, and only length can break it. So first assert, as a precondition, that the fixture path is well under 260 UTF-16 units (e.g. `< 200`), with a message that blames the environment's TEMP root. An unusual TEMP then fails as a setup error instead of rejecting behavior the contract allows;
 - `canonicalize(nb_path) == canonical(dir.join("broken.ipynb"))`, i.e. it names the real file.
 
 This assertion **fails on Windows today**, which makes it the genuine RED for the product fix. The same check could apply to `source_file` if the user wants the wire contract pinned there too.
@@ -139,7 +139,7 @@ This is out of scope for this plan to *design*, but it bounds the choice.
 - reserved DOS names (`CON`, `COM4.txt`, …): `C:\CON` names the device, not the file;
 - invalid filenames (trailing `.`/space, forbidden characters);
 - paths longer than 260 UTF-16 units;
-- any verbatim prefix other than a disk prefix. That includes `\\?\UNC\server\share\…`, which *often* has a plain equivalent (`\\server\share\…`). It has one only when the same three conditions hold for the UNC path: no reserved names, no invalid names, within the length limit. QER's `plain_absolute_path` converts every UNC path unconditionally, so it is not evidence for or against a particular case. `dunce` never converts UNC paths, so on its own it under-delivers for shares that do have a plain form. bd-1klbq2zd must either convert UNC paths only when those conditions hold (and keep the verbatim form otherwise), or decide that shares are out of scope. If it converts them, behavioral tests must cover both a convertible share path and one that has to stay verbatim.
+- any verbatim prefix other than a disk prefix. That includes `\\?\UNC\server\share\…`, which *often* has a plain equivalent (`\\server\share\…`). It has one only when the same three conditions hold for the UNC path: no reserved names, no invalid names, within the length limit. QER's `plain_absolute_path` converts every UNC path unconditionally, so it is not evidence for or against a particular case. `dunce` never converts UNC paths, so on its own it under-delivers for shares that do have a plain form. bd-1klbq2zd must either convert UNC paths only when those conditions hold (and keep the verbatim form otherwise), or decide that shares are out of scope. In the second case the exception must be written into this contract ("UNC shares may stay verbatim"). Leaving shares verbatim without that is a contract violation, not a scope choice. If it converts them, behavioral tests must cover both a convertible share path and one that has to stay verbatim.
 
 Candidate directions, to be decided in bd-1klbq2zd:
 - Fix at the seam: `NativeRuntime::canonicalize` (`native.rs:94`) returns the plain form via `dunce::canonicalize`, plus UNC handling per the contract above. This covers CLI inputs and everything derived from them in one place, and keeps the verbatim form only where the contract allows it.
@@ -172,7 +172,7 @@ Decided 2026-09-28:
 - [x] Research ecosystem precedent (§ Research)
 - [ ] Piece 1: Option C for the URL assertion + strengthened `notebook_path` assertion in `json_errors.rs`. Update the doc comment `:510-521` and the stale comment `:594`.
 - [ ] Confirm the new state: URL assertion passes, and the `notebook_path` assertion fails on Windows with `\\?\C:\…` (the product RED)
-- [ ] Piece 2 (bd-1klbq2zd): design and apply the seam fix, then GREEN
+- [ ] Piece 2 (bd-1klbq2zd): design and apply the seam fix, then GREEN. Its task breakdown (seam, UNC behavior, direct-call audit dispositions) belongs in bd-1klbq2zd's own plan. Its acceptance must include CLI checks, via the saved probe, that `notebook_path`, `source_file` **and** the `Rendering …` status line are plain on Windows. This json_errors test pins only what question 1 decides, so the other outputs must not rely on it.
 - [ ] Sanity check that the assertions catch regressions: point the expectation at another file and confirm the test fails, then revert
 - [ ] Close both strands with links to the commits
 
