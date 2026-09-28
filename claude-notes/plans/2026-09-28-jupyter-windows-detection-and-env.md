@@ -40,9 +40,14 @@ their respective blockers.
 - [x] **1. Fix `JupyterEngine::is_available()` (bd-1eu34vpy)** to probe that
       jupyter actually runs (e.g. `jupyter --version` exits 0), not just that
       the name resolves on PATH. TDD: stub-binary tests (a jupyter stub that
-      exits non-zero / prints garbage must report unavailable), mirroring the
-      `.bat` stub pattern used elsewhere in the suite. Cache the probe result
-      so repeated engine-registry calls don't re-spawn. Effect on any machine
+      exits non-zero must report unavailable), mirroring the `.bat` stub
+      pattern used elsewhere in the suite. The contract is exit status only:
+      stdout is not parsed, because `jupyter --version` output differs
+      across versions (a bare version string on older jupyter_core, a
+      package table on newer) and the observed stale-shim failure already
+      exits non-zero.
+      Cache the probe result per path so repeated engine-registry calls
+      don't re-spawn. Effect on any machine
       with a broken jupyter: engine reports unavailable → jupyter tests take
       their existing skip path instead of hard-failing.
 - [x] **2. Harden test skip guards (bd-ce4fftg8, bd-zvf3e8n2)** to also probe
