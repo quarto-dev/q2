@@ -244,36 +244,92 @@ logo-path resolution against a synthetic merged document's directory context.
       crossref work; not investigated further here (out of this branch's
       scope), restored the fix immediately after confirming.
 
-      **Current state past both of the above: a third, separate, real bug —
-      not yet fixed, found 2026-09-28.** Render now fails with `Error
+      **Third bug — found and fixed 2026-09-28.** Render failed with `Error
       [Q-20-3]: pandoc exited with exit status: 6 ... Argument of --toc-depth
       must be a number 1-6` — this fixture's `_quarto.yml` deliberately sets
       `format.typst.toc-depth: 17` (Typst's native outline isn't capped at 6;
       Q1's fixture exercises that). `crates/quarto-core/src/pandoc_filters/format_defaults.rs`
-      unconditionally forwards `toc-depth` metadata as a raw `--toc-depth <n>`
-      pandoc CLI argument, and pandoc's CLI flag parser hard-validates that
-      range. Verified directly (`pandoc -f markdown -t typst --toc-depth=17`
-      → same error; `pandoc --defaults=<yaml with toc-depth: 17>` → succeeds,
-      no validation at all) — pandoc's `--defaults` YAML mechanism has no such
-      range check; only the CLI flag parser does. Q1's own TS source has no
-      Typst-specific `toc-depth` filtering either (`kTocDepth` search turned
-      up nothing beyond HTML-bootstrap CSS generation), so Q1 likely reaches
-      pandoc via a defaults file for this key, not a raw CLI flag, sidestepping
-      the same validation Q2 hits. Not yet fixed — unclear whether the right
-      fix is narrow (clamp/skip `--toc-depth` when out of pandoc's CLI range,
-      or only pass it when `toc: true`) or broader (route more of
-      `format_defaults.rs`'s args through a `--defaults` file, matching Q1's
-      likely mechanism) — flagged to Gordon before proceeding, given
-      `format_defaults.rs` is shared, not orange-book-specific.
+      unconditionally forwarded `toc-depth` metadata as a raw `--toc-depth
+      <n>` pandoc CLI argument, and pandoc's CLI flag parser hard-validates
+      that range (verified directly: `pandoc -f markdown -t typst
+      --toc-depth=17` → same error; `pandoc --defaults=<yaml with toc-depth:
+      17>` → succeeds, no validation at all).
 
-      **Next steps, in order:** (1) resolve the toc-depth blocker; (2) finish
-      rendering the whole book and reconcile all ~250 assertions; (3) once
-      bd-l6eh1635 actually merges into `feature/typst-testing`, rebase this
-      branch onto it, swap `references.json` back out for `references.bib` in
-      `_quarto.yml`, delete `references.json`, and re-verify. Expect the
-      `fig-visualization`/`sec-embedded-notebooks` assertions (3 lines, see
-      item 3) to still fail on `embed`'s absence; everything else is new
-      ground.
+      Root-cause investigation (self-directed, not delegated to a subagent
+      per this branch's constraint) found the CLI args are simply dead
+      weight for Typst: both Q2's own default template
+      (`resources/pandoc-filters/typst-template/typst-show.typ:89-99` →
+      `typst-template.typ:122-134`) and every vendored extension's own
+      template (orange-book's `typst-show.typ:24-25`) read `toc`/`toc-depth`
+      purely as `$toc$`/`$toc-depth$` *template variables* — which pandoc
+      always populates straight from the document's own metadata regardless
+      of CLI flags — feeding Typst's own native `#outline(depth: toc_depth)`
+      call directly. Pandoc's internal `--toc`/`--toc-depth`-driven TOC
+      insertion is never consumed by the Typst writer in this codebase.
+      Confirmed via LaTeX/PDF being a genuinely different (non-Typst) pandoc
+      profile that does rely on these flags, so the fix must not touch it.
+
+      **Fix (Gordon-approved, 2026-09-28)**: skip forwarding `--toc`/
+      `--toc-depth` when `base_format == FormatIdentifier::Typst`, matching
+      this same file's existing format-conditional-exception pattern
+      (`template` is already skipped for Typst; `slide-level` is already
+      Pptx-only). Added `test_toc_args_not_forwarded_for_typst` (RED before
+      the fix — both args forwarded, `17` included verbatim) and
+      `test_toc_args_still_forwarded_for_non_typst` (negative control,
+      Docx). `cargo nextest run -p quarto-core -E 'test(format_defaults)'`:
+      19/19 passed. `cargo clippy -p quarto-core --all-targets -- -D
+      warnings` clean.
+
+      **Fourth bug — found 2026-09-28, not yet fixed, awaiting a decision.**
+      Past toc-depth, render fails with `Q-20-3: pandoc exited with exit
+      status: 83 ... typst-brand-yaml.lua:339: attempt to index a string
+      value (field 'brand')`. Root cause, confirmed via the retained
+      `pandoc-input.json`: `brand: _brand.yml` (a bare path string)
+      serializes to pandoc as `{"t": "MetaString", "c": "_brand.yml"}`. The
+      vendored `typst-brand-yaml.lua`'s guard
+      (`resources/pandoc-filters/filters/quarto-post/typst-brand-yaml.lua:261-263`,
+      `if not meta.brand or pandoc.utils.type(meta.brand) == 'Inlines' then
+      meta.brand = {} end`) was written for Q1's convention, where pandoc's
+      own YAML-metadata-block parser always encodes scalar front-matter
+      strings as `MetaInlines`. Q2 pre-parses/pre-types metadata in Rust via
+      `ConfigValue` and serializes an already-built JSON AST directly,
+      bypassing pandoc's own YAML parsing; `brand` isn't routed through
+      markdown-parsing (it's a config/path key, not prose), so it stays a
+      plain string and serializes as `MetaString` instead.
+
+      **Not book-merge-specific** — confirmed no other Typst fixture
+      anywhere in this repo (smoke-all or Rust integration tests) exercises
+      `brand:` as a bare path string; the only existing coverage
+      (`crates/quarto-core/tests/integration/pandoc_typst_writer.rs`) uses
+      an *inline brand map*, which serializes as `MetaMap` and never hits
+      this guard at all. orange-book is genuinely the first fixture to
+      exercise this path, book or not — matches this item's own
+      already-documented risk note above almost exactly, just one layer
+      deeper (the metadata-*encoding* gap, not just the logo-path
+      resolution one that note anticipated).
+
+      Two fix shapes discussed with Gordon, not yet decided: (1) narrow —
+      patch the vendored Lua guard to also accept `pandoc.utils.type(...) ==
+      'string'`, using this project's established `QUARTO2-PATCH` convention
+      for tracked, justified deviations from the vendored Q1 filter chain;
+      scoped to the one known-affected filter. (2) broader — change Q2's
+      `ConfigValue`→`MetaValue` serialization so plain scalar strings always
+      emit `MetaInlines`, matching Q1/pandoc's convention globally; fixes
+      this class of bug everywhere at once but is a core, shared-
+      serialization change with unsurveyed blast radius across every Lua
+      filter/template touching string metadata. Re-added a documented
+      `run.skip` on `index.qmd` for this blocker (superseding the resolved
+      toc-depth skip) — `cargo nextest run -p quarto` green again (602
+      passed, 2 skipped).
+
+      **Next steps, in order:** (1) decide and land the brand-encoding fix;
+      (2) finish rendering the whole book and reconcile all ~250 assertions;
+      (3) once bd-l6eh1635 actually merges into `feature/typst-testing`,
+      rebase this branch onto it, swap `references.json` back out for
+      `references.bib` in `_quarto.yml`, delete `references.json`, and
+      re-verify. Expect the `fig-visualization`/`sec-embedded-notebooks`
+      assertions (3 lines, see item 3) to still fail on `embed`'s absence;
+      everything else is new ground.
 - [x] Cross-check against the six existing Rust integration tests
       (`book_numbering_torture.rs` et al.) — any assertion that fails here but passes
       there points at a smoke-all-harness gap, not a rendering regression; triage
@@ -294,19 +350,42 @@ logo-path resolution against a synthetic merged document's directory context.
 
 ## Status
 
-**Blocked on resolving the toc-depth CLI-arg finding (see item 4) before the
-whole-book render can complete.** The BibTeX blocker (bd-l6eh1635, workspace-6/
+**Blocked on deciding and landing the brand `MetaString`/`MetaInlines`
+mismatch fix (see item 4) before the whole-book render can complete.** This
+is in-scope P8 work, not a digression — it's exactly the kind of gap porting
+Q1's real smoke-all fixtures into Q2 exists to surface, not something to defer
+past this branch. The BibTeX blocker (bd-l6eh1635, workspace-6/
 `braid/bd-l6eh1635-bibtex-citeproc`) is temporarily worked around (a local
 `references.json` conversion, reversible, see item 4) rather than actually
 resolved — that dependency still needs to land and be swapped back in before
-this branch is done. Along the way, fixed a real, separate, verified bug in
-shared book-merge machinery: `single_file_render.rs` ran citeproc *before* the
-merged document's Crossref phase instead of after, unlike the single-document
-`.post`-bucket convention — landed, regression-checked against 63 book-related
-tests plus the full `-p quarto-core` suite (5282 tests), all green. Also
-resolved the `requires: jupyter` question from the plan (not needed — `embed`
-is unimplemented, own epic, per D6). Fixture itself is reconciled to Q1's
-tracked source (plus one required Q-2-7 apostrophe-escape deviation),
+this branch is done.
+
+Three real, separate, verified bugs found so far, two fixed:
+1. **Fixed**: `single_file_render.rs` ran citeproc *before* the merged
+   document's Crossref phase instead of after, unlike the single-document
+   `.post`-bucket convention. Regression-checked against 63 book-related
+   tests plus the full `-p quarto-core` suite (5282 tests), all green.
+2. **Fixed**: `format_defaults.rs` forwarded `--toc-depth` to pandoc's CLI
+   for Typst, which hard-validates 1-6, even though Typst never consumes
+   that CLI-driven mechanism (verified against both Q2's default template
+   and every vendored extension's template — TOC depth reaches Typst purely
+   via a `$toc-depth$` template variable). Skipped `--toc`/`--toc-depth`
+   forwarding for `FormatIdentifier::Typst`, matching this file's existing
+   format-conditional-exception pattern. Two new tests, both green.
+3. **Not yet fixed, awaiting a decision — start here on resume.** `brand:
+   _brand.yml` (bare path string) serializes to pandoc as `MetaString`; the
+   vendored `typst-brand-yaml.lua`'s guard only recognizes `MetaInlines`
+   (Q1's convention), so `meta.brand` survives as a raw string and crashes
+   at `meta.brand.typography = ...`. Confirmed this is genuinely first-time
+   territory (no other Typst fixture anywhere in this repo exercises `brand:`
+   as a bare path). Two fix shapes on the table — narrow (patch the vendored
+   Lua guard, `QUARTO2-PATCH` convention) vs. broad (make Q2's `ConfigValue`→
+   `MetaValue` serialization always emit `MetaInlines` for scalar strings,
+   matching Q1/pandoc globally) — full writeup in item 4 above.
+
+Also resolved the `requires: jupyter` question from the plan (not needed —
+`embed` is unimplemented, own epic, per D6). Fixture itself is reconciled to
+Q1's tracked source (plus one required Q-2-7 apostrophe-escape deviation),
 `render-project: true` confirmed, existing Rust integration-test baseline
 confirmed green. Not merging to `feature/typst-testing` yet — nothing here is
 ready to flip to `Complete.` until item 4 actually runs end to end.
