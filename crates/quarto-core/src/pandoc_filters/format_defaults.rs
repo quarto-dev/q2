@@ -283,9 +283,14 @@ pub fn build_forwarded_args(
             args.push(OsString::from(n.to_string()));
         }
     }
-    if let Some(v) = meta
-        .get("reference-location")
-        .and_then(|v| v.as_plain_text())
+    // Typst's `reference-location` values are consumed by the vendored Lua
+    // filters via `QUARTO_FILTER_PARAMS`. Pandoc accepts only block/section/
+    // document here, so forwarding `margin` both fails and bypasses the
+    // Typst-specific behavior.
+    if base_format != FormatIdentifier::Typst
+        && let Some(v) = meta
+            .get("reference-location")
+            .and_then(|v| v.as_plain_text())
     {
         args.push(OsString::from("--reference-location"));
         args.push(OsString::from(v));
@@ -474,7 +479,8 @@ mod tests {
     /// *excluded* keys (`citeproc`, `wrap`, `columns`), not just presence
     /// of the included ones (see the module's Refactor-induced-vacuity
     /// note in the plan: a test asserting only inclusion survives a full
-    /// pass-through refactor).
+    /// pass-through refactor). Also proves Typst's `reference-location` is
+    /// carried through filter params, not forwarded as a Pandoc CLI flag.
     #[test]
     fn test_forwarding_is_allow_listed() {
         use quarto_pandoc_types::ConfigMapEntry;
@@ -543,6 +549,34 @@ mod tests {
         assert!(joined.contains(&"--toc-depth".to_string()));
         assert!(joined.contains(&"--reference-location".to_string()));
         assert!(joined.contains(&"--shift-heading-level-by".to_string()));
+
+        let typst_args = build_forwarded_args(
+            "pandoc-write",
+            Path::new("/doc/dir"),
+            &scalar_meta(&[("reference-location", "margin")]),
+            FormatIdentifier::Typst,
+        )
+        .expect("Typst margin references are filter params, not CLI args");
+        assert!(
+            !typst_args
+                .iter()
+                .any(|arg| arg.to_string_lossy() == "--reference-location"),
+            "Typst must not receive Pandoc's unsupported --reference-location margin: {typst_args:?}"
+        );
+
+        let docx_args = build_forwarded_args(
+            "pandoc-write",
+            Path::new("/doc/dir"),
+            &scalar_meta(&[("reference-location", "section")]),
+            FormatIdentifier::Docx,
+        )
+        .expect("valid Pandoc reference-location should still be forwarded");
+        assert!(
+            docx_args
+                .iter()
+                .any(|arg| arg.to_string_lossy() == "--reference-location"),
+            "non-Typst formats must retain reference-location forwarding: {docx_args:?}"
+        );
 
         assert!(
             !joined.iter().any(|a| a.contains("citeproc")),
