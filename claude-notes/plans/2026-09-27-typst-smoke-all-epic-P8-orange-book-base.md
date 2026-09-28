@@ -174,36 +174,106 @@ logo-path resolution against a synthetic merged document's directory context.
       `_brand.yml` through the book-merge path (see note above) — a logo-path
       mismatch here is a genuine finding, not expected to be pre-ruled-out.
 
-      **Blocked 2026-09-28 on BibTeX bibliography support (external dependency,
-      not listed in this plan's original "Depends on" line).** Reproduced the
-      exact baseline the handoff described: `citeproc failed for merged book:
-      Failed to parse bibliography '.../references.bib': expected value at line 1
-      column 1` — `load_bibliography` in `crates/pampa/src/citeproc_filter.rs`
-      only parses CSL-JSON today; `references.bib` is BibTeX and isn't valid JSON.
-      The fix (biblatex-based `.bib` parsing) is in active, separate development
-      in `workspace-6` on branch `braid/bd-l6eh1635-bibtex-citeproc` (WIP, not yet
-      committed/merged there either) — per this branch's handoff constraints, that
-      work stays out of workspace-5 entirely; it is not to be cherry-picked or
-      reproduced here.
+      **2026-09-28, BibTeX blocker (item as originally written): reproduced,
+      then worked around temporarily (Gordon's call) to keep making progress
+      without waiting for bd-l6eh1635.** Reproduced the exact baseline the
+      handoff described: `citeproc failed for merged book: Failed to parse
+      bibliography '.../references.bib': expected value at line 1 column 1` —
+      `load_bibliography` in `crates/pampa/src/citeproc_filter.rs` only parses
+      CSL-JSON today; `references.bib` is BibTeX and isn't valid JSON. The real
+      fix (biblatex-based `.bib` parsing) is still bd-l6eh1635, in separate,
+      active development in `workspace-6` (WIP, not yet committed/merged there
+      either) — stays out of workspace-5 per the handoff's constraints.
 
-      Because `smoke_all::smoke_all` (`crates/quarto/tests/integration/smoke_all.rs`)
-      is a single test that walks every smoke-all fixture and panics if **any**
-      fails, leaving this fixture red broke `cargo nextest run -p quarto`
-      workspace-wide (602 tests → 1 failure) the moment the fixture was
-      reconciled to a real (non-`citeproc:false`-masked) state. Added a
-      `_quarto.tests.run.skip: "Blocked on BibTeX bibliography support
-      (bd-l6eh1635)"` gate on `index.qmd`, mirroring the existing per-chapter
-      skip convention, with a comment pointing at this plan section and the
-      workspace-6 branch. `cargo nextest run -p quarto` is green again (602
-      passed, 2 skipped) with this fixture visibly, reasonedly skipped rather than
-      silently masked.
+      **Temporary workaround, explicitly reversible**: `references.bib` is
+      kept in the tree untouched as the real source. Generated
+      `references.json` alongside it via `pandoc -f biblatex -t csljson
+      references.bib -o references.json` (21/21 entries carried over cleanly)
+      and pointed `_quarto.yml`'s `bibliography:` at the `.json` file, with a
+      comment marking this temporary and naming what to revert once
+      bd-l6eh1635 merges (swap back to `references.bib`, delete
+      `references.json`). This unblocks rendering *now* without depending on
+      bd-l6eh1635's timeline, and without touching or duplicating any of its
+      actual parser work.
 
-      **Next step once bd-l6eh1635 merges into `feature/typst-testing`:** rebase
-      this branch onto it, remove the `run.skip`, and actually run this item —
-      render the whole book and reconcile all ~250 assertions against Q2's real
-      output. Expect the `fig-visualization`/`sec-embedded-notebooks` assertions
-      (3 lines, see item 3) to still fail on `embed`'s absence; everything else is
-      new ground.
+      **This surfaced a second, real, separate bug — now fixed on this
+      branch**: past the bibliography load, citeproc failed with `Citation
+      processing error: Reference 'sec-basic-figures' not found` — exactly the
+      failure the original handoff already flagged as a distinct concern ("Do
+      not assume the BibTeX parser fix resolves this"). Root cause, confirmed
+      by reading code and reproducing empirically: the single-document
+      pipeline resolves `citeproc` into the `.post` filter bucket by default
+      (`filter_resolve.rs`, `"citeproc" into .post`), so citeproc always runs
+      *after* `AstTransformsStage`'s Crossref sub-phase (`crossref-index` +
+      `crossref-resolve`) has already reclassified reserved-prefix keys
+      (`@sec-...`, `@fig-...`, …) out of plain `Inline::Cite` nodes. The
+      book-merge driver (`crates/quarto-core/src/project/book/single_file_render.rs`)
+      didn't follow that convention: it called `apply_citeproc_filter` once,
+      directly, on the merged document *before* the merged whole's own
+      Crossref-onward pipeline ran — a deliberate P2 design choice
+      (`claude-notes/plans/2026-09-21-book-projects-P2-single-file-merge.md`)
+      whose own tests only ever exercised pure bibliographic citations, never
+      citeproc mixed with numbered crossrefs in the same book. `embed`'s
+      absence (item 3) is unrelated — this reproduces independent of it.
+
+      **Fix (Gordon-approved, 2026-09-28)**: split the merged document's
+      finishing pipeline into three steps instead of one — run
+      `AstTransformsStage::for_range(Crossref..=Crossref)` alone first (via a
+      new intermediate `run_pipeline_from_ast` call), call
+      `apply_citeproc_filter` on the result, then run the remaining
+      `Navigation..`-onward stages as before
+      (`build_pandoc_pipeline_finishing_stages(TransformPhase::Navigation,
+      ...)` instead of `..Crossref`). No new pipeline primitive needed —
+      `AstTransformsStage::for_range` already accepts arbitrary phase ranges.
+      Verified: the `sec-basic-figures` citeproc error is gone; render now
+      gets past citeproc entirely. Regression-checked broadly, not just the
+      6-test subset — `cargo nextest run -p quarto-core -E` against all 15
+      book-*/orange_book_lua test files (63 tests) and the full `-p
+      quarto-core` suite (5282 tests) both green, no regressions. `cargo
+      clippy -p quarto-core --all-targets -- -D warnings` clean.
+
+      **Phase-boundary `cargo nextest run --workspace`**: 14962 passed / 1
+      failed / 201 skipped (15247 total, plus the smoke-all `-p quarto` run
+      counted separately above). The one failure —
+      `quarto-test runner::tests::should_error_respects_project_render_context`
+      — is **pre-existing, not caused by this fix**: confirmed by reverting
+      `single_file_render.rs` to `HEAD` and rerunning the test in isolation,
+      which still fails the same way (`assertion failed: matches!(result,
+      TestResult::Pass | TestResult::Skipped(_))`, an R/knitr execution
+      inside the test's own synthetic fixture). Unrelated to P8/citeproc/
+      crossref work; not investigated further here (out of this branch's
+      scope), restored the fix immediately after confirming.
+
+      **Current state past both of the above: a third, separate, real bug —
+      not yet fixed, found 2026-09-28.** Render now fails with `Error
+      [Q-20-3]: pandoc exited with exit status: 6 ... Argument of --toc-depth
+      must be a number 1-6` — this fixture's `_quarto.yml` deliberately sets
+      `format.typst.toc-depth: 17` (Typst's native outline isn't capped at 6;
+      Q1's fixture exercises that). `crates/quarto-core/src/pandoc_filters/format_defaults.rs`
+      unconditionally forwards `toc-depth` metadata as a raw `--toc-depth <n>`
+      pandoc CLI argument, and pandoc's CLI flag parser hard-validates that
+      range. Verified directly (`pandoc -f markdown -t typst --toc-depth=17`
+      → same error; `pandoc --defaults=<yaml with toc-depth: 17>` → succeeds,
+      no validation at all) — pandoc's `--defaults` YAML mechanism has no such
+      range check; only the CLI flag parser does. Q1's own TS source has no
+      Typst-specific `toc-depth` filtering either (`kTocDepth` search turned
+      up nothing beyond HTML-bootstrap CSS generation), so Q1 likely reaches
+      pandoc via a defaults file for this key, not a raw CLI flag, sidestepping
+      the same validation Q2 hits. Not yet fixed — unclear whether the right
+      fix is narrow (clamp/skip `--toc-depth` when out of pandoc's CLI range,
+      or only pass it when `toc: true`) or broader (route more of
+      `format_defaults.rs`'s args through a `--defaults` file, matching Q1's
+      likely mechanism) — flagged to Gordon before proceeding, given
+      `format_defaults.rs` is shared, not orange-book-specific.
+
+      **Next steps, in order:** (1) resolve the toc-depth blocker; (2) finish
+      rendering the whole book and reconcile all ~250 assertions; (3) once
+      bd-l6eh1635 actually merges into `feature/typst-testing`, rebase this
+      branch onto it, swap `references.json` back out for `references.bib` in
+      `_quarto.yml`, delete `references.json`, and re-verify. Expect the
+      `fig-visualization`/`sec-embedded-notebooks` assertions (3 lines, see
+      item 3) to still fail on `embed`'s absence; everything else is new
+      ground.
 - [x] Cross-check against the six existing Rust integration tests
       (`book_numbering_torture.rs` et al.) — any assertion that fails here but passes
       there points at a smoke-all-harness gap, not a rendering regression; triage
@@ -224,14 +294,19 @@ logo-path resolution against a synthetic merged document's directory context.
 
 ## Status
 
-**Blocked on bd-l6eh1635 (BibTeX bibliography support, workspace-6/
-`braid/bd-l6eh1635-bibtex-citeproc`) for the one remaining item (rendering the
-whole book and reconciling assertions).** Everything else in this branch's scope
-is done: fixture reconciled to Q1's tracked source (plus one required Q-2-7
-apostrophe-escape deviation), `render-project: true` confirmed, the
-`requires: jupyter` question resolved (not needed — `embed` is unimplemented,
-own epic, per D6), existing Rust integration-test baseline confirmed green,
-`cargo clippy`/`cargo nextest -p quarto` green with this fixture's own test
-visibly skipped pending the BibTeX dependency. Not merging to
-`feature/typst-testing` yet — nothing here is ready to flip to `Complete.` until
-item 4 actually runs.
+**Blocked on resolving the toc-depth CLI-arg finding (see item 4) before the
+whole-book render can complete.** The BibTeX blocker (bd-l6eh1635, workspace-6/
+`braid/bd-l6eh1635-bibtex-citeproc`) is temporarily worked around (a local
+`references.json` conversion, reversible, see item 4) rather than actually
+resolved — that dependency still needs to land and be swapped back in before
+this branch is done. Along the way, fixed a real, separate, verified bug in
+shared book-merge machinery: `single_file_render.rs` ran citeproc *before* the
+merged document's Crossref phase instead of after, unlike the single-document
+`.post`-bucket convention — landed, regression-checked against 63 book-related
+tests plus the full `-p quarto-core` suite (5282 tests), all green. Also
+resolved the `requires: jupyter` question from the plan (not needed — `embed`
+is unimplemented, own epic, per D6). Fixture itself is reconciled to Q1's
+tracked source (plus one required Q-2-7 apostrophe-escape deviation),
+`render-project: true` confirmed, existing Rust integration-test baseline
+confirmed green. Not merging to `feature/typst-testing` yet — nothing here is
+ready to flip to `Complete.` until item 4 actually runs end to end.

@@ -273,32 +273,15 @@ pub(crate) async fn render_book_single_file(
         );
     }
 
-    // Deferred citeproc (Decision 1): one call, on the assembled whole,
-    // before the Crossref-onward pass — instead of once per chapter.
-    // bd-oqoozmtr: resolve `bibliography`/`csl` against the first
-    // file-chapter's directory — the directory the merged meta's marked
-    // `Path` values were rebased to. `book_level` is seeded from the same
-    // chapter, so the Option always has a value here.
+    // Deferred citeproc (Decision 1, revised — see the note at the
+    // Crossref-phase split below): the actual `apply_citeproc_filter` call
+    // now happens *after* the merged document's Crossref phase runs, not
+    // here. `citeproc_base_dir` is captured here (bd-oqoozmtr: resolve
+    // `bibliography`/`csl` against the first file-chapter's directory —
+    // the directory the merged meta's marked `Path` values were rebased
+    // to; `book_level` is seeded from the same chapter, so the Option
+    // always has a value) for use down there.
     let citeproc_base_dir = first_chapter_dir.unwrap_or_else(|| project.dir.clone());
-    let ast_context = pampa::pandoc::ASTContext::default();
-    let (mut merged, _ast_context, citeproc_diagnostics, _citation_manifest) =
-        pampa::citeproc_filter::apply_citeproc_filter(
-            merged,
-            ast_context,
-            &format.target_format,
-            &citeproc_base_dir,
-        )
-        .map_err(|e| QuartoError::other(format!("citeproc failed for merged book: {e}")))?;
-    diagnostics.extend(citeproc_diagnostics);
-
-    // The deferred citeproc just consumed `bibliography`/`csl`: every
-    // citation is formatted and the bibliography Div is inserted. Left in
-    // the merged meta, pandoc's Typst writer would *additionally* emit
-    // native `#set bibliography(...)`/`#bibliography(...)` pointing at
-    // doc-relative paths that don't exist under the book output dir —
-    // a compile error plus a second, hayagriva-rendered bibliography.
-    merged.meta.remove("bibliography");
-    merged.meta.remove("csl");
 
     // Derive Q2's `epub-cover-image` key from `book.cover-image` (EPUB
     // output only, and only when the author set no explicit
@@ -390,10 +373,76 @@ pub(crate) async fn render_book_single_file(
         recorded_includes: Vec::new(),
     };
 
+    // Run the merged document's Crossref phase (`crossref-index` +
+    // `crossref-resolve`, *not* `crossref-render` — see
+    // `TransformPhase::Crossref`'s doc comment) on its own, before
+    // citeproc. In the single-document pipeline, citeproc resolves into
+    // the `.post` filter bucket by default (`filter_resolve.rs`'s
+    // `"citeproc" into .post`) and so always runs *after*
+    // `AstTransformsStage` — after Crossref has already reclassified
+    // reserved-prefix keys (`@sec-...`, `@fig-...`, `@tbl-...`, …) out of
+    // plain `Inline::Cite` nodes. `apply_citeproc_filter` has no such
+    // awareness (it treats every `Inline::Cite` as bibliographic), so
+    // calling it *before* Crossref runs — the original Decision 1
+    // mechanism — makes it try to look up crossref-only labels in the
+    // bibliography and fail loudly (`Citation processing error: Reference
+    // '<label>' not found`) the moment a book mixes citeproc with numbered
+    // crossrefs in the same document. Splitting the Crossref phase out
+    // here and running citeproc immediately after restores the
+    // single-document ordering for the merged whole. See the P8 plan
+    // (`claude-notes/plans/2026-09-27-typst-smoke-all-epic-P8-orange-book-base.md`)
+    // for the fixture that surfaced this.
+    let crossref_stages: Vec<Box<dyn crate::stage::PipelineStage>> =
+        vec![Box::new(crate::stage::AstTransformsStage::for_range(
+            TransformPhase::Crossref..=TransformPhase::Crossref,
+        ))];
+    let (crossref_result, crossref_diagnostics) =
+        run_pipeline_from_ast(merged_doc, &mut ctx, runtime.clone(), crossref_stages).await?;
+    ctx.diagnostics.extend(crossref_diagnostics);
+    let crossref_doc = crossref_result.into_document_ast().ok_or_else(|| {
+        QuartoError::Other(
+            "Book single-file Crossref-phase pipeline did not produce DocumentAst".to_string(),
+        )
+    })?;
+
+    let ast_context = pampa::pandoc::ASTContext::default();
+    let (mut citeproc_ast, _ast_context, citeproc_diagnostics, _citation_manifest) =
+        pampa::citeproc_filter::apply_citeproc_filter(
+            crossref_doc.ast,
+            ast_context,
+            &format.target_format,
+            &citeproc_base_dir,
+        )
+        .map_err(|e| QuartoError::other(format!("citeproc failed for merged book: {e}")))?;
+    ctx.diagnostics.extend(citeproc_diagnostics);
+
+    // The deferred citeproc just consumed `bibliography`/`csl`: every
+    // citation is formatted and the bibliography Div is inserted. Left in
+    // the merged meta, pandoc's Typst writer would *additionally* emit
+    // native `#set bibliography(...)`/`#bibliography(...)` pointing at
+    // doc-relative paths that don't exist under the book output dir —
+    // a compile error plus a second, hayagriva-rendered bibliography.
+    citeproc_ast.meta.remove("bibliography");
+    citeproc_ast.meta.remove("csl");
+
+    let post_citeproc_doc = crate::stage::DocumentAst {
+        path: crossref_doc.path,
+        ast: citeproc_ast,
+        ast_context: crossref_doc.ast_context,
+        source_context: crossref_doc.source_context,
+        warnings: crossref_doc.warnings,
+        recorded_includes: crossref_doc.recorded_includes,
+    };
+
     let finishing_stages =
-        build_pandoc_pipeline_finishing_stages(TransformPhase::Crossref, format.identifier);
-    let (finished, finishing_diagnostics) =
-        run_pipeline_from_ast(merged_doc, &mut ctx, runtime.clone(), finishing_stages).await?;
+        build_pandoc_pipeline_finishing_stages(TransformPhase::Navigation, format.identifier);
+    let (finished, finishing_diagnostics) = run_pipeline_from_ast(
+        post_citeproc_doc,
+        &mut ctx,
+        runtime.clone(),
+        finishing_stages,
+    )
+    .await?;
     ctx.diagnostics.extend(finishing_diagnostics);
     let rendered = finished.into_rendered_output().ok_or_else(|| {
         QuartoError::Other(
