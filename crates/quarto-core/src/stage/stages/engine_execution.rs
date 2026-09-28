@@ -513,6 +513,22 @@ impl PipelineStage for EngineExecutionStage {
             let mut masked_ast = ast.clone();
             crate::engine::nested_cell_mask::mask(&mut masked_ast);
 
+            // bd-2lxj10z0 (plan §D1/§D2): re-inject a crossref-consumed
+            // `label:` option into the text handed to knitr, so knitr's
+            // own label-based output naming (`fig-cars-1.svg`) sees the
+            // label again. Additive on this per-engine clone only — `ast`
+            // itself (what `reconcile` below compares against) and the
+            // wrapping Div's `id` are untouched; the Div still needs the
+            // label independently for crossref numbering. Scoped to
+            // knitr: Jupyter has no label-based naming to restore, and
+            // this must not risk changing its behavior (plan §D1).
+            if engine.name() == "knitr" {
+                crate::crossref::label_reinject::inject(
+                    &mut masked_ast,
+                    ctx.ref_type_registry.as_ref(),
+                );
+            }
+
             // Serialize the masked AST to QMD for this engine. Every engine
             // goes through this one call, so knitr, q2's jupyter text
             // engine, and TS extensions are all covered with no per-engine
