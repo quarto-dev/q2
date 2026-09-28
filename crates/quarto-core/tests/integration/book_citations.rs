@@ -18,8 +18,12 @@
  * driver = the first file-chapter's directory, where the merged meta's
  * marked `Path` values are anchored).
  *
- * Fixtures use CSL-JSON bibliographies: pampa's citeproc does not parse
- * BibTeX (`.bib`) at all — separate gap, tracked independently.
+ * Most fixtures use CSL-JSON bibliographies, since that's the simpler format
+ * to hand-author for a test. `book_merge_supports_bibtex_bibliography` below
+ * exercises the same book-wide merge path with a real `.bib` file, so the
+ * `ChapterCitationManifest`/multi-file-merge path is confirmed end-to-end
+ * with BibTeX input too, not just CSL-JSON (bd-l6eh1635; pampa's own BibTeX
+ * ingestion lives in `pampa::citeproc_filter::load_bibliography`).
  *
  * Also home to the non-book face of the same bd-oqoozmtr fix
  * (`single_file_citeproc_resolves_paths_relative_to_document`): the
@@ -89,6 +93,21 @@ const REFS_JSON: &str = r#"[
     "issued": { "date-parts": [[2020]] }
   }
 ]
+"#;
+
+/// Same two references as [`REFS_JSON`], authored as BibTeX instead of
+/// CSL-JSON, for [`book_merge_supports_bibtex_bibliography`] below.
+const REFS_BIB: &str = r#"@book{knuth1984,
+  author = {Knuth, Donald E.},
+  title = {The TeXbook},
+  year = {1984},
+  publisher = {Addison-Wesley}
+}
+@article{doe2020,
+  author = {Doe, Jane},
+  title = {A Paper},
+  year = {2020}
+}
 "#;
 
 fn render_book(project_dir: &Path) -> quarto_core::project::orchestrator::ProjectRenderSummary {
@@ -173,6 +192,64 @@ fn numeric_citation_numbers_are_book_wide() {
         text.matches("The TeXbook").count(),
         1,
         "the merged bibliography must list the shared source exactly once: {text}"
+    );
+}
+
+/// bd-l6eh1635: the book-wide merge path (Decision 1's single deferred
+/// citeproc pass over the merged document) works identically when the
+/// declared `bibliography` is a `.bib` file instead of CSL-JSON — pampa's
+/// `load_bibliography` dispatches on extension before either chapter's
+/// citeproc pass runs, and `ChapterCitationManifest` harvesting doesn't
+/// care which format populated the `Reference`s it captured. Mirrors
+/// `numeric_citation_numbers_are_book_wide` above, but with `REFS_BIB`.
+#[test]
+fn book_merge_supports_bibtex_bibliography() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = canonical(temp.path());
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: book\n\nbibliography: refs.bib\ncsl: numeric.csl\n\nbook:\n  title: \"BibTeX Citation Book\"\n  author: \"Test Author\"\n  chapters:\n    - index.qmd\n    - ch1.qmd\n    - ch2.qmd\n",
+    );
+    write(
+        &project_dir.join("index.qmd"),
+        "---\ntitle: Home\n---\n\nWelcome to the book.\n",
+    );
+    write(
+        &project_dir.join("ch1.qmd"),
+        "# Chapter One\n\nFirst use [@knuth1984] and also [@doe2020].\n",
+    );
+    write(
+        &project_dir.join("ch2.qmd"),
+        "# Chapter Two\n\nSecond use of the same source [@knuth1984].\n",
+    );
+    write(&project_dir.join("refs.bib"), REFS_BIB);
+    write(&project_dir.join("numeric.csl"), NUMERIC_CSL);
+
+    let summary = render_book(&project_dir);
+    assert_eq!(summary.outputs.len(), 1, "{summary:?}");
+    let text = extract_pdf_text(&summary.outputs[0].output_path);
+
+    assert!(
+        text.contains("First use [1] and also [2]."),
+        "chapter one's citations must number 1 and 2 in first-use order: {text}"
+    );
+    assert!(
+        text.contains("same source [1]."),
+        "chapter two's citation of chapter one's source must reuse the book-wide \
+         number [1], not a fresh per-chapter number: {text}"
+    );
+    assert!(
+        !text.contains("[3]"),
+        "no third number may exist — the shared source must not be renumbered: {text}"
+    );
+    assert_eq!(
+        text.matches("The TeXbook").count(),
+        1,
+        "the merged bibliography must list the shared BibTeX source exactly once: {text}"
+    );
+    assert!(
+        !text.contains("@knuth1984") && !text.contains("@doe2020"),
+        "no raw citation may survive the deferred citeproc: {text}"
     );
 }
 

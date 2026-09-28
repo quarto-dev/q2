@@ -11,6 +11,7 @@
 
 use std::path::{Path, PathBuf};
 
+use biblatex::{Bibliography, ChunksExt, DateValue, EntryType, PermissiveType};
 use quarto_citeproc::{Citation, CitationItem, Processor, Reference};
 use quarto_csl::parse_csl;
 use quarto_error_reporting::DiagnosticMessage;
@@ -230,17 +231,373 @@ pub fn load_csl_style(
     })
 }
 
-/// Load bibliography references from a CSL-JSON file.
+/// Load bibliography references from a CSL-JSON or BibTeX file.
 fn load_bibliography(path: &str, base_dir: &Path) -> Result<Vec<Reference>, CiteprocFilterError> {
     let path = resolve_against_base(base_dir, path);
     let content = std::fs::read_to_string(&path)
         .map_err(|e| CiteprocFilterError::BibliographyNotFound(path.clone(), e))?;
 
-    // Parse as JSON array of references
-    let references: Vec<Reference> = serde_json::from_str(&content)
-        .map_err(|e| CiteprocFilterError::BibliographyParseError(path, e.to_string()))?;
+    let is_bibtex = path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            matches!(
+                extension.to_ascii_lowercase().as_str(),
+                "bib" | "bibtex" | "biblatex"
+            )
+        });
 
-    Ok(references)
+    if is_bibtex {
+        let bibliography = Bibliography::parse(&content).map_err(|e| {
+            CiteprocFilterError::BibliographyParseError(path.clone(), e.to_string())
+        })?;
+        bibliography
+            .iter()
+            .map(biblatex_entry_to_reference)
+            .collect::<Result<_, _>>()
+            .map_err(|error| CiteprocFilterError::BibliographyParseError(path, error))
+    } else {
+        // Parse as a CSL-JSON array of references.
+        let references: Vec<Reference> = serde_json::from_str(&content)
+            .map_err(|e| CiteprocFilterError::BibliographyParseError(path, e.to_string()))?;
+
+        Ok(references)
+    }
+}
+
+fn biblatex_entry_to_reference(entry: &biblatex::Entry) -> Result<Reference, String> {
+    use quarto_citeproc::reference::{DateVariable, Name, StringOrNumber};
+
+    let get_text = |keys: &[&str]| {
+        keys.iter().find_map(|key| {
+            entry
+                .get(key)
+                .map(ChunksExt::format_sentence)
+                .filter(|value| !value.is_empty())
+        })
+    };
+    let get_verbatim = |keys: &[&str]| {
+        keys.iter().find_map(|key| {
+            entry
+                .get(key)
+                .map(ChunksExt::format_verbatim)
+                .filter(|value| !value.is_empty())
+        })
+    };
+    let get_title_text = |keys: &[&str]| {
+        keys.iter().find_map(|key| {
+            entry
+                .get(key)
+                .map(format_bibtex_title_case)
+                .filter(|value| !value.is_empty())
+        })
+    };
+    let parse_people = |key: &str| -> Result<Option<Vec<Name>>, String> {
+        entry
+            .get(key)
+            .map(|chunks| {
+                let people = chunks
+                    .parse::<Vec<biblatex::Person>>()
+                    .map_err(|error| format!("invalid {key} field: {error}"))?;
+                Ok(people
+                    .into_iter()
+                    .map(|person| {
+                        let literal = person.given_name.is_empty()
+                            && chunks.iter().any(|chunk| {
+                                matches!(
+                                    &chunk.v,
+                                    biblatex::Chunk::Verbatim(value) if value == &person.name
+                                )
+                            });
+                        Name {
+                            family: (!literal).then_some(person.name.clone()),
+                            given: (!person.given_name.is_empty()).then_some(person.given_name),
+                            dropping_particle: None,
+                            non_dropping_particle: (!person.prefix.is_empty())
+                                .then_some(person.prefix),
+                            suffix: (!person.suffix.is_empty()).then_some(person.suffix),
+                            comma_suffix: None,
+                            static_ordering: None,
+                            literal: literal.then_some(person.name),
+                            parse_names: None,
+                        }
+                    })
+                    .collect())
+            })
+            .transpose()
+    };
+
+    let pages = get_verbatim(&["pages"]).map(normalize_bibtex_pages);
+    let mut other = hashlink::LinkedHashMap::new();
+    if let Some(genre) = match entry.entry_type {
+        EntryType::PhdThesis => Some("PhD thesis"),
+        EntryType::MastersThesis => Some("Master’s thesis"),
+        _ => None,
+    } {
+        other.insert(
+            "genre".to_string(),
+            serde_json::Value::String(genre.to_string()),
+        );
+    }
+    let issued = match entry.date() {
+        Ok(PermissiveType::Typed(date)) => {
+            let date_parts = match date.value {
+                DateValue::At(datetime)
+                | DateValue::After(datetime)
+                | DateValue::Before(datetime) => Some(vec![datetime_to_csl_date_parts(datetime)]),
+                DateValue::Between(start, end) => Some(vec![
+                    datetime_to_csl_date_parts(start),
+                    datetime_to_csl_date_parts(end),
+                ]),
+            };
+            Some(DateVariable {
+                date_parts,
+                literal: None,
+                raw: None,
+                season: None,
+                circa: (date.approximate || date.uncertain).then_some(true),
+            })
+        }
+        Ok(PermissiveType::Chunks(chunks)) => Some(DateVariable {
+            date_parts: None,
+            literal: Some(chunks.format_sentence()),
+            raw: None,
+            season: None,
+            circa: None,
+        }),
+        Err(biblatex::RetrievalError::Missing(_)) => None,
+        Err(error) => return Err(format!("invalid date field: {error}")),
+    };
+
+    let ref_type = match entry.entry_type {
+        EntryType::Article => "article-journal",
+        EntryType::Book
+        | EntryType::Manual
+        | EntryType::Proceedings
+        | EntryType::Collection
+        | EntryType::MvBook
+        | EntryType::Periodical
+        | EntryType::MvCollection
+        | EntryType::Reference
+        | EntryType::MvReference
+        | EntryType::MvProceedings => "book",
+        EntryType::Booklet => "pamphlet",
+        EntryType::InBook
+        | EntryType::InCollection
+        | EntryType::BookInBook
+        | EntryType::SuppBook
+        | EntryType::SuppCollection
+        | EntryType::InReference => "chapter",
+        EntryType::InProceedings => "paper-conference",
+        EntryType::MastersThesis | EntryType::PhdThesis | EntryType::Thesis => "thesis",
+        EntryType::TechReport | EntryType::Report => "report",
+        EntryType::Unpublished => "manuscript",
+        EntryType::Patent => "patent",
+        EntryType::Online => "webpage",
+        EntryType::Software => "software",
+        EntryType::Dataset => "dataset",
+        EntryType::SuppPeriodical => "article-journal",
+        EntryType::Misc | EntryType::Set | EntryType::XData | EntryType::Unknown(_) => "article",
+    };
+
+    let mut reference = Reference {
+        id: entry.key.clone(),
+        ref_type: ref_type.to_string(),
+        title: get_title_text(&["title"]),
+        title_short: get_title_text(&["shorttitle"]),
+        container_title: get_title_text(&["journaltitle", "journal", "booktitle"]),
+        container_title_short: get_title_text(&["shortjournal"]),
+        collection_title: get_title_text(&["series"]),
+        publisher: get_verbatim(&["publisher"]),
+        publisher_place: get_verbatim(&["location", "address"]),
+        edition: get_verbatim(&["edition"]).map(StringOrNumber::String),
+        volume: get_verbatim(&["volume"]).map(StringOrNumber::String),
+        issue: get_verbatim(&["number", "issue"]).map(StringOrNumber::String),
+        page: pages.clone(),
+        page_first: pages.as_deref().and_then(|pages| {
+            pages
+                .split(['-', '–', '—'])
+                .next()
+                .map(str::trim)
+                .filter(|page| !page.is_empty())
+                .map(str::to_string)
+        }),
+        number_of_pages: None,
+        chapter: get_verbatim(&["chapter"]).map(StringOrNumber::String),
+        abstract_: get_verbatim(&["abstract"]),
+        doi: get_verbatim(&["doi"]),
+        isbn: get_verbatim(&["isbn"]),
+        issn: get_verbatim(&["issn"]),
+        url: get_verbatim(&["url"]),
+        note: get_text(&["note"]),
+        language: get_verbatim(&["language", "langid"]),
+        source: None,
+        author: parse_people("author")?,
+        editor: parse_people("editor")?,
+        translator: parse_people("translator")?,
+        container_author: parse_people("bookauthor")?,
+        collection_editor: None,
+        director: None,
+        interviewer: None,
+        recipient: None,
+        reviewed_author: None,
+        composer: None,
+        issued,
+        accessed: entry.get("urldate").map(|chunks| DateVariable {
+            date_parts: None,
+            literal: Some(chunks.format_sentence()),
+            raw: None,
+            season: None,
+            circa: None,
+        }),
+        event_date: None,
+        original_date: None,
+        submitted: None,
+        other,
+        disambiguation: None,
+    };
+    reference.extract_all_particles();
+    Ok(reference)
+}
+
+fn format_bibtex_title_case(chunks: &[biblatex::Spanned<biblatex::Chunk>]) -> String {
+    use std::fmt::Write as _;
+
+    let mut result = String::new();
+    let mut previous_was_whitespace = false;
+    let mut is_first_word = true;
+    let mut capitalize_next_word = true;
+    for chunk in chunks {
+        let (text, protected) = match &chunk.v {
+            biblatex::Chunk::Normal(text) => (text.as_str(), false),
+            biblatex::Chunk::Verbatim(text) => (text.as_str(), true),
+            biblatex::Chunk::Math(text) => {
+                let _ = write!(result, "${text}$");
+                continue;
+            }
+        };
+
+        if protected {
+            result.push_str(&format!(
+                "<span class=\"nocase\">{}</span>",
+                escape_html_text(text)
+            ));
+            if text.chars().any(char::is_alphanumeric) {
+                is_first_word = false;
+                capitalize_next_word = text.chars().last().is_some_and(char::is_whitespace);
+            }
+            previous_was_whitespace = text.chars().last().is_some_and(char::is_whitespace);
+            continue;
+        }
+
+        let mut word = String::new();
+        let flush_word = |word: &mut String,
+                          output: &mut String,
+                          first: &mut bool,
+                          capitalize_next: &mut bool| {
+            if word.is_empty() {
+                return;
+            }
+            output.push_str(&format_bibtex_word(word, *first, *capitalize_next));
+            *first = false;
+            *capitalize_next = false;
+            word.clear();
+        };
+
+        for mut character in text.chars() {
+            if character == '\n' || character == '\r' {
+                if previous_was_whitespace {
+                    continue;
+                }
+                character = ' ';
+            }
+
+            if character.is_alphanumeric() {
+                word.push(character);
+            } else {
+                flush_word(
+                    &mut word,
+                    &mut result,
+                    &mut is_first_word,
+                    &mut capitalize_next_word,
+                );
+                result.push(character);
+                if matches!(character, '.' | '!' | '?') {
+                    capitalize_next_word = true;
+                }
+            }
+            previous_was_whitespace = character.is_whitespace();
+        }
+        flush_word(
+            &mut word,
+            &mut result,
+            &mut is_first_word,
+            &mut capitalize_next_word,
+        );
+    }
+    result
+}
+
+fn format_bibtex_word(word: &str, is_first_word: bool, capitalize: bool) -> String {
+    let mut chars = word.chars();
+    let Some(first) = chars.next() else {
+        return String::new();
+    };
+    let rest: Vec<char> = chars.collect();
+    let is_capitalized =
+        first.is_uppercase() && rest.iter().all(|character| character.is_lowercase());
+    let is_lowercase = word.chars().all(char::is_lowercase);
+    let is_all_uppercase = word.chars().any(char::is_alphabetic)
+        && word
+            .chars()
+            .filter(|character| character.is_alphabetic())
+            .all(char::is_uppercase);
+
+    if capitalize && (is_capitalized || is_lowercase || is_all_uppercase) {
+        first.to_uppercase().chain(rest).collect()
+    } else if !is_first_word && is_capitalized {
+        word.to_lowercase()
+    } else {
+        word.to_string()
+    }
+}
+
+fn escape_html_text(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
+fn normalize_bibtex_pages(pages: String) -> String {
+    let mut normalized = String::with_capacity(pages.len());
+    let mut chars = pages.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if matches!(ch, '-' | '–' | '—') {
+            while chars
+                .peek()
+                .is_some_and(|next| matches!(next, '-' | '–' | '—'))
+            {
+                chars.next();
+            }
+            normalized.push('-');
+        } else {
+            normalized.push(ch);
+        }
+    }
+
+    normalized
+}
+
+fn datetime_to_csl_date_parts(datetime: biblatex::Datetime) -> Vec<i32> {
+    let mut parts = vec![datetime.year];
+    if let Some(month) = datetime.month {
+        parts.push(i32::from(month) + 1);
+        if let Some(day) = datetime.day {
+            parts.push(i32::from(day) + 1);
+        }
+    }
+    parts
 }
 
 /// Collect all citations from the document.
@@ -3218,6 +3575,233 @@ mod tests {
             // Citation should be replaced with rendered text
             assert!(!p.content.is_empty());
         }
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_load_bibtex_bibliography() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("references.bib"),
+            r#"@article{knuth84,
+  author = {Knuth, Donald E.},
+  title = {{Literate Programming}},
+  year = {1984},
+  journal = {{Computer Journal}},
+  volume = {27},
+  number = {2},
+  pages = {97--111},
+  doi = {10.1093/comjnl/27.2.97}
+}"#,
+        )
+        .unwrap();
+
+        let references = load_bibliography("references.bib", dir.path()).unwrap();
+        assert_eq!(references.len(), 1);
+
+        let reference = &references[0];
+        assert_eq!(reference.id, "knuth84");
+        assert_eq!(reference.ref_type, "article-journal");
+        assert_eq!(
+            reference.title.as_deref(),
+            Some("<span class=\"nocase\">Literate Programming</span>")
+        );
+        assert_eq!(
+            reference.container_title.as_deref(),
+            Some("<span class=\"nocase\">Computer Journal</span>")
+        );
+        assert_eq!(
+            reference.volume.as_ref().map(|value| value.as_str()),
+            Some("27".to_string())
+        );
+        assert_eq!(
+            reference.issue.as_ref().map(|value| value.as_str()),
+            Some("2".to_string())
+        );
+        assert_eq!(reference.page.as_deref(), Some("97-111"));
+        assert_eq!(reference.doi.as_deref(), Some("10.1093/comjnl/27.2.97"));
+        assert_eq!(
+            reference.author.as_ref().unwrap()[0].family.as_deref(),
+            Some("Knuth")
+        );
+        assert_eq!(
+            reference.author.as_ref().unwrap()[0].given.as_deref(),
+            Some("Donald E.")
+        );
+        assert_eq!(
+            reference.issued.as_ref().unwrap().date_parts,
+            Some(vec![vec![1984]])
+        );
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_load_bibtex_macros_crossrefs_and_types() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("references.bib"),
+            r#"@string{journalname = {Journal of Testing}}
+@proceedings{conf2024,
+  title = {Proceedings of the Systems Conference},
+  publisher = {Conference Press},
+  year = {2024},
+  journal = {Proceedings of the Systems Conference},
+  editor = {Editor, Eve}
+}
+@inproceedings{paper2024,
+  author = {Author, Ada},
+  title = {A Paper},
+  crossref = {conf2024},
+  pages = {10--20}
+}
+@book{book2022,
+  author = {Doe, Jane},
+  title = {A Book},
+  year = {2022}
+}
+@phdthesis{phd2020,
+  author = {Graduate, Pat},
+  title = {A Dissertation},
+  school = {Example University},
+  year = {2020}
+}
+@mastersthesis{masters2021,
+  author = {Graduate, Max},
+  title = {A Thesis},
+  school = {Example College},
+  year = {2021}
+}
+@techreport{report2023,
+  author = {Reporter, Rita},
+  title = {A Report},
+  institution = {Example Institute},
+  year = {2023}
+}
+@misc{misc2025,
+  author = {{World Health Organization}},
+  title = {A Report},
+  year = {2025}
+}
+@unknownkind{unknown2026,
+  author = {Doe, John},
+  title = {An Unknown Item},
+  year = {2026}
+}
+@article{macro2025,
+  author = {Macro, Mary},
+  title = {An Article},
+  journal = journalname,
+  year = {2025}
+}"#,
+        )
+        .unwrap();
+
+        let references = load_bibliography("references.bib", dir.path()).unwrap();
+        let by_id = |id: &str| {
+            references
+                .iter()
+                .find(|reference| reference.id == id)
+                .unwrap()
+        };
+
+        assert_eq!(
+            by_id("paper2024").container_title.as_deref(),
+            Some("Proceedings of the systems conference")
+        );
+        assert_eq!(
+            by_id("paper2024").editor.as_ref().unwrap()[0]
+                .family
+                .as_deref(),
+            Some("Editor")
+        );
+        assert_eq!(by_id("paper2024").page.as_deref(), Some("10-20"));
+        assert_eq!(
+            by_id("paper2024").publisher.as_deref(),
+            Some("Conference Press")
+        );
+        assert_eq!(by_id("book2022").ref_type, "book");
+        assert_eq!(by_id("phd2020").ref_type, "thesis");
+        assert_eq!(
+            by_id("phd2020")
+                .other
+                .get("genre")
+                .and_then(serde_json::Value::as_str),
+            Some("PhD thesis")
+        );
+        assert_eq!(
+            by_id("phd2020").get_variable("genre").as_deref(),
+            Some("PhD thesis")
+        );
+        assert_eq!(
+            by_id("masters2021")
+                .other
+                .get("genre")
+                .and_then(serde_json::Value::as_str),
+            Some("Master’s thesis")
+        );
+        assert_eq!(by_id("report2023").ref_type, "report");
+        assert_eq!(by_id("misc2025").ref_type, "article");
+        assert_eq!(
+            by_id("misc2025").author.as_ref().unwrap()[0]
+                .literal
+                .as_deref(),
+            Some("World Health Organization")
+        );
+        assert_eq!(by_id("unknown2026").ref_type, "article");
+        assert_eq!(
+            by_id("macro2025").container_title.as_deref(),
+            Some("Journal of testing")
+        );
+        assert_eq!(
+            by_id("paper2024").container_title.as_deref(),
+            Some("Proceedings of the systems conference")
+        );
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_load_bibtex_title_case_and_protected_spans() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("references.bib"),
+            r#"@article{case,
+  title = {Proceedings of NASA Systems: a {lowercase} Work with iPhone. Another Study}
+}"#,
+        )
+        .unwrap();
+
+        let references = load_bibliography("references.bib", dir.path()).unwrap();
+        assert_eq!(
+            references[0].title.as_deref(),
+            Some(
+                "Proceedings of NASA systems: a <span class=\"nocase\">lowercase</span> work with iPhone. Another study"
+            )
+        );
+
+        let csl_text_case_title =
+            quarto_citeproc::output::parse_csl_rich_text(references[0].title.as_deref().unwrap());
+        let rendered =
+            quarto_citeproc::output::inlines_to_markdown_string(&csl_text_case_title.to_inlines());
+        assert_eq!(
+            rendered,
+            "Proceedings of NASA systems: a lowercase work with iPhone. Another study"
+        );
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_load_bibtex_malformed_file_returns_parse_error() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("malformed.bib"),
+            "@article{broken, title = {",
+        )
+        .unwrap();
+
+        assert!(matches!(
+            load_bibliography("malformed.bib", dir.path()),
+            Err(CiteprocFilterError::BibliographyParseError(_, _))
+        ));
     }
 
     #[test]
