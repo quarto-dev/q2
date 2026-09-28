@@ -184,6 +184,14 @@ function App() {
   const projectSetStateRef = useRef(projectSetState);
   projectSetStateRef.current = projectSetState;
 
+  // Publish the project-set status on <html> so E2E specs can wait for
+  // 'connected'. The home renders while the root is still connecting, and
+  // the root's doc id exists before its pointers are saved, so neither a
+  // visible home nor a non-null getProjectSetDocId() means the set is ready.
+  useEffect(() => {
+    document.documentElement.dataset.projectSetStatus = projectSetState.status;
+  }, [projectSetState.status]);
+
   // Resolve the per-project actor ID before opening a document. See
   // `resolveActorIdRequest` for the three-valued contract; callers abandon
   // the open only on `null` (auth failure), proceed on `string`/`undefined`.
