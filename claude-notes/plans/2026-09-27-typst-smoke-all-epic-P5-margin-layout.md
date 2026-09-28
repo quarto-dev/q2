@@ -550,3 +550,67 @@ absence of the "file not found" error, not a raw pass-count delta.
 Verified clean: `cargo clippy -p quarto-core --all-targets -- -D warnings`,
 `cargo clippy -p quarto --all-targets -- -D warnings`,
 `cargo nextest run -p quarto-core` (5285/5285, unchanged from baseline).
+
+**2026-09-28: Group 1 (citeproc) — resolved the "unresolved contradiction," implemented
+the safe wiring fix, and found the real scope of the remaining 3 fixtures.**
+
+Resolved why `citation-margin-basic.qmd` passes natively while
+`citation-margin-elaborate.qmd`/`citation-margin-locator.qmd` (near-identical
+frontmatter, no `citeproc` key) don't: it is **not** a cite-method issue at all.
+`quarto-post/typst.lua:183`'s native branch always emits a bare
+`#cite(<id>, form: "full")`, silently dropping `citation.prefix`/`.suffix` and
+suppress-author mode — so any margin citation using a locator (`[p. 51]`), suffix
+(`and throughout`), or `-@key` suppression fails, while plain `[@key]` citations
+(which is all `citation-margin-basic.qmd`/`citation-margin-citeproc.qmd` use) pass.
+Confirmed directly against the qmd source: the two currently-passing fixtures use
+only bare `[@key]` citations; every failing fixture (elaborate, locator,
+elaborate-citeproc, locator-citeproc, prefix-suffix-citeproc) uses a locator,
+suffix, or suppression. This is a single, uniform capability gap — **locator/
+suffix/author-suppression are not implemented in `typst.lua`'s margin-citation
+`Cite` handler, in either native or citeproc mode** — not four separate issues as
+the original triage's grouping implied.
+
+Implemented the safe half (mirrors `citation-location`/`reference-location`
+exactly): added `TypstFilterParamsContributor.cite_method: Option<String>`, wired
+in `pandoc_write.rs` to read the document's own `citeproc: true` metadata boolean
+and emit `cite-method: "citeproc"` only then (deliberately **not** defaulting to
+`"citeproc"` the way the LaTeX-only `bibliography.lua`/`meta.lua` consumers of the
+same param key do — margin citations default to native, confirmed by
+`citation-margin-basic.qmd`'s own test assertions expecting native
+`#cite(..., form: "full")` output). Added a regression test
+(`render_document_to_file_typst_citeproc_true_uses_citeproc_bibliography_in_margin`)
+proving `citeproc: true` now selects the pre-rendered citeproc bibliography branch
+in `quarto-post/typst.lua`'s `Cite` handler instead of falling through to native.
+
+**Result:** `citation-margin-citeproc.qmd` (plain citations only) now fully passes
+— total smoke-all failure count dropped 40 → 39. The other three explicit-
+`citeproc: true` fixtures (elaborate-citeproc, locator-citeproc,
+prefix-suffix-citeproc) still fail, but the wiring bug itself is gone from their
+output (no more "Illegal pattern found: `#cite(<...>, form: \"full\")`", no more
+missing citeproc-rendered author/year text) — what remains is exactly the locator/
+suffix gap above, now manifesting as missing locator strings (`1941, 51`, `ch. 1`,
+etc.) in the citeproc-rendered margin text, because `citeprocBibliography` is built
+from Pandoc's rendered **reference-list** entry (author/year/title only — locators
+are inherently per-citation-instance, not part of a reference-list entry) rather
+than a locator-aware per-instance citeproc rendering.
+
+**Not implemented — needs its own scoping, same as Groups 2/4/5:** making margin
+citations carry `prefix`/`suffix`/locator/suppress-author through to the rendered
+`#note(...)` block, for both the native `#cite()` call (straightforward — Typst's
+own `cite()` supports a `supplement` argument for this) and the citeproc branch
+(harder — needs per-citation-instance citeproc rendering, e.g.
+`pandoc.utils.citeproc` on a synthetic single-citation doc per instance, rather than
+the current whole-document reference-list lookup). Affects: `citation-margin-
+elaborate.qmd`, `citation-margin-locator.qmd`, `citation-margin-elaborate-
+citeproc.qmd`, `citation-margin-locator-citeproc.qmd`,
+`citation-margin-prefix-suffix-citeproc.qmd` (5 fixtures). Not started —
+recommend treating as its own plan-sized item like Groups 2/4/5, not a quick
+follow-on to this wiring fix.
+
+`citation-margin-suppress-bib.qmd`'s separate `#show bibliography: none` wrinkle
+(noted in the original triage) has not been investigated this session either.
+
+Verified clean: `cargo clippy -p quarto-core --all-targets -- -D warnings`,
+`cargo clippy -p quarto --all-targets -- -D warnings`,
+`cargo nextest run -p quarto-core` (5286/5286, +1 for the new regression test,
+otherwise unchanged from baseline).
