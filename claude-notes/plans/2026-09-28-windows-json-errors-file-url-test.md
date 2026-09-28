@@ -139,7 +139,7 @@ This is out of scope for this plan to *design*, but it bounds the choice.
 - reserved DOS names (`CON`, `COM4.txt`, …): `C:\CON` names the device, not the file;
 - invalid filenames (trailing `.`/space, forbidden characters);
 - paths longer than 260 UTF-16 units;
-- any verbatim prefix other than a disk prefix. That includes `\\?\UNC\server\share\…`, **which does have a plain equivalent** (`\\server\share\…`, as QER's `plain_absolute_path` shows). `dunce` alone therefore does not satisfy this contract for network shares. bd-1klbq2zd must add that conversion or decide that shares are out of scope.
+- any verbatim prefix other than a disk prefix. That includes `\\?\UNC\server\share\…`, which *often* has a plain equivalent (`\\server\share\…`). It has one only when the same three conditions hold for the UNC path: no reserved names, no invalid names, within the length limit. QER's `plain_absolute_path` converts every UNC path unconditionally, so it is not evidence for or against a particular case. `dunce` never converts UNC paths, so on its own it under-delivers for shares that do have a plain form. bd-1klbq2zd must either convert UNC paths only when those conditions hold (and keep the verbatim form otherwise), or decide that shares are out of scope. If it converts them, behavioral tests must cover both a convertible share path and one that has to stay verbatim.
 
 Candidate directions, to be decided in bd-1klbq2zd:
 - Fix at the seam: `NativeRuntime::canonicalize` (`native.rs:94`) returns the plain form via `dunce::canonicalize`, plus UNC handling per the contract above. This covers CLI inputs and everything derived from them in one place, and keeps the verbatim form only where the contract allows it.
