@@ -37,7 +37,7 @@ their respective blockers.
 
 ## Phase 1 (now) — Honest detection, TDD
 
-- [ ] **1. Fix `JupyterEngine::is_available()` (bd-1eu34vpy)** to probe that
+- [x] **1. Fix `JupyterEngine::is_available()` (bd-1eu34vpy)** to probe that
       jupyter actually runs (e.g. `jupyter --version` exits 0), not just that
       the name resolves on PATH. TDD: stub-binary tests (a jupyter stub that
       exits non-zero / prints garbage must report unavailable), mirroring the
@@ -50,6 +50,55 @@ their respective blockers.
       `eprintln!`-skip on `KernelspecNotFound`. Still needed after item 1: a
       machine with working jupyter but only non-Python kernels (R/Julia-only
       users) is a legitimate setup that should skip, not fail.
+
+### Skip-path validation script (item 2)
+
+Run from the repo root in **Git Bash** (a shell started after
+2026-09-28). A stub jupyter passes the bd-1eu34vpy availability probe
+(`--version` exits 0) but fails everything else, and `APPDATA` /
+`JUPYTER_PATH` are redirected to empty dirs so runtimelib's static
+search finds no kernels — both jupyter-gated tests must
+`eprintln!`-skip with `KernelspecNotFound`, not fail.
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+SIM="$(mktemp -d)"
+trap 'rm -rf "$SIM"' EXIT
+mkdir -p "$SIM/bin" "$SIM/appdata" "$SIM/jpath"
+
+# Stub jupyter: answers `--version` (engine stays available via the
+# bd-1eu34vpy probe), fails `--paths` and everything else.
+cat > "$SIM/bin/jupyter.bat" <<'BAT'
+@echo off
+if "%~1"=="--version" (
+  echo 5.7.0
+  exit /b 0
+)
+exit /b 1
+BAT
+
+# MSYS converts $SIM/bin in PATH when spawning the Windows test
+# binaries; APPDATA/JUPYTER_PATH are read by the Rust process
+# directly, so they must be Windows-style paths.
+export PATH="$SIM/bin:$PATH"
+export APPDATA="$(cygpath -w "$SIM/appdata")"
+export JUPYTER_PATH="$(cygpath -w "$SIM/jpath")"
+
+cargo nextest run -p quarto --test integration jupyter_kernel_cleanup --no-capture
+cargo nextest run -p quarto-core --test integration capture_splice_engines --no-capture
+```
+
+Expected: `render_leaves_no_kernel_behind` and
+`jupyter_capture_splices_into_preview_ast` each pass in well under a
+second with `Skipping test: kernelspec 'python3' not found` (searched
+dirs show the redirected APPDATA, available kernels list the stubbed
+environment's emptiness); the knitr leg of `capture_splice_engines`
+still runs for real (~5s) and passes. Sanity check in the other
+direction: the same two commands without the env overrides must
+*execute* the jupyter legs (seconds, not milliseconds) on a machine
+with working jupyter + `python3` kernelspec.
 
 ## Phase 2 (later) — `q2 check jupyter` (bd-elhgm6ff)
 
