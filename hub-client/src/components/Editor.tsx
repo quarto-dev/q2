@@ -40,6 +40,7 @@ import { useCursorToSlide } from '../hooks/useCursorToSlide';
 import { useReplayMode } from '../hooks/useReplayMode';
 import { useAutomergeSync } from '../hooks/useAutomergeSync';
 import { useSidebarDrawer } from '../hooks/useSidebarDrawer';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useDocBranches } from '../hooks/useDocBranches';
 import { setActiveBranch, createBranch, mergeBranchToMain, deleteBranch } from '../services/branchService';
 import BranchBar from './BranchBar';
@@ -525,16 +526,13 @@ export default function Editor({ project, files, fileContents, binaryFileVersion
     previewReplayScrollRef.current = fn;
   }, []);
 
-  // Update document title based on current file and project
-  useEffect(() => {
-    if (currentFile) {
-      // Extract just the filename from the path
-      const filename = currentFile.path.split('/').pop() || currentFile.path;
-      document.title = `${filename} — ${project.description} — Quarto Hub`;
-    } else {
-      document.title = `${project.description} — Quarto Hub`;
-    }
-  }, [currentFile, project.description]);
+  // Update document title based on current file and project.
+  // The hook restores the default "Quarto Hub" title on unmount (e.g.
+  // when exiting to the project selector).
+  const documentTitle = currentFile
+    ? `${currentFile.path.split('/').pop() || currentFile.path} — ${project.description} — Quarto Hub`
+    : `${project.description} — Quarto Hub`;
+  useDocumentTitle(documentTitle);
 
   // Toggle Monaco read-only mode during replay
   useEffect(() => {
