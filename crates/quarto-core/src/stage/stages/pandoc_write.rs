@@ -421,15 +421,27 @@ impl PipelineStage for PandocWriteStage {
         // uses, out of scope for this wiring (typst renders one PDF per
         // invocation, so only the active `brand-mode` — "light" unless a
         // future doc sets it otherwise — is actually reachable today).
-        let (typst_brand_param, typst_available_fonts) =
-            if ctx.format.identifier == crate::format::FormatIdentifier::Typst {
-                (
-                    resolve_typst_brand_param(self.name(), &doc.ast.meta, ctx)?,
-                    resolve_typst_available_fonts(self.name(), ctx)?,
-                )
-            } else {
-                (None, None)
-            };
+        let (
+            typst_brand_param,
+            typst_available_fonts,
+            typst_citation_location,
+            typst_reference_location,
+        ) = if ctx.format.identifier == crate::format::FormatIdentifier::Typst {
+            (
+                resolve_typst_brand_param(self.name(), &doc.ast.meta, ctx)?,
+                resolve_typst_available_fonts(self.name(), ctx)?,
+                doc.ast
+                    .meta
+                    .get("citation-location")
+                    .and_then(|value| value.as_plain_text()),
+                doc.ast
+                    .meta
+                    .get("reference-location")
+                    .and_then(|value| value.as_plain_text()),
+            )
+        } else {
+            (None, None, None, None)
+        };
 
         let mut builder = FilterParamsBuilder::new(
             &ctx.format,
@@ -447,11 +459,17 @@ impl PipelineStage for PandocWriteStage {
                 share_dir: share.clone(),
             }));
         }
-        if typst_brand_param.is_some() || typst_available_fonts.is_some() {
+        if typst_brand_param.is_some()
+            || typst_available_fonts.is_some()
+            || typst_citation_location.is_some()
+            || typst_reference_location.is_some()
+        {
             builder = builder.with_contributor(Box::new(
                 crate::pandoc_filters::typst_params::TypstFilterParamsContributor {
                     brand: typst_brand_param,
                     available_fonts: typst_available_fonts,
+                    citation_location: typst_citation_location,
+                    reference_location: typst_reference_location,
                 },
             ));
         }

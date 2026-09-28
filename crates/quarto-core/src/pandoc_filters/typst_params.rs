@@ -23,11 +23,12 @@ use serde_json::{Map, Value};
 
 use super::params::FilterParamsContributor;
 
-/// Carries the pre-built `brand`/`typst-available-fonts` param values (or
-/// nothing, when unavailable) to insert into the filter-params blob.
+/// Carries Typst-specific values to insert into the filter-params blob.
 pub struct TypstFilterParamsContributor {
     pub brand: Option<Value>,
     pub available_fonts: Option<Vec<String>>,
+    pub citation_location: Option<String>,
+    pub reference_location: Option<String>,
 }
 
 impl FilterParamsContributor for TypstFilterParamsContributor {
@@ -39,6 +40,18 @@ impl FilterParamsContributor for TypstFilterParamsContributor {
             blob.insert(
                 "typst-available-fonts".to_string(),
                 Value::Array(fonts.iter().cloned().map(Value::String).collect()),
+            );
+        }
+        if let Some(location) = &self.citation_location {
+            blob.insert(
+                "citation-location".to_string(),
+                Value::String(location.clone()),
+            );
+        }
+        if let Some(location) = &self.reference_location {
+            blob.insert(
+                "reference-location".to_string(),
+                Value::String(location.clone()),
             );
         }
     }

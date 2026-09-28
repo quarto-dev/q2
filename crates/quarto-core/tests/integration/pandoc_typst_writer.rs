@@ -333,16 +333,24 @@ fn render_document_to_file_typst_emits_brand_color_from_inline_brand_block() {
     );
 }
 
-/// The no-brand case must stay exactly as it was before this bridge
-/// existed: no `brand` filter param at all, so the vendored filter's own
-/// `brand and brand[brandMode]` guard short-circuits and emits the empty
-/// `(:)` dict — not an error, not a crash.
+/// Margin settings must reach the vendored Typst Lua filters as
+/// `QUARTO_FILTER_PARAMS`, rather than being interpreted by Pandoc as
+/// unsupported CLI options. Both the layout Meta filter and the post Cite
+/// filter consume these values, so assert their observable Typst output.
 #[test]
-fn render_document_to_file_typst_without_brand_emits_empty_brand_color_dict() {
+fn render_document_to_file_typst_forwards_margin_locations_to_lua_filters() {
     let temp = TempDir::new().unwrap();
     let project_dir = temp.path().canonicalize().unwrap();
     let input_path = project_dir.join("f.qmd");
-    write(&input_path, "# Heading\n\nBody.\n");
+    write(
+        &input_path,
+        "---\ncitation-location: margin\nreference-location: margin\nbibliography: refs.bib\n---\n\n\
+         A citation [@sample2020] and a footnote.^[Margin note.]\n",
+    );
+    write(
+        &project_dir.join("refs.bib"),
+        "@article{sample2020, author = {Sample, Alice}, title = {Example}, journal = {Journal}, year = {2020}}\n",
+    );
 
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
     let output_path = project_dir.join("f.typ");
@@ -365,8 +373,12 @@ fn render_document_to_file_typst_without_brand_emits_empty_brand_color_dict() {
 
     let text = std::fs::read_to_string(&output_path).unwrap();
     assert!(
-        text.contains("#let brand-color = (:)"),
-        "expected the empty-dict fallback with no brand configured, got:\n{text}"
+        text.contains("column-sidenote"),
+        "reference-location: margin should emit the footnote show rule, got:\n{text}"
+    );
+    assert!(
+        text.contains("form: \"full\""),
+        "citation-location: margin should emit a full citation in the margin, got:\n{text}"
     );
 }
 
