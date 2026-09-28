@@ -4,16 +4,18 @@ _quarto:
   render-project: true
   tests:
     run:
-      # Blocked on BibTeX bibliography support: citeproc's `load_bibliography`
-      # only parses CSL-JSON today, so this fixture's `references.bib` fails
-      # with "Failed to parse bibliography ...: expected value at line 1
-      # column 1" before any of the assertions below get a chance to run.
-      # The fix is being developed separately (bd-l6eh1635,
-      # branch braid/bd-l6eh1635-bibtex-citeproc in workspace-6) and is
-      # deliberately NOT part of this branch — see the P8 plan's "BibTeX
-      # dependency" note. Remove this skip once that support merges into
-      # feature/typst-testing and this branch rebases onto it.
-      skip: "Blocked on BibTeX bibliography support (bd-l6eh1635)"
+      # Blocked on a Q2 pandoc-arg bug, not on this fixture: `--toc-depth`
+      # is forwarded as a raw pandoc CLI flag (format_defaults.rs), and
+      # pandoc's CLI parser hard-validates that value to 1-6 — but this
+      # fixture deliberately sets `format.typst.toc-depth: 17` (Typst's own
+      # outline isn't capped at 6, and Q1's own toc-depth handling has no
+      # such restriction). Verified pandoc's `--defaults` YAML mechanism
+      # accepts any integer with no validation at all — Q1 likely reaches
+      # pandoc that way for this key, sidestepping the CLI parser's check.
+      # See the P8 plan's item 4 for the full writeup; this needs a
+      # decision on the right fix shape (narrow clamp vs. routing more args
+      # through `--defaults`) before removing this skip.
+      skip: "Blocked on pandoc --toc-depth CLI-arg 1-6 validation (see P8 plan item 4)"
     typst:
       ensureTypstFileRegexMatches:
         - # matches array (first positional argument)
