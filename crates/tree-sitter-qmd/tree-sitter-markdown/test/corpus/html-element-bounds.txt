@@ -1,0 +1,223 @@
+================================================================================
+html-element-bounds — `<` + digit with a later `>` is Strs, not html_element (bd-html-element-runaway-k1eo50h8)
+================================================================================
+supports <6.1 and x > y
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
+
+================================================================================
+html-element-bounds — `<-` / `->` (R assignment in prose) are Strs
+================================================================================
+x <- 5 and y -> 6
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
+
+================================================================================
+html-element-bounds — `<=` / `>=` comparisons are Strs
+================================================================================
+a <=b and c >= d
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
+
+================================================================================
+html-element-bounds — `<5>` (digit-led, immediately closed) is Strs
+================================================================================
+a <5> b
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
+
+================================================================================
+html-element-bounds — an unclosed tag stops at a blank line (paragraph boundary)
+================================================================================
+x <foo
+
+bar> y
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_str))
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
+
+================================================================================
+html-element-bounds — a whitespace-only line is a blank line for the bound
+================================================================================
+x <foo
+
+bar> y
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_str))
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
+
+================================================================================
+html-element-bounds — the reported document: `<6.1)` must not swallow the pipe table that follows
+================================================================================
+so eslint (supports <6.1)
+and tooling.
+
+| a | b |
+|---|---|
+| run `x <vsix>` and `{"k": false}` here | c |
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_soft_break)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))
+        (pipe_table
+          (pipe_table_header
+            (pipe_table_cell
+              (pandoc_str))
+            (pipe_table_cell
+              (pandoc_str)))
+          (pipe_table_delimiter_row
+            (pipe_table_delimiter_cell)
+            (pipe_table_delimiter_cell))
+          (pipe_table_row
+            (pipe_table_cell
+              (pandoc_str)
+              (pandoc_code_span
+                (code_span_delimiter)
+                (content)
+                (code_span_delimiter))
+              (pandoc_space)
+              (pandoc_str)
+              (pandoc_code_span
+                (code_span_delimiter)
+                (content)
+                (code_span_delimiter))
+              (pandoc_space)
+              (pandoc_str))
+            (pipe_table_cell
+              (pandoc_str))))))
+
+================================================================================
+html-element-bounds — closing tag `</b>` still parses as html_element (regression)
+================================================================================
+a </b> c
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (html_element)
+          (pandoc_space)
+          (pandoc_str))))
+
+================================================================================
+html-element-bounds — an open tag may still span a newline (bd-ly83qewg decision)
+================================================================================
+a <span
+ class="x"> b
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (html_element)
+          (pandoc_space)
+          (pandoc_str))))
+
+================================================================================
+html-element-bounds — `<#id>` anchor shorthand still lexes as html_element (bd-p2tx)
+================================================================================
+see <#sec-intro> here
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (html_element)
+          (pandoc_space)
+          (pandoc_str))))
+
+================================================================================
+html-element-bounds — digit-led email autolink still parses as autolink (regression)
+================================================================================
+mail <1user@example.com> now
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (autolink)
+          (pandoc_space)
+          (pandoc_str))))

@@ -1250,7 +1250,11 @@ module.exports = grammar({
         // "This is literal text after all." Emitted by the scanner for:
         // - bd-j9cf: a single '<' that is not the start of an HTML construct
         //   (element, autolink, comment, raw-specifier), see
-        //   parse_open_angle_brace;
+        //   parse_open_angle_brace. bd-html-element-runaway-k1eo50h8 made
+        //   that decision stricter: a '<' not followed by a letter, '/',
+        //   '?' or '#' is literal ('<6.1', '<-', '<=b'), and a candidate tag
+        //   that is still open at a blank line is abandoned — an inline
+        //   token cannot span a paragraph boundary;
         // - bd-star-as-str-qigl02pz: a `*` or `_` run that CommonMark's
         //   flanking rules say cannot open (followed by whitespace) and
         //   cannot close (preceded by whitespace / line start), and a `~` or
