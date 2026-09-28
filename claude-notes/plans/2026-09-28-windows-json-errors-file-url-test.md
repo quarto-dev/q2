@@ -3,17 +3,49 @@
 **Date:** 2026-09-28
 **Braid:** bd-clq56rem (related: bd-1klbq2zd)
 **Worktree:** `.worktrees/bd-clq56rem-windows-jsonerrors-ipynb-hyperlink` (branch `braid/bd-clq56rem-windows-jsonerrors-ipynb-hyperlink`, based on `main` @ `e8379cfe`)
-**Status:** Investigation done. Design is pending alignment with the user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Investigation done (revision 2). The product-vs-test decision is pending with the user. **Do not start implementation until the user gives the go-ahead.**
 
 ## Overview
 
-`quarto::integration json_errors::ipynb_diagnostic_hyperlinks_real_notebook` fails on Windows. The product is correct. The test's *expected* URL is wrong: it builds `file://` + the display form of a `std::fs::canonicalize`d path, which on Windows is the verbatim `\\?\C:\...` form. On Unix the same concatenation yields a valid `file:///tmp/...` URL by coincidence, which is why nobody saw the bug.
+`quarto::integration json_errors::ipynb_diagnostic_hyperlinks_real_notebook` fails on Windows. The assertion that fails compares the OSC8 hyperlink URL. The product's URL is correct; the test builds a wrong expected URL (`file://` + the verbatim `\\?\C:\...` display of a `std::fs::canonicalize`d path).
 
-This is a test-only fix. No product change is needed, and the fix does not depend on bd-1klbq2zd.
+The first revision of this plan called that a test-only fix. **That was incomplete.** Every Windows failure has to be classified as a test problem, or as Windows support that is missing because the code was written on Linux/macOS, or both. When run from a plain cwd, q2 itself carries `\\?\` paths through its pipeline and into **wire output** (JSON `notebook_path` and `source_file`) and human status lines. The URL is correct only because QER strips the prefix locally before building it. This test exposes that gap and also hides part of it: its `notebook_path` check at `json_errors.rs:~490` is `ends_with("broken.ipynb")`, which a verbatim path passes.
+
+## Classification: test problem or Windows support gap?
+
+**Both.** Evidence below.
+
+| Layer | Finding | Class |
+|---|---|---|
+| OSC8 URL (the failing assertion) | Product emits `file:///C:/…/broken.ipynb`, which is correct. The test's expected value is built from a verbatim path. | **Test problem** |
+| JSON `notebook_path`, `source_file` | `\\?\C:\…\broken.ipynb` emitted even when the user never typed a verbatim path (probe below) | **Windows support gap** (product) |
+| Human status line | `Rendering single file: \\?\C:\…\ok.qmd` | **Windows support gap** (product). This is bd-1klbq2zd's reported symptom. |
+| `notebook_path` assertion at `json_errors.rs:~490` | `ends_with("broken.ipynb")` passes on a verbatim path, so the test hides the wire leak | **Test hides the gap** |
+
+**Where the prefix enters q2:** `NativeRuntime::canonicalize` (`crates/quarto-system-runtime/src/native.rs:94`) is a bare `path.canonicalize()`. `dispatch` canonicalizes every CLI input through it (`crates/quarto/src/commands/render.rs:278`, and the cwd at `:421`). The verbatim `source.path` then becomes `notebook_path` (`crates/quarto-core/src/stage/stages/parse_document.rs:206`, `.display().to_string()`) and `source_file`, and it reaches the status line at `render.rs:1046`. Beyond that one seam there are ~186 direct `canonicalize(` calls in non-test sources (heaviest in `project_resources.rs`, `project/format_paths.rs`, `engine/capture_files.rs`). The seam is the entry point for CLI inputs; the direct calls are a wider audit.
+
+**Probe** (saved under `2026-09-28-windows-json-errors-file-url-test-investigation/`): render `broken.ipynb` and `ok.qmd` with `target/debug/q2.exe` from a plain `C:\Users\…\probe` cwd using relative arguments. Output:
+
+```
+{"notebook_path":"\\\\?\\C:\\Users\\chris\\AppData\\Local\\Temp\\...\\probe\\broken.ipynb"}
+{"source_file":"\\\\?\\C:\\Users\\chris\\AppData\\Local\\Temp\\...\\probe\\broken.ipynb"}
+Rendering single file: \\?\C:\Users\chris\AppData\Local\Temp\...\probe\ok.qmd
+```
+
+## Research: is `\\?\` expected inside a Rust project?
+
+No. The consensus is to use verbatim paths only where they are needed (very long paths, reserved names) and to present or pass plain paths otherwise.
+
+- **std docs** (`std::fs::canonicalize`): on Windows it returns extended-length syntax, which "may be incompatible with other applications". `std::path::absolute` (stable since 1.79) does no I/O and resolves no symlinks. Source: context7 `/rust-lang/rust`.
+- **`dunce` 1.0.5** (read from source, `~/.cargo/registry/.../dunce-1.0.5/src/lib.rs`): the de facto fix. `dunce::canonicalize` calls std, then `simplified()` strips `\\?\` *only when that is safe*. It keeps the verbatim form for reserved names (`\\?\C:\COM`), invalid names, and paths over 260 chars. It is a no-op off Windows and does no I/O in `simplified`. q2 has it in `Cargo.lock` only as a build-time dep of `aws-lc-sys`; no q2 crate uses it.
+- **uv** (verified in source, `crates/uv-fs/src/path.rs:52-64,397`): wraps `dunce::simplified` / `dunce::canonicalize` in a `Simplified` trait and uses it for display, comparisons and `relative_to`.
+- **QER itself** (`diagnostic.rs:935-955`): strips the prefix by hand before building URLs. Upstream already treats verbatim paths as unfit for user-facing output.
+- DeepWiki-only, not verified in source: cargo avoids `std::fs::canonicalize` (`cargo-util` `normalize_path`, `try_canonicalize`), and rustc has `fix_windows_verbatim_for_gcc`. Deno strips via `strip_unc_prefix`, and Tauri uses `dunce`. A DeepWiki claim about ripgrep's hyperlink code did **not** check out (the "Verbatim" hits are a template parser) and is dropped.
+- Prior knowledge (basic-memory `patterns/windows-rust-canonicalize-path-prefix-issue`): verbatim and plain forms of the same path are unequal under `PathBuf ==` and `starts_with`. So carrying `\\?\` internally is a correctness hazard (prefix checks, relative-path computation) as well as a UX one.
 
 ## Triage verdict
 
-**Ready to design.** The root cause is confirmed at HEAD, only one test is affected, and there are three viable fixes. One design question remains (which oracle the test should use, below).
+**Needs a decision before implementing.** The failing assertion is a test bug, but fixing only the test would leave a confirmed product gap (verbatim paths in JSON wire output) hidden behind a test that goes green. The open question is sequencing with bd-1klbq2zd; see Open design questions.
 
 ## RED (captured 2026-09-28, Windows, HEAD `e8379cfe`)
 
@@ -63,72 +95,71 @@ In `quarto-error-reporting` 0.3.2 (a crates.io version dep, `Cargo.lock:6154`), 
 
 The partial Windows run of the `quarto` crate suite agrees: no other failure there is a test-built `file://` URL (see § Crate suite snapshot).
 
-Note: the test-local `fn canonical` helper is copied into about 55 test files. It is a plain passthrough to `std::fs::canonicalize`, so any *future* test that string-compares its output against product text will hit this same bug. Hardening every copy is out of scope here (YAGNI), but see design question 2.
+Note: the test-local `fn canonical` helper is copied into about 55 test files. It is a plain passthrough to `std::fs::canonicalize`, so any *future* test that string-compares its output against product text will hit this same bug. Hardening every copy is out of scope here (YAGNI), but see design question 4.
 
 ### Q4 — Relationship to bd-1klbq2zd
 
-The two strands are independent in both directions.
+These two strands are **not** independent. The first revision said they were, and the probe disproved it.
 
-- The URL is built entirely inside QER, which re-canonicalizes and strips the prefix itself (`diagnostic.rs:906, 912`). Whatever bd-1klbq2zd does to q2's own path display, this OSC8 URL does not change. So this fix does not depend on it.
-- The recommended fix (Option C) adds no helper and no dependency, so it does not pre-empt bd-1klbq2zd's choice between `dunce`, a `quarto_util` helper, and strip-at-display. Option B *would* add `dunce` to the tree as a test dep, which is a small nudge toward one answer to bd-1klbq2zd. That is one more reason to prefer C.
-- One adjacent observation, not verified: `origin.notebook_path` in the JSON diagnostic (asserted only by `ends_with` at `json_errors.rs:~490`) may carry the verbatim prefix on Windows. If so, it belongs to bd-1klbq2zd's "where do these paths flow" audit, not here.
+- The OSC8 URL is built inside QER, which re-canonicalizes and strips the prefix itself (`diagnostic.rs:906, 912`). The *URL assertion* alone therefore does not depend on bd-1klbq2zd.
+- The rest of the test's contract does depend on it. `origin.notebook_path` and `source_file` in the JSON output carry `\\?\` because of the same root cause bd-1klbq2zd describes (`NativeRuntime::canonicalize`). bd-1klbq2zd frames this as noisy *display*. It is actually a wire-format leak: JSON consumers (editors, the LSP, CI tooling) receive paths that many Windows programs cannot open.
+- A strengthened version of this test (assert that `notebook_path` is a plain path to the real notebook) is a real Windows RED for bd-1klbq2zd's product fix. This is the shared piece that justifies coordinating the two strands.
 
 ## Fix options
 
-### Option A — Mirror QER in the test: strip `\\?\` and use `Url::from_file_path`
+The fix is two pieces with an ordering question between them.
 
-Add a small test helper that strips the verbatim prefix, then call `url::Url::from_file_path(stripped).as_str()`, and keep the exact `contains(osc8)` assertion.
+### Piece 1 — Test: stop building a string oracle, and stop hiding the leak
 
-- Pros: smallest diff, and it keeps the exact-sequence assertion (which also proves there is no fragment).
-- Cons: it reimplements QER's `plain_absolute_path` in the test. Both sides would compute the URL "the same way", so the test proves they agree, not that the link is correct. If QER's strip and the copy drifted in the same wrong direction (say, both mishandling UNC), the test would still pass. This is the tautology the brief warns against.
-
-### Option B — Canonicalize without the verbatim form (`dunce`), then `Url::from_file_path`
-
-Change the test so `dir` comes from `dunce::canonicalize` (or apply `dunce::simplified` to the URL input only), then `Url::from_file_path(dir.join("broken.ipynb"))`, and keep the exact match.
-
-- Pros: uses an independent, widely used ecosystem oracle instead of a hand-written copy of QER's strip. The diff is small and keeps the exact assertion. If applied to the shared `canonical()` in json_errors.rs, the cwd we hand to q2 is also the non-verbatim form, which is closer to what a user would have.
-- Cons: adds a dev-dep to `crates/quarto`. It changes `canonical()` for 14 other tests in the file (they pass today, and dunce is identical to std on Unix). It nudges bd-1klbq2zd toward `dunce` before that strand has done its ecosystem research. It still compares URL *spelling*, so a legitimate encoding difference (e.g. a lowercase drive letter) would fail the test even though the link works.
-
-### Option C — Semantic round-trip: parse the product's link, resolve it, compare paths (recommended)
-
-Pull out the OSC8 target that wraps the `broken.ipynb[cell 2, markdown]` label, then assert:
-
+**Option C, semantic round-trip (recommended for the URL assertion).** Pull out the OSC8 target that wraps the `broken.ipynb[cell 2, markdown]` label, then assert:
 1. `url::Url::parse(target)` succeeds with `scheme() == "file"`.
-2. `url.fragment().is_none()`. This keeps the "no `#line:col` on origin links" contract that the exact-sequence match used to prove implicitly.
-3. `std::fs::canonicalize(url.to_file_path().unwrap()) == canonical(&dir.join("broken.ipynb"))`, a Path-to-Path comparison where both sides are canonicalized by std, so verbatim-vs-plain cannot differ.
+2. `url.fragment().is_none()`. This keeps the "no `#line:col` on origin links" contract.
+3. `std::fs::canonicalize(url.to_file_path()?) == canonical(&dir.join("broken.ipynb"))`, compared Path-to-Path with std on both sides.
 
-- Pros:
-  - The test never builds a URL itself, so there is no copy of product logic and no tautology.
-  - It proves exactly what the doc comment promises: the link opens the real notebook on disk.
-  - It is platform-neutral with no cfg branches and no new deps (`url` is already a dependency).
-  - It still fails on the real regressions:
-    - A pseudo-path target (the pre-`FileOrigin` bug) → `to_file_path`/canonicalize fails or points elsewhere.
-    - A verbatim leak (`file://?/C:/…`) → `?` parses as a query, so the path is wrong or empty and the comparison fails.
-    - An added fragment → assertion 2 fails.
-- Cons:
-  - More test code: a small OSC8-target extractor, about 10-15 lines, local to the file.
-  - It no longer pins the exact URL string, e.g. percent-encoding choices. That is QER's contract, covered by QER's own unit test (`diagnostic.rs:~2690`), not q2's. q2's contract here is that the right file gets linked.
-  - The doc comment at `json_errors.rs:510-521` ("Asserting the exact `ESC]8;;URL ESC\` sequence covers both") must be rewritten to describe the new assertions.
+The test never builds a URL itself, so there is no tautology with QER's logic. It needs no new dependency (`url` is already a `[dependencies]` entry of `crates/quarto`). It fails on the real regressions: a pseudo-path target, a `file://?/C:/…` verbatim leak (`?` parses as a query), or an added fragment. The cost is a small OSC8 extractor (about 10-15 lines) and a rewritten doc comment at `:510-521`. It no longer pins the exact URL spelling, which is QER's contract, covered by QER's own unit test.
 
-**Recommendation: Option C.** It answers the brief's constraints directly: it fixes the root cause (a string-built oracle) instead of swapping in another string-built oracle, it does not weaken the check to "ends with broken.ipynb" (a full path identity check is stronger than today's check), it is not a tautology, and it is independent of bd-1klbq2zd. Option B is the fallback if the user prefers keeping an exact-string assertion.
+**Plus: strengthen the `notebook_path` assertion (`:~490`)** from `ends_with("broken.ipynb")` to:
+- `!nb_path.starts_with(r"\\?\")`, the wire contract (a no-op on Unix);
+- `canonicalize(nb_path) == canonical(dir.join("broken.ipynb"))`, i.e. it names the real file.
+
+This assertion **fails on Windows today**, which makes it the genuine RED for the product fix. The same check could apply to `source_file` if the user wants the wire contract pinned there too.
+
+Alternatives considered for the URL assertion:
+- **A. Mirror QER's strip in the test.** Rejected: it copies product logic, so the test would prove only that the two copies agree.
+- **B. `dunce` + exact URL string.** This is less objectionable now that `dunce` is a likely candidate for the product fix too. But if the product adopts `dunce`, a `dunce`-based oracle shares the product's library, and it still fails on harmless spelling differences. C is stronger.
+
+### Piece 2 — Product: q2 should not carry `\\?\` (bd-1klbq2zd)
+
+This is out of scope for this plan to *design*, but it bounds the choice. Candidate directions, to be decided in bd-1klbq2zd:
+- Fix at the seam: `NativeRuntime::canonicalize` (`native.rs:94`) returns the plain form via `dunce::canonicalize`. This covers CLI inputs and everything derived from them in one place, and keeps the verbatim form where it is required (>260 chars, reserved names).
+- Audit the ~186 direct `std::fs::canonicalize` calls in non-test sources, which bypass the runtime seam. Decide whether they route through the seam, use a shared `quarto_util` helper, or stay put because they never reach output or comparisons.
+- `std::path::absolute` is **not** a drop-in replacement: it resolves no symlinks, and the tests canonicalize precisely because of macOS `/var` → `/private/var`.
+
+### Sequencing options
+
+- **S1 (recommended). One branch, both strands, TDD order.** Write Piece 1 (Option C + strengthened `notebook_path`). The URL assertion goes green and the `notebook_path` assertion stays RED on Windows. Then implement Piece 2 at the seam (bd-1klbq2zd) → GREEN. Nothing lands that hides the leak, and the product fix gets a real Windows RED.
+- **S2. Test-only now (Option C), `notebook_path` strengthening deferred to bd-1klbq2zd.** Smallest step, but the test goes green on Windows while the wire leak persists. This is the "green board without parity" outcome CLAUDE.local.md warns against.
+- **S3. Park bd-clq56rem behind bd-1klbq2zd** (`blocks` edge) and do everything in bd-1klbq2zd. This is equivalent to S1, with the test work owned by the product strand.
 
 ## Open design questions for the user
 
-1. **Oracle choice.** Option C (semantic round-trip, no exact URL string) or Option B (exact string via `dunce`, adds a dev-dep)? Recommended: C.
-2. **Shared `canonical()` hardening.** Leave the ~55 copies of the test-local `canonical()` alone (the recommendation, since nothing else is fragile today), or file a low-priority strand to note the trap near those copies?
-3. **`origin.notebook_path` verbatim check.** Should I spend one extra probe confirming whether the JSON `notebook_path` carries `\\?\` on Windows, and add the result as a comment on bd-1klbq2zd? This is not part of this fix.
+1. **Sequencing.** S1 (one branch: test RED → product fix at the runtime seam), S2 (test-only now), or S3 (fold into bd-1klbq2zd)? Recommended: S1.
+2. **bd-1klbq2zd scope.** Widen it from "user-facing display" to "q2 must not emit or carry `\\?\` in wire output (JSON) or status lines", with the `NativeRuntime::canonicalize` seam as the first fix site and the ~186 direct calls as an audit?
+3. **Wire contract breadth.** Pin "no `\\?\`" only on `notebook_path` in this test, or also on `source_file`?
+4. **Shared `canonical()` in tests.** Leave the ~55 copies of the test helper alone. They are correct as a filesystem oracle as long as comparisons stay Path-to-Path.
 
-## Checklist (after design sign-off)
+## Checklist (after sign-off; assumes S1)
 
 - [x] RED: capture the real failure on Windows (above)
 - [x] Confirm the product URL builder and its visibility (QER `diagnostic.rs:889/944`, private)
-- [x] Sweep sibling tests (Q3). Only json_errors.rs:595 is fragile.
-- [ ] Implement the chosen option in `crates/quarto/tests/integration/json_errors.rs` (test-only; no product code)
-- [ ] Update the test's doc comment (`:510-521`) and the stale comment at `:594` so they match the new assertions
-- [ ] GREEN: the target test passes on Windows
-- [ ] Sibling check: `json_errors::` module green on Windows (the only file touched). Rely on CI for the rest (see § Crate suite snapshot).
-- [ ] Sanity check that the new assertions still catch regressions: temporarily point the expectation at a different file and confirm the test fails, then revert. (There is no Unix host locally, and CI's Linux/macOS legs cover Unix.)
-- [ ] Close bd-clq56rem with a link to the commit
+- [x] Sweep sibling tests (Q3). Only json_errors.rs:595 is a string-built URL.
+- [x] Classify test problem vs support gap. Result: both (§ Classification, probe saved)
+- [x] Research ecosystem precedent (§ Research)
+- [ ] Piece 1: Option C for the URL assertion + strengthened `notebook_path` assertion in `json_errors.rs`. Update the doc comment `:510-521` and the stale comment `:594`.
+- [ ] Confirm the new state: URL assertion passes, and the `notebook_path` assertion fails on Windows with `\\?\C:\…` (the product RED)
+- [ ] Piece 2 (bd-1klbq2zd): design and apply the seam fix, then GREEN
+- [ ] Sanity check that the assertions catch regressions: point the expectation at another file and confirm the test fails, then revert
+- [ ] Close both strands with links to the commits
 
 ## Verification
 

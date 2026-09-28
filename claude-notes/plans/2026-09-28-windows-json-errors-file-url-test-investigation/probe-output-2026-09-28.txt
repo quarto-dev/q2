@@ -1,0 +1,9 @@
+Run 2026-09-28, Windows 11, q2 built from e8379cfe (target/debug/q2.exe), cwd = plain
+C:\Users\chris\AppData\Local\Temp\...\probe (no \?\ anywhere in the invocation).
+
+ipynb JSON path fields:
+{"notebook_path":"\\?\C:\Users\chris\AppData\Local\Temp\...\probe\broken.ipynb"}
+{"source_file":"\\?\C:\Users\chris\AppData\Local\Temp\...\probe\broken.ipynb"}
+
+qmd render:
+Rendering single file: \?\C:\Users\chris\AppData\Local\Temp\...\probe\ok.qmd
