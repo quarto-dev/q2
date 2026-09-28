@@ -208,6 +208,103 @@ nested/screen-inset variants).
   fails because the header/footer decorations are on page 1 while the body/title are
   on page 2. It contributes the extra non-P5 failure in the full `quarto` test run.
 
+### 2026-09-28 — Group 2 (`#notefigure`/margin-caption support), workspace-7
+
+Worked on branch `typst-testing/p5-notefigure-captions` (forked from
+`typst-testing/p5-margin-layout` at `c9f1a30c9`) in `.worktrees/workspace-7`, per
+Gordon's handoff scoping this session to Group 2 only. **The plan's claim that
+`#notefigure`/margin-caption support was "entirely absent from
+`quarto-post/typst.lua`" was stale/incomplete** — a full Typst-side implementation
+(`make_typst_margin_figure`, `make_typst_margin_caption_figure` in
+`resources/pandoc-filters/filters/layout/typst.lua`; the margin-dispatch branch in
+`customnodes/floatreftarget.lua`'s Typst `FloatRefTarget` renderer; the vendored
+`marginalia` Typst package) already existed, landed in `ee7d5d77b` ("Vendor Q1's Lua
+filter pipeline..."), an ancestor of the P5 branch point. The real bug was upstream of
+all that Lua, in Q2's Rust AST-sugaring pass — found by adding temporary
+`io.open(...):write(...)` debug logging directly in the Lua filters (necessary because
+`resources/pandoc-filters/filters/` is embedded into the `quarto-core` binary via
+`include_dir!`, which is **not** tracked by Cargo's incremental-rebuild dependency
+detection — editing a `.lua` file does not trigger a rebuild; a touch to a `.rs` file
+in the same crate, e.g. `crates/quarto-core/src/pandoc_filters/mod.rs`, is needed to
+force re-embedding).
+
+**Root cause 1 (fixed):** real Pandoc 3.11, auto-promoting a solo captioned image
+(`![cap](src){#fig-x .column-margin key=val}`) into a native `Figure` block, puts only
+the identifier on the `Figure`'s own `Attr` (verified directly:
+`echo '![CAP](x.svg){#fig-x .column-margin width=100%}' | pandoc -f markdown -t json`
+→ Figure attr `["fig-x", [], []]`, Image attr `["", ["column-margin"],
+[["width","100%"]]]`). `crates/quarto-core/src/transforms/float_ref_target.rs`'s
+`convert_figure` did `let attr = fig.attr.clone()` with no merge from the inner Image,
+so every FloatRefTarget built from this authoring shape silently got empty
+classes/attributes — `hasMarginColumn`/`hasMarginCaption`/`cap_location` in the Lua
+filters therefore always saw a non-margin, non-captioned float. Fixed by adding
+`merge_image_attrs_into_figure_attr` (mirrors the old, now-superseded Q1 Lua
+`parsefiguredivs.lua` `Figure` handler's own Image-attr merge, which nobody had ported
+to the Rust rewrite): merges the sole child Image's classes and attributes (excluding
+`width`/`height`, which must stay on the Image for correct Typst sizing) up onto the
+Figure's attr before constructing the FloatRefTarget. New regression test
+`figure_image_classes_and_attributes_merge_onto_float` in the same file.
+
+**Root cause 2 (fixed):** `pdf_extract`-extracted PDF text has two whitespace quirks
+the ported Q1 fixture assertions (literal-space patterns like `'Figure 1'`) don't
+account for — verified by dumping raw `pdf_extract::extract_text` output on rendered
+fixtures: (a) Typst's default caption rendering joins supplement+number with U+00A0
+(non-breaking space) to prevent line-splitting, so `pdf_extract` preserves
+`"Figure\u{a0}1"` verbatim; (b) `pdf_extract` inserts a spurious extra space at the
+boundary between two text runs (e.g. plain text followed by a `#ref()`-generated
+link), so `"REF-ALPHA pointing to Figure 1"` in the source renders as `"REF-ALPHA
+pointing to  Figure 1 ."` (double space before `Figure` and before the period). Fixed
+by adding `normalize_pdf_text` in `crates/quarto-test/src/assertions/regex_patterns.rs`
+(replaces U+00A0 with a regular space, then collapses runs of regular spaces to one,
+preserving newlines since patterns use `(?m)` mode) and calling it in
+`pdf_regex.rs`'s `EnsurePdfRegexMatches::verify` before `verify_patterns`. This is a
+general test-harness fix, not scoped to margin-layout — it very likely also affects
+"Figure N"/"Table N" assertions across the rest of the 86-file smoke-all corpus (and
+possibly beyond it), unverified beyond this fixture set. Four new unit tests in
+`regex_patterns.rs`.
+
+**Net effect:** focused P5 run went from the plan's documented 37 passed / 39 failed to
+**58 passed / 18 failed** (10 skipped, unchanged). All fixtures in the "layout/predicate
+boundary" and "pagination/content and geometry" groups the plan called out as needing
+investigation (`custom-geometry-{narrow,wide,asymmetric}`, `fullwidth-{figure,listing,
+nested}`, `sidenote-code-block`, `two-column`) turned out to be blocked by the same PDF
+double-space bug and now pass too — no separate investigation needed for those.
+`fig-column-margin` and `column-widths-{left,right,both}` remain red (they fail on
+`ensurePdfTextPositions` geometry/ordering, not text matching) and still need the P3
+predicate-vs-layout investigation the plan already called for.
+
+**Root cause 3 (identified, not fixed — separate, out of this session's remaining
+budget):** six fixtures still fail, all R/knitr `#| column: margin`-cell-option-driven
+margin figures/tables (not plain-markdown-image authoring): `margin-figure-cell-option`,
+`margin-subfigure-ggplot2`, `margin-table-flextable`, `margin-table-flextable-crossref`,
+`margin-table-gt-r`, `margin-table-gt-r-crossref` — all missing `#notefigure(` in their
+generated `.typ` (margin-subfigure-ggplot2 additionally fails on subfigure lettering
+`(a)`/`(b)`, a symptom of the same root cause: without margin wrapping, its two
+subfigures render as independent top-level figures instead of one `quarto_super`
+panel). `crates/quarto-core/src/engine/knitr/resources/rmd/hooks.R` (lines 407-408)
+correctly turns the `column: margin` cell option into a `.column-margin` class on the
+`.cell` wrapper Div (`classes <- c("cell", ...); if (is.character(options[["column"]]))
+classes <- c(classes, paste0("column-", options[["column"]]))`) — confirmed by reading
+the R source, not yet confirmed against the actual Rust-side AST at the point Lua's
+`resolveColumnClassesForCodeCell` (`resources/pandoc-filters/filters/layout/
+columns-preprocess.lua:77`) would need to see it. This is a different code path from
+Root cause 1 (cell-option class propagation through knitr execution + Rust cell-div
+handling, vs. bare-markdown-image Attr merging) and needs its own investigation before
+a fix is attempted — do not assume it's the same bug.
+
+Gated: `cargo clippy -p quarto-core --all-targets -- -D warnings`,
+`cargo clippy -p quarto-test --all-targets -- -D warnings` both clean.
+`cargo nextest run -p quarto-core`: 5284 passed, 32 skipped (matches prior baseline).
+`cargo nextest run -p quarto-test`: 95 passed, 1 failed — the 1 failure
+(`runner::tests::should_error_respects_project_render_context`) is **pre-existing and
+unrelated**, confirmed by stashing this session's changes and re-running against
+unmodified code (still fails identically); it's an R/knitr book-project `shouldError`
+gap, nothing to do with PDF-text assertions. Per the global CLAUDE.md testing rule, the
+workspace-wide `cargo nextest run --workspace` phase-boundary gate was deliberately
+**not** run from this worktree — Group 1/3/5 work is concurrently in flight in
+workspace-2 on the sibling branch `typst-testing/p5-margin-layout`; that gate runs once
+after both branches are integrated.
+
 ## Status
 
 In progress — fixture port, smoke-all discovery, and the metadata/CLI bridge fix are

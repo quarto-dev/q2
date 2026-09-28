@@ -532,14 +532,56 @@ fn convert_div(div: Div, def: &crate::crossref::RefTypeDef) -> CustomNode {
     node
 }
 
+/// Attribute keys that stay on the inner `Image` rather than being copied up
+/// onto the enclosing float's `Attr`: they affect how the image itself is
+/// sized, not how the float is placed/classified. Mirrors Q1's
+/// `parsefiguredivs.lua` `attributes_to_not_merge = {"width", "height"}`.
+const IMAGE_ATTRS_NOT_MERGED_TO_FLOAT: &[&str] = &["width", "height"];
+
+/// Pandoc's markdown reader, when it auto-promotes a solo captioned image
+/// (`![cap](src){#fig-x .column-margin key=val}`) into a native `Figure`
+/// block, puts only the identifier on the `Figure`'s own `Attr` — classes
+/// and non-geometry attributes (e.g. `.column-margin`, `cap-location=…`)
+/// stay on the inner `Image`. Verified directly: `echo '![CAP](x.svg){#fig-x
+/// .column-margin width=100%}' | pandoc -f markdown -t json` emits
+/// `Figure`'s attr as `["fig-x", [], []]` and the `Image`'s as `["",
+/// ["column-margin"], [["width","100%"]]]`.
+///
+/// Without this merge, every float classifier that inspects the
+/// FloatRefTarget's own classes/attributes (margin placement, cap-location)
+/// silently sees none of them for this authoring shape — the bug behind
+/// missing `#notefigure(...)` emission for plain `![cap](src){.column-margin}`
+/// figures. Mirrors Q1's `parsefiguredivs.lua` `Figure` handler, which does
+/// the same merge (despite its own stale comment claiming classes aren't
+/// merged — the code there inserts them regardless).
+fn merge_image_attrs_into_figure_attr(attr: &mut Attr, content: &Blocks) {
+    let [Block::Plain(plain)] = content.as_slice() else {
+        return;
+    };
+    let [Inline::Image(image)] = plain.content.as_slice() else {
+        return;
+    };
+    for class in &image.attr.1 {
+        if !attr.1.contains(class) {
+            attr.1.push(class.clone());
+        }
+    }
+    for (key, value) in image.attr.2.iter() {
+        if !IMAGE_ATTRS_NOT_MERGED_TO_FLOAT.contains(&key.as_str()) {
+            attr.2.entry(key.clone()).or_insert_with(|| value.clone());
+        }
+    }
+}
+
 /// Convert a `Figure` that we already know is a crossref target (its id
 /// matches a registered ref-type) into a FloatRefTarget custom node.
 fn convert_figure(fig: Figure, def: &crate::crossref::RefTypeDef) -> CustomNode {
     let source_info = fig.source_info.clone();
-    let attr = fig.attr.clone();
+    let mut attr = fig.attr.clone();
     let identifier = attr.0.clone();
 
     let content: Blocks = fig.content;
+    merge_image_attrs_into_figure_attr(&mut attr, &content);
     let caption_long = fig.caption.long.unwrap_or_default();
     let caption_short = fig.caption.short;
 
@@ -570,10 +612,10 @@ mod tests {
     use super::*;
     use crate::crossref::crossref_target_view;
     use hashlink::LinkedHashMap;
-    use quarto_pandoc_types::attr::AttrSourceInfo;
-    use quarto_pandoc_types::block::{CodeBlock, Div, Figure, Paragraph};
+    use quarto_pandoc_types::attr::{AttrSourceInfo, TargetSourceInfo};
+    use quarto_pandoc_types::block::{CodeBlock, Div, Figure, Paragraph, Plain};
     use quarto_pandoc_types::caption::Caption;
-    use quarto_pandoc_types::inline::{Inline, Str};
+    use quarto_pandoc_types::inline::{Image, Inline, Str};
     use quarto_source_map::{FileId, SourceInfo};
 
     fn si() -> SourceInfo {
@@ -594,6 +636,28 @@ mod tests {
     fn para(text: &str) -> Block {
         Block::Paragraph(Paragraph {
             content: vec![str_inline(text)],
+            source_info: si(),
+        })
+    }
+
+    fn image_figure_content(classes: Vec<&str>, attributes: Vec<(&str, &str)>) -> Block {
+        let mut attrs = LinkedHashMap::new();
+        for (k, v) in attributes {
+            attrs.insert(k.to_string(), v.to_string());
+        }
+        Block::Plain(Plain {
+            content: vec![Inline::Image(Image {
+                attr: (
+                    String::new(),
+                    classes.into_iter().map(String::from).collect(),
+                    attrs,
+                ),
+                content: vec![str_inline("cap")],
+                target: ("img.svg".to_string(), String::new()),
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+                target_source: TargetSourceInfo::empty(),
+            })],
             source_info: si(),
         })
     }
@@ -829,6 +893,53 @@ mod tests {
         };
         // A Paragraph caption on a native Figure is canonicalized to Plain too.
         assert_plain_caption(node, "Caption from Figure.");
+    }
+
+    /// Pandoc's markdown reader puts `.column-margin` and other non-geometry
+    /// attributes from `![cap](src){#fig-x .column-margin key=val}` on the
+    /// inner `Image`, not on the `Figure` itself (verified directly against
+    /// `pandoc -f markdown -t json`). Without merging them up, the
+    /// FloatRefTarget ends up with no classes/attributes at all, and every
+    /// downstream margin/cap-location classifier (which inspects the
+    /// float's own `Attr`) silently treats it as a plain, non-margin float —
+    /// the bug behind missing `#notefigure(...)` emission for this authoring
+    /// shape (P5 Group 2).
+    #[test]
+    fn figure_image_classes_and_attributes_merge_onto_float() {
+        let reg = RefTypeRegistry::builtin();
+        let fig = Block::Figure(Figure {
+            attr: attr_id("fig-margin"),
+            caption: Caption {
+                short: None,
+                long: Some(vec![para("MARGIN-FIG-CAP")]),
+                source_info: si(),
+            },
+            content: vec![image_figure_content(
+                vec!["column-margin"],
+                vec![("width", "100%"), ("cap-location", "margin")],
+            )],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let out = run_transform(vec![fig], &reg);
+        let Block::Custom(node) = &out[0] else {
+            panic!("expected FloatRefTarget");
+        };
+        assert!(
+            node.attr.1.contains(&"column-margin".to_string()),
+            "expected .column-margin to be merged onto the float's classes, got {:?}",
+            node.attr.1
+        );
+        assert_eq!(
+            node.attr.2.get("cap-location").map(String::as_str),
+            Some("margin"),
+            "expected cap-location to be merged onto the float's attributes"
+        );
+        assert_eq!(
+            node.attr.2.get("width"),
+            None,
+            "width/height must stay on the Image, not be duplicated onto the float"
+        );
     }
 
     /// A `Div(#tbl-..) > Table` float must surface the Table's caption
