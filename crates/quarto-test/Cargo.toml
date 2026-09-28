@@ -15,7 +15,7 @@ serde.workspace = true
 serde_yaml.workspace = true
 regex.workspace = true
 scraper.workspace = true
-pdf-extract = "0.7"
+pdf-extract = { git = "https://github.com/gordonwoodhull/pdf-extract", rev = "f68ca43f27b1e23d92072cc4383178a33ba25457" }
 
 quarto-core.workspace = true
 quarto-error-reporting.workspace = true
