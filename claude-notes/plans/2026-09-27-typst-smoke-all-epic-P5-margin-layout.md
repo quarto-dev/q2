@@ -273,37 +273,79 @@ double-space bug and now pass too — no separate investigation needed for those
 `ensurePdfTextPositions` geometry/ordering, not text matching) and still need the P3
 predicate-vs-layout investigation the plan already called for.
 
-**Root cause 3 (identified, not fixed — separate, out of this session's remaining
-budget):** six fixtures still fail, all R/knitr `#| column: margin`-cell-option-driven
-margin figures/tables (not plain-markdown-image authoring): `margin-figure-cell-option`,
-`margin-subfigure-ggplot2`, `margin-table-flextable`, `margin-table-flextable-crossref`,
-`margin-table-gt-r`, `margin-table-gt-r-crossref` — all missing `#notefigure(` in their
-generated `.typ` (margin-subfigure-ggplot2 additionally fails on subfigure lettering
-`(a)`/`(b)`, a symptom of the same root cause: without margin wrapping, its two
-subfigures render as independent top-level figures instead of one `quarto_super`
-panel). `crates/quarto-core/src/engine/knitr/resources/rmd/hooks.R` (lines 407-408)
-correctly turns the `column: margin` cell option into a `.column-margin` class on the
-`.cell` wrapper Div (`classes <- c("cell", ...); if (is.character(options[["column"]]))
-classes <- c(classes, paste0("column-", options[["column"]]))`) — confirmed by reading
-the R source, not yet confirmed against the actual Rust-side AST at the point Lua's
-`resolveColumnClassesForCodeCell` (`resources/pandoc-filters/filters/layout/
-columns-preprocess.lua:77`) would need to see it. This is a different code path from
-Root cause 1 (cell-option class propagation through knitr execution + Rust cell-div
-handling, vs. bare-markdown-image Attr merging) and needs its own investigation before
-a fix is attempted — do not assume it's the same bug.
+**Root cause 3 (fixed):** six fixtures failed, all R/knitr `#| column:
+margin`-cell-option-driven margin figures/tables (not plain-markdown-image authoring):
+`margin-figure-cell-option`, `margin-subfigure-ggplot2`, `margin-table-flextable`,
+`margin-table-flextable-crossref`, `margin-table-gt-r`, `margin-table-gt-r-crossref` —
+all missing `#notefigure(`/`#notetable(` in their generated `.typ`.
+`crates/quarto-core/src/engine/knitr/resources/rmd/hooks.R` (lines 407-408) does turn
+the `column: margin` cell option into a `.column-margin` class on the `.cell` wrapper
+Div, as originally read from the R source — but that class never reaches the float.
+Verified by adding temporary debug logging both in Lua (`columns-preprocess.lua`'s
+`resolveColumnClassesForCodeCell`) and in Rust (`float_ref_target.rs`'s
+`transform_block`): Q2's engine-agnostic pre-engine sugaring
+(`crossref/codeblock_shorthand.rs`) wraps a labelled code cell in an outer `::: {#fig-x}`
+Div **before** knitr even executes (shape 1, `Wrapper::Float`), and
+`transforms/float_ref_target.rs` converts that wrapper into `Custom(FloatRefTarget)`
+during the Normalization phase, which runs *before* any Lua filter sees the AST. By the
+time `columns-preprocess.lua`'s `Div` handler runs on the inner `.cell` div (which does
+carry `column-margin`, confirmed directly: `resolveColumnClassesForCodeCell: el.classes =
+cell,column-margin`), the float is that div's **ancestor**, not a descendant — Q1's
+`resolveColumnClassesForCodeCell` was written to forward classes *downward* onto a
+figure/table it discovers nested inside a `.cell-output-display` div (the shape that
+held when Q1's own Lua did the whole conversion), so it can never reach an ancestor.
+Confirmed by tracing the inner Image directly: it carried `id=""` and `caption_len=0` by
+the time Lua saw it, showing the `#fig-scatter` id and caption had already been lifted
+out by `codeblock_shorthand.rs`, while `column`/`cap-location` — options that module
+does not consume — stayed behind in the code block body for knitr's own hook to read.
 
-Gated: `cargo clippy -p quarto-core --all-targets -- -D warnings`,
-`cargo clippy -p quarto-test --all-targets -- -D warnings` both clean.
-`cargo nextest run -p quarto-core`: 5284 passed, 32 skipped (matches prior baseline).
-`cargo nextest run -p quarto-test`: 95 passed, 1 failed — the 1 failure
-(`runner::tests::should_error_respects_project_render_context`) is **pre-existing and
-unrelated**, confirmed by stashing this session's changes and re-running against
-unmodified code (still fails identically); it's an R/knitr book-project `shouldError`
-gap, nothing to do with PDF-text assertions. Per the global CLAUDE.md testing rule, the
-workspace-wide `cargo nextest run --workspace` phase-boundary gate was deliberately
-**not** run from this worktree — Group 1/3/5 work is concurrently in flight in
-workspace-2 on the sibling branch `typst-testing/p5-margin-layout`; that gate runs once
-after both branches are integrated.
+Fixed in `crates/quarto-core/src/crossref/codeblock_shorthand.rs`: a new
+`wrapper_column_classes(parsed, ref_type)` helper reads (peeks, does not consume)
+`column`/`<reftype>-column` and `cap-location`/`<reftype>-cap-location` off the cell's
+parsed options and turns them into `column-<value>` / `margin-caption` classes applied
+directly to the wrapper `Div`'s own `Attr` — so the `FloatRefTarget` node itself already
+carries `column-margin` when Lua's `hasMarginColumn` inspects it, closing the gap at its
+source rather than patching the Lua-side downward-forwarding logic. `column`/
+`cap-location` are read, not consumed: knitr's `hooks.R` still sees them in the code
+block body and still applies its own (now redundant but harmless) class to the `.cell`
+div, so no other engine's existing behavior changes. Three new regression tests in the
+same file (`column_margin_cell_option_becomes_wrapper_class`,
+`cap_location_margin_cell_option_becomes_wrapper_class`,
+`no_column_option_leaves_wrapper_classless`). Fixes 5 of the 6 fixtures listed above,
+confirmed both by direct single-file `q2 render --to typst` and by the focused smoke
+suite.
+
+**Root cause 4 (identified, not fixed):** `margin-subfigure-ggplot2` now passes its
+`ensureTypstFileRegexMatches` check (`#note(` + `quarto_super` both present) but still
+fails `ensurePdfRegexMatches` — the subfigure lettering `(a) Sine`/`(b) Cosine` never
+appears in the PDF. The generated `.typ` shows two independent `#figure(...)` blocks
+(one per `ggplot2` plot), each with a plain caption, with **no** `quarto_super`
+panel-numbering wrapper at all — a different, deeper gap from Root cause 3. Compared
+directly against the passing `margin-subfigure.qmd` fixture (plain-markdown
+`::: {#fig-x layout-ncol=1}` authoring with per-image `{#fig-sub-a}`/`{#fig-sub-b}` ids):
+that shape does produce `quarto_super` numbering correctly. R/knitr's `fig-subcap`
+cell option therefore never produces the subfloat/panel AST structure that the
+`layout-ncol` authoring form does — this is a distinct bug in the R/knitr multi-panel
+cell-option path, not something `wrapper_column_classes` touches, and needs its own
+investigation (likely in `codeblock_shorthand.rs`'s handling of `fig-subcap`, or in how
+knitr's own multi-plot cell output gets desugared/recognized as a subfloat panel).
+Not attempted here — flagging rather than expanding scope under this fix.
+
+**Net effect:** focused P5 run went from 58 passed / 18 failed (10 skipped, this
+session's earlier checkpoint) to **63 passed / 13 failed** (10 skipped, unchanged). The
+remaining 13 failures: 7 citation/citeproc fixtures (Group 1's territory in
+workspace-2, untouched), 4 column-width/geometry fixtures (still need the P3
+predicate-vs-layout investigation), 1 `crossref-grand-finale.qmd` (mediabag-dir gap,
+out of scope), and 1 `margin-subfigure-ggplot2` (Root cause 4 above).
+
+Gated: `cargo clippy -p quarto-core --all-targets -- -D warnings` clean.
+`cargo nextest run -p quarto-core`: 5287 passed, 32 skipped — +3 over the prior
+baseline of 5284, exactly the three new `wrapper_column_classes` regression tests, no
+other deltas. Per the global CLAUDE.md testing rule, the workspace-wide `cargo nextest
+run --workspace` phase-boundary gate was deliberately **not** run from this worktree —
+Group 1/3/5 work is concurrently in flight in workspace-2 on the sibling branch
+`typst-testing/p5-margin-layout`; that gate runs once after both branches are
+integrated.
 
 ## Status
 
@@ -335,6 +377,13 @@ A fourth group (column-width geometry: `column-widths-{left,right,both}`,
 `fig-column-margin`) needs its own investigation pass comparing Q1's predicate
 semantics against the actual rendered geometry before even a root cause (P3 predicate
 vs. Q2 layout) can be assigned — deliberately not guessed here.
+
+**2026-09-28 update:** the `#notefigure`/margin-caption group (item 2 above) is now
+mostly closed — see "Root cause 3 (fixed)" above; 5 of its 6 R/knitr-cell-option
+fixtures pass. One residual, distinct gap remains in that group: Root cause 4
+(subfigure-panel numbering for R/knitr's `fig-subcap` cell option), not yet
+investigated. Items 1 (Typst-native citeproc) and 3 (`mediabag-dir`) are untouched and
+still Gordon's scope call to make, as is the column-width geometry group.
 
 Given this, P5 cannot honestly be marked complete in this session without either (a)
 implementing three separate, non-trivial Typst-filter capabilities plus one
