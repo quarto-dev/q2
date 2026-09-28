@@ -37,6 +37,13 @@ pub struct TypstFilterParamsContributor {
     /// must be rebased against this before being embedded in `.typ`
     /// source. See `modules/mediabag.lua`'s `typst_root_relative`.
     pub root_dir: Option<std::path::PathBuf>,
+    /// Drives `quarto.doc.cite_method()` (`init.lua:939-940`), consumed only
+    /// by `quarto-post/typst.lua`'s margin-citation `Cite` handler. Only
+    /// ever `Some("citeproc")`, set when the document's own `citeproc: true`
+    /// metadata opts in; margin citations default to native Typst rendering
+    /// otherwise (unlike the LaTeX-only `cite-method` consumers elsewhere,
+    /// which default to `'citeproc'`).
+    pub cite_method: Option<String>,
 }
 
 impl FilterParamsContributor for TypstFilterParamsContributor {
@@ -66,6 +73,12 @@ impl FilterParamsContributor for TypstFilterParamsContributor {
             blob.insert(
                 "typst-root-dir".to_string(),
                 Value::String(root_dir.to_string_lossy().into_owned()),
+            );
+        }
+        if let Some(cite_method) = &self.cite_method {
+            blob.insert(
+                "cite-method".to_string(),
+                Value::String(cite_method.clone()),
             );
         }
     }

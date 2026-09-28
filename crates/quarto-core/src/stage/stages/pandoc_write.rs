@@ -426,6 +426,7 @@ impl PipelineStage for PandocWriteStage {
             typst_available_fonts,
             typst_citation_location,
             typst_reference_location,
+            typst_cite_method,
         ) = if ctx.format.identifier == crate::format::FormatIdentifier::Typst {
             (
                 resolve_typst_brand_param(self.name(), &doc.ast.meta, ctx)?,
@@ -438,9 +439,29 @@ impl PipelineStage for PandocWriteStage {
                     .meta
                     .get("reference-location")
                     .and_then(|value| value.as_plain_text()),
+                // `quarto.doc.cite_method()` (`init.lua:939-940`) drives
+                // `quarto-post/typst.lua`'s margin-citation `Cite` handler:
+                // whether to use pre-rendered citeproc bibliography entries
+                // in the margin note, or emit a bare native
+                // `#cite(<id>, form: "full")`. Unlike the LaTeX-only
+                // `cite-method` consumers in `bibliography.lua`/`meta.lua`
+                // (which default to `'citeproc'` when unset, since Pandoc's
+                // own citeproc pass is the ordinary default there), margin
+                // citations default to *native* Typst rendering — confirmed
+                // by `citation-margin-basic.qmd` (no `citeproc` key, asserts
+                // native `#cite(..., form: "full")` output) vs.
+                // `citation-margin-citeproc.qmd` (`citeproc: true`, asserts
+                // citeproc-rendered text). So only emit this key when the
+                // doc opts in explicitly; leaving it unset preserves the
+                // existing native-by-default margin behavior.
+                doc.ast
+                    .meta
+                    .get("citeproc")
+                    .and_then(|value| value.as_bool())
+                    .and_then(|is_citeproc| is_citeproc.then(|| "citeproc".to_string())),
             )
         } else {
-            (None, None, None, None)
+            (None, None, None, None, None)
         };
 
         // `mediabag-dir`: `<output-dir>/<stem>_files/mediabag`, mirroring
@@ -489,6 +510,7 @@ impl PipelineStage for PandocWriteStage {
             || typst_citation_location.is_some()
             || typst_reference_location.is_some()
             || typst_root_dir.is_some()
+            || typst_cite_method.is_some()
         {
             builder = builder.with_contributor(Box::new(
                 crate::pandoc_filters::typst_params::TypstFilterParamsContributor {
@@ -497,6 +519,7 @@ impl PipelineStage for PandocWriteStage {
                     citation_location: typst_citation_location,
                     reference_location: typst_reference_location,
                     root_dir: typst_root_dir,
+                    cite_method: typst_cite_method,
                 },
             ));
         }

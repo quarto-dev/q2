@@ -382,6 +382,62 @@ fn render_document_to_file_typst_forwards_margin_locations_to_lua_filters() {
     );
 }
 
+/// `citeproc: true` must reach `quarto.doc.cite_method()` (via the new
+/// `cite-method` filter param) so `quarto-post/typst.lua`'s margin-citation
+/// `Cite` handler uses the pre-rendered citeproc bibliography entry in the
+/// margin note instead of a bare native `#cite(<id>, form: "full")` call.
+///
+/// Revert hunk: reverting `PandocWriteStage::run`'s `typst_cite_method`
+/// wiring (never calling `.with_contributor` with it, or dropping the
+/// `cite-method` blob insertion in `TypstFilterParamsContributor`) makes
+/// this RED — `quarto.doc.cite_method()` would see `nil`, and the margin
+/// note would fall back to the native `#cite(...)` call this test asserts
+/// is absent.
+#[test]
+fn render_document_to_file_typst_citeproc_true_uses_citeproc_bibliography_in_margin() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = temp.path().canonicalize().unwrap();
+    let input_path = project_dir.join("f.qmd");
+    write(
+        &input_path,
+        "---\ncitation-location: margin\nbibliography: refs.bib\nciteproc: true\n---\n\n\
+         A citation [@sample2020].\n",
+    );
+    write(
+        &project_dir.join("refs.bib"),
+        "@article{sample2020, author = {Sample, Alice}, title = {Example}, journal = {Journal}, year = {2020}}\n",
+    );
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let output_path = project_dir.join("f.typ");
+    let options = RenderToFileOptions {
+        output_path: Some(output_path.clone()),
+        ..Default::default()
+    };
+
+    render_document_to_file(
+        &input_path,
+        "typst",
+        &options,
+        None,
+        runtime,
+        None,
+        None,
+        None,
+    )
+    .expect("typst render should succeed");
+
+    let text = std::fs::read_to_string(&output_path).unwrap();
+    assert!(
+        !text.contains("#cite(<sample2020>"),
+        "citeproc: true should not fall back to the native #cite(...) call, got:\n{text}"
+    );
+    assert!(
+        text.contains("Sample, Alice. 2020."),
+        "citeproc: true should emit the citeproc-rendered bibliography entry in the margin, got:\n{text}"
+    );
+}
+
 /// pandoc-hybrid-typst Phase 1's template vendoring, end to end: pandoc
 /// must actually use the vendored 8-partial doctemplate (`--template`
 /// pointing at the materialized `template.typ`), not its own bundled
