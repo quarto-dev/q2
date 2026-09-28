@@ -94,11 +94,30 @@ local function write_mediabag_entry(src)
   return mediaFile
 end
 
+-- `write_mediabag_entry` returns a real filesystem-absolute path (needed
+-- because Pandoc inherits an uncontrolled cwd, so `_quarto.file.write`'s
+-- `io.open` has no other way to find the right place to write). Typst's
+-- `image()` treats any path starting with "/" as rooted at `--root`
+-- (`ctx.project.dir`, see `typst_compile.rs`), not at the real filesystem
+-- root, so embedding that absolute path verbatim in `.typ` source makes
+-- Typst search for `<root><absolute-path>` — doubling the path. Rebase it
+-- against `typst-root-dir` (emitted only for typst, see
+-- `TypstFilterParamsContributor`) before it reaches an `image()` call; for
+-- every other format this is a no-op, since the param is absent.
+local function typst_root_relative(absPath)
+  local rootDir = param("typst-root-dir", nil)
+  if not rootDir then
+    return absPath
+  end
+  return path.to_forward_slashes("/" .. pandoc.path.make_relative(absPath, rootDir))
+end
+
 return {
   resolved_url_cache = resolved_url_cache,
   with_mediabag_contents = with_mediabag_contents,
   fetch_and_store_image = fetch_and_store_image,
   should_mediabag = should_mediabag,
   resolve_image_from_url = resolve_image_from_url,
-  write_mediabag_entry = write_mediabag_entry
+  write_mediabag_entry = write_mediabag_entry,
+  typst_root_relative = typst_root_relative
 }

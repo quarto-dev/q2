@@ -207,6 +207,68 @@ nested/screen-inset variants).
 - The standalone pre-existing fixture `typst/pdf-text-position-test.qmd` currently
   fails because the header/footer decorations are on page 1 while the body/title are
   on page 2. It contributes the extra non-P5 failure in the full `quarto` test run.
+- **2026-09-28: Group 5 (column-width geometry, 4 fixtures) investigated to a root
+  cause — not a P3 predicate bug, not a Q2 Typst layout bug, not a fixture design
+  flaw.** Confirmed with direct evidence (temporary `eprintln!` instrumentation in
+  `evaluate_assertion`'s default-resolution branch, run against
+  `column-widths-both.qmd`, then reverted — no net diff in
+  `crates/quarto-test/src/assertions/pdf_text_position.rs`):
+  - The exact failing numbers reproduce the plan's earlier example exactly:
+    `OUTSET-B` (mcid 9) `word_bbox`/`mcid_union_bbox` both `right=116.5`; `BODY-B`
+    (mcid 4) both `right=128.5` — i.e. `OUTSET-B`'s measured right edge is *inside*
+    `BODY-B`'s, the reverse of "outset extends into the margin."
+  - `item.text` for the `BODY-B` match is the **entire first line** of that
+    paragraph ("BODY-B: Standard body column width. Lorem ipsum dolor sit amet, "),
+    confirming Typst tags one MCID per rendered line (not per word, not per
+    paragraph) and `TextPositionOutput::flush_word`/`mcid_boxes` resolve to the
+    same value here — the default (non-`granularity`) resolution path is doing
+    exactly what it's supposed to do, unioning every character sharing that line's
+    MCID.
+  - But the measured **width** of that whole multi-word line is only `6.9pt`
+    (`OUTSET-B`: `9.2pt`, `PINSET-B`: `34.6pt`, `PAGE-B`: `4.6pt`) — physically
+    impossible for a line of body text at 11pt that visually spans hundreds of
+    points (confirmed against `pdftotext -layout` on the same PDF, which shows
+    each line wrapping at a normal column width). The `leftOf` assertions on the
+    same lines all pass because they only need the *first* character's position,
+    which is unaffected; the `rightOf` assertions need the *accumulated* width
+    across the whole line, which is what's broken.
+  - Root cause localizes to the vendored `pdf-extract` fork
+    (`Cargo.lock`: `git+https://github.com/gordonwoodhull/pdf-extract?rev=f68ca43f…` —
+    Gordon's own fork), not to this repo's `pdf_text_position.rs`. Traced
+    `show_text`/the `TJ` operator handler in
+    `~/.cargo/git/checkouts/pdf-extract-*/f68ca43/src/lib.rs`: per-glyph advances
+    within one string segment come from `PdfCIDFont::get_width` (CID font `/W`
+    array lookup, falling back to `/DW` default), and inter-segment kerning comes
+    from the `TJ` array's numeric operands, applied separately in the `"TJ" =>`
+    match arm (`lib.rs:1688-1719`). Typst emits body paragraphs as CID/Type0
+    subset fonts with many short string segments interleaved with kerning
+    numbers per line (confirmed in the raw content stream: `column-widths-both`'s
+    first BODY-B line is one `BT`/`TJ`/`ET` block with a long array of short
+    parenthesized glyph runs and interspersed kerning numbers). The measured
+    total width being a tiny fraction of the true line width is consistent with
+    per-glyph advances collapsing to ~0 for this embedded font's CID range (glyph
+    widths not resolving the way `PdfSimpleFont`'s do), while the destination
+    *position* of each subsequent line still ends up visually correct (since line
+    placement comes from Typst's own layout, not from this extraction path) —
+    this explains why the rendered PDF *looks* right in `pdftotext -layout` while
+    the *extracted* per-character bboxes this test tool sums do not. Have not
+    gone further into `PdfCIDFont::get_width`/`/W` array parsing itself — that is
+    the next concrete step for whoever picks this up, but it means the fix (if
+    there is one) lives in the **pdf-extract fork**, not in this repo's Rust or
+    Lua, and needs verifying it doesn't regress the other `ensurePdfTextPositions`
+    assertions elsewhere in the suite that already pass (most of which are
+    short-text-run assertions — headers/captions/labels — where this effect is
+    apparently small enough not to matter, which is consistent with this theory:
+    the bug's impact scales with how many characters/segments a single measured
+    line contains).
+  - Affects exactly the 4 fixtures already named (`column-widths-{left,right,both}`,
+    `fig-column-margin`'s position half) — all of them test multi-word body-text
+    line widths via `rightOf`/`leftOf` pairs, matching the mechanism above.
+  - **Recommendation, not yet actioned:** this is a fix to a vendored fork Gordon
+    maintains directly, with blast radius across every `ensurePdfTextPositions`
+    consumer in the workspace (not just P5) — needs his sign-off before anyone
+    spends time in `PdfCIDFont::get_width`/the `/W`-array parsing path, the same
+    as the other three groups' unimplemented-capability gaps.
 
 ### 2026-09-28 — Group 2 (`#notefigure`/margin-caption support), workspace-7
 
@@ -377,6 +439,26 @@ complete and gated (`quarto-core` clippy + fmt + 5283/5283 nextest all pass, unc
 from baseline). Triage of the 39 remaining failures is complete at the category level:
 five root-cause groups, each backed by direct evidence in §Decisions.
 
+**2026-09-28: work forked across two worktrees to parallelize the remaining groups.**
+Gordon asked for the five root-cause groups to be split roughly in half by effort
+between this worktree (`workspace-2`) and a repurposed `workspace-7`:
+
+- `workspace-7`, branch `typst-testing/p5-notefigure-captions` (forked from this
+  branch at `c9f1a30c9`): Group 2 (`#notefigure`/margin-caption support, 18 fixtures —
+  the largest single item), plus re-triaging Group 4 (pagination/geometry) afterward
+  since several of those fixtures are likely symptomatic of missing margin-float
+  support and may resolve for free.
+- `workspace-2` (here): Group 1 (citeproc mode, 7 fixtures), Group 3 (`mediabag-dir`
+  wiring, 1 fixture but a repo-wide crash fix), and Group 5 (column-width geometry
+  investigation, ~4 fixtures) — three smaller, independent items.
+
+Both branches touch `resources/pandoc-filters/filters/quarto-post/typst.lua` (Group 1
+in `Cite` handling, Group 2 in new caption/figure-emission code) — expect a merge
+conflict there when the branches are integrated; it is not a sign either side did
+something wrong. Neither branch should be merged or marked complete independently;
+this file's checklist/Status gets reconciled once both land, per the plan's own
+"Worktree & git workflow" section and the global CLAUDE.md's "finishing a plan" rule.
+
 **Scope conflict for Gordon to resolve, not silently decided here:** the P5 plan's
 acceptance criteria (Checklist) call for closing "the remaining Q2 format/filter/render
 gaps" before rerunning to a clean-or-explicitly-filed-exception state. Three of the
@@ -417,3 +499,54 @@ per-category basis in follow-up work, since each category is itself plan-sized.
 Current branch checkpoint is `typst-testing/p5-margin-layout`. Do not merge or push
 until Gordon has made this call and the phase test gates pass against whatever
 acceptance criteria result.
+
+**2026-09-28: Group 3 fix had a second bug, now also fixed — path-doubling in
+embedded `image()` calls.** The `mediabag-dir` wiring above (commit `c9f1a30c9`)
+fixed the Lua nil-crash but was never verified against the real
+`crossref-grand-finale.qmd` fixture (only a synthetic regression test that stops at
+`.typ` generation, never invokes `typst compile`). Running the real fixture surfaced
+a second, distinct bug: `mediabag-dir` is a filesystem-absolute path (needed because
+Pandoc inherits an uncontrolled cwd — `PandocWriteStage::run` doesn't override
+`current_dir` — so Lua's `io.open`-based write has no other way to find the right
+place). But Typst's `image()` treats any path starting with `/` as rooted at
+`--root` (`ctx.project.dir`, see `typst_compile.rs:204`), not the real filesystem
+root, so embedding that absolute path verbatim doubled it:
+`<project-root>/Users/.../mediabag/white-text=Fig1` — "file not found."
+
+Confirmed this is a genuine Q2 bug, not a fixture or predicate issue, by checking
+Q1's `render.ts`/`render-paths.ts`: Q1's `mediabag-dir` param is a *bare relative
+fragment* (`<stem>_files/mediabag`, from `inputFilesDir`), which works in Q1 because
+Q1's Pandoc invocation's cwd is the document's own directory. Q2 architecturally
+cannot rely on that (cwd is uncontrolled), which is why the absolute-path choice was
+made — but nobody had traced the consequence through to Typst's root-relative path
+semantics.
+
+**Fix:** added a new typst-only filter param `typst-root-dir` (mirrors the
+`citation-location`/`reference-location` pattern in
+`TypstFilterParamsContributor`/`pandoc_write.rs`), carrying the same
+`ctx.project.dir` value passed to `--root`. Added
+`modules/mediabag.lua`'s `typst_root_relative(absPath)` helper (rebases via
+`pandoc.path.make_relative` against `typst-root-dir`, no-op when the param is absent
+i.e. every non-typst format) and applied it at the three call sites that embed a
+`write_mediabag_entry` result into typst source:
+`quarto-post/typst.lua` (alt-text image branch), `quarto-finalize/mediabag.lua`
+(bare-Image finalize pass, shared across all non-Office formats but the helper
+no-ops for them), and `quarto-post/typst-brand-yaml.lua` (brand logo path — same bug
+pattern, fixed for consistency since it shares the exact same root cause).
+`write_mediabag_entry` itself is untouched, preserving Q1 parity.
+
+**Result on `crossref-grand-finale.qmd`:** the crash/file-not-found error is gone —
+it now renders a real PDF. It still fails, but on unrelated grounds: 5 missing
+crossref-numbering strings (`Figure 3`, `Figure 6`, `Table 3`, `Listing 3`,
+`Listing 6`) and one `ensurePdfTextPositions` miss (`"Figure 3:"` not found). This
+looks like a numbering/counter gap, not a Group 1/3/5 issue owned by this worktree —
+plausibly Group 4-adjacent (workspace-7 is retriaging Group 4). Not investigated
+further here; flagging for whoever picks up Group 4 retriage or a future numbering
+pass. Total smoke-all failure count is unchanged at 40 (crossref-grand-finale was
+already counted as 1 of 40 via the crash; it's still 1 of 40 via the new
+assertions) — Group 3's actual fix is the crash-class elimination, confirmed by the
+absence of the "file not found" error, not a raw pass-count delta.
+
+Verified clean: `cargo clippy -p quarto-core --all-targets -- -D warnings`,
+`cargo clippy -p quarto --all-targets -- -D warnings`,
+`cargo nextest run -p quarto-core` (5285/5285, unchanged from baseline).

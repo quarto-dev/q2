@@ -140,6 +140,7 @@ pub struct FilterParamsBuilder<'a> {
     ref_type_registry: Option<&'a RefTypeRegistry>,
     language: &'a LanguageTerms,
     results_file: PathBuf,
+    mediabag_dir: PathBuf,
     typst_binary: Option<&'a std::path::Path>,
     contributors: Vec<Box<dyn FilterParamsContributor>>,
 }
@@ -151,6 +152,7 @@ impl<'a> FilterParamsBuilder<'a> {
         ref_type_registry: Option<&'a RefTypeRegistry>,
         language: &'a LanguageTerms,
         results_file: PathBuf,
+        mediabag_dir: PathBuf,
     ) -> Self {
         Self {
             format,
@@ -158,6 +160,7 @@ impl<'a> FilterParamsBuilder<'a> {
             ref_type_registry,
             language,
             results_file,
+            mediabag_dir,
             typst_binary: None,
             contributors: Vec::new(),
         }
@@ -198,6 +201,7 @@ impl<'a> FilterParamsBuilder<'a> {
         insert_numbering_params(&mut blob);
         insert_crossref_numbering_mode(&mut blob, self.format);
         insert_top_level_literals(&mut blob, &self.results_file, self.typst_binary);
+        insert_mediabag_dir(&mut blob, &self.mediabag_dir);
 
         for contributor in &self.contributors {
             contributor.contribute(&mut blob);
@@ -396,6 +400,32 @@ fn insert_top_level_literals(
     );
 }
 
+/// `mediabag-dir` — always present for every Pandoc-hybrid render, mirroring
+/// Q1's unconditional `render.ts:119-120` assignment. Read by
+/// `modules/mediabag.lua`'s `write_mediabag_entry`, called from
+/// `quarto-finalize/mediabag.lua`'s `Image` handler — a filter that runs
+/// unconditionally in the finalize chain for *every* format
+/// (`main.lua:598`), gated only at the call site to skip Office formats
+/// (`isWordProcessorOutput`/`isPowerPointOutput`), which scoop up mediabag
+/// files themselves. Before this, `param("mediabag-dir", nil)` returned
+/// `nil` for any format, so any render with an image pandoc resolved into
+/// its mediabag (a remote-fetched URL, or a `data:` URI) crashed inside
+/// `pandoc.path.join{nil, src}` — not typst-specific, confirmed by the
+/// unconditional call site above. `_quarto.file.write`'s underlying
+/// `write_file` (`pandoc/datadir/init.lua:707-708`) already calls
+/// `pandoc.system.make_directory(..., true)` before writing, so the
+/// directory does not need to be created ahead of time here — only a
+/// non-nil path needs to reach the filter. The directory sits at
+/// `<output-dir>/<stem>_files/mediabag`, alongside the render's actual
+/// output file, so no separate copy step is needed to get it to its final
+/// location.
+fn insert_mediabag_dir(blob: &mut Map<String, Value>, mediabag_dir: &std::path::Path) {
+    blob.insert(
+        "mediabag-dir".to_string(),
+        json!(mediabag_dir.to_string_lossy()),
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -431,6 +461,7 @@ mod tests {
             Some(registry),
             language,
             PathBuf::from("/tmp/quarto-pandoc-results.json"),
+            PathBuf::from("/project/doc_files/mediabag"),
         )
     }
 
@@ -602,6 +633,7 @@ mod tests {
             Some(&registry),
             &language,
             PathBuf::from("/tmp/quarto-pandoc-results.json"),
+            PathBuf::from("/project/doc_files/mediabag"),
         )
         .with_contributor(Box::new(Probe))
         .build();
@@ -738,6 +770,37 @@ mod tests {
         assert!(paths.contains_key("Rscript"));
         assert!(paths.contains_key("TinyTexBinDir"));
         assert!(paths.contains_key("Typst"));
+    }
+
+    /// `mediabag-dir` is present for every format, docx included — the
+    /// gate against Office formats lives in the Lua call site
+    /// (`quarto-finalize/mediabag.lua`'s `Image` handler), not in whether
+    /// the param is emitted. Before this, no format ever emitted the key,
+    /// so `modules/mediabag.lua`'s `write_mediabag_entry` crashed on
+    /// `pandoc.path.join{nil, src}` the first time any non-Office render
+    /// resolved an image into pandoc's mediabag.
+    ///
+    /// Revert hunk: removing `insert_mediabag_dir`'s call in `build` makes
+    /// the `blob["mediabag-dir"]` index panic (key absent).
+    #[test]
+    fn test_mediabag_dir_present_for_every_format() {
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = fixture_language();
+
+        for target_format in ["docx", "pptx", "typst", "odt"] {
+            let format = Format::from_format_string(target_format)
+                .unwrap_or_else(|e| panic!("failed to build Format for {target_format}: {e}"));
+            let blob = fixture_builder(&format, &project, &registry, &language).build();
+            let mediabag_dir = blob["mediabag-dir"].as_str().unwrap_or_else(|| {
+                panic!("mediabag-dir missing or not a string for {target_format}")
+            });
+            assert!(
+                mediabag_dir.ends_with("doc_files/mediabag")
+                    || mediabag_dir.ends_with("doc_files\\mediabag"),
+                "expected mediabag-dir to point at a <stem>_files/mediabag directory, got {mediabag_dir}"
+            );
+        }
     }
 
     /// P7 T4.1: `output-divs`/`page-width` are per-format

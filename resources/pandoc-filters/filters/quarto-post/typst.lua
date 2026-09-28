@@ -245,7 +245,7 @@ function render_typst_fixups()
         local src = image.src
         local mediabagPath = _quarto.modules.mediabag.write_mediabag_entry(src)
         if mediabagPath then
-          src = mediabagPath
+          src = _quarto.modules.mediabag.typst_root_relative(mediabagPath)
         end
 
         -- Build image() parameters

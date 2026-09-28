@@ -330,7 +330,8 @@ function render_typst_brand_yaml()
         local imageFilename = logoOptions.path
         if _quarto.modules.mediabag.should_mediabag(imageFilename) then
           imageFilename = _quarto.modules.mediabag.resolved_url_cache[logoOptions.path] or _quarto.modules.mediabag.fetch_and_store_image(logoOptions.path)
-          imageFilename = _quarto.modules.mediabag.write_mediabag_entry(imageFilename) or imageFilename
+          local mediabagPath = _quarto.modules.mediabag.write_mediabag_entry(imageFilename)
+          imageFilename = mediabagPath and _quarto.modules.mediabag.typst_root_relative(mediabagPath) or imageFilename
           imageFilename = imageFilename and imageFilename:gsub('\\_', '_')
         else
           -- Typst 0.15+ rejects backslash path separators.

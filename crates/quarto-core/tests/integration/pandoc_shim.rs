@@ -266,6 +266,7 @@ pub(crate) fn build_ast_and_params_from_content_for_format(
         Some(&registry),
         &language,
         PathBuf::from("/dev/null"),
+        PathBuf::from("/dev/null/mediabag"),
     )
     .build()
     .to_string();

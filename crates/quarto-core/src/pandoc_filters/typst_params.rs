@@ -29,6 +29,14 @@ pub struct TypstFilterParamsContributor {
     pub available_fonts: Option<Vec<String>>,
     pub citation_location: Option<String>,
     pub reference_location: Option<String>,
+    /// `ctx.project.dir`, the same absolute path passed to `typst compile
+    /// --root` in `typst_compile.rs`. Typst treats any path starting with
+    /// `/` in an `image()` call as rooted at `--root`, not at the real
+    /// filesystem root — so Lua's `mediabag-dir`-derived absolute paths
+    /// (needed for `io.open`, since Pandoc inherits an uncontrolled cwd)
+    /// must be rebased against this before being embedded in `.typ`
+    /// source. See `modules/mediabag.lua`'s `typst_root_relative`.
+    pub root_dir: Option<std::path::PathBuf>,
 }
 
 impl FilterParamsContributor for TypstFilterParamsContributor {
@@ -52,6 +60,12 @@ impl FilterParamsContributor for TypstFilterParamsContributor {
             blob.insert(
                 "reference-location".to_string(),
                 Value::String(location.clone()),
+            );
+        }
+        if let Some(root_dir) = &self.root_dir {
+            blob.insert(
+                "typst-root-dir".to_string(),
+                Value::String(root_dir.to_string_lossy().into_owned()),
             );
         }
     }

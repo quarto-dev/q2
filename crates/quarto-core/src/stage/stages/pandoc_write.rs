@@ -443,12 +443,32 @@ impl PipelineStage for PandocWriteStage {
             (None, None, None, None)
         };
 
+        // `mediabag-dir`: `<output-dir>/<stem>_files/mediabag`, mirroring
+        // Q1's `render.ts:119-120` unconditional assignment. Computed from
+        // the *final* output path (not the `output_path` local below, which
+        // for typst is the intermediate `.typ` — same directory and stem,
+        // just a different extension, so either would do; this one is
+        // available before `params_blob` needs it). See `insert_mediabag_dir`
+        // in `pandoc_filters::params` for why every format gets this key.
+        let mediabag_dir = {
+            let out = ctx.output_path();
+            let parent = out.parent().unwrap_or_else(|| Path::new("."));
+            let stem = out
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("quarto-output");
+            parent
+                .join(crate::resources::resource_dir_name(stem))
+                .join("mediabag")
+        };
+
         let mut builder = FilterParamsBuilder::new(
             &ctx.format,
             &ctx.project,
             ctx.ref_type_registry.as_ref(),
             &language,
             results_file,
+            mediabag_dir,
         );
         // P7 Task 4: the 5 docx callout-icon params
         // (`docxCalloutImage`/`param("icon-" .. type, nil)`,
@@ -459,10 +479,16 @@ impl PipelineStage for PandocWriteStage {
                 share_dir: share.clone(),
             }));
         }
+        let typst_root_dir = if ctx.format.identifier == crate::format::FormatIdentifier::Typst {
+            Some(ctx.project.dir.clone())
+        } else {
+            None
+        };
         if typst_brand_param.is_some()
             || typst_available_fonts.is_some()
             || typst_citation_location.is_some()
             || typst_reference_location.is_some()
+            || typst_root_dir.is_some()
         {
             builder = builder.with_contributor(Box::new(
                 crate::pandoc_filters::typst_params::TypstFilterParamsContributor {
@@ -470,6 +496,7 @@ impl PipelineStage for PandocWriteStage {
                     available_fonts: typst_available_fonts,
                     citation_location: typst_citation_location,
                     reference_location: typst_reference_location,
+                    root_dir: typst_root_dir,
                 },
             ));
         }

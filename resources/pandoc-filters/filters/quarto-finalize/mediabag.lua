@@ -11,7 +11,7 @@ function mediabag_filter()
          not _quarto.format.isPowerPointOutput() then
         local mediaFile = _quarto.modules.mediabag.write_mediabag_entry(el.src)
         if mediaFile then
-          el.src = mediaFile
+          el.src = _quarto.modules.mediabag.typst_root_relative(mediaFile)
           return el
         end
       end
