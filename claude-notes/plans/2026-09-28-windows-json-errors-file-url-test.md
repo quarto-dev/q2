@@ -48,7 +48,7 @@ No. The consensus is to use verbatim paths only where they are needed (very long
 **Ready to implement (S1), pending go-ahead.** The failing assertion is a test bug, but fixing only the test would leave a confirmed product gap (verbatim paths in JSON wire output) hidden behind a test that goes green. Decided 2026-09-28:
 - One branch. First rework the test: a URL round-trip, plus a strengthened `notebook_path` assertion as the Windows RED.
 - Then fix the product at `NativeRuntime::canonicalize` under bd-1klbq2zd.
-- bd-1klbq2zd's scope is widened from display to "q2 must not carry or emit `\\?\` in JSON wire output or status lines".
+- bd-1klbq2zd's scope is widened from display to wire output and status lines, under the contract in § Wire-path contract: plain form whenever an equivalent plain form exists.
 
 ## RED (captured 2026-09-28, Windows, HEAD `e8379cfe`)
 
@@ -122,7 +122,7 @@ The fix is two pieces with an ordering question between them.
 The test never builds a URL itself, so there is no tautology with QER's logic. It needs no new dependency (`url` is already a `[dependencies]` entry of `crates/quarto`). It fails on the real regressions: a pseudo-path target, a `file://?/C:/…` verbatim leak (`?` parses as a query), or an added fragment. The cost is a small OSC8 extractor (about 10-15 lines) and a rewritten doc comment at `:510-521`. It no longer pins the exact URL spelling, which is QER's contract, covered by QER's own unit test.
 
 **Plus: strengthen the `notebook_path` assertion (`:~490`)** from `ends_with("broken.ipynb")` to:
-- `!nb_path.starts_with(r"\\?\")`, the wire contract (a no-op on Unix);
+- `!nb_path.starts_with(r"\\?\")`. This is the wire contract applied to this fixture, and it is a no-op on Unix. It is correct here because a short temp-dir path always has a plain form (see § Wire-path contract);
 - `canonicalize(nb_path) == canonical(dir.join("broken.ipynb"))`, i.e. it names the real file.
 
 This assertion **fails on Windows today**, which makes it the genuine RED for the product fix. The same check could apply to `source_file` if the user wants the wire contract pinned there too.
@@ -131,10 +131,18 @@ Alternatives considered for the URL assertion:
 - **A. Mirror QER's strip in the test.** Rejected: it copies product logic, so the test would prove only that the two copies agree.
 - **B. `dunce` + exact URL string.** This is less objectionable now that `dunce` is a likely candidate for the product fix too. But if the product adopts `dunce`, a `dunce`-based oracle shares the product's library, and it still fails on harmless spelling differences. C is stronger.
 
-### Piece 2 — Product: q2 should not carry `\\?\` (bd-1klbq2zd)
+### Piece 2 — Product: q2 carries plain paths wherever a plain form exists (bd-1klbq2zd)
 
-This is out of scope for this plan to *design*, but it bounds the choice. Candidate directions, to be decided in bd-1klbq2zd:
-- Fix at the seam: `NativeRuntime::canonicalize` (`native.rs:94`) returns the plain form via `dunce::canonicalize`. This covers CLI inputs and everything derived from them in one place, and keeps the verbatim form where it is required (>260 chars, reserved names).
+This is out of scope for this plan to *design*, but it bounds the choice.
+
+**Wire-path contract.** On Windows, a path q2 emits (JSON fields, status lines) or compares uses the plain form whenever an equivalent plain form exists. The verbatim `\\?\` form is allowed only for paths that have no plain equivalent. "Never emit `\\?\`" would be wrong: some real paths can only be named in verbatim form. Per `dunce` 1.0.5 `is_safe_to_strip_unc` (`src/lib.rs:152-181`), the cases where stripping is unsafe are:
+- reserved DOS names (`CON`, `COM4.txt`, …): `C:\CON` names the device, not the file;
+- invalid filenames (trailing `.`/space, forbidden characters);
+- paths longer than 260 UTF-16 units;
+- any verbatim prefix other than a disk prefix. That includes `\\?\UNC\server\share\…`, **which does have a plain equivalent** (`\\server\share\…`, as QER's `plain_absolute_path` shows). `dunce` alone therefore does not satisfy this contract for network shares. bd-1klbq2zd must add that conversion or decide that shares are out of scope.
+
+Candidate directions, to be decided in bd-1klbq2zd:
+- Fix at the seam: `NativeRuntime::canonicalize` (`native.rs:94`) returns the plain form via `dunce::canonicalize`, plus UNC handling per the contract above. This covers CLI inputs and everything derived from them in one place, and keeps the verbatim form only where the contract allows it.
 - Audit the ~186 direct `std::fs::canonicalize` calls in non-test sources, which bypass the runtime seam. Decide whether they route through the seam, use a shared `quarto_util` helper, or stay put because they never reach output or comparisons.
 - `std::path::absolute` is **not** a drop-in replacement: it resolves no symlinks, and the tests canonicalize precisely because of macOS `/var` → `/private/var`.
 
@@ -144,14 +152,16 @@ This is out of scope for this plan to *design*, but it bounds the choice. Candid
 - **S2. Test-only now (Option C), `notebook_path` strengthening deferred to bd-1klbq2zd.** Smallest step, but the test goes green on Windows while the wire leak persists. This is the "green board without parity" outcome CLAUDE.local.md warns against.
 - **S3. Park bd-clq56rem behind bd-1klbq2zd** (`blocks` edge) and do everything in bd-1klbq2zd. This is equivalent to S1, with the test work owned by the product strand.
 
+## Decisions
+
+Decided 2026-09-28:
+- **Sequencing: S1.** One branch: test rework with the strengthened `notebook_path` RED first, then the product fix at the runtime seam.
+- **bd-1klbq2zd scope: widened** from user-facing display to wire output (JSON) and status lines, under § Wire-path contract. The `NativeRuntime::canonicalize` seam is the first fix site, and the ~186 direct calls are an audit item.
+
 ## Open design questions for the user
 
-Decided 2026-09-28: question 1 → S1; question 2 → widen. Questions 3 and 4 remain open (defaults: pin `notebook_path` only, and leave the test helpers alone).
-
-1. **Sequencing.** S1 (one branch: test RED → product fix at the runtime seam), S2 (test-only now), or S3 (fold into bd-1klbq2zd)? Recommended: S1.
-2. **bd-1klbq2zd scope.** Widen it from "user-facing display" to "q2 must not emit or carry `\\?\` in wire output (JSON) or status lines", with the `NativeRuntime::canonicalize` seam as the first fix site and the ~186 direct calls as an audit?
-3. **Wire contract breadth.** Pin "no `\\?\`" only on `notebook_path` in this test, or also on `source_file`?
-4. **Shared `canonical()` in tests.** Leave the ~55 copies of the test helper alone. They are correct as a filesystem oracle as long as comparisons stay Path-to-Path.
+1. **Wire contract breadth in this test.** Pin the contract only on `notebook_path`, or also on `source_file`? Default: `notebook_path` only.
+2. **Shared `canonical()` in tests.** Leave the ~55 copies of the test helper alone? Default: yes. They are correct as a filesystem oracle as long as comparisons stay Path-to-Path.
 
 ## Checklist (after sign-off; assumes S1)
 
@@ -176,7 +186,7 @@ cargo nextest run -p quarto -E 'test(ipynb_diagnostic_hyperlinks_real_notebook)'
 cargo nextest run -p quarto -E 'test(json_errors::)'
 ```
 
-No full-crate or workspace run locally. CI covers the rest.
+No full-crate or workspace *test* run locally: CLAUDE.local.md overrides AGENTS.md's pre-push steps on this machine, and CI (Linux/macOS) runs the full suite. Before opening the PR, ask the user about one `cargo build --workspace`. CI has no Windows leg, so that build is the only place Windows-only compile errors (e.g. cfg-gated dead code under `-D warnings`) get caught.
 
 ## Crate suite snapshot (Windows, HEAD `e8379cfe`, informational only)
 
