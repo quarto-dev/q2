@@ -112,8 +112,8 @@ Test specifications first (TDD); implementation follows.
 - [x] `cargo xtask verify` (full — hub-client and ts-packages affected);
   needed `brew install typst` first (CI's macOS leg installs it; this
   machine lacked it and the typst Rust test failed before any TS leg ran)
-- [ ] hub-client two-commit changelog workflow (user-facing: live updates
-  now recover after sleep / network change)
+- [x] hub-client two-commit changelog workflow (user-facing: live updates
+  now recover after sleep / network change) — `9fff3e98` + changelog commit
 
 ## Client change — `StoppableWebSocketClientAdapter`
 
