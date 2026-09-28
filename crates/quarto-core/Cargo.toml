@@ -195,7 +195,7 @@ zip = { version = "6", default-features = false, features = ["deflate-flate2-zli
 # text as vector paths (not `<text>` nodes), so neither is greppable.
 # `pdf-extract` needs no external binary.
 # P2: the gordonwoodhull fork is accepted for MCID support; keep pinned to a commit SHA.
-pdf-extract = { git = "https://github.com/gordonwoodhull/pdf-extract", rev = "f68ca43f27b1e23d92072cc4383178a33ba25457" }
+pdf-extract = { git = "https://github.com/gordonwoodhull/pdf-extract", rev = "b1371931381491fe2557c013d99cc3671f6e28c3" }
 
 [lints]
 workspace = true

@@ -1,5 +1,5 @@
 ---
-title: "Margin Citation with Suppress Bibliography"
+title: "Margin Citations with No End-of-Document Reference List"
 papersize: us-letter
 citation-location: margin
 bibliography: borges-refs.bib
