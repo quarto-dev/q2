@@ -428,6 +428,107 @@ mod tests {
         }
     }
 
+    // === bd-1eu34vpy: is_available() must probe a working jupyter ===
+
+    /// Write an executable `jupyter` stub into `dir` and return its
+    /// path. `body` is the script body (batch syntax on Windows, `sh`
+    /// syntax elsewhere) run when the stub is invoked with
+    /// `--version`.
+    fn write_jupyter_stub(dir: &Path, body: &str) -> PathBuf {
+        #[cfg(windows)]
+        {
+            let path = dir.join("jupyter.bat");
+            std::fs::write(&path, format!("@echo off\r\n{body}\r\n")).unwrap();
+            path
+        }
+        #[cfg(not(windows))]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let path = dir.join("jupyter");
+            std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+            path
+        }
+    }
+
+    /// A jupyter stub that exits non-zero (the stale-shim case: the
+    /// name resolves on PATH but the binary is broken) must report
+    /// NOT available, so jupyter-gated tests skip instead of
+    /// hard-failing.
+    #[test]
+    fn is_available_false_for_broken_stub() {
+        let tmp = tempfile::tempdir().unwrap();
+        #[cfg(windows)]
+        let stub = write_jupyter_stub(tmp.path(), "exit /b 1");
+        #[cfg(not(windows))]
+        let stub = write_jupyter_stub(tmp.path(), "exit 1");
+
+        let engine = JupyterEngine {
+            jupyter_path: Some(stub),
+        };
+        assert!(
+            !engine.is_available(),
+            "a jupyter that exits non-zero on `--version` must not be reported available"
+        );
+    }
+
+    /// A jupyter stub that prints a version and exits 0 must report
+    /// available.
+    #[test]
+    fn is_available_true_for_working_stub() {
+        let tmp = tempfile::tempdir().unwrap();
+        #[cfg(windows)]
+        let stub = write_jupyter_stub(tmp.path(), "echo 5.7.0\r\nexit /b 0");
+        #[cfg(not(windows))]
+        let stub = write_jupyter_stub(tmp.path(), "echo 5.7.0\nexit 0");
+
+        let engine = JupyterEngine {
+            jupyter_path: Some(stub),
+        };
+        assert!(
+            engine.is_available(),
+            "a jupyter that answers `--version` with exit 0 must be reported available"
+        );
+    }
+
+    /// The probe result is cached: repeated `is_available()` calls
+    /// (engine registry is re-queried per render) must not re-spawn
+    /// the binary. The stub appends one line to a counter file on
+    /// every invocation; two calls must produce exactly one line.
+    #[test]
+    fn is_available_probe_runs_at_most_once_per_path() {
+        let tmp = tempfile::tempdir().unwrap();
+        let counter = tmp.path().join("counter.txt");
+        #[cfg(windows)]
+        let stub = write_jupyter_stub(
+            tmp.path(),
+            &format!("echo x>> \"{}\"\r\nexit /b 0", counter.display()),
+        );
+        #[cfg(not(windows))]
+        let stub = write_jupyter_stub(
+            tmp.path(),
+            &format!("echo x >> '{}'\nexit 0", counter.display()),
+        );
+
+        let engine = JupyterEngine {
+            jupyter_path: Some(stub),
+        };
+        assert!(engine.is_available());
+        assert!(engine.is_available());
+
+        // A missing counter file means the stub never ran at all
+        // (e.g. is_available() short-circuits on path presence) —
+        // read as zero invocations so the assertion fails cleanly.
+        let invocations = std::fs::read_to_string(&counter)
+            .unwrap_or_default()
+            .lines()
+            .count();
+        assert_eq!(
+            invocations, 1,
+            "repeated is_available() calls must not re-spawn jupyter (probe result cached)"
+        );
+    }
+
     // bd-c5u2g: per-process memoization of `find_jupyter`. Pre-fix
     // the underlying executable lookup runs once per
     // `JupyterEngine::new()` (= once per document rendered), which
