@@ -15,7 +15,9 @@
 //! replays what `CaptureSpliceStage` does on the consumer side:
 //! parse `capture.input_qmd` / `capture.result.markdown` with the
 //! pampa qmd reader, derive the cell-output map, and splice onto the
-//! live AST. Tests skip (with a note) when the engine isn't installed.
+//! live AST. Tests skip (with a note) when the engine isn't installed;
+//! the jupyter test additionally skips when no `python3` kernelspec is
+//! registered (bd-zvf3e8n2).
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -31,6 +33,31 @@ fn engine_available(name: &str) -> bool {
     EngineRegistry::default()
         .get(name)
         .is_some_and(|e| e.is_available())
+}
+
+/// The jupyter fixture runs a `{python}` cell, which resolves to the
+/// `python3` kernelspec. A working jupyter without a registered
+/// `python3` kernel (an R/Julia-only install is legitimate) must
+/// skip, not fail (bd-zvf3e8n2). The error message names the kernel,
+/// the searched dirs, and the kernels that *were* found.
+fn python3_kernel_available() -> bool {
+    // find_kernelspec is async and runtimelib's `jupyter --paths`
+    // probe needs a Tokio reactor; pollster provides none. These
+    // tests are deliberately not #[tokio::test] (record_capture's
+    // jupyter engine builds its own internal runtime — see below), so
+    // build a short-lived current-thread runtime for the probe and
+    // drop it before any engine work.
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("tokio runtime for kernelspec probe");
+    match rt.block_on(quarto_core::engine::jupyter::find_kernelspec("python3")) {
+        Ok(_) => true,
+        Err(e) => {
+            eprintln!("Skipping test: {e}");
+            false
+        }
+    }
 }
 
 fn fixture(
@@ -78,6 +105,9 @@ fn is_cell_div(block: &Block) -> bool {
 fn assert_capture_splices(content: &str, engine: &str) {
     if !engine_available(engine) {
         eprintln!("Skipping test: engine '{engine}' not available on this machine");
+        return;
+    }
+    if engine == "jupyter" && !python3_kernel_available() {
         return;
     }
 
