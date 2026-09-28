@@ -184,9 +184,18 @@ pub fn render_to_file(
 ) -> Result<RenderToFileResult> {
     // Standalone: pass `None` for project_artifacts so the
     // function flushes Project-scoped artifacts via the resolver.
-    // `format_override = None`: the caller passed an explicit format string,
-    // which is authoritative for this entry point.
-    render_document_to_file(input_path, format, options, None, runtime, None, None, None)
+    // The caller passed an explicit format string, so it must take
+    // precedence over project and document format declarations.
+    render_document_to_file(
+        input_path,
+        format,
+        options,
+        None,
+        runtime,
+        None,
+        None,
+        Some(format),
+    )
 }
 
 /// Render a QMD document to a file (advanced API).

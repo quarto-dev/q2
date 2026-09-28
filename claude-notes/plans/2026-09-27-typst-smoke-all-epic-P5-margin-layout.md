@@ -72,24 +72,75 @@ nested/screen-inset variants).
 
 ## Checklist
 
-- [ ] Copy the fixture directory's **tracked source files** into
-      `crates/quarto/tests/smoke-all/typst/margin-layout/` (all 86 `.qmd` files +
-      `borges-refs.bib` + image assets `neon-spade.svg`/`splat-heart.svg`/
-      `test-image.png`/`test-plot.svg`) — not a literal directory copy. Do not copy
-      the pre-built `_site`/`.typ` outputs (those regenerate), nor any other
-      generated/local cruft the fixture's own `.gitignore` lists (`.quarto/` caches,
-      stray local dotfiles) — copy tracked source only.
-- [ ] Confirm each file renders independently under the existing single-file-in-
-      project path with no harness change (per the "why this doesn't need P6" analysis
-      above) — if any file's rendering surfaces a gap, note it here rather than
-      silently reduce the fixture.
-- [ ] Run the full 86-file set; triage failures into (a) predicate bugs — feed back
-      into P3, (b) real Q2 Typst rendering gaps — file as follow-on beads/plan items,
-      out of this epic's scope per the repo's "beads vs. plans" rule, (c) fixture
-      syntax-translation mistakes — fix in the port.
-- [ ] `cargo clippy -p quarto --all-targets -- -D warnings` + `cargo nextest run
-      -p quarto`.
+- [x] Copy the fixture directory's **tracked source files** into
+      `crates/quarto/tests/smoke-all/typst/margin-layout/` (86 `.qmd` files,
+      `borges-refs.bib`, and the four image assets). The destination `.gitignore`
+      excludes generated Typst/HTML/PDF outputs, `_site/`, `.quarto/`, and copied
+      local `.claude/` settings; only tracked fixture sources are committed.
+- [x] Smoke-all discovers all 86 QMD files without a harness change. The website
+      fixture's output is directed to the source directory so Typst can resolve its
+      relative bibliography file; see §Decisions.
+- [ ] Finish triaging the 86-file run into (a) predicate bugs — feed back into P3,
+      (b) real Q2 Typst rendering gaps, out of this epic's scope, and (c) fixture
+      syntax-translation mistakes — fix in this port. Latest focused run: 24 passed,
+      10 skipped, 52 failed; see §Decisions for the grouped failure causes.
+- [ ] Close the remaining Q2 format/filter/render gaps listed in §Decisions, then
+      rerun the P5 smoke suite and update this checklist.
+- [x] `cargo clippy -p quarto-core --all-targets -- -D warnings`,
+      `cargo clippy -p quarto --all-targets -- -D warnings`, and
+      `cargo fmt --all -- --check` pass at commit `17871afad`.
+- [ ] `cargo nextest run -p quarto-core` passed 5283 tests, 32 skipped before the
+      final fixture edits. Latest `cargo nextest run -p quarto` is red because
+      smoke-all includes the 52 remaining P5 failures plus the existing
+      `typst/pdf-text-position-test.qmd` failure; live total: 601 passed, 1 failed,
+      2 skipped. Rerun after fixes.
+
+## Decisions
+
+- `render_to_file(input, format, ...)` treats its explicit format argument as
+  authoritative. It previously passed `format_override: None` to the lower-level
+  renderer, allowing multi-format frontmatter to win and produce HTML for a Typst
+  test. It now passes `Some(format)`; the regression
+  `render_to_file_typst_overrides_multiple_frontmatter_formats` proves a real PDF
+  is produced. The focused regression passes.
+- The smoke-all test spec uses each `_quarto.tests` format key as the render format;
+  no new per-test `format` metadata option or assertion-specific PDF forcing is
+  needed. The observed `.html` mismatch was a renderer precedence bug, not a
+  `quarto-test` selection bug.
+- The website project's Q2 default output directory is `_site/`, but Typst source
+  keeps local resource names such as `#bibliography(("borges-refs.bib"))`. Q2 does
+  not copy the BibTeX asset into `_site/`; the fixture sets `project.output-dir: .`
+  so the compiled `.typ` and its declared bibliography share the source directory.
+  This is a fixture-local accommodation, not a change to website output defaults.
+- Nine Python/Great Tables fixtures declare `tests.run.requires: jupyter`; this
+  machine has no Jupyter runtime, so they correctly skip rather than fail as engine
+  errors. R/knitr is available here; R fixtures remain active and expose their
+  actual rendering gaps.
+- Q1 syntax that Q2 explicitly rejects was translated in the copied QMDs: listing
+  attributes put classes before key/value pairs; Legal-paper dimensions use words
+  instead of unmatched inch quotes; multiline footnote definitions use Q2's `:::
+  ^label` block form instead of unsupported Pandoc indentation. The suite progressed
+  past those parser errors.
+- Remaining decisive gaps: Pandoc receives `--reference-location margin` and exits
+  with “Argument of --reference-location must be block, section, or document” for
+  five sidenote/mixed fixtures. `layout/meta.lua` and `quarto-post/typst.lua` read
+  `reference-location` and `citation-location` from `QUARTO_FILTER_PARAMS`, but
+  `FilterParamsBuilder` does not currently pass these metadata values; margin
+  citation output therefore lacks the expected `#note(... form: "full")`. Fix the
+  Typst metadata bridge and avoid forwarding the unsupported `reference-location:
+  margin` CLI option to Pandoc.
+- `citation-margin-multiple.qmd` additionally fails Typst compilation because the
+  generated source treats `@vindication1738---a` as a reference label that does not
+  exist. Most other remaining failures are real output-vs-assertion differences in
+  margin geometry, captions/listings, figures/tables, and pagination; classify after
+  the format/filter bridge is corrected. Do not weaken or delete the source assertions
+  just to make the suite green.
+- The standalone pre-existing fixture `typst/pdf-text-position-test.qmd` currently
+  fails because the header/footer decorations are on page 1 while the body/title are
+  on page 2. It contributes the extra non-P5 failure in the full `quarto` test run.
 
 ## Status
 
-Not started.
+In progress — fixture port and smoke-all discovery are complete; P5 triage has
+started. Current branch checkpoint is `typst-testing/p5-margin-layout`. Do not merge
+or push until the remaining P5 failures are classified and the phase test gates pass.
