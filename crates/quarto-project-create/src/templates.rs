@@ -110,6 +110,39 @@ pub mod website {
     pub const STYLES_CSS: &str = include_str!("../resources/templates/website/styles.css");
 }
 
+/// Scaffold contents for the book project type (book-projects P7).
+/// Chapter content and `references.bib` are one-time copies of Q1's
+/// `resources/projects/book/` defaults (per the external-sources
+/// policy; see `templates::blog`'s doc comment for the same pattern);
+/// `_quarto.yml` is a doctemplate port of Q1's `_quarto.ejs.yml`.
+pub mod book {
+    /// `_quarto.yml` template for book projects.
+    pub const QUARTO_YML: &str = include_str!("../resources/templates/book/_quarto.yml.template");
+
+    /// Unnumbered preface chapter (`{.unnumbered}` first heading).
+    pub const INDEX_QMD: &str = include_str!("../resources/templates/book/index.qmd");
+
+    /// Introduction chapter; cites `references.bib`'s one entry.
+    pub const INTRO_QMD: &str = include_str!("../resources/templates/book/intro.qmd");
+
+    /// Summary chapter.
+    pub const SUMMARY_QMD: &str = include_str!("../resources/templates/book/summary.qmd");
+
+    /// Unnumbered references chapter: no code, just the `{#refs}` div
+    /// the book's merged bibliography is spliced into.
+    pub const REFERENCES_QMD: &str = include_str!("../resources/templates/book/references.qmd");
+
+    /// Starter bibliography, CSL-JSON (one entry, cited from
+    /// `intro.qmd`). Q2's citeproc filter only parses CSL-JSON
+    /// (`pampa::citeproc_filter::load_bibliography`) — unlike Q1,
+    /// there is no BibTeX parser, so this is JSON content rather than
+    /// Q1's `references.bib`, even though the same entry.
+    pub const REFERENCES_JSON: &str = include_str!("../resources/templates/book/references.json");
+
+    /// Cover image (embedded binary), copied from Q1's book resources.
+    pub const COVER_PNG: &[u8] = include_bytes!("../resources/templates/book/cover.png");
+}
+
 /// The four example projects seeded into a new user's "Examples /
 /// Templates" collection (bd-3fwtdhil). All static: each example is a short
 /// instructional project whose documents carry fixed titles, so nothing here

@@ -2625,9 +2625,13 @@ fn test_citation_with_leading_space() {
 }
 
 /// Test citation WITHOUT leading space (should NOT inject Space node)
+///
+/// The citation follows punctuation, not a letter: an `@` right after a
+/// letter or digit continues the word (`Hi@cite` is one Str, as in Pandoc;
+/// bd-bare-at-literal-w3ytmu8e), so it is no longer a citation at all.
 #[test]
 fn test_citation_without_leading_space() {
-    let input = "Hi@cite";
+    let input = "Hi(@cite)";
     let result = parse_qmd_to_json(input);
 
     // Should NOT have a Space node
@@ -2642,8 +2646,8 @@ fn test_citation_without_leading_space() {
         result
     );
     assert!(
-        result.contains("\"Hi\""),
-        "Should contain 'Hi' text: {}",
+        result.contains("\"Hi(\""),
+        "Should contain 'Hi(' text: {}",
         result
     );
     assert!(
@@ -2705,10 +2709,12 @@ fn test_citation_paragraph_start() {
 /// Test multiple citations with different spacing patterns
 #[test]
 fn test_citation_multiple_spacing_patterns() {
-    let input = "A@cite1 B @cite2C@cite3 D";
+    // Citations glued to punctuation rather than to a letter: `A@cite1` is
+    // one Str since bd-bare-at-literal-w3ytmu8e (Pandoc agrees).
+    let input = "A(@cite1) B @cite2(@cite3) D";
     let result = parse_qmd_to_json(input);
 
-    // Expected pattern: A, @cite1, Space, B, Space, @cite2, C, @cite3, Space, D
+    // Expected pattern: A(, @cite1, ), Space, B, Space, @cite2, (, @cite3, ), Space, D
     // Space count: 1 (after cite1) + 1 (injected before cite2) + 1 (after cite3) = 3
     let space_count = result.matches("\"t\":\"Space\"").count();
     assert_eq!(

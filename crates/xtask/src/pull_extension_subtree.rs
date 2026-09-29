@@ -21,9 +21,26 @@ pub struct SubtreeConfig {
     pub remote_branch: String,
 }
 
-/// Production subtree table. Empty until the first real subtree (e.g. the
-/// julia engine, epic Step 4) is vendored.
-pub const SUBTREES: &[SubtreeConfig] = &[];
+/// Production subtree table.
+///
+/// A function rather than a `const` because `SubtreeConfig` owns `String`s,
+/// which cannot be built non-empty in a const context.
+///
+/// `orange-book` (book-projects P2, plan item 80): pinned by upstream tag
+/// `0.2.0` = `2b59b76727f22bdcc3522ee56e2437f6abd81c36`, which was
+/// `origin/main`'s HEAD on `quarto-ext/orange-book` at vendoring time
+/// (2026-09-24) — the durable pin lives in the subtree-add commit's
+/// `git-subtree-split` trailer, not in this row; `remote_branch: "main"`
+/// just means "re-running `pull-extension-subtree orange-book` later picks
+/// up whatever main has moved to," same as every other row.
+pub fn subtrees() -> Vec<SubtreeConfig> {
+    vec![SubtreeConfig {
+        name: "orange-book".to_string(),
+        prefix: "resources/extension-subtrees/orange-book".to_string(),
+        remote_url: "https://github.com/quarto-ext/orange-book.git".to_string(),
+        remote_branch: "main".to_string(),
+    }]
+}
 
 /// Result of processing a single subtree.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -40,7 +57,7 @@ pub enum PullOutcome {
 pub struct Args {
     /// Subtree name to process; `None` or `Some("all")` processes every row.
     pub name: Option<String>,
-    /// Dev/test seam: replace the built-in [`SUBTREES`] table with the
+    /// Dev/test seam: replace the built-in [`subtrees()`] table with the
     /// contents of this JSON file.
     pub table: Option<PathBuf>,
 }
@@ -95,7 +112,7 @@ fn load_table(table_path: Option<&Path>) -> Result<Vec<SubtreeConfig>> {
             serde_json::from_str(&content)
                 .with_context(|| format!("parsing subtree table override {}", path.display()))
         }
-        None => Ok(SUBTREES.to_vec()),
+        None => Ok(subtrees()),
     }
 }
 
@@ -252,6 +269,42 @@ mod tests {
             remote_url: remote.to_string_lossy().to_string(),
             remote_branch: "main".to_string(),
         }
+    }
+
+    #[test]
+    fn production_subtrees_table_rows_are_well_formed() {
+        let table = subtrees();
+        assert!(
+            !table.is_empty(),
+            "subtrees() should contain the orange-book row (book-projects P2 item 80)"
+        );
+        for row in &table {
+            assert_eq!(
+                row.prefix,
+                format!("resources/extension-subtrees/{}", row.name),
+                "row {:?}: prefix must be resources/extension-subtrees/<name>",
+                row.name
+            );
+            assert!(
+                row.remote_url.starts_with("https://"),
+                "row {:?}: remote_url must be an https URL",
+                row.name
+            );
+            assert!(
+                !row.remote_branch.is_empty(),
+                "row {:?}: remote_branch must be set",
+                row.name
+            );
+        }
+        let orange_book = table
+            .iter()
+            .find(|r| r.name == "orange-book")
+            .expect("subtrees() must contain the orange-book row");
+        assert_eq!(
+            orange_book.remote_url,
+            "https://github.com/quarto-ext/orange-book.git"
+        );
+        assert_eq!(orange_book.remote_branch, "main");
     }
 
     #[test]

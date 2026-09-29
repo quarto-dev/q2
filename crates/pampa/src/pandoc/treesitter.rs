@@ -841,9 +841,10 @@ fn native_visitor<T: Write>(
         }
         "pandoc_str" => {
             // Tree-sitter may include leading ASCII whitespace in the
-            // pandoc_str node when it wraps the external `_pandoc_lt_str`
-            // token (bd-j9cf): the block-level scanner consumes preceding
-            // indentation before dispatching into `parse_open_angle_brace`,
+            // pandoc_str node when it wraps the external `_pandoc_literal_str`
+            // token (bd-j9cf for `<`, bd-star-as-str-qigl02pz for `*` `_`
+            // `~` `^`): the block-level scanner consumes preceding
+            // whitespace before dispatching into the character handlers,
             // so the chomped whitespace ends up inside the reported token
             // range. Split it back out into a leading Space inline so
             // siblings round-trip cleanly. Regular pandoc_str text never

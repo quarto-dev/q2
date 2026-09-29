@@ -189,7 +189,7 @@ describe('hierarchical path and the Presentation skeleton (bd-q33ylfxf)', () => 
       expect(['Templates', 'Examples'], c.id).toContain(c.path![0]);
     }
     const templates = response.choices.filter((c) => c.path![0] === 'Templates').map((c) => c.id);
-    expect(templates).toEqual(['default', 'website', 'blog', 'presentation']);
+    expect(templates).toEqual(['default', 'website', 'blog', 'presentation', 'book']);
     const examples = response.choices.filter((c) => c.path![0] === 'Examples').map((c) => c.id);
     expect(examples).toEqual([HUB_ONLY_CHOICE_ID, ...SEED_CHOICE_IDS]);
   });

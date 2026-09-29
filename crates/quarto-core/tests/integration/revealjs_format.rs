@@ -461,7 +461,7 @@ fn revealjs_crossref_attribute_figure_resolves_and_stretches() {
     // crossref-render only prefixed Paragraph captions and native Figure
     // captions are Plain — bd-n3sark9b.)
     assert!(
-        html.contains("class=\"caption\">Figure 1: A figure"),
+        html.contains("class=\"caption\">Figure\u{a0}1: A figure"),
         "fig-1 caption must survive the hoist with its number prefix; got:\n{html}"
     );
 }

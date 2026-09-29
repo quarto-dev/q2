@@ -1,0 +1,958 @@
+================================================================================
+flanking — star run followed by space is a Str (bd-star-as-str)
+================================================================================
+a * b
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+flanking — star at end of line is a Str
+================================================================================
+foo *
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str))))
+
+================================================================================
+flanking — star at end of line before a soft break is a Str
+================================================================================
+first *
+second
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_str))))
+
+================================================================================
+flanking — double star followed by space is a Str
+================================================================================
+a ** b
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+flanking — double star at end of line is a Str
+================================================================================
+foo **
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str))))
+
+================================================================================
+flanking — triple star followed by space is a Str
+================================================================================
+a *** b
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+flanking — triple star at end of line after a word is a Str
+================================================================================
+foo***
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str))))
+
+================================================================================
+flanking — tab-separated star is a Str
+================================================================================
+a	*	b
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+flanking — O(N * D)
+================================================================================
+O(N * D) cost
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+flanking — star after punctuation before space is a Str
+================================================================================
+Q-2-* codes
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+flanking — star after word before space is a Str
+================================================================================
+Ts* types
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+flanking — star after word at end of file is a Str
+================================================================================
+value*
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str))))
+
+================================================================================
+flanking — lone star between two emphases
+================================================================================
+*x* * y
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_emph
+        (emphasis_delimiter)
+        (pandoc_str)
+        (emphasis_delimiter))
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+flanking — lone star inside strong
+================================================================================
+**a * b**
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_strong
+        (strong_emphasis_delimiter)
+        (pandoc_str)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (strong_emphasis_delimiter)))))
+
+================================================================================
+flanking — lone star inside emphasis (closer preceded by space cannot close)
+================================================================================
+*a * b*
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_emph
+        (emphasis_delimiter)
+        (pandoc_str)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (emphasis_delimiter)))))
+
+================================================================================
+flanking — double star inside emphasis
+================================================================================
+*a ** b*
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_emph
+        (emphasis_delimiter)
+        (pandoc_str)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (emphasis_delimiter)))))
+
+================================================================================
+flanking — three spaced stars in a paragraph are all literal
+================================================================================
+a * b * c
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+flanking — lone star in a list item at end of line
+================================================================================
+- a *
+- b
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_str)))
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str))))))
+
+================================================================================
+flanking — lone star in a block quote
+================================================================================
+> a * b
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (pandoc_paragraph
+        (pandoc_str)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)))))
+
+================================================================================
+flanking — lone star in a fenced div
+================================================================================
+:::{.note}
+a * b
+:::
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_div
+      (attribute_specifier
+        (commonmark_specifier
+          (attribute_class)))
+      (block_continuation)
+      (pandoc_paragraph
+        (pandoc_str)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (block_continuation)))))
+
+================================================================================
+flanking — lone star in a span
+================================================================================
+[a * b]{.x}
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_span
+        (content
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))
+        (attribute_specifier
+          (commonmark_specifier
+            (attribute_class)))))))
+
+================================================================================
+flanking — lone star in link text
+================================================================================
+[a * b](u)
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_span
+        (content
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))
+        (target
+          (url))))))
+
+================================================================================
+flanking — lone star in an ATX heading
+================================================================================
+# a * b
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (atx_heading
+      (atx_h1_marker)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+flanking — lone star in a pipe table cell
+================================================================================
+| a | b |
+|---|---|
+| x * y | z |
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pipe_table
+      (pipe_table_header
+        (pipe_table_cell
+          (pandoc_str))
+        (pipe_table_cell
+          (pandoc_str)))
+      (pipe_table_delimiter_row
+        (pipe_table_delimiter_cell)
+        (pipe_table_delimiter_cell))
+      (pipe_table_row
+        (pipe_table_cell
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))
+        (pipe_table_cell
+          (pandoc_str))))))
+
+================================================================================
+flanking — star alone on the last line of a paragraph
+================================================================================
+para
+*
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_str))))
+
+================================================================================
+flanking — star alone in the document is a Str
+================================================================================
+*
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str))))
+
+================================================================================
+flanking — closer at line start cannot close, opener at line start can open
+================================================================================
+x
+*b* c
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_emph
+        (emphasis_delimiter)
+        (pandoc_str)
+        (emphasis_delimiter))
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+flanking — underscore followed by space is a Str
+================================================================================
+a _ b
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+flanking — underscores surrounded by spaces are literal
+================================================================================
+_ a and b _
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_str))))
+
+================================================================================
+flanking — underscore emphasis still pairs when flanked
+================================================================================
+_a and b_
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_emph
+        (emphasis_delimiter)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (emphasis_delimiter)))))
+
+================================================================================
+flanking — double underscore followed by space is a Str
+================================================================================
+a __ b
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+flanking — tilde followed by space is a Str
+================================================================================
+a ~ b
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+flanking — tilde openers whose closer is past whitespace are literal
+================================================================================
+~a and then ~b
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str))))
+
+================================================================================
+flanking — approximate numbers with tildes are literal
+================================================================================
+a ~5 and ~10 b
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+flanking — subscript may not contain whitespace (Pandoc rule)
+================================================================================
+~a and b~
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_str))))
+
+================================================================================
+flanking — tilde after word then tilde before word are literal
+================================================================================
+a~ and ~b
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str))))
+
+================================================================================
+flanking — tilde approximations across a soft line break are literal
+================================================================================
+x ~1.5s
+y ~8x z
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+flanking — subscript without whitespace still parses
+================================================================================
+H~2~O
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_subscript
+        (subscript_delimiter)
+        (pandoc_str)
+        (subscript_delimiter))
+      (pandoc_str))))
+
+================================================================================
+flanking — caret followed by space is a Str
+================================================================================
+a ^ b
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+flanking — caret openers whose closer is past whitespace are literal
+================================================================================
+^a and then ^b
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str))))
+
+================================================================================
+flanking — exponents with carets are literal
+================================================================================
+x ^2 and y ^3 z
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+flanking — superscript may not contain whitespace (Pandoc rule)
+================================================================================
+^a and b^
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_str))))
+
+================================================================================
+flanking — powers without closers are literal
+================================================================================
+2^10 and 3^4
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_str)
+      (pandoc_str))))
+
+================================================================================
+flanking — superscript without whitespace still parses
+================================================================================
+x^2^
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_superscript
+        (superscript_delimiter)
+        (pandoc_str)
+        (superscript_delimiter)))))
+
+================================================================================
+flanking — strikeout still parses
+================================================================================
+~~gone~~ here
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_strikeout
+        (strikeout_delimiter)
+        (pandoc_str)
+        (strikeout_delimiter))
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+flanking — regression: escaped star
+================================================================================
+a \* b
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+flanking — regression: star in code span
+================================================================================
+`a * b`
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_code_span
+        (code_span_delimiter)
+        (content)
+        (code_span_delimiter)))))
+
+================================================================================
+flanking — regression: emphasis followed by space
+================================================================================
+*a* b
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_emph
+        (emphasis_delimiter)
+        (pandoc_str)
+        (emphasis_delimiter))
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+flanking — regression: intraword star emphasis
+================================================================================
+foo*bar*baz
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_emph
+        (emphasis_delimiter)
+        (pandoc_str)
+        (emphasis_delimiter))
+      (pandoc_str))))
+
+================================================================================
+flanking — regression: spaced star line still a thematic break between paragraphs
+================================================================================
+a
+
+* * *
+
+b
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str))
+    (pandoc_horizontal_rule)
+    (pandoc_paragraph
+      (pandoc_str))))
+
+================================================================================
+flanking — regression: star list marker at document start
+================================================================================
+* a
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_star)
+        (pandoc_paragraph
+          (pandoc_str))))))
+
+================================================================================
+flanking — regression: star list marker interrupts a paragraph (bd-1xph)
+================================================================================
+text
+* more
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str))
+    (pandoc_list
+      (list_item
+        (list_marker_star)
+        (pandoc_paragraph
+          (pandoc_str))))))
+
+================================================================================
+flanking — boundary (tier 3): left-flanking star with no closer is still an error
+================================================================================
+a *b c
+--------------------------------------------------------------------------------
+
+(document
+  (ERROR
+    (pandoc_str)
+    (emphasis_delimiter)
+    (pandoc_str)
+    (pandoc_space)
+    (pandoc_str)))
+
+================================================================================
+flanking — boundary (tier 3): strong closer preceded by space is not a closer
+================================================================================
+**bold **
+--------------------------------------------------------------------------------
+
+(document
+  (ERROR
+    (strong_emphasis_delimiter)
+    (pandoc_str)
+    (pandoc_str)))
+
+================================================================================
+flanking — boundary (tier 3): underscore filenames still error until unmatched openers are literal
+================================================================================
+_quarto.yml and _metadata.yml
+--------------------------------------------------------------------------------
+
+(document
+  (ERROR
+    (emphasis_delimiter)
+    (pandoc_str)
+    (pandoc_space)
+    (pandoc_str)
+    (emphasis_delimiter)
+    (pandoc_str)))
+
+================================================================================
+flanking — escaped spaces inside a subscript still open it
+================================================================================
+~a\ and\ yes\ I\ meant\ it~ work?
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_subscript
+        (subscript_delimiter)
+        (pandoc_str)
+        (pandoc_str)
+        (pandoc_str)
+        (pandoc_str)
+        (pandoc_str)
+        (pandoc_str)
+        (pandoc_str)
+        (pandoc_str)
+        (pandoc_str)
+        (pandoc_str)
+        (pandoc_str)
+        (subscript_delimiter))
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+flanking — escaped spaces inside a superscript still open it
+================================================================================
+^a\ and\ yes\ I\ meant\ it^ work?
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_superscript
+        (superscript_delimiter)
+        (pandoc_str)
+        (pandoc_str)
+        (pandoc_str)
+        (pandoc_str)
+        (pandoc_str)
+        (pandoc_str)
+        (pandoc_str)
+        (pandoc_str)
+        (pandoc_str)
+        (pandoc_str)
+        (pandoc_str)
+        (superscript_delimiter))
+      (pandoc_space)
+      (pandoc_str))))
+
+================================================================================
+flanking — strikeout with spaces still parses
+================================================================================
+x ~~a b~~ y
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_strikeout
+        (strikeout_delimiter)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (strikeout_delimiter))
+      (pandoc_space)
+      (pandoc_str))))

@@ -283,6 +283,18 @@ pub fn build_forwarded_args(
         args.push(OsString::from("--slide-level"));
         args.push(OsString::from(n.to_string()));
     }
+    // `top-level-division` is the chapter-boundary lever Typst and
+    // LaTeX share (book-projects P2: a single-file book merge sets
+    // `top-level-division: chapter`). Gated to those two writers for
+    // the same reason `slide-level` is pptx-only.
+    if matches!(base_format, FormatIdentifier::Typst | FormatIdentifier::Pdf)
+        && let Some(v) = meta
+            .get("top-level-division")
+            .and_then(|v| v.as_plain_text())
+    {
+        args.push(OsString::from("--top-level-division"));
+        args.push(OsString::from(v));
+    }
 
     if let Some(ext) = format_pandoc_defaults(base_format).default_image_extension {
         args.push(OsString::from("--default-image-extension"));
@@ -570,6 +582,43 @@ mod tests {
                 .any(|a| a.to_string_lossy() == "--slide-level"),
             "docx must not receive --slide-level: {docx_args:?}"
         );
+    }
+
+    /// `top-level-division` is forwarded for typst and pdf only
+    /// (book-projects P2: single-file book merges set
+    /// `top-level-division: chapter` so the compiler treats each
+    /// chapter's H1 as a true chapter boundary — the lever Typst and
+    /// LaTeX share). Gated like `slide-level`: forwarding it
+    /// unconditionally would hand an unaudited new flag to writers
+    /// (docx, pptx, …) Q1 never sets it for.
+    #[test]
+    fn test_top_level_division_is_typst_and_pdf_only() {
+        let meta = scalar_meta(&[("top-level-division", "chapter")]);
+
+        for base in [FormatIdentifier::Typst, FormatIdentifier::Pdf] {
+            let args =
+                build_forwarded_args("pandoc-write", Path::new("/doc/dir"), &meta, base).unwrap();
+            let joined: Vec<String> = args
+                .iter()
+                .map(|s| s.to_string_lossy().into_owned())
+                .collect();
+            let pos = joined
+                .iter()
+                .position(|a| a == "--top-level-division")
+                .unwrap_or_else(|| panic!("{base} must receive --top-level-division: {joined:?}"));
+            assert_eq!(joined[pos + 1], "chapter");
+        }
+
+        for base in [FormatIdentifier::Docx, FormatIdentifier::Epub] {
+            let args =
+                build_forwarded_args("pandoc-write", Path::new("/doc/dir"), &meta, base).unwrap();
+            assert!(
+                !args
+                    .iter()
+                    .any(|a| a.to_string_lossy().contains("top-level-division")),
+                "{base} must not receive --top-level-division: {args:?}"
+            );
+        }
     }
 
     /// T4.11 (Missing-test-pass item 2): `number-sections`/`number-offset`

@@ -123,6 +123,15 @@ pub struct RenderToFileOptions {
     ///
     /// [`GitBlameProvider`]: crate::attribution::GitBlameProvider
     pub attribution: Option<crate::attribution::AttributionMode>,
+
+    /// This document's book chapter seed (book-projects P4): the
+    /// chapter number / appendix flag the crossref index transform
+    /// seeds its section counter from and the crossref render transform
+    /// composes chapter-local display numbers with. `None` (the
+    /// default) for every non-book render — the context gets no seed
+    /// and behaves exactly as before. Set per-chapter by the book
+    /// orchestration via the renderer's `chapter_seeds` map.
+    pub chapter_seed: Option<crate::render::ChapterSeed>,
 }
 
 /// Result of rendering a document to a file.
@@ -319,6 +328,12 @@ pub fn render_document_to_file(
     // `GitBlameProvider`) is populated alongside pandoc/typst/etc.
     let binaries = BinaryDependencies::discover(runtime.as_ref());
     let mut ctx = RenderContext::new(project, &doc_info, &render_format, &binaries);
+    // Book mode (P4): a per-chapter seed rides the options into the
+    // context, where the crossref index/render transforms consume it.
+    // `None` for non-book renders — no change to their behavior.
+    if let Some(seed) = options.chapter_seed {
+        ctx = ctx.with_chapter_seed(seed);
+    }
     if let Some(index) = project_index {
         ctx.project_index = Some(index);
     }
@@ -383,7 +398,7 @@ pub fn render_document_to_file(
     ctx.execution_policy = options.execution_policy.clone();
 
     // Run the render pipeline
-    let mut render_output = if render_format.identifier.is_native() {
+    let render_output = if render_format.identifier.is_native() {
         pollster::block_on(render_qmd_to_html(
             &input_bytes,
             &input_path.to_string_lossy(),
@@ -412,6 +427,51 @@ pub fn render_document_to_file(
         }
     };
 
+    finalize_rendered_output(
+        input_path,
+        output_path,
+        resource_paths.resource_dir,
+        render_output,
+        &mut ctx,
+        &resolver,
+        project_type.as_ref(),
+        project_artifacts,
+        &runtime,
+        render_format.identifier.is_native(),
+    )
+}
+
+/// Flush artifacts, resource copies, and (for native/HTML formats) the
+/// rendered content itself through the shared [`OutputSink`], then
+/// assemble the [`RenderToFileResult`].
+///
+/// Extracted from [`render_document_to_file`] (book-projects P2) so the
+/// book single-file-merge driver — which builds its own `RenderContext`
+/// and drives its own pipeline dispatch (`run_pipeline_from_ast` over a
+/// merged multi-chapter document, not `render_qmd_to_html`/
+/// `render_qmd_to_pandoc` over one document's raw bytes) — can reuse
+/// exactly this tail instead of duplicating the sink/artifact-routing
+/// dance. Pure Extract Method: the existing single-document caller's
+/// behavior is unchanged.
+///
+/// `is_native` mirrors `render_format.identifier.is_native()`: `true`
+/// writes `render_output.html` through the sink (the HTML leg);
+/// `false` skips it because the Pandoc-hybrid leg's `PandocWriteStage`
+/// already wrote `output_path` directly (P7-foundation Task 3, Finding 3).
+#[cfg(not(target_arch = "wasm32"))]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn finalize_rendered_output(
+    input_path: &Path,
+    output_path: PathBuf,
+    resources_dir: PathBuf,
+    mut render_output: RenderOutput,
+    ctx: &mut RenderContext<'_>,
+    resolver: &ResourceResolverContext,
+    project_type: &dyn crate::project::orchestrator::ProjectType,
+    project_artifacts: Option<&mut ArtifactStore>,
+    runtime: &Arc<dyn SystemRuntime>,
+    is_native: bool,
+) -> Result<RenderToFileResult> {
     // bd-cfl67: one sink per render owns every destructive write.
     // Construct it from the resolver's declared output roots so
     // any escape (e.g. an absolute artifact path that bypassed
@@ -430,7 +490,7 @@ pub fn render_document_to_file(
     //   no orchestrator is involved, or the orchestrator's
     //   project type has no shared lib dir, e.g. default
     //   single-doc / loose-directory projects).
-    enqueue_artifacts(&ctx.artifacts, &resolver, ArtifactScope::Page, &mut sink)?;
+    enqueue_artifacts(&ctx.artifacts, resolver, ArtifactScope::Page, &mut sink)?;
     let drained = ctx.artifacts.drain_project_scoped();
 
     // Shared with both Pass-2 renderers (bd-gdhk). Project-scope
@@ -443,7 +503,7 @@ pub fn render_document_to_file(
         drained,
         project_artifacts,
         has_shared_lib,
-        &resolver,
+        resolver,
         &mut sink,
         input_path,
     )?;
@@ -474,7 +534,7 @@ pub fn render_document_to_file(
     // already wrote `output_path` directly (`render_output.html` is
     // empty for that branch, per Finding 3) — enqueuing it here would
     // overwrite the real pandoc output with a zero-byte file.
-    if render_format.identifier.is_native() {
+    if is_native {
         sink.write(output_path.clone(), render_output.html.as_bytes().to_vec())
             .map_err(QuartoError::from)?;
     }
@@ -494,7 +554,7 @@ pub fn render_document_to_file(
     Ok(RenderToFileResult {
         input_path: input_path.to_path_buf(),
         output_path,
-        resources_dir: resource_paths.resource_dir,
+        resources_dir,
         render_output,
         resource_report,
     })
@@ -506,7 +566,12 @@ pub fn render_document_to_file(
 ///
 /// Preserves the input's subdirectory under `project_dir` so
 /// `docs/api.qmd` in a website project renders to `_site/docs/api.html`.
-fn apply_project_output_dir_to_options(
+///
+/// `pub(crate)`: book-projects P2's single-file-merge driver reuses this
+/// (and [`determine_output_paths`] below) against a synthetic input path
+/// carrying the book's own output stem, rather than duplicating the
+/// output-dir-fallback policy.
+pub(crate) fn apply_project_output_dir_to_options(
     options: &RenderToFileOptions,
     project: &ProjectContext,
     input_path: &Path,
@@ -530,7 +595,9 @@ fn apply_project_output_dir_to_options(
 }
 
 /// Determine output paths from input path and options.
-fn determine_output_paths(
+///
+/// `pub(crate)`: see [`apply_project_output_dir_to_options`].
+pub(crate) fn determine_output_paths(
     input_path: &Path,
     format: &str,
     options: &RenderToFileOptions,
@@ -1098,5 +1165,156 @@ Content.
         .unwrap();
 
         assert!(result.output_path.exists());
+    }
+
+    /// book-projects P5 (plan item 46): the resume leg's write path. The
+    /// orchestrator's per-chapter sequence is pause → held struct → resume
+    /// via `run_pipeline_from_ast(Finalization..)` → recompute the output
+    /// trio (never carried) → `finalize_rendered_output(is_native = true)`.
+    /// This test runs exactly that sequence for one chapter against a real
+    /// temp dir and asserts a real HTML file lands at the recomputed
+    /// `output_path` (pause-harvested decorations included), that the
+    /// page-scoped artifact and resource-copy intent a resumed chapter
+    /// carries are drained into the output tree, and that the resource
+    /// report leaves the context inside the result.
+    ///
+    /// The "single-shot callers stay byte-identical" half of item 46 needs
+    /// no new test: the split landed in P2 as a pure Extract Method
+    /// (`render_document_to_file` calls render-then-finalize back-to-back),
+    /// and every render since — the whole P2–P4 suite plus e2e — exercised
+    /// the split path. Recorded in the plan rather than re-proven here.
+    #[test]
+    fn resume_finalize_writes_real_html_and_drains_sidebands() {
+        let temp = TempDir::new().unwrap();
+        let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+
+        // A fenced code block with a `filename` attribute: the pause side
+        // harvests its decoration, the resumed Finalization leg wraps it —
+        // proving the written HTML came from the resumed chapter, not a
+        // bare single-shot re-render.
+        let input_path = temp.path().join("ch1.qmd");
+        fs::write(
+            &input_path,
+            "---\ntitle: Chapter One\n---\n\n# Chapter One\n\n\
+             ``` {filename=\"resume-write.rs\"}\nlet x = 1;\n```\n",
+        )
+        .unwrap();
+
+        let project = ProjectContext {
+            dir: temp.path().to_path_buf(),
+            config: crate::project::ProjectConfig::default(),
+            is_single_file: true,
+            files: vec![DocumentInfo::from_path(&input_path)],
+            output_dir: temp.path().to_path_buf(),
+            ..Default::default()
+        };
+        let doc = DocumentInfo::from_path(&input_path);
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+
+        // --- Pause at ..=Navigation (the orchestrator's Pass-2 stop) ---
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        let source = fs::read(&input_path).unwrap();
+        let (ast, _diagnostics) = pollster::block_on(crate::pipeline::render_qmd_to_ast_partial(
+            source.as_slice(),
+            "ch1.qmd",
+            &mut ctx,
+            runtime.clone(),
+            crate::transform::TransformPhase::Navigation,
+        ))
+        .unwrap();
+        let mut held = crate::pipeline::BookChapterPauseState::extract_from(&mut ctx);
+
+        // --- Recompute, don't carry: the output trio + resolver ---
+        let (output_path, output_dir, output_stem) =
+            determine_output_paths(&input_path, "html", &RenderToFileOptions::default()).unwrap();
+        runtime.dir_create(&output_dir, true).unwrap();
+        let resources_dir = output_dir.join(format!("{output_stem}_files"));
+        let project_type = crate::project::orchestrator::project_type_for(&project);
+        let resolver = ResourceResolverContext::website(
+            &project.output_dir,
+            &output_path,
+            project_type.lib_dir(),
+            &output_stem,
+        );
+
+        // --- Resume from Finalization with the sidebands a real chapter
+        // carries across the pause ---
+        let mut ctx = held.build_context(&project, &doc, &format, &binaries);
+        ctx.resource_resolver = Some(resolver.clone());
+        ctx.artifacts.store(
+            "resume-page-asset",
+            crate::artifact::Artifact::from_string("asset-bytes", "text/plain")
+                .with_path("resume-asset.txt"),
+        );
+        let resource_src = temp.path().join("figure.png");
+        fs::write(&resource_src, b"png-bytes").unwrap();
+        ctx.resource_copies.push(crate::render::ResourceCopyIntent {
+            src: resource_src,
+            dest: resources_dir.join("figure.png"),
+            origin: quarto_source_map::SourceInfo::original(quarto_source_map::FileId(0), 0, 0),
+        });
+
+        let (output, _diagnostics) = pollster::block_on(crate::pipeline::run_pipeline_from_ast(
+            ast,
+            &mut ctx,
+            runtime.clone(),
+            crate::pipeline::build_html_pipeline_finishing_stages(
+                crate::transform::TransformPhase::Finalization,
+            ),
+        ))
+        .unwrap();
+        let rendered = output.into_rendered_output().unwrap();
+
+        let render_output = crate::pipeline::RenderOutput {
+            html: rendered.content,
+            diagnostics: Vec::new(),
+            source_context: rendered.source_context,
+            execution_skipped: ctx.execution_skipped,
+        };
+
+        let result = finalize_rendered_output(
+            &input_path,
+            output_path.clone(),
+            resources_dir.clone(),
+            render_output,
+            &mut ctx,
+            &resolver,
+            project_type.as_ref(),
+            None,
+            &runtime,
+            true,
+        )
+        .unwrap();
+
+        // The recomputed output path holds real chapter HTML.
+        let html = fs::read_to_string(&output_path).unwrap();
+        assert!(
+            html.contains("Chapter One"),
+            "resume must write real chapter HTML at the recomputed path"
+        );
+        assert!(
+            html.contains("code-with-filename") && html.contains("resume-write.rs"),
+            "the written HTML must reflect the resumed chapter's decoration"
+        );
+
+        // Sidebands drained into the output tree: the page-scoped artifact
+        // at its resolver route, the resource copy at its intent's dest.
+        let asset_disk = resolver.on_disk_path_for(
+            crate::artifact::ArtifactScope::Page,
+            Path::new("resume-asset.txt"),
+        );
+        assert!(
+            runtime.path_exists(&asset_disk, None).unwrap(),
+            "the page-scoped artifact must be flushed into the output tree"
+        );
+        assert!(
+            resources_dir.join("figure.png").exists(),
+            "the resource-copy intent must be flushed into the output tree"
+        );
+
+        // The resource report left the context inside the result.
+        assert!(ctx.resource_report.entries.is_empty());
+        assert_eq!(result.output_path, output_path);
     }
 }

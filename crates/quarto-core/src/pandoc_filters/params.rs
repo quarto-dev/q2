@@ -69,6 +69,70 @@ impl FilterParamsContributor for DocxCalloutIconsContributor {
     }
 }
 
+/// The `single-file-book` filter param (book-projects P2/P3, plan
+/// "Decisions" #23.1) — gates `book-cleanup.lua`'s part handling,
+/// `book-numbering.lua`'s counter-reset generation, and (moot once
+/// cross-chapter links are already `#<id>`-shaped) `book-links.lua`.
+/// Registered as a contributor, not a core key, so it only ever appears
+/// for an actual single-file book-merge target — never for an ordinary
+/// render, which must not see the key at all.
+pub struct BookSingleFileContributor;
+
+impl FilterParamsContributor for BookSingleFileContributor {
+    fn contribute(&self, blob: &mut Map<String, Value>) {
+        blob.insert("single-file-book".to_string(), json!(true));
+    }
+}
+
+/// One `Position::Post` user filter forwarded into `main.lua`'s own
+/// entry-point mechanism (book-projects P2b), paired with the exact Q1
+/// entry-point name TS Quarto's `at:` declared for it.
+pub struct EntryPointFilter {
+    pub at: &'static str,
+    pub path: PathBuf,
+    /// `"lua"` or `"json"` — mirrors `emulatedfilter.lua`'s
+    /// `make_wrapped_user_filters`/`inject_user_filters_at_entry_points`
+    /// dispatch, which reads an explicit `type` field.
+    pub filter_type: &'static str,
+}
+
+/// Forwards `Position::Post` user filters into `quarto-filters.entryPoints`
+/// for a Pandoc-hybrid render (book-projects P2b), overriding the empty
+/// default `insert_quarto_filters` sets in `build()`.
+///
+/// `UserFiltersStage::post()` no longer runs these filters itself on a
+/// Pandoc-hybrid leg (see its own module docs) — pampa's Lua engine never
+/// implemented the Q1-ported pure-Lua helpers
+/// (`quarto.utils.file_metadata_filter`, `quarto.utils.combineFilters`)
+/// some extension filters rely on, so they crash there. `main.lua`'s own
+/// filter chain has always had these helpers, via `common/{filemetadata,
+/// pandoc}.lua`. Built directly from `ResolvedFilters::post`/
+/// `post_entry_points` (`crate::filter_resolve`) — no new classification,
+/// just a different destination for the same bucket.
+pub struct QuartoFilterEntryPointsContributor {
+    pub entry_points: Vec<EntryPointFilter>,
+}
+
+impl FilterParamsContributor for QuartoFilterEntryPointsContributor {
+    fn contribute(&self, blob: &mut Map<String, Value>) {
+        let entry_points: Vec<Value> = self
+            .entry_points
+            .iter()
+            .map(|ep| {
+                json!({
+                    "at": ep.at,
+                    "path": ep.path.to_string_lossy(),
+                    "type": ep.filter_type,
+                })
+            })
+            .collect();
+        blob.insert(
+            "quarto-filters".to_string(),
+            json!({ "entryPoints": entry_points }),
+        );
+    }
+}
+
 /// Builds the `QUARTO_FILTER_PARAMS` blob for one Pandoc-leg render.
 pub struct FilterParamsBuilder<'a> {
     format: &'a Format,
@@ -697,6 +761,92 @@ mod tests {
             blob.as_object().unwrap().get("page-width").is_none(),
             "pptx has no page-width entry in Task 4's table"
         );
+    }
+
+    /// book-projects P2: `single-file-book` gates `book-cleanup.lua`'s part
+    /// handling, `book-numbering.lua`'s counter-reset generation, and
+    /// `book-links.lua` — set only via `BookSingleFileContributor`, never a
+    /// core key (a non-book render must never see it at all).
+    #[test]
+    fn test_book_single_file_contributor_sets_flag() {
+        let mut blob = Map::new();
+        BookSingleFileContributor.contribute(&mut blob);
+        assert_eq!(blob["single-file-book"], json!(true));
+    }
+
+    /// The flip side: without the contributor registered, no render (book
+    /// or otherwise) sees the key at all.
+    #[test]
+    fn test_single_file_book_key_absent_without_contributor() {
+        let format = Format::docx();
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = fixture_language();
+        let blob = fixture_builder(&format, &project, &registry, &language).build();
+        assert!(
+            !blob.as_object().unwrap().contains_key("single-file-book"),
+            "single-file-book must only appear when BookSingleFileContributor is registered"
+        );
+    }
+
+    /// book-projects P2b: `QuartoFilterEntryPointsContributor` overrides
+    /// the core builder's empty `quarto-filters.entryPoints` default with
+    /// exactly the entries it was given — no reclassification, no
+    /// dropped/reordered filters — mirroring `at`/`path`/`type` field
+    /// names `emulatedfilter.lua`'s `inject_user_filters_at_entry_points`
+    /// reads.
+    ///
+    /// Revert hunk: removing the contributor's `blob.insert` call leaves
+    /// the core's empty default in place, making the length assertion RED.
+    #[test]
+    fn test_quarto_filter_entry_points_contributor_overrides_empty_default() {
+        let format = Format::docx();
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = fixture_language();
+        let blob = fixture_builder(&format, &project, &registry, &language)
+            .with_contributor(Box::new(QuartoFilterEntryPointsContributor {
+                entry_points: vec![
+                    EntryPointFilter {
+                        at: "post-quarto",
+                        path: PathBuf::from("/ext/orange-book.lua"),
+                        filter_type: "lua",
+                    },
+                    EntryPointFilter {
+                        at: "pre-render",
+                        path: PathBuf::from("/ext/other.lua"),
+                        filter_type: "lua",
+                    },
+                ],
+            }))
+            .build();
+
+        let entry_points = blob["quarto-filters"]["entryPoints"]
+            .as_array()
+            .expect("entryPoints should be an array");
+        assert_eq!(entry_points.len(), 2);
+        assert_eq!(entry_points[0]["at"], json!("post-quarto"));
+        assert_eq!(entry_points[0]["path"], json!("/ext/orange-book.lua"));
+        assert_eq!(entry_points[0]["type"], json!("lua"));
+        assert_eq!(entry_points[1]["at"], json!("pre-render"));
+        assert_eq!(entry_points[1]["path"], json!("/ext/other.lua"));
+    }
+
+    /// The flip side: without the contributor registered, every render
+    /// keeps seeing the empty default T4.3 already covers — this test
+    /// exists so the pairing (present ⇄ absent) is explicit at the same
+    /// call site as the contributor itself.
+    #[test]
+    fn test_quarto_filter_entry_points_empty_without_contributor() {
+        let format = Format::docx();
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = fixture_language();
+        let blob = fixture_builder(&format, &project, &registry, &language).build();
+        let entry_points = blob["quarto-filters"]["entryPoints"]
+            .as_array()
+            .expect("entryPoints should be an array");
+        assert!(entry_points.is_empty());
     }
 
     /// P7 T4.8: all 5 docx callout-icon params are present and each points

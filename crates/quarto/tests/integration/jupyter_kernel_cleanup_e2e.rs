@@ -18,7 +18,8 @@
 //! one kernel observed) while still shutting it down at the end.
 //!
 //! Skips when the jupyter engine isn't installed — same gating as the
-//! quarto-core engine tests.
+//! quarto-core engine tests — or when no `python3` kernelspec is
+//! registered (e.g. an R/Julia-only jupyter install, bd-ce4fftg8).
 
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
@@ -30,6 +31,32 @@ fn jupyter_available() -> bool {
     quarto_core::engine::EngineRegistry::default()
         .get("jupyter")
         .is_some_and(|e| e.is_available())
+}
+
+/// The fixture renders `{python}` cells, which resolve to the
+/// `python3` kernelspec. A working jupyter without a registered
+/// `python3` kernel (an R/Julia-only install is legitimate) must
+/// skip, not fail (bd-ce4fftg8); any other discovery error fails the
+/// test. The error message names the kernel, the searched dirs, and
+/// the kernels that *were* found.
+fn python3_kernel_available() -> bool {
+    // find_kernelspec is async and runtimelib's `jupyter --paths`
+    // probe needs a Tokio reactor; pollster provides none. This test
+    // is deliberately not #[tokio::test], so build a short-lived
+    // current-thread runtime for the probe (same pattern as
+    // KernelSession::shutdown_blocking).
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("tokio runtime for kernelspec probe");
+    match rt.block_on(quarto_core::engine::jupyter::find_kernelspec("python3")) {
+        Ok(_) => true,
+        Err(e @ quarto_core::engine::jupyter::JupyterError::KernelspecNotFound { .. }) => {
+            eprintln!("Skipping test: {e}");
+            false
+        }
+        Err(e) => panic!("kernelspec discovery failed: {e}"),
+    }
 }
 
 /// Ports recorded from one observed `kernel-*.json` connection file.
@@ -121,6 +148,9 @@ fn remaining_connection_files(dir: &Path) -> Vec<String> {
 fn render_leaves_no_kernel_behind() {
     if !jupyter_available() {
         eprintln!("Skipping test: jupyter not available");
+        return;
+    }
+    if !python3_kernel_available() {
         return;
     }
 

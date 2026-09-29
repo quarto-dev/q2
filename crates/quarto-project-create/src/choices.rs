@@ -274,7 +274,6 @@ pub fn available_choices() -> Vec<ProjectChoice> {
             "A multi-chapter book",
             ProjectTypeWithTemplate::new(ProjectType::Book),
         )
-        .unimplemented()
         .in_path(["Templates"]),
         // The welcome tour (bd-d147nkqx): the first hub-only template.
         ProjectChoice::new(
@@ -626,7 +625,10 @@ mod tests {
             .into_iter()
             .map(|c| c.id)
             .collect();
-        assert_eq!(cli_ids, ["default", "website", "blog", "presentation"]);
+        assert_eq!(
+            cli_ids,
+            ["default", "website", "blog", "presentation", "book"]
+        );
         for hub_only in hub_only_choices() {
             assert!(!cli_ids.contains(&hub_only.id), "cli ids: {cli_ids:?}");
         }
@@ -741,7 +743,10 @@ mod tests {
             ]
         );
         let template_ids: Vec<&str> = hub[0].choices.iter().map(|c| c.id.as_str()).collect();
-        assert_eq!(template_ids, ["default", "website", "blog", "presentation"]);
+        assert_eq!(
+            template_ids,
+            ["default", "website", "blog", "presentation", "book"]
+        );
         let example_ids: Vec<&str> = hub[1].choices.iter().map(|c| c.id.as_str()).collect();
         assert_eq!(example_ids[0], "hub-placeholder");
         assert_eq!(example_ids.len(), 5);

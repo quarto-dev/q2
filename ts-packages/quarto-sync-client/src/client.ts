@@ -143,8 +143,10 @@ export function indexUnavailableMessage(indexDocId: string): string {
 /**
  * Build the WebSocket adapter for a sync connection. With `auth` set,
  * we lazily import the Node adapter (which depends on `ws`) so browser
- * bundles never pull it in. Without `auth`, the upstream browser
- * adapter is used unchanged.
+ * bundles never pull it in. Without `auth`, connections use
+ * `StoppableWebSocketClientAdapter` — the upstream browser adapter
+ * plus terminal disconnect() and the wake/network-change
+ * force-reconnect triggers.
  *
  * `retryIntervalMs` is forwarded to the adapter's reconnect loop when
  * set; when unset, the adapter's own default (5000 ms) applies.

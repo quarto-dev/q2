@@ -17,9 +17,10 @@
 //!   with a source snippet anchored in `_quarto.yml`.
 //! - Non-string `project.type` → same Q-5-17 error.
 //! - Built-in names (any case) parse as before; absent type = default.
-//! - `book` / `manuscript` parse but render with default-project
-//!   behavior today — that gets a visible **Q-5-18** warning instead
-//!   of silence.
+//! - `manuscript` parses but renders with default-project behavior
+//!   today — that gets a visible **Q-5-18** warning instead of
+//!   silence. (`book` had the same warning until P1 of the
+//!   book-projects epic gave it a real `ProjectType`.)
 
 use std::sync::Arc;
 
@@ -129,22 +130,16 @@ fn absent_project_type_defaults_without_diagnostics() {
     );
 }
 
-// ── Q-5-18: book / manuscript parse but warn ────────────────────────
+// ── Q-5-18: manuscript parses but warns ─────────────────────────────
 
 #[test]
-fn book_project_type_warns_q_5_18() {
+fn book_project_type_does_not_warn() {
     let (result, _tmp) = discover("project:\n  type: book\n");
     let project = result.expect("book must parse");
     assert_eq!(project.project_kind(), ProjectKind::Book);
-
-    let diags = quarto_core::project::project_kind_diagnostics(&project.config);
-    assert_eq!(diags.len(), 1);
-    assert_eq!(diags[0].code.as_deref(), Some("Q-5-18"));
-    assert_eq!(diags[0].kind, DiagnosticKind::Warning);
-    let text = diags[0].to_text(None);
     assert!(
-        text.contains("book") && text.contains("default"),
-        "warning must say book renders with default behavior; got: {text}"
+        quarto_core::project::project_kind_diagnostics(&project.config).is_empty(),
+        "book has a real ProjectType (P1) — no Q-5-18 warning"
     );
 }
 

@@ -39,6 +39,24 @@ first real row (the julia engine) is the parent epic's Step 4
    `crates/xtask/src/pull_extension_subtree.rs`'s module doc for the exact
    `git-subtree-dir`/`git-subtree-split` trailer mechanics.
 
+   **Running from a linked worktree (`.worktrees/<name>/`): set
+   `QUARTO_SUBTREE_ROOT`.** `subtree_root()`'s default falls back to
+   `create_worktree::repo_root()`, which resolves to the *main* checkout
+   (`git rev-parse --git-common-dir`'s parent) — not the worktree the
+   command is invoked from. Without the override, `git subtree add`
+   silently targets the main checkout's working tree and fails with
+   `fatal: working tree has modifications.  Cannot add.` whenever the main
+   checkout happens to be dirty (unrelated to the worktree you're actually
+   working in — found vendoring `orange-book` from a worktree, item 80 of
+   `claude-notes/plans/2026-09-21-book-projects-P2-single-file-merge.md`).
+   Run instead:
+
+   ```bash
+   QUARTO_SUBTREE_ROOT="$(pwd)" cargo xtask pull-extension-subtree <name>
+   ```
+
+   from inside the worktree.
+
 3. **One `include_dir!` payload static + registration.** The vendored repo
    at `resources/extension-subtrees/<name>/` typically contains far more
    than the extension itself (source, tests, CI config — a real repo

@@ -171,6 +171,24 @@ The following files and modifications are *not* from `v1.11.3` and should be pre
   converted to `crossref_present()`: both predicates dispatch to the same
   `render_ipynb_layout` callback, so the pair is a verified no-op
   regardless of which flag it reads.
+- `resources/pandoc-filters/filters/quarto-pre/book-numbering.lua` — new
+  (ours, book-projects P2; no upstream PR — marked `QUARTO2-PATCH`, not
+  `QUARTO-PATCH`, per the `main.lua` Task 8 convention for Q2-authored
+  changes). The `Header` handler reads `quarto-book-item-*` Pandoc
+  attributes (stamped by Q2's single-file merge step,
+  `crates/quarto-core/src/project/book/merge.rs`) directly, instead of
+  `currentFileMetadataState().file` (Q1's own mechanism, populated from
+  the paired `<!-- quarto-file-metadata: ... -->` comment markers by
+  `common/filemetadata.lua`). Additive, not a replacement: the merge step
+  still emits both forms from the same data, since the comment markers
+  are the *only* channel the unpatched `orange-book` Typst extension's own
+  filter reads via `quarto.doc.file_metadata()`. Along the way, this fixes
+  a read that was dead in Q1 too — Q1's `bookItemMetadata`
+  (`book-render.ts`) never sets a `file.appendix` field, so the "mark
+  appendix chapters for epub" rule was unreachable; the new
+  `quarto-book-item-appendix` attribute (set only on appendix chapters —
+  kind `Appendix`, `file: Some`) makes it live. Tests:
+  `crates/quarto-core/tests/integration/book_numbering_lua.rs`.
 
 ## License
 

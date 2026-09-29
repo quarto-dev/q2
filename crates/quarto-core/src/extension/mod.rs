@@ -77,13 +77,24 @@ mod builtin {
     pub static BUILTIN_EXTENSIONS: ResourceBundle =
         ResourceBundle::new("builtin-extensions", &BUILTIN_EXTENSIONS_DIR);
 
+    /// `orange-book` (book-projects P2 item 80): the default Typst book
+    /// extension, vendored under `resources/extension-subtrees/orange-book/`
+    /// via `cargo xtask pull-extension-subtree orange-book`, pinned to
+    /// upstream tag `0.2.0` (see that commit's `git-subtree-split` trailer
+    /// for the exact hash). Only the subtree's own `_extensions/` payload is
+    /// embedded, not the whole vendored repo (README/LICENSE/etc.).
+    static ORANGE_BOOK_SUBTREE_DIR: Dir = include_dir!(
+        "$CARGO_MANIFEST_DIR/../../resources/extension-subtrees/orange-book/_extensions"
+    );
+    pub static ORANGE_BOOK_SUBTREE: ResourceBundle =
+        ResourceBundle::new("orange-book-subtree", &ORANGE_BOOK_SUBTREE_DIR);
+
     /// Per-subtree embedded payloads for vendored extension subtrees (see
     /// `cargo xtask pull-extension-subtree`). Each real subtree registers its
     /// own `include_dir!` + `ResourceBundle` here, scoped to that subtree's
     /// `_extensions/` payload (never the whole vendored repo — see the
-    /// extension-subtree-infrastructure plan's D1). Empty until the first
-    /// real subtree (e.g. julia) is vendored.
-    pub static EXTENSION_SUBTREE_PAYLOADS: &[&ResourceBundle] = &[];
+    /// extension-subtree-infrastructure plan's D1).
+    pub static EXTENSION_SUBTREE_PAYLOADS: &[&ResourceBundle] = &[&ORANGE_BOOK_SUBTREE];
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -175,18 +186,36 @@ mod tests {
         assert_eq!(roots, vec![tmp.path().to_path_buf()]);
     }
 
+    /// book-projects P2 item 80: `orange-book` is the first real registered
+    /// subtree payload — confirms `EXTENSION_SUBTREE_PAYLOADS` resolves to
+    /// a real, lazily-extracted directory containing exactly that
+    /// extension's own `_extensions/orange-book/_extension.yml`, not the
+    /// whole vendored repo (README.md/LICENSE/etc. from
+    /// `resources/extension-subtrees/orange-book/` must not be embedded).
     #[test]
-    fn builtin_extension_subtree_roots_empty_when_no_subtrees_registered() {
+    fn builtin_extension_subtree_roots_includes_orange_book() {
         let runtime = make_runtime();
         assert!(
             std::env::var("QUARTO_EXTENSION_SUBTREES_DIR").is_err(),
             "test process should not have this env var set"
         );
 
-        // No subtree has been registered in `EXTENSION_SUBTREE_PAYLOADS` yet
-        // (production default) — discovery should proceed with user
-        // extensions only, same as the pre-pluralization `None` behavior.
         let roots = builtin_extension_subtree_roots(&runtime);
-        assert!(roots.is_empty());
+        assert_eq!(
+            roots.len(),
+            1,
+            "exactly one registered subtree payload: {roots:?}"
+        );
+        assert!(
+            roots[0].join("orange-book/_extension.yml").is_file(),
+            "extracted root {} must contain orange-book's own _extension.yml",
+            roots[0].display()
+        );
+        assert!(
+            !roots[0].join("README.md").exists(),
+            "only the _extensions/ payload should be embedded, not the whole \
+             vendored repo: {}",
+            roots[0].display()
+        );
     }
 }

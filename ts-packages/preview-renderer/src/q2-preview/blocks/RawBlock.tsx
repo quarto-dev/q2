@@ -1,4 +1,4 @@
-import { useContext } from 'react';
+import { useContext, useMemo } from 'react';
 import { dataLocProps } from '../../framework';
 import type { NodeArgs, RawBlock as RawBlockType } from '../../framework';
 import { PreviewContext } from '../PreviewContext';
@@ -38,9 +38,15 @@ export const RawBlock = ({ node }: NodeArgs<RawBlockType>) => {
 
     const [format, content] = node.c;
     const locProps = dataLocProps(node);
+    // React 19 re-assigns `innerHTML` whenever the `dangerouslySetInnerHTML`
+    // object identity changes (it no longer compares `__html` strings), so an
+    // inline `{ __html: content }` would recreate the injected DOM — and
+    // reload any embedded <iframe> — on every preview re-render. Memoize the
+    // object per content string so unchanged raw HTML keeps its DOM.
+    const innerHtml = useMemo(() => ({ __html: content }), [content]);
     if (format === 'html' || format === 'html5') {
         const className = rootHasClass(content, 'r-stretch') ? 'r-stretch' : undefined;
-        return <div className={className} {...affordanceAttr} {...locProps} dangerouslySetInnerHTML={{ __html: content }} />;
+        return <div className={className} {...affordanceAttr} {...locProps} dangerouslySetInnerHTML={innerHtml} />;
     }
     return <pre {...affordanceAttr} {...locProps}>{content}</pre>;
 };

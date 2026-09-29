@@ -171,7 +171,9 @@ fn e2e_pdf_still_refused() {
 }
 
 /// T3.9: with no `pandoc` reachable (`PATH` stripped, `QUARTO_PANDOC`
-/// unset), `--to docx` exits non-zero, names the pandoc `Q-18-*` code
+/// unset), `--to docx` exits non-zero, names the pandoc-not-found code
+/// (`Q-20-1`, emitted by the pandoc version gate since the Lua-filter
+/// vendoring moved discovery ahead of the engine layer's old `Q-18-1`)
 /// and the word "pandoc" on stderr, and leaves no partial `.docx` on
 /// disk.
 #[test]

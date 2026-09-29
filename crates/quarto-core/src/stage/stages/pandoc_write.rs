@@ -36,7 +36,10 @@ use crate::language::LanguageTerms;
 use crate::pandoc_filters::bundle::{extract_formats_tree, extract_share_tree};
 use crate::pandoc_filters::diagnostics::{classify_pandoc_stderr, nonzero_exit_error};
 use crate::pandoc_filters::format_defaults::build_forwarded_args;
-use crate::pandoc_filters::params::{DocxCalloutIconsContributor, FilterParamsBuilder};
+use crate::pandoc_filters::params::{
+    BookSingleFileContributor, DocxCalloutIconsContributor, EntryPointFilter, FilterParamsBuilder,
+    QuartoFilterEntryPointsContributor,
+};
 use crate::pandoc_filters::params_codec::encode_params_blob;
 use crate::pandoc_filters::version;
 use crate::stage::{
@@ -437,6 +440,73 @@ impl PipelineStage for PandocWriteStage {
                 },
             ));
         }
+        // book-projects P2: the merge step is the first thing that knows
+        // this render is a book single-file merge, and it hands that
+        // knowledge down as a plain metadata flag on the merged
+        // document — exactly like `top-level-division` above — rather
+        // than a new call-site parameter. Gates `book-cleanup.lua`'s
+        // part handling, `book-numbering.lua`'s counter-reset
+        // generation, and (moot once links are already `#<id>`-shaped)
+        // `book-links.lua`.
+        if doc
+            .ast
+            .meta
+            .get("single-file-book")
+            .and_then(|v| v.as_bool())
+            == Some(true)
+        {
+            builder = builder.with_contributor(Box::new(BookSingleFileContributor));
+        }
+
+        // book-projects P2b: `Position::Post` user filters are forwarded
+        // into `main.lua`'s own entry-point mechanism here instead of
+        // running through pampa — `UserFiltersStage::post()` skips them
+        // for this (Pandoc-hybrid) leg, since pampa's Lua engine never
+        // implemented the Q1-ported pure-Lua helpers
+        // (`quarto.utils.file_metadata_filter` etc.) some extension
+        // filters rely on. Re-resolves from `doc.ast.meta["filters"]`,
+        // which `UserFiltersStage::post()` leaves untouched precisely so
+        // this re-resolution sees the same `resolved.post` it would have.
+        let document_dir = ctx
+            .document
+            .input
+            .parent()
+            .unwrap_or(std::path::Path::new("."));
+        let resolved_filters = crate::filter_resolve::resolve_filters(
+            &doc.ast.meta,
+            document_dir,
+            &ctx.extensions,
+            ctx.runtime.as_ref(),
+        );
+        let entry_points: Vec<EntryPointFilter> = resolved_filters
+            .post
+            .into_iter()
+            .zip(resolved_filters.post_entry_points)
+            .filter_map(|(spec, at)| match spec {
+                pampa::unified_filter::FilterSpec::Lua(path) => Some(EntryPointFilter {
+                    at,
+                    path,
+                    filter_type: "lua",
+                }),
+                pampa::unified_filter::FilterSpec::Json(path) => Some(EntryPointFilter {
+                    at,
+                    path,
+                    filter_type: "json",
+                }),
+                pampa::unified_filter::FilterSpec::Citeproc => {
+                    // citeproc is handled by pandoc's own `--citeproc`
+                    // mechanism elsewhere, not `main.lua`'s per-filter
+                    // entry points — nothing to forward.
+                    None
+                }
+            })
+            .collect();
+        if !entry_points.is_empty() {
+            builder = builder.with_contributor(Box::new(QuartoFilterEntryPointsContributor {
+                entry_points,
+            }));
+        }
+
         let params_blob = builder.build().to_string();
 
         // T9.1: the Pandoc-superset shape (`raw: false`), never pampa's
@@ -523,6 +593,8 @@ impl PipelineStage for PandocWriteStage {
                     )
                 })?;
             }
+            stage_typst_template_partials(&doc.ast.meta, &doc_dir, &template_dir)
+                .map_err(|msg| PipelineError::stage_error(self.name(), msg))?;
             Some(vendored_template)
         } else {
             None
@@ -782,6 +854,48 @@ fn resolve_user_template_path(
         quarto_pandoc_types::config_value::ConfigValueKind::Path(s) => Some(doc_dir.join(s)),
         _ => None,
     }
+}
+
+/// Typst-leg counterpart of ApplyTemplateStage's HTML `template-partials`
+/// handling (`apply_template.rs:179-183`): copies each declared partial over
+/// the same-named vendored partial in `template_dir` — the directory
+/// Pandoc's `--template` resolves `$partial.typ()$` calls against — so an
+/// extension like orange-book that ships a `typst-show.typ` partial without
+/// a whole `template:` actually reaches the compiled output (its
+/// `#part[...]` RawBlocks otherwise fail with `unknown variable: part`;
+/// book-projects P2 item 79). Entries arrive as `ConfigValueKind::Path`
+/// (extension contributions, rebased document-relative by
+/// `adjust_paths_to_document_dir` at metadata-merge time) or as plain
+/// scalars/inlines (document front matter); both resolve against `doc_dir`.
+/// Shadowing is by file name, matching pandoc's partial resolution and Q1.
+fn stage_typst_template_partials(
+    meta: &quarto_pandoc_types::ConfigValue,
+    doc_dir: &Path,
+    template_dir: &Path,
+) -> Result<(), String> {
+    let Some(partials) = meta.get("template-partials").and_then(|v| v.as_array()) else {
+        return Ok(());
+    };
+    for partial in partials {
+        let rel = match &partial.value {
+            quarto_pandoc_types::config_value::ConfigValueKind::Path(s) => s.clone(),
+            _ => match partial.as_plain_text() {
+                Some(s) => s,
+                None => continue,
+            },
+        };
+        let Some(file_name) = Path::new(&rel).file_name() else {
+            continue;
+        };
+        let src = doc_dir.join(&rel);
+        std::fs::copy(&src, template_dir.join(file_name)).map_err(|e| {
+            format!(
+                "failed to stage typst template partial {}: {e}",
+                src.display()
+            )
+        })?;
+    }
+    Ok(())
 }
 
 /// `format-typst.ts:82-90`'s `section-numbering: "1.1.a"`, inserted into

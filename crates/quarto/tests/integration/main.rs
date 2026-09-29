@@ -2,6 +2,7 @@
 //! See bd-xvdop / claude-notes/plans/2026-05-28-integration-test-consolidation.md.
 
 pub mod attribution_cli_e2e;
+pub mod book_docx_diagnostic_e2e;
 pub mod bootstrap_sh;
 pub mod brand_font_weight;
 pub mod build_ts_extension_e2e;

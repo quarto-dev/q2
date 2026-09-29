@@ -1,0 +1,56 @@
+---
+title: "Book Has No Home Page"
+description: "A book project's chapter list must include a home page such as `index.qmd`."
+code: Q-5-36
+subsystem: project
+status: complete
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-36` — Book has no home page
+
+> A book project's chapter list must include a home page: a file
+> whose name starts with `index.`.
+
+## What this means
+
+Every book needs a landing page — the page readers see first, and the
+target of the book's title in the sidebar. Quarto recognizes it by
+name: a file whose name starts with `index.` (for example `index.qmd`
+or `index.md`), listed in `book.chapters`. No such file appears in
+this book's chapter list.
+
+The index page does not have to be first in the list — Quarto moves
+it to the front of the render order automatically — but it must be
+present.
+
+## Why this happens
+
+- **The landing page has a different name** — `preface.qmd` or
+  `home.qmd` instead of `index.qmd`.
+- **The index file exists on disk** but was never added to
+  `book.chapters`.
+- **The index entry has a typo** — `index.md` in the list when the
+  file on disk is `index.qmd`.
+
+## How to fix
+
+Rename your landing page to `index.qmd` (or add one) and list it in
+`book.chapters`:
+
+```yaml
+book:
+  title: "My Book"
+  chapters:
+    - index.qmd
+    - intro.qmd
+```
+
+The home page is typically unnumbered — mark its heading with
+`{.unnumbered}` so it does not consume a chapter number:
+
+```markdown
+# Preface {.unnumbered}
+```

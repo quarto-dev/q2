@@ -23,6 +23,12 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-09-28
+
+- [`e474421`](https://github.com/quarto-dev/q2/commits/e474421): The browser tab title now returns to "Quarto Hub" after leaving a project, instead of keeping the last-opened file and project name on the project selector.
+- [`9fff3e98`](https://github.com/quarto-dev/q2/commits/9fff3e98): Live updates now recover on their own after the computer wakes from sleep or the network changes: the sync connection force-reconnects and open files catch up without a page refresh.
+- [`4d1181fd`](https://github.com/quarto-dev/q2/commits/4d1181fd): Math in the preview now renders with KaTeX 0.18.7, which adds `\reflectbox` and `\mapsfrom` and keeps equation tags on an empty final row of an array.
+
 ### 2026-09-24
 
 - [`dce0c5a5`](https://github.com/quarto-dev/q2/commits/dce0c5a5): Listing pages whose posts declare a front-matter `image:` (for example the Blog template's `index.qmd`) now render in the preview instead of failing with "output destination ... is not under any allowed root".

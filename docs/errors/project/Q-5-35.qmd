@@ -1,0 +1,49 @@
+---
+title: "Book Chapter File Not Found"
+description: "A file listed in `book.chapters`, `book.appendices`, or `book.references` does not exist on disk."
+code: Q-5-35
+subsystem: project
+status: complete
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-35` — Book chapter file not found
+
+> A file listed in `book.chapters`, `book.appendices`, or
+> `book.references` does not exist on disk.
+
+## What this means
+
+Unlike a website project — which renders every document it finds — a
+book project renders exactly the files named by its chapter list.
+Every entry in `book.chapters`, `book.appendices`, and
+`book.references` must therefore point at a real file in the project
+directory. One of them does not.
+
+Paths are resolved relative to the project root (the directory
+containing `_quarto.yml`).
+
+## Why this happens
+
+- **A typo in the chapter path** — `chaptres/intro.qmd` instead of
+  `chapters/intro.qmd`.
+- **A chapter was renamed or moved** without updating `_quarto.yml`.
+- **A new chapter was added to the list** but the file was never
+  created.
+
+## How to fix
+
+Create the missing file, or correct the entry in `_quarto.yml`:
+
+```yaml
+book:
+  title: "My Book"
+  chapters:
+    - index.qmd
+    - intro.qmd     # must exist in the project directory
+    - summary.qmd
+```
+
+If you meant to drop the chapter, remove its entry from the list.

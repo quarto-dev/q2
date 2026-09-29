@@ -24,6 +24,17 @@ use crate::extension::types::{Extension, ExtensionFilter};
 pub struct ResolvedFilters {
     pub pre: Vec<FilterSpec>,
     pub post: Vec<FilterSpec>,
+    /// The entry-point name (e.g. `"post-quarto"`, `"pre-render"`) each
+    /// `post` filter was resolved from, same length and order as `post`.
+    /// Carried alongside rather than folded into `post`'s element type so
+    /// every existing `result.post[i] == FilterSpec::...` assertion keeps
+    /// compiling unchanged. book-projects P2b's `PandocWriteStage`-side
+    /// contributor reads this to rebuild the exact `at:` a Pandoc-hybrid
+    /// render must forward each filter to in `quarto-filters.entryPoints`
+    /// — `Position::Post` bundles five distinct Q1 entry-point names
+    /// (`post-quarto`, `pre-render`, `post-render`, `pre-finalize`,
+    /// `post-finalize`), so the bucket alone isn't enough information.
+    pub post_entry_points: Vec<&'static str>,
 }
 
 /// Entry points recognized by TS Quarto, in canonical execution order.
@@ -179,11 +190,14 @@ pub fn resolve_filters(
     // Split into pre/post and resolve paths
     let mut result = ResolvedFilters::default();
     for ann in annotated {
-        let position = ENTRY_POINTS[ann.entry_point_index].1;
+        let (entry_point, position) = ENTRY_POINTS[ann.entry_point_index];
         let spec = resolve_filter_path(ann.spec, document_dir);
         match position {
             Position::Pre => result.pre.push(spec),
-            Position::Post => result.post.push(spec),
+            Position::Post => {
+                result.post.push(spec);
+                result.post_entry_points.push(entry_point);
+            }
         }
     }
 
@@ -597,6 +611,20 @@ mod tests {
         assert_eq!(result.post[2], FilterSpec::Lua(doc_dir().join("f.lua")));
         assert_eq!(result.post[3], FilterSpec::Lua(doc_dir().join("g.lua")));
         assert_eq!(result.post[4], FilterSpec::Lua(doc_dir().join("h.lua")));
+
+        // book-projects P2b: `post_entry_points` preserves each post
+        // filter's *specific* Q1 entry-point name, not just "it's in the
+        // Post bucket" — the whole bucket is not one name.
+        assert_eq!(
+            result.post_entry_points,
+            vec![
+                "post-quarto",
+                "pre-render",
+                "post-render",
+                "pre-finalize",
+                "post-finalize",
+            ]
+        );
     }
 
     #[test]
