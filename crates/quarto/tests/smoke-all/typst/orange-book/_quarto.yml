@@ -21,13 +21,7 @@ book:
     - appendix-b.qmd
   references: references.qmd
 
-# TEMPORARY (bd-l6eh1635): pandoc -f biblatex -t csljson references.bib -o
-# references.json — citeproc's load_bibliography only parses CSL-JSON today,
-# not BibTeX. references.bib is kept in the tree, untouched, as the real
-# source; swap this back to `references.bib` once bd-l6eh1635's BibTeX
-# support merges (workspace-6, branch braid/bd-l6eh1635-bibtex-citeproc), and
-# delete references.json.
-bibliography: references.json
+bibliography: references.bib
 citeproc: true
 
 crossref:
