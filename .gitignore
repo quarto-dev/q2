@@ -23,6 +23,17 @@ resources/basic-quarto-website-compiled/
 # output file + <stem>_files/); keep those render artifacts out of git.
 crates/quarto/tests/smoke-all/**/_site/
 
+# smoke-all `type: book` fixtures render a `_book/` tree, a `.quarto/`
+# freezer/cache dir, and per-chapter `<chapter>_files/` dirs beside their
+# _quarto.yml, none of which the runner cleans up. Keep those render
+# artifacts out of git (mirrors the `_site/` rule above).
+crates/quarto/tests/smoke-all/**/_book/
+crates/quarto/tests/smoke-all/**/.quarto/
+crates/quarto/tests/smoke-all/**/*_files/
+
+# e2e test scratch output tree (local render runs), not build output.
+/target-e2e/
+
 # Claude Code session-specific plan symlink
 claude-notes/plans/CURRENT.md
 node_modules/
