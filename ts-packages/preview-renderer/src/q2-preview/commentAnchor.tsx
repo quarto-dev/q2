@@ -32,10 +32,17 @@
 import React from 'react';
 
 export interface CommentAnchorTarget {
-    /** The block node whose host element should register. */
+    /** The node whose host element should register. */
     node: unknown;
     /** Ref callback for that element. */
     register: React.RefCallback<Element>;
+    /**
+     * The anchor should paint itself highlighted (span comments: the span
+     * or its bubble is hovered, or its bubble is open). Declarative — the
+     * anchor component renders the class — so it can never go stale or
+     * land on the wrong element.
+     */
+    highlighted?: boolean;
 }
 
 export const CommentAnchorContext = React.createContext<CommentAnchorTarget | null>(null);
@@ -48,6 +55,19 @@ export function useCommentAnchorRef(node: unknown): React.RefCallback<Element> |
     const target = React.useContext(CommentAnchorContext);
     if (!target || target.node !== node) return undefined;
     return target.register;
+}
+
+/**
+ * Ref + highlight state for a component's host element, or `ref` undefined
+ * when no enclosing chrome is asking for THIS node (see `useCommentAnchorRef`).
+ */
+export function useCommentAnchor(node: unknown): {
+    ref: React.RefCallback<Element> | undefined;
+    highlighted: boolean;
+} {
+    const target = React.useContext(CommentAnchorContext);
+    if (!target || target.node !== node) return { ref: undefined, highlighted: false };
+    return { ref: target.register, highlighted: target.highlighted === true };
 }
 
 export const PlainHostContext = React.createContext<React.RefObject<HTMLElement | null> | null>(null);

@@ -105,12 +105,21 @@ export const CommentInline = (args: NodeArgs<InlineNode>) => {
     const enclosing = React.useContext(EnclosingBlockContext);
     const mode: CommentsMode = previewCtx?.commentsMode ?? 'show';
     const { node, onNavigateToDocument, setLocalAst } = args;
-    // Decided once per mount: did the block editor just wrap this span for
-    // commenting? (`null` = not yet checked.)
-    const initialOpenRef = React.useRef<boolean | null>(null);
+    // Rendered copy (comment spans stripped; commented spans marked), stable
+    // per source node so the anchor registration doesn't churn every render.
+    const rendered = React.useMemo(() => {
+        if (node.t !== 'Span') return null;
+        const span = node as SpanInline;
+        const copy = structuredClone(span);
+        copy.c[1] = copy.c[1].filter((n) => !isComment(n));
+        if (span.c[1].some(isComment)) {
+            copy.c[0] = [copy.c[0][0], [...copy.c[0][1], COMMENTED_SPAN_CLASS], copy.c[0][2]];
+        }
+        return copy;
+    }, [node]);
 
     const passthrough = <I node={node} onNavigateToDocument={onNavigateToDocument} setLocalAst={setLocalAst} />;
-    if (node.t !== 'Span' || !isPlainAuthoredSpan(node as SpanInline)) return passthrough;
+    if (!rendered || !isPlainAuthoredSpan(node as SpanInline)) return passthrough;
     const span = node as SpanInline;
     const comments = span.c[1].filter(isComment);
 
@@ -150,17 +159,12 @@ export const CommentInline = (args: NodeArgs<InlineNode>) => {
     // A comment-less span only gets the hover `+` affordance when a
     // comment could actually be committed to it.
     if (comments.length === 0 && resolveTarget() === null) return passthrough;
-    if (initialOpenRef.current === null) {
-        initialOpenRef.current =
-            comments.length === 0 && claimPendingCommentOpen(inlinesText(span.c[1]));
-    }
+    // Did the block editor just ask for this span's bubble (new span, or an
+    // existing one selected in the editor)? Claimed by the wrapper on mount
+    // (one-shot; see `claimInitialOpen`). Matched on the span's own text,
+    // comments excluded.
+    const claimInitialOpen = () => claimPendingCommentOpen(inlinesText(rendered.c[1]));
 
-    // Rendered copy: comment spans stripped; commented spans marked.
-    const rendered = structuredClone(span);
-    rendered.c[1] = rendered.c[1].filter((n) => !isComment(n));
-    if (comments.length > 0) {
-        rendered.c[0] = [rendered.c[0][0], [...rendered.c[0][1], COMMENTED_SPAN_CLASS], rendered.c[0][2]];
-    }
     const content = <I node={rendered} onNavigateToDocument={onNavigateToDocument} setLocalAst={setLocalAst} />;
     if (mode === 'hide') return content;
 
@@ -196,7 +200,7 @@ export const CommentInline = (args: NodeArgs<InlineNode>) => {
             anchorNode={rendered}
             hoverWholeAnchor
             placement="margin"
-            initialOpen={initialOpenRef.current}
+            claimInitialOpen={claimInitialOpen}
             addComment={addComment}
             resolveCommentAtIndex={resolveCommentAtIndex}
             mode={mode}

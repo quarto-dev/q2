@@ -71,6 +71,8 @@ const CSS = `
 .q2-rt-tb-strike { text-decoration: line-through; }
 .q2-rt-tb-sep { width: 1px; align-self: stretch; margin: 2px 2px; background: rgba(0, 0, 0, 0.12); }
 .q2-rt-link-editor { display: flex; align-items: center; gap: 2px; }
+/* Transient refusal notice next to the comment button. */
+.q2-rt-tb-notice { font-size: 0.72rem; color: #b91c1c; padding: 0 0.4em; white-space: nowrap; }
 .q2-rt-link-input {
   font-size: 0.78rem;
   padding: 0.15em 0.4em;
@@ -111,6 +113,12 @@ const CSS = `
   cursor: default;
   user-select: all;
 }
+/* Authored span (the editable span mark): a lavender tint + dashed underline so a
+   span reads as a span, distinct from the comment chrome's blue and from chips.
+   Solid colors on purpose (no alpha). A span carrying hidden comments gets a
+   slightly stronger underline. */
+.q2-rt-span { background-color: #f3e8ff; border-bottom: 1px dashed #a855f7; border-radius: 2px; }
+.q2-rt-span-commented { border-bottom-style: solid; }
 .q2-chip-math { background: rgba(80, 160, 120, 0.14); border-color: rgba(80, 160, 120, 0.30); }
 .q2-chip-cite, .q2-chip-shortcode { background: rgba(160, 120, 80, 0.14); border-color: rgba(160, 120, 80, 0.30); }
 `;

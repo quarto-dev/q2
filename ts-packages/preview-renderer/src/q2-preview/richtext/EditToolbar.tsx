@@ -17,16 +17,14 @@
 // edit box" (see RichTextEditor), so focusing the input keeps the session open.
 //
 // Comment-on-selection (💬, rich surface only — span comments prototype, see
-// custom/CommentSpan.tsx): wraps the selected text in a plain span (`[selected
-// text]`, as a verbatim `chip` — the same opaque pill every authored Span
-// already becomes in the rich editor), commits the block, and opens the span's
+// custom/CommentSpan.tsx): applies the editable `span` mark to the selection
+// (serializes as `[selected text]`), commits the block, and opens the span's
 // add-comment bubble in the rendered view.
 
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
-import type { Editor } from '@tiptap/core';
+import { getMarkRange, type Editor } from '@tiptap/core';
 import { shouldPlaceChromeBelow } from '../editChromeGeometry';
 import { ensureRichTextStyles } from './styles';
-import { docToMarkdown } from './serializer';
 import { requestOpenCommentOnSpan } from '../commentPending';
 import { ModeToggle } from './ModeToggle';
 import { EditTypeIndicator } from './EditTypeIndicator';
@@ -162,25 +160,55 @@ export function EditToolbar({
   // the span once it renders (see `commentPending.ts`). The comment itself is
   // typed in the bubble — the same UI as the `+` on a block — with the span
   // highlighted, so what is being commented on stays visible.
+  // Transient feedback in the toolbar when the selection can't be commented
+  // on (there is no toast facility inside the preview iframe).
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 2500);
+    return () => clearTimeout(t);
+  }, [notice]);
+
   const startComment = (e: MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (!editor) return;
-    const { from, to, $from, $to } = editor.state.selection;
-    if (from === to || !$from.sameParent($to)) return;
-    const { schema } = editor.state;
-    // Serialize just the selected inline content, as a paragraph so heading
-    // markers etc. don't leak into the span.
-    const cut = $from.parent.cut($from.parentOffset, $to.parentOffset);
-    const tmp = schema.nodes.doc.create(null, [schema.nodes.paragraph.create(null, cut.content)]);
-    const md = docToMarkdown(tmp).trim();
-    if (!md) return;
-    editor
-      .chain()
-      .insertContentAt({ from, to }, { type: 'chip', attrs: { src: `[${md}]`, kind: 'span' } })
-      .run();
-    requestOpenCommentOnSpan(cut.textContent);
-    onCommit?.();
+    const { doc, schema, selection } = editor.state;
+    const { from, to, $from, $to } = selection;
+    if (from === to) {
+      setNotice('Select some text to comment on');
+      return;
+    }
+    if (!$from.sameParent($to)) {
+      setNotice('Select text within one paragraph');
+      return;
+    }
+    const spanType = schema.marks.span;
+    // Existing spans are never altered here (no extending, merging, or
+    // nesting). Entirely inside one span: just open that span's bubble.
+    // Partly overlapping one: refuse.
+    if (editor.isActive('span')) {
+      const range = getMarkRange($from, spanType);
+      if (!range) return;
+      requestOpenCommentOnSpan(doc.textBetween(range.from, range.to, ' '));
+      setTimeout(() => onCommit?.(), 0);
+      return;
+    }
+    if (doc.rangeHasMark(from, to, spanType)) {
+      setNotice('Selection overlaps an existing span');
+      return;
+    }
+    const text = doc.textBetween(from, to, ' ');
+    if (!text.trim()) {
+      setNotice('Select some text to comment on');
+      return;
+    }
+    editor.chain().setMark('span', { attr: ['', [], []], comments: [] }).run();
+    requestOpenCommentOnSpan(text);
+    // Commit once the press has fully completed: the trailing `click` must be
+    // delivered while the toolbar still exists, or it lands on whatever sits
+    // under the pointer after the editor closes and can re-open the block.
+    setTimeout(() => onCommit?.(), 0);
   };
 
   const commentButton = (
@@ -232,6 +260,7 @@ export function EditToolbar({
             🔗
           </button>
           {commentButton}
+          {notice && <span className="q2-rt-tb-notice">{notice}</span>}
         </>
       ) : (
         <div className="q2-rt-link-editor">
