@@ -78,12 +78,12 @@ The result goes into an audit table in this plan (site, consumer, operand origin
 ## Checklist
 
 Layer 2 (`bugfix/bd-1klbq2zd-path-audit`):
-- [ ] `gh stack add bugfix/bd-1klbq2zd-path-audit`; `braid update bd-1klbq2zd --status in_progress`; CLAUDE.local.md context block by hand; commit this plan
-- [ ] Baseline: `cargo nextest run -p quarto -p quarto-system-runtime` on unchanged code (expected 7 failures, per the prototype run; re-record the list)
-- [ ] Once the audit table exists, and before any call site changes: baseline every other crate that has R rows (`-p quarto-core -p quarto-preview -p quarto-hub …`), run on the unchanged layer tip and recorded here
-- [ ] Guard: RED test(s) → fix → GREEN
-- [ ] Shared `canonicalize` + deepest-existing variant (std-backed, moved from `output_sink.rs`); `NativeRuntime::canonicalize` uses the former
-- [ ] Audit table (subagent sweep + spot-check of R rows and exceptions); route R sites, both operands for comparisons
+- [x] `gh stack add bugfix/bd-1klbq2zd-path-audit`; `braid update bd-1klbq2zd --status in_progress`; CLAUDE.local.md context block by hand; commit this plan (`b83c5cf6`)
+- [x] Baseline: `cargo nextest run -p quarto -p quarto-system-runtime` on unchanged code (7 failures, listed in § Baselines)
+- [ ] Once the audit table exists, and before any call site changes: baseline every other crate that has R rows. Done: `quarto-core` (45 failures, § Baselines). Still to do: `quarto-hub`, `quarto-preview`, `quarto-test` (and any crate the spot-check adds), at `b83c5cf6` via `git switch --detach b83c5cf6` → run → `git switch bugfix/bd-1klbq2zd-path-audit`
+- [x] Guard: RED test(s) → fix → GREEN (`37e3d127`)
+- [x] Shared `canonicalize` + deepest-existing variant (std-backed, moved from `output_sink.rs`); `NativeRuntime::canonicalize` uses the former (`84f4d01a`)
+- [ ] Audit table: subagent sweep DONE (§ Audit table); coverage cross-checked (every production hit has a row). Spot-check of every R/R? row against source: NOT done yet. Then route R sites, both operands for comparisons
 - [ ] Spelling-agnostic test oracles
 - [ ] Classify `preview_static_e2e::a_page_inside_the_project_opens_on_that_page` and `cache_lru` concurrent test
 - [ ] Crate-scoped suites for every touched crate: failure set identical to the baseline except the guard tests
@@ -101,6 +101,75 @@ Ship:
 - [ ] Ask before pushing; `gh stack submit --auto` (drafts) after review; PR text via `/open-pr`
 - [ ] Mark #743 ready; merge bottom-up with merge commits on go-ahead; close bd-clq56rem, then bd-1klbq2zd
 - [x] File a strand for the relative `--output` failure (bd-xdlbrc7m)
+
+## Baselines (Windows, unchanged layer tip `b83c5cf6`)
+
+`cargo nextest run -p quarto -p quarto-system-runtime --no-fail-fast`: 671 run, 7 failed:
+- `quarto-system-runtime vfs::tests::test_vfs_clear_preserving_prefix`
+- `json_errors::ipynb_parse_error_json_carries_cell_origin` (the #743 RED, on purpose)
+- `preview_static_e2e::cli_flags_override_project_preview_keys`
+- `preview_static_e2e::project_preview_keys_set_the_defaults_and_unsupported_keys_warn`
+- `project_profile_cli::render_verbose_echoes_active_profiles`
+- `render_scripts_cli::explicit_interpreter_command_line_with_args`
+- `render_scripts_cli::list_form_runs_scripts_in_order`
+
+`cargo nextest run -p quarto-core --no-fail-fast`: 5272 run, 45 failed (all pre-existing Windows): 13 `engine::content_processors::spin::tests::golden_*` (CRLF), 7 `glob::expand::tests::*`, `transforms::hephaestus::tests::artifact_path_is_content_and_size_addressed`, `pandoc_filters::format_defaults::tests::test_reference_doc_path_forwarded`, `pandoc_filters::params::tests::test_top_level_literals`, `engine::ts_protocol::tests::test_ts_wire_parity_fixture`, `engine::ts_process::tests::test_single_dial_invariant`, and integration: `pandoc_long_tail_formats::textile_fresh_baseline_snapshot`, `pandoc_goldens::{test_mermaid_fixture_preserves_diagram_source_text, test_fixtures_match_q1_golden}`, `metadata_path_resolution::frontmatter_sidebar_resolves_sibling_relative_qmd`, 3 `orange_book_lua::*`, 2 `listing_pipeline::table_*`, `pandoc_shim::{test_route_n_requires_post_init_position, test_proof_missing_type_surfaces_lua_traceback}`, `pandoc_shim_goldens::test_equation_golden`, `pandoc_render_to_file::render_document_to_file_docx_embeds_a_relatively_referenced_image`, 6 `julia_engine_e2e::j*`, `pandoc_execute_defaults::tier_d_execute_defaults_reach_engine`, `marimo_engine_e2e::sc10_widget_render_shows_header_include_and_body_island`. The run leaves two `.snap.new` files under `crates/quarto-core/tests/integration/snapshots/`; delete them after each run.
+
+Compare sets, not counts. Raw logs are session scratch only; re-derive from this list.
+
+## Guard finding (layer 2, step 3)
+
+On Windows, `PathBuf::push` folds `..` away when the base is verbatim (`\\?\`), so `canonical(dir).join("sub").join("..")` is lexically the input itself and the first version of the dotdot test passed vacuously. The test now hangs the detour off `dunce::simplified(dir)` and asserts the `..` survives. Both new tests were RED for the right reason (`expected refusal … stderr: Rendering single file: …`) before the fix. The guard now also compares `runtime.canonicalize` of both operands; `determine_output_paths` takes a `&dyn SystemRuntime` (all callers, including the two book callers, pass theirs).
+
+## Audit table (sonnet sweep at `b83c5cf6`; spot-check PENDING)
+
+Coverage cross-checked in the main session: the production `canonicalize(` hit list (first-`#[cfg(test)]` cutoff per file) matches the rows below exactly; `capture_files.rs`, `format_paths.rs`, `quarto-hub/src/watch.rs` hits are all test-only.
+
+**Reading rule (main session, applied on top of the agent's dispositions):** a row that is already on the runtime seam needs no change in this layer even when the agent marked it R for emission; it flips with the seam in layer 3, which is the intended behavior. Only `std`/`Path` sites marked R (or R?) are routing candidates. Also, `std` sites that share a key/comparison with a routed `std` site must be routed together (e.g. rows 15-17), or the flip splits the pair.
+
+| # | site | crate (runtime dep) | form | disposition (agent) | main-session note |
+|---|---|---|---|---|---|
+| 1-2 | `quarto-core/src/output_sink.rs:260,262` + former def :420 | core (y) | deepest | L | now `quarto_system_runtime::canonicalize_deepest_existing` |
+| 3 | `output_sink.rs:314` | core (y) | runtime | R (emitted in `DestOutsideAllowedRoots`) | seam: no change |
+| 4 | `output_sink.rs:341` | core (y) | runtime | R (emitted `dest`) | seam: no change |
+| 5 | `output_sink.rs:381` | core (y) | runtime | L | |
+| 6 | `render_to_file.rs:243` | core (y) | runtime | R (error text) | seam: no change |
+| 7 | `project/mod.rs:150` | core (y) | runtime | R? (FileId hash spelling must match `MetadataMergeStage`) | verify the matching-id derivation |
+| 8 | `project/mod.rs:211` | core (y) | runtime | R? (same as 7) | verify |
+| 9-10 | `project/mod.rs:1907, 2105` | core (y) | runtime | L (origin of `project.dir`) | |
+| 11 | `project/orchestrator.rs:2369` | core (y) | runtime | L | |
+| 12 | `project_resources.rs:607` | core (y) | runtime | R (error text) | seam: no change |
+| 13 | `project_resources.rs:739,756` | core (y) | runtime | L | |
+| 14 | `project_resources.rs:1224` `same_canonical_path` | core (y) | std | R? (fallback compares raw `dst` vs seam `source`) | route; check fallback with both operands |
+| 15 | `project/book/multi_file_html.rs:173,498,504` | core (y) | std | L (self-consistent) | route together with 16/17 |
+| 16 | `project/book/render_item.rs:312` `chapter_seed_map` | core (y) | std | **R**: keys looked up by `pass2_renderer.rs:315,461,583,1203` with seam-derived `doc_info.input`; would miss after the flip (book numbering) | highest-confidence; route |
+| 17 | `project/book/static_analyzer.rs:107` | core (y) | std | L (mirrors 16) | route together with 16 |
+| 18 | `stage/stages/include_expansion.rs:284,565` | core (y) | std | R? (`include_stack` seeded with raw `doc_path`; `profile.includes` mixes with row 19) | verify |
+| 19 | `stage/stages/include_resolve.rs:593` | core (y) | runtime | R? | seam; check the shared sink with 18 |
+| 20 | `quarto-hub/src/admin/collect.rs:209` | hub (**n**) | std | R (error text) | needs runtime dep |
+| 21 | `collect.rs:212` | hub (n) | std | L | pair with 20 |
+| 22 | `collect.rs:383` | hub (n) | std | L | |
+| 23 | `collect.rs:467` | hub (n) | std | R (printed at `main.rs:327`) | |
+| 24 | `quarto-hub/src/main.rs:216` | hub (n) | std | R (bail text) | |
+| 25 | `quarto-hub/src/main.rs:370` | hub (n) | std | R (tracing) | |
+| 26-28 | `quarto-hub/src/sync.rs:631,816,907` | hub (n) | std | L (self-consistent containment) | |
+| 29-31 | `quarto-preview/src/config.rs:403,423,447` | preview (y) | std | L (self-consistent) | |
+| 32 | `config.rs:536` | preview (y) | std | R? (rel paths rejoined onto a seam root?) | verify |
+| 33 | `quarto-preview/src/deps.rs:102` | preview (y) | std | L | |
+| 34-35 | `quarto-preview/src/lib.rs:443,444` | preview (y) | std | L (deliberate pair) | |
+| 36 | `quarto/src/commands/get_config.rs:71` | quarto (y) | std | R (feeds seam-derived project machinery) | |
+| 37 | `quarto/src/commands/hub.rs:80` | quarto (y) | std | R (tracing; `StorageManager`) | |
+| 38 | `quarto/src/commands/preview.rs:137` | quarto (y) | std | R (log/error display, per its comment) | |
+| 39 | `quarto/src/commands/preview_static.rs:297` | quarto (y) | std | R? | likely tied to the `preview_static_e2e` prototype failure |
+| 40-41 | `quarto/src/commands/render.rs:278, 421` | quarto (y) | runtime | R (error text) | seam: no change |
+| 42 | `quarto-source-fetch/src/archive.rs:105` | source-fetch (n) | std | L | |
+| 43 | `quarto-trace-server/src/lib.rs:252` | trace-server (n) | std | L (both operands same call) | |
+| 44 | `quarto-system-runtime/src/native.rs:94` | runtime | impl | L (the seam) | now calls the shared fn |
+| 45 | `quarto-test/src/runner.rs:67` | quarto-test (y) | std | R? (feeds `render_document`) | verify |
+| 46 | `wasm-quarto-hub-client/src/lib.rs:1740` | wasm | runtime | N/A (wasm VFS only) | |
+| 47-49 | `traits.rs:333`, `sandbox.rs:205`, `wasm.rs:349` | runtime | decl/impls | N/A | |
+
+Candidate routing set before spot-check: std rows 14, 15, 16, 17, 18, 20(+21), 23, 24, 25, 32?, 36, 37, 38, 39, 45?. That is ~12-15 sites, above the fold threshold of about 10 R rows, so the fold rule leans towards keeping layer 3 separate; decide after the spot-check.
 
 ## Verification
 
