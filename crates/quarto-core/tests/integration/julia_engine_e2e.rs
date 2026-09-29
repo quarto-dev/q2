@@ -3,11 +3,12 @@
  * Copyright (c) 2026 Posit, PBC
  *
  * Plan 4 (Julia validation) — the julia+deno-gated END-TO-END rows. Drives the
- * committed julia-engine fixture (Phase 4A) through the REAL render path — a TS
- * engine spawning the Deno engine-host subprocess, which in turn spawns a real
- * Julia QuartoNotebookRunner control server — and asserts the whole chain works:
- * discovery → static resolution → LoadEngine / LaunchEngine / execute → jupyter
- * `toMarkdown` → HTML writer.
+ * BUNDLED julia engine (vendored extension subtree, julia epic Step 4 — see
+ * `resources/extension-subtrees/julia-engine/`) through the REAL render path —
+ * a TS engine spawning the Deno engine-host subprocess, which in turn spawns a
+ * real Julia QuartoNotebookRunner control server — and asserts the whole chain
+ * works: discovery → static resolution → LoadEngine / LaunchEngine / execute →
+ * jupyter `toMarkdown` → HTML writer.
  *
  * These tests are julia+deno-gated: they early-return (skip, with an
  * `eprintln!("SKIP: …")`) when `deno` or `julia` is not on PATH. On a machine
@@ -18,12 +19,14 @@
  * `ensure_environment.jl` instantiates the QuartoNotebookRunner project (network +
  * package downloads). Budget for a slow, network-dependent first render.
  *
- * Harness mirrors `echo_engine_e2e.rs`, with one structural difference: the
- * committed julia fixture root is a *project directory* that contains the engine
- * package under `_extensions/julia-engine/` (co-located with its `.jl` scripts and
- * `Project.toml`, which the bundle resolves via `import.meta.url`). So the TempDir
- * setup copies that inner package into `tmp/_extensions/julia-engine`, preserving
- * the co-location the engine relies on.
+ * Harness mirrors `echo_engine_e2e.rs`, with one structural difference: no
+ * extension is installed into the temp project's `_extensions/` at all — the
+ * engine is expected to resolve purely from q2's bundled built-in subtree
+ * (`all_builtin_extension_roots`). Installing the old hand-maintained fixture
+ * copy here too used to work when julia was extension-only, but now collides
+ * with the bundled copy ("Engine name collision: both 'julia-engine' and
+ * 'julia-engine' register engine 'julia'") — the whole point of bundling is
+ * that no separate install step is needed.
  */
 
 // Native-only: TsEngine / TsEngineHost are behind cfg(not(target_arch = "wasm32")).
@@ -57,13 +60,6 @@ fn julia_available() -> bool {
         .is_ok_and(|o| o.status.success())
 }
 
-/// Absolute path to the committed julia-engine fixture root
-/// (`crates/quarto-core/tests/fixtures/extensions/julia-engine`). This root is a
-/// project dir; the engine package itself lives under `_extensions/julia-engine`.
-fn julia_fixture_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/extensions/julia-engine")
-}
-
 /// Recursively copy `src` into `dst` (dst is created).
 fn copy_dir(src: &Path, dst: &Path) {
     std::fs::create_dir_all(dst).unwrap();
@@ -86,16 +82,11 @@ fn write_file(path: &Path, contents: &str) {
     std::fs::write(path, contents).unwrap();
 }
 
-/// Build a temp project with the committed julia-engine package installed under
-/// `_extensions/julia-engine/` (co-located `.jl` scripts + bundle preserved).
-/// Returns the `TempDir` (keep it alive for the test's duration).
+/// Build a temp project with NO installed extensions — the julia engine is
+/// expected to resolve entirely from q2's bundled extension subtree. Returns
+/// the `TempDir` (keep it alive for the test's duration).
 fn setup_julia_project() -> TempDir {
-    let tmp = TempDir::new().unwrap();
-    copy_dir(
-        &julia_fixture_root().join("_extensions/julia-engine"),
-        &tmp.path().join("_extensions").join("julia-engine"),
-    );
-    tmp
+    TempDir::new().unwrap()
 }
 
 /// P3 (bd-h4rhohhy) — recursively copy the whole ambient
@@ -586,9 +577,10 @@ fn julia_website_fixture_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/extensions/julia-website")
 }
 
-/// Build a temp WEBSITE project for the Phase-4H rows: the committed
-/// `julia-website` pages plus, copied in at runtime, the `julia-engine`
-/// extension. Deliberately ships **no** notebook `Project.toml`/`Manifest.toml`
+/// Build a temp WEBSITE project for the Phase-4H rows: just the committed
+/// `julia-website` pages — no `_extensions/` install. The julia engine is
+/// expected to resolve entirely from q2's bundled extension subtree.
+/// Deliberately ships **no** notebook `Project.toml`/`Manifest.toml`
 /// — `plot.qmd` emits its PNG figure from a hardcoded byte array via the
 /// `Base64` stdlib, so no notebook Julia environment is needed. (This mirrors
 /// `setup_julia_project` used by j1–j4, which also ship no notebook env and
@@ -605,12 +597,6 @@ fn setup_julia_website_project() -> TempDir {
         )
         .unwrap();
     }
-    // The engine package (co-located `.jl` + bundle), copied from the sibling
-    // fixture — nothing julia-specific is committed under `julia-website/`.
-    copy_dir(
-        &julia_fixture_root().join("_extensions/julia-engine"),
-        &tmp.path().join("_extensions").join("julia-engine"),
-    );
     tmp
 }
 

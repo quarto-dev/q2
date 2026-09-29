@@ -8,27 +8,40 @@ pull-extension-subtree`, and discovered as a builtin root alongside the
 regular `resources/extensions/` bundle — mirroring Quarto 1's
 `src/resources/extension-subtrees/` + hidden `pull-git-subtree` dev command.
 
-As of this writing **no real subtree is registered** — the infrastructure
-was built and proven against a fake extension (`synth-echo`, see
-`crates/quarto-core/tests/fixtures/extension-subtrees/synth-echo/` and
-`crates/quarto-core/tests/integration/synth_extension_subtree_e2e.rs`). The
-first real row (the julia engine) is the parent epic's Step 4
-(`claude-notes/plans/2026-09-03-julia-engine-static-declarations-epic.md`).
+Two real subtrees are registered: **orange-book** (book-projects P2 item
+80, the default Typst book extension, subtreed from `quarto-ext/orange-book`)
+and **julia-engine**, subtreed from the `q2-static-declarations` branch of
+`gordonwoodhull/quarto-julia-engine` (the parent epic's Step 4,
+`claude-notes/plans/2026-09-03-julia-engine-static-declarations-epic.md`).
+The `synth-echo` fake (`crates/quarto-core/tests/fixtures/extension-subtrees/synth-echo/`,
+`crates/quarto-core/tests/integration/synth_extension_subtree_e2e.rs`)
+remains the hermetic test fixture.
 
 ## Adding a subtree: the three pieces
 
-1. **One `SUBTREES` row.** Add a `SubtreeConfig` entry to `SUBTREES` in
-   `crates/xtask/src/pull_extension_subtree.rs`:
+1. **One `subtrees()` row.** Add a `SubtreeConfig` entry to `subtrees()` in
+   `crates/xtask/src/pull_extension_subtree.rs` (a fn, not a const —
+   `SubtreeConfig` owns `String`s, which can't be built non-empty in a
+   const context):
 
    ```rust
-   pub const SUBTREES: &[SubtreeConfig] = &[
-       SubtreeConfig {
-           name: "julia-engine",
-           prefix: "resources/extension-subtrees/julia-engine",
-           remote_url: "https://github.com/PumasAI/quarto-julia-engine.git",
-           remote_branch: "main",
-       },
-   ];
+   pub fn subtrees() -> Vec<SubtreeConfig> {
+       vec![
+           SubtreeConfig {
+               name: "orange-book".to_string(),
+               prefix: "resources/extension-subtrees/orange-book".to_string(),
+               remote_url: "https://github.com/quarto-ext/orange-book.git".to_string(),
+               remote_branch: "main".to_string(),
+           },
+           SubtreeConfig {
+               name: "julia-engine".to_string(),
+               prefix: "resources/extension-subtrees/julia-engine".to_string(),
+               remote_url: "https://github.com/gordonwoodhull/quarto-julia-engine.git".to_string(),
+               remote_branch: "q2-static-declarations".to_string(),
+           },
+           // ... new rows here
+       ]
+   }
    ```
 
 2. **Pull it in.** Run `cargo xtask pull-extension-subtree julia-engine`
@@ -78,19 +91,30 @@ first real row (the julia engine) is the parent epic's Step 4
 
    ```rust
    pub static EXTENSION_SUBTREE_PAYLOADS: &[&ResourceBundle] =
-       &[&JULIA_ENGINE_SUBTREE];
+       &[&ORANGE_BOOK_SUBTREE, &JULIA_ENGINE_SUBTREE];
    ```
 
+   and add the subtree's name to `EXTENSION_SUBTREE_NAMES` in the same file
+   (the shared list the WASM side keys off).
+
    `builtin_extension_subtree_roots` picks up every registered payload
-   automatically — no other code changes needed. On WASM,
-   `populate_extension_subtrees` in `crates/wasm-quarto-hub-client/src/lib.rs`
-   already embeds the **whole** `resources/extension-subtrees/` tree (see
-   that function's doc comment for why the WASM side doesn't need the same
-   per-subtree splitting the native side does — mirroring
-   `populate_builtin_extensions`'s existing whole-dir embed for
-   `resources/extensions/`); no change needed there either unless the
-   binary-size tradeoff is revisited (tracked by the epic's Step 4, not
-   this doc).
+   automatically — no other native code changes needed. **On WASM you must
+   also add a matching per-subtree embed** in `populate_extension_subtrees`
+   in `crates/wasm-quarto-hub-client/src/lib.rs`:
+
+   ```rust
+   static JULIA_ENGINE_SUBTREE_DIR: Dir = include_dir!(
+       "$CARGO_MANIFEST_DIR/../../resources/extension-subtrees/julia-engine/_extensions"
+   );
+   // prefix: {RESOURCE_PATH_PREFIX}/extension-subtrees/julia-engine/_extensions
+   ```
+
+   The WASM side embeds **per-subtree `_extensions/` dirs**, exactly like
+   native — never the whole `resources/extension-subtrees/` tree (that would
+   put the vendored repos' tests/CI config into the WASM blob, and the root
+   shape would be wrong: `discover_extensions` scans each root's *children*
+   as extensions, so a root must be a `_extensions/` dir, not the parent
+   `extension-subtrees/` dir).
 
 ## Dev/test seam: `QUARTO_EXTENSION_SUBTREES_DIR`
 
@@ -107,9 +131,6 @@ Not for production use.
 
 `crates/quarto-core/tests/fixtures/extension-subtrees/synth-echo/` — never
 `resources/extension-subtrees/` — so it never ships in a release binary (D3).
-`resources/extension-subtrees/README.md` is the only thing committed there
-until a real subtree lands; it exists purely so the directory exists in git
-(git does not track empty directories) for the two `include_dir!` call
-sites (native `builtin` module here, and
-`populate_extension_subtrees`/`populate_builtin_extensions` in
-`wasm-quarto-hub-client`) to compile against.
+The `README.md` in `resources/extension-subtrees/` keeps that directory in
+git (git does not track empty directories) for the `include_dir!` call
+sites to compile against even before any real subtree lands.

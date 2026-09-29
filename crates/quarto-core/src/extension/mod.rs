@@ -89,16 +89,38 @@ mod builtin {
     pub static ORANGE_BOOK_SUBTREE: ResourceBundle =
         ResourceBundle::new("orange-book-subtree", &ORANGE_BOOK_SUBTREE_DIR);
 
+    /// The julia engine's `_extensions/` payload, embedded from the vendored
+    /// subtree (`resources/extension-subtrees/julia-engine/`, maintained by
+    /// `cargo xtask pull-extension-subtree`). Scoped to `_extensions/` only —
+    /// the rest of the vendored repo (tests, CI config) never enters the
+    /// binary (extension-subtree-infrastructure plan, D1/D2).
+    static JULIA_ENGINE_SUBTREE_DIR: Dir = include_dir!(
+        "$CARGO_MANIFEST_DIR/../../resources/extension-subtrees/julia-engine/_extensions"
+    );
+
+    /// Resource bundle for the julia engine subtree payload.
+    pub static JULIA_ENGINE_SUBTREE: ResourceBundle =
+        ResourceBundle::new("extension-subtree-julia-engine", &JULIA_ENGINE_SUBTREE_DIR);
+
     /// Per-subtree embedded payloads for vendored extension subtrees (see
     /// `cargo xtask pull-extension-subtree`). Each real subtree registers its
     /// own `include_dir!` + `ResourceBundle` here, scoped to that subtree's
     /// `_extensions/` payload (never the whole vendored repo — see the
     /// extension-subtree-infrastructure plan's D1).
-    pub static EXTENSION_SUBTREE_PAYLOADS: &[&ResourceBundle] = &[&ORANGE_BOOK_SUBTREE];
+    pub static EXTENSION_SUBTREE_PAYLOADS: &[&ResourceBundle] =
+        &[&ORANGE_BOOK_SUBTREE, &JULIA_ENGINE_SUBTREE];
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 pub use builtin::BUILTIN_EXTENSIONS;
+
+/// Names of the vendored extension subtrees whose `_extensions/` payloads
+/// ship in q2, in registration order. Single source of truth shared by the
+/// native payload statics above, the WASM roots below, and
+/// `wasm-quarto-hub-client`'s `populate_extension_subtrees` (which embeds
+/// each `<name>/_extensions/` dir into the VFS — per-subtree, never the whole
+/// vendored repo).
+pub const EXTENSION_SUBTREE_NAMES: &[&str] = &["orange-book", "julia-engine"];
 
 /// Locate the builtin roots contributed by vendored extension subtrees (see
 /// `cargo xtask pull-extension-subtree`), in registration order.
@@ -107,11 +129,10 @@ pub use builtin::BUILTIN_EXTENSIONS;
 ///   below with a single directory (pointed at a fixture in tests). Checked
 ///   before the embedded bundle, native-only — never read on WASM.
 /// - **Native**: each registered per-subtree [`ResourceBundle`] in
-///   [`builtin::EXTENSION_SUBTREE_PAYLOADS`], lazily extracted. Empty in
-///   production until a real subtree is registered.
-/// - **WASM**: the `/__quarto_resources__/extension-subtrees` VFS path, when
-///   the host has populated it (see `populate_extension_subtrees` in
-///   `wasm-quarto-hub-client`).
+///   [`builtin::EXTENSION_SUBTREE_PAYLOADS`], lazily extracted.
+/// - **WASM**: each subtree's `/__quarto_resources__/extension-subtrees/<name>/_extensions`
+///   VFS path, when the host has populated it (see `populate_extension_subtrees`
+///   in `wasm-quarto-hub-client`).
 pub fn builtin_extension_subtree_roots(
     _runtime: &dyn quarto_system_runtime::SystemRuntime,
 ) -> Vec<std::path::PathBuf> {
@@ -128,18 +149,24 @@ pub fn builtin_extension_subtree_roots(
 
     #[cfg(target_arch = "wasm32")]
     {
-        let vfs_path = std::path::PathBuf::from(format!(
-            "{}/extension-subtrees",
-            quarto_sass::RESOURCE_PATH_PREFIX
-        ));
-        if _runtime
-            .path_exists(&vfs_path, Some(quarto_system_runtime::PathKind::Directory))
-            .unwrap_or(false)
-        {
-            vec![vfs_path]
-        } else {
-            Vec::new()
-        }
+        // Same shape contract as native: each root is a subtree's
+        // `_extensions/` dir (its children are the extensions). Populated by
+        // `populate_extension_subtrees` in wasm-quarto-hub-client.
+        EXTENSION_SUBTREE_NAMES
+            .iter()
+            .map(|name| {
+                std::path::PathBuf::from(format!(
+                    "{}/extension-subtrees/{}/_extensions",
+                    quarto_sass::RESOURCE_PATH_PREFIX,
+                    name
+                ))
+            })
+            .filter(|p| {
+                _runtime
+                    .path_exists(p, Some(quarto_system_runtime::PathKind::Directory))
+                    .unwrap_or(false)
+            })
+            .collect()
     }
 }
 
@@ -201,21 +228,113 @@ mod tests {
         );
 
         let roots = builtin_extension_subtree_roots(&runtime);
-        assert_eq!(
-            roots.len(),
-            1,
-            "exactly one registered subtree payload: {roots:?}"
-        );
+        let orange_book_root = roots
+            .iter()
+            .find(|r| r.join("orange-book/_extension.yml").is_file())
+            .unwrap_or_else(|| panic!("no registered root contains orange-book: {roots:?}"));
         assert!(
-            roots[0].join("orange-book/_extension.yml").is_file(),
-            "extracted root {} must contain orange-book's own _extension.yml",
-            roots[0].display()
-        );
-        assert!(
-            !roots[0].join("README.md").exists(),
+            !orange_book_root.join("README.md").exists(),
             "only the _extensions/ payload should be embedded, not the whole \
              vendored repo: {}",
-            roots[0].display()
+            orange_book_root.display()
+        );
+    }
+
+    /// The julia-engine subtree payload is embedded and extracted by the real
+    /// `ResourceBundle` leg (no env override) — the first exercise of that
+    /// leg with a real payload.
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn builtin_extension_subtree_roots_extracts_bundled_julia_payload() {
+        let runtime = make_runtime();
+        assert!(
+            std::env::var("QUARTO_EXTENSION_SUBTREES_DIR").is_err(),
+            "test process should not have this env var set"
+        );
+
+        let roots = builtin_extension_subtree_roots(&runtime);
+        assert_eq!(
+            roots.len(),
+            2,
+            "the orange-book and julia-engine subtree payloads should both be registered; got {roots:?}"
+        );
+        assert!(
+            roots
+                .iter()
+                .any(|r| r.join("julia-engine/_extension.yml").is_file()),
+            "one extracted payload root should contain julia-engine/_extension.yml \
+             (roots scan a subtree's _extensions/ dir, so its children are extensions): {roots:?}"
+        );
+    }
+
+    /// The bundled julia-engine extension is discovered with zero
+    /// `_extensions/` install, and its static declarations (`name`,
+    /// `claims`, `file-extensions`) parse and reach the claim-lookup path —
+    /// pass-1 resolution with no engine load.
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn bundled_julia_engine_discovered_with_static_declarations() {
+        use crate::extension::types::{EngineContribution, lookup_static_claim};
+
+        let runtime = make_runtime();
+        assert!(
+            std::env::var("QUARTO_EXTENSION_SUBTREES_DIR").is_err(),
+            "test process should not have this env var set"
+        );
+
+        let roots = all_builtin_extension_roots(&runtime);
+        let root_refs: Vec<&std::path::Path> = roots.iter().map(|p| p.as_path()).collect();
+
+        let tmp = tempfile::TempDir::new().unwrap();
+        let input = tmp.path().join("test.qmd");
+        let (extensions, diags) =
+            crate::extension::discover_extensions(&input, None, &root_refs, &runtime);
+        assert!(
+            diags.is_empty(),
+            "discovery of bundled extensions should produce no diagnostics; got {diags:?}"
+        );
+
+        let julia = extensions
+            .iter()
+            .find(|e| e.id.name == "julia-engine")
+            .expect("bundled julia-engine extension should be discovered with zero install");
+        let (name, claims, file_extensions) = julia
+            .contributes
+            .engines
+            .iter()
+            .find_map(|e| match e {
+                EngineContribution::External {
+                    name,
+                    claims,
+                    file_extensions,
+                    ..
+                } => Some((name, claims, file_extensions)),
+                _ => None,
+            })
+            .expect("julia-engine should contribute an external engine");
+
+        assert_eq!(name.as_deref(), Some("julia"));
+        let claims = claims
+            .as_ref()
+            .expect("bundled manifest should carry static claims");
+        assert!(
+            matches!(
+                lookup_static_claim(claims, "julia", None),
+                crate::engine::LanguageClaim::Primary(_)
+            ),
+            "lowercase julia should hit the static primary claim"
+        );
+        assert!(
+            matches!(
+                lookup_static_claim(claims, "Julia", None),
+                crate::engine::LanguageClaim::Primary(_)
+            ),
+            "Julia should hit the static claim too (case-insensitive, epic Step 3)"
+        );
+        assert_eq!(
+            file_extensions.as_deref(),
+            Some(&["jl".to_string()][..]),
+            "file-extensions should parse normalized (undotted, lowercase)"
         );
     }
 }

@@ -21,16 +21,16 @@ use std::sync::{Arc, OnceLock};
 
 use quarto_core::project::render_scripts::RenderHost;
 use quarto_core::{
-    render_qmd_to_html, render_qmd_to_preview_ast, BinaryDependencies, DocumentInfo, Format,
-    HtmlRenderConfig, ProjectConfig, ProjectContext, QuartoError, RenderContext, RenderOptions,
-    ResourceResolverContext,
+    BinaryDependencies, DocumentInfo, Format, HtmlRenderConfig, ProjectConfig, ProjectContext,
+    QuartoError, RenderContext, RenderOptions, ResourceResolverContext, render_qmd_to_html,
+    render_qmd_to_preview_ast,
 };
 use quarto_error_reporting::{
-    diagnostic_to_json, with_source_file, DiagnosticMessage, JsonDiagnostic, JsonPass1Failure,
+    DiagnosticMessage, JsonDiagnostic, JsonPass1Failure, diagnostic_to_json, with_source_file,
 };
 use quarto_pandoc_types::ConfigValue;
 use quarto_sass::{
-    compile_theme_css, ThemeConfig, ThemeContext, BOOTSTRAP_RESOURCES, RESOURCE_PATH_PREFIX,
+    BOOTSTRAP_RESOURCES, RESOURCE_PATH_PREFIX, ThemeConfig, ThemeContext, compile_theme_css,
 };
 use quarto_source_map::SourceContext;
 use quarto_system_runtime::{SystemRuntime, WasmRuntime};
@@ -78,15 +78,14 @@ fn populate_vfs_with_embedded_resources(runtime: &WasmRuntime) {
     populate_builtin_extensions(runtime);
 
     // Vendored extension-subtree payloads (bd-13gnwplg's extension-subtree
-    // infrastructure) — empty beyond a README placeholder until a real
-    // subtree is vendored, but the VFS path must exist so
-    // `builtin_extension_subtree_roots` finds it.
+    // infrastructure): orange-book and julia-engine, one per-subtree
+    // `_extensions/` dir each — see `populate_extension_subtrees`.
     populate_extension_subtrees(runtime);
 }
 
 /// Populate the VFS with built-in extensions from the embedded directory.
 fn populate_builtin_extensions(runtime: &WasmRuntime) {
-    use include_dir::{include_dir, Dir};
+    use include_dir::{Dir, include_dir};
 
     static EXTENSIONS_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/../../resources/extensions");
 
@@ -94,19 +93,37 @@ fn populate_builtin_extensions(runtime: &WasmRuntime) {
     populate_dir_recursive(runtime, &EXTENSIONS_DIR, &prefix);
 }
 
-/// Populate the VFS with vendored extension-subtree payloads from the
-/// embedded directory. Mirrors [`populate_builtin_extensions`]; see
-/// `resources/extension-subtrees/README.md` for why the whole vendored
-/// repo isn't embedded here (only `_extensions/` per subtree would be,
-/// once a real subtree is registered).
+/// Populate the VFS with vendored extension-subtree payloads. Mirrors
+/// [`populate_builtin_extensions`], but embeds **per-subtree `_extensions/`
+/// dirs only** — never the whole vendored repo (its tests/CI config would
+/// bloat the WASM blob; see `resources/extension-subtrees/README.md`).
+///
+/// One static per entry in
+/// [`quarto_core::extension::EXTENSION_SUBTREE_NAMES`], which is also what
+/// `builtin_extension_subtree_roots` reads on this target — keep the two in
+/// sync when adding a subtree.
 fn populate_extension_subtrees(runtime: &WasmRuntime) {
     use include_dir::{Dir, include_dir};
 
-    static EXTENSION_SUBTREES_DIR: Dir =
-        include_dir!("$CARGO_MANIFEST_DIR/../../resources/extension-subtrees");
+    // orange-book (quarto_core::extension::EXTENSION_SUBTREE_NAMES[0])
+    static ORANGE_BOOK_SUBTREE_DIR: Dir = include_dir!(
+        "$CARGO_MANIFEST_DIR/../../resources/extension-subtrees/orange-book/_extensions"
+    );
+    let orange_book_prefix = format!(
+        "{}/extension-subtrees/orange-book/_extensions",
+        RESOURCE_PATH_PREFIX
+    );
+    populate_dir_recursive(runtime, &ORANGE_BOOK_SUBTREE_DIR, &orange_book_prefix);
 
-    let prefix = format!("{}/extension-subtrees", RESOURCE_PATH_PREFIX);
-    populate_dir_recursive(runtime, &EXTENSION_SUBTREES_DIR, &prefix);
+    // julia-engine (quarto_core::extension::EXTENSION_SUBTREE_NAMES[1])
+    static JULIA_ENGINE_SUBTREE_DIR: Dir = include_dir!(
+        "$CARGO_MANIFEST_DIR/../../resources/extension-subtrees/julia-engine/_extensions"
+    );
+    let julia_engine_prefix = format!(
+        "{}/extension-subtrees/julia-engine/_extensions",
+        RESOURCE_PATH_PREFIX
+    );
+    populate_dir_recursive(runtime, &JULIA_ENGINE_SUBTREE_DIR, &julia_engine_prefix);
 }
 
 /// Recursively add all files from an embedded directory to the VFS.
@@ -1699,7 +1716,7 @@ async fn render_project_active_page_to_response(
     captures: Vec<quarto_trace::EngineCapture>,
     attribution_json: Option<String>,
 ) -> String {
-    use quarto_core::project::orchestrator::{project_type_for, ProjectPipeline, RenderMode};
+    use quarto_core::project::orchestrator::{ProjectPipeline, RenderMode, project_type_for};
     use quarto_core::project::pass2_renderer::{
         Pass2Payload, RenderToHtmlRenderer, RenderToPreviewAstRenderer,
     };
@@ -1911,7 +1928,7 @@ async fn render_project_active_page_to_response(
     let source_name = active_path.to_string_lossy();
     let untransformed_ast_json = ast_json.as_ref().and_then(|_| {
         use pampa::wasm_entry_points::qmd_to_pandoc;
-        use pampa::writers::json::{write_with_config, JsonConfig};
+        use pampa::writers::json::{JsonConfig, write_with_config};
         let (ast, context) = qmd_to_pandoc(content).ok()?;
         let ast_ctx = pampa::pandoc::ASTContext {
             filenames: vec![source_name.to_string()],
@@ -2085,8 +2102,8 @@ pub fn get_builtin_template(name: &str) -> String {
 // with quarto-doctemplate (pure Rust — no JS bridge involved).
 
 use quarto_project_create::{
-    choices_for, choices_grouped_by_path, create_project_from_choice, CreateFromChoiceOptions,
-    ScaffoldedFile, Surface,
+    CreateFromChoiceOptions, ScaffoldedFile, Surface, choices_for, choices_grouped_by_path,
+    create_project_from_choice,
 };
 
 /// A project choice for JSON serialization.
@@ -2292,8 +2309,8 @@ pub fn create_project(choice_id: &str, title: &str) -> String {
 // native and WASM targets.
 
 use quarto_lsp_core::{
-    analyze_document, get_semantic_tokens, Document, DocumentAnalysisJson, SemanticToken,
-    QMD_TOKEN_LEGEND,
+    Document, DocumentAnalysisJson, QMD_TOKEN_LEGEND, SemanticToken, analyze_document,
+    get_semantic_tokens,
 };
 
 /// Response for LSP analyze_document().
@@ -2930,7 +2947,7 @@ struct AstResponse {
 #[wasm_bindgen]
 pub fn parse_qmd_content(content: &str) -> String {
     use pampa::wasm_entry_points::qmd_to_pandoc;
-    use pampa::writers::json::{write_with_config, JsonConfig};
+    use pampa::writers::json::{JsonConfig, write_with_config};
 
     match qmd_to_pandoc(content.as_bytes()) {
         Ok((pandoc, context)) => {

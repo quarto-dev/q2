@@ -1,11 +1,108 @@
 # Vendoring the julia engine as an extension subtree (epic Step 4)
 
-**Status:** In progress (2026-09-24).
+**Status:** RESUMED (2026-09-29) — Plan 7b landed on `main`, unblocking this
+plan (see below). Phase 1 done. Phase 2 done: payload registered (native +
+WASM), all fixture-collision tests fixed, `julia_engine_e2e.rs` no longer
+installs a separate extension (relies purely on the bundled subtree),
+`cargo clippy -p quarto-core --all-targets -- -D warnings` clean, targeted
+`cargo nextest -p quarto-core` green (11/11, including live julia+deno J1–J7).
+Phase 3 (Q9 diagnostic) and Phase 4 (fixture-future decision, wrap-up) not
+started.
 **Parent:** [2026-09-03-julia-engine-static-declarations-epic.md](2026-09-03-julia-engine-static-declarations-epic.md)
 — this plan scopes Step 4's julia-specific remainder. The infrastructure
 landed in [2026-09-23-extension-subtree-infrastructure.md](2026-09-23-extension-subtree-infrastructure.md)
 (PR #717); this work stacks on that branch (`julia-engine-subtree` on top of
 `feature/extension-subtree-infra` + the 2c-pivot plan commit).
+
+## Resumption (2026-09-29)
+
+Plan 7b (native content-processor registry, `processor:` on `claims-files`)
+landed on `main` (`79f70d0ef`, `de2e64b52`). Gordon: "we changed course and
+started using my fork of quarto-julia-engine. that unblocks everything on
+that side. also the percent script transformations / processor field have
+landed." Concretely:
+
+1. Added `claims-files: [{extension: .jl, processor: {name: percent,
+   language: julia}}]` to `gordonwoodhull/quarto-julia-engine`'s
+   `q2-static-declarations` branch (commit `0a2b98f`), matching the syntax
+   Plan 7b's own Phase 7 commit (`de2e64b52`) already used for the committed
+   `tests/fixtures/extensions/julia-engine` manifest. Pushed to the fork.
+2. Re-ran `cargo xtask pull-extension-subtree julia-engine` in this worktree
+   (stashed the uncommitted Phase 2 work first — `git subtree pull` needs a
+   clean tree — then reapplied it) to pick up the new commit. Vendored copy
+   now carries `claims-files` too.
+3. Q-16-10 no longer fires — confirmed by running the full `quarto-core`
+   suite: the only failures left were the anticipated ones below, not the
+   diagnostic.
+4. Fixed the two collision tests that actually existed (not five — see
+   below): `p1_4_name_collision_errors_and_names_both_contributors` (renamed
+   its synthetic collision engine from `julia` to `collide-synth`, since
+   `julia` now also collides with the real bundled engine) and
+   `c3_path_map_entry_reserved_skip_no_error_no_order_change` (now asserts
+   `contribution_order == ["julia"]` instead of empty, mirroring the
+   already-fixed `p0_no_extension_project_builds_builtins_only`).
+5. Fixed `julia_engine_e2e.rs`: all seven J1–J7 rows were failing with
+   `Engine name collision: both 'julia-engine' and 'julia-engine' register
+   engine 'julia'` — installing the old hand-maintained fixture into
+   `_extensions/julia-engine` now collides with the bundled copy.
+   `setup_julia_project`/`setup_julia_website_project` no longer install any
+   extension; the engine resolves purely from
+   `all_builtin_extension_roots`. Verified live (real deno + julia on PATH):
+   all 11 targeted tests pass, including J7 (failed-run leak check) — the
+   plain upstream v0.2.2 close-on-failure fix in the bundled fork is
+   sufficient for that scenario. `PC4a` (busy-worker forceclose recovery)
+   stays `#[ignore]`d/env-gated and untouched; it depends on q2's
+   hand-rolled `errorRunClose` hardening
+   (`worker-busy-recovery` branch on the fork, commits `41ba4dc`/`13efa45`,
+   based on the same `e04ef86` tip as `q2-static-declarations`, not yet
+   merged into it) which the bundled copy does not carry. Not addressed here
+   — out of this plan's immediate scope; flagged for Phase 4/epic Step 5 if
+   PC4a's scenario ever needs to be exercised against the bundled engine.
+6. The hand-maintained fixture at
+   `crates/quarto-core/tests/fixtures/extensions/julia-engine/` is now
+   unreferenced by any test (the file-existence grep came up empty except
+   for this file, and this file no longer uses it). Left in place, not
+   deleted — Phase 4 below still owns the "fixture vs. bundled" decision
+   explicitly, including whether to fold `worker-busy-recovery`'s hardening
+   into the fork so the bundled copy is the same, since dropping the fixture
+   now would preempt that call.
+
+## Why paused (2026-09-24, historical)
+
+Registering the real payload (Phase 2) surfaced 12 test failures in
+`quarto-core`. Two categories:
+
+1. **Fixture name collisions (5 tests)** — mechanical: test fixtures that
+   declare a test engine also named `julia` now collide with the real bundled
+   one. Trivial once unpaused.
+2. **Q-16-10 fires on every render, unconditionally (4 tests + a real
+   product-facing regression)** — the bundled manifest has no `claims-files`
+   (correctly — Julia's `.jl` claim is a content sniff, `isPercentScript`,
+   which q2 cannot statically declare without `processor:` support). So
+   `build_engine_registry` warns "engine extension `julia-engine` does not
+   declare static claims... not declared: claims-files" on **every single q2
+   render**, project or single-file, whether or not Julia is touched. Verified
+   this is real `project_diagnostics`, printed CLI output, not test plumbing.
+   Confirmed against Gordon's local fork checkout
+   (`~/src/quarto-julia-engine`, `q2-static-declarations` branch) — the
+   manifest is identical to what's vendored; there's no fix hiding there.
+   Declaring `claims-files: []` would be actively wrong (falsely tells q2
+   "claims no files," silently breaking `.jl` file detection).
+
+**Gordon's call (2026-09-24):** don't build a suppression mechanism for this —
+implement [Plan 7b](2026-07-08-plan7b-native-content-processors.md) (the
+native content-processor registry: `processor:` on `claims-files`, percent +
+spin conversion, zero-Pass-1-launch) properly first, on a fresh worktree with
+a dedicated agent. Once 7b's Phase 7 (TS-engine native path, julia `.jl`
+validation flip) lands, the fork's manifest gains a real, truthful
+`claims-files: [{extension: .jl, processor: {name: percent, language: julia}}]`
+entry and Q-16-10 clears at the source — no suppression code needed.
+
+**Resumed 2026-09-29 — see "Resumption" above for what actually happened**
+(the plan had anticipated "5 fixture-collision tests"; ground truth was 2 in
+`engine_registry_build.rs` + all 7 rows of `julia_engine_e2e.rs`, the latter
+via a different mechanism — a real name collision with the fixture install,
+not a Q-16-10-style diagnostic).
 
 **Sign-offs (Gordon, 2026-09-24):**
 - **Q8: whole repo.** Subtree all of `gordonwoodhull/quarto-julia-engine`
@@ -48,45 +145,73 @@ mirroring native.**
 
 ### Phase 1 — vendor the subtree
 
-- [ ] `crates/xtask/src/pull_extension_subtree.rs`: add the first real
+- [x] `crates/xtask/src/pull_extension_subtree.rs`: add the first real
       `SUBTREES` row — name `julia-engine`, prefix
       `resources/extension-subtrees/julia-engine`, remote
       `https://github.com/gordonwoodhull/quarto-julia-engine.git`, branch
       `q2-static-declarations`. Unit-test the row's shape (prefix ==
       `resources/extension-subtrees/<name>`; remote/branch non-empty) so a
       malformed future row fails in `cargo nextest -p xtask`, not mid-pull.
-- [ ] Run `cargo xtask pull-extension-subtree julia-engine` (real `git
+      *(Done as `subtrees()` — a fn, not a const: `SubtreeConfig` owns
+      `String`s, which can't be built non-empty in a const context. TDD: RED
+      against the empty table, GREEN with the row.)*
+- [x] Run `cargo xtask pull-extension-subtree julia-engine` (real `git
       subtree add --squash`; creates the squash + merge commits on this
       branch). Verify: prefix exists, `_extensions/julia-engine/_extension.yml`
       carries the static declarations, `git log --grep` finds the split.
-- [ ] Gate: clippy + `cargo nextest run -p xtask`.
+      *(Verified: v0.2.2 manifest with `name`/`claims`/`file-extensions`;
+      squash tree is only 196K on disk — F8's "14M" was the upstream repo
+      including its `.git` history, which `--squash` never imports;
+      `_extensions/` payload 68K as predicted; split trailer points at the
+      fork's `7d72bda`.)*
+      **Found and fixed en route (TDD regression test):** the Phase 1 port's
+      default root was `create_worktree::repo_root()`, which resolves the
+      *main* checkout via `--git-common-dir` — from a linked worktree the
+      command ran `git subtree add` against the main checkout's dirty tree
+      and died with "working tree has modifications". Now uses
+      `git rev-parse --show-toplevel` (the invoking worktree).
+- [x] Gate: clippy + `cargo nextest run -p xtask`. *(180 passed, +2: the
+      table-shape test and the worktree-root regression test.)*
 
 ### Phase 2 — register the payload (native + WASM fix)
 
-- [ ] **Tests first:**
-  - [ ] native discovery test with **no env override and no user install**:
+- [x] **Tests first:**
+  - [x] native discovery test with **no env override and no user install**:
         `all_builtin_extension_roots` includes the extracted julia payload and
         `discover_extensions` finds `julia-engine` — this is the first
         exercise of the real `EXTENSION_SUBTREE_PAYLOADS` /
         `ResourceBundle` extraction leg (flagged as untested in PR #717).
-  - [ ] static-claim test: the bundled `_extension.yml`'s `claims:` /
+        *(`builtin_extension_subtree_roots_extracts_bundled_julia_payload`.)*
+  - [x] static-claim test: the bundled `_extension.yml`'s `claims:` /
         `file-extensions:` reach the engine registry (pass-1 resolution,
-        no engine load).
-- [ ] `extension/mod.rs`: `JULIA_ENGINE_SUBTREE` `include_dir!` static scoped
+        no engine load). *(`bundled_julia_engine_discovered_with_static_declarations`.)*
+- [x] `extension/mod.rs`: `JULIA_ENGINE_SUBTREE` `include_dir!` static scoped
       to `resources/extension-subtrees/julia-engine/_extensions` +
       `ResourceBundle`, registered in `EXTENSION_SUBTREE_PAYLOADS`.
-- [ ] **WASM (F1):** replace the whole-dir embed in
+- [x] **WASM (F1):** replace the whole-dir embed in
       `populate_extension_subtrees` with a per-subtree embed of
       `julia-engine/_extensions` at
       `<prefix>/extension-subtrees/julia-engine/_extensions/…`, and make the
       WASM branch of `builtin_extension_subtree_roots` return the
       per-subtree `_extensions` VFS dirs (same shape contract as native).
-- [ ] Update `resources/extension-subtrees/README.md` (no longer a
+      Verified it actually builds for `wasm32-unknown-unknown` (Homebrew LLVM
+      clang + the documented `CFLAGS_wasm32_unknown_unknown`/wasm-sysroot
+      env, per `dev-docs/wasm.md`) — clean build, no new warnings from this
+      change. (`cargo clippy` on this crate hits two pre-existing
+      `too_many_arguments` errors in unrelated functions authored 2026-05-01,
+      not introduced here — not fixed, out of this plan's scope.)
+- [x] Update `resources/extension-subtrees/README.md` (no longer a
       placeholder-only dir) and the runbook
       (`claude-notes/instructions/extension-subtrees.md`) with the WASM
       per-subtree rule so the next subtree doesn't reintroduce F1.
-- [ ] Gate: clippy + `cargo nextest run -p quarto-core`; full
-      `cargo xtask verify` (WASM leg is in scope).
+- [x] Gate: clippy (`-p quarto-core --all-targets -- -D warnings`, clean) +
+      `cargo nextest run -p quarto-core` (targeted collision +
+      `julia_engine_e2e` rows: 11/11 green, live deno+julia). Full workspace
+      `cargo nextest run --workspace` run at this phase boundary per
+      `CLAUDE.md`'s testing rule (result recorded below); full
+      `cargo xtask verify` (hub-client build + WASM leg end-to-end via the
+      npm scripts) not run — out of scope for this pass, left for Phase 4's
+      wrap-up gate.
 
 ### Phase 3 — Q9 diagnostic (no Julia on the machine)
 

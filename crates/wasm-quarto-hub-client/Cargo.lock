@@ -251,6 +251,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "biblatex"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "591eba69b7c085632e22ca03606f0bbea68d53bbe26c8962e2d549af20c6a561"
+dependencies = [
+ "paste",
+ "roman-numerals-rs",
+ "strum",
+ "unicode-normalization",
+ "unscanny",
+]
+
+[[package]]
 name = "bincode"
 version = "1.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1687,7 +1700,7 @@ version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1cb69425736f184173b3ca6e27fcba440a61492a790c786b1c6af7e06a03e575"
 dependencies = [
- "biblatex",
+ "biblatex 0.11.0",
  "ciborium",
  "citationberg",
  "indexmap",
@@ -2910,6 +2923,7 @@ dependencies = [
  "ariadne",
  "async-trait",
  "base64 0.22.1",
+ "biblatex 0.12.0",
  "clap",
  "comrak",
  "comrak-to-pandoc",
