@@ -9,6 +9,7 @@ _quarto:
   tests:
     run:
       requires: jupyter
+      skip: "bd-gbaykhth: Jupyter/Python engine has no subfloat synthesis for tbl-subcap/fig-subcap; pre-engine wrapping is correctly skipped but no per-panel ids/captions are ever produced downstream"
     typst:
       ensureTypstFileRegexMatches:
         # Should have note() wrapping quarto_super for margin subtable placement
