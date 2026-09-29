@@ -1,18 +1,28 @@
 # Vendoring the julia engine as an extension subtree (epic Step 4)
 
-**Status:** RESUMED (2026-09-29) — Plan 7b landed on `main`, unblocking this
-plan (see below). Phase 1 done. Phase 2 done: payload registered (native +
-WASM), all fixture-collision tests fixed, `julia_engine_e2e.rs` no longer
-installs a separate extension (relies purely on the bundled subtree),
-`cargo clippy -p quarto-core --all-targets -- -D warnings` clean, targeted
-`cargo nextest -p quarto-core` green (11/11, including live julia+deno J1–J7).
-Phase 3 (Q9 diagnostic) and Phase 4 (fixture-future decision, wrap-up) not
-started.
+**Status:** DONE (2026-09-29), ready for PR. All four phases complete: payload
+registered (native + WASM, F1 fixed), the Q9 diagnostic added (`Q-18-3`), the
+hand-maintained fixture deleted, gates green (`cargo clippy -p quarto-core
+--all-targets -- -D warnings`, `cargo xtask lint`, targeted
+`cargo nextest -p quarto-core` including live julia+deno J1–J7 and the xtask
+subtree-table tests, full `cargo nextest run --workspace`).
 **Parent:** [2026-09-03-julia-engine-static-declarations-epic.md](2026-09-03-julia-engine-static-declarations-epic.md)
 — this plan scopes Step 4's julia-specific remainder. The infrastructure
-landed in [2026-09-23-extension-subtree-infrastructure.md](2026-09-23-extension-subtree-infrastructure.md)
-(PR #717); this work stacks on that branch (`julia-engine-subtree` on top of
-`feature/extension-subtree-infra` + the 2c-pivot plan commit).
+landed on `main` as PR #717 (`extension-subtree-infra`, merged 2026-09-24).
+This branch (`julia-engine-subtree`) was rebased onto current `main`
+(2026-09-29) — including a manual cherry-pick replay to drop and
+freshly re-run the `git subtree add` step, since replaying a `git subtree`
+squash/merge commit via `git rebase` corrupts it (the squash commit's diff
+gets applied outside its prefix-scoped merge context, producing spurious
+root-level conflicts). The `orange-book` subtree (landed on `main` after this
+branch diverged, via the same infrastructure) required reconciling two
+places that both added a table/registration row:
+`crates/xtask/src/pull_extension_subtree.rs`'s `subtrees()` table and
+`crates/quarto-core/src/extension/mod.rs`'s `EXTENSION_SUBTREE_PAYLOADS` /
+`EXTENSION_SUBTREE_NAMES` — both now list both subtrees, and
+`wasm-quarto-hub-client`'s `populate_extension_subtrees` (this plan's F1 fix)
+now embeds both per-subtree `_extensions/` dirs, since `main` had never
+gotten the WASM fix for `orange-book`.
 
 ## Resumption (2026-09-29)
 
@@ -215,27 +225,52 @@ mirroring native.**
 
 ### Phase 3 — Q9 diagnostic (no Julia on the machine)
 
-- [ ] Investigate where a missing Julia surfaces today (engine host startup /
+- [x] Investigate where a missing Julia surfaces today (engine host startup /
       QuartoNotebookRunner instantiation) and pick the earliest detection
-      point that has source context for a good diagnostic.
-- [ ] **Test first:** `{julia}` cell, no `julia` on PATH → the new Q-* code,
-      not a raw subprocess/engine-host error.
-- [ ] Add the error-catalog entry **and** its `docs/errors/<subsystem>/<code>.qmd`
+      point that has source context for a good diagnostic. *(The `julia`
+      subprocess is spawned deep inside the shared Deno host by the bundled
+      `julia-engine.js`, where a missing binary surfaced as a raw, unhandled
+      Deno spawn exception with no q2-side wrapping. Earliest point with
+      source context that doesn't require touching the vendored fork:
+      `TsEngine::ensure_loaded` in `crates/quarto-core/src/engine/ts_engine.rs`,
+      gated on `self.name == "julia"` — the one place that both knows "this is
+      the julia engine" and can return before any subprocess spawns.)*
+- [x] **Test first:** `{julia}` cell, no `julia` on PATH → the new Q-* code,
+      not a raw subprocess/engine-host error. *(`ensure_loaded_reports_runtime_not_found_when_julia_binary_missing`
+      and `ensure_loaded_skips_julia_check_for_other_engines` in
+      `ts_engine.rs`, plus `runtime_not_found_is_a_coded_error_naming_engine_and_runtime`
+      in `engine/diagnostics.rs`.)*
+- [x] Add the error-catalog entry **and** its `docs/errors/<subsystem>/<code>.qmd`
       page **and** the sidebar entry in the same commit (xtask lint rules
       `error-docs-page-missing` / `error-docs-sidebar-unlisted` enforce both).
-- [ ] Gate: clippy + per-crate nextest.
+      *(`Q-18-3` — reuses the existing `ExecutionError::RuntimeNotFound`
+      variant, previously uncoded, so knitr's and jupyter's own
+      runtime-not-found errors get the same coded diagnostic as a side
+      effect.)*
+- [x] Gate: clippy + per-crate nextest. *(`cargo clippy -p quarto-core
+      --all-targets -- -D warnings` clean; `cargo xtask lint` clean.)*
 
 ### Phase 4 — fixture future + wrap-up
 
-- [ ] Decide: the hand-maintained julia fixture (v0.2.1 + our hardened
-      worker-close) vs. the bundled copy (v0.2.2 + declarations). The e2e
-      tests deliberately copy the fixture into a temp project — replacing it
-      with the bundled copy retires the drift item (epic Step 5) but loses
-      the hardened close path. Document the decision in the epic.
-- [ ] Reconcile epic Step 4 checklist; update runbook if the fixture decision
-      changes anything.
-- [ ] Full `cargo xtask verify`; stacked PR with base
-      `feature/extension-subtree-infra`.
+- [x] Decide: the hand-maintained julia fixture (v0.2.1 + our hardened
+      worker-close) vs. the bundled copy (v0.2.2 + declarations). **Decided
+      (Gordon, 2026-09-29): delete the fixture, do not merge the fork's
+      `worker-busy-recovery` hardening.** `julia_engine_e2e.rs` already
+      resolves purely from the bundled subtree (Phase 2); the one remaining
+      user, `ts_engine.rs`'s `julia_fixture_jl_percent_converts_natively`,
+      now reads the bundled subtree's `_extension.yml` instead (identical
+      `claims-files` shape). J7 (failed-run leak check) passes live against
+      the bundled copy without the hardening, confirming plain upstream
+      v0.2.2's close-on-failure fix is sufficient.
+- [x] Reconcile epic Step 4 checklist; update runbook if the fixture decision
+      changes anything. *(Epic doc's Step 4 "decide the fixture's future" and
+      Step 5 "fixture drift management" items both marked resolved/moot.)*
+- [x] Full `cargo xtask verify`; PR against `main` (the infra branch merged as
+      PR #717 on 2026-09-24, so this stacks directly on `main`, not on
+      `feature/extension-subtree-infra`). *(Green: lint, fmt, workspace build,
+      full `cargo nextest run --workspace` — 15317/15317 passed, 201 skipped,
+      0 failed — ts-packages build, hub-client build including the WASM leg,
+      and hub-client tests all passed.)*
 
 ## Explicitly out of scope
 

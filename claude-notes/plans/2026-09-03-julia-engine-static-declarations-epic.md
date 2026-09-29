@@ -448,11 +448,18 @@ Work items (first pass, not scoped):
   `resources/extension-subtrees/julia-engine/_extensions` (68K) +
   registration in the subtree-roots helper, following the infra plan's
   runbook.
-- **Decide the fixture's future.** If the bundled copy carries the static
-  declarations, the hand-maintained fixture fork may be replaceable by (or
-  derivable from) the bundled copy — which would retire the drift item in
-  Step 5. Needs care: the julia e2e tests deliberately copy the fixture into a
-  temp project.
+- ~~**Decide the fixture's future.**~~ **Resolved (2026-09-29):** the
+  hand-maintained fixture (`crates/quarto-core/tests/fixtures/extensions/julia-engine/`)
+  is deleted. The bundled subtree copy carries the same static declarations
+  and `claims-files` entry; `julia_engine_e2e.rs`'s J1–J7 rows resolve the
+  engine purely from `all_builtin_extension_roots` (no separate install), and
+  `ts_engine.rs`'s `julia_fixture_jl_percent_converts_natively` now reads the
+  bundled subtree's `_extension.yml` directly. This retires the Step 5
+  fixture-drift item below — there is no longer a second copy to drift.
+  Deliberately **not** carried over: the fork's `worker-busy-recovery`
+  hardening (busy-worker forceclose recovery, PC4a) — not merged into
+  `q2-static-declarations`, so the bundled copy relies on plain upstream
+  v0.2.2's close-on-failure fix, which J7 confirms is sufficient live.
 - **Runtime prerequisites.** Bundling ships the engine, not Julia itself:
   QuartoNotebookRunner still instantiates on first use (network), and the
   engine host still needs Deno. Worth an explicit UX decision about what
@@ -464,14 +471,10 @@ Work items (first pass, not scoped):
 
 ### Step 5 — what else belongs (candidates, not yet decided)
 
-- **Fixture drift management.** The q2 fixture is a hand-maintained fork
-  (`claude-notes/plans/2026-04-16-julia-validation.md`). After this epic it
-  carries **two permanent deliberate deviations**: the `claims:` block (q2-only
-  schema) and the Bug C comments in
-  `start_quartonotebookrunner_detached.jl` (code byte-identical to upstream).
-  Nothing checks fixture-bundle ≡ fixture-TS (upstream CI does; q2 has no
-  equivalent), and nothing tracks fixture-vs-upstream drift. Candidate: a
-  documented refresh procedure, optionally an `xtask lint` rule.
+- ~~**Fixture drift management.**~~ **Moot (2026-09-29):** Step 4 deleted the
+  hand-maintained fixture rather than tracking its drift from upstream — the
+  bundled subtree (kept in sync via `cargo xtask pull-extension-subtree
+  julia-engine`) is now the only copy.
 - **Plan 7b (`processor:` on `claims-files`)** to make `.jl` percent-script
   input zero-load too (F4) — the other half of "pass-1 happy". *(2026-09-23:
   7a was tombstoned; 7b/7c own this now, and the Q1 schema side shipped in
