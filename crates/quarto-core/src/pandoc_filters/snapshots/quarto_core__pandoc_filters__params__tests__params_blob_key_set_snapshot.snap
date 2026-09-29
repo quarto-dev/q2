@@ -4,8 +4,12 @@ expression: keys
 ---
 [
     "active-filters",
+    "crossref-apx-prefix",
+    "crossref-apx-title",
     "crossref-cau-prefix",
     "crossref-cau-title",
+    "crossref-ch-prefix",
+    "crossref-ch-title",
     "crossref-cnj-prefix",
     "crossref-cnj-title",
     "crossref-cor-prefix",

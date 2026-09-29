@@ -41,6 +41,20 @@ pub(super) fn insert_crossref_title_prefix_family(
         blob.insert(format!("crossref-{ref_type}-title"), json!(title));
         blob.insert(format!("crossref-{ref_type}-prefix"), json!(prefix));
     }
+    // `ch`/`apx` are not registered ref-types (`sec` is) -- they're the
+    // synthetic prefix keys Q1's refs.lua swaps a chapter-level `sec`
+    // target's prefix to under `crossref.chapters` (`crossref/format.lua`'s
+    // `isChapterRef` branch, ported to `quarto2-shim.lua`'s
+    // `route_crossref_resolved_ref`). Emit them unconditionally, the same
+    // way the registry loop above does, so `param("crossref-ch-prefix")`
+    // resolves instead of falling through `refPrefix`'s own bare
+    // `type .. "."` literal fallback.
+    for (prefix_type, fallback) in [("ch", "Chapter"), ("apx", "Appendix")] {
+        let title = language.crossref_title(prefix_type).unwrap_or(fallback);
+        let prefix = language.crossref_prefix(prefix_type).unwrap_or(title);
+        blob.insert(format!("crossref-{prefix_type}-title"), json!(title));
+        blob.insert(format!("crossref-{prefix_type}-prefix"), json!(prefix));
+    }
 }
 
 #[cfg(test)]
@@ -50,9 +64,9 @@ mod tests {
 
     /// T5.1: for every registered ref-type, both `-title` and `-prefix` are
     /// present, and the emitted pair count is exactly `2 * registry.len()`
-    /// — the discriminator against "some crossref param is set" (a
-    /// `-title`-only test passes under the exact round-4 regression this
-    /// task fixes).
+    /// plus the two synthetic `ch`/`apx` pairs — the discriminator against
+    /// "some crossref param is set" (a `-title`-only test passes under the
+    /// exact round-4 regression this task fixes).
     ///
     /// Revert hunk: removing the `-prefix` emit line makes the pair-count
     /// assertion RED (it would read `registry.len()`, not `2 *
@@ -72,7 +86,12 @@ mod tests {
             pairs += 2;
         }
         assert_eq!(pairs, 2 * registry.len());
-        assert_eq!(blob.len(), 2 * registry.len());
+        // `ch`/`apx`: synthetic, not in the registry (see module doc).
+        assert_eq!(blob["crossref-ch-title"], "Chapter");
+        assert_eq!(blob["crossref-ch-prefix"], "Chapter");
+        assert_eq!(blob["crossref-apx-title"], "Appendix");
+        assert_eq!(blob["crossref-apx-prefix"], "Appendix");
+        assert_eq!(blob.len(), 2 * registry.len() + 4);
     }
 
     /// T5.2: when the language table has an explicit `-title` and no

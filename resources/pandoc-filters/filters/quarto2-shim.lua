@@ -506,14 +506,24 @@ local function route_crossref_resolved_ref(node, wire)
   -- `cite_prefix` branch takes priority over the category prefix,
   -- exactly mirroring refs.lua's own `elseif` chain -- Q1 REPLACES
   -- "Figure" with the cite's own bracket-prefix text entirely, it does
-  -- not combine the two. The `chapters`/"sec" prefix-type juggling
-  -- (`refs.lua:60-70`) remains out of scope for the epic's non-chapters
-  -- v1 target; `refNumberOption`'s own `type == "sec"` handling below
-  -- still applies regardless.
+  -- not combine the two.
   if wire.slots.cite_prefix ~= nil and #wire.slots.cite_prefix > 0 then
     add_ref_prefix(wire.slots.cite_prefix)
   elseif data.cite_mode ~= "suppress_author" then
-    local prefix = refPrefix(data.ref_type, data.label_upper)
+    -- `chapters`/"sec" prefix-type juggling (`refs.lua:60-70`), previously
+    -- out of scope for the epic's non-chapters v1 target: a book-projects
+    -- P0 chapter-level `sec` target under `crossref.chapters` swaps in the
+    -- ch/apx crossref-prefix term instead of the plain "sec" one. `data`
+    -- is always resolved here (the `data.resolved == false` branch above
+    -- already returned), so `data.order`/`data.in_appendix` are always
+    -- present for a `sec` entry -- `crossref_resolve.rs`'s
+    -- `build_resolved_ref` only omits them when unresolved.
+    local prefix_type = data.ref_type
+    if data.ref_type == "sec" and crossrefOption("chapters", false)
+      and isChapterRef(data.order.section) then
+      prefix_type = data.in_appendix and "apx" or "ch"
+    end
+    local prefix = refPrefix(prefix_type, data.label_upper)
     if #prefix > 0 then
       add_ref_prefix(prefix)
     end
