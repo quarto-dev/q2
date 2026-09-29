@@ -2,8 +2,8 @@
 
 **Date:** 2026-09-28
 **Braid:** bd-clq56rem (related: bd-1klbq2zd)
-**Worktree:** `.worktrees/bd-clq56rem-windows-jsonerrors-ipynb-hyperlink` (branch `braid/bd-clq56rem-windows-jsonerrors-ipynb-hyperlink`, based on `main` @ `e8379cfe`)
-**Status:** Piece 1 (test rework) implemented. Decided 2026-09-29: this branch ships Piece 1 only. The product fix (Piece 2) moves to bd-1klbq2zd, audit first. See § Decisions. The S1 sequencing below was decided 2026-09-28 and is superseded for Piece 2.
+**Worktree:** `.worktrees/bd-clq56rem-windows-jsonerrors-ipynb-hyperlink` (branch `bugfix/bd-clq56rem-windows-jsonerrors-ipynb-hyperlink`, local and remote; based on `main` @ `e8379cfe`)
+**Status:** Piece 1 (test rework) implemented and opened as a draft PR, the bottom layer of a stack. Decided 2026-09-29: this branch ships Piece 1 only. The product fix (Piece 2) moves to bd-1klbq2zd, audit first, as the upper layers of the same stack. See § Decisions and § Stacked PR workflow. The S1 sequencing below was decided 2026-09-28 and is superseded for Piece 2.
 
 ## Overview
 
@@ -169,6 +169,35 @@ Decided 2026-09-29:
 Decided 2026-09-29, after the seam prototype (supersedes "this branch fixes the seam only"):
 - **This branch ships Piece 1 only.** The `notebook_path` RED stays failing on Windows. It is tracked by bd-1klbq2zd, not skipped. The seam fix moves to bd-1klbq2zd on its own branch, with the direct-call audit done **before** the seam switch.
 
+Decided 2026-09-29, stacked PRs:
+- **Piece 2 stacks on this branch** instead of waiting for it to merge. The Windows RED then stays on `main` only between two back-to-back merges, and each layer gets a focused review.
+- **This PR stays a draft** until the fix layer is ready, so it does not merge alone.
+- **`gh stack` with local state**, which needs local branch names equal to remote names (see § Stacked PR workflow).
+
+## Stacked PR workflow
+
+Layers, bottom to top (local name = remote name):
+
+```
+(main) <- bugfix/bd-clq56rem-windows-jsonerrors-ipynb-hyperlink   Piece 1: this test rework (draft PR)
+       <- bugfix/bd-1klbq2zd-path-audit                           direct canonicalize call audit, the 17
+                                                                  verbatim test oracles, the overwrite guard
+                                                                  (render_to_file.rs:647), the 2 unclassified
+                                                                  failures; green before and after the seam
+       <- bugfix/bd-1klbq2zd-dunce-seam                           NativeRuntime::canonicalize -> dunce;
+                                                                  turns this branch's RED green
+```
+
+The two upper layers may fold into one if the audit turns out small. Their design lives in bd-1klbq2zd's own plan.
+
+Mechanics:
+- `gh stack` pushes `refs/heads/<name>:refs/heads/<name>` and ignores upstream config (github/gh-stack `internal/git/gitops.go:228-229`). A local `braid/<id>-<slug>` branch would therefore publish a second remote branch named `braid/...`. So these branches use the remote name locally, a deliberate exception to the bare-local-name convention in `.claude/rules/worktrees.md`.
+- `cargo xtask switch-task` emits `braid/...` names, so it is not used here. Its steps are done by hand: `gh stack add bugfix/bd-1klbq2zd-path-audit`, `braid update bd-1klbq2zd --status in_progress`, and the context block in `CLAUDE.local.md`.
+- Non-interactive forms only: `gh stack view --json`, `gh stack add <branch>`, `gh stack submit --auto` (drafts), `gh stack merge <pr> --yes`. Edit a lower layer on its own branch, then `gh stack rebase --upstack`.
+- `rerere.enabled` is on for this repo, so conflict resolutions made while rebasing upper layers are replayed automatically.
+- q2 merges with merge commits and deletes the head branch on merge, so GitHub retargets each upper PR to `main` as the layer below merges. Merge bottom-up with `gh stack merge <top-pr> --yes --merge`.
+- If GitHub stacked PRs are not enabled on the repo (`gh stack` exit 9), keep plain PRs whose base is the layer below; they merge the same way.
+
 ## Seam prototype results (2026-09-29, Windows)
 
 The prototype replaced the body of `NativeRuntime::canonicalize` with `dunce::canonicalize(path)`, adding `dunce = "1"` as a native-only dep of `quarto-system-runtime`.
@@ -193,6 +222,9 @@ The prototype replaced the body of `NativeRuntime::canonicalize` with `dunce::ca
 - [x] Confirm the new state: URL assertion passes, and the `notebook_path` assertion fails on Windows with `\\?\C:\…` (the product RED)
 - [x] Prototype the seam fix and measure the fallout (§ Seam prototype results). Piece 2 moved to bd-1klbq2zd.
 - [x] Sanity check that the URL assertions catch regressions: a verbatim-leak target, a fragment, the wrong file, and the pseudo-path each fail; a correct target passes. The `notebook_path` equality check gets its sanity pass once bd-1klbq2zd turns it green.
+- [x] Review follow-ups: 6 deferred minors, explicit `is_absolute()` assert, scratch path removed from branch history. `cargo build --workspace` green on Windows; `json_errors::` 14 pass, 1 intended fail.
+- [x] Push and open as a draft PR, bottom layer of the stack (§ Stacked PR workflow).
+- [ ] Mark ready for review once the fix layer's PR is up; merge bottom-up together with it.
 - [ ] Close bd-clq56rem once this branch merges. bd-1klbq2zd stays open and owns the RED.
 
 Handed off to bd-1klbq2zd (not tracked by this checklist): design and apply the seam fix, then GREEN. Its task breakdown (seam, UNC behavior, direct-call audit dispositions) belongs in bd-1klbq2zd's own plan. Its acceptance must include CLI checks, via the saved probe, that `notebook_path`, `source_file` **and** the `Rendering …` status line are plain on Windows. This json_errors test pins only `notebook_path` (§ Decisions), so the other outputs must not rely on it.
