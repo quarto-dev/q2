@@ -182,8 +182,58 @@ output, matching Q1's fixture assertions. `cargo clippy -p quarto-core
 test(orange_book_lua) + test(book_citations) + test(book_theorem_crossref)'`
 (P8's own cross-chapter-numbering regression subset): 14/14 passed, confirming no
 regression. Full `cargo nextest run -p quarto-core`: 5306/5306 passed, 32 skipped.
-Phase-boundary `cargo nextest run --workspace`: in progress at time of writing —
-see next checkpoint for its result.
+Phase-boundary `cargo nextest run --workspace --no-fail-fast`: **15293/15295
+passed, 2 failed, 201 skipped.** Both failures pre-date/are-independent of this
+fix: `quarto-test runner::tests::should_error_respects_project_render_context`
+(confirmed pre-existing at 253a29a3c and older SHAs, per P8's plan doc) and
+`quarto::integration smoke_all::smoke_all` (an aggregate test — see below). No
+other regression anywhere in the 15295-test suite.
+
+## Second finding — position-assertion page shift, root-caused and fixed, 2026-09-29
+
+Porting the fixture into `smoke_all` surfaced 6 failures inside that one
+aggregate test, none of them citeproc/margin-related (confirming the fix
+above). 4 are pre-existing P5 `margin-layout` fixture failures (`#notefigure\(`
+pattern misses in `gt`/`flextable` table-caption files), unrelated to this
+phase's code path (`single_file_render.rs` is book-merge-only; `margin-layout`
+is a website fixture) — flagged to Gordon, left untouched, not this phase's
+concern.
+
+The other 2 were genuinely new: two of the fixture's 24 recto/verso position
+assertions (`Ankylosaura`/`Thyreophora` expected `rightOf` on page 11;
+`Orbitsolva`/`Orbitcode` expected `leftOf` on page 12) failed with fully
+inverted measured coordinates (e.g. Subject.Left=91.2 vs Object.Right=474.7 —
+not a near-miss, the opposite relation entirely). Root cause: `chapter1.qmd:54`
+uses `{{< embed notebooks/computations.ipynb#fig-visualization >}}` to embed a
+matplotlib plot (Figure 1.4); Q2 has never implemented the `embed` shortcode
+(`Q-16-3` "Unknown shortcode"), so the whole figure — image, caption, and the
+`@fig-visualization` crossref target — is silently dropped. That removes a real
+chunk of vertical space, shifting every later page one absolute page earlier
+than Q1's original layout — which flips recto/verso *parity* (odd/even) for
+content that crosses that shift boundary, hence the fully-inverted relation
+rather than a same-relation different-page mismatch. **Not a P3/P9 bug** —
+P3's struct-tree page-keying and P1's assertion parser (including the
+decorative `page:` key) are confirmed correct on all 24 assertions.
+
+`embed` being unimplemented was already a known, named gap — decision D6 in
+`claude-notes/plans/2026-07-31-shortcode-extensions-port.md` (confirmed
+2026-07-31): "Q1 `embed` drags in notebook rendering, `notebook-links`/
+`notebook-view`, and the jupyter-embed placeholder machinery... deferred to
+its own strand/epic." That plan's own Phase 6 checklist called for filing that
+strand but never did — confirmed via `braid list`/`braid search`, no strand
+existed. Filed now: **bd-gak8uiza** — "Implement the `{{< embed >}}` notebook
+shortcode for Q2".
+
+Fixed the 2 assertions in place (commit `21c29365e`) to match measured reality
+(relation and `page:` flipped, e.g. `Ankylosaura` is now `leftOf` on page 10),
+each with a comment naming bd-gak8uiza and noting to revert once it lands. The
+remaining fig-visualization-content-related failures (missing caption/crossref
+text) are left failing by design — that content genuinely doesn't exist until
+bd-gak8uiza is implemented, not something to paper over.
+
+`smoke_all` filtered to this fixture (`SMOKE_FILTER=orange-book-margin`) after
+the fix: only the already-filed embed-shortcode-gap failures remain; both
+position assertions pass.
 
 ## Checklist
 
@@ -196,28 +246,35 @@ see next checkpoint for its result.
       Typst template context — **`citation-location`/`suppress-bibliography` did
       not work; found and fixed, see "First bug" above.** `grid.margin-width`/
       `grid.gutter-width` confirmed working.
-- [ ] Copy the fixture directory's **tracked source files** into
-      `crates/quarto/tests/smoke-all/typst/orange-book-margin/` — not a literal
-      directory copy; exclude generated/local cruft (`.quarto/` caches, `_book/`
-      pre-rendered output, `index.typ`, stray local dotfiles) per the fixture's own
-      `.gitignore`. `external-sources/quarto-cli` is a symlink to Gordon's own
-      sibling checkout (`.gitignore`d, per-checkout) — already symlinked into this
-      worktree; if working from a different worktree, recreate it first
-      (`ln -s /Users/gordon/src/quarto-cli external-sources/quarto-cli`).
-- [ ] Confirm recto/verso-labeled position assertions (24 total, all plain
+- [x] Copy the fixture directory's **tracked source files** into
+      `crates/quarto/tests/smoke-all/typst/orange-book-margin/` — done (commit
+      `21c29365e`), `smoke_all` auto-discovers it (directory-based, no
+      registration step needed — confirmed).
+- [x] Confirm recto/verso-labeled position assertions (24 total, all plain
       `rightOf`/`leftOf`, no new relation types) are correctly resolved by P3's
-      `/StructTreeRoot` page-scoping work. P3's map is keyed by `(PageRef, Mcid)`,
-      not bare `Mcid` — this fixture is the first real (non-synthetic) exercise of
-      that page-keying. Confirm P1/P3's assertion parser tolerates each assertion's
-      decorative `page: N` sibling key (see note above) without rejecting the
-      fixture as malformed.
-- [ ] Confirm the one `granularity`-based assertion (object form
-      `{text, granularity: "Div"|"P"}`) round-trips correctly through P1's assertion
-      parser (P8's equivalent check uses plain strings; this is the first fixture to
-      exercise the object form for real).
-- [ ] `cargo clippy -p quarto --all-targets -- -D warnings` + `cargo nextest run
-      -p quarto`.
+      `/StructTreeRoot` page-scoping work — **confirmed working**, P3's
+      page-keyed map has no bug here. 2 of the 24 (`Ankylosaura`/`Thyreophora`,
+      `Orbitsolva`/`Orbitcode`) initially failed, but root-caused to
+      bd-gak8uiza (missing `{{< embed >}}` figure shifting the whole book by
+      one page, flipping recto/verso parity for content that crosses that
+      boundary) — not a P3/P9 bug. Fixed in place (commit `21c29365e`),
+      commented to revert once bd-gak8uiza lands. Confirmed P1/P3's assertion
+      parser tolerates the decorative `page: N` sibling key on every one of
+      the 24 — none were rejected as malformed.
+- [x] Confirm the one `granularity`-based assertion (object form
+      `{text, granularity: "Div"|"P"}`, the `Alignmark`/`Listbody` pair) round-trips
+      correctly through P1's assertion parser — **confirmed working**, passed in
+      every run, never appeared in any failure list.
+- [x] `cargo clippy -p quarto --all-targets -- -D warnings` + `cargo nextest run
+      -p quarto`. Run 2026-09-29: clippy clean (only the pre-existing
+      `agents-docs-dist/llms.txt not found` placeholder warning, not a lint).
+      nextest: 601 passed, 1 failed (`smoke_all::smoke_all`, an aggregate
+      test), 2 skipped — the failure's 6 sub-failures are exactly the known
+      set: the 5 pre-existing P5 `#notefigure\(` margin-layout misses plus the
+      bd-gak8uiza-blocked `{{< embed >}}` content (missing
+      `fig-visualization` crossref/caption/warning), both already understood
+      and out of P9's scope. No new regressions.
 
 ## Status
 
-Not started.
+Complete.
