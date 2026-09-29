@@ -114,16 +114,88 @@ This lowers this phase from "does this work at all" to "port + one real empirica
 spike" (same shape as P8), covering both the `citation-location`/`margin-geometry`
 propagation question above and a confirming render — see checklist below.
 
+## First bug — found and fixed, 2026-09-29
+
+The spike (item (a)) confirmed `reference-location: margin` and
+`grid.margin-width`/`grid.gutter-width` propagate correctly (footnotes render via
+`#note(...)`, `marginalia.setup(...)` gets the right values). Item (b),
+`citation-location: margin`, did not: it rendered as if unset — citations appeared
+as plain resolved text (`(Newton 1687)`), no margin note, and
+`suppress-bibliography: true` had no effect since there was no `#bibliography(...)`
+call at all to suppress.
+
+**Root cause:** `single_file_render.rs` unconditionally called
+`pampa::citeproc_filter::apply_citeproc_filter` directly on the merged AST, right
+after the merged document's Crossref phase and before any Lua filter ran —
+including `quarto-post/typst.lua`, where `citation-location: margin`'s `Cite`
+handler lives (line 181). By the time that handler could run, every `Inline::Cite`
+node had already been resolved to plain text — confirmed empirically via a
+temporary debug print in `marginCitations()` that never fired. This was a genuine
+conflict between two independently-correct, already-shipped features: P8's
+merge-once citeproc call (needed for correct cross-chapter numbering) and
+`typst.lua`'s existing margin-citation mechanism (which single-document renders
+already use correctly, by leaving `Cite` nodes unresolved for the Lua handler and
+pandoc's native Typst writer).
+
+**Fix (Gordon-approved, 2026-09-29, in two rounds):** in
+`render_book_single_file`, skip `apply_citeproc_filter` (and its
+`meta.remove("bibliography"/"csl")` cleanup) whenever the merged doc's
+`citation-location` meta key is `"margin"`, and feed the crossref-phase document
+straight into the Navigation-onward finishing stages instead. This needs **no Lua
+or template changes** — `typst.lua`'s Pass 0 + `Cite` handler already handle
+whatever document they're given correctly, and `finishing_stages` already runs
+exactly once on the whole merged AST (not per chapter), so there's no risk of
+reintroducing P8's cross-chapter numbering bug: that bug was about *each chapter*
+resolving citeproc locally before the merge (fixed by
+`strip_citeproc_from_filters`, untouched by this change), not about which engine
+resolves the merged whole.
+
+This surfaced a **second bug**: once `Cite` nodes were left unresolved, Typst's
+native writer correctly emitted `#bibliography(("references.bib"))`, but
+`references.bib` was never copied to (or reachable from) the book's `_book/`
+output directory — previously irrelevant, since `apply_citeproc_filter` read the
+file directly from disk via `citeproc_base_dir` and never needed it present
+relative to the compiled `.typ`. Fix: `rebase_typst_bibliography_paths` (new
+helper in `single_file_render.rs`) rewrites `bibliography`/`csl` entries from
+`citeproc_base_dir`-relative to `project.dir`-root-relative with a leading `/`,
+mirroring the existing `modules/mediabag.lua` `typst_root_relative` convention for
+image paths (Typst resolves a leading `/` against `typst compile --root
+<project.dir>`, not the real filesystem root). URLs and non-existent-as-file
+entries (e.g. a built-in CSL style name) are left untouched. No file copy needed —
+Typst reads the original file directly, sandboxed correctly under `--root`.
+
+This changed the literal rendered bibliography call from `#bibliography(("references.bib"))`
+to `#bibliography(("/references.bib"))`, which broke the character-for-character
+ported assertion at `index.qmd:85`. Fixed (Gordon-approved) by loosening the
+assertion regex to `'#bibliography\(\("/?references\.bib"\)\)'`, documenting that
+the leading `/` reflects Q2's `_book/` output directory being distinct from the
+source directory (unlike Q1) — same category as other already-accepted Q1→Q2
+fixture adaptations in this epic.
+
+Verified: rerendering `orange-book-margin` (Typst) now produces all six expected
+`#cite(<id>, form: "full")` margin-note citations
+(`knuth84`/`newton1687`/`einstein1905`/`turing1950`/`dijkstra1968`/`shannon1948`)
+and `#show bibliography: none` / `#bibliography(("/references.bib"))` in the
+output, matching Q1's fixture assertions. `cargo clippy -p quarto-core
+--all-targets -- -D warnings`: clean. `cargo nextest run -p quarto-core -E
+'test(book_numbering_torture) + test(book_multifile_bibliography) +
+test(orange_book_lua) + test(book_citations) + test(book_theorem_crossref)'`
+(P8's own cross-chapter-numbering regression subset): 14/14 passed, confirming no
+regression. Full `cargo nextest run -p quarto-core`: 5306/5306 passed, 32 skipped.
+Phase-boundary `cargo nextest run --workspace`: in progress at time of writing —
+see next checkpoint for its result.
+
 ## Checklist
 
-- [ ] Spike: render `orange-book-margin` with today's (post-P8) harness. Two things
+- [x] Spike: render `orange-book-margin` with today's (post-P8) harness. Two things
       to specifically check, not just "does it render": (a) does `reference-location`
       margin placement work as the code-reading above predicts (should — treat a
-      failure here as a real finding); (b) does `citation-location: margin`/
-      `suppress-bibliography: true`/`grid.margin-width`/`grid.gutter-width` actually
-      reach the merged document's Typst template context (**not yet confirmed by
-      code-reading alone** — this is the part of the spike that's a genuine unknown,
-      not a formality).
+      failure here as a real finding) — **confirmed working**; (b) does
+      `citation-location: margin`/`suppress-bibliography: true`/
+      `grid.margin-width`/`grid.gutter-width` actually reach the merged document's
+      Typst template context — **`citation-location`/`suppress-bibliography` did
+      not work; found and fixed, see "First bug" above.** `grid.margin-width`/
+      `grid.gutter-width` confirmed working.
 - [ ] Copy the fixture directory's **tracked source files** into
       `crates/quarto/tests/smoke-all/typst/orange-book-margin/` — not a literal
       directory copy; exclude generated/local cruft (`.quarto/` caches, `_book/`
