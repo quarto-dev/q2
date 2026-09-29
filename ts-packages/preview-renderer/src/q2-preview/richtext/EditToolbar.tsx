@@ -15,11 +15,19 @@
 // editor (which would collapse the selection before the command runs). The link
 // input DOES take focus; the editor's commit is scoped to "focus left the whole
 // edit box" (see RichTextEditor), so focusing the input keeps the session open.
+//
+// Comment-on-selection (💬, rich surface only — span comments prototype, see
+// custom/CommentSpan.tsx): wraps the selected text in a plain span (`[selected
+// text]`, as a verbatim `chip` — the same opaque pill every authored Span
+// already becomes in the rich editor), commits the block, and opens the span's
+// add-comment bubble in the rendered view.
 
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import type { Editor } from '@tiptap/core';
 import { shouldPlaceChromeBelow } from '../editChromeGeometry';
 import { ensureRichTextStyles } from './styles';
+import { docToMarkdown } from './serializer';
+import { requestOpenCommentOnSpan } from '../commentPending';
 import { ModeToggle } from './ModeToggle';
 import { EditTypeIndicator } from './EditTypeIndicator';
 
@@ -43,7 +51,10 @@ const MARKS: MarkSpec[] = [
 export function EditToolbar({
   editor,
   richSupported,
+  onCommit,
 }: {
+  /** Commit the edit session now (rich surface); used by comment-on-selection. */
+  onCommit?: () => void;
   /** The live tiptap editor when the rich surface is mounted; null/undefined on
    *  the plain surface (no marks then). */
   editor?: Editor | null;
@@ -145,6 +156,48 @@ export function EditToolbar({
     editor?.chain().focus().run();
   };
 
+  // ---- comment on selection ------------------------------------------------
+  // Wrap the selection (within one text block) in a plain span chip, commit the
+  // block, and ask the span comment chrome to open its add-comment bubble on
+  // the span once it renders (see `commentPending.ts`). The comment itself is
+  // typed in the bubble — the same UI as the `+` on a block — with the span
+  // highlighted, so what is being commented on stays visible.
+  const startComment = (e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!editor) return;
+    const { from, to, $from, $to } = editor.state.selection;
+    if (from === to || !$from.sameParent($to)) return;
+    const { schema } = editor.state;
+    // Serialize just the selected inline content, as a paragraph so heading
+    // markers etc. don't leak into the span.
+    const cut = $from.parent.cut($from.parentOffset, $to.parentOffset);
+    const tmp = schema.nodes.doc.create(null, [schema.nodes.paragraph.create(null, cut.content)]);
+    const md = docToMarkdown(tmp).trim();
+    if (!md) return;
+    editor
+      .chain()
+      .insertContentAt({ from, to }, { type: 'chip', attrs: { src: `[${md}]`, kind: 'span' } })
+      .run();
+    requestOpenCommentOnSpan(cut.textContent);
+    onCommit?.();
+  };
+
+  const commentButton = (
+    <button
+      type="button"
+      title="Comment on selection"
+      className="q2-rt-tb-btn q2-rt-tb-comment"
+      // mousedown only keeps the editor's focus + selection (as every toolbar
+      // button does); the action itself runs on mouse-up, so the wrap + commit
+      // happen once the press completes rather than mid-press.
+      onMouseDown={(e) => e.preventDefault()}
+      onMouseUp={startComment}
+    >
+      💬
+    </button>
+  );
+
   return (
     <div
       ref={toolbarRef}
@@ -178,6 +231,7 @@ export function EditToolbar({
           >
             🔗
           </button>
+          {commentButton}
         </>
       ) : (
         <div className="q2-rt-link-editor">
