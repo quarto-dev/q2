@@ -11,6 +11,12 @@
 //! `currentFileMetadataState()` already covers (and which the merge step
 //! still emits, unchanged, per the plan's "additive, not a replacement"
 //! decision).
+//!
+//! P10 (typst-smoke-all epic): this file's mechanisms are docx/epub3-
+//! specific Pandoc-attribute rules, orthogonal to the Typst-only smoke-all
+//! fixtures that epic ported (`crates/quarto/tests/smoke-all/typst/`). No
+//! overlapping coverage exists or is expected; this file remains the only
+//! test of these rules.
 
 use quarto_core::pandoc_filters::harness::{assert_pandoc_available, run_main_lua_capturing_ast};
 

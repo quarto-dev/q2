@@ -22,6 +22,13 @@
  * references resolving to the *original* chapter's number.
  *
  * See claude-notes/plans/2026-09-21-book-projects-P3-typst-epub.md.
+ *
+ * P10 (typst-smoke-all epic) cross-referenced this file's assertions against
+ * `crates/quarto/tests/smoke-all/typst/orange-book/index.qmd` and
+ * `orange-book-margin/index.qmd`, which now exercise the same chapter-scoped
+ * numbering/reset/appendix-lettering mechanisms end-to-end against the real,
+ * unpatched extension. This file stays — it's a fast, targeted mechanism
+ * probe, not a substitute for the slower end-to-end fixtures, and vice versa.
  */
 
 use std::path::{Path, PathBuf};

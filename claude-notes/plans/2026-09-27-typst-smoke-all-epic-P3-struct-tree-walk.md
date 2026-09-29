@@ -129,7 +129,7 @@ action needed; pure Rust throughout, no platform-specific APIs, so
 
 ## Checklist
 
-- [ ] Re-run the struct-tree spike (already done once during plan review — see
+- [x] Re-run the struct-tree spike (already done once during plan review — see
       `claude-notes/research/2026-09-27-typst-tagged-pdf-struct-tree.md`) against the
       real, ported `orange-book-margin` fixture once P9 lands it, and re-check the
       Typst-version caveat — the exact `/Pg`-inheritance/MCID-restart shape may differ
@@ -137,6 +137,17 @@ action needed; pure Rust throughout, no platform-specific APIs, so
       CI pins 0.15.1, and runtime accepts versions from floor `(0, 8)`; the P9 fixture
       has not landed in this worktree, so cross-version and project-fixture confirmation
       remain pending.
+      **Closed out in P10 (2026-09-29):** downloaded the real CI-pinned Typst 0.15.1
+      binary (`typst-aarch64-apple-darwin` release asset) and re-ran smoke-all against
+      it via `QUARTO_TYPST=<path-to-0.15.1-binary>` (no code change, just pointing the
+      pipeline's `find_binary` env override at the other binary). `margin-layout`'s
+      full 86-fixture set (76 `ensurePdfTextPositions` assertions, the richest
+      struct-tree exercise in the epic) — 81 passed, 5 pre-existing skips, 0 failed,
+      identical to the 0.14.2 baseline. `orange-book`/`orange-book-margin` — same
+      single pre-existing failure (the bd-gak8uiza `{{< embed >}}`/`fig-visualization`
+      gap) reproduces identically under both Typst versions; confirmed by running the
+      same fixtures against the default 0.14.2 binary and diffing the failure output.
+      No struct-tree-shape regression found between 0.14.2 and CI's pinned 0.15.1.
 - [x] Implement `/StructTreeRoot` walk: build a map keyed by **`(PageRef, Mcid)`**,
       not `Mcid` alone — MCIDs restart at 0 on every page, so a bare-`Mcid` key
       collides entries from different pages. Walk every `StructElem`, resolving

@@ -23,6 +23,12 @@
 //! variable: part`). Fixture shape probed empirically in
 //! /tmp/part-app-probe before assertions were written, per this plan's
 //! empirical-first pattern.
+//!
+//! P10 (typst-smoke-all epic): `crates/quarto/tests/smoke-all/typst/orange-book/index.qmd`
+//! now asserts the same `#part[...]` emission and appendix-letter theorem
+//! numbering end-to-end against the real, unpatched extension. This file
+//! stays as the fast, targeted regression guard for the specific historical
+//! bugs noted above.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

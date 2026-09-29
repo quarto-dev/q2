@@ -164,6 +164,12 @@ _quarto:
           # Appendix section ref must appear inline (not fly to margin)
           # This fails when orange-book appendices() numbering returns place()
           - "Section\\s+A\\.5\\s+phantasmagorically-validates"
+          # Appendix chapter headings render with their letter prefix baked
+          # in by orange-book's `appendices()` show rule (the .typ source
+          # heading text itself is letter-free — confirmed by compiling
+          # Test-Typst-Book.typ and extracting text with pdftotext, P10).
+          - "A\\.\\s+Additional\\s+Resources"
+          - "B\\.\\s+Supplementary\\s+Data"
           # Note: Orange-book appendix sections may use different numbering
           - "tests\\s+sub-figure\\s+numbering"
           - "tests\\s+callout\\s+numbering"
