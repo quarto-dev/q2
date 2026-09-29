@@ -734,8 +734,31 @@ impl PipelineStage for PandocWriteStage {
         // document-relative `Path` value is rebased against, since this
         // `Command` inherits the process cwd rather than setting its own.
         let doc_dir = doc.path.parent().unwrap_or_else(|| Path::new("."));
-        let forwarded_args =
+        let mut forwarded_args =
             build_forwarded_args(self.name(), doc_dir, &doc.ast.meta, ctx.format.identifier)?;
+
+        // `build_forwarded_args` deliberately skips a bare `--toc-depth` CLI
+        // flag for Typst (pandoc's CLI hard-validates it to 1-6, which
+        // Typst's own uncapped `#outline(depth: ...)` doesn't need) — but
+        // the vendored `typst.lua` filter reads the real value back out of
+        // `PANDOC_WRITER_OPTIONS.toc_depth`, which only reflects the
+        // document's metadata when threaded through a `--defaults` file
+        // (see `build_typst_toc_defaults_yaml`'s doc comment). Write that
+        // file here, alongside this stage's other temp-dir artifacts.
+        if ctx.format.identifier == FormatIdentifier::Typst
+            && let Some(yaml) =
+                crate::pandoc_filters::format_defaults::build_typst_toc_defaults_yaml(&doc.ast.meta)
+        {
+            let defaults_path = temp_dir.join("pandoc-typst-toc-defaults.yaml");
+            std::fs::write(&defaults_path, yaml).map_err(|e| {
+                PipelineError::stage_error(
+                    self.name(),
+                    format!("failed to write typst toc-depth defaults file: {e}"),
+                )
+            })?;
+            forwarded_args.push(OsString::from("--defaults"));
+            forwarded_args.push(defaults_path.into_os_string());
+        }
 
         // Body-content `Image`/`Link` targets (e.g. `img/thinker.jpg`)
         // reach pandoc as literal, unrebased strings from the AST — unlike
