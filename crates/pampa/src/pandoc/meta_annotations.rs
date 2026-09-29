@@ -99,6 +99,16 @@ const ANNOTATIONS: &[(&[&str], Interpretation)] = &[
     // `brand: _brand.yml` path string and every inline-block leaf —
     // including custom fields under `meta`, which the spec allows.
     (&["brand", "**"], Interpretation::PlainString),
+    // `_quarto.tests.*` holds the smoke-test harness's own assertion
+    // strings (regex patterns like `"<fig-cars>"`), embedded directly
+    // in a fixture's front matter. They are machine-facing, identical
+    // in kind to `_quarto.yml`'s ProjectConfig content, and were never
+    // meant to be parsed as document prose
+    // (bd-quarto-tests-metadata-markdown-3wsdzq4c). Without this
+    // annotation, DocumentMetadata's markdown-by-default misreads
+    // bracket-label patterns as HTML tags (Q-2-9) and fails to parse
+    // some regex strings outright (Q-1-20).
+    (&["_quarto", "tests", "**"], Interpretation::PlainString),
 ];
 
 /// Interpretation annotated for the value at `path`, if any.
@@ -223,6 +233,39 @@ mod tests {
         // `listing.contents` still refuses descendants.
         assert_eq!(
             annotated_interpretation(&path(&["listing", "contents", "title"])),
+            None
+        );
+    }
+
+    // ── `_quarto.tests` subtree (bd-quarto-tests-metadata-markdown-3wsdzq4c) ──
+
+    #[test]
+    fn quarto_tests_subtree_matches_assertion_leaves() {
+        // Every format/assertion-type leaf under `_quarto.tests` must be
+        // plain, regardless of depth or which assertion key holds it.
+        for p in [
+            &["_quarto", "tests", "typst", "ensureTypstFileRegexMatches"][..],
+            &["_quarto", "tests", "typst", "ensurePdfRegexMatches"][..],
+            &["_quarto", "tests", "html", "ensureFileRegexMatches"][..],
+        ] {
+            assert_eq!(
+                annotated_interpretation(&path(p)),
+                Some(Interpretation::PlainString),
+                "path {p:?} must be plain YAML, never markdown"
+            );
+        }
+    }
+
+    #[test]
+    fn quarto_tests_subtree_no_false_positives() {
+        // A sibling `_quarto` key is not swept in...
+        assert_eq!(
+            annotated_interpretation(&path(&["_quarto", "render-project"])),
+            None
+        );
+        // ...nor is an unrelated user key that merely echoes the shape.
+        assert_eq!(
+            annotated_interpretation(&path(&["my", "_quarto", "tests"])),
             None
         );
     }
