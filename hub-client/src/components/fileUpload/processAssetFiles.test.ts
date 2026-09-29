@@ -24,10 +24,10 @@ describe('processAssetFiles', () => {
     expect(result[1].file.name).toBe('b.wasm');
   });
 
-  it('marks empty files as errors', () => {
-    const files = [makeFile('empty.png', 0)];
+  it('allows empty files (a blank new .qmd is a normal drop)', () => {
+    const files = [makeFile('empty.qmd', 0)];
     const result = processAssetFiles(files);
-    expect(result[0].error).toMatch(/empty/i);
+    expect(result[0].error).toBeUndefined();
   });
 
   it('marks oversized files as errors', () => {
@@ -51,7 +51,7 @@ describe('processAssetFiles', () => {
     ];
     const result = processAssetFiles(files);
     expect(result[0].error).toBeUndefined();
-    expect(result[1].error).toMatch(/empty/i);
+    expect(result[1].error).toBeUndefined();
     expect(result[2].error).toMatch(/size|max/i);
   });
 });

@@ -14,7 +14,8 @@
  *   dialog opened.
  */
 
-import { useEffect, useId, useRef } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { HTMLAttributes, KeyboardEvent, ReactNode } from 'react';
 import { common } from '../strings';
 
@@ -64,6 +65,17 @@ export default function ModalDialog({
   // as the restore target (and it's detached by unmount, so focus would
   // be lost to <body>).
   const restoreFocusTo = useRef<Element | null>(null);
+
+  // Resolved on first commit from a hidden marker rendered in place (the
+  // dialog itself only exists once the target is known).
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+  const anchorRef = useCallback((el: HTMLSpanElement | null) => {
+    if (!el) return;
+    setPortalTarget(
+      (el.closest('.editor-container, .projects-home, .dev-gallery-page') as HTMLElement | null) ??
+        document.body
+    );
+  }, []);
   if (restoreFocusTo.current === null && typeof document !== 'undefined') {
     restoreFocusTo.current = document.activeElement;
   }
@@ -111,7 +123,15 @@ export default function ModalDialog({
     onKeyDown?.(e);
   };
 
-  return (
+  // Portal out of the opener's subtree: dialogs are opened from inside
+  // sticky headers and other stacking contexts (z-index'd sidebar chrome),
+  // where a fixed backdrop would be trapped beneath sibling layers. The
+  // target is the nearest themed surface (.editor-container / .projects-home
+  // / .dev-gallery-page — the scopes that carry the dark-mode token ramp),
+  // falling back to <body>; portaling straight to <body> would drop the
+  // dialog out of that ramp in dark mode.
+  if (!portalTarget) return <span ref={anchorRef} hidden />;
+  return createPortal(
     <div className="qh-dialog-backdrop" onClick={onClose}>
       <div
         {...dialogProps}
@@ -132,5 +152,7 @@ export default function ModalDialog({
         {children}
       </div>
     </div>
+    ,
+    portalTarget
   );
 }

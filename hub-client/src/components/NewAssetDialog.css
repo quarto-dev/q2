@@ -16,15 +16,24 @@
   padding: 0;
 }
 
+/* Folder row: label and picker on one line, matching NewFileDialog. */
 .new-asset-dialog .destination-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin-bottom: 16px;
 }
 
 .new-asset-dialog .destination-input label {
-  display: block;
-  margin-bottom: 8px;
+  flex-shrink: 0;
+  min-width: 72px;
   color: var(--editor-text-dim);
   font-size: 14px;
+}
+
+.new-asset-dialog .destination-input > .folder-picker {
+  flex: 1;
+  min-width: 0;
 }
 
 /* SVG file icons (replaced the emoji glyphs). */

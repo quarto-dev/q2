@@ -6,7 +6,7 @@ import '../monacoSetup';
 import MonacoEditor, { DiffEditor } from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
 import type { ProjectEntry, FileEntry } from '@quarto/preview-renderer/types/project';
-import { isBinaryExtension, isImageExtension, isSourceFile, isTextExtension } from '@quarto/preview-renderer/types/project';
+import { isBinaryExtension, isImageExtension, isSourceFile, isTextExtension, normalizeProjectPath } from '@quarto/preview-renderer/types/project';
 import type { Route } from '../utils/routing';
 import { buildFullUrl, buildShareableUrl } from '../utils/routing';
 import {
@@ -14,6 +14,8 @@ import {
   createBinaryFile,
   deleteFile,
   renameFile,
+  createFolder,
+  deleteFolder,
   exportProjectAsZip,
   type EditorContentChange,
 } from '@quarto/preview-runtime';
@@ -49,6 +51,14 @@ import { diagnosticsToMarkers } from '../utils/diagnosticToMonaco';
 import EphemeralSessionBanner from './EphemeralSessionBanner';
 import FileSidebar from './FileSidebar';
 import NewFileDialog from './NewFileDialog';
+import NewFolderDialog from './NewFolderDialog';
+import PlaceFileDialog, { type PlaceRequest } from './PlaceFileDialog';
+import SearchFilesDialog from './SearchFilesDialog';
+import type { MatchRange } from '../services/search';
+import { linkFromPaste } from '../utils/pasteLink';
+import { toggleWrap } from '../utils/markdownToggle';
+import { joinPath } from '../utils/uniquePath';
+import { collectDroppedEntries, type DroppedEntries } from '../utils/droppedEntries';
 import NewAssetDialog from './NewAssetDialog';
 import ShareDialog from './ShareDialog';
 import ProjectTopBar from './ProjectTopBar';
@@ -69,10 +79,16 @@ import ImageViewer from './ImageViewer';
 import ReplayDrawer from './ReplayDrawer';
 import './Editor.css';
 import PreviewRouter from './render/PreviewRouter';
+import { fileSidebar, dialogs } from '../strings';
+import { getAncestorPaths } from '../utils/fileTree';
+import { sanitizeFilename } from '../services/resourceService';
+import { processAssetFiles } from './fileUpload/processAssetFiles';
 
 interface Props {
   project: ProjectEntry;
   files: FileEntry[];
+  /** Explicitly created folders (may be empty of files). */
+  folders?: string[];
   fileContents: Map<string, string>;
   /**
    * Path -> change counter for binary (image) documents. Bumped by App when
@@ -188,6 +204,11 @@ const editorOptions = {
 // index.md / first .md (bd-6d2wj4zp Phase 5 — .md is a source file, but
 // only a fallback: a synced .md may be a never-rendered README while a
 // .qmd is always deliberate content), then first file.
+/** Sanitize each segment of a dropped relative path, keeping its folders. */
+function sanitizeRelativePath(rel: string): string {
+  return rel.split('/').filter(Boolean).map(sanitizeFilename).join('/');
+}
+
 function selectDefaultFile(files: FileEntry[]): FileEntry | null {
   if (files.length === 0) return null;
 
@@ -209,7 +230,7 @@ function selectDefaultFile(files: FileEntry[]): FileEntry | null {
   return files[0];
 }
 
-export default function Editor({ project, files, fileContents, binaryFileVersions, onDisconnect, onContentOperations, route, onNavigateToFile, identities, captures, executorsOnline, onRequestExecution, isOnline, sessionEphemeral, banner, userName }: Props) {
+export default function Editor({ project, files, folders, fileContents, binaryFileVersions, onDisconnect, onContentOperations, route, onNavigateToFile, identities, captures, executorsOnline, onRequestExecution, isOnline, sessionEphemeral, banner, userName }: Props) {
   // View mode for pane sizing
   const { viewMode } = useViewMode();
 
@@ -425,6 +446,55 @@ export default function Editor({ project, files, fileContents, binaryFileVersion
 
   // New file dialog state (text-only after Phase C of generic-file-uploader plan)
   const [showNewFileDialog, setShowNewFileDialog] = useState(false);
+  // Parent folder for the new-folder dialog; null = dialog closed.
+  const [newFolderParent, setNewFolderParent] = useState<string | null>(null);
+  const [showSearchDialog, setShowSearchDialog] = useState(false);
+  // Match to select once the search-picked document is in the editor.
+  // Switching files remounts MonacoEditor, so the selection is applied
+  // from handleEditorMount, not synchronously.
+  const pendingMatchRef = useRef<{ path: string; match: MatchRange } | null>(null);
+
+  const selectMatchInEditor = useCallback((match: MatchRange) => {
+    // Deferred a frame: Monaco resets scroll/layout when it takes a new
+    // document value, and a reveal issued in the same frame is undone by
+    // that reset. The second frame guarantees layout has run.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const editor = editorRef.current;
+        const model = editor?.getModel();
+        if (!editor || !model) return;
+        const start = model.getPositionAt(match.index);
+        const end = model.getPositionAt(match.index + match.length);
+        const range = {
+          startLineNumber: start.lineNumber,
+          startColumn: start.column,
+          endLineNumber: end.lineNumber,
+          endColumn: end.column,
+        };
+        editor.setSelection(range);
+        editor.revealRangeInCenter(range, 1 /* ScrollType.Immediate */);
+        editor.focus();
+      })
+    );
+  }, []);
+
+  // Place-file dialog queue (moves and conflicting drops); the head is
+  // shown. Several dropped files can conflict at once, so they line up.
+  const [placeQueue, setPlaceQueue] = useState<PlaceRequest[]>([]);
+  const enqueuePlace = useCallback((req: PlaceRequest) => {
+    setPlaceQueue((q) => [...q, req]);
+  }, []);
+  const dequeuePlace = useCallback(() => {
+    setPlaceQueue((q) => q.slice(1));
+  }, []);
+
+  // Every folder in the project: explicitly created ones plus those
+  // implied by file paths. Feeds the folder pickers in both dialogs.
+  const allFolders = useMemo(() => {
+    const set = new Set<string>(folders ?? []);
+    for (const f of files) for (const a of getAncestorPaths(f.path)) set.add(a);
+    return Array.from(set).sort();
+  }, [files, folders]);
   // Initial filename for new file dialog (e.g., from clicking a link to a non-existent file)
   const [newFileInitialName, setNewFileInitialName] = useState<string>('');
 
@@ -446,6 +516,24 @@ export default function Editor({ project, files, fileContents, binaryFileVersion
   // Editor drag-drop state for image insertion
   const [isEditorDragOver, setIsEditorDragOver] = useState(false);
   const pendingDropPositionRef = useRef<Monaco.IPosition | null>(null);
+
+  // Editor drag-drop/paste listeners are attached to Monaco's DOM node
+  // once, at mount, as these stable wrappers. The wrappers read the
+  // latest handlers from a ref (synced by an effect below), so handler
+  // identity can change with `currentFile`/`files` without the listeners
+  // ever being detached — previously a cleanup effect removed them on the
+  // first such change and nothing re-added them, so only the first drop
+  // after mount worked.
+  const editorDndHandlersRef = useRef<{
+    dragOver: (e: DragEvent) => void;
+    dragLeave: (e: DragEvent) => void;
+    drop: (e: DragEvent) => void;
+    paste: (e: ClipboardEvent) => void;
+  }>({ dragOver: () => {}, dragLeave: () => {}, drop: () => {}, paste: () => {} });
+  const stableEditorDragOver = useCallback((e: DragEvent) => editorDndHandlersRef.current.dragOver(e), []);
+  const stableEditorDragLeave = useCallback((e: DragEvent) => editorDndHandlersRef.current.dragLeave(e), []);
+  const stableEditorDrop = useCallback((e: DragEvent) => editorDndHandlersRef.current.drop(e), []);
+  const stableEditorPaste = useCallback((e: ClipboardEvent) => editorDndHandlersRef.current.paste(e), []);
 
   // Fullscreen preview mode
   const [isFullscreenPreview, setIsFullscreenPreview] = useState(false);
@@ -731,6 +819,55 @@ export default function Editor({ project, files, fileContents, binaryFileVersion
 
   // Capture Monaco editor instance on mount
   const handleEditorMount = (editor: Monaco.editor.IStandaloneCodeEditor, monaco: typeof Monaco) => {
+    // Cmd/Ctrl+B toggles **bold** around the selection (or inserts an
+    // empty pair at the cursor).
+    const registerToggle = (id: string, label: string, key: number, marker: string) => {
+      editor.addAction({
+        id,
+        label,
+        keybindings: [monaco.KeyMod.CtrlCmd | key],
+        run: (ed) => {
+          const model = ed.getModel();
+          const sel = ed.getSelection();
+          if (!model || !sel) return;
+          const selected = model.getValueInRange(sel);
+          const m = marker.length;
+          const before = model.getValueInRange({
+            startLineNumber: sel.startLineNumber,
+            startColumn: Math.max(1, sel.startColumn - m),
+            endLineNumber: sel.startLineNumber,
+            endColumn: sel.startColumn,
+          });
+          const after = model.getValueInRange({
+            startLineNumber: sel.endLineNumber,
+            startColumn: sel.endColumn,
+            endLineNumber: sel.endLineNumber,
+            endColumn: sel.endColumn + m,
+          });
+          const r = toggleWrap(selected, marker, before, after);
+          const range = {
+            startLineNumber: sel.startLineNumber,
+            startColumn: sel.startColumn - r.extendBefore,
+            endLineNumber: sel.endLineNumber,
+            endColumn: sel.endColumn + r.extendAfter,
+          };
+          ed.executeEdits(id, [{ range, text: r.text, forceMoveMarkers: true }]);
+          // Re-select the inner text (or place the cursor between the markers).
+          const startCol = range.startColumn + r.selectStart;
+          const singleLine = sel.startLineNumber === sel.endLineNumber;
+          ed.setSelection({
+            startLineNumber: sel.startLineNumber,
+            startColumn: startCol,
+            endLineNumber: singleLine ? sel.startLineNumber : sel.endLineNumber,
+            endColumn: singleLine
+              ? range.startColumn + r.selectEnd
+              : sel.endColumn + r.extendAfter - (r.text.length - r.selectEnd),
+          });
+        },
+      });
+    };
+    registerToggle('qmd.toggleBold', 'Toggle bold', monaco.KeyCode.KeyB, '**');
+
     editorRef.current = editor;
     monacoRef.current = monaco;
     onSyncEditorMount(editor);
@@ -800,18 +937,27 @@ export default function Editor({ project, files, fileContents, binaryFileVersion
     // Attach drag-drop and paste handlers to editor container
     const domNode = editor.getDomNode();
     if (domNode) {
-      domNode.addEventListener('dragover', handleEditorDragOver);
-      domNode.addEventListener('dragleave', handleEditorDragLeave);
-      domNode.addEventListener('drop', handleEditorDrop);
+      domNode.addEventListener('dragover', stableEditorDragOver);
+      domNode.addEventListener('dragleave', stableEditorDragLeave);
+      domNode.addEventListener('drop', stableEditorDrop);
       // Capture phase: the paste event targets Monaco's hidden textarea,
       // and Monaco's own listener (which preventDefaults and re-implements
       // text paste) sits on that textarea — capture on the container runs
       // first, so image payloads can be intercepted (bd-706b0ixu).
-      domNode.addEventListener('paste', handleEditorPaste, true);
+      domNode.addEventListener('paste', stableEditorPaste, true);
     }
 
     // Signal that editor is ready for scroll sync
     setEditorReady(true);
+
+    // A search result picked while another file was open: the editor
+    // remounts per file (see the MonacoEditor `key`), so the match is
+    // applied here, once the new instance holds the picked document.
+    const pending = pendingMatchRef.current;
+    if (pending && pending.path === currentFile?.path) {
+      pendingMatchRef.current = null;
+      selectMatchInEditor(pending.match);
+    }
   };
 
   // Handle symbol click from outline panel - navigate editor to symbol location
@@ -847,6 +993,19 @@ export default function Editor({ project, files, fileContents, binaryFileVersion
     // Update URL without adding history entry (sidebar navigation)
     onNavigateToFile(file.path, { replace: true });
   }, [fileContents, onNavigateToFile, replayState.isActive]);
+
+  // Search result picked: open the file and highlight the first match.
+  const handleSelectSearchResult = useCallback(
+    (file: FileEntry, match: MatchRange | null) => {
+      const alreadyOpen = currentFile?.path === file.path;
+      handleSelectFile(file);
+      if (!match) return;
+      if (alreadyOpen) selectMatchInEditor(match);
+      else pendingMatchRef.current = { path: file.path, match };
+    },
+    [currentFile?.path, handleSelectFile, selectMatchInEditor]
+  );
+
 
   // Handle opening a file in a new browser tab
   const handleOpenInNewTab = useCallback((file: FileEntry) => {
@@ -946,6 +1105,103 @@ export default function Editor({ project, files, fileContents, binaryFileVersion
     // uploads happen inside handleUploadAsset and clear it after insertion.
   }, []);
 
+  // Handle creating a new text file
+  const handleCreateTextFile = useCallback(async (rawPath: string, initialContent: string) => {
+    const path = normalizeProjectPath(rawPath);
+    try {
+      await createFile(path, initialContent);
+      // Select the newly created file
+      const newFile: FileEntry = { path, docId: '' }; // docId will be set by automerge
+      setCurrentFile(newFile);
+      setContent(initialContent);
+    } catch (err) {
+      console.error('Failed to create file:', err);
+    }
+  }, []);
+
+  // Handle uploading an asset (text files go through text creation,
+  // everything else becomes a binary file). `targetPath` is the already-
+  // validated final path (e.g. "_quarto/grammars/toml/toml.wasm").
+  const handleUploadAsset = useCallback(async (file: File, targetPath: string) => {
+    try {
+      // Text files must be created as text documents so the editor can display them
+      if (isTextExtension(targetPath)) {
+        const textContent = await file.text();
+        handleCreateTextFile(targetPath, textContent);
+        return;
+      }
+
+      const { content: binaryContent, mimeType } = await processFileForUpload(file);
+      const result = await createBinaryFile(targetPath, binaryContent, mimeType);
+
+      // If this is an image and we have a pending drop position (editor drop),
+      // insert a markdown image reference at the drop point.
+      if (file.type.startsWith('image/') && pendingDropPositionRef.current && editorRef.current) {
+        const position = pendingDropPositionRef.current;
+        // result.path is the final project-root-relative path (it can be
+        // hash-suffix renamed on conflict); relativize it against the
+        // current file so the markdown reference resolves.
+        const markdown = buildDropMarkdown('image', currentFile?.path ?? null, result.path);
+
+        editorRef.current.executeEdits('image-drop', [{
+          range: {
+            startLineNumber: position.lineNumber,
+            startColumn: position.column,
+            endLineNumber: position.lineNumber,
+            endColumn: position.column,
+          },
+          text: markdown,
+          forceMoveMarkers: true,
+        }]);
+
+        pendingDropPositionRef.current = null;
+      }
+    } catch (err) {
+      console.error('Failed to upload file:', err);
+      pendingDropPositionRef.current = null;
+    }
+  }, [handleCreateTextFile, currentFile]);
+
+  // Files dropped onto the sidebar tree: added directly, no dialog —
+  // unless the name is already taken (in the project or earlier in the
+  // batch), in which case the place-file dialog asks for a folder/name,
+  // exactly as a conflicting internal move does. Files failing the
+  // size/empty checks are skipped with a console warning.
+  const handleDropFiles = useCallback(
+    (entries: DroppedEntries, destination: string) => {
+      const taken = new Set(files.map((f) => f.path));
+      // Dropped directories become folders even when empty, so the tree
+      // mirrors what was dropped.
+      for (const folder of entries.folders) {
+        try {
+          createFolder(joinPath(destination, sanitizeRelativePath(folder)));
+        } catch (err) {
+          console.error('Failed to create folder:', err);
+        }
+      }
+      const byFile = new Map(entries.files.map((e) => [e.file, e.relativePath]));
+      for (const { file, error } of processAssetFiles(entries.files.map((e) => e.file))) {
+        if (error) {
+          console.warn(`[sidebar drop] skipped ${file.name}: ${error}`);
+          continue;
+        }
+        const rel = sanitizeRelativePath(byFile.get(file) ?? file.name);
+        const path = joinPath(destination, rel);
+        if (taken.has(path)) {
+          const slash = rel.lastIndexOf('/');
+          const folder = joinPath(destination, slash >= 0 ? rel.slice(0, slash) : '');
+          enqueuePlace({ kind: 'add', file, folder, name: slash >= 0 ? rel.slice(slash + 1) : rel });
+          continue;
+        }
+        taken.add(path);
+        void handleUploadAsset(file, path);
+      }
+    },
+    [files, handleUploadAsset, enqueuePlace]
+  );
+
+
+
   // Editor drag-drop handlers for image/file insertion
   const handleEditorDragOver = useCallback((e: DragEvent) => {
     // Handle external files OR internal file drags from sidebar
@@ -1022,12 +1278,14 @@ export default function Editor({ project, files, fileContents, binaryFileVersion
       pendingDropPositionRef.current = target?.position ?? editorRef.current.getPosition();
     }
 
-    setAssetInitialFiles(files);
-    // Default the upload next to the document being edited, so the common
-    // case yields a same-directory reference.
-    setAssetDestination(resolveDefaultDestination({ selection: currentFile?.path ?? null }));
-    setShowNewAssetDialog(true);
-  }, [currentFile]);
+    // Add next to the document being edited, so the common case yields a
+    // same-directory reference. Same direct-add path as a sidebar drop
+    // (folders walked too): no dialog unless a name is already taken.
+    const destination = resolveDefaultDestination({ selection: currentFile?.path ?? null });
+    if (e.dataTransfer) {
+      void collectDroppedEntries(e.dataTransfer).then((entries) => handleDropFiles(entries, destination));
+    }
+  }, [currentFile, handleDropFiles]);
 
   // Clipboard image paste (bd-706b0ixu, see
   // claude-notes/plans/2026-08-27-paste-image-clipboard.md): silent
@@ -1068,6 +1326,21 @@ export default function Editor({ project, files, fileContents, binaryFileVersion
       const clipboard = e.clipboardData;
       if (!clipboard) return;
       const files = Array.from(clipboard.files);
+
+      // Pasting a URL over selected text wraps the selection as a link.
+      const editor = editorRef.current;
+      const selection = editor?.getSelection();
+      if (editor && selection && files.length === 0) {
+        const selected = editor.getModel()?.getValueInRange(selection) ?? '';
+        const link = linkFromPaste(selected, clipboard.getData('text/plain'));
+        if (link) {
+          e.preventDefault();
+          e.stopPropagation();
+          editor.executeEdits('paste-link', [{ range: selection, text: link, forceMoveMarkers: true }]);
+          return;
+        }
+      }
+
       if (
         classifyPastePayload({
           files: files.map((f) => ({ name: f.name, type: f.type, size: f.size })),
@@ -1085,77 +1358,30 @@ export default function Editor({ project, files, fileContents, binaryFileVersion
     [pasteImageIngest]
   );
 
-  // Cleanup editor drag-drop/paste listeners on unmount. Note:
+  // Keep the stable listener wrappers pointing at the latest handlers.
+  useEffect(() => {
+    editorDndHandlersRef.current = {
+      dragOver: handleEditorDragOver,
+      dragLeave: handleEditorDragLeave,
+      drop: handleEditorDrop,
+      paste: handleEditorPaste,
+    };
+  }, [handleEditorDragOver, handleEditorDragLeave, handleEditorDrop, handleEditorPaste]);
+
+  // Detach the editor drag-drop/paste listeners on unmount only. Note:
   // intelligence-provider disposal lives in useIntelligenceProviders
-  // (mount-only) — it must NOT be coupled to `handleEditorDrop`, whose
-  // identity changes with `currentFile`.
+  // (mount-only).
   useEffect(() => {
     return () => {
       const domNode = editorRef.current?.getDomNode();
       if (domNode) {
-        domNode.removeEventListener('dragover', handleEditorDragOver);
-        domNode.removeEventListener('dragleave', handleEditorDragLeave);
-        domNode.removeEventListener('drop', handleEditorDrop);
-        domNode.removeEventListener('paste', handleEditorPaste, true);
+        domNode.removeEventListener('dragover', stableEditorDragOver);
+        domNode.removeEventListener('dragleave', stableEditorDragLeave);
+        domNode.removeEventListener('drop', stableEditorDrop);
+        domNode.removeEventListener('paste', stableEditorPaste, true);
       }
     };
-  }, [handleEditorDragOver, handleEditorDragLeave, handleEditorDrop, handleEditorPaste]);
-
-  // Handle creating a new text file
-  const handleCreateTextFile = useCallback(async (path: string, initialContent: string) => {
-    try {
-      await createFile(path, initialContent);
-      // Select the newly created file
-      const newFile: FileEntry = { path, docId: '' }; // docId will be set by automerge
-      setCurrentFile(newFile);
-      setContent(initialContent);
-    } catch (err) {
-      console.error('Failed to create file:', err);
-    }
-  }, []);
-
-  // Handle uploading an asset (text files go through text creation,
-  // everything else becomes a binary file). `targetPath` is the already-
-  // validated final path (e.g. "_quarto/grammars/toml/toml.wasm").
-  const handleUploadAsset = useCallback(async (file: File, targetPath: string) => {
-    try {
-      // Text files must be created as text documents so the editor can display them
-      if (isTextExtension(targetPath)) {
-        const textContent = await file.text();
-        handleCreateTextFile(targetPath, textContent);
-        return;
-      }
-
-      const { content: binaryContent, mimeType } = await processFileForUpload(file);
-      const result = await createBinaryFile(targetPath, binaryContent, mimeType);
-
-      // If this is an image and we have a pending drop position (editor drop),
-      // insert a markdown image reference at the drop point.
-      if (file.type.startsWith('image/') && pendingDropPositionRef.current && editorRef.current) {
-        const position = pendingDropPositionRef.current;
-        // result.path is the final project-root-relative path (it can be
-        // hash-suffix renamed on conflict); relativize it against the
-        // current file so the markdown reference resolves.
-        const markdown = buildDropMarkdown('image', currentFile?.path ?? null, result.path);
-
-        editorRef.current.executeEdits('image-drop', [{
-          range: {
-            startLineNumber: position.lineNumber,
-            startColumn: position.column,
-            endLineNumber: position.lineNumber,
-            endColumn: position.column,
-          },
-          text: markdown,
-          forceMoveMarkers: true,
-        }]);
-
-        pendingDropPositionRef.current = null;
-      }
-    } catch (err) {
-      console.error('Failed to upload file:', err);
-      pendingDropPositionRef.current = null;
-    }
-  }, [handleCreateTextFile, currentFile]);
+  }, [stableEditorDragOver, stableEditorDragLeave, stableEditorDrop, stableEditorPaste]);
 
   // Handle deleting a file
   const handleDeleteFile = useCallback((file: FileEntry) => {
@@ -1171,8 +1397,40 @@ export default function Editor({ project, files, fileContents, binaryFileVersion
     }
   }, [currentFile, files]);
 
+  // Open the new-file dialog seeded with `folder` ('' = project root).
+  const handleNewFileIn = useCallback((folder: string) => {
+    setNewFileInitialName(folder ? `${folder}/` : '');
+    setShowNewFileDialog(true);
+  }, []);
+
+  // Open the new-folder dialog for `parent` ('' = project root).
+  const handleNewFolder = useCallback((parent: string) => {
+    setNewFolderParent(parent);
+  }, []);
+
+  const handleCreateFolder = useCallback((path: string) => {
+    try {
+      createFolder(path);
+    } catch (err) {
+      console.error('Failed to create folder:', err);
+    }
+  }, []);
+
+  // Forget an explicitly created folder. FileSidebar only offers this for
+  // folders with nothing under them, so no files are affected.
+  const handleDeleteFolder = useCallback((path: string) => {
+    if (!window.confirm(fileSidebar.confirmDeleteFolder(path))) return;
+    try {
+      deleteFolder(path);
+    } catch (err) {
+      console.error('Failed to delete folder:', err);
+    }
+  }, []);
+
   // Handle renaming a file
-  const handleRenameFile = useCallback((file: FileEntry, newPath: string) => {
+  const handleRenameFile = useCallback((file: FileEntry, rawNewPath: string) => {
+    const newPath = normalizeProjectPath(rawNewPath);
+    if (!newPath || newPath === file.path) return;
     try {
       renameFile(file.path, newPath);
       // If we renamed the current file, update the reference
@@ -1185,6 +1443,45 @@ export default function Editor({ project, files, fileContents, binaryFileVersion
       alert(`Failed to rename file: ${err instanceof Error ? err.message : String(err)}`);
     }
   }, [currentFile]);
+
+  // Move a folder and everything under it into `destination`. Refused (with
+  // an alert, like a failed rename) if any file would land on an existing
+  // one; otherwise each file is renamed and explicit folder markers follow.
+  const handleMoveFolder = useCallback(
+    (folder: string, destination: string) => {
+      const name = folder.split('/').pop() || folder;
+      const newFolder = joinPath(destination, name);
+      const prefix = `${folder}/`;
+      const moving = files.filter((f) => f.path.startsWith(prefix));
+      const existing = new Set(files.map((f) => f.path));
+      const renames = moving.map((f) => [f, `${newFolder}/${f.path.slice(prefix.length)}`] as const);
+      if (renames.some(([, to]) => existing.has(to))) {
+        alert(dialogs.moveFile.errorFolderConflict(newFolder));
+        return;
+      }
+      for (const [f, to] of renames) handleRenameFile(f, to);
+      for (const marker of allFolders) {
+        if (marker === folder || marker.startsWith(prefix)) {
+          try {
+            createFolder(`${newFolder}${marker.slice(folder.length)}`);
+            deleteFolder(marker);
+          } catch (err) {
+            console.error('Failed to move folder marker:', err);
+          }
+        }
+      }
+    },
+    [files, allFolders, handleRenameFile]
+  );
+
+  // Place-file dialog confirmed: move an existing file or add a new one.
+  const handlePlaceConfirm = useCallback(
+    (request: PlaceRequest, newPath: string) => {
+      if (request.kind === 'move') handleRenameFile(request.file, newPath);
+      else void handleUploadAsset(request.file, newPath);
+    },
+    [handleRenameFile, handleUploadAsset]
+  );
 
   return (
     <div className="editor-container">
@@ -1200,31 +1497,41 @@ export default function Editor({ project, files, fileContents, binaryFileVersion
               onChooseNewProject={onDisconnect}
               onShare={handleShare}
             />
-            <SidebarTabs disabled={replayState.isActive}>
+            <SidebarTabs
+              disabled={replayState.isActive}
+              headerExtras={(id) =>
+                id === 'files' ? (
+                  <SyncStatusBadge
+                    scope="project"
+                    currentFilePath={currentFile?.path ?? null}
+                    dotPosition="end"
+                  />
+                ) : null
+              }
+            >
             {(activeTab) => {
               switch (activeTab) {
                 case 'files':
                   return (
                     <>
-                      <div className="files-sync-status">
-                        <SyncStatusBadge
-                          scope="project"
-                          currentFilePath={currentFile?.path ?? null}
-                        />
-                      </div>
                       <FileSidebar
                         files={files}
+                        folders={folders}
                         currentFile={currentFile}
                         onSelectFile={handleSelectFile}
                         onNewFile={handleNewFile}
+                        onNewFileIn={handleNewFileIn}
+                        onNewFolder={handleNewFolder}
+                        onDeleteFolder={handleDeleteFolder}
+                        onMoveFile={(file, preset) => enqueuePlace({ kind: 'move', file, ...preset })}
                         onUploadFiles={handleUploadFiles}
+                        onDropFiles={handleDropFiles}
+                        onMoveFolder={handleMoveFolder}
                         onDeleteFile={handleDeleteFile}
                         onRenameFile={handleRenameFile}
                         onOpenInNewTab={handleOpenInNewTab}
                         onCopyLink={handleCopyLink}
-                        currentFormat={currentFormat}
-                        searchFiles={searchFiles}
-                        fileContents={fileContents}
+                        onOpenSearch={() => setShowSearchDialog(true)}
                       />
                     </>
                   );
@@ -1279,6 +1586,7 @@ export default function Editor({ project, files, fileContents, binaryFileVersion
           <div className="header-wrapper">
             <DocumentTopBar
               currentFilePath={currentFile?.path ?? null}
+              currentFormat={currentFormat}
               onToggleFullscreenPreview={handleToggleFullscreenPreview}
               isFullscreenPreview={isFullscreenPreview}
               sidebarOpen={sidebarDrawer.sidebarVisible}
@@ -1529,6 +1837,7 @@ export default function Editor({ project, files, fileContents, binaryFileVersion
               <SyncStatusBadge
                 scope="document"
                 currentFilePath={currentFile?.path ?? null}
+                verbose
               />
             }
           />
@@ -1540,6 +1849,7 @@ export default function Editor({ project, files, fileContents, binaryFileVersion
       <NewFileDialog
         isOpen={showNewFileDialog}
         existingPaths={files.map(f => f.path)}
+        folders={allFolders}
         onClose={() => {
           handleDialogClose();
           setNewFileInitialName(''); // Clear on close
@@ -1548,11 +1858,41 @@ export default function Editor({ project, files, fileContents, binaryFileVersion
         initialFilename={newFileInitialName}
       />
 
+      {/* Search files dialog */}
+      <SearchFilesDialog
+        isOpen={showSearchDialog}
+        files={files}
+        searchFiles={searchFiles}
+        fileContents={fileContents}
+        onClose={() => setShowSearchDialog(false)}
+        onSelectFile={handleSelectSearchResult}
+      />
+
+      {/* Place-file dialog (move, or add a conflicting drop) */}
+      <PlaceFileDialog
+        request={placeQueue[0] ?? null}
+        folders={allFolders}
+        existingPaths={files.map((f) => f.path)}
+        onClose={dequeuePlace}
+        onConfirm={handlePlaceConfirm}
+      />
+
+      {/* New folder dialog */}
+      <NewFolderDialog
+        isOpen={newFolderParent !== null}
+        parent={newFolderParent ?? ''}
+        existingFolders={allFolders}
+        existingPaths={files.map((f) => f.path)}
+        onClose={() => setNewFolderParent(null)}
+        onCreateFolder={handleCreateFolder}
+      />
+
       {/* Asset upload dialog */}
       <NewAssetDialog
         isOpen={showNewAssetDialog}
         existingPaths={files.map(f => f.path)}
         defaultDestination={assetDestination}
+        folders={allFolders}
         initialFiles={assetInitialFiles}
         onClose={handleAssetDialogClose}
         onUploadAsset={handleUploadAsset}

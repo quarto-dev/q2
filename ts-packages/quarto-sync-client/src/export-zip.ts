@@ -67,3 +67,35 @@ export function exportProjectAsZip(
 
   return zipSync(files, { level: 6 });
 }
+
+/**
+ * Export one folder (and everything under it) as a ZIP archive whose
+ * entries are nested under the folder's own name, so extracting yields a
+ * `<folder>/…` directory. `folder` is root-relative with no leading or
+ * trailing slash. Returns null when nothing lives under the folder.
+ */
+export function exportFolderAsZip(client: SyncClient, folder: string): Uint8Array | null {
+  if (!client.isConnected()) {
+    throw new Error('SyncClient is not connected');
+  }
+  const prefix = `${folder.replace(/^\/+|\/+$/g, '')}/`;
+  const parentLen = prefix.lastIndexOf('/', prefix.length - 2) + 1;
+  const files: Record<string, Uint8Array> = {};
+
+  for (const path of client.getFilePaths()) {
+    const relative = path.replace(/^\/+/, '');
+    if (!relative.startsWith(prefix)) continue;
+    // Key relative to the folder's parent: keeps `<folder>/` as the root.
+    const key = relative.slice(parentLen);
+    if (client.isFileBinary(path)) {
+      const binary = client.getBinaryFileContent(path);
+      if (binary) files[key] = binary.content;
+    } else {
+      const text = client.getFileContent(path);
+      if (text !== null) files[key] = strToU8(text);
+    }
+  }
+
+  if (Object.keys(files).length === 0) return null;
+  return zipSync(files, { level: 6 });
+}

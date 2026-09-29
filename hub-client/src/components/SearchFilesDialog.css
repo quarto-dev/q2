@@ -1,0 +1,57 @@
+/* SearchFilesDialog — search box on top, ranked results below. The
+   result-row rules moved here from FileSidebar.css when search left the
+   sidebar. */
+
+.qh-dialog.search-files-dialog {
+  width: 560px;
+  padding: 0;
+}
+
+.search-files-input {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.search-files-results {
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.search-result {
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.search-result-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.search-result-name {
+  font-family: var(--font-mono);
+  color: var(--editor-text);
+  font-size: 13px;
+}
+
+.search-result-path {
+  color: var(--editor-text-muted);
+  font-size: 11px;
+}
+
+.search-result-snippet {
+  margin-top: 2px;
+  padding-inline-start: 22px;
+  color: var(--editor-text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.search-result-snippet mark {
+  background: var(--editor-accent-border);
+  color: var(--editor-text);
+  border-radius: var(--radius-xs);
+  padding: 0 1px;
+}

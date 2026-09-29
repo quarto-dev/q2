@@ -1,0 +1,52 @@
+/* FolderPicker — trigger styled like a text input, popover reusing the
+   sidebar's folder rows inside the shared .qh-menu surface. */
+
+.folder-picker-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  text-align: start;
+  cursor: pointer;
+}
+
+.folder-picker-value {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.folder-picker-caret {
+  display: inline-flex;
+  align-items: center;
+  color: var(--editor-text-dim);
+  flex-shrink: 0;
+}
+
+.folder-picker-menu {
+  min-width: 260px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+/* Rows are menuitems here: focus (which the pointer follows) is the
+   current-row tint; the chosen folder gets the selected tint. */
+.folder-picker-menu .folder-header {
+  border-radius: var(--radius-sm);
+}
+
+/* Pointer focus shows the tint, not a ring; keyboard focus keeps the
+   ring via :focus-visible. */
+.folder-picker-menu .folder-header:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.folder-picker-menu .folder-header:focus,
+.folder-picker-menu .folder-header:hover {
+  background: var(--context-menu-hover);
+}
+
+.folder-picker-menu .folder-header.active {
+  background: var(--sidebar-drag-bg);
+  color: var(--editor-text);
+}

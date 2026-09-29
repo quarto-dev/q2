@@ -91,7 +91,16 @@
 
 /* Fullscreen-preview cell: mirrors the toggle box at the bar's right
    edge (full-height square, separated by a left border). */
-.fullscreen-btn-box {
+/* Right-edge action cells sit flush against each other (no bar gap
+   between them); each draws its own leading divider. */
+.bar-actions {
+  display: flex;
+  align-self: stretch;
+  flex-shrink: 0;
+}
+
+.fullscreen-btn-box,
+.print-btn-box {
   align-self: stretch;
   width: 35px;
   display: flex;

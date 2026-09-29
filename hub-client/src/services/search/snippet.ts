@@ -50,6 +50,23 @@ function firstMatch(
   return best;
 }
 
+/** Character range of a match in `content`. */
+export interface MatchRange {
+  index: number;
+  length: number;
+}
+
+/**
+ * Earliest occurrence of any query term in `content` (case-insensitive),
+ * or null. The same match `buildSnippet` centers its excerpt on, so a
+ * caller can open the document to exactly what the snippet showed.
+ */
+export function findFirstMatch(content: string, terms: string[]): MatchRange | null {
+  const normTerms = normalizeTerms(terms);
+  if (normTerms.length === 0 || content === '') return null;
+  return firstMatch(content.toLowerCase(), normTerms);
+}
+
 export function buildSnippet(
   content: string,
   terms: string[],

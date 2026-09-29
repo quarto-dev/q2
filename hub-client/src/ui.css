@@ -255,6 +255,18 @@
 .qh-menu-item.accent { color: var(--accent-action-text); font-weight: 600; }
 .qh-menu-item.danger { color: var(--error-text); }
 
+/* Optional leading icon inside the label. */
+.qh-menu-item-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.qh-menu-item-icon {
+  display: inline-flex;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
 .qh-menu-item.with-hint {
   flex-direction: row;
   align-items: center;
@@ -347,7 +359,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: var(--z-overlay);
+  /* Dialogs portal to <body>, so they must clear every in-app fixed
+     surface on their own: .projects-home is itself a fixed --z-modal
+     layer, and the editor chrome's floating layer is --z-modal too.
+     Body-level and later in DOM, the backdrop wins ties. */
+  z-index: var(--z-modal);
   animation: qh-fade-in var(--duration-base) var(--ease-out);
 }
 
@@ -566,8 +582,6 @@ select.qh-input { appearance: auto; }
 
 /* Editor chrome stacks floating elements up to z-index 1000 (context menu,
    preview error overlay), so dialogs in the editor keep the higher level. */
-.editor-container .qh-dialog-backdrop { z-index: var(--z-modal); }
-
 .dialog-header {
   display: flex;
   justify-content: space-between;

@@ -1,11 +1,15 @@
 /**
  * @vitest-environment jsdom
+ *
+ * Full-text search moved from an inline sidebar box to SearchFilesDialog,
+ * opened by the sidebar's magnifying-glass button.
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import type { FileEntry } from '@quarto/preview-renderer/types/project';
 import FileSidebar from './FileSidebar';
+import SearchFilesDialog from './SearchFilesDialog';
 import type { SearchResult } from '../services/search';
 
 afterEach(cleanup);
@@ -14,41 +18,56 @@ function entry(path: string): FileEntry {
   return { path, docId: `doc-${path}` } as FileEntry;
 }
 
-const baseProps = {
-  currentFile: null,
-  onNewFile: () => {},
-  onUploadFiles: () => {},
-};
-
-describe('FileSidebar full-text search', () => {
-  it('does not render a search box when searchFiles is not provided', () => {
+describe('FileSidebar search button', () => {
+  it('does not render a search button when onOpenSearch is not provided', () => {
     render(
-      <FileSidebar files={[entry('a.qmd')]} onSelectFile={() => {}} {...baseProps} />
+      <FileSidebar
+        files={[entry('a.qmd')]}
+        currentFile={null}
+        onSelectFile={() => {}}
+        onNewFile={() => {}}
+        onUploadFiles={() => {}}
+      />
     );
-    expect(screen.queryByLabelText('Search files')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Search files' })).toBeNull();
   });
+
+  it('opens search via the header button', () => {
+    const onOpenSearch = vi.fn();
+    render(
+      <FileSidebar
+        files={[entry('a.qmd')]}
+        currentFile={null}
+        onSelectFile={() => {}}
+        onNewFile={() => {}}
+        onUploadFiles={() => {}}
+        onOpenSearch={onOpenSearch}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Search files' }));
+    expect(onOpenSearch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('SearchFilesDialog', () => {
+  const base = { isOpen: true, onClose: () => {} };
 
   it('runs a query and renders ranked results with snippets', async () => {
     const searchFiles = vi.fn(
-      async (): Promise<SearchResult[]> => [
-        { path: 'intro.qmd', score: 2, terms: ['search'] },
-      ]
+      async (): Promise<SearchResult[]> => [{ path: 'intro.qmd', score: 2, terms: ['search'] }]
     );
     const fileContents = new Map([['intro.qmd', 'a document about search engines']]);
-
     render(
-      <FileSidebar
+      <SearchFilesDialog
+        {...base}
         files={[entry('intro.qmd'), entry('other.qmd')]}
-        onSelectFile={() => {}}
         searchFiles={searchFiles}
         fileContents={fileContents}
-        {...baseProps}
+        onSelectFile={() => {}}
       />
     );
 
-    fireEvent.change(screen.getByLabelText('Search files'), {
-      target: { value: 'search' },
-    });
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search files' }), { target: { value: 'search' } });
 
     await waitFor(() => expect(searchFiles).toHaveBeenCalledWith('search', expect.anything()));
     expect(await screen.findByText('intro.qmd')).toBeTruthy();
@@ -57,66 +76,82 @@ describe('FileSidebar full-text search', () => {
     expect(mark?.textContent).toBe('search');
   });
 
-  it('selects the right file when a result is clicked', async () => {
+  it('selects the file and its first match when a result is clicked, then closes', async () => {
+    const onSelectFile = vi.fn();
+    const onClose = vi.fn();
+    const searchFiles = vi.fn(
+      async (): Promise<SearchResult[]> => [{ path: 'intro.qmd', score: 1, terms: ['intro'] }]
+    );
+    render(
+      <SearchFilesDialog
+        {...base}
+        onClose={onClose}
+        files={[entry('intro.qmd')]}
+        searchFiles={searchFiles}
+        fileContents={new Map([['intro.qmd', 'An intro to things']])}
+        onSelectFile={onSelectFile}
+      />
+    );
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search files' }), { target: { value: 'intro' } });
+    fireEvent.click(await screen.findByText('intro.qmd'));
+
+    expect(onSelectFile).toHaveBeenCalledWith(
+      expect.objectContaining({ path: 'intro.qmd' }),
+      { index: 3, length: 5 }
+    );
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes a null match when the file text is not loaded', async () => {
     const onSelectFile = vi.fn();
     const searchFiles = vi.fn(
       async (): Promise<SearchResult[]> => [{ path: 'intro.qmd', score: 1, terms: ['intro'] }]
     );
-
     render(
-      <FileSidebar
+      <SearchFilesDialog
+        {...base}
         files={[entry('intro.qmd')]}
-        onSelectFile={onSelectFile}
         searchFiles={searchFiles}
-        {...baseProps}
+        onSelectFile={onSelectFile}
       />
     );
-
-    fireEvent.change(screen.getByLabelText('Search files'), {
-      target: { value: 'intro' },
-    });
-
-    const result = await screen.findByText('intro.qmd');
-    fireEvent.click(result);
-    expect(onSelectFile).toHaveBeenCalledWith(expect.objectContaining({ path: 'intro.qmd' }));
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search files' }), { target: { value: 'intro' } });
+    fireEvent.click(await screen.findByText('intro.qmd'));
+    expect(onSelectFile).toHaveBeenCalledWith(expect.objectContaining({ path: 'intro.qmd' }), null);
   });
 
   it('shows a no-matches state when the query returns nothing', async () => {
     const searchFiles = vi.fn(async (): Promise<SearchResult[]> => []);
     render(
-      <FileSidebar
-        files={[entry('a.qmd')]}
-        onSelectFile={() => {}}
-        searchFiles={searchFiles}
-        {...baseProps}
-      />
+      <SearchFilesDialog {...base} files={[entry('a.qmd')]} searchFiles={searchFiles} onSelectFile={() => {}} />
     );
-
-    fireEvent.change(screen.getByLabelText('Search files'), {
-      target: { value: 'zzz' },
-    });
-
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search files' }), { target: { value: 'zzz' } });
     expect(await screen.findByText('No matches')).toBeTruthy();
   });
 
-  it('clears the query with the clear button, restoring the file tree', async () => {
-    const searchFiles = vi.fn(async (): Promise<SearchResult[]> => []);
+  it('Enter opens the highlighted result; ArrowDown moves the highlight', async () => {
+    const onSelectFile = vi.fn();
+    const searchFiles = vi.fn(
+      async (): Promise<SearchResult[]> => [
+        { path: 'a.qmd', score: 2, terms: ['x'] },
+        { path: 'b.qmd', score: 1, terms: ['x'] },
+      ]
+    );
     render(
-      <FileSidebar
-        files={[entry('tree-file.qmd')]}
-        onSelectFile={() => {}}
+      <SearchFilesDialog
+        {...base}
+        files={[entry('a.qmd'), entry('b.qmd')]}
         searchFiles={searchFiles}
-        {...baseProps}
+        onSelectFile={onSelectFile}
       />
     );
+    const input = screen.getByRole('searchbox', { name: 'Search files' });
+    fireEvent.change(input, { target: { value: 'x' } });
+    await screen.findByText('b.qmd');
 
-    const input = screen.getByLabelText('Search files') as HTMLInputElement;
-    fireEvent.change(input, { target: { value: 'zzz' } });
-    await screen.findByText('No matches');
-
-    fireEvent.click(screen.getByLabelText('Clear search'));
-    expect(input.value).toBe('');
-    // Tree is back: the file name is shown again.
-    expect(screen.getByText('tree-file.qmd')).toBeTruthy();
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onSelectFile).toHaveBeenCalledWith(expect.objectContaining({ path: 'b.qmd' }), null);
   });
 });

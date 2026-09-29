@@ -28,10 +28,12 @@ const SECTIONS: Section[] = [
 
 interface SidebarTabsProps {
   children: (sectionId: SectionId) => ReactNode;
+  /** Optional content at the right end of a section's header row. */
+  headerExtras?: (sectionId: SectionId) => ReactNode;
   disabled?: boolean;
 }
 
-export default function SidebarTabs({ children, disabled }: SidebarTabsProps) {
+export default function SidebarTabs({ children, headerExtras, disabled }: SidebarTabsProps) {
   const [expandedSections, setExpandedSections] = useState<Set<SectionId>>(() => {
     const initial = new Set<SectionId>();
     for (const section of SECTIONS) {
@@ -65,16 +67,22 @@ export default function SidebarTabs({ children, disabled }: SidebarTabsProps) {
             key={section.id}
             className={`sidebar-section ${isExpanded ? 'expanded' : 'collapsed'}`}
           >
-            <button
-              id={headerId}
-              className="section-header"
-              onClick={() => toggleSection(section.id)}
-              aria-expanded={isExpanded}
-              aria-controls={contentId}
-            >
-              <span className="section-chevron">{isExpanded ? '▼' : '▶'}</span>
-              <span className="section-label qh-truncate">{section.label}</span>
-            </button>
+            {/* Sticky header row: the toggle button plus any extras
+                (e.g. the FILES sync badge), which must not nest inside
+                the button. */}
+            <div className="sidebar-section-header-row">
+              <button
+                id={headerId}
+                className="section-header"
+                onClick={() => toggleSection(section.id)}
+                aria-expanded={isExpanded}
+                aria-controls={contentId}
+              >
+                <span className="section-chevron">{isExpanded ? '▼' : '▶'}</span>
+                <span className="section-label qh-truncate">{section.label}</span>
+              </button>
+              {headerExtras?.(section.id)}
+            </div>
             {isExpanded && (
               <div
                 className="section-content"
