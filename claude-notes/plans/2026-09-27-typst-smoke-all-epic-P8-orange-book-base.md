@@ -370,19 +370,291 @@ logo-path resolution against a synthetic merged document's directory context.
       quarto-core` suite (5387/5387) both green; `cargo clippy -p
       quarto-core -p quarto-brand --all-targets -- -D warnings` clean.
 
-      **Next steps, in order:** (1) finish rendering the whole book and
-      reconcile all ~250 assertions — in progress, next blocker found is
-      chapter1.qmd's `fig-cars` R chunk (explicit `#| label: fig-cars`)
-      producing `unnamed-chunk-1-1.svg` instead of `fig-cars-1.svg` in the
-      book-merge render, so the Typst template's `image("chapter1_files/
-      figure-typst/fig-cars-1.svg")` reference 404s — not yet
-      investigated past reproducing it; (2) once bd-l6eh1635 actually
-      merges into `feature/typst-testing`, rebase this branch onto it,
-      swap `references.json` back out for `references.bib` in
-      `_quarto.yml`, delete `references.json`, and re-verify. Expect the
-      `fig-visualization`/`sec-embedded-notebooks` assertions (3 lines,
-      see item 3) to still fail on `embed`'s absence; everything else is
-      new ground.
+      **Sixth bug — found and root-caused 2026-09-28 (bd-2lxj10z0
+      filed, fixture workaround applied here).** The `fig-cars` mismatch
+      (`unnamed-chunk-1-1.svg` on disk vs. `fig-cars-1.svg` expected by
+      `chapter2.qmd`/`appendix.qmd`/`appendix-b.qmd`'s hand-authored
+      `![...](chapter1_files/figure-typst/fig-cars-1.svg)` references)
+      turned out to be **general to q2, not book-merge-specific** —
+      confirmed by reproducing the identical stripped input to knitr in
+      both a plain single-document render and the book-merge render (a
+      direct debug capture of the markdown string handed to
+      `crates/quarto-core/src/engine/knitr/resources/rmd/execute.R`
+      showed `#| label: fig-cars`/`#| fig-cap:` already gone in both
+      cases, replaced by a bare `::: {#fig-cars} ... :::` wrapper), and
+      by confirming with a bare `rmarkdown::render()` call that knitr
+      itself names figures by label correctly when given the label
+      unstripped (`fig-cars-1.png`, not `unnamed-chunk-1-1.png`).
+
+      Root cause: `PreEngineSugaringStage` /
+      `crates/quarto-core/src/crossref/codeblock_shorthand.rs`
+      deliberately **consumes and removes** `label:`/`<reftype>-cap:`
+      from an executable code cell's body before the engine ever sees it
+      (by design, D2/D7 — the label moves into a wrapping
+      `::: {#fig-cars}` Div for q2's own crossref numbering instead).
+      Side effect, apparently never noticed until this fixture: knitr's
+      own native label-based figure-filename convention (real, confirmed
+      Q1 behavior — Q1's tracked `_book/chapter1_files/` genuinely
+      contains a `fig-cars-1.svg`) becomes unreachable, since knitr never
+      sees the `label:` option anymore and falls back to
+      `unnamed-chunk-N` auto-naming. Single-document renders never
+      surface this as a *failure* — nothing downstream references the
+      actual filename by name — so the regression was invisible until a
+      book fixture cross-referenced a sibling chapter's generated figure
+      by its Q1-convention path.
+
+      **Gordon's call (2026-09-28):** real fix is out of P8's scope
+      (affects every q2 knitr render with a labelled figure/table, not
+      just this fixture) — filed as **bd-2lxj10z0** with full root-cause
+      detail and a suggested fix direction (re-inject `#| label: <id>`
+      into the code block text at engine-serialization time, engine-side
+      only, no change to q2's own crossref/numbering). Worked around
+      *here* by pointing the six affected image references at the
+      filename q2 actually produces
+      (`chapter1_files/figure-typst/unnamed-chunk-1-1.svg`) instead of
+      the Q1-convention `fig-cars-1.svg` — see bd-2lxj10z0's comment
+      trail for the exact file/line list to revert once the real fix
+      lands. No test was skipped for this; index.qmd's assertions don't
+      reference the filename by name.
+
+      **Seventh bug — found and fixed 2026-09-28, immediately after
+      the bug-6 workaround unblocked the render further.** Typst compile
+      then failed with `error: the document does not contain a
+      bibliography` / `label <...> does not exist in the document` for
+      five citations (`dijkstra1968`, `hoare1978`, `pearl2009`,
+      `cortes1995`, `box1976`) — all confirmed present in
+      `references.json`, so the bibliography data itself was fine. Every
+      one of the five lives inside a `.callout-*` Div or a custom
+      crossref (`{#dino-...}`, ref-type `dino`) Div — i.e. inside a
+      `CustomNode` (Callout/FloatRefTarget) scaffold by the time citeproc
+      runs. Root cause, confirmed by reading the code:
+      `collect_citations_from_block`/`collect_citations_from_inlines`
+      and `transform_block`/`transform_inlines` in
+      `crates/pampa/src/citeproc_filter.rs` had no `Block::Custom`/
+      `Inline::Custom` arm — both fell through the generic `_ => {}`
+      catch-all, so any `@cite` nested inside *any* custom node was
+      invisible to citeproc's citation collector and never got its
+      raw `Cite` node replaced. The unresolved `Cite` survived to the
+      Typst writer, which emitted a native `#cite(<id>)` call that
+      Typst's own `#bibliography()` (built from citeproc's — incomplete —
+      resolved set) didn't know about.
+
+      Fix: added `Block::Custom`/`Inline::Custom` arms to all four
+      functions, walking `node.slots` exactly the way
+      `crates/quarto-core/src/transforms/equation_label.rs` already does
+      for the same shape (`Slot::Block`/`Blocks`/`Inline`/`Inlines`, each
+      recursing back into the matching collect/transform function).
+      `transform_inlines`'s signature changed from `&mut Vec<Inline>` to
+      `&mut [Inline]` so a `Slot::Inline`'s single owned inline can be
+      passed via `std::slice::from_mut` without a temporary `Vec` — a
+      pure widening, no call site needed updating (`&mut Vec<T>` already
+      coerces to `&mut [T]`). Two new regression tests
+      (`test_collect_citations_in_custom_node`,
+      `test_transform_block_in_custom_node`) build a bare `Callout`
+      `CustomNode` with a `Blocks` slot containing a cited paragraph and
+      assert the citation is found and replaced. `cargo nextest run -p
+      pampa` (full suite): 4851/4851 passed. `cargo clippy -p pampa
+      --all-targets -- -D warnings`: clean. This is a plan-scoped fix
+      (found while directly blocking this same checklist item, not a
+      digression) — implemented here, not filed as a bead, per
+      `CLAUDE.md`'s beads-vs-plans rule.
+
+      **Eighth bug — root-caused and fixed 2026-09-28** (ninth and tenth
+      bugs surfaced and fixed along the way — see below). With
+      bugs 6 and 7 both addressed, the render compiles all the way to a
+      PDF for the first time, but the assertion pass surfaces a large
+      new failure: 70 occurrences of `[WARN] unresolved crossref` across
+      11 distinct `@sec-*` ids (`@sec-intro`, `@sec-methods`,
+      `@sec-basic-figures`, `@sec-tables`, `@sec-cross-references`,
+      `@sec-custom-crossref-dinosaurs`, `@sec-more-dinosaurs`,
+      `@sec-embedded-notebooks`, `@sec-appendix-sub-figures`,
+      `@sec-appendix-callouts`, `@sec-appendix-dinosaurs` — every `@sec-`
+      id in the book except none), 184 "Required pattern not found"
+      assertions, a PDF page-ordering assertion (`ALIGNTEST_MARKER` on
+      page 11 vs. `LISTING_BODY_ALIGN_TEST` on page 10, likely a
+      downstream symptom of the same numbering breakage), and one
+      already-expected failure (`@fig-visualization`/
+      `sec-embedded-notebooks`, item 3's `embed`-unimplemented gap — 3
+      lines, not part of this bug).
+
+      Root cause, confirmed by reading the code and matching it against
+      the actual diagnostic text: `crates/quarto-core/src/transforms/
+      crossref_index.rs`'s `visit_header` (around line 326) has
+      `if unnumbered || !self.html { return; }` — for any non-HTML
+      format (`self.html = ctx.format.identifier.is_html_based()`,
+      false for Typst), this skips **both** the HTML-only `number` kv
+      stash (correctly HTML-only — Typst does its own native heading
+      numbering) **and** `sec`-target registration into the
+      `CrossrefIndex` (this is the actual bug — registration is
+      unconditional in Q1). The gate's own comment says the intent was
+      "the pandoc-hybrid pipeline also runs this transform, and
+      registering there would let crossref-resolve consume `@sec-`
+      cites before the vendored refs.lua sees them" — but exhaustive
+      grep across `crates/quarto-core/src` and `crates/pampa/src` found
+      **no live invocation** of any file under
+      `resources/pandoc-filters/filters/crossref/` (`index.lua`,
+      `refs.lua`, `format.lua`, etc.) — every reference to them in the
+      current Rust source is a "ported from"/"matches Q1's" comment
+      citing the algorithm's origin, not a filter-chain wiring. This
+      strongly suggests the "Lua handles sec for non-HTML" assumption
+      is stale for Q2's current architecture (crossref is now fully
+      native Rust), though this hasn't been independently confirmed for
+      every pandoc-hybrid format (only Typst was checked in depth).
+
+      Confirmed via the actual diagnostic path: `crossref_resolve.rs`'s
+      `resolve_one_cite` classifies `@sec-intro` as ref-type `sec` via
+      the format-agnostic `RefTypeRegistry` (unaffected by the `!self.html`
+      gate — that gate only controls the per-document *index* of real
+      targets, not the registry of valid ref-type prefixes), looks it
+      up in the `CrossrefIndex`, finds nothing (never registered, per
+      above), and emits exactly `"unresolved crossref \`@{id}\`: no
+      target with this identifier was found."` — the literal string
+      seen in the smoke-test output. `render_resolved_ref`
+      (`crossref_render.rs`) is documented to render an unresolved ref
+      as literal `"?id?"`, but the actual `.typ` output shows bare
+      `sec-intro` with no `?` wrapping — an open discrepancy not yet
+      explained. **This doesn't block the fix**: once `sec` targets are
+      actually registered, resolution succeeds and the `resolved: true`
+      branch (already proven correct — every other ref type: fig, eq,
+      thm, lst, and the custom `dino` type all already render as proper
+      `#ref(<id>, supplement: [...])` in this exact book) takes over;
+      the unresolved-rendering discrepancy only matters if some `@sec-`
+      id still fails to resolve after the fix.
+
+      An existing test pins the *current* (to-be-changed) behavior:
+      `crossref_index.rs::sec_registration_is_html_only` (`Format::pdf()`,
+      asserts `idx.get("sec-a").is_none()` with comment "pandoc-hybrid
+      formats keep Lua-native @sec- resolution") — this test encodes the
+      assumption above and will need to be rewritten, not just left
+      failing, as part of the fix.
+
+      **Fixed 2026-09-28.** Scope decision: apply to **every format, not
+      just Typst** — dispatched a fork to check whether LaTeX/PDF has an
+      independent, already-working `@sec-` resolution path before
+      generalizing. Finding: `FormatIdentifier::Pdf` is neither
+      `is_native()` nor `is_pandoc_hybrid()` (`format.rs`'s own comment:
+      "Pdf is deliberately absent: the latex/beamer epic owns it") — PDF
+      has **no working render pipeline in q2 at all yet**, so there is
+      nothing today that could depend on `sec` staying unregistered for
+      it. The pandoc-hybrid Typst path's only Lua involvement
+      (`quarto2-shim.lua`'s `route_crossref_resolved_ref`) merely formats
+      an *already-resolved* ref per-writer; it never builds the
+      `CrossrefIndex` or registers `sec` targets — that is 100% owned by
+      the Rust `crossref_index.rs`, run uniformly before dispatch to any
+      writer. So the "Lua handles it" assumption was stale for every
+      non-HTML format, not just Typst. Implemented: `visit_header`
+      (`crossref_index.rs`) now splits the old combined
+      `if unnumbered || !self.html { return; }` gate — `unnumbered` still
+      short-circuits everything, but the HTML-only condition now guards
+      *only* the `number` kv stash; `sec`-target registration runs
+      unconditionally. Rewrote `sec_registration_is_html_only` →
+      `sec_registration_is_format_agnostic` (asserts the opposite:
+      `Format::pdf()` now registers `sec-a`). `cargo nextest run -p
+      quarto-core`: 5287 tests, all green (0 failed, 32 skipped).
+
+      Re-running the smoke test after this fix alone dropped `@sec-*`
+      unresolved-crossref warnings from 70 to 0 (only the already-known
+      `@fig-visualization` embed-gap warning remains), but surfaced a
+      **ninth bug**: `@sec-*` refs for a chapter-level heading rendered
+      with supplement `[Section]` instead of the expected `[Chapter]`
+      (`#ref(<sec-intro>, supplement: [Section])` vs `[Chapter]`). Root
+      cause: Q1's `refs.lua`'s chapter/appendix prefix-type swap
+      (`isChapterRef` + `crossrefOption("chapters", false)`, `refs.lua:
+      60-70`) was never ported into `quarto2-shim.lua`'s
+      `route_crossref_resolved_ref` — its own doc comment explicitly
+      flagged this as a "v1 scope-out." Ported it (mirrors Q1 exactly,
+      using `data.order`/`data.in_appendix`, always present when
+      `data.resolved == true`). That alone still rendered `[ch.]` instead
+      of `[Chapter]`, because `param("crossref-ch-prefix")` was never
+      populated for the Lua filter chain: `insert_crossref_title_prefix_family`
+      (`crossref_params.rs`) only emits `-title`/`-prefix` params for
+      ref-types in the `RefTypeRegistry`, and `ch`/`apx` are synthetic
+      presentation keys, not registered ref-types. Added an explicit,
+      unconditional second loop emitting `crossref-ch-title`/`-prefix`
+      and `crossref-apx-title`/`-prefix` from `LanguageTerms` (which,
+      unlike the Lua param blob, already covers every `_language.yml`
+      key). Updated `test_both_crossref_families_are_emitted` (now
+      asserts the 4 synthetic keys too) and the `params_blob_key_set`
+      insta snapshot. Both `@sec-*` resolution and the Chapter/Appendix
+      supplement swap are now fully correct in the rendered `.typ`/PDF.
+
+      Re-running again surfaced a **tenth bug**, orthogonal to crossref
+      entirely: ~178 PDF-text "Required pattern not found" failures, an
+      exact byte-for-byte repeat of the pre-existing baseline (confirmed:
+      the same 85 `ensurePdfRegexMatches` mismatches occurred before
+      *and* after the `sec` fix). Root cause (confirmed by dumping
+      `pdf_extract::extract_text` output directly): the `pdf-extract`
+      crate inserts a spurious extra space at Typst content-box
+      boundaries — e.g. a numbered `#ref()`/caption-prefix box abutting
+      literal surrounding text produces `" Figure 1.1:  A plot..."`
+      instead of `"Figure 1.1: A plot..."`, and similarly a bare space
+      before trailing punctuation like `. , :` where a ref box is
+      immediately followed by punctuation in the source
+      (`"Chapter 1. , we now present"`). This is a known
+      PDF-text-extraction artifact, not a content bug — **Gordon's
+      guidance: "we generally do not worry about the number of spaces
+      ... we just fix the test to accept any amount of whitespace."**
+      Confirmed via a fork that orange-book is the *only* fixture using
+      `ensurePdfRegexMatches` (no prior convention to match) and that the
+      existing ad hoc `\s+` spots in this same file were already an
+      instance of the same fix, just applied inconsistently. Fixed by
+      mechanically replacing every literal run of spaces with `\s+`
+      across all of `ensurePdfRegexMatches` (not just the failing ones),
+      plus `\s*` immediately before trailing punctuation (`,`/`:`/`.`)
+      that directly abuts a ref-rendered number/word with no space in
+      the original pattern. (First attempt used a single backslash —
+      `\s+` — which is not a valid YAML double-quoted-scalar escape and
+      broke frontmatter parsing; fixed to the correct double-backslash
+      `\\s+` encoding, verified by re-parsing.) Also fixed one incidental
+      stale pattern found along the way: `path: "logo\.svg"` should have
+      read `path: "\.\./logo\.svg"` since the book-output-dir fix
+      earlier in this plan (the brand-logo-resolution fix) intentionally
+      changed the correct value to `"../logo.svg"`, but the test pattern
+      was never updated to match.
+
+      **Remaining failures after both fixes — all pre-existing, already
+      tracked, and out of scope for this bug:**
+      - `<fig-visualization>` / its `#ref()` / "Figure 1.2: A display of
+        a line" / "Some content in Section 1.2. See Figure 1.2" — item
+        3's `embed`-shortcode-unimplemented gap (separate epic).
+      - `Turing\s+\(1950\)\s+on\s+machine\s+intelligence` and 3 sibling
+        citation patterns (McCarthy/Codd/Lamport) — rendered as
+        `"(Turing 1950)"` (parenthetical) instead of `"Turing (1950)"`
+        (author-in-text, the correct rendering for a bare `@turing1950`
+        citation). Not investigated further — very likely a symptom of
+        the *already-tracked* temporary `references.json` workaround
+        (bd-l6eh1635 BibTeX blocker) losing CSL fields needed for
+        correct in-text-vs-parenthetical citation-mode rendering; this
+        plan's own "Next steps (2)" already calls for re-verifying once
+        `references.bib` is restored, which should be the right moment
+        to re-check this too.
+      - `outline-depth: 17,` (actual: `outline-depth: 3,`, Typst's
+        native default) — **newly surfaced, not yet diagnosed.** The
+        earlier `toc-depth` fix in this same plan (`format_defaults.rs`
+        skips `--toc-depth` CLI forwarding for Typst, relying on the
+        `$toc-depth$` template variable) apparently doesn't reach the
+        book-merged document's metadata correctly. Needs its own
+        investigation — not attempted here, out of scope for this bug.
+      - `ensurePdfTextPositions`: `ALIGNTEST_MARKER` still on page 11 vs
+        `LISTING_BODY_ALIGN_TEST` on page 10 — unchanged by either fix
+        above; still the "likely a downstream symptom" item flagged
+        earlier in this section, still not independently investigated.
+      - `noErrorsOrWarnings`: 112 warnings (HTML-raw-passthrough,
+        metadata-as-markdown parse failures, the `embed` shortcode
+        warning, the `@fig-visualization` unresolved-crossref warning) —
+        this fixture has never been warning-free; reaching zero requires
+        either fixing each underlying warning or the fixture opting into
+        an explicit `printsMessage`/`noErrors` acknowledgment list,
+        neither attempted here.
+
+      **Next steps, in order:** (1) decide whether to chase the
+      newly-surfaced `outline-depth`/book-merge toc-depth bug and the PDF
+      page-ordering symptom now or file them for later — both are
+      genuinely new ground, not part of this bug's scope. (2) once
+      bd-l6eh1635 actually merges into `feature/typst-testing`, rebase
+      this branch onto it, swap `references.json` back out for
+      `references.bib` in `_quarto.yml`, delete `references.json`, and
+      re-verify — including the citation-mode mismatch above.
 - [x] Cross-check against the six existing Rust integration tests
       (`book_numbering_torture.rs` et al.) — any assertion that fails here but passes
       there points at a smoke-all-harness gap, not a rendering regression; triage
