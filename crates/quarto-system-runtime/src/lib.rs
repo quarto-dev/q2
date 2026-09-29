@@ -28,6 +28,8 @@ mod vfs;
 
 // Native runtime is only compiled for non-WASM targets
 #[cfg(not(target_arch = "wasm32"))]
+mod canonical;
+#[cfg(not(target_arch = "wasm32"))]
 mod native;
 
 // SASS compilation for native targets
@@ -52,6 +54,8 @@ pub use traits::{
 pub use vfs::{VfsWriteStats, VirtualFileSystem};
 
 // Re-export runtime implementations based on target
+#[cfg(not(target_arch = "wasm32"))]
+pub use canonical::{canonicalize, canonicalize_deepest_existing};
 #[cfg(not(target_arch = "wasm32"))]
 pub use native::NativeRuntime;
 

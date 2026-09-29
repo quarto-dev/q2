@@ -92,7 +92,7 @@ impl SystemRuntime for NativeRuntime {
     }
 
     fn canonicalize(&self, path: &Path) -> RuntimeResult<PathBuf> {
-        path.canonicalize().map_err(RuntimeError::from)
+        crate::canonicalize(path).map_err(RuntimeError::from)
     }
 
     fn path_metadata(&self, path: &Path) -> RuntimeResult<PathMetadata> {
