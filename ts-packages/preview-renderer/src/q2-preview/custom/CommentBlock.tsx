@@ -121,14 +121,14 @@ function inlineSlot(block: BlockNode): InlineNode[] | null {
         // widen the shrink-to-fit bubble to its intrinsic size. `100%`
         // resolves against the bubble's inner max-width'd containers.
         '.q2-comment-bubble img { max-width: 100%; max-height: 2.5em; object-fit: contain; }\n' +
-        // A span carrying comments (CommentSpan.tsx): a dotted underline
-        // ties the bubble to its text without hovering.
-        '.q2-commented-span { text-decoration: underline dotted #4a7ba7; text-decoration-thickness: 1px; text-underline-offset: 2px; }\n' +
-        // Hovered span (or its bubble, or its bubble open): a TEXT highlight
-        // that follows the line boxes, not a rectangle over the bounding box
-        // — a span wrapped across lines would otherwise cover text that
-        // isn't in it. Rendered by Span.tsx from the anchor context.
-        '.q2-comment-span-hover { background-color: #dbeafe; border-radius: 2px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }';
+        // A span carrying comments (CommentSpan.tsx): a light blue text
+        // background ties the bubble to its text without hovering. Follows
+        // the line boxes (not a rectangle over the bounding box) so a span
+        // wrapped across lines never covers text that isn't in it.
+        '.q2-commented-span { background-color: #e3eefb; border-radius: 2px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }\n' +
+        // Hovered span (or its bubble, or its bubble open): a stronger blue.
+        // Rendered by Span.tsx from the anchor context.
+        '.q2-comment-span-hover { background-color: #c7ddf7; border-radius: 2px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }';
     document.head.appendChild(tag);
 })();
 
