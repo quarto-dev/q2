@@ -38,6 +38,57 @@ fn generated_source_info() -> SourceInfo {
     SourceInfo::generated(By::programmatic_config())
 }
 
+/// Rebase `meta["bibliography"]`/`meta["csl"]` entries from
+/// `base_dir`-relative (their declaration site) to `root_dir`-relative
+/// with a leading `/`, matching `typst_root_relative`'s convention
+/// (`modules/mediabag.lua`). Only touches entries that are local files:
+/// URLs are left verbatim, and an entry that doesn't exist as a file
+/// under `base_dir` (e.g. a built-in CSL style name like `apa`) is left
+/// verbatim too, mirroring `format_paths::mark_entry`'s
+/// `ExistenceSilent` policy. Handles both the scalar and array forms
+/// `bibliography`/`csl` accept.
+fn rebase_typst_bibliography_paths(
+    meta: &mut ConfigValue,
+    base_dir: &std::path::Path,
+    root_dir: &std::path::Path,
+    runtime: &dyn SystemRuntime,
+) {
+    for key in ["bibliography", "csl"] {
+        let Some(value) = meta.get_mut(key) else {
+            continue;
+        };
+        match &mut value.value {
+            quarto_pandoc_types::config_value::ConfigValueKind::Array(items) => {
+                for item in items {
+                    rebase_one_typst_path(item, base_dir, root_dir, runtime);
+                }
+            }
+            _ => rebase_one_typst_path(value, base_dir, root_dir, runtime),
+        }
+    }
+}
+
+fn rebase_one_typst_path(
+    entry: &mut ConfigValue,
+    base_dir: &std::path::Path,
+    root_dir: &std::path::Path,
+    runtime: &dyn SystemRuntime,
+) {
+    let Some(declared) = entry.as_plain_text() else {
+        return;
+    };
+    if quarto_util::is_external_url(&declared) {
+        return;
+    }
+    let source = base_dir.join(&declared);
+    if !runtime.is_file(&source).unwrap_or(false) {
+        return;
+    }
+    let relative = pathdiff::diff_paths(&source, root_dir).unwrap_or(source);
+    let rooted = format!("/{}", quarto_util::to_forward_slashes(&relative));
+    *entry = ConfigValue::new_string(rooted, entry.source_info.clone());
+}
+
 /// Render one chapter through its own pipeline, paused after
 /// Normalization — with citeproc deferred (Decision 1 of the plan): a
 /// chapter that declares `filters: [citeproc]` must not build its own
@@ -399,39 +450,78 @@ pub(crate) async fn render_book_single_file(
     let (crossref_result, crossref_diagnostics) =
         run_pipeline_from_ast(merged_doc, &mut ctx, runtime.clone(), crossref_stages).await?;
     ctx.diagnostics.extend(crossref_diagnostics);
-    let crossref_doc = crossref_result.into_document_ast().ok_or_else(|| {
+    let mut crossref_doc = crossref_result.into_document_ast().ok_or_else(|| {
         QuartoError::Other(
             "Book single-file Crossref-phase pipeline did not produce DocumentAst".to_string(),
         )
     })?;
 
-    let ast_context = pampa::pandoc::ASTContext::default();
-    let (mut citeproc_ast, _ast_context, citeproc_diagnostics, _citation_manifest) =
-        pampa::citeproc_filter::apply_citeproc_filter(
-            crossref_doc.ast,
-            ast_context,
-            &format.target_format,
+    // `citation-location: margin` needs every `Inline::Cite` node left
+    // unresolved: pandoc's native Typst writer then emits `#cite`/`@key`
+    // citations, and `quarto-post/typst.lua`'s existing Pass 0 (Cite
+    // handler + `marginCitations()`) builds the margin note text itself —
+    // exactly as it already does for single-document renders. Running
+    // `apply_citeproc_filter` here would resolve every `Cite` node before
+    // that Lua filter ever runs, which is the P9 orange-book-margin bug.
+    // Leaving `meta.bibliography`/`csl` intact (skipping the removal below)
+    // also lets the Typst template's own `$if(bibliography)$` block
+    // (`biblio.typ`) emit `#bibliography(...)`, suppressed from display
+    // via `suppress-bibliography` when set — no template change needed.
+    let margin_citations = crossref_doc
+        .ast
+        .meta
+        .get("citation-location")
+        .and_then(|value| value.as_plain_text())
+        .is_some_and(|location| location == "margin");
+
+    let post_citeproc_doc = if margin_citations {
+        // The declared `bibliography`/`csl` paths are relative to
+        // `citeproc_base_dir` (the chapter directory they were declared
+        // in), but the compiled `.typ` lives under `project.dir`'s
+        // `_book/` — a different directory. Typst embeds this path as
+        // literal source text and resolves it against `typst compile
+        // --root <project.dir>` (`typst_compile.rs:204`), where a
+        // leading `/` means root-relative, not filesystem-absolute. This
+        // mirrors `modules/mediabag.lua`'s `typst_root_relative`, the
+        // existing convention for the same problem with image paths;
+        // there's no Lua-side equivalent for `bibliography`/`csl` since
+        // Lua's Meta filter never sees `citeproc_base_dir`.
+        rebase_typst_bibliography_paths(
+            &mut crossref_doc.ast.meta,
             &citeproc_base_dir,
-        )
-        .map_err(|e| QuartoError::other(format!("citeproc failed for merged book: {e}")))?;
-    ctx.diagnostics.extend(citeproc_diagnostics);
+            &project.dir,
+            runtime.as_ref(),
+        );
+        crossref_doc
+    } else {
+        let ast_context = pampa::pandoc::ASTContext::default();
+        let (mut citeproc_ast, _ast_context, citeproc_diagnostics, _citation_manifest) =
+            pampa::citeproc_filter::apply_citeproc_filter(
+                crossref_doc.ast,
+                ast_context,
+                &format.target_format,
+                &citeproc_base_dir,
+            )
+            .map_err(|e| QuartoError::other(format!("citeproc failed for merged book: {e}")))?;
+        ctx.diagnostics.extend(citeproc_diagnostics);
 
-    // The deferred citeproc just consumed `bibliography`/`csl`: every
-    // citation is formatted and the bibliography Div is inserted. Left in
-    // the merged meta, pandoc's Typst writer would *additionally* emit
-    // native `#set bibliography(...)`/`#bibliography(...)` pointing at
-    // doc-relative paths that don't exist under the book output dir —
-    // a compile error plus a second, hayagriva-rendered bibliography.
-    citeproc_ast.meta.remove("bibliography");
-    citeproc_ast.meta.remove("csl");
+        // The deferred citeproc just consumed `bibliography`/`csl`: every
+        // citation is formatted and the bibliography Div is inserted. Left in
+        // the merged meta, pandoc's Typst writer would *additionally* emit
+        // native `#set bibliography(...)`/`#bibliography(...)` pointing at
+        // doc-relative paths that don't exist under the book output dir —
+        // a compile error plus a second, hayagriva-rendered bibliography.
+        citeproc_ast.meta.remove("bibliography");
+        citeproc_ast.meta.remove("csl");
 
-    let post_citeproc_doc = crate::stage::DocumentAst {
-        path: crossref_doc.path,
-        ast: citeproc_ast,
-        ast_context: crossref_doc.ast_context,
-        source_context: crossref_doc.source_context,
-        warnings: crossref_doc.warnings,
-        recorded_includes: crossref_doc.recorded_includes,
+        crate::stage::DocumentAst {
+            path: crossref_doc.path,
+            ast: citeproc_ast,
+            ast_context: crossref_doc.ast_context,
+            source_context: crossref_doc.source_context,
+            warnings: crossref_doc.warnings,
+            recorded_includes: crossref_doc.recorded_includes,
+        }
     };
 
     let finishing_stages =
