@@ -676,6 +676,63 @@ fn output_equal_to_input_refuses_and_preserves_source() {
     assert_eq!(after, source, "source file must be untouched");
 }
 
+/// Runs `q2 render doc.qmd --output <output>` from `dir` and asserts the
+/// overwrite refusal plus an untouched source.
+fn assert_output_spelling_refused(dir: &Path, output: &Path) {
+    let source = "---\ntitle: T\n---\n\nhello\n";
+    let input = dir.join("doc.qmd");
+    write_file(&input, source);
+
+    let out = run_q2(dir, &["doc.qmd", "--output", output.to_str().unwrap()]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success(),
+        "expected refusal when --output {} names the input; stderr: {stderr}",
+        output.display(),
+    );
+    assert!(
+        stderr.contains("overwrite"),
+        "error should explain the overwrite refusal; got stderr: {stderr}",
+    );
+    let after = std::fs::read_to_string(&input).expect("source still exists");
+    assert_eq!(after, source, "source file must be untouched");
+}
+
+/// bd-1klbq2zd: the overwrite guard compares files, not spellings. A
+/// `sub/..` detour names the input on every OS (`sub/` exists, so the
+/// path resolves) yet differs lexically from it. The detour hangs off the
+/// plain form because `PathBuf::push` folds `..` away under a `\\?\` base.
+#[test]
+fn output_via_dotdot_spelling_of_input_refuses_and_preserves_source() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    std::fs::create_dir_all(dir.join("sub")).unwrap();
+    let detour = dunce::simplified(&dir)
+        .join("sub")
+        .join("..")
+        .join("doc.qmd");
+    assert!(
+        detour
+            .components()
+            .any(|c| c == std::path::Component::ParentDir),
+        "the output spelling must keep its `..`: {}",
+        detour.display(),
+    );
+    assert_output_spelling_refused(&dir, &detour);
+}
+
+/// bd-1klbq2zd: on Windows the input is canonicalized (`\\?\C:\…`), so a
+/// plain `C:\…` spelling of the same file differs lexically. Elsewhere
+/// `dunce::simplified` is the identity and this matches the test above
+/// without the detour.
+#[test]
+fn output_via_plain_spelling_of_input_refuses_and_preserves_source() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    let plain = dunce::simplified(&dir).to_path_buf();
+    assert_output_spelling_refused(&dir, &plain.join("doc.qmd"));
+}
+
 /// bd-6d2wj4zp S3: single-file format detection reads `.md` front
 /// matter exactly like `.qmd`. Pinned via the non-native bail-out:
 /// a `.md` declaring `format: pdf` must get the same early "not yet

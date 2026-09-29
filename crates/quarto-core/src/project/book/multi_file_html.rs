@@ -219,17 +219,21 @@ pub(crate) async fn render_book_multi_file_html(
 
         let effective_options =
             apply_project_output_dir_to_options(render_options, project, &input_path);
-        let (output_path, output_dir, output_stem) =
-            match determine_output_paths(&input_path, &resolved_format, &effective_options) {
-                Ok(p) => p,
-                Err(e) => {
-                    failures.push(file_failure_from_error(input_path.clone(), e));
-                    if fail_fast {
-                        break;
-                    }
-                    continue;
+        let (output_path, output_dir, output_stem) = match determine_output_paths(
+            &input_path,
+            &resolved_format,
+            &effective_options,
+            runtime.as_ref(),
+        ) {
+            Ok(p) => p,
+            Err(e) => {
+                failures.push(file_failure_from_error(input_path.clone(), e));
+                if fail_fast {
+                    break;
                 }
-            };
+                continue;
+            }
+        };
         if let Err(e) = runtime.dir_create(&output_dir, true) {
             failures.push(file_failure_from_error(
                 input_path.clone(),
