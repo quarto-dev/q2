@@ -313,6 +313,20 @@ impl TsEngine {
     }
 
     fn ensure_loaded(&self, c: &Cancellation) -> Result<&LoadEngineResult, ExecutionError> {
+        // Q9 (julia epic Step 4, Phase 3): the julia-engine's `julia`
+        // subprocess is spawned deep inside the shared Deno host (by the
+        // bundled `julia-engine.js`), where a missing binary would otherwise
+        // surface as a raw, unhelpful Deno spawn exception. Check here
+        // instead — the earliest point that knows both "this is the julia
+        // engine" (`self.name`) and can return a coded `ExecutionError`
+        // before any subprocess is spawned. Gated on the engine name (not a
+        // generic mechanism) because no other bundled TS engine has this
+        // problem today; `julia_command()` mirrors the `QUARTO_JULIA`
+        // override the JS side's `juliaCmd()` honors, so this check and the
+        // subprocess it's guarding always agree on which binary to look for.
+        if self.name == "julia" && !julia_is_available() {
+            return Err(ExecutionError::runtime_not_found("julia", julia_command()));
+        }
         self.host.ensure_started()?;
 
         // `current_generation` reflects any respawn `ensure_started()` just
@@ -723,6 +737,33 @@ fn to_wire_ext(ext: &str) -> String {
     } else {
         format!(".{ext}")
     }
+}
+
+// ============================================================================
+// Julia runtime detection (Q9, julia epic Step 4 Phase 3)
+// ============================================================================
+
+/// Resolve the julia binary name/path, honoring `QUARTO_JULIA` the same way
+/// the bundled julia-engine's own `juliaCmd()` does
+/// (`resources/extension-subtrees/julia-engine/_extensions/julia-engine/julia-engine.js`),
+/// so this check and the subprocess it guards always agree on which binary
+/// to look for.
+fn julia_command() -> String {
+    std::env::var("QUARTO_JULIA").unwrap_or_else(|_| "julia".to_string())
+}
+
+/// Check whether the resolved julia binary is on PATH.
+///
+/// Mirrors `ts_process::is_available`'s `deno --version` check: spawns
+/// `<julia> --version` and looks for a successful exit. Julia's CLI answers
+/// `--version` immediately (no package loading), so this is cheap.
+fn julia_is_available() -> bool {
+    std::process::Command::new(julia_command())
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
 }
 
 // ============================================================================
@@ -2707,29 +2748,29 @@ mod tests {
 
     // ── Plan 7b Phase 7: julia's real `_extension.yml` claims `.jl` percent ────
 
-    /// Loads the REAL committed julia-engine fixture's `_extension.yml`
-    /// (`tests/fixtures/extensions/julia-engine/`) — not a synthetic
-    /// `FileClaim` — and proves a `.jl` percent script converts natively
-    /// (zero wire messages, no Deno launch) with genuine `Original`
-    /// provenance (not the wire path's `Generated(By::unknown())`
-    /// placeholder). This is the fixture Plan 4's e2e tests
+    /// Loads the REAL bundled julia-engine subtree's `_extension.yml`
+    /// (`resources/extension-subtrees/julia-engine/`, julia epic Step 4) —
+    /// not a synthetic `FileClaim` — and proves a `.jl` percent script
+    /// converts natively (zero wire messages, no Deno launch) with genuine
+    /// `Original` provenance (not the wire path's `Generated(By::unknown())`
+    /// placeholder). This is the manifest Plan 4's e2e tests
     /// (`julia_engine_e2e.rs`) already exercise for *execution*; this test
     /// covers the *conversion* half those never touch (they render `.qmd`
     /// documents with `engine: julia`, never a percent `.jl` file).
     ///
-    /// Named revert: drop the `claims-files` entry from the fixture's
-    /// `_extension.yml` → `claims_files` parses to `None` →
-    /// `native_markdown_for_file` finds no claim for `.jl` → falls to the
-    /// wire path → a `ToEngine::MarkdownForFile` message is sent → RED.
+    /// Named revert: drop the `claims-files` entry from the manifest →
+    /// `claims_files` parses to `None` → `native_markdown_for_file` finds no
+    /// claim for `.jl` → falls to the wire path → a
+    /// `ToEngine::MarkdownForFile` message is sent → RED.
     #[test]
     fn julia_fixture_jl_percent_converts_natively() {
         watchdog(Duration::from_secs(10), || {
-            let fixture_yml = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(
-                "tests/fixtures/extensions/julia-engine/_extensions/julia-engine/_extension.yml",
+            let manifest_yml = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(
+                "../../resources/extension-subtrees/julia-engine/_extensions/julia-engine/_extension.yml",
             );
             let runtime = quarto_system_runtime::NativeRuntime::new();
-            let extension = crate::extension::read::read_extension(&fixture_yml, &runtime)
-                .expect("the committed julia-engine fixture must parse");
+            let extension = crate::extension::read::read_extension(&manifest_yml, &runtime)
+                .expect("the bundled julia-engine subtree's manifest must parse");
             let claims_files = extension
                 .contributes
                 .engines
@@ -2740,7 +2781,9 @@ mod tests {
                     } => claims_files.clone(),
                     _ => None,
                 })
-                .expect("julia-engine fixture must declare claims-files (Plan 7b Phase 7)");
+                .expect(
+                    "bundled julia-engine manifest must declare claims-files (Plan 7b Phase 7)",
+                );
             assert_eq!(
                 claims_files,
                 vec![FileClaim {
@@ -2750,7 +2793,7 @@ mod tests {
                         comment: "#".to_string(),
                     }),
                 }],
-                "fixture must claim .jl via the percent processor"
+                "manifest must claim .jl via the percent processor"
             );
 
             let (write, read, mock) = MockTransport::pair_with_handle();
@@ -2780,7 +2823,7 @@ mod tests {
                 Arc::new(quarto_system_runtime::NativeRuntime::new());
             let (markdown, source_info) = engine
                 .markdown_for_file(&file, &runtime)
-                .expect("julia's real fixture claim must dispatch natively");
+                .expect("julia's real bundled-manifest claim must dispatch natively");
             assert_eq!(markdown, "hello from julia\n\n");
             assert!(
                 matches!(source_info, quarto_source_map::SourceInfo::Concat { .. }),
@@ -3457,5 +3500,65 @@ mod tests {
             "every written line must map to where it actually starts in the file; \
              drifted (line, reported, true) = {drift:?}\n{report}"
         );
+    }
+
+    // ── Q9 (julia epic Step 4, Phase 3): missing julia binary ──────────────
+
+    #[test]
+    fn ensure_loaded_reports_runtime_not_found_when_julia_binary_missing() {
+        watchdog(Duration::from_secs(10), || {
+            let (engine, _mock) = make_engine_with_mock("julia", None, None, None);
+
+            // Point QUARTO_JULIA at a path that cannot exist, so the check
+            // fails deterministically without depending on whether a real
+            // `julia` happens to be on this machine's PATH. Each nextest
+            // test runs in its own process, so mutating the environment
+            // here is safe (no cross-test race).
+            unsafe {
+                std::env::set_var("QUARTO_JULIA", "/nonexistent/not-a-real-julia-binary");
+            }
+            let c = Cancellation::new();
+            let err = engine
+                .ensure_loaded(&c)
+                .expect_err("a missing julia binary must fail before any subprocess is spawned");
+            unsafe {
+                std::env::remove_var("QUARTO_JULIA");
+            }
+
+            assert!(
+                matches!(
+                    err,
+                    ExecutionError::RuntimeNotFound { ref engine, ref runtime }
+                        if engine == "julia" && runtime == "/nonexistent/not-a-real-julia-binary"
+                ),
+                "expected RuntimeNotFound naming julia and the resolved binary path; got: {err:?}"
+            );
+        });
+    }
+
+    #[test]
+    fn ensure_loaded_skips_julia_check_for_other_engines() {
+        // Named revert: if the `self.name == "julia"` gate were removed (or
+        // inverted), a non-julia engine would also fail here even though it
+        // never touches the julia binary.
+        watchdog(Duration::from_secs(10), || {
+            let (engine, mock) = make_engine_with_mock("echo", None, None, None);
+            unsafe {
+                std::env::set_var("QUARTO_JULIA", "/nonexistent/not-a-real-julia-binary");
+            }
+            mock.script_response(0, loaded_response("echo", vec![]));
+            let c = Cancellation::new();
+            let result = engine.ensure_loaded(&c);
+            unsafe {
+                std::env::remove_var("QUARTO_JULIA");
+            }
+
+            assert!(
+                result.is_ok(),
+                "a non-julia engine must not be affected by QUARTO_JULIA or a missing julia \
+                 binary: {result:?}"
+            );
+            mock.signal_eof();
+        });
     }
 }

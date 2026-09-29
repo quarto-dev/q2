@@ -1,0 +1,51 @@
+---
+title: "Engine Runtime Not Found"
+description: "An execution engine needs an external runtime (e.g. Julia, R, or Jupyter) that could not be found on this machine."
+code: Q-18-3
+subsystem: engine
+status: stub
+since: "99.9.9"
+categories:
+  - engine
+---
+
+# `Q-18-3` — Engine Runtime Not Found
+
+> An execution engine needs an external runtime (e.g. Julia, R, or
+> Jupyter) that could not be found on this machine, so the render
+> could not continue.
+
+## What this means
+
+Some engines are Quarto integrations for a language runtime that lives
+outside Quarto itself — Julia, R (via knitr), or a Jupyter kernel. The
+engine extension is present and resolves correctly, but when Quarto
+tried to launch the runtime it needs, that runtime was not on `PATH`.
+
+This is a missing local dependency, not a problem in your document:
+the same document renders fine on a machine where the runtime is
+installed.
+
+## Why this happens
+
+- The runtime (e.g. `julia`, `Rscript`, `jupyter`) is not installed.
+- The runtime is installed but not on the `PATH` Quarto sees — for
+  example an IDE or CI environment with a different `PATH` than an
+  interactive shell.
+- An environment variable that names a specific runtime executable
+  (for example `QUARTO_JULIA`) points at a path that does not exist.
+
+## How to fix
+
+The message names both the engine and the runtime it could not find.
+
+1. Install the named runtime, or make sure it is on `PATH` in the
+   environment Quarto runs in.
+2. If you use an override environment variable to point at a specific
+   executable, confirm that path is correct.
+3. Re-run the render once the runtime is available.
+
+## Related errors
+
+- [`Q-18-1`](Q-18-1.qmd) — the engine ran, but its result was not in
+  the shape Quarto expects.

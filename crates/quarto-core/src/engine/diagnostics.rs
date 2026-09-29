@@ -31,11 +31,11 @@ const ISSUES_URL: &str = "https://github.com/quarto-dev/q2/issues";
 
 /// The diagnostic for an engine failure.
 ///
-/// `MalformedResult` maps to `Q-18-1`. Every other variant currently maps
-/// to an uncoded error whose title is the variant's `Display` text —
-/// exactly what the stage produced before this seam existed — so adding
-/// a mapping here is the whole job of giving a variant a code
-/// (bd-yd94iyq9).
+/// `MalformedResult` maps to `Q-18-1`, `RuntimeNotFound` to `Q-18-3`. Every
+/// other variant currently maps to an uncoded error whose title is the
+/// variant's `Display` text — exactly what the stage produced before this
+/// seam existed — so adding a mapping here is the whole job of giving a
+/// variant a code (bd-yd94iyq9).
 pub fn engine_error_diagnostic(err: &ExecutionError) -> DiagnosticMessage {
     match err {
         ExecutionError::MalformedResult {
@@ -62,6 +62,22 @@ pub fn engine_error_diagnostic(err: &ExecutionError) -> DiagnosticMessage {
                     "This is a bug in Quarto's integration with the `{engine}` engine, not a \
                      problem in your document. Please report it at {ISSUES_URL}, including \
                      this message and the preserved file."
+                ))
+                .build()
+        }
+        ExecutionError::RuntimeNotFound { engine, runtime } => {
+            DiagnosticMessageBuilder::error("Engine Runtime Not Found")
+                .with_code("Q-18-3")
+                .problem(format!(
+                    "the `{engine}` engine needs `{runtime}`, but it could not be found on \
+                     this machine."
+                ))
+                .add_detail(
+                    "This is a missing local dependency, not a problem in the document — the \
+                     same document renders fine where the runtime is installed.",
+                )
+                .add_hint(format!(
+                    "Install `{runtime}` and make sure it is on PATH, then re-run the render."
                 ))
                 .build()
         }
@@ -169,11 +185,23 @@ mod tests {
     /// uncoded error carrying the variant's `Display` text.
     #[test]
     fn unmapped_variants_fall_through_to_display_text() {
-        let err = ExecutionError::runtime_not_found("knitr", "Rscript");
+        let err = ExecutionError::not_available("knitr");
         let diag = engine_error_diagnostic(&err);
         assert_eq!(diag.code, None);
         assert_eq!(diag.kind, DiagnosticKind::Error);
         assert_eq!(diag.title, err.to_string());
+    }
+
+    // ── the runtime-not-found error (Q-18-3, Q9) ─────────────────────────
+
+    #[test]
+    fn runtime_not_found_is_a_coded_error_naming_engine_and_runtime() {
+        let err = ExecutionError::runtime_not_found("julia", "julia");
+        let diag = engine_error_diagnostic(&err);
+        assert_eq!(diag.code.as_deref(), Some("Q-18-3"));
+        assert_eq!(diag.kind, DiagnosticKind::Error);
+        let text = diag.to_text(None);
+        assert!(text.contains("julia"), "{text}");
     }
 
     // ── the unreadable-include warning (Q-18-2) ──────────────────────────
