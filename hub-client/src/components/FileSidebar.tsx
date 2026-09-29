@@ -527,6 +527,11 @@ export default function FileSidebar({
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    // dragleave fires for every child boundary the pointer crosses; only
+    // clear when the pointer actually leaves the sidebar, or the highlight
+    // (and the hover-expand timer) flicker on every row.
+    const next = e.relatedTarget;
+    if (next instanceof Node && sidebarRef.current?.contains(next)) return;
     setIsDragOver(false);
     hoverDropTarget(null);
   }, [hoverDropTarget]);

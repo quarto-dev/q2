@@ -144,18 +144,39 @@
   background: var(--sidebar-bg);
 }
 
-/* Drag-to-move destination: the hovered folder's header, or the whole
-   tree when the drop would land at the project root. Solid tint plus an
-   inset outline so the target reads even on a short list. */
-.tree-folder.drop-target > .folder-header {
+/* Drag-to-move destination: a rounded outline around the whole hovered
+   folder block (header and contents), with the folder's name row tinted
+   so the destination reads at a glance. Contents are left untinted. */
+.tree-folder.drop-target {
+  position: relative;
+}
+
+/* The outline is an overlay above the block's sticky headers (which are
+   positioned and layered, and would otherwise paint over a plain outline
+   along the top edge and beside nested headers). */
+.tree-folder.drop-target::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--sidebar-drop-accent);
+  border-radius: var(--radius-md);
+  pointer-events: none;
+  z-index: var(--z-sticky);
+}
+
+/* Specificity matches the sticky-header rule above (which sets an opaque
+   background) and comes later, so the tint wins while dragging. */
+.file-list .tree-folder.drop-target > .folder-header,
+.file-list .tree-folder.drop-target > .folder-header:hover {
   background: var(--sidebar-drag-bg);
-  outline: 2px solid var(--sidebar-drop-accent);
-  outline-offset: -2px;
+  color: var(--editor-text);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
 }
 
 .file-list.drop-target {
   outline: 2px solid var(--sidebar-drop-accent);
   outline-offset: -2px;
+  border-radius: var(--radius-md);
 }
 
 .folder-children {
