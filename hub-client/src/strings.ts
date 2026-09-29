@@ -239,6 +239,8 @@ export const dialogs = {
     nameLabel: 'Name:',
     move: 'Move',
     add: 'Add',
+    errorFolderConflict: (folder: string) =>
+      `Can't move folder: files already exist at ${folder}/…`,
     errorExists: 'A file with this name already exists in that folder',
   },
   newFolder: {

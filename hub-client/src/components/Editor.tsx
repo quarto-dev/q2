@@ -57,6 +57,7 @@ import type { MatchRange } from '../services/search';
 import { linkFromPaste } from '../utils/pasteLink';
 import { toggleWrap } from '../utils/markdownToggle';
 import { joinPath } from '../utils/uniquePath';
+import { collectDroppedEntries, type DroppedEntries } from '../utils/droppedEntries';
 import NewAssetDialog from './NewAssetDialog';
 import ShareDialog from './ShareDialog';
 import ProjectTopBar from './ProjectTopBar';
@@ -77,7 +78,7 @@ import ImageViewer from './ImageViewer';
 import ReplayDrawer from './ReplayDrawer';
 import './Editor.css';
 import PreviewRouter from './render/PreviewRouter';
-import { fileSidebar } from '../strings';
+import { fileSidebar, dialogs } from '../strings';
 import { getAncestorPaths } from '../utils/fileTree';
 import { sanitizeFilename } from '../services/resourceService';
 import { processAssetFiles } from './fileUpload/processAssetFiles';
@@ -202,6 +203,11 @@ const editorOptions = {
 // index.md / first .md (bd-6d2wj4zp Phase 5 — .md is a source file, but
 // only a fallback: a synced .md may be a never-rendered README while a
 // .qmd is always deliberate content), then first file.
+/** Sanitize each segment of a dropped relative path, keeping its folders. */
+function sanitizeRelativePath(rel: string): string {
+  return rel.split('/').filter(Boolean).map(sanitizeFilename).join('/');
+}
+
 function selectDefaultFile(files: FileEntry[]): FileEntry | null {
   if (files.length === 0) return null;
 
@@ -1164,17 +1170,29 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
   // exactly as a conflicting internal move does. Files failing the
   // size/empty checks are skipped with a console warning.
   const handleDropFiles = useCallback(
-    (droppedFiles: File[], destination: string) => {
+    (entries: DroppedEntries, destination: string) => {
       const taken = new Set(files.map((f) => f.path));
-      for (const { file, error } of processAssetFiles(droppedFiles)) {
+      // Dropped directories become folders even when empty, so the tree
+      // mirrors what was dropped.
+      for (const folder of entries.folders) {
+        try {
+          createFolder(joinPath(destination, sanitizeRelativePath(folder)));
+        } catch (err) {
+          console.error('Failed to create folder:', err);
+        }
+      }
+      const byFile = new Map(entries.files.map((e) => [e.file, e.relativePath]));
+      for (const { file, error } of processAssetFiles(entries.files.map((e) => e.file))) {
         if (error) {
           console.warn(`[sidebar drop] skipped ${file.name}: ${error}`);
           continue;
         }
-        const name = sanitizeFilename(file.name);
-        const path = joinPath(destination, name);
+        const rel = sanitizeRelativePath(byFile.get(file) ?? file.name);
+        const path = joinPath(destination, rel);
         if (taken.has(path)) {
-          enqueuePlace({ kind: 'add', file, folder: destination, name });
+          const slash = rel.lastIndexOf('/');
+          const folder = joinPath(destination, slash >= 0 ? rel.slice(0, slash) : '');
+          enqueuePlace({ kind: 'add', file, folder, name: slash >= 0 ? rel.slice(slash + 1) : rel });
           continue;
         }
         taken.add(path);
@@ -1183,6 +1201,7 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
     },
     [files, handleUploadAsset, enqueuePlace]
   );
+
 
 
   // Editor drag-drop handlers for image/file insertion
@@ -1262,9 +1281,12 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
     }
 
     // Add next to the document being edited, so the common case yields a
-    // same-directory reference. Same direct-add path as a sidebar drop:
-    // no dialog unless a name is already taken.
-    handleDropFiles(files, resolveDefaultDestination({ selection: currentFile?.path ?? null }));
+    // same-directory reference. Same direct-add path as a sidebar drop
+    // (folders walked too): no dialog unless a name is already taken.
+    const destination = resolveDefaultDestination({ selection: currentFile?.path ?? null });
+    if (e.dataTransfer) {
+      void collectDroppedEntries(e.dataTransfer).then((entries) => handleDropFiles(entries, destination));
+    }
   }, [currentFile, handleDropFiles]);
 
   // Clipboard image paste (bd-706b0ixu, see
@@ -1424,6 +1446,36 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
     }
   }, [currentFile]);
 
+  // Move a folder and everything under it into `destination`. Refused (with
+  // an alert, like a failed rename) if any file would land on an existing
+  // one; otherwise each file is renamed and explicit folder markers follow.
+  const handleMoveFolder = useCallback(
+    (folder: string, destination: string) => {
+      const name = folder.split('/').pop() || folder;
+      const newFolder = joinPath(destination, name);
+      const prefix = `${folder}/`;
+      const moving = files.filter((f) => f.path.startsWith(prefix));
+      const existing = new Set(files.map((f) => f.path));
+      const renames = moving.map((f) => [f, `${newFolder}/${f.path.slice(prefix.length)}`] as const);
+      if (renames.some(([, to]) => existing.has(to))) {
+        alert(dialogs.moveFile.errorFolderConflict(newFolder));
+        return;
+      }
+      for (const [f, to] of renames) handleRenameFile(f, to);
+      for (const marker of allFolders) {
+        if (marker === folder || marker.startsWith(prefix)) {
+          try {
+            createFolder(`${newFolder}${marker.slice(folder.length)}`);
+            deleteFolder(marker);
+          } catch (err) {
+            console.error('Failed to move folder marker:', err);
+          }
+        }
+      }
+    },
+    [files, allFolders, handleRenameFile]
+  );
+
   // Place-file dialog confirmed: move an existing file or add a new one.
   const handlePlaceConfirm = useCallback(
     (request: PlaceRequest, newPath: string) => {
@@ -1476,6 +1528,7 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
                         onMoveFile={(file, preset) => enqueuePlace({ kind: 'move', file, ...preset })}
                         onUploadFiles={handleUploadFiles}
                         onDropFiles={handleDropFiles}
+                        onMoveFolder={handleMoveFolder}
                         onDeleteFile={handleDeleteFile}
                         onRenameFile={handleRenameFile}
                         onOpenInNewTab={handleOpenInNewTab}

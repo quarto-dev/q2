@@ -17,6 +17,7 @@ import {
   type FileTreeNode,
 } from '../utils/fileTree';
 import { resolveDefaultDestination } from './fileUpload';
+import { collectDroppedEntries, type DroppedEntries } from '../utils/droppedEntries';
 import {
   prepareDragOut,
   prepareFolderDragOut,
@@ -74,11 +75,14 @@ export interface FileSidebarProps {
    */
   onUploadFiles: (files: File[], destination: string) => void;
   /**
-   * Files dropped onto the tree from outside the browser. When provided
-   * they are added straight into `destination` (no dialog); otherwise the
-   * drop falls back to `onUploadFiles`.
+   * Files (and folders, walked recursively) dropped onto the tree from
+   * outside the browser. When provided they are added straight into
+   * `destination` (no dialog); otherwise the drop falls back to
+   * `onUploadFiles` with the flat file list.
    */
-  onDropFiles?: (files: File[], destination: string) => void;
+  onDropFiles?: (entries: DroppedEntries, destination: string) => void;
+  /** Move a whole folder (and everything under it) into `destination`. */
+  onMoveFolder?: (folder: string, destination: string) => void;
   onDeleteFile?: (file: FileEntry) => void;
   onRenameFile?: (file: FileEntry, newPath: string) => void;
   /** Open a file in a new browser tab */
@@ -171,6 +175,7 @@ export default function FileSidebar({
   onMoveFile,
   onUploadFiles,
   onDropFiles,
+  onMoveFolder,
   onDeleteFile,
   onRenameFile,
   onOpenInNewTab,
@@ -185,6 +190,7 @@ export default function FileSidebar({
   // dragover — only the payload's *type* is exposed until drop.
   const [moveTarget, setMoveTarget] = useState<string | null>(null);
   const draggingPathRef = useRef<string | null>(null);
+  const draggingFolderRef = useRef<string | null>(null);
   // Hover-to-expand while dragging: the folder currently armed to expand
   // and its timer. Holding over a folder briefly opens it; passing over
   // it does not.
@@ -472,16 +478,30 @@ export default function FileSidebar({
     [filesByPath]
   );
 
-  // Drag and drop handlers. Two kinds of drag reach the sidebar: external
-  // files (upload — shows the drop overlay) and the sidebar's own file
-  // rows (move — highlights the destination folder).
+  /**
+   * Destination for dragging `folder` onto `target`, or null when the
+   * drop is a no-op or illegal: onto itself, into its own subtree, or
+   * into the folder it already lives in.
+   */
+  const resolveFolderMove = useCallback((folder: string, target: EventTarget | null): string | null => {
+    const dest = folderFromTarget(target);
+    const parent = folder.includes('/') ? folder.slice(0, folder.lastIndexOf('/')) : '';
+    if (dest === folder || dest.startsWith(`${folder}/`) || dest === parent) return null;
+    return dest;
+  }, []);
+
+  // Drag and drop handlers. Three kinds of drag reach the sidebar:
+  // external files/folders (add), the sidebar's own file rows (move),
+  // and its folder rows (move the whole subtree).
   const handleDragOver = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
       if (e.dataTransfer.types.includes(HUB_FOLDER_TYPE)) {
-        // Folder drags only go *out* (as a zip); nothing to drop here.
-        e.dataTransfer.dropEffect = 'none';
+        const folder = draggingFolderRef.current;
+        const dest = folder && onMoveFolder ? resolveFolderMove(folder, e.target) : null;
+        e.dataTransfer.dropEffect = dest !== null ? 'move' : 'none';
+        hoverDropTarget(dest);
         return;
       }
       if (e.dataTransfer.types.includes(HUB_FILE_TYPE)) {
@@ -501,7 +521,7 @@ export default function FileSidebar({
       e.dataTransfer.dropEffect = 'copy';
       hoverDropTarget(folderFromTarget(e.target));
     },
-    [onRenameFile, resolveMove, files.length, hoverDropTarget]
+    [onRenameFile, resolveMove, files.length, hoverDropTarget, onMoveFolder, resolveFolderMove]
   );
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
@@ -518,7 +538,15 @@ export default function FileSidebar({
       setIsDragOver(false);
       hoverDropTarget(null);
 
-      if (e.dataTransfer.types.includes(HUB_FOLDER_TYPE)) return;
+      const folderDrag = e.dataTransfer.getData(HUB_FOLDER_TYPE);
+      if (folderDrag) {
+        const dest = onMoveFolder ? resolveFolderMove(folderDrag, e.target) : null;
+        if (dest !== null) {
+          onMoveFolder!(folderDrag, dest);
+          expandFolder(dest);
+        }
+        return;
+      }
       const internal = e.dataTransfer.getData(HUB_FILE_TYPE);
       if (internal) {
         const { path } = JSON.parse(internal) as { path: string };
@@ -537,16 +565,20 @@ export default function FileSidebar({
         return;
       }
 
-      const droppedFiles = Array.from(e.dataTransfer.files);
-      if (droppedFiles.length > 0) {
+      if (e.dataTransfer.files.length > 0 || e.dataTransfer.items.length > 0) {
         // Same folder the drag-over highlighted; in an empty project fall
         // back to the selection's folder (there is nothing to hover).
         const destination =
           files.length > 0
             ? folderFromTarget(e.target)
             : resolveDefaultDestination({ dropTarget: e.target, selection: currentFile?.path });
-        (onDropFiles ?? onUploadFiles)(droppedFiles, destination);
-        expandFolder(destination);
+        // The DataTransfer is only readable during the event: walk it now.
+        void collectDroppedEntries(e.dataTransfer).then((entries) => {
+          if (entries.files.length === 0 && entries.folders.length === 0) return;
+          if (onDropFiles) onDropFiles(entries, destination);
+          else onUploadFiles(entries.files.map((f) => f.file), destination);
+          expandFolder(destination);
+        });
       }
     },
     [
@@ -560,6 +592,8 @@ export default function FileSidebar({
       hoverDropTarget,
       expandFolder,
       onMoveFile,
+      onMoveFolder,
+      resolveFolderMove,
     ]
   );
 
@@ -723,11 +757,17 @@ export default function FileSidebar({
 
   // Folder drag: out of the browser only, as `<folder>.zip` (Chromium).
   const handleFolderDragStart = useCallback((e: React.DragEvent, folder: string) => {
+    draggingFolderRef.current = folder;
     e.dataTransfer.setData(HUB_FOLDER_TYPE, folder);
     const dragOut = prepareFolderDragOut(folder);
     if (dragOut) e.dataTransfer.setData('DownloadURL', dragOut);
-    e.dataTransfer.effectAllowed = 'copy';
+    e.dataTransfer.effectAllowed = 'copyMove';
   }, []);
+
+  const handleFolderDragEnd = useCallback(() => {
+    draggingFolderRef.current = null;
+    hoverDropTarget(null);
+  }, [hoverDropTarget]);
 
   const handleFileDragEnd = useCallback(() => {
     draggingPathRef.current = null;
@@ -857,6 +897,7 @@ export default function FileSidebar({
           onContextMenu={(e) => handleFolderContextMenu(e, node)}
           draggable
           onDragStart={(e) => handleFolderDragStart(e, node.path)}
+          onDragEnd={handleFolderDragEnd}
         />
         {isExpanded && node.children.length > 0 && (
           <div className="folder-children" role="group">
