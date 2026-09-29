@@ -19,6 +19,47 @@ interface Ctx {
   src: string;
   /** opaque node types we could not richly represent (reported for diagnostics) */
   unknown: Set<string>;
+  /**
+   * Where a `[>> …]` comment met while walking inlines is filed (verbatim
+   * source), innermost last: a block pushes a sink for its own comments, an
+   * authored span pushes one for the comments inside it. Comments never
+   * appear in the editable text (span comments prototype).
+   */
+  sinks: string[][];
+}
+
+type SpanAttr = [string, string[], [string, string][]];
+
+/** Plain text of inlines — the fallback comment source when no byte range is known. */
+function plainText(items: AstNode[]): string {
+  let out = '';
+  for (const n of items) {
+    if (n.t === 'Str') out += n.c as string;
+    else if (n.t === 'Space' || n.t === 'SoftBreak' || n.t === 'LineBreak') out += ' ';
+    else if (n.t === 'Code') out += (n.c as [unknown, string])[1];
+    else if (n.t === 'Span' || n.t === 'Link' || n.t === 'Quoted') out += plainText(asArray((n.c as unknown[])[1]));
+    else if (Array.isArray(n.c)) out += plainText(n.c as AstNode[]);
+  }
+  return out;
+}
+
+/** File a comment span's verbatim source in the innermost sink. */
+function fileComment(node: AstNode, ctx: Ctx): void {
+  const sink = ctx.sinks[ctx.sinks.length - 1];
+  if (!sink) return;
+  const content = asArray((node.c as [unknown, AstNode[]])?.[1]);
+  sink.push(nodeSource(node, ctx.pool, ctx.src) ?? `[>> ${plainText(content)}]`);
+}
+
+/** Run `fn` with a fresh comment sink; returns [result, comments filed]. */
+function withSink<T>(ctx: Ctx, fn: () => T): [T, string[]] {
+  const sink: string[] = [];
+  ctx.sinks.push(sink);
+  try {
+    return [fn(), sink];
+  } finally {
+    ctx.sinks.pop();
+  }
 }
 
 const S = richTextSchema;
@@ -106,10 +147,39 @@ function inlines(items: AstNode[], marks: readonly Mark[], ctx: Ctx): PMNode[] {
         out.push(chip(node, 'raw', ctx, (node.c as [string, string])?.[1] ?? ''));
         break;
       case 'Span': {
-        const attr = (node.c as [unknown])?.[0] as [string, string[], [string, string][]];
+        const [attr, children] = node.c as [SpanAttr, AstNode[]];
         const classes = attr?.[1] ?? [];
+        // A comment is never editable text: file it with the enclosing span
+        // or block, to be written back on serialization.
+        if (classes.includes('quarto-edit-comment')) {
+          fileComment(node, ctx);
+          // The comment's leading space goes with it (`text [>> c]` -> `text`),
+          // so the editable text doesn't end in / double up a space.
+          const prev = out[out.length - 1];
+          if (prev?.isText && prev.text === ' ') out.pop();
+          break;
+        }
         const isShortcode = classes.includes('quarto-shortcode__');
-        out.push(chip(node, isShortcode ? 'shortcode' : 'span', ctx, ''));
+        // Synthesized / editorial-mark spans (`quarto-*`) stay opaque chips, and
+        // so does a span nested inside another span (one `span` mark per text).
+        if (isShortcode || classes.some((c) => c.startsWith('quarto-')) || marks.some((m) => m.type === M.span)) {
+          out.push(chip(node, isShortcode ? 'shortcode' : 'span', ctx, ''));
+          break;
+        }
+        // Authored span -> editable `span` mark. Its content is built under a
+        // provisional mark while the comments inside it are collected; the
+        // final mark (comments attached) then replaces the provisional one.
+        const spanAttr: SpanAttr = [attr?.[0] ?? '', [...classes], [...(attr?.[2] ?? [])]];
+        const provisional = M.span.create({ attr: spanAttr, comments: [] });
+        const [content, comments] = withSink(ctx, () =>
+          inlines(asArray(children), marks.concat(provisional), ctx),
+        );
+        if (comments.length === 0) {
+          out.push(...content);
+        } else {
+          const final = M.span.create({ attr: spanAttr, comments });
+          out.push(...content.map((n) => n.mark(n.marks.map((m) => (m === provisional ? final : m)))));
+        }
         break;
       }
       case 'Image':
@@ -143,12 +213,17 @@ function blocks(items: AstNode[], ctx: Ctx): PMNode[] {
   for (const node of items) {
     switch (node.t) {
       case 'Para':
-      case 'Plain':
-        out.push(N.paragraph.create(null, inlines(asArray(node.c), [], ctx)));
+      case 'Plain': {
+        // The block's own comments are stripped from the editable text and
+        // kept on the node (re-appended at the end on serialization).
+        const [content, comments] = withSink(ctx, () => inlines(asArray(node.c), [], ctx));
+        out.push(N.paragraph.create({ comments }, content));
         break;
+      }
       case 'Header': {
         const [level, , inl] = node.c as [number, unknown, AstNode[]];
-        out.push(N.heading.create({ level }, inlines(inl, [], ctx)));
+        const [content, comments] = withSink(ctx, () => inlines(inl, [], ctx));
+        out.push(N.heading.create({ level, comments }, content));
         break;
       }
       case 'BulletList':
@@ -200,7 +275,7 @@ export interface AstToDocResult {
 
 /** Build a ProseMirror doc from one or more untransformed Pandoc blocks. */
 export function astToDoc(sourceBlocks: AstNode[], pool: PoolEntry[], src: string): AstToDocResult {
-  const ctx: Ctx = { pool, src, unknown: new Set() };
+  const ctx: Ctx = { pool, src, unknown: new Set(), sinks: [] };
   const content = blocks(sourceBlocks, ctx);
   // A doc must contain at least one block; fall back to an empty paragraph.
   const doc = N.doc.create(null, content.length ? content : [N.paragraph.create()]);
