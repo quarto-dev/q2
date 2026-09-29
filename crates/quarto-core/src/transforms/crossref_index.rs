@@ -125,10 +125,10 @@ impl AstTransform for CrossrefIndexTransform {
             index: &mut index,
             diagnostics: Vec::new(),
             registry: ctx.ref_type_registry.clone(),
-            // sec-target registration is native-HTML-only: the pandoc-hybrid
-            // pipeline also runs this transform, and registering there would
-            // let crossref-resolve consume `@sec-` cites before the vendored
-            // refs.lua sees them.
+            // Gates the HTML-only `number` kv stash below (see
+            // `visit_header`); `sec`-target registration itself is
+            // unconditional — there is no live Lua filter chain that
+            // resolves `@sec-` for any other format.
             html: ctx.format.identifier.is_html_based(),
             // Q1 marks every entry with the per-file appendix state; with
             // per-file seeds the whole file shares it.
@@ -165,8 +165,8 @@ struct Walker<'a> {
     /// The document's ref-type registry; used to recognize `sec`-classifying
     /// header ids. `None` only in contexts that never installed one.
     registry: Option<crate::crossref::RefTypeRegistry>,
-    /// Native-HTML-family render (see `transform` for why registration is
-    /// gated on this).
+    /// Native-HTML-family render. Only gates the visible `number` kv stash
+    /// (see `visit_header`); `sec`-target registration runs regardless.
     html: bool,
     /// Per-file appendix state from the chapter seed (Q1's
     /// `currentFileMetadataState().appendix`).
@@ -323,7 +323,7 @@ impl<'a> Walker<'a> {
             section: self.index.sections.clone(),
             source_info: header.source_info.clone(),
         });
-        if unnumbered || !self.html {
+        if unnumbered {
             return;
         }
         // Book-projects P0 / sections.lua: stash the visible section number
@@ -331,8 +331,10 @@ impl<'a> Walker<'a> {
         // free) — gated only on `number-sections`/`number-depth`, and
         // deliberately placed before the identifier/`sec`-target checks
         // below, since Q1 stashes this for every numbered header regardless
-        // of whether it's also an `@sec-` target.
-        if self.number_sections && (header.level as u32) <= self.number_depth {
+        // of whether it's also an `@sec-` target. HTML-only: non-HTML
+        // writers (Typst, pandoc-hybrid docx/pptx/etc.) do their own native
+        // heading numbering and never consume this kv.
+        if self.html && self.number_sections && (header.level as u32) <= self.number_depth {
             header.attr.2.insert(
                 "number".to_string(),
                 format_section_number(&self.index.sections, self.index.max_heading, self.appendix),
@@ -340,7 +342,12 @@ impl<'a> Walker<'a> {
         }
         // Register `sec`-classifying ids as crossref targets — this, not
         // `number-sections`, is what makes `@sec-` refs resolve (Q1
-        // registers unconditionally; only visible numbering is gated).
+        // registers unconditionally for every format; only visible
+        // numbering above is HTML-only). There is no live Lua filter chain
+        // in q2's current architecture that resolves `@sec-` for
+        // pandoc-hybrid formats independently — crossref resolution is
+        // fully native Rust regardless of writer — so this must run
+        // unconditionally too, not just for HTML.
         let Some(identifier) = identifier else { return };
         let is_sec = self
             .registry
@@ -1119,13 +1126,18 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn sec_registration_is_html_only() {
+    async fn sec_registration_is_format_agnostic() {
+        // `sec`-target registration must run for every format, not just
+        // HTML: q2's crossref resolution is fully native Rust with no live
+        // Lua filter chain that resolves `@sec-` for pandoc-hybrid or
+        // unimplemented (e.g. PDF) writers. Only the *visible* `number` kv
+        // stash (see `number_attr_skips_unnumbered_and_non_html`) is
+        // HTML-only.
         let (_ast, idx, _diags) =
             run_with_format(vec![header(1, "sec-a", "A")], crate::format::Format::pdf()).await;
         assert!(
-            idx.get("sec-a").is_none(),
-            "pandoc-hybrid formats keep Lua-native @sec- resolution; \
-             crossref-index must not register sec targets for them"
+            idx.get("sec-a").is_some(),
+            "sec targets must register regardless of format"
         );
         // The section counter still advances for every format — floats get
         // section-relative numbers from it.
