@@ -261,19 +261,37 @@ pub fn build_forwarded_args(
     }
     // Typst never consumes pandoc's own `--toc`/`--toc-depth`-driven
     // internal TOC-insertion (`WriterOptions.writerTableOfContents`/
-    // `writerTOCDepth`) — both `resources/pandoc-filters/typst-template/
-    // typst-template.typ` (Q2's own default template) and every vendored
-    // extension's own `typst-show.typ` (e.g. orange-book) read `toc`/
-    // `toc-depth` purely as `$toc$`/`$toc-depth$` *template variables*,
-    // which pandoc always populates straight from the document's own
-    // metadata regardless of these CLI flags, feeding a native Typst
-    // `#outline(depth: toc_depth)` call directly. Forwarding them is
-    // therefore not just unnecessary but actively harmful: pandoc's CLI
-    // parser hard-validates `--toc-depth` to 1-6 (verified directly), while
-    // Typst's own outline has no such cap — a book with deep heading
-    // nesting (`orange-book`'s smoke-all fixture sets `toc-depth: 17`)
-    // fails to render at all for a restriction that would never have
-    // applied to it.
+    // `writerTOCDepth`) directly as a writer feature — both
+    // `resources/pandoc-filters/typst-template/typst-template.typ` (Q2's own
+    // default template) and every vendored extension's own `typst-show.typ`
+    // (e.g. orange-book) read `toc`/`toc-depth` purely as
+    // `$toc$`/`$toc-depth$` *template variables*, feeding a native Typst
+    // `#outline(depth: toc_depth)` call directly. Forwarding a *bare*
+    // `--toc-depth` CLI flag is therefore not just unnecessary but actively
+    // harmful: pandoc's CLI parser hard-validates `--toc-depth` to 1-6
+    // (verified directly), while Typst's own outline has no such cap — a
+    // book with deep heading nesting (`orange-book`'s smoke-all fixture sets
+    // `toc-depth: 17`) fails to render at all for a restriction that would
+    // never have applied to it.
+    //
+    // This does NOT mean `$toc-depth$` is simply populated straight from
+    // document metadata regardless of CLI flags, though — the vendored
+    // `resources/pandoc-filters/filters/quarto-post/typst.lua`'s `Meta`
+    // filter (ported from Q1) unconditionally *overwrites*
+    // `meta["toc-depth"]` with `tostring(PANDOC_WRITER_OPTIONS["toc_depth"])`
+    // before the template ever substitutes `$toc-depth$` — i.e. by
+    // template-substitution time the value is pandoc's own *writer-options*
+    // idea of toc-depth, not the document's raw metadata. And
+    // `PANDOC_WRITER_OPTIONS.toc_depth` only reflects a value other than
+    // pandoc's built-in default of 3 when it was populated via a real
+    // `--toc-depth` CLI flag or a `--defaults` file — a bare `--metadata
+    // toc-depth=N` does NOT propagate to it (verified empirically with
+    // `pandoc -t typst --lua-filter=<probe>`). So skipping CLI forwarding
+    // entirely (as below) silently resets any custom `toc-depth` back to 3;
+    // [`build_typst_toc_defaults_yaml`] is the other half of this fix —
+    // it threads the real value through a `--defaults` file instead, which
+    // bypasses the CLI's 1-6 validation (confirmed: `pandoc --defaults=<yaml
+    // with toc-depth: 17>` succeeds with no range check at all).
     if base_format != FormatIdentifier::Typst {
         if meta.get("toc").and_then(|v| v.as_bool()) == Some(true) {
             args.push(OsString::from("--toc"));
@@ -324,6 +342,33 @@ pub fn build_forwarded_args(
     }
 
     Ok(args)
+}
+
+/// Build the content of a pandoc `--defaults` file carrying `toc`/`toc-depth`
+/// for Typst, bypassing the `--toc-depth` CLI flag's 1-6 range validation
+/// (see the doc comment on `build_forwarded_args`'s Typst-skip branch above
+/// for why a bare CLI flag can't be used here). Returns `None` when the
+/// document sets neither key — nothing to override pandoc's built-in
+/// `toc_depth` default of 3 with.
+///
+/// Caller-owned I/O: this is a pure string builder so it stays unit-testable
+/// without a filesystem; [`crate::stage::stages::PandocWriteStage`] writes
+/// the returned content to a temp file and appends `--defaults=<path>` to
+/// the pandoc invocation.
+pub fn build_typst_toc_defaults_yaml(meta: &ConfigValue) -> Option<String> {
+    let toc = meta.get("toc").and_then(|v| v.as_bool());
+    let toc_depth = meta.get("toc-depth").and_then(|v| v.as_int());
+    if toc.is_none() && toc_depth.is_none() {
+        return None;
+    }
+    let mut yaml = String::new();
+    if let Some(t) = toc {
+        yaml.push_str(&format!("toc: {t}\n"));
+    }
+    if let Some(d) = toc_depth {
+        yaml.push_str(&format!("toc-depth: {d}\n"));
+    }
+    Some(yaml)
 }
 
 #[cfg(test)]
@@ -638,6 +683,41 @@ mod tests {
                 .any(|a| a == "--toc" || a == "--toc-depth" || a == "17"),
             "toc/toc-depth must not be forwarded for Typst: {joined:?}"
         );
+    }
+
+    /// The other half of the Typst toc-depth fix: since a bare `--toc-depth`
+    /// CLI flag is skipped (test above), the value must instead reach
+    /// pandoc via a `--defaults` file, or `PANDOC_WRITER_OPTIONS.toc_depth`
+    /// (and therefore the vendored `typst.lua`'s `meta["toc-depth"]`
+    /// override) silently falls back to pandoc's built-in default of 3.
+    #[test]
+    fn test_typst_toc_defaults_yaml_carries_depth_past_pandoc_cli_cap() {
+        use quarto_pandoc_types::ConfigMapEntry;
+        let meta = ConfigValue::new_map(
+            vec![
+                ConfigMapEntry {
+                    key: "toc".to_string(),
+                    key_source: SourceInfo::for_test(),
+                    value: ConfigValue::new_bool(false, SourceInfo::for_test()),
+                },
+                ConfigMapEntry {
+                    key: "toc-depth".to_string(),
+                    key_source: SourceInfo::for_test(),
+                    value: int_value(17),
+                },
+            ],
+            SourceInfo::for_test(),
+        );
+
+        let yaml = build_typst_toc_defaults_yaml(&meta).expect("toc-depth is present");
+        assert!(yaml.contains("toc-depth: 17"), "{yaml}");
+        assert!(yaml.contains("toc: false"), "{yaml}");
+    }
+
+    #[test]
+    fn test_typst_toc_defaults_yaml_none_when_no_toc_keys_present() {
+        let meta = ConfigValue::new_map(vec![], SourceInfo::for_test());
+        assert!(build_typst_toc_defaults_yaml(&meta).is_none());
     }
 
     /// Negative control for the test above: a non-Typst Pandoc-hybrid
