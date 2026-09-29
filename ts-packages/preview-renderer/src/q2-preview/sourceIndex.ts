@@ -19,12 +19,22 @@ export type ReachabilityClass = 'TopLevel' | 'Descendable' | 'Opaque';
 export interface SourceIndexEntry {
     sourceNode: BlockNode;
     reachabilityClass: ReachabilityClass;
+    /**
+     * The untransformed AST's source-info pool (`astContext.p`), which the
+     * `s` fields inside `sourceNode` index into. Lets a consumer locate an
+     * inline INSIDE the source block by source-range value — the way
+     * `resolveSource` locates the block itself (span comments,
+     * `custom/CommentSpan.tsx`).
+     */
+    sourcePool: RawPool;
 }
 
 export interface ResolvedSource {
     sourceNode: BlockNode;
     reachabilityClass: ReachabilityClass;
     sourceEntry: { t: 0; r: [number, number]; d: number };
+    /** See `SourceIndexEntry.sourcePool`. Optional: older test fixtures omit it. */
+    sourcePool?: RawPool;
 }
 
 export function serializeSourceEntry(entry: {
@@ -35,7 +45,7 @@ export function serializeSourceEntry(entry: {
     return `${entry.t}:${entry.r[0]}-${entry.r[1]}:${entry.d}`;
 }
 
-type RawPool = Array<{ t: number; r: [number, number]; d: unknown }>;
+export type RawPool = Array<{ t: number; r: [number, number]; d: unknown }>;
 
 function childClass(
     parent: ReachabilityClass,
@@ -57,7 +67,7 @@ function indexBlock(
             const key = serializeSourceEntry(
                 entry as { t: 0; r: [number, number]; d: number },
             );
-            index.set(key, { sourceNode: block, reachabilityClass: reachability });
+            index.set(key, { sourceNode: block, reachabilityClass: reachability, sourcePool: pool });
         }
     }
     descendBlock(block, pool, reachability, index);
