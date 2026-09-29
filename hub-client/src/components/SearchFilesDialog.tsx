@@ -101,9 +101,10 @@ function SearchFilesForm({
         const delta = e.key === 'ArrowDown' ? 1 : -1;
         const next = (activeIndex + delta + results.length) % results.length;
         setActiveIndex(next);
+        // Optional call: jsdom (unit tests) has no scrollIntoView.
         listRef.current
           ?.querySelector(`[data-index="${next}"]`)
-          ?.scrollIntoView({ block: 'nearest' });
+          ?.scrollIntoView?.({ block: 'nearest' });
       } else if (e.key === 'Enter') {
         if (e.target instanceof HTMLButtonElement) return;
         e.preventDefault();

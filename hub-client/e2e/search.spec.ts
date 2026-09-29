@@ -1,7 +1,8 @@
 /**
- * End-to-end test for Phase 1 full-text search: a project with several files
- * is loaded through the real Automerge sync pipeline, then the FileSidebar
- * search box is exercised in the browser.
+ * End-to-end test for full-text search: a project with several files is
+ * loaded through the real Automerge sync pipeline, then the search dialog
+ * (opened from the FileSidebar's magnifying-glass button) is exercised in
+ * the browser.
  */
 
 import { test, expect } from '@playwright/test';
@@ -54,28 +55,33 @@ test.describe('Full-text search', () => {
     const previewFrame = page.frameLocator('iframe[src*="q2-preview.html"]');
     await expect(previewFrame.locator('body')).toContainText('homepage', { timeout: 30000 });
 
-    const searchBox = page.getByLabel('Search files');
-    await expect(searchBox).toBeVisible();
+    // Open the search dialog from the sidebar header.
+    await page.getByRole('button', { name: 'Search files' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Search files' });
+    await expect(dialog).toBeVisible();
+    const searchBox = dialog.getByRole('searchbox', { name: 'Search files' });
+    await expect(searchBox).toBeFocused();
 
     // Query a term unique to methods.qmd.
     await searchBox.fill('regression');
 
     // The matching file appears; non-matching files do not.
-    const results = page.locator('.search-result');
+    const results = dialog.locator('.search-result');
     await expect(results).toHaveCount(1);
-    await expect(page.locator('.search-result-name')).toHaveText('methods.qmd');
+    await expect(dialog.locator('.search-result-name')).toHaveText('methods.qmd');
     // The snippet highlights the matched term.
-    await expect(page.locator('.search-result-snippet mark')).toContainText('regression');
+    await expect(dialog.locator('.search-result-snippet mark')).toContainText('regression');
 
-    // Selecting the result opens that file in the preview.
-    await page.locator('.search-result').click();
+    // Selecting the result closes the dialog and opens that file in the
+    // preview, with the match selected in the editor.
+    await results.click();
+    await expect(dialog).not.toBeVisible();
     await expect(previewFrame.locator('body')).toContainText('logistic regression', {
       timeout: 30000,
     });
+    await expect(page.locator('.file-path')).toHaveText('methods.qmd');
 
-    // Clearing the search restores the file tree (all files listed).
-    await page.getByLabel('Clear search').click();
-    await expect(searchBox).toHaveValue('');
+    // The file tree is untouched by searching (all files still listed).
     await expect(page.locator('.file-item')).toHaveCount(4);
   });
 });
