@@ -30,6 +30,10 @@ const nodes: Record<string, NodeSpec> = {
   paragraph: {
     group: 'block',
     content: 'inline*',
+    // Verbatim source of the block's own `[>> …]` comments, hidden from the
+    // editable text and re-appended on serialization (span comments prototype;
+    // see spanMarkExtension.ts for the tiptap twin).
+    attrs: { comments: { default: [] } },
     parseDOM: [{ tag: 'p' }],
     toDOM: () => pDOM,
   },
@@ -37,7 +41,7 @@ const nodes: Record<string, NodeSpec> = {
   heading: {
     group: 'block',
     content: 'inline*',
-    attrs: { level: { default: 1 } },
+    attrs: { level: { default: 1 }, comments: { default: [] } },
     defining: true,
     parseDOM: [1, 2, 3, 4, 5, 6].map((level) => ({ tag: `h${level}`, attrs: { level } })),
     toDOM: (node) => [`h${node.attrs.level as number}`, 0],
@@ -123,6 +127,45 @@ const nodes: Record<string, NodeSpec> = {
 };
 
 const marks: Record<string, MarkSpec> = {
+  // `span` is FIRST on purpose: schema order is mark rank, and the lowest rank
+  // is the outermost mark when serializing (see the tiptap twin's `priority`).
+  // An authored `[text]{attrs}` span as an editable mark (span comments
+  // prototype). `attr` is the Pandoc attr tuple; `comments` the verbatim source
+  // of `[>> …]` comments that were inside the span (hidden, written back).
+  span: {
+    attrs: { attr: { default: ['', [], []] }, comments: { default: [] } },
+    inclusive: false,
+    parseDOM: [
+      {
+        tag: 'span.q2-rt-span',
+        getAttrs(dom) {
+          const el = dom as HTMLElement;
+          const parse = (raw: string | null, fallback: unknown) => {
+            try {
+              return raw ? JSON.parse(raw) : fallback;
+            } catch {
+              return fallback;
+            }
+          };
+          return {
+            attr: parse(el.getAttribute('data-attr'), ['', [], []]),
+            comments: parse(el.getAttribute('data-comments'), []),
+          };
+        },
+      },
+    ],
+    toDOM(mark) {
+      return [
+        'span',
+        {
+          class: 'q2-rt-span',
+          'data-attr': JSON.stringify(mark.attrs.attr),
+          'data-comments': JSON.stringify(mark.attrs.comments),
+        },
+        0,
+      ];
+    },
+  },
   bold: { parseDOM: [{ tag: 'strong' }, { tag: 'b' }], toDOM: () => ['strong', 0] },
   italic: { parseDOM: [{ tag: 'em' }, { tag: 'i' }], toDOM: () => ['em', 0] },
   strike: { parseDOM: [{ tag: 's' }, { tag: 'del' }], toDOM: () => ['s', 0] },
