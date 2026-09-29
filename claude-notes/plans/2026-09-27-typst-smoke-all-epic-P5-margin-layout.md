@@ -92,16 +92,16 @@ nested/screen-inset variants).
       investigation pass; none are (c).
 - [ ] Close the remaining in-scope Q2 format/filter/render gaps listed in §Decisions,
       then rerun the P5 smoke suite and update this checklist. **Scope conflict,
-      flagged rather than silently resolved:** three of the five groups are
-      unimplemented Q2 Typst-filter capabilities (Typst-native citeproc mode for margin
-      citations; `#notefigure`/margin-caption support entirely absent from
-      `quarto-post/typst.lua`; `mediabag-dir` filter-param wiring, a repo-wide gap not
-      Typst-specific), not fixes scoped to this metadata-bridge pass — each is its own
-      multi-file change with its own test plan. The column-width geometry group needs
-      a dedicated P3-predicate-vs-rendered-layout investigation before a root cause is
-      even assigned. None of this was attempted here to avoid rushing a large surface
-      under gate pressure; see `## Status` for the explicit decision this leaves for
-      Gordon.
+      flagged rather than silently resolved:** the `#notefigure`/margin-caption group
+      is now fully closed (2026-09-28, Root causes 3 and 4 — see §Decisions); two of
+      the remaining three groups are unimplemented Q2 Typst-filter capabilities
+      (Typst-native citeproc mode for margin citations; `mediabag-dir` filter-param
+      wiring, a repo-wide gap not Typst-specific), not fixes scoped to this
+      metadata-bridge pass — each is its own multi-file change with its own test plan.
+      The column-width geometry group needs a dedicated P3-predicate-vs-rendered-layout
+      investigation before a root cause is even assigned. None of this was attempted
+      here to avoid rushing a large surface under gate pressure; see `## Status` for
+      the explicit decision this leaves for Gordon.
 - [x] `cargo clippy -p quarto-core --all-targets -- -D warnings`,
       `cargo clippy -p quarto --all-targets -- -D warnings`, and
       `cargo fmt --all -- --check` pass after the metadata-bridge change.
@@ -315,34 +315,57 @@ same file (`column_margin_cell_option_becomes_wrapper_class`,
 confirmed both by direct single-file `q2 render --to typst` and by the focused smoke
 suite.
 
-**Root cause 4 (identified, not fixed):** `margin-subfigure-ggplot2` now passes its
+**Root cause 4 (fixed):** `margin-subfigure-ggplot2` passed its
 `ensureTypstFileRegexMatches` check (`#note(` + `quarto_super` both present) but still
-fails `ensurePdfRegexMatches` — the subfigure lettering `(a) Sine`/`(b) Cosine` never
-appears in the PDF. The generated `.typ` shows two independent `#figure(...)` blocks
+failed `ensurePdfRegexMatches` — the subfigure lettering `(a) Sine`/`(b) Cosine` never
+appeared in the PDF. The generated `.typ` showed two independent `#figure(...)` blocks
 (one per `ggplot2` plot), each with a plain caption, with **no** `quarto_super`
-panel-numbering wrapper at all — a different, deeper gap from Root cause 3. Compared
-directly against the passing `margin-subfigure.qmd` fixture (plain-markdown
-`::: {#fig-x layout-ncol=1}` authoring with per-image `{#fig-sub-a}`/`{#fig-sub-b}` ids):
-that shape does produce `quarto_super` numbering correctly. R/knitr's `fig-subcap`
-cell option therefore never produces the subfloat/panel AST structure that the
-`layout-ncol` authoring form does — this is a distinct bug in the R/knitr multi-panel
-cell-option path, not something `wrapper_column_classes` touches, and needs its own
-investigation (likely in `codeblock_shorthand.rs`'s handling of `fig-subcap`, or in how
-knitr's own multi-plot cell output gets desugared/recognized as a subfloat panel).
-Not attempted here — flagging rather than expanding scope under this fix.
+panel-numbering wrapper at all — a different, deeper gap from Root cause 3. Traced to
+the same pre-engine wrapping Root cause 3 fixed, but hitting it harder: for a labelled
+R/knitr cell with `fig-subcap` (a YAML *list* of per-panel captions, not a scalar),
+`codeblock_shorthand.rs` was still building the `Wrapper::Float` ancestor Div and
+consuming `label`/`fig-cap` out of the code block body before knitr ever ran. Without
+`label` still present in its own chunk options, knitr's `hooks.R` (`output_label`,
+`output_label_placeholder`) can't synthesize the per-panel ids it normally derives from
+that label — every panel image comes back with an empty identifier — and
+`figure_cap()`'s subcap captions land on unlabelled images. Downstream,
+`parsefiguredivs.lua`'s `Figure` handler only promotes an image to a `FloatRefTarget`
+when its identifier matches a ref-type prefix, so the now-unlabelled panels never
+become subfloats and `crossref_mark_subfloats` (`crossref/preprocess.lua`) never sets
+`has_subfloats`. Confirmed against the passing `margin-subfigure.qmd` fixture
+(plain-markdown `::: {#fig-x layout-ncol=1}` authoring with per-image
+`{#fig-sub-a}`/`{#fig-sub-b}` ids, never touched by `codeblock_shorthand.rs` since
+there's no code cell at all): that shape keeps its per-image ids and does produce
+`quarto_super` numbering correctly, which is what pointed at label-stripping as the
+mechanism rather than a missing subfloat feature.
+
+Fixed by leaving a `fig-subcap` cell entirely unwrapped: `codeblock_shorthand.rs` now
+checks (new `CellOptions::has`, since `fig-subcap`'s YAML-sequence value has no entry in
+`CellOptions::get`'s scalar-only map) for `<reftype>-subcap` before building the
+`Wrapper::Float` case, and short-circuits to `Wrapper::None` when present — no
+consumption of `label`/`fig-cap` at all, so the cell reaches knitr byte-for-byte as
+written. This restores the classic shape: knitr's own `.cell` div comes back
+self-labelled with the panel images individually labelled/captioned, which is exactly
+what `parsefiguredivs.lua` + `crossref_mark_subfloats`'s all-Lua subfloat pipeline
+already recognizes and numbers — no Lua or Rust subfloat-construction logic needed, just
+not defeating the existing one. One new regression test
+(`fig_subcap_cell_is_left_unwrapped_for_the_engine`) asserting the block list is
+untouched.
 
 **Net effect:** focused P5 run went from 58 passed / 18 failed (10 skipped, this
-session's earlier checkpoint) to **63 passed / 13 failed** (10 skipped, unchanged). The
-remaining 13 failures: 7 citation/citeproc fixtures (Group 1's territory in
+session's earlier checkpoint) to **64 passed / 12 failed** (10 skipped, unchanged). The
+remaining 12 failures: 7 citation/citeproc fixtures (Group 1's territory in
 workspace-2, untouched), 4 column-width/geometry fixtures (still need the P3
-predicate-vs-layout investigation), 1 `crossref-grand-finale.qmd` (mediabag-dir gap,
-out of scope), and 1 `margin-subfigure-ggplot2` (Root cause 4 above).
+predicate-vs-layout investigation), and 1 `crossref-grand-finale.qmd` (mediabag-dir gap,
+out of scope) — all three groups are Gordon's scope call per `## Status` below, nothing
+further attempted here.
 
 Gated: `cargo clippy -p quarto-core --all-targets -- -D warnings` clean.
-`cargo nextest run -p quarto-core`: 5287 passed, 32 skipped — +3 over the prior
-baseline of 5284, exactly the three new `wrapper_column_classes` regression tests, no
-other deltas. Per the global CLAUDE.md testing rule, the workspace-wide `cargo nextest
-run --workspace` phase-boundary gate was deliberately **not** run from this worktree —
+`cargo nextest run -p quarto-core`: 5288 passed, 32 skipped — +1 over the Root-cause-3
+checkpoint's 5287, exactly this session's one new
+`fig_subcap_cell_is_left_unwrapped_for_the_engine` regression test, no other deltas.
+Per the global CLAUDE.md testing rule, the workspace-wide `cargo nextest run
+--workspace` phase-boundary gate was deliberately **not** run from this worktree —
 Group 1/3/5 work is concurrently in flight in workspace-2 on the sibling branch
 `typst-testing/p5-margin-layout`; that gate runs once after both branches are
 integrated.
@@ -379,11 +402,11 @@ semantics against the actual rendered geometry before even a root cause (P3 pred
 vs. Q2 layout) can be assigned — deliberately not guessed here.
 
 **2026-09-28 update:** the `#notefigure`/margin-caption group (item 2 above) is now
-mostly closed — see "Root cause 3 (fixed)" above; 5 of its 6 R/knitr-cell-option
-fixtures pass. One residual, distinct gap remains in that group: Root cause 4
-(subfigure-panel numbering for R/knitr's `fig-subcap` cell option), not yet
-investigated. Items 1 (Typst-native citeproc) and 3 (`mediabag-dir`) are untouched and
-still Gordon's scope call to make, as is the column-width geometry group.
+fully closed — see "Root cause 3 (fixed)" and "Root cause 4 (fixed)" above; all 6 of
+its R/knitr-cell-option fixtures pass. Items 1 (Typst-native citeproc) and 3
+(`mediabag-dir`) are untouched and still Gordon's scope call to make, as is the
+column-width geometry group — these three groups (7 + 1 + 4 = 12 fixtures) are the
+entirety of what remains red in the focused P5 suite.
 
 Given this, P5 cannot honestly be marked complete in this session without either (a)
 implementing three separate, non-trivial Typst-filter capabilities plus one

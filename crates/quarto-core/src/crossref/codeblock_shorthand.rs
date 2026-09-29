@@ -164,6 +164,21 @@ fn try_desugar_code_block(
         // a crossref means the author is naming the cell for the
         // engine — no wrapper, and the label stays in the body.
         Some(label) => match registry.classify_cite_id(label) {
+            Some(def) if parsed.has(&format!("{}-subcap", def.ref_type)) => {
+                // A multi-panel cell (R/knitr `fig-subcap` et al.): leave
+                // `label`/`<reftype>-cap` in the body untouched. The engine
+                // needs its own `label` option intact to synthesize each
+                // panel's id and per-panel caption (see knitr's
+                // `output_label_placeholder`/`figure_cap` in hooks.R); the
+                // resulting self-labelled `.cell` div — with its nested,
+                // individually labelled/captioned panel images — is the
+                // exact shape the all-Lua subfloat pipeline
+                // (`parsefiguredivs.lua` + `crossref_mark_subfloats`)
+                // already turns into a numbered panel. Wrapping it here,
+                // pre-engine, would strip the very options the engine needs
+                // and leave the panel images unlabelled (no subfloats).
+                Wrapper::None
+            }
             Some(def) => {
                 let ref_type = def.ref_type.clone();
                 let label = label.to_string();
@@ -673,6 +688,11 @@ fn is_fence_line(line: &str) -> bool {
 struct CellOptions {
     values: std::collections::HashMap<String, OptionValue>,
     syntax: CommentSyntax,
+    /// Every option key seen, including ones whose value is a YAML
+    /// sequence/mapping and so has no entry in `values` (e.g. `fig-subcap`'s
+    /// list of per-panel captions). Presence checks that don't need the
+    /// value itself go through [`CellOptions::has`] instead of `get`.
+    all_keys: std::collections::HashSet<String>,
 }
 
 /// One option's scalar value and the provenance of its **key**, which is
@@ -700,6 +720,12 @@ impl CellOptions {
     fn get(&self, key: &str) -> Option<&str> {
         self.values.get(key).map(|v| v.value.as_str())
     }
+
+    /// Whether `key` was present in the cell's options at all, regardless
+    /// of whether its value was a scalar `get` can return.
+    fn has(&self, key: &str) -> bool {
+        self.all_keys.contains(key)
+    }
 }
 
 /// Split `text` into `<marker> key: value` options + code per
@@ -717,15 +743,18 @@ impl CellOptions {
 fn parse_cell_options(language: &str, text: &str, body_source: SourceInfo) -> CellOptions {
     let syntax = comment_syntax_for(language);
     let mut values = std::collections::HashMap::new();
+    let mut all_keys = std::collections::HashSet::new();
 
     if let Ok(part) = partition_cell_options(language, text, body_source)
         && let Some(options) = part.options
         && let Some(entries) = options.as_hash()
     {
         for entry in entries {
-            let (Some(key), Some(value)) =
-                (entry.key.yaml.as_str(), scalar_to_string(&entry.value))
-            else {
+            let Some(key) = entry.key.yaml.as_str() else {
+                continue;
+            };
+            all_keys.insert(key.to_string());
+            let Some(value) = scalar_to_string(&entry.value) else {
                 continue;
             };
             values.insert(
@@ -743,7 +772,11 @@ fn parse_cell_options(language: &str, text: &str, body_source: SourceInfo) -> Ce
         }
     }
 
-    CellOptions { values, syntax }
+    CellOptions {
+        values,
+        syntax,
+        all_keys,
+    }
 }
 
 /// Render a scalar YAML node as the string this module works with.
@@ -1048,6 +1081,32 @@ mod tests {
             panic!("expected Div, got {:?}", blocks[0]);
         };
         assert!(div.attr.1.is_empty());
+    }
+
+    /// Root cause 4 (bd-13gnwplg / P5 margin-layout): a labelled cell that
+    /// also carries `fig-subcap` (R/knitr's multi-panel form) must be left
+    /// entirely untouched pre-engine. Wrapping it the way a single-caption
+    /// cell is wrapped would strip `label`/`fig-cap` from the body before
+    /// knitr runs, so knitr's own `output_label_placeholder`/`figure_cap`
+    /// (hooks.R) could no longer synthesize per-panel ids and captions —
+    /// the panel images would come back unlabelled, and the all-Lua
+    /// subfloat pipeline (`parsefiguredivs.lua`) would have nothing to
+    /// recognize as a subfloat. Leaving the cell alone preserves the
+    /// classic self-labelled `.cell` div shape that pipeline already knows
+    /// how to turn into a numbered panel.
+    ///
+    /// `fig-subcap`'s value is a YAML sequence, which `CellOptions::get`
+    /// cannot see (it only stores scalars) -- this is what
+    /// `CellOptions::has` is for.
+    #[test]
+    fn fig_subcap_cell_is_left_unwrapped_for_the_engine() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code(
+            "#| label: fig-panel\n#| fig-cap: Two plots.\n#| fig-subcap:\n#|   - Sine\n#|   - Cosine\nplot(x, y)\n",
+        )];
+        let before = blocks.clone();
+        desugar(&mut blocks, &reg);
+        assert_eq!(blocks, before, "fig-subcap cell must not be rewritten");
     }
 
     /// D2 (bd-sdpp9rw4): a caption is markdown, so `*emphasized*` must
