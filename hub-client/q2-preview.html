@@ -12,6 +12,9 @@
     body {
       margin: 0;
       padding: 0;
+      /* Light gray until the first render replaces #root's content
+         (matches the host's loading placeholder). */
+      background: #f4f4f4;
     }
   </style>
   <script>
@@ -23,7 +26,7 @@
 </head>
 
 <body>
-  <div id="root">Loading q2-preview renderer...</div>
+  <div id="root"></div>
   <script type="module" src="/src/components/render/q2-preview/entry.tsx"></script>
 </body>
 

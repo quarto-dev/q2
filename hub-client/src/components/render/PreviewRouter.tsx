@@ -152,11 +152,9 @@ export default function PreviewRouter(props: PreviewRouterProps) {
   // Subsequent re-checks keep the current Preview mounted to avoid
   // a destructive unmount/remount cycle on every keystroke.
   if (initialChecking) {
-    return (
-      <div style={{ padding: '20px', color: '#666' }}>
-        Loading preview...
-      </div>
-    );
+    // Quiet placeholder: light gray, no text — the same gray as the
+    // renderer page that follows, so the hand-off is seamless.
+    return <div style={{ height: '100%', background: '#f4f4f4' }} aria-busy="true" />;
   }
 
   // Non-source files (not .qmd/.md): show placeholder
