@@ -3,7 +3,7 @@
 **Date:** 2026-09-28
 **Braid:** bd-clq56rem (related: bd-1klbq2zd)
 **Worktree:** `.worktrees/bd-clq56rem-windows-jsonerrors-ipynb-hyperlink` (branch `braid/bd-clq56rem-windows-jsonerrors-ipynb-hyperlink`, based on `main` @ `e8379cfe`)
-**Status:** Implementing (go-ahead 2026-09-29). Decided 2026-09-28: sequencing S1, and bd-1klbq2zd widened to cover wire output. Piece 2 decisions: § Decisions.
+**Status:** Piece 1 (test rework) implemented. Decided 2026-09-29: this branch ships Piece 1 only. The product fix (Piece 2) moves to bd-1klbq2zd, audit first. See § Decisions. The S1 sequencing below was decided 2026-09-28 and is superseded for Piece 2.
 
 ## Overview
 
@@ -182,7 +182,7 @@ The prototype replaced the body of `NativeRuntime::canonicalize` with `dunce::ca
 - Conclusion: the seam change is not local. Seam output (plain) meets verbatim paths from the ~186 direct calls, so the audit has to come first.
 
 
-## Checklist (after sign-off; assumes S1)
+## Checklist (this branch: Piece 1 only; Piece 2 items belong to bd-1klbq2zd)
 
 - [x] RED: capture the real failure on Windows (above)
 - [x] Confirm the product URL builder and its visibility (QER `diagnostic.rs:889/944`, private)
