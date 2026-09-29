@@ -2515,8 +2515,9 @@ mod tests {
 
     // === classify_inputs tests =============================================
 
+    // Same function the runtime seam uses, so expected paths share its spelling.
     fn canonical(p: &Path) -> PathBuf {
-        p.canonicalize().unwrap_or_else(|_| p.to_path_buf())
+        quarto_system_runtime::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
     }
 
     fn write_file(path: &Path, contents: &str) {

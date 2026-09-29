@@ -32,8 +32,9 @@ fn write_file(path: &Path, contents: &str) {
     std::fs::write(path, contents).unwrap();
 }
 
+// Same function the runtime seam uses, so expected paths share its spelling.
 fn canonical(p: &Path) -> PathBuf {
-    p.canonicalize().unwrap_or_else(|_| p.to_path_buf())
+    quarto_system_runtime::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
 }
 
 /// Run `q2 render <args...>` from `cwd` with extra environment
@@ -222,16 +223,27 @@ fn post_render_script_receives_output_files() {
         dump_value(&dump, "QUARTO_PROJECT_INPUT_FILES").is_none(),
         "INPUT_FILES is pre-render-only"
     );
-    // Shared vars.
-    assert_eq!(
-        dump_value(&dump, "QUARTO_PROJECT_DIR").map(Path::new),
-        Some(project.as_path()),
-        "QUARTO_PROJECT_DIR should be the absolute project dir"
+    // Shared vars. Both sides are canonicalized: these check which
+    // directory is named, not how it is spelled.
+    let project_dir = dump_value(&dump, "QUARTO_PROJECT_DIR").expect("PROJECT_DIR set");
+    assert!(
+        Path::new(project_dir).is_absolute(),
+        "QUARTO_PROJECT_DIR should be absolute: {project_dir}"
     );
     assert_eq!(
-        dump_value(&dump, "QUARTO_PROJECT_OUTPUT_DIR").map(Path::new),
-        Some(project.join("_site").as_path()),
-        "QUARTO_PROJECT_OUTPUT_DIR should be the absolute output dir"
+        canonical(Path::new(project_dir)),
+        canonical(&project),
+        "QUARTO_PROJECT_DIR should be the project dir"
+    );
+    let output_dir = dump_value(&dump, "QUARTO_PROJECT_OUTPUT_DIR").expect("OUTPUT_DIR set");
+    assert!(
+        Path::new(output_dir).is_absolute(),
+        "QUARTO_PROJECT_OUTPUT_DIR should be absolute: {output_dir}"
+    );
+    assert_eq!(
+        canonical(Path::new(output_dir)),
+        canonical(&project.join("_site")),
+        "QUARTO_PROJECT_OUTPUT_DIR should be the output dir"
     );
 }
 
@@ -270,10 +282,13 @@ fn env_contract_full_render() {
             "INPUT_FILES should list {expected}; got: {listed:?}"
         );
     }
-    assert_eq!(
-        dump_value(&dump, "QUARTO_PROJECT_DIR").map(Path::new),
-        Some(project.as_path()),
+    // Which directory is named, not how it is spelled.
+    let project_dir = dump_value(&dump, "QUARTO_PROJECT_DIR").expect("PROJECT_DIR set");
+    assert!(
+        Path::new(project_dir).is_absolute(),
+        "QUARTO_PROJECT_DIR should be absolute: {project_dir}"
     );
+    assert_eq!(canonical(Path::new(project_dir)), canonical(&project));
     // Post-render-only var must be absent during pre-render.
     assert!(
         dump_value(&dump, "QUARTO_PROJECT_OUTPUT_FILES").is_none(),
