@@ -8,13 +8,15 @@
  * This component is only imported in development builds.
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import ProjectSetError from './ProjectSetError';
 import ProjectsHome from './ProjectsHome';
 import NewFileDialog from './NewFileDialog';
 import ShareDialog from './ShareDialog';
 import NewAssetDialog from './NewAssetDialog';
 import FileSidebar from './FileSidebar';
+import SearchFilesDialog from './SearchFilesDialog';
+import type { SearchFiles } from '../services/search';
 import OutlinePanel from './OutlinePanel';
 import SidebarTabs from './SidebarTabs';
 import { PreviewIcon } from './icons';
@@ -159,9 +161,22 @@ const pendingPrompt: PwaPromptStore = {
  * this tracks the selected file (aria-selected / active-row state) and
  * records the last action in an offscreen testid element for assertions.
  */
+/** Search fixture for the sidebar route: substring match over the files. */
+function fakeSearchFor(files: FileEntry[]): SearchFiles {
+  return async (query) => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    return files
+      .filter((f) => f.path.toLowerCase().includes(q))
+      .map((f) => ({ path: f.path, score: 1, terms: [q] }));
+  };
+}
+
 function StatefulSidebarSections({ files = FAKE_FILES }: { files?: FileEntry[] }) {
   const [currentFile, setCurrentFile] = useState<FileEntry | null>(files[0] ?? null);
   const [lastAction, setLastAction] = useState('none');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchFiles = useMemo(() => fakeSearchFor(files), [files]);
   return (
     <>
       <SidebarTabs>
@@ -180,6 +195,7 @@ function StatefulSidebarSections({ files = FAKE_FILES }: { files?: FileEntry[] }
               onRenameFile={(f, p) => setLastAction(`rename:${f.path}->${p}`)}
               onOpenInNewTab={(f) => setLastAction(`new-tab:${f.path}`)}
               onCopyLink={(f) => setLastAction(`copy:${f.path}`)}
+              onOpenSearch={() => setSearchOpen(true)}
             />
           ) : sectionId === 'outline' ? (
             <OutlinePanel
@@ -193,6 +209,16 @@ function StatefulSidebarSections({ files = FAKE_FILES }: { files?: FileEntry[] }
           )
         }
       </SidebarTabs>
+      <SearchFilesDialog
+        isOpen={searchOpen}
+        files={files}
+        searchFiles={searchFiles}
+        onClose={() => setSearchOpen(false)}
+        onSelectFile={(f) => {
+          setCurrentFile(f);
+          setLastAction(`select:${f.path}`);
+        }}
+      />
       {/* Offscreen action recorder for Playwright assertions. */}
       <div
         data-testid="sidebar-last-action"
