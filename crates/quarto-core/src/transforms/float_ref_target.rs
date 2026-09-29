@@ -464,6 +464,60 @@ fn canonicalize_caption(mut caption: Blocks) -> Blocks {
 /// be this leaked echo, never an unrelated element that legitimately
 /// shares the id.
 fn clear_matching_id(blocks: &mut Blocks, identifier: &str) {
+    clear_blocks(blocks, identifier);
+}
+
+/// Clear `identifier` from a list of blocks, splicing away any nested
+/// `Custom(FloatRefTarget)` echo entirely rather than just blanking its id.
+///
+/// A leaked echo that is itself wrapped in a Div/Figure carrying the same
+/// crossref id (the table/figure case, as opposed to the bare-`Image` case)
+/// gets independently classified and promoted to `Custom(FloatRefTarget)` by
+/// this transform's bottom-up walk *before* the ancestor claiming the same
+/// id is processed. By the time [`clear_matching_id`] runs on the ancestor's
+/// content, blanking the echo's `attr.0` is not enough: Lua's
+/// `crossref_mark_subfloats()` (`crossref/preprocess.lua`) matches nested
+/// floats by *custom-node type*, not by identifier, so a stray
+/// `Custom(FloatRefTarget)` — id or no id — still gets counted as a subfloat
+/// and routes the parent through Typst's subfloat/`#note(quarto_super(...))`
+/// path instead of the plain single-float `#notefigure(...)` path. Splicing
+/// the echo's own `content` slot in its place removes the duplicate float
+/// entirely, matching what a single, correctly-labeled float should look
+/// like.
+fn clear_blocks(blocks: &mut Blocks, identifier: &str) {
+    let mut i = 0;
+    while i < blocks.len() {
+        let is_leaked_float_echo = matches!(
+            &blocks[i],
+            Block::Custom(c) if c.attr.0 == identifier && c.type_name == FLOAT_REF_TARGET
+        );
+        if is_leaked_float_echo {
+            let Block::Custom(custom) = blocks.remove(i) else {
+                unreachable!()
+            };
+            let mut replacement = custom
+                .slots
+                .into_iter()
+                .find_map(|(name, slot)| match (name.as_str(), slot) {
+                    ("content", Slot::Blocks(bs)) => Some(bs),
+                    _ => None,
+                })
+                .unwrap_or_default();
+            clear_blocks(&mut replacement, identifier);
+            let n = replacement.len();
+            blocks.splice(i..i, replacement);
+            i += n;
+            continue;
+        }
+        clear_block(&mut blocks[i], identifier);
+        i += 1;
+    }
+}
+
+/// Clear `identifier` from a single block (and recurse into its children).
+/// Used both by [`clear_blocks`] for non-echo elements and for slot shapes
+/// (`Slot::Block`) that hold exactly one block and so can't be spliced.
+fn clear_block(block: &mut Block, identifier: &str) {
     fn clear_inlines(inlines: &mut [Inline], identifier: &str) {
         for inline in inlines {
             match inline {
@@ -498,84 +552,75 @@ fn clear_matching_id(blocks: &mut Blocks, identifier: &str) {
             }
         }
     }
-    fn clear_blocks(blocks: &mut [Block], identifier: &str) {
-        for block in blocks {
-            match block {
-                Block::Div(d) => {
-                    if d.attr.0 == identifier {
-                        d.attr.0 = String::new();
-                    }
-                    clear_blocks(&mut d.content, identifier);
-                }
-                Block::Figure(f) => {
-                    if f.attr.0 == identifier {
-                        f.attr.0 = String::new();
-                    }
-                    clear_blocks(&mut f.content, identifier);
-                    if let Some(long) = &mut f.caption.long {
-                        clear_blocks(long, identifier);
-                    }
-                }
-                Block::CodeBlock(cb) if cb.attr.0 == identifier => {
-                    cb.attr.0 = String::new();
-                }
-                Block::BlockQuote(bq) => clear_blocks(&mut bq.content, identifier),
-                Block::OrderedList(ol) => {
-                    for item in &mut ol.content {
-                        clear_blocks(item, identifier);
-                    }
-                }
-                Block::BulletList(bl) => {
-                    for item in &mut bl.content {
-                        clear_blocks(item, identifier);
-                    }
-                }
-                Block::DefinitionList(dl) => {
-                    for (term, defs) in &mut dl.content {
-                        clear_inlines(term, identifier);
-                        for def in defs {
-                            clear_blocks(def, identifier);
-                        }
-                    }
-                }
-                Block::Paragraph(p) => clear_inlines(&mut p.content, identifier),
-                Block::Plain(p) => clear_inlines(&mut p.content, identifier),
-                Block::Header(h) => {
-                    if h.attr.0 == identifier {
-                        h.attr.0 = String::new();
-                    }
-                    clear_inlines(&mut h.content, identifier);
-                }
-                Block::LineBlock(lb) => {
-                    for line in &mut lb.content {
-                        clear_inlines(line, identifier);
-                    }
-                }
-                Block::Table(t) if t.attr.0 == identifier => {
-                    t.attr.0 = String::new();
-                }
-                Block::Custom(c) => {
-                    if c.attr.0 == identifier {
-                        c.attr.0 = String::new();
-                    }
-                    for (_name, slot) in c.slots.iter_mut() {
-                        match slot {
-                            Slot::Block(b) => {
-                                clear_blocks(std::slice::from_mut(&mut **b), identifier)
-                            }
-                            Slot::Blocks(bs) => clear_blocks(bs, identifier),
-                            Slot::Inline(i) => {
-                                clear_inlines(std::slice::from_mut(&mut **i), identifier)
-                            }
-                            Slot::Inlines(is) => clear_inlines(is, identifier),
-                        }
-                    }
-                }
-                _ => {}
+    match block {
+        Block::Div(d) => {
+            if d.attr.0 == identifier {
+                d.attr.0 = String::new();
+            }
+            clear_blocks(&mut d.content, identifier);
+        }
+        Block::Figure(f) => {
+            if f.attr.0 == identifier {
+                f.attr.0 = String::new();
+            }
+            clear_blocks(&mut f.content, identifier);
+            if let Some(long) = &mut f.caption.long {
+                clear_blocks(long, identifier);
             }
         }
+        Block::CodeBlock(cb) if cb.attr.0 == identifier => {
+            cb.attr.0 = String::new();
+        }
+        Block::BlockQuote(bq) => clear_blocks(&mut bq.content, identifier),
+        Block::OrderedList(ol) => {
+            for item in &mut ol.content {
+                clear_blocks(item, identifier);
+            }
+        }
+        Block::BulletList(bl) => {
+            for item in &mut bl.content {
+                clear_blocks(item, identifier);
+            }
+        }
+        Block::DefinitionList(dl) => {
+            for (term, defs) in &mut dl.content {
+                clear_inlines(term, identifier);
+                for def in defs {
+                    clear_blocks(def, identifier);
+                }
+            }
+        }
+        Block::Paragraph(p) => clear_inlines(&mut p.content, identifier),
+        Block::Plain(p) => clear_inlines(&mut p.content, identifier),
+        Block::Header(h) => {
+            if h.attr.0 == identifier {
+                h.attr.0 = String::new();
+            }
+            clear_inlines(&mut h.content, identifier);
+        }
+        Block::LineBlock(lb) => {
+            for line in &mut lb.content {
+                clear_inlines(line, identifier);
+            }
+        }
+        Block::Table(t) if t.attr.0 == identifier => {
+            t.attr.0 = String::new();
+        }
+        Block::Custom(c) => {
+            if c.attr.0 == identifier {
+                c.attr.0 = String::new();
+            }
+            for (_name, slot) in c.slots.iter_mut() {
+                match slot {
+                    Slot::Block(b) => clear_block(b, identifier),
+                    Slot::Blocks(bs) => clear_blocks(bs, identifier),
+                    Slot::Inline(i) => clear_inlines(std::slice::from_mut(&mut **i), identifier),
+                    Slot::Inlines(is) => clear_inlines(is, identifier),
+                }
+            }
+        }
+        _ => {}
     }
-    clear_blocks(blocks, identifier);
 }
 
 /// Convert a `Div` that we already know is a crossref target into a

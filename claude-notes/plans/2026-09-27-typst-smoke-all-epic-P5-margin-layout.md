@@ -448,7 +448,12 @@ integrated.
 
 ## Status
 
-**Complete.** (Note: the paragraph below is the original 2026-09-28 progress note,
+**Complete**, but see the **2026-09-29 — second regression in the subfloat path**
+entry at the end of this section: the "fully closed"/"82/86 pass, 0 fail" claims
+below (and the identical "fully closed" claim in the 2026-09-28 update further
+down) were **stale as of `72ad0eda8`** — a second, independent bug re-broke 5 of
+this group's fixtures after this doc was written, root-caused and fixed in that
+entry. (Note: the paragraph below is the original 2026-09-28 progress note,
 left in place for the historical narrative it introduces — see the dated entries
 that follow for how each item it flags was actually resolved, and the final
 reconciled numbers in the last entry of this section: 82/86 fixtures pass, 4
@@ -1220,3 +1225,60 @@ the 4 `skip:` YAML additions) — `cargo clippy`/`cargo nextest -p
 quarto-core` gates from the Fix 2 checkpoint above are unaffected and were
 not rerun; the workspace-wide `cargo nextest run --workspace --no-fail-fast`
 phase-boundary gate was rerun (see `## Status`/handoff for the result).
+
+## 2026-09-29 — second regression in the subfloat path, root-caused and fixed
+
+After this doc's "fully closed" claim above, `smoke_all::smoke_all` was red again
+at `72ad0eda8` on 5 of this group's fixtures: `margin-table-flextable-crossref.qmd`,
+`margin-table-flextable.qmd`, `margin-table-gt-r-crossref.qmd`,
+`margin-table-gt-r.qmd`, `tbl-column-margin.qmd` — all failing
+`ensureTypstFileRegexMatches` on `` `#notefigure\(` `` not found. This was a
+**second, distinct** bug from Root cause 3/4 above — not a reopening of the
+original `wrapper_column_classes` gap, which is still merged and still correct.
+
+**Root cause:** `crates/quarto-core/src/transforms/float_ref_target.rs`'s
+`clear_matching_id` (added by bd-2lxj10z0, "Restore knitr label visibility
+through PreEngineSugaringStage" — see that function's own doc comment for the
+`label_reinject`/leaked-echo background). For a figure, the label a knitr chunk
+echoes back lands on a bare `Image`, which is never independently promoted to a
+float — blanking its `attr.0` id is sufficient. For a **table**, knitr's leaked
+echo is itself a `Div` carrying the same crossref id, and because
+`FloatRefTargetSugarTransform::transform_block` walks bottom-up, that echo Div
+gets classified and promoted to a full `Custom(FloatRefTarget)` node *before*
+the outer, correctly-authored wrapper Div (same id) is processed. By the time
+the outer wrapper's `clear_matching_id` runs, blanking the echo's `attr.0` no
+longer helps: Lua's `crossref_mark_subfloats()`
+(`resources/pandoc-filters/filters/crossref/preprocess.lua`) matches nested
+floats by **custom-node type**, not by identifier, so the id-blanked-but-still-
+`FloatRefTarget`-typed echo is still counted as a subfloat. That flips
+`float.has_subfloats` true and routes the whole float through Typst's
+subfloat/`#note(quarto_super(...))` path instead of the plain single-float
+`#notefigure(...)` path — confirmed by dumping the pre-filter pandoc JSON AST
+(`q2 render margin-table-gt-r.qmd --to typst`, retaining the normally-deleted
+temp `pandoc-input.json`): it already contained two nested
+`Custom(FloatRefTarget, identifier: tbl-islands-r)` nodes before any Lua filter
+ran, the inner one with its pandoc-level id blanked but its `plain_data`
+JSON payload (and node type) untouched.
+
+**Fix:** `clear_matching_id` now splices the leaked echo's own `content` slot
+in its place instead of merely blanking its id, removing the duplicate float
+entirely rather than leaving an anonymous-but-still-typed one. Required
+restructuring the block-list walk (`clear_blocks`, new) to operate on
+`&mut Blocks` (owned `Vec`, supporting splice) with a `clear_block`
+(single-block, non-splicing) sibling for the one truly-singular slot shape
+(`Slot::Block`). No test-vocabulary or fixture changes — the existing
+`ensureTypstFileRegexMatches` assertions already covered this correctly; they
+were just failing.
+
+**Verification:**
+- All 5 fixtures individually (`q2 render <fixture>.qmd --to typst`): each now
+  emits exactly one `#notefigure(` and one `quarto-float-tbl`, no nested `#note(`.
+- `SMOKE_FILTER=margin-layout cargo nextest run -p quarto --test integration --
+  smoke_all`: **1 passed** (all margin-layout fixtures, 400 others skipped by
+  the filter).
+- `cargo clippy -p quarto-core --all-targets -- -D warnings`: clean.
+- `cargo nextest run -p quarto-core`: **5306 passed**, 32 skipped, 0 failed —
+  no regressions from this fix.
+- Full unfiltered `cargo nextest run -p quarto --test integration -- smoke_all`:
+  **passes** (see epic doc for the combined Group A + Group B result and the
+  workspace-wide gate).
