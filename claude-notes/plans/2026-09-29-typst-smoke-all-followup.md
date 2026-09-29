@@ -240,12 +240,111 @@ and a follow-up bead linking to the filed bug, Gordon's call on which.
    reaching the generated call). This is a large, close-to-total gap in brand.yml logo
    support for Typst, not a narrow unit-conversion bug — needs its own scoping pass
    before a fix is attempted.
-6. `authors.lua` crashes on multi-author + string `affiliation:` (shared pandoc
-   filter, cross-format — not typst-specific). Reconfirmed 2026-09-29 via two more
-   independent repros: `columns/two-column-landscape.qmd` and
-   `columns/two-column-title-block.qmd` (same
+6. **FIXED 2026-09-29.** `authors.lua` crashed on multi-author + string
+   `affiliation:` (shared pandoc filter, cross-format — not typst-specific).
+   Reconfirmed 2026-09-29 via two more independent repros:
+   `columns/two-column-landscape.qmd` and `columns/two-column-title-block.qmd` (same
    `authors.lua:358: attempt to index a nil value (field 'integer index')` crash,
    called from `byAuthors`/`processAuthorMeta`).
+
+   **Root cause, fully diagnosed 2026-09-29 (bug-fix session) — not a Lua bug, a
+   double-normalization bug.** `authors.lua` is byte-identical between Q2's vendored
+   copy and Q1's current upstream (`diff` confirmed empty) — it is not broken code, it
+   is being fed data in the wrong shape. Confirmed via direct instrumentation
+   (`io.stderr:write` probes temporarily added at the crash site and at
+   `processAuthorMeta`'s entry, then reverted — not committed) that:
+   - `crates/quarto-core/src/transforms/authors_normalize.rs`'s
+     `AuthorsNormalizeTransform` (registered unconditionally in `pipeline.rs` — "Runs
+     right after metadata-normalize; format-agnostic like Q1's authors.lua pass", no
+     format gate at all) runs for **every** render, Pandoc-hybrid targets (typst/docx/
+     pptx/odt) included. It writes `meta['authors']`/`meta['affiliations']` *before*
+     Pandoc ever runs, with affiliation ids as **plain strings** (`"aff-1"`,
+     `crates/quarto-core/src/metadata/authors.rs:749`'s `format!("aff-{}", ...)`).
+   - Then, for the Pandoc-hybrid leg specifically, the vendored Lua `authors.lua` runs
+     *again* (via `normalize.lua`'s `Meta = function(meta) ... authors.processAuthorMeta(meta) ...`,
+     unconditional for every Pandoc-hybrid render) and reads `meta['authors']` —
+     picking up the **already-normalized** Rust output, not the raw `author:`/
+     `affiliation:` frontmatter. `authors.lua`'s own `maybeAddAffiliation` (line
+     310-312) assigns ids as `{ pandoc.Str(affiliationId) }` (an Inlines-shaped
+     table, indexable as `[1].text`) — but Q2's Rust-written ids are plain strings, so
+     `affiliation[kId][1]` fails, crashing at line 358/(817 in `byAuthors`).
+   - **Confirmed Q1 does not have this bug**: real `quarto render
+     pandoc-template-features.qmd --to typst` (the exact fixture that crashes under
+     Q2) succeeds cleanly — Q1 has no Rust-side pre-normalization step, so the shared
+     Lua only ever sees raw metadata, its only supported input shape.
+   - **Fix is not "small, scoped" as originally estimated** — it's an architecture
+     question, not a one-line patch. `AuthorsNormalizeTransform`'s own outputs
+     (`by-author`, `labels.abstract`, etc.) are read directly by the typst template
+     (`resources/pandoc-filters/typst-template/typst-show.typ:8,10,30` — `$if(by-author)$`/
+     `$for(by-author)$`/`$labels.abstract$`), so the transform cannot simply be
+     deleted or format-gated off without confirming what replaces those template
+     variables for the Pandoc-hybrid leg. The likely-correct direction: skip
+     `AuthorsNormalizeTransform` (or at least its `authors`/`affiliations`/`by-author`/
+     `labels` writes) when `ctx.format.identifier.is_pandoc_hybrid()` is true (a
+     predicate that already exists, `crates/quarto-core/src/format.rs:245`) — for that
+     route, the vendored Lua `authors.lua` is the sole, pre-existing, working source
+     of those same keys (confirmed: `typst-template.typ:64` computes its own
+     `has-title-block` locally from `authors`/`title`/`date`/`abstract`, **not** from
+     any Rust-only `rendered.has-title-block` key, so at least that one key is safe).
+     **Not yet verified**: whether docx/pptx/odt reference-doc templates consume any
+     `AuthorsNormalizeTransform`-only key (e.g. `rendered.has-title-block`,
+     `quarto-template-params.title-block-categories`, `author-meta`) that the Lua path
+     does *not* equivalently provide — this must be checked before gating, or those
+     formats could silently lose title-block rendering. No fix attempted or
+     committed this session; `authors.lua` and all Rust files are back to their
+     pre-investigation state (`git status` clean at the epic's HEAD).
+
+   **Fix applied 2026-09-29 (follow-up session), revised same day after finding a
+   preview regression in the first version.** First attempt gated the *entire*
+   transform on `ctx.format.identifier.is_pandoc_hybrid()` (returning early before
+   writing anything). That fixed the crash but broke something not caught until a
+   follow-up review: `q2 preview` on a document whose frontmatter declares a
+   pandoc-hybrid format (`format: typst`/`docx`/...) doesn't get the `q2-preview`
+   pseudo-format substitution — `map_format_for_preview`'s doc comment says
+   "explicit non-html formats are honoured as-is" — so it falls through to the
+   *native HTML pipeline* (`render_qmd_to_html`) with `ctx.format.identifier` still
+   `Typst`/`Docx`/etc. `authors.lua` never runs on that leg (no real `pandoc`
+   subprocess), so skipping the whole transform there left preview's title block
+   with no author data at all. Confirmed empirically: reverted to the pre-gate
+   code, rendered a `format: typst` doc through `render_qmd_to_html` directly, saw
+   the author/affiliation correctly in the output HTML; re-applied the whole-
+   transform gate, saw it vanish.
+
+   **Root cause, precisely.** `authors.lua`'s `processAuthorMeta` explicitly
+   *prefers* `meta['authors']` (plural) over raw `meta['author']` when the plural
+   key is present ("prefer to render 'authors' if it is available"). Only
+   `meta['authors']` and `meta['affiliations']` — the two keys this transform
+   writes that *shadow* what `authors.lua` reads as its raw input — cause the
+   crash. Every other key it derives (`by-author`, `by-affiliation`, `funding`,
+   `labels`) is unconditionally recomputed and overwritten by `authors.lua`'s own
+   `processAuthorMeta` once it runs on undisturbed raw data — so leaving Rust's
+   copies in place for the real Pandoc-hybrid leg is harmless. `rendered.
+   has-title-block` and `quarto-template-params.title-block-categories` are Q2-only
+   keys `authors.lua` never reads at all (confirmed by grep, zero matches under
+   `resources/`).
+
+   **Final fix**: narrowed the gate to only the two raw-shadowing keys. In
+   `AuthorsNormalizeTransform::transform`, snapshot `meta['authors']`/
+   `meta['affiliations']` before calling `normalize_authors_meta` (only when
+   `ctx.format.identifier.is_pandoc_hybrid()`), then restore the snapshot
+   afterward (re-insert the original value, or remove the key if there was none).
+   Every other derived key stays unconditional for every format. Added/replaced
+   three unit tests in `transform_gate`:
+   `typst_target_leaves_raw_authors_key_untouched_but_still_derives_by_author`,
+   `typst_target_restores_a_preexisting_authors_key_rather_than_dropping_it` (the
+   edge case where a document declares `authors:` directly rather than `author:`
+   — the gate must restore the original, not just delete it), and
+   `html_target_still_normalizes_authors_key_too`. Verified via direct
+   `q2 render --to typst` that all three repro fixtures
+   (`pandoc-template-features.qmd`, `columns/two-column-landscape.qmd`,
+   `columns/two-column-title-block.qmd`) now render clean *and* that the compiled
+   `.typ` output actually contains the correct author/affiliation text (not just
+   "no crash"). Verified via a direct `render_qmd_to_html` call (the same code
+   path `q2 preview` falls back to for a `format: typst` document) that the
+   preview title block still renders the author/affiliation correctly.
+   `columns/two-column-landscape` and `columns/two-column-title-block` ported (see
+   Port session results below). `pandoc-template-features.qmd` is *not* ported —
+   past the authors.lua crash, it now hits a distinct, unrelated gap: bug #17 below.
 
 ### New bugs found during the 2026-09-29 port session (not in the original 6)
 
@@ -349,6 +448,68 @@ and a follow-up bead linking to the filed bug, Gordon's call on which.
     treats the `'` as an apostrophe, not a quote-close; Q2 hard-errors instead. Not
     Typst-specific — a general markdown/smart-quotes parser gap. Found via
     `theorem-inline-code-title.qmd`.
+17. **`brand.yml` `source: google` font fetching is not implemented for Typst.**
+    `pandoc-template-features.qmd` (`brand.typography.fonts: [{family: Fira Code,
+    source: google}]`) no longer crashes after bug #6's fix, but now fails
+    `noErrorsOrWarnings` on a `typst compile diagnostic: warning: unknown font family:
+    fira code` — the font is never fetched/registered, so Typst falls back silently
+    (a warning, not a hard error) instead of rendering with the brand-declared
+    monospace font. Not yet scoped: unclear whether Q2 has *any* Google Fonts fetch
+    path for brand.yml (any format), or whether this is Typst-specific (missing
+    `--font-path` wiring for a fetched cache dir, distinct from bug #1's
+    metadata-only `font-paths:`/file-fonts gap). Found via
+    `pandoc-template-features.qmd`, left unported pending this bug.
+18. **Test-harness gap: `ensurePdfMetadata` assertion (Q1 spelling) has no Q2
+    implementation.** `crates/quarto-test/src/spec.rs::parse_format_spec` only
+    recognizes `ensureHtmlElements`, `ensureFileRegexMatches`,
+    `ensureTypstFileRegexMatches`, `ensurePdfRegexMatches`, `ensurePdfTextPositions`,
+    `ensureCssRegexMatches`, and a handful of non-`ensure*` keys (`noErrors`,
+    `shouldError`, `printsMessage`, `fileExists`, `pathDoesNotExist`, `folderExists`,
+    `dom-parity`); any other key (including `ensurePdfMetadata`, which checks
+    extracted PDF document metadata — title/author/keywords/creator — against
+    expected values) hits the `other => anyhow::bail!("Unknown assertion type")` arm
+    and fails the whole fixture at spec-parse time, before rendering even starts.
+    Found via `pandoc-template-features.qmd`'s original (Q1) `ensurePdfMetadata`
+    block, which had to be dropped (not adapted — there is no equivalent) when
+    porting; the `ensureTypstFileRegexMatches` checks kept in its place verify the
+    same title/author/keywords signal at the Typst-source level (the
+    `set document(...)` call) rather than the compiled-PDF-metadata level, so this
+    is a test-infra gap, not a rendering-correctness gap — no document under test
+    actually produces wrong PDF metadata as far as this session's sampling showed.
+    Worth a scoped follow-up (parse the assertion, extract PDF metadata via
+    whatever the existing `ensurePdfRegexMatches`/`ensurePdfTextPositions` PDF-text
+    extraction path already uses) if more ported fixtures want this Q1 assertion
+    shape rather than working around it per-fixture.
+19. **`q2 preview` on a document with an explicit non-HTML `format:` (typst, docx,
+    pptx, ...) silently drops TOC, crossref numbering, and apparently figure
+    content — not caused by this session's work, found only as a side effect of
+    verifying bug #6's fix didn't regress preview.** `map_format_for_preview`'s doc
+    comment says such formats are "honoured as-is" for `q2 preview` — no pseudo-
+    format substitution happens, so the render falls through to the native HTML
+    pipeline (`render_qmd_to_html`) with `ctx.format.identifier` still e.g. `Typst`.
+    But `AstTransformsStage` derives which transforms to drop
+    (`PANDOC_TRANSFORM_EXCLUDED`) from `PipelineProfile::from_format(ctx.format.
+    target_format)` — a pure string→enum function with no way to know it's
+    actually running inside the HTML-chrome pipeline rather than heading for a real
+    `pandoc` subprocess — so it computes `Pandoc("typst")` and drops every
+    HTML-only transform on that list (`toc-generate`, `toc-render`,
+    `crossref-render`, `navbar-*`, `sidebar-*`, etc.), the same way it correctly
+    would for a real Pandoc-hybrid render. Confirmed empirically with a minimal
+    `toc: true` + `format: typst` + a numbered-figure-crossref fixture rendered
+    directly through `render_qmd_to_html`: no TOC in the output, the `@fig-a`
+    crossref resolved to an empty string ("See ." instead of "See Figure 1."), and
+    the figure/image itself was entirely absent from the output. **Only
+    `authors-normalize` turned out to be load-bearing enough to notice as a crash
+    /missing-content bug** (bug #6) because it's the *sole* metadata source for
+    something `ApplyTemplateStage`'s built-in title-block partial reads with no
+    fallback; the other dropped transforms in `PANDOC_TRANSFORM_EXCLUDED` (TOC,
+    crossref, navbar, ...) silently degrade preview fidelity instead of crashing,
+    which is presumably why this has gone unnoticed. Not scoped or fixed this
+    session — flagging only. The real fix likely needs a genuine "am I inside the
+    HTML-chrome pipeline or heading for a real Pandoc write" signal threaded onto
+    `RenderContext`/`StageContext`, since `ctx.format.identifier`/`target_format`
+    alone cannot distinguish the two call sites that both end up calling
+    `AstTransformsStage` with the same format.
 
 ## Port session results (2026-09-29)
 
@@ -375,8 +536,8 @@ fixing a given bug — ask if needed, they weren't committed anywhere).
   Excluded: `definition-item-no-break` (bug #7).
 - `toc-tables/`: 1 of 3 — `suppress-bibliography` (+ `refs.bib`). Excluded:
   `toc-title-auto-fallback` (bug #9), `tbl-align-issue10086` (bug #8).
-- `columns/`: 2 of 4 — `basic-two-column`, `two-column-toc`. Excluded:
-  `two-column-landscape`, `two-column-title-block` (both bug #6).
+- `columns/`: 4 of 4 — `basic-two-column`, `two-column-toc`, `two-column-landscape`,
+  `two-column-title-block` (the latter two unblocked 2026-09-29 by the bug #6 fix).
 - `theorem/`: 4 of 5 — `theorem-clouds`, `theorem-fancy`, `theorem-rainbow`,
   `theorem-simple` (+ `_brand.yml`). Excluded: `theorem-inline-code-title` (bug #16).
 - `syntax-highlighting/`: 1 of 13 — `idiomatic` only. Excluded: all 6
@@ -426,6 +587,15 @@ one-line fixes — plan accordingly.
   sampling `great-tables-oceania`/`gt-islands`/`pandas-cell-css-rules`, or treat those
   three as out of scope for this pass.
 - `lof-lot` — worth a note upstream to Q1, or just drop it?
+- New this session: bug #17 (`brand.yml` Google Fonts fetching not implemented for
+  Typst) — surfaced only after fixing #6 unblocked `pandoc-template-features.qmd`
+  far enough to reach it. Not yet scoped (see #17's entry for open questions on
+  whether this is Typst-specific or a general brand.yml gap).
+- Also flagged, not investigated: `font-paths/brand-font-paths-book` (a book
+  project) renders clean via direct `q2 render` but fails `error: expected content,
+  found array` on `author` when run through the smoke-all harness on the identical
+  fixture — a harness-vs-CLI discrepancy noted in passing while fixing bug #1,
+  unrelated to bug #6.
 
 No braid strand opened for this — per the repo's "Beads vs. plans (STRICT)" rule,
 this stays exploratory until Gordon scopes it into an actual plan/phase list.
