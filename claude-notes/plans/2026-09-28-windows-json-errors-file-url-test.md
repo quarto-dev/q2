@@ -191,10 +191,11 @@ The prototype replaced the body of `NativeRuntime::canonicalize` with `dunce::ca
 - [x] Research ecosystem precedent (§ Research)
 - [x] Piece 1: Option C for the URL assertion + strengthened `notebook_path` assertion in `json_errors.rs`. Update the doc comment `:510-521` and the stale comment `:594`. (The `notebook_path` assertion lives in `ipynb_parse_error_json_carries_cell_origin`, the test that owns `:490`.)
 - [x] Confirm the new state: URL assertion passes, and the `notebook_path` assertion fails on Windows with `\\?\C:\…` (the product RED)
-- [x] Prototype the seam fix and measure the fallout (§ Seam prototype results). Moved to bd-1klbq2zd; the items below are its work, not this branch's.
-- [ ] Piece 2 (bd-1klbq2zd): design and apply the seam fix, then GREEN. Its task breakdown (seam, UNC behavior, direct-call audit dispositions) belongs in bd-1klbq2zd's own plan. Its acceptance must include CLI checks, via the saved probe, that `notebook_path`, `source_file` **and** the `Rendering …` status line are plain on Windows. This json_errors test pins only `notebook_path` (§ Decisions), so the other outputs must not rely on it.
+- [x] Prototype the seam fix and measure the fallout (§ Seam prototype results). Piece 2 moved to bd-1klbq2zd.
 - [x] Sanity check that the URL assertions catch regressions: a verbatim-leak target, a fragment, the wrong file, and the pseudo-path each fail; a correct target passes. The `notebook_path` equality check gets its sanity pass once bd-1klbq2zd turns it green.
 - [ ] Close bd-clq56rem once this branch merges. bd-1klbq2zd stays open and owns the RED.
+
+Handed off to bd-1klbq2zd (not tracked by this checklist): design and apply the seam fix, then GREEN. Its task breakdown (seam, UNC behavior, direct-call audit dispositions) belongs in bd-1klbq2zd's own plan. Its acceptance must include CLI checks, via the saved probe, that `notebook_path`, `source_file` **and** the `Rendering …` status line are plain on Windows. This json_errors test pins only `notebook_path` (§ Decisions), so the other outputs must not rely on it.
 
 ## Verification
 
