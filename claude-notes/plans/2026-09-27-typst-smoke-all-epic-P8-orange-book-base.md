@@ -655,6 +655,56 @@ logo-path resolution against a synthetic merged document's directory context.
       this branch onto it, swap `references.json` back out for
       `references.bib` in `_quarto.yml`, delete `references.json`, and
       re-verify — including the citation-mode mismatch above.
+
+      **2026-09-29: step (2) done.** bd-l6eh1635 (BibTeX) and bd-2lxj10z0
+      (knitr label visibility) had both landed on `feature/typst-testing`
+      by then. Rebased this branch onto it — clean, zero conflicts (git's
+      patch-id detection auto-skipped the 4 duplicate P8 commits already
+      shared between the two lineages; the 6 P8-specific commits on this
+      branch replayed cleanly, including in `citeproc_filter.rs`, the one
+      file both lineages touch). Reverted the bug-6 knitr-naming workaround
+      in `appendix.qmd`/`appendix-b.qmd`/`chapter2.qmd` (back to
+      `fig-cars-1.svg`, now that bd-2lxj10z0 makes knitr receive the real
+      label), which surfaced an **eleventh bug**: Typst compile failed with
+      `label `<fig-cars>` occurs multiple times`. Root cause, confirmed by
+      rendering and inspecting the reconciled AST: `label_reinject`
+      (bd-2lxj10z0) correctly hands knitr the `#fig-cars` label so it can
+      derive the right output filename, but knitr's own rendered markdown
+      for a `#| fig-cap` chunk *also* attaches that label directly to the
+      `Image` it emits (`![](fig-cars-1.svg){#fig-cars}`), nested inside
+      knitr's output-wrapper divs; `quarto_ast_reconcile::reconcile` slots
+      that whole subtree into the pre-engine `FloatRefTarget` Div's content
+      in place of the plain `CodeBlock`, so the identifier the
+      `FloatRefTarget` is about to claim was already sitting on a nested
+      `Image` two `Div`s down. Fixed in
+      `crates/quarto-core/src/transforms/float_ref_target.rs`: added
+      `clear_matching_id()`, a recursive block/inline walker (same shape as
+      `crossref_render.rs`'s existing `collect_document_ids`) that scrubs
+      any nested attribute id equal to the identifier a `FloatRefTarget` is
+      about to claim, called from `convert_div`/`convert_figure` right
+      before content is assigned — safe because crossref identifiers are
+      unique document-wide, so any match found here can only be this
+      engine-echoed duplicate. `cargo clippy -p quarto-core --all-targets
+      -- -D warnings`: clean. `cargo nextest run -p quarto-core`:
+      5295/5295 passed, 32 skipped. Re-rendering confirmed the duplicate-
+      label compile error is gone.
+
+      Then swapped `_quarto.yml`'s `bibliography: references.json` back to
+      `bibliography: references.bib`, deleted the TEMPORARY comment block
+      and `references.json`. Re-ran the smoke test: **the citation-mode
+      mismatch is *not* fixed by restoring real BibTeX support** —
+      Turing/McCarthy/Codd/Lamport still render parenthetical
+      (`"(Turing 1950)"`) instead of author-in-text (`"Turing (1950)"`).
+      This rules out the plan's earlier guess that the mismatch was a
+      symptom of the temporary `references.json` conversion losing CSL
+      fields — the same `.bib` source is now loaded directly by
+      `load_bibliography`'s native BibTeX parser (bd-l6eh1635), and the
+      mismatch persists unchanged. Needs independent investigation
+      (citation-mode rendering — `@turing1950` bare-citation-authors
+      handling — not a BibTeX-parsing issue). All other remaining failures
+      (`fig-visualization` embed-gap, `outline-depth: 17` vs Typst's native
+      3, `ensurePdfTextPositions` page mismatch, 112 warnings) are
+      unchanged from the state documented above.
 - [x] Cross-check against the six existing Rust integration tests
       (`book_numbering_torture.rs` et al.) — any assertion that fails here but passes
       there points at a smoke-all-harness gap, not a rendering regression; triage
@@ -675,65 +725,29 @@ logo-path resolution against a synthetic merged document's directory context.
 
 ## Status
 
-**In progress — five real, separate, verified bugs found so far, all five
-fixed.** Blocked next on a sixth (see below), still inside item 4's "finish
-rendering the whole book" work — not a digression. The BibTeX blocker
-(bd-l6eh1635, workspace-6/`braid/bd-l6eh1635-bibtex-citeproc`) is temporarily
-worked around (a local `references.json` conversion, reversible, see item 4)
-rather than actually resolved — that dependency still needs to land and be
-swapped back in before this branch is done.
+**In progress — eleven real, separate, verified bugs found, all eleven
+fixed.** Full bug-by-bug narrative (root cause, fix, tests) lives inline
+under item 4's checklist entry above — this section is a pointer, not a
+duplicate. Summary: (1) citeproc/crossref book-merge ordering, (2)
+`--toc-depth` CLI forwarding for Typst, (3) brand `MetaString` guard, (4)
+named-logo resolution, (5) book output-dir path base for brand-relative
+paths, (6) knitr unnamed-chunk figure naming (temporary workaround, since
+superseded — see below), (7) citeproc CustomNode-slot descent, (8) `sec`
+crossref registration for non-HTML formats, (9) chapter/appendix
+crossref-prefix swap, (10) PDF-extract whitespace tolerance, (11) fig-cars
+double label registration after bd-2lxj10z0 (knitr label round-trip) made
+bug 6's workaround obsolete and exposed a real post-engine-reconciliation
+bug instead.
 
-1. **Fixed**: `single_file_render.rs` ran citeproc *before* the merged
-   document's Crossref phase instead of after, unlike the single-document
-   `.post`-bucket convention. Regression-checked against 63 book-related
-   tests plus the full `-p quarto-core` suite (5282 tests), all green.
-2. **Fixed**: `format_defaults.rs` forwarded `--toc-depth` to pandoc's CLI
-   for Typst, which hard-validates 1-6, even though Typst never consumes
-   that CLI-driven mechanism (verified against both Q2's default template
-   and every vendored extension's template — TOC depth reaches Typst purely
-   via a `$toc-depth$` template variable). Skipped `--toc`/`--toc-depth`
-   forwarding for `FormatIdentifier::Typst`, matching this file's existing
-   format-conditional-exception pattern. Two new tests, both green.
-3. **Fixed (Gordon decided option 1, 2026-09-28)**: `brand: _brand.yml`
-   (bare path string) serialized to pandoc as `MetaString`; the vendored
-   `typst-brand-yaml.lua`'s guard only recognized `MetaInlines`. Patched the
-   guard to also accept `pandoc.utils.type(meta.brand) == 'string'`
-   (`QUARTO2-PATCH`, documented in `resources/pandoc-filters/README.md`).
-   Removed the `run.skip`.
-4. **Fixed**: `logo.medium: test-logo` (a name reference into
-   `logo.images`, a real documented brand.yml convention) was treated as a
-   literal path everywhere in `quarto-brand` — `typst_brand::logo_map`,
-   `Brand::favicon()`, `ResolvedBrand::logo_resource_relative_to()`. Added
-   `Brand::resolve_named_logo()` implementing Q1's `getLogoResource`
-   precedence (images-name match wins over literal-path fallback) and
-   threaded it through all three call sites. 4 new tests; all 100 existing
-   `quarto-brand` tests stayed green.
-5. **Fixed**: even after (4), the resolved logo path was still wrong for a
-   *book* render — `resolve_typst_brand_param` rewrote brand-relative paths
-   against `ctx.project.dir`, but a book's compiled `.typ`/PDF lands in the
-   project's output directory (`_book/`), one level down, and Typst
-   resolves relative `image()` paths against the including file's own
-   directory. Fixed by rewriting against `ctx.output_path().parent()`
-   instead (a no-op for single-document renders, where output dir ==
-   project dir — why this was invisible until a book render exercised it).
-   New end-to-end test in `book_single_file_merge.rs` renders a real
-   branded book and asserts the retained `.typ`'s logo path.
-   `cargo nextest run -p quarto-brand -p quarto-core`: 5387/5387 passed;
-   clippy clean on both crates.
-
-**Sixth bug — found, not yet fixed, start here on resume.** Past all five
-logo/brand fixes, typst compile now fails on
-`error: file not found (searched at .../_book/chapter1_files/figure-typst/fig-cars-1.svg)`.
-`chapter1.qmd`'s R chunk explicitly sets `#| label: fig-cars`, but the
-actual generated file is `unnamed-chunk-1-1.svg` — the chunk label isn't
-reaching the R/knitr figure-naming convention in this book-merge render.
-Not yet root-caused (single-document renders with a labelled chunk need
-checking as a comparison point — is this book-merge-specific like bugs
-1/5, or general?).
-
-Also resolved the `requires: jupyter` question from the plan (not needed —
-`embed` is unimplemented, own epic, per D6). Fixture itself is reconciled to
-Q1's tracked source (plus one required Q-2-7 apostrophe-escape deviation),
-`render-project: true` confirmed, existing Rust integration-test baseline
-confirmed green. Not merging to `feature/typst-testing` yet — nothing here is
-ready to flip to `Complete.` until item 4 actually runs end to end.
+As of 2026-09-29: rebased onto `feature/typst-testing` (bd-l6eh1635 BibTeX
+and bd-2lxj10z0 knitr-label-visibility both landed there); bug 6's
+workaround reverted and replaced by the real bug-11 fix; `references.bib`
+restored as the real bibliography source (`references.json` deleted). The
+book now renders end-to-end with no compile errors. Remaining, all
+pre-existing and independently scoped (see item 4's "2026-09-29" note for
+detail): `fig-visualization`/embed-gap (own epic, D6), `outline-depth`
+book-merge toc-depth bug (not yet diagnosed), citation-mode mismatch
+(confirmed *not* a BibTeX-parsing symptom — needs its own investigation),
+`ensurePdfTextPositions` page-order mismatch, and 112 warnings. Not merging
+to `feature/typst-testing` yet — nothing here is ready to flip to
+`Complete.` until item 4's full assertion pass is green end to end.
