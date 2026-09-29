@@ -98,7 +98,7 @@ In `quarto-error-reporting` 0.3.2 (a crates.io version dep, `Cargo.lock:6154`), 
 
 The partial Windows run of the `quarto` crate suite agrees: no other failure there is a test-built `file://` URL (see § Crate suite snapshot).
 
-Note: the test-local `fn canonical` helper is copied into about 55 test files. It is a plain passthrough to `std::fs::canonicalize`, so any *future* test that string-compares its output against product text will hit this same bug. Hardening every copy is out of scope here (YAGNI), but see design question 4.
+Note: the test-local `fn canonical` helper is copied into about 55 test files. It is a plain passthrough to `std::fs::canonicalize`, so any *future* test that string-compares its output against product text will hit this same bug. Hardening every copy is out of scope here (YAGNI), see § Decisions (shared `canonical()`).
 
 ### Q4 — Relationship to bd-1klbq2zd
 
@@ -139,10 +139,12 @@ This is out of scope for this plan to *design*, but it bounds the choice.
 - reserved DOS names (`CON`, `COM4.txt`, …): `C:\CON` names the device, not the file;
 - invalid filenames (trailing `.`/space, forbidden characters);
 - paths longer than 260 UTF-16 units;
-- any verbatim prefix other than a disk prefix. That includes `\\?\UNC\server\share\…`, which *often* has a plain equivalent (`\\server\share\…`). It has one only when the same three conditions hold for the UNC path: no reserved names, no invalid names, within the length limit. QER's `plain_absolute_path` converts every UNC path unconditionally, so it is not evidence for or against a particular case. `dunce` never converts UNC paths, so on its own it under-delivers for shares that do have a plain form. bd-1klbq2zd must either convert UNC paths only when those conditions hold (and keep the verbatim form otherwise), or decide that shares are out of scope. In the second case the exception must be written into this contract ("UNC shares may stay verbatim"). Leaving shares verbatim without that is a contract violation, not a scope choice. If it converts them, behavioral tests must cover both a convertible share path and one that has to stay verbatim.
+- any verbatim prefix other than a disk prefix. That includes `\\?\UNC\server\share\…`, which *often* has a plain equivalent (`\\server\share\…`). It has one only when the same three conditions hold for the UNC path: no reserved names, no invalid names, within the length limit. QER's `plain_absolute_path` converts every UNC path unconditionally, so it is not evidence for or against a particular case. `dunce` never converts UNC paths, so on its own it under-delivers for shares that do have a plain form.
+
+**Exception (decided 2026-09-29): UNC shares may stay verbatim.** A `\\?\UNC\…` path may be emitted or compared in verbatim form even when a plain `\\server\share\…` equivalent exists, which matches what `dunce` does and what q2 does today. A follow-up strand may narrow this exception by converting shares only when the three conditions above hold. That work must add behavioral tests for a convertible share path and for one that has to stay verbatim.
 
 Candidate directions, to be decided in bd-1klbq2zd:
-- Fix at the seam: `NativeRuntime::canonicalize` (`native.rs:94`) returns the plain form via `dunce::canonicalize`, plus UNC handling per the contract above. This covers CLI inputs and everything derived from them in one place, and keeps the verbatim form only where the contract allows it.
+- Fix at the seam: `NativeRuntime::canonicalize` (`native.rs:94`) returns the plain form via `dunce::canonicalize`, which leaves UNC shares verbatim under the contract's exception. This covers CLI inputs and everything derived from them in one place, and keeps the verbatim form only where the contract allows it.
 - Audit the ~186 direct `std::fs::canonicalize` calls in non-test sources, which bypass the runtime seam. Decide whether they route through the seam, use a shared `quarto_util` helper, or stay put because they never reach output or comparisons.
 - `std::path::absolute` is **not** a drop-in replacement: it resolves no symlinks, and the tests canonicalize precisely because of macOS `/var` → `/private/var`.
 
@@ -159,9 +161,10 @@ Decided 2026-09-28:
 - **bd-1klbq2zd scope: widened** from user-facing display to wire output (JSON) and status lines, under § Wire-path contract. The `NativeRuntime::canonicalize` seam is the first fix site, and the ~186 direct calls are an audit item.
 
 Decided 2026-09-29:
-- **UNC shares may stay verbatim.** This is a written exception to § Wire-path contract. `dunce` never converts `\\?\UNC\…`, and behavior for shares is unchanged from before the fix. Conditional UNC conversion is a follow-up strand.
+- **UNC shares may stay verbatim.** The exception is written into § Wire-path contract. Conditional UNC conversion is a follow-up strand.
 - **This branch fixes the seam only.** `NativeRuntime::canonicalize` calls `dunce::canonicalize` directly (native-only dep, already in `Cargo.lock`). No `quarto_util` helper yet. The direct-call audit is its own strand.
-- Open question 1 → `notebook_path` only. Open question 2 → leave the `canonical()` copies alone.
+- **Wire contract breadth in this test: `notebook_path` only.** `source_file` is not pinned here. The bd-1klbq2zd acceptance covers it through the probe.
+- **Shared `canonical()` in tests: leave the ~55 copies alone.** They are correct as a filesystem oracle as long as comparisons stay Path-to-Path.
 
 Decided 2026-09-29, after the seam prototype (supersedes "this branch fixes the seam only"):
 - **This branch ships Piece 1 only.** The `notebook_path` RED stays failing on Windows. It is tracked by bd-1klbq2zd, not skipped. The seam fix moves to bd-1klbq2zd on its own branch, with the direct-call audit done **before** the seam switch.
@@ -178,10 +181,6 @@ The prototype replaced the body of `NativeRuntime::canonicalize` with `dunce::ca
   - `quarto-system-runtime cache_lru::tests::concurrent_get_and_set_lru_do_not_lose_the_set` (os error 5 on persist), probably flaky, not classified.
 - Conclusion: the seam change is not local. Seam output (plain) meets verbatim paths from the ~186 direct calls, so the audit has to come first.
 
-## Open design questions for the user
-
-1. **Wire contract breadth in this test.** Pin the contract only on `notebook_path`, or also on `source_file`? Default: `notebook_path` only.
-2. **Shared `canonical()` in tests.** Leave the ~55 copies of the test helper alone? Default: yes. They are correct as a filesystem oracle as long as comparisons stay Path-to-Path.
 
 ## Checklist (after sign-off; assumes S1)
 
@@ -193,7 +192,7 @@ The prototype replaced the body of `NativeRuntime::canonicalize` with `dunce::ca
 - [x] Piece 1: Option C for the URL assertion + strengthened `notebook_path` assertion in `json_errors.rs`. Update the doc comment `:510-521` and the stale comment `:594`. (The `notebook_path` assertion lives in `ipynb_parse_error_json_carries_cell_origin`, the test that owns `:490`.)
 - [x] Confirm the new state: URL assertion passes, and the `notebook_path` assertion fails on Windows with `\\?\C:\…` (the product RED)
 - [x] Prototype the seam fix and measure the fallout (§ Seam prototype results). Moved to bd-1klbq2zd; the items below are its work, not this branch's.
-- [ ] Piece 2 (bd-1klbq2zd): design and apply the seam fix, then GREEN. Its task breakdown (seam, UNC behavior, direct-call audit dispositions) belongs in bd-1klbq2zd's own plan. Its acceptance must include CLI checks, via the saved probe, that `notebook_path`, `source_file` **and** the `Rendering …` status line are plain on Windows. This json_errors test pins only what question 1 decides, so the other outputs must not rely on it.
+- [ ] Piece 2 (bd-1klbq2zd): design and apply the seam fix, then GREEN. Its task breakdown (seam, UNC behavior, direct-call audit dispositions) belongs in bd-1klbq2zd's own plan. Its acceptance must include CLI checks, via the saved probe, that `notebook_path`, `source_file` **and** the `Rendering …` status line are plain on Windows. This json_errors test pins only `notebook_path` (§ Decisions), so the other outputs must not rely on it.
 - [x] Sanity check that the URL assertions catch regressions: a verbatim-leak target, a fragment, the wrong file, and the pseudo-path each fail; a correct target passes. The `notebook_path` equality check gets its sanity pass once bd-1klbq2zd turns it green.
 - [ ] Close bd-clq56rem once this branch merges. bd-1klbq2zd stays open and owns the RED.
 
