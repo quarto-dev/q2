@@ -425,6 +425,22 @@ fn evaluate_citation_to_output_impl(
         citation.items.iter().collect()
     };
 
+    // Author-in-text mode (`@id` outside brackets — pandoc's `AuthorInText`
+    // citation mode, tagged here as `author_only`) needs to move the name
+    // outside the citation's own parenthetical wrapping, e.g. "Turing (1950)"
+    // rather than "(Turing 1950)". That restructuring only has a
+    // well-defined shape for a lone citation item (the overwhelmingly common
+    // case, and the only one pandoc's own bare-`@id` syntax produces) with a
+    // layout that actually renders a separable `<names>` element — a mixed
+    // group, or a numeric/citation-number style with no names in its layout
+    // at all (there's nothing to move outside the brackets), falls back to
+    // the pre-existing rendering below. `skip_outer_parens` is set once the
+    // per-item loop below confirms the single item's output really did
+    // contain a names portion to split out.
+    let single_author_in_text_candidate =
+        citation.items.len() == 1 && citation.items[0].author_only == Some(true);
+    let mut skip_outer_parens = false;
+
     let mut item_outputs = Vec::new();
 
     for item in sorted_items {
@@ -532,13 +548,43 @@ fn evaluate_citation_to_output_impl(
             crate::output::CitationItemType::NormalCite
         };
 
+        let inner = Output::sequence(parts);
+        let inner = if single_author_in_text_candidate
+            && item_type == crate::output::CitationItemType::AuthorOnly
+        {
+            // Split the fully-evaluated layout output into its name portion
+            // (rendered outside any parens) and everything else (rendered
+            // inside manually-added parens) — since the outer group-level
+            // `layout.formatting` affix is skipped entirely below for this
+            // case, these are the *only* parens this citation gets.
+            let names_part = inner.extract_names_only();
+            if names_part.is_null() {
+                // No separable `<names>` element in this style's citation
+                // layout (e.g. a numeric/citation-number-only style like
+                // "[1]") — nothing to move outside parens, so there's no
+                // author-in-text distinction to make here at all.
+                inner
+            } else {
+                let rest_part = inner.suppress_names();
+                skip_outer_parens = true;
+                Output::sequence(vec![
+                    names_part,
+                    Output::literal(" ("),
+                    rest_part,
+                    Output::literal(")"),
+                ])
+            }
+        } else {
+            inner
+        };
+
         // Wrap with Tag::Item for disambiguation
         let tagged_output = Output::tagged(
             Tag::Item {
                 item_type,
                 item_id: item.id.clone(),
             },
-            Output::sequence(parts),
+            inner,
         );
 
         item_outputs.push(tagged_output);
@@ -569,8 +615,15 @@ fn evaluate_citation_to_output_impl(
         Output::formatted_with_delimiter(Formatting::default(), item_outputs, &delimiter)
     };
 
-    // Apply layout-level formatting
-    Ok(Output::formatted(layout.formatting.clone(), vec![combined]))
+    // Apply layout-level formatting (the citation-wide "(" ")" affix) —
+    // except for the single-item author-in-text case, which has already
+    // manually wrapped its own (non-name) portion in parens above and must
+    // not be double-wrapped.
+    if skip_outer_parens {
+        Ok(combined)
+    } else {
+        Ok(Output::formatted(layout.formatting.clone(), vec![combined]))
+    }
 }
 
 /// Collapse citations by author name (year collapse).
@@ -4459,6 +4512,72 @@ mod tests {
 
         let result = processor.process_citation(&citation).unwrap();
         assert_eq!(result, "Smith, 2020");
+    }
+
+    /// A processor whose citation layout wraps the whole citation in parens
+    /// (`prefix="(" suffix=")"`), matching real author-date CSL styles —
+    /// `create_test_processor`'s style has no such affix, so it can't
+    /// distinguish "wrapped in parens" from "not wrapped".
+    fn create_parenthesized_test_processor() -> Processor {
+        let csl = r#"<?xml version="1.0" encoding="utf-8"?>
+<style xmlns="http://purl.org/net/xbiblio/csl" class="in-text" version="1.0">
+  <citation>
+    <layout prefix="(" suffix=")" delimiter="; ">
+      <group delimiter=" ">
+        <names variable="author">
+          <name form="short"/>
+        </names>
+        <date variable="issued">
+          <date-part name="year"/>
+        </date>
+      </group>
+    </layout>
+  </citation>
+</style>"#;
+
+        let style = parse_csl(csl).unwrap();
+        Processor::new(style)
+    }
+
+    #[test]
+    fn test_author_in_text_citation_moves_name_outside_parens() {
+        let mut processor = create_parenthesized_test_processor();
+
+        let reference: Reference = serde_json::from_str(
+            r#"{
+            "id": "turing1950",
+            "type": "article-journal",
+            "author": [{"family": "Turing", "given": "Alan"}],
+            "issued": {"date-parts": [[1950]]}
+        }"#,
+        )
+        .unwrap();
+        processor.add_reference(reference);
+
+        // Bare `@turing1950` (pandoc's `AuthorInText` mode): "Turing (1950)",
+        // not "(Turing 1950)".
+        let author_in_text = Citation {
+            items: vec![crate::types::CitationItem {
+                id: "turing1950".to_string(),
+                author_only: Some(true),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let result = processor.process_citation(&author_in_text).unwrap();
+        assert_eq!(result, "Turing (1950)");
+
+        // Negative control: the same reference cited normally (`[@turing1950]`)
+        // still gets the ordinary parenthetical rendering.
+        let normal = Citation {
+            items: vec![crate::types::CitationItem {
+                id: "turing1950".to_string(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let result = processor.process_citation(&normal).unwrap();
+        assert_eq!(result, "(Turing 1950)");
     }
 
     #[test]

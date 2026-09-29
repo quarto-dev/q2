@@ -1133,6 +1133,86 @@ impl Output {
         }
     }
 
+    /// Return a copy of this output containing *only* the names (`Tag::Names`)
+    /// portions, with everything else (dates, titles, literal delimiters, …)
+    /// suppressed (made null). The structural complement of [`suppress_names`]
+    /// — used to render the "author" half of an author-in-text citation
+    /// (`@id` outside brackets), where the name must appear outside the
+    /// citation's own parenthetical wrapping.
+    ///
+    /// [`suppress_names`]: Output::suppress_names
+    pub fn extract_names_only(&self) -> Output {
+        let result = self.extract_names_only_inner();
+        result.strip_leading_whitespace()
+    }
+
+    /// Inner implementation of `extract_names_only` without whitespace stripping.
+    fn extract_names_only_inner(&self) -> Output {
+        match self {
+            Output::Null => Output::Null,
+            // Bare literals outside a Tag::Names node are delimiters/punctuation,
+            // not names content.
+            Output::Literal(_) => Output::Null,
+            Output::Formatted {
+                formatting,
+                children,
+            } => {
+                let new_children: Vec<_> = children
+                    .iter()
+                    .map(|c| c.extract_names_only_inner())
+                    .filter(|c| !c.is_null())
+                    .collect();
+                if new_children.is_empty() {
+                    Output::Null
+                } else {
+                    Output::Formatted {
+                        formatting: formatting.clone(),
+                        children: new_children,
+                    }
+                }
+            }
+            Output::Linked { url, children } => {
+                let new_children: Vec<_> = children
+                    .iter()
+                    .map(|c| c.extract_names_only_inner())
+                    .filter(|c| !c.is_null())
+                    .collect();
+                if new_children.is_empty() {
+                    Output::Null
+                } else {
+                    Output::Linked {
+                        url: url.clone(),
+                        children: new_children,
+                    }
+                }
+            }
+            Output::InNote(child) => {
+                let new_child = child.extract_names_only_inner();
+                if new_child.is_null() {
+                    Output::Null
+                } else {
+                    Output::InNote(Box::new(new_child))
+                }
+            }
+            Output::Tagged { tag, child } => match tag {
+                // Keep the whole subtree verbatim (tag included) — mirrors
+                // `find_year_suffix_output`'s full-node-copy precedent.
+                Tag::Names { .. } => self.clone(),
+                _ => {
+                    let new_child = child.extract_names_only_inner();
+                    if new_child.is_null() {
+                        Output::Null
+                    } else {
+                        Output::Tagged {
+                            tag: tag.clone(),
+                            child: Box::new(new_child),
+                        }
+                    }
+                }
+            },
+        }
+    }
+
     /// Convert the output to Pandoc Inlines.
     ///
     /// This produces a `Vec<Inline>` that can be consumed by pampa's
