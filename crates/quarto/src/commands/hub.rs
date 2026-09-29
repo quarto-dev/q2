@@ -76,8 +76,7 @@ async fn run_hub(args: HubArgs) -> Result<()> {
         let project_root = args
             .project
             .unwrap_or_else(|| std::env::current_dir().expect("Failed to get current directory"));
-        let project_root = project_root
-            .canonicalize()
+        let project_root = quarto_system_runtime::canonicalize(&project_root)
             .expect("Failed to canonicalize project root");
 
         info!(project_root = %project_root.display(), "Starting hub (project mode)");

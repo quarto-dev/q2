@@ -2,8 +2,8 @@
  * canonical.rs
  * Copyright (c) 2026 Posit, PBC
  *
- * The one native canonicalize q2 uses, so every canonical path it
- * emits or compares has the same spelling.
+ * The one canonicalize q2 uses, so every canonical path it emits or
+ * compares has the same spelling.
  */
 
 use std::path::{Path, PathBuf};

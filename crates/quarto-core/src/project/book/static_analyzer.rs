@@ -101,10 +101,12 @@ pub(crate) async fn analyze_book_project_statically(
             continue;
         };
         let abs_path = project_dir.join(rel_path);
-        // Matches `chapter_seed_map`'s own key derivation exactly (`std`'s
-        // `Path::canonicalize`, not the runtime's) so a lookup against
-        // `seed_map` hits the same entry that map was keyed with.
-        let seed_key = abs_path.canonicalize().unwrap_or_else(|_| abs_path.clone());
+        // Matches `chapter_seed_map`'s own key derivation exactly (the
+        // shared `quarto_system_runtime::canonicalize`, not the runtime's)
+        // so a lookup against `seed_map` hits the same entry that map was
+        // keyed with.
+        let seed_key =
+            quarto_system_runtime::canonicalize(&abs_path).unwrap_or_else(|_| abs_path.clone());
         let chapter_seed = seed_map.get(&seed_key).copied();
 
         let content = match runtime.file_read(&abs_path) {

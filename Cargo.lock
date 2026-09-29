@@ -6320,6 +6320,7 @@ dependencies = [
  "notify",
  "notify-debouncer-mini",
  "parking_lot",
+ "quarto-system-runtime",
  "quarto-util",
  "rand 0.9.5",
  "reqwest 0.13.5",

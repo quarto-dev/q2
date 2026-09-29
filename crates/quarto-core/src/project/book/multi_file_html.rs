@@ -169,9 +169,8 @@ pub(crate) async fn render_book_multi_file_html(
         };
         // `chapter_seed_map` keys are canonicalized paths; match that
         // spelling for the lookup.
-        let seed_key = input_path
-            .canonicalize()
-            .unwrap_or_else(|_| input_path.clone());
+        let seed_key =
+            quarto_system_runtime::canonicalize(&input_path).unwrap_or_else(|_| input_path.clone());
         let chapter_seed = seeds.get(&seed_key).copied();
         let doc_info = DocumentInfo::from_path(&input_path);
         // Book-projects P6: only the designated references chapter keeps
@@ -499,14 +498,12 @@ pub(crate) async fn render_book_multi_file_html(
         .filter_map(|item| item.file.as_ref())
         .map(|f| {
             let p = project.dir.join(f);
-            p.canonicalize().unwrap_or(p)
+            quarto_system_runtime::canonicalize(&p).unwrap_or(p)
         })
         .collect();
     for doc in &project.files {
-        let key = doc
-            .input
-            .canonicalize()
-            .unwrap_or_else(|_| doc.input.clone());
+        let key =
+            quarto_system_runtime::canonicalize(&doc.input).unwrap_or_else(|_| doc.input.clone());
         if item_inputs.contains(&key) {
             continue;
         }

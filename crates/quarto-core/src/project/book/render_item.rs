@@ -309,7 +309,7 @@ pub fn chapter_seed_map(
             let number = item.number?;
             let file = item.file.as_ref()?;
             let path = project_dir.join(file);
-            let key = path.canonicalize().unwrap_or(path);
+            let key = quarto_system_runtime::canonicalize(&path).unwrap_or(path);
             Some((
                 key,
                 ChapterSeed {
@@ -801,7 +801,7 @@ mod tests {
         let seeds = chapter_seed_map(dir.path(), &items);
         // Keys are canonicalized (matching `DocumentInfo.input`); on macOS
         // the TempDir path is a symlink away from that form.
-        let dir = dir.path().canonicalize().unwrap();
+        let dir = quarto_system_runtime::canonicalize(dir.path()).unwrap();
 
         assert_eq!(
             seeds.len(),
@@ -830,5 +830,47 @@ mod tests {
             }),
             "appendix seeds carry their own fresh sequence number + the flag"
         );
+    }
+
+    #[test]
+    fn seed_map_keys_match_the_discovered_document_inputs() {
+        // The renderers look seeds up by `DocumentInfo.input` as
+        // `ProjectContext::discover` spells it, so the keys must use the
+        // same spelling even when the project dir is given another way.
+        let dir = book_dir(&[
+            ("_quarto.yml", "title: Book\n"),
+            ("index.qmd", "# Preface {.unnumbered}\n"),
+            ("ch1.qmd", "# One\n"),
+            ("ch2.qmd", "# Two\n"),
+        ]);
+        std::fs::create_dir(dir.path().join("sub")).unwrap();
+        let book = map(vec![(
+            "chapters",
+            arr(vec![s("index.qmd"), s("ch1.qmd"), s("ch2.qmd")]),
+        )]);
+        let dotdot_dir = dir.path().join("sub").join("..");
+        let items = render_items(&dotdot_dir, &book).unwrap();
+        let seeds = chapter_seed_map(&dotdot_dir, &items);
+
+        let project =
+            crate::project::ProjectContext::discover(dir.path(), &NativeRuntime::new()).unwrap();
+        let chapters: Vec<_> = project
+            .files
+            .iter()
+            .filter(|doc| {
+                doc.input
+                    .file_name()
+                    .is_some_and(|n| n.to_string_lossy().starts_with("ch"))
+            })
+            .collect();
+        assert_eq!(chapters.len(), 2, "discovered: {:?}", project.files);
+        for doc in chapters {
+            assert!(
+                seeds.contains_key(&doc.input),
+                "no seed for discovered input {} in {:?}",
+                doc.input.display(),
+                seeds.keys().collect::<Vec<_>>()
+            );
+        }
     }
 }
