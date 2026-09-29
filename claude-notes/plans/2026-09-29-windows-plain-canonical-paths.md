@@ -87,10 +87,15 @@ Layer 2 (`bugfix/bd-1klbq2zd-path-audit`):
 - [x] Shared `canonicalize` + deepest-existing variant (std-backed, moved from `output_sink.rs`); `NativeRuntime::canonicalize` uses the former (`84f4d01a`)
 - [x] Audit table: subagent sweep, coverage cross-check, spot-check (§ Spot-check verdicts), routing (`28bea643`). `ts_process` failures classified (§ Baselines, bd-j5ij00i0). wasm32: `cargo check -p quarto-system-runtime --target wasm32-unknown-unknown` passes; the `quarto-core` wasm32 check cannot run on this host (no clang for tree-sitter's C build), so CI's hub-client build leg is the check for rows 16-18
 - [x] Spelling-agnostic test oracles: `commands::render` and `render_scripts_cli` `canonical` helpers call the shared function; `QUARTO_PROJECT_DIR`/`OUTPUT_DIR` assert identity (absolute + equal after canonicalizing both sides). Unflipped: only the 2 baseline `render_scripts_cli` failures. `preview.rs` helpers wait on the flip
-- [ ] Classify `preview_static_e2e::a_page_inside_the_project_opens_on_that_page` (needs the flip run). `cache_lru` concurrent test: classified, independent of this work (bd-cpzr71jr)
+- [x] Classify `preview_static_e2e::a_page_inside_the_project_opens_on_that_page`: passes under the flip, nothing to fix. `cache_lru` concurrent test: classified, independent of this work (bd-cpzr71jr). `preview.rs` helpers: no `commands::preview` test fails under the flip, no change
 - [ ] Crate-scoped suites for every touched crate: failure set identical to the baseline except the guard tests
-- [ ] Apply the fold rule
-- [ ] Temporary seam prototype check: flip the function to dunce locally, confirm the audit fallout is gone, revert (not committed in this layer)
+- [x] Apply the fold rule: do **not** fold. R rows exceed 10 and the flip fallout is not small (§ Flip results)
+- [x] Temporary seam prototype check (`932313dc`, flip reverted, `Cargo.lock` == HEAD): audit fallout is **not** gone, ~129 new failures (§ Flip results)
+- [ ] Classify every § Flip results cluster as test oracle vs product mixing (evidence `file:line`, which operand is verbatim and where it comes from)
+- [ ] Route `quarto-preview/src/config.rs:403` (+ `:423/:447/:536`) through the shared function; flip-RED = `config::tests::single_file_deps_resources_glob`. Correct audit rows 29-32 to R
+- [ ] Fix every product site the classification finds, same flip-RED pattern
+- [ ] Oracle sweep: std `canonical()` helpers in `quarto-core` tests (`idempotence.rs:67`, `repo_actions_pipeline.rs:27`, `render_page_in_project.rs:50`, others per classification), `quarto-hub` `admin_collect_lifecycle.rs:106/135`, the two `render_once_tests` step 6 missed
+- [ ] Re-run the flip on all six crates: new failures only from known noise (bd-j5ij00i0, bd-cpzr71jr), then revert
 
 Layer 3 (`bugfix/bd-1klbq2zd-dunce-seam`):
 - [ ] `gh stack add bugfix/bd-1klbq2zd-dunce-seam`; CLAUDE.local.md block
@@ -129,6 +134,18 @@ Ship:
 Temporary dunce flip, before and after routing: the new `render_item::tests::seed_map_keys_match_the_discovered_document_inputs` and `include_expansion::tests::self_include_is_caught_at_the_first_level_on_disk` both fail without the routing (the discovered input is plain, the keys are verbatim; the document gets spliced into itself once) and pass with it. The existing `seed_map_covers_numbered_files_and_skips_unnumbered` also failed under the flip; its oracle now uses the shared function.
 
 Compare sets, not counts. Raw logs are session scratch only; re-derive from this list.
+
+## Flip results (temporary dunce flip at `932313dc`, six crates)
+
+`cargo nextest run -p quarto -p quarto-system-runtime -p quarto-core -p quarto-hub -p quarto-preview -p quarto-test --no-fail-fast --build-jobs 6 --test-threads 8`: 6676 run, 171 failed (unflipped: 53). The capped parallelism kept free RAM above 8 GB. The #743 RED and `preview_static_e2e::a_page_inside_the_project_opens_on_that_page` pass. The new failures (~129) are all plain-vs-verbatim mixing: one operand std-canonicalized (verbatim), the other from the shared function (plain).
+
+- `quarto` `commands::render::render_once_tests::{single_document_outside_a_project_renders_beside_the_source, project_render_reports_output_dir_and_input_output_pairs}`: expectation verbatim, product plain (`render.rs:3351`). Step 6 missed these two.
+- `quarto-core` unit: `project_resources::tests` (~22; `OutOfProject` with a verbatim `project_root`, e.g. `expand_literal_path` at `project_resources.rs:1405`), `project::tests::directory_metadata_tests` (12), `project::tests::project_brand` (2).
+- `quarto-core` integration (~88): `idempotence` 26 ("active file present in discovered project", `idempotence.rs:191`), `render_page_in_project` 14, `repo_actions_pipeline` 13 ("no output for href 'index.html'"), `book_preview` 7, `secondary_nav_pipeline` 7, `breadcrumbs_pipeline` 5, `headroom_pipeline` 3, `project_pipeline` 3, `project_profile_overlays` 3, and one each in `book_project_type`, `execution_policy`, `format_css`, `incremental_rebuild`, `project_resources::orchestrator_engine_channel`, `render_to_html_captures`, `render_to_html_user_grammars`. The first three files have std `canonical()` helpers (`idempotence.rs:67`, `repo_actions_pipeline.rs:27`, `render_page_in_project.rs:50`), so these clusters are probably test oracles. That is not verified per cluster yet.
+- `quarto-hub::integration admin_collect_lifecycle::collect_lifecycle_quarantine_restore_purge`: the test std-canonicalizes `hub_dir` (`:106`, `:135`).
+- `quarto-preview config::tests::{single_file_deps_includes_declared_resources, single_file_deps_resources_glob}`: **product bug**. `config.rs:403` std-canonicalizes `canonical_root` and passes it to `quarto_core::project_resources::expand_patterns` (`:480`), which canonicalizes the matches through the runtime. The containment check yields `OutOfProject`, the `if let Ok` swallows it, and declared `resources:` drop out of the single-file preview closure. Audit rows 29-32 (L, self-consistent) were wrong: `expand_patterns` is a seam consumer.
+
+Baseline tests that pass under the flip (run-to-run variation, not attributed): `metadata_path_resolution::frontmatter_sidebar_resolves_sibling_relative_qmd`, `pandoc_render_to_file::render_document_to_file_docx_embeds_a_relatively_referenced_image`, the six `julia_engine_e2e::j*`. The run left `crossrefs_all_docx__docx.snap.new` and `integration__pandoc_shim_goldens__equation_golden.snap.new` (deleted).
 
 ## Guard finding (layer 2, step 3)
 
