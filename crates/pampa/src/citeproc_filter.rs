@@ -20,6 +20,7 @@ use serde::{Deserialize, Serialize};
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::{Block, Div, Inline, Pandoc};
 use crate::unified_filter::CiteprocFilterError;
+use quarto_pandoc_types::custom::Slot;
 use quarto_pandoc_types::{ConfigMapEntry, ConfigValue, ConfigValueKind};
 
 /// Default CSL style (Chicago Manual of Style, author-date format).
@@ -715,6 +716,32 @@ fn collect_citations_from_block(
                 collect_citations_from_inlines(line, citations, note_number);
             }
         }
+        // Callouts, custom crossref floats (e.g. the "Dinosaur" ref-type),
+        // theorems, etc. are CustomNode-scaffolded by this point in the
+        // pipeline (float-ref-target sugar / callout-resolve). Without this
+        // arm, any `@cite` nested inside one is invisible to citeproc: it
+        // survives as a raw `Cite` node all the way to the Typst writer,
+        // which emits a native `#cite(<id>)` call the document's own
+        // `#bibliography()` (built from citeproc's resolved set) was never
+        // told about — "the document does not contain a bibliography".
+        Block::Custom(node) => {
+            for slot in node.slots.values() {
+                match slot {
+                    Slot::Block(b) => collect_citations_from_block(b, citations, note_number),
+                    Slot::Blocks(bs) => {
+                        for b in bs {
+                            collect_citations_from_block(b, citations, note_number);
+                        }
+                    }
+                    Slot::Inline(i) => collect_citations_from_inlines(
+                        std::slice::from_ref(i),
+                        citations,
+                        note_number,
+                    ),
+                    Slot::Inlines(is) => collect_citations_from_inlines(is, citations, note_number),
+                }
+            }
+        }
         _ => {}
     }
 }
@@ -788,6 +815,26 @@ fn collect_citations_from_inlines(
             Inline::Note(n) => {
                 for b in &n.content {
                     collect_citations_from_block(b, citations, note_number);
+                }
+            }
+            Inline::Custom(node) => {
+                for slot in node.slots.values() {
+                    match slot {
+                        Slot::Block(b) => collect_citations_from_block(b, citations, note_number),
+                        Slot::Blocks(bs) => {
+                            for b in bs {
+                                collect_citations_from_block(b, citations, note_number);
+                            }
+                        }
+                        Slot::Inline(i) => collect_citations_from_inlines(
+                            std::slice::from_ref(i),
+                            citations,
+                            note_number,
+                        ),
+                        Slot::Inlines(is) => {
+                            collect_citations_from_inlines(is, citations, note_number)
+                        }
+                    }
                 }
             }
             _ => {}
@@ -902,13 +949,37 @@ fn transform_block(
                 transform_inlines(line, citation_outputs, citation_index, processor);
             }
         }
+        // See the matching arm in `collect_citations_from_block` for why
+        // this is needed: a Callout/FloatRefTarget/etc. must be descended
+        // into or its `Cite` nodes never get replaced with resolved text.
+        Block::Custom(node) => {
+            for slot in node.slots.values_mut() {
+                match slot {
+                    Slot::Block(b) => {
+                        transform_block(b, citation_outputs, citation_index, processor)
+                    }
+                    Slot::Blocks(bs) => {
+                        transform_blocks(bs, citation_outputs, citation_index, processor)
+                    }
+                    Slot::Inline(i) => transform_inlines(
+                        std::slice::from_mut(i),
+                        citation_outputs,
+                        citation_index,
+                        processor,
+                    ),
+                    Slot::Inlines(is) => {
+                        transform_inlines(is, citation_outputs, citation_index, processor)
+                    }
+                }
+            }
+        }
         _ => {}
     }
 }
 
 /// Transform inlines, replacing Cite with rendered content.
 fn transform_inlines(
-    inlines: &mut Vec<Inline>,
+    inlines: &mut [Inline],
     citation_outputs: &[(&Citation, &String)],
     citation_index: &mut usize,
     processor: &Processor,
@@ -979,6 +1050,28 @@ fn transform_inlines(
             }
             Inline::Note(n) => {
                 transform_blocks(&mut n.content, citation_outputs, citation_index, processor);
+                i += 1;
+            }
+            Inline::Custom(node) => {
+                for slot in node.slots.values_mut() {
+                    match slot {
+                        Slot::Block(b) => {
+                            transform_block(b, citation_outputs, citation_index, processor)
+                        }
+                        Slot::Blocks(bs) => {
+                            transform_blocks(bs, citation_outputs, citation_index, processor)
+                        }
+                        Slot::Inline(inner) => transform_inlines(
+                            std::slice::from_mut(inner),
+                            citation_outputs,
+                            citation_index,
+                            processor,
+                        ),
+                        Slot::Inlines(is) => {
+                            transform_inlines(is, citation_outputs, citation_index, processor)
+                        }
+                    }
+                }
                 i += 1;
             }
             _ => {
@@ -1438,8 +1531,8 @@ fn inlines_to_text(inlines: &[crate::pandoc::Inline]) -> String {
 mod tests {
     use super::*;
     use crate::pandoc::{
-        Code, Emph, LineBreak, Math, MathType, QuoteType, Quoted, RawInline, SmallCaps, SoftBreak,
-        Space, Strikeout, Strong, Subscript, Superscript, Underline,
+        Code, CustomNode, Emph, LineBreak, Math, MathType, QuoteType, Quoted, RawInline, SmallCaps,
+        SoftBreak, Space, Strikeout, Strong, Subscript, Superscript, Underline,
     };
 
     // Helper to create a default SourceInfo for tests
@@ -2265,6 +2358,94 @@ mod tests {
         let citations = collect_citations(&pandoc);
         assert_eq!(citations.len(), 1);
         assert_eq!(citations[0].items[0].id, "div2020");
+    }
+
+    /// Regression test: a `@cite` nested inside a `CustomNode` (the
+    /// scaffold shape a Callout, FloatRefTarget, Theorem, etc. is in by the
+    /// time citeproc runs) must still be found and resolved. Before this
+    /// fix, `Block::Custom`/`Inline::Custom` fell through the catch-all arm
+    /// in both `collect_citations_from_block` and `transform_block`, so any
+    /// citation living inside e.g. a `.callout-note` or a custom crossref
+    /// float silently survived as a raw `Cite` node all the way to the
+    /// writer.
+    #[test]
+    fn test_collect_citations_in_custom_node() {
+        let mut node = CustomNode::new(
+            "Callout",
+            (String::new(), Vec::new(), hashlink::LinkedHashMap::new()),
+            si(),
+        );
+        node.set_slot(
+            "content",
+            Slot::Blocks(vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![make_cite("callout2020")],
+                source_info: si(),
+            })]),
+        );
+        let pandoc = Pandoc {
+            meta: meta_map(vec![]),
+            blocks: vec![Block::Custom(node)],
+        };
+        let citations = collect_citations(&pandoc);
+        assert_eq!(citations.len(), 1);
+        assert_eq!(citations[0].items[0].id, "callout2020");
+    }
+
+    #[test]
+    fn test_transform_block_in_custom_node() {
+        let mut node = CustomNode::new(
+            "Callout",
+            (String::new(), Vec::new(), hashlink::LinkedHashMap::new()),
+            si(),
+        );
+        node.set_slot(
+            "content",
+            Slot::Blocks(vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![make_cite("callout2020")],
+                source_info: si(),
+            })]),
+        );
+        let mut block = Block::Custom(node);
+        let citation = Citation {
+            id: None,
+            note_number: Some(1),
+            items: vec![CitationItem {
+                id: "callout2020".to_string(),
+                locator: None,
+                label: None,
+                prefix: None,
+                suffix: None,
+                suppress_author: Some(false),
+                author_only: Some(false),
+                position: None,
+            }],
+        };
+        let rendered = "(Callout, 2020)".to_string();
+        let citation_outputs: Vec<(&Citation, &String)> = vec![(&citation, &rendered)];
+        let style = quarto_csl::parse_csl(DEFAULT_CSL_STYLE).unwrap();
+        let processor = Processor::new(style);
+        let mut citation_index = 0;
+        transform_block(
+            &mut block,
+            &citation_outputs,
+            &mut citation_index,
+            &processor,
+        );
+
+        let Block::Custom(node) = &block else {
+            panic!("expected Block::Custom");
+        };
+        let Some(Slot::Blocks(blocks)) = node.get_slot("content") else {
+            panic!("expected a Blocks slot named \"content\"");
+        };
+        let Block::Paragraph(p) = &blocks[0] else {
+            panic!("expected a Paragraph");
+        };
+        assert!(
+            matches!(&p.content[0], Inline::Str(s) if s.text == "(Callout, 2020)"),
+            "citation inside the custom node was not replaced: {:?}",
+            p.content
+        );
     }
 
     // Tests for insert_bibliography
