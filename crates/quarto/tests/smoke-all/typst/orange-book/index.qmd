@@ -278,27 +278,16 @@ _quarto:
             relation: leftAligned
             object: "LISTING_BODY_ALIGN_TEST"
             tolerance: 10  # 8pt inset from Skylighting block styling
-      # ACKNOWLEDGED GAP (P8, 2026-09-29): ~110 of this fixture's warnings
-      # are a false-positive artifact of Q2's metadata pipeline, not real
-      # content issues — this file's own `_quarto.tests.typst.*` assertion
-      # strings (bracket-label patterns like "<fig-cars>", regex patterns
-      # with escaped parens) get parsed as DocumentMetadata markdown the
-      # same as `title`/`abstract` would, so e.g. "<fig-visualization>"
-      # above is misread as an HTML tag (Q-2-9 "HTML element converted to
-      # raw HTML") and some regex strings fail markdown parsing outright
-      # (Q-1-20 "Failed to parse metadata value as markdown"). Confirmed:
-      # none of chapter1-3/appendix*/references.qmd's actual body content
-      # contains literal `<...>` syntax outside fenced code blocks: this
-      # test-harness convention (`_quarto.tests`, itself a Q2 invention,
-      # analogous to `_quarto.yml`'s ProjectConfig literal-string handling)
-      # is being run through document-content markdown parsing it was
-      # never meant to receive. Real fix belongs to the metadata pipeline
-      # (crates/pampa/src/pandoc/meta.rs), not this fixture or P8 (book-merge
-      # rendering) — filed as bd-quarto-tests-metadata-markdown-3wsdzq4c.
-      # Explicit noErrors (errors-only) in place of the implicit
-      # noErrorsOrWarnings default until that lands; the 2 warnings from
-      # item 3's embed gap (Unknown shortcode, unresolved @fig-visualization
-      # crossref) are also covered by this.
+      # The remaining 2 warnings are the embed gap — see the
+      # `<fig-visualization>` comment above (`{{< embed >}}` unimplemented,
+      # D6). bd-quarto-tests-metadata-markdown-3wsdzq4c's markdown-parsing
+      # false positives are fixed (meta_annotations.rs's `_quarto.tests.**`
+      # entry); this is back to the tightest check short of landing D6.
+      printsMessage:
+        - level: WARN
+          regex: "Unknown shortcode"
+        - level: WARN
+          regex: "unresolved crossref `@fig-visualization`"
       noErrors: true
 ---
 
