@@ -69,8 +69,6 @@ import type { CommentAnchorTarget } from '../commentAnchor';
 const CHROME_BLUE = '#4a7ba7';
 const DIVIDER = '1px solid rgba(74, 123, 167, 0.3)';
 const GLOW = '0 0 8px 2px rgba(140, 190, 240, 0.6)';
-// Toggled on a hovered commented span's element (see the injected rules).
-const SPAN_HOVER_CLASS = 'q2-comment-span-hover';
 
 export function isComment(inline: InlineNode): boolean {
     if (inline.t === 'Span' && 'c' in inline) {
@@ -126,9 +124,10 @@ function inlineSlot(block: BlockNode): InlineNode[] | null {
         // A span carrying comments (CommentSpan.tsx): a dotted underline
         // ties the bubble to its text without hovering.
         '.q2-commented-span { text-decoration: underline dotted #4a7ba7; text-decoration-thickness: 1px; text-underline-offset: 2px; }\n' +
-        // Hovered span (or its bubble): a TEXT highlight that follows the
-        // line boxes, not a rectangle over the bounding box — a span wrapped
-        // across lines would otherwise cover text that isn't in it.
+        // Hovered span (or its bubble, or its bubble open): a TEXT highlight
+        // that follows the line boxes, not a rectangle over the bounding box
+        // — a span wrapped across lines would otherwise cover text that
+        // isn't in it. Rendered by Span.tsx from the anchor context.
         '.q2-comment-span-hover { background-color: #dbeafe; border-radius: 2px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }';
     document.head.appendChild(tag);
 })();
@@ -1005,7 +1004,7 @@ export const CommentWrapper = ({
     fallbackAnchor = null,
     hoverWholeAnchor = false,
     placement = 'corner',
-    initialOpen = false,
+    claimInitialOpen,
     addComment,
     resolveCommentAtIndex,
     mode,
@@ -1021,8 +1020,14 @@ export const CommentWrapper = ({
     hoverWholeAnchor?: boolean;
     /** Where the chrome sits relative to the anchor (see `BubblePlacement`). */
     placement?: BubblePlacement;
-    /** Mount with the bubble expanded and the add-comment input open (comment-on-selection). */
-    initialOpen?: boolean;
+    /**
+     * Asked once on mount: should this bubble open expanded with the
+     * add-comment input (comment-on-selection hand-off)? A callback rather
+     * than a boolean so the one-shot claim happens in the mount effect —
+     * safe under StrictMode's double render, where a render-time claim
+     * would be consumed by the discarded first pass.
+     */
+    claimInitialOpen?: () => boolean;
     /** Append a comment with this text to the source node and commit. */
     addComment: (text: string) => void;
     /** Remove the index-th comment (comment spans only, in order) from the source node and commit. */
@@ -1040,10 +1045,6 @@ export const CommentWrapper = ({
     // being edited (the edit surface replaces the component) or when
     // nothing registered; the layout pass hides the chrome then.
     const anchorRef = React.useRef<Element | null>(null);
-    const anchorTarget = React.useMemo<CommentAnchorTarget>(
-        () => ({ node: anchorNode, register: (el) => { anchorRef.current = el; } }),
-        [anchorNode],
-    );
     const getAnchorRef = React.useRef<() => Element | null>(() => null);
     getAnchorRef.current = () => anchorRef.current ?? fallbackAnchor?.current ?? null;
 
@@ -1090,8 +1091,16 @@ export const CommentWrapper = ({
 
     // Clicking a compact bubble expands it in place (with the inline
     // add-comment input open at its bottom).
-    const [selfExpanded, setSelfExpanded] = React.useState(initialOpen);
-    const [showInlineInput, setShowInlineInput] = React.useState(initialOpen);
+    const [selfExpanded, setSelfExpanded] = React.useState(false);
+    const [showInlineInput, setShowInlineInput] = React.useState(false);
+    React.useLayoutEffect(() => {
+        if (claimInitialOpen?.()) {
+            setSelfExpanded(true);
+            setShowInlineInput(true);
+        }
+        // Mount only: the claim is one-shot by design.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
     const inlineInputRef = React.useRef<HTMLTextAreaElement>(null);
     const [isHovered, setIsHovered] = React.useState(false);
     // Hovering the bubble itself glows the block (mirror of the
@@ -1184,6 +1193,10 @@ export const CommentWrapper = ({
     React.useEffect(() => {
         const ta = inlineInputRef.current;
         if (showInlineInput && ta) {
+            // The input owns focus now: drop any block-editor focus restore
+            // still pending from the edit session that just closed (it would
+            // fire from the reland effect / backstop timer and deselect us).
+            previewCtx?.cancelPendingLand?.();
             ta.focus();
             const end = ta.value.length;
             ta.setSelectionRange(end, end);
@@ -1364,16 +1377,18 @@ export const CommentWrapper = ({
     // (An open span bubble keeps its span highlighted, so what is being
     // commented on stays visible while typing.)
     const glowVisible = bubbleHovered || (hoverWholeAnchor && (isHovered || selfExpanded));
-    // Whole-anchor targets highlight the anchor's TEXT (a class on the span,
-    // following its line boxes) instead of the rectangular glow overlay,
-    // which would cover other text when the span wraps.
-    React.useLayoutEffect(() => {
-        if (!hoverWholeAnchor) return;
-        const el = getAnchorRef.current();
-        if (!el) return;
-        el.classList.toggle(SPAN_HOVER_CLASS, glowVisible);
-        return () => el.classList.remove(SPAN_HOVER_CLASS);
-    }, [glowVisible, hoverWholeAnchor]);
+    // Whole-anchor targets highlight the anchor's TEXT (the span renders the
+    // highlight class itself, following its line boxes) instead of the
+    // rectangular glow overlay, which would cover other text when the span
+    // wraps. Delivered through the anchor context, declaratively.
+    const anchorTarget = React.useMemo<CommentAnchorTarget>(
+        () => ({
+            node: anchorNode,
+            register: (el) => { anchorRef.current = el; },
+            highlighted: hoverWholeAnchor && glowVisible,
+        }),
+        [anchorNode, hoverWholeAnchor, glowVisible],
+    );
     const chrome = chromeVisible && (
         <>
             {glowVisible && !hoverWholeAnchor && (

@@ -11,6 +11,7 @@ import Superscript from '@tiptap/extension-superscript';
 import HardBreak from '@tiptap/extension-hard-break';
 import type { AnyExtension } from '@tiptap/core';
 import { Chip } from './chipExtension';
+import { HiddenComments, SpanMark } from './spanMarkExtension';
 
 /**
  * The static extensions for the rich-text editor.
@@ -55,5 +56,9 @@ export function buildRichTextExtensions(): AnyExtension[] {
         Subscript,
         Superscript,
         Chip,
+        // Span comments prototype: authored spans as an editable mark; the
+        // block's `[>> …]` comments hidden on the node (see spanMarkExtension).
+        SpanMark,
+        HiddenComments,
     ];
 }
