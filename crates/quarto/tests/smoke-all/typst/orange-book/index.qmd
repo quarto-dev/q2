@@ -3,6 +3,8 @@ keep-typ: true
 _quarto:
   render-project: true
   tests:
+    run:
+      requires: knitr
     typst:
       ensureTypstFileRegexMatches:
         - # matches array (first positional argument)
