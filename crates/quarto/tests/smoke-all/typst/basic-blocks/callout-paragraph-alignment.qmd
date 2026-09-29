@@ -1,0 +1,28 @@
+---
+title: "Callout Paragraph Alignment"
+format:
+  typst:
+    keep-typ: true
+_quarto:
+  tests:
+    typst:
+      ensurePdfTextPositions:
+        - # Paragraphs inside cross-referenced callout should be left-aligned
+          - subject: "ShortLine"
+            relation: leftAligned
+            object: "LongerParagraph with additional words"
+            tolerance: 2
+        - []
+      noErrors: default
+---
+
+<!-- Id-before-class attribute order (Q1 accepts `.callout-tip #tip-alignment`;
+Q2's grammar requires id first by design, not a bug -- see
+claude-notes/plans/2026-09-29-typst-smoke-all-followup.md item #2). -->
+::: {#tip-alignment .callout-tip}
+## Alignment Test
+
+ShortLine
+
+LongerParagraph with additional words filling out this line.
+:::
