@@ -590,6 +590,32 @@ impl PipelineStage for PandocWriteStage {
             }));
         }
 
+        // The crossref-index Lua filter (`crossref/index.lua`) writes
+        // straight to `crossref-index-file` (`<project>/.quarto/crossref-index.json`,
+        // set in `insert_project_keys`) with no directory creation of its
+        // own — Lua's `io.open(path, "w")` never creates missing parent
+        // directories, and doing the `mkdir -p` there would need a
+        // shell-out that isn't portable to Windows. On a project whose
+        // `.quarto/` has never been created (a fresh checkout, or a fresh
+        // test fixture dir), that `io.open` returns `nil` and the filter
+        // only warns "Error attempting to write crossref index" — no path,
+        // no errno. Every book chapter's own Pandoc invocation writes to
+        // this same file, so ensure the directory exists before any of
+        // them run, rather than depending on some other chapter (or a
+        // leftover `.quarto/` from a previous run) having created it first.
+        if !ctx.project.is_single_file {
+            let quarto_dir = ctx.project.dir.join(".quarto");
+            std::fs::create_dir_all(&quarto_dir).map_err(|e| {
+                PipelineError::stage_error(
+                    self.name(),
+                    format!(
+                        "failed to create {} for the crossref index: {e}",
+                        quarto_dir.display()
+                    ),
+                )
+            })?;
+        }
+
         let params_blob = builder.build().to_string();
 
         // T9.1: the Pandoc-superset shape (`raw: false`), never pampa's

@@ -86,7 +86,11 @@ comment).
 
 ## Status
 
-**Complete.** All P7 tasks finished successfully.
+**Complete**, but see **2026-09-29 — crossref-index write race, root-caused and
+fixed** at the end of this section: both fixtures regressed again after this
+"Complete" mark, on a bug unrelated to anything P7 built.
+
+All P7 tasks finished successfully.
 
 - [x] **P6 Correctness Gap Fixes:**
   - Format selection now uses explicit test format override
@@ -105,3 +109,48 @@ comment).
       appears in `.typ` and the French localization assertions pass.
 - [x] `cargo clippy -p quarto --all-targets -- -D warnings` + `cargo nextest run
       -p quarto` after the render authorization is granted.
+
+## 2026-09-29 — crossref-index write race, root-caused and fixed
+
+At `72ad0eda8`, `smoke_all::smoke_all` was red on both `orange-book-lang/index.qmd`
+and `override-orange-book/index.qmd`, failing `noErrorsOrWarnings` on an
+unexpected warning: `Error attempting to write crossref index`
+(`resources/pandoc-filters/filters/crossref/index.lua:215`). Initially suspected
+as an intermittent flake (both failures showed up on a cold Typst-package-cache
+run); confirmed **not** a flake by reproducing deterministically.
+
+**Root cause:** `insert_project_keys`
+(`crates/quarto-core/src/pandoc_filters/params.rs`) points the
+`crossref-index-file` filter param at `<project>/.quarto/crossref-index.json`,
+but nothing ever creates the `.quarto/` directory before Pandoc's Lua filter
+tries to `io.open(indexFile, "w")` — Lua's `io.open` never creates missing
+parent directories, and every chapter in a book render independently invokes
+Pandoc and writes to this same path. Locally this went unnoticed because a
+`.quarto/` directory left over from a previous render of the same fixture
+directory made the write succeed; deleting the fixture's `.quarto/` first
+(`rm -rf crates/quarto/tests/smoke-all/typst/{orange-book-lang,override-orange-book}/.quarto`)
+reproduces the failure on every run, cold-cache or not.
+
+**Fix:** `crates/quarto-core/src/stage/stages/pandoc_write.rs`'s `PandocWriteStage`
+now `create_dir_all`s `<project>/.quarto/` before building the filter params
+blob, whenever `!ctx.project.is_single_file` (the same condition
+`insert_project_keys` already gates the param on). This makes the directory's
+existence deterministic regardless of the order in which a book's chapters
+render, rather than depending on some other chapter (or a stale directory from
+a previous run) having created it first.
+
+**Verification:**
+- With both fixtures' `.quarto/` deleted (cold): `SMOKE_FILTER=orange-book
+  cargo nextest run -p quarto --test integration -- smoke_all` → **3 passed**
+  (`orange-book/index.qmd`, `orange-book-lang/index.qmd`,
+  `override-orange-book/index.qmd`), 7 skipped (book chapters), 0 failed — a log
+  line confirms the cold-cache condition (`Downloading @preview/orange-book:0.7.1...`
+  rather than `Skipping ... (cached)`).
+- `cargo clippy -p quarto-core --all-targets -- -D warnings`: clean.
+- `cargo nextest run -p quarto-core`: 5306 passed, 32 skipped, 0 failed — same
+  run also covers the `#notefigure(` fix in the P5 doc's 2026-09-29 entry
+  (`crates/quarto-core/src/transforms/float_ref_target.rs`); no unrelated diff.
+- Full unfiltered `cargo nextest run -p quarto --test integration -- smoke_all`:
+  **passes** — the smoke-all group's `smoke_all::smoke_all` test (bundling this
+  fixture plus the 5 margin-table fixtures from the P5 doc's 2026-09-29 entry)
+  went from 1 failure to 0.
