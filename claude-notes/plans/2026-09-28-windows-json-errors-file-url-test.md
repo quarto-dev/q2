@@ -3,7 +3,7 @@
 **Date:** 2026-09-28
 **Braid:** bd-clq56rem (related: bd-1klbq2zd)
 **Worktree:** `.worktrees/bd-clq56rem-windows-jsonerrors-ipynb-hyperlink` (branch `braid/bd-clq56rem-windows-jsonerrors-ipynb-hyperlink`, based on `main` @ `e8379cfe`)
-**Status:** Investigation done (revision 2). Decided 2026-09-28: sequencing S1, and bd-1klbq2zd widened to cover wire output. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Implementing (go-ahead 2026-09-29). Decided 2026-09-28: sequencing S1, and bd-1klbq2zd widened to cover wire output. Piece 2 decisions: § Decisions.
 
 ## Overview
 
@@ -158,6 +158,26 @@ Decided 2026-09-28:
 - **Sequencing: S1.** One branch: test rework with the strengthened `notebook_path` RED first, then the product fix at the runtime seam.
 - **bd-1klbq2zd scope: widened** from user-facing display to wire output (JSON) and status lines, under § Wire-path contract. The `NativeRuntime::canonicalize` seam is the first fix site, and the ~186 direct calls are an audit item.
 
+Decided 2026-09-29:
+- **UNC shares may stay verbatim.** This is a written exception to § Wire-path contract. `dunce` never converts `\\?\UNC\…`, and behavior for shares is unchanged from before the fix. Conditional UNC conversion is a follow-up strand.
+- **This branch fixes the seam only.** `NativeRuntime::canonicalize` calls `dunce::canonicalize` directly (native-only dep, already in `Cargo.lock`). No `quarto_util` helper yet. The direct-call audit is its own strand.
+- Open question 1 → `notebook_path` only. Open question 2 → leave the `canonical()` copies alone.
+
+Decided 2026-09-29, after the seam prototype (supersedes "this branch fixes the seam only"):
+- **This branch ships Piece 1 only.** The `notebook_path` RED stays failing on Windows. It is tracked by bd-1klbq2zd, not skipped. The seam fix moves to bd-1klbq2zd on its own branch, with the direct-call audit done **before** the seam switch.
+
+## Seam prototype results (2026-09-29, Windows)
+
+The prototype replaced the body of `NativeRuntime::canonicalize` with `dunce::canonicalize(path)`, adding `dunce = "1"` as a native-only dep of `quarto-system-runtime`.
+
+- The RED went green, and the saved probe showed `notebook_path`, `source_file` and `Rendering single file:` all plain.
+- `cargo nextest run -p quarto -p quarto-system-runtime`: the baseline has 7 failures, the seam has 26. The 20 new failures are:
+  - 17 test expectations that build the expected path with `std` canonicalize (verbatim) and compare it with product output (now plain): the `commands::render` `classify_*` and `render_once_*` unit tests, and `render_scripts_cli::{env_contract_full_render, post_render_script_receives_output_files}` (`QUARTO_PROJECT_DIR`).
+  - `render_cli_e2e::output_equal_to_input_refuses_and_preserves_source`. The overwrite guard (`render_to_file.rs:647`) compares paths lexically. The test passes a verbatim `-o`, and the input is now plain. With plain user input the guard already missed before the fix, so the gap moves rather than appears.
+  - `preview_static_e2e::a_page_inside_the_project_opens_on_that_page`, not classified.
+  - `quarto-system-runtime cache_lru::tests::concurrent_get_and_set_lru_do_not_lose_the_set` (os error 5 on persist), probably flaky, not classified.
+- Conclusion: the seam change is not local. Seam output (plain) meets verbatim paths from the ~186 direct calls, so the audit has to come first.
+
 ## Open design questions for the user
 
 1. **Wire contract breadth in this test.** Pin the contract only on `notebook_path`, or also on `source_file`? Default: `notebook_path` only.
@@ -170,11 +190,12 @@ Decided 2026-09-28:
 - [x] Sweep sibling tests (Q3). Only json_errors.rs:595 is a string-built URL.
 - [x] Classify test problem vs support gap. Result: both (§ Classification, probe saved)
 - [x] Research ecosystem precedent (§ Research)
-- [ ] Piece 1: Option C for the URL assertion + strengthened `notebook_path` assertion in `json_errors.rs`. Update the doc comment `:510-521` and the stale comment `:594`.
-- [ ] Confirm the new state: URL assertion passes, and the `notebook_path` assertion fails on Windows with `\\?\C:\…` (the product RED)
+- [x] Piece 1: Option C for the URL assertion + strengthened `notebook_path` assertion in `json_errors.rs`. Update the doc comment `:510-521` and the stale comment `:594`. (The `notebook_path` assertion lives in `ipynb_parse_error_json_carries_cell_origin`, the test that owns `:490`.)
+- [x] Confirm the new state: URL assertion passes, and the `notebook_path` assertion fails on Windows with `\\?\C:\…` (the product RED)
+- [x] Prototype the seam fix and measure the fallout (§ Seam prototype results). Moved to bd-1klbq2zd; the items below are its work, not this branch's.
 - [ ] Piece 2 (bd-1klbq2zd): design and apply the seam fix, then GREEN. Its task breakdown (seam, UNC behavior, direct-call audit dispositions) belongs in bd-1klbq2zd's own plan. Its acceptance must include CLI checks, via the saved probe, that `notebook_path`, `source_file` **and** the `Rendering …` status line are plain on Windows. This json_errors test pins only what question 1 decides, so the other outputs must not rely on it.
-- [ ] Sanity check that the assertions catch regressions: point the expectation at another file and confirm the test fails, then revert
-- [ ] Close both strands with links to the commits
+- [x] Sanity check that the URL assertions catch regressions: a verbatim-leak target, a fragment, the wrong file, and the pseudo-path each fail; a correct target passes. The `notebook_path` equality check gets its sanity pass once bd-1klbq2zd turns it green.
+- [ ] Close bd-clq56rem once this branch merges. bd-1klbq2zd stays open and owns the RED.
 
 ## Verification
 
