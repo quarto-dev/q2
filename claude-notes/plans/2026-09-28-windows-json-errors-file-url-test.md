@@ -45,7 +45,7 @@ No. The consensus is to use verbatim paths only where they are needed (very long
 
 ## Triage verdict
 
-**Ready to implement (S1), pending go-ahead.** The failing assertion is a test bug, but fixing only the test would leave a confirmed product gap (verbatim paths in JSON wire output) hidden behind a test that goes green. Decided 2026-09-28:
+**Piece 1 implemented; Piece 2 handed to bd-1klbq2zd** (see § Decisions, 2026-09-29). The original verdict follows. The failing assertion is a test bug, but fixing only the test would leave a confirmed product gap (verbatim paths in JSON wire output) hidden behind a test that goes green. Decided 2026-09-28:
 - One branch. First rework the test: a URL round-trip, plus a strengthened `notebook_path` assertion as the Windows RED.
 - Then fix the product at `NativeRuntime::canonicalize` under bd-1klbq2zd.
 - bd-1klbq2zd's scope is widened from display to wire output and status lines, under the contract in § Wire-path contract: plain form whenever an equivalent plain form exists.
@@ -207,6 +207,8 @@ cargo nextest run -p quarto -E 'test(ipynb_diagnostic_hyperlinks_real_notebook)'
 cargo nextest run -p quarto -E 'test(json_errors::)'
 ```
 
+Expected on Windows until bd-1klbq2zd lands: exactly one `json_errors::` failure, `ipynb_parse_error_json_carries_cell_origin` ("notebook_path must be a plain path, got: `\\?\C:\...`"). That is the intended RED. On Linux/macOS all pass.
+
 No full-crate or workspace *test* run locally: CLAUDE.local.md overrides AGENTS.md's pre-push steps on this machine, and CI (Linux/macOS) runs the full suite. Before opening the PR, ask the user about one `cargo build --workspace`. CI has no Windows leg, so that build is the only place Windows-only compile errors (e.g. cfg-gated dead code under `-D warnings`) get caught.
 
 ## Crate suite snapshot (Windows, HEAD `e8379cfe`, informational only)
@@ -227,4 +229,4 @@ These are not investigated here. Tracking status for the last five was not check
 ## Risks / tradeoffs
 
 - Option C's OSC8 extractor must find the link wrapping the *cell label*, not just the first `ESC]8;;` in the output, in case QER ever links more than one file per diagnostic.
-- `Url::to_file_path` on Windows requires a drive-letter or UNC form. It returns `Err` on the verbatim-leak shape, which is the behavior we want (the test fails loudly). This is unverified until implementation: confirm by hand-feeding a malformed URL during the sanity step.
+- `Url::to_file_path` on Windows requires a drive-letter or UNC form. It returns `Err` on the verbatim-leak shape, which is the behavior we want (the test fails loudly). Verified in the sanity step: a hand-fed verbatim-leak target fails the test.
