@@ -82,10 +82,10 @@ The result goes into an audit table in this plan (site, consumer, operand origin
 Layer 2 (`bugfix/bd-1klbq2zd-path-audit`):
 - [x] `gh stack add bugfix/bd-1klbq2zd-path-audit`; `braid update bd-1klbq2zd --status in_progress`; CLAUDE.local.md context block by hand; commit this plan (`b83c5cf6`)
 - [x] Baseline: `cargo nextest run -p quarto -p quarto-system-runtime` on unchanged code (7 failures, listed in § Baselines)
-- [ ] Once the audit table exists, and before any call site changes: baseline every other crate that has R rows. Done: `quarto-core` (45 failures, § Baselines). Still to do: `quarto-hub`, `quarto-preview`, `quarto-test` (and any crate the spot-check adds), at `b83c5cf6` via `git switch --detach b83c5cf6` → run → `git switch bugfix/bd-1klbq2zd-path-audit`
+- [x] Once the audit table exists, and before any call site changes: baseline every other crate that has R rows: `quarto-core` (45 failures), `quarto-hub` + `quarto-preview` + `quarto-test` (3 failures), all at `b83c5cf6` (§ Baselines)
 - [x] Guard: RED test(s) → fix → GREEN (`37e3d127`)
 - [x] Shared `canonicalize` + deepest-existing variant (std-backed, moved from `output_sink.rs`); `NativeRuntime::canonicalize` uses the former (`84f4d01a`)
-- [ ] Audit table: subagent sweep DONE (§ Audit table); coverage cross-checked (every production hit has a row). Spot-check of every R/R? row against source: NOT done yet. Then route R sites, both operands for comparisons; first export `canonical` on all targets (§ Target gating) and run the wasm `cargo check`
+- [ ] Audit table: subagent sweep DONE (§ Audit table); coverage cross-checked (every production hit has a row). Spot-check of every R/R? row against source DONE (§ Spot-check verdicts). Then route R sites, both operands for comparisons; first export `canonical` on all targets (§ Target gating) and run the wasm `cargo check`
 - [ ] Spelling-agnostic test oracles
 - [ ] Classify `preview_static_e2e::a_page_inside_the_project_opens_on_that_page` and `cache_lru` concurrent test
 - [ ] Crate-scoped suites for every touched crate: failure set identical to the baseline except the guard tests
@@ -117,13 +117,15 @@ Ship:
 
 `cargo nextest run -p quarto-core --no-fail-fast`: 5272 run, 45 failed (all pre-existing Windows): 13 `engine::content_processors::spin::tests::golden_*` (CRLF), 7 `glob::expand::tests::*`, `transforms::hephaestus::tests::artifact_path_is_content_and_size_addressed`, `pandoc_filters::format_defaults::tests::test_reference_doc_path_forwarded`, `pandoc_filters::params::tests::test_top_level_literals`, `engine::ts_protocol::tests::test_ts_wire_parity_fixture`, `engine::ts_process::tests::test_single_dial_invariant`, and integration: `pandoc_long_tail_formats::textile_fresh_baseline_snapshot`, `pandoc_goldens::{test_mermaid_fixture_preserves_diagram_source_text, test_fixtures_match_q1_golden}`, `metadata_path_resolution::frontmatter_sidebar_resolves_sibling_relative_qmd`, 3 `orange_book_lua::*`, 2 `listing_pipeline::table_*`, `pandoc_shim::{test_route_n_requires_post_init_position, test_proof_missing_type_surfaces_lua_traceback}`, `pandoc_shim_goldens::test_equation_golden`, `pandoc_render_to_file::render_document_to_file_docx_embeds_a_relatively_referenced_image`, 6 `julia_engine_e2e::j*`, `pandoc_execute_defaults::tier_d_execute_defaults_reach_engine`, `marimo_engine_e2e::sc10_widget_render_shows_header_include_and_body_island`. The run leaves two `.snap.new` files under `crates/quarto-core/tests/integration/snapshots/`; delete them after each run.
 
+`cargo nextest run -p quarto-hub -p quarto-preview -p quarto-test --no-fail-fast`: 728 run, 3 failed (1 skipped): `quarto-hub storage::tests::test_storage_manager_prevents_double_lock`, `quarto-hub storage::tests::test_storage_manager_standalone_prevents_double_lock`, `quarto-preview render_scripts_boot::pre_render_scripts_run_once_at_boot`.
+
 Compare sets, not counts. Raw logs are session scratch only; re-derive from this list.
 
 ## Guard finding (layer 2, step 3)
 
 On Windows, `PathBuf::push` folds `..` away when the base is verbatim (`\\?\`), so `canonical(dir).join("sub").join("..")` is lexically the input itself and the first version of the dotdot test passed vacuously. The test now hangs the detour off `dunce::simplified(dir)` and asserts the `..` survives. Both new tests were RED for the right reason (`expected refusal … stderr: Rendering single file: …`) before the fix. The guard now also compares `runtime.canonicalize` of both operands; `determine_output_paths` takes a `&dyn SystemRuntime` (all callers, including the two book callers, pass theirs).
 
-## Audit table (sonnet sweep at `b83c5cf6`; spot-check PENDING)
+## Audit table (sonnet sweep at `b83c5cf6`; spot-checked, see § Spot-check verdicts)
 
 Coverage cross-checked in the main session: the production `canonicalize(` hit list (first-`#[cfg(test)]` cutoff per file) matches the rows below exactly; `capture_files.rs`, `format_paths.rs`, `quarto-hub/src/watch.rs` hits are all test-only.
 
@@ -174,6 +176,30 @@ Coverage cross-checked in the main session: the production `canonicalize(` hit l
 Target of each quarto-core candidate (checked against `cfg` gates at `16cd2d5b`): row 14 native-only (`project_resources.rs:1222` `#[cfg(not(target_arch = "wasm32"))]`); row 15 native-only (`book/mod.rs:16` gates `multi_file_html`); rows 16, 17, 18 **compile for wasm32** (ungated modules `render_item`, `static_analyzer`, `include_expansion`). Rows in `quarto`, `quarto-hub`, `quarto-preview`, `quarto-test` are native binaries/libs. The wasm32 rows need the all-target export (§ Target gating).
 
 Candidate routing set before spot-check: std rows 14, 15, 16, 17, 18, 20(+21), 23, 24, 25, 32?, 36, 37, 38, 39, 45?. That is ~12-15 sites, above the fold threshold of about 10 R rows, so the fold rule leans towards keeping layer 3 separate; decide after the spot-check.
+
+### Spot-check verdicts (main session, source at `b83c5cf6`)
+
+| row | verdict | evidence |
+|---|---|---|
+| 7-8 | seam, no change | `project/mod.rs:150` and `:211` both call `runtime.canonicalize`; the FileId spelling and the layer-id re-derivation share that one function, so they flip together |
+| 14 | **L** | `same_canonical_path` canonicalizes both operands with the same call; the lexical fallback only runs when one side is missing, and a missing `dst` can never be the existing `source` |
+| 15 | **R** (route with 16) | `multi_file_html.rs:173` looks up `chapter_seed_map` with its own std key; `:498/:504` build and probe `item_inputs` from `project.dir` joins vs `project.files[].input`, both std-canonicalized |
+| 16 | **R** (confirmed) | keys: `render_item.rs:312`, std canonicalize of `project.dir.join(file)`. Lookups: `pass2_renderer.rs:315,461,583,1203` use `doc_info.input` straight from `ProjectContext::discover` (runtime canonical at `mod.rs:1906`, then the walk / `from_path` at `:1976`). After the flip every lookup misses and book chapters lose their numbering seed |
+| 17 | **R** (route with 16) | `static_analyzer.rs:107` mirrors 16's key derivation, per its comment |
+| 18 | **R** (confirmed) | `include_expansion.rs:128-130` seeds `include_stack` with `doc.path` (seam spelling); `:284/:565` insert and probe std-canonical paths. After the flip a self-include is caught one level late (its content is spliced once). The same paths feed `recorded_includes` next to row 19's runtime-canonical entries |
+| 19 | seam, no change | runtime call; routing row 18 makes both include sinks agree |
+| 20-23 | **R** (emission) | admin `data_dir` canonicalizations: error text and the `purge`/`restore` paths. The `collect` manifest check (`collect.rs:209/212`) canonicalizes both sides itself, so manifests scanned by an older binary still match |
+| 24 | **R** (emission) | `main.rs:216` admin scan: bail text and the canonical `data_dir` it records |
+| 25 | **R** (emission) | `main.rs:370` project root: tracing and the `StorageManager` root |
+| 26-28 | L (re-confirmed) | `sync.rs:631/816/907`: both containment operands are std-canonicalized in place, independent of how `project_root` is spelled. Security-sensitive; left untouched on purpose |
+| 32 | **L** | `quarto-preview/config.rs:403-536`: `canonical_root` and every candidate are std-canonicalized in place (`recorded_includes` too, re-canonicalized at `:423`); the output is project-relative |
+| 36 | **R** | `get_config.rs:71`: the std `input` goes into `DocumentInfo::from_path` next to the seam-derived `project.dir` from `discover_with_profile` |
+| 37 | **R** (emission) | `commands/hub.rs:80`: tracing and the `StorageManager` root, as row 25 |
+| 38 | **R** | `commands/preview.rs:137`: the std root feeds `resolve_project_and_initial_page` and the served project |
+| 39 | **R** | `preview_static.rs:297`: the std `path` is both the render input (re-canonicalized by the seam) and the base for `find_project_root_upward` and the initial page; suspect for `preview_static_e2e::a_page_inside_the_project_opens_on_that_page` |
+| 45 | **R** (emission) | `quarto-test/runner.rs:67`: the std `input_path` sits next to the seam-derived `output_path` in failure reports |
+
+Routing set: rows 15 (3 calls), 16, 17, 18 (2 calls), 20-25, 36-39, 45. Left as they are: 14 and 32 (downgraded from R? by the spot-check), 26-28. No crate beyond the baselined ones is added.
 
 ## Verification
 
