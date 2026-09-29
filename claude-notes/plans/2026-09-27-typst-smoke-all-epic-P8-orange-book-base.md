@@ -840,6 +840,11 @@ logo-path resolution against a synthetic merged document's directory context.
       (errors-only), documented inline alongside the embed-gap comments
       already there.
 
+      **Fixed** in `d2a9f03bd` (`_quarto.tests.**` → `PlainString` in
+      `meta_annotations.rs`'s `ANNOTATIONS` table); `index.qmd` restored
+      to `printsMessage` x2 + `noErrors` for the remaining embed-gap
+      warnings. bd-quarto-tests-metadata-markdown-3wsdzq4c closed.
+
       **Result: `typst/orange-book/index.qmd` passes standalone**
       (`SMOKE_FILTER=typst/orange-book/index.qmd cargo nextest run -p
       quarto -E 'test(smoke_all)'` → 1 passed). Full `smoke_all::smoke_all`
@@ -894,24 +899,40 @@ the pandoc template via a `--defaults` file instead of a bare (and
 range-capped) CLI flag.
 
 Accepted gaps, both root-caused and documented rather than left silently
-red: `{{< embed >}}` shortcode unimplemented (own epic, D6,
-`claude-notes/plans/2026-07-31-shortcode-extensions-port.md`) costs 4
-assertions (2 `ensureTypstFileRegexMatches`, 2 `ensurePdfRegexMatches`);
-the `ALIGNTEST_MARKER`/`LISTING_BODY_ALIGN_TEST` `ensurePdfTextPositions`
-case can't run because the two markers land on different pages under
-Typst's pagination (confirmed not an alignment regression — see item 4).
-Both are commented out in `index.qmd` with the reasoning inline. The
-112-warnings bucket is root-caused (a metadata-parsing-context gap
+red, at the time P8 closed: `{{< embed >}}` shortcode unimplemented (own
+epic, D6, `claude-notes/plans/2026-07-31-shortcode-extensions-port.md`)
+costs 4 assertions (2 `ensureTypstFileRegexMatches`, 2
+`ensurePdfRegexMatches`) and remains open; the
+`ALIGNTEST_MARKER`/`LISTING_BODY_ALIGN_TEST` `ensurePdfTextPositions`
+case couldn't run because the two markers landed on different pages
+under Typst's pagination (confirmed not an alignment regression — see
+item 4); the 112-warnings bucket was a metadata-parsing-context gap
 affecting `_quarto.tests.*` assertion strings, filed as
-bd-quarto-tests-metadata-markdown-3wsdzq4c, out of P8's scope) and worked
+bd-quarto-tests-metadata-markdown-3wsdzq4c, out of P8's scope, worked
 around via an explicit `noErrors: true` in place of the implicit
 `noErrorsOrWarnings` default.
 
+**Update (2026-09-29, post-close):** both of the latter two gaps are now
+fixed. `296c222e3` forces a page break before the Code Listings section
+so `ALIGNTEST_MARKER`/`LISTING_BODY_ALIGN_TEST` land together and
+re-enables that `ensurePdfTextPositions` case. `d2a9f03bd` adds
+`_quarto.tests.**` → `PlainString` to `meta_annotations.rs`'s
+`ANNOTATIONS` table, eliminating the 112-warning false-positive bucket;
+`index.qmd` is restored to `printsMessage` x2 + `noErrors` for the
+remaining, still-open embed-gap (D6) warnings only.
+bd-quarto-tests-metadata-markdown-3wsdzq4c is closed. The separate
+`pdf-text-position-test.qmd` failure (bd-pdf-text-position-fixture-9xhxg9un,
+unrelated to P8) was also fixed in `d855c9e34`.
+
 `typst/orange-book/index.qmd` passes standalone. Full `smoke_all::smoke_all`
-(`--no-fail-fast`): 149 passed, 36 skipped, 1 failed — the one failure is
-the unrelated, pre-existing `pdf-text-position-test.qmd`
-(bd-pdf-text-position-fixture-9xhxg9un), confirmed failing identically at
-`feature/typst-testing`'s clean tip before any P8 work. `cargo clippy -p
-quarto --all-targets -- -D warnings`: clean. `cargo nextest run -p quarto`:
-601/602 passed (the 1 "failed" is `smoke_all::smoke_all` itself, red only
-because of that unrelated fixture), 2 skipped.
+(`--no-fail-fast`, current): **150 passed, 36 skipped, 0 failed** — all
+three gaps above (pdf-text-position, ALIGNTEST pagination, metadata
+warnings) are now green; only D6's embed gap remains, and it's covered
+by explicit `printsMessage` assertions, not silently skipped. `cargo
+clippy -p pampa --all-targets -- -D warnings` and `cargo clippy -p quarto
+--all-targets -- -D warnings`: both clean. `cargo nextest run -p pampa`:
+4863/4863 passed. `cargo nextest run --workspace`: 1 failure remains,
+`quarto-test runner::tests::should_error_respects_project_render_context`
+— confirmed pre-existing (reproduces identically at `296c222e3`, before
+the metadata-annotation fix), unrelated to this work; not investigated
+further here.
