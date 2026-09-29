@@ -152,6 +152,10 @@ export default function NewFileDialog({
       return;
     }
     const base = filename.trim();
+    if (!base) {
+      setError(dialogs.newFile.errorRequired);
+      return;
+    }
     // Don't double the extension if the user typed it into the name too.
     const withExt = base.toLowerCase().endsWith(`.${extension}`) ? base : `${base}.${extension}`;
     const path = normalizeProjectPath(folder ? `${folder}/${withExt}` : withExt);

@@ -107,7 +107,9 @@ describe('ModalDialog backdrop', () => {
     const onClose = vi.fn();
     const { container } = renderDialog(onClose);
 
-    fireEvent.click(container.querySelector('.qh-dialog-backdrop')!);
+    // The dialog portals to <body>, so query the document, not the container.
+    void container;
+    fireEvent.click(document.querySelector('.qh-dialog-backdrop')!);
     expect(onClose).toHaveBeenCalledTimes(1);
 
     onClose.mockClear();

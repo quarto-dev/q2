@@ -42,16 +42,14 @@ describe('NewAssetDialog', () => {
       expect(screen.queryByText('Add asset to project')).not.toBeInTheDocument();
     });
 
-    it('shows the destination input', () => {
-      render(<NewAssetDialog {...defaultProps} defaultDestination="images" />);
-      const input = screen.getByLabelText(/destination/i) as HTMLInputElement;
-      expect(input.value).toBe('images');
+    it('shows the destination folder in the folder picker', () => {
+      render(<NewAssetDialog {...defaultProps} defaultDestination="images" folders={['images']} />);
+      expect(screen.getByRole('button', { name: 'Choose folder' })).toHaveTextContent('images');
     });
 
     it('shows empty destination as project root', () => {
       render(<NewAssetDialog {...defaultProps} defaultDestination="" />);
-      const input = screen.getByLabelText(/destination/i) as HTMLInputElement;
-      expect(input.value).toBe('');
+      expect(screen.getByRole('button', { name: 'Choose folder' })).toHaveTextContent('(project root)');
     });
   });
 
@@ -72,49 +70,29 @@ describe('NewAssetDialog', () => {
       });
     });
 
-    it('marks empty initial files with an error', async () => {
-      const files = [makeFile('empty.png', 0)];
+    it('accepts empty initial files (a blank new file is a normal upload)', async () => {
+      const files = [makeFile('empty.qmd', 0)];
       render(<NewAssetDialog {...defaultProps} initialFiles={files} />);
       await waitFor(() => {
-        expect(screen.getByText(/empty/i)).toBeInTheDocument();
+        expect(screen.getByDisplayValue('empty.qmd')).toBeInTheDocument();
       });
+      expect(screen.queryByText(/empty/i)).not.toBeInTheDocument();
     });
   });
 
-  describe('destination validation', () => {
-    it('reports an error for leading slash', () => {
-      render(<NewAssetDialog {...defaultProps} defaultDestination="" />);
-      const input = screen.getByLabelText(/destination/i);
-      fireEvent.change(input, { target: { value: '/images' } });
-      expect(screen.getByText(/leading slash/i)).toBeInTheDocument();
-    });
+  describe('destination folder picker', () => {
+    it('lists the project folders and picking one changes the destination', () => {
+      render(
+        <NewAssetDialog {...defaultProps} defaultDestination="" folders={['images', 'images/icons']} />
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Choose folder' }));
+      const menu = screen.getByRole('menu', { name: 'Choose folder' });
+      expect(menu).toHaveTextContent('(project root)');
+      expect(menu).toHaveTextContent('images');
+      expect(menu).toHaveTextContent('icons');
 
-    it('reports an error for ".." segments', () => {
-      render(<NewAssetDialog {...defaultProps} defaultDestination="" />);
-      const input = screen.getByLabelText(/destination/i);
-      fireEvent.change(input, { target: { value: 'foo/..' } });
-      expect(screen.getByText(/"\."|".."|segments/i)).toBeInTheDocument();
-    });
-
-    it('reports an error for forbidden chars', () => {
-      render(<NewAssetDialog {...defaultProps} defaultDestination="" />);
-      const input = screen.getByLabelText(/destination/i);
-      fireEvent.change(input, { target: { value: 'foo<bar' } });
-      expect(screen.getByText(/invalid char/i)).toBeInTheDocument();
-    });
-
-    it('reports an error for empty segment (trailing slash)', () => {
-      render(<NewAssetDialog {...defaultProps} defaultDestination="" />);
-      const input = screen.getByLabelText(/destination/i);
-      fireEvent.change(input, { target: { value: 'foo/' } });
-      expect(screen.getByText(/empty segment/i)).toBeInTheDocument();
-    });
-
-    it('accepts a valid nested destination', () => {
-      render(<NewAssetDialog {...defaultProps} defaultDestination="" />);
-      const input = screen.getByLabelText(/destination/i);
-      fireEvent.change(input, { target: { value: '_quarto/grammars/toml' } });
-      expect(screen.queryByText(/slash|invalid|segment/i)).not.toBeInTheDocument();
+      fireEvent.click(screen.getAllByRole('menuitem').find((el) => el.textContent === 'icons')!);
+      expect(screen.getByRole('button', { name: 'Choose folder' })).toHaveTextContent('images/icons');
     });
   });
 

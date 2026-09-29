@@ -46,20 +46,37 @@ describe('SyncStatusBadge', () => {
     mocks.wsReadyState = 1;
     mocks.peers = [{ peerId: 'peer-1' }];
     mocks.lastRemoteChangeAt = Date.now();
-    render(<SyncStatusBadge scope="project" />);
+    render(<SyncStatusBadge scope="project" verbose />);
     const dot = document.querySelector('.sync-status-dot')!;
     expect(dot.className).toContain('green');
-    expect(screen.getByText(/Synced/)).toBeDefined();
+    expect(screen.getByText(/Synced just now/)).toBeDefined();
+  });
+
+  it('compact mode shows only the time, with the full status as accessible name', () => {
+    mocks.wsReadyState = 1;
+    mocks.peers = [{ peerId: 'peer-1' }];
+    mocks.lastRemoteChangeAt = Date.now();
+    render(<SyncStatusBadge scope="project" />);
     expect(screen.getByText('just now')).toBeDefined();
+    expect(screen.queryByText(/Synced/)).toBeNull();
+    expect(screen.getByRole('button').getAttribute('aria-label')).toMatch(/^Synced just now/);
   });
 
   it('shows Offline when the websocket is down', () => {
     mocks.wsReadyState = 3; // CLOSED
     mocks.lastRemoteChangeAt = null;
-    render(<SyncStatusBadge scope="project" />);
+    render(<SyncStatusBadge scope="project" verbose />);
     const dot = document.querySelector('.sync-status-dot')!;
     expect(dot.className).toContain('yellow');
-    expect(screen.getByText(/Offline/)).toBeDefined();
+    expect(screen.getByText(/Offline — not synced yet/)).toBeDefined();
+  });
+
+  it('compact offline shows just the time ago with the offline state in the accessible name', () => {
+    mocks.wsReadyState = 3; // CLOSED
+    mocks.lastRemoteChangeAt = null;
+    render(<SyncStatusBadge scope="project" />);
     expect(screen.getByText('not synced yet')).toBeDefined();
+    expect(screen.queryByText(/Offline/)).toBeNull();
+    expect(screen.getByRole('button').getAttribute('aria-label')).toMatch(/^Offline/);
   });
 });
