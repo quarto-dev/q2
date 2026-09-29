@@ -185,10 +185,12 @@ fn try_desugar_code_block(
                 consume("label".to_string());
                 let caption = consume(format!("{ref_type}-cap"));
                 let classes = wrapper_column_classes(&parsed, &ref_type);
+                let attributes = wrapper_cap_location_attribute(&parsed, &ref_type);
                 Wrapper::Float {
                     label,
                     caption,
                     classes,
+                    attributes,
                 }
             }
             None => Wrapper::None,
@@ -237,13 +239,16 @@ fn try_desugar_code_block(
             label,
             caption,
             classes,
+            attributes,
         } => {
             let mut content: Blocks = vec![new_code_block];
             if let Some(caption) = caption {
                 content.push(caption_paragraph(caption, diagnostics));
             }
+            let attr_map: hashlink::LinkedHashMap<String, String> =
+                attributes.into_iter().collect();
             Block::Div(Div {
-                attr: (label, classes, hashlink::LinkedHashMap::new()),
+                attr: (label, classes, attr_map),
                 content,
                 source_info: cb.source_info.clone(),
                 attr_source: AttrSourceInfo::empty(),
@@ -316,6 +321,29 @@ fn wrapper_column_classes(parsed: &CellOptions, ref_type: &str) -> Vec<String> {
     classes
 }
 
+/// The wrapper `Div`'s `cap-location` attribute, forwarded verbatim from
+/// whichever of `<reftype>-cap-location`/`cap-location` the cell set.
+///
+/// `floatreftarget.lua`'s `cap_location(obj)` (customnodes/floatreftarget.lua)
+/// is what actually decides a float's caption position; it reads
+/// `obj.attributes['cap-location']` (falling back from a ref-type-qualified
+/// key it can't derive here) to pick between `"top"`/`"bottom"`/`"margin"`.
+/// Before this, only the `"margin"` case was forwarded (as the
+/// `margin-caption` class, via [`wrapper_column_classes`]) — any other value
+/// (e.g. `cap-location: bottom`) was silently dropped, so Lua always fell
+/// back to the category default instead of honoring the author's cell
+/// option. `"margin"` still also gets the class alongside this attribute:
+/// something downstream may depend on it as a class, not just the attribute.
+fn wrapper_cap_location_attribute(parsed: &CellOptions, ref_type: &str) -> Vec<(String, String)> {
+    let cap_location = parsed
+        .get(&format!("{ref_type}-cap-location"))
+        .or_else(|| parsed.get("cap-location"));
+    match cap_location {
+        Some(value) => vec![("cap-location".to_string(), value.to_string())],
+        None => Vec::new(),
+    }
+}
+
 /// What the cell's caption options call for around the rewritten code
 /// block.
 enum Wrapper<'a> {
@@ -327,6 +355,9 @@ enum Wrapper<'a> {
         /// Classes read off `column`/`cap-location` (and their
         /// `<reftype>-`-scoped forms) via [`wrapper_column_classes`].
         classes: Vec<String>,
+        /// The `cap-location` attribute, via
+        /// [`wrapper_cap_location_attribute`].
+        attributes: Vec<(String, String)>,
     },
     /// A plain [`Block::Figure`]: the HTML writer renders it as
     /// `<figure>…<figcaption>` with no number and no float scaffolding.

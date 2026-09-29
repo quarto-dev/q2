@@ -120,6 +120,12 @@ nested/screen-inset variants).
       `pdf-text-position-test.qmd` failure (pre-existing, unrelated to P5 — header/footer
       decorations land on the wrong page) is the only other smoke-all failure. See the
       final `## Status` entry for the full reconciliation prior to the citeproc fix.
+      **Final state (2026-09-29, after classifying and closing out all 5
+      Jupyter-revealed findings — see §"Remaining 4 Jupyter-revealed findings" below):
+      82/86 P5 fixtures pass, 4 skipped (3 stranded generic-engine/dependency gaps,
+      `bd-c439o0wo`/`bd-gbaykhth`/`bd-jq223o9p`, plus `index.qmd`'s pre-existing
+      no-test-specs skip), 0 fail.** The sole remaining smoke-all failure
+      workspace-wide is still the pre-existing, unrelated `pdf-text-position-test.qmd`.
 
 ## Decisions
 
@@ -1042,3 +1048,175 @@ section above, zero regressions among the other 81. `cargo clippy -p quarto
 variant question in `format.rs`/`pandoc_write.rs`) remains untouched, as
 constrained — this fix is entirely local to `typst.lua` and one fixture's
 test assertions.
+
+## Fix 2 (cap-location non-margin values): implemented and verified (2026-09-29)
+
+Of the 5 Jupyter-revealed failures above, this closes the
+`margin-listing-cell-option-caption-below.qmd` /
+`margin-table-great-tables-caption-below.qmd` root cause: a `cap-location`
+(or `<reftype>-cap-location`) cell option value other than `"margin"` (e.g.
+`bottom`) was silently dropped pre-engine, so `floatreftarget.lua`'s
+`cap_location(obj)` always fell back to the category default
+(`caption_location` in `mainstateinit.lua`: `"top"` for `tbl`/`lst`,
+`"bottom"` for `fig`) instead of honoring the author's cell option.
+
+**Fix, landed (uncommitted, in this worktree):**
+`codeblock_shorthand.rs`'s `Wrapper::Float` enum variant gained an
+`attributes: Vec<(String, String)>` field. A new function
+`wrapper_cap_location_attribute(parsed: &CellOptions, ref_type: &str) ->
+Vec<(String, String)>`, sibling to `wrapper_column_classes` and called at
+the same call site, reads `<reftype>-cap-location` (falling back to
+generic `cap-location`) and forwards it verbatim as a single
+`("cap-location", value)` tuple (empty vec if the option wasn't set). The
+wrapper `Div`'s `attr` `LinkedHashMap` — previously always constructed
+empty — is now built from this vec via `.into_iter().collect()`. The
+existing `"margin"` → `margin-caption` class push in
+`wrapper_column_classes` is untouched (kept in case something downstream
+depends on it as a class, not just the attribute).
+
+**Verification:**
+- `cargo clippy -p quarto-core --all-targets -- -D warnings`: clean.
+- `cargo nextest run -p quarto-core --no-fail-fast`: 5291/5291 passed, 32
+  skipped (one `julia_engine_e2e::j1_minimal_julia_render` failure seen in
+  an earlier, contention-heavy run did not reproduce in isolation or in
+  this clean rerun — a flake from concurrent `cargo-nextest` processes on
+  the machine, not a real regression).
+- `SMOKE_FILTER=margin-table-great-tables-caption-below cargo nextest run
+  -p quarto`: **now fully passes** (was failing on the missing `position:
+  bottom` pattern before this fix).
+- `SMOKE_FILTER=margin-listing-cell-option-caption-below cargo nextest run
+  -p quarto`: the `position: bottom` pattern now matches (confirming the
+  fix works), but the fixture still fails — on a *different*, already-known
+  bug: `ensurePdfTextPositions` reports `"World"` is ambiguous (2 matches).
+  This fixture also sets `#| eval: false` on its Python cell, so it's
+  blocked by the same eval:false-not-honored gap as
+  `margin-listing-cell-option.qmd` (see previous section) — not a new
+  finding, just a second fixture hitting the same still-open bug.
+- A `cargo nextest run --workspace --no-fail-fast` was attempted
+  concurrently with this fix's edits (started just before the edit, so its
+  build may have raced the source change) — do not treat its 15259
+  passed/2 failed result as authoritative for this fix; a clean rerun
+  (not concurrent with any edit) was kicked off afterward — see `##
+  Status` for its result once available. The two failures seen were
+  `smoke_all::smoke_all` (expected) and `quarto-test
+  runner::tests::should_error_respects_project_render_context`, the latter
+  confirmed pre-existing and unrelated by reverting
+  `codeblock_shorthand.rs` to HEAD (521f0b093) and reproducing the
+  identical failure, then restoring the fix.
+
+**Net effect on the 5 Jupyter-revealed findings:** 1 of 5
+(`margin-table-great-tables-caption-below.qmd`) now fully resolved; 4
+remain — `margin-listing-cell-option-caption-below.qmd` (now blocked only
+by the eval:false gap, not cap-location), `fullwidth-table-great-tables.qmd`,
+`margin-listing-cell-option.qmd`, and `margin-subtable.qmd`.
+
+## Remaining 4 Jupyter-revealed findings: classified and closed out (2026-09-29)
+
+Each of the 4 remaining findings was root-caused, then classified per
+Gordon's rule for this task: fixes touching the Pandoc writer or
+book-related code stay in-plan; fixes for generic Jupyter/Python-engine
+behavior (would misbehave identically outside typst/margin-layout
+entirely) get a braid strand + a `skip:` line on the fixture, rather than
+being fixed here. All 4 are now closed out — one in-plan fixture fix, three
+stranded-and-skipped (one of which uncovered a second, deeper root cause
+in the same fixture, also stranded-and-skipped). **P5 margin-layout is now
+82/86 pass, 4 skipped (3 newly stranded above + `index.qmd`, no test
+specs), 0 fail** — the only other smoke-all failure workspace-wide is the
+pre-existing, unrelated `typst/pdf-text-position-test.qmd`.
+
+- **`fullwidth-table-great-tables.qmd` — in-plan fixture fix, then a second,
+  distinct root cause found and stranded.** The original `DataFrame.pivot()
+  got an unexpected keyword argument 'on'` error is confirmed to originate
+  in the fixture's own Python source (lines with `.pivot(index=[...],
+  on="year", values="population")`), not in any Q2-generated/injected code
+  — a fixture-porting bug: the fixture was written against a newer polars
+  API (`pivot(on=...)`, introduced later) than the `polars 0.20.31` pinned
+  in the dev venv, whose `pivot()` only accepts `columns=`. **Fixed in this
+  fixture** by changing both cells' `on="year"` to `columns="year"`
+  (identical semantics, just the parameter name the installed polars
+  version expects). This is a fixture edit, not a Rust/Q2 code change.
+  Fixing it uncovered a **second, independent** failure in the same
+  fixture: both cells also call `GT(...).tab_spanner(label=..., columns=
+  cs.all())`, which raises `TypeError: expected a selector; found [...]
+  instead` — reproduced standalone in plain Python with zero Quarto/Q2
+  involvement (`great_tables 0.4.0`'s `tab_spanner` → `cols_move` →
+  `eval_select` unconditionally calls `polars.selectors.expand_selector`
+  even when the resolved columns are already a plain list of strings, and
+  `expand_selector` rejects anything that isn't a polars selector object —
+  confirmed the same `TypeError` occurs even passing a plain `["b","c"]`
+  list instead of `cs.all()`). This is a pure third-party Python
+  dependency-version incompatibility in the shared dev venv
+  (`/Users/gordon/src/quarto-web/.venv`), unrelated to the Pandoc writer or
+  any book/margin-layout code, and out of scope to fix by changing that
+  shared venv from this worktree. **Stranded:** `bd-jq223o9p`. Fixture
+  `skip:` line added citing it — the `on=`→`columns=` fix stays in the
+  fixture regardless (it's correct and will be needed once the venv
+  incompatibility is resolved upstream).
+
+- **`margin-listing-cell-option.qmd` and
+  `margin-listing-cell-option-caption-below.qmd` — confirmed generic
+  Jupyter-engine gap, stranded.** Dispatched a focused investigation of
+  where `eval` is consumed in the Jupyter engine's execution path
+  (`crates/quarto-core/src/engine/jupyter/text_execute.rs`) versus the
+  knitr/R path, for contrast. Finding: the Jupyter engine **never reads the
+  `eval` cell option anywhere** — `execute_blocks_inner()` unconditionally
+  calls `daemon.execute_in_session()` for every partitioned executable
+  cell; `resolved_flag()` is only ever called for `"error"`, `"include"`,
+  `"echo"`, `"output"`, `"warning"` (`CellVisibility::resolve`). The string
+  literal `"eval"` does not occur anywhere under
+  `crates/quarto-core/src/engine/jupyter/`. By contrast, the knitr/R path
+  never implements per-chunk `eval` gating in Rust/R-glue code either — it
+  relies entirely on knitr's own native, built-in per-chunk `eval` chunk
+  option (`execute.R` sets a document-level `opts_chunk$eval` default;
+  `hooks.R` force-overrides it via `opts_hooks` for `execute: enabled:
+  false`), which is why the R path "just works" while the Jupyter path,
+  lacking any equivalent, silently ignores `eval: false` entirely. Directly
+  confirmed on `margin-listing-cell-option.qmd`: the rendered `.typ`
+  contains both the echoed source `print(greet("World"))` *and* its
+  executed output `Hello, World!`, which is exactly why
+  `ensurePdfTextPositions` reports `"World"` ambiguous (2 matches) on both
+  fixtures. This is a generic Jupyter/Python-engine gap with nothing to do
+  with the Pandoc writer or book-specific code — any Quarto document
+  rendered via the Jupyter engine with `eval: false` on a cell is affected
+  identically, regardless of Typst or margin-layout. **Stranded:**
+  `bd-c439o0wo` (one strand for both fixtures, as instructed, since they
+  share the identical root cause). Both fixtures' `skip:` lines cite it.
+
+- **`margin-subtable.qmd` — confirmed generic Jupyter-engine gap, stranded.**
+  First confirmed the pre-engine Rust wrapping (Root cause 4's fix) *does*
+  apply correctly and engine-agnostically to this Python cell: `label:
+  tbl-margin-panel` + `tbl-subcap` correctly hits
+  `codeblock_shorthand.rs`'s generic `<reftype>-subcap` check (branches on
+  `def.ref_type`, not hardcoded to `"fig"`) and returns `Wrapper::None`,
+  leaving the cell's `label`/`tbl-cap`/`tbl-subcap` options untouched for
+  the engine — this part of the in-plan Rust code is working exactly as
+  designed, for Python same as R. The gap is downstream: rendering the
+  fixture directly and inspecting the generated `.typ` shows the two
+  `display(GT(...))` outputs come back as two bare `#table(...)` blocks
+  with **no ids, no captions, and no `#note()`/`quarto_super` wrapper at
+  all** — `@tbl-margin-panel` is reported as an unresolved crossref. Unlike
+  knitr, whose `hooks.R` (`output_label`/`output_label_placeholder`,
+  `figure_cap`) uses the still-present `label`/`subcap` options to
+  synthesize each panel's own id/caption from multiple R plot outputs
+  under one chunk, the Jupyter engine (`text_execute.rs`'s
+  `render_cell`/`format_outputs`) has no equivalent per-panel
+  id/caption-synthesis logic at all for multiple IPython `display()` calls
+  under one label+subcap. This is a missing feature in the generic
+  Jupyter engine's own output-synthesis, unrelated to the Pandoc writer or
+  book/margin-layout code — it would misbehave identically for any Quarto
+  document (HTML included) using `tbl-subcap`/`fig-subcap` via a
+  Jupyter-kernel language. **Stranded:** `bd-gbaykhth`. Fixture `skip:`
+  line added citing it.
+
+**Verification:** `SMOKE_FILTER` reruns of each of the 4 fixtures individually
+confirm: `fullwidth-table-great-tables.qmd`, the two listing fixtures, and
+`margin-subtable.qmd` all now report `⊘ skipped` (not fail) with their
+strand id + reason in the skip message; the full `cargo nextest run -p
+quarto --no-fail-fast -E 'test(smoke_all)'` run shows **230 passed, 34
+skipped, 1 failed** workspace-wide, with the sole failure being the
+pre-existing, unrelated `typst/pdf-text-position-test.qmd`. No Rust source
+was changed in this pass (fixture-only edits: the `on=`→`columns=` fix and
+the 4 `skip:` YAML additions) — `cargo clippy`/`cargo nextest -p
+quarto-core` gates from the Fix 2 checkpoint above are unaffected and were
+not rerun; the workspace-wide `cargo nextest run --workspace --no-fail-fast`
+phase-boundary gate was rerun (see `## Status`/handoff for the result).

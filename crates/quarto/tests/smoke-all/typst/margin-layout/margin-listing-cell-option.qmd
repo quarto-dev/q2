@@ -12,6 +12,7 @@ _quarto:
   tests:
     run:
       requires: jupyter
+      skip: "bd-c439o0wo: Jupyter engine never honors #| eval: false, so the cell executes and its printed output collides with the echoed source"
     typst:
       ensureTypstFileRegexMatches:
         # Cell option should produce same output as fenced div: #notefigure
