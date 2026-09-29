@@ -440,6 +440,144 @@ fn canonicalize_caption(mut caption: Blocks) -> Blocks {
     caption
 }
 
+/// Recursively clear any block or inline attribute id equal to
+/// `identifier`, wherever it occurs inside `blocks`.
+///
+/// `label_reinject` (bd-2lxj10z0) hands an engine (knitr) the crossref
+/// label it would otherwise never see, so the engine can derive the
+/// right output filename (`fig-cars-1.svg`, not `unnamed-chunk-1-1.svg`).
+/// But an engine that receives a label may also emit its *own*
+/// already-labeled output for that chunk — e.g. knitr's rendered
+/// markdown for a `#| fig-cap` chunk attaches the label directly to the
+/// image it emits (`![](fig-cars-1.svg){#fig-cars}`), nested inside the
+/// engine's own output-wrapper divs. `quarto_ast_reconcile::reconcile`
+/// then slots that whole subtree into this Div/Figure's content in place
+/// of the plain pre-engine `CodeBlock`, so the identifier this
+/// `FloatRefTarget` is about to claim can already be sitting on a block
+/// or inline several levels down in `content` — confirmed by rendering
+/// `crates/quarto/tests/smoke-all/typst/orange-book/chapter1.qmd`'s
+/// `fig-cars` chunk and inspecting the reconciled AST: the leaked id
+/// landed on an `Image` nested two `Div`s deep. Left in place, the Typst
+/// writer emits `<fig-cars>` a second time there and Typst rejects the
+/// document for a duplicate label. Since crossref identifiers are unique
+/// document-wide, any match found here — anywhere in `content` — can only
+/// be this leaked echo, never an unrelated element that legitimately
+/// shares the id.
+fn clear_matching_id(blocks: &mut Blocks, identifier: &str) {
+    fn clear_inlines(inlines: &mut [Inline], identifier: &str) {
+        for inline in inlines {
+            match inline {
+                Inline::Span(s) => {
+                    if s.attr.0 == identifier {
+                        s.attr.0 = String::new();
+                    }
+                    clear_inlines(&mut s.content, identifier);
+                }
+                Inline::Link(l) => {
+                    if l.attr.0 == identifier {
+                        l.attr.0 = String::new();
+                    }
+                    clear_inlines(&mut l.content, identifier);
+                }
+                Inline::Image(i) => {
+                    if i.attr.0 == identifier {
+                        i.attr.0 = String::new();
+                    }
+                    clear_inlines(&mut i.content, identifier);
+                }
+                Inline::Emph(e) => clear_inlines(&mut e.content, identifier),
+                Inline::Underline(u) => clear_inlines(&mut u.content, identifier),
+                Inline::Strong(s) => clear_inlines(&mut s.content, identifier),
+                Inline::Strikeout(s) => clear_inlines(&mut s.content, identifier),
+                Inline::Superscript(s) => clear_inlines(&mut s.content, identifier),
+                Inline::Subscript(s) => clear_inlines(&mut s.content, identifier),
+                Inline::SmallCaps(s) => clear_inlines(&mut s.content, identifier),
+                Inline::Quoted(q) => clear_inlines(&mut q.content, identifier),
+                Inline::Note(n) => clear_blocks(&mut n.content, identifier),
+                _ => {}
+            }
+        }
+    }
+    fn clear_blocks(blocks: &mut [Block], identifier: &str) {
+        for block in blocks {
+            match block {
+                Block::Div(d) => {
+                    if d.attr.0 == identifier {
+                        d.attr.0 = String::new();
+                    }
+                    clear_blocks(&mut d.content, identifier);
+                }
+                Block::Figure(f) => {
+                    if f.attr.0 == identifier {
+                        f.attr.0 = String::new();
+                    }
+                    clear_blocks(&mut f.content, identifier);
+                    if let Some(long) = &mut f.caption.long {
+                        clear_blocks(long, identifier);
+                    }
+                }
+                Block::CodeBlock(cb) if cb.attr.0 == identifier => {
+                    cb.attr.0 = String::new();
+                }
+                Block::BlockQuote(bq) => clear_blocks(&mut bq.content, identifier),
+                Block::OrderedList(ol) => {
+                    for item in &mut ol.content {
+                        clear_blocks(item, identifier);
+                    }
+                }
+                Block::BulletList(bl) => {
+                    for item in &mut bl.content {
+                        clear_blocks(item, identifier);
+                    }
+                }
+                Block::DefinitionList(dl) => {
+                    for (term, defs) in &mut dl.content {
+                        clear_inlines(term, identifier);
+                        for def in defs {
+                            clear_blocks(def, identifier);
+                        }
+                    }
+                }
+                Block::Paragraph(p) => clear_inlines(&mut p.content, identifier),
+                Block::Plain(p) => clear_inlines(&mut p.content, identifier),
+                Block::Header(h) => {
+                    if h.attr.0 == identifier {
+                        h.attr.0 = String::new();
+                    }
+                    clear_inlines(&mut h.content, identifier);
+                }
+                Block::LineBlock(lb) => {
+                    for line in &mut lb.content {
+                        clear_inlines(line, identifier);
+                    }
+                }
+                Block::Table(t) if t.attr.0 == identifier => {
+                    t.attr.0 = String::new();
+                }
+                Block::Custom(c) => {
+                    if c.attr.0 == identifier {
+                        c.attr.0 = String::new();
+                    }
+                    for (_name, slot) in c.slots.iter_mut() {
+                        match slot {
+                            Slot::Block(b) => {
+                                clear_blocks(std::slice::from_mut(&mut **b), identifier)
+                            }
+                            Slot::Blocks(bs) => clear_blocks(bs, identifier),
+                            Slot::Inline(i) => {
+                                clear_inlines(std::slice::from_mut(&mut **i), identifier)
+                            }
+                            Slot::Inlines(is) => clear_inlines(is, identifier),
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    clear_blocks(blocks, identifier);
+}
+
 /// Convert a `Div` that we already know is a crossref target into a
 /// FloatRefTarget custom node.
 ///
@@ -453,13 +591,19 @@ fn canonicalize_caption(mut caption: Blocks) -> Blocks {
 /// - Otherwise, the last `Paragraph` becomes the caption (Q1 convention),
 ///   and the remaining blocks become content. Divs with no trailing para
 ///   still produce a target — just with no caption.
+///
+/// Whichever shape applies, [`clear_matching_id`] then scrubs the chosen
+/// `content` of this identifier wherever it recurs — see that function's
+/// doc comment for why an engine-executed chunk can hand back its own
+/// label buried inside the content it's about to become.
 fn convert_div(div: Div, def: &crate::crossref::RefTypeDef) -> CustomNode {
     let source_info = div.source_info.clone();
     let attr = div.attr.clone();
     let identifier = attr.0.clone();
 
     let mut content_blocks = div.content;
-    let (content, caption_long, caption_short) = match content_blocks.as_slice() {
+
+    let (mut content, caption_long, caption_short) = match content_blocks.as_slice() {
         [Block::Figure(_)] => {
             // Flatten Div > Figure. Move Figure's content/caption up.
             let Block::Figure(fig) = content_blocks.remove(0) else {
@@ -509,6 +653,7 @@ fn convert_div(div: Div, def: &crate::crossref::RefTypeDef) -> CustomNode {
             (content_blocks, long, None)
         }
     };
+    clear_matching_id(&mut content, &identifier);
 
     let mut node = CustomNode::new(FLOAT_REF_TARGET, attr, source_info);
     node.plain_data = json!({
@@ -580,8 +725,9 @@ fn convert_figure(fig: Figure, def: &crate::crossref::RefTypeDef) -> CustomNode 
     let mut attr = fig.attr.clone();
     let identifier = attr.0.clone();
 
-    let content: Blocks = fig.content;
+    let mut content: Blocks = fig.content;
     merge_image_attrs_into_figure_attr(&mut attr, &content);
+    clear_matching_id(&mut content, &identifier);
     let caption_long = fig.caption.long.unwrap_or_default();
     let caption_short = fig.caption.short;
 

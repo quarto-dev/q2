@@ -36,9 +36,9 @@ See @fig-panel for a panel of sub-figures, or @fig-panel-a and @fig-panel-b indi
 
 ::: {#fig-panel layout-ncol=2}
 
-![First panel](chapter1_files/figure-typst/unnamed-chunk-1-1.svg){#fig-panel-a}
+![First panel](chapter1_files/figure-typst/fig-cars-1.svg){#fig-panel-a}
 
-![Second panel](chapter1_files/figure-typst/unnamed-chunk-1-1.svg){#fig-panel-b}
+![Second panel](chapter1_files/figure-typst/fig-cars-1.svg){#fig-panel-b}
 
 A panel with two sub-figures showing the same plot.
 :::
