@@ -482,16 +482,18 @@ fn ipynb_parse_error_json_carries_cell_origin() {
             )
         });
 
-    // The path is whatever LoadedSource resolved (`source.path`), which
-    // may be canonicalized. Wire contract: an emitted path uses the plain
-    // form whenever one exists, so no Windows `\\?\` verbatim prefix.
+    // The path is whatever LoadedSource resolved (`source.path`). It must be
+    // absolute: the check below resolves it from the test's cwd, not the
+    // fixture dir. Wire contract: an emitted path uses the plain form
+    // whenever one exists, so no Windows `\\?\` verbatim prefix.
     let nb_path = origin
         .get("notebook_path")
         .and_then(|v| v.as_str())
         .expect("origin must carry notebook_path");
     let notebook = canonical(&dir.join("broken.ipynb"));
-    // `dunce` keeps the verbatim form exactly when no plain form is safe
-    // (reserved or invalid name, >260 chars, network share).
+    // `dunce` keeps the verbatim form for reserved or invalid names, paths
+    // over 260 chars, and every network share (even one with a plain
+    // `\\server\share` form).
     assert!(
         !dunce::simplified(&notebook)
             .to_string_lossy()
