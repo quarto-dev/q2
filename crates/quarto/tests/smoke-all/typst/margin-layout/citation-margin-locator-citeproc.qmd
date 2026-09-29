@@ -30,8 +30,12 @@ _quarto:
           - subject: "Bifurcan"
             relation: rightOf
             object: "LOCATOR-MARKER"
-          # Locator appears inline (left of margin content) - citeproc drops "p." prefix
-          - subject: "42"
+          # Locator-aware short form ("1941, 42", citeproc drops "p.") renders
+          # inline in the main column, while the full bibliography entry
+          # ("Bifurcan") renders in the margin column - genuinely disjoint
+          # x-ranges, so this is a robust column-level check, not an
+          # intra-note text-run comparison.
+          - subject: "1941, 42"
             relation: leftOf
             object: "Bifurcan"
         - []

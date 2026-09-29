@@ -29,6 +29,15 @@ function render_typst()
 
   local number_depth
 
+  -- Per-instance citeproc replacements, keyed by occurrence index (1-based,
+  -- document order). Unlike citeprocBibliography (keyed by citation id, one
+  -- entry per reference work), this carries the locator/prefix/suffix that
+  -- only exists on a specific Cite occurrence. Both are populated by Pass 0
+  -- and consumed by the Cite handler below, within this same render_typst()
+  -- call, so they stay scoped to one document render.
+  local citeprocInstances = {}
+  local citeInstanceCounter = 0
+
   return {
     -- Pass 0: Pre-process citeproc to build bibliography lookup table
     -- This must run before the Cite handler so entries are available
@@ -58,6 +67,24 @@ function render_typst()
                 end
                 citeprocBibliography[match] = inlines
               end
+            end
+          })
+
+          -- Also capture each Cite node's own rendered replacement, in
+          -- document order. citeproc rewrites Cite.content in place (the
+          -- node stays a Cite, just with rendered text) with locator/
+          -- prefix/suffix baked in, which citeprocBibliography's per-key
+          -- lookup above can't carry since the same reference can be cited
+          -- multiple times with different locators. A Cite node bundling
+          -- several sub-citations (e.g. [@a; @b]) gets ONE combined
+          -- replacement, so this is indexed per Cite node, not per
+          -- sub-citation, and the Cite handler below walks the ORIGINAL
+          -- document's Cite nodes in the same order to match them up.
+          local instanceIndex = 0
+          processed:walk({
+            Cite = function(cite)
+              instanceIndex = instanceIndex + 1
+              citeprocInstances[instanceIndex] = cite.content
             end
           })
         end
@@ -161,7 +188,25 @@ function render_typst()
           -- Keep original Cite element (Pandoc renders it with locator inline)
           -- Append margin note with full bibliographic entries
           local result = pandoc.Inlines({})
-          result:insert(cite)
+
+          -- This Cite node corresponds 1:1, in document order, to a Cite
+          -- node captured by Pass 0's walk over the citeproc-processed
+          -- document. When available, show that occurrence's own
+          -- locator/prefix/suffix-aware short form in the body instead of
+          -- the raw Cite node, matching what real Pandoc --citeproc
+          -- processing on the main document would have produced (Q2 only
+          -- runs citeproc on Pass 0's side copy, not the main document, so
+          -- the raw Cite node here would otherwise fall back to Typst's
+          -- native `@key[locator]` citation syntax, which can't carry a
+          -- citeproc-style locator since Typst never sees the citeproc
+          -- processing at all).
+          citeInstanceCounter = citeInstanceCounter + 1
+          local instance = use_citeproc and citeprocInstances[citeInstanceCounter]
+          if instance then
+            result:extend(instance)
+          else
+            result:insert(cite)
+          end
 
           -- Open margin note
           result:insert(pandoc.RawInline("typst",
