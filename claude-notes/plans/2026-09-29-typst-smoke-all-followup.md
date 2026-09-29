@@ -1,0 +1,431 @@
+# Follow-up: `format: typst` smoke-all coverage beyond the orange-book epic
+
+**Date:** 2026-09-29
+**Status:** Research/triage complete. Proposal below — **not started**, awaiting
+Gordon's review before any fixture is copied or any Rust test is written.
+**Base:** `origin/feature/typst-testing` tip (PR #745, still open at time of writing —
+re-check `gh pr view 745 --json state` before branching implementation work off this;
+if merged, re-base onto `main` first, per this file's own worktree note).
+**Worktree:** `.worktrees/workspace-4`, branch `typst-testing/workspace-4`.
+**Predecessor:** `claude-notes/plans/2026-09-27-typst-smoke-all-epic.md` (PR #745) —
+ported 7 book/margin-layout fixtures + built the assertion vocabulary
+(`ensureTypstFileRegexMatches`, `ensurePdfRegexMatches`, `ensurePdfTextPositions`) this
+follow-up reuses as-is.
+
+## The gap, corrected
+
+The original handoff estimated ~27 curated + ~140 dated-regression fixtures (~165
+candidates) beyond the 7 already ported. Both numbers needed correction:
+
+- **Curated `smoke-all/typst/`:** ~27 holds up — confirmed 33 new single/directory
+  candidates + `lof-lot` (orphaned, see below) + `myfonts/` (not a fixture, a font
+  asset dir for `custom-fonts.qmd`).
+- **Dated regressions:** ~140 was wrong. A plain grep for the substring "typst"
+  over-counts (matches build-cache directories, sibling multi-format variants,
+  unrelated prose). A strict top-level `format: typst` parse under-counts — it misses
+  fixtures that declare `typst` only as a nested key under `_quarto.tests.<format>:`
+  (the smoke-all harness renders whichever formats have a `tests:` block, independent
+  of the front matter's own primary `format:`). Combining both patterns plus a
+  `keep-typ: true` sweep for stragglers, the real count is **50 individual fixtures +
+  1 project** (`2023/12/04/7784/`, `_quarto.yml`-driven, 3 files). Distribution: 2023×10,
+  2024×15, 2025×9, 2026×15 (includes an 8-file cluster, `issue-13992-*`, all dated
+  2026/02/04 — one issue, one test-per-Typst-construct: theorem/proof/table/listing/
+  nested-callout/nested-tabset/figure/plain).
+
+Real total candidate pool: **~84**, not ~165.
+
+## What I actually rendered (not just read)
+
+Built `q2` once (`cargo build -p quarto --bin q2`, clean, ~36s), then rendered a
+representative sample directly against `external-sources/quarto-cli` fixtures — real
+`q2 render <path> --to typst` invocations, artifacts inspected then removed from the
+Q1 checkout afterward (all render output there is either gitignored or was untracked
+cruft I created and cleaned up; `git status` on that checkout shows only one
+pre-existing unrelated modification, `orange-book-margin/index.qmd`, not touched by
+this session).
+
+### Confirmed capability gaps (real Q2 bugs, not test-coverage gaps)
+
+These are genuine defects, independently reproduced with minimal repros where useful.
+Per this epic's own P5 precedent: **file separately, don't block the port on fixing
+them.**
+
+1. **`font-paths:` (and brand.yml file-based fonts) are never wired to Typst's
+   `--font-path`.** `crates/quarto-core/src/stage/stages/typst_compile.rs`'s
+   `font_path_args()` only ever adds the vendored package-cache fonts dir — it never
+   reads the `font-paths` metadata key at all (confirmed: zero matches for
+   `"font-paths"` anywhere in `crates/**/*.rs`). Reproduced on 3 independent curated
+   fixtures (`custom-fonts.qmd`, `font-paths/subdir-font-paths`,
+   `font-paths/brand-font-paths`) plus `relative-font-path/report1` (whose own Q1 test
+   asserts, via `printsMessage negate:true`, that *no* "unknown font family" warning
+   should appear — Q2 prints it) **and** one dated regression
+   (`2025/12/09/13775-brand-typst-citeproc.qmd`, brand-declared "Sarabun" not found).
+   This is the single largest root cause behind the "fonts" theme — one fix likely
+   clears most of that theme's failures at once.
+
+2. **Fenced-div attribute parser rejects `.class #id` ordering.** Minimal repro
+   (`::: {.foo #bar}`) fails with `Parse error: unexpected character or token`;
+   `::: {#bar .foo}` (id first) parses fine. Not Typst-specific — this is a markdown-
+   parser bug that would affect every format. Found via `callout-paragraph-alignment.qmd`
+   (`::: {.callout-tip #tip-alignment}`).
+
+3. **`{{< placeholder N >}}` inside a `layout=` panel with 7 images fails**
+   (`layout/fraction-layout.qmd`): `error: failed to load file (is a directory)`.
+   Looks like a path-collision when multiple identical placeholder shortcode calls
+   resolve to the same generated path within one layout panel.
+
+4. **Raw HTML with a base64 data-URI `<img>` fails typst compile**
+   (`juice/test.qmd`): `error: file not found (searched at .../juice/<uuid>)` — the
+   mediabag-extracted asset isn't where the generated `.typ` expects it.
+
+5. **brand.yml logo `directional-padding` emits a bad Typst unit.** `typst compile`
+   errors `invalid number suffix: px` — Q2 is passing a raw CSS-style `px` value into
+   generated Typst source, which doesn't accept that suffix (needs `pt`/conversion).
+
+6. **`authors.lua` (shared pandoc filter, not typst-specific) crashes on multi-author
+   + `affiliation:`-as-string metadata.** `pandoc-template-features.qmd`:
+   `attempt to index a nil value (field 'integer index')` in
+   `modules/authors.lua:358`, called from `processAuthorMeta`. This is a shared-filter
+   bug (author normalization runs for every format), just first surfaced here because
+   no other ported fixture happens to combine multi-author + plain-string affiliation.
+
+### Confirmed pure coverage gaps (Q2 already renders correctly, just untested)
+
+Clean renders, no warnings: `callout.qmd`, `callout-no-icon.qmd`,
+`code-listing-alignment.qmd`, `tbl-align-issue10086.qmd`, `theorem/theorem-simple.qmd`,
+`columns/basic-two-column.qmd`, `css-property-processing/default.qmd`,
+`toc/toc-title-auto-fallback.qmd`, `syntax-highlighting/idiomatic.qmd`,
+`brand-yaml/color/foreground-background.qmd`,
+`brand-yaml/font-filtering-fallback/font-filtering-fallback.qmd`,
+`brand-yaml/typography/basefont-typst.qmd`. Also clean, across dated regressions:
+`2023/09/26/6977.qmd`, `2024/07/03/10217.qmd`, `2026/06/29/14583-typst.qmd`,
+`2026/02/04/issue-13992-theorem.qmd`. `2025/10/21/13589.qmd` prints a warning but it's
+the fixture's own intentional assertion target (unknown-reference-type callout), not
+a bug.
+
+### Can't verify in this environment
+
+`great-tables-oceania.qmd` and `pandas-cell-css-rules.qmd` both use the `jupyter`
+engine, which isn't installed in this worktree/sandbox (`Engine 'jupyter' is
+registered but its runtime is not available`). Their Typst-specific behavior is
+unverified either way — needs a machine with a Python/Jupyter env to sample for real
+before committing to porting them.
+
+### Excluded from the candidate pool entirely
+
+- `myfonts/` — font asset directory for `custom-fonts.qmd`, not a fixture.
+- `lof-lot.pdf`/`lof-lot.typ` — committed reference output with **no corresponding
+  source `.qmd` anywhere in the Q1 checkout** (confirmed by search, not assumed).
+  Unportable as-is; flagging for Gordon rather than silently dropping — worth asking
+  upstream Q1 if the source was ever committed, or treating as lost.
+
+## Proposed port, grouped by theme
+
+Every group below is *pure test-coverage* work (clean-rendering fixtures →
+`ensureTypstFileRegexMatches`/`ensurePdfRegexMatches`/`ensurePdfTextPositions`
+assertions), **except** where noted — those need the corresponding bug fixed first,
+or need to be ported with an assertion that captures the *current* (buggy) behavior
+and a follow-up bead linking to the filed bug, Gordon's call on which.
+
+1. **Callouts & basic blocks** — `block-divs`, `callout`, `callout-no-icon`,
+   `code-listing-alignment`, `definition-item-no-break`, `raw-set-page-no-extra-page`,
+   `url-image-mediabag`. All have committed Q1 reference `.pdf`/`.typ` to diff
+   against. `callout-paragraph-alignment` blocked on bug #2 above (parser rejects its
+   own div syntax) — port once fixed, or file the bug and skip for now.
+
+2. **TOC & tables** — `toc/toc-title-auto-fallback`, `tbl-align-issue10086`,
+   `suppress-bibliography`. (`lof-lot` excluded, no source.)
+
+3. **Typography & citeproc** — `typst-bibliography-leading-dot`, `typst-citeproc`,
+   `typst-no-citeproc`, `typst-i18n`, `typst-subfig`, `typst-subfig-badid`. Small,
+   focused, single-file — cheap to port, each exercises one citeproc/typography edge
+   distinct from orange-book's numbering focus.
+
+4. **Theorems & columns** — `theorem/*` (5), `columns/*` (4). Strongest
+   `ensurePdfTextPositions` candidates in this batch — column layout and theorem-box
+   placement are exactly the relational assertions that predicate was built for.
+
+5. **Syntax highlighting & CSS processing** — `syntax-highlighting/*` (13),
+   `css-property-processing/*` (3). `pandas-cell-css-rules.qmd` needs the jupyter-
+   engine check above before deciding in/out; the rest render clean today.
+
+6. **brand.yml** — `brand-yaml/color/*`, `brand-yaml/font-filtering*`,
+   `brand-yaml/typography/*` port clean today. `brand-yaml/logo/*` is blocked on bug
+   #5 (`directional-padding` px-unit crash) for at least that one file — sample the
+   other logo variants (`customize-without-path`, `light-dark-variants`,
+   `online-logo`) before deciding how much of `logo/` ports now vs. waits.
+
+7. **Layout & juice** — `layout/overflowing-callout*`, `layout/unitless-image-width`
+   look portable; `layout/fraction-layout` and `juice/*` are blocked on bugs #3/#4
+   above respectively — file both, don't port until fixed (or port with a
+   known-broken assertion + linked bug, if Gordon wants the regression pinned now).
+
+8. **Fonts** — `custom-fonts`, `font-paths/*` (4), `relative-font-path`. All four are
+   blocked on bug #1 — this is the fix-first-then-port case *the* epic's escape hatch
+   was written for: one root-cause fix likely clears the whole theme at once. Worth
+   fixing before porting rather than porting a theme that's currently 100% red.
+
+9. **Dated regressions — do NOT bulk-port.** Per the handoff's own framing, 50
+   one-off issue-regression fixtures is a decision for Gordon to make explicitly, not
+   a default. Of the ~50, three sub-groups stand out as worth asking about
+   specifically rather than defaulting to "skip all":
+   - The **`issue-13992` cluster** (8 files, one issue, systematically covers
+     conditional-visibility across theorem/proof/table/listing/nested-callout/
+     nested-tabset/figure/plain) reads more like a thematic feature-test family than a
+     one-off regression — closer in spirit to the curated directory than to the rest
+     of the dated corpus.
+   - The **`13775-*` trio** (brand+citeproc, `-html-variants`, `-latex-variants`
+     siblings not in the typst set) is a real brand.yml+citeproc interaction, already
+     hit by bug #1 above.
+   - `2026/06/29/14583-typst.qmd` and `2026/02/12/mermaid-typst.qmd` render clean and
+     look like they exercise typst-specific paths (mermaid diagram embedding) not
+     covered elsewhere.
+   Recommend asking Gordon: port these ~11-13 specifically, leave the remaining ~37
+   dated regressions unported by default (available to mine later if a specific area
+   needs regression coverage), rather than a wholesale decision either way.
+
+## Bugs to file (before or independent of any porting)
+
+1. `font-paths:` / brand file-fonts never reach Typst's `--font-path`
+   (`typst_compile.rs::font_path_args`).
+2. **RESOLVED — not a bug, no parser change needed.** Verified by a dedicated research
+   pass (2026-09-29): real Pandoc (v3.11) is fully order-independent for div/span
+   attributes (`{.foo #bar}` and `{#bar .foo}` both parse to the identical AST) — Gordon's
+   suspicion was correct that Q1/pandoc accepts both orders. Q2's grammar, however, is
+   **intentionally** order-sensitive by design:
+   `crates/tree-sitter-qmd/tree-sitter-markdown/grammar.js:559-605`
+   (`_pandoc_attr_specifier` → `commonmark_specifier`) hard-requires id-first, then
+   class(es), then key=value(s), with no grammar path back to an id after a class. This
+   reads as a deliberate LR-grammar simplification (closest history: Carlos's
+   `75f0d4d86` "make grammar tighter around attributes", no rationale text) — not
+   something to widen. **The real gap is diagnostic-quality**, exactly as Gordon
+   suspected: Q2 already has a purpose-built friendly diagnostic for the sibling case
+   (`Q-2-3`, "Key-value Pair Before Class Specifier", `crates/pampa/resources/error-corpus/Q-2-3.json`)
+   plus a whole Q1→Q2 porting-hazard detector for it
+   (`crates/qmd-syntax-helper/src/conversions/attribute_ordering.rs`), but **no
+   equivalent corpus entry exists for "class before id"** — it falls through to the
+   generic fallback error at `crates/quarto-parse-errors/src/error_generation.rs:298`
+   ("unexpected character or token here"). Recommended fix: add a new error-corpus entry
+   (next free `Q-2-NN` code) modeled exactly on `Q-2-3.json`, titled something like
+   "Class Specifier Before Id Specifier in Attribute", with cases covering `{.foo #bar}`
+   and the callout fixture's `{.callout-tip #tip-alignment}`. This is a diagnostic
+   addition, not a parser-behavior fix — no grammar change, no regression risk to the
+   existing id-first requirement.
+3. `{{< placeholder N >}}` produces an **empty image path** (`image("")`) in Typst
+   output — confirmed broader than originally scoped. Originally described as a
+   multi-image `layout=` panel path-collision; re-tested 2026-09-29 and reproduced with
+   a **single, non-layout** `{{< placeholder 200 >}}` call (`typst-subfig.qmd`,
+   `typst-subfig-badid.qmd`) and with all three `layout/overflowing-callout*`/
+   `unitless-image-width.qmd` fixtures — every one hits the identical
+   `#box(image("", width: ...))` / "failed to load file (is a directory)" failure, not
+   just the 7-image layout panel case. The root cause is the placeholder shortcode
+   itself never emitting a path for the typst target, independent of layout context.
+   6 fixtures blocked on this (up from 1): `typst-subfig`, `typst-subfig-badid`,
+   `layout/overflowing-callout`, `layout/overflowing-callout-7`,
+   `layout/unitless-image-width`, `layout/fraction-layout`.
+4. Base64 data-URI `<img>` in raw HTML → typst mediabag asset not found
+   (`juice/test.qmd`; `juice/gt-table-images.qmd` not independently re-tested this
+   session, presumed same theme, not confirmed).
+5. brand.yml logo → Typst background-image generation is broken **far more broadly**
+   than the original `directional-padding` px-unit-crash scoping. Re-tested 2026-09-29
+   against 9 `brand-yaml/logo/*` variants (`customize-without-path`,
+   `light-dark-variants`, `light-dark-variants-dark-mode`, `online-logo`, `padding`,
+   `padding-xy`, `posit`, `quarto`, `relative-path`) — **all 9 failed**, every one with
+   an empty/missing value somewhere in the generated
+   `#set page(background: align(..., box(inset: ..., image("...", width: ...))))` call
+   (empty image path, empty inset, empty alignment, empty width, in various
+   combinations — e.g. `customize-without-path.qmd`'s simple `padding: 2rem` produces
+   `box(inset: , image("", width: 300px))`, and `posit/brand-logo.qmd` produces
+   `align(, box(inset: , image("", width: )))` — nothing from `brand.logo` metadata is
+   reaching the generated call). This is a large, close-to-total gap in brand.yml logo
+   support for Typst, not a narrow unit-conversion bug — needs its own scoping pass
+   before a fix is attempted.
+6. `authors.lua` crashes on multi-author + string `affiliation:` (shared pandoc
+   filter, cross-format — not typst-specific). Reconfirmed 2026-09-29 via two more
+   independent repros: `columns/two-column-landscape.qmd` and
+   `columns/two-column-title-block.qmd` (same
+   `authors.lua:358: attempt to index a nil value (field 'integer index')` crash,
+   called from `byAuthors`/`processAuthorMeta`).
+
+### New bugs found during the 2026-09-29 port session (not in the original 6)
+
+7. **Pandoc definition-list syntax is not implemented at all**, and silently drops
+   content. `Term\n: description` (no blank line needed) is Pandoc's definition-list
+   syntax; Q2's grammar has no rule for it at all
+   (`crates/tree-sitter-qmd/tree-sitter-markdown/grammar.js` — zero mentions of
+   definition lists) even though a `DefinitionList` AST node type exists and is handled
+   throughout `crates/pampa` (writers, filters, Lua API) — nothing constructs one from
+   this syntax. Instead, the leading `:` line is unconditionally parsed as an **orphaned
+   table caption**: it prints `[Q-0-99] Caption found without a preceding table` and the
+   description text is **dropped from the output entirely** (confirmed with a minimal
+   repro: a term line + `: description text` anywhere, lipsum shortcode not required).
+   Found via `definition-item-no-break.qmd`. This is a real content-loss bug, and looks
+   like a missing-feature-sized grammar gap, not a quick fix.
+8. **`tbl-align-issue10086.qmd` regression reintroduced**: Q2 wraps knitr/pandoc table
+   output in an extra `#block[...]` between `#figure([` and `#table(...)` —
+   `#figure([\n#block[\n#table(...` — which is *exactly* the double-nesting this
+   upstream Q1 regression test (issue 10086) was written to guard against (its second,
+   forbidden-pattern assertion checks for a *doubled* `#block[.../#figure(.../#block[.../#figure`
+   sequence, which is absent, but the *required* pattern `#figure\(\[\n#table` — no
+   intervening block — is also absent, because of the single extra `#block[` wrapper).
+   Whatever code path adds this wrapper likely affects table column-alignment fidelity,
+   which is the entire point of the regression test.
+9. **TOC title auto-fallback: unused-variable bug, one-line fix identified (not yet
+   applied).** `resources/pandoc-filters/typst-template/typst-template.typ:123-134`:
+   ```
+   if toc {
+     let title = if toc_title == none { auto } else { toc_title }
+     block(...)[
+     #outline(
+       title: toc_title,   // <- BUG: should be `title: title`
+       ...
+   ```
+   The computed `title` fallback (`auto` when `toc_title` is `none`) is never used —
+   `outline()` receives the raw `toc_title` (`none`) instead, so Typst's `outline(title:
+   none)` suppresses the TOC heading entirely rather than falling back to Typst's own
+   localized default (e.g. "Contents" in English). **Exact fix**: change
+   `title: toc_title` to `title: title` at that line. Found via
+   `toc/toc-title-auto-fallback.qmd`. This is the smallest, lowest-risk fix in this
+   whole list — pure template typo, one line, no design questions.
+10. **`typst-i18n.qmd` crashes the render**: `common/refs.lua:47: An error occurred:
+    unknown float type 'Figura'` (a Spanish-localized float-type name not recognized by
+    the crossref Lua filter), fatal in `quarto-pre/figures.lua`. Blocks the entire
+    i18n/localized-crossref theme, not just cosmetic.
+11. **Typst-native citation handling looks architecturally inconsistent — needs research,
+    not a quick fix.** `typst-citeproc.qmd`, `typst-no-citeproc.qmd`, and
+    `typst-bibliography-leading-dot.qmd` (all plain, non-margin, non-book documents with
+    `citeproc: true`) all fail: the generated Typst has malformed nested citation calls
+    (`@Cronbach_1951[#cite(<Cronbach_1952>, form: "prose")]` for `[@Cronbach_1951,
+    @Cronbach_1952]` — nonsensical Typst), is missing the native `<ref-KEY>` labels the
+    Q1 fixture's assertions expect, and (forbidden by the fixture) still emits a plain
+    `#bibliography(("refs.bib"))` call. This is confusing because the **already-merged,
+    already-passing** `margin-layout/citation-margin-citeproc.qmd` fixture (also
+    `citeproc: true`) explicitly asserts the *opposite* — pre-rendered prose citations
+    with **no** native `#cite()` calls — and that assertion passes today. Whether Q1's
+    real behavior differs between margin/book and plain-document contexts, or whether
+    something more specific to these three fixtures is wrong, is unresolved. Do not
+    attempt a fix without a dedicated research pass first.
+12. **Skylighting-based syntax highlighting for Typst is not implemented at all — the
+    single largest capability gap found this session.** Q2's Typst output always uses
+    Typst's own native/idiomatic code highlighter (bare ` ```python ` fenced blocks,
+    colored by Typst itself at compile time), **regardless of the `syntax-highlighting:`
+    metadata setting**. Quarto's own Skylighting-based highlighting — Q1's *default*
+    mode, which generates `#Skylighting(...)`/`#KeywordTok`/`#StringTok`/etc. calls, a
+    theme-specific `#show raw.where(block: true): set text(...)` styling block, and
+    integrates with brand.yml's `monospace-*` tokens — has no implementation for Typst
+    at all. Confirmed via `syntax-highlighting: idiomatic` (Q2's only working mode,
+    `idiomatic.qmd` passes) contrasted with every other syntax-highlighting fixture
+    (custom themes, skylighting defaults, line numbers, and all 6 `brand-monospace-*`
+    variants — 12 of 13 fixtures in the theme) failing on missing `#Skylighting`/
+    `#KeywordTok`/theme-specific `#show raw.where` rules. This is feature-sized work,
+    not a bug fix.
+13. **`css-property-processing: none` is silently ignored** — `grep -rn
+    "css-property-processing"` over `crates/` returns zero matches. CSS-to-Typst
+    color/property translation for raw HTML always runs, regardless of this metadata
+    setting. Same shape as bug #1 (font-paths) — a documented metadata key with no
+    reader anywhere in the Rust code. Found via `css-property-processing/none.qmd`.
+14. **brand.yml color: several palette mechanisms unimplemented for Typst beyond plain
+    foreground/background.** 7 of 15 sampled `brand-yaml/color/*` fixtures failed:
+    named/custom brand colors (`primary: rgb(...)`, `burgundy: rgb(...)`, etc.),
+    `color.mix(...)`-derived tones, and the "unknown brand color" diagnostic message are
+    all missing from generated Typst output (`exper`, `homedepot`, `posit`,
+    `posit-duobrand/brand-color-light-dark`, `typst-css-duobrand-named-color-dark`,
+    `typst-css-duobrand-wrong-named-color-{dark,light}`). Simple single-color
+    foreground/background and one-level named colors (the cases the predecessor plan
+    actually sampled) do work.
+15. **brand.yml typography: font-filtering, multi-font lists, and per-element
+    typography unimplemented beyond a single mainfont/basefont.** 7 of 12 sampled
+    `brand-yaml/typography/*` fixtures failed, plus all 3 `font-filtering*` fixtures:
+    font-filtering fallback chains (`font: ("Libertinus Serif", ...)` style lists),
+    generic-family fallback (`"sans-serif"`/`"monospace"` tokens), and richer
+    per-element styling (title/subtitle/heading-2/paragraph combinations — the
+    `kitchen-sink-*` fixtures) never reach the generated `font:`/`codefont:` arguments
+    or per-element PDF text styling. Only the single-mainfont/basefont case (already
+    sampled by the predecessor plan) works.
+16. **Smart-quote heuristic gap: possessive apostrophe in a heading hard-errors.**
+    `## \`P(A|B)\` = Bayes' Rule` fails to parse: `[Q-2-10] Closed Quote Without Matching
+    Open Quote`. Real Pandoc's smart-typography heuristic recognizes this extremely
+    common English possessive-apostrophe pattern (no matching open quote nearby) and
+    treats the `'` as an apostrophe, not a quote-close; Q2 hard-errors instead. Not
+    Typst-specific — a general markdown/smart-quotes parser gap. Found via
+    `theorem-inline-code-title.qmd`.
+
+## Port session results (2026-09-29)
+
+Ported the curated groups (plan groups 1-8) into
+`crates/quarto/tests/smoke-all/typst/{basic-blocks,toc-tables,columns,theorem,
+syntax-highlighting,css-property-processing,brand-yaml}/`, verifying each fixture
+individually with `SMOKE_FILTER=<dir> cargo nextest run -p quarto --test integration --
+smoke_all` before keeping it. Every fixture that render-and-passes as-is (or with a
+Q2-reality-vs-Q1-assumption assertion fix, documented inline) was kept; everything that
+hit one of the 16 bugs above was pulled back out and left unported (source files
+preserved outside the tree, not lost, in case Gordon wants them for reference while
+fixing a given bug — ask if needed, they weren't committed anywhere).
+
+**Kept (passing):**
+- `basic-blocks/`: 7 of 8 — `block-divs`, `callout`, `callout-no-icon`,
+  `code-listing-alignment` (subject text narrowed to `"CODESTART_func"` — the original
+  `"CODESTART_func():"` spans a syntax-highlighting color-boundary that our
+  `ensurePdfTextPositions` item-matching can't see across; a real but separate,
+  lower-priority position-assertion-infra limitation, not filed as a numbered bug
+  above), `callout-paragraph-alignment` (attributes reordered id-first per bug #2's
+  verdict — `{#tip-alignment .callout-tip}` — with an explanatory comment), `raw-set-page-no-extra-page`,
+  `url-image-mediabag` (assertion regex updated for Q2's leading-`/` mediabag path
+  convention, confirmed consistent with the already-merged `crossref-grand-finale.typ`).
+  Excluded: `definition-item-no-break` (bug #7).
+- `toc-tables/`: 1 of 3 — `suppress-bibliography` (+ `refs.bib`). Excluded:
+  `toc-title-auto-fallback` (bug #9), `tbl-align-issue10086` (bug #8).
+- `columns/`: 2 of 4 — `basic-two-column`, `two-column-toc`. Excluded:
+  `two-column-landscape`, `two-column-title-block` (both bug #6).
+- `theorem/`: 4 of 5 — `theorem-clouds`, `theorem-fancy`, `theorem-rainbow`,
+  `theorem-simple` (+ `_brand.yml`). Excluded: `theorem-inline-code-title` (bug #16).
+- `syntax-highlighting/`: 1 of 13 — `idiomatic` only. Excluded: all 6
+  `brand-monospace-*`, `custom-theme` (+ `.theme`), `highlight-style-alias`, `none`,
+  `skylighting-default`, `skylighting-line-numbers`, `skylighting` (all bug #12).
+- `css-property-processing/`: 2 of 3 — `default`, `translate`. Excluded: `none`
+  (bug #13).
+- `brand-yaml/`: 10 of ~35 sampled — `color/foreground-background`,
+  `color/link-primary-brand-color`, `color/nobrand/brand-color`,
+  `color/posit-duobrand/brand-color-light-light`, `color/typst-css-duobrand-named-color`,
+  `color/typst-css-named-brand-color`, `typography/basefont-typst`,
+  `typography/dashed-font-weights`, `typography/mainfont-typst`,
+  `typography/nobrand/brand-typography`. Excluded: 7 color variants (bug #14), all 3
+  `font-filtering*` (bug #15), 6 typography variants (bug #15), all 9 `logo/*`
+  variants (bug #5).
+- **Entirely excluded (0 ported):** `typography-citeproc` group (3 files, bug #11),
+  `layout/` (3 files, bug #3 — `fraction-layout` already known-blocked, the other 2
+  newly confirmed same root cause), fonts group (`custom-fonts`, `font-paths/*` ×4,
+  `relative-font-path`; unchanged, still bug #1), `juice/*` (bug #4, not re-tested).
+
+**Not attempted this session** (per plan's own scoping, unchanged): dated regressions
+(§9), `great-tables-oceania.qmd`/`gt-islands.qmd`/`pandas-cell-css-rules.qmd` (jupyter
+engine unavailable), `lof-lot` (no source).
+
+**Net result**: real Typst rendering in this codebase is considerably less complete
+than the predecessor epic's sampling suggested — of ~60 fixtures sampled/attempted this
+session (beyond the 7 orange-book/margin-layout fixtures already on `main`), roughly
+27 ported clean and ~33 hit one of 10 distinct capability gaps (bugs #1, #3-#16, minus
+#2 which resolved to "not a bug"). Three of those gaps are large, feature-sized
+(Skylighting highlighting entirely unimplemented, brand.yml logo background-image
+generation broadly broken, definition lists entirely unimplemented) rather than
+one-line fixes — plan accordingly.
+
+## Open questions for Gordon
+
+- Which of these 16 items to prioritize fixing, and in what order? A
+  suggested easy-first ordering by risk/size: #9 (one-line template typo, already
+  diagnosed) → #13 (metadata key ignored, same shape as #1) → #1 (font-paths, same
+  shape, larger) → #6 (authors.lua) → #3 (placeholder empty path) → #4 (juice) → #8
+  (table wrapper regression) → #16 (smart-quote heuristic) → #2's diagnostic-only fix →
+  #10 (i18n lua crash) → the three feature-sized items (#12 Skylighting, #5 brand logo,
+  #7 definition lists) → #11 (needs research before any fix, do that research first) →
+  #14/#15 (brand.yml color/typography breadth, likely follow-on work after #5/#12
+  establish the pattern).
+- Which of the three dated-regression sub-groups (§9) to include, if any.
+- Whether to spend an environment cycle getting `jupyter` available to unblock
+  sampling `great-tables-oceania`/`gt-islands`/`pandas-cell-css-rules`, or treat those
+  three as out of scope for this pass.
+- `lof-lot` — worth a note upstream to Q1, or just drop it?
+
+No braid strand opened for this — per the repo's "Beads vs. plans (STRICT)" rule,
+this stays exploratory until Gordon scopes it into an actual plan/phase list.
