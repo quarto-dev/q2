@@ -38,7 +38,9 @@ Decided 2026-09-29:
 
 ### Layer 2: `bugfix/bd-1klbq2zd-path-audit` (behavior-preserving, except for the guard)
 
-**One production canonicalize function.** Add a free function in `quarto-system-runtime` (native only; name to settle during review, e.g. `quarto_system_runtime::canonicalize`) that wraps `std::fs::canonicalize` **unchanged** in this layer. `NativeRuntime::canonicalize` calls it. Audited direct `std` call sites that need a consistent spelling call the **free function**, never the runtime, even when a runtime is in scope. The runtime is not equivalent: `WasmRuntime::canonicalize` normalizes against its VFS (`wasm.rs:349`), and the test-mock runtimes return whatever they are told, so rerouting a `std` call through it would change behavior in this layer. Existing runtime calls stay as they are. Deliberately moving a site onto the runtime is out of scope unless the audit records it as its own behavior change with its own acceptance test.
+**One production canonicalize function.** Add a free function in `quarto-system-runtime` (all targets, see § Target gating below; name to settle during review, e.g. `quarto_system_runtime::canonicalize`) that wraps `std::fs::canonicalize` **unchanged** in this layer. `NativeRuntime::canonicalize` calls it. Audited direct `std` call sites that need a consistent spelling call the **free function**, never the runtime, even when a runtime is in scope. The runtime is not equivalent: `WasmRuntime::canonicalize` normalizes against its VFS (`wasm.rs:349`), and the test-mock runtimes return whatever they are told, so rerouting a `std` call through it would change behavior in this layer. Existing runtime calls stay as they are. Deliberately moving a site onto the runtime is out of scope unless the audit records it as its own behavior change with its own acceptance test.
+
+**Target gating.** `84f4d01a` exports both functions for native targets only (`lib.rs` gates `mod canonical`), but some routing candidates compile for wasm32 too: `project/book/render_item.rs`, `project/book/static_analyzer.rs` and `stage/stages/include_expansion.rs` are ungated modules (rows 16-18). Routing them to a native-only function would break the WASM build. Decision: export both functions on every target. On wasm32 the body stays `std::fs::canonicalize`, which is exactly what those sites call today, so wasm behavior does not change and no call site needs its own `cfg`. Layer 3's dunce switch is `cfg`-split inside the function body (dunce is a native-only dep). The audit table records the target of every candidate.
 
 A second shared function covers paths that may not exist yet: `canonicalize_deepest_existing` (now private in `output_sink.rs:420`) moves into `quarto-system-runtime` and calls the shared `canonicalize`. It canonicalizes the deepest existing ancestor, re-appends the missing tail, and keeps the lexical form on failure. Layer 3 then flips one function body, and every routed site changes spelling together, including not-yet-created outputs. That removes the plain-versus-verbatim mixing hazard that produced most of the prototype fallout.
 
@@ -71,7 +73,7 @@ The result goes into an audit table in this plan (site, consumer, operand origin
 
 ### Layer 3: `bugfix/bd-1klbq2zd-dunce-seam`
 
-- `dunce = "1"` under `[target.'cfg(not(target_arch = "wasm32"))'.dependencies]` in `quarto-system-runtime`. The shared function's body becomes `dunce::canonicalize`. UNC shares stay verbatim, per the contract exception.
+- `dunce = "1"` under `[target.'cfg(not(target_arch = "wasm32"))'.dependencies]` in `quarto-system-runtime`. The shared function's native body becomes `dunce::canonicalize`; the wasm32 body stays `std::fs::canonicalize`. UNC shares stay verbatim, per the contract exception.
 - REDs before the switch, with the plain-form precondition used in `json_errors.rs` (`dunce::simplified` on the temp path): `source_file` in `--json-errors` output, the `Rendering single file:` status line, and `QUARTO_PROJECT_DIR`. The existing #743 RED (`json_errors::ipynb_parse_error_json_carries_cell_origin`) goes green.
 - The acceptance probe from `2026-09-28-…-investigation/` shows `notebook_path`, `source_file` and the status line plain.
 
@@ -83,7 +85,7 @@ Layer 2 (`bugfix/bd-1klbq2zd-path-audit`):
 - [ ] Once the audit table exists, and before any call site changes: baseline every other crate that has R rows. Done: `quarto-core` (45 failures, § Baselines). Still to do: `quarto-hub`, `quarto-preview`, `quarto-test` (and any crate the spot-check adds), at `b83c5cf6` via `git switch --detach b83c5cf6` → run → `git switch bugfix/bd-1klbq2zd-path-audit`
 - [x] Guard: RED test(s) → fix → GREEN (`37e3d127`)
 - [x] Shared `canonicalize` + deepest-existing variant (std-backed, moved from `output_sink.rs`); `NativeRuntime::canonicalize` uses the former (`84f4d01a`)
-- [ ] Audit table: subagent sweep DONE (§ Audit table); coverage cross-checked (every production hit has a row). Spot-check of every R/R? row against source: NOT done yet. Then route R sites, both operands for comparisons
+- [ ] Audit table: subagent sweep DONE (§ Audit table); coverage cross-checked (every production hit has a row). Spot-check of every R/R? row against source: NOT done yet. Then route R sites, both operands for comparisons; first export `canonical` on all targets (§ Target gating) and run the wasm `cargo check`
 - [ ] Spelling-agnostic test oracles
 - [ ] Classify `preview_static_e2e::a_page_inside_the_project_opens_on_that_page` and `cache_lru` concurrent test
 - [ ] Crate-scoped suites for every touched crate: failure set identical to the baseline except the guard tests
@@ -169,6 +171,8 @@ Coverage cross-checked in the main session: the production `canonicalize(` hit l
 | 46 | `wasm-quarto-hub-client/src/lib.rs:1740` | wasm | runtime | N/A (wasm VFS only) | |
 | 47-49 | `traits.rs:333`, `sandbox.rs:205`, `wasm.rs:349` | runtime | decl/impls | N/A | |
 
+Target of each quarto-core candidate (checked against `cfg` gates at `16cd2d5b`): row 14 native-only (`project_resources.rs:1222` `#[cfg(not(target_arch = "wasm32"))]`); row 15 native-only (`book/mod.rs:16` gates `multi_file_html`); rows 16, 17, 18 **compile for wasm32** (ungated modules `render_item`, `static_analyzer`, `include_expansion`). Rows in `quarto`, `quarto-hub`, `quarto-preview`, `quarto-test` are native binaries/libs. The wasm32 rows need the all-target export (§ Target gating).
+
 Candidate routing set before spot-check: std rows 14, 15, 16, 17, 18, 20(+21), 23, 24, 25, 32?, 36, 37, 38, 39, 45?. That is ~12-15 sites, above the fold threshold of about 10 R rows, so the fold rule leans towards keeping layer 3 separate; decide after the spot-check.
 
 ## Verification
@@ -179,7 +183,10 @@ Crate-scoped only on this machine: CLAUDE.local.md overrides the AGENTS.md pre-p
 cargo nextest run -p quarto -p quarto-system-runtime          # baseline + each layer
 cargo nextest run -p quarto-core -p quarto-preview            # when audit routes sites there
 cargo nextest run -p quarto -E 'test(json_errors::)'          # layer 3: the #743 RED goes green
+cargo check -p quarto-core --target wasm32-unknown-unknown    # after routing wasm32-compiled sites, and after the layer-3 body split
 ```
+
+The wasm check is crate-scoped (target installed here); CI's hub-client build leg is the full WASM backstop.
 
 Linux/macOS CI covers the rest, including the portable guard test.
 
