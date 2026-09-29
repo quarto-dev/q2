@@ -483,9 +483,9 @@ fn ipynb_parse_error_json_carries_cell_origin() {
         });
 
     // The path is whatever LoadedSource resolved (`source.path`). It must be
-    // absolute: the check below resolves it from the test's cwd, not the
-    // fixture dir. Wire contract: an emitted path uses the plain form
-    // whenever one exists, so no Windows `\\?\` verbatim prefix.
+    // absolute, since a relative path would resolve against the consumer's
+    // cwd. Wire contract: an emitted path uses the plain form whenever one
+    // exists, so no Windows `\\?\` verbatim prefix.
     let nb_path = origin
         .get("notebook_path")
         .and_then(|v| v.as_str())
@@ -504,6 +504,10 @@ fn ipynb_parse_error_json_carries_cell_origin() {
     assert!(
         !nb_path.starts_with(r"\\?\"),
         "notebook_path must be a plain path, got: {nb_path}"
+    );
+    assert!(
+        Path::new(nb_path).is_absolute(),
+        "notebook_path must be absolute, got: {nb_path}"
     );
     assert_eq!(
         canonical(Path::new(nb_path)),
