@@ -277,6 +277,37 @@ git show feature/typst-testing:claude-notes/plans/2026-09-27-typst-smoke-all-epi
 - `pdf-extract` fork dependency is pinned by commit SHA (not branch), and its adoption
   is verified not to regress the six existing Rust tests' behavior.
 
+### P10 confirmation (2026-09-29): both surfaces green in the same workspace run
+
+`cargo nextest run --workspace --no-fail-fast` at `feature/typst-testing` HEAD
+(workspace-2, macOS): **15295 tests run, 15294 passed, 1 failed, 201 skipped**,
+718.929s. The one failure is `quarto::integration smoke_all::smoke_all` itself
+(232 passed, 45 skipped, 1 failed *within* that test) — the pre-existing,
+separately-filed bd-gak8uiza `{{< embed >}}`-unimplemented gap in
+`orange-book-margin/index.qmd` (missing `fig-visualization` crossref/caption),
+not a new regression. Per this doc's own escape hatch above, "done" here means
+every fixture passes except that one identified, filed gap — not literally
+zero failures.
+
+**Delta against the current live baseline** (`main` @ `e8379cfe1`, CI run
+36479624208, `macos-latest` job, 2026-09-28): 15188 tests run, 15188 passed
+(0 failed), 201 skipped, 391.512s. So: **+107 tests, 0→1 failed (the accepted
+gap above), skip count unchanged.** The six existing Rust book-numbering
+tests (P10's own scope) are part of that unchanged-pass set — confirmed
+individually via the per-crate `-p quarto-core` gate, not just inferred from
+the workspace total.
+
+**Wall-clock**: 718.929s (this branch, local macOS) vs. 391.512s (`main`,
+CI `macos-latest`) — a ~84% increase, **not proportional to the +107 test
+count** (+0.7%). The increase is overwhelmingly `smoke_all` itself getting
+heavier (162.5s of the total, up from a lighter pre-epic baseline), from
+compiling ~90 additional real Typst/PDF fixtures inside that one test, not
+from more discrete tests. Accepted as the inherent cost of real end-to-end
+PDF-rendering coverage — see "Known limitations" and P3's checklist for the
+Typst-version compatibility spike this same session also closed out
+(CI's pinned Typst 0.15.1 produces no struct-tree-shape regression vs. the
+0.14.2 used for local development).
+
 ## Pre-epic spikes (both completed 2026-09-27, before any phase starts)
 
 Two items surfaced by implementability review were resolved empirically before

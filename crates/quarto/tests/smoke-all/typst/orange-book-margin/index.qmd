@@ -243,6 +243,12 @@ _quarto:
           # Chapter 3 dinosaurs
           - "Dinosaur 3\\.1:.*Pterosaura"
           - "Dinosaur 3\\.1.*aerodynamic"
+          # Appendix chapter headings render with their letter prefix baked
+          # in by orange-book's `appendices()` show rule (the .typ source
+          # heading text itself is letter-free — confirmed by compiling
+          # this fixture's .typ and extracting text with pdftotext, P10).
+          - "A\\.\\s+Additional\\s+Resources"
+          - "B\\.\\s+Supplementary\\s+Data"
           # Appendix A figures
           - "Figure A\\.1:.*Appendorba"
           - "Figure A\\.2:.*panel"

@@ -9,6 +9,13 @@
 //! `quarto.utils.file_metadata_filter()` **at load time** — unconditionally,
 //! before any AST walk — so a minimal one-block AST is enough to exercise
 //! the load path.
+//!
+//! P10 (typst-smoke-all epic): every real `orange-book`/`orange-book-margin`/
+//! `orange-book-lang`/`override-orange-book` smoke-all render
+//! (`crates/quarto/tests/smoke-all/typst/`) drives this exact load path and
+//! `#part[...]` transform end-to-end, and would fail outright if either
+//! broke. This file's synthetic minimal-AST probes stay for their tighter,
+//! load-time-specific failure signal.
 
 use quarto_core::pandoc_filters::harness::{assert_pandoc_available, run_main_lua_capturing_ast};
 

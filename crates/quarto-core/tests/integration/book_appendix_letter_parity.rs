@@ -11,6 +11,15 @@
  * actually renders in the compiled single-file Typst PDF. The PDF
  * assertion is written in terms of the *computed* letters, so a data-path
  * regression and a render-path regression each break a different half.
+ *
+ * P10 (typst-smoke-all epic): the render-path half now overlaps
+ * `crates/quarto/tests/smoke-all/typst/orange-book/index.qmd` and
+ * `orange-book-margin/index.qmd`, which assert both the appendix chapter
+ * headings' letter prefix ("A. Additional Resources", "B. Supplementary
+ * Data") and appendix body-construct numbering (e.g. "Theorem A.1") in the
+ * compiled PDF. The data-path half (`book_render_items` +
+ * `chapter_label_prefix`) has no smoke-all equivalent — it's an internal
+ * API with no rendered-output surface — and stays Rust-only.
  */
 
 use std::path::{Path, PathBuf};

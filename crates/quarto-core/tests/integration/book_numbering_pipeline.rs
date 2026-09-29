@@ -26,6 +26,14 @@
 //! alone is not sufficient" finding's permanent regression guard: without
 //! the counter-reset show rule, the three figures would render "Figure
 //! 1"/"Figure 2"/"Figure 3" continuously across chapter boundaries.
+//!
+//! P10 (typst-smoke-all epic): `crates/quarto/tests/smoke-all/typst/orange-book/index.qmd`
+//! and `orange-book-margin/index.qmd` now exercise the same per-chapter
+//! figure/dinosaur counter-reset mechanism end-to-end (Figure 1.1/2.1/3.1,
+//! Dinosaur 1.1/2.1/3.1/A.1). This file's isolation-control negative test
+//! (a top-level heading alone, with no counter-reset rule, must NOT reset)
+//! has no smoke-all equivalent by construction — no book-project fixture can
+//! express "book support absent" — and stays Rust-only.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
