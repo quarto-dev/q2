@@ -1517,6 +1517,7 @@ export function PreviewRoot(props: PreviewRootProps) {
                 sourceNode: indexEntry.sourceNode,
                 reachabilityClass: indexEntry.reachabilityClass,
                 sourceEntry,
+                sourcePool: indexEntry.sourcePool,
             };
         },
         [pool, sourceIndex],

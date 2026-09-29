@@ -285,7 +285,15 @@ export function RichTextEditor({
   // `{editor && …}` defers the toolbar past the transient pre-editor window (as before).
   return (
     <div className="q2-richtext-editor" ref={rootRef}>
-      {editor && <EditToolbar editor={editor} richSupported />}
+      {editor && (
+        <EditToolbar
+          editor={editor}
+          richSupported
+          // Comment-on-selection commits straight away; no focus restore — the
+          // span's comment bubble takes focus once it renders.
+          onCommit={() => commit(editor)}
+        />
+      )}
       {editor && <EditorContent editor={editor} />}
     </div>
   );
