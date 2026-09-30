@@ -98,11 +98,11 @@ Layer 2 (`bugfix/bd-1klbq2zd-path-audit`):
 - [x] Re-run the flip on all six crates (§ Flip re-run): no failure outside the baseline set; flip reverted, `Cargo.lock` == HEAD, `.snap.new` deleted
 
 Layer 3 (`bugfix/bd-1klbq2zd-dunce-seam`):
-- [ ] `gh stack add bugfix/bd-1klbq2zd-dunce-seam`; CLAUDE.local.md block
-- [ ] REDs for `source_file`, status line, `QUARTO_PROJECT_DIR`. The expected side must NOT come from `quarto_system_runtime::canonicalize` (that only proves "same as the helper"): assert no `\\?\` prefix on a temp path made plain with `dunce::simplified`, as `json_errors.rs` does. Each RED fails on unchanged layer-3 base on Windows before the switch
-- [ ] Contract test for the shared fn itself (`canonical.rs`): on Windows, a short existing path comes back plain; an existing path over 260 UTF-16 units (created through `\\?\`) stays verbatim (reserved names can't exist as files, so they can't be canonicalized); on other OSes, identical to `std::fs::canonicalize`
-- [ ] dunce switch → GREEN, including #743's RED
-- [ ] Probe re-run; output inspected and recorded here
+- [x] `gh stack add bugfix/bd-1klbq2zd-dunce-seam`; CLAUDE.local.md block
+- [x] (`76ff76cc`, § Layer 3 results) REDs for `source_file`, status line, `QUARTO_PROJECT_DIR`. The expected side must NOT come from `quarto_system_runtime::canonicalize` (that only proves "same as the helper"): assert no `\\?\` prefix on a temp path made plain with `dunce::simplified`, as `json_errors.rs` does. Each RED fails on unchanged layer-3 base on Windows before the switch
+- [x] (`76ff76cc`) Contract test for the shared fn itself (`canonical.rs`): on Windows, a short existing path comes back plain; an existing path over 260 UTF-16 units (created through `\\?\`) stays verbatim (reserved names can't exist as files, so they can't be canonicalized); on other OSes, identical to `std::fs::canonicalize`
+- [x] dunce switch → GREEN, including #743's RED (`db5f75bd`)
+- [x] Probe re-run; output inspected and recorded here (§ Layer 3 results)
 - [ ] Crate-scoped suites vs baseline; ask about one `cargo build --workspace` before the PR
 
 Ship:
@@ -258,6 +258,23 @@ Routing set: rows 15 (3 calls), 16, 17, 18 (2 calls), 20-25, 36-39, 45. Left as 
 - Coverage audit (codex): 63 production `canonicalize(` sites, 59 matched to the table; the 4 unmatched are this layer's own additions, now rows 50-53. Rows 1-2's definition moved to `canonical.rs`, as noted. 84 test helpers call `canonicalize`; none failed under the flip re-run.
 - Branch review (codex, roborev 2949): no findings.
 - Whole-branch review (Opus): no high/medium. Low: the overwrite guard misses a hardlink alias of the input (pre-existing, outside the spelling contract; bd-vf2eil63). Low: `render_scripts_cli` had dropped its spelling pin; exact check restored, both tests pass.
+
+## Layer 3 results
+
+**REDs (`76ff76cc`, unchanged seam, Windows).** New: `json_errors::source_file_json_is_a_plain_path`, `render_cli_e2e::single_file_status_line_shows_a_plain_path`, `render_scripts_cli::project_dir_env_is_a_plain_path` (all run from a plain cwd with relative args; expected side checked against a `dunce::simplified` temp path) and the `canonical.rs` contract tests. Failing before the switch, each with a `\\?\C:\Users\chris\AppData\Local\Temp\.tmp…` value: the three wire tests, `canonical::tests::short_existing_path_comes_back_plain`, and #743's `json_errors::ipynb_parse_error_json_carries_cell_origin`. `existing_path_over_max_path_stays_verbatim` passes before and after (std is verbatim there too; it pins that dunce keeps it). Off Windows the contract is `matches_std_canonicalize`.
+
+**Switch (`db5f75bd`).** All seven targeted tests pass. `cargo check -p quarto-system-runtime --target wasm32-unknown-unknown` passes (two warnings, neither in `canonical.rs`).
+
+**Acceptance probe** (`db5f75bd`, `target/debug/q2.exe`, cwd a plain scratch dir holding the investigation fixtures, run with Git Bash as `bash probe.sh <q2>`). Output copied from the terminal; inspected: no `\\?\` anywhere. The scratch path is elided as `…`:
+
+```
+ipynb JSON path fields:
+{"notebook_path":"C:\\Users\\chris\\AppData\\Local\\Temp\\claude\\…\\scratchpad\\probe\\broken.ipynb"}
+{"source_file":"C:\\Users\\chris\\AppData\\Local\\Temp\\claude\\…\\scratchpad\\probe\\broken.ipynb"}
+Rendering single file: C:\Users\chris\AppData\Local\Temp\claude\…\scratchpad\probe\ok.qmd
+```
+
+Compare the 2026-09-28 run (`probe-output-2026-09-28.txt`), where all three carried `\\?\`.
 
 ## Verification
 
