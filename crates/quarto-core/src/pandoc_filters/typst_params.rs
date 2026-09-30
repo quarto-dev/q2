@@ -26,6 +26,10 @@ use super::params::FilterParamsContributor;
 /// Carries Typst-specific values to insert into the filter-params blob.
 pub struct TypstFilterParamsContributor {
     pub brand: Option<Value>,
+    /// The page-background logo layout, built by
+    /// [`super::typst_brand::build_logo_param`] — `param('logo')` in
+    /// `typst-brand-yaml.lua`'s `Meta` handler.
+    pub logo: Option<Value>,
     pub available_fonts: Option<Vec<String>>,
     pub citation_location: Option<String>,
     pub reference_location: Option<String>,
@@ -50,6 +54,9 @@ impl FilterParamsContributor for TypstFilterParamsContributor {
     fn contribute(&self, blob: &mut Map<String, Value>) {
         if let Some(brand) = &self.brand {
             blob.insert("brand".to_string(), brand.clone());
+        }
+        if let Some(logo) = &self.logo {
+            blob.insert("logo".to_string(), logo.clone());
         }
         if let Some(fonts) = &self.available_fonts {
             blob.insert(
