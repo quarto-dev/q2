@@ -4418,7 +4418,7 @@ fn test_pipe_table_no_caption_regression() {
     );
 }
 
-/// Test standalone caption without table (edge case - should be removed with warning)
+/// Test standalone caption without table: the text remains literal with a warning.
 #[test]
 fn test_standalone_caption_no_table() {
     let input = "Some paragraph.\n\
@@ -4426,8 +4426,8 @@ fn test_standalone_caption_no_table() {
                  : Standalone caption";
     let result = parse_qmd_to_pandoc_ast(input);
 
-    // Standalone captions are intentionally removed by postprocess.rs with a warning
-    // The output should only contain the paragraph
+    // A caption after a paragraph is kept as literal text and diagnosed as a
+    // likely unsupported definition-list line.
     assert!(
         result.contains("Para"),
         "Should contain paragraph: {}",
@@ -4438,13 +4438,11 @@ fn test_standalone_caption_no_table() {
         "Should contain paragraph text: {}",
         result
     );
-    // Should NOT contain the standalone caption (it's removed)
     assert!(
-        !result.contains("Standalone"),
-        "Should not contain standalone caption text (removed by postprocess): {}",
+        result.contains("Standalone"),
+        "Should retain the standalone caption as literal text: {}",
         result
     );
-    // Note: A warning "Caption found without a preceding table" is emitted (not tested here)
 }
 
 // ============================================================================

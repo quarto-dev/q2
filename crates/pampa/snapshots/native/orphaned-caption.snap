@@ -1,5 +1,6 @@
 ---
-source: crates/quarto-markdown-pandoc/tests/test.rs
+source: crates/pampa/tests/integration/test.rs
+assertion_line: 555
 expression: output
 ---
-[ Para [Str "Some", Space, Str "paragraph", Space, Str "text."], Para [Str "Another", Space, Str "paragraph."] ]
+[ Para [Str "Some", Space, Str "paragraph", Space, Str "text."], Para [Str ": This is an orphaned caption"], Para [Str "Another", Space, Str "paragraph."] ]
