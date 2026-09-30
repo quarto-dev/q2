@@ -93,6 +93,11 @@ pub enum ResolutionContext {
     Block,
     /// Shortcode is inline among other content — must return Inlines
     Inline,
+    /// Shortcode sits in a plain-text field (link/image target, attribute
+    /// value, code text) — Lua handlers see context `"text"` and may
+    /// return a bare string, which is what makes `![]({{< placeholder >}})`
+    /// yield a usable `src`. Built-in handlers treat it like `Inline`.
+    Text,
 }
 
 /// Trait for shortcode handlers.
@@ -805,6 +810,7 @@ async fn dispatch_lua_shortcode(
     let call_ctx = match resolution_ctx {
         ResolutionContext::Block => pampa::lua::ShortcodeCallContext::Block,
         ResolutionContext::Inline => pampa::lua::ShortcodeCallContext::Inline,
+        ResolutionContext::Text => pampa::lua::ShortcodeCallContext::Text,
     };
     match engine.call(&shortcode.name, &args, call_ctx).await {
         Some(result) => lua_result_to_shortcode_result(result, ctx.source_info),
@@ -1512,7 +1518,7 @@ async fn expand_text_segments(
                     .dispatch_shortcode(
                         &shortcode,
                         &ctx,
-                        ResolutionContext::Inline,
+                        ResolutionContext::Text,
                         lua_engine,
                         diagnostics,
                     )
@@ -2882,10 +2888,12 @@ mod tests {
                         source_info: SourceInfo::for_test(),
                     },
                 )]),
-                ResolutionContext::Inline => ShortcodeResult::Inlines(vec![Inline::Str(Str {
-                    text: "inline-fallback".to_string(),
-                    source_info: SourceInfo::for_test(),
-                })]),
+                ResolutionContext::Inline | ResolutionContext::Text => {
+                    ShortcodeResult::Inlines(vec![Inline::Str(Str {
+                        text: "inline-fallback".to_string(),
+                        source_info: SourceInfo::for_test(),
+                    })])
+                }
             }
         }
     }

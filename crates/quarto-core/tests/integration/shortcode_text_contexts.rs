@@ -263,6 +263,19 @@ fn image_src_substitutes() {
     );
 }
 
+/// A Lua shortcode that returns an Image in inline context (the built-in
+/// `placeholder`) must still yield a bare data URI when it sits in an
+/// image src — Lua handlers are called with context `"text"` there.
+#[test]
+fn image_src_accepts_lua_shortcode_returning_a_string() {
+    let html = render_doc("![Placeholder]({{< placeholder 200 >}})\n");
+    assert!(
+        html.contains("src=\"data:image/svg+xml;base64,"),
+        "placeholder in image src must expand to a data URI; got: {}",
+        line_containing(&html, "<img")
+    );
+}
+
 // ── Unresolved policy ───────────────────────────────────────────────
 
 /// An unresolved shortcode in code text leaves a plain `?key` marker
