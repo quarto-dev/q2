@@ -103,7 +103,8 @@ Layer 3 (`bugfix/bd-1klbq2zd-dunce-seam`):
 - [x] (`76ff76cc`) Contract test for the shared fn itself (`canonical.rs`): on Windows, a short existing path comes back plain; an existing path over 260 UTF-16 units (created through `\\?\`) stays verbatim (reserved names can't exist as files, so they can't be canonicalized); on other OSes, identical to `std::fs::canonicalize`
 - [x] dunce switch → GREEN, including #743's RED (`db5f75bd`)
 - [x] Probe re-run; output inspected and recorded here (§ Layer 3 results)
-- [ ] Crate-scoped suites vs baseline; ask about one `cargo build --workspace` before the PR
+- [x] Crate-scoped suites vs baseline (§ Layer 3 results: 42 failed, all baseline)
+- [ ] Ask about one `cargo build --workspace` before the PR
 
 Ship:
 - [ ] Ask before pushing; `gh stack submit --auto` (drafts) after review; PR text via `/open-pr`. Decided 2026-09-30: layer 2 is not pushed alone; layer 3 is built first and the whole stack is submitted together, so the stack top is green on Windows and layer 2 is reviewed next to the switch that motivates it
@@ -275,6 +276,8 @@ Rendering single file: C:\Users\chris\AppData\Local\Temp\claude\…\scratchpad\p
 ```
 
 Compare the 2026-09-28 run (`probe-output-2026-09-28.txt`), where all three carried `\\?\`.
+
+**Six-crate run** (`44795025`, same crates and caps as § Flip re-run): 6681 run (the 6676 before plus this layer's 5 new tests, all passing), **42 failed**, 1 leaky, 430 s test phase. Set built from the log's post-`Summary` `FAIL` lines: identical to the § Flip re-run set, so every failure is in the § Baselines sets. The load-sensitive `ts_process` tests (bd-j5ij00i0) and the `cache_lru` test (bd-cpzr71jr) did not fail. The two known `.snap.new` files were deleted.
 
 ## Verification
 
