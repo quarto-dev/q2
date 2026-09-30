@@ -39,6 +39,11 @@ pub struct TypstFilterParamsContributor {
     /// `'light'` for when unset. `None` when the document doesn't set
     /// one, matching that default (bd-67i2z57f).
     pub brand_mode: Option<String>,
+    /// The document's own `css-property-processing` (`translate` | `none`),
+    /// read by `typst-css-property-processing.lua`'s top-level guard via
+    /// `param('css-property-processing', 'translate')`. `None` when unset,
+    /// which leaves the filter on its own `translate` default.
+    pub css_property_processing: Option<String>,
     pub available_fonts: Option<Vec<String>>,
     pub citation_location: Option<String>,
     pub reference_location: Option<String>,
@@ -69,6 +74,12 @@ impl FilterParamsContributor for TypstFilterParamsContributor {
         }
         if let Some(brand_mode) = &self.brand_mode {
             blob.insert("brand-mode".to_string(), Value::String(brand_mode.clone()));
+        }
+        if let Some(mode) = &self.css_property_processing {
+            blob.insert(
+                "css-property-processing".to_string(),
+                Value::String(mode.clone()),
+            );
         }
         if let Some(fonts) = &self.available_fonts {
             blob.insert(
