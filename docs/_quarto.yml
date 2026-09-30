@@ -389,6 +389,7 @@ website:
             - errors/typst/Q-21-1.qmd
             - errors/typst/Q-21-2.qmd
             - errors/typst/Q-21-3.qmd
+            - errors/typst/Q-21-4.qmd
         - section: "math"
           contents:
             - errors/math/Q-22-1.qmd

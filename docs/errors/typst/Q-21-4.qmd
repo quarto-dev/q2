@@ -1,0 +1,48 @@
+---
+title: "Brand Font Not Available To Typst"
+description: "A brand.typography.fonts entry could not be made available to Typst, so Typst falls back to another font."
+code: Q-21-4
+subsystem: typst
+status: stub
+since: "99.9.9"
+categories:
+  - typst
+---
+
+# `Q-21-4` — Brand Font Not Available To Typst
+
+> A `brand.typography.fonts` entry could not be made available to
+> Typst, so Typst falls back to another font for that family.
+
+## What this means
+
+Typst only uses fonts that exist as files on disk. For a brand font
+with `source: google`, Quarto downloads the font files when it renders
+to Typst and caches them under `.quarto/typst/fonts` in the project
+directory. This warning means that download did not produce a usable
+font. The render still completes, using a fallback font.
+
+## Why this happens
+
+- The machine is offline, or `fonts.googleapis.com` /
+  `fonts.gstatic.com` could not be reached.
+- The family name is misspelled, so Google Fonts returned no font
+  files for it.
+- Google Fonts offered the family only as `woff`/`woff2`, which Typst
+  cannot load. Typst needs TrueType or OpenType files.
+- The font uses `source: bunny`, which Typst output does not support.
+
+## How to fix
+
+Check the network connection and the spelling of the family. Fonts
+that downloaded once are cached and are not fetched again, so a later
+offline render can still use them.
+
+To avoid depending on the network, or to use a font Google does not
+serve as TrueType/OpenType, supply the files yourself with
+`source: file` in `typography.fonts`, or list their directory under
+`font-paths`.
+
+## Related errors
+
+- [`Q-21-3`](Q-21-3.qmd) — the `typst compile` step itself failed.

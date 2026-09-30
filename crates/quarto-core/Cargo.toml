@@ -102,6 +102,10 @@ clap = { workspace = true, optional = true, features = ["derive"] }
 # flate2 (miniz_oxide backend) builds cleanly for wasm.
 flate2.workspace = true
 
+# CSS tokenizer for reading Google Fonts `@font-face` rules
+# (`typst_google_fonts`). Already in the lockfile via scraper/selectors.
+cssparser = "0.36"
+
 [features]
 clap = ["dep:clap"]
 

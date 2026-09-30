@@ -511,6 +511,16 @@ fn variable_translations_for_kind(kind: &str) -> &'static [(&'static str, &'stat
 /// `wght` axis span (`wght@400..700`, or `ital,wght@0,400..700;1,400..700`
 /// with italics), which is how the API serves one variable font file.
 fn google_font_import_string(font: &BrandFontGoogle, font_path: &str) -> Result<String, SassError> {
+    Ok(format!(
+        "@import url('{}');",
+        google_font_css_url(font, font_path)?
+    ))
+}
+
+/// The Google Fonts CSS2 URL for a brand font. The HTML pipeline wraps
+/// it in an `@import`; the Typst pipeline fetches it and downloads the
+/// font files it lists.
+pub fn google_font_css_url(font: &BrandFontGoogle, font_path: &str) -> Result<String, SassError> {
     let family_url = font.family.replace(' ', "+");
     let styles = enumerate_styles(font.style.as_ref());
     let weights = weight_spec(
@@ -540,7 +550,7 @@ fn google_font_import_string(font: &BrandFontGoogle, font_path: &str) -> Result<
     };
 
     Ok(format!(
-        "@import url('https://fonts.googleapis.com/css2?family={family_url}:{style_string}wght@{weights_string}&display={display}');"
+        "https://fonts.googleapis.com/css2?family={family_url}:{style_string}wght@{weights_string}&display={display}"
     ))
 }
 

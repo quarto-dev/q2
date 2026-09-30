@@ -1819,6 +1819,13 @@
     "docs_url": "https://quarto.org/docs/errors/typst/Q-21-3",
     "since_version": "99.9.9"
   },
+  "Q-21-4": {
+    "subsystem": "typst",
+    "title": "Brand Font Not Available To Typst",
+    "message_template": "A `brand.typography.fonts` entry could not be made available to Typst, so Typst falls back to another font for that family. Google Fonts entries are downloaded at render time and cached under `.quarto/typst/fonts`; the download can fail when offline, or the family may not be offered as a TrueType/OpenType file. Bunny Fonts entries are not supported for Typst. Use `source: file` to supply the font files yourself.",
+    "docs_url": "https://quarto.org/docs/errors/typst/Q-21-4",
+    "since_version": "99.9.9"
+  },
   "Q-22-1": {
     "subsystem": "math",
     "title": "Unknown Math Command",
