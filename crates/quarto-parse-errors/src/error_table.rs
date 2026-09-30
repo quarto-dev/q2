@@ -55,6 +55,10 @@ pub struct ErrorInfo {
     /// rather than an independent mistake. See
     /// `error_generation::produce_diagnostic_messages`.
     pub desynchronizes: bool,
+    /// Name of a built-in suggester that builds a hint from the author's
+    /// own source text (e.g. `"attribute-order"`), or `None` for entries
+    /// whose hints are all fixed text. See `error_generation`.
+    pub suggestion: Option<&'static str>,
 }
 
 /// Entry in the error table mapping a parser state to diagnostic information.
@@ -179,6 +183,7 @@ mod tests {
                 hints: &[],
                 guard: None,
                 desynchronizes: false,
+                suggestion: None,
             },
             name: "test_case",
         }
@@ -260,6 +265,7 @@ mod tests {
             hints: &["Try removing the extra character"],
             guard: None,
             desynchronizes: false,
+            suggestion: None,
         };
         let debug = format!("{:?}", info);
         assert!(debug.contains("ErrorInfo"));
@@ -287,6 +293,7 @@ mod tests {
             hints: &[],
             guard: None,
             desynchronizes: false,
+            suggestion: None,
         };
         assert_eq!(info.captures.len(), 1);
         assert_eq!(info.captures[0].label, "tok");

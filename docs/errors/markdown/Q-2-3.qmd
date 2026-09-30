@@ -52,5 +52,8 @@ The parser flags this input:
 
 ## Related
 
+- [`Q-2-55`](Q-2-55.qmd) and [`Q-2-56`](Q-2-56.qmd) — the other two
+  inversions of the attribute order (identifier after a class or after a
+  key-value pair).
 - [`Q-2-2`](Q-2-2.qmd) — mismatched delimiter: a broader
   shape error inside the same `{...}` construct.

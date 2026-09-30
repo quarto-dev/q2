@@ -114,6 +114,7 @@
 
 pub mod error_generation;
 pub mod error_table;
+mod suggestion;
 pub mod tree_sitter_log;
 
 // Re-export commonly used types

@@ -49,6 +49,8 @@ struct ErrorInfo {
     guard: Option<String>,
     #[serde(default)]
     desynchronizes: bool,
+    #[serde(default)]
+    suggestion: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -177,6 +179,10 @@ pub fn include_error_table(input: TokenStream) -> TokenStream {
             None => quote! { None },
         };
         let desynchronizes = entry.error_info.desynchronizes;
+        let suggestion = match &entry.error_info.suggestion {
+            Some(s) => quote! { Some(#s) },
+            None => quote! { None },
+        };
 
         quote! {
             #module_tokens::ErrorTableEntry {
@@ -193,6 +199,7 @@ pub fn include_error_table(input: TokenStream) -> TokenStream {
                     hints: &[#(#hints),*],
                     guard: #guard,
                     desynchronizes: #desynchronizes,
+                    suggestion: #suggestion,
                 },
                 name: #name,
             }

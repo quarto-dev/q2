@@ -1616,6 +1616,20 @@
     "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-54",
     "since_version": "99.9.9"
   },
+  "Q-2-55": {
+    "subsystem": "markdown",
+    "title": "Class Specifier Before Identifier in Attribute",
+    "message_template": "This identifier appears after a class specifier.",
+    "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-55",
+    "since_version": "99.9.9"
+  },
+  "Q-2-56": {
+    "subsystem": "markdown",
+    "title": "Key-value Pair Before Identifier in Attribute",
+    "message_template": "This identifier appears after a key-value pair.",
+    "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-56",
+    "since_version": "99.9.9"
+  },
   "Q-5-27": {
     "subsystem": "project",
     "title": "Invalid `diagnostics:` Entry",

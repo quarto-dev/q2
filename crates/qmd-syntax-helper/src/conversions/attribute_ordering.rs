@@ -8,6 +8,14 @@ use std::process::{Command, Stdio};
 use crate::rule::{CheckResult, ConvertResult, Rule, SourceLocation};
 use crate::utils::file_io::read_file;
 
+/// Parse-error codes that say an attribute list is in the wrong order. Matched
+/// by code rather than title: titles are prose and get reworded.
+///
+/// - `Q-2-3`: key-value pair before a class specifier
+/// - `Q-2-55`: class specifier before the identifier
+/// - `Q-2-56`: key-value pair before the identifier
+const ATTRIBUTE_ORDERING_CODES: &[&str] = &["Q-2-3", "Q-2-55", "Q-2-56"];
+
 pub struct AttributeOrderingConverter {
     // Regex for extracting normalized attributes from Pandoc output
     pandoc_output_regex: Regex,
@@ -61,7 +69,11 @@ impl AttributeOrderingConverter {
 
         for diagnostic in diagnostics {
             // Check if this is an attribute ordering error
-            if diagnostic.title != "Key-value Pair Before Class Specifier in Attribute" {
+            if !diagnostic
+                .code
+                .as_deref()
+                .is_some_and(|code| ATTRIBUTE_ORDERING_CODES.contains(&code))
+            {
                 continue;
             }
 
@@ -76,6 +88,15 @@ impl AttributeOrderingConverter {
             // Find the full attribute block
             match self.find_attribute_block(&content, start_offset) {
                 Ok((block_start, block_end)) => {
+                    // One list can be misordered in several ways at once
+                    // (`{k=v .c #i}`) and draw a diagnostic for each; it is
+                    // still one replacement.
+                    if violations
+                        .iter()
+                        .any(|v: &AttributeOrderingViolation| v.start_offset == block_start)
+                    {
+                        continue;
+                    }
                     let original = content[block_start..block_end].to_string();
 
                     violations.push(AttributeOrderingViolation {
