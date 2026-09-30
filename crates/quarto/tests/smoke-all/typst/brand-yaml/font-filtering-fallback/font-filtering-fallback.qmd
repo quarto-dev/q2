@@ -1,0 +1,23 @@
+---
+title: "Font Filtering Fallback Test"
+brand: _brand.yml
+format:
+  typst:
+    keep-typ: true
+_quarto:
+  tests:
+    typst:
+      # The fake font names are deliberately preserved into the compiled
+      # .typ (that's the behavior under test), so typst legitimately warns
+      # "unknown font family" for each at compile time.
+      noErrors: true
+      ensureTypstFileRegexMatches:
+        -
+          # When ALL fonts are unavailable, fallback preserves the original list
+          - 'font: \("FakeFont Alpha", "FakeFont Beta"\),'
+          - 'codefont: \("FakeMonoFont One", "FakeMonoFont Two"\),'
+        - []
+---
+
+Verifies that when every font in a comma list is unavailable, the original
+unfiltered list is preserved as fallback rather than producing an empty tuple.
