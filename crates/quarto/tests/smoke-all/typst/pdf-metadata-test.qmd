@@ -1,0 +1,19 @@
+---
+title: "Test Document"
+author: "Alice Smith"
+keywords: [quarto, typst, testing]
+format: typst
+_quarto:
+  tests:
+    typst:
+      ensurePdfMetadata:
+        title: "Test Document"
+        author: "Alice Smith"
+        keywords:
+          - quarto
+          - typst
+          - testing
+        creator: "Typst"
+---
+
+Body text for the PDF metadata smoke-all fixture.
