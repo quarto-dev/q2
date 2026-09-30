@@ -754,16 +754,30 @@ fn output_via_dotdot_spelling_of_input_refuses_and_preserves_source() {
     assert_output_spelling_refused(&dir, &detour);
 }
 
-/// bd-1klbq2zd: on Windows the input is canonicalized (`\\?\C:\…`), so a
-/// plain `C:\…` spelling of the same file differs lexically. Elsewhere
-/// `dunce::simplified` is the identity and this matches the test above
+/// bd-1klbq2zd: on Windows the same file has a plain `C:\…` and a
+/// verbatim `\\?\C:\…` spelling. The output uses whichever one q2 does
+/// not give its canonicalized input (the shared canonicalize, not this
+/// file's std `canonical`), so it differs lexically from the input.
+/// Elsewhere there is one spelling and this matches the test above
 /// without the detour.
 #[test]
-fn output_via_plain_spelling_of_input_refuses_and_preserves_source() {
+fn output_via_other_windows_spelling_of_input_refuses_and_preserves_source() {
     let temp = TempDir::new().unwrap();
     let dir = canonical(temp.path());
-    let plain = dunce::simplified(&dir).to_path_buf();
-    assert_output_spelling_refused(&dir, &plain.join("doc.qmd"));
+    let q2_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
+    let other = if cfg!(windows) {
+        let plain = dunce::simplified(&q2_dir);
+        let other = if plain == q2_dir.as_path() {
+            PathBuf::from(format!(r"\\?\{}", q2_dir.display()))
+        } else {
+            plain.to_path_buf()
+        };
+        assert_ne!(other, q2_dir, "test setup: the spellings must differ");
+        other
+    } else {
+        dir.clone()
+    };
+    assert_output_spelling_refused(&dir, &other.join("doc.qmd"));
 }
 
 /// bd-6d2wj4zp S3: single-file format detection reads `.md` front

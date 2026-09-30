@@ -79,10 +79,15 @@ mod tests {
         let temp = tempfile::TempDir::new().unwrap();
         let file = temp.path().join("doc.qmd");
         std::fs::write(&file, "x").unwrap();
-        let spelled = file.to_string_lossy().into_owned();
+        // TEMP on a network share or behind a junction to one can resolve
+        // to a path that must stay verbatim; require a plain form first.
+        let std_canonical = std::fs::canonicalize(&file).unwrap();
+        let plain_form = dunce::simplified(&std_canonical)
+            .to_string_lossy()
+            .into_owned();
         assert!(
-            !spelled.starts_with(r"\\?\") && spelled.encode_utf16().count() < 200,
-            "test setup: TEMP must give a short plain path: {spelled}"
+            !plain_form.starts_with(r"\\?\") && plain_form.encode_utf16().count() < 200,
+            "test setup: TEMP must resolve to a short path with a plain form: {plain_form}"
         );
 
         let result = canonicalize(&file).unwrap();
