@@ -99,13 +99,14 @@ Layer 2 (`bugfix/bd-1klbq2zd-path-audit`):
 
 Layer 3 (`bugfix/bd-1klbq2zd-dunce-seam`):
 - [ ] `gh stack add bugfix/bd-1klbq2zd-dunce-seam`; CLAUDE.local.md block
-- [ ] REDs for `source_file`, status line, `QUARTO_PROJECT_DIR`
+- [ ] REDs for `source_file`, status line, `QUARTO_PROJECT_DIR`. The expected side must NOT come from `quarto_system_runtime::canonicalize` (that only proves "same as the helper"): assert no `\\?\` prefix on a temp path made plain with `dunce::simplified`, as `json_errors.rs` does. Each RED fails on unchanged layer-3 base on Windows before the switch
+- [ ] Contract test for the shared fn itself (`canonical.rs`): on Windows, a short existing path comes back plain; an existing path over 260 UTF-16 units (created through `\\?\`) stays verbatim (reserved names can't exist as files, so they can't be canonicalized); on other OSes, identical to `std::fs::canonicalize`
 - [ ] dunce switch → GREEN, including #743's RED
 - [ ] Probe re-run; output inspected and recorded here
 - [ ] Crate-scoped suites vs baseline; ask about one `cargo build --workspace` before the PR
 
 Ship:
-- [ ] Ask before pushing; `gh stack submit --auto` (drafts) after review; PR text via `/open-pr`
+- [ ] Ask before pushing; `gh stack submit --auto` (drafts) after review; PR text via `/open-pr`. Decided 2026-09-30: layer 2 is not pushed alone; layer 3 is built first and the whole stack is submitted together, so the stack top is green on Windows and layer 2 is reviewed next to the switch that motivates it
 - [ ] Mark #743 ready; merge bottom-up with merge commits on go-ahead; close bd-clq56rem, then bd-1klbq2zd
 - [x] File a strand for the relative `--output` failure (bd-xdlbrc7m)
 
