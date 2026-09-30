@@ -199,10 +199,20 @@ impl PipelineStage for TypstCompileStage {
             ]);
         }
 
+        let input_dir = rendered
+            .input_path
+            .parent()
+            .map_or_else(|| ctx.project.dir.clone(), std::path::Path::to_path_buf);
+        let extra_font_paths = resolve_font_paths(
+            &string_array(rendered.metadata.get("font-paths")),
+            &ctx.project.dir,
+            &input_dir,
+        );
+
         let mut cmd = Command::new(&typst_bin);
         cmd.arg("compile");
         cmd.arg("--root").arg(&ctx.project.dir);
-        cmd.args(font_path_args(&packages_dir));
+        cmd.args(font_path_args(&packages_dir, &extra_font_paths));
         if package_cache_dir.join("preview").is_dir() {
             cmd.arg("--package-cache-path").arg(&package_cache_dir);
         }
@@ -334,12 +344,49 @@ fn at_least(version_str: &str, floor: (u32, u32)) -> bool {
 /// (staged at `packages_dir/fonts`) must come first — Typst's font
 /// resolution takes the first path that provides a given font family, so
 /// ordering is load-bearing for the vendored template's own font
-/// references, not cosmetic.
-pub(crate) fn font_path_args(packages_dir: &Path) -> Vec<String> {
-    vec![
+/// references, not cosmetic. `extra_font_paths` are the document's
+/// `font-paths` metadata entries (see [`resolve_font_paths`]), already
+/// resolved to absolute paths, appended in the order given.
+pub(crate) fn font_path_args(
+    packages_dir: &Path,
+    extra_font_paths: &[std::path::PathBuf],
+) -> Vec<String> {
+    let mut args = vec![
         "--font-path".to_string(),
         packages_dir.join("fonts").to_string_lossy().into_owned(),
-    ]
+    ];
+    for path in extra_font_paths {
+        args.push("--font-path".to_string());
+        args.push(path.to_string_lossy().into_owned());
+    }
+    args
+}
+
+/// `command/render/pandoc.ts:1672-1678` + `output-typst.ts:247-249`'s
+/// `font-paths` resolution, collapsed into one step (Q2 has no separate
+/// "stash back into metadata" pass, so there's no need to split the
+/// project-relative rewrite from the final absolute-path resolution the
+/// way Q1 does across two files). A path beginning with `/` is
+/// project-root-relative — a Quarto-wide convention, unrelated to
+/// filesystem-absolute paths — and resolves against `project_dir`;
+/// anything else resolves against `input_dir` (the document's own
+/// directory), matching Q1's `resolve(inputDir, p)` fallback. This is
+/// checked as a string prefix *before* falling through to `PathBuf::join`,
+/// because on Unix `input_dir.join("/foo")` would otherwise discard
+/// `input_dir` entirely (Rust's `Path::join` replaces the base when the
+/// joined component is itself absolute) — exactly the filesystem-absolute
+/// reading this convention exists to avoid.
+pub(crate) fn resolve_font_paths(
+    raw: &[String],
+    project_dir: &Path,
+    input_dir: &Path,
+) -> Vec<std::path::PathBuf> {
+    raw.iter()
+        .map(|p| match p.strip_prefix('/') {
+            Some(rest) => project_dir.join(rest),
+            None => input_dir.join(p),
+        })
+        .collect()
 }
 
 /// `core/typst.ts:49-119`'s `getAvailableTypstFonts`, minus its cross-render
@@ -395,7 +442,7 @@ fn parse_typst_fonts_output(output: &str) -> Vec<String> {
 /// scalars into owned strings (`pdf-standard`/`font-paths`-shaped keys).
 /// Non-string entries are skipped rather than erroring — this is
 /// best-effort metadata reading, not schema validation.
-fn string_array(value: Option<&ConfigValue>) -> Vec<String> {
+pub(crate) fn string_array(value: Option<&ConfigValue>) -> Vec<String> {
     let Some(value) = value else {
         return Vec::new();
     };
@@ -490,6 +537,40 @@ mod tests {
         assert_eq!(string_array(Some(&array)), vec!["a-2b", "a-3u"]);
 
         assert_eq!(string_array(None), Vec::<String>::new());
+    }
+
+    /// bd-3ij4nokp: a leading `/` is project-root-relative (Quarto's
+    /// resource-path convention), not filesystem-absolute — verified
+    /// against Q1's own `relative-font-path` smoke-all fixture, where
+    /// `font-paths: /artifacts/fonts` declared in the project's
+    /// `_quarto.yml` must resolve to `<project-dir>/artifacts/fonts`
+    /// regardless of which document (possibly nested) is rendering.
+    #[test]
+    fn test_resolve_font_paths_leading_slash_is_project_relative() {
+        let project_dir = Path::new("/project");
+        let input_dir = Path::new("/project/report1");
+        let resolved =
+            resolve_font_paths(&["/artifacts/fonts".to_string()], project_dir, input_dir);
+        assert_eq!(
+            resolved,
+            vec![std::path::PathBuf::from("/project/artifacts/fonts")]
+        );
+    }
+
+    /// bd-3ij4nokp: a path without a leading `/` resolves against the
+    /// document's own directory, not the project root or cwd — verified
+    /// against Q1's `subdir-font-paths` fixture, where a document at
+    /// `subdir/test.qmd` declares `font-paths: [../fonts]` meaning
+    /// `<project-dir>/fonts` (one level up from `subdir/`).
+    #[test]
+    fn test_resolve_font_paths_relative_resolves_against_input_dir() {
+        let project_dir = Path::new("/project");
+        let input_dir = Path::new("/project/subdir");
+        let resolved = resolve_font_paths(&["../fonts".to_string()], project_dir, input_dir);
+        assert_eq!(
+            resolved,
+            vec![std::path::PathBuf::from("/project/subdir/../fonts")]
+        );
     }
 
     /// Regression test for the `--package-cache-path` bug this session
@@ -587,7 +668,7 @@ mod tests {
         let typst_path = quarto_system_runtime::NativeRuntime::new()
             .find_binary("typst", "QUARTO_TYPST")
             .expect("typst must be on PATH to run this test suite");
-        let args = font_path_args(&packages_dir);
+        let args = font_path_args(&packages_dir, &[]);
 
         let fonts = discover_available_typst_fonts(Some(&typst_path), &args)
             .expect("a real typst binary + real font-path should report fonts");
