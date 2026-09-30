@@ -635,6 +635,51 @@ pub fn resolve_brand(
     Ok(Some(resolved_brand(split.light, file)))
 }
 
+/// Resolve the `brand:` key of a config into **both** halves of a
+/// split brand — light and dark.
+///
+/// Unlike [`resolve_brand`] (single-variant consumers that render one
+/// static mode and have no per-document way to pick a different one),
+/// this is for consumers where the document itself selects a mode at
+/// render time (Typst's `brand-mode` filter param, bd-67i2z57f) rather
+/// than compiling a light/dark CSS pair the browser can toggle between.
+///
+/// Shares [`extract_brand_refs`] and [`load_split_brand`] with
+/// [`ThemeConfig::resolve_variants`] but skips that function's
+/// theme/highlight-style machinery entirely — there is no SCSS
+/// dual-compile or Bootstrap-suppression question here, just "what is
+/// the dark half of this brand". Per [`quarto_brand::SplitBrand`]'s
+/// own contract, both halves always exist once a brand is configured
+/// (an all-plain brand's halves are simply equal), so the dark half is
+/// returned whenever the light half is.
+///
+/// `base_dir` resolves a relative `brand:` path, as in [`resolve_brand`].
+pub fn resolve_brand_variants(
+    config: &ConfigValue,
+    runtime: &dyn SystemRuntime,
+    base_dir: &Path,
+) -> Result<(Option<ResolvedBrand>, Option<ResolvedBrand>), SassError> {
+    let brand_refs = extract_brand_refs(config.get("brand"))?;
+    let Some(light_ref) = brand_refs.light else {
+        return Ok((None, None));
+    };
+    let (light_split, light_file) = load_split_brand(&light_ref, runtime, base_dir)?;
+    let light = resolved_brand(light_split.light.clone(), light_file.clone());
+
+    // Two-file form (`brand: {light:, dark:}`) names its own dark
+    // file; the single-file form (or a `dark:`-less two-file form)
+    // falls back to the light file's own dark half.
+    let dark_ref = brand_refs.dark.unwrap_or_else(|| light_ref.clone());
+    let dark = if dark_ref == light_ref {
+        resolved_brand(light_split.dark, light_file)
+    } else {
+        let (dark_split, dark_file) = load_split_brand(&dark_ref, runtime, base_dir)?;
+        resolved_brand(dark_split.dark, dark_file)
+    };
+
+    Ok((Some(light), Some(dark)))
+}
+
 /// A [`ResolvedBrand`] for a half of a split brand: anchored at its
 /// file when it came from one, directory-less for an inline block.
 fn resolved_brand(brand: quarto_brand::Brand, file: Option<PathBuf>) -> ResolvedBrand {

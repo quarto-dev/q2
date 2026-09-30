@@ -229,17 +229,24 @@ fn epub_extra_args(
     Ok(args)
 }
 
-/// Resolves the `brand` and `logo` filter params for a typst render
-/// (Phase 1's `extractTypstFilterParams` bullet). `meta` is the
-/// document's already-merged metadata (`doc.ast.meta`, a `ConfigValue`)
-/// — the same config shape every other single-variant brand consumer
-/// (`quarto_sass::resolve_brand`'s doc comment: favicon fallback, reveal)
-/// reads a brand out of. Returns `Ok((None, None))` for a brand-less,
+/// Resolves the `brand`, `logo`, and `brand-mode` filter params for a
+/// typst render (Phase 1's `extractTypstFilterParams` bullet, extended
+/// by bd-67i2z57f to resolve both halves of the brand and wire the
+/// document's own `brand-mode`). `meta` is the document's
+/// already-merged metadata (`doc.ast.meta`, a `ConfigValue`) — the same
+/// config shape every other brand consumer reads a brand out of, but
+/// unlike the single-variant consumers (`quarto_sass::resolve_brand`'s
+/// doc comment: favicon fallback, reveal) this uses
+/// [`quarto_sass::resolve_brand_variants`] because Typst picks its
+/// brand mode per document (`brand-mode:` / `format.typst.brand-mode:`)
+/// rather than compiling a light/dark CSS pair the browser toggles
+/// between. Returns `Ok((None, None, None))` for a brand-less,
 /// logo-less document, which is the common case and not an error.
 ///
-/// The two params are resolved together because [`typst_brand::build_logo_param`]
-/// reads the brand image path back out of the already-built `brand`
-/// JSON rather than re-resolving the brand a second time.
+/// The `brand`/`logo` params are resolved together because
+/// [`typst_brand::build_logo_param`] reads the brand image path back
+/// out of the already-built `brand` JSON rather than re-resolving the
+/// brand a second time.
 ///
 /// Errors ([`quarto_sass::SassError`] — invalid `_brand.yml` shape, a bad
 /// font weight, a missing brand file) are real user-facing configuration
@@ -253,22 +260,32 @@ fn resolve_typst_brand_param(
     _stage_name: &str,
     meta: &quarto_pandoc_types::ConfigValue,
     ctx: &StageContext,
-) -> Result<(Option<serde_json::Value>, Option<serde_json::Value>), PipelineError> {
-    let light =
-        quarto_sass::resolve_brand(meta, ctx.runtime.as_ref(), &ctx.project.dir).map_err(|e| {
-            let mut candidates: Vec<(quarto_source_map::FileId, std::path::PathBuf)> = Vec::new();
-            if let Some(p) = ctx.project.config.config_path.as_deref() {
-                candidates.push((
-                    quarto_yaml::file_id_for_filename(&p.to_string_lossy()),
-                    p.to_path_buf(),
-                ));
-            }
-            candidates.push((quarto_source_map::FileId(0), ctx.document.input.clone()));
-            PipelineError::Structured(crate::theme_diagnostic::sass_error_to_parse_error(
-                &e,
-                &candidates,
-            ))
-        })?;
+) -> Result<
+    (
+        Option<serde_json::Value>,
+        Option<serde_json::Value>,
+        Option<String>,
+    ),
+    PipelineError,
+> {
+    let (light, dark) =
+        quarto_sass::resolve_brand_variants(meta, ctx.runtime.as_ref(), &ctx.project.dir).map_err(
+            |e| {
+                let mut candidates: Vec<(quarto_source_map::FileId, std::path::PathBuf)> =
+                    Vec::new();
+                if let Some(p) = ctx.project.config.config_path.as_deref() {
+                    candidates.push((
+                        quarto_yaml::file_id_for_filename(&p.to_string_lossy()),
+                        p.to_path_buf(),
+                    ));
+                }
+                candidates.push((quarto_source_map::FileId(0), ctx.document.input.clone()));
+                PipelineError::Structured(crate::theme_diagnostic::sass_error_to_parse_error(
+                    &e,
+                    &candidates,
+                ))
+            },
+        )?;
     // The compiled `.typ` file (and, from it, the final PDF) is written
     // at `ctx.output_path()`'s directory — for a single document that's
     // ordinarily the project root, but for a book render it's the
@@ -284,11 +301,19 @@ fn resolve_typst_brand_param(
         .output_path()
         .parent()
         .map_or_else(|| ctx.project.dir.clone(), std::path::Path::to_path_buf);
-    let brand_param =
-        crate::pandoc_filters::typst_brand::build_brand_param(light.as_ref(), None, &output_dir);
+    let brand_param = crate::pandoc_filters::typst_brand::build_brand_param(
+        light.as_ref(),
+        dark.as_ref(),
+        &output_dir,
+    );
     let logo_param =
         crate::pandoc_filters::typst_brand::build_logo_param(meta, brand_param.as_ref());
-    Ok((brand_param, logo_param))
+    // `typst-brand-yaml.lua`'s `param('brand-mode') or 'light'` already
+    // supplies the default, so the key is only emitted when the
+    // document (or its `format.typst.brand-mode`, flattened into `meta`
+    // by `MetadataMergeStage`) sets one explicitly.
+    let brand_mode = meta.get("brand-mode").and_then(|v| v.as_plain_text());
+    Ok((brand_param, logo_param, brand_mode))
 }
 
 /// Resolves the `typst-available-fonts` filter param (pandoc-hybrid-typst
@@ -432,17 +457,17 @@ impl PipelineStage for PandocWriteStage {
         let share = temp_dir.join("pandoc-share");
 
         // pandoc-hybrid-typst Phase 1: `extractTypstFilterParams` — the
-        // `brand` key, typst-only (see `typst_params`'s module docs for why
-        // this isn't a core, format-independent key yet). Resolved from the
-        // document's own merged metadata, matching every other single-
-        // variant brand consumer (favicon fallback, reveal); the **dark**
-        // half is deliberately not resolved here — it needs the full
-        // `ThemeConfig::resolve_variants` machinery `compile_theme_css`
-        // uses, out of scope for this wiring (typst renders one PDF per
-        // invocation, so only the active `brand-mode` — "light" unless a
-        // future doc sets it otherwise — is actually reachable today).
+        // `brand`/`logo`/`brand-mode` keys, typst-only (see `typst_params`'s
+        // module docs for why `brand` isn't a core, format-independent key
+        // yet). Resolved from the document's own merged metadata via
+        // `quarto_sass::resolve_brand_variants` (bd-67i2z57f): both halves
+        // of the brand are resolved (unlike the single-variant consumers —
+        // favicon fallback, reveal — which only ever need `light`), and
+        // `brand-mode` is read straight off `meta` so the vendored Lua
+        // filter's `param('brand-mode') or 'light'` picks the document's
+        // own mode instead of always falling back to light.
         let (
-            (typst_brand_param, typst_logo_param),
+            (typst_brand_param, typst_logo_param, typst_brand_mode),
             typst_available_fonts,
             typst_citation_location,
             typst_reference_location,
@@ -481,7 +506,7 @@ impl PipelineStage for PandocWriteStage {
                     .and_then(|is_citeproc| is_citeproc.then(|| "citeproc".to_string())),
             )
         } else {
-            ((None, None), None, None, None, None)
+            ((None, None, None), None, None, None, None)
         };
 
         // `mediabag-dir`: `<output-dir>/<stem>_files/mediabag`, mirroring
@@ -527,6 +552,7 @@ impl PipelineStage for PandocWriteStage {
         };
         if typst_brand_param.is_some()
             || typst_logo_param.is_some()
+            || typst_brand_mode.is_some()
             || typst_available_fonts.is_some()
             || typst_citation_location.is_some()
             || typst_reference_location.is_some()
@@ -537,6 +563,7 @@ impl PipelineStage for PandocWriteStage {
                 crate::pandoc_filters::typst_params::TypstFilterParamsContributor {
                     brand: typst_brand_param,
                     logo: typst_logo_param,
+                    brand_mode: typst_brand_mode,
                     available_fonts: typst_available_fonts,
                     citation_location: typst_citation_location,
                     reference_location: typst_reference_location,

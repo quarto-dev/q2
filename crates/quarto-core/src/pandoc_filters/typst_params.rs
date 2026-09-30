@@ -1,18 +1,21 @@
 //! `extractTypstFilterParams` (Q1's own name for the family,
 //! `format-typst.ts`) — the typst-only [`FilterParamsContributor`] that
-//! adds the `brand` key built by [`super::typst_brand::build_brand_param`]
+//! adds the `brand` key built by [`super::typst_brand::build_brand_param`],
+//! the `brand-mode` key read straight off the document's merged metadata,
 //! and the `typst-available-fonts` key built by
 //! `super::super::stage::stages::typst_compile::discover_available_typst_fonts`.
 //!
-//! Q1 sets `brand` **generically for every Pandoc format**
-//! (`command/render/filters.ts:197`'s `[kBrand]: options.format.render[kBrand]`,
-//! part of `quartoFilterParams`, not a per-format extra) from an
-//! already-resolved `LightDarkBrand`. Q2 has not extended that generic path
-//! to any Pandoc-hybrid format yet — docx/pptx get no `brand` key today.
-//! This contributor supplies it for typst only, through the extension point
+//! Q1 sets both `brand` and `brand-mode` **generically for every Pandoc
+//! format** (`command/render/filters.ts:197,952`'s `[kBrand]:
+//! options.format.render[kBrand]` and `[kBrandMode]:
+//! format.metadata[kBrandMode]`, both part of `quartoFilterParams`, not a
+//! per-format extra) from an already-resolved `LightDarkBrand`. Q2 has not
+//! extended that generic path to any Pandoc-hybrid format yet — docx/pptx
+//! get neither key today. This contributor supplies them for typst only,
+//! through the extension point
 //! [`super::params::FilterParamsBuilder::with_contributor`] P7 already
-//! designed for per-format extras. Widening `brand` into a core,
-//! format-independent key (matching Q1's shape) is out of this plan's
+//! designed for per-format extras. Widening `brand`/`brand-mode` into core,
+//! format-independent keys (matching Q1's shape) is out of this plan's
 //! scope — file it separately if docx/pptx brand support is ever wanted.
 //!
 //! `typst-available-fonts` is genuinely typst-specific (no other
@@ -30,6 +33,12 @@ pub struct TypstFilterParamsContributor {
     /// [`super::typst_brand::build_logo_param`] — `param('logo')` in
     /// `typst-brand-yaml.lua`'s `Meta` handler.
     pub logo: Option<Value>,
+    /// The document's own `brand-mode` (or `format.typst.brand-mode`,
+    /// flattened by `MetadataMergeStage`) — `param('brand-mode')`,
+    /// which every vendored brand-consuming Lua module falls back to
+    /// `'light'` for when unset. `None` when the document doesn't set
+    /// one, matching that default (bd-67i2z57f).
+    pub brand_mode: Option<String>,
     pub available_fonts: Option<Vec<String>>,
     pub citation_location: Option<String>,
     pub reference_location: Option<String>,
@@ -57,6 +66,9 @@ impl FilterParamsContributor for TypstFilterParamsContributor {
         }
         if let Some(logo) = &self.logo {
             blob.insert("logo".to_string(), logo.clone());
+        }
+        if let Some(brand_mode) = &self.brand_mode {
+            blob.insert("brand-mode".to_string(), Value::String(brand_mode.clone()));
         }
         if let Some(fonts) = &self.available_fonts {
             blob.insert(
