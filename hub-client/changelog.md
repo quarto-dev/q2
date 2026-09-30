@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-09-30
+
+- [`9da27a917`](https://github.com/quarto-dev/q2/commits/9da27a917): Your edits now carry a stable per-project author identity that stays credited to you across tabs and devices, and two tabs of the same account editing at once can no longer wedge a document with a duplicate-sequence conflict.
+
 ### 2026-09-28
 
 - [`e474421`](https://github.com/quarto-dev/q2/commits/e474421): The browser tab title now returns to "Quarto Hub" after leaving a project, instead of keeping the last-opened file and project name on the project selector.
