@@ -11,7 +11,7 @@ import {
   incrementalWriteQmd,
   applyNodeEdit,
   parseQmdContentSync,
-  getActorId,
+  getAuthorId,
   regenerateNestedBuffers,
 } from '@quarto/preview-runtime';
 import { pipelineKindForFormat } from '@quarto/preview-runtime';
@@ -903,7 +903,7 @@ export default function ReactPreview({
             themeFingerprint={themeFingerprint}
             renderedContent={rendered.renderedContent}
             untransformedAstJson={rendered.untransformedAstJson}
-            currentActor={getActorId()}
+            currentActor={getAuthorId()}
             commentsMode={commentsMode}
             unlockNestingCursor={unlockNestingCursor}
             richText={richText}

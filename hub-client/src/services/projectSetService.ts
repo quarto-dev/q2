@@ -592,6 +592,9 @@ export async function createCollection(
     version: CURRENT_PROJECT_SET_SCHEMA_VERSION,
     ...(name !== undefined ? { name } : {}),
   } as Record<string, unknown>;
+  // Authorless by design (D8): project-set documents are not user content
+  // and have no attribution UI, so they get automerge's random actor and
+  // carry no author — exactly like pre-transition history.
   const doc = automergeFrom(initial);
   const handle = server.repo.import<ProjectSetDocument>(automergeSerialize(doc));
 

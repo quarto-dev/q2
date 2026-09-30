@@ -9,10 +9,10 @@ import { render, screen, fireEvent, act, cleanup } from '@testing-library/react'
 import ReplayDrawer from './ReplayDrawer';
 import type { ReplayState, ReplayControls } from '../hooks/useReplayMode';
 
-// Mock getActorId from automergeSync (now in @quarto/preview-runtime)
-let mockActorId: string | null = null;
+// Mock getAuthorId from automergeSync (now in @quarto/preview-runtime)
+let mockAuthorId: string | null = null;
 vi.mock('@quarto/preview-runtime', () => ({
-  getActorId: () => mockActorId,
+  getAuthorId: () => mockAuthorId,
 }));
 
 function makeState(overrides: Partial<ReplayState> = {}): ReplayState {
@@ -53,7 +53,7 @@ describe('ReplayDrawer', () => {
 
   beforeEach(() => {
     controls = makeControls();
-    mockActorId = null;
+    mockAuthorId = null;
   });
 
   afterEach(() => {
@@ -134,7 +134,7 @@ describe('ReplayDrawer', () => {
     });
 
     it('applies --me CSS class when currentActorId matches', () => {
-      mockActorId = 'abcdef0123456789abcdef0123456789';
+      mockAuthorId = 'abcdef0123456789abcdef0123456789';
       const identities = { 'abcdef0123456789abcdef0123456789': { name: 'Alice', color: '#E91E63' } };
       render(<ReplayDrawer state={activeState} controls={controls} identities={identities} />);
       const actorEl = screen.getByText('Alice');
@@ -142,7 +142,7 @@ describe('ReplayDrawer', () => {
     });
 
     it('does not apply --me CSS class when actor is not current user', () => {
-      mockActorId = 'different0123456789abcdef01234567';
+      mockAuthorId = 'different0123456789abcdef01234567';
       const identities = { 'abcdef0123456789abcdef0123456789': { name: 'Alice', color: '#E91E63' } };
       render(<ReplayDrawer state={activeState} controls={controls} identities={identities} />);
       const actorEl = screen.getByText('Alice');
@@ -150,14 +150,14 @@ describe('ReplayDrawer', () => {
     });
 
     it('applies --me CSS class with truncated hex when no identity', () => {
-      mockActorId = 'abcdef0123456789abcdef0123456789';
+      mockAuthorId = 'abcdef0123456789abcdef0123456789';
       render(<ReplayDrawer state={activeState} controls={controls} />);
       const actorEl = screen.getByText('abcdef01');
       expect(actorEl.className).toContain('replay-drawer__actor--me');
     });
 
     it('renders short hash when currentActorId does not match and no identities', () => {
-      mockActorId = 'different0123456789abcdef01234567';
+      mockAuthorId = 'different0123456789abcdef01234567';
       render(<ReplayDrawer state={activeState} controls={controls} />);
       expect(screen.getByText('abcdef01')).toBeDefined();
     });

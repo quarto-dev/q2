@@ -210,8 +210,9 @@ interface UpdateAstPayload {
     renderedContent?: string;
     /**
      * Reactji-authorship demo (2026-05-25 plan): current viewer's
-     * Automerge actor id. Provided via `CurrentActorContext` to user
-     * TSX so `useCurrentActor()` can drive `actor === me` checks.
+     * attribution key (automerge author id; bare actor id only for
+     * pre-transition history). Provided via `CurrentActorContext` to
+     * user TSX so `useCurrentActor()` can drive `actor === me` checks.
      */
     currentActor?: string | null;
     /**

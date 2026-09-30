@@ -62,19 +62,54 @@ export async function fetchAuthMe(): Promise<AuthState | null> {
   };
 }
 
+/** Raw JSON shape from GET /auth/author (snake_case). */
+interface AuthAuthorResponse {
+  author_id: string;
+}
+
+/**
+ * Fetch the per-project author ID for the authenticated user.
+ *
+ * Returns the author ID string on success, or null on 401/403 (session expired
+ * or forbidden). Throws on unexpected errors (e.g. 500).
+ *
+ * The server computes `HMAC-SHA256(server_secret, sub || "\0" || projectId)`,
+ * so the same user gets a different author ID in each project. The author ID
+ * is attribution metadata only — the document's actor ID is always
+ * automerge's random per-instance actor.
+ *
+ * A 404 means the server predates the author endpoint: fall back to the
+ * deprecated `/auth/actor`, which mints the byte-identical value (same HMAC
+ * construction — author-ID transition, D5), so the client stays fully
+ * functional against an old server.
+ */
+export async function fetchAuthorId(projectId: string): Promise<string | null> {
+  const res = await fetch(
+    hubPath(`/auth/author?project=${encodeURIComponent(projectId)}`),
+    { credentials: 'same-origin' },
+  );
+  if (res.status === 404) return fetchActorId(projectId);
+  if (res.status === 401 || res.status === 403) return null;
+  if (!res.ok) throw new Error(`/auth/author failed: ${res.status}`);
+  const data = await res.json() as AuthAuthorResponse;
+  return data.author_id;
+}
+
 /** Raw JSON shape from GET /auth/actor (snake_case). */
 interface AuthActorResponse {
   actor_id: string;
 }
 
 /**
- * Fetch the per-project actor ID for the authenticated user.
+ * Fetch the per-project actor ID from the deprecated `/auth/actor` endpoint.
  *
- * Returns the actor ID string on success, or null on 401/403 (session expired
- * or forbidden). Throws on unexpected errors (e.g. 500).
+ * Legacy fallback only — called by `fetchAuthorId` when the server predates
+ * `/auth/author` (404). The minted value is byte-identical to the author ID
+ * (D5), so it is applied as the author, never as the document's actor.
+ * Removed once no released server lacks `/auth/author` (Phase 5 strand).
  *
- * The server computes `HMAC-SHA256(server_secret, sub || "\0" || projectId)`,
- * so the same user gets a different actor ID in each project.
+ * Returns the ID string on success, or null on 401/403. Throws on unexpected
+ * errors (e.g. 500).
  */
 export async function fetchActorId(projectId: string): Promise<string | null> {
   const res = await fetch(
@@ -88,30 +123,31 @@ export async function fetchActorId(projectId: string): Promise<string | null> {
 }
 
 /**
- * Resolve the per-project actor ID for a document open. Three-valued contract
- * the callers depend on:
- *   - string    → actor ID resolved; open with it
- *   - undefined → auth disabled and no fallback; open with a random actor ID
+ * Resolve the per-project author ID for a document open. Three-valued
+ * contract the callers depend on:
+ *   - string    → author ID resolved; open with it
+ *   - undefined → auth disabled and no fallback; open authorless (the
+ *                 document gets a random actor and changes carry no author)
  *   - null      → auth failure (401/403); abandon the open
  *
- * When auth is disabled, `fallbackActorId` (if provided) is returned so the
- * open uses a *stable* local actor — this is how auth-less deployments
- * (local-prod / `--allow-insecure-auth`) still stamp a consistent identity into
- * documents. The network is never touched in the auth-disabled branch.
+ * When auth is disabled, `fallbackAuthorId` (if provided) is returned so the
+ * open uses a *stable* local author — this is how auth-less deployments
+ * (local-prod / `--allow-insecure-auth`) still stamp a consistent identity
+ * into documents. The network is never touched in the auth-disabled branch.
  *
  * On auth failure we fire `onSessionExpired` — the session has ended, so the
  * SPA shows the login screen — and return `null` so callers' `=== null` guard
  * abandons this attempt. Throws propagate (e.g. 500) so callers' try/catch
  * surfaces a connection error.
  */
-export async function resolveActorId(
+export async function resolveAuthorId(
   indexDocId: string,
   authEnabled: boolean,
   onSessionExpired: () => void,
-  fallbackActorId?: string,
+  fallbackAuthorId?: string,
 ): Promise<string | undefined | null> {
-  if (!authEnabled) return fallbackActorId;
-  const id = await fetchActorId(indexDocId);
+  if (!authEnabled) return fallbackAuthorId;
+  const id = await fetchAuthorId(indexDocId);
   if (id === null) {
     onSessionExpired();
     return null;

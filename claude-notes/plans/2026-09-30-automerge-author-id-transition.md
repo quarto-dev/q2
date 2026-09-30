@@ -467,37 +467,54 @@ unrelated to this work.
 
 ### Phase 3 — hub-client: fetch and wire author IDs
 
-- [ ] Tests first (mirror existing authService tests): `fetchAuthorId` parses
+- [x] Tests first (mirror existing authService tests): `fetchAuthorId` parses
   `author_id`, returns null on 401/403, throws on 500, and on **404 falls back
   to `/auth/actor`** (new client against an old server; by D5 the value is
   identical); `resolveAuthorId` preserves the three-valued contract
   (string / undefined / null + logout side-effect).
-- [ ] `hub-client/src/services/authService.ts`: add `fetchAuthorId(projectId)`
+  → `authService.test.ts` (7 new `fetchAuthorId` + 9 `resolveAuthorId`
+  tests, incl. the 404→`/auth/actor` fallback and fallback-401→null pins),
+  `userSettings.test.ts` (rename), `branchService.test.ts` (3 new
+  author-attribution tests: seq-1 footer + seq-2 actor→author index
+  resolution after merge-back, the clone-on-load path after a simulated
+  reload, and the authorless D8 case). All red before implementation
+  (missing exports/seam), green after. One test-authoring fix along the
+  way: `A.getHistory` returns decoded changes, so attribution assertions
+  go through `A.getAllChanges` + `A.decodeChange` (same as the spike).
+- [x] `hub-client/src/services/authService.ts`: add `fetchAuthorId(projectId)`
   and `resolveAuthorId(...)`. `fetchActorId` survives only as the 404 fallback.
-- [ ] `hub-client/src/services/userSettings.ts`: rename `actorIdFromUserId` →
+- [x] `hub-client/src/services/userSettings.ts`: rename `actorIdFromUserId` →
   `authorIdFromUserId` (same derivation; update the doc comment, which
   currently explains the stable-actor rationale).
-- [ ] `hub-client/src/App.tsx`: `localActorId` → `localAuthorId` (`:142, :310`);
+- [x] `hub-client/src/App.tsx`: `localActorId` → `localAuthorId` (`:142, :310`);
   `resolveAuthorId` in all four open paths (`:413, :616, :711, :850`);
   `__QUARTO_TEST_ACTOR_ID__` → `__QUARTO_TEST_AUTHOR_ID__` (`:77-114`).
-- [ ] E2E specs `q2-preview-render-components-{comment,kanban,drag}.spec.ts`:
+- [x] E2E specs `q2-preview-render-components-{comment,kanban,drag}.spec.ts`:
   inject `__QUARTO_TEST_AUTHOR_ID__`; the value no longer needs to be a valid
   actor id but stays hex.
-- [ ] Current-user key: `render/ReactPreview.tsx:906` `currentActor={getAuthorId()}`;
+- [x] Current-user key: `render/ReactPreview.tsx:906` `currentActor={getAuthorId()}`;
   `ReplayDrawer.tsx:357` `currentActorId = getAuthorId()`; update the
   `DevHarness.tsx:487` comment. Prop names unchanged (D6); doc comments in
   `render/ReactRenderer.tsx:109`, `CurrentActorContext.tsx`, `PreviewRoot.tsx:150`,
   `entry.tsx:213` say the value is the attribution key.
-- [ ] Local branches: `branchService.ts:208` `A.clone(sourceDoc, { author })`
+  → Also updated the `getActorId` → `getAuthorId` mocks in
+  `ReplayDrawer.test.tsx` and the three `ReactPreview.*.integration.test.tsx`
+  files (missed by the plan's inventory).
+- [x] Local branches: `branchService.ts:208` `A.clone(sourceDoc, { author })`
   and `:133` `clone(A.load(bytes), { author })` — **not** `A.load(bytes,
   { author })`, which silently drops the author (see "Verified author-ID API
   surface") — with `author = getAuthorId()`, so branch edits carry the author
   and merge back attributed (today they merge back as an unrelated random
   actor once actors are random).
-- [ ] `projectSetService.ts:595`: authorless (D8; no attribution UI on
+  → Applied via an `authorGetter` seam mirroring `handleGetter`
+  (`_setAuthorGetterForTesting` for tests); null/absent author passes no
+  option (D8 authorless).
+- [x] `projectSetService.ts:595`: authorless (D8; no attribution UI on
   project-set docs); say so in a code comment.
-- [ ] `npm run build:all` from `hub-client/` green (stricter than vitest per
+- [x] `npm run build:all` from `hub-client/` green (stricter than vitest per
   AGENTS.md); hub-client changelog updated with the two-commit workflow.
+  → Full unit suite 1260/1260 (107 files), integration 143/143 (20 files),
+  `build:all` green, preview-renderer `tsc --noEmit` clean.
 
 ### Phase 4 — attribution consumers: author-first resolution
 
