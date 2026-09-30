@@ -223,16 +223,16 @@ fn post_render_script_receives_output_files() {
         dump_value(&dump, "QUARTO_PROJECT_INPUT_FILES").is_none(),
         "INPUT_FILES is pre-render-only"
     );
-    // Shared vars. Both sides are canonicalized: these check which
-    // directory is named, not how it is spelled.
+    // Shared vars. `project` is spelled by the shared canonicalize, so
+    // these also pin that q2 emits the same spelling.
     let project_dir = dump_value(&dump, "QUARTO_PROJECT_DIR").expect("PROJECT_DIR set");
     assert!(
         Path::new(project_dir).is_absolute(),
         "QUARTO_PROJECT_DIR should be absolute: {project_dir}"
     );
     assert_eq!(
-        canonical(Path::new(project_dir)),
-        canonical(&project),
+        Path::new(project_dir),
+        project.as_path(),
         "QUARTO_PROJECT_DIR should be the project dir"
     );
     let output_dir = dump_value(&dump, "QUARTO_PROJECT_OUTPUT_DIR").expect("OUTPUT_DIR set");
@@ -241,8 +241,8 @@ fn post_render_script_receives_output_files() {
         "QUARTO_PROJECT_OUTPUT_DIR should be absolute: {output_dir}"
     );
     assert_eq!(
-        canonical(Path::new(output_dir)),
-        canonical(&project.join("_site")),
+        Path::new(output_dir),
+        project.join("_site").as_path(),
         "QUARTO_PROJECT_OUTPUT_DIR should be the output dir"
     );
 }
@@ -282,13 +282,13 @@ fn env_contract_full_render() {
             "INPUT_FILES should list {expected}; got: {listed:?}"
         );
     }
-    // Which directory is named, not how it is spelled.
+    // Same spelling as the shared canonicalize (`project`).
     let project_dir = dump_value(&dump, "QUARTO_PROJECT_DIR").expect("PROJECT_DIR set");
     assert!(
         Path::new(project_dir).is_absolute(),
         "QUARTO_PROJECT_DIR should be absolute: {project_dir}"
     );
-    assert_eq!(canonical(Path::new(project_dir)), canonical(&project));
+    assert_eq!(Path::new(project_dir), project.as_path());
     // Post-render-only var must be absent during pre-render.
     assert!(
         dump_value(&dump, "QUARTO_PROJECT_OUTPUT_FILES").is_none(),
