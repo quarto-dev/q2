@@ -203,11 +203,32 @@ impl PipelineStage for TypstCompileStage {
             .input_path
             .parent()
             .map_or_else(|| ctx.project.dir.clone(), std::path::Path::to_path_buf);
+        // Best-effort: an invalid brand is reported by `PandocWriteStage`
+        // (which resolves it with full diagnostics) before this stage runs.
+        let (light, dark) = quarto_sass::resolve_brand_variants(
+            &rendered.metadata,
+            ctx.runtime.as_ref(),
+            &ctx.project.dir,
+        )
+        .unwrap_or((None, None));
+        let brand = brand_for_mode(
+            light.as_ref(),
+            dark.as_ref(),
+            rendered
+                .metadata
+                .get("brand-mode")
+                .and_then(|v| v.as_plain_text())
+                .as_deref(),
+        );
         let extra_font_paths = with_google_font_cache(
-            resolve_font_paths(
-                &string_array(rendered.metadata.get("font-paths")),
+            with_brand_file_fonts(
+                resolve_font_paths(
+                    &string_array(rendered.metadata.get("font-paths")),
+                    &ctx.project.dir,
+                    &input_dir,
+                ),
+                brand,
                 &ctx.project.dir,
-                &input_dir,
             ),
             &ctx.project.dir,
         );
@@ -392,6 +413,56 @@ pub(crate) fn resolve_font_paths(
         .collect()
 }
 
+/// The brand variant Typst renders with: the dark half when the
+/// document's `brand-mode` is `dark` and a dark half exists, otherwise
+/// light (the default, matching the `brand-mode` filter param).
+pub(crate) fn brand_for_mode<'a>(
+    light: Option<&'a quarto_brand::ResolvedBrand>,
+    dark: Option<&'a quarto_brand::ResolvedBrand>,
+    brand_mode: Option<&str>,
+) -> Option<&'a quarto_brand::ResolvedBrand> {
+    match brand_mode {
+        Some("dark") => dark.or(light),
+        _ => light,
+    }
+}
+
+/// `command/render/pandoc.ts:1541-1548`: each brand `source: file` font
+/// contributes the *directory* of each of its files (not the file itself)
+/// as a font path, resolved against the brand's own directory (the
+/// project root for an inline brand). Appended after the document's own
+/// `font-paths`, before the Google cache. `brand` is the
+/// variant for the document's `brand-mode` (see [`brand_for_mode`]) — a
+/// deliberate step past Q1, which always used the light half. Both
+/// `typst fonts` and `typst compile` must pass the same set, so
+/// `PandocWriteStage` calls this too.
+pub(crate) fn with_brand_file_fonts(
+    mut font_paths: Vec<std::path::PathBuf>,
+    brand: Option<&quarto_brand::ResolvedBrand>,
+    project_dir: &Path,
+) -> Vec<std::path::PathBuf> {
+    let Some(brand) = brand else {
+        return font_paths;
+    };
+    let Some(typography) = brand.brand.typography.as_ref() else {
+        return font_paths;
+    };
+    let brand_dir = brand.dir.as_deref().unwrap_or(project_dir);
+    for font in &typography.fonts {
+        if let quarto_brand::BrandFont::File(file_font) = font {
+            for entry in &file_font.files {
+                if let Some(dir) = brand_dir.join(entry.path()).parent() {
+                    let dir = dir.to_path_buf();
+                    if !font_paths.contains(&dir) {
+                        font_paths.push(dir);
+                    }
+                }
+            }
+        }
+    }
+    font_paths
+}
+
 /// Appends the project's downloaded-Google-fonts cache
 /// ([`crate::typst_google_fonts::font_cache_dir`]) when it exists, after
 /// the document's own `font-paths` — Q1's order (`fontPaths.push(...fontdirs)`).
@@ -513,6 +584,67 @@ fn nonzero_exit_error(stage_name: &str, status_desc: &str, stderr: &str) -> Pipe
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+
+    fn brand_with_file_fonts(dir: Option<&str>) -> quarto_brand::ResolvedBrand {
+        let brand: quarto_brand::Brand = serde_yaml::from_str(
+            "typography:\n  fonts:\n    - family: Foo\n      source: file\n      files:\n        - path: fonts/a/Foo-Regular.ttf\n        - path: fonts/a/Foo-Bold.ttf\n        - path: fonts/b/Foo-Italic.ttf\n    - family: Sys\n      source: system\n",
+        )
+        .unwrap();
+        quarto_brand::ResolvedBrand::new(brand, dir.map(PathBuf::from))
+    }
+
+    #[test]
+    fn test_with_brand_file_fonts_adds_file_directories_deduped() {
+        let brand = brand_with_file_fonts(Some("/proj/brand"));
+        let out = with_brand_file_fonts(
+            vec![PathBuf::from("/doc/fonts")],
+            Some(&brand),
+            Path::new("/proj"),
+        );
+        assert_eq!(
+            out,
+            vec![
+                PathBuf::from("/doc/fonts"),
+                PathBuf::from("/proj/brand/fonts/a"),
+                PathBuf::from("/proj/brand/fonts/b"),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_with_brand_file_fonts_inline_brand_resolves_against_project() {
+        let brand = brand_with_file_fonts(None);
+        let out = with_brand_file_fonts(Vec::new(), Some(&brand), Path::new("/proj"));
+        assert_eq!(out[0], PathBuf::from("/proj/fonts/a"));
+    }
+
+    #[test]
+    fn test_brand_for_mode_picks_variant() {
+        let light = brand_with_file_fonts(Some("/l"));
+        let dark = brand_with_file_fonts(Some("/d"));
+        let dir = |b: Option<&quarto_brand::ResolvedBrand>| b.unwrap().dir.clone().unwrap();
+        let (l, d) = (Some(&light), Some(&dark));
+        assert_eq!(dir(brand_for_mode(l, d, None)), PathBuf::from("/l"));
+        assert_eq!(
+            dir(brand_for_mode(l, d, Some("light"))),
+            PathBuf::from("/l")
+        );
+        assert_eq!(dir(brand_for_mode(l, d, Some("dark"))), PathBuf::from("/d"));
+        assert_eq!(
+            dir(brand_for_mode(l, None, Some("dark"))),
+            PathBuf::from("/l")
+        );
+    }
+
+    #[test]
+    fn test_with_brand_file_fonts_no_brand_is_identity() {
+        let base = vec![PathBuf::from("/x")];
+        assert_eq!(
+            with_brand_file_fonts(base.clone(), None, Path::new("/p")),
+            base
+        );
+    }
 
     /// T1: numeric, not lexicographic — `0.9` must compare above `0.10`
     /// is false lexicographically but true numerically is NOT the claim
