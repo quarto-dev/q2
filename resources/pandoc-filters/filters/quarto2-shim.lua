@@ -298,15 +298,19 @@ end
 
 local function route_float_ref_target(node, wire)
   local attr = sanitize_attr(node.attr)
-  -- `type` is a rename, not a pass-through: Q1's renderer reads
-  -- `float.type` as a *display name* keyed into
-  -- `crossref.categories.by_name` (common/refs.lua:44-55), which is
-  -- exactly Q2's `plain_data.kind` ("Figure"/"Table"/"Listing") -- handing
-  -- `plain_data` through verbatim leaves `float.type` nil and crashes
-  -- (P5 Findings item 3).
+  -- `float.type` is a Q1 category name keyed into
+  -- `crossref.categories.by_name` (common/refs.lua:44-55). Q2's `kind` may
+  -- be localized, so resolve the category's canonical name from its ref-type
+  -- before constructing the Q1 node. Renderers continue to obtain the
+  -- localized display name from the `crossref-<type>-title` params.
+  local category = crossref.categories.by_ref_type[wire.data.ref_type]
+  if category == nil then
+    error("unknown float ref type '" .. tostring(wire.data.ref_type) .. "'")
+  end
+  local kind = category.name
   local scaffold, tbl = quarto.FloatRefTarget{
     attr = attr,
-    type = wire.data.kind,
+    type = kind,
     content = wire.slots.content,
     caption_long = wire.slots.caption_long,
     caption_short = wire.slots.caption_short,

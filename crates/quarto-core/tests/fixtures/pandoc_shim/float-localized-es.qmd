@@ -1,0 +1,5 @@
+---
+lang: es
+---
+
+![Un pie de figura.](img.png){#fig-localizada}
