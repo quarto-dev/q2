@@ -189,6 +189,121 @@ fn resource_json(resource: &BrandLogoResource) -> Value {
     Value::Object(obj)
 }
 
+/// Resolves the `logo` filter param — the page-background logo layout
+/// `typst-brand-yaml.lua`'s `Meta` handler reads via `param('logo')`
+/// (`typst-brand-yaml.lua:269-341`).
+///
+/// Mirrors Q1's `fillLogoPaths`/`resolveLogo`
+/// (`core/brand/brand.ts:307-404,475-...`), narrowed to what the vendored
+/// Lua filter actually needs: that filter does no brand-image lookup of
+/// its own (its `logoOptions` loop just translates whatever `path` is
+/// already in `foundLogo`), so this function is the only place that
+/// picks a brand logo size and injects its path.
+///
+/// The document's own `logo:` metadata can be a flat spec (applies to
+/// both light and dark), a `{light:, dark:}` pair, or absent entirely —
+/// in which case a document that names no logo at all still gets one
+/// synthesized here from the brand's first configured size (`small` >
+/// `medium` > `large`, Q1's own `sizeOrder`), so a bare `brand: {logo:
+/// ...}` document (no document-level `logo:` key, e.g. `online-logo.qmd`)
+/// still gets a page-background logo — matching Q1's `!spec` branch of
+/// `resolveLogo`.
+///
+/// `brand_param` is the JSON already built by [`build_brand_param`] — this
+/// function reads path values back out of it rather than re-resolving
+/// the brand, so it only ever sees `light` (the `dark` half isn't
+/// resolved yet, see `build_brand_param`'s caller). Paths pulled from
+/// there get a leading `/` added when they're neither external nor
+/// already rooted, matching Q1's `brandWithAbsoluteLogoPaths` — a step
+/// that function applies *only* for this filter param, not for the
+/// `brand-logo` dict `logo_map` above also feeds (that one stays
+/// project-relative, without the leading slash, which is why this can't
+/// just reuse `logo_map`'s output verbatim).
+pub fn build_logo_param(
+    meta: &quarto_pandoc_types::ConfigValue,
+    brand_param: Option<&Value>,
+) -> Option<Value> {
+    const SIZE_ORDER: [&str; 3] = ["small", "medium", "large"];
+    const LAYOUT_KEYS: [&str; 8] = [
+        "path",
+        "location",
+        "width",
+        "padding",
+        "padding-top",
+        "padding-right",
+        "padding-bottom",
+        "padding-left",
+    ];
+
+    let logo_meta = meta.get("logo");
+    let is_light_dark_spec =
+        logo_meta.is_some_and(|v| v.get("light").is_some() || v.get("dark").is_some());
+
+    let brand_logo_path = |size: &str| -> Option<String> {
+        let raw = brand_param?
+            .get("light")?
+            .get("processedData")?
+            .get("logo")?
+            .get(size)?
+            .get("path")?
+            .as_str()?;
+        Some(
+            if quarto_util::is_external_url(raw) || raw.starts_with('/') {
+                raw.to_string()
+            } else {
+                format!("/{raw}")
+            },
+        )
+    };
+    let default_brand_path = || SIZE_ORDER.iter().find_map(|s| brand_logo_path(s));
+
+    let build_mode = |mode: &str| -> Option<Value> {
+        let spec = match logo_meta {
+            None => None,
+            Some(v) if is_light_dark_spec => v.get(mode),
+            Some(v) => Some(v),
+        };
+        let mut obj = Map::new();
+        for key in LAYOUT_KEYS {
+            if let Some(v) = spec
+                .and_then(|s| s.get(key))
+                .and_then(|v| v.as_plain_text())
+            {
+                obj.insert(key.to_string(), Value::String(v));
+            }
+        }
+        if !obj.contains_key("path")
+            && let Some(path) = default_brand_path()
+        {
+            obj.insert("path".to_string(), Value::String(path));
+        }
+        if obj.is_empty() {
+            None
+        } else {
+            Some(Value::Object(obj))
+        }
+    };
+
+    let light = build_mode("light");
+    let dark = build_mode("dark");
+    if light.is_none() && dark.is_none() {
+        return None;
+    }
+    // Q1's `resolveLogo`: an unset side falls back to the other side
+    // rather than being left absent, so `logo[brandMode]` still finds
+    // something when only one side names a logo.
+    let light = light.or_else(|| dark.clone());
+    let dark = dark.or_else(|| light.clone());
+    let mut out = Map::new();
+    if let Some(l) = light {
+        out.insert("light".to_string(), l);
+    }
+    if let Some(d) = dark {
+        out.insert("dark".to_string(), d);
+    }
+    Some(Value::Object(out))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -383,5 +498,139 @@ logo:
             param["dark"]["processedData"]["color"]["primary"],
             json!("navy")
         );
+    }
+
+    // ── build_logo_param ──────────────────────────────────────────
+
+    fn cv_s(v: &str) -> quarto_pandoc_types::ConfigValue {
+        quarto_pandoc_types::ConfigValue::new_string(v, quarto_source_map::SourceInfo::for_test())
+    }
+
+    fn cv_map(
+        entries: Vec<(&str, quarto_pandoc_types::ConfigValue)>,
+    ) -> quarto_pandoc_types::ConfigValue {
+        use quarto_pandoc_types::config_value::ConfigMapEntry;
+        quarto_pandoc_types::ConfigValue::new_map(
+            entries
+                .into_iter()
+                .map(|(k, v)| ConfigMapEntry {
+                    key: k.to_string(),
+                    key_source: quarto_source_map::SourceInfo::for_test(),
+                    value: v,
+                })
+                .collect(),
+            quarto_source_map::SourceInfo::for_test(),
+        )
+    }
+
+    fn brand_param_with_large_logo(path: &str) -> Value {
+        json!({
+            "light": {
+                "processedData": {
+                    "logo": {
+                        "large": { "path": path }
+                    }
+                }
+            }
+        })
+    }
+
+    /// No document `logo:` key and no brand logo at all: nothing to
+    /// surface, `param('logo')` stays absent.
+    #[test]
+    fn test_build_logo_param_absent_without_doc_or_brand_logo() {
+        let meta = cv_map(vec![]);
+        assert!(build_logo_param(&meta, None).is_none());
+    }
+
+    /// No document `logo:` key, but the brand names one (`online-logo.qmd`
+    /// style): synthesize `{path}` for both modes from the brand's logo,
+    /// with a leading `/` added since the path isn't external or rooted.
+    #[test]
+    fn test_build_logo_param_synthesizes_from_brand_when_doc_logo_absent() {
+        let meta = cv_map(vec![]);
+        let brand_param = brand_param_with_large_logo("quarto/quarto.png");
+        let logo = build_logo_param(&meta, Some(&brand_param)).unwrap();
+        assert_eq!(logo["light"]["path"], json!("/quarto/quarto.png"));
+        assert_eq!(logo["dark"]["path"], json!("/quarto/quarto.png"));
+    }
+
+    /// An external brand logo URL is left untouched — no leading `/`
+    /// prepended, matching `BrandLogoResource::with_path_relative_to`'s
+    /// own external-URL passthrough.
+    #[test]
+    fn test_build_logo_param_leaves_external_brand_path_untouched() {
+        let meta = cv_map(vec![]);
+        let brand_param = brand_param_with_large_logo("https://quarto.org/quarto.png");
+        let logo = build_logo_param(&meta, Some(&brand_param)).unwrap();
+        assert_eq!(
+            logo["light"]["path"],
+            json!("https://quarto.org/quarto.png")
+        );
+    }
+
+    /// A flat (non-light/dark) `logo:` spec applies to both modes
+    /// (`directional-padding.qmd` style): layout keys pass through
+    /// verbatim (unit conversion is the Lua filter's job), and a missing
+    /// `path` still gets filled in from the brand.
+    #[test]
+    fn test_build_logo_param_flat_spec_applies_to_both_modes() {
+        let meta = cv_map(vec![(
+            "logo",
+            cv_map(vec![
+                ("location", cv_s("center-middle")),
+                ("padding-top", cv_s("30px")),
+                ("width", cv_s("180px")),
+            ]),
+        )]);
+        let brand_param = brand_param_with_large_logo("quarto/quarto.png");
+        let logo = build_logo_param(&meta, Some(&brand_param)).unwrap();
+        for mode in ["light", "dark"] {
+            assert_eq!(logo[mode]["location"], json!("center-middle"));
+            assert_eq!(logo[mode]["padding-top"], json!("30px"));
+            assert_eq!(logo[mode]["width"], json!("180px"));
+            assert_eq!(logo[mode]["path"], json!("/quarto/quarto.png"));
+        }
+    }
+
+    /// A `{light:, dark:}` document spec (`light-dark-variants.qmd` style)
+    /// picks each mode's own sub-object rather than sharing one flat spec.
+    #[test]
+    fn test_build_logo_param_light_dark_spec_picks_each_side() {
+        let meta = cv_map(vec![(
+            "logo",
+            cv_map(vec![
+                ("light", cv_map(vec![("location", cv_s("left-top"))])),
+                ("dark", cv_map(vec![("location", cv_s("right-bottom"))])),
+            ]),
+        )]);
+        let logo = build_logo_param(&meta, None).unwrap();
+        assert_eq!(logo["light"]["location"], json!("left-top"));
+        assert_eq!(logo["dark"]["location"], json!("right-bottom"));
+    }
+
+    /// An explicit document `path` wins over the brand's own logo — the
+    /// brand lookup only fills in a *missing* path.
+    #[test]
+    fn test_build_logo_param_explicit_doc_path_wins_over_brand() {
+        let meta = cv_map(vec![("logo", cv_map(vec![("path", cv_s("doc-logo.png"))]))]);
+        let brand_param = brand_param_with_large_logo("quarto/quarto.png");
+        let logo = build_logo_param(&meta, Some(&brand_param)).unwrap();
+        assert_eq!(logo["light"]["path"], json!("doc-logo.png"));
+    }
+
+    /// Q1 parity: when only one side of a `{light:, dark:}` doc spec is
+    /// set, the other side falls back to it rather than staying absent.
+    #[test]
+    fn test_build_logo_param_light_dark_falls_back_to_other_side() {
+        let meta = cv_map(vec![(
+            "logo",
+            cv_map(vec![(
+                "light",
+                cv_map(vec![("location", cv_s("left-top"))]),
+            )]),
+        )]);
+        let logo = build_logo_param(&meta, None).unwrap();
+        assert_eq!(logo["dark"]["location"], json!("left-top"));
     }
 }

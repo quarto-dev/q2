@@ -229,13 +229,17 @@ fn epub_extra_args(
     Ok(args)
 }
 
-/// Resolves the `brand` filter param for a typst render (Phase 1's
-/// `extractTypstFilterParams` bullet). `meta` is the document's already-
-/// merged metadata (`doc.ast.meta`, a `ConfigValue`) — the same config
-/// shape every other single-variant brand consumer
+/// Resolves the `brand` and `logo` filter params for a typst render
+/// (Phase 1's `extractTypstFilterParams` bullet). `meta` is the
+/// document's already-merged metadata (`doc.ast.meta`, a `ConfigValue`)
+/// — the same config shape every other single-variant brand consumer
 /// (`quarto_sass::resolve_brand`'s doc comment: favicon fallback, reveal)
-/// reads a brand out of. Returns `Ok(None)` for a brand-less document,
-/// which is the common case and not an error.
+/// reads a brand out of. Returns `Ok((None, None))` for a brand-less,
+/// logo-less document, which is the common case and not an error.
+///
+/// The two params are resolved together because [`typst_brand::build_logo_param`]
+/// reads the brand image path back out of the already-built `brand`
+/// JSON rather than re-resolving the brand a second time.
 ///
 /// Errors ([`quarto_sass::SassError`] — invalid `_brand.yml` shape, a bad
 /// font weight, a missing brand file) are real user-facing configuration
@@ -249,7 +253,7 @@ fn resolve_typst_brand_param(
     _stage_name: &str,
     meta: &quarto_pandoc_types::ConfigValue,
     ctx: &StageContext,
-) -> Result<Option<serde_json::Value>, PipelineError> {
+) -> Result<(Option<serde_json::Value>, Option<serde_json::Value>), PipelineError> {
     let light =
         quarto_sass::resolve_brand(meta, ctx.runtime.as_ref(), &ctx.project.dir).map_err(|e| {
             let mut candidates: Vec<(quarto_source_map::FileId, std::path::PathBuf)> = Vec::new();
@@ -280,11 +284,11 @@ fn resolve_typst_brand_param(
         .output_path()
         .parent()
         .map_or_else(|| ctx.project.dir.clone(), std::path::Path::to_path_buf);
-    Ok(crate::pandoc_filters::typst_brand::build_brand_param(
-        light.as_ref(),
-        None,
-        &output_dir,
-    ))
+    let brand_param =
+        crate::pandoc_filters::typst_brand::build_brand_param(light.as_ref(), None, &output_dir);
+    let logo_param =
+        crate::pandoc_filters::typst_brand::build_logo_param(meta, brand_param.as_ref());
+    Ok((brand_param, logo_param))
 }
 
 /// Resolves the `typst-available-fonts` filter param (pandoc-hybrid-typst
@@ -422,7 +426,7 @@ impl PipelineStage for PandocWriteStage {
         // invocation, so only the active `brand-mode` — "light" unless a
         // future doc sets it otherwise — is actually reachable today).
         let (
-            typst_brand_param,
+            (typst_brand_param, typst_logo_param),
             typst_available_fonts,
             typst_citation_location,
             typst_reference_location,
@@ -461,7 +465,7 @@ impl PipelineStage for PandocWriteStage {
                     .and_then(|is_citeproc| is_citeproc.then(|| "citeproc".to_string())),
             )
         } else {
-            (None, None, None, None, None)
+            ((None, None), None, None, None, None)
         };
 
         // `mediabag-dir`: `<output-dir>/<stem>_files/mediabag`, mirroring
@@ -506,6 +510,7 @@ impl PipelineStage for PandocWriteStage {
             None
         };
         if typst_brand_param.is_some()
+            || typst_logo_param.is_some()
             || typst_available_fonts.is_some()
             || typst_citation_location.is_some()
             || typst_reference_location.is_some()
@@ -515,6 +520,7 @@ impl PipelineStage for PandocWriteStage {
             builder = builder.with_contributor(Box::new(
                 crate::pandoc_filters::typst_params::TypstFilterParamsContributor {
                     brand: typst_brand_param,
+                    logo: typst_logo_param,
                     available_fonts: typst_available_fonts,
                     citation_location: typst_citation_location,
                     reference_location: typst_reference_location,
