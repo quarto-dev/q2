@@ -25,6 +25,7 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-09-30
 
+- [`b6795880f`](https://github.com/quarto-dev/q2/commits/b6795880f): Added an end-to-end suite that signs two users in against a real authenticated hub and proves every edit is credited to the right author, two tabs of one account can no longer collide, and documents written before the author-ID transition still show continuous credit.
 - [`d2e3773b8`](https://github.com/quarto-dev/q2/commits/d2e3773b8): The Authors overlay and history replay now show one continuous identity for each person across documents edited before and after the author-ID transition — older edits keep their original credit, and the "me" highlight matches your steps from both eras.
 - [`9da27a917`](https://github.com/quarto-dev/q2/commits/9da27a917): Your edits now carry a stable per-project author identity that stays credited to you across tabs and devices, and two tabs of the same account editing at once can no longer wedge a document with a duplicate-sequence conflict.
 
