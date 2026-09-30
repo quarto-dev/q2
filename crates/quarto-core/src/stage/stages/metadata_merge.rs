@@ -495,6 +495,23 @@ impl PipelineStage for MetadataMergeStage {
         ctx.diagnostic_policy = policy;
         ctx.add_diagnostics(policy_diagnostics);
 
+        // Q-5-37 (bd-yl1bpj82): a Q1-style brand file the merged metadata
+        // never references. Checked here because this is where "is there a
+        // `brand:` for this document" is finally decidable. Pushed through
+        // `add_diagnostics`, so the `diagnostics:` policy resolved above
+        // suppresses it like any other. Native only: the WASM VFS is not
+        // authoritative for non-qmd project files, so probing for
+        // `_brand.yml` there would misfire (same reasoning as the css gate
+        // above).
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(diagnostic) = crate::project::unreferenced_brand_diagnostic(
+            &doc.ast.meta,
+            &ctx.project.dir,
+            ctx.runtime.as_ref(),
+        ) {
+            ctx.add_diagnostics(vec![diagnostic]);
+        }
+
         Ok(PipelineData::DocumentAst(doc))
     }
 }

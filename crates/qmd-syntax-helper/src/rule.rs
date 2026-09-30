@@ -159,6 +159,7 @@ impl RuleRegistry {
         registry.register(Arc::new(crate::conversions::q_2_28::Q228Converter::new()?));
         registry.register(Arc::new(crate::conversions::q_2_33::Q233Converter::new()?));
         registry.register(Arc::new(crate::conversions::q_2_52::Q252Converter::new()?));
+        registry.register(Arc::new(crate::conversions::q_5_37::Q537Converter::new()?));
 
         Ok(registry)
     }

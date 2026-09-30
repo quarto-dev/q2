@@ -1686,6 +1686,13 @@
     "docs_url": "https://quarto.org/docs/errors/project/Q-5-36",
     "since_version": "99.9.9"
   },
+  "Q-5-37": {
+    "subsystem": "project",
+    "title": "Brand File Not Referenced",
+    "message_template": "The project directory contains a brand file (`_brand.yml`, `_brand.yaml`, `_brand/_brand.yml`, or `_brand/_brand.yaml`) but no `brand:` key is set, so the file is ignored. Quarto 1 discovers these files automatically; Quarto 2 requires an explicit `brand:` key. Add `brand: _brand.yml` (or the path to your brand file) to `_quarto.yml`.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-37",
+    "since_version": "99.9.9"
+  },
   "Q-13-8": {
     "subsystem": "navigation",
     "title": "Unsupported toc-location value",
