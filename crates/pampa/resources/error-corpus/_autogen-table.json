@@ -18120,7 +18120,8 @@
       ],
       "hints": [],
       "guard": null,
-      "desynchronizes": false
+      "desynchronizes": false,
+      "suggestion": "attribute-order"
     },
     "name": "Q-2-3/simple"
   },
@@ -18152,7 +18153,8 @@
       ],
       "hints": [],
       "guard": null,
-      "desynchronizes": false
+      "desynchronizes": false,
+      "suggestion": "attribute-order"
     },
     "name": "Q-2-3/simple-2"
   },
@@ -22384,6 +22386,72 @@
       "desynchronizes": true
     },
     "name": "Q-2-53/no-space-after-colons"
+  },
+  {
+    "column": 13,
+    "row": 0,
+    "state": 2824,
+    "sym": "attribute_id",
+    "errorInfo": {
+      "code": "Q-2-55",
+      "title": "Class Specifier Before Identifier in Attribute",
+      "message": "This identifier appears after a class specifier.",
+      "captures": [
+        {
+          "column": 6,
+          "lrState": 2813,
+          "row": 0,
+          "size": 6,
+          "sym": "attribute_class",
+          "label": "class"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This class specifier cannot appear before the identifier.",
+          "noteType": "simple",
+          "label": "class"
+        }
+      ],
+      "hints": [],
+      "guard": null,
+      "desynchronizes": false,
+      "suggestion": "attribute-order"
+    },
+    "name": "Q-2-55/simple"
+  },
+  {
+    "column": 16,
+    "row": 0,
+    "state": 2786,
+    "sym": "attribute_id",
+    "errorInfo": {
+      "code": "Q-2-56",
+      "title": "Key-value Pair Before Identifier in Attribute",
+      "message": "This identifier appears after a key-value pair.",
+      "captures": [
+        {
+          "column": 6,
+          "lrState": 2786,
+          "row": 0,
+          "size": 9,
+          "sym": "key_value_specifier",
+          "label": "key-value"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This key-value pair cannot appear before the identifier.",
+          "noteType": "simple",
+          "label": "key-value"
+        }
+      ],
+      "hints": [],
+      "guard": null,
+      "desynchronizes": false,
+      "suggestion": "attribute-order"
+    },
+    "name": "Q-2-56/simple"
   },
   {
     "column": 1,

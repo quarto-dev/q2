@@ -2,6 +2,7 @@
   "code": "Q-2-3",
   "title": "Key-value Pair Before Class Specifier in Attribute",
   "message": "This class specifier appears after the key-value pair.",
+  "suggestion": "attribute-order",
   "notes": [
     {
       "message": "This key-value pair cannot appear before the class specifier.",

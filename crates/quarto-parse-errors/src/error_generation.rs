@@ -11,6 +11,7 @@
 use std::collections::HashSet;
 
 use crate::error_table::{ErrorCapture, ErrorTableEntry, lookup_error_entry};
+use crate::suggestion::{Suggestion, suggest};
 use crate::tree_sitter_log::{ConsumedToken, TreeSitterLogObserver};
 use quarto_error_reporting::DiagnosticMessage;
 
@@ -193,8 +194,20 @@ fn error_diagnostic_from_parse_state(
 
     error_entry
         .into_iter()
-        .map(|entry| {
-            // if let Some(entry) = error_entry {
+        .filter_map(|entry| {
+            // A suggester can recognise that the source is not the mistake
+            // this entry describes (same parser state, different cause) and
+            // drop the entry, leaving any other candidate or the generic
+            // fallback to answer.
+            let suggested_hint = match entry.error_info.suggestion {
+                Some(name) => match suggest(name, input_bytes, byte_offset) {
+                    Suggestion::Hint(hint) => Some(hint),
+                    Suggestion::Nothing => None,
+                    Suggestion::Reject => return None,
+                },
+                None => None,
+            };
+
             // Build diagnostic from error table entry
             let mut builder = DiagnosticMessageBuilder::error(entry.error_info.title)
                 .with_location(source_info.clone())
@@ -286,8 +299,11 @@ fn error_diagnostic_from_parse_state(
             for hint in entry.error_info.hints {
                 builder = builder.add_hint(*hint);
             }
+            if let Some(hint) = suggested_hint {
+                builder = builder.add_hint(hint);
+            }
 
-            (builder.build(), entry.error_info.desynchronizes)
+            Some((builder.build(), entry.error_info.desynchronizes))
         })
         .max_by(|(diag1, _), (diag2, _)| diagnostic_score(diag1).cmp(&diagnostic_score(diag2)))
         .unwrap_or_else(|| {

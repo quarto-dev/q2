@@ -70,6 +70,7 @@ pub mod test;
 pub mod test_ansi_writer;
 pub mod test_attr_source_parsing;
 pub mod test_attr_source_structure;
+pub mod test_attribute_order_contexts;
 pub mod test_bare_at_str;
 pub mod test_bare_lt_str;
 pub mod test_blockquote_multiline_attrs;
