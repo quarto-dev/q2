@@ -92,7 +92,7 @@ Layer 2 (`bugfix/bd-1klbq2zd-path-audit`):
 - [x] Apply the fold rule: do **not** fold. R rows exceed 10 and the flip fallout is not small (§ Flip results)
 - [x] Temporary seam prototype check (`932313dc`, flip reverted, `Cargo.lock` == HEAD): audit fallout is **not** gone, ~129 new failures (§ Flip results)
 - [x] Classify every § Flip results cluster as test oracle vs product mixing (§ Flip classification)
-- [x] Route `quarto-preview/src/config.rs:403` (+ `:423/:447/:536`) through the shared function; flip-RED = `config::tests::single_file_deps_resources_glob` (RED from the `932313dc` flip run; GREEN pending the flip re-run). Audit rows 29-32 corrected to R
+- [x] Route `quarto-preview/src/config.rs:403` (+ `:423/:447/:536`) through the shared function; flip-RED = `config::tests::single_file_deps_resources_glob` (RED from the `932313dc` flip run; GREEN in the flip re-run, § Flip re-run). Audit rows 29-32 corrected to R
 - [x] Fix every product site the classification finds: none beyond config.rs
 - [x] Oracle sweep (`111e2cf7`): the failing files' std helpers and inline std canonicalizes now call the shared function
 - [x] Re-run the flip on all six crates (§ Flip re-run): no failure outside the baseline set; flip reverted, `Cargo.lock` == HEAD, `.snap.new` deleted
