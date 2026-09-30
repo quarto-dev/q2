@@ -95,7 +95,7 @@ Layer 2 (`bugfix/bd-1klbq2zd-path-audit`):
 - [x] Route `quarto-preview/src/config.rs:403` (+ `:423/:447/:536`) through the shared function; flip-RED = `config::tests::single_file_deps_resources_glob` (RED from the `932313dc` flip run; GREEN pending the flip re-run). Audit rows 29-32 corrected to R
 - [x] Fix every product site the classification finds: none beyond config.rs
 - [x] Oracle sweep (`111e2cf7`): the failing files' std helpers and inline std canonicalizes now call the shared function
-- [ ] Re-run the flip on all six crates: new failures only from known noise (bd-j5ij00i0, bd-cpzr71jr), then revert
+- [x] Re-run the flip on all six crates (§ Flip re-run): no failure outside the baseline set; flip reverted, `Cargo.lock` == HEAD, `.snap.new` deleted
 
 Layer 3 (`bugfix/bd-1klbq2zd-dunce-seam`):
 - [ ] `gh stack add bugfix/bd-1klbq2zd-dunce-seam`; CLAUDE.local.md block
@@ -146,6 +146,10 @@ Compare sets, not counts. Raw logs are session scratch only; re-derive from this
 - `quarto-preview config::tests::{single_file_deps_includes_declared_resources, single_file_deps_resources_glob}`: **product bug**. `config.rs:403` std-canonicalizes `canonical_root` and passes it to `quarto_core::project_resources::expand_patterns` (`:480`), which canonicalizes the matches through the runtime. The containment check yields `OutOfProject`, the `if let Ok` swallows it, and declared `resources:` drop out of the single-file preview closure. Audit rows 29-32 (L, self-consistent) were wrong: `expand_patterns` is a seam consumer.
 
 Baseline tests that pass under the flip (run-to-run variation, not attributed): `metadata_path_resolution::frontmatter_sidebar_resolves_sibling_relative_qmd`, `pandoc_render_to_file::render_document_to_file_docx_embeds_a_relatively_referenced_image`, the six `julia_engine_e2e::j*`. The run left `crossrefs_all_docx__docx.snap.new` and `integration__pandoc_shim_goldens__equation_golden.snap.new` (deleted).
+
+### Flip re-run (temporary dunce flip at `1c24125b`, same six crates and caps)
+
+6676 run, **42 failed**, every one in the § Baselines sets: 5 `quarto` (`project_profile_cli`, 2 `preview_static_e2e`, 2 `render_scripts_cli`), 12 `spin::tests::golden_*`, `ts_process::test_single_dial_invariant`, `ts_wire_parity_fixture`, 7 `glob::expand`, `hephaestus`, `format_defaults`, `params`, 2 `listing_pipeline`, 3 `orange_book_lua`, `pandoc_goldens::test_fixtures_match_q1_golden`, 2 `pandoc_shim`, `pandoc_shim_goldens::test_equation_golden`, 2 hub `storage` double-lock, `render_scripts_boot`, `vfs::test_vfs_clear_preserving_prefix`. Now GREEN: `config::tests::single_file_deps_{resources_glob,includes_declared_resources}`, `admin_collect_lifecycle`, every oracle cluster, and the #743 RED. The known-noise tests (bd-j5ij00i0, bd-cpzr71jr) did not fail this run. Baseline failures that passed (mermaid, textile, execute_defaults, marimo, `metadata_path_resolution`, docx image, 6 julia) match the run-to-run set noted above. 538 s test phase.
 
 ### Flip classification (sonnet sweep, static; central claims checked in the main session)
 
