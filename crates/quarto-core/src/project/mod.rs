@@ -385,6 +385,61 @@ pub fn project_kind_diagnostics(
     ]
 }
 
+/// The brand files Quarto 1 discovers implicitly, in its probe order
+/// (`projectResolveBrand` in Q1's `project-shared.ts`). Quarto 2 never
+/// reads them without a `brand:` key; they are listed only so
+/// [`unreferenced_brand_diagnostic`] can notice one.
+const Q1_IMPLICIT_BRAND_FILES: [&str; 4] = [
+    "_brand.yml",
+    "_brand.yaml",
+    "_brand/_brand.yml",
+    "_brand/_brand.yaml",
+];
+
+/// **Q-5-37**: a Quarto 1 style brand file sits in the project
+/// directory but the document's merged metadata has no `brand:` key
+/// (bd-yl1bpj82).
+///
+/// Quarto 2 deliberately has no implicit `_brand.yml` discovery, so
+/// such a file is silently ignored — a Quarto 1 project that relied on
+/// discovery loses its brand without a word. This makes that visible.
+///
+/// Called per document from `MetadataMergeStage` with the *merged*
+/// (format-flattened) metadata, so `brand:` set anywhere — project
+/// config, an active profile, `_metadata.yml`, or front matter —
+/// counts as declared. That is why this is a per-document check rather
+/// than a project-config one; `q2 render` collapses the per-page
+/// warnings into one line.
+pub(crate) fn unreferenced_brand_diagnostic(
+    merged_meta: &ConfigValue,
+    project_dir: &Path,
+    runtime: &dyn SystemRuntime,
+) -> Option<quarto_error_reporting::DiagnosticMessage> {
+    if merged_meta.get("brand").is_some() {
+        return None;
+    }
+
+    let found = Q1_IMPLICIT_BRAND_FILES
+        .iter()
+        .find(|name| matches!(runtime.is_file(&project_dir.join(name)), Ok(true)))?;
+
+    Some(
+        quarto_error_reporting::DiagnosticMessageBuilder::warning(format!(
+            "`{found}` is not referenced by any `brand:` key"
+        ))
+        .with_code("Q-5-37")
+        .problem(format!(
+            "The project contains `{found}`, but no `brand:` key is set, so Quarto 2 \
+             ignores it. Quarto 1 would have applied it automatically."
+        ))
+        .add_hint(format!(
+            "Add `brand: {found}` to `_quarto.yml` to use it, or set \
+             `diagnostics: {{ Q-5-37: off }}` if it is intentionally unused."
+        ))
+        .build(),
+    )
+}
+
 /// Result of resolving `project.type` (bd-ad7i1pc6).
 struct ResolvedProjectType {
     kind: ProjectKind,
@@ -1093,7 +1148,8 @@ pub struct ProjectConfig {
     /// key, resolved once at config-parse time (`bd-97yc`).
     ///
     /// `None` when no `brand:` key is present — Q2 deliberately has
-    /// no `_brand.yml` auto-discovery, unlike Q1 — and also when the
+    /// no `_brand.yml` auto-discovery, unlike Q1 (an unreferenced
+    /// brand file draws the Q-5-37 warning instead) — and also when the
     /// brand could not be read or parsed. Failure is silent *here* on
     /// purpose: `CompileThemeCssStage` resolves brand again from the
     /// merged document metadata and raises the user-facing

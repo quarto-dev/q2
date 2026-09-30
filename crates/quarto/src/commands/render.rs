@@ -1459,6 +1459,36 @@ fn config_source_context(candidates: &[PathBuf]) -> Option<SourceContext> {
     registered.then_some(ctx)
 }
 
+/// Diagnostic code of the per-page "brand file not referenced" warning,
+/// which the summary prints once (bd-yl1bpj82).
+const UNREFERENCED_BRAND_CODE: &str = "Q-5-37";
+
+/// Split the per-page Q-5-37 diagnostics out of `entries` and collapse
+/// them into one group (representative = the first, affected files = every
+/// page that carried one), reusing the coalescer's "Affected files:" tail.
+/// Returns the remaining entries untouched. `None` when no page warned.
+fn collapse_unreferenced_brand<I>(
+    entries: I,
+) -> (
+    Option<CoalescedDiagnostic>,
+    Vec<(PathBuf, DiagnosticMessage, Option<SourceContext>)>,
+)
+where
+    I: IntoIterator<Item = (PathBuf, DiagnosticMessage, Option<SourceContext>)>,
+{
+    let (brand, rest): (Vec<_>, Vec<_>) = entries
+        .into_iter()
+        .partition(|(_, d, _)| d.code.as_deref() == Some(UNREFERENCED_BRAND_CODE));
+    let group = brand
+        .first()
+        .map(|(_, representative, _)| CoalescedDiagnostic {
+            representative: representative.clone(),
+            source_context: None,
+            affected_files: brand.iter().map(|(p, _, _)| p.clone()).collect(),
+        });
+    (group, rest)
+}
+
 fn attach_config_source(group: &mut CoalescedDiagnostic, candidates: &[PathBuf]) {
     let Some(loc) = group.representative.location.as_ref() else {
         return;
@@ -1761,7 +1791,13 @@ fn format_render_diagnostics_text(
                 )
             })
         });
-        for mut group in coalesce_by_source(entries) {
+        // Q-5-37 (unreferenced brand file) is emitted once per page but
+        // is one project-wide problem with no source span, so the
+        // location coalescer would print it once per page.
+        let (brand_group, entries) = collapse_unreferenced_brand(entries);
+        let mut groups = coalesce_by_source(entries);
+        groups.extend(brand_group);
+        for mut group in groups {
             attach_config_source(&mut group, config_sources);
             let code = group.representative.code.as_deref();
             if let Some(text) =
@@ -2164,6 +2200,40 @@ mod tests {
     ///
     /// These tests pin `failure_attribution_line`, the predicate that
     /// decides when to restore it.
+    fn entry(file: &str, code: &str) -> (PathBuf, DiagnosticMessage, Option<SourceContext>) {
+        (
+            PathBuf::from(file),
+            DiagnosticMessageBuilder::warning("w")
+                .with_code(code)
+                .build(),
+            None,
+        )
+    }
+
+    #[test]
+    fn unreferenced_brand_collapses_to_one_group_listing_every_page() {
+        let (group, rest) = collapse_unreferenced_brand(vec![
+            entry("a.qmd", "Q-5-37"),
+            entry("b.qmd", "Q-2-1"),
+            entry("c.qmd", "Q-5-37"),
+        ]);
+        let group = group.expect("a brand group");
+        assert_eq!(
+            group.affected_files,
+            vec![PathBuf::from("a.qmd"), PathBuf::from("c.qmd")]
+        );
+        assert!(group.to_text().contains("Affected files: a.qmd, c.qmd"));
+        assert_eq!(rest.len(), 1);
+        assert_eq!(rest[0].1.code.as_deref(), Some("Q-2-1"));
+    }
+
+    #[test]
+    fn no_brand_group_when_no_page_warned() {
+        let (group, rest) = collapse_unreferenced_brand(vec![entry("a.qmd", "Q-2-1")]);
+        assert!(group.is_none());
+        assert_eq!(rest.len(), 1);
+    }
+
     fn group(
         diagnostic: quarto_error_reporting::DiagnosticMessage,
         ctx: Option<SourceContext>,
