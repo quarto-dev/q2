@@ -364,6 +364,7 @@ fn stage_typst_brand_fonts(brand: Option<&quarto_brand::ResolvedBrand>, ctx: &mu
 fn resolve_typst_available_fonts(
     stage_name: &str,
     meta: &quarto_pandoc_types::ConfigValue,
+    brand: Option<&quarto_brand::ResolvedBrand>,
     input_path: &Path,
     ctx: &mut StageContext,
 ) -> Result<Option<Vec<String>>, PipelineError> {
@@ -386,10 +387,14 @@ fn resolve_typst_available_fonts(
         .parent()
         .map_or_else(|| ctx.project.dir.clone(), std::path::Path::to_path_buf);
     let extra_font_paths = super::typst_compile::with_google_font_cache(
-        super::typst_compile::resolve_font_paths(
-            &super::typst_compile::string_array(meta.get("font-paths")),
+        super::typst_compile::with_brand_file_fonts(
+            super::typst_compile::resolve_font_paths(
+                &super::typst_compile::string_array(meta.get("font-paths")),
+                &ctx.project.dir,
+                &input_dir,
+            ),
+            brand,
             &ctx.project.dir,
-            &input_dir,
         ),
         &ctx.project.dir,
     );
@@ -511,7 +516,21 @@ impl PipelineStage for PandocWriteStage {
             stage_typst_brand_fonts(dark.as_ref(), ctx);
             (
                 resolve_typst_brand_param(&doc.ast.meta, light.as_ref(), dark.as_ref(), ctx),
-                resolve_typst_available_fonts(self.name(), &doc.ast.meta, &doc.path, ctx)?,
+                resolve_typst_available_fonts(
+                    self.name(),
+                    &doc.ast.meta,
+                    super::typst_compile::brand_for_mode(
+                        light.as_ref(),
+                        dark.as_ref(),
+                        doc.ast
+                            .meta
+                            .get("brand-mode")
+                            .and_then(|v| v.as_plain_text())
+                            .as_deref(),
+                    ),
+                    &doc.path,
+                    ctx,
+                )?,
                 doc.ast
                     .meta
                     .get("citation-location")
