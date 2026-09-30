@@ -5,11 +5,22 @@
  * to walk through the document's history.
  */
 
-import { clone, view, free } from '@automerge/automerge';
+import { clone, view, free, getAuthorForActor } from '@automerge/automerge';
 import { decodeHeads, type DocHandle } from '@automerge/automerge-repo';
 
-export interface ChangeMetadata {
+/**
+ * Per-step metadata for the replay drawer. (Named `ReplayStepMetadata`,
+ * not `ChangeMetadata`, to avoid colliding with automerge's own exported
+ * `ChangeMetadata` type.)
+ */
+export interface ReplayStepMetadata {
   timestamp: number | null;
+  /**
+   * Attribution key for the step: the change's author ID when recorded
+   * (post-transition), else the author mapped from its actor (seq>1
+   * changes carry no footer — Phase 0 finding 1), else the bare actor ID
+   * (pre-transition history). Keeps the `actor` field name per D6.
+   */
   actor: string | null;
 }
 
@@ -20,8 +31,8 @@ export interface ReplaySession {
   /** Get text content at a history index (cached after first access) */
   getContentAt(index: number): string;
 
-  /** Get metadata (timestamp, actor) for a history index */
-  getMetadataAt(index: number): ChangeMetadata;
+  /** Get metadata (timestamp, attribution key) for a history index */
+  getMetadataAt(index: number): ReplayStepMetadata;
 
   /** Write historical content back to the live document via the updateContent callback */
   applyContentAt(index: number): void;
@@ -33,7 +44,7 @@ export interface ReplaySession {
 // Internal handle shape — avoids coupling callers to concrete Automerge types.
 interface ViewableHandle {
   history(): unknown[] | undefined;
-  metadata(change?: string): { time?: number; actor?: string } | undefined;
+  metadata(change?: string): { time?: number; actor?: string; author?: string | null } | undefined;
   doc(): unknown;
 }
 
@@ -70,7 +81,7 @@ export function createReplaySession(
     return text;
   }
 
-  function getMetadataAt(index: number): ChangeMetadata {
+  function getMetadataAt(index: number): ReplayStepMetadata {
     if (closed || index < 0 || index >= history.length) {
       return { timestamp: null, actor: null };
     }
@@ -79,7 +90,17 @@ export function createReplaySession(
       const changeHash = Array.isArray(heads) ? heads[0] : heads;
       if (typeof changeHash !== 'string') return { timestamp: null, actor: null };
       const meta = viewable.metadata(changeHash);
-      return { timestamp: meta?.time ?? null, actor: meta?.actor ?? null };
+      // Author-first resolution: the step's attribution key is the change's
+      // author, else the actor→author index (the clone shares full history,
+      // so its index covers every historical actor), else the bare actor
+      // for pre-transition changes.
+      const actor = meta?.author
+        ?? (meta?.actor
+          ? getAuthorForActor(clonedDoc as Parameters<typeof getAuthorForActor>[0], meta.actor)
+          : undefined)
+        ?? meta?.actor
+        ?? null;
+      return { timestamp: meta?.time ?? null, actor };
     } catch {
       return { timestamp: null, actor: null };
     }

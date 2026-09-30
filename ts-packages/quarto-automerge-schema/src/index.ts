@@ -63,7 +63,12 @@ export interface CaptureRef {
 export interface IndexDocument {
   files: Record<string, string>; // path -> docId mapping
   version?: number; // schema version (3 = current)
-  identities?: Record<string, ActorIdentity>; // actorId -> identity
+  // Attribution key -> identity (D4): authorId for post-transition changes;
+  // legacy actorId keys remain readable — readers resolve
+  // `change.author ?? getAuthorForActor(doc, change.actor) ?? change.actor`,
+  // and by D5 the author ID equals the legacy stable actor ID, so one user's
+  // key is continuous across the transition with no re-keying migration.
+  identities?: Record<string, ActorIdentity>;
   captures?: Record<string, CaptureRef>; // path -> capture sidecar entry (V2+)
   folders?: Record<string, true>; // explicitly created folders (V3+)
 }

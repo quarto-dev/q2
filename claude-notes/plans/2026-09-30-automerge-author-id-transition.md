@@ -518,13 +518,23 @@ unrelated to this work.
 
 ### Phase 4 — attribution consumers: author-first resolution
 
-- [ ] Tests first: attribution/history display resolves an author-keyed
+- [x] Tests first: attribution/history display resolves an author-keyed
   identity for new changes and an actor-keyed identity for legacy
   (`author: null`) changes in the same document.
-- [ ] `ts-packages/quarto-automerge-schema/src/index.ts:66`: document
+  → `attribution-runs.test.ts` (3 new: continuous key across a real
+  legacy+two-session doc incl. payload single-identity assertion;
+  incremental path resolving seq-2 via the state-carried map — red without
+  it; `maybeMergeAt` coalescing across sessions at equal timestamps),
+  `replay.test.ts` (4 new: author preference, seq>1 index fallback,
+  legacy bare-actor fallback — stayed green throughout, cross-boundary
+  continuity), `ReplayDrawer.test.tsx` (1 mixed-history UI continuity
+  test — green from the start since the drawer only sees resolved keys;
+  the load-bearing red pins live in the two producer suites). All red
+  before implementation where the layer owns resolution, green after.
+- [x] `ts-packages/quarto-automerge-schema/src/index.ts:66`: document
   `identities` as keyed by author ID (legacy actor keys remain readable);
   schema comment only, no version bump or type change.
-- [ ] `replayChange` (`attribution-runs.ts:276`): attribution key
+- [x] `replayChange` (`attribution-runs.ts:276`): attribution key
   `decoded.author ?? authorForActor(decoded.actor) ?? decoded.actor`, where
   `authorForActor` is the actor→author map accumulated from seq-1 footers
   during replay (Phase 0 finding 1: seq>1 changes carry no footer).
@@ -532,21 +542,37 @@ unrelated to this work.
   and `AttributionRun.actor`: attribution key. Widen the
   `ViewableHandle.metadata` return type in `attribution-runs.ts:91` and
   `replay.ts:36` to include `author?: string | null`.
-- [ ] `replay.ts` `getMetadataAt`: `actor: meta?.author ?? authorForActor(meta?.actor) ?? meta?.actor ?? null`.
+  → The map is carried on `RunListAttribution._authorByActor` so the
+  incremental path resolves actors whose footer was replayed in an earlier
+  build/update (the common case: one in-memory actor, many seq>1 changes).
+- [x] `replay.ts` `getMetadataAt`: `actor: meta?.author ?? authorForActor(meta?.actor) ?? meta?.actor ?? null`.
   Rename the local `ChangeMetadata` type (it collides with automerge's
   exported `ChangeMetadata`), e.g. `ReplayStepMetadata`.
-- [ ] `useAttribution.ts` `buildIdentityMap`: logic unchanged (keys already
+  → Renamed to `ReplayStepMetadata` (export in sync-client `index.ts`
+  updated; no other consumers). `authorForActor` here is automerge's own
+  `getAuthorForActor` against the session clone (full history, lazy,
+  exact) — the accumulated-map variant belongs to the attribution-runs
+  hot loop, which has no live doc to query.
+- [x] `useAttribution.ts` `buildIdentityMap`: logic unchanged (keys already
   come from `runs`); update the comment.
-- [ ] Rust: no code change (D6). Doc comment on `TransportAttributionRun.actor`
+- [x] Rust: no code change (D6). Doc comment on `TransportAttributionRun.actor`
   (`types.rs:161`) describing the key.
-- [ ] Mixed-history regression test (anchor: `ReplayDrawer.test.tsx`): a
+- [x] Mixed-history regression test (anchor: `ReplayDrawer.test.tsx`): a
   document containing both pre-transition changes (`author: null`, stable
   actor) and post-transition changes (author set, random actor) by the same
   user shows one continuous attribution — same identity entry, same palette
   color — across the boundary; same-author runs from different sessions
   coalesce in `maybeMergeAt`; the `--me` highlight matches both legacy and
   new steps for the current user.
-- [ ] hub-client changelog (second commit) if any hub-client file changed.
+  → Split across the three suites above: run-list continuity + single
+  identity entry + coalescing in `attribution-runs.test.ts`, per-step key
+  continuity in `replay.test.ts`, waveform single-color band + `--me`
+  chip in `ReplayDrawer.test.tsx`.
+- [x] hub-client changelog (second commit) if any hub-client file changed.
+  → Full unit 1264/1264 (107 files), integration 143/143, sync-client
+  167/167 (25 files), quarto-core attribution tests 81/81 + `cargo fmt
+  --check` clean (doc-comment-only Rust change), `npm run build:all`
+  green, ts-packages dist rebuilt after the type rename.
 
 ### Phase 5 — audits, deprecation, end-to-end verification
 

@@ -158,6 +158,10 @@ impl Default for AttributionData {
 pub struct TransportAttributionRun {
     pub start: usize,
     pub end: usize,
+    /// Attribution key, chosen by the JS producer: the change's author ID
+    /// when recorded (post-transition changes), else the bare actor ID
+    /// (pre-transition history). Rust only joins on the key; the field
+    /// keeps the `actor` name per the author-ID transition's D6.
     pub actor: String,
     pub time: i64,
 }

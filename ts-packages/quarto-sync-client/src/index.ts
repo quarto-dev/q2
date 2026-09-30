@@ -122,4 +122,4 @@ export { projectFolderName } from './project-folder-name.js';
 
 // Export replay API
 export { createReplaySession } from './replay.js';
-export type { ReplaySession, ChangeMetadata } from './replay.js';
+export type { ReplaySession, ReplayStepMetadata } from './replay.js';

@@ -56,13 +56,18 @@ interface TransportPayload {
 }
 
 /**
- * Build an `IdentityMap` covering every actor referenced by `runs`,
- * satisfying the Phase 6 producer invariant: **every** actor in `runs`
- * has an entry in `identities` at the wire.
+ * Build an `IdentityMap` covering every attribution key referenced by
+ * `runs`, satisfying the Phase 6 producer invariant: **every** key in
+ * `runs` has an entry in `identities` at the wire.
  *
- * Resolution order per actor:
- *   1. `identities[actor]` (Automerge profile metadata when available),
- *   2. fallback `(actor.slice(0, 8), actorColor(fnv1aHex8(actor)))` —
+ * Run `actor` fields are attribution keys (author IDs for post-transition
+ * changes, bare actor IDs for pre-transition history — see
+ * `attribution-runs.ts`), and `identities` is keyed the same way (D4), so
+ * the lookup needs no author/actor distinction here.
+ *
+ * Resolution order per key:
+ *   1. `identities[key]` (Automerge profile metadata when available),
+ *   2. fallback `(key.slice(0, 8), actorColor(fnv1aHex8(key)))` —
  *      the same formula `GitBlameProvider` uses for emails, so visual
  *      output stays consistent across native and WASM producers.
  */
@@ -120,7 +125,7 @@ export interface UseAttributionOptions {
   filePath: string | null;
   /** The current full document text — needed for char→byte translation. */
   sourceText: string;
-  /** Actor → profile identity table (from `App.tsx`'s identities state). */
+  /** Attribution key → profile identity table (from `App.tsx`'s identities state). */
   identities: Record<string, ActorIdentity>;
 }
 
