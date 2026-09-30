@@ -1423,9 +1423,9 @@ mod tests {
     #[test]
     fn test_two_step_lifecycle_no_launch_on_discovery() {
         watchdog(Duration::from_secs(10), || {
-            let (engine, mock) = make_engine_with_mock("julia", None, None, None);
+            let (engine, mock) = make_engine_with_mock("mockengine", None, None, None);
 
-            mock.script_response(0, loaded_response("julia", vec!["jl"]));
+            mock.script_response(0, loaded_response("mockengine", vec!["jl"]));
             mock.script_response(1, claims_none_response());
 
             let claim = engine.claims_language("python", None);
@@ -1469,11 +1469,11 @@ mod tests {
 
             let aliases = Arc::new(Mutex::new(HashMap::new()));
             let diag = Arc::new(Mutex::new(Vec::new()));
-            let ext_id = ExtensionId::new("julia");
+            let ext_id = ExtensionId::new("mockengine");
             let engine = Arc::new(TsEngine::new(
-                "julia",
+                "mockengine",
                 false,
-                PathBuf::from("/engines/julia.ts"),
+                PathBuf::from("/engines/mockengine.ts"),
                 Arc::clone(&host),
                 None,
                 None,
@@ -1557,11 +1557,11 @@ mod tests {
 
             let aliases = Arc::new(Mutex::new(HashMap::new()));
             let diag = Arc::new(Mutex::new(Vec::new()));
-            let ext_id = ExtensionId::new("julia");
+            let ext_id = ExtensionId::new("mockengine");
             let engine = Arc::new(TsEngine::new(
-                "julia",
+                "mockengine",
                 false,
-                PathBuf::from("/engines/julia.ts"),
+                PathBuf::from("/engines/mockengine.ts"),
                 Arc::clone(&host),
                 None,
                 None,
@@ -1575,8 +1575,8 @@ mod tests {
             let deliver_thread = std::thread::spawn(move || {
                 let mut delivered = 0usize;
                 let responses = [
-                    loaded_response("julia-v1", vec!["jl"]),
-                    loaded_response("julia-v2", vec!["jl", "julia"]),
+                    loaded_response("mockengine-v1", vec!["jl"]),
+                    loaded_response("mockengine-v2", vec!["jl", "julia"]),
                 ];
                 for _ in 0..300 {
                     std::thread::sleep(Duration::from_millis(5));
@@ -1648,11 +1648,11 @@ mod tests {
             let host = Arc::new(TsEngineHost::with_transport(write, read, ctx));
             let aliases = Arc::new(Mutex::new(HashMap::new()));
             let diag = Arc::new(Mutex::new(Vec::new()));
-            let ext_id = ExtensionId::new("julia");
+            let ext_id = ExtensionId::new("mockengine");
             let engine = TsEngine::new(
-                "julia",
+                "mockengine",
                 false,
-                PathBuf::from("/engines/julia.ts"),
+                PathBuf::from("/engines/mockengine.ts"),
                 Arc::clone(&host),
                 None,
                 None,
@@ -2136,11 +2136,11 @@ mod tests {
 
             let aliases = Arc::new(Mutex::new(HashMap::new()));
             let diag = Arc::new(Mutex::new(Vec::new()));
-            let ext_id = ExtensionId::new("julia");
+            let ext_id = ExtensionId::new("mockengine");
             let engine = TsEngine::new(
-                "julia",
+                "mockengine",
                 false,
-                PathBuf::from("/engines/julia.ts"),
+                PathBuf::from("/engines/mockengine.ts"),
                 Arc::clone(&host),
                 None,
                 None,
@@ -2150,7 +2150,7 @@ mod tests {
                 diag,
             );
 
-            mock.script_response(0, loaded_response("julia", vec!["jl"]));
+            mock.script_response(0, loaded_response("mockengine", vec!["jl"]));
             mock.script_response(1, claims_primary_response(1));
 
             let claim1 = engine.claims_language("julia", None);
@@ -3195,11 +3195,11 @@ mod tests {
             let host = Arc::new(TsEngineHost::with_transport(write, read, ctx));
             let aliases = Arc::new(Mutex::new(HashMap::new()));
             let diag = Arc::new(Mutex::new(Vec::new()));
-            let ext_id = ExtensionId::new("julia");
+            let ext_id = ExtensionId::new("mockengine");
             let engine = TsEngine::new(
-                "julia",
+                "mockengine",
                 false,
-                PathBuf::from("/engines/julia.ts"),
+                PathBuf::from("/engines/mockengine.ts"),
                 Arc::clone(&host),
                 None,
                 None,
@@ -3221,7 +3221,7 @@ mod tests {
                 0,
                 FromEngine::Loaded {
                     discovery: LoadEngineResult {
-                        name: "julia".to_string(),
+                        name: "mockengine".to_string(),
                         valid_extensions: vec![],
                         generates_figures: false,
                         can_freeze: false,
