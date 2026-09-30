@@ -63,7 +63,7 @@ Each error code has **one JSON file** with multiple test cases:
   "message": "A space is causing a quote mark to be interpreted as a quotation close.",
   "notes": [
     {
-      "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+      "message": "No opening quote was found before this mark. If you meant an apostrophe, escape it with a backslash.",
       "label": "quote-start",
       "noteType": "simple"
     }
