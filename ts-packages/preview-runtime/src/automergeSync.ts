@@ -163,11 +163,11 @@ function ensureClient(): SyncClient {
  * per-IP handshake serialization — the SPA's boot controller
  * arbitrates server liveness over HTTP `/health` instead.
  */
-export async function connect(syncServerUrl: string, indexDocId: string, actorId?: string, screenName?: string, color?: string, peerTimeoutMsOrOptions?: number | ConnectOptions): Promise<FileEntry[]> {
+export async function connect(syncServerUrl: string, indexDocId: string, authorId?: string, screenName?: string, color?: string, peerTimeoutMsOrOptions?: number | ConnectOptions): Promise<FileEntry[]> {
   await initWasm();
   vfsClear();
 
-  return ensureClient().connect(syncServerUrl, indexDocId, actorId, screenName, color, peerTimeoutMsOrOptions ?? 1);
+  return ensureClient().connect(syncServerUrl, indexDocId, authorId, screenName, color, peerTimeoutMsOrOptions ?? 1);
 }
 
 /**
@@ -306,22 +306,23 @@ export function isConnected(): boolean {
  */
 export async function createNewProject(
   options: CreateProjectOptions,
-  actorId?: string,
+  authorId?: string,
   screenName?: string,
   color?: string,
-  resolveActorId?: (indexDocId: string) => Promise<string | null | undefined>,
+  resolveAuthorId?: (indexDocId: string) => Promise<string | null | undefined>,
 ): Promise<CreateProjectResult> {
   await initWasm();
   vfsClear();
 
-  return ensureClient().createNewProject(options, actorId, screenName, color, resolveActorId);
+  return ensureClient().createNewProject(options, authorId, screenName, color, resolveAuthorId);
 }
 
 /**
- * Get the current actor ID, or null if not set.
+ * Get the current author ID — the attribution key identifying this
+ * user's changes — or null if not set.
  */
-export function getActorId(): string | null {
-  return client?.getActorId() ?? null;
+export function getAuthorId(): string | null {
+  return client?.getAuthorId() ?? null;
 }
 
 /**

@@ -1,28 +1,27 @@
 /**
- * Characterization test underpinning the index-document self-heal fix
- * (bd-6f21d4c6; see
+ * Hazard documentation for the duplicate-seq wedge (bd-6f21d4c6; see
  * claude-notes/plans/2026-09-17-index-doc-duplicate-seq-self-heal.md):
- * does reusing the same Automerge actor id across two
- * independent, concurrently-edited copies of a document produce the
- * exact `RangeError: duplicate seq N found for actor <id>` Carlos
- * observed in production, via the real sync-message path (not just
- * `merge()`)?
- *
- * Answer, confirmed directly: **yes**, deterministically, in two rounds
- * of `generateSyncMessage`/`receiveSyncMessage` — no automerge-repo, no
- * network, no hub needed. Round 1 exchanges heads/haves only (no change
- * bytes yet, per the sync protocol's own design); round 2 is where the
- * actual colliding change bytes cross the wire and the receiving side's
+ * reusing the same Automerge actor id across two independent,
+ * concurrently-edited copies of a document deterministically produces
+ * `RangeError: duplicate seq N found for actor <id>` on
+ * `receiveSyncMessage` — no automerge-repo, no network, no hub needed.
+ * Round 1 of the protocol exchanges heads/haves only (no change bytes
+ * yet, per the sync protocol's own design); round 2 is where the actual
+ * colliding change bytes cross the wire and the receiving side's
  * `apply_changes_batch_log_patches` rejects them.
  *
- * This is not a fix-driving red test — it demonstrates existing,
- * documented automerge behavior (throwing on a genuine actor-identity
- * violation is correct; the bug is that automerge-repo's `Repo.ts`
- * silently swallows this with no recovery, and that reusing an actor id
- * across concurrent sessions is what creates the violation in the first
- * place — both covered separately). It exists to prove H4's root-cause
- * mechanism is real and trivially reachable, not merely plausible from
- * reading the Rust source.
+ * This was the production failure mode of the pre-transition stable
+ * actor id (actorIdFromUserId / GET /auth/actor). Post-transition
+ * (author-ID epic bd-o1yn1fqy) no q2 code chooses actor IDs: every
+ * document instance gets automerge's random actor (D1), so this setup
+ * is no longer reachable through the sync client — the two-tab
+ * convergence proof lives in author-id.test.ts. The tests stay because
+ * the hazard stays: throwing on a genuine actor-identity violation is
+ * correct upstream behavior, and anyone tempted to reintroduce explicit
+ * actor management (per-device actors, "stable" actor prefixes) should
+ * watch exactly how it wedges. Note the parallel with automerge's own
+ * author support: `set_author` re-randomizes the actor precisely
+ * because authors and actors must never be conflated.
  */
 
 import { describe, it, expect } from 'vitest';

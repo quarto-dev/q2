@@ -397,7 +397,7 @@ unrelated to this work.
 
 ### Phase 2 — quarto-sync-client and preview-runtime: apply author, drop actor
 
-- [ ] Tests first: `connect` with an `authorId` produces changes that
+- [x] Tests first: `connect` with an `authorId` produces changes that
   resolve to that author (`change.author` on each actor's seq-1 change,
   `getAuthorForActor` thereafter — per the Phase 0 findings); two documents
   opened by the same client have different actors; the same document opened
@@ -405,7 +405,11 @@ unrelated to this work.
   scenario — two tabs of one user must not share an actor); `createDoc`
   stamps the author from the first change; a re-found document (the
   `findDoc` path) has the author applied.
-- [ ] Replace `applyActorId` with `applyAuthorId(handle, authorId)`
+  → `src/author-id.test.ts` (5 tests): all red before the change
+  (author assertions undefined; actors shared 1-across-3 docs; the
+  two-tab convergence test failed after 15 s — the literal production
+  wedge), all green after.
+- [x] Replace `applyActorId` with `applyAuthorId(handle, authorId)`
   (`client.ts:~688`): `getBackend(handle.doc()!).setAuthor(authorId)` —
   author is runtime-only backend state, so set it in place rather than
   forking the document (D9; `docSync()` does not exist in automerge-repo
@@ -416,33 +420,50 @@ unrelated to this work.
   (`handle.update(doc => automergeClone(doc, { author }))`) in a code comment
   as the documented fallback if the `@hidden` `getBackend` hatch is ever
   removed (D9).
-- [ ] `createDoc` (`client.ts:~699`): `automergeFrom(init, { author })`.
-- [ ] Rename per D7: `state.actorId` → `state.authorId`; `connect(...,
+- [x] `createDoc` (`client.ts:~699`): `automergeFrom(init, { author })`.
+- [x] Rename per D7: `state.actorId` → `state.authorId`; `connect(...,
   actorId, ...)` → `authorId`; `createNewProject(..., actorId, ...,
   resolveActorId)` → `authorId`, `resolveAuthorId`; `getActorId()` →
   `getAuthorId()`. No caller supplies actors; automerge generates them.
-- [ ] `setIdentity` call sites (`client.ts:1264, 2094`): key by author ID.
-- [ ] Local/remote change classification (`client.ts:627`) unchanged — it
+- [x] `setIdentity` call sites (`client.ts:1264, 2094`): key by author ID.
+- [x] Local/remote change classification (`client.ts:627`) unchanged — it
   compares against the doc's own actor, which is now correct across tabs.
-- [ ] Collision-repro tests (bd-6f21d4c6's evidence base):
+- [x] Collision-repro tests (bd-6f21d4c6's evidence base):
   `actor-id-collision.test.ts` and `full-stack-actor-collision.test.ts` in
   `ts-packages/quarto-sync-client/src/` manufacture the wedge by forcing two
   clients to share an actor — a setup that no longer exists once `connect`
   stops accepting one. Rewrite them as convergence proofs (two same-author
   clients converge; no duplicate-seq error; self-heal never fires) or delete
   them with the reason recorded in the commit message.
-- [ ] Keep `installDuplicateSeqRecovery` as a safety net while legacy clients
+  → `full-stack-actor-collision.test.ts` deleted: its wedge setup is
+  inexpressible once `connect`/`createNewProject` take no actor; the
+  same-author convergence proof (no duplicate-seq, self-heal never
+  fires, both tabs converge, both edits resolve to the same author) is
+  the last test in `author-id.test.ts`. `actor-id-collision.test.ts`
+  kept with a reframed header: bare-automerge hazard documentation for
+  why no code may manage actor IDs (D1).
+- [x] Keep `installDuplicateSeqRecovery` as a safety net while legacy clients
   still emit stable actors during the skew window; the removal is a Phase 5
   follow-up strand.
-- [ ] preview-runtime wrapper (`ts-packages/preview-runtime/src/automergeSync.ts`):
+- [x] preview-runtime wrapper (`ts-packages/preview-runtime/src/automergeSync.ts`):
   `connect`, `createNewProject`, `getActorId` → author equivalents.
   q2-preview-spa needs no change: it imports only `connect`/`disconnect`
   from `@quarto/preview-runtime`, passes no actor, and stays authorless per
   D8.
-- [ ] `npm run test -w ts-packages/quarto-sync-client` and
+- [x] `npm run test -w ts-packages/quarto-sync-client` and
   `npm run test -w ts-packages/preview-runtime` green (neither package has a
   `test:ci` script; also run preview-runtime's `test:integration`/`test:wasm`
   suites if the wrapper's behavior changed).
+  → sync-client 163/163 (25 files), preview-runtime 79/79. The wrapper
+  change is a pass-through rename only (no behavior change), and both
+  extra suites are pre-existing vacuous: `test:integration` matches zero
+  files; `test:wasm` names a config file that does not exist (documented
+  in ts-test-suite.yml:298-301). Both `tsc --noEmit` clean.
+  Mock-based suites needed `getBackend` stubs added to their wholesale
+  `@automerge/automerge` mocks (client.ts now imports it for D9).
+  Note: one order-dependent flake observed — `doc-inventory.test.ts`
+  failed once in a full-suite run, green standalone and on two full-suite
+  re-runs; unrelated to author handling (its projects are authorless).
 
 ### Phase 3 — hub-client: fetch and wire author IDs
 
