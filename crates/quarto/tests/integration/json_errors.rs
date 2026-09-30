@@ -387,6 +387,50 @@ fn discovery_parse_error_json_carries_real_code() {
     );
 }
 
+/// Wire contract: `source_file` uses the plain path form whenever one
+/// exists, so no Windows `\\?\` verbatim prefix. The test runs from a
+/// plain cwd with a relative argument, as a user would, so any verbatim
+/// prefix on the wire comes from q2 itself.
+#[test]
+fn source_file_json_is_a_plain_path() {
+    let temp = TempDir::new().unwrap();
+    let dir = dunce::simplified(&canonical(temp.path())).to_path_buf();
+    assert!(
+        !dir.to_string_lossy().starts_with(r"\\?\"),
+        "test setup: the TEMP root gives the fixture no plain path form: {}",
+        dir.display()
+    );
+    write_file(&dir.join("bad.qmd"), "---\ntitle: Bad\n---\n\n```{python\n");
+
+    let output = run_q2_render(&dir, &["--json-errors", "bad.qmd"]);
+    assert!(
+        !output.status.success(),
+        "expected non-zero exit on parse error"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let lines = parse_ndjson_lines(&stderr);
+    let source_files: Vec<&str> = lines
+        .iter()
+        .filter_map(|l| l.get("source_file").and_then(|s| s.as_str()))
+        .collect();
+    assert!(
+        !source_files.is_empty(),
+        "expected a source_file field on stderr; stderr:\n{stderr}\nparsed:\n{lines:#?}"
+    );
+    for source_file in source_files {
+        assert!(
+            !source_file.starts_with(r"\\?\"),
+            "source_file must be a plain path, got: {source_file}"
+        );
+        assert_eq!(
+            canonical(Path::new(source_file)),
+            canonical(&dir.join("bad.qmd")),
+            "source_file must name the rendered file, got: {source_file}"
+        );
+    }
+}
+
 // ====================================================================
 // Plan 7c Phase 4: structured cell locations for .ipynb documents
 // ====================================================================

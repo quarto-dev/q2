@@ -79,6 +79,39 @@ fn write_minimal_website(project_dir: &Path) {
 
 // === Tests ============================================================
 
+/// The `Rendering single file:` status line names the input by its
+/// plain path whenever one exists, so no Windows `\\?\` verbatim
+/// prefix. Runs from a plain cwd with a relative argument, as a user
+/// would, so any verbatim prefix comes from q2 itself.
+#[test]
+fn single_file_status_line_shows_a_plain_path() {
+    let temp = TempDir::new().unwrap();
+    let dir = dunce::simplified(&canonical(temp.path())).to_path_buf();
+    assert!(
+        !dir.to_string_lossy().starts_with(r"\\?\"),
+        "test setup: the TEMP root gives the fixture no plain path form: {}",
+        dir.display()
+    );
+    write_file(&dir.join("doc.qmd"), "---\ntitle: Doc\n---\n\nBody.\n");
+
+    let out = run_q2(&dir, &["doc.qmd"]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "render failed:\nstderr: {stderr}");
+    let shown = stderr
+        .lines()
+        .find_map(|l| l.strip_prefix("Rendering single file: "))
+        .unwrap_or_else(|| panic!("expected a status line; stderr:\n{stderr}"));
+    assert!(
+        !shown.starts_with(r"\\?\"),
+        "status line must show a plain path, got: {shown}"
+    );
+    assert_eq!(
+        canonical(Path::new(shown)),
+        canonical(&dir.join("doc.qmd")),
+        "status line must name the input, got: {shown}"
+    );
+}
+
 /// Test 53: `--clean-cache` wipes the profile cache and the
 /// nav-config-hash sentinel before the render runs. The
 /// subsequent render then re-populates the profile cache.
