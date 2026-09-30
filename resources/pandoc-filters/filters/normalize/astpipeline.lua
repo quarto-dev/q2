@@ -60,6 +60,15 @@ function quarto_ast_pipeline()
             return data_uri
           end
         end)
+        -- put the long data uris back in place of the placeholders
+        local function restore_data_uris(text)
+          local index = 1
+          return (text:gsub(data_uri_uuid:gsub('-', '%%-'), function(_)
+            local data_uri = data_uris[index]
+            index = index + 1
+            return data_uri
+          end))
+        end
         local juice_in = pandoc.path.join({tmpdir, 'juice-in.html'})
         local jin = assert(io.open(juice_in, 'w'))
         jin:write(htmltext)
@@ -69,15 +78,10 @@ function quarto_ast_pipeline()
         local ok, content = pcall(pandoc.pipe, quarto_path, {'run', juice_script, juice_in}, '')
         if not ok then
           quarto.log.error('Running juice failed: ' .. tostring(content))
-          return htmltext
+          -- the placeholders must not leak into the document
+          return restore_data_uris(htmltext)
         end
-        local index = 1
-        content = content:gsub(data_uri_uuid:gsub('-', '%%-'), function(_)
-          local data_uri = data_uris[index]
-          index = index + 1
-          return data_uri
-        end)
-        return content
+        return restore_data_uris(content)
       end)
     end   
     local function should_handle_raw_html_as_table(el)

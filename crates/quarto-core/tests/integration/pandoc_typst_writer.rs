@@ -784,3 +784,69 @@ fn render_document_to_file_typst_resolves_data_uri_image_via_mediabag() {
         "expected the typst output to reference the written mediabag file, got:\n{text}"
     );
 }
+
+/// A raw-HTML table holding a data-URI `<img>` over 2000 characters must
+/// not leak the placeholder `juice()` swaps in for it (normalize/
+/// astpipeline.lua) into the Typst source.
+///
+/// `juice.ts` does not ship with q2, so the juice step always falls back;
+/// that fallback used to return the placeholder-substituted HTML, leaving a
+/// bare UUID as the `image()` path ("file not found" from Typst). Short
+/// data-URIs are not substituted, so one of each size in the same table
+/// covers both paths.
+///
+/// Revert hunk: returning `htmltext` (not `restore_data_uris(htmltext)`)
+/// from the `not ok` branch of `juice()` makes this RED.
+#[test]
+fn render_document_to_file_typst_raw_html_table_long_data_uri_images_reach_mediabag() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = temp.path().canonicalize().unwrap();
+    let input_path = project_dir.join("f.qmd");
+    let short_png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+    // Over the 2000-char threshold; decodes to bytes distinct from `short_png`.
+    let long_png = format!("iVBORw0KGgo{}", "A".repeat(2400));
+    write(
+        &input_path,
+        &format!(
+            "---\ntitle: Juice Check\n---\n\n```{{=html}}\n<table><tr><td>\n\
+             <img src=\"data:image/png;base64,{short_png}\">\n</td><td>\n\
+             <img src=\"data:image/png;base64,{long_png}\">\n</td></tr></table>\n```\n"
+        ),
+    );
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let output_path = project_dir.join("f.typ");
+    let options = RenderToFileOptions {
+        output_path: Some(output_path.clone()),
+        ..Default::default()
+    };
+
+    render_document_to_file(
+        &input_path,
+        "typst",
+        &options,
+        None,
+        runtime,
+        None,
+        None,
+        None,
+    )
+    .expect("typst render should succeed");
+
+    let text = std::fs::read_to_string(&output_path).unwrap();
+    assert!(
+        !text.contains("273dae7e-3633-4385-9b0c-203d2d7a2d37"),
+        "juice placeholder leaked into typst output:\n{text}"
+    );
+    let image_calls = text.matches("image(\"").count();
+    assert_eq!(image_calls, 2, "expected two image() calls, got:\n{text}");
+    assert_eq!(
+        text.matches("f_files/mediabag/").count(),
+        2,
+        "both images should point into the mediabag, got:\n{text}"
+    );
+    let n = std::fs::read_dir(project_dir.join("f_files").join("mediabag"))
+        .unwrap()
+        .count();
+    assert_eq!(n, 2, "expected two mediabag files");
+}
