@@ -1,0 +1,46 @@
+---
+title: "Pandoc definition lists are not supported"
+description: "Pandoc definition-list syntax stays visible as literal text because Quarto Markdown does not support it."
+code: Q-2-54
+subsystem: markdown
+status: stub
+since: "99.9.9"
+categories:
+  - markdown
+---
+
+# `Q-2-54` — Pandoc definition lists are not supported
+
+> Pandoc definition-list syntax stays visible as literal text because Quarto Markdown does not support it.
+
+## What this means
+
+A line beginning with `:` after a term is Pandoc definition-list syntax. Quarto Markdown does not build a definition list from this form. The line is shown as literal text instead, so the definition is not attached to its term.
+
+## Why this happens
+
+At the beginning of a line, `: ` is also the syntax for a table caption. When no table precedes it, Quarto reports a warning and keeps the caption text visible. If the line follows a paragraph or plain block, Quarto also reports Q-2-54 because the sequence looks like a Pandoc definition list.
+
+## How to fix
+
+Use the supported `.definition-list` div syntax instead:
+
+```markdown
+::: {.definition-list}
+* `time`
+  - A timestamp that identifies when the request was initiated.
+  - Type: string
+:::
+```
+
+To migrate an existing document automatically, run:
+
+```sh
+qmd-syntax-helper convert -r definition-lists
+```
+
+If a leading colon is intentional literal text rather than a definition, escape it as `\:`.
+
+## Related
+
+- [`Q-2-46`](Q-2-46.qmd) — link reference definitions are also unsupported, but remain visible as text.
