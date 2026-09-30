@@ -60,7 +60,7 @@ Why not add dunce at each site: about 45 inlined copies with nothing keeping the
 
 The result goes into an audit table in this plan (site, consumer, operand origins, disposition, reason). The sweep is mechanical but spans about 30 files, so one sonnet subagent does it under a strict output contract (one row per site, evidence as `file:line`, no fix proposals), and I spot-check every R row and every out-of-acceptance exception against the source.
 
-**Test oracles (17 in the prototype, plus any the audit adds).** Where a test checks *which* file a path names (the `classify_*`/`render_once_*` units), make the comparison spelling-agnostic by canonicalizing both sides through the shared function, so the test passes before and after layer 3. Where a test pins *what q2 emits* (`render_scripts_cli` `QUARTO_PROJECT_DIR`), keep the identity check in this layer and add the spelling assertion in layer 3 as a real RED.
+**Test oracles (17 in the prototype, plus any the audit adds).** Where a test checks *which* file a path names (the `classify_*`/`render_once_*` units), make the comparison spelling-agnostic by canonicalizing both sides through the shared function, so the test passes before and after layer 3. Where a test pins *what q2 emits* (`render_scripts_cli` `QUARTO_PROJECT_DIR`), keep an exact-string check against an expected path spelled by the shared function (so it pins "q2 emits the shared function's spelling" before and after layer 3), and add the plain-spelling assertion in layer 3 as a real RED.
 
 **Overwrite guard (TDD, portable RED).**
 1. RED: add `render_cli_e2e::output_via_dotdot_spelling_of_input_refuses_and_preserves_source`, which creates `<dir>/sub/` in the fixture (so the spelling resolves on every OS instead of naming a missing directory), runs `--output <dir>/sub/../doc.qmd`, and asserts both refusal and an untouched source. It fails today on every OS (verified above via the binary). On Windows, also run the plain-spelling case; if it can't be expressed portably, put it in a `#[cfg(windows)]` test whose body is the Windows-only spelling (the gate matches what's being tested and doesn't hide a failure).
@@ -86,7 +86,7 @@ Layer 2 (`bugfix/bd-1klbq2zd-path-audit`):
 - [x] Guard: RED test(s) → fix → GREEN (`37e3d127`)
 - [x] Shared `canonicalize` + deepest-existing variant (std-backed, moved from `output_sink.rs`); `NativeRuntime::canonicalize` uses the former (`84f4d01a`)
 - [x] Audit table: subagent sweep, coverage cross-check, spot-check (§ Spot-check verdicts), routing (`28bea643`). `ts_process` failures classified (§ Baselines, bd-j5ij00i0). wasm32: `cargo check -p quarto-system-runtime --target wasm32-unknown-unknown` passes; the `quarto-core` wasm32 check cannot run on this host (no clang for tree-sitter's C build), so CI's hub-client build leg is the check for rows 16-18
-- [x] Spelling-agnostic test oracles: `commands::render` and `render_scripts_cli` `canonical` helpers call the shared function; `QUARTO_PROJECT_DIR`/`OUTPUT_DIR` assert identity (absolute + equal after canonicalizing both sides). Unflipped: only the 2 baseline `render_scripts_cli` failures. `preview.rs` helpers wait on the flip
+- [x] Spelling-agnostic test oracles: `commands::render` and `render_scripts_cli` `canonical` helpers call the shared function; `QUARTO_PROJECT_DIR`/`OUTPUT_DIR` assert absolute + exact equality with the shared-function-spelled `project` (the review restored the exact check that `932313dc` had relaxed to "equal after canonicalizing both sides"). Unflipped: only the 2 baseline `render_scripts_cli` failures. `preview.rs` helpers wait on the flip
 - [x] Classify `preview_static_e2e::a_page_inside_the_project_opens_on_that_page`: passes under the flip, nothing to fix. `cache_lru` concurrent test: classified, independent of this work (bd-cpzr71jr). `preview.rs` helpers: no `commands::preview` test fails under the flip, no change
 - [x] Crate-scoped suites for every touched crate: no failure outside the baseline sets (§ Unflipped regression run). 51 of the 55 baseline failures fail; the other 4 (textile, mermaid, execute_defaults, marimo) pass, as in the after-routing run. The new guard tests pass
 - [x] Apply the fold rule: do **not** fold. R rows exceed 10 and the flip fallout is not small (§ Flip results)
@@ -221,6 +221,8 @@ Coverage cross-checked in the main session: the production `canonicalize(` hit l
 | 45 | `quarto-test/src/runner.rs:67` | quarto-test (y) | std | R? (feeds `render_document`) | verify |
 | 46 | `wasm-quarto-hub-client/src/lib.rs:1740` | wasm | runtime | N/A (wasm VFS only) | |
 | 47-49 | `traits.rs:333`, `sandbox.rs:205`, `wasm.rs:349` | runtime | decl/impls | N/A | |
+| 50-51 | `quarto-system-runtime/src/canonical.rs:17,18` (HEAD `120704bb`) | runtime | shared fn def + its std call | N/A | added by this layer (`84f4d01a`); the function every routed site calls |
+| 52-53 | `quarto-core/src/render_to_file.rs:649,650` (HEAD `120704bb`) | core (y) | runtime | N/A | added by this layer (`37e3d127`): overwrite guard, both operands through the runtime |
 
 Target of each quarto-core candidate (checked against `cfg` gates at `16cd2d5b`): row 14 native-only (`project_resources.rs:1222` `#[cfg(not(target_arch = "wasm32"))]`); row 15 native-only (`book/mod.rs:16` gates `multi_file_html`); rows 16, 17, 18 **compile for wasm32** (ungated modules `render_item`, `static_analyzer`, `include_expansion`). Rows in `quarto`, `quarto-hub`, `quarto-preview`, `quarto-test` are native binaries/libs. The wasm32 rows need the all-target export (§ Target gating).
 
@@ -249,6 +251,12 @@ Candidate routing set before spot-check: std rows 14, 15, 16, 17, 18, 20(+21), 2
 | 45 | **R** (emission) | `quarto-test/runner.rs:67`: the std `input_path` sits next to the seam-derived `output_path` in failure reports |
 
 Routing set: rows 15 (3 calls), 16, 17, 18 (2 calls), 20-25, 36-39, 45. Left as they are: 14 and 32 (downgraded from R? by the spot-check), 26-28. No crate beyond the baselined ones is added.
+
+## Layer 2 review (layer tip `120704bb`)
+
+- Coverage audit (codex): 63 production `canonicalize(` sites, 59 matched to the table; the 4 unmatched are this layer's own additions, now rows 50-53. Rows 1-2's definition moved to `canonical.rs`, as noted. 84 test helpers call `canonicalize`; none failed under the flip re-run.
+- Branch review (codex, roborev 2949): no findings.
+- Whole-branch review (Opus): no high/medium. Low: the overwrite guard misses a hardlink alias of the input (pre-existing, outside the spelling contract; bd-vf2eil63). Low: `render_scripts_cli` had dropped its spelling pin; exact check restored, both tests pass.
 
 ## Verification
 
