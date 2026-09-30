@@ -91,10 +91,10 @@ Layer 2 (`bugfix/bd-1klbq2zd-path-audit`):
 - [ ] Crate-scoped suites for every touched crate: failure set identical to the baseline except the guard tests
 - [x] Apply the fold rule: do **not** fold. R rows exceed 10 and the flip fallout is not small (§ Flip results)
 - [x] Temporary seam prototype check (`932313dc`, flip reverted, `Cargo.lock` == HEAD): audit fallout is **not** gone, ~129 new failures (§ Flip results)
-- [ ] Classify every § Flip results cluster as test oracle vs product mixing (evidence `file:line`, which operand is verbatim and where it comes from)
-- [ ] Route `quarto-preview/src/config.rs:403` (+ `:423/:447/:536`) through the shared function; flip-RED = `config::tests::single_file_deps_resources_glob`. Correct audit rows 29-32 to R
-- [ ] Fix every product site the classification finds, same flip-RED pattern
-- [ ] Oracle sweep: std `canonical()` helpers in `quarto-core` tests (`idempotence.rs:67`, `repo_actions_pipeline.rs:27`, `render_page_in_project.rs:50`, others per classification), `quarto-hub` `admin_collect_lifecycle.rs:106/135`, the two `render_once_tests` step 6 missed
+- [x] Classify every § Flip results cluster as test oracle vs product mixing (§ Flip classification)
+- [x] Route `quarto-preview/src/config.rs:403` (+ `:423/:447/:536`) through the shared function; flip-RED = `config::tests::single_file_deps_resources_glob` (RED from the `932313dc` flip run; GREEN pending the flip re-run). Audit rows 29-32 corrected to R
+- [x] Fix every product site the classification finds: none beyond config.rs
+- [x] Oracle sweep (`111e2cf7`): the failing files' std helpers and inline std canonicalizes now call the shared function
 - [ ] Re-run the flip on all six crates: new failures only from known noise (bd-j5ij00i0, bd-cpzr71jr), then revert
 
 Layer 3 (`bugfix/bd-1klbq2zd-dunce-seam`):
@@ -147,6 +147,21 @@ Compare sets, not counts. Raw logs are session scratch only; re-derive from this
 
 Baseline tests that pass under the flip (run-to-run variation, not attributed): `metadata_path_resolution::frontmatter_sidebar_resolves_sibling_relative_qmd`, `pandoc_render_to_file::render_document_to_file_docx_embeds_a_relatively_referenced_image`, the six `julia_engine_e2e::j*`. The run left `crossrefs_all_docx__docx.snap.new` and `integration__pandoc_shim_goldens__equation_golden.snap.new` (deleted).
 
+### Flip classification (sonnet sweep, static; central claims checked in the main session)
+
+Every cluster except config.rs is a **test oracle**: the verbatim operand is a test-side std canonicalize, and every production caller spells the same argument through the runtime or the shared function (`discover` at `project/mod.rs:1907`; `RenderMode::Subset` from `project.files[].input` at `render.rs:1236`; `ExecutionPolicy::Only` from the shared fn at `preview_static.rs:296`, per its contract at `execution_policy.rs:30-32`).
+
+| cluster | verbatim operand (test) | meets the runtime spelling at |
+|---|---|---|
+| `render_once_tests` (2) | `render.rs:3295` (`website()`), `:3345` | `assert_eq` on `report.output_dir/project_dir/outputs()` |
+| `project_resources::tests` (~22) | `temp.path().canonicalize()` ×29 plus 4 expected values | `project_resources.rs:609` containment → `OutOfProject` |
+| `directory_metadata_tests` (12) | `test_project_context`, `project/mod.rs:3153` | `mod.rs:217` `strip_prefix` |
+| `project_brand` (2) | `mod.rs:4026, 4049` | `assert_eq` on `resolved.dir` |
+| quarto-core integration (16 files) | each file's local `canonical()` helper, or inline in `execution_policy.rs` / `project_profile_overlays.rs` | `ActivePage`/`Subset`/`Only` membership against `project.files`, or `output_path.strip_prefix(site_root)` |
+| `admin_collect_lifecycle` | `:135` (`:106` is harmless: re-canonicalized by `collect.rs:210`) | `batch_dir.starts_with` |
+
+The only **product** site is `quarto-preview/src/config.rs:403` (see rows 29-32). The sweep found no other production std canonicalize that meets a seam path (the others sit in `cfg(test)`, or both of their operands come from std: `deps.rs:102`, `lib.rs:443-444`, `sync.rs`, `same_canonical_path`, trace-server `is_within`). Other integration files with the same std `canonical()` helper (`book_*`, `brand_fonts`, `fail_fast`, …) passed under the flip and are left unchanged.
+
 ## Guard finding (layer 2, step 3)
 
 On Windows, `PathBuf::push` folds `..` away when the base is verbatim (`\\?\`), so `canonical(dir).join("sub").join("..")` is lexically the input itself and the first version of the dotdot test passed vacuously. The test now hangs the detour off `dunce::simplified(dir)` and asserts the `..` survives. Both new tests were RED for the right reason (`expected refusal … stderr: Rendering single file: …`) before the fix. The guard now also compares `runtime.canonicalize` of both operands; `determine_output_paths` takes a `&dyn SystemRuntime` (all callers, including the two book callers, pass theirs).
@@ -183,8 +198,8 @@ Coverage cross-checked in the main session: the production `canonicalize(` hit l
 | 24 | `quarto-hub/src/main.rs:216` | hub (n) | std | R (bail text) | |
 | 25 | `quarto-hub/src/main.rs:370` | hub (n) | std | R (tracing) | |
 | 26-28 | `quarto-hub/src/sync.rs:631,816,907` | hub (n) | std | L (self-consistent containment) | |
-| 29-31 | `quarto-preview/src/config.rs:403,423,447` | preview (y) | std | L (self-consistent) | |
-| 32 | `config.rs:536` | preview (y) | std | R? (rel paths rejoined onto a seam root?) | verify |
+| 29-31 | `quarto-preview/src/config.rs:403,423,447` | preview (y) | std | L (self-consistent) | **R** (flip): `:403`'s root meets runtime-canonical matches in `expand_patterns`; `:423/:447` compare against that root, so all move together |
+| 32 | `config.rs:536` | preview (y) | std | R? (rel paths rejoined onto a seam root?) | **R** with 29-31 (same `to_in_tree_rel` root) |
 | 33 | `quarto-preview/src/deps.rs:102` | preview (y) | std | L | |
 | 34-35 | `quarto-preview/src/lib.rs:443,444` | preview (y) | std | L (deliberate pair) | |
 | 36 | `quarto/src/commands/get_config.rs:71` | quarto (y) | std | R (feeds seam-derived project machinery) | |
@@ -218,7 +233,7 @@ Candidate routing set before spot-check: std rows 14, 15, 16, 17, 18, 20(+21), 2
 | 24 | **R** (emission) | `main.rs:216` admin scan: bail text and the canonical `data_dir` it records |
 | 25 | **R** (emission) | `main.rs:370` project root: tracing and the `StorageManager` root |
 | 26-28 | L (re-confirmed) | `sync.rs:631/816/907`: both containment operands are std-canonicalized in place, independent of how `project_root` is spelled. Security-sensitive; left untouched on purpose |
-| 32 | **L** | `quarto-preview/config.rs:403-536`: `canonical_root` and every candidate are std-canonicalized in place (`recorded_includes` too, re-canonicalized at `:423`); the output is project-relative |
+| 32 | ~~L~~ **R** (corrected by the flip) | `quarto-preview/config.rs:403-536`: the in-place candidates are self-consistent, but `canonical_root` also goes into `expand_patterns` (`:480`), whose containment check (`project_resources.rs:606-609`) uses runtime-canonical matches. Under the flip every declared `resources:` entry is `OutOfProject` and the `if let Ok` drops it. Rows 29-32 routed together |
 | 36 | **R** | `get_config.rs:71`: the std `input` goes into `DocumentInfo::from_path` next to the seam-derived `project.dir` from `discover_with_profile` |
 | 37 | **R** (emission) | `commands/hub.rs:80`: tracing and the `StorageManager` root, as row 25 |
 | 38 | **R** | `commands/preview.rs:137`: the std root feeds `resolve_project_and_initial_page` and the served project |
