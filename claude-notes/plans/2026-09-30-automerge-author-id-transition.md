@@ -49,8 +49,10 @@ This plan transitions **all deployments** so that:
 2. **Actor IDs** return to the upstream-recommended role: automerge's random
    actor per document instance, never chosen by our code, never shared.
 3. All attribution consumers — history readers *and* the "current user"
-   checks — key off `change.author`, falling back to `change.actor` for
-   pre-transition history (which has `author: null`).
+   checks — resolve `change.author ?? getAuthorForActor(doc, change.actor)
+   ?? change.actor` (the middle step covers seq>1 changes, which carry no
+   footer — see Phase 0 results), falling back to `change.actor` for
+   pre-transition history (which has no author anywhere).
 
 Scope: hub server endpoint, quarto-sync-client, the preview-runtime wrapper,
 hub-client (open paths, local branches, attribution UI), and the
@@ -123,9 +125,17 @@ JS (`@automerge/automerge` 3.5.0, from installed `dist/*.d.ts` and
 - `getAuthors(doc): Author[]` — all authors appearing in history.
 - `getAuthorForActor(doc, actor): Author | null`,
   `getActorsForAuthor(doc, author): ActorId[]` — mapping derived from history.
-- `DecodedChange.author` / `ChangeMetadata.author`: `Author | null` — **null
-  for all pre-3.5 changes**, which is what makes this a purely additive
-  migration (no document rewrite).
+- `DecodedChange.author` / `ChangeMetadata.author`: declared `Author | null`;
+  **runtime delivers `undefined` when absent** (pinned in Phase 0) — `??`
+  resolution handles both. Absent for all pre-3.5 changes, which is what
+  makes this a purely additive migration (no document rewrite).
+- **The footer is per-actor, not per-change** (Phase 0's biggest finding):
+  `transaction_args` attaches the author only when `seq == 1`
+  (automerge.rs:568), and `set_author` mints a fresh random actor whenever
+  the author value changes (automerge.rs:389-396). Each actor carries the
+  author on exactly its first change; later changes by that actor resolve
+  via the actor→author index (`getAuthorForActor`), rebuilt from history on
+  load (change_graph.rs:908-911).
 - `Author = string`, an opaque **hex** string.
 - **Wire encoding (identical in JS and Rust — same Rust core):** the author
   is a footer in the change's existing `extra_bytes` field
@@ -197,12 +207,13 @@ flowchart LR
   default random actor (from `fork`/`init`). This removes the root cause of
   bd-6f21d4c6 in every deployment mode.
 - `identities` in the IndexDocument becomes keyed by **author ID**; readers
-  resolve `change.author ?? change.actor` so pre-transition history keeps its
-  attribution. Because the author ID equals the old actor ID, a user's
-  identity-map key **does not change across the transition**: legacy changes
-  (fallback to `change.actor`) and new changes (`change.author`) resolve to
-  the same key, so attribution is continuous with no aliasing or re-keying
-  migration.
+  resolve `change.author ?? getAuthorForActor(doc, change.actor) ??
+  change.actor` so both seq>1 post-transition changes and pre-transition
+  history keep their attribution. Because the author ID equals the old actor
+  ID, a user's identity-map key **does not change across the transition**:
+  legacy changes (fallback to `change.actor`) and new changes (`change.author`
+  or the actor→author index) resolve to the same key, so attribution is
+  continuous with no aliasing or re-keying migration.
 - The **current-user key** is `getAuthorId()`, which replaces `getActorId()`
   everywhere "me" is computed. Downstream prop and field names
   (`currentActor`, `CurrentActorContext`, `data-attr-actor`,
@@ -285,8 +296,8 @@ stamps identically.
   bd-kmycto1p (P1), bd-x3b1e0t9 (P2), bd-u3cbfv3g (P3), bd-7jdb6mnp (P4),
   bd-r62zad5b (P5), chained `blocks` in phase order; plan link commented
   onto bd-6f21d4c6.
-- [ ] One JS test in `ts-packages/quarto-sync-client`: import a doc via
-  automerge-repo, apply `getBackend(handle.docSync()).setAuthor(author)`
+- [x] One JS test in `ts-packages/quarto-sync-client`: import a doc via
+  automerge-repo, apply `getBackend(handle.doc()).setAuthor(author)`
   (D9), then `handle.change(...)`; assert the new change's `author` equals
   `author` (via `decodeChange`) and `getAuthorForActor(doc, getActorId(doc))
   === author`. Assert the documented clone fallback stamps identically on a
@@ -297,9 +308,67 @@ stamps identically.
   `author: null`, while `clone(A.load(bytes), { author })` then `A.change`
   stamps correctly. Record `save()` length before/after (measures the
   on-disk cost of the author footer after the format's chunk compression).
-- [ ] Rust unit test in `crates/quarto-hub/src/auth.rs` tests:
+  → `src/author-id-spike.test.ts`, 7 tests green.
+- [x] Rust unit test in `crates/quarto-hub/src/auth.rs` tests:
   `Author::from_str(&sub_to_actor_id_for_project(...))` is `Ok`.
-- [ ] Record results in this file.
+  → `auth::tests::actor_id_for_project_is_a_valid_automerge_author`, green.
+- [x] Record results in this file.
+
+### Phase 0 results (recorded 2026-09-30)
+
+Spike test: `ts-packages/quarto-sync-client/src/author-id-spike.test.ts`
+(7 tests, green; full package suite 159/159). Findings that amend the
+design — the spike did its job:
+
+1. **Author footers are per-actor, not per-change** — the plan's biggest
+   correction. `transaction_args` attaches the author only when `seq == 1`
+   (automerge.rs:568), and `set_author` mints a fresh random actor whenever
+   the author value changes (automerge.rs:389-396; "If you are using
+   authors *never* manually manage the ActorId"). Each actor carries the
+   author on exactly its first change; later changes by that actor are
+   attributed via the actor→author index (`getAuthorForActor`), rebuilt
+   from history on load (change_graph.rs:908-911, with an asserted
+   `seq() == 1` invariant on footer-bearing changes). Consequences:
+   - Reader-side resolution (Phase 4) is
+     `change.author ?? getAuthorForActor(doc, change.actor) ?? change.actor`.
+     The original two-step `change.author ?? change.actor` would have
+     misattributed every seq>1 change to its random actor.
+   - On-disk cost is ~34 bytes **per actor** (i.e. per document session),
+     not per change: measured `save()` 1140 → 1179 bytes (+39) for 51
+     changes with an author vs without, with exactly one footer-bearing
+     change confirmed via `getAllChanges`. The "Document size" paragraph
+     in Compatibility is amended accordingly.
+   - D1 is reinforced: `set_author` itself re-randomizes the actor when
+     the value changes, and re-applying the *same* author is a no-op
+     (pinned: actor unchanged), so `findDoc`'s idempotent re-application
+     is safe.
+2. **Absence surfaces as `undefined`, not `null`** in JS:
+   `DecodedChange.author` and `getAuthorForActor` return `undefined` for
+   authorless changes/actors despite the `.d.ts` declaring `Author | null`.
+   `??`-based resolution handles both; the spike pins `undefined`.
+3. **`handle.docSync()` does not exist** in automerge-repo 2.6.0-alpha.5;
+   the synchronous accessor is `handle.doc()`. D9's escape hatch is
+   therefore `getBackend(handle.doc()!).setAuthor(author)`.
+4. **D9 mechanism confirmed**: author set in place on the repo handle's
+   backend stamps the next `handle.change` (seq-1 of the fresh actor),
+   persists as `getAuthor`, survives idempotent re-application, and the
+   clone fallback stamps identically. `Repo.import` without an author
+   stays authorless (legacy simulation). The actor→author mapping survives
+   a `save`/`load` round trip; the current-author *setting* does not —
+   reloads must re-apply the author, which matches the createDoc/findDoc
+   call sites.
+5. **`A.load(bytes, { author })` silently drops the author** (pinned);
+   `clone(A.load(bytes), { author })` stamps correctly — this is why
+   branch loading in Phase 3 uses the `clone` form.
+
+Rust side: `auth::tests::actor_id_for_project_is_a_valid_automerge_author`
+confirms the HMAC output parses as `automerge::Author` (D5).
+
+Local test-suite note: three sync-client suites failed on a clean tree
+with `normalizeProjectPath is not a function` — stale
+`ts-packages/quarto-automerge-schema/dist/` (predates that export), fixed
+by `npm run build -w ts-packages/quarto-automerge-schema`. Pre-existing,
+unrelated to this work.
 
 ### Phase 1 — hub server: mint author IDs
 
@@ -320,19 +389,22 @@ stamps identically.
 
 ### Phase 2 — quarto-sync-client and preview-runtime: apply author, drop actor
 
-- [ ] Tests first: `connect` with an `authorId` produces changes whose
-  metadata carries that author; two documents opened by the same client
-  have different actors; the same document opened by two client instances
-  has different actors (the literal bd-6f21d4c6 scenario — two tabs of one
-  user must not share an actor); `createDoc` stamps the author from the
-  first change; a re-found document (the `findDoc` path) has the author
-  applied.
+- [ ] Tests first: `connect` with an `authorId` produces changes that
+  resolve to that author (`change.author` on each actor's seq-1 change,
+  `getAuthorForActor` thereafter — per the Phase 0 findings); two documents
+  opened by the same client have different actors; the same document opened
+  by two client instances has different actors (the literal bd-6f21d4c6
+  scenario — two tabs of one user must not share an actor); `createDoc`
+  stamps the author from the first change; a re-found document (the
+  `findDoc` path) has the author applied.
 - [ ] Replace `applyActorId` with `applyAuthorId(handle, authorId)`
-  (`client.ts:~688`): `getBackend(handle.docSync()).setAuthor(authorId)` —
+  (`client.ts:~688`): `getBackend(handle.doc()!).setAuthor(authorId)` —
   author is runtime-only backend state, so set it in place rather than
-  forking the document (D9). Call sites: `createDoc` (`:703`, after the
-  `repo.import` that would otherwise drop the author) and `findDoc` (`:732`,
-  also covers the self-heal re-fetch). Keep the clone form
+  forking the document (D9; `docSync()` does not exist in automerge-repo
+  2.6.0-alpha.5, `doc()` is the synchronous accessor — Phase 0 finding 3).
+  Call sites: `createDoc` (`:703`, after the `repo.import` that would
+  otherwise drop the author) and `findDoc` (`:732`, also covers the
+  self-heal re-fetch). Keep the clone form
   (`handle.update(doc => automergeClone(doc, { author }))`) in a code comment
   as the documented fallback if the `@hidden` `getBackend` hatch is ever
   removed (D9).
@@ -407,11 +479,14 @@ stamps identically.
   `identities` as keyed by author ID (legacy actor keys remain readable);
   schema comment only, no version bump or type change.
 - [ ] `replayChange` (`attribution-runs.ts:276`): attribution key
-  `decoded.author ?? decoded.actor`. Doc comments on `CharAttribution.actor`
+  `decoded.author ?? authorForActor(decoded.actor) ?? decoded.actor`, where
+  `authorForActor` is the actor→author map accumulated from seq-1 footers
+  during replay (Phase 0 finding 1: seq>1 changes carry no footer).
+  Doc comments on `CharAttribution.actor`
   and `AttributionRun.actor`: attribution key. Widen the
   `ViewableHandle.metadata` return type in `attribution-runs.ts:91` and
   `replay.ts:36` to include `author?: string | null`.
-- [ ] `replay.ts` `getMetadataAt`: `actor: meta?.author ?? meta?.actor ?? null`.
+- [ ] `replay.ts` `getMetadataAt`: `actor: meta?.author ?? authorForActor(meta?.actor) ?? meta?.actor ?? null`.
   Rename the local `ChangeMetadata` type (it collides with automerge's
   exported `ChangeMetadata`), e.g. `ReplayStepMetadata`.
 - [ ] `useAttribution.ts` `buildIdentityMap`: logic unchanged (keys already
@@ -506,13 +581,12 @@ stamps identically.
   either. Attribution is by convention in both designs. Server-side validation
   of `change.author` at the sync endpoint is possible future hardening (the hub
   terminates sync and can decode changes); out of scope here, worth a strand.
-- **Document size.** The author footer costs ~34 bytes per change
-  (`0x01 | leb128(32) | 32 bytes` in `extra_bytes`); the deduplicated
-  `Authors` index is in-memory only, not an on-disk saving. The format's
-  chunk compression deflates runs of identical footers, so real overhead
-  depends on how interleaved authors are — measure it in the Phase 0 spike
-  with a before/after `save()` length check rather than assuming
-  negligibility.
+- **Document size.** The author footer costs ~34 bytes **per actor**
+  (`0x01 | leb128(32) | 32 bytes` in `extra_bytes` on the actor's seq-1
+  change only — Phase 0 finding 1), i.e. once per document session, not per
+  change. Measured in the spike: `save()` 1140 → 1179 bytes (+39) for 51
+  changes with an author versus without. The deduplicated `Authors` index
+  is in-memory only, rebuilt from history on load.
 
 ## References
 

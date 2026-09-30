@@ -1654,6 +1654,19 @@ mod tests {
         assert_ne!(id1, id2);
     }
 
+    #[test]
+    fn actor_id_for_project_is_a_valid_automerge_author() {
+        // D5 of the author-ID transition (epic bd-o1yn1fqy): the HMAC output
+        // is served as the automerge author ID from GET /auth/author, so it
+        // must parse as an `Author` (hex) with no re-encoding.
+        use std::str::FromStr;
+        let id = sub_to_actor_id_for_project(&make_secret(), "user123", "automerge:abc");
+        assert!(
+            automerge::Author::from_str(&id).is_ok(),
+            "actor id must parse as an automerge Author"
+        );
+    }
+
     // ── callback_csrf_mode / uses_form_post_callback ──────────────
 
     fn make_config_with_issuer(issuer: &str) -> AuthConfig {
