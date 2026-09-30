@@ -298,8 +298,16 @@ fn resolve_typst_brand_param(
 /// found or `typst fonts` fails; that failure mode belongs to
 /// `TypstCompileStage`'s later, clearer `Q-19-*` diagnostic, and the Lua
 /// consumer already treats an absent param as fully permissive.
+///
+/// Resolves the document's own `font-paths` metadata the same way
+/// `TypstCompileStage` will (see `typst_compile::resolve_font_paths`), so
+/// `typst fonts` is asked about the exact same font-path set the real
+/// compile uses — otherwise the CSS font-fallback filter list could
+/// silently disagree with what Typst actually finds.
 fn resolve_typst_available_fonts(
     stage_name: &str,
+    meta: &quarto_pandoc_types::ConfigValue,
+    input_path: &Path,
     ctx: &mut StageContext,
 ) -> Result<Option<Vec<String>>, PipelineError> {
     let temp_dir = ctx.temp_dir()?.to_path_buf();
@@ -317,7 +325,15 @@ fn resolve_typst_available_fonts(
         )
     })?;
     let typst_path = ctx.runtime.find_binary("typst", "QUARTO_TYPST");
-    let font_args = super::typst_compile::font_path_args(&packages_dir);
+    let input_dir = input_path
+        .parent()
+        .map_or_else(|| ctx.project.dir.clone(), std::path::Path::to_path_buf);
+    let extra_font_paths = super::typst_compile::resolve_font_paths(
+        &super::typst_compile::string_array(meta.get("font-paths")),
+        &ctx.project.dir,
+        &input_dir,
+    );
+    let font_args = super::typst_compile::font_path_args(&packages_dir, &extra_font_paths);
     Ok(super::typst_compile::discover_available_typst_fonts(
         typst_path.as_deref(),
         &font_args,
@@ -430,7 +446,7 @@ impl PipelineStage for PandocWriteStage {
         ) = if ctx.format.identifier == crate::format::FormatIdentifier::Typst {
             (
                 resolve_typst_brand_param(self.name(), &doc.ast.meta, ctx)?,
-                resolve_typst_available_fonts(self.name(), ctx)?,
+                resolve_typst_available_fonts(self.name(), &doc.ast.meta, &doc.path, ctx)?,
                 doc.ast
                     .meta
                     .get("citation-location")
