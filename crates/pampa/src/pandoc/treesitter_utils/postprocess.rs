@@ -38,8 +38,8 @@ use crate::filters::{
 };
 use crate::pandoc::location::empty_source_info;
 use crate::pandoc::{
-    Attr, Block, Blocks, Caption, DefinitionList, Div, Figure, Inline, Inlines, Pandoc, Plain,
-    Space, Span, Str, Superscript, is_empty_attr,
+    Attr, Block, Blocks, Caption, DefinitionList, Div, Figure, Inline, Inlines, Pandoc, Paragraph,
+    Plain, Space, Span, Str, Superscript, is_empty_attr,
 };
 use crate::utils::autoid;
 use crate::utils::diagnostic_collector::DiagnosticCollector;
@@ -1020,6 +1020,27 @@ fn parse_local_range(info: &SourceInfo) -> Option<(usize, usize)> {
     }
 }
 
+/// Whether a no-table caption begins with a list marker in its definition
+/// body. Tree-sitter parses the following indented list as a sibling block; it
+/// needs a literal fallback too, or its items would survive as a parsed list.
+fn caption_has_list_definition_body(text: &str) -> bool {
+    let Some(body) = text.strip_prefix(':') else {
+        return false;
+    };
+    let body = body.trim_start();
+    if ["- ", "+ ", "* "]
+        .iter()
+        .any(|marker| body.starts_with(marker))
+    {
+        return true;
+    }
+
+    let digits = body.bytes().take_while(u8::is_ascii_digit).count();
+    digits > 0
+        && matches!(body.as_bytes().get(digits), Some(b'.' | b')'))
+        && body.as_bytes().get(digits + 1) == Some(&b' ')
+}
+
 /// Apply post-processing transformations to the Pandoc AST
 ///
 /// `input_bytes` is the document text the AST's offsets are relative to. It
@@ -1816,8 +1837,9 @@ pub fn postprocess(
             .with_blocks(|blocks, _ctx| {
                 // Process CaptionBlock nodes: attach to preceding tables or issue warnings
                 let mut result: Blocks = Vec::new();
+                let mut blocks = blocks.into_iter().peekable();
 
-                for block in blocks {
+                while let Some(block) = blocks.next() {
                     // Check if current block is a CaptionBlock
                     if let Block::CaptionBlock(caption_block) = block {
                         // Look for a preceding Table
@@ -1914,12 +1936,118 @@ pub fn postprocess(
 
                             // Don't add the CaptionBlock to the result (it's now attached)
                         } else {
-                            // Issue a warning when caption has no preceding table
-                            error_collector_ref.borrow_mut().warn_at(
-                                "Caption found without a preceding table".to_string(),
-                                caption_block.source_info.clone(),
-                            );
-                            // Remove the caption from the output (don't add to result)
+                            let previous_was_definition_term = result.last().is_some_and(|block| {
+                                match block {
+                                    Block::Paragraph(paragraph) => {
+                                        !matches!(
+                                            paragraph.content.as_slice(),
+                                            [Inline::Image(_)]
+                                        )
+                                    }
+                                    Block::Plain(plain) => {
+                                        !matches!(plain.content.as_slice(), [Inline::Image(_)])
+                                    }
+                                    _ => false,
+                                }
+                            });
+                            let source_info = caption_block.source_info.clone();
+                            let fallback_content = || {
+                                let mut content = vec![Inline::Str(Str {
+                                    text: ":".to_string(),
+                                    source_info: source_info.clone(),
+                                })];
+                                content.extend(caption_block.content.clone());
+                                content
+                            };
+                            let emit_generic_warning = |collector: &mut DiagnosticCollector| {
+                                collector.warn_at(
+                                    "Caption found without a preceding table".to_string(),
+                                    source_info.clone(),
+                                );
+                            };
+                            let line_text = parse_local_range(&source_info)
+                                .and_then(|(start, end)| input_bytes.get(start..end))
+                                .map(|line_bytes| {
+                                    String::from_utf8_lossy(line_bytes)
+                                        .trim_end_matches(['\r', '\n'])
+                                        .to_string()
+                                });
+                            let Some(line_text) = line_text else {
+                                // Keep parsed content even when its source is generated,
+                                // discontiguous, or outside the input buffer.
+                                result.push(Block::Paragraph(Paragraph {
+                                    content: fallback_content(),
+                                    source_info: source_info.clone(),
+                                }));
+                                emit_generic_warning(&mut error_collector_ref.borrow_mut());
+                                continue;
+                            };
+                            let line_text = if line_text.starts_with(':') {
+                                line_text
+                            } else {
+                                format!(":{line_text}")
+                            };
+                            let has_list_definition_body =
+                                caption_has_list_definition_body(&line_text);
+                            let literal = Inline::Str(Str {
+                                text: line_text,
+                                source_info: source_info.clone(),
+                            });
+                            if previous_was_definition_term {
+                                error_collector_ref.borrow_mut().add(
+                                    DiagnosticMessageBuilder::warning(
+                                        "Pandoc definition lists are not supported",
+                                    )
+                                    .with_code("Q-2-54")
+                                    .with_location(source_info.clone())
+                                    .problem(
+                                        "This line follows a term and is parsed as a table caption. The line renders as literal text instead of a definition.",
+                                    )
+                                    .add_hint(
+                                        "Use the supported `::: {.definition-list}` form, with one bullet per term and a nested bullet per definition.",
+                                    )
+                                    .add_hint(
+                                        "If the colon is intentional literal text, escape it as `\\:`.",
+                                    )
+                                    .add_hint(
+                                        "Run `qmd-syntax-helper convert -r definition-lists` to migrate definition lists automatically.",
+                                    )
+                                    .build(),
+                                );
+                            } else {
+                                emit_generic_warning(&mut error_collector_ref.borrow_mut());
+                            }
+                            result.push(Block::Paragraph(Paragraph {
+                                content: vec![literal],
+                                source_info,
+                            }));
+                            if has_list_definition_body
+                                && matches!(
+                                    blocks.peek(),
+                                    Some(Block::BulletList(_) | Block::OrderedList(_))
+                                )
+                            {
+                                let list = blocks.next().expect("peeked list block");
+                                let list_source = list.source_info().clone();
+                                let list_text = parse_local_range(&list_source)
+                                    .and_then(|(start, end)| input_bytes.get(start..end))
+                                    .map(|bytes| {
+                                        String::from_utf8_lossy(bytes)
+                                            .trim_end_matches(['\r', '\n'])
+                                            .to_string()
+                                    });
+                                if let Some(text) = list_text {
+                                    result.push(Block::Paragraph(Paragraph {
+                                        content: vec![Inline::Str(Str {
+                                            text,
+                                            source_info: list_source.clone(),
+                                        })],
+                                        source_info: list_source,
+                                    }));
+                                } else {
+                                    result.push(list);
+                                }
+                            }
                         }
                     } else {
                         // Not a CaptionBlock, add it to result
