@@ -207,23 +207,32 @@ async function interceptMonacoCdn(page: Page): Promise<void> {
  * URL to pass: this helper installs the usual init scripts, loads `/`, and
  * waits for the home to appear.
  */
-export async function bootstrapProjectSet(page: Page): Promise<void> {
-  await bootstrapProjectSetVariant(page, 'classic');
+export async function bootstrapProjectSet(
+  page: Page,
+  opts?: { stubAuthMe?: boolean; baseUrl?: string },
+): Promise<void> {
+  await bootstrapProjectSetVariant(page, 'classic', opts);
 }
 
 /**
  * Like {@link bootstrapProjectSet}, but lands on the collections-based
  * projects home (the app's default variant) instead of the classic selector.
  */
-export async function bootstrapProjectsHome(page: Page): Promise<void> {
-  await bootstrapProjectSetVariant(page, 'collections');
+export async function bootstrapProjectsHome(
+  page: Page,
+  opts?: { stubAuthMe?: boolean; baseUrl?: string },
+): Promise<void> {
+  await bootstrapProjectSetVariant(page, 'collections', opts);
 }
 
 async function bootstrapProjectSetVariant(
   page: Page,
   variant: 'classic' | 'collections',
+  opts?: { stubAuthMe?: boolean; baseUrl?: string },
 ): Promise<void> {
-  await mockAuthMe(page);
+  // Authenticated contexts (author-attribution e2e) must NOT stub
+  // /auth/me — the real response carries the signed-in user.
+  if (opts?.stubAuthMe !== false) await mockAuthMe(page);
   await interceptMonacoCdn(page);
   await seedUiVariant(page, variant);
   // Monaco 0.55+ requires MonacoEnvironment.getWorkerUrl. Without it the
@@ -264,7 +273,10 @@ async function bootstrapProjectSetVariant(
       localStorage.setItem(KEY, JSON.stringify({ ...defaults, richText: false }));
     }
   }, DEFAULT_PREFERENCES);
-  await page.goto('/');
+  // baseUrl override: the author-attribution e2e serves the app from two
+  // different proxy origins (auth-on vs auth-disabled hub), so its pages
+  // must boot against an absolute origin rather than the config baseURL.
+  await page.goto(opts?.baseUrl ?? '/');
   await expect(page.locator('body')).toBeVisible();
 
   // Wait for React to mount before checking test hooks — the `body` becomes

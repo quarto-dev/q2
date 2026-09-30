@@ -517,7 +517,11 @@ export default function ReplayDrawer({
             </span>
           )}
           {state.actor && (
-            <span className={`replay-drawer__actor${currentActorId === state.actor ? ' replay-drawer__actor--me' : ''}`}>
+            <span
+              className={`replay-drawer__actor${currentActorId === state.actor ? ' replay-drawer__actor--me' : ''}`}
+              data-actor-key={state.actor}
+              data-current-actor={currentActorId ?? ''}
+            >
               <span
                 className="replay-drawer__actor-dot"
                 style={{ backgroundColor: resolveActorColor(state.actor) }}

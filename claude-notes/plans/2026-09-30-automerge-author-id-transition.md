@@ -576,33 +576,47 @@ unrelated to this work.
 
 ### Phase 5 — audits, deprecation, end-to-end verification
 
-- [ ] Hub-server-authored changes: `index.rs` (`transact` at `:118, :172,
+- [x] Hub-server-authored changes: `index.rs` (`transact` at `:118, :172,
   :191, :271, :306` — files map and capture sidecar) and `sync.rs` (`:164,
-  :378, :1186, :1207, :1743` — filesystem import/update). Stay authorless
+  `:378` — filesystem import/update; the other grep hits are test-module
+  helpers). Stay authorless
   (D8): no code change; add a test asserting a server-written change decodes
   with `author: null` so a future `LoadOptions::author` is a deliberate act.
-- [ ] `ts-packages/quarto-hub-mcp`: fetch the author via the Bearer path
+  → `index::tests::server_writes_carry_no_author` (create + add/remove file
+  + set/remove capture, ≥5 changes all authorless) and
+  `sync::tests::server_sync_writes_carry_no_author` (text fork/merge +
+  binary content write), both green; committed 064bf4353.
+- [x] `ts-packages/quarto-hub-mcp`: fetch the author via the Bearer path
   (`/auth/author`, 404 fallback `/auth/actor`) and pass it as `authorId`;
   update the `PEER_TIMEOUT_MS` comment at `connection-manager.ts:197`. File a
   strand if the change is non-trivial.
-- [ ] File follow-up strands: remove `GET /auth/actor` and the `fetchActorId`
+  → Filed and closed bd-5y0han3a; committed 064bf4353. Best-effort failure
+  semantics (stderr warning + authorless connect, D8-compatible) — the WS
+  handshake stays the real auth gate. `connect` passes the fetched value as
+  `authorId`; `createProject` wires a `resolveAuthorId` callback (the index
+  doc id is generated inside the sync client). 5 new connection-manager
+  tests + 8 existing ones updated for the extra per-connect fetch; package
+  suite 256/256, `tsc` clean. Confirmed against the REAL endpoint: the
+  package's `e2e-auth.test.ts` (real hub + mock IdP, Bearer) passes with the
+  fetch in the connect path.
+- [x] File follow-up strands: remove `GET /auth/actor` and the `fetchActorId`
   fallback; remove `installDuplicateSeqRecovery`; rename
   `sub_to_actor_id_for_project` — all gated on no released client emitting
   stable actors. Give the self-heal-removal strand an **evaluable closure
   criterion**, not just the gate: e.g. all clients older than a defined
   release no longer supported, or zero duplicate-seq recoveries observed in
   hub logs over a defined window.
-- [ ] Disposition H1 and H2 — bd-6f21d4c6's other confirmed defects; this
+  → bd-8oyidg7h (/auth/actor + both client fallbacks), bd-lh7e13o5
+  (self-heal removal; closure criterion: all pre-transition releases
+  unsupported AND zero recoveries in hub logs over a trailing 90-day
+  window), bd-x9v6sgza (rename). All `discovered-from` bd-r62zad5b.
+- [x] Disposition H1 and H2 — bd-6f21d4c6's other confirmed defects; this
   plan removes H4 only. File one strand per defect, linked
   `discovered-from` bd-6f21d4c6, as upstream-contribution candidates or
-  explicitly accepted-as-latent per Gordon's call. H1:
-  `CollectionSynchronizer.addPeer`'s dedup guard suppresses `beginSync` on
-  peer-candidate reordering (carry the open tier-2 real-socket confirmation
-  question into the strand); H2: `Repo.saveSyncState`'s 100 ms
-  per-storageId throttle drops persisted sync-state writes. Context:
-  bd-6f21d4c6's investigation trail and
-  `claude-notes/plans/2026-09-17-index-doc-duplicate-seq-self-heal.md`.
-- [ ] E2E: two distinct authenticated users edit concurrently against a hub
+  explicitly accepted-as-latent per Gordon's call.
+  → bd-bks7az35 (H1, carrying the open tier-2 real-socket confirmation
+  question), bd-w7x5ajsv (H2).
+- [x] E2E: two distinct authenticated users edit concurrently against a hub
   running with auth on — plain `npm run local-prod` is auth-off, so stand up
   the mock OIDC provider from the integration suite (`MockOidcProvider`,
   `crates/quarto-hub/tests/integration/support.rs`) the way
@@ -615,6 +629,58 @@ unrelated to this work.
   older (pre-transition) document and confirm legacy attribution still
   renders via actor fallback. **Record the exact
   invocation and observed output here per the end-to-end verification policy.**
+  → New Playwright suite `hub-client/e2e-author/` +
+  `playwright.author-e2e.config.ts` (own globalSetup: mock OIDC IdP à la
+  `hub-sliding-sessions-e2e.mjs`, one auth-on hub, one auth-disabled hub,
+  two static+proxy origins via `scripts/local-prod-server.mjs`; session
+  cookies minted through `POST /auth/session`). Wired into CI
+  (`hub-client-e2e.yml`) and as `npm run test:e2e:author-id`. Four
+  scenarios, all green twice in a row (19–20 s each run):
+  1. **auth-on two users** — alice + bob edit `main.qmd` concurrently.
+     Observer client decodes the file doc's changes: keys resolve to
+     exactly the two server-minted authors; three distinct random actors
+     (creation client + two browsers); no actor equals an author;
+     identities map keyed `{authorA, authorB}`. Authors overlay in BOTH
+     browsers keys each user's text by their author (per-word spans,
+     aggregated per key in assertions). `__COMMENT_DIAG__.me` in the
+     preview iframe reads authorA for alice, authorB for bob. Replay
+     drawer: bob's latest step shows his key without `--me` for alice and
+     with `--me` for bob; stepping to alice's steps flips it (assertions
+     on the chip's `data-actor-key` / `data-current-actor` attributes,
+     added to `ReplayDrawer.tsx`).
+  2. **H4 negative** — alice in two tabs of one context, simultaneous
+     edits: both tabs converge with both texts, zero console matches for
+     `duplicate seq|recovered index document`, and the file doc shows ONE
+     author (authorA) under ≥3 distinct actors (creation + tab1 + tab2).
+  3. **auth-disabled parity** — two browser profiles: local authors equal
+     `authorIdFromUserId(userId)` read from each profile's IndexedDB,
+     distinct random actors, authorless creation change decodes
+     `author: null` and attributes via bare-actor fallback (D8); overlay
+     keyed correctly.
+  4. **legacy continuity** — a pre-transition project crafted with raw
+     automerge (`A.from(..., {actor: aliceAuthorForProject})`, two changes,
+     `author: null` pinned) uploaded via `repo.import` with chosen doc
+     IDs: overlay renders legacy text under the bare actor (= alice's
+     author, D5), alice's NEW edit lands on the SAME key, the page shows
+     exactly one `data-attr-actor` value, and the replay drawer shows
+     `--me` from the newest step back to step 1.
+  Invocation: `cd hub-client && npm run test:e2e:author-id` (full build)
+  or `npx playwright test --config playwright.author-e2e.config.ts` (dist
+  already built). Observed output inspected: `4 passed (19.4s)` with the
+  per-scenario assertion flow above; the protocol-level change table was
+  eyeballed during development (browser seq-1 changes carry the author
+  footer; seq>1 resolve via the actor→author index — matching the Phase 0
+  spike's model).
+  **E2E surfacing worth noting:** the SPA's `AUTH_ENABLED` is a
+  build-time flag (`VITE_GOOGLE_CLIENT_ID`); the e2e build doesn't set
+  it, so the suite forces it via a new `VITE_E2E`-gated window override
+  (`__QUARTO_TEST_AUTH_ENABLED__`, App.tsx, same pattern as
+  `__QUARTO_TEST_AUTHOR_ID__`). Without it the app silently falls back to
+  local authors even against an auth-on hub — the suite's first red run
+  caught exactly that (browsers stamping userId-derived authors).
+  Browser-stamped authors match `/auth/author?project=<bare indexDocId>`
+  byte-for-byte, which also pins hub-mcp↔hub-client author consistency
+  (both pass the bare id).
 - [ ] `cargo xtask verify` (full — hub-client and WASM legs affected) green.
 - [ ] Close bd-6f21d4c6: record the outcome of the Carlos capture plan
   (forced H4 repro / IndexedDB export) or Gordon's waiver of the real

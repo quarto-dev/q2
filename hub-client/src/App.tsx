@@ -114,7 +114,15 @@ async function connectAndLoadContents(
 }
 
 /** Whether auth is configured (build-time env var). */
-const AUTH_ENABLED = !!import.meta.env.VITE_GOOGLE_CLIENT_ID;
+// E2E builds may force the flag on via __QUARTO_TEST_AUTH_ENABLED__ so the
+// author-attribution suite can exercise the authenticated code paths
+// against a mock-OIDC hub without a second client build carrying
+// VITE_GOOGLE_CLIENT_ID. Tree-shaken with the other VITE_E2E branches in
+// production.
+const AUTH_ENABLED =
+  !!import.meta.env.VITE_GOOGLE_CLIENT_ID ||
+  (import.meta.env.VITE_E2E === '1' &&
+    (window as any).__QUARTO_TEST_AUTH_ENABLED__ === true);
 
 
 function App() {
