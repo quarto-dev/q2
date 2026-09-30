@@ -372,20 +372,28 @@ unrelated to this work.
 
 ### Phase 1 — hub server: mint author IDs
 
-- [ ] Tests first (`crates/quarto-hub/src/server.rs` / auth tests, following
+- [x] Tests first (`crates/quarto-hub/src/server.rs` / auth tests, following
   `claude-notes/instructions/testing.md`): `GET /auth/author?project=` returns
   deterministic 64-hex equal to `/auth/actor`'s value for the same
   credential+project (D5), distinct per project, 401 unauthenticated / 403
   disallowed, 400 on missing `project`, works on both session-cookie and
   Bearer credential paths.
-- [ ] Add `auth_author` handler + `AuthAuthorResponse { author_id }` in
+  → `session_auth.rs`: `auth_author_works_with_session_cookie`,
+  `auth_author_supports_bearer`, `auth_author_requires_authentication`,
+  `auth_author_rejects_missing_project`, `auth_author_refuses_banned_sub`;
+  red (404) before the route existed, green after.
+- [x] Add `auth_author` handler + `AuthAuthorResponse { author_id }` in
   `crates/quarto-hub/src/server.rs`, route `GET /auth/author`, calling the
   existing `sub_to_actor_id_for_project` (D5: byte-identical; no second HMAC
   body to drift). Update that function's doc comment to describe the
   identity role. Rename it when `/auth/actor` is removed (Phase 5 strand).
-- [ ] Keep `GET /auth/actor` untouched for older clients; mark deprecated in a
+- [x] Keep `GET /auth/actor` untouched for older clients; mark deprecated in a
   doc comment.
-- [ ] `cargo nextest run -p quarto-hub` green; `cargo xtask verify --skip-hub-build` green.
+- [x] `cargo nextest run -p quarto-hub` green (480/480);
+  `cargo xtask verify --skip-hub-build` green except four pre-existing
+  environmental failures: `typst/margin-layout/margin-table-{gt-r,flextable}[-crossref].qmd`
+  need the R packages `gt` / `flextable`, not installed in this machine's
+  R library — unrelated to this phase (hub HTTP surface), same on main.
 
 ### Phase 2 — quarto-sync-client and preview-runtime: apply author, drop actor
 

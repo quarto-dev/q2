@@ -733,17 +733,26 @@ pub fn validate_image_domain(domain: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Derive a per-project Automerge actor ID using HMAC-SHA256.
+/// Derive a per-project Automerge identity ID using HMAC-SHA256.
 ///
 /// Uses `HMAC-SHA256(key=server_secret, message="{sub}\0{project_id}")`.
 ///
+/// Served from two endpoints with distinct roles (author-ID transition,
+/// bd-o1yn1fqy): as the automerge **author** ID from `GET /auth/author` —
+/// the stable per-user attribution identity carried in change metadata —
+/// and as the legacy per-project **actor** ID from `GET /auth/actor`
+/// (deprecated). The value is byte-identical either way (D5), so
+/// attribution keys are continuous across the transition. Renaming this
+/// function to match the author role is a Phase 5 follow-up, gated on
+/// `/auth/actor` removal.
+///
 /// Properties:
-/// - **Per-project isolation**: Same user gets a different actor ID in every
-///   project. Cross-project correlation via actor_id is impossible.
-/// - **Server-secret binding**: The actor_id cannot be computed outside the
+/// - **Per-project isolation**: Same user gets a different ID in every
+///   project. Cross-project correlation via the ID is impossible.
+/// - **Server-secret binding**: The ID cannot be computed outside the
 ///   server even if an attacker knows both `sub` and `project_id`.
 /// - **Per-session consistency**: Within a single project, the same user gets
-///   the same actor_id across sessions/devices/reconnections.
+///   the same ID across sessions/devices/reconnections.
 ///
 /// The null byte separator (`\0`) cannot appear in JWT `sub` claims (which are
 /// JSON strings) or Automerge IDs (`automerge:<bs58>`), preventing separator
