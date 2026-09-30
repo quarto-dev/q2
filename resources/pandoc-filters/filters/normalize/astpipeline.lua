@@ -44,46 +44,24 @@ function quarto_ast_pipeline()
     
       return src
     end
-    local function juice(htmltext)
-      -- return htmltext
-      return pandoc.system.with_temporary_directory('juice', function(tmpdir)
-        -- replace any long data uris with uuids
-        local data_uri_uuid = '273dae7e-3633-4385-9b0c-203d2d7a2d37'
-        local data_uris = {}
-        local data_uri_regex = 'data:image/[a-z]+;base64,[a-zA-Z0-9+/]+=*'
-        htmltext = htmltext:gsub(data_uri_regex, function(data_uri)
-          -- juice truncates around 15k characters; let's guard any over 2000 characters
-          if #data_uri > 2000 then
-            table.insert(data_uris, data_uri)
-            return data_uri_uuid
-          else
-            return data_uri
-          end
-        end)
-        -- put the long data uris back in place of the placeholders
-        local function restore_data_uris(text)
-          local index = 1
-          return (text:gsub(data_uri_uuid:gsub('-', '%%-'), function(_)
-            local data_uri = data_uris[index]
-            index = index + 1
-            return data_uri
-          end))
-        end
-        local juice_in = pandoc.path.join({tmpdir, 'juice-in.html'})
-        local jin = assert(io.open(juice_in, 'w'))
-        jin:write(htmltext)
-        jin:flush()
-        local quarto_path = quarto.config.cli_path()
-        local juice_script = pandoc.path.join({os.getenv('QUARTO_SHARE_PATH'), 'scripts', 'juice.ts'})
-        local ok, content = pcall(pandoc.pipe, quarto_path, {'run', juice_script, juice_in}, '')
-        if not ok then
-          quarto.log.error('Running juice failed: ' .. tostring(content))
-          -- the placeholders must not leak into the document
-          return restore_data_uris(htmltext)
-        end
-        return restore_data_uris(content)
-      end)
-    end   
+    -- Move <style> block rules onto the elements they match, so formats
+    -- that can't process stylesheets (e.g. typst) still see gt/pandas styling.
+    -- Q1 ran the `juice` npm package via `quarto run juice.ts`; q2 pipes the
+    -- HTML through its own hidden `inline-css` subcommand instead. There is
+    -- no size limit on the round trip, so data URIs pass through untouched.
+    local function inline_css(htmltext)
+      local cli_path = quarto.config.cli_path()
+      if cli_path == nil then
+        -- not running under the q2 CLI (e.g. in-process callers): leave as is
+        return htmltext
+      end
+      local ok, content = pcall(pandoc.pipe, cli_path, {'inline-css'}, htmltext)
+      if not ok then
+        quarto.log.error('Inlining CSS failed: ' .. tostring(content))
+        return htmltext
+      end
+      return content
+    end
     local function should_handle_raw_html_as_table(el)
       if not _quarto.format.isRawHtml(el) then
         return nil
@@ -111,7 +89,7 @@ function quarto_ast_pipeline()
       el.text = el.text:gsub("^%s*(.-)%s*$", "%1")
 
       if(_quarto.format.isTypstOutput()) then
-        eltext = juice(el.text)
+        eltext = inline_css(el.text)
       else
         eltext = el.text
       end
@@ -218,7 +196,7 @@ function quarto_ast_pipeline()
     local function handle_raw_html_as_pre_tag(pre_tag)
       local eltext
       if(_quarto.format.isTypstOutput()) then
-        eltext = juice(pre_tag.text)
+        eltext = inline_css(pre_tag.text)
       else
         eltext = pre_tag.text
       end

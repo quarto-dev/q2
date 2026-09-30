@@ -35,6 +35,7 @@ pub mod strict_mode;
 pub mod theme_compile_error;
 pub mod theme_missing_file;
 pub mod trace_cli;
+pub mod typst_html_table_css;
 pub mod unknown_project_type;
 pub mod use_brand;
 pub mod version_cli;
