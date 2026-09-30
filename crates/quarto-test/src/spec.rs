@@ -14,8 +14,9 @@ use serde_yaml::Value;
 
 use crate::assertions::{
     Assertion, EnsureCssRegexMatches, EnsureFileRegexMatches, EnsureHtmlElements,
-    EnsurePdfRegexMatches, EnsurePdfTextPositions, EnsureTypstFileRegexMatches, FileExists,
-    FolderExists, NoErrors, NoErrorsOrWarnings, PathDoesNotExist, PrintsMessage, ShouldError,
+    EnsurePdfMetadata, EnsurePdfRegexMatches, EnsurePdfTextPositions, EnsureTypstFileRegexMatches,
+    FileExists, FolderExists, NoErrors, NoErrorsOrWarnings, PathDoesNotExist,
+    PdfMetadataExpectation, PrintsMessage, ShouldError,
 };
 
 /// Configuration for when/whether to run tests.
@@ -222,6 +223,10 @@ fn parse_format_spec(format: &str, value: &Value, _input_path: &Path) -> Result<
                 "ensurePdfTextPositions" => {
                     assertions.push(Box::new(EnsurePdfTextPositions::new(assertion_value)?));
                 }
+                "ensurePdfMetadata" => {
+                    let assertion = parse_ensure_pdf_metadata(assertion_value)?;
+                    assertions.push(Box::new(assertion));
+                }
                 "ensureCssRegexMatches" => {
                     let assertion = parse_ensure_css_regex_matches(assertion_value)?;
                     assertions.push(Box::new(assertion));
@@ -334,6 +339,74 @@ fn parse_file_exists(value: &Value, assertions: &mut Vec<Box<dyn Assertion>>) ->
     }
 
     Ok(())
+}
+
+/// Parse `ensurePdfMetadata` assertion.
+///
+/// ```yaml
+/// ensurePdfMetadata:
+///   title: "Test Document"
+///   author: "Alice Smith"
+///   keywords:
+///     - quarto
+///     - typst
+///   creator: "Typst"
+/// ```
+///
+/// Each specified field is checked as a case-insensitive substring match
+/// against the corresponding PDF Info dictionary field; `keywords` may be a
+/// single string or an array, and every entry must be present.
+fn parse_ensure_pdf_metadata(value: &Value) -> Result<EnsurePdfMetadata> {
+    let map = value
+        .as_mapping()
+        .context("ensurePdfMetadata must be a mapping")?;
+
+    let mut expected = PdfMetadataExpectation::default();
+
+    for (key, field_value) in map {
+        let key_str = key
+            .as_str()
+            .context("ensurePdfMetadata key must be a string")?;
+
+        match key_str {
+            "title" => {
+                expected.title = Some(
+                    field_value
+                        .as_str()
+                        .context("ensurePdfMetadata.title must be a string")?
+                        .to_string(),
+                );
+            }
+            "author" => {
+                expected.author = Some(
+                    field_value
+                        .as_str()
+                        .context("ensurePdfMetadata.author must be a string")?
+                        .to_string(),
+                );
+            }
+            "creator" => {
+                expected.creator = Some(
+                    field_value
+                        .as_str()
+                        .context("ensurePdfMetadata.creator must be a string")?
+                        .to_string(),
+                );
+            }
+            "keywords" => {
+                expected.keywords = parse_string_or_array(field_value)
+                    .context("ensurePdfMetadata.keywords must be a string or array of strings")?;
+            }
+            other => {
+                anyhow::bail!(
+                    "Unknown ensurePdfMetadata key: '{}' (expected 'title', 'author', 'keywords', or 'creator')",
+                    other
+                );
+            }
+        }
+    }
+
+    Ok(EnsurePdfMetadata::new(expected))
 }
 
 /// Parse `ensureCssRegexMatches` assertion.
@@ -658,6 +731,50 @@ mod tests {
         assert_eq!(specs[0].assertions.len(), 2);
         assert_eq!(specs[0].assertions[0].name(), "ensureTypstFileRegexMatches");
         assert_eq!(specs[0].assertions[1].name(), "ensurePdfRegexMatches");
+    }
+
+    #[test]
+    fn test_ensure_pdf_metadata_parsed() {
+        let yaml: Value = serde_yaml::from_str(
+            r#"
+            _quarto:
+              tests:
+                typst:
+                  ensurePdfMetadata:
+                    title: "Test Document"
+                    author: "Alice Smith"
+                    keywords:
+                      - quarto
+                      - typst
+                      - testing
+                    creator: "Typst"
+            "#,
+        )
+        .unwrap();
+
+        let (_run_config, specs) =
+            parse_test_specs(&yaml, std::path::Path::new("doc.qmd")).unwrap();
+
+        assert_eq!(specs.len(), 1);
+        assert_eq!(specs[0].assertions.len(), 1);
+        assert_eq!(specs[0].assertions[0].name(), "ensurePdfMetadata");
+    }
+
+    #[test]
+    fn test_ensure_pdf_metadata_rejects_unknown_key() {
+        let yaml: Value = serde_yaml::from_str(
+            r#"
+            _quarto:
+              tests:
+                typst:
+                  ensurePdfMetadata:
+                    subject: "Not supported yet"
+            "#,
+        )
+        .unwrap();
+
+        let err = parse_test_specs(&yaml, std::path::Path::new("doc.qmd")).unwrap_err();
+        assert!(format!("{err:#}").contains("Unknown ensurePdfMetadata key"));
     }
 
     #[test]
