@@ -755,9 +755,9 @@ fn output_via_dotdot_spelling_of_input_refuses_and_preserves_source() {
 }
 
 /// bd-1klbq2zd: on Windows the same file has a plain `C:\…` and a
-/// verbatim `\\?\C:\…` spelling. The output uses whichever one q2 does
-/// not give its canonicalized input (the shared canonicalize, not this
-/// file's std `canonical`), so it differs lexically from the input.
+/// verbatim `\\?\C:\…` spelling. q2 gives its canonicalized input the
+/// plain one (the shared canonicalize, not this file's std `canonical`),
+/// so the output uses the verbatim one and differs lexically from it.
 /// Elsewhere there is one spelling and this matches the test above
 /// without the detour.
 #[test]
@@ -766,14 +766,14 @@ fn output_via_other_windows_spelling_of_input_refuses_and_preserves_source() {
     let dir = canonical(temp.path());
     let q2_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let other = if cfg!(windows) {
-        let plain = dunce::simplified(&q2_dir);
-        let other = if plain == q2_dir.as_path() {
-            PathBuf::from(format!(r"\\?\{}", q2_dir.display()))
-        } else {
-            plain.to_path_buf()
-        };
-        assert_ne!(other, q2_dir, "test setup: the spellings must differ");
-        other
+        // The shared canonicalize keeps `\\?\` only where no plain form
+        // exists (network share, past MAX_PATH); such a TEMP has no alias.
+        let spelled = q2_dir.display().to_string();
+        assert!(
+            !spelled.starts_with(r"\\?\"),
+            "test setup: TEMP must resolve to a local path with a plain form: {spelled}"
+        );
+        PathBuf::from(format!(r"\\?\{spelled}"))
     } else {
         dir.clone()
     };
