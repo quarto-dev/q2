@@ -88,7 +88,7 @@ Layer 2 (`bugfix/bd-1klbq2zd-path-audit`):
 - [x] Audit table: subagent sweep, coverage cross-check, spot-check (§ Spot-check verdicts), routing (`28bea643`). `ts_process` failures classified (§ Baselines, bd-j5ij00i0). wasm32: `cargo check -p quarto-system-runtime --target wasm32-unknown-unknown` passes; the `quarto-core` wasm32 check cannot run on this host (no clang for tree-sitter's C build), so CI's hub-client build leg is the check for rows 16-18
 - [x] Spelling-agnostic test oracles: `commands::render` and `render_scripts_cli` `canonical` helpers call the shared function; `QUARTO_PROJECT_DIR`/`OUTPUT_DIR` assert identity (absolute + equal after canonicalizing both sides). Unflipped: only the 2 baseline `render_scripts_cli` failures. `preview.rs` helpers wait on the flip
 - [x] Classify `preview_static_e2e::a_page_inside_the_project_opens_on_that_page`: passes under the flip, nothing to fix. `cache_lru` concurrent test: classified, independent of this work (bd-cpzr71jr). `preview.rs` helpers: no `commands::preview` test fails under the flip, no change
-- [ ] Crate-scoped suites for every touched crate: failure set identical to the baseline except the guard tests
+- [x] Crate-scoped suites for every touched crate: failure set identical to the baseline except the guard tests (§ Unflipped regression run)
 - [x] Apply the fold rule: do **not** fold. R rows exceed 10 and the flip fallout is not small (§ Flip results)
 - [x] Temporary seam prototype check (`932313dc`, flip reverted, `Cargo.lock` == HEAD): audit fallout is **not** gone, ~129 new failures (§ Flip results)
 - [x] Classify every § Flip results cluster as test oracle vs product mixing (§ Flip classification)
@@ -150,6 +150,10 @@ Baseline tests that pass under the flip (run-to-run variation, not attributed): 
 ### Flip re-run (temporary dunce flip at `1c24125b`, same six crates and caps)
 
 6676 run, **42 failed**, every one in the § Baselines sets: 5 `quarto` (`project_profile_cli`, 2 `preview_static_e2e`, 2 `render_scripts_cli`), 12 `spin::tests::golden_*`, `ts_process::test_single_dial_invariant`, `ts_wire_parity_fixture`, 7 `glob::expand`, `hephaestus`, `format_defaults`, `params`, 2 `listing_pipeline`, 3 `orange_book_lua`, `pandoc_goldens::test_fixtures_match_q1_golden`, 2 `pandoc_shim`, `pandoc_shim_goldens::test_equation_golden`, 2 hub `storage` double-lock, `render_scripts_boot`, `vfs::test_vfs_clear_preserving_prefix`. Now GREEN: `config::tests::single_file_deps_{resources_glob,includes_declared_resources}`, `admin_collect_lifecycle`, every oracle cluster, and the #743 RED. The known-noise tests (bd-j5ij00i0, bd-cpzr71jr) did not fail this run. Baseline failures that passed (mermaid, textile, execute_defaults, marimo, `metadata_path_resolution`, docx image, 6 julia) match the run-to-run set noted above. 538 s test phase.
+
+### Unflipped regression run (layer tip `954c341a`, same six crates and caps)
+
+Two earlier attempts failed at link (LNK2019 on compiler-internal `.llvm.*`/`anon.*` locals) for the `quarto-core` lib test and the `q2` bin test. They linked after deleting those units' incremental dirs in the shared build-dir. 6676 run, **51 failed** (387 s test phase), set built from the log's post-`Summary` `FAIL` lines. Every one is in the 53-failure after-routing set above: the 23 named tests minus the two load-sensitive `ts_process` tests (bd-j5ij00i0), which passed this run, plus the counted groups at their recorded sizes (12 spin, 7 `glob::expand`, 6 julia, 3 `orange_book_lua`, 2 `listing_pipeline`). No failure outside that set. The two known `.snap.new` files were deleted.
 
 ### Flip classification (sonnet sweep, static; central claims checked in the main session)
 
