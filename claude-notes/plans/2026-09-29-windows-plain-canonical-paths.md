@@ -104,7 +104,8 @@ Layer 3 (`bugfix/bd-1klbq2zd-dunce-seam`):
 - [x] dunce switch → GREEN, including #743's RED (`db5f75bd`)
 - [x] Probe re-run; output inspected and recorded here (§ Layer 3 results)
 - [x] Crate-scoped suites vs baseline (§ Layer 3 results: 42 failed, all baseline)
-- [ ] Ask about one `cargo build --workspace` before the PR
+- [x] One `cargo build --workspace` before the PR: passes on Windows at `f450fc93` (2026-09-30, run by hand in a terminal)
+- [ ] Whole-branch review of layer 3 (`roborev review --branch --base bugfix/bd-1klbq2zd-path-audit`), triaged
 
 Ship:
 - [ ] Ask before pushing; `gh stack submit --auto` (drafts) after review; PR text via `/open-pr`. Decided 2026-09-30: layer 2 is not pushed alone; layer 3 is built first and the whole stack is submitted together, so the stack top is green on Windows and layer 2 is reviewed next to the switch that motivates it
