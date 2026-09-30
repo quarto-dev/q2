@@ -203,10 +203,13 @@ impl PipelineStage for TypstCompileStage {
             .input_path
             .parent()
             .map_or_else(|| ctx.project.dir.clone(), std::path::Path::to_path_buf);
-        let extra_font_paths = resolve_font_paths(
-            &string_array(rendered.metadata.get("font-paths")),
+        let extra_font_paths = with_google_font_cache(
+            resolve_font_paths(
+                &string_array(rendered.metadata.get("font-paths")),
+                &ctx.project.dir,
+                &input_dir,
+            ),
             &ctx.project.dir,
-            &input_dir,
         );
 
         let mut cmd = Command::new(&typst_bin);
@@ -387,6 +390,22 @@ pub(crate) fn resolve_font_paths(
             None => input_dir.join(p),
         })
         .collect()
+}
+
+/// Appends the project's downloaded-Google-fonts cache
+/// ([`crate::typst_google_fonts::font_cache_dir`]) when it exists, after
+/// the document's own `font-paths` — Q1's order (`fontPaths.push(...fontdirs)`).
+/// `PandocWriteStage` populates it; both `typst fonts` and `typst compile`
+/// must pass the same set, so `PandocWriteStage` calls this too.
+pub(crate) fn with_google_font_cache(
+    mut font_paths: Vec<std::path::PathBuf>,
+    project_dir: &Path,
+) -> Vec<std::path::PathBuf> {
+    let cache = crate::typst_google_fonts::font_cache_dir(project_dir);
+    if cache.is_dir() {
+        font_paths.push(cache);
+    }
+    font_paths
 }
 
 /// `core/typst.ts:49-119`'s `getAvailableTypstFonts`, minus its cross-render

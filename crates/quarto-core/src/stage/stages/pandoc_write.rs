@@ -256,36 +256,45 @@ fn epub_extra_args(
 /// `brand:` value reaching `PandocWriteStage` came from either the
 /// project config or the document itself — good enough for the span
 /// binding to land on the right file in the common case.
-fn resolve_typst_brand_param(
-    _stage_name: &str,
+#[allow(clippy::type_complexity)]
+fn resolve_typst_brand(
     meta: &quarto_pandoc_types::ConfigValue,
     ctx: &StageContext,
 ) -> Result<
     (
-        Option<serde_json::Value>,
-        Option<serde_json::Value>,
-        Option<String>,
+        Option<quarto_brand::ResolvedBrand>,
+        Option<quarto_brand::ResolvedBrand>,
     ),
     PipelineError,
 > {
-    let (light, dark) =
-        quarto_sass::resolve_brand_variants(meta, ctx.runtime.as_ref(), &ctx.project.dir).map_err(
-            |e| {
-                let mut candidates: Vec<(quarto_source_map::FileId, std::path::PathBuf)> =
-                    Vec::new();
-                if let Some(p) = ctx.project.config.config_path.as_deref() {
-                    candidates.push((
-                        quarto_yaml::file_id_for_filename(&p.to_string_lossy()),
-                        p.to_path_buf(),
-                    ));
-                }
-                candidates.push((quarto_source_map::FileId(0), ctx.document.input.clone()));
-                PipelineError::Structured(crate::theme_diagnostic::sass_error_to_parse_error(
-                    &e,
-                    &candidates,
-                ))
-            },
-        )?;
+    quarto_sass::resolve_brand_variants(meta, ctx.runtime.as_ref(), &ctx.project.dir).map_err(|e| {
+        let mut candidates: Vec<(quarto_source_map::FileId, std::path::PathBuf)> = Vec::new();
+        if let Some(p) = ctx.project.config.config_path.as_deref() {
+            candidates.push((
+                quarto_yaml::file_id_for_filename(&p.to_string_lossy()),
+                p.to_path_buf(),
+            ));
+        }
+        candidates.push((quarto_source_map::FileId(0), ctx.document.input.clone()));
+        PipelineError::Structured(crate::theme_diagnostic::sass_error_to_parse_error(
+            &e,
+            &candidates,
+        ))
+    })
+}
+
+/// Builds the `brand`, `logo` and `brand-mode` filter params from
+/// already-resolved brand variants (see [`resolve_typst_brand`]).
+fn resolve_typst_brand_param(
+    meta: &quarto_pandoc_types::ConfigValue,
+    light: Option<&quarto_brand::ResolvedBrand>,
+    dark: Option<&quarto_brand::ResolvedBrand>,
+    ctx: &StageContext,
+) -> (
+    Option<serde_json::Value>,
+    Option<serde_json::Value>,
+    Option<String>,
+) {
     // The compiled `.typ` file (and, from it, the final PDF) is written
     // at `ctx.output_path()`'s directory — for a single document that's
     // ordinarily the project root, but for a book render it's the
@@ -301,11 +310,8 @@ fn resolve_typst_brand_param(
         .output_path()
         .parent()
         .map_or_else(|| ctx.project.dir.clone(), std::path::Path::to_path_buf);
-    let brand_param = crate::pandoc_filters::typst_brand::build_brand_param(
-        light.as_ref(),
-        dark.as_ref(),
-        &output_dir,
-    );
+    let brand_param =
+        crate::pandoc_filters::typst_brand::build_brand_param(light, dark, &output_dir);
     let logo_param =
         crate::pandoc_filters::typst_brand::build_logo_param(meta, brand_param.as_ref());
     // `typst-brand-yaml.lua`'s `param('brand-mode') or 'light'` already
@@ -313,7 +319,29 @@ fn resolve_typst_brand_param(
     // document (or its `format.typst.brand-mode`, flattened into `meta`
     // by `MetadataMergeStage`) sets one explicitly.
     let brand_mode = meta.get("brand-mode").and_then(|v| v.as_plain_text());
-    Ok((brand_param, logo_param, brand_mode))
+    (brand_param, logo_param, brand_mode)
+}
+
+/// Download the brand's `source: google` fonts into the project's font
+/// cache so `typst fonts` and `typst compile` can see them (see
+/// [`crate::typst_google_fonts`]). Failures only warn: the font then falls
+/// back, as Typst did before this existed.
+fn stage_typst_brand_fonts(brand: Option<&quarto_brand::ResolvedBrand>, ctx: &mut StageContext) {
+    let Some(brand) = brand else {
+        return;
+    };
+    let runtime = ctx.runtime.clone();
+    let fetch = |url: &str| {
+        pollster::block_on(runtime.fetch_url(url))
+            .map(|(bytes, _mime)| bytes)
+            .map_err(|e| e.to_string())
+    };
+    let diagnostics = crate::typst_google_fonts::stage_brand_fonts(
+        brand,
+        &crate::typst_google_fonts::font_cache_dir(&ctx.project.dir),
+        &fetch,
+    );
+    ctx.add_diagnostics(diagnostics);
 }
 
 /// Resolves the `typst-available-fonts` filter param (pandoc-hybrid-typst
@@ -357,10 +385,13 @@ fn resolve_typst_available_fonts(
     let input_dir = input_path
         .parent()
         .map_or_else(|| ctx.project.dir.clone(), std::path::Path::to_path_buf);
-    let extra_font_paths = super::typst_compile::resolve_font_paths(
-        &super::typst_compile::string_array(meta.get("font-paths")),
+    let extra_font_paths = super::typst_compile::with_google_font_cache(
+        super::typst_compile::resolve_font_paths(
+            &super::typst_compile::string_array(meta.get("font-paths")),
+            &ctx.project.dir,
+            &input_dir,
+        ),
         &ctx.project.dir,
-        &input_dir,
     );
     let font_args = super::typst_compile::font_path_args(&packages_dir, &extra_font_paths);
     Ok(super::typst_compile::discover_available_typst_fonts(
@@ -473,8 +504,13 @@ impl PipelineStage for PandocWriteStage {
             typst_reference_location,
             typst_cite_method,
         ) = if ctx.format.identifier == crate::format::FormatIdentifier::Typst {
+            let (light, dark) = resolve_typst_brand(&doc.ast.meta, ctx)?;
+            // Before `typst fonts` runs: the available-fonts list must
+            // include the fonts we are about to make available.
+            stage_typst_brand_fonts(light.as_ref(), ctx);
+            stage_typst_brand_fonts(dark.as_ref(), ctx);
             (
-                resolve_typst_brand_param(self.name(), &doc.ast.meta, ctx)?,
+                resolve_typst_brand_param(&doc.ast.meta, light.as_ref(), dark.as_ref(), ctx),
                 resolve_typst_available_fonts(self.name(), &doc.ast.meta, &doc.path, ctx)?,
                 doc.ast
                     .meta

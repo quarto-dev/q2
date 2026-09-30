@@ -6091,6 +6091,7 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "clap",
+ "cssparser",
  "flate2",
  "fontique",
  "glob",

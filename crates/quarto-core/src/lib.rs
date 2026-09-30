@@ -76,6 +76,7 @@ pub mod template;
 pub mod theme_diagnostic;
 pub mod transform;
 pub mod transforms;
+pub mod typst_google_fonts;
 
 // Re-export commonly used types
 pub use artifact::{Artifact, ArtifactMergeConflict, ArtifactScope, ArtifactStore, MergeStats};
