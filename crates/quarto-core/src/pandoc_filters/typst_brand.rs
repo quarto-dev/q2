@@ -211,14 +211,19 @@ fn resource_json(resource: &BrandLogoResource) -> Value {
 ///
 /// `brand_param` is the JSON already built by [`build_brand_param`] — this
 /// function reads path values back out of it rather than re-resolving
-/// the brand, so it only ever sees `light` (the `dark` half isn't
-/// resolved yet, see `build_brand_param`'s caller). Paths pulled from
-/// there get a leading `/` added when they're neither external nor
-/// already rooted, matching Q1's `brandWithAbsoluteLogoPaths` — a step
-/// that function applies *only* for this filter param, not for the
-/// `brand-logo` dict `logo_map` above also feeds (that one stays
-/// project-relative, without the leading slash, which is why this can't
-/// just reuse `logo_map`'s output verbatim).
+/// the brand, keyed per side by that side's own mode (the light logo
+/// default comes from `brand_param["light"]`, the dark logo default
+/// from `brand_param["dark"]`) — not by whichever mode the document
+/// ultimately renders under, since a document can name distinct
+/// `logo: {light:, dark:}` layouts and still wants each side's
+/// unspecified `path` filled from that same side's brand data. Paths
+/// pulled from there get a leading `/` added when they're neither
+/// external nor already rooted, matching Q1's
+/// `brandWithAbsoluteLogoPaths` — a step that function applies *only*
+/// for this filter param, not for the `brand-logo` dict `logo_map`
+/// above also feeds (that one stays project-relative, without the
+/// leading slash, which is why this can't just reuse `logo_map`'s
+/// output verbatim).
 pub fn build_logo_param(
     meta: &quarto_pandoc_types::ConfigValue,
     brand_param: Option<&Value>,
@@ -239,9 +244,9 @@ pub fn build_logo_param(
     let is_light_dark_spec =
         logo_meta.is_some_and(|v| v.get("light").is_some() || v.get("dark").is_some());
 
-    let brand_logo_path = |size: &str| -> Option<String> {
+    let brand_logo_path = |mode: &str, size: &str| -> Option<String> {
         let raw = brand_param?
-            .get("light")?
+            .get(mode)?
             .get("processedData")?
             .get("logo")?
             .get(size)?
@@ -255,7 +260,7 @@ pub fn build_logo_param(
             },
         )
     };
-    let default_brand_path = || SIZE_ORDER.iter().find_map(|s| brand_logo_path(s));
+    let default_brand_path = |mode: &str| SIZE_ORDER.iter().find_map(|s| brand_logo_path(mode, s));
 
     let build_mode = |mode: &str| -> Option<Value> {
         let spec = match logo_meta {
@@ -273,7 +278,7 @@ pub fn build_logo_param(
             }
         }
         if !obj.contains_key("path")
-            && let Some(path) = default_brand_path()
+            && let Some(path) = default_brand_path(mode)
         {
             obj.insert("path".to_string(), Value::String(path));
         }
@@ -523,12 +528,30 @@ logo:
         )
     }
 
+    /// A brand param with the same `large` logo path on both sides —
+    /// the common case once a real dark half is always resolved (an
+    /// all-plain brand's split halves are equal, per
+    /// [`quarto_brand::SplitBrand`]'s contract).
     fn brand_param_with_large_logo(path: &str) -> Value {
+        brand_param_with_large_logo_per_mode(path, path)
+    }
+
+    /// A brand param with **distinct** `large` logo paths per mode —
+    /// exercises that [`build_logo_param`]'s brand-path fallback reads
+    /// each side's own mode rather than always `"light"`.
+    fn brand_param_with_large_logo_per_mode(light_path: &str, dark_path: &str) -> Value {
         json!({
             "light": {
                 "processedData": {
                     "logo": {
-                        "large": { "path": path }
+                        "large": { "path": light_path }
+                    }
+                }
+            },
+            "dark": {
+                "processedData": {
+                    "logo": {
+                        "large": { "path": dark_path }
                     }
                 }
             }
@@ -591,6 +614,30 @@ logo:
             assert_eq!(logo[mode]["width"], json!("180px"));
             assert_eq!(logo[mode]["path"], json!("/quarto/quarto.png"));
         }
+    }
+
+    /// bd-67i2z57f: when the brand's light and dark halves name
+    /// different logo images, a document `logo:` spec that leaves
+    /// `path` unset gets each side's default filled from *that side's
+    /// own* brand data — not always the light side's.
+    ///
+    /// Revert hunk: reverting `default_brand_path` to always read
+    /// `brand_param["light"]` makes the dark-path assertion RED
+    /// (it would equal the light path instead).
+    #[test]
+    fn test_build_logo_param_light_dark_spec_defaults_from_matching_brand_side() {
+        let meta = cv_map(vec![(
+            "logo",
+            cv_map(vec![
+                ("light", cv_map(vec![("location", cv_s("left-top"))])),
+                ("dark", cv_map(vec![("location", cv_s("right-bottom"))])),
+            ]),
+        )]);
+        let brand_param =
+            brand_param_with_large_logo_per_mode("light-quarto.png", "dark-quarto.png");
+        let logo = build_logo_param(&meta, Some(&brand_param)).unwrap();
+        assert_eq!(logo["light"]["path"], json!("/light-quarto.png"));
+        assert_eq!(logo["dark"]["path"], json!("/dark-quarto.png"));
     }
 
     /// A `{light:, dark:}` document spec (`light-dark-variants.qmd` style)
