@@ -157,6 +157,7 @@ function parseFormatSpec(format: string, value: Record<string, unknown>, options
         case 'ensureTypstFileRegexMatches':
         case 'ensurePdfRegexMatches':
         case 'ensurePdfTextPositions':
+        case 'ensurePdfMetadata':
           // Parse but don't check — Typst/PDF-only assertions. WASM only
           // renders HTML (see the `spec.format !== 'html'` skip below), so
           // these never actually run; they just need to be recognized here

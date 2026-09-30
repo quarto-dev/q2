@@ -267,6 +267,7 @@ function parseFormatSpec(
         case 'ensureTypstFileRegexMatches':
         case 'ensurePdfRegexMatches':
         case 'ensurePdfTextPositions':
+        case 'ensurePdfMetadata':
           // Typst/PDF-only assertions — no-ops in the browser E2E runner,
           // which (like the WASM unit runner) only exercises HTML.
           break;
