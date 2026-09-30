@@ -681,7 +681,13 @@ unrelated to this work.
   Browser-stamped authors match `/auth/author?project=<bare indexDocId>`
   byte-for-byte, which also pins hub-mcp↔hub-client author consistency
   (both pass the bare id).
-- [ ] `cargo xtask verify` (full — hub-client and WASM legs affected) green.
+- [x] `cargo xtask verify` (full — hub-client and WASM legs affected) green.
+  → All 14 steps passed 2026-09-30 (lints incl. CSS, Rust workspace build +
+  nextest 15332 passed, ts-packages builds + MCP smoke, hub-client
+  build:all + test:ci 1264 unit + 143 integration + 153 wasm, q2-preview-spa
+  build). The smoke_all typst fixtures needed the R packages `flextable`
+  and `gt` installed in the session library (environmental, installed
+  0.10.1 / 1.3.0).
 - [ ] Close bd-6f21d4c6: record the outcome of the Carlos capture plan
   (forced H4 repro / IndexedDB export) or Gordon's waiver of the real
   specimen, then close the strand with a reason referencing the execution
