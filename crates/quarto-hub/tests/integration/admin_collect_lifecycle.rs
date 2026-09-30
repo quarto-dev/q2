@@ -103,7 +103,9 @@ async fn scan_store(hub_dir: &Path) -> quarto_hub::admin::manifest::ScanManifest
     scan(
         &storage,
         &ids,
-        &hub_dir.canonicalize().unwrap().to_string_lossy(),
+        &quarto_system_runtime::canonicalize(&hub_dir)
+            .unwrap()
+            .to_string_lossy(),
         &ScanOptions::default(),
     )
     .await
@@ -132,7 +134,13 @@ async fn collect_lifecycle_quarantine_restore_purge() {
     let batch_dir = outcome.batch_dir.expect("batch created");
     // collect canonicalizes the data dir (macOS: /var → /private/var),
     // so compare against the canonical form.
-    assert!(batch_dir.starts_with(hub_dir.canonicalize().unwrap().join("trash")));
+    assert!(
+        batch_dir.starts_with(
+            quarto_system_runtime::canonicalize(&hub_dir)
+                .unwrap()
+                .join("trash")
+        )
+    );
     // Orphan's chunks moved (not copied, not deleted).
     let orphan_quarantined = batch_dir.join("docs").join(&orphan_id);
     assert!(orphan_quarantined.is_dir());
