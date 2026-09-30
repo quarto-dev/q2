@@ -133,7 +133,7 @@ Ship:
 
 Temporary dunce flip, before and after routing: the new `render_item::tests::seed_map_keys_match_the_discovered_document_inputs` and `include_expansion::tests::self_include_is_caught_at_the_first_level_on_disk` both fail without the routing (the discovered input is plain, the keys are verbatim; the document gets spliced into itself once) and pass with it. The existing `seed_map_covers_numbered_files_and_skips_unnumbered` also failed under the flip; its oracle now uses the shared function.
 
-Compare sets, not counts. Raw logs are session scratch only; re-derive from this list.
+Compare sets, not counts. Raw logs are session scratch only; re-derive from this list. Build every recorded set from the log (the `FAIL` lines after nextest's `Summary`, sorted), never by hand: a hand-typed "13 spin" once made the totals fail to reconcile.
 
 ## Flip results (temporary dunce flip at `932313dc`, six crates)
 
