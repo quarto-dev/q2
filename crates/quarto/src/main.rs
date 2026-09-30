@@ -434,6 +434,11 @@ enum Commands {
         args: Vec<String>,
     },
 
+    /// Inline `<style>` rules of the HTML on stdin into `style` attributes
+    /// (internal helper for the Pandoc filter chain)
+    #[command(name = "inline-css", hide = true)]
+    InlineCss,
+
     /// Run the version of Typst embedded within Quarto
     Typst {
         /// Arguments to pass to typst
@@ -1305,6 +1310,12 @@ fn main() -> Result<()> {
     // catalog metadata. Must run before any diagnostic is rendered; idempotent.
     quarto_error_catalog::install();
 
+    // Let Pandoc filters call back into this binary (`quarto-cli-path`), e.g.
+    // `q2 inline-css` for raw HTML tables.
+    if let Ok(exe) = std::env::current_exe() {
+        quarto_core::pandoc_filters::params::set_cli_path(exe);
+    }
+
     let cli = Cli::parse();
 
     // Initialize logging. The `-v` flag chooses a default filter
@@ -1451,6 +1462,7 @@ fn main() -> Result<()> {
         Commands::Remove { .. } => commands::remove::execute(),
         Commands::Convert { .. } => commands::convert::execute(),
         Commands::Pandoc { .. } => commands::pandoc::execute(),
+        Commands::InlineCss => commands::inline_css::execute(),
         Commands::Typst { .. } => commands::typst::execute(),
         Commands::Run { .. } => commands::run::execute(),
         Commands::List { .. } => commands::list::execute(),

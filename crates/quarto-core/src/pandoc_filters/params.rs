@@ -367,6 +367,17 @@ fn insert_crossref_numbering_mode(blob: &mut Map<String, Value>, format: &Format
     }
 }
 
+static CLI_PATH: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+/// Registers the `q2` executable that filters may shell back into, exposed
+/// to them as the `quarto-cli-path` param. Only the real CLI binary should
+/// call this: in-process callers (tests, library users) must leave it unset,
+/// because their `current_exe()` is not a `q2` and would mis-handle the
+/// subcommands filters send it. Set-once; later calls are ignored.
+pub fn set_cli_path(path: PathBuf) {
+    let _ = CLI_PATH.set(path);
+}
+
 /// `results-file`, `execution-engine`, `quarto-environment` — top-level
 /// literals from the Task 4 worked example. `execution-engine` is a
 /// placeholder constant: by the time a document reaches the Pandoc leg, any
@@ -388,6 +399,13 @@ fn insert_top_level_literals(
         json!(results_file.to_string_lossy()),
     );
     blob.insert("execution-engine".to_string(), json!("markdown"));
+    // `quarto.config.cli_path()` in `init.lua`. Filters that shell back into
+    // the CLI use it; `normalize/astpipeline.lua` pipes raw HTML tables
+    // through `<cli> inline-css` (the q2 stand-in for Q1's juice step).
+    // Absent unless the CLI registered itself (see `set_cli_path`).
+    if let Some(cli) = CLI_PATH.get() {
+        blob.insert("quarto-cli-path".to_string(), json!(cli.to_string_lossy()));
+    }
     blob.insert(
         "quarto-environment".to_string(),
         json!({
@@ -770,6 +788,29 @@ mod tests {
         assert!(paths.contains_key("Rscript"));
         assert!(paths.contains_key("TinyTexBinDir"));
         assert!(paths.contains_key("Typst"));
+    }
+
+    /// `quarto-cli-path` is emitted only once the CLI registers itself, so
+    /// in-process callers never point filters at a non-`q2` executable.
+    ///
+    /// Revert hunk: emitting it unconditionally (e.g. from `current_exe()`)
+    /// makes the first assertion fail; dropping the `set_cli_path` plumbing
+    /// makes the second one fail. This is the only test that calls
+    /// `set_cli_path` (set-once per process), so the "absent" check runs
+    /// first in the same test.
+    #[test]
+    fn test_cli_path_only_present_once_registered() {
+        let format = Format::docx();
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = fixture_language();
+
+        let blob = fixture_builder(&format, &project, &registry, &language).build();
+        assert!(blob.get("quarto-cli-path").is_none());
+
+        set_cli_path(PathBuf::from("/opt/q2/bin/q2"));
+        let blob = fixture_builder(&format, &project, &registry, &language).build();
+        assert_eq!(blob["quarto-cli-path"], "/opt/q2/bin/q2");
     }
 
     /// `mediabag-dir` is present for every format, docx included — the
