@@ -14,6 +14,17 @@ use std::path::{Path, PathBuf};
 /// wherever the result is emitted or compared with another canonical
 /// path, so all such paths share one spelling. `NativeRuntime::canonicalize`
 /// delegates here.
+///
+/// On Windows the result is the plain `C:\…` form whenever one exists;
+/// the verbatim `\\?\` form is kept only where a plain spelling would
+/// not name the same file (paths past `MAX_PATH`, reserved names,
+/// network shares). Elsewhere this is `std::fs::canonicalize`.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn canonicalize(path: &Path) -> std::io::Result<PathBuf> {
+    dunce::canonicalize(path)
+}
+
+#[cfg(target_arch = "wasm32")]
 pub fn canonicalize(path: &Path) -> std::io::Result<PathBuf> {
     std::fs::canonicalize(path)
 }
