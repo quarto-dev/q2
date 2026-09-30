@@ -605,7 +605,17 @@ impl PipelineStage for PandocWriteStage {
         } else {
             None
         };
+        let typst_css_property_processing =
+            if ctx.format.identifier == crate::format::FormatIdentifier::Typst {
+                doc.ast
+                    .meta
+                    .get("css-property-processing")
+                    .and_then(|v| v.as_plain_text())
+            } else {
+                None
+            };
         if typst_brand_param.is_some()
+            || typst_css_property_processing.is_some()
             || typst_logo_param.is_some()
             || typst_brand_mode.is_some()
             || typst_available_fonts.is_some()
@@ -619,6 +629,7 @@ impl PipelineStage for PandocWriteStage {
                     brand: typst_brand_param,
                     logo: typst_logo_param,
                     brand_mode: typst_brand_mode,
+                    css_property_processing: typst_css_property_processing,
                     available_fonts: typst_available_fonts,
                     citation_location: typst_citation_location,
                     reference_location: typst_reference_location,
