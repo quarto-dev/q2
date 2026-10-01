@@ -508,12 +508,31 @@ impl PipelineStage for PandocWriteStage {
             typst_citation_location,
             typst_reference_location,
             typst_cite_method,
+            typst_code_block_bg,
         ) = if ctx.format.identifier == crate::format::FormatIdentifier::Typst {
             let (light, dark) = resolve_typst_brand(&doc.ast.meta, ctx)?;
             // Before `typst fonts` runs: the available-fonts list must
             // include the fonts we are about to make available.
             stage_typst_brand_fonts(light.as_ref(), ctx);
             stage_typst_brand_fonts(dark.as_ref(), ctx);
+            // The brand's `monospace-block` background replaces the
+            // highlight palette's code-block background.
+            let code_block_bg = super::typst_compile::brand_for_mode(
+                light.as_ref(),
+                dark.as_ref(),
+                doc.ast
+                    .meta
+                    .get("brand-mode")
+                    .and_then(|v| v.as_plain_text())
+                    .as_deref(),
+            )
+            .and_then(|resolved| {
+                let name = resolved
+                    .brand
+                    .effective_monospace_block()?
+                    .background_color?;
+                Some(resolved.brand.resolve_color_quiet(&name))
+            });
             (
                 resolve_typst_brand_param(&doc.ast.meta, light.as_ref(), dark.as_ref(), ctx),
                 resolve_typst_available_fonts(
@@ -559,9 +578,10 @@ impl PipelineStage for PandocWriteStage {
                     .get("citeproc")
                     .and_then(|value| value.as_bool())
                     .and_then(|is_citeproc| is_citeproc.then(|| "citeproc".to_string())),
+                code_block_bg,
             )
         } else {
-            ((None, None, None), None, None, None, None)
+            ((None, None, None), None, None, None, None, None)
         };
 
         // `mediabag-dir`: `<output-dir>/<stem>_files/mediabag`, mirroring
@@ -605,6 +625,15 @@ impl PipelineStage for PandocWriteStage {
         } else {
             None
         };
+        let typst_code_line_numbers =
+            if ctx.format.identifier == crate::format::FormatIdentifier::Typst {
+                doc.ast
+                    .meta
+                    .get("code-line-numbers")
+                    .and_then(|v| v.as_bool())
+            } else {
+                None
+            };
         let typst_css_property_processing =
             if ctx.format.identifier == crate::format::FormatIdentifier::Typst {
                 doc.ast
@@ -623,18 +652,20 @@ impl PipelineStage for PandocWriteStage {
             || typst_reference_location.is_some()
             || typst_root_dir.is_some()
             || typst_cite_method.is_some()
+            || typst_code_line_numbers.is_some()
         {
             builder = builder.with_contributor(Box::new(
                 crate::pandoc_filters::typst_params::TypstFilterParamsContributor {
                     brand: typst_brand_param,
                     logo: typst_logo_param,
-                    brand_mode: typst_brand_mode,
+                    brand_mode: typst_brand_mode.clone(),
                     css_property_processing: typst_css_property_processing,
                     available_fonts: typst_available_fonts,
                     citation_location: typst_citation_location,
                     reference_location: typst_reference_location,
                     root_dir: typst_root_dir,
                     cite_method: typst_cite_method,
+                    code_line_numbers: typst_code_line_numbers,
                 },
             ));
         }
@@ -877,6 +908,17 @@ impl PipelineStage for PandocWriteStage {
         let doc_dir = doc.path.parent().unwrap_or_else(|| Path::new("."));
         let mut forwarded_args =
             build_forwarded_args(self.name(), doc_dir, &doc.ast.meta, ctx.format.identifier)?;
+
+        if ctx.format.identifier == FormatIdentifier::Typst {
+            let args = crate::pandoc_filters::typst_highlight::typst_highlight_args(
+                doc_dir,
+                &doc.ast.meta,
+                typst_brand_mode.as_deref(),
+                typst_code_block_bg.as_deref(),
+            )
+            .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?;
+            forwarded_args.extend(args);
+        }
 
         // `build_forwarded_args` deliberately skips a bare `--toc-depth` CLI
         // flag for Typst (pandoc's CLI hard-validates it to 1-6, which

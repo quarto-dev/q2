@@ -255,7 +255,11 @@ pub fn build_forwarded_args(
         }
     }
 
-    if let Some(v) = meta.get("highlight-style").and_then(|v| v.as_plain_text()) {
+    // Typst's highlighting is owned by `typst_highlight`, which also
+    // honors `syntax-highlighting:` and generates the definitions block.
+    if base_format != FormatIdentifier::Typst
+        && let Some(v) = meta.get("highlight-style").and_then(|v| v.as_plain_text())
+    {
         args.push(OsString::from("--highlight-style"));
         args.push(OsString::from(v));
     }
@@ -470,6 +474,23 @@ mod tests {
                 "default image extension for {id}"
             );
         }
+    }
+
+    /// Typst's highlighting is owned by `typst_highlight`; the generic
+    /// `--highlight-style` forwarding must not also fire for it (a second,
+    /// deprecated flag would fight the generated definitions), while other
+    /// formats keep forwarding it.
+    #[test]
+    fn test_highlight_style_forwarding_is_typst_skipped() {
+        let meta = scalar_meta(&[("highlight-style", "tango")]);
+        let args_for =
+            |id| build_forwarded_args("pandoc-write", Path::new("/doc/dir"), &meta, id).unwrap();
+        let has_flag = |args: &[OsString]| {
+            args.iter()
+                .any(|a| a.to_string_lossy() == "--highlight-style")
+        };
+        assert!(has_flag(&args_for(FormatIdentifier::Docx)));
+        assert!(!has_flag(&args_for(FormatIdentifier::Typst)));
     }
 
     /// Phase 1 wrinkle 2: typst's `template` is owned by its dedicated

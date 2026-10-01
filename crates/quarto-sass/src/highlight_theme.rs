@@ -76,6 +76,11 @@ pub struct DotTheme {
     /// Top-level default text color.
     #[serde(rename = "text-color")]
     pub text_color: Option<String>,
+    /// Top-level line-number color (skylighting's `line-number-color`;
+    /// `editor-colors.LineNumbers` is the fallback). Consumed only by
+    /// the Typst backend — HTML numbers lines through CSS counters.
+    #[serde(rename = "line-number-color")]
+    pub line_number_color: Option<String>,
 }
 
 // ---------------------------------------------------------------------------

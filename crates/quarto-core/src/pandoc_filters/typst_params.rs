@@ -62,6 +62,11 @@ pub struct TypstFilterParamsContributor {
     /// otherwise (unlike the LaTeX-only `cite-method` consumers elsewhere,
     /// which default to `'citeproc'`).
     pub cite_method: Option<String>,
+    /// The document's `code-line-numbers`, read by
+    /// `quarto-pre/line-numbers.lua` via `param('code-line-numbers', false)`
+    /// to add pandoc's `number-lines` class to every classed code block —
+    /// which the Typst writer turns into `#Skylighting(number: true, ...)`.
+    pub code_line_numbers: Option<bool>,
 }
 
 impl FilterParamsContributor for TypstFilterParamsContributor {
@@ -105,11 +110,46 @@ impl FilterParamsContributor for TypstFilterParamsContributor {
                 Value::String(root_dir.to_string_lossy().into_owned()),
             );
         }
+        if let Some(numbers) = self.code_line_numbers {
+            blob.insert("code-line-numbers".to_string(), Value::Bool(numbers));
+        }
         if let Some(cite_method) = &self.cite_method {
             blob.insert(
                 "cite-method".to_string(),
                 Value::String(cite_method.clone()),
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn contributor(code_line_numbers: Option<bool>) -> TypstFilterParamsContributor {
+        TypstFilterParamsContributor {
+            brand: None,
+            logo: None,
+            brand_mode: None,
+            css_property_processing: None,
+            available_fonts: None,
+            citation_location: None,
+            reference_location: None,
+            root_dir: None,
+            cite_method: None,
+            code_line_numbers,
+        }
+    }
+
+    /// `code-line-numbers` reaches `quarto-pre/line-numbers.lua`'s
+    /// `param('code-line-numbers', false)` only when the document sets it.
+    #[test]
+    fn code_line_numbers_param_is_emitted_only_when_set() {
+        let mut blob = Map::new();
+        contributor(None).contribute(&mut blob);
+        assert!(!blob.contains_key("code-line-numbers"));
+
+        contributor(Some(true)).contribute(&mut blob);
+        assert_eq!(blob["code-line-numbers"], Value::Bool(true));
     }
 }

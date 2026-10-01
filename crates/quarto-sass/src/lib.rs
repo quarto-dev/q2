@@ -67,8 +67,8 @@ pub use compile::{
     compile_reveal_theme_css, compile_theme_css, compile_with_doc_vars,
 };
 pub use config::{
-    DarkThemeConfig, HighlightStyle, ResolvedVariants, ThemeConfig, resolve_brand,
-    resolve_brand_variants,
+    DarkThemeConfig, HighlightStyle, ResolvedVariants, ThemeConfig, resolve_adaptive_highlight,
+    resolve_brand, resolve_brand_variants,
 };
 pub use error::SassError;
 pub use layer::{merge_layers, parse_layer, parse_layer_from_parts};
