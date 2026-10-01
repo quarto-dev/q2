@@ -438,6 +438,90 @@ fn render_document_to_file_typst_citeproc_true_uses_citeproc_bibliography_in_mar
     );
 }
 
+/// Renders `frontmatter` + one citation to Typst source and returns it.
+fn render_citation_to_typst(frontmatter: &str) -> String {
+    let temp = TempDir::new().unwrap();
+    let project_dir = temp.path().canonicalize().unwrap();
+    let input_path = project_dir.join("f.qmd");
+    write(
+        &input_path,
+        &format!("---\n{frontmatter}bibliography: refs.bib\n---\n\nA citation [@sample2020].\n"),
+    );
+    write(
+        &project_dir.join("refs.bib"),
+        "@article{sample2020, author = {Sample, Alice}, title = {Example}, journal = {Journal}, year = {2020}}\n",
+    );
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let output_path = project_dir.join("f.typ");
+    let options = RenderToFileOptions {
+        output_path: Some(output_path.clone()),
+        ..Default::default()
+    };
+    render_document_to_file(
+        &input_path,
+        "typst",
+        &options,
+        None,
+        runtime,
+        None,
+        None,
+        None,
+    )
+    .expect("typst render should succeed");
+    std::fs::read_to_string(&output_path).unwrap()
+}
+
+/// bd-ysqekrm2 / bd-wjn7jdzw: `citeproc: true` on a plain (non-margin)
+/// Typst document resolves citations through Q2's citeproc filter and
+/// leaves nothing for Typst's native citation machinery: the citation is
+/// rendered text, the bibliography is the `<refs>` div citeproc built, and
+/// the pandoc writer (run as `typst-citations`) emits no `#bibliography()`.
+///
+/// Revert hunks: dropping `apply_citeproc_shorthand` from
+/// `UserFiltersStage::pre` leaves the native `@sample2020`; dropping the
+/// `-citations` writer suffix in `PandocWriteStage` brings back a trailing
+/// `#bibliography(...)`.
+#[test]
+fn render_document_to_file_typst_citeproc_true_resolves_citations_without_native_bibliography() {
+    let text = render_citation_to_typst("citeproc: true\n");
+    assert!(
+        text.contains("(Sample 2020)"),
+        "citeproc: true should render the citation as text, got:\n{text}"
+    );
+    assert!(
+        !text.contains("@sample2020"),
+        "citeproc: true must not leave a native @key citation, got:\n{text}"
+    );
+    assert!(
+        text.contains("<refs>") && text.contains("<ref-sample2020>"),
+        "citeproc: true should emit citeproc's labeled bibliography div, got:\n{text}"
+    );
+    assert!(
+        !text.contains("#bibliography("),
+        "citeproc: true must not also emit a native #bibliography(), got:\n{text}"
+    );
+}
+
+/// bd-ysqekrm2: without `citeproc: true` the document stays on Typst's
+/// native citation path (`@key` plus a `#bibliography()` call) — the
+/// default is unchanged.
+#[test]
+fn render_document_to_file_typst_without_citeproc_keeps_native_citations() {
+    let text = render_citation_to_typst("");
+    assert!(text.contains("@sample2020"), "got:\n{text}");
+    assert!(text.contains("#bibliography("), "got:\n{text}");
+}
+
+/// bd-ysqekrm2: an explicit `filters: [quarto, citeproc]` puts citeproc in
+/// the post group, which `PandocWriteStage`'s hybrid leg used to drop
+/// without running it; it now resolves the citation like the shorthand.
+#[test]
+fn render_document_to_file_typst_explicit_post_citeproc_filter_resolves_citations() {
+    let text = render_citation_to_typst("filters: [quarto, citeproc]\n");
+    assert!(text.contains("(Sample 2020)"), "got:\n{text}");
+    assert!(!text.contains("#bibliography("), "got:\n{text}");
+}
+
 /// pandoc-hybrid-typst Phase 1's template vendoring, end to end: pandoc
 /// must actually use the vendored 8-partial doctemplate (`--template`
 /// pointing at the materialized `template.typ`), not its own bundled

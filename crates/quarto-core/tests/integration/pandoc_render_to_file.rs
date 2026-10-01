@@ -294,3 +294,49 @@ async fn user_filters_pre_sees_no_custom_node_post_position_does() {
         );
     }
 }
+
+/// bd-ysqekrm2: the Citeproc drop in the Pandoc-hybrid leg was not
+/// Typst-specific — any `main.lua`-backed format ignored a post-position
+/// `citeproc` (explicit `filters: [quarto, citeproc]`) and the
+/// `citeproc: true` shorthand. `plain` is a text-based Pandoc-hybrid
+/// format, so the resolved citation is directly inspectable.
+#[test]
+fn render_document_to_file_pandoc_hybrid_resolves_citations_for_both_citeproc_spellings() {
+    for frontmatter in ["citeproc: true\n", "filters: [quarto, citeproc]\n"] {
+        let temp = TempDir::new().unwrap();
+        let project_dir = temp.path().canonicalize().unwrap();
+        let input_path = project_dir.join("f.qmd");
+        write(
+            &input_path,
+            &format!(
+                "---\n{frontmatter}bibliography: refs.bib\n---\n\nA citation [@sample2020].\n"
+            ),
+        );
+        write(
+            &project_dir.join("refs.bib"),
+            "@article{sample2020, author = {Sample, Alice}, title = {Example}, journal = {Journal}, year = {2020}}\n",
+        );
+        let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+        let output_path = project_dir.join("f.txt");
+        let options = RenderToFileOptions {
+            output_path: Some(output_path.clone()),
+            ..Default::default()
+        };
+        render_document_to_file(
+            &input_path,
+            "plain",
+            &options,
+            None,
+            runtime,
+            None,
+            None,
+            None,
+        )
+        .expect("plain render should succeed");
+        let text = std::fs::read_to_string(&output_path).unwrap();
+        assert!(
+            text.contains("(Sample 2020)"),
+            "{frontmatter:?}: citation should be resolved by citeproc, got:\n{text}"
+        );
+    }
+}
