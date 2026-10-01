@@ -2729,10 +2729,8 @@ mod tests {
         let document_dir = PathBuf::from("/project/docs");
         let project_root = PathBuf::from("/project");
 
-        let mut metadata = ConfigValue::new_path(
-            "orange-book.lua".to_string(),
-            SourceInfo::for_test(),
-        );
+        let mut metadata =
+            ConfigValue::new_path("orange-book.lua".to_string(), SourceInfo::for_test());
 
         adjust_paths_to_document_dir(&mut metadata, &metadata_dir, &document_dir, &project_root);
 
@@ -2771,8 +2769,7 @@ mod tests {
             panic!("expected a Path value");
         };
         assert_eq!(
-            rebased,
-            "../_extensions/acm/filter.lua",
+            rebased, "../_extensions/acm/filter.lua",
             "in-tree rebase should be doc-relative"
         );
     }

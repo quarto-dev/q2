@@ -303,18 +303,15 @@ impl PipelineStage for MetadataMergeStage {
         // Layer 2: Extension metadata (uses full target_format for lookup)
         // Adjust !path values from extension dir to document dir
         let is_book = ctx.project.config.project_kind == crate::project::ProjectKind::Book;
-        let extension_layer =
-            build_extension_metadata_layer(&ctx.extensions, target_format, is_book).map(
-                |(mut config, ext_dir)| {
-                    adjust_paths_to_document_dir(
-                        &mut config,
-                        &ext_dir,
-                        &document_dir,
-                        &ctx.project.dir,
-                    );
-                    config
-                },
-            );
+        let extension_layer = build_extension_metadata_layer(
+            &ctx.extensions,
+            target_format,
+            is_book,
+        )
+        .map(|(mut config, ext_dir)| {
+            adjust_paths_to_document_dir(&mut config, &ext_dir, &document_dir, &ctx.project.dir);
+            config
+        });
 
         // Layer 3: Directory metadata layers (each flattened for base format)
         let dir_layer_entries: Vec<(PathBuf, ConfigValue)> = if !ctx.project.is_single_file {
@@ -2204,7 +2201,12 @@ mod tests {
         ]);
         let ext = make_metadata_extension("meta-ext", meta);
 
-        let layers = build_metadata_contribution_layers(&[ext], "html", Path::new("/project"), Path::new("/project"));
+        let layers = build_metadata_contribution_layers(
+            &[ext],
+            "html",
+            Path::new("/project"),
+            Path::new("/project"),
+        );
         assert_eq!(layers.len(), 1);
         let layer = &layers[0];
         assert!(
@@ -2231,7 +2233,12 @@ mod tests {
         let meta = config_map(vec![("css", css)]);
         let ext = make_metadata_extension("meta-ext", meta);
 
-        let layers = build_metadata_contribution_layers(&[ext], "html", Path::new("/project"), Path::new("/project"));
+        let layers = build_metadata_contribution_layers(
+            &[ext],
+            "html",
+            Path::new("/project"),
+            Path::new("/project"),
+        );
         assert_eq!(layers.len(), 1);
         assert_eq!(
             layers[0].get("css").and_then(|v| v.as_str()),
@@ -2247,7 +2254,12 @@ mod tests {
             config_map(vec![("pre-render", config_str("x.ts"))]),
         )]);
         let ext = make_metadata_extension("meta-ext", meta);
-        let layers = build_metadata_contribution_layers(&[ext], "html", Path::new("/project"), Path::new("/project"));
+        let layers = build_metadata_contribution_layers(
+            &[ext],
+            "html",
+            Path::new("/project"),
+            Path::new("/project"),
+        );
         assert!(layers.is_empty());
     }
 
