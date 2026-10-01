@@ -31,6 +31,12 @@ crates/quarto/tests/smoke-all/**/_book/
 crates/quarto/tests/smoke-all/**/.quarto/
 crates/quarto/tests/smoke-all/**/*_files/
 
+# smoke-all `format: typst` fixtures leave the rendered `<stem>.typ` beside
+# the .qmd (keep-typ), which the runner does not clean up. Extension sources
+# under `_extensions/` (e.g. typst-show.typ) are real inputs, so re-include them.
+crates/quarto/tests/smoke-all/**/*.typ
+!crates/quarto/tests/smoke-all/**/_extensions/**/*.typ
+
 # e2e test scratch output tree (local render runs), not build output.
 /target-e2e/
 
