@@ -131,7 +131,7 @@ bd-oejuizi9 / bd-hjv5o).
 
 ---
 
-## Follow-up design: drop the key-based space split (bd-gh3qdq7d) — PROPOSED, not implemented
+## Follow-up design: drop the key-based space split (bd-gh3qdq7d) — IMPLEMENTED in 0e4c834c8 (smoke guard pending)
 
 Evidence: research doc § 3. Summary: at the walk, `theme` and `css` are both
 filesystem-space. css becomes a URL only when `FormatCssTransform` *derives* an href
@@ -204,11 +204,32 @@ consistency change with contract tests, not a TDD bug fix.
 
 ### Checklist
 
-- [ ] Chris approves the design (incl. inverting test 3)
-- [ ] Free disk space (C: at 0 GB on 2026-10-01; shared target `q2-shared-build`)
-- [ ] Tests 1–2 written and confirmed failing on current code
-- [ ] Seam change (steps 1–3)
-- [ ] Tests 1–6 green; orange-book-margin smoke green on Windows
-- [ ] Amend nothing: new commit on `bugfix/bd-1klbq2zd-dunce-seam`
-- [ ] Re-run roborev on the new commit; post the 2987 replies; close 2987
-- [ ] Update bd-f0h4ahai premise (done in this session as a comment)
+- [x] Chris approves the design, incl. inverting test 3 and folding in finding 1 (2026-10-01)
+- [x] Free disk space
+- [x] Tests 1–2 written, RED on 73d1fbf code: css → `../../tmp/ext/style.css`;
+  escaping value → `../sub/../../tmp/x.lua`
+- [x] Seam change (steps 1–3), plus `project_root` normalized once at entry. Commit `0e4c834c8`
+- [x] Test 3 replaced by `adjust_paths_outside_project_keeps_every_form_absolute`;
+  probe test re-asserted (both forms absolute; the `..` chain still loads)
+- [x] Fixture fix: `make_metadata_extension` (metadata_merge.rs) moved under
+  `/project/_extensions`; its old `/extensions` path sat outside the project root it passed
+- [x] `cargo nextest run -p quarto-core`: 34 failures; 33 also fail on the pre-fix code
+  (baseline swap of the two source files, same filter): spin goldens, glob::expand,
+  orange_book_lua, pandoc_shim, listing_pipeline, ts_protocol, hephaestus, etc. These are
+  pre-existing Windows failures. The 34th was the fixture above, now green. Logs:
+  `target/logs/quarto-core-green.log`, `fix-subset.log`, `baseline-subset.log`
+- [ ] **NEXT SESSION:** orange-book-margin smoke guard on Windows:
+  `SMOKE_FILTER=orange-book-margin cargo nextest run -p quarto -E 'test(smoke_all)'`
+- [ ] Confirm the 33 pre-existing quarto-core failures are already tracked (braid,
+  bd-eehxwr29 for CRLF); file strands for any that are not
+- [ ] Re-run roborev on `0e4c834c8`; post the 2987 replies (drafts below); close 2987
+- [x] bd-f0h4ahai premise updated (comment c-z9d1cdh6)
+- [ ] Untracked test artifacts to clean: two `.snap.new` under
+  `crates/quarto-core/tests/integration/snapshots/` (from the failing pre-existing goldens)
+  and `rustc-ice-*.txt` at the worktree root
+
+### Draft roborev replies for job 2987 (approved content pending review)
+
+Finding 1: Confirmed, pre-existing, and not the MAX_PATH class this commit targets. The relative branch is unchanged from before 73d1fbf. A value declared inside the project that escapes it with '..' (metadata_dir /project/sub, value ../../tmp/x.lua) passes the lexical starts_with(project_root) check and is rebased by diff_paths to ../sub/../../tmp/x.lua (verified with a probe). That chain is bounded by what the author wrote plus the document depth; it never climbs to an unrelated temp tree, which is what broke Lua io.open for the temp-extracted built-in. Still, the boundary check should be honest: 0e4c834c8 normalizes the joined path lexically before the check, so an escaping path becomes absolute like any other outside-project value (test adjust_paths_escaping_declaration_is_outside_project).
+
+Finding 2: Confirmed. adjust_paths_recursive passed the immediate map key down, so under theme: {light, dark} the key was light/dark and the nested value became absolute while a top-level theme stayed relative. 0e4c834c8 removes the classification rather than carrying it down: at this walk neither theme nor css is URL-space. Every theme read goes through ThemeContext::resolve_path, which normalizes, and no theme value reaches HTML. The css href is derived by FormatCssTransform from the resolved source (format_css.rs:121-158), never copied from the stored string. rebase_candidate already stores absolute theme/css for temp-extracted fragments. A Windows probe (424-char unnormalized join) loads the theme in both forms. Every outside-project Path value now keeps its absolute form, nested or not (test adjust_paths_outside_project_keeps_every_form_absolute).
