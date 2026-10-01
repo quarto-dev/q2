@@ -87,12 +87,17 @@ fn write_minimal_website(project_dir: &Path) {
 fn single_file_status_line_shows_a_plain_path() {
     let temp = TempDir::new().unwrap();
     let dir = dunce::simplified(&canonical(temp.path())).to_path_buf();
+    let fixture = dir.join("doc.qmd");
+    write_file(&fixture, "---\ntitle: Doc\n---\n\nBody.\n");
+    // The whole fixture path, not just its directory, must have a plain
+    // form: the file name can push a near-MAX_PATH directory past it.
     assert!(
-        !dir.to_string_lossy().starts_with(r"\\?\"),
+        !dunce::simplified(&canonical(&fixture))
+            .to_string_lossy()
+            .starts_with(r"\\?\"),
         "test setup: the TEMP root gives the fixture no plain path form: {}",
-        dir.display()
+        fixture.display()
     );
-    write_file(&dir.join("doc.qmd"), "---\ntitle: Doc\n---\n\nBody.\n");
 
     let out = run_q2(&dir, &["doc.qmd"]);
     let stderr = String::from_utf8_lossy(&out.stderr);

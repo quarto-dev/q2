@@ -395,12 +395,17 @@ fn discovery_parse_error_json_carries_real_code() {
 fn source_file_json_is_a_plain_path() {
     let temp = TempDir::new().unwrap();
     let dir = dunce::simplified(&canonical(temp.path())).to_path_buf();
+    let fixture = dir.join("bad.qmd");
+    write_file(&fixture, "---\ntitle: Bad\n---\n\n```{python\n");
+    // The whole fixture path, not just its directory, must have a plain
+    // form: the file name can push a near-MAX_PATH directory past it.
     assert!(
-        !dir.to_string_lossy().starts_with(r"\\?\"),
+        !dunce::simplified(&canonical(&fixture))
+            .to_string_lossy()
+            .starts_with(r"\\?\"),
         "test setup: the TEMP root gives the fixture no plain path form: {}",
-        dir.display()
+        fixture.display()
     );
-    write_file(&dir.join("bad.qmd"), "---\ntitle: Bad\n---\n\n```{python\n");
 
     let output = run_q2_render(&dir, &["--json-errors", "bad.qmd"]);
     assert!(
