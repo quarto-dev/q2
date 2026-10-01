@@ -404,7 +404,9 @@ and a follow-up bead linking to the filed bug, Gordon's call on which.
     real behavior differs between margin/book and plain-document contexts, or whether
     something more specific to these three fixtures is wrong, is unresolved. Do not
     attempt a fix without a dedicated research pass first.
-12. **Skylighting-based syntax highlighting for Typst is not implemented at all — the
+12. **[Corrected 2026-10-01, fixed by PR #772: pandoc already emits Skylighting output;
+    only plumbing and generated definitions were missing.]**
+    **Skylighting-based syntax highlighting for Typst is not implemented at all — the
     single largest capability gap found this session.** Q2's Typst output always uses
     Typst's own native/idiomatic code highlighter (bare ` ```python ` fenced blocks,
     colored by Typst itself at compile time), **regardless of the `syntax-highlighting:`
@@ -599,3 +601,145 @@ one-line fixes — plan accordingly.
 
 No braid strand opened for this — per the repo's "Beads vs. plans (STRICT)" rule,
 this stays exploratory until Gordon scopes it into an actual plan/phase list.
+
+## Status update (2026-10-01)
+
+Re-verified every numbered finding against current `main` (not from commit
+messages alone — re-ran the actual smoke-all fixtures via `SMOKE_FILTER=...
+cargo test -p quarto --test integration smoke_all`, plus two direct render
+repros for #3 and #10). `workspace-4` itself was rebased onto `main`
+(`3833d06c8`) this session; see below for what's still only on the branch.
+
+**Fixed and merged to `main`:**
+- **#1** font-paths/brand file-fonts → `--font-path`. Both halves landed:
+  brand `source: file` dirs (`9a4dd0539`) and the general `font-paths:`
+  metadata key (PR #750, `bd-3ij4nokp`). Verified: all 3 `font-paths/*`
+  smoke-all fixtures pass. **Strand closed.**
+- **#2** attribute-order — resolved as "not a bug" (Q2's id-first grammar is
+  intentional); real gap was diagnostic quality, now added (PR #762,
+  `bd-6hf7nz7i`). *Strand still shows open — stale, should close.*
+- **#5** brand.yml logo generation (was 9/9 failing) — fixed by `b70b6b36b`
+  (brand-mode/dark-mode wiring) + `aa75f3199` (logo filter param wiring).
+  Verified: 7/7 `brand-yaml/logo/*` fixtures pass. No strand was filed for
+  this one originally.
+- **#10** Spanish `Figura` crossref crash — fixed via PR #757
+  (`bd-m2j4m3wg`, "Use canonical float types for Q1 category lookup").
+  Verified: `cargo test -p quarto-core --test integration pandoc_shim`
+  61/61 pass, plus a direct `lang: es` + `@fig-a` crossref render repro
+  renders clean. **Strand closed.**
+- **#13** `css-property-processing: none` ignored — fixed, PR behind
+  `bd-5adgk9hr` (`7bd31564a`). Verified: 3/3 fixtures pass. *Strand still
+  shows open — stale, should close.*
+- **#14** brand.yml color gaps (was 7/15 failing) — turned out to be a
+  fixture-authoring issue (missing explicit `brand:` key under Q2's
+  no-implicit-`_brand.yml`-discovery rule), not a real capability gap
+  (`9f0f6c66a`). Verified: 3/3 fixtures pass. *`bd-x1iurczn` ("verify
+  color.mix/named-color gaps") still open — now verified, should close.*
+- **#17** `source: google` font fetching for Typst — implemented, PR #752
+  (`bd-mzrgikmu`, closed already).
+- **#18** `ensurePdfMetadata` test-harness gap — merged (`5fdec2093`/
+  `58ed02fe6`). *`bd-0syqvgl2` still open — stale, should close.*
+
+**Partially fixed:**
+- **#4** juice/data-URI mismediabag — the fallback no longer leaks a bare
+  UUID (merged `761f0f114`, *`bd-qj6odpi4` still open — stale, should
+  close*), but juice itself has never worked in q2 at all (`juice.ts`
+  doesn't exist). Real fix is **PR #766** (draft, open, mergeable),
+  `bd-sccaj7u4`.
+- **#7** definition lists silently dropped — content-loss is fixed, now
+  falls back to literal text with a new diagnostic (`Q-2-54`, confirmed
+  present on main), via `c90ee9202` (`bd-definition-lists-no-fallback-irykzp3g`
+  already closed). Full `DefinitionList` grammar support (the
+  `Term\n: description` syntax itself) is still not implemented — feature
+  gap remains.
+- **#15** brand.yml typography gaps — `font-filtering`/
+  `font-filtering-fallback` now pass (verified 2/2). The broader
+  multi-font/per-element/kitchen-sink fixtures were never ported — no
+  `typography/` fixture dir exists on main yet. `bd-post2btu` (P2, open)
+  accurately reflects the remainder.
+
+**Fixed in code, sitting on `workspace-4`, not yet merged:**
+No separate PR needed for these — they land when `workspace-4` itself
+merges, not before.
+- **#6 (P1, `bd-ymkkrn64`)** authors.lua crash on bare-string affiliation.
+  Fixed across two commits (`37bddab0e`, narrowed by `79f2df5d8` after
+  catching a preview regression). Compiles clean post-rebase.
+- **#9** TOC title auto-fallback one-line template fix (`6d96fe81b`). No
+  strand was ever filed for this one — trivial, lowest-risk item in the
+  whole list.
+
+**In a draft PR, awaiting a merge decision:**
+- **#8** extra `#block[` wrapper around knitr/pandoc tables — **PR #767**
+  (draft, open, mergeable), `bd-gb6u8qsz`.
+- **#4**'s real juice fix — **PR #766** (draft, open, mergeable),
+  `bd-sccaj7u4` (see above).
+
+**Still fully open, untouched:**
+- **#11** Typst-native citation handling — **resolved 2026-10-01**: PR #770
+  (`bd-ysqekrm2`, `bd-wjn7jdzw`) made `citeproc: true` work on hybrid formats
+  (native `<ref-KEY>`/`<refs>`, no duplicate `#bibliography`). The "malformed
+  nested cite" was pandoc's own parse of the malformed `[@a, @b]` (intended
+  `;`), so the fixture was corrected. The three fixtures are ported under
+  `typst/citations/`. Residual, filed separately: `@key[locator]` bare
+  locators parse as citation + empty span (`bd-bare-locator-citation-nx3gzh07`,
+  not ported: removed from the fixtures), and citeproc output differs from
+  pandoc on cluster collapse / punctuation-in-quote
+  (`bd-citeproc-cluster-collapse-kns8uggw`). `./refs.bib` is normalized to
+  `refs.bib` by Q2, so that fixture accepts both forms.
+- **#12** Skylighting syntax highlighting for Typst — corrected: pandoc already
+  emits Skylighting output; only plumbing + generated definitions were missing.
+  Tracked as `bd-typst-skylighting-av61oid8` (dispatched to workspace-7).
+- **#16** smart-quote gap (`Bayes' Rule` hard-errors) — verified directly,
+  still hard-errors on main. Only the diagnostic message improved (now
+  suggests a `\'` escape, via now-closed `bd-7vz18qht`); the underlying
+  heuristic gap (auto-recognizing the possessive without a manual escape)
+  is unfixed. The previously-flagged "Q-2-10 duplicate" (byte-identical fix
+  across two worktree branches) is still unreconciled.
+- **#19** `q2 preview` on an explicit non-HTML `format:` silently drops
+  TOC/crossref numbering/figure content — not scoped, not fixed, no strand
+  filed.
+
+**Stale-strand housekeeping (confirmed resolved, braid still shows open):**
+`bd-6hf7nz7i` (#2), `bd-qj6odpi4` (#4 fallback half), `bd-5adgk9hr` (#13),
+`bd-x1iurczn` (#14), `bd-0syqvgl2` (#18).
+
+## Status update (2026-10-02)
+
+Supersedes the 2026-10-01 update where they differ. Every numbered finding is
+now either merged, fixed on this branch, or tracked by an open strand.
+
+**Merged since the last update:**
+- **#4** PR #766 (`bd-sccaj7u4`) replaced the missing `juice.ts` with an
+  in-process CSS inliner; PR #763 (`bd-qj6odpi4`) had already stopped the
+  fallback leaking a UUID.
+- **#12** PR #772 (`bd-typst-skylighting-av61oid8`) wires Skylighting for Typst.
+- **#11** PR #770, as recorded above.
+
+**Corrections to the 2026-10-01 update:**
+- **#16** is won't-fix by design, not an open gap. `bd-7vz18qht` was closed
+  (Carlos, 2026-08-25): the parser cannot tell a plural possessive from a stray
+  closing quote, so the answer stays "escape it as `\'`". PR #748 rewrote the
+  Q-2-10 note to neutral wording and is merged, so the "unreconciled duplicate"
+  is moot.
+- **#15** is partly done: PR #751 ported `font-filtering` and
+  `font-filtering-fallback`, and this branch ports four more typography fixtures
+  (`basefont-typst`, `dashed-font-weights`, `mainfont-typst`,
+  `nobrand/brand-typography`). Nine Q1 fixture groups remain unported
+  (`kitchen-sink-*`, `font-filtering-generics`, `google`, `complex`,
+  `brand-extension`, `relative-path`, `simple`, `font-list`,
+  `title-inherit-base-family`), probably unblocked by PR #752. Tracked by
+  `bd-post2btu`.
+
+**PR numbers for fixes recorded above as commits only:** #5 and #14 are #751,
+#7 is #753, #13 is #764, #18 is #749.
+
+**Strands closed this session** (all had merged PRs): `bd-6hf7nz7i`,
+`bd-sccaj7u4`, `bd-qj6odpi4`, `bd-ysqekrm2`, `bd-wjn7jdzw`, `bd-5adgk9hr`,
+`bd-x1iurczn`, `bd-0syqvgl2`, `bd-typst-skylighting-av61oid8`, and the parent
+`bd-dsco4` (explicit `brand:` works; implicit `_brand.yml` discovery is
+intentionally absent and warns).
+
+**Still open:** #19 (no strand), `bd-gb6u8qsz` (#8, PR #767 draft),
+`bd-post2btu` (#15 remainder), `bd-bare-locator-citation-nx3gzh07`,
+`bd-citeproc-cluster-collapse-kns8uggw`, and `bd-ymkkrn64` (#6, closes when this
+branch merges).
