@@ -2178,7 +2178,7 @@ mod tests {
             author: Some("Test".to_string()),
             version: None,
             quarto_required: None,
-            path: PathBuf::from("/extensions").join(name),
+            path: PathBuf::from("/project/_extensions").join(name),
             contributes: Contributes {
                 metadata: Some(metadata),
                 ..Default::default()
@@ -2242,7 +2242,7 @@ mod tests {
         assert_eq!(layers.len(), 1);
         assert_eq!(
             layers[0].get("css").and_then(|v| v.as_str()),
-            Some("../extensions/meta-ext/assets/extra.css"),
+            Some("_extensions/meta-ext/assets/extra.css"),
             "Path-kind values rebase ext dir → document dir"
         );
     }

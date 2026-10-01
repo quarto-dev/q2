@@ -257,58 +257,33 @@ fn find_metadata_file(dir: &Path, runtime: &dyn SystemRuntime) -> Option<PathBuf
 ///
 /// Leaves other values (strings, globs, etc.) unchanged.
 ///
-/// When the declaring dir lives **outside** the project tree (a built-in
-/// extension extracted to a temp dir), the doc-relative rebase would climb
-/// out of the project with a `..` chain. Filesystem-space keys instead keep
-/// the **absolute** declaring-dir-resolved path (consumers tolerate it; see
-/// [`URL_SPACE_REBASE_KEYS`]). `project_root` is the tree boundary the
+/// When a value resolves **outside** the project tree (a built-in
+/// extension extracted to a temp dir, or a declaration escaping the
+/// project with `..`), it keeps the **absolute** resolved path instead of
+/// a doc-relative `..` chain. `project_root` is the tree boundary the
 /// rebase is allowed to climb within — pass the consuming project's dir.
+///
+/// The stored value is a filesystem path for every key, `css` and `theme`
+/// included: consumers resolve it before use, and the css `<link href>`
+/// is derived from the resolved source by
+/// [`crate::transforms::FormatCssTransform`], never copied from this
+/// string. See `claude-notes/research/2026-09-30-extension-path-rebase-windows-max-path.md`.
 pub(crate) fn adjust_paths_to_document_dir(
     metadata: &mut ConfigValue,
     metadata_dir: &Path,
     document_dir: &Path,
     project_root: &Path,
 ) {
-    adjust_paths_recursive(metadata, metadata_dir, document_dir, project_root, None);
+    let project_root = quarto_util::normalize_lexically(project_root);
+    adjust_paths_recursive(metadata, metadata_dir, document_dir, &project_root);
 }
 
-/// Top-level metadata keys whose `Path` values live in **URL space**: the
-/// string can survive into an emitted HTML attribute (`<link href>` for
-/// `css`, the resolved theme stylesheet for `theme`), so a
-/// filesystem-absolute form is never valid for them.
-///
-/// Every other `Path` value reaching [`adjust_paths_to_document_dir`] is
-/// filesystem-space — read by the renderer at build time (`filters`,
-/// `template`, `template-partials`, `include-*`, `format-resources`,
-/// `reference-doc`, `shortcodes`, explicit `!path`) — where an absolute
-/// path is safe (Rust `Path::join` returns an absolute RHS unchanged, and
-/// `filter_resolve` already special-cases `is_absolute`). The user-facing
-/// keys (`css`, `theme`, `include-*`, `reference-doc`, `template`) are
-/// marked document-relative by
-/// [`crate::project::format_paths::mark_format_path_values`] *after* this
-/// rebase runs, so only extension-contributed `css`/`theme`
-/// ([`crate::extension::paths::FORMAT_ASSET_PATTERNS`]) and explicit
-/// `!path` css entries actually reach this walk as `Path` — and those are
-/// exactly the values that must stay on the relative form. Excluding
-/// `css`/`theme` from absolute-if-outside leaves the outside-tree
-/// extension-asset case a known gap: a temp-extracted extension's `css`
-/// climbs out via `..` and [`crate::transforms::FormatCssTransform`]'s
-/// outside-project guard drops the copy (the pre-fix behavior). Scope-out
-/// strand linked to bd-oejuizi9; the unified path-shaped-key registry is
-/// the convergence point (bd-oejuizi9 / bd-hjv5o).
-const URL_SPACE_REBASE_KEYS: &[&str] = &["css", "theme"];
-
 /// Recursively walk ConfigValue, adjusting Path variants.
-///
-/// `key` is the map key whose value is being walked (`None` at the root
-/// and under array items); it selects the value's space — see
-/// [`URL_SPACE_REBASE_KEYS`].
 fn adjust_paths_recursive(
     value: &mut ConfigValue,
     metadata_dir: &Path,
     document_dir: &Path,
     project_root: &Path,
-    key: Option<&str>,
 ) {
     match &mut value.value {
         ConfigValueKind::Path(path_str) => {
@@ -321,20 +296,17 @@ fn adjust_paths_recursive(
                 && !path_str.starts_with("http://")
                 && !path_str.starts_with("https://")
             {
-                let abs_path = metadata_dir.join(&path);
-                // A filesystem-space value whose resolved absolute path lives
-                // outside the project tree (a temp-extracted built-in
-                // extension) must not be rebased to a `..` chain: consumers
-                // join it onto the document dir without normalizing (Rust
-                // `Path::join` keeps `..`), and on Windows the long chain
-                // exceeds MAX_PATH and fails `io.open`. Keep the absolute
-                // declaring-dir-resolved path instead — same refusal as
-                // `rebase_candidate` (bd-9z2258af). URL-space keys (css/theme)
-                // are excluded: an absolute filesystem path is not a valid
-                // page-relative href.
-                let outside_project = !abs_path.starts_with(project_root);
-                let url_space = key.is_some_and(|k| URL_SPACE_REBASE_KEYS.contains(&k));
-                if outside_project && !url_space {
+                // Normalized so a `..` escaping the project is seen as
+                // outside it by the lexical `starts_with` below.
+                let abs_path = quarto_util::normalize_lexically(&metadata_dir.join(&path));
+                // A value resolving outside the project tree (a temp-extracted
+                // built-in extension) must not be rebased to a `..` chain:
+                // consumers join it onto the document dir without normalizing
+                // (Rust `Path::join` keeps `..`), and on Windows the long chain
+                // exceeds MAX_PATH and fails Lua `io.open`. Keep the absolute
+                // resolved path instead — same refusal as `rebase_candidate`
+                // (bd-9z2258af).
+                if !abs_path.starts_with(project_root) {
                     *path_str = quarto_util::to_forward_slashes(&abs_path);
                 } else if let Some(adjusted) = pathdiff::diff_paths(&abs_path, document_dir) {
                     // The adjusted value is used verbatim in HTML hrefs (e.g. a
@@ -346,18 +318,12 @@ fn adjust_paths_recursive(
         }
         ConfigValueKind::Array(items) => {
             for item in items {
-                adjust_paths_recursive(item, metadata_dir, document_dir, project_root, key);
+                adjust_paths_recursive(item, metadata_dir, document_dir, project_root);
             }
         }
         ConfigValueKind::Map(entries) => {
             for entry in entries {
-                adjust_paths_recursive(
-                    &mut entry.value,
-                    metadata_dir,
-                    document_dir,
-                    project_root,
-                    Some(&entry.key),
-                );
+                adjust_paths_recursive(&mut entry.value, metadata_dir, document_dir, project_root);
             }
         }
         // All other kinds (Scalar, PandocInlines, Glob, Expr, etc.) - no adjustment
@@ -2774,13 +2740,14 @@ mod tests {
         );
     }
 
-    /// Space-aware refusal (bd-9z2258af): a filesystem-space key
-    /// (`filters`) whose declaring dir is outside the document tree keeps
-    /// the absolute path, while a URL-space key (`css`) in the same map
-    /// stays on the relative form — an absolute filesystem path must never
-    /// reach an emitted `<link href>`.
+    /// Every `Path` leaf from a declaring dir outside the project keeps
+    /// its absolute form, whatever key or nesting it sits under: `css`
+    /// and `theme` are filesystem paths at this walk too (the css href
+    /// is derived later from the resolved source), and `theme`'s
+    /// `{light, dark}` pair must not rebase differently from its plain
+    /// form (bd-gh3qdq7d).
     #[test]
-    fn adjust_paths_outside_document_tree_keeps_css_relative() {
+    fn adjust_paths_outside_project_keeps_every_form_absolute() {
         use quarto_pandoc_types::{ConfigMapEntry, ConfigValue};
         use quarto_source_map::SourceInfo;
 
@@ -2788,67 +2755,104 @@ mod tests {
         let document_dir = PathBuf::from("/project/docs");
         let project_root = PathBuf::from("/project");
 
-        let path_entry = |v: &str| ConfigValue::new_path(v.to_string(), SourceInfo::for_test());
-        let mut metadata = ConfigValue::new_map(
-            vec![
-                ConfigMapEntry {
-                    key: "filters".to_string(),
-                    key_source: SourceInfo::for_test(),
-                    value: ConfigValue::new_array(
-                        vec![path_entry("filter.lua")],
-                        SourceInfo::for_test(),
-                    ),
-                },
-                ConfigMapEntry {
-                    key: "css".to_string(),
-                    key_source: SourceInfo::for_test(),
-                    value: path_entry("style.css"),
-                },
-                ConfigMapEntry {
-                    key: "theme".to_string(),
-                    key_source: SourceInfo::for_test(),
-                    value: path_entry("theme.scss"),
-                },
-            ],
-            SourceInfo::for_test(),
-        );
-
-        adjust_paths_to_document_dir(&mut metadata, &metadata_dir, &document_dir, &project_root);
-
-        let ConfigValueKind::Array(filters) = &metadata.get("filters").unwrap().value else {
-            panic!("expected filters to be an array");
+        let si = SourceInfo::for_test;
+        let path = |v: &str| ConfigValue::new_path(v.to_string(), si());
+        let list = |vs: &[&str]| ConfigValue::new_array(vs.iter().map(|v| path(v)).collect(), si());
+        let map = |entries: Vec<(&str, ConfigValue)>| {
+            ConfigValue::new_map(
+                entries
+                    .into_iter()
+                    .map(|(k, value)| ConfigMapEntry {
+                        key: k.to_string(),
+                        key_source: si(),
+                        value,
+                    })
+                    .collect(),
+                si(),
+            )
         };
-        let ConfigValueKind::Path(filter) = &filters[0].value else {
-            panic!("expected a Path value");
-        };
-        assert_eq!(
-            filter,
-            &quarto_util::to_forward_slashes(&metadata_dir.join("filter.lua")),
-            "fs-space key must keep the absolute declaring-dir-resolved path"
-        );
+        let cases = [
+            ("filters", list(&["filter.lua"])),
+            ("css", path("style.css")),
+            ("css", list(&["a.css", "b.css"])),
+            ("theme", path("theme.scss")),
+            ("theme", list(&["theme.scss"])),
+            (
+                "theme",
+                map(vec![
+                    ("light", path("light.scss")),
+                    ("dark", list(&["dark.scss"])),
+                ]),
+            ),
+        ];
 
-        for key in ["css", "theme"] {
-            let ConfigValueKind::Path(value) = &metadata.get(key).unwrap().value else {
-                panic!("expected a Path value for {key}");
-            };
-            assert!(
-                value.starts_with("../"),
-                "url-space key {key} must stay doc-relative, got: {value}"
+        for (key, value) in cases {
+            let mut metadata = map(vec![(key, value)]);
+            adjust_paths_to_document_dir(
+                &mut metadata,
+                &metadata_dir,
+                &document_dir,
+                &project_root,
             );
-            assert!(
-                !quarto_util::is_rooted(std::path::Path::new(value)),
-                "url-space key {key} must never become filesystem-absolute, got: {value}"
-            );
+
+            let mut leaves = Vec::new();
+            collect_path_leaves(metadata.get(key).unwrap(), &mut leaves);
+            assert!(!leaves.is_empty(), "{key}: no Path leaves");
+            for leaf in leaves {
+                assert!(
+                    leaf.starts_with(&quarto_util::to_forward_slashes(&metadata_dir)),
+                    "{key}: expected the absolute declaring-dir-resolved path, got: {leaf}"
+                );
+            }
         }
     }
 
-    /// Characterization probe (bd-gh3qdq7d): a theme file in a real temp
-    /// dir, consumed from a deep document dir whose unnormalized
-    /// `document_dir.join(value)` exceeds Windows MAX_PATH, still loads
-    /// through the theme consumer, whichever form the rebase leaves
-    /// (top-level `theme` stays doc-relative, nested `{light: …}`
-    /// becomes absolute). `ThemeContext::resolve_path` normalizes
-    /// lexically before any read, so both forms resolve to one file.
+    fn collect_path_leaves(value: &ConfigValue, out: &mut Vec<String>) {
+        match &value.value {
+            ConfigValueKind::Path(s) => out.push(s.clone()),
+            ConfigValueKind::Array(items) => {
+                items.iter().for_each(|item| collect_path_leaves(item, out));
+            }
+            ConfigValueKind::Map(entries) => {
+                entries
+                    .iter()
+                    .for_each(|entry| collect_path_leaves(&entry.value, out));
+            }
+            _ => {}
+        }
+    }
+
+    /// A value declared inside the project that escapes it with `..` is
+    /// outside the project too: the boundary check must see the
+    /// normalized path, not the lexical `metadata_dir.join(value)`, which
+    /// still `starts_with` the project root (roborev 2987 finding 1).
+    #[test]
+    fn adjust_paths_escaping_declaration_is_outside_project() {
+        use quarto_pandoc_types::ConfigValue;
+        use quarto_source_map::SourceInfo;
+
+        let mut metadata =
+            ConfigValue::new_path("../../tmp/x.lua".to_string(), SourceInfo::for_test());
+        adjust_paths_to_document_dir(
+            &mut metadata,
+            Path::new("/project/sub"),
+            Path::new("/project/docs"),
+            Path::new("/project"),
+        );
+
+        let ConfigValueKind::Path(rebased) = &metadata.value else {
+            panic!("expected a Path value");
+        };
+        assert_eq!(rebased, "/tmp/x.lua");
+    }
+
+    /// A theme file in a real temp dir, consumed from a deep document
+    /// dir: the plain and `{light: …}` forms both rebase to the same
+    /// absolute path and load. The theme consumer also tolerates the
+    /// doc-relative `..` chain, whose unnormalized
+    /// `document_dir.join(value)` exceeds Windows MAX_PATH, because
+    /// `ThemeContext::resolve_path` normalizes before any read
+    /// (bd-gh3qdq7d).
     #[test]
     fn theme_rebase_outside_project_loads_from_deep_document_dir() {
         use quarto_pandoc_types::{ConfigMapEntry, ConfigValue};
@@ -2902,29 +2906,27 @@ mod tests {
         else {
             panic!("expected a Path value");
         };
-        eprintln!("top-level theme value: {top_value}");
-        eprintln!("nested theme value:    {nested_value}");
+        let expected = quarto_util::to_forward_slashes(&ext_dir.join("probe.scss"));
+        assert_eq!(top_value, &expected);
+        assert_eq!(nested_value, &expected);
 
-        let unnormalized = document_dir.join(top_value);
-        eprintln!(
-            "unnormalized join length: {}",
-            unnormalized.as_os_str().len()
+        let dotdot_chain = quarto_util::to_forward_slashes(
+            &pathdiff::diff_paths(ext_dir.join("probe.scss"), &document_dir).unwrap(),
         );
-        assert!(top_value.starts_with("../"), "got: {top_value}");
         assert!(
-            unnormalized.as_os_str().len() > 260,
-            "probe must exceed MAX_PATH to mean anything"
+            document_dir.join(&dotdot_chain).as_os_str().len() > 260,
+            "the '..' chain must exceed MAX_PATH to mean anything"
         );
 
         let context = quarto_sass::ThemeContext::native(document_dir.clone());
-        for value in [top_value, nested_value] {
+        for value in [top_value.as_str(), dotdot_chain.as_str()] {
             quarto_sass::load_custom_theme(Path::new(value), &context)
                 .unwrap_or_else(|e| panic!("theme {value} failed to load: {e}"));
         }
         assert_eq!(
             context.resolve_path(Path::new(top_value)),
-            context.resolve_path(Path::new(nested_value)),
-            "both forms must resolve to one file identity (cache key, load path)"
+            context.resolve_path(Path::new(&dotdot_chain)),
+            "both spellings must resolve to one file identity (cache key, load path)"
         );
     }
 
