@@ -300,7 +300,7 @@ fn adjust_paths_recursive(
                 // Normalized so a `..` escaping the project is seen as
                 // outside it by the lexical `starts_with` below.
                 let abs_path = quarto_util::normalize_lexically(&joined);
-                // Off Windows the in-project rebase keeps `..` for the OS to
+                // Off Windows the stored value keeps `..` for the OS to
                 // resolve (it may follow a symlink). Windows resolves `..`
                 // lexically, so the shorter normalized form names the same
                 // file and keeps consumer paths further from MAX_PATH.
@@ -313,7 +313,7 @@ fn adjust_paths_recursive(
                 // resolved path instead — same refusal as `rebase_candidate`
                 // (bd-9z2258af).
                 if !abs_path.starts_with(project_root) {
-                    *path_str = quarto_util::to_forward_slashes(&abs_path);
+                    *path_str = quarto_util::to_forward_slashes(rebase_from);
                 } else if let Some(adjusted) = pathdiff::diff_paths(rebase_from, document_dir) {
                     // The adjusted value is used verbatim in HTML hrefs (e.g. a
                     // `css: !path` <link>), so it must use forward slashes on
@@ -2776,6 +2776,35 @@ mod tests {
         assert_eq!(rebased, expected);
     }
 
+    /// The outside-project absolute form follows the same rule: off
+    /// Windows a `link/../..` escape keeps its `..` for the OS, since
+    /// collapsing it lexically names a different file when `link` is a
+    /// symlink.
+    #[test]
+    fn adjust_paths_outside_project_keeps_dotdot_where_the_os_resolves_it() {
+        use quarto_pandoc_types::ConfigValue;
+        use quarto_source_map::SourceInfo;
+
+        let mut metadata =
+            ConfigValue::new_path("link/../../header.html".to_string(), SourceInfo::for_test());
+        adjust_paths_to_document_dir(
+            &mut metadata,
+            Path::new("/work/project"),
+            Path::new("/work/project/docs"),
+            Path::new("/work/project"),
+        );
+
+        let ConfigValueKind::Path(rebased) = &metadata.value else {
+            panic!("expected a Path value");
+        };
+        let expected = if cfg!(windows) {
+            "/work/header.html"
+        } else {
+            "/work/project/link/../../header.html"
+        };
+        assert_eq!(rebased, expected);
+    }
+
     /// Every `Path` leaf from a declaring dir outside the project keeps
     /// its absolute form, whatever key or nesting it sits under: `css`
     /// and `theme` are filesystem paths at this walk too (the css href
@@ -2879,7 +2908,12 @@ mod tests {
         let ConfigValueKind::Path(rebased) = &metadata.value else {
             panic!("expected a Path value");
         };
-        assert_eq!(rebased, "/tmp/x.lua");
+        let expected = if cfg!(windows) {
+            "/tmp/x.lua"
+        } else {
+            "/project/sub/../../tmp/x.lua"
+        };
+        assert_eq!(rebased, expected);
     }
 
     /// A theme file in a real temp dir, consumed from a deep document
