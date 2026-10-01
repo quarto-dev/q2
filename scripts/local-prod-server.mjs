@@ -68,14 +68,26 @@ function proxyRequest(req, res) {
 
   const proxyReq = http.request(options, (proxyRes) => {
     res.writeHead(proxyRes.statusCode, proxyRes.headers);
+    proxyRes.on('error', () => res.destroy());
     proxyRes.pipe(res);
   });
 
   proxyReq.on('error', (err) => {
     console.error(`Proxy error: ${err.message}`);
+    if (res.headersSent) {
+      res.destroy();
+      return;
+    }
     res.writeHead(502);
     res.end('Bad Gateway');
   });
+
+  // Client went away mid-request: drop the upstream request too.
+  res.on('close', () => {
+    if (!res.writableFinished) proxyReq.destroy();
+  });
+  req.on('error', () => proxyReq.destroy());
+  res.on('error', () => proxyReq.destroy());
 
   req.pipe(proxyReq);
 }
@@ -99,12 +111,23 @@ function handleUpgrade(req, socket, head) {
     socket.write('\r\n');
     proxySocket.write(proxyHead);
     proxySocket.pipe(socket).pipe(proxySocket);
+
+    // A reset on either side (e.g. a browser tab dying) must tear down only
+    // this connection pair. Without handlers, the 'error' event is thrown and
+    // takes the whole proxy process down.
+    socket.on('error', () => proxySocket.destroy());
+    proxySocket.on('error', () => socket.destroy());
+    socket.on('close', () => proxySocket.destroy());
+    proxySocket.on('close', () => socket.destroy());
   });
 
   proxyReq.on('error', (err) => {
     console.error(`WebSocket proxy error: ${err.message}`);
     socket.end();
   });
+
+  // The client can reset before the hub answers the upgrade.
+  socket.on('error', () => proxyReq.destroy());
 
   proxyReq.end();
 }
