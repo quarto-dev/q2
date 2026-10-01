@@ -1,0 +1,1262 @@
+[
+  {
+    "path": "filters/ast/customnodes.lua",
+    "size": 16932,
+    "sha256": "25f4fa507f815afa1caa00d87d6a94e20adb116434b63a778b69eecabe467b81"
+  },
+  {
+    "path": "filters/ast/emulatedfilter.lua",
+    "size": 2443,
+    "sha256": "bcc3cdbc63d2847e687fd6e7c91c406414727b74f22f94b1cf7035c29b382383"
+  },
+  {
+    "path": "filters/ast/parse.lua",
+    "size": 616,
+    "sha256": "4c4218e02f4d735d8fd44546e575874643253b76220c17ef1972835d885dd55e"
+  },
+  {
+    "path": "filters/ast/render.lua",
+    "size": 1967,
+    "sha256": "c6b501b9584b8cb89a2a09dbfe8553f4c12ce1a35669c3550907d44e58e69f37"
+  },
+  {
+    "path": "filters/ast/runemulation.lua",
+    "size": 5681,
+    "sha256": "4e67463b2678c1b84c905aaa53a11148c1c1c0e2b64bad52ef0ca7b53ff045d8"
+  },
+  {
+    "path": "filters/ast/scopedwalk.lua",
+    "size": 9176,
+    "sha256": "8dc9a2a97a47c66d30e79b33283c58f5f3286ff71f8f903ec46f03258d2502c1"
+  },
+  {
+    "path": "filters/ast/traceexecution.lua",
+    "size": 1819,
+    "sha256": "50427cb7590f1712457c817870453540b04ffc6c194356713069873e34aec487"
+  },
+  {
+    "path": "filters/ast/wrappedwriter.lua",
+    "size": 5532,
+    "sha256": "9a9b5bbbad50b60644b7cb2672bf52c10c7640736eadb3f95c821268307bf3ba"
+  },
+  {
+    "path": "filters/common/base64.lua",
+    "size": 7186,
+    "sha256": "c678937039632ab9c0d00f6fd343f7c001f867a0154e0c68c88014df85383819"
+  },
+  {
+    "path": "filters/common/citations.lua",
+    "size": 2135,
+    "sha256": "9b3b62f004aea0bd3ba14a78f60bf4315e8b8de179dae09ff8c386d7b46ee66c"
+  },
+  {
+    "path": "filters/common/collate.lua",
+    "size": 679,
+    "sha256": "801b8f75896a322e9263042df965684cecfe1a896aec8ba33a99663e199f3870"
+  },
+  {
+    "path": "filters/common/colors.lua",
+    "size": 1415,
+    "sha256": "378b7670b89891ee1272e7022448e8472ef1b1085108e4bd7c68101c8975cfea"
+  },
+  {
+    "path": "filters/common/crossref.lua",
+    "size": 330,
+    "sha256": "d981c54339b23e5dc0d43e1e6e0704d61933318c9684f0fbbb16401536cb881a"
+  },
+  {
+    "path": "filters/common/debug.lua",
+    "size": 3390,
+    "sha256": "81c4c17f9ce5b6961a999c8577991402e36862cf035add331c794bb73e22422f"
+  },
+  {
+    "path": "filters/common/error.lua",
+    "size": 1396,
+    "sha256": "b558b8efe61a3740247856361f8327fbc4b487f1e0a93dab55d88714dc913198"
+  },
+  {
+    "path": "filters/common/figures.lua",
+    "size": 3520,
+    "sha256": "95fbca4ef187ed50ff8afdd2d71d5d8808d40a49e9fd5ddd43cced69fd384c64"
+  },
+  {
+    "path": "filters/common/filemetadata.lua",
+    "size": 1260,
+    "sha256": "79580c64bbce4359c13069cd11a018b9d524f65a8c16af7636c93ff2f2eae385"
+  },
+  {
+    "path": "filters/common/floats.lua",
+    "size": 755,
+    "sha256": "01ce1ce4fc52e2402931ee4e23eba41670ace0b4fdc47be8303522a574c2d4ba"
+  },
+  {
+    "path": "filters/common/format.lua",
+    "size": 191,
+    "sha256": "24ec1d0c8898dbc405cecfa5e85ab943c38a6af942333922ff569b9376c396a8"
+  },
+  {
+    "path": "filters/common/latex.lua",
+    "size": 452,
+    "sha256": "a548e6c1b7ca35113499d43202c55c215a58c3a6d691f8ab3de6ec5493ccf877"
+  },
+  {
+    "path": "filters/common/layout.lua",
+    "size": 2429,
+    "sha256": "3f4e321dc8a6626ef4fa1c9bf7634bea8143348cf132d053eb3509796e27346f"
+  },
+  {
+    "path": "filters/common/list.lua",
+    "size": 88,
+    "sha256": "94074cb3898b4c66e3dec95ac5536dbaf258b9050afe431b47b8d47a3aed303a"
+  },
+  {
+    "path": "filters/common/log.lua",
+    "size": 1137,
+    "sha256": "78cdbbf51eacb051a3ca65576653ab40732c502315605425bbab77f83b034389"
+  },
+  {
+    "path": "filters/common/lunacolors.lua",
+    "size": 2899,
+    "sha256": "6f47b1890c39ca4a31e1dd2e73e3316a5fd5a926af7530b134c7bbf8e7921545"
+  },
+  {
+    "path": "filters/common/maporcall.lua",
+    "size": 325,
+    "sha256": "68be39ee96daa989fa1786108c5d5334f167c8173d337df608cafd9509336da2"
+  },
+  {
+    "path": "filters/common/meta.lua",
+    "size": 2493,
+    "sha256": "37d2d1d48e4c860e97934a50a6c4412e91faf47351ad7b53b79cd4dc2217d4ba"
+  },
+  {
+    "path": "filters/common/options.lua",
+    "size": 553,
+    "sha256": "7e4f91d4eb3678e49028911a7ca1790e550f3369595e2eaa7da0d520e1f1b3e3"
+  },
+  {
+    "path": "filters/common/pandoc.lua",
+    "size": 6026,
+    "sha256": "259a6a7c5e202964dcd98c6dca8479f9c8b0523cf6002c9ec000c55369d56f0e"
+  },
+  {
+    "path": "filters/common/paths.lua",
+    "size": 2080,
+    "sha256": "a5bcb8384dccde42eb031a34b577838a3e7ed3a88c91c219925c2a9f53e0795a"
+  },
+  {
+    "path": "filters/common/refs.lua",
+    "size": 1871,
+    "sha256": "10e33a5520c8660f3aae46e80fb502e8be7b6f2a91e69146d7c99ae49fea95fb"
+  },
+  {
+    "path": "filters/common/string.lua",
+    "size": 2061,
+    "sha256": "6778c799db40faa5a1a84ae73b4062534cf95de01674c2ecab9f0b5755932ce8"
+  },
+  {
+    "path": "filters/common/table.lua",
+    "size": 1871,
+    "sha256": "49b1511ff26db674b2b584295910c066c84ea893cd78fa749cdac86212a2670f"
+  },
+  {
+    "path": "filters/common/tables.lua",
+    "size": 4102,
+    "sha256": "b48758c9187a7c5a966faa4988a7a2eb0170fc959c70e2a17765d91b588a7894"
+  },
+  {
+    "path": "filters/common/theorems.lua",
+    "size": 63,
+    "sha256": "2cf60e15508ef5c6b5bd55b7ca65aba8c0b848abff3002673f71e74f72b0c8ac"
+  },
+  {
+    "path": "filters/common/url.lua",
+    "size": 522,
+    "sha256": "f103f4cfd56f930196531e9d4b2e746555e01259210dfcb0207ce05eab775f0b"
+  },
+  {
+    "path": "filters/common/validate.lua",
+    "size": 755,
+    "sha256": "cabb8ad9ddb48686d8135a36276c7d7d3c25fffabee33bd172b222730d219cac"
+  },
+  {
+    "path": "filters/common/wrapped-filter.lua",
+    "size": 6872,
+    "sha256": "f24f9d092c304d597f4bea9a0d8cc78b42142ea8901a14bd1a6b71ad15c1ffbc"
+  },
+  {
+    "path": "filters/crossref/crossref.lua",
+    "size": 6620,
+    "sha256": "7a538138c3d442ffba16d0d3f6fd7aaf7f21bdb99376410be7c697f0eabcd8a3"
+  },
+  {
+    "path": "filters/crossref/custom.lua",
+    "size": 6774,
+    "sha256": "33d3888725f3c78cf3a2fb7e8b176030c555038010653d3cf5b97462d3f869e8"
+  },
+  {
+    "path": "filters/crossref/equations.lua",
+    "size": 8052,
+    "sha256": "d0f882c98099fc73a3675b0221a9601c5728d804b5c4c2e9d639ac5238786938"
+  },
+  {
+    "path": "filters/crossref/figures.lua",
+    "size": 1069,
+    "sha256": "587ed4da409403b8b7227fa87b47309825631e9067f5855999693907eef19d36"
+  },
+  {
+    "path": "filters/crossref/format.lua",
+    "size": 8088,
+    "sha256": "7220ab63d168e658327db6fbea1a0ff821cfd9edc1076323086ee27bbe543eb4"
+  },
+  {
+    "path": "filters/crossref/index.lua",
+    "size": 5323,
+    "sha256": "b2fe1ccd64f1c67294705796ae085d9ab44daa10dc0dc0dd83856ae5834a889c"
+  },
+  {
+    "path": "filters/crossref/meta.lua",
+    "size": 3429,
+    "sha256": "b7721081714e311bb0750d0a8e965879261fdef0ef4b122e711dad3de830f05b"
+  },
+  {
+    "path": "filters/crossref/options.lua",
+    "size": 540,
+    "sha256": "4f4f18ba728221fe9942e9a9d74970e514de5143faabcfbf8f3c41d21ea8227e"
+  },
+  {
+    "path": "filters/crossref/preprocess.lua",
+    "size": 904,
+    "sha256": "2c43578d238766ce7f4909e05aca01a93d6b9ef2ed924c71f3579fcb99b08d5e"
+  },
+  {
+    "path": "filters/crossref/qmd.lua",
+    "size": 1250,
+    "sha256": "d07b623e4321e63ccd0cb1edd8257b56500b86dd50e71cef44d3a050166a4bcf"
+  },
+  {
+    "path": "filters/crossref/refs.lua",
+    "size": 7386,
+    "sha256": "9dfcb151d62e32799baf341a9b2ae8ce05b2a9fd58041396eacd348238d07b1c"
+  },
+  {
+    "path": "filters/crossref/sections.lua",
+    "size": 3496,
+    "sha256": "eae4d61ee62d75d79657ec408ae05daaf04deba59193ee7327ed77be95d74e32"
+  },
+  {
+    "path": "filters/crossref/tables.lua",
+    "size": 7969,
+    "sha256": "c7f1c9cae744d42eab0f1f4e70033fe6fb6440e51c47fe97725de04186a1febc"
+  },
+  {
+    "path": "filters/crossref/theorems.lua",
+    "size": 3896,
+    "sha256": "4a1779ae9f47ec6c2170a81c20c8a7c76101ab798f6ceb5d9bc9fadee3d1903c"
+  },
+  {
+    "path": "filters/customnodes/callout.lua",
+    "size": 17168,
+    "sha256": "d4aa3cfb36697057e26d40fde0063204907ccf473a0a8642b9b89bc4edc30533"
+  },
+  {
+    "path": "filters/customnodes/content-hidden.lua",
+    "size": 6928,
+    "sha256": "81eafdff7b9c1357782e15999109b37481cbd1743cbc03ac0ea450dabacb0bbc"
+  },
+  {
+    "path": "filters/customnodes/decoratedcodeblock.lua",
+    "size": 6430,
+    "sha256": "f223febb849f7d9555feddea21a737d6f9d5ff8b844e0aa94685dec00766d728"
+  },
+  {
+    "path": "filters/customnodes/floatreftarget.lua",
+    "size": 45039,
+    "sha256": "d2ceea029f11578276b9f5083632d6225c99797f92fa5cdfabf9461a26e6ef10"
+  },
+  {
+    "path": "filters/customnodes/htmltag.lua",
+    "size": 1609,
+    "sha256": "52e3f1fd14ce1693f264ddac7a37691eaef8e18ace31dc9ea2caa535357b2cd5"
+  },
+  {
+    "path": "filters/customnodes/latexcmd.lua",
+    "size": 2480,
+    "sha256": "5d50af1254f8406ecdd8b7b3382dd65b67546290a906ab44d1453b5e2b28057d"
+  },
+  {
+    "path": "filters/customnodes/latexenv.lua",
+    "size": 850,
+    "sha256": "e9a179c1747ac72773f5b7de5ab08756edfd2f9dc1c3a74f26b7710f063b8170"
+  },
+  {
+    "path": "filters/customnodes/panel-tabset.lua",
+    "size": 10723,
+    "sha256": "9ea6f68e04342281ec91ef27bdce6905697e95bdd131afee725563c2b7f0a4c2"
+  },
+  {
+    "path": "filters/customnodes/panellayout.lua",
+    "size": 6407,
+    "sha256": "3f258e937a8a059411996cf688133d0edafb117f63a3a7f867c85ed624ba004b"
+  },
+  {
+    "path": "filters/customnodes/proof.lua",
+    "size": 5115,
+    "sha256": "bcd1f3add0b72eba97a7dbd27e47fb6d5d61624c7fc4db7ae0f37a5aceb203d7"
+  },
+  {
+    "path": "filters/customnodes/shortcodes.lua",
+    "size": 15971,
+    "sha256": "80dd52905bf5f1a8f80bfb12fa49ef618500ce34ca7e21a31e73946a94f2efae"
+  },
+  {
+    "path": "filters/customnodes/theorem.lua",
+    "size": 9950,
+    "sha256": "d1ba09457395bba17ced6160706c5789ec440b2174f74e2543eae0e88cff1176"
+  },
+  {
+    "path": "filters/customwriter/customwriter.lua",
+    "size": 280,
+    "sha256": "7a2a9966cc9d20a2d6bd418b3e9d8f8ac3705f78a496b8915fc26fb06567ed4a"
+  },
+  {
+    "path": "filters/layout/asciidoc.lua",
+    "size": 4042,
+    "sha256": "f71e7d63db06b77931ccaf39798e495711e0e11f574363b1504b6d695a461406"
+  },
+  {
+    "path": "filters/layout/cites.lua",
+    "size": 6325,
+    "sha256": "36cff77f48f3fa2e11cd9530597d0b7c89326df4c8715064e38aeba77ba1e1ae"
+  },
+  {
+    "path": "filters/layout/columns-preprocess.lua",
+    "size": 11548,
+    "sha256": "75ec640be69c24ec3abc9fa1e3715e4c41cc2730cc9cd2dec62575d6fce81724"
+  },
+  {
+    "path": "filters/layout/columns.lua",
+    "size": 18253,
+    "sha256": "aa889f23de2c11191cf5e476e102fad3b34185c76829e6cc944cb85e3ccd2563"
+  },
+  {
+    "path": "filters/layout/confluence.lua",
+    "size": 3886,
+    "sha256": "0a66a5e10178ff9f2d0740347270c29c28ce9d9860d175ae023eebd0c928b518"
+  },
+  {
+    "path": "filters/layout/docx.lua",
+    "size": 3352,
+    "sha256": "1ddc3b076542e2f1230d78be76514acf83a74cc8675407ec975fd7e97293c6e9"
+  },
+  {
+    "path": "filters/layout/epub.lua",
+    "size": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "filters/layout/figures.lua",
+    "size": 1150,
+    "sha256": "d23b8c5232978f8f3b8d4f02564cbd16dfc00cbf4e4f808ba365aecd92a67452"
+  },
+  {
+    "path": "filters/layout/html.lua",
+    "size": 7780,
+    "sha256": "311a638e1330645890133d7e942907889362eab73c24381ee38d5eecea912a2c"
+  },
+  {
+    "path": "filters/layout/hugo.lua",
+    "size": 4765,
+    "sha256": "5b9c9ede785be136b0564cc35e674ca1a56baacf01a9204e6e4608b7f2a975e9"
+  },
+  {
+    "path": "filters/layout/ipynb.lua",
+    "size": 3834,
+    "sha256": "0b791ab3550d820c9704b0b0c2552f428c79b98e205f3e1e6781451cb6aba27b"
+  },
+  {
+    "path": "filters/layout/jats.lua",
+    "size": 3170,
+    "sha256": "b8be59a2e0fc79ba42277d8668efa6baa2dd1f02d4b247e00a893e466692390f"
+  },
+  {
+    "path": "filters/layout/latex.lua",
+    "size": 20882,
+    "sha256": "6192958ba88c73d23c4ddd041c22b50f6ec220569d4844ed0181cb30da3c51f5"
+  },
+  {
+    "path": "filters/layout/layout.lua",
+    "size": 8400,
+    "sha256": "7dfdbafd6a3d41444d43331eebe0eb1c3cf7a4cb4355fce94f2e10496589fcef"
+  },
+  {
+    "path": "filters/layout/lightbox.lua",
+    "size": 14205,
+    "sha256": "2664f4bf463bab89040af83fa2e39adb08e3daf432423020e50164ddcf41f155"
+  },
+  {
+    "path": "filters/layout/manuscript.lua",
+    "size": 5782,
+    "sha256": "111df0a151f56e3bb0e45cf512550e234ee21c98a796f8ac4241e9eaa74ad383"
+  },
+  {
+    "path": "filters/layout/meta.lua",
+    "size": 17824,
+    "sha256": "5485950b3b448e625a56889f10aa94fcb6c78f44a3cdcd4a15fec2baa073b129"
+  },
+  {
+    "path": "filters/layout/odt.lua",
+    "size": 665,
+    "sha256": "15160c5d0658e31182e9fc7f3c08707af9b1cc96476c18452638882132411a0a"
+  },
+  {
+    "path": "filters/layout/pandoc3_figure.lua",
+    "size": 6765,
+    "sha256": "45dd5d0af77603b121c23f3822ddf83798355152794d800d065677231d2e9b72"
+  },
+  {
+    "path": "filters/layout/pptx.lua",
+    "size": 647,
+    "sha256": "7392a1de41acd640219239f835a0c4b36ea62259eec7dc9925c7fdd99abd40b4"
+  },
+  {
+    "path": "filters/layout/table.lua",
+    "size": 5499,
+    "sha256": "314440e2941e83b813d9e7ac4fd67314aff8817ed0844517c893387e3492718a"
+  },
+  {
+    "path": "filters/layout/typst.lua",
+    "size": 14739,
+    "sha256": "6e5f405357665c2214f45a2548d7e82eddd02f9d5558e5d0bcb56480305a9361"
+  },
+  {
+    "path": "filters/layout/width.lua",
+    "size": 5224,
+    "sha256": "1093507c98227b8761d921c9e59582a5de67463dbedd48d2386cf929df7b1f93"
+  },
+  {
+    "path": "filters/layout/wp.lua",
+    "size": 1508,
+    "sha256": "9f1dc47f98f8f6c40bc8ac1edb0dad6072290fe65b4e1f02d14a4d8d77711f9b"
+  },
+  {
+    "path": "filters/llms/llms.lua",
+    "size": 7843,
+    "sha256": "a36eb3b98cafc56aa58a329cec9c0e4dabc460dc5b1acf45fa8da5e352604b0c"
+  },
+  {
+    "path": "filters/main.lua",
+    "size": 24045,
+    "sha256": "67cc1f1bbf25713c171db7af7cb5248b1af20f8bb8fa3ee5ec69c74cfdf028fc"
+  },
+  {
+    "path": "filters/mainstateinit.lua",
+    "size": 3097,
+    "sha256": "9d1d89d9c06dfbc3597bbba735baa1b91013ba9b622018bbc3bd56516a37a9ef"
+  },
+  {
+    "path": "filters/modules/astshortcode.lua",
+    "size": 8185,
+    "sha256": "e69f5601428784aef480c76a219d11435a0f3a110d026fc7719629c2a44670e8"
+  },
+  {
+    "path": "filters/modules/authors.lua",
+    "size": 38783,
+    "sha256": "0e5b001ed147347c186adf5bb0f9ffe262552ea5c55b7504a2ccf2b633e9f0fc"
+  },
+  {
+    "path": "filters/modules/brand/brand.lua",
+    "size": 2520,
+    "sha256": "01337bfa24cbd523d405132d9e8981ba67b9e078f1c2e14fd8a12e9f3935fa7a"
+  },
+  {
+    "path": "filters/modules/callouts.lua",
+    "size": 12043,
+    "sha256": "b02ad4feceb8404e16f5ae040523f25eecd95f5276cc3b06670462c53bf5680f"
+  },
+  {
+    "path": "filters/modules/classpredicates.lua",
+    "size": 730,
+    "sha256": "6d1d274b6e30aa2957a5585e1c93e718318a77a47fd99b1d089e0d47fce2d426"
+  },
+  {
+    "path": "filters/modules/connectversion.lua",
+    "size": 2671,
+    "sha256": "14e7770be19fc571efa45b4f6dff0364369b0f60c9bd5459b3502999f23c5e7b"
+  },
+  {
+    "path": "filters/modules/constants.lua",
+    "size": 8314,
+    "sha256": "90dad39341383e222cbfa70d4fdc9acaf6565e1c676805b17662e0aa1144a6ad"
+  },
+  {
+    "path": "filters/modules/crossref_numbering.lua",
+    "size": 1256,
+    "sha256": "81c0c82692cfa270063afa0c2dd4ec21257d27924c9ee31e0bb8045947a8da20"
+  },
+  {
+    "path": "filters/modules/dashboard.lua",
+    "size": 3890,
+    "sha256": "3f0a95891edc5865b3ad432f904ca4213682c950070f0b84f10d6123c28fe213"
+  },
+  {
+    "path": "filters/modules/dashboard/card-sidebar.lua",
+    "size": 4511,
+    "sha256": "47fb13170a2e05323ef6532d6b036d68ca1100d700eb37043b483fba0c6032da"
+  },
+  {
+    "path": "filters/modules/dashboard/card-toolbar.lua",
+    "size": 5603,
+    "sha256": "eeb9c629e363b537d8dc08b0fffab13c09e6897bfcbeb0c93f25c11e00aca615"
+  },
+  {
+    "path": "filters/modules/dashboard/card.lua",
+    "size": 12421,
+    "sha256": "b624b28f28ba6879d6c131c4882051c453680d805015f8d029dd09304f3cf29b"
+  },
+  {
+    "path": "filters/modules/dashboard/document.lua",
+    "size": 549,
+    "sha256": "56dfc3db21e1c70f1c3e5b4ce693031b59971989745a1254d006b78899fc1413"
+  },
+  {
+    "path": "filters/modules/dashboard/layout.lua",
+    "size": 4174,
+    "sha256": "79fb6f84c0e432ffbe2c5b8cc0daf032f121b0d654ece2fb1af3f29a87771972"
+  },
+  {
+    "path": "filters/modules/dashboard/page.lua",
+    "size": 2016,
+    "sha256": "cd8e470c5453038b31de30faba6a19850594e7a0949a5b733c14261542362324"
+  },
+  {
+    "path": "filters/modules/dashboard/sidebar.lua",
+    "size": 3497,
+    "sha256": "3d3e303eba0dc6a95608e1b18f05a833baa63f73bab398128c6885b52b8b723e"
+  },
+  {
+    "path": "filters/modules/dashboard/tabset.lua",
+    "size": 6610,
+    "sha256": "ed3f6d7e8e1a746a407ca1834dd26d7379536f29c777b863f4f97142d8b8704b"
+  },
+  {
+    "path": "filters/modules/dashboard/toolbar.lua",
+    "size": 3522,
+    "sha256": "0015ad5f664668701c9a37d47c3c7ef480e1c70e884576361e744e11921a9934"
+  },
+  {
+    "path": "filters/modules/dashboard/utils.lua",
+    "size": 942,
+    "sha256": "45e4c94888032d71cc1350dd01bf46a7c42c932f603672efc02ae27d0ff66439"
+  },
+  {
+    "path": "filters/modules/dashboard/valuebox.lua",
+    "size": 7729,
+    "sha256": "52fd8b28e91bc79f3a968be716a8a878b42e08fc8bb4d193617b585a31638623"
+  },
+  {
+    "path": "filters/modules/filenames.lua",
+    "size": 1617,
+    "sha256": "2868451220f236dda25d5889885c51f1dcf5a1582e9c67b469d7ea209dd384df"
+  },
+  {
+    "path": "filters/modules/filters.lua",
+    "size": 339,
+    "sha256": "f8904f77de886c0d142867c55f10c1e8a581d59bdbf1587078fc0b5349cccbdc"
+  },
+  {
+    "path": "filters/modules/import_all.lua",
+    "size": 1222,
+    "sha256": "1883687c19d6774777abe1f2a1ba570b0a869893b8c1b6d165b603c73635eed3"
+  },
+  {
+    "path": "filters/modules/jog.lua",
+    "size": 9031,
+    "sha256": "04b7cf2d514b2666d30c0cd5f64fbcf90cb542d647591796e6086bb1a93c4fd7"
+  },
+  {
+    "path": "filters/modules/license.lua",
+    "size": 5062,
+    "sha256": "dc4cda1d7acafc4d4d6d38bf78db0c22d13ce8e6f4ef1096155afff831b19e82"
+  },
+  {
+    "path": "filters/modules/lightbox.lua",
+    "size": 1125,
+    "sha256": "5b5b49d0b9b298e2a3c0b321679be7cf351cf3cae92c6d79c3af5fdf54d3c15a"
+  },
+  {
+    "path": "filters/modules/listtable.lua",
+    "size": 8755,
+    "sha256": "060f13ce30835aa4dc5749012d7897833c8392220634a98e3b79e69b015c5e3b"
+  },
+  {
+    "path": "filters/modules/mediabag.lua",
+    "size": 4279,
+    "sha256": "7b40ba78cf61f3c818c065167b7b78f13a26be88a2df5eb4b27ef2c818173836"
+  },
+  {
+    "path": "filters/modules/openxml.lua",
+    "size": 905,
+    "sha256": "b5edf64013e35af5e09a866b32bbd72047b9a382668f4fe1c1661438817b39e1"
+  },
+  {
+    "path": "filters/modules/path.lua",
+    "size": 410,
+    "sha256": "6029e23fedbc996fc068035a8931296c6c860436d0aaffda5ed3708b26eb6e76"
+  },
+  {
+    "path": "filters/modules/patterns.lua",
+    "size": 3504,
+    "sha256": "8bb97eb6878e49d99c673f8504f60df780299ec179774bde2b5d61bf498e5dea"
+  },
+  {
+    "path": "filters/modules/scope.lua",
+    "size": 991,
+    "sha256": "b9e2e162dd9674a57d1542352e737f3bb0869abdabddd3a0f54144273c3d4e5a"
+  },
+  {
+    "path": "filters/modules/string.lua",
+    "size": 1448,
+    "sha256": "11cdbb86e16474a6793d2e2a86dc135a9fbc77925d091953d6b633aabcb43d05"
+  },
+  {
+    "path": "filters/modules/tablecolwidths.lua",
+    "size": 4170,
+    "sha256": "821b1ab963fd06f1e89b8129c3e5f2029eba0e2077e3c49915f1b454088a439f"
+  },
+  {
+    "path": "filters/modules/tableutils.lua",
+    "size": 844,
+    "sha256": "7f7df673bcf99fc0b257a772fa6066aa5d5ae32ac0e7e325288ec505fa839431"
+  },
+  {
+    "path": "filters/modules/typst.lua",
+    "size": 3764,
+    "sha256": "354985a1e32d7224dd397389a65015c5cf18c3532abb07ce55e34817d2e0faff"
+  },
+  {
+    "path": "filters/modules/typst_css.lua",
+    "size": 24801,
+    "sha256": "8a0f92aeb47c58effba312a23fd16826f64ea6e178625319d71528d35c412e7c"
+  },
+  {
+    "path": "filters/normalize/astpipeline.lua",
+    "size": 12357,
+    "sha256": "46b4902983b686b0a487f3746dd40f50b24479393a08fc7b6fea634199501f56"
+  },
+  {
+    "path": "filters/normalize/capturereaderstate.lua",
+    "size": 359,
+    "sha256": "0d1b17d3c4afa46e1d7eb7482eeea301c8f5a8afbbd629335e252eca133baecc"
+  },
+  {
+    "path": "filters/normalize/draft.lua",
+    "size": 1227,
+    "sha256": "fd945291776132df1ecbbc0b957aab597c0e0dacebb99e4ca9e0f392cb79cc12"
+  },
+  {
+    "path": "filters/normalize/extractquartodom.lua",
+    "size": 5182,
+    "sha256": "252ba572acf819633d400425c54ac523d186aca45d725b2c37240344ba2d2fb7"
+  },
+  {
+    "path": "filters/normalize/fixupdatauri.lua",
+    "size": 1365,
+    "sha256": "40ce207f046d950b52d4466af44ff82856e2a0032560becfa44e63f0368ede31"
+  },
+  {
+    "path": "filters/normalize/flags.lua",
+    "size": 6075,
+    "sha256": "403c874ff3dc44c060f73cb48b025ba679c260576e47316161b436c89361b735"
+  },
+  {
+    "path": "filters/normalize/normalize.lua",
+    "size": 1938,
+    "sha256": "566acf2c8f742db58c8f4634fd7a26cf63c4fd1231578b3b1686730bc24ac5a5"
+  },
+  {
+    "path": "filters/qmd-reader.lua",
+    "size": 568,
+    "sha256": "8ac561d3e954894cc35dd968740e9155f74a953fbcdafb089bf3210f360ca08f"
+  },
+  {
+    "path": "filters/quarto-finalize/book-cleanup.lua",
+    "size": 1351,
+    "sha256": "ead2c8b02a49ba5397158ecb01e6a6129a227b3d14ffa04816708e41170afc38"
+  },
+  {
+    "path": "filters/quarto-finalize/coalesceraw.lua",
+    "size": 2195,
+    "sha256": "7daeda27c792a108fa9d02cb2f9e909bd8c4031d915f59c9c8b3b446efefb178"
+  },
+  {
+    "path": "filters/quarto-finalize/dependencies.lua",
+    "size": 292,
+    "sha256": "6f7b59cdc3ec678b8b373262a64d03e14e0cceea27dc8bcf4eee287b50ae3c24"
+  },
+  {
+    "path": "filters/quarto-finalize/descaffold.lua",
+    "size": 638,
+    "sha256": "27e611baa7afd01e9cafce7be787fad0fe977ea92bda783d5e4b37cf98f52ab3"
+  },
+  {
+    "path": "filters/quarto-finalize/finalize-combined-1.lua",
+    "size": 2433,
+    "sha256": "86cc87644b0d27a56fb0495def1a406818bc9a828b38cad489c4a9179bfaffab"
+  },
+  {
+    "path": "filters/quarto-finalize/mediabag.lua",
+    "size": 639,
+    "sha256": "8355afdd0dca1fd08d6bb11ff036a245bf921c6a724e81bf2b1a9575998711af"
+  },
+  {
+    "path": "filters/quarto-finalize/meta-cleanup.lua",
+    "size": 248,
+    "sha256": "801d8ec5f2d25db483b040aac905a5ac423c2a6ba11f19b4f71b2a8d9ec437e9"
+  },
+  {
+    "path": "filters/quarto-finalize/typst.lua",
+    "size": 802,
+    "sha256": "d5430adfadbf29614bf9b0a2f869eb1d8f745ed61d2e794ee6e39c3a33976227"
+  },
+  {
+    "path": "filters/quarto-init/configurefilters.lua",
+    "size": 229,
+    "sha256": "9b5594979d9650843f78cfda028c69e2053db8defbebb26e92a62165f360562d"
+  },
+  {
+    "path": "filters/quarto-init/includes.lua",
+    "size": 1819,
+    "sha256": "7f0c38fbc22a0e2fe5efb9a0a1de5323f20334a00627bbcd26677924efceca3b"
+  },
+  {
+    "path": "filters/quarto-init/knitr-fixup.lua",
+    "size": 492,
+    "sha256": "73bbd56d94a0090681d5c78f84c05d539ea130ddc71daab64d3a20adb9c2752e"
+  },
+  {
+    "path": "filters/quarto-init/metainit.lua",
+    "size": 316,
+    "sha256": "769ba03f0dc05be44b61537acf0bfcda0c58c211dfdba3eeb752db5720236a7f"
+  },
+  {
+    "path": "filters/quarto-init/quarto-init.lua",
+    "size": 601,
+    "sha256": "9cd112f7e3a4e3af01a6be95fdfd89bf03082f117d0d209043ebecc39145a97d"
+  },
+  {
+    "path": "filters/quarto-init/resourcerefs.lua",
+    "size": 712,
+    "sha256": "79437e525e373c06f975877d596c7157099448c6ce0b50721ac465f5f21cfa8b"
+  },
+  {
+    "path": "filters/quarto-internals/leveloneanalysis.lua",
+    "size": 288,
+    "sha256": "4a8f0e8005d6bbc4dc3024ae75f6d632d1d6585ea8e689ee28b7cebd86bdb7d9"
+  },
+  {
+    "path": "filters/quarto-post/bibliography.lua",
+    "size": 379,
+    "sha256": "0be81b741c3f61be60dbb8d637af174d1a42f3751076ca13f2c6dbb687718557"
+  },
+  {
+    "path": "filters/quarto-post/book.lua",
+    "size": 2338,
+    "sha256": "45d199dd80b0b9302edfd0d44df3b486e34deb94e63c1a0a5b1c6d111fa8855f"
+  },
+  {
+    "path": "filters/quarto-post/cell-renderings.lua",
+    "size": 2614,
+    "sha256": "7c2a72a4c7ee4f22dafa891dc3cf3a59b4f75fefc0c1e4308de650a226fc22b9"
+  },
+  {
+    "path": "filters/quarto-post/cellcleanup.lua",
+    "size": 297,
+    "sha256": "01361975b791696f9dfbcd9eff52842e78598f15b1ab69432b314cfc45bef4f8"
+  },
+  {
+    "path": "filters/quarto-post/cites.lua",
+    "size": 1511,
+    "sha256": "39f51ebb040b67c505643674f427aa30c98aca5d22a6037215f56b0383130302"
+  },
+  {
+    "path": "filters/quarto-post/code.lua",
+    "size": 1055,
+    "sha256": "2956996bd0a9e215c23aecd6b9a5d3bdd94d5a718521e8efb34a49c21049e40b"
+  },
+  {
+    "path": "filters/quarto-post/dashboard.lua",
+    "size": 32704,
+    "sha256": "8824a24ba2df952b39642738c3bb6da2797239245e90088cce7d619e48ee3d50"
+  },
+  {
+    "path": "filters/quarto-post/delink.lua",
+    "size": 850,
+    "sha256": "0b683e3fcd2b2290dbc2568e2861c865d763e34a22bc7f0f93522a7f1ad574db"
+  },
+  {
+    "path": "filters/quarto-post/docx.lua",
+    "size": 7315,
+    "sha256": "11adec016da43ab8bab3d3e9f1645fbde12719fba4b42e75eb75345b4197483d"
+  },
+  {
+    "path": "filters/quarto-post/email.lua",
+    "size": 24063,
+    "sha256": "6c9117838050e91ee8cdb35301b845063a50977d4bdec5cbef16bf3ae0376d66"
+  },
+  {
+    "path": "filters/quarto-post/fig-cleanup.lua",
+    "size": 308,
+    "sha256": "32f3e45e2f6611ea94787a7f83fdfac943897a0a3d91075ae61a2275c827b4f5"
+  },
+  {
+    "path": "filters/quarto-post/foldcode.lua",
+    "size": 4969,
+    "sha256": "9efad4ef70b5660da12fc1ab591472c1d3f1f55251422de7e1f911cbb0aa2168"
+  },
+  {
+    "path": "filters/quarto-post/gfm.lua",
+    "size": 792,
+    "sha256": "b4eecc614594379a87c3263b99da41f397723915901df4675801d5118c744c25"
+  },
+  {
+    "path": "filters/quarto-post/html.lua",
+    "size": 4618,
+    "sha256": "c5943443d20c87b8b47fe236e2bd11c845e27f771811afb70047e30999d1b304"
+  },
+  {
+    "path": "filters/quarto-post/ipynb.lua",
+    "size": 6948,
+    "sha256": "6d762b74601c2d8eba1fd4f7352f6336c9dd05b3d9f36e42858b7361b3174eae"
+  },
+  {
+    "path": "filters/quarto-post/jats.lua",
+    "size": 7685,
+    "sha256": "510b2f6221ca723e7b72adfc13d149ea0f860a010bb300e0f0afaaf2c58005a8"
+  },
+  {
+    "path": "filters/quarto-post/landscape.lua",
+    "size": 1938,
+    "sha256": "935915b248255886f09505a0ec18881d6dacad40b65e39d1afcd255738323c5e"
+  },
+  {
+    "path": "filters/quarto-post/latex.lua",
+    "size": 22747,
+    "sha256": "3a21519d4c3fd78eca1a541cd9c8d621207b6b1040c4bef8fdd447489039193c"
+  },
+  {
+    "path": "filters/quarto-post/latexdiv.lua",
+    "size": 1823,
+    "sha256": "7cd0ce681adf52622f3395f34cd4941ab07ae9f1c143d1e89efe2887e7b01e9f"
+  },
+  {
+    "path": "filters/quarto-post/meta.lua",
+    "size": 416,
+    "sha256": "ffb193a123453b3319c39df2fd49424f15fa9a778edd9f84d0ba1e143a2e4e92"
+  },
+  {
+    "path": "filters/quarto-post/ojs.lua",
+    "size": 6218,
+    "sha256": "c6314bec2f3cf375fd90346f246119c26f2a5a60318ea9e8cd24ffb4062f346c"
+  },
+  {
+    "path": "filters/quarto-post/pdf-images.lua",
+    "size": 3500,
+    "sha256": "0865b41f1f9b5c67007f4d89506090b41467587883dff7f3926e0bdb02921b05"
+  },
+  {
+    "path": "filters/quarto-post/pptx.lua",
+    "size": 441,
+    "sha256": "016734ab6e705255ec75017ca55663e07f43dcc4dbae7646f612d05a73339bdf"
+  },
+  {
+    "path": "filters/quarto-post/render-asciidoc.lua",
+    "size": 3693,
+    "sha256": "9a6bd1bc502c7c205137f4647211bebda52456a34f944db0ca36e8827ca831a4"
+  },
+  {
+    "path": "filters/quarto-post/responsive.lua",
+    "size": 1935,
+    "sha256": "df9303bc32ed541881059387b3afe6fc4311415f03de29ad558371aa3ae2565a"
+  },
+  {
+    "path": "filters/quarto-post/reveal.lua",
+    "size": 1848,
+    "sha256": "57a01948fb502216e0daf1ce7223577bfe66e0d8ea1e7ab9ae5ff8eba76de5b7"
+  },
+  {
+    "path": "filters/quarto-post/tikz.lua",
+    "size": 300,
+    "sha256": "bf93087405435db24374b83a22b24a2fd9c79ffb7c131e15dc0e4f44a2176b2d"
+  },
+  {
+    "path": "filters/quarto-post/typst-brand-yaml.lua",
+    "size": 16692,
+    "sha256": "ea6f4ba2de96f6f8ee76d05c0949345df14719379bd2ae53e12a2e413bb9aecb"
+  },
+  {
+    "path": "filters/quarto-post/typst-css-property-processing.lua",
+    "size": 12088,
+    "sha256": "e48faae8f76d73c059286b4210834a74046acf6d045a269ab3441e02f315c4d7"
+  },
+  {
+    "path": "filters/quarto-post/typst.lua",
+    "size": 15477,
+    "sha256": "410dfb2afde33187117b8e23bf9e0485a80238627be5c71cef06c56ad8b3fc50"
+  },
+  {
+    "path": "filters/quarto-pre/bibliography-formats.lua",
+    "size": 1116,
+    "sha256": "89c1c90bc2ccb424fdefca38509cdf7a20cdfd0ad91f82643ea48bb85299ee99"
+  },
+  {
+    "path": "filters/quarto-pre/book-links.lua",
+    "size": 2536,
+    "sha256": "d5a59599535d2d2644bf6a6f46221c6802346352b458b79caddd4a821ea73867"
+  },
+  {
+    "path": "filters/quarto-pre/book-numbering.lua",
+    "size": 5853,
+    "sha256": "bd849e0fbf824b541e3495c025834435a43de56a75fb8654a9d6a0284882150f"
+  },
+  {
+    "path": "filters/quarto-pre/code-annotation.lua",
+    "size": 21529,
+    "sha256": "74301ef00e93f93aa96da86bf42b65ddbc018133650481489999c96028e7acaa"
+  },
+  {
+    "path": "filters/quarto-pre/code-filename.lua",
+    "size": 2407,
+    "sha256": "6efdee8ce014027d2f0f756146767d9f87c58e3dc78fa2305039399ff3cec8c1"
+  },
+  {
+    "path": "filters/quarto-pre/contentsshortcode.lua",
+    "size": 5087,
+    "sha256": "eba7a82bf6f98285a7ff8e4bec205e85b832a67202cd8aa12d10cd901148185a"
+  },
+  {
+    "path": "filters/quarto-pre/engine-escape.lua",
+    "size": 5754,
+    "sha256": "12463c4672285aba108f0cf3fe26cd4178696af4e377b1e1d3b1964326c7a6f2"
+  },
+  {
+    "path": "filters/quarto-pre/figures.lua",
+    "size": 1833,
+    "sha256": "3a1a0f1c8b5290e859f0453e652082c8be800bcda39fffa5307457ef0b9569ce"
+  },
+  {
+    "path": "filters/quarto-pre/font.lua",
+    "size": 2171,
+    "sha256": "e90ea3e8ff0129b9bed6397832a04712556bf01d9638a081aed26dfce59686a6"
+  },
+  {
+    "path": "filters/quarto-pre/hidden.lua",
+    "size": 2932,
+    "sha256": "58c7d2db20b235465e4de692a7cca8d5815063b41dffafbd8e55ea94aa955155"
+  },
+  {
+    "path": "filters/quarto-pre/include-paths.lua",
+    "size": 1006,
+    "sha256": "75b9e461c64ede97909c52b58e7e91d06763046d2cad3828fb001b46094dc911"
+  },
+  {
+    "path": "filters/quarto-pre/input-traits.lua",
+    "size": 364,
+    "sha256": "f23e4f3efd30c198973040edf8e07193f9ad6a3961ec2448417f8abc838c20e5"
+  },
+  {
+    "path": "filters/quarto-pre/line-numbers.lua",
+    "size": 1449,
+    "sha256": "b0d08eb7e0df9c53669d856a3afd0ac87e628403523016445ee726e2b0f26d62"
+  },
+  {
+    "path": "filters/quarto-pre/llms-code-annotations.lua",
+    "size": 445,
+    "sha256": "08b118ba9acef7c988c24f2aa1f80e7ed014f67fd1ce2e23ade0091ad50a7a12"
+  },
+  {
+    "path": "filters/quarto-pre/llms-conditional-content.lua",
+    "size": 2633,
+    "sha256": "036bb5c2472e652e0422b7b63a8edc23419563050bf6a56d6c555f021e3e4d06"
+  },
+  {
+    "path": "filters/quarto-pre/meta.lua",
+    "size": 2022,
+    "sha256": "0ff32df23e70a7790bbe3db664adebd230a4f7ff6ead09c349e5ca33ed43c759"
+  },
+  {
+    "path": "filters/quarto-pre/options.lua",
+    "size": 1504,
+    "sha256": "353022211222590cecdbdda064bec3e71c402d9b9ab1406aee7e5fbc62c48fc8"
+  },
+  {
+    "path": "filters/quarto-pre/output-location.lua",
+    "size": 3169,
+    "sha256": "c4566212596bc94dd922afbd7571ec6a4f10ae61fcb5e409e30ada3540652d87"
+  },
+  {
+    "path": "filters/quarto-pre/outputs.lua",
+    "size": 1350,
+    "sha256": "83f3c831d99d1323a776379f237c369b96ef27a1bcfaf038ca7b4be0296e9e86"
+  },
+  {
+    "path": "filters/quarto-pre/panel-input.lua",
+    "size": 353,
+    "sha256": "86389f931407cb4f534ac28075ee3ce63cd499744162bf20aac81598a0d38723"
+  },
+  {
+    "path": "filters/quarto-pre/panel-layout.lua",
+    "size": 1504,
+    "sha256": "960cd264d2e36b3e0b96872b08526640d8359e17cad2f8a48240b1e637b5b3d8"
+  },
+  {
+    "path": "filters/quarto-pre/panel-sidebar.lua",
+    "size": 6773,
+    "sha256": "4d149bd0fd7755e2bb25fa57c3eb6c22195c4a76b15f3b8ee5a5e12664b05c88"
+  },
+  {
+    "path": "filters/quarto-pre/parseblockreftargets.lua",
+    "size": 1912,
+    "sha256": "d5dc935462592bb7c58e2371ce612cf21e037ce945e2a62a473fa73b40477067"
+  },
+  {
+    "path": "filters/quarto-pre/parsefiguredivs.lua",
+    "size": 29099,
+    "sha256": "aa8dee6e8d4715de03ece3c03aabe4ee53647105f15a6465ec358d1051182fd1"
+  },
+  {
+    "path": "filters/quarto-pre/project-paths.lua",
+    "size": 2031,
+    "sha256": "d1ecd4916e27259e5373f0c1428895c34f13da8e432595f3c2a5ebaac69a4708"
+  },
+  {
+    "path": "filters/quarto-pre/resolvescopedelements.lua",
+    "size": 601,
+    "sha256": "d5bfe0aa7a977c50fcc8501bd6ef3aa3444ec5141e0d47e5c264ac65236ca71b"
+  },
+  {
+    "path": "filters/quarto-pre/resourcefiles.lua",
+    "size": 1163,
+    "sha256": "c46f32497c579964f46d62dbb7ba48f64e76231a4b5082c670984e971208f3ce"
+  },
+  {
+    "path": "filters/quarto-pre/results.lua",
+    "size": 515,
+    "sha256": "2ecc30fa1079f2dbfcd076069a1650636d16fd6853db7ab83c751899b5bea62e"
+  },
+  {
+    "path": "filters/quarto-pre/shiny.lua",
+    "size": 4195,
+    "sha256": "79d746062b1d3dbc2749105fc748737b82986073a1a27ac708b8f578c733d2aa"
+  },
+  {
+    "path": "filters/quarto-pre/shortcodes-handlers.lua",
+    "size": 12484,
+    "sha256": "1d7ee72a84d157e6a550cd2c98193ac298298ae5bf78757ec9834f4d25fd914c"
+  },
+  {
+    "path": "filters/quarto-pre/table-captions.lua",
+    "size": 8705,
+    "sha256": "6c11ddc4393040f1ea8b5be155a821b577f3fe6ff468d30cb9f47d1ea93fc928"
+  },
+  {
+    "path": "filters/quarto-pre/table-classes.lua",
+    "size": 3575,
+    "sha256": "1204229b3761228a38e725aa0c3a6dc6a3d1e91472d8cd4891b3745b2798b008"
+  },
+  {
+    "path": "filters/quarto-pre/table-colwidth.lua",
+    "size": 4602,
+    "sha256": "6628ad4ee69858a5bebed6fbd5d819c3d66687bcca516d6bd87ed7d56de37a54"
+  },
+  {
+    "path": "filters/quarto-pre/table-rawhtml.lua",
+    "size": 1763,
+    "sha256": "d7ee248e1d8f324c4da8574fb91e57724ffb3e17112b43f33d35b89220036b90"
+  },
+  {
+    "path": "filters/quarto-pre/tableattributes.lua",
+    "size": 355,
+    "sha256": "7037b67ac35c698915bf6eb136f2afa2ff0fdb21c33cd7acf9c24ae18c1d071b"
+  },
+  {
+    "path": "filters/quarto-pre/theorems.lua",
+    "size": 409,
+    "sha256": "fc83332616545011cb919ee2ed6339e91e5f5810a4cb15f079002ff7076aae21"
+  },
+  {
+    "path": "filters/quarto2-shim-probe.lua",
+    "size": 788,
+    "sha256": "95ffd6376bd9516735199e4d2d61764c32d8b5e87af50763e3584c10787415b0"
+  },
+  {
+    "path": "filters/quarto2-shim.lua",
+    "size": 36927,
+    "sha256": "cdc9b7be5ffb6a181c428c170ed032aa0f22ca3675dcf82259bdd496af9dcd10"
+  },
+  {
+    "path": "filters/rmarkdown/pagebreak.lua",
+    "size": 3675,
+    "sha256": "ee6c5b28e3ec66a272a0b81df8aa31748246531b99af5bff887b641d95723d95"
+  },
+  {
+    "path": "formats/docx/caution.png",
+    "size": 749,
+    "sha256": "5c908b003e224909db5be99682716b3671ee8e885f1c73e70b1ddd9b399cdb3d"
+  },
+  {
+    "path": "formats/docx/important.png",
+    "size": 1216,
+    "sha256": "1fd109f5454c79e645a08c01eb20a421e9e3a6c9b43e87cd311f88c7b1784341"
+  },
+  {
+    "path": "formats/docx/note.png",
+    "size": 1257,
+    "sha256": "ed81730ce2442eca9d4d4f0c5a3da640c959cd72001bea78b1a949eea3f0c746"
+  },
+  {
+    "path": "formats/docx/tip.png",
+    "size": 1093,
+    "sha256": "9eb2b3e59f73c71354b4db376bf603fc529be4d50bcc3ad3d6d4842a888d0938"
+  },
+  {
+    "path": "formats/docx/warning.png",
+    "size": 1252,
+    "sha256": "9fc0013d9c5ae792709ad30f7c8dfc48c4aeda7371e0d7b349f56bab0f435381"
+  },
+  {
+    "path": "pandoc/datadir/_base64.lua",
+    "size": 7272,
+    "sha256": "9f2172b2ec4fdc698dc190883f621d31b44287408cddd216d8526ea840bce797"
+  },
+  {
+    "path": "pandoc/datadir/_format.lua",
+    "size": 9611,
+    "sha256": "83586f3036bf8d2968301cfd833d24ae1fcaf0ed76d4d6c15db18bf13d9c2b82"
+  },
+  {
+    "path": "pandoc/datadir/_json.lua",
+    "size": 10426,
+    "sha256": "759a2185918da982399d8c0f917155a3856a2633cd060d722f94e99c4f6454b2"
+  },
+  {
+    "path": "pandoc/datadir/_utils.lua",
+    "size": 18931,
+    "sha256": "c42918b8c8a6f56a8fbc99eb9617290b8ddee0f79e45d997eba5381983aadd4a"
+  },
+  {
+    "path": "pandoc/datadir/init.lua",
+    "size": 35438,
+    "sha256": "e2a234ce9fdca0c0bff1712b1fe95b64e06db32fdefbcdd2ebd4587e9b222fea"
+  },
+  {
+    "path": "pandoc/datadir/logging.lua",
+    "size": 8907,
+    "sha256": "1f485562b47c336387f4b18b8d53a0ffda8f51ce81421c2f09946304327058aa"
+  },
+  {
+    "path": "pandoc/datadir/lpegfenceddiv.lua",
+    "size": 5070,
+    "sha256": "a390b9f9a076c93692c9b0b6d6d9bf4291756aacb0524b352790ca0b1d185159"
+  },
+  {
+    "path": "pandoc/datadir/lpegshortcode.lua",
+    "size": 12779,
+    "sha256": "b2585b0c4ac4fde573a4e62ee8c41c3c9a41c684435cc4f402250f0c964b42c8"
+  },
+  {
+    "path": "pandoc/datadir/luacov.lua",
+    "size": 281,
+    "sha256": "11243da09d66230c236dab427f45871893086e56c5e83b5734d7a825055d4d00"
+  },
+  {
+    "path": "pandoc/datadir/luacov/defaults.lua",
+    "size": 3214,
+    "sha256": "e008ed131968e463534a72e2e4b0eba1664772ee420b4991337341daec732e98"
+  },
+  {
+    "path": "pandoc/datadir/luacov/hook.lua",
+    "size": 2186,
+    "sha256": "b740112f32792a09a98b0c6a7f22db1ff401fc9abef3f76b8b0adcc658af2a5e"
+  },
+  {
+    "path": "pandoc/datadir/luacov/linescanner.lua",
+    "size": 11201,
+    "sha256": "acb3ab4f4b073a810f58491259df5c38799a0e2c8fc4a0f121c6323ba2115959"
+  },
+  {
+    "path": "pandoc/datadir/luacov/reporter.lua",
+    "size": 13890,
+    "sha256": "ca80ae58e2c7649ea408869085e663a5185161aedb771831ba1df91bb7d8c13d"
+  },
+  {
+    "path": "pandoc/datadir/luacov/reporter/default.lua",
+    "size": 32,
+    "sha256": "ed1156b734e32596fdc41872882e3e4db0c31df8a797b0863237ba2280a685f0"
+  },
+  {
+    "path": "pandoc/datadir/luacov/reporter/html.lua",
+    "size": 7238,
+    "sha256": "f4b19992409ead394b64f4696c162c1ba725bb7d13111a0f24f78428d0d2ce28"
+  },
+  {
+    "path": "pandoc/datadir/luacov/reporter/html/lang-lua.js",
+    "size": 1144,
+    "sha256": "b08ab059793d42668d7eee4634e054b217a1ecacf4377b142c33b2db82c1a16e"
+  },
+  {
+    "path": "pandoc/datadir/luacov/reporter/html/prettify.js",
+    "size": 15655,
+    "sha256": "6b4f67671fd72c3c65216bcd6a058328921d2a3723934cbcbbcf523cfb7724b5"
+  },
+  {
+    "path": "pandoc/datadir/luacov/reporter/html/report.css",
+    "size": 4389,
+    "sha256": "84d04f9b8d12fc91d21f537c2c13f250cae61b4703bec75d955aed834440b1a6"
+  },
+  {
+    "path": "pandoc/datadir/luacov/reporter/html/report.js",
+    "size": 1673,
+    "sha256": "e287dd81ef9e146472c47492a50f9696f683ab698ba429e8e7b239f173a1be95"
+  },
+  {
+    "path": "pandoc/datadir/luacov/reporter/html/template.lua",
+    "size": 2812,
+    "sha256": "175cd4d2ba21939cd369ad37d7fe4051e43f090337194dfb043b9388ad2aeeac"
+  },
+  {
+    "path": "pandoc/datadir/luacov/runner.lua",
+    "size": 22003,
+    "sha256": "47ac6a0a0c30d821ade2ee940aa9432844d93b22553567e0c357e8a7b1d3c40f"
+  },
+  {
+    "path": "pandoc/datadir/luacov/stats.lua",
+    "size": 2078,
+    "sha256": "238536d46a20d42b0a1fabd1f347c1d6903cfc4ffa9d668fc33fcd97f87ea122"
+  },
+  {
+    "path": "pandoc/datadir/luacov/tick.lua",
+    "size": 323,
+    "sha256": "a7500c69e488655cab3fd885f71a3455d084c072410bbbac39293a6c78380964"
+  },
+  {
+    "path": "pandoc/datadir/luacov/util.lua",
+    "size": 2371,
+    "sha256": "fbae18bc623c5275f6bf675183754c42a360fc190de5bf8d42892b1d266cfbef"
+  },
+  {
+    "path": "pandoc/datadir/luacov_reporter.lua",
+    "size": 2566,
+    "sha256": "3818ffb7ccc4b8deb1bb9599b9a965226a4405851524e820237ba961196bc927"
+  },
+  {
+    "path": "pandoc/datadir/profiler.lua",
+    "size": 1790,
+    "sha256": "dfbba223ecede07d84dcb7d856c0a4c691ba71ad317edf8537b96bfb9868f3ae"
+  },
+  {
+    "path": "pandoc/datadir/readqmd.lua",
+    "size": 8999,
+    "sha256": "dc35388e9f18602f6e2a672c90fb3bcbc9734e3f5c0f02ac9f94ab37eec32123"
+  }
+]

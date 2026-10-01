@@ -6159,7 +6159,7 @@ dependencies = [
  "quarto-highlight",
  "quarto-math",
  "quarto-navigation",
- "quarto-ooxml-extract",
+ "quarto-output-extract",
  "quarto-pandoc-types",
  "quarto-sass",
  "quarto-source-map",
@@ -6457,7 +6457,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "quarto-ooxml-extract"
+name = "quarto-output-extract"
 version = "0.32.0"
 dependencies = [
  "quick-xml 0.39.4",
@@ -6480,6 +6480,21 @@ dependencies = [
  "tokio",
  "tokio-tungstenite 0.29.0",
  "tracing",
+]
+
+[[package]]
+name = "quarto-pandoc-recording"
+version = "0.32.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "clap",
+ "quarto-output-extract",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tempfile",
+ "walkdir",
 ]
 
 [[package]]
@@ -10765,7 +10780,8 @@ dependencies = [
  "nodejs-semver",
  "proc-macro2",
  "quarto-math",
- "quarto-ooxml-extract",
+ "quarto-output-extract",
+ "quarto-pandoc-recording",
  "serde",
  "serde_json",
  "serde_yaml",

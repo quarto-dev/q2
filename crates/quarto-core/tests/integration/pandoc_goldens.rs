@@ -7,7 +7,7 @@
  * `pandoc-goldens` fixture through Q2's own real Pandoc-hybrid path
  * (`render_document_to_file`, the same entry point the CLI uses — not a
  * lower-level shim call), extracts it with the identical
- * `quarto_ooxml_extract` used by `cargo xtask capture-pandoc-goldens`
+ * `quarto_output_extract` used by `cargo xtask capture-pandoc-goldens`
  * (P7 Task 10), and asserts it against the same committed `.snap` files
  * that xtask wrote from a real Q1 `quarto`. One assertion therefore
  * serves both Q1-parity and Q2-regression.
@@ -22,7 +22,7 @@ use std::sync::Arc;
 
 use quarto_core::project::ProjectContext;
 use quarto_core::render_to_file::{RenderToFileOptions, render_document_to_file};
-use quarto_ooxml_extract::{Extraction, FIXTURES, golden_snapshot_name};
+use quarto_output_extract::{Extraction, FIXTURES, golden_snapshot_name};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
 /// Fixtures whose golden comparison is a **known, accepted** divergence
@@ -114,9 +114,9 @@ fn render_fixture(qmd: &str, resources: &[&str], format: &str) -> Vec<u8> {
 
 fn extract(bytes: &[u8], format: &str) -> Extraction {
     let result = if format == "docx" {
-        quarto_ooxml_extract::extract_docx(bytes)
+        quarto_output_extract::extract_docx(bytes)
     } else {
-        quarto_ooxml_extract::extract_pptx(bytes)
+        quarto_output_extract::extract_pptx(bytes)
     };
     result.unwrap_or_else(|e| panic!("extracting {format} output: {e}"))
 }

@@ -3,10 +3,10 @@
 //!
 //! Locates a real `quarto` at exactly [`QUARTO_PINNED_VERSION`], renders
 //! every fixture in [`FIXTURES`] to `--to docx` and `--to pptx`, extracts
-//! each output with `quarto_ooxml_extract`, and writes the result as a
+//! each output with `quarto_output_extract`, and writes the result as a
 //! committed insta snapshot under [`snapshot_dir`]. `FIXTURES` and
 //! [`golden_snapshot_name`] are re-exported from
-//! `quarto_ooxml_extract::golden_fixtures` — the leaf crate this xtask and
+//! `quarto_output_extract::golden_fixtures` — the leaf crate this xtask and
 //! `quarto-core` already both depend on — rather than defined here, so the
 //! CI-runnable assertion half (Q2's own hybrid output against these same
 //! snapshots, `crates/quarto-core/tests/integration/pandoc_goldens.rs`, P7
@@ -24,7 +24,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::switch_task::current_worktree_root;
-pub use quarto_ooxml_extract::{FIXTURES, FixtureEntry, golden_snapshot_name};
+pub use quarto_output_extract::{FIXTURES, FixtureEntry, golden_snapshot_name};
 
 /// The pinned Q1 release tag goldens are captured against. Bump only on a
 /// deliberate re-vendor (see the plan's "re-capture policy").
@@ -223,9 +223,9 @@ pub fn run() -> Result<()> {
                 work_dir.path(),
             )?;
             let extraction = if format == "docx" {
-                quarto_ooxml_extract::extract_docx(&bytes)
+                quarto_output_extract::extract_docx(&bytes)
             } else {
-                quarto_ooxml_extract::extract_pptx(&bytes)
+                quarto_output_extract::extract_pptx(&bytes)
             }
             .map_err(|e| anyhow::anyhow!("extracting {} ({format}): {e}", fixture.qmd))?;
 
@@ -317,7 +317,7 @@ mod tests {
     }
 
     // --- T10.3: the shared naming function, hardcoded literals -----------
-    // Covered by `quarto_ooxml_extract::golden_fixtures`'s own
+    // Covered by `quarto_output_extract::golden_fixtures`'s own
     // `test_golden_snapshot_name_matches_hardcoded_literals` — this xtask
     // re-exports rather than re-derives, so the literal test lives with the
     // one definition.

@@ -1,0 +1,47 @@
+[
+  {
+    "path": "argv.json",
+    "size": 298,
+    "sha256": "e941b47a76741a558e20567de4b850e64644483f629b876047bac96e150bea20"
+  },
+  {
+    "path": "capture/citations.pptx",
+    "size": 29551,
+    "sha256": "a19f81798f182bb67b43ba77bc77ec2bcfce065d19569aeca2ad7507aeed7002"
+  },
+  {
+    "path": "env.json",
+    "size": 8612,
+    "sha256": "4df2b969ce498810e44edb26ba9ff885acf266b1e0f773272ad8a25de27f96c0"
+  },
+  {
+    "path": "fs/__q2_doc__/citations.qmd",
+    "size": 186,
+    "sha256": "28f06a84badabcfb5cbc5d38fbedb5e55d28eeb7d301ff6d972b9e3853ce8071"
+  },
+  {
+    "path": "fs/__q2_doc__/refs.bib",
+    "size": 343,
+    "sha256": "512c41da8f87bbc14b9c338a3973b7acdd686c596443092835b2e4c314ef65dd"
+  },
+  {
+    "path": "fs/__q2_tmp__/pandoc-filter-deps.txt",
+    "size": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "fs/__q2_tmp__/pandoc-input.json",
+    "size": 22857,
+    "sha256": "b4460459db1a9378011a3796d4e0c6fbbfafdcfc23fb4028edd58cb6fe02fd29"
+  },
+  {
+    "path": "meta.json",
+    "size": 185,
+    "sha256": "f5b00b101d9008cbf1292107efea5492b91b35cdb51336b3a3baceeefdb38abe"
+  },
+  {
+    "path": "reference/citations.pptx",
+    "size": 29551,
+    "sha256": "a19f81798f182bb67b43ba77bc77ec2bcfce065d19569aeca2ad7507aeed7002"
+  }
+]

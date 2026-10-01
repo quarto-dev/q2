@@ -1,0 +1,10 @@
+---
+title: Shortcodes
+subtitle: Expanded before pandoc runs
+---
+
+The title is {{< meta title >}}.
+
+{{< pagebreak >}}
+
+After the break: {{< meta subtitle >}}.

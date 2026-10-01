@@ -1,0 +1,42 @@
+[
+  {
+    "path": "argv.json",
+    "size": 299,
+    "sha256": "4143734ca0b925ed48b8e355a86d8376866d5c7833ff81a2bc51bfc02ebed7eb"
+  },
+  {
+    "path": "capture/shortcodes.docx",
+    "size": 10728,
+    "sha256": "50c71fa479ad4d7aae92b785e8e424c0a82e709d4d5928ff78324644bbbc2a2b"
+  },
+  {
+    "path": "env.json",
+    "size": 8996,
+    "sha256": "a260dc1dbe88a3e7a6cd780bd4de298b55e2935ed08c6aaf373348d41efdfa34"
+  },
+  {
+    "path": "fs/__q2_doc__/shortcodes.qmd",
+    "size": 158,
+    "sha256": "8592d351a27f4e886c266aeb876be461699562a182e9e8c77eb2c85981ea1220"
+  },
+  {
+    "path": "fs/__q2_tmp__/pandoc-filter-deps.txt",
+    "size": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "fs/__q2_tmp__/pandoc-input.json",
+    "size": 23253,
+    "sha256": "de6e751c38ba29fd8e9a684cc181b798b3132b434e5ba50661510f1676f65933"
+  },
+  {
+    "path": "meta.json",
+    "size": 188,
+    "sha256": "c9c07fe0058c35a779db2a02e68a3831a59582d4cf6dabfdba0de6032c0acf63"
+  },
+  {
+    "path": "reference/shortcodes.docx",
+    "size": 10728,
+    "sha256": "50c71fa479ad4d7aae92b785e8e424c0a82e709d4d5928ff78324644bbbc2a2b"
+  }
+]

@@ -113,6 +113,7 @@ pub mod pandoc_typst_compile;
 pub mod pandoc_typst_resource_copy;
 pub mod pandoc_typst_template_partials;
 pub mod pandoc_typst_writer;
+pub mod pandoc_wasm_constants;
 pub mod pass1_engine_resolution_pipeline;
 pub mod preview_render_css_parity;
 pub mod printable_render;
