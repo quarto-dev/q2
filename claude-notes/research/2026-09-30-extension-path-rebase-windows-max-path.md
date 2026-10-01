@@ -104,9 +104,14 @@ work before shipping.
   page-relative href. Must be space-aware, or applied only to pure-filesystem
   keys (filters, template, template-partials, include-*, format-resources,
   reference-doc), leaving css/theme on the mechanism-3 marking.
-- **Normalized joins at consumers**: collapses `..` before open, but does not
-  shorten the *string*, so it does **not** help Windows MAX_PATH on the stored
-  value — only on what the OS sees. Insufficient alone for the reported bug.
+- **Normalized joins at consumers**: collapses `..` before open. MAX_PATH
+  applies to the path handed to the open call, not to the stored metadata
+  string, so a consumer that passes the normalized path to Lua `io.open`
+  does avoid the failure (this is why Q1 is unaffected). The drawback is
+  coverage, not correctness: every filesystem consumer (filters, template,
+  partials, include-*, format-resources, reference-doc, shortcodes) would
+  need it, and a new consumer that forgets regresses silently. Fixing the
+  value once at the merge-time rebase covers them all.
 - **Both, space-aware** (the direction consistent with the contract): FS-space
   keys get absolute-if-outside at merge time (mirroring `rebase_candidate`);
   URL-space keys (css, theme) get copy-to-`_site` + page-relative href and must
@@ -197,8 +202,11 @@ comment says "top-level key". The implementation does not match it.
 No built-in extension contributes `css`, `theme` or `include-*`. orange-book only has
 `template-partials`, and julia-engine has none (grep of `resources/extension*/**/_extension.yml`).
 User extensions are discovered only between the input dir and the project root
-(`extension/discover.rs:50-66`), so they are always inside the tree. The outside-project
-css/theme case through this walk is unreachable in the shipped product today.
+(`extension/discover.rs:50-66`), so the extension *dir* is always inside the tree. The
+*asset* need not be: `bundled_file_exists` accepts any existing file, so
+`<project>/_extensions/acme` declaring `css: ../../../shared.css` reaches this walk with
+a value outside the project. That case is reachable, and it used to emit a working
+`../shared.css` href (see the plan's Migration section for how it is kept working).
 
 ### Precedent already contradicts the exclusion
 

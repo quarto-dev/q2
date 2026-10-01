@@ -2858,24 +2858,23 @@ mod tests {
         use quarto_pandoc_types::{ConfigMapEntry, ConfigValue};
         use quarto_source_map::SourceInfo;
 
-        let ext = tempfile::Builder::new()
+        // Siblings under one parent: on separate volumes pathdiff yields
+        // a drive-absolute path, not the `..` chain this test is about.
+        let root = tempfile::Builder::new()
             .prefix("quarto-theme-probe-")
             .tempdir()
             .unwrap();
-        let ext_dir = ext.path().to_path_buf();
+        let ext_dir = root.path().join("ext");
+        std::fs::create_dir_all(&ext_dir).unwrap();
         std::fs::write(
             ext_dir.join("probe.scss"),
             "/*-- scss:defaults --*/\n$probe: 1;\n/*-- scss:rules --*/\n",
         )
         .unwrap();
 
-        let project = tempfile::Builder::new()
-            .prefix("quarto-theme-probe-project-")
-            .tempdir_in(env!("CARGO_MANIFEST_DIR"))
-            .unwrap();
-        let project_root = project.path().to_path_buf();
+        let project_root = root.path().join("project");
         let mut document_dir = project_root.clone();
-        for _ in 0..40 {
+        for _ in 0..60 {
             document_dir.push("d");
         }
         std::fs::create_dir_all(&document_dir).unwrap();

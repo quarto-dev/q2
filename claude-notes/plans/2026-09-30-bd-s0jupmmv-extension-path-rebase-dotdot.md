@@ -122,8 +122,10 @@ bd-oejuizi9 / bd-hjv5o).
 ## Notes / gotchas
 
 - `#[ignore]` on the red test is **temporary**; leaving it is a silent hole.
-- Do not "fix" by normalizing consumer joins alone — that collapses `..` for
-  the OS but does not shorten the stored string, so MAX_PATH still trips.
+- Normalizing consumer joins would also avoid MAX_PATH (the limit applies to
+  the path passed to the open call, not the stored string), but every
+  filesystem consumer would need it. The merge-time rebase fixes the value
+  once for all of them, which is why it is preferred.
 - The absolute path is only safe for FS-space keys; never emit it as an href.
 - `git status` shows untracked typst smoke fixtures under
   `crates/quarto/tests/smoke-all/typst/brand-yaml/**` — pre-existing, **not**
@@ -190,11 +192,16 @@ consistency change with contract tests, not a TDD bug fix.
 - No on-disk or cached state stores these strings. The theme cache key hashes the
   *resolved, normalized* path, which the probe shows is identical for both forms, so no
   cache invalidation is needed.
-- `FormatCssTransform`: an outside-project css stays unrewritten in both forms. The
-  emitted broken `<link href>` changes from a `..` chain to a `C:/…/Temp/…` string.
-  That case is unreachable today (no built-in contributes css), and the fragment path
-  already behaves this way. The real fix stays bd-f0h4ahai (copy outside-project
-  extension css into `quarto-contrib/`), which is easier from an absolute source.
+- `FormatCssTransform`: outside-project css is reachable. An in-tree extension at
+  `<project>/_extensions/acme` can declare `css: ../../../shared.css`, and
+  `bundled_file_exists` accepts any existing file. Before 0e4c834c8 the css exemption
+  kept `../shared.css`, which the transform emitted verbatim and which worked when
+  served from a common parent. After 0e4c834c8 the stored value is absolute, and the
+  transform's outside-project early return emitted it as a `C:/…` href (a regression;
+  roborev 3004/3008/3009). Fix: that branch now rewrites the entry to
+  `diff_paths(source, page_dir)`, so the href is page-relative whatever form the
+  rebase stored (test `extension_css_outside_project_links_page_relative`). Shipping
+  the file stays bd-f0h4ahai (copy outside-project extension css into `quarto-contrib/`).
 - epub `--css=`: `doc_dir.join(absolute)` returns the absolute path, so pandoc is fine.
 - WASM / VFS built-ins: unverified whether built-in extension dirs are outside
   `/project/` in VFS mode. If so, they get a rooted VFS path, which the walk already
@@ -232,4 +239,4 @@ consistency change with contract tests, not a TDD bug fix.
 
 Finding 1: Confirmed, pre-existing, and not the MAX_PATH class this commit targets. The relative branch is unchanged from before 73d1fbf. A value declared inside the project that escapes it with '..' (metadata_dir /project/sub, value ../../tmp/x.lua) passes the lexical starts_with(project_root) check and is rebased by diff_paths to ../sub/../../tmp/x.lua (verified with a probe). That chain is bounded by what the author wrote plus the document depth; it never climbs to an unrelated temp tree, which is what broke Lua io.open for the temp-extracted built-in. Still, the boundary check should be honest: 0e4c834c8 normalizes the joined path lexically before the check, so an escaping path becomes absolute like any other outside-project value (test adjust_paths_escaping_declaration_is_outside_project).
 
-Finding 2: Confirmed. adjust_paths_recursive passed the immediate map key down, so under theme: {light, dark} the key was light/dark and the nested value became absolute while a top-level theme stayed relative. 0e4c834c8 removes the classification rather than carrying it down: at this walk neither theme nor css is URL-space. Every theme read goes through ThemeContext::resolve_path, which normalizes, and no theme value reaches HTML. The css href is derived by FormatCssTransform from the resolved source (format_css.rs:121-158), never copied from the stored string. rebase_candidate already stores absolute theme/css for temp-extracted fragments. A Windows probe (424-char unnormalized join) loads the theme in both forms. Every outside-project Path value now keeps its absolute form, nested or not (test adjust_paths_outside_project_keeps_every_form_absolute).
+Finding 2: Confirmed. adjust_paths_recursive passed the immediate map key down, so under theme: {light, dark} the key was light/dark and the nested value became absolute while a top-level theme stayed relative. 0e4c834c8 removes the classification rather than carrying it down: at this walk neither theme nor css is URL-space. Every theme read goes through ThemeContext::resolve_path, which normalizes, and no theme value reaches HTML. FormatCssTransform derives the css href from the resolved source. Its outside-project branch originally emitted the stored string verbatim, so an in-tree extension css escaping the project would have become a filesystem-absolute href. That branch now links the source page-relatively (test extension_css_outside_project_links_page_relative). rebase_candidate already stores absolute theme/css for temp-extracted fragments. A Windows probe (424-char unnormalized join) loads the theme in both forms. Every outside-project Path value now keeps its absolute form, nested or not (test adjust_paths_outside_project_keeps_every_form_absolute).
