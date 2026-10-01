@@ -296,9 +296,12 @@ fn adjust_paths_recursive(
                 && !path_str.starts_with("http://")
                 && !path_str.starts_with("https://")
             {
+                let joined = metadata_dir.join(&path);
                 // Normalized so a `..` escaping the project is seen as
-                // outside it by the lexical `starts_with` below.
-                let abs_path = quarto_util::normalize_lexically(&metadata_dir.join(&path));
+                // outside it by the lexical `starts_with` below. The
+                // in-project rebase uses `joined`, keeping `..` for the
+                // OS to resolve (it may follow a symlink).
+                let abs_path = quarto_util::normalize_lexically(&joined);
                 // A value resolving outside the project tree (a temp-extracted
                 // built-in extension) must not be rebased to a `..` chain:
                 // consumers join it onto the document dir without normalizing
@@ -308,7 +311,7 @@ fn adjust_paths_recursive(
                 // (bd-9z2258af).
                 if !abs_path.starts_with(project_root) {
                     *path_str = quarto_util::to_forward_slashes(&abs_path);
-                } else if let Some(adjusted) = pathdiff::diff_paths(&abs_path, document_dir) {
+                } else if let Some(adjusted) = pathdiff::diff_paths(&joined, document_dir) {
                     // The adjusted value is used verbatim in HTML hrefs (e.g. a
                     // `css: !path` <link>), so it must use forward slashes on
                     // every platform; pathdiff yields native separators.
@@ -2738,6 +2741,30 @@ mod tests {
             rebased, "../_extensions/acm/filter.lua",
             "in-tree rebase should be doc-relative"
         );
+    }
+
+    /// An in-project value keeps its `..` components: when the component
+    /// before a `..` is a symlink, only the OS resolves `link/..` to the
+    /// file the author named, so the rebase must not collapse it
+    /// lexically. The normalized form is for the containment check only.
+    #[test]
+    fn adjust_paths_inside_project_keeps_dotdot_for_the_os() {
+        use quarto_pandoc_types::ConfigValue;
+        use quarto_source_map::SourceInfo;
+
+        let mut metadata =
+            ConfigValue::new_path("link/../header.html".to_string(), SourceInfo::for_test());
+        adjust_paths_to_document_dir(
+            &mut metadata,
+            Path::new("/project"),
+            Path::new("/project/docs"),
+            Path::new("/project"),
+        );
+
+        let ConfigValueKind::Path(rebased) = &metadata.value else {
+            panic!("expected a Path value");
+        };
+        assert_eq!(rebased, "../link/../header.html");
     }
 
     /// Every `Path` leaf from a declaring dir outside the project keeps
