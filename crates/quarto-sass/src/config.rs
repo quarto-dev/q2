@@ -1050,7 +1050,7 @@ pub(crate) const ADAPTIVE_HIGHLIGHT_STYLES: &[&str] = &[
 /// Resolve an adaptive highlight-style name for a variant's darkness;
 /// non-adaptive names pass through unchanged (unknown ones fall back
 /// to the default palette at compile time, with a stage-side warning).
-fn resolve_adaptive_highlight(name: &str, dark: bool) -> String {
+pub fn resolve_adaptive_highlight(name: &str, dark: bool) -> String {
     if ADAPTIVE_HIGHLIGHT_STYLES.contains(&name) {
         format!("{name}-{}", if dark { "dark" } else { "light" })
     } else {
