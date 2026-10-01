@@ -114,6 +114,18 @@ impl PipelineStage for UserFiltersStage {
         // renders in-text citations normally but appends no local
         // bibliography div — the project-wide merge owns the one true
         // bibliography, installed later into the references chapter only.
+        // The `citeproc: true` shorthand only reaches citeproc through the
+        // `filters` list `resolve_filters` reads, so spell it out there
+        // (after the deferral strip above — a deferred render must leave
+        // citeproc to its driver). Pandoc-hybrid targets only: HTML has
+        // its own citation path.
+        if matches!(self.position, FilterPosition::Pre)
+            && !ctx.defer_citeproc
+            && is_pandoc_hybrid(&ctx.format)
+        {
+            crate::filter_resolve::apply_citeproc_shorthand(&mut doc.ast.meta);
+        }
+
         if matches!(self.position, FilterPosition::Pre) && ctx.suppress_book_bibliography {
             crate::project::book::set_suppress_bibliography(&mut doc.ast.meta);
         }
@@ -153,12 +165,26 @@ impl PipelineStage for UserFiltersStage {
         // double-execute them. HTML targets have no `main.lua` leg at
         // all, so they keep running `Position::Post` filters here
         // exactly as before.
-        if matches!(self.position, FilterPosition::Post) && is_pandoc_hybrid(&ctx.format) {
-            return Ok(PipelineData::DocumentAst(doc));
-        }
-
+        // `"citeproc"` is the exception: it is Q2's own Rust filter, not a
+        // `main.lua` entry point, so nothing downstream would run it. It
+        // runs here — except in margin-citation mode, where the Typst
+        // margin handler resolves citations itself.
+        let hybrid_post =
+            matches!(self.position, FilterPosition::Post) && is_pandoc_hybrid(&ctx.format);
         let filters: Vec<pampa::unified_filter::FilterSpec> = match self.position {
             FilterPosition::Pre => resolved.pre.clone(),
+            FilterPosition::Post if hybrid_post => {
+                if crate::filter_resolve::margin_citations(&doc.ast.meta) {
+                    Vec::new()
+                } else {
+                    resolved
+                        .post
+                        .iter()
+                        .filter(|f| **f == pampa::unified_filter::FilterSpec::Citeproc)
+                        .cloned()
+                        .collect()
+                }
+            }
             FilterPosition::Post => resolved.post.clone(),
         };
         if filters.is_empty() {
@@ -881,6 +907,137 @@ mod tests {
             result.is_err(),
             "without defer_citeproc, citeproc must run and fail on the missing bibliography"
         );
+    }
+
+    /// Runs the `Pre` then `Post` user-filter stages over `meta` for
+    /// `format`, the way the pipeline does. The bibliography path in these
+    /// tests is deliberately missing: citeproc running is observable as
+    /// the run failing, citeproc not running as it succeeding.
+    async fn run_pre_post(
+        format: crate::format::Format,
+        defer_citeproc: bool,
+        mut meta_entries: Vec<(&str, ConfigValue)>,
+    ) -> Result<(), PipelineError> {
+        let mut ctx = make_ctx();
+        ctx.format = format;
+        ctx.defer_citeproc = defer_citeproc;
+        meta_entries.push(("bibliography", cv_str("/nonexistent/path/refs.json")));
+        let doc = make_doc_ast(cv_map(meta_entries));
+        let mid = UserFiltersStage::pre()
+            .run(PipelineData::DocumentAst(doc), &mut ctx)
+            .await?;
+        UserFiltersStage::post().run(mid, &mut ctx).await?;
+        Ok(())
+    }
+
+    /// bd-ysqekrm2: `citeproc: true` on a Pandoc-hybrid target runs Q2's
+    /// citeproc filter (post-crossref); previously the boolean did nothing.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn citeproc_true_runs_citeproc_on_pandoc_hybrid_target() {
+        let result = run_pre_post(
+            crate::format::Format::from_format_string("typst").unwrap(),
+            false,
+            vec![(
+                "citeproc",
+                ConfigValue::new_bool(true, SourceInfo::for_test()),
+            )],
+        )
+        .await;
+        assert!(
+            result.is_err(),
+            "citeproc: true must run citeproc (failing on the missing bibliography)"
+        );
+    }
+
+    /// bd-ysqekrm2: an explicit `filters: [quarto, citeproc]` puts citeproc
+    /// in the post group, which the Pandoc-hybrid leg used to drop silently
+    /// (docx/pptx/epub/typst alike).
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn explicit_post_citeproc_runs_on_pandoc_hybrid_target() {
+        for format in [
+            crate::format::Format::docx(),
+            crate::format::Format::from_format_string("typst").unwrap(),
+        ] {
+            let result = run_pre_post(
+                format,
+                false,
+                vec![(
+                    "filters",
+                    cv_array(vec![cv_str("quarto"), cv_str("citeproc")]),
+                )],
+            )
+            .await;
+            assert!(
+                result.is_err(),
+                "post-position citeproc must run on a Pandoc-hybrid target"
+            );
+        }
+    }
+
+    /// Margin citations on Typst resolve citations in the Lua margin
+    /// handler, so the whole-document filter stays out — for both the
+    /// shorthand and an explicit post-position `citeproc`.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn margin_citations_skip_whole_document_citeproc() {
+        let margin = || ("citation-location", cv_str("margin"));
+        let shorthand = run_pre_post(
+            crate::format::Format::from_format_string("typst").unwrap(),
+            false,
+            vec![
+                margin(),
+                (
+                    "citeproc",
+                    ConfigValue::new_bool(true, SourceInfo::for_test()),
+                ),
+            ],
+        )
+        .await;
+        assert!(shorthand.is_ok(), "{shorthand:?}");
+        let explicit = run_pre_post(
+            crate::format::Format::from_format_string("typst").unwrap(),
+            false,
+            vec![
+                margin(),
+                (
+                    "filters",
+                    cv_array(vec![cv_str("quarto"), cv_str("citeproc")]),
+                ),
+            ],
+        )
+        .await;
+        assert!(explicit.is_ok(), "{explicit:?}");
+    }
+
+    /// The book single-file driver defers citeproc to the merged document;
+    /// the shorthand must not reintroduce it per chapter.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn deferred_citeproc_is_not_reintroduced_by_shorthand() {
+        let result = run_pre_post(
+            crate::format::Format::from_format_string("typst").unwrap(),
+            true,
+            vec![(
+                "citeproc",
+                ConfigValue::new_bool(true, SourceInfo::for_test()),
+            )],
+        )
+        .await;
+        assert!(result.is_ok(), "{result:?}");
+    }
+
+    /// Scope guard: the shorthand is only wired for Pandoc-hybrid targets;
+    /// an HTML render is untouched.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn citeproc_shorthand_leaves_html_untouched() {
+        let result = run_pre_post(
+            crate::format::Format::html(),
+            false,
+            vec![(
+                "citeproc",
+                ConfigValue::new_bool(true, SourceInfo::for_test()),
+            )],
+        )
+        .await;
+        assert!(result.is_ok(), "{result:?}");
     }
 
     /// book-projects P6 regression: a non-book (or ordinary) render leaves

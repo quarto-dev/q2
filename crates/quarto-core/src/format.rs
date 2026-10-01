@@ -953,13 +953,10 @@ fn pandoc_writer_name_for(id: FormatIdentifier) -> String {
 /// `citeproc: false` from the same registration needs no entry here: Q2
 /// never passes `--citeproc` to pandoc for *any* Pandoc-hybrid format
 /// (citations are resolved upstream of this stage), so "false" is the
-/// already-existing default, not a flag to add. The opt-in `-citations`
-/// variant (Q1 auto-adds a target-format variant when the user asks for
-/// pandoc's native citeproc) is deferred — there is no existing
-/// pseudo-format-variant seam to model it on (see
-/// `builtin_pseudo_format` above, which only maps whole-format aliases,
-/// not opt-in suffixes on a base format), so it needs its own design
-/// decision rather than a guess here.
+/// already-existing default, not a flag to add. The `-citations` writer
+/// variant Q1 uses when citeproc is on is not an invocation arg: it is a
+/// suffix on the `-t` target, applied by `PandocWriteStage` when Q2's
+/// citeproc filter ran.
 fn pandoc_invocation_args_for(id: FormatIdentifier) -> Vec<String> {
     match id {
         FormatIdentifier::Typst => vec![

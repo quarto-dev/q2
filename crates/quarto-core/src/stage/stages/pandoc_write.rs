@@ -707,6 +707,16 @@ impl PipelineStage for PandocWriteStage {
             &ctx.extensions,
             ctx.runtime.as_ref(),
         );
+        // Whether Q2's citeproc filter resolved this document's citations
+        // upstream of pandoc (read before `.post` is consumed below).
+        // Margin-citation mode is excluded: there the Typst margin handler
+        // owns citation rendering and the `Cite` nodes stay native.
+        let citeproc_resolved = !crate::filter_resolve::margin_citations(&doc.ast.meta)
+            && resolved_filters
+                .pre
+                .iter()
+                .chain(resolved_filters.post.iter())
+                .any(|f| *f == pampa::unified_filter::FilterSpec::Citeproc);
         let entry_points: Vec<EntryPointFilter> = resolved_filters
             .post
             .into_iter()
@@ -723,9 +733,10 @@ impl PipelineStage for PandocWriteStage {
                     filter_type: "json",
                 }),
                 pampa::unified_filter::FilterSpec::Citeproc => {
-                    // citeproc is handled by pandoc's own `--citeproc`
-                    // mechanism elsewhere, not `main.lua`'s per-filter
-                    // entry points — nothing to forward.
+                    // Q2's own Rust citeproc filter, not a `main.lua`
+                    // entry point. `UserFiltersStage::post()` already ran
+                    // it on the AST (Q2 never passes `--citeproc` to
+                    // pandoc) — nothing to forward.
                     None
                 }
             })
@@ -890,7 +901,16 @@ impl PipelineStage for PandocWriteStage {
                 format!("failed to create filter dependency file: {e}"),
             )
         })?;
-        let to_format = ctx.format.pandoc_writer_name();
+        let mut to_format = ctx.format.pandoc_writer_name();
+        if citeproc_resolved && ctx.format.identifier == FormatIdentifier::Typst {
+            // Q1's `typstResolveFormat` equivalent: with citations already
+            // resolved, turn off the writer's `citations` extension so it
+            // prints the resolved `Cite.content` instead of re-deriving
+            // native `@key`/`#cite()` syntax, and so the `$citations$`
+            // template variable `biblio.typ` gates `#bibliography()` on is
+            // unset (no second, redundant bibliography).
+            to_format.push_str("-citations");
+        }
 
         let format_extra_args = if ctx.format.identifier == FormatIdentifier::Epub {
             epub_extra_args(&temp_dir, &doc.path, &doc.ast.meta)?
