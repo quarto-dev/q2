@@ -1,0 +1,19 @@
+[package]
+name = "quarto-output-extract"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Shared semantic extraction and comparison of rendered docx/pptx/epub outputs (Q1-parity goldens, pandoc.wasm parity)"
+
+[[bin]]
+name = "quarto-output-extract"
+path = "src/main.rs"
+
+[dependencies]
+zip.workspace = true
+quick-xml.workspace = true
+
+[lints]
+workspace = true

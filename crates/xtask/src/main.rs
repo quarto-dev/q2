@@ -33,6 +33,7 @@ mod build_hub_mcp_bundle;
 mod build_q2_preview_spa;
 mod build_trace_viewer;
 mod capture_pandoc_goldens;
+mod capture_pandoc_recordings;
 mod create_worktree;
 mod dev_setup;
 mod gen_math_spec;
@@ -276,10 +277,19 @@ enum Command {
     /// (`capture_pandoc_goldens::QUARTO_PINNED_VERSION`) on `PATH` — fails
     /// loudly, never skips, if absent or at the wrong version. Renders each
     /// fixture in `tests/fixtures/pandoc-goldens/` to docx and pptx,
-    /// extracts semantic content via `quarto-ooxml-extract`, and writes the
+    /// extracts semantic content via `quarto-output-extract`, and writes the
     /// result as a committed insta snapshot. Never invoked from `cargo
     /// xtask verify` or CI.
     CapturePandocGoldens {},
+
+    /// Dev-only capture of the exact inputs of real native pandoc runs
+    /// (pandoc.wasm epic, phase R0): renders each recording fixture to docx,
+    /// pptx, epub and typst with `QUARTO_PANDOC` set to
+    /// `scripts/pandoc-capture.sh`, then normalizes the captures into
+    /// `crates/quarto-core/tests/fixtures/pandoc-recordings/recordings/`.
+    /// Needs the pinned native pandoc on `PATH`. Unix only; never invoked
+    /// from `cargo xtask verify` or CI.
+    CapturePandocRecordings {},
 
     /// Byte-diff a rendered corpus between `--base <commit>` and `HEAD`.
     ///
@@ -524,6 +534,7 @@ fn main() -> Result<()> {
         }
         Command::PandocCheck {} => pandoc_check::run(),
         Command::CapturePandocGoldens {} => capture_pandoc_goldens::run(),
+        Command::CapturePandocRecordings {} => capture_pandoc_recordings::run(),
         Command::RenderCorpusDiff { base, corpus, keep } => {
             render_corpus_diff::run(render_corpus_diff::Args { base, corpus, keep })
         }

@@ -1,0 +1,7 @@
+---
+title: Images
+---
+
+![A red square, captioned.](img/square.png){#fig-square width=2in}
+
+Inline image ![small](img/square.png){width=0.5in} in a sentence, and @fig-square.

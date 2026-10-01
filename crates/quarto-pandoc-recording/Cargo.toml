@@ -1,0 +1,28 @@
+[package]
+name = "quarto-pandoc-recording"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Dev tooling: normalize, store and replay recordings of native pandoc runs (pandoc.wasm foundations)"
+
+[[bin]]
+name = "pandoc-recording"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+base64.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.11"
+walkdir.workspace = true
+
+[dev-dependencies]
+quarto-output-extract = { path = "../quarto-output-extract" }
+tempfile = "3"
+
+[lints]
+workspace = true

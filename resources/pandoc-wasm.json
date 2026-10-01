@@ -1,0 +1,11 @@
+{
+  "asset_name": "pandoc-3.11.wasm.zip",
+  "upstream_zip_sha256": "bd856c19094f5333ee92f239dd93d288a05429f1d957efef1c37e7bb97ac14bd",
+  "wasm_sha256": "44829227ac8f74fb57387d12ac7e347e89fa851510e089263d27f5af2e266332",
+  "share_root": "/__q2_share__",
+  "limits": {
+    "image_bytes": 26214400,
+    "reference_doc_bytes": 52428800,
+    "total_bytes": 314572800
+  }
+}

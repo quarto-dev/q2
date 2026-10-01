@@ -1,0 +1,154 @@
+# Research notes: pandoc.wasm in hub-client
+
+**Date:** 2026-10-01. Evidence behind the pandoc-wasm design ([`../designs/pandoc-wasm-architecture.md`](../designs/pandoc-wasm-architecture.md)) and its two epics ([request](../plans/2026-10-01-pandoc-request-epic.md), [host](../plans/2026-10-01-pandoc-host-epic.md)). Code refs are to this branch (`feature/pandoc-wasm`,
+from main `142cb4045`). Items marked *(inferred)* were read from source, not built or run. The spike harness is in `2026-10-01-pandoc-wasm-spike/` next to this file (called `spike/` below).
+
+## 1. The Pandoc wasm artifact
+
+- Official assets: `pandoc-<ver>.wasm.zip` on each jgm/pandoc release since 3.9 (`gh release download <ver> -R jgm/pandoc -p 'pandoc-<ver>.wasm.zip'`;
+  the zip contains `pandoc-wasm/pandoc.wasm`).
+
+| Version | pandoc.wasm raw | zip (deflate) | Needs exnref? | Node 24 (V8 13.6) | Chromium (Playwright) | WebKit 26.4 (Playwright) |
+|---|---|---|---|---|---|---|
+| 3.9 | 58.4 MB | 16.2 MB | no | ok | not run | not run |
+| 3.10 (also bundled in npm `pandoc-wasm@1.1.0`) | 58.6 MB | 16.2 MB | no | ok | ok | not run |
+| **3.11** (our native floor, `PANDOC_PIN`) | 59.2 MB | 16.4 MB | **yes** | needs `--experimental-wasm-exnref` | ok | ok (also Firefox 157 ok) |
+| 3.12 (latest, released 2026-09-29; not used, the wasm is pinned to 3.11) | n/a | 16.7 MB | **yes** | needs the flag | not run | not run |
+
+- Brotli -q11 on 3.11: **10.9 MB** (gzip -9 on 3.10: 16.0 MB). Brotli is the smaller wire size, but no serving path in this repo does Brotli (see §7), so the working baseline is gzip (~16 MB).
+- **exnref:** 3.11+ wasm uses the new WebAssembly exception-handling encoding (opcode 0x1f). Node 24 rejects it without
+  `--experimental-wasm-exnref`; Chromium and WebKit 26.4 accept it with no flag. **Firefox 157 (macOS, the user's default browser) also
+  passes the full spike-3 suite** (`spike/ff/`, 2026-10-01): exnref probe, compile (~250 ms), instantiate, docx/pptx/epub, Lua filter with nested
+  `require` + env var, 20 repeated conversions (wasm memory 119 MB), 3 fresh instances (~310-330 ms create+docx each). Playwright's own
+  Firefox build cannot launch on this machine (`RenderCompositorSWGL failed mapping default framebuffer`), so Firefox was tested by opening the page in the real browser.
+  Older Firefox versions are untested (MDN lists exnref from 131).
+- The npm `pandoc-wasm@1.1.0` ships pandoc 3.10, **below our native floor 3.11**
+  (`crates/quarto-core/src/pandoc_filters/mod.rs:28`, `PANDOC_PIN = "3.11"`; vendored Q1 pin `QUARTO_CLI_PIN = "v1.11.3"`). So we cannot
+  just depend on that npm package; we download the official 3.11 asset.
+- Toolchain: standalone `wasm32-wasi` (GHC wasm backend), no JS FFI; not linked with our Rust wasm; hosted by any WASI shim
+  (`@bjorn3/browser_wasi_shim`). Reactor protocol used by the npm host: `hs_init_with_rtsopts`, then exports `query` / `convert`.
+
+## 2. Host behaviour measured in the spike
+
+| Behaviour | Result |
+|---|---|
+| Stock npm host file store | **Flat** map: `filters/sub/x.lua` is not found. Our host needs nested directories (`spike/host-patched.js`, ~10 lines). |
+| Env vars | **Fixed at instance init.** Changing the env array between `convert()` calls is invisible (`spike/env-reuse.mjs`). Files are re-read every call. |
+| Per-render params options | (a) new instance per render from a pre-compiled `WebAssembly.Module`: ~40 ms to create, but the first docx then costs ~630 ms vs ~40-130 ms warm, memory stable (GC reclaims old instances; `spike/instance-cost.mjs`). (b) keep one warm instance and deliver the params blob via a file read by a small Lua preamble that overrides `os.getenv` for `QUARTO_*` (fits the planned P5 shim). |
+| FS cleared per `convert()` | The host clears the file map every call, so the share tree (~250 files) must be re-added each call; cost unmeasured, expected small. |
+| `-f json` + `filters:` (Lua) + nested `require` | Works. The option key is `filters`, not `lua-filter`. |
+| Memory | Linear memory 39 MB fresh, plateaus at ~105-118 MB after many conversions (no leak). Chromium process-tree RSS about +340 MB once pandoc is loaded (mostly compiled code). |
+| Latency | Compile+init ~140-200 ms; first docx 150-650 ms; later 30-130 ms. |
+| Coexistence with Rust wasm | Works in Node and Chromium (chain spike: `spike/chain.spike.test.ts`, `chain-browser.mjs`). Rust AST goes straight into `-f json`; docx `document.xml` byte-identical to native for the preview-format AST. |
+| Command mode (`_start`) | Not exercised by any committed spike; all spike measurements here are reactor-mode (`hs_init`/`convert`/`query`). The 3.11 wasm does export `_start`. The 2026-10-01 runtime audit (§9) later ran command mode in Node; the browser run is host phase H0. |
+| Where Rust wasm runs today | Main thread: `initWasm()` in `ts-packages/preview-runtime/src/wasmRenderer.ts:150`; hub-client has no application Workers (Monaco only). Pandoc in its own Worker is a clean fit. |
+
+## 3. What the native Pandoc leg does (so a wasm "request" can reproduce it)
+
+From `crates/quarto-core/src/stage/stages/pandoc_write.rs` (`PandocWriteStage`) and `pandoc_filters/*`:
+
+- **Before the call:** coerce title/subtitle MetaBlocks -> MetaInlines (`:452`); typst-only section numbering and
+  `--shift-heading-level-by` (`:462-468`); pandoc version gate (`:473`, `:102-117`).
+- **Argument order** (`:927-957`): `-f json -t <writer> --data-dir <share>/pandoc/datadir -L <share>/filters/main.lua`, then epub extra args,
+  then `Format::pandoc_invocation_args()`, then `--resource-path <doc_dir>`, then typst extras, then `-o <output>`, then
+  `forwarded_args` (reference-doc, template, highlight-style, toc, toc-depth, reference-location, slide-level, default-image-extension), then the input JSON path.
+- **Env vars:** `QUARTO_SHARE_PATH`, `QUARTO_FILTER_PARAMS` (base64 blob via `encode_params_blob`), `QUARTO_FILTER_DEPENDENCY_FILE` (must exist and be writable).
+- **Files pandoc reads/writes:** `pandoc-input.json` (wire JSON, `raw: false`; a file, not stdin); the share tree
+  (`filters/`, `pandoc/datadir/`, `formats/docx/` callout PNGs); epub `formats/{html/styles-callout.html,epub/styles.html}`; doc-relative resources
+  (images, `reference-doc`, `epub-cover-image`, `epub-metadata`, `epub-embed-font`, `css`); writable results file, deps file, crossref index
+  (paths named in the params blob).
+- **Output:** written directly to `output_path`; binary bytes never pass through `PipelineData`. Only markdown-family outputs get a post-step (shortcode unescape).
+- **Stderr** is captured unconditionally; `classify_pandoc_completion` (`:62`) yields `Q-11-1` warnings on success or the `Q-20-3` nonzero-exit error. These live in the pure
+  `diagnostics.rs` and are reusable in wasm.
+
+## 4. What is already wasm-ready, and what is not
+
+- **Already compiled for wasm32 (ungated):** `params`, `params_codec`, `meta_coerce`, `format_defaults`, `typst_brand`, `typst_params`, `version`,
+  `crossref_params`, the `include_dir!` statics for the vendored trees (`pandoc_filters/mod.rs:31-61`), `PipelineProfile` (`format.rs:499`),
+  `Format::pandoc_writer_name`/`pandoc_invocation_args` (`format.rs:1181-1190`). *(inferred from cfg gates; `quarto-core` was not built for wasm32 with `pandoc_write` ungated)*
+- **Gated native-only:** `bundle` (extracts to disk), `harness` (spawns pandoc), `diagnostics` (pure; only gated because its sole consumer is native — can just be ungated),
+  the `pandoc_write`, `resource_copy_flush`, `typst_compile` stages (`stage/stages/mod.rs:74-147`), `render_qmd_to_pandoc` and the pandoc stage-list builders
+  (`pipeline.rs:427, 560, 654, 670, 1258`; wasm fallback `:1274` always picks the HTML list).
+- **Everything before PandocWrite already runs in wasm:** the pandoc stage list is the HTML list minus `PANDOC_STAGE_EXCLUDED` (`pipeline.rs:526-566`); crossref, callouts,
+  `AstTransformsStage` (dispatches on `PipelineProfile` at runtime), citeproc (pampa, in Rust), and pampa's JSON writer are shared.
+- **wasm entry:** `render_page_in_project_with_attribution` (`crates/wasm-quarto-hub-client/src/lib.rs:1271`) picks pipeline by `format.pipeline_kind`
+  (`"preview"` -> preview AST, else HTML); there is **no `PipelineProfile::Pandoc` branch** in the wasm crate (format override: `:1538-1546`).
+- **Runtime reads in the prepare path that need the VFS/`SystemRuntime`:**
+  `epub_extra_args` (`:152`, uses `std::fs` + extracts `FORMATS_DIR`); `resolve_user_template_path` (`:1095`) and `stage_typst_template_partials` (`:1118`) (`std::fs::copy`, typst);
+  `stage_typst_brand_fonts` (`:329`, `fetch_url` via `pollster::block_on`, typst); `resolve_typst_available_fonts` (`:364`, runs `typst fonts`, typst, must return `None` in wasm);
+  `resolve_typst_brand` (`:260`) goes through `SystemRuntime` and is probably fine. `quarto-system-runtime` already has a VFS-backed `WasmRuntime` (`src/wasm.rs`): file read/write,
+  `dir_create`, `fetch_url`, `temp_dir` -> `/tmp/<name>-N` in the VFS; `exec_command`/`exec_pipe` unsupported; `env_get` empty.
+
+## 5. Vendored trees and resources
+
+| Tree | Files | Raw | gzip -9 |
+|---|---|---|---|
+| `resources/pandoc-filters/filters/` | 220 | 1.12 MB | 280 KB |
+| `resources/pandoc-filters/pandoc/datadir/` | 27 | 212 KB | 61 KB |
+| `resources/formats/` (docx PNGs, epub/html snippets) | 7 | 18.7 KB | 12.7 KB |
+| `typst-template/` (typst only) | 8 | 16.6 KB | 5.8 KB |
+| `resources/typst-packages/` (typst only; 5 packages, fonts 1.7 MB of 2.5 MB) | | 2.5 MB | |
+
+- Filters + datadir + formats together: ~1.35 MB raw, ~353 KB gzipped. A docx/pptx/epub subset is **not** meaningfully smaller: `main.lua` has 171 unconditional
+  `import()`s; only `dashboard`/`rmarkdown`/`llms`/`luacov` could be pruned (<10%, untested). `datadir` carries luacov/profiler files not needed at runtime.
+- Per-format extras: docx 5 PNGs (5.5 KB); epub 2 HTML snippets (~13 KB).
+- **By-path inputs for docx/pptx/epub:** images (found through `--resource-path <doc_dir>`; a missing image is a warning `Q-11-1` and pandoc substitutes the alt text);
+  `--reference-doc`/`--template` (a missing file is the hard error `Q-5-30`, `format_defaults.rs:163-189`); epub `--epub-cover-image`, `--epub-metadata`, repeated
+  `--epub-embed-font`, repeated `--css`. **Bibliography/CSL are not read by pandoc** — pampa's citeproc consumes them in Rust before JSON is produced.
+- docx/pptx/epub **do not need `ResourceCopyFlushStage`** (pandoc embeds image bytes at write time); the output-dir resource copy is irrelevant for them. No Rust-side zip/epub post-processing exists.
+- **Hub VFS:** `vfs_add_file`, `vfs_add_binary_file`, `vfs_read_binary_file` (base64) at `wasm-quarto-hub-client/src/lib.rs:399-576`; `ts-packages/preview-runtime/src/automergeSync.ts:102,112`
+  already pushes Automerge binary docs (images) into the VFS. The VFS lives *inside the Rust wasm*, so TS has to copy files out (`vfs_list_files` + `vfs_read_binary_file`) into pandoc's FS.
+  Non-doc files like `reference-doc` only exist there if they are in the Automerge project.
+
+## 6. Lua calls the wasm sandbox lacks (grep of vendored `filters/`, `datadir/`)
+
+- **Happy path for docx/pptx/epub is fine** given the FS/env setup: `os.getenv` (`QUARTO_SHARE_PATH`, `QUARTO_FILTER_PARAMS`, `QUARTO_FILTER_DEPENDENCY_FILE`, soft-failing `QUARTO_PROJECT_DIR`, shortcode `env`),
+  `io.open` writes to paths we choose (deps file, results file, crossref index), `pandoc.read`, `pandoc.path.*`, `pandoc.system.get_working_directory`.
+- **Not on the happy path:** `pandoc.pipe("rsvg-convert")` (`pdf-images.lua:15`, pdf only), `pandoc.system.with_temporary_directory` (`modules/mediabag.lua:21`, pdf-gated),
+  `pandoc.pipe quarto run juice.ts` (`normalize/astpipeline.lua:47-78`, raw HTML tables; gated to typst output at `:113`; only the `pandoc.pipe` is `pcall`-guarded, the `with_temporary_directory` around it is not (§9); line numbers are pre-#766, which is the in-process replacement), `os.execute("quarto ...")` (profiling/trace), `shiny.lua` pipes, `email.lua`, `manuscript.lua`, typst-only mediabag code,
+  debug env hooks. **`pandoc.mediabag.fetch` (network)** runs only for remote-URL images — those will fail in wasm.
+- Not yet checked: format gating of `mediabag_filter` (`main.lua:598`) and `writeIndex` (`main.lua:714`); `pandoc.write`/`os.date`.
+- Unknowns that only running it answers: whether wasm pandoc's Lua has full `io`/`os` for these writes (the spike's filter used `io.open` read and `os.getenv` successfully), working-directory semantics, Lua startup time for ~1.3 MB of filters in wasm (native extraction ~27 ms).
+
+## 7. Delivery and offline
+
+- hub-client is a Vite PWA (`hub-client/OFFLINE.md`): the app shell is precached (~14 MB); WASM files (`/assets/*.wasm`) are runtime-cached `CacheFirst` in `wasm-cache`,
+  30-day expiry, **max 8 entries** (pandoc.wasm stays off this route; its loader owns its Cache API entry, design doc D6) (Rust wasm ~26-30 MB, Automerge ~3.5 MB, tree-sitter). Large assets were deliberately moved out of the precache (GH #447: an all-or-nothing ~56 MB
+  install let one flaky fetch discard the new service worker). So pandoc.wasm is a runtime-cached, on-demand asset, never precached, and the entry cap is unchanged.
+- `scripts/precompress-dist.mjs` and `scripts/gzip-skip-extensions.txt` exist for dist precompression; mime-db marks `application/wasm` non-compressible in Vite's compress config
+  (`vite.config.ts:101-107`), so a Brotli path would need an explicit allowance. In practice there is no Brotli anywhere: `precompress-dist.mjs` and the q2 preview embed are `.gz`-only (decided 2026-08-13; `quarto-preview/src/lib.rs:858-883`), nginx and `vite preview` gzip only. The embed also does `file.to_vec()` per request and caches gzip output in memory (`GZ_CACHE`), and the release pipeline does not build the editor embed (`release-pipeline.yml` `web-payloads`).
+- Native `q2 preview` embeds a built hub-client (`hub-client/package.json` `build:preview-embed`, `crates/quarto-preview`; `crates/xtask/src/build_hub_client_embed.rs` only runs that script) and renders non-HTML formats with real pandoc natively. The embed therefore carries no pandoc.wasm and uses the native pandoc (design doc D7). The PWA service worker is disabled in the embed.
+
+## 8. Typst for PDF (see the host epic's PDF phases H7-H9)
+
+- Native q2 **shells out to an external `typst` binary** (`typst_compile.rs:236`, `--root`, `--font-path`; floor 0.8, unpinned; local 0.14.2). Typst crates in `Cargo.lock` come only via `typst-gather` (package fetching), not the compiler.
+- Vendored typst packages: showybox, fontawesome, theorion, octique, marginalia (2.5 MB incl. 1.7 MB Font Awesome OTFs), extracted to `packages/preview/<name>/<ver>/` + `fonts/` (`bundle.rs:106`).
+  Other `@preview` packages are fetched by `typst_gather::gather_packages` (`typst_compile.rs:157`). `--font-path` order is load-bearing: vendored fonts, document `font-paths`, brand file fonts, Google font cache.
+  `typst-available-fonts` filter param is computed from `typst fonts`.
+- Browser options: **typst.ts** (`@myriaddreamin/typst-ts-web-compiler@0.7.0`, targets typst 0.14.2 = native here; compiler wasm 28.3 MB raw / ~10.8 MB gzip; active; `0.8.0-rc` targets typst 0.15 rc);
+  `typst-wasm` (1.0.0, younger, 37 stars, not evaluated in depth); embedding the `typst` crate ourselves (we would write the `World`: VFS, fonts, package registry, PDF export; ~10 MB+ estimated; we own version bumps).
+  typst.ts bundles **no default fonts**; the host supplies them (`typst-assets` ~4-8 MB, estimated). API: `map_shadow(path, bytes)` virtual FS, `add_raw_font`/`add_lazy_font`, JS package-registry callback, PDF export; works in a Worker.
+- pdf.js: `pdfjs-dist@6.3.289`; main 459 KB (132 KB gz) + worker 1.27 MB (375 KB gz); Vite `?url` worker import; lazy `await import()`.
+- Pitfalls: pandoc 3.10/3.11 typst writer targets Typst 0.14-era syntax; fonts differ -> layout differs from native; package versions must match; `--root` must map to the virtual FS.
+
+## 9. Runtime audit (2026-10-01, run in Node 24.5 with `--experimental-wasm-exnref`, shim 0.4.2)
+
+Native runs were captured with a `QUARTO_PANDOC` wrapper and replayed through the 3.11 wasm in command mode (`_start`), after rewriting native temp paths to fixed ones.
+- **Parity with native pandoc 3.11 on identical inputs:** typst `.typ` identical; pptx 1 of 54 zip entries differs (`core.xml` timestamp); epub 2 of 12 differ (`content.opf`, `toc.ncx`: random `urn:uuid` + modified time); docx differs only through an SVG image (native embeds a PNG via `rsvg-convert`; wasm warns and emits an empty `<a:blip>`).
+- **Determinism:** `SOURCE_DATE_EPOCH` gives a byte-identical whole docx; epub is not identical without a document `identifier`.
+- **Command mode:** exit codes come back from `wasi.start()` (0; 83 Lua filter error; 6 bad option; 1 missing input; 97 unknown data file; 251 for `+RTS -M5m`); `+RTS` in argv works; stderr needs a custom `Fd` (`ConsoleStdout.lineBuffered` drops an unterminated last line); the shim logs every path open unless `{debug:false}`; no `poll_oneoff` NOTSUP occurred; a nested `require` through `datadir/init.lua` and `../../filters` works; a user filter that `require`s and `io.open`s siblings matched native.
+- **Timings (Node, module precompiled, fresh instance):** compile ~91 ms; docx ~425 ms, pptx ~490 ms, epub ~440 ms, typst ~305 ms; a bare docx without filters ~90-165 ms (Lua init is ~250-300 ms); linear memory afterwards ~46-50 MB.
+- **Wasm Lua:** `os.getenv`, `os.date` (UTC), `os.time`, `io.open` read/write in the mounted tree, `pandoc.read`/`write`, `pandoc.system.make_directory`/`list_directory`/`with_working_directory`, the mediabag, `lpeg` work; `os.tmpname`, `io.tmpfile`, `io.popen`, `pandoc.pipe`, network `mediabag.fetch`, `require 'lfs'` fail; `os.execute` is a stub returning `true`; cwd is `/`.
+- **Fatal without `/tmp`:** `pandoc.system.with_temporary_directory` with no `/tmp` in the mount is an uncatchable Haskell exception (exit 1); before PR #766 the vendored Lua reached it at `normalize/astpipeline.lua:49` for a typst raw-HTML table; #766 replaced that call, so the `/tmp` mount stays only for `mediabag.lua:21` and `runemulation.lua:143`.
+- **Remote images:** docx/pptx/epub warn ("compiled without HTTP support") and fall back to alt text; typst fails hard (exit 83) via `modules/mediabag.lua:30` / `quarto-post/typst.lua:260`.
+- **Locale:** unset `LANG` is fine for UTF-8; `LANG=C` breaks non-ASCII file names.
+- **Projects:** `QUARTO_PROJECT_DIR` is not set natively either; `writeIndex` did not write `.quarto/crossref-index.json` in the docx project replay (unconfirmed why).
+- **Pandoc data files:** embedded in the wasm and used when `--data-dir` lacks them (missing or empty `--data-dir` is silent, exit 0): `reference.docx`, `reference.pptx`, `epub.css`, `templates/default.{html5,typst,epub3,latex}`, `abbreviations`, `translations`, `default.csl`, `init.lua`, highlight styles. Not embedded: `sample.lua`, `styles/*.csl`. The vendored `datadir/` holds only Lua helpers (and trimmable `luacov*`/`profiler`), so docx/pptx/epub use pandoc's embedded defaults as native does. The mount must keep `<share>/pandoc/datadir` and `<share>/filters` in the same relative layout (`init.lua:233` adds `user_data_dir/../../filters/?.lua`) plus `<share>/formats/docx/*.png` (their absolute paths are in the params blob and the AST).
+
+## 10. Pre-plan experiments (2026-10-01, review round 4; scratch code was discarded, scripts live in the session scratchpad)
+
+- **Command mode in browsers** (Playwright 1.60 builds: Chromium 148 headless, WebKit 26.4; module Web Worker; shim 0.4.2, `{debug:false}`, `args_sizes_get` overridden; captured native docx with callout, table, crossrefs, `doc 数据.qmd` and `résumé.png`; share tree 255 files mounted at its original absolute paths under a `/` preopen). Docx byte-identical to native under `SOURCE_DATE_EPOCH` in both; exit codes 0/83/6/251 return from `wasi.start()`; a custom `Fd` keeps an unterminated stderr line (`ConsoleStdout.lineBuffered` loses it); no `poll_oneoff` calls over 15 runs; non-ASCII output and image names work, and a long non-ASCII argv traps without the UTF-8 `args_sizes_get` override (a normal fixture passes without it by luck); `_start` traps on a second call. The replay needs argv[0] (the wrapper log starts at `-f json`) and the empty dependency file (exit 83 without it). Chromium: wasm compile ~0.3 s, instance ~25 ms, first docx ~295 ms, later ~160 ms, bare docx run ~62 ms, linear memory ~53 MB with Lua and ~47 MB without; WebKit: compile ~1.2 s, instance ~125-300 ms, first docx ~0.6-0.8 s, later ~0.3-0.4 s. Not run: Firefox, SVG, pptx/epub/typst, hang injection.
+- **wasm32 ungate** (`cargo check --target wasm32-unknown-unknown` in `crates/wasm-quarto-hub-client`, Homebrew llvm clang): ungating `pandoc_write`, `bundle` and `diagnostics` gave 8 errors (`ResourceError` and the `typst_compile` helpers); then `typst_compile` needed ungating, which hits `typst-gather` → `openssl-sys` (does not build for wasm32, so the stage stays native-gated); `tempfile` had to move to shared dependencies. About six edits, three error layers, then dead-code warnings until the helpers are split from the stage. `css-inline` 0.21 with default features off type-checks for wasm32.
+- **typst.ts 0.7.0 in Node 24.5:** compile ~28 ms, `getModule()` with a precompiled `Module` works including inside a `worker_threads` Worker; `mapShadow` plus compile root `/` resolves images, `#import` and `#include`; wasm 28,325,178 bytes, 10,733,225 gzip -9, 7,099,357 Brotli -q11; first compile 0.19-0.45 s, later ~4 ms; PDF 36,188 bytes against native typst 0.14.2's 36,198 for the same `.typ` and fonts. Fonts, package registry, missing-package diagnostics and PDF dates are in H7 and H9. Not checked: that the wasm embeds typst 0.14.2 exactly, and browsers.
+- **prepare/execute split sketch** (docx, `pandoc_write.rs` plus a new request module and `RenderContext` bridge): compiled, clippy clean, 344 pandoc/docx/epub/typst tests passed unchanged; the details are in R1.
+- **Static review:** default-position (`Pre`) user filters run in pampa's Lua and only `Post`/entry-point filters in pandoc.wasm (`user_filters.rs:140-160`); the vfs-root gate leaves site-root image targets as written (`link_rewrite.rs:285-291`); the R0 wrapper is POSIX-only and `.gitattributes` pins `eol=lf` for one directory only.

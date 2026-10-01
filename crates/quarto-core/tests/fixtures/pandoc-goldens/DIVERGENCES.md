@@ -10,7 +10,7 @@ This file is checked against the test's own
 `ACCEPTED_DIVERGENT_SNAPSHOTS` list by
 `test_divergence_ledger_is_complete_and_accurate` (T11.5): every entry here
 must name a snapshot that list also names, and vice versa. **Never** "fix" a
-persistent divergence by teaching `quarto-ooxml-extract` to skip the
+persistent divergence by teaching `quarto-output-extract` to skip the
 differing surface — that would make every future regression in that area
 invisible while this file (and T11.5) keeps passing. Delete an entry (and
 its corresponding line in `ACCEPTED_DIVERGENT_SNAPSHOTS`) only when the
