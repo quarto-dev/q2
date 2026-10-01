@@ -124,3 +124,100 @@ On the bd-1klbq2zd stack tip:
 fails with `cannot open ...\../../...orange-book.lua`. Portable probe:
 `adjust_paths_to_document_dir` with a `metadata_dir` outside `document_dir`'s
 tree stores a `..`-leading value.
+
+## 3. Follow-up (2026-10-01, bd-gh3qdq7d): `theme` and `css` space at the walk
+
+73d1fbf excluded `css`/`theme` from absolute-if-outside (`URL_SPACE_REBASE_KEYS`) on the
+premise that their values reach an emitted href. Checked against code, the premise does
+not hold at the point where `adjust_paths_to_document_dir` runs. Section 2's table was
+right for `theme`. The `css` row conflated the stored value with the href derived later.
+73d1fbf followed the plan's Phase 1 reasoning ("an absolute filesystem value is not a
+valid page-relative href") without checking that the href is *derived from* the stored
+value rather than *copied from* it.
+
+### Verdict
+
+- **`theme` is filesystem-space, end to end.** No consumer emits a theme value into
+  HTML, JSON wire output, or a template variable.
+- **`css` is filesystem-space at the walk.** It enters URL space only when
+  `FormatCssTransform` rewrites the entry to a page-relative href computed from the
+  *resolved filesystem source* (`transforms/format_css.rs:121-158`). The stored string is
+  never the href. For an outside-project source, the transform returns early
+  (`format_css.rs:125-133`) and leaves the value as it was, so the emitted `<link>` is
+  broken whether the value is a `..` chain or absolute. That is bd-f0h4ahai's gap, and
+  it is independent of the rebase form.
+- **Neither key hits MAX_PATH today.** The orange-book failure is Lua `io.open` (C
+  `fopen`). Theme and css reads go through Rust `std::fs` or pandoc, and both handle long
+  and unnormalized paths on Windows (probes below).
+
+### Consumers of a merged `theme` value (reads and joins)
+
+| Site | What it does with the value |
+|---|---|
+| `quarto-sass/src/config.rs:303` `ThemeConfig::from_config_value` | parses string / list / `{light, dark}` into `ThemeSpec::Custom(path)` |
+| `quarto-sass/src/themes.rs:463` `ThemeContext::resolve_path` | `document_dir.join` then `normalize_lexically`. Every read below goes through it |
+| `quarto-sass/src/themes.rs:573` `load_custom_theme` | `path_exists` + `file_read_string` on the resolved path (NativeRuntime = `std::fs`) |
+| `compile_theme_css.rs:464` `cache_key` | hashes the *resolved, normalized* path + file bytes |
+| `compile_theme_css.rs:1001` existence pre-check (Q-14-4) | resolved path |
+| `compile_theme_css.rs:1129` `attach_entry_location` | compares resolved paths |
+| `revealjs/theme.rs:45,84` | `as_plain_text` entries → `load_custom_theme` |
+| `format.rs:1238` `is_minimal_html` | compares to `none` / `pandoc` only |
+| `template.rs:886`, `navbar_generate.rs:97` | `ThemeConfig::from_config_value(...).dark` presence only |
+
+Compiled CSS is stored as an artifact (`store_css` / `store_variant_pair`). Its href comes
+from the artifact, not from the theme value. Templates have no `$theme$` variable
+(grep of `resources/`).
+
+### Which theme forms reach the walk as `Path`
+
+`FORMAT_ASSET_PATTERNS` (`extension/paths.rs:59`) has `["theme"]`. Once that pattern is
+exhausted, `walk_pattern_leaves` applies `apply_to_string_leaves` (`paths.rs:118-140`),
+which marks **every** string leaf under `theme`: a plain string, list items, and the
+`light` / `dark` children (string or list). `ThemeConfig` accepts nothing deeper. The pair
+form is top-level only (`config.rs:310`). `adjust_paths_recursive` passes the
+*immediate* map key down (`Some(&entry.key)`), so under the pair form the key is
+`light` / `dark` and the classification is lost (roborev 2987 finding 2). The doc
+comment says "top-level key". The implementation does not match it.
+
+### Probes (Windows 11, 2026-10-01)
+
+1. `project::tests::theme_rebase_outside_project_loads_from_deep_document_dir`. A real
+   temp-dir theme consumed from a 40-level document dir. Top-level `theme` →
+   `../../…(48×)/AppData/Local/Temp/quarto-theme-probe-*/probe.scss`. `{light:}` →
+   `C:/Users/chris/AppData/Local/Temp/…/probe.scss`. Unnormalized `document_dir.join` =
+   **424 chars**. `load_custom_theme` succeeds for both, and `resolve_path` gives the
+   same path for both (same cache key and load path). **No RED for a theme MAX_PATH
+   failure exists**: the defect is the inconsistency, not a failure.
+2. pandoc 3.12 `--css=<428-char unnormalized '..' path>` (the epub consumer,
+   `pandoc_write.rs:210`, `resolve_doc_relative` = unnormalized join): exit 0, and the
+   epub contains the stylesheet. pandoc handles long paths.
+
+### Reachability
+
+No built-in extension contributes `css`, `theme` or `include-*`. orange-book only has
+`template-partials`, and julia-engine has none (grep of `resources/extension*/**/_extension.yml`).
+User extensions are discovered only between the input dir and the project root
+(`extension/discover.rs:50-66`), so they are always inside the tree. The outside-project
+css/theme case through this walk is unreachable in the shipped product today.
+
+### Precedent already contradicts the exclusion
+
+`rebase_candidate` (`project/mod.rs:~890-904`) stores **absolute** paths for
+`contributes.project` fragment values outside the project, *including*
+`format.*.theme` and `format.*.css` (`FRAGMENT_PATH_PATTERNS`, `mod.rs:826-828`). Those
+values are rooted, so `adjust_paths_recursive` skips them (`mod.rs:320`). Absolute
+css/theme from a temp-extracted extension therefore already flow to `FormatCssTransform`
+and `ThemeContext` today. 73d1fbf's two mechanisms disagree on the same keys.
+
+### Roborev 2987 finding 1 (lexical `starts_with`)
+
+Confirmed real and **pre-existing**. The `else` branch is the pre-73d1fbf code
+unchanged. Example: `metadata_dir = /project/sub`, value `../../tmp/x.lua` →
+`abs_path = /project/sub/../../tmp/x.lua`, which lexically `starts_with("/project")`,
+so it takes the `diff_paths` branch and yields `../sub/../../tmp/x.lua` (probe run
+2026-10-01, Windows). The
+chain is bounded by what the author wrote plus the document depth. It never climbs to an
+unrelated temp tree, so it is not the bd-qi11c7fj MAX_PATH class. Built-in extension
+dirs are clean absolute temp paths, so the orange-book case never takes this route.
+Harmless for the stack. It costs one `normalize_lexically` call to make the boundary
+check honest.

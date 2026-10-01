@@ -128,3 +128,87 @@ bd-oejuizi9 / bd-hjv5o).
 - `git status` shows untracked typst smoke fixtures under
   `crates/quarto/tests/smoke-all/typst/brand-yaml/**` — pre-existing, **not**
   part of this work; leave them alone.
+
+---
+
+## Follow-up design: drop the key-based space split (bd-gh3qdq7d) — PROPOSED, not implemented
+
+Evidence: research doc § 3. Summary: at the walk, `theme` and `css` are both
+filesystem-space. css becomes a URL only when `FormatCssTransform` *derives* an href
+from the resolved source. Neither key hits MAX_PATH (Rust `std::fs` and pandoc handle
+long paths, as the probes show). The fragment rebase (`rebase_candidate`) already stores
+absolute css/theme for temp-extracted extensions. `URL_SPACE_REBASE_KEYS` therefore
+protects nothing. It only makes the two mechanisms disagree, and it loses its own
+classification under `{light, dark}` (roborev 2987 finding 2).
+
+Is key classification the wrong seam? For *this* walk, yes. The value stored here is
+the pivot form, never a terminal href, so no key needs a URL-space exception at the
+rebase. Per-key space belongs to the consumer exits (the bd-oejuizi9 / bd-hjv5o
+registry), not to the merge-time rebase. No registry work is needed to unblock the
+stack.
+
+### Seam
+
+`adjust_paths_recursive` (`project/mod.rs`):
+1. Remove `URL_SPACE_REBASE_KEYS` and the `key: Option<&str>` parameter (revert to
+   the pre-73d1fbf signature plus `project_root`). Nested forms need no carried
+   classification, because none exists.
+2. `let abs_path = quarto_util::normalize_lexically(&metadata_dir.join(&path));`
+   before the `starts_with(project_root)` boundary check (roborev finding 1). This makes
+   the check honest. A side effect is that the stored absolute and relative forms
+   carry no `.`/`..` noise.
+3. Rewrite the doc comments to match: "absolute-if-outside for every `Path` value;
+   the stored value is a pivot form, not an href".
+
+### Tests
+
+None of these is a user-visible RED. The stack's only real failure (orange-book Lua
+`io.open`) is already GREEN. For theme/css the probes show no failure, so this is a
+consistency change with contract tests, not a TDD bug fix.
+
+1. *Contract test (fails on current code):* outside-project extension with `theme`
+   as a string, a list, and `{light: x, dark: [y]}`, plus `css` as a string and a list.
+   Every leaf is the absolute forward-slash path. Fails today on top-level/list `theme`
+   and `css`.
+2. *Contract test (fails on current code):* `metadata_dir=/project/sub`,
+   value `../../tmp/x.lua` → `/tmp/x.lua` (absolute, normalized). Today it yields
+   `../sub/../../tmp/x.lua` (probe run 2026-10-01).
+3. *Replace* `adjust_paths_outside_document_tree_keeps_css_relative`. It asserts the
+   behavior this design removes. **Needs Chris's OK** to invert it rather than delete it.
+4. *Keep:* `adjust_paths_outside_document_tree_does_not_produce_dotdot`,
+   `adjust_paths_inside_document_tree_stays_relative`, and the new characterization
+   probe `theme_rebase_outside_project_loads_from_deep_document_dir` (adjust its
+   asserts: the top-level value becomes absolute too).
+5. *Regression guard (Windows):*
+   `SMOKE_FILTER=orange-book-margin cargo nextest run -p quarto -E 'test(smoke_all)'`.
+6. In-tree css/theme still doc-relative: existing
+   `metadata_merge` / `format_paths` css tests (`cargo nextest run -p quarto-core -E
+   'test(css) | test(theme)'`).
+
+### Migration / consumer impact
+
+- No on-disk or cached state stores these strings. The theme cache key hashes the
+  *resolved, normalized* path, which the probe shows is identical for both forms, so no
+  cache invalidation is needed.
+- `FormatCssTransform`: an outside-project css stays unrewritten in both forms. The
+  emitted broken `<link href>` changes from a `..` chain to a `C:/…/Temp/…` string.
+  That case is unreachable today (no built-in contributes css), and the fragment path
+  already behaves this way. The real fix stays bd-f0h4ahai (copy outside-project
+  extension css into `quarto-contrib/`), which is easier from an absolute source.
+- epub `--css=`: `doc_dir.join(absolute)` returns the absolute path, so pandoc is fine.
+- WASM / VFS built-ins: unverified whether built-in extension dirs are outside
+  `/project/` in VFS mode. If so, they get a rooted VFS path, which the walk already
+  produced for filters after 73d1fbf. Check during implementation.
+- In-tree values: unchanged except `.`/`..` segments collapse (step 2). Expect no
+  snapshot churn; confirm.
+
+### Checklist
+
+- [ ] Chris approves the design (incl. inverting test 3)
+- [ ] Free disk space (C: at 0 GB on 2026-10-01; shared target `q2-shared-build`)
+- [ ] Tests 1–2 written and confirmed failing on current code
+- [ ] Seam change (steps 1–3)
+- [ ] Tests 1–6 green; orange-book-margin smoke green on Windows
+- [ ] Amend nothing: new commit on `bugfix/bd-1klbq2zd-dunce-seam`
+- [ ] Re-run roborev on the new commit; post the 2987 replies; close 2987
+- [ ] Update bd-f0h4ahai premise (done in this session as a comment)
