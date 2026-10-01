@@ -298,10 +298,13 @@ fn adjust_paths_recursive(
             {
                 let joined = metadata_dir.join(&path);
                 // Normalized so a `..` escaping the project is seen as
-                // outside it by the lexical `starts_with` below. The
-                // in-project rebase uses `joined`, keeping `..` for the
-                // OS to resolve (it may follow a symlink).
+                // outside it by the lexical `starts_with` below.
                 let abs_path = quarto_util::normalize_lexically(&joined);
+                // Off Windows the in-project rebase keeps `..` for the OS to
+                // resolve (it may follow a symlink). Windows resolves `..`
+                // lexically, so the shorter normalized form names the same
+                // file and keeps consumer paths further from MAX_PATH.
+                let rebase_from = if cfg!(windows) { &abs_path } else { &joined };
                 // A value resolving outside the project tree (a temp-extracted
                 // built-in extension) must not be rebased to a `..` chain:
                 // consumers join it onto the document dir without normalizing
@@ -311,7 +314,7 @@ fn adjust_paths_recursive(
                 // (bd-9z2258af).
                 if !abs_path.starts_with(project_root) {
                     *path_str = quarto_util::to_forward_slashes(&abs_path);
-                } else if let Some(adjusted) = pathdiff::diff_paths(&joined, document_dir) {
+                } else if let Some(adjusted) = pathdiff::diff_paths(rebase_from, document_dir) {
                     // The adjusted value is used verbatim in HTML hrefs (e.g. a
                     // `css: !path` <link>), so it must use forward slashes on
                     // every platform; pathdiff yields native separators.
@@ -2743,12 +2746,13 @@ mod tests {
         );
     }
 
-    /// An in-project value keeps its `..` components: when the component
-    /// before a `..` is a symlink, only the OS resolves `link/..` to the
-    /// file the author named, so the rebase must not collapse it
-    /// lexically. The normalized form is for the containment check only.
+    /// Off Windows an in-project value keeps its `..` components: when the
+    /// component before a `..` is a symlink, only the OS resolves
+    /// `link/..` to the file the author named. Windows resolves `..`
+    /// lexically, so there the collapsed form names the same file and
+    /// keeps the consumer path short of MAX_PATH.
     #[test]
-    fn adjust_paths_inside_project_keeps_dotdot_for_the_os() {
+    fn adjust_paths_inside_project_keeps_dotdot_where_the_os_resolves_it() {
         use quarto_pandoc_types::ConfigValue;
         use quarto_source_map::SourceInfo;
 
@@ -2764,7 +2768,12 @@ mod tests {
         let ConfigValueKind::Path(rebased) = &metadata.value else {
             panic!("expected a Path value");
         };
-        assert_eq!(rebased, "../link/../header.html");
+        let expected = if cfg!(windows) {
+            "../header.html"
+        } else {
+            "../link/../header.html"
+        };
+        assert_eq!(rebased, expected);
     }
 
     /// Every `Path` leaf from a declaring dir outside the project keeps
