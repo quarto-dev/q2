@@ -302,6 +302,7 @@ Linux/macOS CI covers the rest, including the portable guard test.
 - A site the audit marks L may still meet a seam path through a consumer the sweep missed. The prototype flip at the end of layer 2 is the backstop: it reruns the same suites that showed the 20 fallout failures.
 - `dunce::canonicalize` differs from std only on Windows; on Unix the layer-3 switch is a no-op, so Linux/macOS CI cannot catch a Windows regression in layer 3. That is why the Windows crate runs and the probe are mandatory before the PR.
 - The shared-function naming and location are a small API decision in a foundation crate; flag it in the PR body.
+- **Known limit (accepted 2026-10-01, bd-l0eemakd).** dunce keeps `\\?\` past `MAX_PATH`, so a short root and a long descendant canonicalized separately get different spellings, and prefix comparisons between them fail (`pathdiff` gives a `..`-led path instead). Routing every site through one function does not prevent this: the function itself returns both spellings. Only paths over 260 units are affected, where Lua `io.open` already fails on Windows (bd-9z2258af). Evidence, the 39 at-risk sites and a prototype helper with a RED test: `claude-notes/research/2026-10-01-windows-mixed-spelling-prefix-comparisons.md`.
 
 ## PR drafts (2026-09-30, /open-pr; apply with gh pr edit after gh stack submit --auto)
 
@@ -343,6 +344,8 @@ Layer 3 title: `Canonicalize to plain paths on Windows`
 On Windows, q2 hands verbatim `\\?\C:\…` paths to users. Run from a normal directory with a relative argument, `q2 render --json-errors` puts them in `notebook_path` and `source_file`, the status line reads `Rendering single file: \\?\C:\…`, and project scripts get the same form in `QUARTO_PROJECT_DIR`. The cause is `std::fs::canonicalize`, which always returns the verbatim form on Windows.
 
 The shared `quarto_system_runtime::canonicalize` from the PR below now calls `dunce::canonicalize` on native targets. It returns the plain `C:\…` form when that names the same file, and keeps `\\?\` where it would not: paths longer than `MAX_PATH`, reserved names, network shares. Off Windows, `dunce::canonicalize` is `std::fs::canonicalize`, and the wasm32 body stays std. Since the PR below routed every site that emits or compares a canonical path through this function, they all change spelling together.
+
+One limit remains. A short directory and a file under it past `MAX_PATH` now canonicalize to different spellings (plain and `\\?\`), and a prefix comparison between them fails, so for example a declared resource that deep is reported as outside the project. Before, both were verbatim. Fixing it touches about 40 comparison sites, and Lua filters already cannot open files past `MAX_PATH` on Windows, so it is tracked as a follow-up.
 
 Before, on Windows from a plain scratch directory:
 
