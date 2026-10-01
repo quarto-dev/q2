@@ -224,7 +224,7 @@ consistency change with contract tests, not a TDD bug fix.
   bd-eehxwr29 for CRLF); file strands for any that are not
 - [ ] Re-run roborev on `0e4c834c8`; post the 2987 replies (drafts below); close 2987
 - [x] bd-f0h4ahai premise updated (comment c-z9d1cdh6)
-- [ ] Untracked test artifacts to clean: two `.snap.new` under
+- [x] Untracked test artifacts cleaned (2026-10-01): two `.snap.new` under
   `crates/quarto-core/tests/integration/snapshots/` (from the failing pre-existing goldens)
   and `rustc-ice-*.txt` at the worktree root
 
