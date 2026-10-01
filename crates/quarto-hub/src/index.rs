@@ -699,4 +699,50 @@ mod tests {
             Some("existing-doc".to_string())
         );
     }
+
+    /// D8 audit: hub-server writes stay authorless.
+    ///
+    /// Server-authored changes (files map, capture sidecar) do not
+    /// originate from a signed-in or locally identified user, and the
+    /// author-ID transition deliberately mints no synthetic "hub" author
+    /// (plan 2026-09-30-automerge-author-id-transition, D8). Every change
+    /// the server writes must therefore decode with `author: null` —
+    /// attribution readers fall back to the actor. Pinning that here
+    /// makes a future `LoadOptions::author` / `set_author` on a server
+    /// write path a deliberate, test-visible act.
+    #[tokio::test]
+    async fn server_writes_carry_no_author() {
+        let repo = create_test_repo().await;
+        let (index, _) = IndexDocument::create(&repo).await.unwrap();
+
+        // Drive every server write path on the index document: files
+        // map (add/remove) and capture sidecar (set/remove).
+        index.add_file("index.qmd", "doc-id-1").unwrap();
+        index.add_file("chapters/intro.qmd", "doc-id-2").unwrap();
+        let cap = CaptureRef {
+            capture_doc_id: "cap-doc-1".to_string(),
+            staleness: None,
+            state: Some(CaptureState::Idle),
+            last_error: None,
+        };
+        index.set_capture("index.qmd", &cap).unwrap();
+        index.remove_file("chapters/intro.qmd").unwrap();
+        index.remove_capture("index.qmd").unwrap();
+
+        index.handle().with_document(|doc| {
+            let changes = doc.get_changes(&[]);
+            assert!(
+                changes.len() >= 5,
+                "expected the writes above to have produced changes, got {}",
+                changes.len()
+            );
+            for change in &changes {
+                assert!(
+                    change.author().is_none(),
+                    "server-written change must carry no author (seq {})",
+                    change.seq(),
+                );
+            }
+        });
+    }
 }

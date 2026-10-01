@@ -486,8 +486,8 @@ const REPLAY_FIXTURE_TIMESTAMP = (Date.now() - 42 * 60_000) / 1000;
 /**
  * Replay drawer fixture (Phase 5): the real expanded drawer with a remote
  * actor, plus a static replica of the "me" actor chip. The real
- * `--me` state requires the live sync actor id (getActorId()), which the
- * no-server harness doesn't have — the replica uses the real
+ * `--me` state requires the live sync attribution key (getAuthorId()),
+ * which the no-server harness doesn't have — the replica uses the real
  * `replay-drawer__actor` classes so token changes render authentically.
  * Keep the replica's markup in sync with the actor chip in
  * ReplayDrawer.tsx.

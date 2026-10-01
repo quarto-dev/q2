@@ -2285,4 +2285,78 @@ mod tests {
         .unwrap();
         assert_eq!(second, SyncResult::NoChanges);
     }
+
+    /// Assert every change in the document's history decodes with
+    /// `author: null` (D8 audit helper — see the test below).
+    fn assert_all_changes_authorless(handle: &DocHandle) {
+        handle.with_document(|doc| {
+            let changes = doc.get_changes(&[]);
+            assert!(
+                !changes.is_empty(),
+                "expected at least one change in the document history"
+            );
+            for change in &changes {
+                assert!(
+                    change.author().is_none(),
+                    "server-written change must carry no author (seq {})",
+                    change.seq(),
+                );
+            }
+        });
+    }
+
+    /// D8 audit: filesystem import/update writes stay authorless.
+    ///
+    /// The hub's sync paths write on behalf of no signed-in user, so —
+    /// like the index-document writes — they carry no automerge author
+    /// metadata (plan 2026-09-30-automerge-author-id-transition, D8).
+    /// Pin: every change a filesystem→document sync produces decodes
+    /// with `author: null`, making a future `LoadOptions::author` on
+    /// this path a deliberate, test-visible act.
+    #[tokio::test]
+    async fn server_sync_writes_carry_no_author() {
+        let temp = TempDir::new().unwrap();
+        let repo = create_test_repo().await;
+
+        // Text path: filesystem delta merged into the document
+        // (fork / update_text / merge).
+        let doc = create_doc_with_text("Original content");
+        let handle = repo.create(doc).await.unwrap();
+        let doc_id = handle.document_id().to_string();
+        let file_path = temp.path().join("test.qmd");
+        std::fs::write(&file_path, "Modified by filesystem").unwrap();
+        let mut sync_state = SyncState::load(temp.path()).unwrap();
+        let heads = handle.with_document(|doc| doc.get_heads());
+        sync_state.set_checkpoint(&doc_id, &heads, &sha256_hash("Original content"));
+        let result = sync_document(
+            &handle,
+            &file_path,
+            &mut sync_state,
+            DiskWritePolicy::WriteBack,
+        )
+        .unwrap();
+        assert!(matches!(result, SyncResult::FilesystemChanged { .. }));
+        assert_all_changes_authorless(&handle);
+
+        // Binary path: same discipline on the content/mimeType/hash
+        // writes.
+        let original_content = vec![0x89, 0x50, 0x4E, 0x47];
+        let bdoc = create_doc_with_binary(&original_content, "image/png");
+        let bhandle = repo.create(bdoc).await.unwrap();
+        let bdoc_id = bhandle.document_id().to_string();
+        let modified_content = vec![0xFF, 0xD8, 0xFF, 0xE0];
+        let bfile_path = temp.path().join("image.jpg");
+        std::fs::write(&bfile_path, &modified_content).unwrap();
+        let bheads = bhandle.with_document(|doc| doc.get_heads());
+        sync_state.set_checkpoint(&bdoc_id, &bheads, &compute_hash(&original_content));
+        let result = sync_binary_document(
+            &bhandle,
+            &bfile_path,
+            &mut sync_state,
+            DiskWritePolicy::WriteBack,
+        )
+        .unwrap();
+        assert!(matches!(result, SyncResult::FilesystemChanged { .. }));
+        assert_all_changes_authorless(&bhandle);
+    }
 }

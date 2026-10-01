@@ -1181,6 +1181,131 @@ async fn auth_actor_supports_bearer() {
     assert_eq!(actor_id.len(), 64, "HMAC-SHA256 hex actor id");
 }
 
+// ── /auth/author (author-ID transition, bd-kmycto1p) ─────────────
+//
+// The author ID carries the stable per-user identity in the automerge
+// author field; actor IDs return to automerge's random per-document
+// default. D5: the minted value is byte-identical to /auth/actor's, so
+// attribution keys are continuous across the transition.
+
+#[tokio::test]
+async fn auth_author_works_with_session_cookie() {
+    let (_provider, hub) = session_setup().await;
+    let token = mint_test_session("author-session-sub", "user@posit.co");
+
+    let get = |endpoint: &str, project: &str| {
+        hub.client
+            .get(hub.url(&format!("/auth/{endpoint}?project={project}")))
+            .header("cookie", cookie_header(&token))
+    };
+
+    let r1 = get("author", "proj-a").send().await.unwrap();
+    assert_eq!(r1.status(), 200);
+    let a1: serde_json::Value = r1.json().await.unwrap();
+    let id_a = a1["author_id"].as_str().unwrap().to_string();
+    assert_eq!(id_a.len(), 64, "HMAC-SHA256 hex author id");
+    assert!(id_a.chars().all(|c| c.is_ascii_hexdigit()));
+
+    // Deterministic per (sub, project); different across projects.
+    let r2 = get("author", "proj-a").send().await.unwrap();
+    let a2: serde_json::Value = r2.json().await.unwrap();
+    assert_eq!(a2["author_id"].as_str().unwrap(), id_a);
+
+    let r3 = get("author", "proj-b").send().await.unwrap();
+    let a3: serde_json::Value = r3.json().await.unwrap();
+    assert_ne!(a3["author_id"].as_str().unwrap(), id_a);
+
+    // D5: byte-identical to the legacy /auth/actor value for the same
+    // credential+project, so legacy (actor-keyed) and new (author-keyed)
+    // changes resolve to one identity.
+    let r4 = get("actor", "proj-a").send().await.unwrap();
+    assert_eq!(r4.status(), 200);
+    let a4: serde_json::Value = r4.json().await.unwrap();
+    assert_eq!(a4["actor_id"].as_str().unwrap(), id_a);
+}
+
+#[tokio::test]
+async fn auth_author_supports_bearer() {
+    // MCP sessions obtain the author id over Bearer, same as the actor id
+    // (bd-3g0aijb3's dual-credential rule applies to /auth/author too).
+    let (provider, hub) = session_setup().await;
+    let google = provider.sign(
+        &ClaimsBuilder::from_provider(provider)
+            .sub("author-bearer-sub")
+            .to_value(),
+    );
+
+    let resp = hub
+        .client
+        .get(hub.url("/auth/author?project=proj-mcp"))
+        .bearer_auth(&google)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200, "author acquisition over Bearer");
+    let body: serde_json::Value = resp.json().await.unwrap();
+    let author_id = body["author_id"].as_str().unwrap();
+    assert_eq!(author_id.len(), 64, "HMAC-SHA256 hex author id");
+
+    // D5: identical to what the Bearer caller would receive from
+    // /auth/actor.
+    let legacy = hub
+        .client
+        .get(hub.url("/auth/actor?project=proj-mcp"))
+        .bearer_auth(&google)
+        .send()
+        .await
+        .unwrap();
+    let legacy_body: serde_json::Value = legacy.json().await.unwrap();
+    assert_eq!(legacy_body["actor_id"].as_str().unwrap(), author_id);
+}
+
+#[tokio::test]
+async fn auth_author_requires_authentication() {
+    let (_provider, hub) = session_setup().await;
+    let resp = hub
+        .client
+        .get(hub.url("/auth/author?project=proj-a"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 401);
+}
+
+#[tokio::test]
+async fn auth_author_rejects_missing_project() {
+    let (_provider, hub) = session_setup().await;
+    let token = mint_test_session("author-no-project-sub", "user@posit.co");
+    let resp = hub
+        .client
+        .get(hub.url("/auth/author"))
+        .header("cookie", cookie_header(&token))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 400, "missing project query param must 400");
+}
+
+#[tokio::test]
+async fn auth_author_refuses_banned_sub() {
+    install_tracing_once();
+    let provider = MockOidcProvider::start().await;
+    let hub = TestHubBuilder::new()
+        .session_secret(TEST_SESSION_SECRET)
+        .banned_subs(&["banned-author-sub"])
+        .start(&provider)
+        .await;
+    let token = mint_test_session("banned-author-sub", "banned@posit.co");
+    let resp = hub
+        .client
+        .get(hub.url("/auth/author?project=proj-a"))
+        .header("cookie", cookie_header(&token))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 403, "banned sub must be refused");
+}
+
 // ── C3: sliding re-issue on authenticated activity ───────────────
 
 #[tokio::test]

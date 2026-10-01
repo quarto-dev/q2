@@ -53,7 +53,7 @@ import type { ProjectFile } from '@quarto/preview-runtime';
 import * as projectStorage from './services/projectStorage';
 import { seedExampleProjects } from './services/seedExamples';
 import { installDebugApi } from './services/debugApi';
-import { getUserIdentity, updateUserName, actorIdFromUserId } from './services/userSettings';
+import { getUserIdentity, updateUserName, authorIdFromUserId } from './services/userSettings';
 import { useRouting } from './hooks/useRouting';
 import { useCollectionSets } from './hooks/useCollectionSets';
 import { useAutoEstablishRoot } from './hooks/useAutoEstablishRoot';
@@ -62,7 +62,7 @@ import { useAuthProbe } from './hooks/useAuthProbe';
 import { useSessionKeepAlive } from './hooks/useSessionKeepAlive';
 import { useExecutionChannel } from './hooks/useExecutionChannel';
 import { usePreviewSession } from './hooks/usePreviewSession';
-import { resolveActorId as resolveActorIdRequest } from './services/authService';
+import { resolveAuthorId as resolveAuthorIdRequest } from './services/authService';
 import type { Route, ShareRoute, LinkProjectSetRoute, JoinCollectionRoute } from './utils/routing';
 import { resolveSyncServerUrl, DEFAULT_SYNC_SERVER, parseHashRoute, hubPath, savePreAuthHash, clearPreAuthHash, buildHashRoute } from './utils/routing';
 import { isEphemeralStorage } from './services/ephemeralStorage';
@@ -77,14 +77,14 @@ import './App.css';
 async function connectAndLoadContents(
   syncServer: string,
   indexDocId: string,
-  actorId?: string,
+  authorId?: string,
   screenName?: string,
   color?: string,
 ): Promise<{ files: FileEntry[]; contents: Map<string, string> }> {
-  // E2E builds: honour __QUARTO_TEST_ACTOR_ID__ so getActorId() returns a
+  // E2E builds: honour __QUARTO_TEST_AUTHOR_ID__ so getAuthorId() returns a
   // stable, known value inside the preview iframe. Tree-shaken in production.
   if (import.meta.env.VITE_E2E === '1') {
-    actorId = (window as any).__QUARTO_TEST_ACTOR_ID__ as string | undefined ?? actorId;
+    authorId = (window as any).__QUARTO_TEST_AUTHOR_ID__ as string | undefined ?? authorId;
   }
   // Offline-first: a 1 ms peer probe, so a cached project opens straight
   // from IndexedDB and the socket lands in the background. (This was
@@ -104,7 +104,7 @@ async function connectAndLoadContents(
   // is a fresh origin, so a persisted cache could never hit and would
   // just accumulate in IndexedDB.
   const storage: StorageKind = isEphemeralStorage() ? 'memory' : 'indexeddb';
-  const files = await connect(resolveSyncServerUrl(syncServer), indexDocId, actorId, screenName, color, { peerTimeoutMs, storage });
+  const files = await connect(resolveSyncServerUrl(syncServer), indexDocId, authorId, screenName, color, { peerTimeoutMs, storage });
   const contents = new Map<string, string>();
   for (const file of files) {
     const content = getFileContent(file.path);
@@ -114,7 +114,15 @@ async function connectAndLoadContents(
 }
 
 /** Whether auth is configured (build-time env var). */
-const AUTH_ENABLED = !!import.meta.env.VITE_GOOGLE_CLIENT_ID;
+// E2E builds may force the flag on via __QUARTO_TEST_AUTH_ENABLED__ so the
+// author-attribution suite can exercise the authenticated code paths
+// against a mock-OIDC hub without a second client build carrying
+// VITE_GOOGLE_CLIENT_ID. Tree-shaken with the other VITE_E2E branches in
+// production.
+const AUTH_ENABLED =
+  !!import.meta.env.VITE_GOOGLE_CLIENT_ID ||
+  (import.meta.env.VITE_E2E === '1' &&
+    (window as any).__QUARTO_TEST_AUTH_ENABLED__ === true);
 
 
 function App() {
@@ -138,8 +146,8 @@ function App() {
   const [showSaveToast, setShowSaveToast] = useState(false);
   const [screenName, setScreenName] = useState<string | undefined>();
   const [cursorColor, setCursorColor] = useState<string | undefined>();
-  // Local user id → stable Automerge actor when auth is disabled (local-prod).
-  const [localActorId, setLocalActorId] = useState<string | undefined>();
+  // Local user id → stable Automerge author when auth is disabled (local-prod).
+  const [localAuthorId, setLocalAuthorId] = useState<string | undefined>();
   const [identities, setIdentities] = useState<Record<string, ActorIdentity>>({});
   // bd-sfet3264 (Phase 1C): IndexDocument V2 capture sidecar (path → CaptureRef).
   // Populated by the sync client's onCapturesChange; threaded down to the
@@ -194,12 +202,12 @@ function App() {
     document.documentElement.dataset.projectSetStatus = projectSetState.status;
   }, [projectSetState.status]);
 
-  // Resolve the per-project actor ID before opening a document. See
-  // `resolveActorIdRequest` for the three-valued contract; callers abandon
+  // Resolve the per-project author ID before opening a document. See
+  // `resolveAuthorIdRequest` for the three-valued contract; callers abandon
   // the open only on `null` (auth failure), proceed on `string`/`undefined`.
-  const resolveActorId = useCallback(
-    (indexDocId: string) => resolveActorIdRequest(indexDocId, AUTH_ENABLED, expireSession, localActorId),
-    [expireSession, localActorId],
+  const resolveAuthorId = useCallback(
+    (indexDocId: string) => resolveAuthorIdRequest(indexDocId, AUTH_ENABLED, expireSession, localAuthorId),
+    [expireSession, localAuthorId],
   );
 
   // Capture the auth error reason from the redirect query param (once,
@@ -263,7 +271,7 @@ function App() {
           undefined,
           screenName,
           cursorColor,
-          resolveActorId,
+          resolveAuthorId,
         ),
       addLocalProject: projectStorage.addProject,
       createCollection: projectSetActions.createCollection,
@@ -276,7 +284,7 @@ function App() {
           (result.failed.length > 0 ? `, ${result.failed.length} failed` : ''),
       );
     }
-  }, [screenName, cursorColor, resolveActorId, projectSetActions]);
+  }, [screenName, cursorColor, resolveAuthorId, projectSetActions]);
 
   useAutoEstablishRoot({
     status: projectSetState.status,
@@ -307,7 +315,7 @@ function App() {
   useEffect(() => {
     if (AUTH_ENABLED && authLoading) return;
     getUserIdentity().then(async (settings) => {
-      setLocalActorId(actorIdFromUserId(settings.userId));
+      setLocalAuthorId(authorIdFromUserId(settings.userId));
       if (auth?.name && settings.createdAt === settings.updatedAt) {
         const updated = await updateUserName(auth.name);
         setScreenName(updated.userName);
@@ -410,9 +418,9 @@ function App() {
 
       setConnectionError(null);
       try {
-        const newActorId = await resolveActorId(targetProject.indexDocId);
-        if (newActorId === null) return 'Your session has expired. Please sign in again.';
-        const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId, newActorId, screenName, cursorColor);
+        const newAuthorId = await resolveAuthorId(targetProject.indexDocId);
+        if (newAuthorId === null) return 'Your session has expired. Please sign in again.';
+        const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId, newAuthorId, screenName, cursorColor);
         setProject(targetProject);
         setFiles(loadedFiles);
         setFileContents(contents);
@@ -425,7 +433,7 @@ function App() {
         return message;
       }
     },
-    [projectSetActions, resolveActorId, screenName, cursorColor, navigateToFile],
+    [projectSetActions, resolveAuthorId, screenName, cursorColor, navigateToFile],
   );
 
   // Invite-first onboarding (bd-fxdcxbpq): the personal root is established
@@ -613,9 +621,9 @@ function App() {
           if (targetProject) {
             setConnectionError(null);
             try {
-              const newActorId = await resolveActorId(targetProject.indexDocId);
-              if (newActorId === null) return;
-              const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId, newActorId, screenName, cursorColor);
+              const newAuthorId = await resolveAuthorId(targetProject.indexDocId);
+              if (newAuthorId === null) return;
+              const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId, newAuthorId, screenName, cursorColor);
               setProject(targetProject);
               setFiles(loadedFiles);
               setFileContents(contents);
@@ -708,9 +716,9 @@ function App() {
         if (targetProject) {
           setConnectionError(null);
           try {
-            const newActorId = await resolveActorId(targetProject.indexDocId);
-            if (newActorId === null) return;
-            const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId, newActorId, screenName, cursorColor);
+            const newAuthorId = await resolveAuthorId(targetProject.indexDocId);
+            if (newAuthorId === null) return;
+            const { files: loadedFiles, contents } = await connectAndLoadContents(targetProject.syncServer, targetProject.indexDocId, newAuthorId, screenName, cursorColor);
             setProject(targetProject);
             setFiles(loadedFiles);
             setFileContents(contents);
@@ -847,9 +855,9 @@ function App() {
     setLastOpenAttempt({ project: selectedProject, filePathOverride });
 
     try {
-      const newActorId = await resolveActorId(selectedProject.indexDocId);
-      if (newActorId === null) return;
-      const { files: loadedFiles, contents } = await connectAndLoadContents(selectedProject.syncServer, selectedProject.indexDocId, newActorId, screenName, cursorColor);
+      const newAuthorId = await resolveAuthorId(selectedProject.indexDocId);
+      if (newAuthorId === null) return;
+      const { files: loadedFiles, contents } = await connectAndLoadContents(selectedProject.syncServer, selectedProject.indexDocId, newAuthorId, screenName, cursorColor);
       setProject(selectedProject);
       setFiles(loadedFiles);
       setFileContents(contents);
@@ -864,7 +872,7 @@ function App() {
     } catch (err) {
       setConnectionError(err instanceof Error ? err.message : String(err));
     }
-  }, [navigateToProject, navigateToFile, resolveActorId, screenName, cursorColor]);
+  }, [navigateToProject, navigateToFile, resolveAuthorId, screenName, cursorColor]);
 
   const handleDisconnect = useCallback(async () => {
     await disconnect();
@@ -899,8 +907,8 @@ function App() {
         mimeType: f.mime_type,
       }));
 
-      // Create the Automerge documents. The resolveActorId callback is
-      // called after the index doc is created (to derive the HMAC actor
+      // Create the Automerge documents. The resolveAuthorId callback is
+      // called after the index doc is created (to derive the HMAC author
       // ID from the indexDocId) but before any file docs are written.
       //
       // Resolve only the runtime connection value (the WS adapter needs an
@@ -911,7 +919,7 @@ function App() {
         files,
         // Ephemeral storage mode (bd-sw4xy1vw): no IndexedDB cache.
         storage: isEphemeralStorage() ? 'memory' : 'indexeddb',
-      }, undefined, screenName, cursorColor, resolveActorId);
+      }, undefined, screenName, cursorColor, resolveAuthorId);
 
       // Store the project in IndexedDB
       const projectEntry = await projectStorage.addProject(
@@ -951,7 +959,7 @@ function App() {
     } catch (err) {
       setConnectionError(err instanceof Error ? err.message : String(err));
     }
-  }, [navigateToProject, resolveActorId, screenName, cursorColor]);
+  }, [navigateToProject, resolveAuthorId, screenName, cursorColor]);
 
   // Whether the welcome banner belongs on the currently open project: a
   // project invite's banner only on that project; a collection

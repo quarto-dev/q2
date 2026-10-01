@@ -19,6 +19,9 @@ vi.mock('@automerge/automerge', () => ({
   clone: vi.fn((doc: unknown) => structuredClone(doc)),
   from: vi.fn((val: unknown) => structuredClone(val)),
   save: vi.fn(() => new Uint8Array(0)),
+  // client.ts applies the author in place via the @hidden getBackend
+  // hatch (D9); the mock docs are plain objects, so stub it.
+  getBackend: vi.fn(() => ({ setAuthor: vi.fn() })),
 }));
 
 vi.mock('@automerge/automerge-repo-network-websocket', () => ({

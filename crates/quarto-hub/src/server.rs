@@ -1225,7 +1225,7 @@ struct AuthMeResponse {
     credential: &'static str,
 }
 
-/// Query parameters for GET /auth/actor.
+/// Query parameters for GET /auth/actor and GET /auth/author.
 #[derive(Deserialize)]
 struct AuthActorQuery {
     project: String,
@@ -1235,6 +1235,12 @@ struct AuthActorQuery {
 #[derive(Serialize)]
 struct AuthActorResponse {
     actor_id: String,
+}
+
+/// Response for GET /auth/author.
+#[derive(Serialize)]
+struct AuthAuthorResponse {
+    author_id: String,
 }
 
 /// Request body for POST /auth/session.
@@ -1306,6 +1312,10 @@ async fn auth_me(
 /// so the same user gets a different actor ID in each project. Cross-project
 /// correlation is impossible without the server secret.
 ///
+/// **Deprecated** (author-ID transition, bd-o1yn1fqy): superseded by
+/// `GET /auth/author`. Kept untouched for older clients until no released
+/// client calls it; removal is a Phase 5 follow-up strand.
+///
 /// - Returns 401 if the credential is missing or invalid.
 /// - Returns 400 if the `project` query parameter is missing (Axum extractor).
 /// - No server-side project validation: an unknown `project_id` just yields an
@@ -1322,6 +1332,33 @@ async fn auth_actor(
         &query.project,
     );
     Ok(Json(AuthActorResponse { actor_id }))
+}
+
+/// Return a per-project author ID for the authenticated user.
+///
+/// The author ID is served for automerge's change-level author metadata:
+/// it carries the stable per-user identity, while actor IDs return to
+/// automerge's random per-document default (author-ID transition,
+/// bd-o1yn1fqy). It is minted with the same HMAC construction as the
+/// legacy actor ID, so the value is byte-identical to what
+/// `GET /auth/actor` returns for the same credential+project (D5) and
+/// attribution keys are continuous across the transition.
+///
+/// Same contract as `auth_actor`: 401 missing/invalid credential, 400
+/// missing `project`, 403 disallowed user; no server-side project
+/// validation.
+async fn auth_author(
+    headers: HeaderMap,
+    State(ctx): State<SharedContext>,
+    Query(query): Query<AuthActorQuery>,
+) -> std::result::Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    let user = authenticate_request(&ctx, &headers).await?;
+    let author_id = crate::auth::sub_to_actor_id_for_project(
+        ctx.server_secret_bytes(),
+        user.subject(),
+        &query.project,
+    );
+    Ok(Json(AuthAuthorResponse { author_id }))
 }
 
 /// Clear the auth cookie.
@@ -1756,6 +1793,7 @@ pub async fn build_router_with_state(ctx: SharedContext) -> Result<Router<Shared
         // Auth endpoints
         .route("/auth/me", get(auth_me))
         .route("/auth/actor", get(auth_actor))
+        .route("/auth/author", get(auth_author))
         .route("/auth/logout", post(auth_logout))
         .route("/auth/logout-everywhere", post(auth_logout_everywhere))
         // WebSocket endpoint for automerge sync at `/ws` (hub-client +

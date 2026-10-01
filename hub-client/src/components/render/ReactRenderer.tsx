@@ -102,9 +102,10 @@ interface ReactRendererProps {
   untransformedAstJson?: string | null;
   /**
    * Reactji-authorship demo (2026-05-25 plan): current viewer's
-   * Automerge actor id, forwarded only to `Q2PreviewIframe` so user
+   * attribution key (automerge author id; a bare actor id only for
+   * pre-transition history), forwarded only to `Q2PreviewIframe` so user
    * TSX can do `actor === me` checks. `null` is a valid "unknown"
-   * value. Sourced from `getActorId()` in `ReactPreview`.
+   * value. Sourced from `getAuthorId()` in `ReactPreview`.
    */
   currentActor?: string | null;
   /**

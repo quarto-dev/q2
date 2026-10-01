@@ -38,6 +38,12 @@ import type { DocHandle } from '@automerge/automerge-repo';
 // ---------------------------------------------------------------------------
 
 export interface CharAttribution {
+  /**
+   * Attribution key: the change's author ID when one is recorded
+   * (post-transition changes), else the bare actor ID (pre-transition
+   * history, which has no author anywhere). Never a raw actor when an
+   * author is known. The field keeps the `actor` name per D6.
+   */
   actor: string;
   time: number;
 }
@@ -47,6 +53,7 @@ export interface AttributionRun {
   start: number;
   /** exclusive char offset */
   end: number;
+  /** Attribution key (author ID, or actor ID for pre-transition history). */
   actor: string;
   time: number;
 }
@@ -64,6 +71,16 @@ export interface RunListAttribution {
    * the caller (`useAttribution`) falls back to a full rebuild.
    */
   _workDoc?: Doc<unknown>;
+  /**
+   * Internal: actor → author index accumulated from seq-1 author footers
+   * during replay (Phase 0 finding 1: seq>1 changes carry no footer).
+   * Consulted for every change whose own footer is absent, so the
+   * incremental path attributes later same-actor changes to the author
+   * without rescanning history. Absent on hand-constructed state (tests)
+   * — resolution then covers footers seen in the current batch and falls
+   * back to bare actors for the rest.
+   */
+  _authorByActor?: Map<string, string>;
 }
 
 interface SplicePatch {
@@ -88,7 +105,7 @@ export type TextPatch = SplicePatch | DelPatch | PutPatch;
 
 export interface ViewableHandle {
   history(): unknown[] | undefined;
-  metadata(change?: string): { time?: number; actor?: string } | undefined;
+  metadata(change?: string): { time?: number; actor?: string; author?: string | null } | undefined;
   doc(): unknown;
 }
 
@@ -263,17 +280,29 @@ function newChangeHashAt(prevHeads: string[] | null, currHeads: string[]): strin
 
 /**
  * Apply one change to `workDoc`, collect any patches via patchCallback,
- * and fold them into the running runs list using the change's own
- * actor/time. Returns the advanced workDoc.
+ * and fold them into the running runs list using the change's attribution
+ * key/time. Returns the advanced workDoc.
+ *
+ * Author-first resolution (author-ID transition): the author footer rides
+ * on the actor's seq-1 change only (Phase 0 finding 1), so `authorByActor`
+ * is accumulated as replay proceeds; seq>1 changes resolve through it, and
+ * pre-transition changes (no author anywhere) fall through to the bare
+ * actor — which by D5 equals the author's value, keeping one user's key
+ * continuous across the transition boundary.
  */
 function replayChange(
   workDoc: Doc<unknown>,
   change: Change,
   textFieldName: string,
   runs: AttributionRun[],
+  authorByActor: Map<string, string>,
 ): Doc<unknown> {
   const decoded = decodeChange(change);
-  const attribution: CharAttribution = { actor: decoded.actor, time: decoded.time };
+  if (decoded.author) authorByActor.set(decoded.actor, decoded.author);
+  const attribution: CharAttribution = {
+    actor: decoded.author ?? authorByActor.get(decoded.actor) ?? decoded.actor,
+    time: decoded.time,
+  };
   let collected: Patch[] = [];
   const [next] = applyChanges(workDoc, [change], {
     patchCallback: (patches: Patch[]) => { collected = patches; },
@@ -298,7 +327,7 @@ export async function buildRunListAttribution(
   if (!history) return null;
 
   if (history.length === 0) {
-    return { runs: [], processedHeads: [], processedHistoryIndex: 0, _workDoc: init() };
+    return { runs: [], processedHeads: [], processedHistoryIndex: 0, _workDoc: init(), _authorByActor: new Map() };
   }
 
   // Pre-index every change in the doc by hash so each history step can
@@ -310,6 +339,7 @@ export async function buildRunListAttribution(
   }
 
   const runs: AttributionRun[] = [];
+  const authorByActor = new Map<string, string>();
   let prevHeads: string[] | null = null;
   let lastHeads: unknown[] = [];
   let workDoc: Doc<unknown> = init();
@@ -324,7 +354,7 @@ export async function buildRunListAttribution(
       const newHash = newChangeHashAt(prevHeads, decodedCurr);
       const change = newHash ? changeByHash.get(newHash) : undefined;
       if (change) {
-        workDoc = replayChange(workDoc, change, textFieldName, runs);
+        workDoc = replayChange(workDoc, change, textFieldName, runs, authorByActor);
       }
       prevHeads = decodedCurr;
       lastHeads = Array.isArray(currHeads) ? currHeads : [currHeads];
@@ -338,6 +368,7 @@ export async function buildRunListAttribution(
     processedHeads: lastHeads as unknown[],
     processedHistoryIndex: history.length,
     _workDoc: workDoc,
+    _authorByActor: authorByActor,
   };
 }
 
@@ -367,9 +398,10 @@ export function updateRunListAttribution(
   if (newChanges.length === 0) return state;
 
   const runs = state.runs.map(r => ({ ...r }));
+  const authorByActor = state._authorByActor ?? new Map<string, string>();
   let workDoc: Doc<unknown> = state._workDoc;
   for (const change of newChanges) {
-    workDoc = replayChange(workDoc, change, textFieldName, runs);
+    workDoc = replayChange(workDoc, change, textFieldName, runs, authorByActor);
   }
 
   // `processedHeads` / `processedHistoryIndex` are bookkeeping in the
@@ -381,6 +413,7 @@ export function updateRunListAttribution(
     processedHeads: getHeads(workDoc),
     processedHistoryIndex: history?.length ?? state.processedHistoryIndex,
     _workDoc: workDoc,
+    _authorByActor: authorByActor,
   };
 }
 

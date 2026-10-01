@@ -1,7 +1,8 @@
 /**
  * Unit Tests for authService
  *
- * Tests auth API helpers: fetchAuthMe, logout, fetchActorId, resolveActorId.
+ * Tests auth API helpers: fetchAuthMe, logout, fetchAuthorId, fetchActorId
+ * (the legacy 404 fallback), resolveAuthorId.
  * Uses mocked fetch. IdP-side signout is no longer authService's
  * concern (moved to the AuthProvider boundary); see Phase 6 of
  * `claude-notes/plans/2026-05-20-auth-provider-interface.md`. Session
@@ -11,7 +12,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { fetchAuthMe, fetchActorId, resolveActorId, logout } from './authService';
+import { fetchAuthMe, fetchActorId, fetchAuthorId, resolveAuthorId, logout } from './authService';
 
 describe('authService', () => {
   beforeEach(() => {
@@ -40,9 +41,9 @@ describe('authService', () => {
         credentials: 'same-origin',
       });
 
-      await fetchActorId('proj-1');
+      await fetchAuthorId('proj-1');
       expect(fetch).toHaveBeenCalledWith(
-        '/subpath/auth/actor?project=proj-1',
+        '/subpath/auth/author?project=proj-1',
         { credentials: 'same-origin' },
       );
     });
@@ -133,7 +134,95 @@ describe('authService', () => {
     });
   });
 
+  // ── fetchAuthorId ────────────────────────────────────────────
+
+  describe('fetchAuthorId', () => {
+    it('calls GET /auth/author?project=<id> and returns author_id', async () => {
+      vi.mocked(fetch).mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ author_id: 'abcd1234' }),
+      } as Response);
+
+      const result = await fetchAuthorId('automerge:abc123');
+
+      expect(result).toBe('abcd1234');
+      expect(fetch).toHaveBeenCalledWith(
+        '/auth/author?project=automerge%3Aabc123',
+        { credentials: 'same-origin' },
+      );
+    });
+
+    it('returns null on 401', async () => {
+      vi.mocked(fetch).mockResolvedValue({
+        ok: false,
+        status: 401,
+      } as Response);
+
+      expect(await fetchAuthorId('automerge:abc')).toBeNull();
+    });
+
+    it('returns null on 403', async () => {
+      vi.mocked(fetch).mockResolvedValue({
+        ok: false,
+        status: 403,
+      } as Response);
+
+      expect(await fetchAuthorId('automerge:abc')).toBeNull();
+    });
+
+    it('throws on non-OK, non-401/403/404 response', async () => {
+      vi.mocked(fetch).mockResolvedValue({
+        ok: false,
+        status: 500,
+      } as Response);
+
+      await expect(fetchAuthorId('automerge:abc')).rejects.toThrow(
+        '/auth/author failed: 500',
+      );
+    });
+
+    it('falls back to /auth/actor on 404 (old server; same value by D5)', async () => {
+      // A new client against a pre-author server gets a 404 on
+      // /auth/author. The deprecated actor endpoint mints the byte-identical
+      // value (same HMAC construction), so the client applies it as the
+      // author and stays fully functional.
+      vi.mocked(fetch)
+        .mockResolvedValueOnce({ ok: false, status: 404 } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ actor_id: 'deadbeef' }),
+        } as Response);
+
+      const result = await fetchAuthorId('automerge:abc123');
+
+      expect(result).toBe('deadbeef');
+      expect(fetch).toHaveBeenNthCalledWith(
+        1,
+        '/auth/author?project=automerge%3Aabc123',
+        { credentials: 'same-origin' },
+      );
+      expect(fetch).toHaveBeenNthCalledWith(
+        2,
+        '/auth/actor?project=automerge%3Aabc123',
+        { credentials: 'same-origin' },
+      );
+    });
+
+    it('surfaces the fallback\'s null on 401 (session expiry still works)', async () => {
+      vi.mocked(fetch)
+        .mockResolvedValueOnce({ ok: false, status: 404 } as Response)
+        .mockResolvedValueOnce({ ok: false, status: 401 } as Response);
+
+      expect(await fetchAuthorId('automerge:abc')).toBeNull();
+    });
+  });
+
   // ── fetchActorId ─────────────────────────────────────────────
+  //
+  // Legacy endpoint client; survives only as fetchAuthorId's 404 fallback
+  // (removed once no released server lacks /auth/author — Phase 5 strand).
 
   describe('fetchActorId', () => {
     it('calls GET /auth/actor?project=<id> and returns actor_id', async () => {
@@ -212,29 +301,29 @@ describe('authService', () => {
     });
   });
 
-  // ── resolveActorId ───────────────────────────────────────────
+  // ── resolveAuthorId ──────────────────────────────────────────
   //
   // Three-valued contract the document-open callers depend on:
-  //   string    → open with this actor ID
-  //   undefined → auth disabled; open with no (random) actor ID
+  //   string    → open with this author ID
+  //   undefined → auth disabled; open authorless (random actor, no author)
   //   null      → auth failure; abandon the open (callers guard `=== null`)
 
-  describe('resolveActorId', () => {
+  describe('resolveAuthorId', () => {
     it('returns undefined and skips the network when auth is disabled', async () => {
       const onSessionExpired = vi.fn();
-      const result = await resolveActorId('automerge:abc', false, onSessionExpired);
+      const result = await resolveAuthorId('automerge:abc', false, onSessionExpired);
 
       expect(result).toBeUndefined();
       expect(fetch).not.toHaveBeenCalled();
       expect(onSessionExpired).not.toHaveBeenCalled();
     });
 
-    it('returns the fallback actor id (not the network) when auth is disabled', async () => {
-      // Auth-less deployments (local-prod) have no /auth/actor to call, but a
-      // stable local actor id lets identity stamping still work. The fallback
-      // is returned verbatim; the network is never touched.
+    it('returns the fallback author id (not the network) when auth is disabled', async () => {
+      // Auth-less deployments (local-prod) have no /auth/author to call, but
+      // a stable local author id lets identity stamping still work. The
+      // fallback is returned verbatim; the network is never touched.
       const onSessionExpired = vi.fn();
-      const result = await resolveActorId(
+      const result = await resolveAuthorId(
         'automerge:abc',
         false,
         onSessionExpired,
@@ -246,33 +335,33 @@ describe('authService', () => {
       expect(onSessionExpired).not.toHaveBeenCalled();
     });
 
-    it('ignores the fallback when auth is enabled (server actor wins)', async () => {
+    it('ignores the fallback when auth is enabled (server author wins)', async () => {
       vi.mocked(fetch).mockResolvedValue({
         ok: true,
         status: 200,
-        json: () => Promise.resolve({ actor_id: 'serveractor' }),
+        json: () => Promise.resolve({ author_id: 'serverauthor' }),
       } as Response);
       const onSessionExpired = vi.fn();
 
-      const result = await resolveActorId(
+      const result = await resolveAuthorId(
         'automerge:abc',
         true,
         onSessionExpired,
         '6d914340d834489b934c58390f9b3301',
       );
 
-      expect(result).toBe('serveractor');
+      expect(result).toBe('serverauthor');
     });
 
-    it('returns the actor ID on success without ending the session', async () => {
+    it('returns the author ID on success without ending the session', async () => {
       vi.mocked(fetch).mockResolvedValue({
         ok: true,
         status: 200,
-        json: () => Promise.resolve({ actor_id: 'abcd1234' }),
+        json: () => Promise.resolve({ author_id: 'abcd1234' }),
       } as Response);
       const onSessionExpired = vi.fn();
 
-      const result = await resolveActorId('automerge:abc', true, onSessionExpired);
+      const result = await resolveAuthorId('automerge:abc', true, onSessionExpired);
 
       expect(result).toBe('abcd1234');
       expect(onSessionExpired).not.toHaveBeenCalled();
@@ -285,7 +374,7 @@ describe('authService', () => {
       } as Response);
       const onSessionExpired = vi.fn();
 
-      const result = await resolveActorId('automerge:abc', true, onSessionExpired);
+      const result = await resolveAuthorId('automerge:abc', true, onSessionExpired);
 
       // null, NOT undefined: callers' `if (id === null) return` must fire so
       // the document open is abandoned; onSessionExpired ends the session so
@@ -302,7 +391,7 @@ describe('authService', () => {
       } as Response);
       const onSessionExpired = vi.fn();
 
-      const result = await resolveActorId('automerge:abc', true, onSessionExpired);
+      const result = await resolveAuthorId('automerge:abc', true, onSessionExpired);
 
       expect(result).toBeNull();
       expect(onSessionExpired).toHaveBeenCalledTimes(1);
@@ -316,8 +405,27 @@ describe('authService', () => {
       const onSessionExpired = vi.fn();
 
       await expect(
-        resolveActorId('automerge:abc', true, onSessionExpired),
-      ).rejects.toThrow('/auth/actor failed: 500');
+        resolveAuthorId('automerge:abc', true, onSessionExpired),
+      ).rejects.toThrow('/auth/author failed: 500');
+      expect(onSessionExpired).not.toHaveBeenCalled();
+    });
+
+    it('resolves via /auth/actor when the server predates /auth/author', async () => {
+      // Version-skew path: old server 404s /auth/author, the fallback
+      // endpoint returns the byte-identical value (D5), and the open
+      // proceeds with it as the author ID.
+      vi.mocked(fetch)
+        .mockResolvedValueOnce({ ok: false, status: 404 } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ actor_id: 'deadbeef' }),
+        } as Response);
+      const onSessionExpired = vi.fn();
+
+      const result = await resolveAuthorId('automerge:abc', true, onSessionExpired);
+
+      expect(result).toBe('deadbeef');
       expect(onSessionExpired).not.toHaveBeenCalled();
     });
   });

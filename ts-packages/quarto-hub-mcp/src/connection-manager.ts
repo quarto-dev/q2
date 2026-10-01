@@ -194,7 +194,8 @@ function toHttpUrl(wsUrl: URL): URL {
 /**
  * Peer-wait budget for connect/create (bd-xnmd5ni1). Generous because
  * the authenticated path runs several HTTP round-trips (health probe,
- * /auth/actor, possibly a token refresh) before the websocket joins.
+ * /auth/author fetch, possibly a token refresh) before the websocket
+ * joins.
  */
 const PEER_TIMEOUT_MS = 15_000;
 
@@ -263,6 +264,14 @@ export class ConnectionManager {
     if (existing) return existing;
 
     const auth = await this.resolveAuthForConnect();
+    // Attribution (bd-5y0han3a): fetch the per-project author ID over
+    // the Bearer path so this bot's edits carry the authenticated
+    // user's author metadata. Best-effort — a failure logs a warning
+    // and connects authorless (author-ID transition, D8); the WS
+    // handshake remains the real auth gate.
+    const authorId = auth
+      ? await this.fetchAuthorId(indexDocId, auth.getBearer)
+      : undefined;
 
     const files = new Map<string, FilePayload>();
     const waiters = new Set<ChangeWaiter>();
@@ -296,12 +305,12 @@ export class ConnectionManager {
     const client = this.syncClientFactory(callbacks);
     // Pass auth iff we resolved a Bearer; otherwise the sync-client
     // uses the browser adapter (no header).
-    await client.connect(this.serverUrl, indexDocId, undefined, undefined, undefined, {
+    await client.connect(this.serverUrl, indexDocId, authorId, undefined, undefined, {
       auth,
       // Server-backed client with memory storage: offline mode would
       // be a silent data black hole — demand a live peer or fail
       // loudly (bd-xnmd5ni1). The budget covers the auth round-trips
-      // (health probe, actor fetch, token refresh) that made the old
+      // (health probe, author fetch, token refresh) that made the old
       // 1 ms default lose deterministically.
       requireOnline: true,
       peerTimeoutMs: PEER_TIMEOUT_MS,
@@ -367,6 +376,12 @@ export class ConnectionManager {
   ): Promise<{ indexDocId: string; files: Array<{ path: string; docId: string }> }> {
     await this.gateAuthState();
     const auth = await this.resolveAuthForConnect();
+    // Same attribution wiring as connect(); the index doc ID is
+    // generated inside the sync client, so the author is resolved via
+    // callback once the ID exists (bd-5y0han3a).
+    const resolveAuthorId = auth
+      ? (indexDocId: string) => this.fetchAuthorId(indexDocId, auth.getBearer)
+      : undefined;
 
     const tempFiles = new Map<string, FilePayload>();
     const waiters = new Set<ChangeWaiter>();
@@ -392,19 +407,25 @@ export class ConnectionManager {
     };
 
     const client = this.syncClientFactory(callbacks);
-    const result = await client.createNewProject({
-      syncServer: this.serverUrl,
-      files: files.map((f) => ({
-        path: f.path,
-        content: f.content,
-        contentType: 'text' as const,
-      })),
-      auth,
-      // See connect(): online-or-error, never a silent offline project
-      // that dies with the process (bd-xnmd5ni1).
-      requireOnline: true,
-      peerTimeoutMs: PEER_TIMEOUT_MS,
-    });
+    const result = await client.createNewProject(
+      {
+        syncServer: this.serverUrl,
+        files: files.map((f) => ({
+          path: f.path,
+          content: f.content,
+          contentType: 'text' as const,
+        })),
+        auth,
+        // See connect(): online-or-error, never a silent offline project
+        // that dies with the process (bd-xnmd5ni1).
+        requireOnline: true,
+        peerTimeoutMs: PEER_TIMEOUT_MS,
+      },
+      undefined,
+      undefined,
+      undefined,
+      resolveAuthorId,
+    );
 
     const state: ProjectState = { client, files: tempFiles, waiters };
     this.projects.set(result.indexDocId, state);
@@ -693,6 +714,62 @@ export class ConnectionManager {
         }
       }),
     );
+  }
+
+  /**
+   * Best-effort fetch of the per-project author ID over the Bearer path
+   * (`GET /auth/author?project=`; a 404 falls back to the deprecated
+   * `/auth/actor`, which mints the byte-identical value — author-ID
+   * transition, D5). The author is attribution metadata, not an auth
+   * gate: any failure (network, non-OK status, malformed body) logs a
+   * warning and yields `undefined`, so the connection proceeds
+   * authorless (D8) instead of failing.
+   */
+  private async fetchAuthorId(
+    projectId: string,
+    getBearer: () => Promise<string>,
+  ): Promise<string | undefined> {
+    const urlFor = (path: string) => {
+      const url = new URL(path, toHttpUrl(this.serverUrlParsed));
+      url.searchParams.set('project', projectId);
+      return url.toString();
+    };
+    try {
+      const token = await getBearer();
+      const headers = { Authorization: `Bearer ${token}` };
+      let bodyKey: 'author_id' | 'actor_id' = 'author_id';
+      let res = await this.httpFetch(urlFor('/auth/author'), { headers });
+      if (res.status === 404) {
+        // Server predates /auth/author (Phase 1 of the transition): the
+        // deprecated endpoint mints the byte-identical value (D5).
+        bodyKey = 'actor_id';
+        res = await this.httpFetch(urlFor('/auth/actor'), { headers });
+      }
+      if (!res.ok) {
+        console.error(
+          `[hub-mcp] WARNING: author-ID fetch for project ${projectId} ` +
+            `returned HTTP ${res.status}; connecting authorless.`,
+        );
+        return undefined;
+      }
+      const data = (await res.json()) as Record<string, unknown>;
+      const id = data[bodyKey];
+      if (typeof id !== 'string' || id === '') {
+        console.error(
+          `[hub-mcp] WARNING: author-ID fetch for project ${projectId} ` +
+            'returned a malformed body; connecting authorless.',
+        );
+        return undefined;
+      }
+      return id;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(
+        `[hub-mcp] WARNING: author-ID fetch for project ${projectId} ` +
+          `failed: ${redactTokens(msg)}; connecting authorless.`,
+      );
+      return undefined;
+    }
   }
 
   /**

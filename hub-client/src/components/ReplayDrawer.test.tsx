@@ -9,10 +9,10 @@ import { render, screen, fireEvent, act, cleanup } from '@testing-library/react'
 import ReplayDrawer from './ReplayDrawer';
 import type { ReplayState, ReplayControls } from '../hooks/useReplayMode';
 
-// Mock getActorId from automergeSync (now in @quarto/preview-runtime)
-let mockActorId: string | null = null;
+// Mock getAuthorId from automergeSync (now in @quarto/preview-runtime)
+let mockAuthorId: string | null = null;
 vi.mock('@quarto/preview-runtime', () => ({
-  getActorId: () => mockActorId,
+  getAuthorId: () => mockAuthorId,
 }));
 
 function makeState(overrides: Partial<ReplayState> = {}): ReplayState {
@@ -53,7 +53,7 @@ describe('ReplayDrawer', () => {
 
   beforeEach(() => {
     controls = makeControls();
-    mockActorId = null;
+    mockAuthorId = null;
   });
 
   afterEach(() => {
@@ -134,7 +134,7 @@ describe('ReplayDrawer', () => {
     });
 
     it('applies --me CSS class when currentActorId matches', () => {
-      mockActorId = 'abcdef0123456789abcdef0123456789';
+      mockAuthorId = 'abcdef0123456789abcdef0123456789';
       const identities = { 'abcdef0123456789abcdef0123456789': { name: 'Alice', color: '#E91E63' } };
       render(<ReplayDrawer state={activeState} controls={controls} identities={identities} />);
       const actorEl = screen.getByText('Alice');
@@ -142,7 +142,7 @@ describe('ReplayDrawer', () => {
     });
 
     it('does not apply --me CSS class when actor is not current user', () => {
-      mockActorId = 'different0123456789abcdef01234567';
+      mockAuthorId = 'different0123456789abcdef01234567';
       const identities = { 'abcdef0123456789abcdef0123456789': { name: 'Alice', color: '#E91E63' } };
       render(<ReplayDrawer state={activeState} controls={controls} identities={identities} />);
       const actorEl = screen.getByText('Alice');
@@ -150,14 +150,14 @@ describe('ReplayDrawer', () => {
     });
 
     it('applies --me CSS class with truncated hex when no identity', () => {
-      mockActorId = 'abcdef0123456789abcdef0123456789';
+      mockAuthorId = 'abcdef0123456789abcdef0123456789';
       render(<ReplayDrawer state={activeState} controls={controls} />);
       const actorEl = screen.getByText('abcdef01');
       expect(actorEl.className).toContain('replay-drawer__actor--me');
     });
 
     it('renders short hash when currentActorId does not match and no identities', () => {
-      mockActorId = 'different0123456789abcdef01234567';
+      mockAuthorId = 'different0123456789abcdef01234567';
       render(<ReplayDrawer state={activeState} controls={controls} />);
       expect(screen.getByText('abcdef01')).toBeDefined();
     });
@@ -165,6 +165,58 @@ describe('ReplayDrawer', () => {
     it('renders short hash when currentActorId is null', () => {
       render(<ReplayDrawer state={activeState} controls={controls} />);
       expect(screen.getByText('abcdef01')).toBeDefined();
+    });
+
+    // ── Mixed-history attribution (author-ID transition) ───────────
+    //
+    // A document can hold pre-transition changes (no author anywhere —
+    // the key falls back to the bare stable actor) and post-transition
+    // changes (key resolved from the author footer / actor→author index)
+    // by the SAME user. By D5 the author ID equals the legacy stable
+    // actor ID, so every step from both eras arrives here with the same
+    // attribution key — one identity entry, one palette color, and the
+    // "me" highlight on both sides of the boundary.
+    describe('mixed-history attribution (author-ID transition)', () => {
+      const KEY = 'abcdef0123456789abcdef0123456789';
+      const identities = { [KEY]: { name: 'Alice', color: '#E91E63' } };
+
+      it('renders steps from both eras as one continuous identity', () => {
+        mockAuthorId = KEY;
+        // Chunks as replay.ts's getMetadataAt resolves them: legacy steps
+        // (actor fallback) and post-transition steps (author) — the same
+        // string by D5.
+        const mixed = makeState({
+          isActive: true,
+          historyLength: 4,
+          currentIndex: 3,
+          currentContent: 'hello',
+          timestamp: 1710000000,
+          actor: KEY,
+          chunkActors: [
+            [{ actor: KEY, fraction: 1 }], // legacy step (actor fallback)
+            [{ actor: KEY, fraction: 1 }], // legacy step
+            [{ actor: KEY, fraction: 1 }], // post-transition (author footer)
+            [{ actor: KEY, fraction: 1 }], // post-transition (actor→author index)
+          ],
+        });
+        const { container } = render(
+          <ReplayDrawer state={mixed} controls={controls} identities={identities} />,
+        );
+
+        // One continuous color band: every actor-colored waveform rect uses
+        // the single identity entry's color.
+        const rects = container.querySelectorAll<SVGRectElement>(
+          '.replay-waveform rect:not([fill="#1f3460"]):not([fill^="rgba"])',
+        );
+        expect(rects.length).toBe(4);
+        for (const rect of rects) {
+          expect(rect.getAttribute('fill')).toBe('#E91E63');
+        }
+
+        // The current step highlights as "me" with the shared identity name.
+        const actorEl = screen.getByText('Alice');
+        expect(actorEl.className).toContain('replay-drawer__actor--me');
+      });
     });
 
     it('Apply button calls controls.apply()', () => {
