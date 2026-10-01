@@ -2842,6 +2842,92 @@ mod tests {
         }
     }
 
+    /// Characterization probe (bd-gh3qdq7d): a theme file in a real temp
+    /// dir, consumed from a deep document dir whose unnormalized
+    /// `document_dir.join(value)` exceeds Windows MAX_PATH, still loads
+    /// through the theme consumer, whichever form the rebase leaves
+    /// (top-level `theme` stays doc-relative, nested `{light: …}`
+    /// becomes absolute). `ThemeContext::resolve_path` normalizes
+    /// lexically before any read, so both forms resolve to one file.
+    #[test]
+    fn theme_rebase_outside_project_loads_from_deep_document_dir() {
+        use quarto_pandoc_types::{ConfigMapEntry, ConfigValue};
+        use quarto_source_map::SourceInfo;
+
+        let ext = tempfile::Builder::new()
+            .prefix("quarto-theme-probe-")
+            .tempdir()
+            .unwrap();
+        let ext_dir = ext.path().to_path_buf();
+        std::fs::write(
+            ext_dir.join("probe.scss"),
+            "/*-- scss:defaults --*/\n$probe: 1;\n/*-- scss:rules --*/\n",
+        )
+        .unwrap();
+
+        let project = tempfile::Builder::new()
+            .prefix("quarto-theme-probe-project-")
+            .tempdir_in(env!("CARGO_MANIFEST_DIR"))
+            .unwrap();
+        let project_root = project.path().to_path_buf();
+        let mut document_dir = project_root.clone();
+        for _ in 0..40 {
+            document_dir.push("d");
+        }
+        std::fs::create_dir_all(&document_dir).unwrap();
+
+        let si = SourceInfo::for_test;
+        let path = |v: &str| ConfigValue::new_path(v.to_string(), si());
+        let entry = |k: &str, value| ConfigMapEntry {
+            key: k.to_string(),
+            key_source: si(),
+            value,
+        };
+        let mut top = ConfigValue::new_map(vec![entry("theme", path("probe.scss"))], si());
+        let mut nested = ConfigValue::new_map(
+            vec![entry(
+                "theme",
+                ConfigValue::new_map(vec![entry("light", path("probe.scss"))], si()),
+            )],
+            si(),
+        );
+        adjust_paths_to_document_dir(&mut top, &ext_dir, &document_dir, &project_root);
+        adjust_paths_to_document_dir(&mut nested, &ext_dir, &document_dir, &project_root);
+
+        let ConfigValueKind::Path(top_value) = &top.get("theme").unwrap().value else {
+            panic!("expected a Path value");
+        };
+        let ConfigValueKind::Path(nested_value) =
+            &nested.get("theme").unwrap().get("light").unwrap().value
+        else {
+            panic!("expected a Path value");
+        };
+        eprintln!("top-level theme value: {top_value}");
+        eprintln!("nested theme value:    {nested_value}");
+
+        let unnormalized = document_dir.join(top_value);
+        eprintln!(
+            "unnormalized join length: {}",
+            unnormalized.as_os_str().len()
+        );
+        assert!(top_value.starts_with("../"), "got: {top_value}");
+        assert!(
+            unnormalized.as_os_str().len() > 260,
+            "probe must exceed MAX_PATH to mean anything"
+        );
+
+        let context = quarto_sass::ThemeContext::native(document_dir.clone());
+        for value in [top_value, nested_value] {
+            quarto_sass::load_custom_theme(Path::new(value), &context)
+                .unwrap_or_else(|e| panic!("theme {value} failed to load: {e}"));
+        }
+        assert_eq!(
+            context.resolve_path(Path::new(top_value)),
+            context.resolve_path(Path::new(nested_value)),
+            "both forms must resolve to one file identity (cache key, load path)"
+        );
+    }
+
     // === ProjectKind tests ===
 
     #[test]
