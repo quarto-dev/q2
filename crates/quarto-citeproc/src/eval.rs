@@ -549,6 +549,7 @@ fn evaluate_citation_to_output_impl(
         };
 
         let inner = Output::sequence(parts);
+        let mut item_type = item_type;
         let inner = if single_author_in_text_candidate
             && item_type == crate::output::CitationItemType::AuthorOnly
         {
@@ -567,6 +568,11 @@ fn evaluate_citation_to_output_impl(
             } else {
                 let rest_part = inner.suppress_names();
                 skip_outer_parens = true;
+                // This is the full "Name (year)" cite, not a bare author
+                // fragment, so it takes part in disambiguation like any
+                // normal cite; otherwise `@a` + `@b` sharing author and year
+                // never see each other as ambiguous.
+                item_type = crate::output::CitationItemType::NormalCite;
                 Output::sequence(vec![
                     names_part,
                     Output::literal(" ("),
