@@ -12,7 +12,9 @@ Main cause: `render_to_file.rs:252` canonicalizes the input document apart from 
 
 ## Why it is a known limit for now
 
-Only paths over 260 units are affected, and Lua `io.open` already fails there on Windows (bd-9z2258af); other external tools were not checked. A fix spans ~41 sites plus a spelling-aware `diff_paths`, and without a lint any new raw comparison brings the bug back.
+Every affected render involves a path over 260 units somewhere, but the rejected path itself can be short. If the input is long, the project root found by walking up from it (`find_project_config` takes `.parent()` of the canonical input and never canonicalizes again) stays verbatim even when it is short. A short resource such as `data.txt` at that root then canonicalizes plain, and `canonicalize_within_project` (`project_resources.rs:609`) rejects it as outside the project. Lua is not involved there.
+
+Lua's limit is a separate issue: `io.open` already fails past `MAX_PATH` on Windows (bd-9z2258af), so documents that deep are already broken for filters. That covers the long-descendant direction, not the inherited-verbatim-root direction. Other external tools were not checked. A fix spans ~41 sites plus a spelling-aware `diff_paths`, and without a lint any new raw comparison brings the bug back.
 
 ## At-risk sites (static sweep at `3241511b1`, Opus; central claim checked in the main session)
 
