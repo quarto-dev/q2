@@ -154,3 +154,45 @@ references:
         html_output
     );
 }
+
+/// Two different references with the same author and year, one cited in
+/// brackets and one as a bare in-text `@id`, must get year suffixes. The
+/// in-text cite renders the full "Name (year)" form, so it has to take part
+/// in disambiguation.
+#[test]
+fn test_same_author_year_disambiguated_with_in_text_cite() {
+    let test_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let test_file = test_dir.path().join("test.qmd");
+
+    let qmd_content = r#"---
+title: Test Document
+references:
+- id: first
+  type: article-journal
+  author: [{family: Cronbach, given: Lee J.}]
+  title: Coefficient alpha
+  issued: {date-parts: [[1951]]}
+- id: second
+  type: article-journal
+  author: [{family: Cronbach, given: Lee J.}]
+  title: Coefficient alpha
+  issued: {date-parts: [[1951]]}
+---
+
+As shown [@first], and @second also says so.
+"#;
+    fs::write(&test_file, qmd_content).expect("Failed to write test file");
+
+    let output = Command::new(get_binary_path())
+        .args(["-F", "citeproc", "-t", "plain", "-i"])
+        .arg(&test_file)
+        .output()
+        .expect("Failed to execute binary");
+    assert!(output.status.success(), "{:?}", output);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(stdout.contains("(Cronbach 1951a)"), "{stdout}");
+    assert!(stdout.contains("Cronbach (1951b) also says so"), "{stdout}");
+    assert!(stdout.contains("Cronbach, Lee J. 1951a."), "{stdout}");
+    assert!(stdout.contains("Cronbach, Lee J. 1951b."), "{stdout}");
+}
