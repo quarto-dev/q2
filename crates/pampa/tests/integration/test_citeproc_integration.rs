@@ -154,3 +154,52 @@ references:
         html_output
     );
 }
+
+/// Two different references with the same author and year, cited as
+/// `[@a, @b]` (comma, so the parser nests `@b` inside `@a`'s suffix), and
+/// again as a bare in-text `@b`, must get year suffixes everywhere.
+#[test]
+fn test_same_author_year_disambiguated_with_nested_and_in_text_cites() {
+    let test_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let test_file = test_dir.path().join("test.qmd");
+
+    let qmd_content = r#"---
+title: Test Document
+references:
+- id: first
+  type: article-journal
+  author: [{family: Cronbach, given: Lee J.}]
+  title: Coefficient alpha
+  issued: {date-parts: [[1951]]}
+- id: second
+  type: article-journal
+  author: [{family: Cronbach, given: Lee J.}]
+  title: Coefficient alpha
+  issued: {date-parts: [[1951]]}
+---
+
+Both [@first, @second].
+
+In text @second says so.
+"#;
+    fs::write(&test_file, qmd_content).expect("Failed to write test file");
+
+    let output = Command::new(get_binary_path())
+        .args(["-F", "citeproc", "-t", "plain", "-i"])
+        .arg(&test_file)
+        .output()
+        .expect("Failed to execute binary");
+    assert!(output.status.success(), "{:?}", output);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(
+        stdout.contains("(Cronbach 1951a, Cronbach (1951b))"),
+        "nested cite should render inside its parent's suffix:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("Cronbach (1951b) says so"),
+        "in-text cite should carry the year suffix:\n{stdout}"
+    );
+    assert!(stdout.contains("Cronbach, Lee J. 1951a."), "{stdout}");
+    assert!(stdout.contains("Cronbach, Lee J. 1951b."), "{stdout}");
+}

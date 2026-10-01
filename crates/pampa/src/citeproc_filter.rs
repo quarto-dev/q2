@@ -170,6 +170,9 @@ pub fn apply_citeproc_filter(
         .process_citations_with_disambiguation(&citations)
         .map_err(|e| CiteprocFilterError::ProcessingError(e.to_string()))?;
 
+    let mut rendered_citations = rendered_citations;
+    resolve_nested_citations(&mut rendered_citations);
+
     // Build a map from citation index to rendered output
     let citation_outputs: Vec<_> = citations.iter().zip(rendered_citations.iter()).collect();
 
@@ -746,6 +749,116 @@ fn collect_citations_from_block(
     }
 }
 
+/// Collect one `Cite` (and any `Cite`s nested in its prefixes/suffixes) as
+/// citeproc `Citation`s, returning the index of the outer one.
+///
+/// The parser reads `[@a, @b]` (comma instead of `;`) as `@a` whose suffix is
+/// `, ` followed by a nested in-text `Cite` for `@b`. Every nested cite is
+/// registered as its own citation, after its parent, so disambiguation sees
+/// all cited references; the parent's text refers to it by placeholder (see
+/// [`nested_placeholder`]).
+fn collect_cite(
+    cite: &crate::pandoc::Cite,
+    citations: &mut Vec<Citation>,
+    note_number: &mut i32,
+) -> usize {
+    let index = citations.len();
+    citations.push(Citation {
+        id: None,
+        note_number: Some(*note_number),
+        items: vec![],
+    });
+    *note_number += 1;
+
+    let mut items = Vec::with_capacity(cite.citations.len());
+    for c in &cite.citations {
+        let prefix = text_with_nested_cites(&c.prefix, citations, note_number);
+        let suffix = text_with_nested_cites(&c.suffix, citations, note_number);
+        items.push(CitationItem {
+            id: c.id.clone(),
+            locator: None, // TODO: Extract locator from suffix
+            label: None,
+            prefix: (!prefix.is_empty()).then_some(prefix),
+            suffix: (!suffix.is_empty()).then_some(suffix),
+            suppress_author: Some(matches!(
+                c.mode,
+                crate::pandoc::CitationMode::SuppressAuthor
+            )),
+            author_only: Some(matches!(c.mode, crate::pandoc::CitationMode::AuthorInText)),
+            position: None,
+        });
+    }
+    citations[index].items = items;
+    index
+}
+
+/// Like [`inlines_to_text`], but a nested `Cite` is collected as its own
+/// citation and replaced by a placeholder for its eventual rendering.
+fn text_with_nested_cites(
+    inlines: &[crate::pandoc::Inline],
+    citations: &mut Vec<Citation>,
+    note_number: &mut i32,
+) -> String {
+    let mut result = String::new();
+    for inline in inlines {
+        match inline {
+            Inline::Cite(nested) => {
+                let index = collect_cite(nested, citations, note_number);
+                result.push_str(&nested_placeholder(index));
+            }
+            other => result.push_str(&inlines_to_text(std::slice::from_ref(other))),
+        }
+    }
+    result
+}
+
+const PLACEHOLDER_OPEN: char = '\u{E000}';
+const PLACEHOLDER_CLOSE: char = '\u{E001}';
+
+/// Private-use-delimited stand-in for the rendering of citation `index`.
+fn nested_placeholder(index: usize) -> String {
+    format!("{PLACEHOLDER_OPEN}{index}{PLACEHOLDER_CLOSE}")
+}
+
+/// Substitute each citation's nested-cite placeholders with the nested
+/// citation's own rendering. Nested citations always have a higher index than
+/// their parent, so resolving from the end means each substituted rendering
+/// is already placeholder-free.
+fn resolve_nested_citations(rendered: &mut [String]) {
+    for i in (0..rendered.len()).rev() {
+        while let Some(open) = rendered[i].find(PLACEHOLDER_OPEN) {
+            let Some(close) = rendered[i][open..]
+                .find(PLACEHOLDER_CLOSE)
+                .map(|c| open + c)
+            else {
+                break;
+            };
+            let digits = &rendered[i][open + PLACEHOLDER_OPEN.len_utf8()..close];
+            let replacement = digits
+                .parse::<usize>()
+                .ok()
+                .filter(|&n| n > i && n < rendered.len())
+                .map(|n| rendered[n].clone())
+                .unwrap_or_default();
+            rendered[i].replace_range(open..close + PLACEHOLDER_CLOSE.len_utf8(), &replacement);
+        }
+    }
+}
+
+/// Number of citations a `Cite` contributes to the flat citation list: itself
+/// plus every `Cite` nested in its prefixes/suffixes (see [`collect_cite`]).
+fn cite_span(cite: &crate::pandoc::Cite) -> usize {
+    1 + cite
+        .citations
+        .iter()
+        .flat_map(|c| c.prefix.iter().chain(c.suffix.iter()))
+        .map(|inline| match inline {
+            Inline::Cite(nested) => cite_span(nested),
+            _ => 0,
+        })
+        .sum::<usize>()
+}
+
 /// Collect citations from inlines.
 fn collect_citations_from_inlines(
     inlines: &[Inline],
@@ -755,42 +868,7 @@ fn collect_citations_from_inlines(
     for inline in inlines {
         match inline {
             Inline::Cite(cite) => {
-                // Convert our Citation type to quarto_citeproc's Citation
-                let items: Vec<CitationItem> = cite
-                    .citations
-                    .iter()
-                    .map(|c| CitationItem {
-                        id: c.id.clone(),
-                        locator: None, // TODO: Extract locator from suffix
-                        label: None,
-                        prefix: if c.prefix.is_empty() {
-                            None
-                        } else {
-                            Some(inlines_to_text(&c.prefix))
-                        },
-                        suffix: if c.suffix.is_empty() {
-                            None
-                        } else {
-                            Some(inlines_to_text(&c.suffix))
-                        },
-                        suppress_author: Some(matches!(
-                            c.mode,
-                            crate::pandoc::CitationMode::SuppressAuthor
-                        )),
-                        author_only: Some(matches!(
-                            c.mode,
-                            crate::pandoc::CitationMode::AuthorInText
-                        )),
-                        position: None,
-                    })
-                    .collect();
-
-                citations.push(Citation {
-                    id: None,
-                    note_number: Some(*note_number),
-                    items,
-                });
-                *note_number += 1;
+                collect_cite(cite, citations, note_number);
             }
             Inline::Emph(e) => collect_citations_from_inlines(&e.content, citations, note_number),
             Inline::Strong(s) => collect_citations_from_inlines(&s.content, citations, note_number),
@@ -987,10 +1065,12 @@ fn transform_inlines(
     let mut i = 0;
     while i < inlines.len() {
         match &mut inlines[i] {
-            Inline::Cite(_) => {
+            Inline::Cite(cite) => {
                 if *citation_index < citation_outputs.len() {
                     let (citation, rendered) = citation_outputs[*citation_index];
-                    *citation_index += 1;
+                    // Skip the cites nested in this one's affixes: their
+                    // renderings were folded into `rendered`.
+                    *citation_index += cite_span(cite);
 
                     // Get the Output AST for this citation to convert to Inlines
                     // For now, we use the rendered string and create a simple Str inline

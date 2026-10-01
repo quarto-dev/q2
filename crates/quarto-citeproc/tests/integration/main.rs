@@ -3,5 +3,6 @@
 
 pub mod csl_conformance;
 pub mod error_tests;
+pub mod same_author_year;
 
 fn main() {}
