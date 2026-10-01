@@ -225,8 +225,10 @@ consistency change with contract tests, not a TDD bug fix.
   orange_book_lua, pandoc_shim, listing_pipeline, ts_protocol, hephaestus, etc. These are
   pre-existing Windows failures. The 34th was the fixture above, now green. Logs:
   `target/logs/quarto-core-green.log`, `fix-subset.log`, `baseline-subset.log`
-- [ ] **NEXT SESSION:** orange-book-margin smoke guard on Windows:
+- [x] orange-book-margin smoke guard on Windows at `abc6f0f91` (2026-10-01):
   `SMOKE_FILTER=orange-book-margin cargo nextest run -p quarto -E 'test(smoke_all)'`
+  → 1 passed (`smoke_all::smoke_all`, 6.4 s)
+- [x] PR #760 body updated for the extension-path changes (2026-10-01)
 - [ ] Confirm the 33 pre-existing quarto-core failures are already tracked (braid,
   bd-eehxwr29 for CRLF); file strands for any that are not
 - [ ] Re-run roborev on `0e4c834c8`; post the 2987 replies (drafts below); close 2987
