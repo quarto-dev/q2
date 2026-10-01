@@ -195,9 +195,11 @@ fn transform_block(
 
     // Now check this block itself. Replace in place iff we recognize a
     // crossref target shape.
-    let converted = match block {
+    let converted: Option<Block> = match block {
         Block::Div(div) => classify_div(&div.attr, reg).map(|def| {
-            convert_div(
+            let cell_attr = cell_wrapper_attr(&div.attr);
+            let source_info = div.source_info.clone();
+            let node = convert_div(
                 std::mem::replace(
                     div,
                     Div {
@@ -208,10 +210,14 @@ fn transform_block(
                     },
                 ),
                 def,
-            )
+            );
+            match cell_attr {
+                Some(attr) => rewrap_cell(node, attr, source_info),
+                None => Block::Custom(node),
+            }
         }),
         Block::Figure(fig) => classify_fig(&fig.attr, reg).map(|def| {
-            convert_figure(
+            Block::Custom(convert_figure(
                 std::mem::replace(
                     fig,
                     Figure {
@@ -227,10 +233,10 @@ fn transform_block(
                     },
                 ),
                 def,
-            )
+            ))
         }),
         Block::CodeBlock(cb) => classify_codeblock(cb, reg).map(|(def, caption_value)| {
-            convert_codeblock(
+            Block::Custom(convert_codeblock(
                 std::mem::replace(
                     cb,
                     CodeBlock {
@@ -243,13 +249,13 @@ fn transform_block(
                 def,
                 caption_value,
                 diagnostics,
-            )
+            ))
         }),
         _ => None,
     };
 
-    if let Some(custom) = converted {
-        *block = Block::Custom(custom);
+    if let Some(converted) = converted {
+        *block = converted;
     }
 }
 
@@ -271,6 +277,63 @@ fn classify_div<'r>(
     }
     let id = attr.0.as_str();
     reg.classify_cite_id(id)
+}
+
+/// Whether `c` is the engine's per-output scaffold class.
+fn is_cell_output_display(block: &Block) -> bool {
+    matches!(block, Block::Div(d) if d.attr.1.iter().any(|c| c == "cell-output-display"))
+}
+
+/// If `attr` belongs to an engine `.cell` Div that Q1 would keep as a
+/// wrapper around its float, return the wrapper's attr: the cell's classes
+/// and attributes, without the identifier (the float keeps the id).
+///
+/// Mirrors the non-layout-cell branch of Q1's `parsefiguredivs.lua`
+/// (`div.classes:includes("cell") and div.attributes["layout-ncol"] == nil`).
+/// Layout cells do their own processing later and are left alone.
+fn cell_wrapper_attr(attr: &Attr) -> Option<Attr> {
+    if !attr.1.iter().any(|c| c == "cell") || attr.2.contains_key("layout-ncol") {
+        return None;
+    }
+    Some((String::new(), attr.1.clone(), attr.2.clone()))
+}
+
+/// Re-create Q1's `.cell > [code…, FloatRefTarget(cell-output-display…)]`
+/// shape from a float built out of a whole `.cell` Div.
+///
+/// `convert_div` slots *everything* in the cell into the float, which drops
+/// the `.cell` Div. Q1 instead keeps `.cell` and gives the float just the
+/// output Divs; the Typst post filter relies on that `.cell` parent to mark
+/// both Divs as scaffolding, and without it the `cell-output-display` Div
+/// renders as an extra `#block[…]` between `#figure([` and `#table(`. A cell
+/// with no output Div keeps the plain float.
+///
+/// This covers only a float that *is* the `.cell` Div (`.cell #tbl-…`). When
+/// the `.cell` sits inside a float wrapper Div (what the `#| label:` shorthand
+/// produces for an `echo: true` chunk), it is left as-is.
+fn rewrap_cell(
+    mut node: CustomNode,
+    attr: Attr,
+    source_info: quarto_source_map::SourceInfo,
+) -> Block {
+    let Some(Slot::Blocks(content)) = node.slots.get_mut("content") else {
+        return Block::Custom(node);
+    };
+    if !content.iter().any(is_cell_output_display) {
+        return Block::Custom(node);
+    }
+    let (outputs, rest): (Vec<Block>, Vec<Block>) = std::mem::take(content)
+        .into_iter()
+        .partition(is_cell_output_display);
+    *content = outputs;
+    let mut cell = rest;
+    cell.push(Block::Custom(node));
+    Block::Div(Div {
+        attr,
+        content: cell,
+        source_info,
+        attr_source: AttrSourceInfo::empty(),
+    })
 }
 
 /// Classify a Figure's attributes: if its id is a crossref target, return
@@ -1430,5 +1493,116 @@ mod tests {
             "a #fig-* code block must not sugar, got {:?}",
             out[0]
         );
+    }
+
+    fn cell_div(id: &str, extra_attrs: Vec<(&str, &str)>, content: Vec<Block>) -> Block {
+        let mut attrs = LinkedHashMap::new();
+        for (k, v) in extra_attrs {
+            attrs.insert(k.to_string(), v.to_string());
+        }
+        Block::Div(Div {
+            attr: (id.to_string(), vec!["cell".to_string()], attrs),
+            content,
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        })
+    }
+
+    fn output_div(content: Vec<Block>) -> Block {
+        Block::Div(Div {
+            attr: (
+                String::new(),
+                vec!["cell-output-display".to_string()],
+                LinkedHashMap::new(),
+            ),
+            content,
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        })
+    }
+
+    fn float_content(node: &Block) -> &Blocks {
+        let Block::Custom(c) = node else {
+            panic!("expected FloatRefTarget, got {node:?}");
+        };
+        let Some(Slot::Blocks(content)) = c.slots.get("content") else {
+            panic!("FloatRefTarget has no content slot");
+        };
+        content
+    }
+
+    #[test]
+    fn cell_with_output_keeps_cell_wrapper_around_float() {
+        // Q1 (`parsefiguredivs.lua`, non-layout cell) leaves the `.cell` Div in
+        // place and gives the float only the `cell-output-display` Divs; the
+        // Typst post filter keys its scaffolding off that `.cell` parent.
+        let reg = RefTypeRegistry::builtin();
+        let out = run_transform(
+            vec![cell_div(
+                "tbl-x",
+                vec![("tbl-cap", "Nums")],
+                vec![output_div(vec![code("text", "out")]), para("Nums")],
+            )],
+            &reg,
+        );
+        let Block::Div(cell) = &out[0] else {
+            panic!("expected .cell Div wrapper, got {:?}", out[0]);
+        };
+        assert_eq!(cell.attr.0, "", "wrapper must not repeat the float's id");
+        assert!(cell.attr.1.iter().any(|c| c == "cell"));
+        assert_eq!(cell.attr.2.get("tbl-cap").map(String::as_str), Some("Nums"));
+        assert_eq!(cell.content.len(), 1);
+        let content = float_content(&cell.content[0]);
+        assert_eq!(content.len(), 1);
+        assert!(matches!(&content[0], Block::Div(d)
+            if d.attr.1.iter().any(|c| c == "cell-output-display")));
+    }
+
+    #[test]
+    fn cell_echoed_code_stays_outside_the_float() {
+        let reg = RefTypeRegistry::builtin();
+        let out = run_transform(
+            vec![cell_div(
+                "tbl-x",
+                vec![],
+                vec![
+                    code("r", "kable(d)"),
+                    output_div(vec![code("text", "out")]),
+                    para("Nums"),
+                ],
+            )],
+            &reg,
+        );
+        let Block::Div(cell) = &out[0] else {
+            panic!("expected .cell Div wrapper, got {:?}", out[0]);
+        };
+        assert_eq!(cell.content.len(), 2);
+        assert!(matches!(&cell.content[0], Block::CodeBlock(_)));
+        assert_eq!(float_content(&cell.content[1]).len(), 1);
+    }
+
+    #[test]
+    fn layout_cell_and_outputless_cell_are_not_rewrapped() {
+        let reg = RefTypeRegistry::builtin();
+        // Layout cells do their own processing later (Q1 skips them too).
+        let out = run_transform(
+            vec![cell_div(
+                "fig-x",
+                vec![("layout-ncol", "2")],
+                vec![output_div(vec![code("text", "out")]), para("Cap")],
+            )],
+            &reg,
+        );
+        assert!(matches!(&out[0], Block::Custom(_)), "got {:?}", out[0]);
+        // No `cell-output-display` child: nothing to split out.
+        let out = run_transform(
+            vec![cell_div(
+                "fig-y",
+                vec![],
+                vec![code("text", "listing"), para("Cap")],
+            )],
+            &reg,
+        );
+        assert!(matches!(&out[0], Block::Custom(_)), "got {:?}", out[0]);
     }
 }
