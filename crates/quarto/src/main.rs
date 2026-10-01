@@ -434,11 +434,6 @@ enum Commands {
         args: Vec<String>,
     },
 
-    /// Inline `<style>` rules of the HTML on stdin into `style` attributes
-    /// (internal helper for the Pandoc filter chain)
-    #[command(name = "inline-css", hide = true)]
-    InlineCss,
-
     /// Run the version of Typst embedded within Quarto
     Typst {
         /// Arguments to pass to typst
@@ -839,6 +834,10 @@ enum CallCommands {
         #[arg(long)]
         workspace: bool,
     },
+    /// Inline `<style>` rules of the HTML on stdin into `style` attributes
+    /// (internal helper for the Pandoc filter chain)
+    #[command(name = "inline-css", hide = true)]
+    InlineCss,
 }
 
 #[derive(Subcommand)]
@@ -1311,7 +1310,7 @@ fn main() -> Result<()> {
     quarto_error_catalog::install();
 
     // Let Pandoc filters call back into this binary (`quarto-cli-path`), e.g.
-    // `q2 inline-css` for raw HTML tables.
+    // `q2 call inline-css` for raw HTML tables.
     if let Ok(exe) = std::env::current_exe() {
         quarto_core::pandoc_filters::params::set_cli_path(exe);
     }
@@ -1462,7 +1461,6 @@ fn main() -> Result<()> {
         Commands::Remove { .. } => commands::remove::execute(),
         Commands::Convert { .. } => commands::convert::execute(),
         Commands::Pandoc { .. } => commands::pandoc::execute(),
-        Commands::InlineCss => commands::inline_css::execute(),
         Commands::Typst { .. } => commands::typst::execute(),
         Commands::Run { .. } => commands::run::execute(),
         Commands::List { .. } => commands::list::execute(),
@@ -1504,6 +1502,7 @@ fn main() -> Result<()> {
                     workspace,
                 },
             ),
+            CallCommands::InlineCss => commands::inline_css::execute(),
         },
         Commands::Lsp => commands::lsp::execute(),
         Commands::GetConfig {

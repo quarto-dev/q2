@@ -401,7 +401,7 @@ fn insert_top_level_literals(
     blob.insert("execution-engine".to_string(), json!("markdown"));
     // `quarto.config.cli_path()` in `init.lua`. Filters that shell back into
     // the CLI use it; `normalize/astpipeline.lua` pipes raw HTML tables
-    // through `<cli> inline-css` (the q2 stand-in for Q1's juice step).
+    // through `<cli> call inline-css` (the q2 stand-in for Q1's juice step).
     // Absent unless the CLI registered itself (see `set_cli_path`).
     if let Some(cli) = CLI_PATH.get() {
         blob.insert("quarto-cli-path".to_string(), json!(cli.to_string_lossy()));
