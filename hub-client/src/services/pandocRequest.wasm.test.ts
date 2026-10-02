@@ -35,7 +35,11 @@ interface Envelope {
     resource_refs: RequestFile[];
     share_tree_version: string;
     argv: string[];
+    env: Record<string, string>;
     job_id: string;
+    writer: string;
+    output_path: string;
+    post: string;
   };
 }
 
@@ -63,6 +67,9 @@ interface WasmModule {
   ) => string;
   get_pandoc_formats: () => string;
   resolve_pandoc_formats: (path: string) => string;
+  get_typst_assets_version: () => string;
+  get_typst_assets: () => { typst_assets_version: string; files: RequestFile[] };
+  typst_date_prelude: (source_date_epoch: number) => string;
 }
 
 let wasm: WasmModule;
@@ -173,14 +180,13 @@ describe('render_pandoc_request', () => {
     expect(out.diagnostics.some((d) => d.kind === 'error' && d.code === 'Q-5-30')).toBe(true);
   });
 
-  it('refuses a format pandoc.wasm cannot produce and an unavailable one', async () => {
+  it('refuses a format pandoc.wasm cannot produce', async () => {
     wasm.vfs_add_file('/project/doc.qmd', '# Hi\n');
-    const pdf = await wasm.render_pandoc_request('/project/doc.qmd', 'pdf');
-    expect(pdf.success).toBe(false);
-    expect(pdf.error).toMatch(/cannot be rendered by pandoc/);
-    const typst = await wasm.render_pandoc_request('/project/doc.qmd', 'typst');
-    expect(typst.success).toBe(false);
-    expect(typst.error).toMatch(/not available in the browser yet/);
+    for (const format of ['latex', 'html', 'nonsense']) {
+      const out = await wasm.render_pandoc_request('/project/doc.qmd', format);
+      expect(out.success, format).toBe(false);
+      expect(out.error, format).toMatch(/cannot be rendered by pandoc/);
+    }
   });
 
   it('says projects are not supported yet for a document inside a _quarto.yml project', async () => {
@@ -261,7 +267,8 @@ describe('classify_pandoc_completion', () => {
 });
 
 describe('format table and resolver', () => {
-  const formats = () => JSON.parse(wasm.get_pandoc_formats()).formats as { key: string; available: boolean }[];
+  const formats = () =>
+    JSON.parse(wasm.get_pandoc_formats()).formats as { key: string; available: boolean; hidden: boolean }[];
   const resolve = (path: string) =>
     JSON.parse(wasm.resolve_pandoc_formats(path)) as {
       success: boolean;
@@ -271,8 +278,10 @@ describe('format table and resolver', () => {
     };
 
   it('lists the downloadable formats in menu order', () => {
-    expect(formats().map((f) => f.key)).toEqual(['docx', 'pptx', 'epub', 'typst']);
-    expect(formats().find((f) => f.key === 'typst')!.available).toBe(false);
+    expect(formats().map((f) => f.key)).toEqual(['docx', 'pptx', 'epub', 'typst', 'pdf']);
+    expect(formats().every((f) => f.available)).toBe(true);
+    // `pdf` is accepted by the render but stays out of the menu until host H8.
+    expect(formats().filter((f) => f.hidden).map((f) => f.key)).toEqual(['pdf']);
   });
 
   it('takes the first key of a format map', () => {
@@ -306,6 +315,77 @@ describe('format table and resolver', () => {
   });
 });
 
+describe('typst request (R4)', () => {
+  const DOC = '---\ntitle: Typst Doc\n---\n\n# Hello\n\nA *typst* paragraph.\n\n![A figure](figure.png)\n';
+
+  it('carries the template as files, no images, and the output as .typ', async () => {
+    wasm.vfs_add_file('/project/doc.qmd', DOC);
+    wasm.vfs_add_binary_file('/project/figure.png', FIGURE);
+    const out = await wasm.render_pandoc_request('/project/doc.qmd', 'typst', SDE);
+    expect(out.success).toBe(true);
+    const request = out.request!;
+    expect(request.writer).toBe('typst');
+    expect(request.output_path).toBe('/project/doc.typ');
+    expect(request.post).toBe('none');
+    const templateFiles = request.files.filter((f) => f.path.includes('/pandoc-typst-template/'));
+    expect(templateFiles.length).toBeGreaterThanOrEqual(8);
+    // pandoc never reads a typst image; only the pdf request mounts it.
+    expect(request.resource_refs).toEqual([]);
+    const pdf = await wasm.render_pandoc_request('/project/doc.qmd', 'pdf', SDE);
+    expect(pdf.success).toBe(true);
+    expect(pdf.request!.post).toBe('compile_typst');
+    expect(pdf.request!.output_path).toBe('/project/doc.typ');
+    expect(pdf.request!.resource_refs.map((f) => f.path)).toEqual(['/project/figure.png']);
+    expect(pdf.request!.job_id).not.toBe(request.job_id);
+  });
+
+  it('reads a user template and partials from the VFS', async () => {
+    wasm.vfs_add_file('/project/my.typ', '// USER-TEMPLATE\n$body$\n');
+    wasm.vfs_add_file('/project/p/typst-show.typ', '// USER-SHOW\n');
+    wasm.vfs_add_file(
+      '/project/doc.qmd',
+      '---\ntitle: T\nformat:\n  typst:\n    template: my.typ\n    template-partials:\n      - p/typst-show.typ\n---\n\n# Hi\n',
+    );
+    const out = await wasm.render_pandoc_request('/project/doc.qmd', 'typst', SDE);
+    expect(out.success).toBe(true);
+    const text = (suffix: string) =>
+      new TextDecoder().decode(out.request!.files.find((f) => f.path.endsWith(suffix))!.bytes);
+    expect(text('/pandoc-typst-template/template.typ')).toBe('// USER-TEMPLATE\n$body$\n');
+    expect(text('/pandoc-typst-template/typst-show.typ')).toBe('// USER-SHOW\n');
+  });
+
+  it('reports the remote-image and CSS-inlining limits, and sends no quarto-cli-path', async () => {
+    wasm.vfs_add_file(
+      '/project/doc.qmd',
+      '---\ntitle: T\n---\n\n![remote](https://example.com/a.png)\n\n```{=html}\n<style>td{color:red}</style><table><tr><td>x</td></tr></table>\n```\n',
+    );
+    const out = await wasm.render_pandoc_request('/project/doc.qmd', 'typst', SDE);
+    expect(out.success).toBe(true);
+    expect(out.diagnostics.map((d) => d.code).filter(Boolean)).toEqual(expect.arrayContaining(['Q-20-9', 'Q-20-10']));
+    const blob = JSON.parse(Buffer.from(out.request!.env.QUARTO_FILTER_PARAMS, 'base64').toString());
+    expect(blob['quarto-cli-path']).toBeUndefined();
+  });
+
+  it('feeds the host font list to the filter params', async () => {
+    wasm.vfs_add_file('/project/doc.qmd', '# Hi\n');
+    const out = await wasm.render_pandoc_request('/project/doc.qmd', 'pdf', SDE, undefined, ['Inter']);
+    const blob = JSON.parse(Buffer.from(out.request!.env.QUARTO_FILTER_PARAMS, 'base64').toString());
+    expect(blob['typst-available-fonts']).toEqual(['Inter']);
+  });
+
+  it('exports the typst assets separately from the share tree, and the date prelude', () => {
+    const assets = wasm.get_typst_assets();
+    expect(assets.typst_assets_version).toBe(wasm.get_typst_assets_version());
+    expect(assets.typst_assets_version).not.toBe(wasm.get_pandoc_share_tree_version());
+    expect(assets.files.some((f) => f.path.startsWith('packages/preview/'))).toBe(true);
+    expect(assets.files.some((f) => f.path.startsWith('fonts/'))).toBe(true);
+    expect(assets.files.every((f) => f.bytes instanceof Uint8Array)).toBe(true);
+    expect(wasm.typst_date_prelude(SDE)).toBe(
+      '#set document(date: datetime(year: 2023, month: 11, day: 14, hour: 22, minute: 13, second: 20))\n',
+    );
+  });
+});
+
 // The point of the phase: a docx request produced inside the hub's wasm runs in
 // the real pandoc.wasm (host phase H1's `execute`) and yields a docx with the
 // image. Needs `node scripts/fetch-pandoc-wasm.mjs` (a missing wasm skips locally,
@@ -336,5 +416,23 @@ describe.skipIf(!pandocWasmAvailable())('request built in wasm, run in pandoc.wa
       wasm.classify_pandoc_completion('pandoc-write', true, 'exit status: 0', result.stderr, out.request!.json_path as string),
     );
     expect(classified.diagnostics.filter((d: { kind: string }) => d.kind === 'error')).toEqual([]);
+  }, 120_000);
+
+  it('produces the .typ source of a typst request, template partials included', async () => {
+    const module = await WebAssembly.compile(readFileSync(WASM_PATH));
+    wasm.vfs_add_file('/project/doc.qmd', '---\ntitle: Typst Doc\n---\n\n# Hello\n\nA *typst* paragraph.\n\n![A figure](figure.png)\n');
+    wasm.vfs_add_binary_file('/project/figure.png', PNG_1X1);
+    const out = await wasm.render_pandoc_request('/project/doc.qmd', 'typst', SDE);
+    expect(out.success).toBe(true);
+    const tree = wasm.get_pandoc_share_tree();
+    const result = await execute(out.request as unknown as PandocRequest, tree, { module });
+    if (!result.ok) throw new Error(`pandoc failed (${result.kind}): ${result.stderr}`);
+    const typ = new TextDecoder().decode(result.output);
+    expect(typ).toContain('Typst Doc');
+    expect(typ).toContain('A figure');
+    expect(typ).toContain('typst');
+    // The vendored template's partials were found next to template.typ.
+    expect(typ).toContain('#show: doc => article(');
+    expect(typ).toContain('image("figure.png")');
   }, 120_000);
 });

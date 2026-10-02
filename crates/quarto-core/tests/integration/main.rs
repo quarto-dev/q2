@@ -110,6 +110,7 @@ pub mod pandoc_request_contract;
 pub mod pandoc_request_execute;
 pub mod pandoc_request_exports;
 pub mod pandoc_request_prepare;
+pub mod pandoc_request_typst;
 pub mod pandoc_resource_refs;
 pub mod pandoc_shim;
 pub mod pandoc_shim_goldens;

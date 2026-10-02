@@ -171,6 +171,8 @@ mod transport {
             temp_root: PathBuf::from("/__q2_share__"),
             source_date_epoch: Some(1_700_000_000),
             collect_resources: true,
+            typst_available_fonts: None,
+            post: quarto_core::pandoc_request::RequestPost::None,
         }))
         .await
         .expect("request");
@@ -214,6 +216,8 @@ mod transport {
             temp_root: PathBuf::from("/__q2_share__"),
             source_date_epoch: Some(1_700_000_000),
             collect_resources: true,
+            typst_available_fonts: None,
+            post: quarto_core::pandoc_request::RequestPost::None,
         });
         let seen = Arc::new(std::sync::Mutex::new(None));
         let stages: Vec<Box<dyn PipelineStage>> = vec![

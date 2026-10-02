@@ -127,13 +127,12 @@ fn a_document_with_errors_returns_no_request() {
 }
 
 #[test]
-fn unsupported_and_unavailable_formats_say_why() {
+fn unsupported_formats_say_why() {
     let (_guard, root) = scratch();
     let doc = root.join("doc.qmd");
     write(&doc, b"# Hi\n");
     for (format, needle) in [
-        ("typst", "not available in the browser yet"),
-        ("pdf", "cannot be rendered by pandoc"),
+        ("latex", "cannot be rendered by pandoc"),
         ("html", "cannot be rendered by pandoc"),
         ("nonsense", "cannot be rendered by pandoc"),
     ] {
@@ -247,7 +246,7 @@ fn an_unknown_format_is_neither_and_no_format_is_html() {
 }
 
 /// The table is what the render function accepts: every `available` row
-/// renders, every other row is refused with "not available yet".
+/// renders (hidden ones too: `pdf` is accepted but not offered).
 #[test]
 fn the_table_agrees_with_what_render_pandoc_request_accepts() {
     let (_guard, root) = scratch();

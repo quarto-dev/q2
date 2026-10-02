@@ -26,6 +26,7 @@ use async_trait::async_trait;
 use quarto_error_reporting::DiagnosticMessageBuilder;
 use quarto_pandoc_types::ConfigValue;
 
+use super::pandoc_write::brand_for_mode;
 use crate::pandoc_filters::bundle::extract_typst_packages;
 use crate::stage::{
     PipelineData, PipelineDataKind, PipelineError, PipelineStage, RenderedOutput, StageContext,
@@ -411,20 +412,6 @@ pub(crate) fn resolve_font_paths(
             None => input_dir.join(p),
         })
         .collect()
-}
-
-/// The brand variant Typst renders with: the dark half when the
-/// document's `brand-mode` is `dark` and a dark half exists, otherwise
-/// light (the default, matching the `brand-mode` filter param).
-pub(crate) fn brand_for_mode<'a>(
-    light: Option<&'a quarto_brand::ResolvedBrand>,
-    dark: Option<&'a quarto_brand::ResolvedBrand>,
-    brand_mode: Option<&str>,
-) -> Option<&'a quarto_brand::ResolvedBrand> {
-    match brand_mode {
-        Some("dark") => dark.or(light),
-        _ => light,
-    }
 }
 
 /// `command/render/pandoc.ts:1541-1548`: each brand `source: file` font

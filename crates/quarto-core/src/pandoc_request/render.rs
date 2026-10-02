@@ -11,10 +11,10 @@ use quarto_error_reporting::{DiagnosticKind, DiagnosticMessage};
 use quarto_source_map::SourceContext;
 use quarto_system_runtime::SystemRuntime;
 
-use super::formats::{FormatClass, format_class, pandoc_format};
-use super::{PandocRequest, PrepareOptions, constants};
+use super::formats::pandoc_format;
+use super::{PandocRequest, PrepareOptions, RequestPost, constants};
 use crate::error::QuartoError;
-use crate::format::{Format, FormatIdentifier};
+use crate::format::Format;
 use crate::pipeline::{build_pandoc_request_stages, run_pipeline};
 use crate::project::{DocumentInfo, ProjectContext};
 use crate::render::{BinaryDependencies, RenderContext, RenderOptions};
@@ -76,25 +76,25 @@ pub async fn render_pandoc_request(
         resolver,
     } = input;
 
-    // D8: only the table's downloadable formats; typst waits for R4.
-    match (format_class(format_key), pandoc_format(format_key)) {
-        (FormatClass::Download, Some(info)) if info.available => {}
-        (FormatClass::Download, _) => {
-            return PandocRequestOutcome::failed(format!(
-                "{format_key} output is not available in the browser yet"
-            ));
-        }
-        _ => {
-            return PandocRequestOutcome::failed(format!(
-                "{format_key} cannot be rendered by pandoc in the browser"
-            ));
-        }
+    // D8: only the table's formats. `pdf` is the typst request plus a
+    // `compile_typst` post step (the host compiles the `.typ`), so it is
+    // built as typst.
+    let Some(info) = pandoc_format(format_key) else {
+        return PandocRequestOutcome::failed(format!(
+            "{format_key} cannot be rendered by pandoc in the browser"
+        ));
+    };
+    if !info.available {
+        return PandocRequestOutcome::failed(format!(
+            "{format_key} output is not available in the browser yet"
+        ));
     }
-    let format = match Format::from_format_string(format_key) {
+    let compile_typst = format_key == "pdf";
+    let format = match Format::from_format_string(if compile_typst { "typst" } else { format_key })
+    {
         Ok(f) => f,
         Err(e) => return PandocRequestOutcome::failed(e),
     };
-    debug_assert_ne!(format.identifier, FormatIdentifier::Typst);
 
     // R7 stage 0 brings project documents; until then H5 shows this.
     if !project.is_single_file {
@@ -122,6 +122,12 @@ pub async fn render_pandoc_request(
         temp_root: PathBuf::from(&constants().share_root),
         source_date_epoch,
         collect_resources: true,
+        typst_available_fonts: typst_available_fonts.clone(),
+        post: if compile_typst {
+            RequestPost::CompileTypst
+        } else {
+            RequestPost::None
+        },
     });
 
     let source_name = path.to_string_lossy();
@@ -171,8 +177,8 @@ pub async fn render_pandoc_request(
     };
     if typst_available_fonts.is_some() {
         request.typst_available_fonts = typst_available_fonts;
-        request.job_id = request.compute_job_id();
     }
+    request.job_id = request.compute_job_id();
     PandocRequestOutcome {
         request: Some(request),
         diagnostics,

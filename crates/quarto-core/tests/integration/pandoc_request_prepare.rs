@@ -10,7 +10,9 @@ use quarto_core::format::{Format, FormatIdentifier};
 use quarto_core::pandoc_request::{
     PandocRequest, PrepareOptions, RequestFile, constants, validate_mounts,
 };
-use quarto_core::pipeline::{build_pandoc_pipeline_stages, run_pipeline};
+use quarto_core::pipeline::{
+    build_pandoc_pipeline_stages, build_pandoc_request_stages, run_pipeline,
+};
 use quarto_core::project::{DocumentInfo, ProjectContext};
 use quarto_core::render::{BinaryDependencies, RenderContext};
 use quarto_core::stage::stages::PandocPrepareStage;
@@ -23,6 +25,8 @@ fn wasm_opts() -> PrepareOptions {
         temp_root: PathBuf::from(&constants().share_root),
         source_date_epoch: Some(SDE),
         collect_resources: true,
+        typst_available_fonts: None,
+        post: quarto_core::pandoc_request::RequestPost::None,
     }
 }
 
@@ -64,6 +68,8 @@ fn job_id_is_stable_across_temp_roots_and_epochs_and_sensitive_to_inputs() {
         temp_root: PathBuf::from(root),
         source_date_epoch: sde,
         collect_resources: false,
+        typst_available_fonts: None,
+        post: quarto_core::pandoc_request::RequestPost::None,
     };
     let a = prepare_at(dir, DOC, Some(opts("/nonexistent/tmp-aaa", Some(1))));
     let b = prepare_at(dir, DOC, Some(opts("/nonexistent/tmp-bbb", Some(2))));
@@ -106,6 +112,8 @@ fn prepare_writes_nothing_and_needs_nothing_on_disk() {
             temp_root: share.clone(),
             source_date_epoch: None,
             collect_resources: false,
+            typst_available_fonts: None,
+            post: quarto_core::pandoc_request::RequestPost::None,
         }),
     );
     assert!(!root.exists(), "prepare() created {}", root.display());
@@ -328,10 +336,12 @@ fn to_recording_roots(s: &str, req: &PandocRequest) -> String {
 }
 
 /// Machine-specific values inside the params blob: the CLI path and the
-/// Typst path are process state, not document state.
+/// Typst path are process state, not document state, and the recorded run's
+/// font list came from `typst fonts`, which the browser request does not run
+/// (the host supplies it).
 fn scrub_params(v: &mut Value) {
     if let Some(obj) = v.as_object_mut() {
-        for key in ["quarto-cli-path", "typst-path"] {
+        for key in ["quarto-cli-path", "typst-path", "typst-available-fonts"] {
             obj.remove(key);
         }
     }
@@ -346,8 +356,16 @@ fn decode_params(blob: &str) -> Value {
     v
 }
 
-#[test]
-fn docx_request_matches_the_recorded_native_run() {
+/// Prepare each fixture as `format` and compare with what native pandoc
+/// did (R0's recordings): argv, the path/share env and the filter params.
+/// Returns the request and the recording directory per fixture, for the
+/// caller's format-specific checks.
+fn check_against_recordings(
+    format: &Format,
+    suffix: &str,
+    stages: impl Fn() -> Vec<Box<dyn quarto_core::stage::PipelineStage>>,
+    mut extra: impl FnMut(&str, &PandocRequest, &Path),
+) {
     let rec_root = fixtures_dir().join("pandoc-recordings/recordings");
     for (name, root, qmd, resources) in DOCX_FIXTURES {
         let scratch = tempfile::tempdir().unwrap();
@@ -368,27 +386,31 @@ fn docx_request_matches_the_recorded_native_run() {
             output_dir: doc_dir.clone(),
             ..Default::default()
         };
-        let output = input.with_extension("docx");
+        let output = input.with_extension(&format.output_extension);
         let doc = DocumentInfo::from_path(&input).with_output(&output);
-        let format = Format::docx();
         let binaries = BinaryDependencies::new();
-        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        let mut ctx = RenderContext::new(&project, &doc, format, &binaries);
         ctx.prepare_options = Some(PrepareOptions {
             temp_root,
             source_date_epoch: Some(SDE),
             collect_resources: false,
+            typst_available_fonts: None,
+            post: quarto_core::pandoc_request::RequestPost::None,
         });
-        let mut stages = build_pandoc_pipeline_stages(FormatIdentifier::Docx);
-        stages.pop();
-        stages.push(Box::new(PandocPrepareStage::new()));
         let runtime = Arc::new(quarto_system_runtime::NativeRuntime::new());
         let content = std::fs::read(&input).unwrap();
         let file_name = input.file_name().unwrap().to_str().unwrap();
-        pollster::block_on(run_pipeline(&content, file_name, &mut ctx, runtime, stages))
-            .unwrap_or_else(|e| panic!("{name}: {e}"));
+        pollster::block_on(run_pipeline(
+            &content,
+            file_name,
+            &mut ctx,
+            runtime,
+            stages(),
+        ))
+        .unwrap_or_else(|e| panic!("{name}: {e}"));
         let req = ctx.pandoc_request.take().unwrap();
 
-        let rec = rec_root.join(format!("{name}-docx"));
+        let rec = rec_root.join(format!("{name}-{suffix}"));
         let argv: Vec<String> =
             serde_json::from_slice(&std::fs::read(rec.join("argv.json")).unwrap()).unwrap();
         let got_argv: Vec<String> = req
@@ -421,7 +443,77 @@ fn docx_request_matches_the_recorded_native_run() {
         };
         assert_eq!(got, want, "{name}: QUARTO_FILTER_PARAMS");
         assert!(!req.env.contains_key("LANG"));
+        extra(name, &req, &rec);
     }
+}
+
+#[test]
+fn docx_request_matches_the_recorded_native_run() {
+    check_against_recordings(
+        &Format::docx(),
+        "docx",
+        || {
+            let mut stages = build_pandoc_pipeline_stages(FormatIdentifier::Docx);
+            stages.pop();
+            stages.push(Box::new(PandocPrepareStage::new()));
+            stages
+        },
+        |_, _, _| {},
+    );
+}
+
+/// The typst request is the recorded native run structurally: argv, env,
+/// params and every staged template file (R4). The `.typ` limitations the
+/// recording does not have (design D8.6): no `typst-available-fonts` (the
+/// host's list or none; scrubbed above), and no `typst-packages/` or
+/// fonts, which only the PDF compile reads.
+#[test]
+fn typst_request_matches_the_recorded_native_run() {
+    check_against_recordings(
+        &Format::from_format_string("typst").unwrap(),
+        "typst",
+        || build_pandoc_request_stages(Vec::new()),
+        |name, req, rec| {
+            let tmp = rec.join("fs/__q2_tmp__");
+            let mut checked = 0;
+            for entry in walk(&tmp.join("pandoc-typst-template")) {
+                let rel = entry
+                    .strip_prefix(&tmp)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                let want_path = format!("{}/{rel}", req.share_root);
+                let file = req
+                    .files
+                    .iter()
+                    .find(|f| f.path == want_path)
+                    .unwrap_or_else(|| panic!("{name}: no request file {want_path}"));
+                assert_eq!(file.bytes, std::fs::read(&entry).unwrap(), "{name}: {rel}");
+                checked += 1;
+            }
+            assert!(checked >= 8, "{name}: template files checked: {checked}");
+            // Nothing else of the template tree sneaks in.
+            let staged = req
+                .files
+                .iter()
+                .filter(|f| f.path.contains("/pandoc-typst-template/"))
+                .count();
+            assert_eq!(staged, checked, "{name}: template files in the request");
+        },
+    );
+}
+
+fn walk(dir: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            out.extend(walk(&path));
+        } else {
+            out.push(path);
+        }
+    }
+    out
 }
 
 // --- the published golden is a real request ----------------------------
