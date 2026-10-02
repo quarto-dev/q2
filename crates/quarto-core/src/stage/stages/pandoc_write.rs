@@ -45,7 +45,7 @@ use crate::pandoc_filters::params::{
 };
 use crate::pandoc_filters::params_codec::encode_params_blob;
 use crate::pandoc_filters::version;
-use crate::pandoc_request::args::is_absolute_request_path;
+use crate::pandoc_request::args::{is_absolute_request_path, to_native_windows_arg};
 use crate::pandoc_request::{
     PandocArg, PandocRequest, PrepareOptions, REQUEST_SCHEMA_VERSION, RequestFile, constants,
     normalize_request_path, share_tree_version, validate_mounts,
@@ -1122,9 +1122,26 @@ impl PandocWriteStage {
             )
         })?;
 
+        // Native Windows gets native separators back (see
+        // `to_native_windows_arg`); the request itself stays `/`-normalized.
+        // The params blob is not touched: its builders emitted native paths.
+        let native = |s: &str| {
+            if cfg!(windows) {
+                to_native_windows_arg(s)
+            } else {
+                s.to_string()
+            }
+        };
+        let env = request.env.iter().map(|(k, v)| {
+            let v = match k.as_str() {
+                "QUARTO_SHARE_PATH" | "QUARTO_FILTER_DEPENDENCY_FILE" => native(v),
+                _ => v.clone(),
+            };
+            (k.clone(), v)
+        });
         let output = Command::new(pandoc_bin)
-            .args(request.argv.iter().skip(1))
-            .envs(&request.env)
+            .args(request.argv.iter().skip(1).map(|a| native(a)))
+            .envs(env)
             .output()
             .map_err(|e| {
                 PipelineError::stage_error(name, format!("failed to execute pandoc: {e}"))

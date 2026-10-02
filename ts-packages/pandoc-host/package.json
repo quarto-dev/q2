@@ -1,0 +1,39 @@
+{
+  "name": "@quarto/pandoc-host",
+  "version": "0.0.1",
+  "private": true,
+  "description": "DOM-free host that runs the pinned pandoc.wasm in WASI command mode from a PandocRequest (pandoc-wasm epic, host phase H1). Worker-agnostic core: execute(request, shareTree, { module }).",
+  "license": "MIT",
+  "author": {
+    "name": "Posit PBC"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "source": "./src/index.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "typecheck:tests": "tsc -p tsconfig.tests.json"
+  },
+  "dependencies": {
+    "@bjorn3/browser_wasi_shim": "0.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "ajv": "^8.17.1",
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.17"
+  }
+}
