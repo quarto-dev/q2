@@ -162,17 +162,32 @@ jobs:
       - name: Pre-build hub binary
         run: cargo build --bin hub
 
-      # Install Playwright browsers
+      # Playwright browsers. The cache key is the resolved Playwright
+      # version (browser builds are pinned to it); on a hit the download is
+      # skipped, but `--with-deps` still installs the OS libraries, which
+      # live outside the cache.
+      - name: Get Playwright version
+        id: playwright_version
+        run: |
+          cd hub-client
+          echo "version=$(npx playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright_version.outputs.version }}-chromium-firefox
+
       - name: Install Playwright
         run: |
           cd hub-client
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps chromium firefox
 
       # Run E2E tests — custom specs only (smoke-all excluded by testIgnore)
       - name: Run E2E tests
         run: |
           cd hub-client
-          npx playwright test
+          npx playwright test --project=chromium
 
       # Author-attribution E2E (author-ID transition, Phase 5): runs its own
       # auth-on hub + mock OIDC IdP + static proxies (e2e-author/setup.ts),
@@ -226,7 +241,7 @@ jobs:
           SMOKE_ALL_WORKERS: ${{ inputs.smoke-all-workers }}
         run: |
           cd hub-client
-          npx playwright test --config playwright.smoke-all.config.ts
+          npx playwright test --config playwright.smoke-all.config.ts --project=chromium
 
       # Dev-harness behavioral tests: keyboard contracts, dialog focus,
       # axe scans, forced-colors, reduced-motion, viewport reflow. No hub
@@ -236,7 +251,31 @@ jobs:
       - name: Run harness tests
         run: |
           cd hub-client
-          npx playwright test --config playwright.harness.config.ts
+          npx playwright test --config playwright.harness.config.ts --project=chromium
+
+      # Firefox (Playwright's patched build) over the same default and
+      # harness suites. continue-on-error while the initial triage is in
+      # flight: a Firefox failure is reported on the step but does not
+      # gate the PR. Remove it once the suite is green on Firefox.
+      # Separate report/output dirs keep Firefox traces from clobbering
+      # the Chromium ones (Playwright wipes --output at the start of a run).
+      - name: Run E2E tests (Firefox)
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        env:
+          PLAYWRIGHT_HTML_REPORT: playwright-report-firefox
+        run: |
+          cd hub-client
+          npx playwright test --project=firefox --output=test-results-firefox
+
+      - name: Run harness tests (Firefox)
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        env:
+          PLAYWRIGHT_HTML_REPORT: playwright-report-firefox-harness
+        run: |
+          cd hub-client
+          npx playwright test --config playwright.harness.config.ts --project=firefox --output=test-results-firefox-harness
 
       # sync-test-harness's hub tier spawns `cargo run --bin hub` with a 120s
       # readiness timeout, so it belongs in this workflow rather than
@@ -265,3 +304,19 @@ jobs:
           name: playwright-report
           path: hub-client/playwright-report/
           retention-days: 7
+
+      # Firefox reports (with traces) are uploaded even when green so a
+      # triage run can inspect them; the continue-on-error steps above
+      # never fail the job on their own.
+      - name: Upload Playwright report (Firefox)
+        uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report-firefox
+          path: |
+            hub-client/playwright-report-firefox/
+            hub-client/playwright-report-firefox-harness/
+            hub-client/test-results-firefox/
+            hub-client/test-results-firefox-harness/
+          retention-days: 7
+          if-no-files-found: ignore
