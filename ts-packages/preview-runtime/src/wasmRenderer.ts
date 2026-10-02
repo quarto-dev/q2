@@ -111,6 +111,7 @@ interface WasmModuleExtended {
     source_date_epoch?: number,
     capture_gz_json?: Uint8Array,
     typst_available_fonts?: string[],
+    abort_signal?: AbortSignal,
   ) => Promise<RenderPandocRequestResponse>;
   get_pandoc_share_tree_version: () => string;
   get_pandoc_share_tree: () => {
@@ -656,6 +657,8 @@ export async function renderPandocRequest(
     sourceDateEpoch?: number;
     captureGzJson?: Uint8Array;
     typstAvailableFonts?: string[];
+    /** Cancels the downloads of remote images (the click's signal). */
+    signal?: AbortSignal;
   } = {},
 ): Promise<RenderPandocRequestResponse> {
   const wasm = getWasm();
@@ -665,6 +668,7 @@ export async function renderPandocRequest(
     options.sourceDateEpoch,
     options.captureGzJson,
     options.typstAvailableFonts,
+    options.signal,
   );
 }
 

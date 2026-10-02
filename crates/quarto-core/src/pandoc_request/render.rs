@@ -15,7 +15,7 @@ use super::formats::pandoc_format;
 use super::{PandocRequest, PrepareOptions, RequestPost, constants};
 use crate::error::QuartoError;
 use crate::format::Format;
-use crate::pipeline::{build_pandoc_request_stages, run_pipeline};
+use crate::pipeline::{build_pandoc_request_stages_fetching, run_pipeline};
 use crate::project::{DocumentInfo, ProjectContext};
 use crate::render::{BinaryDependencies, RenderContext, RenderOptions};
 use crate::resource_resolver::ResourceResolverContext;
@@ -136,7 +136,7 @@ pub async fn render_pandoc_request(
         &source_name,
         &mut ctx,
         runtime,
-        build_pandoc_request_stages(captures),
+        build_pandoc_request_stages_fetching(captures),
     )
     .await
     {

@@ -115,6 +115,7 @@ declare module 'wasm-quarto-hub-client' {
     source_date_epoch?: number,
     capture_gz_json?: Uint8Array,
     typst_available_fonts?: string[],
+    abort_signal?: AbortSignal,
   ): Promise<RenderPandocRequestResponse>;
 
   /**

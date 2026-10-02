@@ -1,6 +1,6 @@
 ---
-title: "Remote Image Cannot Be Fetched for Typst in the Browser"
-description: "Producing Typst in the browser cannot fetch remote images, so a document that references one fails."
+title: "Remote Image Could Not Be Fetched for Typst in the Browser"
+description: "A remote image could not be downloaded while producing Typst in the browser, so its alt text is used instead."
 code: Q-20-9
 subsystem: pandoc
 status: stub
@@ -9,17 +9,20 @@ categories:
   - pandoc
 ---
 
-# `Q-20-9` — Remote Image Cannot Be Fetched for Typst in the Browser
+# `Q-20-9` — Remote Image Could Not Be Fetched for Typst in the Browser
 
-> Producing Typst in the browser cannot fetch remote images, so a
-> document that references one fails.
+> A remote image could not be downloaded while producing Typst in the
+> browser, so its alt text is used instead.
 
 ## What this means
 
-pandoc.wasm has no network access, and the Typst filter's remote image
-fetch is a hard failure there. A document that references an image by
-`http://` or `https://` URL therefore cannot be converted to Typst in
-the browser. Native `q2 render` is not affected.
+pandoc.wasm has no network access, so the browser downloads each
+`https://` image itself before pandoc runs. When a download fails (the
+server is unreachable, the response is over the size limit or is not an
+image, the URL is `http://`, or the server does not allow a web page to
+read it with CORS), Typst would stop on the missing image, so the image
+is replaced by its alt text and this warning names the URL and the
+reason. Native `q2 render` is not affected.
 
 ## How to fix
 

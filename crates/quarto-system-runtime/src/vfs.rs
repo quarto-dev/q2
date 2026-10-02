@@ -56,7 +56,11 @@ pub struct VfsWriteStats {
 ///
 /// Thread safety: Uses RwLock to satisfy Send + Sync trait bounds.
 /// In practice, WASM is single-threaded so this is never contended.
-#[derive(Debug, Default)]
+///
+/// `Clone` copies every file (including the bootstrap SCSS under
+/// `/__quarto_resources__`); a clone is a click-time snapshot that later
+/// writes to the original cannot reach (`WasmRuntime::snapshot`).
+#[derive(Debug, Default, Clone)]
 pub struct VirtualFileSystem {
     /// File contents, keyed by normalized absolute path
     files: HashMap<PathBuf, Vec<u8>>,
@@ -382,6 +386,25 @@ impl Drop for VirtualFileSystem {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn clone_is_a_snapshot_later_writes_do_not_reach() {
+        let mut live = VirtualFileSystem::new();
+        live.add_file(Path::new("/project/a.qmd"), b"click time".to_vec());
+        let snapshot = live.clone();
+        live.update_file(Path::new("/project/a.qmd"), b"edited".to_vec());
+        live.add_file(Path::new("/project/new.png"), b"new".to_vec());
+        live.remove_file(Path::new("/project/a.qmd"));
+        assert_eq!(
+            snapshot.read_file(Path::new("/project/a.qmd")).unwrap(),
+            b"click time"
+        );
+        assert!(!snapshot.exists(Path::new("/project/new.png")));
+        // And the other way: a mount in the snapshot is not in the live VFS.
+        let mut snapshot = snapshot;
+        snapshot.add_file(Path::new("/project/_remote/x.png"), b"x".to_vec());
+        assert!(!live.exists(Path::new("/project/_remote/x.png")));
+    }
 
     #[test]
     fn test_vfs_add_and_read_file() {

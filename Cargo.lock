@@ -6293,6 +6293,7 @@ dependencies = [
  "cssparser 0.36.0",
  "flate2",
  "fontique",
+ "futures",
  "glob",
  "hashlink",
  "hephaestus",
