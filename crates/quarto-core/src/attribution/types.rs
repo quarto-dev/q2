@@ -204,12 +204,19 @@ pub type AttributionHit = AttributionRecord;
 /// attribution on a non-consuming format would otherwise fire a
 /// `git blame` subprocess whose output goes nowhere visible.
 ///
-/// In v1 returns `true` for HTML and q2-debug JSON only. The
-/// `q2-debug` pseudo-format parses with `FormatIdentifier::Html` but
-/// keeps its original string in `target_format`, so the HTML branch
-/// covers both; `revealjs` has its own identifier and is excluded.
+/// Returns `true` for HTML, q2-debug JSON, and every Pandoc-hybrid
+/// format (docx, pptx, typst, ...). The `q2-debug` pseudo-format parses
+/// with `FormatIdentifier::Html` but keeps its original string in
+/// `target_format`, so the HTML branch covers both; `revealjs` has its
+/// own identifier and is excluded.
+///
+/// For Pandoc-hybrid formats the data is only consumable by pampa-side
+/// Lua filters (pre-ast, post-ast, pre-quarto) via
+/// `quarto.attribution.*`: the writer is a pandoc subprocess, which
+/// never sees it, and the HTML-specific render/viewer output is
+/// written to `format_options.html`, which those writers ignore.
 pub fn format_supports_attribution(format: &Format) -> bool {
-    matches!(format.identifier, FormatIdentifier::Html)
+    matches!(format.identifier, FormatIdentifier::Html) || format.identifier.is_pandoc_hybrid()
 }
 
 /// Read user-authored `meta.attribution.identities` (a small
