@@ -435,4 +435,54 @@ describe.skipIf(!pandocWasmAvailable())('request built in wasm, run in pandoc.wa
     expect(typ).toContain('#show: doc => article(');
     expect(typ).toContain('image("figure.png")');
   }, 120_000);
+
+  it('produces a pptx that carries the slide text and the image', async () => {
+    const module = await WebAssembly.compile(readFileSync(WASM_PATH));
+    wasm.vfs_add_file('/project/doc.qmd', '---\ntitle: Deck\n---\n\n# First slide\n\nA *pptx* paragraph.\n\n![A figure](figure.png)\n');
+    wasm.vfs_add_binary_file('/project/figure.png', PNG_1X1);
+    const out = await wasm.render_pandoc_request('/project/doc.qmd', 'pptx', SDE);
+    expect(out.success).toBe(true);
+    expect(out.request!.post).not.toBe('compile_typst');
+    const tree = wasm.get_pandoc_share_tree();
+    const result = await execute(out.request as unknown as PandocRequest, tree, { module });
+    if (!result.ok) throw new Error(`pandoc failed (${result.kind}): ${result.stderr}`);
+    const entries = unzipSync(result.output);
+    const names = Object.keys(entries);
+    expect(names).toContain('ppt/slides/slide1.xml');
+    expect(names.some((n) => n.startsWith('ppt/media/'))).toBe(true);
+    const slides = names.filter((n) => /^ppt\/slides\/slide\d+\.xml$/.test(n));
+    const text = slides.map((n) => new TextDecoder().decode(entries[n])).join('\n');
+    expect(text).toContain('First slide');
+    expect(text).toContain('pptx');
+  }, 120_000);
+
+  it('produces an epub with the user stylesheet and cover image from the VFS, each once', async () => {
+    const module = await WebAssembly.compile(readFileSync(WASM_PATH));
+    wasm.vfs_add_file(
+      '/project/doc.qmd',
+      '---\ntitle: Book\nformat:\n  epub:\n    epub-cover-image: cover.png\n    css: book.css\n---\n\n# Chapter\n\nAn *epub* paragraph.\n\n![A figure](figure.png)\n',
+    );
+    wasm.vfs_add_binary_file('/project/figure.png', PNG_1X1);
+    wasm.vfs_add_binary_file('/project/cover.png', PNG_1X1);
+    wasm.vfs_add_file('/project/book.css', 'p { color: red; }\n');
+    const out = await wasm.render_pandoc_request('/project/doc.qmd', 'epub', SDE);
+    expect(out.success).toBe(true);
+    const tree = wasm.get_pandoc_share_tree();
+    const result = await execute(out.request as unknown as PandocRequest, tree, { module });
+    if (!result.ok) throw new Error(`pandoc failed (${result.kind}): ${result.stderr}`);
+    const entries = unzipSync(result.output);
+    const names = Object.keys(entries);
+    expect(names).toContain('mimetype');
+    // `css:` reaches pandoc only as the absolute `--css=` flag, so the
+    // stylesheet is embedded once (pandoc renames it stylesheetN.css).
+    const css = names.filter((n) => n.endsWith('.css'));
+    const mine = css.filter((n) => new TextDecoder().decode(entries[n]).includes('color: red'));
+    expect(mine).toHaveLength(1);
+    expect(names.some((n) => n.includes('media/') && n.endsWith('.png'))).toBe(true);
+    const chapters = names.filter((n) => n.endsWith('.xhtml'));
+    const text = chapters.map((n) => new TextDecoder().decode(entries[n])).join('\n');
+    expect(text).toContain('An <em>epub</em> paragraph');
+    // The vendored callout stylesheet arrived through the request's files.
+    expect(text).toMatch(/callout/);
+  }, 120_000);
 });

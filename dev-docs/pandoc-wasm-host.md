@@ -110,7 +110,9 @@ with the Q1 golden (`.snap`) using the Rust extractor CLI:
 | Node | `npm run test:wasm -- goldenParity` (in `hub-client`) | built wasm pkg, `fetch-pandoc-wasm.mjs`, `cargo build -p quarto-output-extract` |
 | Chromium | `VITE_E2E=1 npm run build && npx playwright test --config playwright.harness.config.ts e2e/pandoc-parity.harness.spec.ts` | the same, plus `hub-client/public/pandoc/pandoc.wasm.gz` |
 
-`Q2_PARITY_OUT=<dir>` keeps the rendered docx files (to open in Word). The mermaid fixture's reference
+Typst, pptx and epub are covered by R0's recorded documents (`recordingParity.wasm.test.ts`, `e2e/pandoc-formats.harness.spec.ts`; the same two commands with `recordingParity` / the formats spec): each is seeded at `/__q2_doc__`, rendered through the Rust request and compared with the recording's native `reference/`.
+
+`Q2_PARITY_OUT=<dir>` keeps the rendered files (to open in Word). The mermaid fixture's reference
 is native q2's output, not Q1's (`pandoc-goldens/DIVERGENCES.md`).
 
 ## Measuring (H3)

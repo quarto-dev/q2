@@ -940,8 +940,21 @@ impl PandocWriteStage {
 
         // T9.1: the Pandoc-superset shape (`raw: false`), never pampa's
         // native `raw-json` envelope.
+        //
+        // Epub's `css` travels as absolute `--css=` flags (`epub_extra_args`).
+        // Left in the metadata too, pandoc would read the document-relative
+        // value against its own cwd (`/` in the browser, the q2 process cwd
+        // natively) and embed every stylesheet twice, so it is left out of
+        // the serialized AST only.
+        let epub_css = if ctx.format.identifier == FormatIdentifier::Epub {
+            let css = doc.ast.meta.get("css").cloned();
+            doc.ast.meta.remove("css");
+            css
+        } else {
+            None
+        };
         let mut json_buf = Vec::new();
-        pampa::writers::json::write_with_config(
+        let json_result = pampa::writers::json::write_with_config(
             &doc.ast,
             &doc.ast_context,
             &mut json_buf,
@@ -949,8 +962,11 @@ impl PandocWriteStage {
                 raw: false,
                 ..Default::default()
             },
-        )
-        .map_err(|diags| {
+        );
+        if let Some(css) = epub_css {
+            doc.ast.meta.insert_path(&["css"], css);
+        }
+        json_result.map_err(|diags| {
             PipelineError::stage_error(
                 name,
                 format!(

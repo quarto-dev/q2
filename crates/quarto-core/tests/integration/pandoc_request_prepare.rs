@@ -33,6 +33,15 @@ fn wasm_opts() -> PrepareOptions {
 /// Run the real pre-write pipeline over `qmd` with `PandocPrepareStage` in
 /// place of `PandocWriteStage`. `project_dir` need not exist.
 fn prepare_at(project_dir: &Path, qmd: &[u8], opts: Option<PrepareOptions>) -> PandocRequest {
+    prepare_format_at(project_dir, qmd, "docx", opts)
+}
+
+fn prepare_format_at(
+    project_dir: &Path,
+    qmd: &[u8],
+    format_key: &str,
+    opts: Option<PrepareOptions>,
+) -> PandocRequest {
     let input = project_dir.join("doc.qmd");
     let project = ProjectContext {
         dir: project_dir.to_path_buf(),
@@ -41,12 +50,13 @@ fn prepare_at(project_dir: &Path, qmd: &[u8], opts: Option<PrepareOptions>) -> P
         output_dir: project_dir.to_path_buf(),
         ..Default::default()
     };
-    let doc = DocumentInfo::from_path(&input).with_output(project_dir.join("doc.docx"));
-    let format = Format::docx();
+    let format = Format::from_format_string(format_key).unwrap();
+    let doc = DocumentInfo::from_path(&input)
+        .with_output(project_dir.join(format!("doc.{}", format.output_extension)));
     let binaries = BinaryDependencies::new();
     let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
     ctx.prepare_options = opts;
-    let mut stages = build_pandoc_pipeline_stages(FormatIdentifier::Docx);
+    let mut stages = build_pandoc_pipeline_stages(format.identifier);
     stages.pop();
     stages.push(Box::new(PandocPrepareStage::new()));
     let runtime = Arc::new(quarto_system_runtime::NativeRuntime::new());
@@ -460,6 +470,162 @@ fn docx_request_matches_the_recorded_native_run() {
         },
         |_, _, _| {},
     );
+}
+
+/// pptx has no post-step and no format-specific files: argv, env and params
+/// equal the recorded native run (R5).
+#[test]
+fn pptx_request_matches_the_recorded_native_run() {
+    check_against_recordings(
+        &Format::from_format_string("pptx").unwrap(),
+        "pptx",
+        || {
+            let mut stages = build_pandoc_pipeline_stages(FormatIdentifier::Pptx);
+            stages.pop();
+            stages.push(Box::new(PandocPrepareStage::new()));
+            stages
+        },
+        |name, req, _| {
+            assert!(
+                req.files.iter().all(|f| !f.path.contains("pandoc-formats")),
+                "{name}: pptx stages no epub resources"
+            );
+        },
+    );
+}
+
+/// epub's two `--include-in-header` stylesheets travel as request files at
+/// the paths the argv names, with the recorded bytes (R5).
+#[test]
+fn epub_request_matches_the_recorded_native_run() {
+    check_against_recordings(
+        &Format::from_format_string("epub").unwrap(),
+        "epub",
+        || {
+            let mut stages = build_pandoc_pipeline_stages(FormatIdentifier::Epub);
+            stages.pop();
+            stages.push(Box::new(PandocPrepareStage::new()));
+            stages
+        },
+        |name, req, rec| {
+            // The recorded run extracted the whole `formats/` tree; pandoc
+            // reads only the two headers its argv names, and only those
+            // travel in the request.
+            let tmp = rec.join("fs/__q2_tmp__/pandoc-formats/formats");
+            for rel in ["html/styles-callout.html", "epub/styles.html"] {
+                let want_path = format!("{}/pandoc-formats/formats/{rel}", req.share_root);
+                let file = req
+                    .files
+                    .iter()
+                    .find(|f| f.path == want_path)
+                    .unwrap_or_else(|| panic!("{name}: no request file {want_path}"));
+                assert_eq!(
+                    file.bytes,
+                    std::fs::read(tmp.join(rel)).unwrap(),
+                    "{name}: {rel}"
+                );
+            }
+            let staged = req
+                .files
+                .iter()
+                .filter(|f| f.path.contains("/pandoc-formats/"))
+                .count();
+            assert_eq!(staged, 2, "{name}: epub header files in the request");
+        },
+    );
+}
+
+/// epub's path-valued keys (cover image, metadata, embedded fonts, CSS) feed
+/// `resource_refs` with the bytes read through the runtime, at the
+/// document-relative path pandoc is told (R5).
+#[test]
+fn epub_path_keys_become_resource_refs() {
+    let proj = Path::new(env!("CARGO_TARGET_TMPDIR")).join("r5-epub-resources");
+    let _ = std::fs::remove_dir_all(&proj);
+    std::fs::create_dir_all(proj.join("assets")).unwrap();
+    for (rel, bytes) in [
+        ("assets/cover.png", &b"cover"[..]),
+        ("assets/meta.xml", b"<dc/>"),
+        ("assets/f.ttf", b"font"),
+        ("assets/book.css", b"p{}"),
+    ] {
+        std::fs::write(proj.join(rel), bytes).unwrap();
+    }
+    let qmd = b"---\nformat:\n  epub:\n    epub-cover-image: assets/cover.png\n    epub-metadata: assets/meta.xml\n    epub-embed-font: assets/f.ttf\n    css: assets/book.css\n---\n\n# Hi\n";
+    let request = prepare_format_at(&proj, qmd, "epub", Some(wasm_opts()));
+    let root = quarto_core::pandoc_request::normalize_request_path(&proj);
+    for (rel, bytes, flag) in [
+        ("assets/cover.png", &b"cover"[..], "--epub-cover-image="),
+        ("assets/meta.xml", b"<dc/>", "--epub-metadata="),
+        ("assets/f.ttf", b"font", "--epub-embed-font="),
+        ("assets/book.css", b"p{}", "--css="),
+    ] {
+        let path = format!("{root}/{rel}");
+        let got = request
+            .resource_refs
+            .iter()
+            .find(|f| f.path == path)
+            .unwrap_or_else(|| panic!("no resource_ref {path}"));
+        assert_eq!(got.bytes, bytes, "{rel}");
+        let want = format!("{flag}{path}");
+        assert!(request.argv.contains(&want), "argv lacks {want}");
+    }
+    // `css` travels only as the `--css=` flag: a copy left in the metadata
+    // would be read against pandoc's cwd and embed the stylesheet twice.
+    let input = request
+        .files
+        .iter()
+        .find(|f| f.path.ends_with("/pandoc-input.json"))
+        .expect("pandoc-input.json is a request file");
+    let json: Value = serde_json::from_slice(&input.bytes).unwrap();
+    assert!(
+        json["meta"].get("css").is_none(),
+        "css left in the metadata: {}",
+        json["meta"]
+    );
+    let _ = std::fs::remove_dir_all(&proj);
+}
+
+/// pptx forwards `reference-doc` (mounted from the project) and
+/// `slide-level`, and has no post-step (R5).
+#[test]
+fn pptx_forwards_reference_doc_and_slide_level() {
+    let proj = Path::new(env!("CARGO_TARGET_TMPDIR")).join("r5-pptx-resources");
+    let _ = std::fs::remove_dir_all(&proj);
+    std::fs::create_dir_all(&proj).unwrap();
+    std::fs::write(proj.join("ref.pptx"), b"pptx-bytes").unwrap();
+    let qmd =
+        b"---\nformat:\n  pptx:\n    reference-doc: ref.pptx\n    slide-level: 3\n---\n\n# Hi\n";
+    let request = prepare_format_at(&proj, qmd, "pptx", Some(wasm_opts()));
+    let root = quarto_core::pandoc_request::normalize_request_path(&proj);
+    let path = format!("{root}/ref.pptx");
+    let i = request
+        .argv
+        .iter()
+        .position(|a| a == "--reference-doc" || a.starts_with("--reference-doc="))
+        .expect("--reference-doc forwarded");
+    assert!(
+        request.argv[i] == format!("--reference-doc={path}") || request.argv[i + 1] == path,
+        "{:?}",
+        request.argv
+    );
+    let got = request
+        .resource_refs
+        .iter()
+        .find(|f| f.path == path)
+        .expect("reference doc mounted");
+    assert_eq!(got.bytes, b"pptx-bytes");
+    assert!(
+        request.argv.iter().any(|a| a == "--slide-level=3")
+            || request
+                .argv
+                .windows(2)
+                .any(|w| w[0] == "--slide-level" && w[1] == "3"),
+        "{:?}",
+        request.argv
+    );
+    assert_eq!(request.post, quarto_core::pandoc_request::RequestPost::None);
+    let _ = std::fs::remove_dir_all(&proj);
 }
 
 /// The typst request is the recorded native run structurally: argv, env,
