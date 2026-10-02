@@ -190,13 +190,64 @@ describe('render_pandoc_request', () => {
     }
   });
 
-  it('says projects are not supported yet for a document inside a _quarto.yml project', async () => {
-    wasm.vfs_add_file('/p/_quarto.yml', 'project:\n  type: default\n');
+  it('renders a document inside a _quarto.yml project as its active page, with image targets relative to the source', async () => {
+    wasm.vfs_add_file('/p/_quarto.yml', 'project:\n  type: default\nformat:\n  html: default\n');
+    wasm.vfs_add_binary_file('/p/img/a.png', FIGURE);
+    wasm.vfs_add_binary_file('/p/sub/pic.png', FIGURE);
+    wasm.vfs_add_file('/p/other.qmd', '# Other\n\nNot in the request.\n');
+    wasm.vfs_add_file('/p/sub/doc.qmd', '# Hi\n\n![a](/img/a.png)\n\n![b](pic.png)\n');
+    const out = await wasm.render_pandoc_request('/p/sub/doc.qmd', 'docx', SDE);
+    expect(out.error).toBeUndefined();
+    expect(out.success).toBe(true);
+    const request = out.request!;
+    // The requested format wins over the project's `format: html`.
+    expect(request.writer).toBe('docx');
+    const input = JSON.parse(
+      new TextDecoder().decode(request.files.find((f) => f.path.endsWith('/pandoc-input.json'))!.bytes),
+    );
+    const targets: string[] = [];
+    const walk = (v: unknown) => {
+      if (Array.isArray(v)) v.forEach(walk);
+      else if (v && typeof v === 'object') {
+        const o = v as { t?: string; c?: unknown };
+        if (o.t === 'Image') targets.push((o.c as [unknown, unknown, [string]])[2][0]);
+        Object.values(o).forEach(walk);
+      }
+    };
+    walk(input.blocks);
+    // The site-root target is no longer written as `/img/a.png`, which pandoc
+    // (working directory `/`) could not find.
+    expect(targets).toEqual(['../img/a.png', 'pic.png']);
+    expect(request.resource_refs.map((f) => f.path).sort()).toEqual(['/p/img/a.png', '/p/sub/pic.png']);
+    expect(JSON.stringify(input.blocks)).not.toContain('Not in the request');
+  });
+
+  it('says the project render scripts did not run, on every download', async () => {
+    wasm.vfs_add_file('/p/_quarto.yml', 'project:\n  type: default\n  pre-render: prepare.py\n');
+    wasm.vfs_add_file('/p/prepare.py', 'print(1)\n');
     wasm.vfs_add_file('/p/doc.qmd', '# Hi\n');
-    const out = await wasm.render_pandoc_request('/p/doc.qmd', 'docx');
-    expect(out.success).toBe(false);
-    expect(out.request).toBeUndefined();
-    expect(out.error).toMatch(/projects not yet supported/);
+    for (let i = 0; i < 2; i += 1) {
+      const out = await wasm.render_pandoc_request('/p/doc.qmd', 'docx', SDE);
+      expect(out.success).toBe(true);
+      expect(out.diagnostics.map((d) => d.code)).toContain('Q-5-12');
+    }
+  });
+
+  it('renders the active chapter of a book alone', async () => {
+    wasm.vfs_add_file(
+      '/b/_quarto.yml',
+      'project:\n  type: book\nbook:\n  title: B\n  chapters:\n    - index.qmd\n    - one.qmd\n    - two.qmd\n',
+    );
+    wasm.vfs_add_file('/b/index.qmd', '# Preface\n\nHello\n');
+    wasm.vfs_add_file('/b/one.qmd', '# One\n\nFirst chapter.\n');
+    wasm.vfs_add_file('/b/two.qmd', '# Two\n\nSecond chapter.\n');
+    const out = await wasm.render_pandoc_request('/b/one.qmd', 'typst', SDE);
+    expect(out.error).toBeUndefined();
+    const text = new TextDecoder().decode(
+      out.request!.files.find((f) => f.path.endsWith('/pandoc-input.json'))!.bytes,
+    );
+    expect(text).toContain('First chapter');
+    expect(text).not.toContain('Second chapter');
   });
 
   it('counts code cells without a cached result, and splices the ones with one', async () => {
