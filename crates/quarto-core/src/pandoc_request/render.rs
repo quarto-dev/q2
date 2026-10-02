@@ -96,12 +96,32 @@ pub async fn render_pandoc_request(
         Err(e) => return PandocRequestOutcome::failed(e),
     };
 
-    // R7 stage 0 brings project documents; until then H5 shows this.
+    let prepare_options = PrepareOptions {
+        temp_root: PathBuf::from(&constants().share_root),
+        source_date_epoch,
+        collect_resources: true,
+        typst_available_fonts: typst_available_fonts.clone(),
+        post: if compile_typst {
+            RequestPost::CompileTypst
+        } else {
+            RequestPost::None
+        },
+    };
+
+    // A document inside a `_quarto.yml` project renders as the active page of
+    // the project (R7), through the orchestrator's pass 1 (the index) and a
+    // pandoc Pass2Renderer.
     if !project.is_single_file {
-        return PandocRequestOutcome::failed(
-            "Documents in a project (_quarto.yml) cannot be downloaded in other formats yet \
-             (projects not yet supported)",
-        );
+        return render_project_request(
+            path,
+            format,
+            if compile_typst { "typst" } else { format_key },
+            project,
+            prepare_options,
+            captures,
+            runtime,
+        )
+        .await;
     }
 
     let doc = DocumentInfo::from_path(path);
@@ -114,27 +134,42 @@ pub async fn render_pandoc_request(
             output_path: None,
         });
     ctx.resource_resolver = resolver;
+    ctx.prepare_options = Some(prepare_options);
+    let source_name = path.to_string_lossy();
+    build_request_in_context(
+        &mut ctx,
+        content,
+        &source_name,
+        runtime,
+        captures,
+        typst_available_fonts,
+    )
+    .await
+}
+
+/// Run the pandoc-request pipeline over `content` in a prepared context and
+/// collect the outcome. `ctx.prepare_options` must be set. Shared by the
+/// single-document path and [`RenderToPandocRequestRenderer`], so a project
+/// document goes through exactly the stages a single document does.
+///
+/// [`RenderToPandocRequestRenderer`]: crate::project::pass2_renderer::RenderToPandocRequestRenderer
+pub(crate) async fn build_request_in_context(
+    ctx: &mut RenderContext<'_>,
+    content: &[u8],
+    source_name: &str,
+    runtime: Arc<dyn SystemRuntime>,
+    captures: Vec<quarto_trace::EngineCapture>,
+    typst_available_fonts: Option<Vec<String>>,
+) -> PandocRequestOutcome {
     // The browser has no engines: cells without a capture pass through
     // inert and silently (the response counts them), whatever the native
     // registry would have done with them.
     ctx.execution_policy = crate::engine::ExecutionPolicy::None;
-    ctx.prepare_options = Some(PrepareOptions {
-        temp_root: PathBuf::from(&constants().share_root),
-        source_date_epoch,
-        collect_resources: true,
-        typst_available_fonts: typst_available_fonts.clone(),
-        post: if compile_typst {
-            RequestPost::CompileTypst
-        } else {
-            RequestPost::None
-        },
-    });
 
-    let source_name = path.to_string_lossy();
     let (output, diagnostics) = match run_pipeline(
         content,
-        &source_name,
-        &mut ctx,
+        source_name,
+        ctx,
         runtime,
         build_pandoc_request_stages_fetching(captures),
     )
@@ -186,4 +221,84 @@ pub async fn render_pandoc_request(
         error: None,
         unexecuted_cells: ctx.unexecuted_cells,
     }
+}
+
+/// A document inside a project: the project's pass 1 builds the index (so
+/// cross-document links, the project's `format:` layers and its metadata all
+/// resolve as they do natively), then pass 2 renders only the active page,
+/// with a renderer that builds the request instead of writing a file.
+async fn render_project_request(
+    path: &Path,
+    format: Format,
+    format_str: &str,
+    project: &ProjectContext,
+    prepare_options: PrepareOptions,
+    captures: Vec<quarto_trace::EngineCapture>,
+    runtime: Arc<dyn SystemRuntime>,
+) -> PandocRequestOutcome {
+    use crate::project::orchestrator::{ProjectPipeline, RenderMode, project_type_for};
+    use crate::project::pass2_renderer::RenderToPandocRequestRenderer;
+
+    // The pipeline fills in per-render state (the book's render list) and
+    // takes the project by `&mut`; the caller's copy stays as it was.
+    let mut project = project.clone();
+    let project_type = project_type_for(&project);
+    // `project.files` holds canonical paths and the active-page filter
+    // compares by equality.
+    let active = runtime
+        .canonicalize(path)
+        .unwrap_or_else(|_| path.to_path_buf());
+    let renderer = RenderToPandocRequestRenderer::new(prepare_options, captures);
+    let mut pipeline = ProjectPipeline::with_renderer(
+        &mut project,
+        project_type,
+        format,
+        format_str,
+        runtime,
+        renderer,
+    )
+    .with_mode(RenderMode::ActivePage(active.clone()));
+    let summary = match pipeline.run().await {
+        Ok(summary) => summary,
+        Err(QuartoError::Parse(parse_error)) => {
+            return PandocRequestOutcome {
+                request: None,
+                diagnostics: parse_error.diagnostics.clone(),
+                source_context: parse_error.source_context.clone(),
+                error: Some(QuartoError::Parse(parse_error).to_string()),
+                unexecuted_cells: 0,
+            };
+        }
+        Err(e) => return PandocRequestOutcome::failed(e.to_string()),
+    };
+
+    let Some(page) = summary.outputs.into_iter().next() else {
+        // Pass 1 drops a page that fails to parse, and pass 2 never sees it:
+        // report the page's own diagnostics (as the preview does).
+        let failure = summary
+            .pass1_failures
+            .into_iter()
+            .find(|f| f.input == active)
+            .or_else(|| summary.pass2_failures.into_iter().next());
+        return match failure {
+            Some(failure) => PandocRequestOutcome {
+                request: None,
+                diagnostics: failure.diagnostics,
+                source_context: failure.source_context.unwrap_or_default(),
+                error: Some(format!(
+                    "Rendering {} failed: {}",
+                    failure.input.display(),
+                    failure.error
+                )),
+                unexecuted_cells: 0,
+            },
+            None => PandocRequestOutcome::failed(
+                "The project render produced no output for the active page",
+            ),
+        };
+    };
+
+    let mut outcome = page.outcome;
+    outcome.diagnostics.extend(summary.project_diagnostics);
+    outcome
 }

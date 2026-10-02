@@ -147,24 +147,6 @@ fn unsupported_formats_say_why() {
 }
 
 #[test]
-fn a_document_inside_a_project_says_projects_are_not_supported_yet() {
-    let (_guard, root) = scratch();
-    write(&root.join("_quarto.yml"), b"project:\n  type: default\n");
-    let doc = root.join("doc.qmd");
-    write(&doc, b"# Hi\n");
-    let out = render(&doc, "docx", None);
-    assert!(out.request.is_none());
-    assert!(
-        out.error
-            .as_deref()
-            .unwrap_or("")
-            .contains("projects not yet supported"),
-        "{:?}",
-        out.error
-    );
-}
-
-#[test]
 fn typst_available_fonts_are_echoed() {
     let (_guard, root) = scratch();
     let doc = root.join("doc.qmd");

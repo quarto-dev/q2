@@ -1598,8 +1598,11 @@ fn pandoc_request_envelope(
 /// (a key of [`get_pandoc_formats`]). Async because the pipeline is; once
 /// remote images land (R6) it also fetches. Returns the envelope
 /// `{ success, error?, diagnostics, stats: { unexecuted_cells }, request? }`;
-/// a document with errors, an active path absent from the VFS, and a document
-/// inside a `_quarto.yml` project (until R7) return no `request`.
+/// a document with errors and an active path absent from the VFS return no
+/// `request`. A document inside a `_quarto.yml` project renders as the
+/// project's active page (R7): the request carries that page alone, with the
+/// project's metadata and `format:` layers applied, and a book chapter is
+/// not merged with the rest of the book.
 ///
 /// `source_date_epoch` is seconds, as an `f64` because an `i64` would cross
 /// as a BigInt and a JS number would throw. `capture_gz_json` is read the way
@@ -1643,7 +1646,7 @@ pub async fn render_pandoc_request(
         Err(e) => return fail(format!("Failed to discover project context: {}", e)),
     };
 
-    let outcome = quarto_core::pandoc_request::render::render_pandoc_request(
+    let mut outcome = quarto_core::pandoc_request::render::render_pandoc_request(
         quarto_core::pandoc_request::render::PandocRequestInput {
             path: &path_buf,
             content: &content,
@@ -1662,6 +1665,18 @@ pub async fn render_pandoc_request(
         Arc::clone(&snapshot) as Arc<dyn SystemRuntime>,
     )
     .await;
+
+    // Project render scripts cannot run in the browser. Unlike the preview's
+    // once-per-session warning, a download says so every time: its
+    // diagnostics are the click's whole report.
+    if !project.is_single_file {
+        outcome.diagnostics.extend(
+            quarto_core::project::render_scripts::render_scripts_unsupported_diagnostic(
+                RenderHost::HubClient,
+                &project.config,
+            ),
+        );
+    }
 
     let diagnostics = diagnostics_to_json(&outcome.diagnostics, &outcome.source_context);
     pandoc_request_envelope(
