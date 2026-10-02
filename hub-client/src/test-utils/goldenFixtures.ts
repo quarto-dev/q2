@@ -8,6 +8,7 @@
  * accepted-divergent fixture (mermaid) compares against the native q2 extraction instead
  * (`parity/`, see DIVERGENCES.md).
  */
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { REPO } from './pandocRecordings';
@@ -58,4 +59,9 @@ export function findExtractor(): string | null {
     path.join(REPO, 'target/debug/quarto-output-extract' + exe),
   ];
   return candidates.find((c): c is string => !!c && existsSync(c)) ?? null;
+}
+
+/** The extractor's text for a file (`.typ` is verbatim; the CLI reads it the same way). */
+export function extractText(extractor: string, file: string): string {
+  return execFileSync(extractor, ['extract', file], { maxBuffer: 1 << 28 }).toString('utf8');
 }

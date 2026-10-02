@@ -386,6 +386,8 @@ website:
             - errors/pandoc/Q-20-6.qmd
             - errors/pandoc/Q-20-7.qmd
             - errors/pandoc/Q-20-8.qmd
+            - errors/pandoc/Q-20-9.qmd
+            - errors/pandoc/Q-20-10.qmd
         - section: "typst"
           contents:
             - errors/typst/Q-21-1.qmd
