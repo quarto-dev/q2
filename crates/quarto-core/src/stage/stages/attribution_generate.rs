@@ -239,6 +239,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn pandoc_hybrid_formats_populate_sidecar() {
+        for name in ["docx", "pptx", "typst"] {
+            let format = Format::from_format_string(name).expect(name);
+            let json = r##"{
+                "runs": [{"start": 0, "end": 10, "actor": "alice@example.com", "time": 1}],
+                "identities": {}
+            }"##;
+            let provider: Arc<dyn crate::attribution::AttributionSourceProvider> =
+                Arc::new(PreBuiltAttributionProvider::new(json.to_string()));
+            let mut ctx = make_ctx(format, Some(provider));
+            let input = PipelineData::DocumentAst(make_doc());
+            let _ = AttributionGenerateStage::new()
+                .run(input, &mut ctx)
+                .await
+                .unwrap();
+            assert!(
+                ctx.attribution_data.is_some(),
+                "{name} must populate the sidecar for pampa-side filters"
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn non_html_format_skips_provider_invocation() {
         // q2-debug parses as HTML but other formats short-circuit.
         // Use a JSON-like format identifier to hit the skip path.
