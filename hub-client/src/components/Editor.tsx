@@ -79,6 +79,9 @@ import ImageViewer from './ImageViewer';
 import ReplayDrawer from './ReplayDrawer';
 import './Editor.css';
 import PreviewRouter from './render/PreviewRouter';
+import type { PreviewMode } from './render/getQ2Format';
+import { useDownloadAs } from '../pandoc/useDownloadAs';
+import { download as downloadStrings } from '../strings';
 import { fileSidebar, dialogs } from '../strings';
 import { getAncestorPaths } from '../utils/fileTree';
 import { sanitizeFilename } from '../services/resourceService';
@@ -429,6 +432,9 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
   // Current document format (e.g., 'q2-slides', 'q2-debug', or null for default)
   const [currentFormat, setCurrentFormat] = useState<string | null>(null);
 
+  // The router's mode (react / dom / download / neither) and the "Download as" control it drives.
+  const [previewMode, setPreviewMode] = useState<PreviewMode>({ mode: 'dom' });
+
   // Handle format changes from PreviewRouter
   const handleFormatChange = useCallback((format: string | null) => {
     setCurrentFormat(format);
@@ -634,6 +640,7 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
   // untouched during replay so that when replay exits, the Automerge sync
   // effect's setContent(automergeContent) always produces a state change.
   const displayContent = replayState.isActive ? replayState.currentContent : content;
+  const downloadAs = useDownloadAs(currentFile?.path ?? null, displayContent, wasmStatus === 'ready');
 
   // When replay content changes, update Monaco and VFS for display.
   // Writing to VFS ensures the preview renderer sees historical content.
@@ -1595,6 +1602,15 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
               splitFraction={editorPaneFraction}
               onSetSplit={handleSetSplitPreset}
               splitDisabled={previewUnavailable}
+              downloadAs={
+                downloadAs.available && currentFile && isSourceFile(currentFile.path)
+                  ? {
+                      ...downloadAs,
+                      disabledReason:
+                        previewMode.mode === 'neither' ? downloadStrings.neitherDescription(previewMode.formatKey) : undefined,
+                    }
+                  : undefined
+              }
             />
             {replayState.isActive && (
               <div className="replay-mode-banner">REPLAY MODE</div>
@@ -1774,6 +1790,7 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
             />
           )}
           <PreviewRouter
+            onPreviewModeChange={setPreviewMode}
             content={displayContent}
             currentFile={currentFile}
             files={files}

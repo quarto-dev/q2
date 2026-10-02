@@ -115,6 +115,41 @@ Typst, pptx and epub are covered by R0's recorded documents (`recordingParity.wa
 `Q2_PARITY_OUT=<dir>` keeps the rendered files (to open in Word). The mermaid fixture's reference
 is native q2's output, not Q1's (`pandoc-goldens/DIVERGENCES.md`).
 
+## "Download as" UI (H5)
+
+`DocumentTopBar` renders `DownloadAsControl` (a menu button and a status panel) when
+`downloadAvailable()` (`pandocWasmEnabled() || isPreviewEmbed()`). The pieces, all under
+`hub-client/src/pandoc/`:
+
+| File | Role |
+|---|---|
+| `downloadController.ts` | The state machine: click id (a stale `render_pandoc_request` or runner response is dropped), cancel, throttled progress, classification of the run through `classifyPandocCompletion`. A document with an error diagnostic or a failed run produces no Blob. Two executors: pandoc.wasm, or `renderNatively` in the `q2 preview` embed. |
+| `downloadService.ts` | The singleton controller and `menuFormats()`. `MENU_FORMATS` is the list of entries the UI has been reviewed for (docx now); each request phase that lands adds its entry in its own commit. |
+| `downloadName.ts` | `<doc-stem>.<ext>` with directory parts, control and bidi characters, Windows-reserved characters and device names removed. |
+| `useDownloadAs.ts` | The React binding; status lives outside the editor's diagnostics array (which every live-preview render replaces). |
+
+`PreviewRouter` has four modes (`PreviewMode` in `components/render/getQ2Format.ts`): `react`,
+`dom`, `download` (the document's own format is downloadable but not previewable: a "Download
+<type>" button, rendering only on click) and `neither` (nothing is mounted; the control is
+`aria-disabled` and described by the explanation). The class comes from the Rust resolver
+(`resolvePandocFormats`), which reads the document from the VFS.
+
+### What filters and extensions can do in the browser (D9)
+
+The docx download runs the document's Lua filters in two places. Filters in the default position
+run in the browser's own Lua with a synthetic `io`/`os` and `quarto.*`. Post-position and entry-point
+filters run inside pandoc.wasm with Quarto 1's vendored Lua, which has these limits:
+
+- Not available: `os.tmpname`, `io.tmpfile`, `io.popen`, `pandoc.pipe`, network `mediabag.fetch`,
+  `require 'lfs'`. `os.execute` does nothing, so a filter that runs a command and reads its
+  output finds no file.
+- The working directory is `/`, so a relative `io.open('data.csv')` finds nothing: only the
+  filter's own directory, images and path-valued options (a reference doc, a template) are mounted.
+- `os.getenv` sees only `QUARTO_*` and `SOURCE_DATE_EPOCH`; `HOME`, `PATH` and `TMPDIR` are nil.
+- A filter's `print` output is not shown; a Lua error shows pandoc's message in the `Q-20-3` error.
+- SVG images in docx get alt text instead of the picture (no `rsvg-convert`).
+- Documents inside a `_quarto.yml` project cannot be downloaded yet (request phase R7).
+
 ## Measuring (H3)
 
 `e2e/pandoc-measure.harness.spec.ts` (opt-in: `Q2_MEASURE=1`, with a `VITE_E2E=1` build) launches Chromium and

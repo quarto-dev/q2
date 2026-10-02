@@ -23,6 +23,8 @@ import { PreviewIcon } from './icons';
 import StatusTab from './tabs/StatusTab';
 import ProjectTopBar from './ProjectTopBar';
 import DocumentTopBar from './DocumentTopBar';
+import { DownloadOnlyView, NeitherView } from './render/DownloadOnlyViews';
+import type { DownloadFormat, DownloadStatus } from '../pandoc/downloadController';
 import Toast from './Toast';
 import UpdateAvailableToast from './UpdateAvailableToast';
 import EphemeralSessionBanner from './EphemeralSessionBanner';
@@ -672,6 +674,70 @@ const FAKE_SINGLE_FILE_PREVIEW: ProjectInvitePreview = {
   contributorInitials: ['CS'],
 };
 
+
+/* ---- "Download as" states (pandoc-host H5) ---- */
+
+const HARNESS_DOCX: DownloadFormat = {
+  key: 'docx',
+  label: 'Word',
+  extension: 'docx',
+  mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+};
+
+/**
+ * The document top bar with the "Download as" control in one fixed state. `interactive`
+ * wires a fake controller: select an entry and it goes working -> done, cancel -> cancelled.
+ */
+function DownloadAsPage({
+  status: fixed,
+  disabledReason,
+  interactive,
+  children,
+}: {
+  status?: DownloadStatus;
+  disabledReason?: string;
+  interactive?: boolean;
+  children?: React.ReactNode;
+}) {
+  const [live, setLive] = useState<DownloadStatus>({ phase: 'idle' });
+  const status = interactive ? live : (fixed ?? { phase: 'idle' });
+  return (
+    <EditorChrome>
+      <div className="top-bars">
+        <DocumentTopBar
+          currentFilePath="report.qmd"
+          sidebarOpen={true}
+          onToggleSidebar={() => {}}
+          sidebarToggleRef={{ current: null }}
+          downloadAs={{
+            available: true,
+            formats: [HARNESS_DOCX],
+            status,
+            disabledReason,
+            start: (format) => setLive({ phase: 'done', clickId: 1, format, fileName: 'report.docx', warnings: [], notices: [], unexecutedCells: 0 }),
+            cancel: () => setLive({ phase: 'cancelled', clickId: 1, format: HARNESS_DOCX }),
+            dismiss: () => setLive({ phase: 'idle' }),
+          }}
+        />
+      </div>
+      <div id="sidebar-drawer" hidden />
+      {children}
+    </EditorChrome>
+  );
+}
+
+const harnessDone: DownloadStatus = {
+  phase: 'done',
+  clickId: 1,
+  format: HARNESS_DOCX,
+  fileName: 'report.docx',
+  notices: [],
+  unexecutedCells: 2,
+  warnings: [
+    { origin: 'rust', kind: 'warning', code: 'Q-11-1', title: 'pandoc warning', problem: 'Could not fetch resource figure.png' },
+  ],
+};
+
 const DEV_PAGES: Record<string, () => React.ReactNode> = {
   'invite-landing-collection': () => (
     <InviteLanding
@@ -916,6 +982,39 @@ const DEV_PAGES: Record<string, () => React.ReactNode> = {
           (axe's aria-valid-attr-value flags a dangling reference). */}
       <div id="sidebar-drawer" hidden />
     </EditorChrome>
+  ),
+  'download-as': () => <DownloadAsPage interactive />,
+  'download-as-progress': () => (
+    <DownloadAsPage
+      status={{ phase: 'working', clickId: 1, format: HARNESS_DOCX, stage: 'loading', load: { phase: 'download', loaded: 6_500_000, total: 16_700_000 } }}
+    />
+  ),
+  'download-as-done': () => <DownloadAsPage status={harnessDone} />,
+  'download-as-failed': () => (
+    <DownloadAsPage
+      status={{
+        phase: 'failed',
+        clickId: 1,
+        format: HARNESS_DOCX,
+        state: 'pandoc-error',
+        notices: [],
+        diagnostics: [{ origin: 'rust', kind: 'error', code: 'Q-20-3', title: 'pandoc failed', problem: 'exit status: 83' }],
+      }}
+    />
+  ),
+  'download-as-disabled': () => (
+    <DownloadAsPage disabledReason="Download is unavailable: documents with format latex can't be converted in the browser.">
+      <div style={{ height: 240 }}>
+        <NeitherView formatKey="latex" />
+      </div>
+    </DownloadAsPage>
+  ),
+  'download-as-only': () => (
+    <DownloadAsPage>
+      <div style={{ height: 240 }}>
+        <DownloadOnlyView format={HARNESS_DOCX} busy={false} onDownload={() => {}} />
+      </div>
+    </DownloadAsPage>
   ),
   notifications: () => (
     <EditorChrome>

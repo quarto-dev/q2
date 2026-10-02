@@ -1,4 +1,5 @@
 import { extractMetaString } from '@quarto/preview-renderer/framework';
+import type { ResolvePandocFormatsResponse } from '@quarto/preview-runtime';
 
 /**
  * Decide which preview branch `PreviewRouter` mounts for a document, from
@@ -38,5 +39,60 @@ export function getQ2Format(astJson: string): string | null {
   } catch (err) {
     console.error('[PreviewRouter] Failed to parse AST:', err);
     return null;
+  }
+}
+
+/**
+ * What `PreviewRouter` mounts for a document (pandoc-host H5, design D8.4/D8.7). An enum so a
+ * later "pdf-preview" mode fits.
+ *
+ * - `react`: `ReactPreview` renders `format` (the `q2-*` pseudo-formats, `revealjs`, `html`).
+ * - `dom`: the full-DOM `Preview` (MorphIframe) renders the HTML pipeline's output.
+ * - `download`: the document's own format cannot be previewed but pandoc.wasm (or the native
+ *   render in the embed) can produce it: no preview, a "Download <type>" button.
+ * - `neither`: nothing can show or produce it: no preview, the control is disabled and
+ *   the pane says why.
+ */
+export type PreviewMode =
+  | { mode: 'react'; format: string }
+  | { mode: 'dom' }
+  | { mode: 'download'; formatKey: string }
+  | { mode: 'neither'; formatKey: string };
+
+export type FormatClassResolver = (path: string) => ResolvePandocFormatsResponse | null;
+
+export interface ClassifyDeps {
+  /** The Rust-owned project-aware resolver (`resolvePandocFormats`). */
+  resolve: FormatClassResolver;
+  /** True when "Download as" can produce this format key in this build. */
+  canDownload: (formatKey: string) => boolean;
+}
+
+/**
+ * The three-class classifier. `getQ2Format` keeps deciding the React side; for everything it
+ * returns `null` for, the class of the document's own (first) format decides: `preview` and
+ * unknown keep the full-DOM renderer, `download` becomes the click-only download mode (when this
+ * build can produce it), `neither` mounts neither preview.
+ */
+export function classifyPreviewMode(astJson: string, path: string | undefined, deps: ClassifyDeps): PreviewMode {
+  const react = getQ2Format(astJson);
+  if (react) return { mode: 'react', format: react };
+  try {
+    const ast = JSON.parse(astJson);
+    if (extractMetaString(ast?.meta?.format) === 'q2-html-render') return { mode: 'dom' };
+  } catch {
+    return { mode: 'dom' };
+  }
+  if (!path) return { mode: 'dom' };
+  const resolved = deps.resolve(path);
+  if (!resolved || !resolved.success || resolved.formats.length === 0) return { mode: 'dom' };
+  const first = resolved.formats[0];
+  switch (first.class) {
+    case 'preview':
+      return { mode: 'dom' };
+    case 'download':
+      return deps.canDownload(first.key) ? { mode: 'download', formatKey: first.key } : { mode: 'dom' };
+    case 'neither':
+      return { mode: 'neither', formatKey: first.key };
   }
 }

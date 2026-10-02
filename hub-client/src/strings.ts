@@ -55,6 +55,65 @@ export const header = {
   noFileSelected: 'No file selected',
 } as const;
 
+/** "Download as" (pandoc.wasm in the browser, or the native render in the preview embed). */
+export const download = {
+  buttonLabel: 'Download as',
+  buttonTooltip: 'Download this document as another format',
+  menuLabel: 'Download as',
+  /** Shown in the menu: the first use fetches pandoc, then it is cached. */
+  sizeHint: 'The first download fetches the converter (about 16 MB, kept for next time).',
+  cancel: 'Cancel',
+  dismiss: 'Dismiss',
+  statusRegionLabel: 'Download status',
+  preparing: 'Preparing the document…',
+  startingConverter: 'Starting the converter…',
+  loadingFromCache: 'Loading the converter…',
+  verifying: 'Verifying the converter…',
+  compiling: 'Compiling the converter…',
+  downloadingConverter: (loaded: string, total: string | null) =>
+    total ? `Downloading the converter… ${loaded} of ${total}` : `Downloading the converter… ${loaded}`,
+  downloadingConverterShort: 'Downloading the converter…',
+  mounting: 'Preparing files…',
+  converting: (label: string) => `Converting to ${label}…`,
+  renderingNatively: (label: string) => `Rendering ${label}…`,
+  cancelled: 'Download cancelled.',
+  done: (fileName: string) => `Downloaded ${fileName}.`,
+  warnings: (n: number) => (n === 1 ? '1 warning' : `${n} warnings`),
+  unexecutedCells: (n: number) =>
+    n === 1
+      ? '1 code cell was not executed; its output is not in the file.'
+      : `${n} code cells were not executed; their output is not in the file.`,
+  typstDangling:
+    'The .typ file names images and brand assets but does not include them, so it may have dangling resource references.',
+  failed: {
+    'request-failed': 'The document could not be prepared for download, so nothing was downloaded.',
+    'native-failed': 'The document has errors, so nothing was downloaded. Fix them and try again.',
+    'native-error': 'The preview server could not render the document.',
+    'pandoc-error': 'The converter reported an error, so nothing was downloaded.',
+    'invalid-request': 'The converter rejected the request, so nothing was downloaded.',
+    unsupported:
+      'This browser cannot run the converter. It needs WebAssembly exception handling (Chrome or Edge 137, Firefox 131, Safari 18.4).',
+    blocked: 'The browser or an extension blocked the converter (workers or WebAssembly compilation).',
+    'download-failed': 'The converter could not be downloaded. Check your connection and try again.',
+    offline: 'You are offline and the converter is not saved yet. Connect once to download it (about 16 MB).',
+    timeout: 'The conversion took too long and was stopped. A filter may be stuck in a loop.',
+    'out-of-memory': 'The document needs more memory than this browser can give. Try fewer or smaller images.',
+    crashed: 'The converter stopped unexpectedly. Try again.',
+    done: '',
+    cancelled: '',
+  },
+  /** Class "download": no preview, only a download for the document's own format. */
+  noPreviewTitle: (label: string) => `No live preview for ${label} documents`,
+  noPreviewBody: 'Download the rendered file to see it. It is rendered when you click, not while you edit.',
+  downloadOwn: (label: string) => `Download ${label}`,
+  /** Class "neither": the control is disabled and says why. */
+  neitherTitle: (format: string) => `No preview or download for ${format} documents`,
+  neitherBody: (format: string) =>
+    `The browser can preview HTML and slides, and download Word, PowerPoint and EPUB. A document whose format is ${format} can't be shown or downloaded here.`,
+  neitherDescription: (format: string) =>
+    `Download is unavailable: documents with format ${format} can't be converted in the browser.`,
+} as const;
+
 /** SyncStatusBadge (FILES section + document bottom bar). */
 export const syncStatus = {
   /** Prefix when disconnected (browser offline / socket down / no peer). */
