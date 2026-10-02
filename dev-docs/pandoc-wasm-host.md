@@ -90,3 +90,35 @@ or point `QUARTO_OUTPUT_EXTRACT` at a binary).
 `limits`/`shareRoot` as options so hub-client can supply them from its own build.
 
 See `dev-docs/pandoc-wasm-bump.md` for changing the pinned version.
+
+## Harness and parity net (H3)
+
+`window.q2PandocDownload(path, { format = 'docx', save = true, sourceDateEpoch })` (`vite dev` and
+`VITE_E2E` builds only) runs the whole chain on the document in the VFS: Rust `render_pandoc_request`,
+the share tree, `PandocRunner`, then a download. It returns `{ ok, output, fileName, failure,
+diagnostics, timings }`; `timings` has the request build, share-tree fetch, runner wall time, and the
+host core's `instanceMs`, `runMs`, `memoryBytes`, `mountedBytes`. Tests use
+`window.__quartoTest.pandoc.download`.
+
+The parity net renders the ten P7 docx golden fixtures (`crates/quarto-core/tests/fixtures/pandoc-goldens/fixtures.json`,
+the committed export of `quarto_output_extract::FIXTURES`; regenerate with
+`quarto-output-extract fixtures`) through that chain and compares the extraction of each output
+with the Q1 golden (`.snap`) using the Rust extractor CLI:
+
+| Run | Command | Needs |
+|---|---|---|
+| Node | `npm run test:wasm -- goldenParity` (in `hub-client`) | built wasm pkg, `fetch-pandoc-wasm.mjs`, `cargo build -p quarto-output-extract` |
+| Chromium | `VITE_E2E=1 npm run build && npx playwright test --config playwright.harness.config.ts e2e/pandoc-parity.harness.spec.ts` | the same, plus `hub-client/public/pandoc/pandoc.wasm.gz` |
+
+`Q2_PARITY_OUT=<dir>` keeps the rendered docx files (to open in Word). The mermaid fixture's reference
+is native q2's output, not Q1's (`pandoc-goldens/DIVERGENCES.md`).
+
+## Measuring (H3)
+
+`e2e/pandoc-measure.harness.spec.ts` (opt-in: `Q2_MEASURE=1`, with a `VITE_E2E=1` build) launches Chromium and
+WebKit itself and records first-download, cached-load and per-render latency, filter startup, `mountMs`, pandoc's
+linear memory and process RSS with image-heavy documents, to `Q2_MEASURE_OUT/measure-<browser>.json`. The numbers and
+what they mean for the limits are in `claude-notes/research/2026-10-01-pandoc-wasm-evidence.md` §12.
+
+The loader rejects a download that gunzips to more than `MAX_DECOMPRESSION_RATIO` (8) times its compressed size; the
+real asset is 3.55x.

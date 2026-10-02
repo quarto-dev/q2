@@ -38,3 +38,5 @@ crates/quarto-core/tests/fixtures/pandoc-recordings/**/*.epub binary
 crates/quarto-core/tests/fixtures/pandoc-recordings/**/*.png binary
 crates/quarto-core/tests/fixtures/pandoc-recordings/**/*.jpg binary
 crates/quarto-core/tests/fixtures/pandoc-recordings/**/*.js text eol=lf
+crates/quarto-core/tests/fixtures/pandoc-goldens/fixtures.json text eol=lf
+crates/quarto-core/tests/fixtures/pandoc-goldens/parity/** text eol=lf

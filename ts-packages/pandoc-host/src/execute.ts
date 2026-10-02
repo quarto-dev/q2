@@ -89,7 +89,9 @@ export async function execute(request: PandocRequest, shareTree: ShareTree, opti
   if (problems.length) return failure('invalid-request', null, '', '', problems);
 
   options.onProgress?.('mounting');
+  const tMount = performance.now();
   const tree = buildTree(request, shareTree);
+  const mountMs = Math.round(performance.now() - tMount);
   const mountedBytes =
     shareTree.files.reduce((n, f) => n + f.bytes.length, 0) +
     request.files.reduce((n, f) => n + f.bytes.length, 0) +
@@ -157,6 +159,7 @@ export async function execute(request: PandocRequest, shareTree: ShareTree, opti
   const stderr = dec.decode(concat(err));
   const stdout = dec.decode(concat(out));
   const stats: RunStats = {
+    mountMs,
     instanceMs: Math.round(t1 - t0),
     runMs: Math.round(t2 - t1),
     memoryBytes: (instance.exports.memory as WebAssembly.Memory | undefined)?.buffer.byteLength ?? 0,

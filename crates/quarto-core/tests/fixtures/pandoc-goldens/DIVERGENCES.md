@@ -37,3 +37,14 @@ underlying capability actually lands and a fresh capture confirms parity.
   present as body content — rather than asserting equality against the Q1
   golden. See that test's doc comment for the acknowledged limits of what
   this actually guards (labeling, not mermaid behavior).
+
+## pandoc.wasm parity reference for the mermaid fixture
+
+The pandoc.wasm parity net (pandoc-host H3: `hub-client/src/pandoc/goldenParity.wasm.test.ts`
+and `e2e/pandoc-parity.harness.spec.ts`) compares the browser-side docx against the Q1 goldens
+above for every fixture except this one. Since this fixture's Q1 golden differs from Q2 by
+design, its reference is `parity/smoke_all_mermaid_backticks__docx.txt`: the extraction of
+what native `q2 render --to docx` produces (the shape the divergence above describes). It
+pins wasm == native for the divergent fixture. Regenerate it only together with a deliberate
+change to native mermaid handling:
+`q2 render backticks.qmd --to docx && quarto-output-extract extract backticks.docx > parity/smoke_all_mermaid_backticks__docx.txt`.

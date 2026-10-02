@@ -1,8 +1,8 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FakeCache, fakeStorage } from '../test-utils/fakeCache';
-import { MIN_BROWSERS, PandocLoadError, PandocLoader, type LoaderEnv } from './pandocLoader';
+import { MAX_DECOMPRESSION_RATIO, MIN_BROWSERS, PandocLoadError, PandocLoader, type LoaderEnv } from './pandocLoader';
 
 const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
 const wasmBytes = (tag: string) => new Uint8Array([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0, ...new TextEncoder().encode(tag)]);
@@ -60,6 +60,34 @@ describe('PandocLoader: input cases (gzip, raw wasm, neither)', () => {
     expect(err.message).toContain(String(junk.length));
     expect(compile).not.toHaveBeenCalled();
     expect(cache.entries.size).toBe(0);
+  });
+
+  it('a gzip bomb is rejected before it is buffered whole, and never compiled or cached', async () => {
+    // Zeros: ~1000x. Starts with the wasm magic so only the ratio can reject it.
+    const bomb = new Uint8Array(1 << 22);
+    bomb.set(WASM);
+    const gz = new Uint8Array(gzipSync(bomb));
+    expect(bomb.length / gz.length).toBeGreaterThan(MAX_DECOMPRESSION_RATIO);
+    const { loader, compile, cache } = harness({ fetch: (async () => new Response(gz.slice())) as typeof fetch });
+    const err = await loader.load(sha(bomb)).catch((e) => e);
+    expect(err).toBeInstanceOf(PandocLoadError);
+    expect(err.code).toBe('fetch-failed');
+    expect(err.message).toContain(URL_);
+    expect(err.message).toContain(`${MAX_DECOMPRESSION_RATIO} times`);
+    expect(compile).not.toHaveBeenCalled();
+    expect(cache.entries.size).toBe(0);
+  });
+
+  it('a build that compresses just under the ratio is accepted', async () => {
+    // Half random, half zeros: about 2x, inside the guard (the real asset is 3.55x).
+    const payload = new Uint8Array(64 * 1024);
+    payload.set(randomBytes(32 * 1024), 0);
+    payload.set(WASM);
+    const gz = new Uint8Array(gzipSync(payload));
+    expect(payload.length / gz.length).toBeLessThan(MAX_DECOMPRESSION_RATIO);
+    const { loader, compile } = harness({ fetch: (async () => new Response(gz.slice())) as typeof fetch });
+    await loader.load(sha(payload));
+    expect(compile).toHaveBeenCalledOnce();
   });
 
   it('a truncated gzip is reported as corrupt, not compiled', async () => {

@@ -20,6 +20,7 @@ import { PandocLoader, type LoaderConfig } from './pandoc/pandocLoader';
 import { PandocRunner, uiStateFor } from './pandoc/pandocRunner';
 import { createBrowserWorker } from './pandoc/pandocService';
 import { PANDOC_WASM_SHA256, smokeJob } from './pandoc/smokeJob';
+import { installDevHarness, pandocDownload } from './pandoc/devHarness';
 
 /**
  * Pandoc loader/worker hook for the `pandoc-*.harness.spec.ts` smoke tests. The runner it
@@ -33,6 +34,8 @@ export const pandoc = {
     return { loader, runner };
   },
   smokeJob,
+  /** The dev harness: Rust request -> worker -> output (src/pandoc/devHarness.ts). */
+  download: pandocDownload,
   uiStateFor,
   sha256: PANDOC_WASM_SHA256,
 };
@@ -56,6 +59,8 @@ declare global {
     };
   }
 }
+
+installDevHarness();
 
 window.__quartoTest = {
   projectStorage,

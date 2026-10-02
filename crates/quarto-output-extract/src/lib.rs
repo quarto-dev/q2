@@ -26,7 +26,7 @@ use zip::ZipArchive;
 
 pub mod epub;
 mod golden_fixtures;
-pub use golden_fixtures::{FIXTURES, FixtureEntry, golden_snapshot_name};
+pub use golden_fixtures::{FIXTURES, FixtureEntry, fixtures_json, golden_snapshot_name};
 
 /// Errors returned by extraction. Extraction never panics on malformed
 /// input; every failure mode returns `Err`.

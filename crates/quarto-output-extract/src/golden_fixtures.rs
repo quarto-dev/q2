@@ -67,6 +67,27 @@ pub const FIXTURES: &[FixtureEntry] = &[
     },
 ];
 
+/// The manifest as JSON (`[{"qmd": ..., "resources": [...]}, ...]`), for the TypeScript
+/// side of the pandoc.wasm parity net (pandoc-host H3), which cannot call Rust. The
+/// committed copy is `crates/quarto-core/tests/fixtures/pandoc-goldens/fixtures.json`;
+/// `quarto-output-extract fixtures` prints it and a test below fails if the two drift.
+/// Paths contain no characters that need JSON escaping (asserted below).
+pub fn fixtures_json() -> String {
+    let quoted = |s: &str| format!("\"{s}\"");
+    let entries: Vec<String> = FIXTURES
+        .iter()
+        .map(|f| {
+            let resources: Vec<String> = f.resources.iter().map(|r| quoted(r)).collect();
+            format!(
+                "  {{\"qmd\": {}, \"resources\": [{}]}}",
+                quoted(f.qmd),
+                resources.join(", ")
+            )
+        })
+        .collect();
+    format!("[\n{}\n]\n", entries.join(",\n"))
+}
+
 /// The shared snapshot-naming function. **Both** the `G`-tier capture
 /// xtask (writing) and `pandoc_goldens.rs`'s assertion test (reading,
 /// P7 Task 11) must call this same function — never re-derive it
@@ -94,6 +115,27 @@ mod tests {
         assert_eq!(
             golden_snapshot_name("tabset-subfloat.qmd", "docx"),
             "tabset_subfloat__docx"
+        );
+    }
+
+    #[test]
+    fn test_fixtures_json_matches_the_committed_copy() {
+        for f in FIXTURES {
+            for p in std::iter::once(&f.qmd).chain(f.resources) {
+                assert!(
+                    !p.contains(['"', '\\']),
+                    "{p}: fixtures_json does not escape"
+                );
+            }
+        }
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../quarto-core/tests/fixtures/pandoc-goldens/fixtures.json");
+        let committed = std::fs::read_to_string(&path).expect("fixtures.json is committed");
+        assert_eq!(
+            committed.replace("\r\n", "\n"),
+            fixtures_json(),
+            "fixtures.json is stale: `quarto-output-extract fixtures > {}`",
+            path.display()
         );
     }
 

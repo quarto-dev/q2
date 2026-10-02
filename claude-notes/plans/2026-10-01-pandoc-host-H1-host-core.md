@@ -15,7 +15,7 @@ The DOM-free host package: a WASI command-mode runner over a compiled `WebAssemb
 
 - Command mode per the H0 result; the host drops the spike's reactor model (`hs_init`/`convert`, `fileSystem.clear()`, the `stdin`/`stdout`/`warnings` magic files). `spike/host-patched.js` provides the nested-directory idea but cannot be reused as-is (it drives the reactor exports).
 - The host takes no part in UI policy (supersession, classification).
-- Limits (decided; kept in `resources/pandoc-wasm.json`, shared with `prepare()`): images ≤ 25 MB each, `reference-doc` ≤ 50 MB, total mounted payload ≤ 300 MB. **Open:** the decompression-ratio guard has no number yet; H3 sets it from measurement. **Open:** how the limits reach the host (request fields in the R1 schema, or a Vite virtual module like `attributionViewerCssPlugin`; `rootDir ./src` and `?raw` outside the project root rule out a direct import of the repo-root JSON); choose in the scaffolding task.
+- Limits (decided; kept in `resources/pandoc-wasm.json`, shared with `prepare()`): images ≤ 25 MB each, `reference-doc` ≤ 50 MB, total mounted payload ≤ 300 MB. **Settled by H3:** the decompression-ratio guard is 8x (`MAX_DECOMPRESSION_RATIO`, `pandocLoader.ts`; measured 3.55x). **Open:** how the limits reach the host (request fields in the R1 schema, or a Vite virtual module like `attributionViewerCssPlugin`; `rootDir ./src` and `?raw` outside the project root rule out a direct import of the repo-root JSON); choose in the scaffolding task.
 
 ## Checklist
 
