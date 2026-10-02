@@ -14,6 +14,8 @@ import { PreviewIcon, PanelLeftIcon, PrintIcon } from './icons';
 import ViewToggleControl from './ViewToggleControl';
 import Tooltip from './Tooltip';
 import Toast from './Toast';
+import DownloadAsControl from './DownloadAsControl';
+import type { DownloadAs } from '../pandoc/useDownloadAs';
 import { openPrintableDocument } from '../services/printableDocument';
 import { header } from '../strings';
 import './TopBars.css';
@@ -44,6 +46,12 @@ interface DocumentTopBarProps {
   onSetSplit?: (fraction: number) => void;
   /** Gray out the split presets (current file has no preview pane). */
   splitDisabled?: boolean;
+  /**
+   * "Download as" (pandoc-host H5). Absent when the build does not offer it or the open file
+   * is not a document. `disabledReason` set means the document's format can be neither
+   * previewed nor produced: the button stays, `aria-disabled` and described by this text.
+   */
+  downloadAs?: DownloadAs & { disabledReason?: string };
 }
 
 export default function DocumentTopBar({
@@ -57,6 +65,7 @@ export default function DocumentTopBar({
   splitFraction,
   onSetSplit,
   splitDisabled,
+  downloadAs,
 }: DocumentTopBarProps) {
   // "Open printable version" (issue #315). The React preview formats
   // can't be printed in place (sandboxed iframe → clipped single page).
@@ -125,6 +134,16 @@ export default function DocumentTopBar({
             </button>
           </Tooltip>
         </div>
+      )}
+      {downloadAs && !isFullscreenPreview && (
+        <DownloadAsControl
+          formats={downloadAs.formats}
+          status={downloadAs.status}
+          disabledReason={downloadAs.disabledReason}
+          onSelect={downloadAs.start}
+          onCancel={downloadAs.cancel}
+          onDismiss={downloadAs.dismiss}
+        />
       )}
       <Toast
         message={printableError ?? ''}

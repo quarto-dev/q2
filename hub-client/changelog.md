@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-10-02
+
+- [`d42d780d6`](https://github.com/quarto-dev/q2/commits/d42d780d6): Added a "Download as" button to the document top bar: choose Word and the open document is converted to a .docx file in the browser, with a progress panel, a cancel button and a summary of any warnings. A document whose own format is Word shows a click-only "Download Word" button in place of the preview, and formats that cannot be previewed or downloaded disable the button and explain why.
+
 ### 2026-09-30
 
 - [`b6795880f`](https://github.com/quarto-dev/q2/commits/b6795880f): Added an end-to-end suite that signs two users in against a real authenticated hub and proves every edit is credited to the right author, two tabs of one account can no longer collide, and documents written before the author-ID transition still show continuous credit.

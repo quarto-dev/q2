@@ -23,6 +23,8 @@ import {
 import type { Diagnostic, PandocRequest, ShareTree } from '@quarto/pandoc-host';
 import type { PandocRunner, RunOutcome } from './pandocRunner';
 import { getPandoc } from './pandocService';
+import { sanitizeDownloadName } from './downloadName';
+import { saveBlob } from './saveBlob';
 
 export interface HarnessOptions {
   /** Pandoc format key from `getPandocFormats()`; default `docx`. */
@@ -96,26 +98,6 @@ const MIME: Record<string, string> = {
   typ: 'text/plain',
 };
 
-function saveBlob(bytes: Uint8Array, fileName: string): void {
-  const ext = fileName.split('.').pop() ?? '';
-  const blob = new Blob([bytes as BlobPart], { type: MIME[ext] ?? 'application/octet-stream' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
-}
-
-/** The output file's name: the document's stem with the output's extension. */
-function outputFileName(docPath: string, outputPath: string): string {
-  const stem = (docPath.split('/').pop() ?? 'document').replace(/\.[^.]+$/, '');
-  const ext = outputPath.split('.').pop() ?? 'out';
-  return `${stem}.${ext}`;
-}
-
 /** Render the document at `path` (in the VFS) to `options.format` through pandoc.wasm. */
 export async function pandocDownload(path: string, options: HarnessOptions = {}): Promise<HarnessResult> {
   const { format = 'docx', save = true } = options;
@@ -161,8 +143,11 @@ export async function pandocDownload(path: string, options: HarnessOptions = {})
   if (!outcome.ok) {
     return { ok: false, failure: outcome.kind, diagnostics: outcome.diagnostics, timings, notices: outcome.notices };
   }
-  const fileName = outputFileName(path, outcome.outputPath);
-  if (save) saveBlob(outcome.output, fileName);
+  const fileName = sanitizeDownloadName(path, outcome.outputPath.split('.').pop() ?? 'out');
+  if (save) {
+    const ext = fileName.split('.').pop() ?? '';
+    saveBlob(new Blob([outcome.output as BlobPart], { type: MIME[ext] ?? 'application/octet-stream' }), fileName);
+  }
   return { ok: true, output: outcome.output, fileName, diagnostics: outcome.diagnostics, timings, notices: outcome.notices };
 }
 

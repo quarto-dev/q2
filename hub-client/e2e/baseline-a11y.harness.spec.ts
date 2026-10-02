@@ -67,6 +67,11 @@ const SCAN_PAGES: { page: string; label: string; selector: string }[] = [
   // mapping, which no previously-scanned page renders.
   { page: 'editor-shell', label: 'editor-shell', selector: '.editor-container' },
   { page: 'editor-status-states', label: 'editor-status-states', selector: '.diagnostics-banner' },
+  // pandoc-host H5: the "Download as" control in the document top bar, in each state.
+  { page: 'download-as-progress', label: 'download-as-progress', selector: '.top-bars' },
+  { page: 'download-as-done', label: 'download-as-done', selector: '.top-bars' },
+  { page: 'download-as-failed', label: 'download-as-failed', selector: '.top-bars' },
+  { page: 'download-as-disabled', label: 'download-as-disabled', selector: '.top-bars' },
 ];
 
 /** key → { ruleId: nodeCount } */

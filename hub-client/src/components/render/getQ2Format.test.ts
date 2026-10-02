@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { getQ2Format } from './getQ2Format';
+import { getQ2Format, classifyPreviewMode } from './getQ2Format';
 
 function astWithFormat(format: string | undefined): string {
   const meta =
@@ -52,5 +52,45 @@ describe('getQ2Format (hub-client renderer routing)', () => {
 
   it('returns null for unparseable AST JSON', () => {
     expect(getQ2Format('not json')).toBeNull();
+  });
+});
+
+describe('classifyPreviewMode (three-class classifier, D8)', () => {
+  const resolved = (key: string, cls: 'preview' | 'download' | 'neither') => () => ({
+    success: true as const,
+    source: 'document' as const,
+    formats: [{ key, class: cls }],
+  });
+  const deps = (r: ReturnType<typeof resolved> | (() => null), canDownload = true) => ({ resolve: r, canDownload: () => canDownload });
+
+  it('keeps the React side where getQ2Format decides it', () => {
+    expect(classifyPreviewMode(astWithFormat('html'), 'a.qmd', deps(resolved('html', 'preview')))).toEqual({ mode: 'react', format: 'q2-preview' });
+    expect(classifyPreviewMode(astWithFormat('revealjs'), 'a.qmd', deps(resolved('revealjs', 'preview')))).toEqual({ mode: 'react', format: 'revealjs' });
+  });
+
+  it('keeps the explicit full-DOM opt-out without consulting the resolver', () => {
+    const resolve = () => {
+      throw new Error('must not be called');
+    };
+    expect(classifyPreviewMode(astWithFormat('q2-html-render'), 'a.qmd', { resolve, canDownload: () => true })).toEqual({ mode: 'dom' });
+  });
+
+  it('a downloadable own format is the download mode, naming the first format key', () => {
+    expect(classifyPreviewMode(astWithFormat('docx'), 'a.qmd', deps(resolved('docx', 'download')))).toEqual({ mode: 'download', formatKey: 'docx' });
+  });
+
+  it('a downloadable format this build cannot produce keeps the full-DOM renderer', () => {
+    expect(classifyPreviewMode(astWithFormat('docx'), 'a.qmd', deps(resolved('docx', 'download'), false))).toEqual({ mode: 'dom' });
+  });
+
+  it('a format that is neither mounts neither preview and names the format', () => {
+    expect(classifyPreviewMode(astWithFormat('latex'), 'a.qmd', deps(resolved('latex', 'neither')))).toEqual({ mode: 'neither', formatKey: 'latex' });
+  });
+
+  it('falls back to the full-DOM renderer when the resolver fails or says preview', () => {
+    expect(classifyPreviewMode(astWithFormat('x'), 'a.qmd', deps(() => null))).toEqual({ mode: 'dom' });
+    expect(classifyPreviewMode(astWithFormat('x'), 'a.qmd', deps(() => ({ success: false as const, error: 'no' })))).toEqual({ mode: 'dom' });
+    expect(classifyPreviewMode(astWithFormat('x'), 'a.qmd', deps(resolved('x', 'preview')))).toEqual({ mode: 'dom' });
+    expect(classifyPreviewMode(astWithFormat('x'), undefined, deps(resolved('docx', 'download')))).toEqual({ mode: 'dom' });
   });
 });
