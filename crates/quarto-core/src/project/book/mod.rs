@@ -9,6 +9,7 @@
 pub mod bibliography;
 pub mod citeproc;
 pub mod config;
+pub mod core_types;
 pub mod images;
 pub mod links;
 pub mod merge;
@@ -20,13 +21,13 @@ pub mod project_type;
 pub mod render_item;
 pub mod static_analyzer;
 
-// Native-only: drives the render-to-file tail (`crate::render_to_file` is
-// gated out for wasm; WASM preview renders single documents, never books).
-#[cfg(not(target_arch = "wasm32"))]
+// The shared single-file-merge core is ungated (the browser's whole-book
+// request runs it); the native tail inside it is `cfg(not(wasm32))`.
 pub(crate) mod single_file_render;
 
 pub use bibliography::{aggregate_chapter_citations, build_merged_bibliography};
 pub use citeproc::{set_suppress_bibliography, strip_citeproc_from_filters};
+pub use core_types::{BookRenderHooks, BookRenderOptions, Cancelled, ChapterDiagnostics};
 pub use images::resolve_chapter_image_targets;
 pub use links::resolve_cross_chapter_links;
 pub use merge::merge_book_chapters;

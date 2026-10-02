@@ -28,7 +28,7 @@ use crate::format::{
     Format, format_key_from_config_value, format_key_from_frontmatter, resolve_format_key,
 };
 use crate::pipeline::{
-    BookChapterPauseState, RenderOutput, build_html_pipeline_finishing_stages,
+    BookChapterPauseState, PartialKind, RenderOutput, build_html_pipeline_finishing_stages,
     render_qmd_to_ast_partial, run_pipeline_from_ast,
 };
 use crate::project::book::render_item::{BookRenderItem, BookRenderItemKind};
@@ -309,6 +309,7 @@ pub(crate) async fn render_book_multi_file_html(
             &mut ctx,
             runtime.clone(),
             TransformPhase::Navigation,
+            PartialKind::Native,
         )
         .await
         {
@@ -384,7 +385,13 @@ pub(crate) async fn render_book_multi_file_html(
             .input_path
             .parent()
             .map_or_else(|| project.dir.clone(), |p| p.to_path_buf());
-        match build_merged_bibliography(&config, &base_dir, &cited_order, references) {
+        match build_merged_bibliography(
+            &config,
+            &base_dir,
+            &cited_order,
+            references,
+            runtime.as_ref(),
+        ) {
             Ok(bib_blocks) => {
                 pampa::citeproc_filter::insert_bibliography(
                     &mut references_chapter.paused.ast.blocks,

@@ -279,6 +279,108 @@ describe('render_pandoc_request', () => {
   });
 });
 
+function addBook(root: string) {
+  wasm.vfs_add_file(
+    `${root}/_quarto.yml`,
+    'project:\n  type: book\nbook:\n  title: B\n  chapters:\n    - index.qmd\n    - one.qmd\n',
+  );
+  wasm.vfs_add_file(`${root}/index.qmd`, '# Preface\n\nHello\n');
+  wasm.vfs_add_file(`${root}/one.qmd`, '# One\n\nFirst chapter.\n');
+}
+
+describe('built-in extension filters are mounted (R9 task 1a)', () => {
+  it('puts the orange-book filter and its directory in files, not resource_refs', async () => {
+    addBook('/b');
+    const out = await wasm.render_pandoc_request('/b/one.qmd', 'typst', SDE);
+    expect(out.error).toBeUndefined();
+    expect(out.diagnostics.map((d) => d.code)).not.toContain('Q-11-1');
+    const request = out.request!;
+    const files = request.files.map((f) => f.path);
+    const prefix = '/__quarto_resources__/extension-subtrees/orange-book/_extensions/orange-book/';
+    expect(files).toContain(`${prefix}orange-book.lua`);
+    expect(files).toContain(`${prefix}_extension.yml`);
+    expect(request.resource_refs.map((f) => f.path).filter((p) => p.includes('orange-book'))).toEqual([]);
+    // Every filter entry point is a normalized, mounted path.
+    const params = JSON.parse(
+      new TextDecoder().decode(
+        Uint8Array.from(atob(request.env.QUARTO_FILTER_PARAMS), (c) => c.charCodeAt(0)),
+      ),
+    );
+    const entries: string[] = params['quarto-filters'].entryPoints.map((e: { path: string }) => e.path);
+    expect(entries.length).toBeGreaterThan(0);
+    for (const entry of entries) expect(files).toContain(entry);
+  });
+});
+
+describe('citeproc reads its files through the runtime (R9)', () => {
+  const REFS_BIB =
+    '@book{knuth1984,\n  author = {Knuth, Donald E.},\n  title = {The TeXbook},\n  year = {1984},\n  publisher = {Addison-Wesley}\n}\n';
+  // A numeric style that only exists in the VFS: its `[1]` marks that it was read.
+  const NUMERIC_CSL =
+    '<?xml version="1.0" encoding="utf-8"?>\n<style xmlns="http://purl.org/net/xbiblio/csl" version="1.0" class="in-text" default-locale="en-US">\n' +
+    '  <info><title>Mem</title><id>http://example.com/mem</id><updated>2026-01-01T00:00:00+00:00</updated></info>\n' +
+    '  <citation><layout><text variable="citation-number" prefix="[" suffix="]"/></layout></citation>\n' +
+    '  <bibliography><layout><text variable="citation-number" prefix="[" suffix="] "/><text variable="title"/></layout></bibliography>\n</style>\n';
+
+  const inputText = (out: Envelope): string =>
+    new TextDecoder().decode(out.request!.files.find((f) => f.path.endsWith('/pandoc-input.json'))!.bytes);
+
+  it('resolves a cite against a .bib in the VFS, for a single document', async () => {
+    wasm.vfs_add_file('/p/refs.bib', REFS_BIB);
+    wasm.vfs_add_file(
+      '/p/doc.qmd',
+      '---\nbibliography: refs.bib\nciteproc: true\n---\n\nKnuth wrote it [@knuth1984].\n',
+    );
+    const out = await wasm.render_pandoc_request('/p/doc.qmd', 'docx', SDE);
+    expect(out.error).toBeUndefined();
+    expect(out.success).toBe(true);
+    const text = inputText(out);
+    expect(text).not.toContain('"t":"Cite"');
+    expect(text).toContain('TeXbook');
+  });
+
+  it('resolves a cite for a book chapter whose bibliography is set in _quarto.yml', async () => {
+    wasm.vfs_add_file(
+      '/b/_quarto.yml',
+      'project:\n  type: book\nbook:\n  title: B\n  chapters:\n    - index.qmd\n    - one.qmd\nbibliography: refs.bib\nciteproc: true\n',
+    );
+    wasm.vfs_add_file('/b/refs.bib', REFS_BIB);
+    wasm.vfs_add_file('/b/index.qmd', '# Preface\n\nHello\n');
+    wasm.vfs_add_file('/b/one.qmd', '# One\n\nKnuth wrote it [@knuth1984].\n');
+    const out = await wasm.render_pandoc_request('/b/one.qmd', 'typst', SDE);
+    expect(out.error).toBeUndefined();
+    expect(out.success).toBe(true);
+    const text = inputText(out);
+    expect(text).not.toContain('"t":"Cite"');
+    expect(text).toContain('TeXbook');
+  });
+
+  it('reads a csl: file from the VFS', async () => {
+    wasm.vfs_add_file('/p/refs.bib', REFS_BIB);
+    wasm.vfs_add_file('/p/mem.csl', NUMERIC_CSL);
+    wasm.vfs_add_file(
+      '/p/doc.qmd',
+      '---\nbibliography: refs.bib\ncsl: mem.csl\nciteproc: true\n---\n\nKnuth wrote it [@knuth1984].\n',
+    );
+    const out = await wasm.render_pandoc_request('/p/doc.qmd', 'docx', SDE);
+    expect(out.error).toBeUndefined();
+    expect(out.success).toBe(true);
+    expect(inputText(out)).toContain('[1]');
+  });
+
+  it('names the missing file, not a platform error', async () => {
+    wasm.vfs_add_file(
+      '/p/doc.qmd',
+      '---\nbibliography: refs.bib\nciteproc: true\n---\n\nKnuth wrote it [@knuth1984].\n',
+    );
+    const out = await wasm.render_pandoc_request('/p/doc.qmd', 'docx', SDE);
+    expect(out.request).toBeUndefined();
+    const message = JSON.stringify([out.error, out.diagnostics]);
+    expect(message).toContain('refs.bib');
+    expect(message).not.toContain('not supported on this platform');
+  });
+});
+
 describe('share tree export', () => {
   it('matches the request and carries Uint8Array bytes', async () => {
     const out = await goldenEnvelope();
@@ -492,6 +594,17 @@ describe.skipIf(!pandocWasmAvailable())('request built in wasm, run in pandoc.wa
     // The vendored template's partials were found next to template.typ.
     expect(typ).toContain('#show: doc => article(');
     expect(typ).toContain('image("figure.png")');
+  }, 120_000);
+
+  it('runs a book chapter\'s typst request, orange-book filter included, with no "cannot open" error', async () => {
+    const module = await WebAssembly.compile(readFileSync(WASM_PATH));
+    addBook('/b');
+    const out = await wasm.render_pandoc_request('/b/one.qmd', 'typst', SDE);
+    expect(out.success).toBe(true);
+    const tree = wasm.get_pandoc_share_tree();
+    const result = await execute(out.request as unknown as PandocRequest, tree, { module });
+    if (!result.ok) throw new Error(`pandoc failed (${result.kind}): ${result.stderr}`);
+    expect(new TextDecoder().decode(result.output)).toContain('First chapter');
   }, 120_000);
 
   it('produces a pptx that carries the slide text and the image', async () => {

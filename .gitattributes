@@ -41,3 +41,6 @@ crates/quarto-core/tests/fixtures/pandoc-recordings/**/*.jpg binary
 crates/quarto-core/tests/fixtures/pandoc-recordings/**/*.js text eol=lf
 crates/quarto-core/tests/fixtures/pandoc-goldens/fixtures.json text eol=lf
 crates/quarto-core/tests/fixtures/pandoc-goldens/parity/** text eol=lf
+
+# pandoc-request R9: native book refactor-guard recordings are byte-compared.
+crates/quarto-core/tests/integration/book_refactor_guard/** text eol=lf
