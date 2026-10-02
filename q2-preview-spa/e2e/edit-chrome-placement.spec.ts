@@ -68,12 +68,13 @@ test.describe('bd-pvcnea83 — edit chrome flips below at the top of the viewpor
             .toBeGreaterThanOrEqual(0);
     });
 
-    test('standalone breadcrumb chip: editing a first (title-less) code block flips the chip below, uncropped', async ({ page }) => {
+    test('plain-block toolbar: editing a first (title-less) code block leaves the toolbar uncropped', async ({ page }) => {
         server = await startPreviewServer({
             allowEdit: true,
             fixtureFiles: [{
                 path: 'index.qmd',
-                // First block is a code block (non-rich) → textarea + standalone chip.
+                // First block is a code block (non-rich) → textarea + the same
+                // pop-up toolbar (the standalone breadcrumb chip was folded into it).
                 content: '```python\nx = 1\ny = 2\n```\n\nA paragraph after.\n',
             }],
         });
@@ -87,12 +88,14 @@ test.describe('bd-pvcnea83 — edit chrome flips below at the top of the viewpor
         await iframe.locator('[data-block-pool-id]').first().click();
         await iframe.locator('#q2-active-edit-region textarea').first().waitFor({ timeout: 10_000 });
 
-        const chip = iframe.locator('[data-testid="q2-breadcrumb-chip"]');
-        await chip.waitFor({ timeout: 5000 });
+        const toolbar = iframe.locator('.q2-rt-toolbar').first();
+        await toolbar.waitFor({ timeout: 5000 });
+        // No flip-class assertion: the edit box starts ~34px down, so the toolbar
+        // (~25px) fits above it. Whichever side it lands on, it must not be clipped.
         await expect
-            .poll(() => iframeRectTop(page, '[data-testid="q2-breadcrumb-chip"]'), {
+            .poll(() => iframeRectTop(page, '.q2-rt-toolbar'), {
                 timeout: 8000,
-                message: 'standalone chip top must be >= 0 (not clipped above the viewport)',
+                message: 'plain-block toolbar top must be >= 0 (not clipped above the viewport)',
             })
             .toBeGreaterThanOrEqual(0);
     });

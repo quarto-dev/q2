@@ -158,9 +158,18 @@ test.describe('P3.5 — SPA nesting-cursor resolution (real q2 preview binary)',
         ).not.toContain('>');
         expect(value, 'leaf edit must not include the Intro paragraph').not.toContain('Intro paragraph.');
 
-        // The standalone navigator chip is the breadcrumb home in plain/textarea mode.
-        const chip = iframe.locator('[data-testid="q2-breadcrumb-chip"]');
-        await expect(chip, 'breadcrumb navigator chip must be visible by default').toBeVisible({ timeout: 5000 });
+        // The pop-up toolbar hosts the breadcrumb in plain/textarea mode too
+        // (the standalone chip is gone); the nesting indicator must show by default.
+        const toolbar = iframe.locator('.q2-rt-toolbar').first();
+        await expect(toolbar, 'edit toolbar must be visible in plain mode').toBeVisible({ timeout: 5000 });
+        await expect(
+            toolbar.locator('.q2-crumb').last(),
+            'type/nesting indicator must be visible by default',
+        ).toBeVisible({ timeout: 5000 });
+        await expect(
+            iframe.locator('[data-testid="q2-breadcrumb-chip"]'),
+            'standalone chip no longer exists',
+        ).toHaveCount(0);
 
         await ta.press('Escape');
     });

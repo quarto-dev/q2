@@ -6,7 +6,7 @@
 //! Raw HTML tables (gt, pandas, ...) carry their styling in a `<style>`
 //! block. For Typst output the filter chain inlines those rules onto the
 //! cells before Pandoc converts the table (Q1's juice step, here the hidden
-//! `q2 inline-css` subcommand). Driven through the real `q2` binary because
+//! `q2 call inline-css` subcommand). Driven through the real `q2` binary because
 //! the filter finds it via the `quarto-cli-path` filter param.
 
 use std::path::Path;
@@ -54,7 +54,7 @@ fn style_block_rules_reach_typst_table_cells() {
 fn inline_css_subcommand_filters_stdin_to_stdout() {
     use std::io::Write;
     let mut child = Command::new(Q2_BIN)
-        .arg("inline-css")
+        .args(["call", "inline-css"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
