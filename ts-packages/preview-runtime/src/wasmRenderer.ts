@@ -9,7 +9,14 @@
 
 import type { Diagnostic, RenderResponse } from '@quarto/preview-renderer/types/diagnostic';
 import type { RustQmdJson } from '@quarto/pandoc-types'
-import type { AstResponse } from 'wasm-quarto-hub-client'
+import type {
+  AstDiagnostic,
+  AstResponse,
+  PandocFormatInfo,
+  PandocRequestFile,
+  RenderPandocRequestResponse,
+  ResolvePandocFormatsResponse,
+} from 'wasm-quarto-hub-client'
 import { discoverUserGrammars } from './userGrammar/Discovery';
 import { UserGrammarCache } from './userGrammar/Cache';
 import { loadUserGrammar } from './userGrammar/Highlight';
@@ -95,6 +102,30 @@ interface WasmModuleExtended {
     // the pre-knob behaviour.
     prefer_preview_format?: boolean,
   ) => Promise<string>;
+  // pandoc-wasm epic (R2): build the request pandoc.wasm runs. See
+  // wasm-quarto-hub-client.d.ts for the shapes. `render_pandoc_request`
+  // returns a JS object (it carries Uint8Arrays), not a JSON string.
+  render_pandoc_request: (
+    path: string,
+    format: string,
+    source_date_epoch?: number,
+    capture_gz_json?: Uint8Array,
+    typst_available_fonts?: string[],
+  ) => Promise<RenderPandocRequestResponse>;
+  get_pandoc_share_tree_version: () => string;
+  get_pandoc_share_tree: () => {
+    share_tree_version: string;
+    files: PandocRequestFile[];
+  };
+  classify_pandoc_completion: (
+    stage_name: string,
+    success: boolean,
+    status: string,
+    stderr: string,
+    json_path: string,
+  ) => string;
+  get_pandoc_formats: () => string;
+  resolve_pandoc_formats: (path: string) => string;
   get_builtin_template: (name: string) => string;
   get_project_choices: () => string;
   create_project: (choiceId: string, title: string) => Promise<string>;
@@ -592,6 +623,79 @@ export async function renderPageForPreview(
   return JSON.parse(
     await wasm.render_page_for_preview(path, userGrammars, captureGzJson),
   );
+}
+
+// ---- pandoc-wasm epic (R2): the request exports --------------------------
+
+export type {
+  PandocFormatClass,
+  PandocFormatInfo,
+  PandocRequestFile,
+  PandocRequestWire,
+  RenderPandocRequestResponse,
+  ResolvePandocFormatsResponse,
+} from 'wasm-quarto-hub-client';
+
+/**
+ * Build the pandoc request for the document at `path` rendered to `format`
+ * (a `key` of {@link getPandocFormats}). `sourceDateEpoch` is seconds (the
+ * click time in production). A document with errors, or inside a
+ * `_quarto.yml` project (until R7), comes back with no `request`; the
+ * `diagnostics` say why. The request's bytes are copies the caller owns.
+ */
+export async function renderPandocRequest(
+  path: string,
+  format: string,
+  options: {
+    sourceDateEpoch?: number;
+    captureGzJson?: Uint8Array;
+    typstAvailableFonts?: string[];
+  } = {},
+): Promise<RenderPandocRequestResponse> {
+  const wasm = getWasm();
+  return wasm.render_pandoc_request(
+    path,
+    format,
+    options.sourceDateEpoch,
+    options.captureGzJson,
+    options.typstAvailableFonts,
+  );
+}
+
+/** Identifies the share tree; re-read it only when this changes. */
+export function getPandocShareTreeVersion(): string {
+  return getWasm().get_pandoc_share_tree_version();
+}
+
+/** The share tree, paths relative to `request.share_tree_path`. */
+export function getPandocShareTree(): {
+  share_tree_version: string;
+  files: PandocRequestFile[];
+} {
+  return getWasm().get_pandoc_share_tree();
+}
+
+/** Classify a finished pandoc run into diagnostics (`Q-11-1` warnings, `Q-20-3` error). */
+export function classifyPandocCompletion(
+  stageName: string,
+  success: boolean,
+  status: string,
+  stderr: string,
+  jsonPath: string,
+): { success: boolean; diagnostics: AstDiagnostic[] } {
+  return JSON.parse(
+    getWasm().classify_pandoc_completion(stageName, success, status, stderr, jsonPath),
+  );
+}
+
+/** The formats pandoc.wasm can produce, in menu order. */
+export function getPandocFormats(): PandocFormatInfo[] {
+  return JSON.parse(getWasm().get_pandoc_formats()).formats;
+}
+
+/** The document's own format(s): `format:` of the document, else `_quarto.yml`, else `html`. */
+export function resolvePandocFormats(path: string): ResolvePandocFormatsResponse {
+  return JSON.parse(getWasm().resolve_pandoc_formats(path));
 }
 
 /**

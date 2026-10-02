@@ -113,13 +113,42 @@ pub fn nonzero_exit_error(
     stderr: &str,
     retained_json_path: &Path,
 ) -> PipelineError {
-    let message = DiagnosticMessageBuilder::error(format!(
-        "pandoc exited with {status_desc}; input JSON retained at {}:\n{stderr}",
-        retained_json_path.display()
-    ))
-    .with_code("Q-20-3")
-    .build();
-    PipelineError::stage_error_with_diagnostics(stage_name, vec![message])
+    PipelineError::stage_error_with_diagnostics(
+        stage_name,
+        vec![nonzero_exit_diagnostic(
+            status_desc,
+            stderr,
+            retained_json_path,
+            true,
+        )],
+    )
+}
+
+/// The `Q-20-3` diagnostic itself. `json_retained` says whether the input
+/// JSON really is left on disk at `json_path`: native keeps it for
+/// debugging, but a browser run's path lives in a throwaway virtual
+/// filesystem, so claiming it was "retained" would be false (the path is
+/// still named, as the id the request carried).
+pub fn nonzero_exit_diagnostic(
+    status_desc: &str,
+    stderr: &str,
+    json_path: &Path,
+    json_retained: bool,
+) -> DiagnosticMessage {
+    let message = if json_retained {
+        format!(
+            "pandoc exited with {status_desc}; input JSON retained at {}:\n{stderr}",
+            json_path.display()
+        )
+    } else {
+        format!(
+            "pandoc exited with {status_desc} (input JSON {}):\n{stderr}",
+            json_path.display()
+        )
+    };
+    DiagnosticMessageBuilder::error(message)
+        .with_code("Q-20-3")
+        .build()
 }
 
 /// Decides how to handle a completed pandoc invocation's exit status and
@@ -142,14 +171,31 @@ pub fn classify_pandoc_completion(
     stderr: &str,
     json_path: &Path,
 ) -> Result<Vec<DiagnosticMessage>, PipelineError> {
+    // Native keeps the input JSON on failure (see `retain_temp_json_unless_success`).
+    classify_pandoc_completion_with(stage_name, success, status_desc, stderr, json_path, true)
+}
+
+/// [`classify_pandoc_completion`] with the retention fact supplied by the
+/// caller (see [`nonzero_exit_diagnostic`]).
+pub fn classify_pandoc_completion_with(
+    stage_name: &str,
+    success: bool,
+    status_desc: &str,
+    stderr: &str,
+    json_path: &Path,
+    json_retained: bool,
+) -> Result<Vec<DiagnosticMessage>, PipelineError> {
     if success {
         Ok(classify_pandoc_stderr(stderr))
     } else {
-        Err(nonzero_exit_error(
+        Err(PipelineError::stage_error_with_diagnostics(
             stage_name,
-            status_desc,
-            stderr,
-            json_path,
+            vec![nonzero_exit_diagnostic(
+                status_desc,
+                stderr,
+                json_path,
+                json_retained,
+            )],
         ))
     }
 }
@@ -158,6 +204,37 @@ pub fn classify_pandoc_completion(
 mod tests {
     use super::*;
     use quarto_error_reporting::DiagnosticKind;
+
+    /// R2: a non-zero exit from a browser run is `Q-20-3` carrying the
+    /// (virtual) `json_path`, without the native "retained at" claim, and
+    /// the verbatim stderr.
+    #[test]
+    fn test_virtual_json_path_is_not_claimed_retained() {
+        let path = Path::new("/__q2_share__/pandoc-input.json");
+        let diag = nonzero_exit_diagnostic("exit status: 64", "boom\n", path, false);
+        assert_eq!(diag.code.as_deref(), Some("Q-20-3"));
+        assert!(diag.title.contains("/__q2_share__/pandoc-input.json"));
+        assert!(!diag.title.contains("retained"), "{}", diag.title);
+        assert!(diag.title.contains("boom"));
+        let native = nonzero_exit_diagnostic("exit status: 64", "boom\n", path, true);
+        assert!(native.title.contains("input JSON retained at"));
+    }
+
+    /// R2: warnings on a zero exit are `Q-11-1`, same as native.
+    #[test]
+    fn test_with_variant_classifies_warnings_on_success() {
+        let diags = classify_pandoc_completion_with(
+            "pandoc-write",
+            true,
+            "exit status: 0",
+            "[WARNING] Could not fetch resource a.png\n",
+            Path::new("/x.json"),
+            false,
+        )
+        .unwrap();
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].code.as_deref(), Some("Q-11-1"));
+    }
 
     /// T10.1 (pure half): a single `[WARNING]` line produces exactly one
     /// `Q-11-1` warning diagnostic, carrying the line verbatim.

@@ -46,7 +46,9 @@ fn prepare_at(project_dir: &Path, qmd: &[u8], opts: Option<PrepareOptions>) -> P
     stages.pop();
     stages.push(Box::new(PandocPrepareStage::new()));
     let runtime = Arc::new(quarto_system_runtime::NativeRuntime::new());
-    pollster::block_on(run_pipeline(qmd, "doc.qmd", &mut ctx, runtime, stages))
+    // The full path, as the hub passes it: the input JSON's source table names it.
+    let source_name = input.to_string_lossy();
+    pollster::block_on(run_pipeline(qmd, &source_name, &mut ctx, runtime, stages))
         .expect("pipeline runs");
     ctx.pandoc_request
         .take()
@@ -428,12 +430,16 @@ const GOLDEN_PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/schemas/pandoc-request.golden.json"
 );
-const GOLDEN_DOC: &[u8] = b"---\ntitle: Golden\n---\n\n# Hello\n\nA *docx* paragraph.\n";
+const GOLDEN_DOC: &[u8] =
+    b"---\ntitle: Golden\n---\n\n# Hello\n\nA *docx* paragraph.\n\n![A figure](figure.png)\n";
 
 /// What `schemas/pandoc-request.golden.json` is made of: a real wasm-style
-/// `prepare()` of a one-paragraph document at `/project/doc.qmd`, plus one
-/// hand-added `resource_refs` entry (prepare leaves it empty until R2, but
-/// the golden must show the entry shape and its bytes mapping).
+/// `prepare()` of a small document at `/project/doc.qmd` that references
+/// `figure.png`, plus that file's `resource_refs` entry. The entry is added
+/// by hand because a native test cannot serve `/project` from a VFS
+/// (`WasmRuntime` is wasm32-only); it is exactly what the collector emits
+/// there, and `hub-client/src/services/pandocRequest.wasm.test.ts` proves it
+/// by rendering this document in the built wasm and deep-equaling the golden.
 fn golden_request() -> PandocRequest {
     let mut request = prepare_at(Path::new("/project"), GOLDEN_DOC, Some(wasm_opts()));
     request

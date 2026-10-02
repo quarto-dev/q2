@@ -35,10 +35,6 @@ impl PipelineStage for PandocPrepareStage {
         PipelineDataKind::RenderedOutput
     }
 
-    // `PandocWriteStage::prepare` lives in the native-gated `pandoc_write`
-    // module until R2 ungates it; the wasm build of this stage reports that
-    // instead of building a request.
-    #[cfg(not(target_arch = "wasm32"))]
     async fn run(
         &self,
         input: PipelineData,
@@ -74,16 +70,5 @@ impl PipelineStage for PandocPrepareStage {
             metadata: doc.ast.meta,
             source_context: doc.source_context,
         }))
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    async fn run(
-        &self,
-        _input: PipelineData,
-        _ctx: &mut StageContext,
-    ) -> Result<PipelineData, PipelineError> {
-        Err(PipelineError::other(
-            "pandoc-prepare is not available on wasm until R2 ungates PandocWriteStage::prepare",
-        ))
     }
 }

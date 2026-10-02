@@ -52,6 +52,125 @@ declare module 'wasm-quarto-hub-client' {
     capture_gz_json?: Uint8Array,
   ): Promise<string>;
 
+  // ---- pandoc-wasm epic (R2): build a pandoc request inside the wasm ----
+
+  /** A file the pandoc worker mounts at `path`. Bytes are copies, never views of wasm memory. */
+  export interface PandocRequestFile {
+    path: string;
+    bytes: Uint8Array;
+  }
+
+  /**
+   * The request object (`crates/quarto-core/schemas/pandoc-request.schema.json`).
+   * Same shape as `PandocRequest` in `@quarto/pandoc-host`, which is canonical
+   * for the host side. A posted request is consumed by the host.
+   */
+  export interface PandocRequestWire {
+    schema_version: number;
+    kind?: 'pandoc';
+    job_id: string;
+    writer: string;
+    argv: string[];
+    env: Record<string, string>;
+    files: PandocRequestFile[];
+    dirs: string[];
+    resource_refs: PandocRequestFile[];
+    share_root: string;
+    share_tree_path: string;
+    doc_dir: string;
+    project_root: string;
+    output_path: string;
+    stage_name: string;
+    json_path: string;
+    post?: 'none' | 'compile_typst';
+    expected_pandoc_wasm_sha256: string;
+    share_tree_version: string;
+    typst_available_fonts: string[] | null;
+  }
+
+  /**
+   * Envelope returned by `render_pandoc_request`. `request` is absent when the
+   * document has errors, when the active path is not in the VFS, and for a
+   * document inside a `_quarto.yml` project (until R7 stage 0). `diagnostics`
+   * are the same JSON shape as `RenderResponse.warnings`/`diagnostics`.
+   */
+  export interface RenderPandocRequestResponse {
+    success: boolean;
+    error?: string;
+    diagnostics: AstDiagnostic[];
+    stats: { unexecuted_cells: number };
+    request?: PandocRequestWire;
+  }
+
+  /**
+   * Build the pandoc request for `path` rendered to `format` (a key of
+   * `get_pandoc_formats()`). Unlike every other export this returns a JS
+   * object, not a JSON string, because it carries `Uint8Array`s.
+   * `source_date_epoch` is seconds (a JS number, cast to i64 in Rust).
+   * `capture_gz_json` is as for `render_page_for_preview` (R3 wires it).
+   */
+  export function render_pandoc_request(
+    path: string,
+    format: string,
+    source_date_epoch?: number,
+    capture_gz_json?: Uint8Array,
+    typst_available_fonts?: string[],
+  ): Promise<RenderPandocRequestResponse>;
+
+  /** SHA-256 identifying the share tree; re-read the tree only when it changes. */
+  export function get_pandoc_share_tree_version(): string;
+  /** The share tree: paths relative to `request.share_tree_path`. */
+  export function get_pandoc_share_tree(): {
+    share_tree_version: string;
+    files: PandocRequestFile[];
+  };
+
+  /**
+   * Classify a finished pandoc run (JSON string of
+   * `{ success, diagnostics: AstDiagnostic[] }`; on non-zero exit the Q-20-3
+   * diagnostic carries `json_path` but does not claim the virtual file was
+   * retained). `status` is a description such as `"exit status: 64"`.
+   */
+  export function classify_pandoc_completion(
+    stage_name: string,
+    success: boolean,
+    status: string,
+    stderr: string,
+    json_path: string,
+  ): string;
+
+  /** One row of the "Download as" table (D8). */
+  export interface PandocFormatInfo {
+    /** The key in a document's `format:` map; what `render_pandoc_request` takes. */
+    key: string;
+    label: string;
+    /** The downloaded file's extension, no dot (typst is source only: `typ`). */
+    extension: string;
+    mime: string;
+    /** False until the request for this format is implemented (typst waits for R4). */
+    available: boolean;
+  }
+
+  /** JSON `{ formats: PandocFormatInfo[] }`: the formats pandoc.wasm can produce, in menu order. */
+  export function get_pandoc_formats(): string;
+
+  /** preview: the preview renders it; download: pandoc.wasm can produce it; neither: disable the control. */
+  export type PandocFormatClass = 'preview' | 'download' | 'neither';
+
+  /**
+   * Project-aware format resolver (D8.7), JSON of this shape: the document's own
+   * `format:` keys (the first is its format), else the surrounding `_quarto.yml`'s,
+   * else `html`.
+   */
+  export type ResolvePandocFormatsResponse =
+    | {
+        success: true;
+        source: 'document' | 'project' | 'default';
+        formats: { key: string; class: PandocFormatClass }[];
+      }
+    | { success: false; error: string };
+  export function resolve_pandoc_formats(path: string): string;
+
   /** Test-only: calls the user-grammar bridge directly. Phase 4.3 of syntax-highlighting. */
   export function quarto_highlight_with_user_for_test(
     language_class: string,

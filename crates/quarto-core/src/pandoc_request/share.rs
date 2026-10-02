@@ -42,6 +42,14 @@ pub fn share_tree_entries() -> &'static [ShareEntry] {
     })
 }
 
+/// Total bytes of the share tree (counted against the mount size limit).
+pub fn share_tree_total_bytes() -> u64 {
+    share_tree_entries()
+        .iter()
+        .map(|e| e.bytes.len() as u64)
+        .sum()
+}
+
 /// SHA-256 (hex) over the sorted `(path, bytes)` entries of the share tree.
 pub fn share_tree_version() -> &'static str {
     static VERSION: OnceLock<String> = OnceLock::new();

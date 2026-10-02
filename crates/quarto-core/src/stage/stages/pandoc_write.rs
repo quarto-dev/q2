@@ -29,6 +29,7 @@
 //! Task 9 and `claude-notes/plans/2026-10-01-pandoc-request-R1-request-seam.md`.
 
 use std::path::{Path, PathBuf};
+#[cfg(not(target_arch = "wasm32"))]
 use std::process::Command;
 
 use async_trait::async_trait;
@@ -36,7 +37,9 @@ use quarto_error_reporting::DiagnosticMessage;
 
 use crate::format::FormatIdentifier;
 use crate::language::LanguageTerms;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::pandoc_filters::bundle::extract_share_tree;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::pandoc_filters::diagnostics::classify_pandoc_completion;
 use crate::pandoc_filters::format_defaults::build_forwarded_args;
 use crate::pandoc_filters::params::{
@@ -44,15 +47,19 @@ use crate::pandoc_filters::params::{
     QuartoFilterEntryPointsContributor,
 };
 use crate::pandoc_filters::params_codec::encode_params_blob;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::pandoc_filters::version;
-use crate::pandoc_request::args::{is_absolute_request_path, to_native_windows_arg};
+use crate::pandoc_request::args::is_absolute_request_path;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::pandoc_request::args::to_native_windows_arg;
 use crate::pandoc_request::{
-    PandocArg, PandocRequest, PrepareOptions, REQUEST_SCHEMA_VERSION, RequestFile, constants,
-    normalize_request_path, share_tree_version, validate_mounts,
+    PandocArg, PandocRequest, PrepareOptions, REQUEST_SCHEMA_VERSION, RequestFile,
+    ResourceCollector, constants, normalize_request_path, share_tree_version, validate_mounts,
 };
+#[cfg(not(target_arch = "wasm32"))]
+use crate::stage::RenderedOutput;
 use crate::stage::{
-    DocumentAst, PipelineData, PipelineDataKind, PipelineError, PipelineStage, RenderedOutput,
-    StageContext,
+    DocumentAst, PipelineData, PipelineDataKind, PipelineError, PipelineStage, StageContext,
 };
 
 /// Removes the temp JSON input on a successful render; leaves it on disk
@@ -61,6 +68,7 @@ use crate::stage::{
 ///
 /// A missing/already-removed file on the success path is not an error —
 /// `remove_file`'s result is deliberately discarded.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn retain_temp_json_unless_success(success: bool, json_path: &Path) {
     if success {
         let _ = std::fs::remove_file(json_path);
@@ -76,6 +84,7 @@ pub fn retain_temp_json_unless_success(success: bool, json_path: &Path) {
 /// resolution fails — a state `gate` above already turned into an `Err`,
 /// so this fallback value is never actually reached in a caller that
 /// propagates the `?`).
+#[cfg(not(target_arch = "wasm32"))]
 fn resolve_and_gate_pandoc(
     stage_name: &str,
     runtime: &dyn quarto_system_runtime::SystemRuntime,
@@ -237,6 +246,7 @@ fn epub_extra_args(
 /// `brand:` value reaching `PandocWriteStage` came from either the
 /// project config or the document itself — good enough for the span
 /// binding to land on the right file in the common case.
+#[cfg(not(target_arch = "wasm32"))]
 #[allow(clippy::type_complexity)]
 fn resolve_typst_brand(
     meta: &quarto_pandoc_types::ConfigValue,
@@ -266,6 +276,7 @@ fn resolve_typst_brand(
 
 /// Builds the `brand`, `logo` and `brand-mode` filter params from
 /// already-resolved brand variants (see [`resolve_typst_brand`]).
+#[cfg(not(target_arch = "wasm32"))]
 fn resolve_typst_brand_param(
     meta: &quarto_pandoc_types::ConfigValue,
     light: Option<&quarto_brand::ResolvedBrand>,
@@ -307,6 +318,7 @@ fn resolve_typst_brand_param(
 /// cache so `typst fonts` and `typst compile` can see them (see
 /// [`crate::typst_google_fonts`]). Failures only warn: the font then falls
 /// back, as Typst did before this existed.
+#[cfg(not(target_arch = "wasm32"))]
 fn stage_typst_brand_fonts(brand: Option<&quarto_brand::ResolvedBrand>, ctx: &mut StageContext) {
     let Some(brand) = brand else {
         return;
@@ -342,6 +354,7 @@ fn stage_typst_brand_fonts(brand: Option<&quarto_brand::ResolvedBrand>, ctx: &mu
 /// `typst fonts` is asked about the exact same font-path set the real
 /// compile uses — otherwise the CSS font-fallback filter list could
 /// silently disagree with what Typst actually finds.
+#[cfg(not(target_arch = "wasm32"))]
 fn resolve_typst_available_fonts(
     stage_name: &str,
     meta: &quarto_pandoc_types::ConfigValue,
@@ -440,6 +453,71 @@ fn request_path(stage: &str, project_dir: &Path, path: &Path) -> Result<String, 
     Ok(normalized)
 }
 
+/// Stages the typst doctemplate under `temp_root` and returns the
+/// orchestrator's path. Direct `std::fs` until R4 moves it into the
+/// request's `files`.
+#[cfg(not(target_arch = "wasm32"))]
+fn stage_typst_template(
+    name: &str,
+    temp_root: &Path,
+    doc: &DocumentAst,
+) -> Result<PathBuf, PipelineError> {
+    let template_dir = temp_root.join("pandoc-typst-template");
+    std::fs::create_dir_all(&template_dir).map_err(|e| {
+        PipelineError::stage_error(
+            name,
+            format!("failed to create typst template directory: {e}"),
+        )
+    })?;
+    crate::pandoc_filters::bundle::extract_typst_template(&template_dir).map_err(|e| {
+        PipelineError::stage_error(
+            name,
+            format!("failed to materialize vendored typst template: {e}"),
+        )
+    })?;
+    let vendored_template = template_dir.join("template.typ");
+
+    // pandoc-hybrid-typst Phase 1's "Pandoc-defaults forwarding
+    // allow-list" bullet, `template` entry: a user-configured
+    // `format.typst.template` replaces the vendored template file,
+    // mirroring Q1's `userTemplate`
+    // (`command/render/pandoc.ts:784-810`). The vendored partials
+    // stay staged alongside it unchanged, so a custom template can
+    // still reference them (`$numbering.typ()$` etc).
+    let doc_dir = doc
+        .path
+        .parent()
+        .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
+    if let Some(user_template) = resolve_user_template_path(&doc.ast.meta, &doc_dir) {
+        std::fs::copy(&user_template, &vendored_template).map_err(|e| {
+            PipelineError::stage_error(
+                name,
+                format!(
+                    "failed to stage user-configured typst template {}: {e}",
+                    user_template.display()
+                ),
+            )
+        })?;
+    }
+    stage_typst_template_partials(&doc.ast.meta, &doc_dir, &template_dir)
+        .map_err(|msg| PipelineError::stage_error(name, msg))?;
+    Ok(vendored_template)
+}
+
+/// Typst through the request seam needs R4 (template partials as request
+/// files); until then the wasm build refuses it up front.
+#[cfg(target_arch = "wasm32")]
+fn stage_typst_template(
+    name: &str,
+    _temp_root: &Path,
+    _doc: &DocumentAst,
+) -> Result<PathBuf, PipelineError> {
+    Err(PipelineError::stage_error(
+        name,
+        "typst output is not available in the browser yet",
+    ))
+}
+
 pub struct PandocWriteStage;
 
 impl PandocWriteStage {
@@ -450,6 +528,7 @@ impl PandocWriteStage {
     /// The native typst pre-step: brand, logo, brand-mode, brand-font
     /// staging, `typst fonts` discovery and the citation/reference params.
     /// Empty for every other format.
+    #[cfg(not(target_arch = "wasm32"))]
     fn typst_prestep(
         &self,
         doc: &DocumentAst,
@@ -727,6 +806,15 @@ impl PandocWriteStage {
                 .iter()
                 .chain(resolved_filters.post.iter())
                 .any(|f| *f == pampa::unified_filter::FilterSpec::Citeproc);
+        let filter_refs: Vec<(PathBuf, bool)> = resolved_filters
+            .post
+            .iter()
+            .filter_map(|spec| match spec {
+                pampa::unified_filter::FilterSpec::Lua(path) => Some((path.clone(), false)),
+                pampa::unified_filter::FilterSpec::Json(path) => Some((path.clone(), true)),
+                pampa::unified_filter::FilterSpec::Citeproc => None,
+            })
+            .collect();
         let entry_points: Vec<EntryPointFilter> = resolved_filters
             .post
             .into_iter()
@@ -793,46 +881,7 @@ impl PandocWriteStage {
         // `--data-dir`/`-L` — see `bundle::extract_typst_template`'s doc
         // comment). Direct `std::fs` until R4.
         let typst_template_path = if is_typst {
-            let template_dir = temp_root.join("pandoc-typst-template");
-            std::fs::create_dir_all(&template_dir).map_err(|e| {
-                PipelineError::stage_error(
-                    name,
-                    format!("failed to create typst template directory: {e}"),
-                )
-            })?;
-            crate::pandoc_filters::bundle::extract_typst_template(&template_dir).map_err(|e| {
-                PipelineError::stage_error(
-                    name,
-                    format!("failed to materialize vendored typst template: {e}"),
-                )
-            })?;
-            let vendored_template = template_dir.join("template.typ");
-
-            // pandoc-hybrid-typst Phase 1's "Pandoc-defaults forwarding
-            // allow-list" bullet, `template` entry: a user-configured
-            // `format.typst.template` replaces the vendored template file,
-            // mirroring Q1's `userTemplate`
-            // (`command/render/pandoc.ts:784-810`). The vendored partials
-            // stay staged alongside it unchanged, so a custom template can
-            // still reference them (`$numbering.typ()$` etc).
-            let doc_dir = doc
-                .path
-                .parent()
-                .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
-            if let Some(user_template) = resolve_user_template_path(&doc.ast.meta, &doc_dir) {
-                std::fs::copy(&user_template, &vendored_template).map_err(|e| {
-                    PipelineError::stage_error(
-                        name,
-                        format!(
-                            "failed to stage user-configured typst template {}: {e}",
-                            user_template.display()
-                        ),
-                    )
-                })?;
-            }
-            stage_typst_template_partials(&doc.ast.meta, &doc_dir, &template_dir)
-                .map_err(|msg| PipelineError::stage_error(name, msg))?;
-            Some(vendored_template)
+            Some(stage_typst_template(name, &temp_root, doc)?)
         } else {
             None
         };
@@ -976,6 +1025,59 @@ impl PandocWriteStage {
         // plus any format-specific extra flags (pandoc-hybrid-typst Phase 1's
         // invocation builder — typst needs `--standalone --wrap none
         // --default-image-extension svg`; see `Format::pandoc_invocation_args`).
+        // D3: copy the bytes of the document's own files into the request
+        // (wasm only; natively pandoc reads them where they already are).
+        let mut diagnostics = Vec::new();
+        let resource_refs = if opts.collect_resources {
+            let invocation_args: Vec<PandocArg> = ctx
+                .format
+                .pandoc_invocation_args()
+                .into_iter()
+                .map(PandocArg::Text)
+                .collect();
+            let default_ext =
+                crate::pandoc_request::resources::default_image_extension(&format_extra_args)
+                    .or_else(|| {
+                        crate::pandoc_request::resources::default_image_extension(&invocation_args)
+                    });
+            let base_total: u64 = crate::pandoc_request::share::share_tree_total_bytes()
+                + files.iter().map(|f| f.bytes.len() as u64).sum::<u64>();
+            let mut collector = ResourceCollector::new(
+                ctx.runtime.as_ref(),
+                Path::new(&rp(&project_dir)?),
+                &temp_root,
+                base_total,
+            );
+            let mut image_targets = Vec::new();
+            crate::ast_walk::for_each_inline_mut(&mut doc.ast.blocks, &mut |inline| {
+                if let quarto_pandoc_types::Inline::Image(img) = inline {
+                    image_targets.push(img.target.0.clone());
+                }
+            });
+            for target in &image_targets {
+                collector.add_image(&doc_dir_abs, target, default_ext.as_deref());
+            }
+            collector.add_args(&format_extra_args);
+            collector.add_args(&forwarded_args);
+            for (path, is_json) in &filter_refs {
+                let absolute = if path.has_root() || path.is_absolute() {
+                    path.clone()
+                } else {
+                    project_dir.join(path)
+                };
+                if *is_json {
+                    collector.reject_json_filter(&absolute);
+                } else {
+                    collector.add_lua_filter(&absolute);
+                }
+            }
+            let (refs, notes) = collector.finish();
+            diagnostics = notes;
+            refs
+        } else {
+            Vec::new()
+        };
+
         let mut args: Vec<PandocArg> = vec![
             PandocArg::text("-f"),
             PandocArg::text("json"),
@@ -1044,9 +1146,7 @@ impl PandocWriteStage {
             env,
             files,
             dirs,
-            // R2 computes `resource_refs` (paths and bytes copied by Rust
-            // from the VFS snapshot); the docx seam leaves it empty.
-            resource_refs: Vec::new(),
+            resource_refs,
             share_root: rp(&temp_root)?,
             share_tree_path: rp(&share)?,
             doc_dir: rp(&doc_dir_abs)?,
@@ -1068,7 +1168,7 @@ impl PandocWriteStage {
         // intermediate `.typ` file `TypstCompileStage` compiles next.
         Ok(PreparedPandoc {
             request,
-            diagnostics: Vec::new(),
+            diagnostics,
             output_path,
             is_intermediate: is_typst,
         })
@@ -1079,6 +1179,7 @@ impl PandocWriteStage {
     /// request's argv (argv[0] replaced by the resolved binary) and env
     /// (applied over the inherited environment). Returns the classified
     /// pandoc warnings.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn execute(
         &self,
         request: &PandocRequest,
@@ -1185,6 +1286,7 @@ impl PipelineStage for PandocWriteStage {
         PipelineDataKind::RenderedOutput
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     async fn run(
         &self,
         input: PipelineData,
@@ -1236,6 +1338,19 @@ impl PipelineStage for PandocWriteStage {
             metadata: doc.ast.meta,
             source_context: doc.source_context,
         }))
+    }
+
+    /// There is no process to run on wasm: the request is returned to the
+    /// host instead (`PandocPrepareStage`).
+    #[cfg(target_arch = "wasm32")]
+    async fn run(
+        &self,
+        _input: PipelineData,
+        _ctx: &mut StageContext,
+    ) -> Result<PipelineData, PipelineError> {
+        Err(PipelineError::other(
+            "pandoc-write runs natively only; the wasm pipeline uses pandoc-prepare",
+        ))
     }
 }
 
@@ -1325,6 +1440,7 @@ fn shift_heading_level_by_for(
 /// (`command/render/pandoc.ts:784-810`). Only the `Path` variant is
 /// handled: `MarkPolicy::Always` guarantees any string entry is marked, so
 /// an unmarked value here means no `template:` key was set at all.
+#[cfg(not(target_arch = "wasm32"))]
 fn resolve_user_template_path(
     meta: &quarto_pandoc_types::ConfigValue,
     doc_dir: &Path,
@@ -1348,6 +1464,7 @@ fn resolve_user_template_path(
 /// `adjust_paths_to_document_dir` at metadata-merge time) or as plain
 /// scalars/inlines (document front matter); both resolve against `doc_dir`.
 /// Shadowing is by file name, matching pandoc's partial resolution and Q1.
+#[cfg(not(target_arch = "wasm32"))]
 fn stage_typst_template_partials(
     meta: &quarto_pandoc_types::ConfigValue,
     doc_dir: &Path,
@@ -1405,6 +1522,7 @@ fn insert_typst_section_numbering(meta: &mut quarto_pandoc_types::ConfigValue) {
 /// neither delimiter (the common case — no rewrite, no mtime churn);
 /// a read or write failure fails the stage, since leaving the output
 /// double-escaped would be silently wrong.
+#[cfg(not(target_arch = "wasm32"))]
 fn unescape_shortcodes_in_output(output_path: &Path) -> Result<(), PipelineError> {
     let content = std::fs::read_to_string(output_path).map_err(|e| {
         PipelineError::stage_error(
