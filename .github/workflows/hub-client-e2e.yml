@@ -135,6 +135,20 @@ jobs:
           cd hub-client
           npm run build:wasm
 
+      # pandoc.wasm.gz must be in hub-client/public/pandoc/ before the hub-client
+      # build below: Vite copies public/ into dist/ at build time, so a later fetch
+      # leaves the loader without its asset and every pandoc-*.harness.spec.ts
+      # assertion fails (host phase H2). A cache miss during a GitHub outage fails
+      # the job (--require).
+      - name: Cache pandoc.wasm
+        uses: actions/cache@v4
+        with:
+          path: .cache/pandoc-wasm
+          key: pandoc-wasm-${{ hashFiles('resources/pandoc-wasm.json') }}
+
+      - name: Fetch pandoc.wasm
+        run: node scripts/fetch-pandoc-wasm.mjs --require
+
       # Build only the workspaces the e2e tests actually exercise.
       # q2-demos/* currently fail their vite build (they import an
       # absolute path "/src/wasm-js-bridge/cache.js" that only exists

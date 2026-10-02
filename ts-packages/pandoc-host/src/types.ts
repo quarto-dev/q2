@@ -62,7 +62,15 @@ export type HostDiagnosticCode =
   | 'limit-exceeded'
   | 'pandoc-oom'
   | 'pandoc-crash'
-  | 'no-output';
+  | 'no-output'
+  // Raised by hub-client's loader and runner (host phase H2), not by `execute`.
+  | 'pandoc-timeout'
+  | 'wasm-unsupported'
+  | 'worker-blocked'
+  | 'compile-blocked'
+  | 'download-failed'
+  | 'checksum-mismatch'
+  | 'offline';
 
 /** The shape of a diagnostic produced by Rust (the classify export). Fields beyond these pass through. */
 export interface RustDiagnostic {

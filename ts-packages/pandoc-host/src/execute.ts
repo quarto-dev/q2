@@ -124,7 +124,12 @@ export async function execute(request: PandocRequest, shareTree: ShareTree, opti
     const fault = options.fault;
     wasi.wasiImport.path_open = () => {
       if (fault.kind === 'crash') throw new Error(fault.message ?? 'injected crash');
-      for (;;); // hang: only a terminated worker gets out
+      // hang: only a terminated worker gets out. A bare `for (;;);` is deleted by esbuild's
+      // minifier, so production bundles would not hang; calling `performance.now()` keeps it.
+      while (performance.now() >= 0) {
+        /* spin */
+      }
+      return 0;
     };
   }
 
