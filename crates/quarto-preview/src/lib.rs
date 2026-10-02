@@ -31,6 +31,7 @@ pub mod deps;
 pub mod diagnostics;
 pub mod join_frontend;
 pub mod re_execute;
+pub mod render_download;
 pub mod share;
 pub mod static_mode;
 
@@ -731,6 +732,9 @@ pub fn extend_with_preview(
         // include-shortcode dep set here so it can filter unrelated
         // sibling edits out of `onFileContent`-driven re-renders.
         .route("/api/preview/deps", get(deps::deps_handler))
+        // pandoc-wasm H4b (D7): "Download as" for the embedded hub, which
+        // carries no pandoc.wasm; renders natively and returns the file.
+        .route("/api/preview/render", post(render_download::render_handler))
         // bd-b9kzg: SPA fetches accumulated server-side diagnostics
         // (capture-driver / deps-parse / re-execute failures) per
         // page. Merged with the WASM render's own `result.warnings`

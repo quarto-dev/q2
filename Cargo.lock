@@ -6720,6 +6720,7 @@ dependencies = [
  "tower 0.5.3",
  "tracing",
  "url",
+ "zip",
  "zstd",
 ]
 

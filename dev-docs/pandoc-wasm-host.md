@@ -38,6 +38,32 @@ SHA-256 and the decompressed wasm SHA-256, extracts with `fflate` (no `unzip`), 
 `hub-client/public/pandoc/pandoc.wasm.gz` (the served asset). Both are gitignored.
 `npm run test:wasm` runs it (non-`--require`) as `pretest:wasm`.
 
+## Shipping the asset (H4)
+
+`hub-client/public/pandoc/pandoc.wasm.gz` is served from `/pandoc/` (outside `assets/`, so the
+service worker's `/assets/*.wasm` route never sees it). Build entry points and the asset:
+
+| Entry point | Behaviour |
+|---|---|
+| `npm run build:all` (production, built by `quarto-hub-deployment`), `test:e2e*`, `test:harness`, `scripts/build-local-prod.sh` | run `npm run fetch:pandoc` first (`fetch-pandoc-wasm.mjs --require`): the build fails when the asset cannot be fetched or verified |
+| `npm run build`, `vite dev` alone | no fetch; a missing asset turns the feature off and prints a `[pandoc]` warning (restart `vite dev` after fetching) |
+| `npm run build:preview-embed` | builds with `VITE_PANDOC_WASM=0` and then `scripts/prune-embed-dist.mjs` removes `pandoc/` (and `typst/`, `pdfjs/` once they exist) from `dist-preview-embed`, which is `include_dir!`-ed into the `q2` binary; the embed does its downloads through the native pandoc (D7) |
+
+The flag is `__PANDOC_WASM_ENABLED__` (`src/pandoc/buildFlag.ts` decides, `vite.config.ts` defines it,
+`src/pandoc/featureFlag.ts` reads it): on iff the asset exists and `VITE_PANDOC_WASM` is not `0`.
+The "Download as" UI (H5) must check it. It is also the kill switch: build with `VITE_PANDOC_WASM=0`.
+
+`.gz` is in `scripts/gzip-skip-extensions.txt`, so `precompress-dist.mjs` skips it, and `vite preview`'s
+`compression` filter leaves it alone (`mime-db` has `application/gzip` as not compressible).
+
+Production serving (nginx in `quarto-hub-deployment`) needs a `location /pandoc/` that 404s a missing
+file, serves `application/octet-stream` with `Cache-Control: public, max-age=31536000, immutable`
+and repeats the server-level security headers; see the H4 plan for the block.
+
+CSP: hub-client sets none (only `quarto-hub/server.rs` does, with auth on), so nothing changes
+here. A deployment that adds a CSP needs `worker-src` (the render worker is a same-origin module worker)
+and `script-src 'wasm-unsafe-eval'` (compiling the module).
+
 ## Tests
 
 | Where | What |

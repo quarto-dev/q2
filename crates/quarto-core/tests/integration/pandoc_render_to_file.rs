@@ -340,3 +340,41 @@ fn render_document_to_file_pandoc_hybrid_resolves_citations_for_both_citeproc_sp
         );
     }
 }
+
+/// H4b: `source_override` renders the given bytes instead of the file's
+/// disk copy (the preview server's "Download as" renders the editor's
+/// current text, which can be ahead of what is on disk), while the
+/// document's directory still anchors relative resources.
+#[test]
+fn render_document_to_file_source_override_replaces_the_disk_copy() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = temp.path().canonicalize().unwrap();
+    let input_path = project_dir.join("f.qmd");
+    write(&input_path, "---\ntitle: T\n---\n\nSTALE disk text.\n");
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let output_path = project_dir.join("f.txt");
+    let options = RenderToFileOptions {
+        output_path: Some(output_path.clone()),
+        source_override: Some(b"---\ntitle: T\n---\n\nFRESH editor text.\n".to_vec()),
+        ..Default::default()
+    };
+    render_document_to_file(
+        &input_path,
+        "plain",
+        &options,
+        None,
+        runtime,
+        None,
+        None,
+        None,
+    )
+    .expect("plain render should succeed");
+    let text = std::fs::read_to_string(&output_path).unwrap();
+    assert!(text.contains("FRESH editor text."), "got:\n{text}");
+    assert!(!text.contains("STALE"), "got:\n{text}");
+    assert_eq!(
+        std::fs::read_to_string(&input_path).unwrap(),
+        "---\ntitle: T\n---\n\nSTALE disk text.\n",
+        "the override must not write back to the input file"
+    );
+}
