@@ -13,6 +13,7 @@ pub mod attribution_viewer;
 pub mod attribution_wasm_invariant;
 pub mod behave_engine_e2e;
 pub mod book_appendix_letter_parity;
+pub mod book_chapter_images;
 pub mod book_citations;
 pub mod book_cross_chapter_links;
 pub mod book_epub;

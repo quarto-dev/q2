@@ -295,6 +295,7 @@ pub(crate) async fn render_book_single_file(
         diagnostics.push(DiagnosticMessage::warning(issue));
     }
     crate::project::book::resolve_cross_chapter_links(&mut merged);
+    crate::project::book::resolve_chapter_image_targets(&mut merged);
 
     // Plan Decision 4/6: the merge step is the first thing that knows
     // this render is a book single-file merge — hand that down to

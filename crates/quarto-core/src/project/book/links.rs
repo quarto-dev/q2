@@ -41,7 +41,7 @@ use quarto_pandoc_types::pandoc::Pandoc;
 /// Q1's `isRelativeRef` (`common/paths.lua`): no leading `/`, no
 /// `scheme://`, no `data:` prefix, no leading `#`. Fragment-only and
 /// external links are left alone entirely.
-fn is_relative_ref(target: &str) -> bool {
+pub(super) fn is_relative_ref(target: &str) -> bool {
     !target.starts_with('/')
         && !target.starts_with('#')
         && !target.starts_with("data:")
@@ -52,7 +52,7 @@ fn is_relative_ref(target: &str) -> bool {
 
 /// `pandoc.path.normalize`/`flatten` for a project-relative,
 /// forward-slashed path: drop `.` and empty segments, pop on `..`.
-fn normalize_book_path(path: &str) -> String {
+pub(super) fn normalize_book_path(path: &str) -> String {
     let mut parts: Vec<&str> = Vec::new();
     for part in path.split('/') {
         match part {
@@ -85,7 +85,7 @@ fn marker_resource_dir(text: &str) -> Option<String> {
 /// If this block is one of the merge's two marker shapes
 /// (`Paragraph[RawInline(html, …)]` or `RawBlock(html, …)`), its
 /// `resourceDir`.
-fn block_marker_resource_dir(block: &Block) -> Option<String> {
+pub(super) fn block_marker_resource_dir(block: &Block) -> Option<String> {
     match block {
         Block::RawBlock(r) if r.format == "html" => marker_resource_dir(&r.text),
         Block::Paragraph(p) => match p.content.as_slice() {
