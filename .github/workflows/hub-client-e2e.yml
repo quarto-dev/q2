@@ -20,6 +20,11 @@ on:
         description: 'Also run smoke-all E2E tests (slow, ~80 extra tests, opt-in only)'
         type: boolean
         default: false
+      smoke-all-browser:
+        description: 'Browser(s) for the on-demand smoke-all run (nightly and fixture PRs always run both)'
+        type: choice
+        options: [both, chromium, firefox]
+        default: both
       smoke-all-workers:
         description: 'Playwright worker count for smoke-all (override; nightly default is 3)'
         type: string
@@ -42,6 +47,17 @@ jobs:
     runs-on: ubuntu-latest
     name: Hub-Client E2E Tests
     if: github.repository == 'quarto-dev/q2'
+
+    # One parallel leg per browser, so adding Firefox does not lengthen the
+    # Chromium run. Firefox is non-gating (job-level continue-on-error) while
+    # it is new: a red Firefox leg is reported but does not fail the workflow.
+    # Remove that line, and add `Hub-Client E2E Tests (firefox)` to the
+    # required checks, once Firefox has proven stable.
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox]
+    continue-on-error: ${{ matrix.browser == 'firefox' }}
 
     steps:
       - name: Checkout Repo
@@ -176,24 +192,25 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright_version.outputs.version }}-chromium-firefox
+          key: playwright-${{ runner.os }}-${{ steps.playwright_version.outputs.version }}-${{ matrix.browser }}
 
       - name: Install Playwright
         run: |
           cd hub-client
-          npx playwright install --with-deps chromium firefox
+          npx playwright install --with-deps ${{ matrix.browser }}
 
       # Run E2E tests — custom specs only (smoke-all excluded by testIgnore)
       - name: Run E2E tests
         run: |
           cd hub-client
-          npx playwright test --project=chromium
+          npx playwright test --project=${{ matrix.browser }}
 
       # Author-attribution E2E (author-ID transition, Phase 5): runs its own
       # auth-on hub + mock OIDC IdP + static proxies (e2e-author/setup.ts),
       # so no vite preview is needed — the VITE_E2E=1 dist built above is
       # served by scripts/local-prod-server.mjs.
       - name: Run author-attribution E2E tests
+        if: matrix.browser == 'chromium'
         run: |
           cd hub-client
           npx playwright test --config playwright.author-e2e.config.ts
@@ -231,7 +248,8 @@ jobs:
       # pipeline or theme resolution.
       - name: Run smoke-all E2E tests (nightly + opt-in + fixture PRs)
         if: >-
-          inputs.run-smoke-all == true
+          (inputs.run-smoke-all == true
+            && (inputs.smoke-all-browser == 'both' || inputs.smoke-all-browser == matrix.browser))
           || github.event_name == 'schedule'
           || steps.smoke_changed.outputs.changed == 'true'
         env:
@@ -241,7 +259,7 @@ jobs:
           SMOKE_ALL_WORKERS: ${{ inputs.smoke-all-workers }}
         run: |
           cd hub-client
-          npx playwright test --config playwright.smoke-all.config.ts --project=chromium
+          npx playwright test --config playwright.smoke-all.config.ts --project=${{ matrix.browser }}
 
       # Dev-harness behavioral tests: keyboard contracts, dialog focus,
       # axe scans, forced-colors, reduced-motion, viewport reflow. No hub
@@ -251,31 +269,7 @@ jobs:
       - name: Run harness tests
         run: |
           cd hub-client
-          npx playwright test --config playwright.harness.config.ts --project=chromium
-
-      # Firefox (Playwright's patched build) over the same default and
-      # harness suites. continue-on-error while the initial triage is in
-      # flight: a Firefox failure is reported on the step but does not
-      # gate the PR. Remove it once the suite is green on Firefox.
-      # Separate report/output dirs keep Firefox traces from clobbering
-      # the Chromium ones (Playwright wipes --output at the start of a run).
-      - name: Run E2E tests (Firefox)
-        if: ${{ !cancelled() }}
-        continue-on-error: true
-        env:
-          PLAYWRIGHT_HTML_REPORT: playwright-report-firefox
-        run: |
-          cd hub-client
-          npx playwright test --project=firefox --output=test-results-firefox
-
-      - name: Run harness tests (Firefox)
-        if: ${{ !cancelled() }}
-        continue-on-error: true
-        env:
-          PLAYWRIGHT_HTML_REPORT: playwright-report-firefox-harness
-        run: |
-          cd hub-client
-          npx playwright test --config playwright.harness.config.ts --project=firefox --output=test-results-firefox-harness
+          npx playwright test --config playwright.harness.config.ts --project=${{ matrix.browser }}
 
       # sync-test-harness's hub tier spawns `cargo run --bin hub` with a 120s
       # readiness timeout, so it belongs in this workflow rather than
@@ -293,30 +287,16 @@ jobs:
       # them. Running last with `always()` still reports this step's own
       # result without gating anything upstream of it. GH #250.
       - name: Run sync-test-harness tests
-        if: always()
+        if: always() && matrix.browser == 'chromium'
         run: npm test -w ts-packages/sync-test-harness
 
-      # Upload test artifacts on failure
+      # Upload test artifacts on failure. Firefox reports are also kept when
+      # green (Firefox is non-gating, so a triage run wants the traces).
       - name: Upload Playwright report
         uses: actions/upload-artifact@v7
-        if: failure()
+        if: failure() || (matrix.browser == 'firefox' && !cancelled())
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.browser }}
           path: hub-client/playwright-report/
-          retention-days: 7
-
-      # Firefox reports (with traces) are uploaded even when green so a
-      # triage run can inspect them; the continue-on-error steps above
-      # never fail the job on their own.
-      - name: Upload Playwright report (Firefox)
-        uses: actions/upload-artifact@v7
-        if: ${{ !cancelled() }}
-        with:
-          name: playwright-report-firefox
-          path: |
-            hub-client/playwright-report-firefox/
-            hub-client/playwright-report-firefox-harness/
-            hub-client/test-results-firefox/
-            hub-client/test-results-firefox-harness/
           retention-days: 7
           if-no-files-found: ignore
