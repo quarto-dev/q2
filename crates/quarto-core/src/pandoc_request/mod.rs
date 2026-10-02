@@ -14,7 +14,6 @@ pub mod render;
 pub mod resources;
 pub mod share;
 pub mod types;
-pub mod typst_limits;
 pub mod typst_pdf;
 
 pub use args::PandocArg;

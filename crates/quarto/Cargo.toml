@@ -13,9 +13,6 @@ path = "src/main.rs"
 
 [dependencies]
 clap.workspace = true
-# Backs the hidden `call inline-css` subcommand (Q1's juice step). Default features
-# (remote/file stylesheet loading, rayon) stay off.
-css-inline = { version = "0.21", default-features = false }
 # Global allocator for the native CLI; see the `#[global_allocator]` in main.rs.
 mimalloc = "0.1"
 anyhow.workspace = true

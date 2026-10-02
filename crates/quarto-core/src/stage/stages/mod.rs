@@ -53,6 +53,7 @@ mod engine_execution;
 mod equation_number;
 mod include_expansion;
 mod include_resolve;
+mod inline_table_css;
 mod language_resolve;
 mod link_resolution;
 mod listing_item_info;
@@ -128,6 +129,7 @@ pub use include_expansion::{
     IncludeExpansionStage, collect_include_paths, expand_document_includes, extract_include_path,
 };
 pub use include_resolve::IncludeResolveStage;
+pub use inline_table_css::{InlineTableCssStage, inline_table_css};
 pub use language_resolve::LanguageResolveStage;
 pub use link_resolution::LinkResolutionStage;
 pub use listing_item_info::ListingItemInfoStage;

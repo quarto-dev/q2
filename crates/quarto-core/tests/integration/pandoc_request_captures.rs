@@ -25,6 +25,15 @@ fn scratch() -> (tempfile::TempDir, PathBuf) {
 }
 
 fn render(path: &Path, qmd: &str, captures: Vec<EngineCapture>) -> PandocRequestOutcome {
+    render_as(path, qmd, captures, "docx")
+}
+
+fn render_as(
+    path: &Path,
+    qmd: &str,
+    captures: Vec<EngineCapture>,
+    format: &str,
+) -> PandocRequestOutcome {
     std::fs::write(path, qmd).unwrap();
     let runtime = Arc::new(NativeRuntime::new());
     let project = ProjectContext::discover(path, runtime.as_ref()).unwrap();
@@ -32,7 +41,7 @@ fn render(path: &Path, qmd: &str, captures: Vec<EngineCapture>) -> PandocRequest
         PandocRequestInput {
             path,
             content: qmd.as_bytes(),
-            format: "docx",
+            format,
             project: &project,
             source_date_epoch: Some(1_700_000_000),
             captures,
@@ -133,4 +142,33 @@ fn a_captured_figure_reaches_the_request_as_a_resource() {
         .collect();
     assert_eq!(refs.len(), 1, "{:?}", request.resource_refs);
     assert_eq!(refs[0].bytes, b"FIGBYTES");
+}
+
+/// R8: HTML a capture splices in (a gt/pandas table) is CSS-inlined for typst
+/// too, because the stage runs after the splice.
+#[test]
+fn a_captured_styled_table_is_css_inlined_for_typst() {
+    let (_guard, root) = scratch();
+    let markdown = "---\ntitle: T\n---\n\n::: {.cell}\n::: {.cell-output-display}\n\
+        ```{=html}\n<style>td { text-align: right }</style>\n\
+        <table><tr><td>TBL</td></tr></table>\n```\n:::\n:::\n";
+    let capture = EngineCapture {
+        engine_name: "r".to_string(),
+        input_qmd: "---\ntitle: T\n---\n\n```{r}\nSRC_R\n```\n".to_string(),
+        result: serde_json::json!({ "markdown": markdown }),
+        files: Vec::new(),
+    };
+    let qmd = "---\ntitle: T\n---\n\n```{r}\nSRC_R\n```\n";
+    let out = render_as(&root.join("doc.qmd"), qmd, vec![capture], "typst");
+    assert!(out.error.is_none(), "{:?}", out.error);
+    let request = out.request.as_ref().expect("request");
+    let input = request
+        .files
+        .iter()
+        .find(|f| f.path.ends_with("/pandoc-input.json"))
+        .expect("pandoc-input.json");
+    let json = String::from_utf8_lossy(&input.bytes);
+    assert!(json.contains("TBL"), "capture not spliced: {json}");
+    assert!(!json.contains("<style"), "style block left in the input");
+    assert!(json.contains("text-align"), "rules not on the cell");
 }

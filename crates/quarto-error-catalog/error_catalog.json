@@ -1511,13 +1511,6 @@
     "docs_url": "https://quarto.org/docs/errors/pandoc/Q-20-9",
     "since_version": "99.9.9"
   },
-  "Q-20-10": {
-    "subsystem": "pandoc",
-    "title": "Styled Raw HTML Table Not CSS-Inlined for Typst in the Browser",
-    "message_template": "Native Typst rendering moves the rules of a raw HTML block's <style> element onto the table or <pre> elements it styles. That step is not available in the browser, so the styling is lost in the Typst output.",
-    "docs_url": "https://quarto.org/docs/errors/pandoc/Q-20-10",
-    "since_version": "99.9.9"
-  },
   "Q-2-43": {
     "subsystem": "markdown",
     "title": "Callout Title Given Twice",
