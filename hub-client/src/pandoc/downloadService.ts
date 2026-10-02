@@ -72,6 +72,14 @@ function shareTree(): ShareTree {
   return cachedTree;
 }
 
+export type PdfListener = (pdf: Uint8Array, info: { path: string; fileName: string }) => void;
+const pdfListeners = new Set<PdfListener>();
+/** Each compiled PDF, as the "Download as PDF" chain produces it (the viewer's feed). Returns an unsubscribe. */
+export function onPdfCompiled(listener: PdfListener): () => void {
+  pdfListeners.add(listener);
+  return () => pdfListeners.delete(listener);
+}
+
 let controller: DownloadController | undefined;
 
 export function getDownloadController(): DownloadController {
@@ -92,6 +100,7 @@ export function getDownloadController(): DownloadController {
           },
           classify: classifyPandocCompletion,
           save: saveBlob,
+          onPdf: (pdf, info) => pdfListeners.forEach((l) => l(pdf, info)),
         });
   }
   return controller;

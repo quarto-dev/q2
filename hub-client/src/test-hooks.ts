@@ -21,7 +21,8 @@ import { PandocRunner, uiStateFor } from './pandoc/pandocRunner';
 import { createBrowserWorker } from './pandoc/pandocService';
 import { PANDOC_WASM_SHA256, smokeJob } from './pandoc/smokeJob';
 import { installDevHarness, pandocDownload } from './pandoc/devHarness';
-import { formatByKey, getDownloadController } from './pandoc/downloadService';
+import { formatByKey, getDownloadController, onPdfCompiled } from './pandoc/downloadService';
+import { mountPdfViewer } from './pandoc/pdfViewer';
 import { createTypstLoader, TypstFontsLoader, TYPST_WASM_SHA256 } from './typst/typstAssets';
 import { splitTypstAssets } from './typst/typstAssetSplit';
 import { TypstRunner, typstUiStateFor } from './typst/typstRunner';
@@ -74,6 +75,22 @@ export const pandoc = {
       fileName: s.phase === 'done' ? s.fileName : undefined,
       diagnostics: s.phase === 'failed' ? s.diagnostics : s.phase === 'done' ? s.warnings : [],
     };
+  },
+  /**
+   * The PDF viewer (H9) mounted into `#pdf-viewer-host` (created if missing) and fed by every
+   * compiled PDF; the pdf.js app is then reachable at `iframe.contentWindow.PDFViewerApplication`.
+   */
+  mountPdfViewer() {
+    let host = document.getElementById('pdf-viewer-host');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'pdf-viewer-host';
+      host.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#fff';
+      document.body.appendChild(host);
+    }
+    const viewer = mountPdfViewer(host);
+    onPdfCompiled((pdf, info) => void viewer.show(pdf, { key: info.path, fileName: info.fileName }));
+    return viewer;
   },
   /** The dev harness: Rust request -> worker -> output (src/pandoc/devHarness.ts). */
   download: pandocDownload,

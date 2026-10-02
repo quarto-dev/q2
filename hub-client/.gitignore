@@ -39,3 +39,6 @@ e2e/**/*-snapshots/
 public/pandoc/
 # Served typst.ts wasm and default fonts, same script
 public/typst/
+
+# Served pdf.js viewer (scripts/fetch-pandoc-wasm.mjs)
+public/pdfjs/
