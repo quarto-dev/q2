@@ -13,8 +13,7 @@ import { DownloadIcon } from './icons';
 import Tooltip from './Tooltip';
 import { download } from '../strings';
 import './DownloadAsControl.css';
-import type { Diagnostic } from '@quarto/pandoc-host';
-import type { DownloadFormat, DownloadStatus } from '../pandoc/downloadController';
+import type { Diagnostic, DownloadFormat, DownloadStatus } from '../pandoc/downloadController';
 import { liveText, workingText } from '../pandoc/downloadText';
 
 export interface DownloadAsControlProps {
@@ -27,8 +26,12 @@ export interface DownloadAsControlProps {
   onDismiss: () => void;
 }
 
-const diagText = (d: Diagnostic): { code?: string; title: string; detail?: string } =>
-  d.origin === 'host' ? { code: d.code, title: d.message } : { code: d.code, title: d.title, detail: d.problem };
+const diagText = (d: Diagnostic): { code?: string; title: string; detail?: string } => {
+  if (d.origin === 'host') return { code: d.code, title: d.message };
+  // typst's own diagnostics: the message, and where in the generated .typ it was raised.
+  if (d.origin === 'typst') return { title: d.message, detail: d.range ? `${d.path} ${d.range}` : d.path };
+  return { code: d.code, title: d.title, detail: d.problem };
+};
 
 function DiagnosticList({ diagnostics }: { diagnostics: Diagnostic[] }) {
   if (diagnostics.length === 0) return null;
@@ -90,7 +93,7 @@ export default function DownloadAsControl({ formats, status, disabledReason, onS
               {f.label}
             </MenuItem>
           ))}
-          <MenuLabel>{download.sizeHint}</MenuLabel>
+          <MenuLabel>{formats.some((f) => f.key === 'pdf') ? download.sizeHintPdf : download.sizeHint}</MenuLabel>
         </Menu>
       )}
       <div className="download-visually-hidden" role="status" aria-live="polite" aria-label={download.statusRegionLabel}>

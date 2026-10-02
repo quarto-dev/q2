@@ -21,6 +21,7 @@ import { PandocRunner, uiStateFor } from './pandoc/pandocRunner';
 import { createBrowserWorker } from './pandoc/pandocService';
 import { PANDOC_WASM_SHA256, smokeJob } from './pandoc/smokeJob';
 import { installDevHarness, pandocDownload } from './pandoc/devHarness';
+import { formatByKey, getDownloadController } from './pandoc/downloadService';
 import { createTypstLoader, TypstFontsLoader, TYPST_WASM_SHA256 } from './typst/typstAssets';
 import { splitTypstAssets } from './typst/typstAssetSplit';
 import { TypstRunner, typstUiStateFor } from './typst/typstRunner';
@@ -39,6 +40,41 @@ export const pandoc = {
     return { loader, runner };
   },
   smokeJob,
+  /**
+   * The production `DownloadController` (what the menu drives) for the document at `path` in the
+   * VFS: resolves once the click's chain has finished or was cancelled. `cancelOnStage` cancels the
+   * click when the status first reaches that stage (the abort-during-a-stage tests). The saved file
+   * goes through the real `saveBlob`, so the page emits a download.
+   */
+  async startDownload(path: string, formatKey: string, options: { cancelOnStage?: string } = {}) {
+    await wasmRenderer.initWasm();
+    const format = formatByKey(formatKey);
+    if (!format) throw new Error(`no such download format: ${formatKey}`);
+    const controller = getDownloadController();
+    const stages: string[] = [];
+    const phases: string[] = [];
+    const unsubscribe = controller.subscribe(() => {
+      const s = controller.getSnapshot();
+      phases.push(s.phase);
+      if (s.phase !== 'working') return;
+      if (stages[stages.length - 1] !== s.stage) stages.push(s.stage);
+      if (options.cancelOnStage === s.stage) controller.cancel();
+    });
+    try {
+      await controller.start({ path, format });
+    } finally {
+      unsubscribe();
+    }
+    const s = controller.getSnapshot();
+    return {
+      phase: s.phase,
+      stages,
+      cancelledCount: phases.filter((p) => p === 'cancelled').length,
+      state: s.phase === 'failed' ? s.state : undefined,
+      fileName: s.phase === 'done' ? s.fileName : undefined,
+      diagnostics: s.phase === 'failed' ? s.diagnostics : s.phase === 'done' ? s.warnings : [],
+    };
+  },
   /** The dev harness: Rust request -> worker -> output (src/pandoc/devHarness.ts). */
   download: pandocDownload,
   uiStateFor,

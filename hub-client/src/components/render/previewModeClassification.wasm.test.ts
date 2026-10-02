@@ -72,8 +72,8 @@ describe('classifyPreviewMode against the real wasm', () => {
     expect(await modeOf('format:\n  docx: default\n  html: default')).toEqual({ mode: 'download', formatKey: 'docx' });
   });
 
-  it('pdf and latex are neither', async () => {
-    expect(await modeOf('format: pdf')).toEqual({ mode: 'neither', formatKey: 'pdf' });
+  it('pdf is the download mode (host H8 wired the chain); latex is neither', async () => {
+    expect(await modeOf('format: pdf')).toEqual({ mode: 'download', formatKey: 'pdf' });
     expect(await modeOf('format: latex')).toEqual({ mode: 'neither', formatKey: 'latex' });
   });
 });

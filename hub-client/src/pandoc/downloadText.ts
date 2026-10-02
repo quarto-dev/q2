@@ -8,7 +8,7 @@ const mb = (bytes: number) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 /** Text for the visible panel; includes byte counts. */
 export function workingText(status: Extract<DownloadStatus, { phase: 'working' }>): string {
   const { stage, load, format } = status;
-  if (stage === 'loading' && load) return loadText(load);
+  if ((stage === 'loading' || stage === 'typst-loading') && load) return loadText(load);
   return stageText(stage, format.label);
 }
 
@@ -35,6 +35,11 @@ function stageText(stage: string, label: string): string {
       return download.startingConverter;
     case 'mounting':
       return download.mounting;
+    case 'typst-loading':
+    case 'typst-starting':
+      return download.startingCompiler;
+    case 'typst-compiling':
+      return download.compilingPdf;
     case 'native':
       return download.renderingNatively(label);
     default:
@@ -48,7 +53,7 @@ export function liveText(status: DownloadStatus): string {
     case 'idle':
       return '';
     case 'working':
-      return status.stage === 'loading' && status.load ? loadText(status.load, false) : stageText(status.stage, status.format.label);
+      return (status.stage === 'loading' || status.stage === 'typst-loading') && status.load ? loadText(status.load, false) : stageText(status.stage, status.format.label);
     case 'done':
       return download.done(status.fileName);
     case 'cancelled':
