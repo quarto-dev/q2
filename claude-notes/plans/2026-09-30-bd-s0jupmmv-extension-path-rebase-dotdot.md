@@ -243,3 +243,20 @@ consistency change with contract tests, not a TDD bug fix.
 Finding 1: Confirmed, pre-existing, and not the MAX_PATH class this commit targets. The relative branch is unchanged from before 73d1fbf. A value declared inside the project that escapes it with '..' (metadata_dir /project/sub, value ../../tmp/x.lua) passes the lexical starts_with(project_root) check and is rebased by diff_paths to ../sub/../../tmp/x.lua (verified with a probe). That chain is bounded by what the author wrote plus the document depth; it never climbs to an unrelated temp tree, which is what broke Lua io.open for the temp-extracted built-in. Still, the boundary check should be honest: 0e4c834c8 normalizes the joined path lexically before the check, so an escaping path becomes absolute like any other outside-project value (test adjust_paths_escaping_declaration_is_outside_project).
 
 Finding 2: Confirmed. adjust_paths_recursive passed the immediate map key down, so under theme: {light, dark} the key was light/dark and the nested value became absolute while a top-level theme stayed relative. 0e4c834c8 removes the classification rather than carrying it down: at this walk neither theme nor css is URL-space. Every theme read goes through ThemeContext::resolve_path, which normalizes, and no theme value reaches HTML. FormatCssTransform derives the css href from the resolved source. Its outside-project branch originally emitted the stored string verbatim, so an in-tree extension css escaping the project would have become a filesystem-absolute href. That branch now links the source page-relatively (test extension_css_outside_project_links_page_relative). rebase_candidate already stores absolute theme/css for temp-extracted fragments. A Windows probe (424-char unnormalized join) loads the theme in both forms. Every outside-project Path value now keeps its absolute form, nested or not (test adjust_paths_outside_project_keeps_every_form_absolute).
+
+### Review 3064 follow-up (2026-10-02)
+
+- [x] Verify the research verdict against the original and current
+  `FormatCssTransform`, the Migration section, and
+  `extension_css_outside_project_links_page_relative`.
+- [x] Correct the verdict to distinguish the working relative href, the
+  absolute-href regression, and the implemented rewrite; keep bd-f0h4ahai's
+  asset-copy limitation separate.
+- [x] Inspect the documentation diff and check whitespace (`git diff --check`
+  passed). Documentation-only correction; no runtime tests run.
+- [x] Pre-push verification attempted: `cargo fmt --check` passed;
+  `cargo xtask verify --skip-hub-build` stopped at the Clippy gate on
+  `quarto-hub/tests/integration/admin_collect_lifecycle.rs:106`
+  (`needless_borrow` on `canonicalize(&hub_dir)`). That line predates this
+  documentation change (commit `17d5e42a56`); workspace build and tests were
+  not reached.

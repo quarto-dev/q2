@@ -146,11 +146,16 @@ value rather than *copied from* it.
   HTML, JSON wire output, or a template variable.
 - **`css` is filesystem-space at the walk.** It enters URL space only when
   `FormatCssTransform` rewrites the entry to a page-relative href computed from the
-  *resolved filesystem source* (`transforms/format_css.rs:121-158`). The stored string is
-  never the href. For an outside-project source, the transform returns early
-  (`format_css.rs:125-133`) and leaves the value as it was, so the emitted `<link>` is
-  broken whether the value is a `..` chain or absolute. That is bd-f0h4ahai's gap, and
-  it is independent of the rebase form.
+  *resolved filesystem source*. Before `0e4c834c8`, the outside-project branch left
+  the stored value unchanged: the `../shared.css` href worked when served from a
+  common parent. The absolute-if-outside rebase introduced a regression by making
+  that branch emit an absolute filesystem path as the href. The branch now rewrites
+  the entry to `diff_paths(source, page_dir)` before returning, preserving a
+  page-relative href for either stored form (regression test:
+  `extension_css_outside_project_links_page_relative`).
+- **Outside-project CSS is still not copied into the output.** The relative href
+  depends on the source file remaining accessible at that location. Shipping the
+  stylesheet into `quarto-contrib/` remains bd-f0h4ahai's separate asset-copy gap.
 - **Neither key hits MAX_PATH today.** The orange-book failure is Lua `io.open` (C
   `fopen`). Theme and css reads go through Rust `std::fs` or pandoc, and both handle long
   and unnormalized paths on Windows (probes below).
