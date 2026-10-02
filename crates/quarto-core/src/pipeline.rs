@@ -60,13 +60,13 @@ use crate::stage::stages::ApplyTemplateConfig;
 use crate::stage::stages::BootstrapJsStage;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::stage::stages::ClipboardJsStage;
-use crate::stage::stages::PandocPrepareStage;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::stage::stages::PandocWriteStage;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::stage::stages::ResourceCopyFlushStage;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::stage::stages::TypstCompileStage;
+use crate::stage::stages::{PandocPrepareStage, UnexecutedCellCountStage};
 use crate::stage::{
     ApplyTemplateStage, AstTransformsStage, AttributionGenerateStage, CompileThemeCssStage,
     DocumentProfileStage, EngineExecutionStage, EquationNumberStage, IncludeExpansionStage,
@@ -546,7 +546,7 @@ const PANDOC_STAGE_EXCLUDED: &[&str] = &[
 /// share one prefix.
 ///
 /// `captures` are server-recorded engine captures to splice in before
-/// engine execution (R3 wires them from the wasm entry point). With none,
+/// engine execution (the wasm entry point passes the document's). With none,
 /// the list is exactly the old pandoc list minus its tail: the splice stage
 /// is only inserted when there is something to splice.
 pub fn build_pandoc_prefix_stages(
@@ -569,6 +569,13 @@ pub fn build_pandoc_request_stages(
     captures: Vec<quarto_trace::EngineCapture>,
 ) -> Vec<Box<dyn PipelineStage>> {
     let mut stages = build_pandoc_prefix_stages(captures);
+    // Right where the splice leaves off: before `ast-transforms` rewrites
+    // classes, and present with or without captures.
+    let engine_idx = stages
+        .iter()
+        .position(|s| s.name() == "engine-execution")
+        .expect("engine-execution stage must exist in the pipeline");
+    stages.insert(engine_idx, Box::new(UnexecutedCellCountStage::new()));
     stages.push(Box::new(PandocPrepareStage::new()));
     stages
 }
@@ -1197,6 +1204,8 @@ fn restore_render_context(ctx: &mut RenderContext<'_>, stage_ctx: &mut StageCont
     ctx.citeproc_filter_in_post = stage_ctx.citeproc_filter_in_post;
     // R1: the request `PandocPrepareStage` built (output-only).
     ctx.pandoc_request = stage_ctx.pandoc_request.take();
+    // R3: the unexecuted-cell count (output-only).
+    ctx.unexecuted_cells = stage_ctx.unexecuted_cells;
 }
 
 /// Apply the diagnostic-suppression policy and map a pipeline result into
@@ -6798,15 +6807,23 @@ mod tests {
             "the prefix has no writer"
         );
         let request = names(build_pandoc_request_stages(Vec::new()));
-        assert_eq!(request[..request.len() - 1], prefix[..]);
+        // The request list is the prefix plus the cell count (just before
+        // `engine-execution`) and the `pandoc-prepare` tail.
+        let mut expected = prefix.clone();
+        let engine = expected
+            .iter()
+            .position(|n| n == "engine-execution")
+            .unwrap();
+        expected.insert(engine, "unexecuted-cell-count".to_string());
+        assert_eq!(request[..request.len() - 1], expected[..]);
         assert_eq!(request.last().map(String::as_str), Some("pandoc-prepare"));
         for excluded in PANDOC_STAGE_EXCLUDED {
             assert!(!request.iter().any(|n| n == excluded), "{excluded}");
         }
     }
 
-    /// R2: captures splice in before engine execution (R3 wires them from
-    /// the wasm entry point); with none the list has no splice stage.
+    /// R2: captures splice in before engine execution (the wasm entry point
+    /// passes the document's); with none the list has no splice stage.
     #[test]
     fn pandoc_prefix_splices_captures_before_engine_execution() {
         let capture = quarto_trace::EngineCapture {

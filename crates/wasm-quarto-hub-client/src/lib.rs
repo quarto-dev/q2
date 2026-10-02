@@ -1550,10 +1550,11 @@ fn pandoc_request_envelope(
     error: Option<String>,
     diagnostics: Vec<JsonDiagnostic>,
     request: Option<&quarto_core::pandoc_request::PandocRequest>,
+    unexecuted_cells: usize,
 ) -> JsValue {
     #[derive(Serialize)]
     struct Stats {
-        /// Filled in by R3 (code cells).
+        /// Code cells with no cached result (shown as source).
         unexecuted_cells: usize,
     }
     #[derive(Serialize)]
@@ -1568,9 +1569,7 @@ fn pandoc_request_envelope(
         success,
         error,
         diagnostics,
-        stats: Stats {
-            unexecuted_cells: 0,
-        },
+        stats: Stats { unexecuted_cells },
     })
     .unwrap();
     let js = js_sys::JSON::parse(&json).unwrap();
@@ -1604,7 +1603,8 @@ fn pandoc_request_envelope(
 ///
 /// `source_date_epoch` is seconds, as an `f64` because an `i64` would cross
 /// as a BigInt and a JS number would throw. `capture_gz_json` is read the way
-/// `render_page_for_preview` reads it (R3 wires it into the pipeline).
+/// `render_page_for_preview` reads it and spliced in before engine execution;
+/// `stats.unexecuted_cells` counts the code cells it left without results.
 #[wasm_bindgen]
 pub async fn render_pandoc_request(
     path: &str,
@@ -1615,7 +1615,7 @@ pub async fn render_pandoc_request(
 ) -> JsValue {
     let runtime = get_runtime();
     let path_buf = std::path::PathBuf::from(path);
-    let fail = |message: String| pandoc_request_envelope(false, Some(message), Vec::new(), None);
+    let fail = |message: String| pandoc_request_envelope(false, Some(message), Vec::new(), None, 0);
 
     let content = match runtime.file_read(&path_buf) {
         Ok(bytes) => bytes,
@@ -1656,6 +1656,7 @@ pub async fn render_pandoc_request(
         outcome.error,
         diagnostics,
         outcome.request.as_ref(),
+        outcome.unexecuted_cells,
     )
 }
 

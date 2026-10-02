@@ -340,6 +340,11 @@ pub struct StageContext {
     /// [`crate::render::RenderContext::pandoc_request`] by `run_pipeline`.
     pub pandoc_request: Option<crate::pandoc_request::PandocRequest>,
 
+    /// Engine cells left after the capture splice, counted by
+    /// [`crate::stage::stages::UnexecutedCellCountStage`] and restored into
+    /// [`crate::render::RenderContext::unexecuted_cells`] by `run_pipeline`.
+    pub unexecuted_cells: usize,
+
     /// This chapter's harvested citation manifest (book-projects P6),
     /// set by [`crate::stage::stages::UserFiltersStage`] from the
     /// citeproc filter's output alongside its existing, unchanged
@@ -449,6 +454,7 @@ impl StageContext {
             defer_citeproc: false,
             prepare_options: None,
             pandoc_request: None,
+            unexecuted_cells: 0,
             chapter_seed: None,
             cross_chapter_crossref_registry: None,
             citation_manifest: None,

@@ -105,6 +105,7 @@ pub mod pandoc_long_tail_formats;
 pub mod pandoc_meta_mapping;
 pub mod pandoc_profile_cut;
 pub mod pandoc_render_to_file;
+pub mod pandoc_request_captures;
 pub mod pandoc_request_contract;
 pub mod pandoc_request_execute;
 pub mod pandoc_request_exports;

@@ -14,7 +14,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { readFile } from 'fs/promises';
-import { unzipSync } from 'fflate';
+import { gzipSync, unzipSync } from 'fflate';
 import { execute, type PandocRequest } from '@quarto/pandoc-host';
 import { WASM_PATH, pandocWasmAvailable } from '../test-utils/pandocRecordings';
 import { dirname, join } from 'path';
@@ -190,6 +190,28 @@ describe('render_pandoc_request', () => {
     expect(out.success).toBe(false);
     expect(out.request).toBeUndefined();
     expect(out.error).toMatch(/projects not yet supported/);
+  });
+
+  it('counts code cells without a cached result, and splices the ones with one', async () => {
+    const doc = '---\ntitle: T\n---\n\nBefore.\n\n```{r}\nSRC_R\n```\n\nMiddle.\n\n```{python}\nSRC_PY\n```\n';
+    wasm.vfs_add_file('/project/doc.qmd', doc);
+    const bare = await wasm.render_pandoc_request('/project/doc.qmd', 'docx', SDE);
+    expect(bare.success).toBe(true);
+    expect(bare.stats).toEqual({ unexecuted_cells: 2 });
+
+    const markdown =
+      '---\ntitle: T\n---\n\nBefore.\n\n::: {.cell}\n::: {.cell-output .cell-output-stdout}\nOUT_R\n:::\n:::\n\n' +
+      'Middle.\n\n```{python}\nSRC_PY\n```\n';
+    const capture = [{ engine_name: 'r', input_qmd: doc, result: { markdown }, files: [] }];
+    const gz = gzipSync(new TextEncoder().encode(JSON.stringify(capture)));
+    const cached = await wasm.render_pandoc_request('/project/doc.qmd', 'docx', SDE, gz);
+    expect(cached.success).toBe(true);
+    expect(cached.stats).toEqual({ unexecuted_cells: 1 });
+    const input = cached.request!.files.find((f) => f.path.endsWith('/pandoc-input.json'))!;
+    const text = new TextDecoder().decode(input.bytes);
+    expect(text).toContain('OUT_R');
+    expect(text).not.toContain('SRC_R');
+    expect(text).toContain('SRC_PY');
   });
 
   it('echoes typst_available_fonts', async () => {
