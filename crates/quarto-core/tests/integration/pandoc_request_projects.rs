@@ -342,7 +342,10 @@ fn book_project(root: &Path) {
 #[test]
 fn a_book_chapter_renders_alone_as_the_active_page() {
     // No native baseline: native renders a whole book or nothing for these
-    // formats. v1 renders the active page, as for any project document.
+    // formats. Interim: typst (and so pdf) and epub consolidate a book
+    // natively, so they should become a whole-book download (R7 stages 2-3,
+    // own plan); until then the active page renders alone, as for any
+    // project document.
     let (_guard, root) = scratch();
     book_project(&root);
     let doc = root.join("one.qmd");
@@ -362,9 +365,10 @@ fn a_book_chapter_renders_alone_as_the_active_page() {
 #[test]
 fn a_book_chapter_downloads_as_docx_and_pptx_without_native_rejection_or_warning() {
     // Native refuses docx/pptx for a book (Q-5-33: no single-file book
-    // merge). A chapter download is the active page alone, like the html
-    // preview, so it is allowed for every format, silently (decided with
-    // Gordon).
+    // merge). For these formats, which have no single-file book, a chapter
+    // download is the active page alone, like the html preview: allowed,
+    // silently (decided with Gordon). This is the settled behavior, unlike
+    // the typst case above, which is interim.
     let (_guard, root) = scratch();
     book_project(&root);
     let doc = root.join("one.qmd");

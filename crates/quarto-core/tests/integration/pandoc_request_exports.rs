@@ -228,7 +228,7 @@ fn an_unknown_format_is_neither_and_no_format_is_html() {
 }
 
 /// The table is what the render function accepts: every `available` row
-/// renders (hidden ones too: `pdf` is accepted but not offered).
+/// renders (a hidden row is accepted but not offered).
 #[test]
 fn the_table_agrees_with_what_render_pandoc_request_accepts() {
     let (_guard, root) = scratch();

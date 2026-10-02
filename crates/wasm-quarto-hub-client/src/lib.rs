@@ -1602,7 +1602,9 @@ fn pandoc_request_envelope(
 /// `request`. A document inside a `_quarto.yml` project renders as the
 /// project's active page (R7): the request carries that page alone, with the
 /// project's metadata and `format:` layers applied, and a book chapter is
-/// not merged with the rest of the book.
+/// not merged with the rest of the book (settled for docx and pptx, which have
+/// no single-file book; interim for typst, pdf and epub, which should become
+/// whole-book downloads with R7 stages 2-3).
 ///
 /// `source_date_epoch` is seconds, as an `f64` because an `i64` would cross
 /// as a BigInt and a JS number would throw. `capture_gz_json` is read the way
@@ -1791,7 +1793,7 @@ pub fn classify_pandoc_completion(
 
 /// JSON `{ formats: [{ key, label, extension, mime, available, hidden }] }`:
 /// the formats pandoc.wasm can produce, in menu order (D8). `hidden` rows are
-/// accepted by `render_pandoc_request` but not offered (`pdf`, until H8).
+/// accepted by `render_pandoc_request` but not offered (none today; `pdf` was, until H8).
 #[wasm_bindgen]
 pub fn get_pandoc_formats() -> String {
     serde_json::to_string(&serde_json::json!({

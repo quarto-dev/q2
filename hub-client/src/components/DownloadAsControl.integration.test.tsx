@@ -50,6 +50,33 @@ describe('DownloadAsControl', () => {
     expect(screen.getByText(/about 16 MB/)).toBeTruthy();
   });
 
+  it('with PDF in the menu, the hint states the larger first-use total', () => {
+    const PDF: DownloadFormat = { key: 'pdf', label: 'PDF', extension: 'pdf', mime: 'application/pdf' };
+    setup({ formats: [DOCX, PDF] });
+    fireEvent.click(screen.getByRole('button', { name: 'Download as' }));
+    expect(screen.getByText(/about 33 MB in all/)).toBeTruthy();
+  });
+
+  it('shows the typst stages of a PDF download and a typst diagnostic with its location', () => {
+    const PDF: DownloadFormat = { key: 'pdf', label: 'PDF', extension: 'pdf', mime: 'application/pdf' };
+    setup({ formats: [PDF], status: { phase: 'working', clickId: 1, format: PDF, stage: 'typst-compiling' } });
+    expect(screen.getByRole('status', { name: 'Download status' }).textContent).toBe(download.compilingPdf);
+    cleanup();
+    setup({
+      formats: [PDF],
+      status: {
+        phase: 'failed',
+        clickId: 1,
+        format: PDF,
+        state: 'typst-error',
+        notices: [],
+        diagnostics: [{ origin: 'typst', kind: 'error', message: 'unknown variable: x', path: '/doc/doc.typ', range: '3:1-3:2', stage: 'typst' }],
+      },
+    });
+    expect(screen.getByText(/unknown variable: x/)).toBeTruthy();
+    expect(screen.getByText(/\/doc\/doc.typ 3:1-3:2/)).toBeTruthy();
+  });
+
   it('a disabled control is aria-disabled, described by text, and does not open', () => {
     setup({ disabledReason: 'Download is unavailable: documents with format latex cannot be converted.' });
     const button = screen.getByRole('button', { name: 'Download as' });
@@ -121,7 +148,7 @@ describe('DownloadAsControl', () => {
   it('every failure state has its own plain-language copy', () => {
     const states = Object.keys(download.failed).filter((s) => s !== 'done' && s !== 'cancelled');
     expect(states.sort()).toEqual(
-      ['blocked', 'crashed', 'download-failed', 'invalid-request', 'native-error', 'native-failed', 'offline', 'out-of-memory', 'pandoc-error', 'request-failed', 'timeout', 'unsupported'].sort(),
+      ['blocked', 'crashed', 'download-failed', 'invalid-request', 'native-error', 'native-failed', 'offline', 'out-of-memory', 'package-error', 'pandoc-error', 'request-failed', 'timeout', 'typst-error', 'unsupported'].sort(),
     );
     for (const state of states) {
       const { unmount } = setup({ status: { phase: 'failed', clickId: 1, format: DOCX, state: state as never, notices: [], diagnostics: [] } });

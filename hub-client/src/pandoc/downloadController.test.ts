@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { PandocRequest, ShareTree } from '@quarto/pandoc-host';
 import { DownloadController, PROGRESS_THROTTLE_MS, type DownloadDeps, type DownloadFormat, type RequestEnvelope } from './downloadController';
 import type { RunOptions, RunOutcome } from './pandocRunner';
+import type { TypstJob, TypstRunOutcome } from '../typst/typstRunner';
 
 const DOCX: DownloadFormat = { key: 'docx', label: 'Word', extension: 'docx', mime: 'application/docx' };
 const tree: ShareTree = { share_tree_version: 'v1', files: [] };
@@ -247,5 +248,209 @@ describe('DownloadController', () => {
     await controller.start({ path: 'a.qmd', format: DOCX, content: '' });
     expect(save).not.toHaveBeenCalled();
     expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', state: 'native-failed' });
+  });
+});
+
+// ---- the PDF chain (host H8) ----------------------------------------------------------
+describe('DownloadController: the PDF chain', () => {
+  const PDF: DownloadFormat = { key: 'pdf', label: 'PDF', extension: 'pdf', mime: 'application/pdf' };
+  const pdfRequest = {
+    stage_name: 'pandoc',
+    json_path: '/x.json',
+    post: 'compile_typst',
+    output_path: '/project/doc.typ',
+    share_tree_path: '/__q2_share__/pandoc-share',
+    env: { SOURCE_DATE_EPOCH: '1700000000' },
+    files: [{ path: '/project/doc.qmd', bytes: new Uint8Array([1]) }],
+    resource_refs: [{ path: '/project/fig.png', bytes: new Uint8Array([2]) }],
+  } as unknown as PandocRequest;
+  const shareTree: ShareTree = { share_tree_version: 'v1', files: [{ path: 'typst/t.typ', bytes: new Uint8Array([9]) }] };
+  const typstOk = (extra: Record<string, unknown> = {}) =>
+    ({ ok: true, pdf: new Uint8Array([37, 80, 68, 70]), pages: 1, diagnostics: [], stats: {}, notices: [], fontFamilies: ['Inter'], ...extra }) as unknown as TypstRunOutcome;
+  const typstFail = (kind: string, extra: Record<string, unknown> = {}) => ({ ok: false, kind, diagnostics: [], notices: [], ...extra }) as unknown as TypstRunOutcome;
+
+  function chain(over: { typstRun?: ReturnType<typeof vi.fn>; listFonts?: ReturnType<typeof vi.fn>; pandocRun?: ReturnType<typeof vi.fn>; deps?: Partial<DownloadDeps> } = {}) {
+    const order: string[] = [];
+    const listFonts = over.listFonts ?? vi.fn(async () => (order.push('fonts'), { ok: true, families: ['Inter', 'Font Awesome'], notices: [] }));
+    const typstRun = over.typstRun ?? vi.fn(async () => (order.push('typst'), typstOk()));
+    const pandocRun =
+      over.pandocRun ??
+      vi.fn(async (r: PandocRequest) => {
+        order.push('pandoc');
+        // The real runner transfers (detaches) these buffers.
+        for (const f of [...r.files, ...r.resource_refs]) f.bytes = new Uint8Array(0);
+        return success({ output: new TextEncoder().encode('#set page()\n'), outputPath: '/project/doc.typ' });
+      });
+    const buildRequest = vi.fn(async () => (order.push('request'), okEnvelope({ request: structuredClone(pdfRequest) })));
+    const save = vi.fn();
+    const assets = vi.fn(() => ({ vendoredPackages: [{ path: 'preview/x/1.0.0/typst.toml', bytes: new Uint8Array([7]) }], fonts: [new Uint8Array([8])] }));
+    const controller = new DownloadController({
+      buildRequest,
+      getShareTree: () => shareTree,
+      runner: { run: pandocRun },
+      typst: { runner: { run: typstRun, listFonts }, assets, datePrelude: (e) => `#set document(date: ${e})\n` },
+      classify: () => ({ success: true, diagnostics: [] }),
+      save,
+      nowSeconds: () => 1700000000,
+      ...over.deps,
+    });
+    return { controller, order, listFonts, typstRun, pandocRun, buildRequest, save, assets };
+  }
+
+  it('lists fonts, builds the request with them, runs pandoc, then compiles and saves the PDF', async () => {
+    const { controller, order, buildRequest, save, typstRun } = chain();
+    await controller.start({ path: 'dir/Report.qmd', format: PDF });
+    expect(order).toEqual(['fonts', 'request', 'pandoc', 'typst']);
+    expect(buildRequest).toHaveBeenCalledWith('dir/Report.qmd', 'pdf', 1700000000, expect.any(AbortSignal), ['Inter', 'Font Awesome']);
+    const [blob, name] = save.mock.calls[0];
+    expect(name).toBe('Report.pdf');
+    expect((blob as Blob).type).toBe('application/pdf');
+    expect(controller.getSnapshot()).toMatchObject({ phase: 'done', fileName: 'Report.pdf' });
+
+    const job = typstRun.mock.calls[0][0] as TypstJob;
+    expect(job.input.main).toBe('/project/doc.typ');
+    expect(job.input.root).toBe('/');
+    const byPath = new Map(job.input.files.map((f) => [f.path, f.bytes]));
+    // The compile sees the share tree at the same absolute path, the request's files and refs (copied
+    // before pandoc detached them), and the produced .typ with the date prelude first.
+    expect([...(byPath.get('/__q2_share__/pandoc-share/typst/t.typ') ?? [])]).toEqual([9]);
+    expect([...(byPath.get('/project/doc.qmd') ?? [])]).toEqual([1]);
+    expect([...(byPath.get('/project/fig.png') ?? [])]).toEqual([2]);
+    expect(new TextDecoder().decode(byPath.get('/project/doc.typ'))).toBe('#set document(date: 1700000000)\n#set page()\n');
+    expect(job.vendoredPackages?.map((p) => p.path)).toEqual(['preview/x/1.0.0/typst.toml']);
+    expect([...(job.fonts?.[0] ?? [])]).toEqual([8]);
+    // The share tree is reused across renders: the compile gets copies.
+    expect(byPath.get('/__q2_share__/pandoc-share/typst/t.typ')).not.toBe(shareTree.files[0].bytes);
+  });
+
+  it('gives each typst job its own font buffers (the runner transfers them)', async () => {
+    const { listFonts, typstRun } = chain();
+    const { controller } = chain({ listFonts, typstRun });
+    await controller.start({ path: 'a.qmd', format: PDF });
+    expect(listFonts.mock.calls[0][0]).not.toBe((typstRun.mock.calls[0][0] as TypstJob).fonts);
+  });
+
+  it('tags each stage\'s diagnostics and concatenates warnings in stage order', async () => {
+    const pw = { kind: 'warning', title: 'pandoc warns', code: 'Q-11-1' };
+    const tw = { origin: 'typst', kind: 'warning', message: 'typst warns', path: '/p', range: '0:0-0:1', stage: 'typst' };
+    const { controller } = chain({
+      deps: { classify: () => ({ success: true, diagnostics: [pw] }) },
+      typstRun: vi.fn(async () => typstOk({ diagnostics: [tw] })),
+    });
+    await controller.start({ path: 'a.qmd', format: PDF });
+    const s = controller.getSnapshot();
+    expect(s.phase).toBe('done');
+    if (s.phase === 'done') expect(s.warnings.map((w) => [w.kind, w.stage])).toEqual([['warning', 'pandoc'], ['warning', 'typst']]);
+  });
+
+  it('a pandoc error blocks the download and never starts the compile', async () => {
+    const { controller, typstRun, save } = chain({ deps: { classify: () => ({ success: false, diagnostics: [{ kind: 'error', title: 'bad' }] }) } });
+    await controller.start({ path: 'a.qmd', format: PDF });
+    expect(typstRun).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+    const s = controller.getSnapshot();
+    expect(s).toMatchObject({ phase: 'failed', state: 'pandoc-error' });
+    if (s.phase === 'failed') expect(s.diagnostics[0].stage).toBe('pandoc');
+  });
+
+  it('a typst error blocks the download, keeping pandoc\'s warnings ahead of typst\'s diagnostics', async () => {
+    const te = { origin: 'typst', kind: 'error', message: 'unknown variable', path: '/project/doc.typ', range: '1:0-1:3', stage: 'typst' };
+    const pw = { kind: 'warning', title: 'pandoc warns' };
+    const { controller, save } = chain({
+      deps: { classify: () => ({ success: true, diagnostics: [pw] }) },
+      typstRun: vi.fn(async () => typstFail('typst-error', { diagnostics: [te] })),
+    });
+    await controller.start({ path: 'a.qmd', format: PDF });
+    expect(save).not.toHaveBeenCalled();
+    const s = controller.getSnapshot();
+    expect(s).toMatchObject({ phase: 'failed', state: 'typst-error' });
+    if (s.phase === 'failed') expect(s.diagnostics.map((d) => d.stage)).toEqual(['pandoc', 'typst']);
+  });
+
+  it('a package fetch failure is its own state; a font-list load failure stops before pandoc', async () => {
+    const a = chain({ typstRun: vi.fn(async () => typstFail('package-fetch')) });
+    await a.controller.start({ path: 'a.qmd', format: PDF });
+    expect(a.controller.getSnapshot()).toMatchObject({ phase: 'failed', state: 'package-error' });
+
+    const load = { code: 'offline' };
+    const b = chain({ listFonts: vi.fn(async () => typstFail('load-failed', { loadError: load, diagnostics: [{ origin: 'host', kind: 'error', code: 'offline', message: 'offline', stage: 'typst' }] })) });
+    await b.controller.start({ path: 'a.qmd', format: PDF });
+    expect(b.buildRequest).not.toHaveBeenCalled();
+    expect(b.pandocRun).not.toHaveBeenCalled();
+    expect(b.controller.getSnapshot()).toMatchObject({ phase: 'failed', state: 'offline' });
+  });
+
+  it('a cancel during the pandoc stage reports once, never compiles, and aborts the shared signal', async () => {
+    const gate = deferred<RunOutcome>();
+    let signal: AbortSignal | undefined;
+    const { controller, typstRun, save } = chain({
+      pandocRun: vi.fn(async (_r: PandocRequest, _t: ShareTree, o?: RunOptions) => ((signal = o?.signal), gate.promise)),
+    });
+    const seen: string[] = [];
+    controller.subscribe(() => seen.push(controller.getSnapshot().phase));
+    const p = controller.start({ path: 'a.qmd', format: PDF });
+    await vi.waitFor(() => expect(signal).toBeDefined());
+    controller.cancel();
+    gate.resolve(failure('aborted'));
+    await p;
+    expect(signal!.aborted).toBe(true);
+    expect(typstRun).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+    expect(seen.filter((s) => s === 'cancelled')).toHaveLength(1);
+    expect(controller.getSnapshot().phase).toBe('cancelled');
+  });
+
+  it('a cancel during the typst stage reports once and drops the late result', async () => {
+    const gate = deferred<TypstRunOutcome>();
+    let signal: AbortSignal | undefined;
+    const typstRun = vi.fn(async (_j: TypstJob, o?: { signal?: AbortSignal }) => ((signal = o?.signal), gate.promise));
+    const { controller, save } = chain({ typstRun });
+    const seen: string[] = [];
+    controller.subscribe(() => seen.push(controller.getSnapshot().phase));
+    const p = controller.start({ path: 'a.qmd', format: PDF });
+    await vi.waitFor(() => expect(signal).toBeDefined());
+    controller.cancel();
+    gate.resolve(typstOk());
+    await p;
+    expect(signal!.aborted).toBe(true);
+    expect(save).not.toHaveBeenCalled();
+    expect(seen.filter((s) => s === 'cancelled')).toHaveLength(1);
+    expect(controller.getSnapshot().phase).toBe('cancelled');
+  });
+
+  it('a newer click supersedes a PDF chain in flight', async () => {
+    const gate = deferred<TypstRunOutcome>();
+    let first = true;
+    const typstRun = vi.fn(async () => (first ? ((first = false), gate.promise) : typstOk()));
+    const { controller, save } = chain({ typstRun });
+    const p1 = controller.start({ path: 'one.qmd', format: PDF });
+    await vi.waitFor(() => expect(typstRun).toHaveBeenCalledTimes(1));
+    const p2 = controller.start({ path: 'two.qmd', format: PDF });
+    gate.resolve(typstOk());
+    await Promise.all([p1, p2]);
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save.mock.calls[0][1]).toBe('two.pdf');
+  });
+
+  it('shows the typst stages in the working status', async () => {
+    const stages: string[] = [];
+    const typstRun = vi.fn(async (_j: TypstJob, o?: { onStage?: (s: 'loading' | 'starting' | 'compiling') => void }) => {
+      for (const s of ['loading', 'starting', 'compiling'] as const) {
+        o?.onStage?.(s);
+        const st = controller.getSnapshot();
+        if (st.phase === 'working') stages.push(st.stage);
+      }
+      return typstOk();
+    });
+    const { controller } = chain({ typstRun });
+    await controller.start({ path: 'a.qmd', format: PDF });
+    expect(stages).toEqual(['typst-loading', 'typst-starting', 'typst-compiling']);
+  });
+
+  it('a non-PDF format never touches the typst runner', async () => {
+    const { controller, listFonts, typstRun } = chain();
+    await controller.start({ path: 'a.qmd', format: DOCX });
+    expect(listFonts).not.toHaveBeenCalled();
+    expect(typstRun).not.toHaveBeenCalled();
   });
 });

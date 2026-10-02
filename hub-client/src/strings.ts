@@ -62,6 +62,10 @@ export const download = {
   menuLabel: 'Download as',
   /** Shown in the menu: the first use fetches pandoc, then it is cached. */
   sizeHint: 'The first download fetches the converter (about 16 MB, kept for next time).',
+  /** PDF adds the Typst compiler and fonts (measured first-use total 34,441,544 gzip bytes, evidence §14). */
+  sizeHintPdf: 'The first download fetches the converter (about 16 MB). A first PDF also fetches the PDF compiler and fonts (about 33 MB in all). All kept for next time.',
+  compilingPdf: 'Compiling the PDF…',
+  startingCompiler: 'Starting the PDF compiler…',
   cancel: 'Cancel',
   dismiss: 'Dismiss',
   statusRegionLabel: 'Download status',
@@ -90,6 +94,8 @@ export const download = {
     'native-failed': 'The document has errors, so nothing was downloaded. Fix them and try again.',
     'native-error': 'The preview server could not render the document.',
     'pandoc-error': 'The converter reported an error, so nothing was downloaded.',
+    'typst-error': 'The PDF compiler reported an error, so nothing was downloaded.',
+    'package-error': 'A Typst package the document needs could not be fetched, so nothing was downloaded. Check your connection and try again.',
     'invalid-request': 'The converter rejected the request, so nothing was downloaded.',
     unsupported:
       'This browser cannot run the converter. It needs WebAssembly exception handling (Chrome or Edge 137, Firefox 131, Safari 18.4).',

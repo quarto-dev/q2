@@ -40,7 +40,8 @@ pub struct PandocFormatInfo {
     pub available: bool,
     /// Accepted by `render_pandoc_request` but not offered: the host leaves
     /// it out of the menu, and the resolver classes it [`FormatClass::Neither`],
-    /// until the work that finishes it lands (`pdf`: host H8).
+    /// until the work that finishes it lands. No row is hidden today (`pdf`
+    /// was, until host H8).
     pub hidden: bool,
 }
 
@@ -78,14 +79,14 @@ pub const PANDOC_FORMATS: &[PandocFormatInfo] = &[
         hidden: false,
     },
     // The typst request plus `post: compile_typst` (R4); the host compiles
-    // the `.typ` to a PDF (H8), so it stays out of the menu until then.
+    // the `.typ` to a PDF (H8).
     PandocFormatInfo {
         key: "pdf",
         label: "PDF (.pdf)",
         extension: "pdf",
         mime: "application/pdf",
         available: true,
-        hidden: true,
+        hidden: false,
     },
 ];
 
@@ -212,7 +213,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn table_has_the_download_formats_in_menu_order_and_pdf_hidden() {
+    fn table_has_the_download_formats_in_menu_order_and_none_hidden() {
         let keys: Vec<_> = PANDOC_FORMATS.iter().map(|f| f.key).collect();
         assert_eq!(keys, ["docx", "pptx", "epub", "typst", "pdf"]);
         let hidden: Vec<_> = PANDOC_FORMATS
@@ -220,20 +221,19 @@ mod tests {
             .filter(|f| f.hidden)
             .map(|f| f.key)
             .collect();
-        assert_eq!(hidden, ["pdf"]);
+        assert!(hidden.is_empty(), "{hidden:?}");
         assert!(PANDOC_FORMATS.iter().all(|f| !f.mime.is_empty()));
     }
 
     #[test]
     fn classes_follow_d8() {
-        for key in ["docx", "pptx", "epub", "typst"] {
+        for key in ["docx", "pptx", "epub", "typst", "pdf"] {
             assert_eq!(format_class(key), FormatClass::Download, "{key}");
         }
         for key in ["html", "revealjs", "acm-html", "q2-preview"] {
             assert_eq!(format_class(key), FormatClass::Preview, "{key}");
         }
-        // `pdf` has a table row (render accepts it) but is hidden until H8.
-        for key in ["pdf", "latex", "odt", "no-such-format", "my-docx"] {
+        for key in ["latex", "odt", "no-such-format", "my-docx"] {
             assert_eq!(format_class(key), FormatClass::Neither, "{key}");
         }
     }

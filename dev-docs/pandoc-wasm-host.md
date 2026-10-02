@@ -204,3 +204,21 @@ Things that bite:
 Measured (evidence §14): the first-use download is 34,441,544 gzip bytes (32.85 MiB) against the 40 MiB budget (pandoc 16.65 MB,
 typst wasm 11.07 MB, fonts 5.86 MB, the vendored export 0.86 MB). `e2e/typst-measure.harness.spec.ts` (opt-in, `Q2_MEASURE=1`) records latency and process RSS with typst, pandoc and
 the Rust wasm resident; a compile adds about 40-50 MB on top of the other two.
+
+## PDF chain (H8)
+
+"Download as PDF" is `DownloadController` with `format.key === 'pdf'` (`hub-client/src/pandoc/downloadController.ts`).
+The order matters:
+
+1. `typst.runner.listFonts(...)` loads the compiler (wasm and fonts) first, so its family names reach the request as `typst_available_fonts`.
+2. `render_pandoc_request(path, 'pdf', ...)` builds the typst-writer request with `post: compile_typst` and a `.typ` `output_path`.
+3. pandoc.wasm writes the `.typ`.
+4. The typst worker compiles it with root `/`: the share tree at `share_tree_path`, the request's `files` and `resource_refs` at their own absolute paths (copied before step 3, which detaches the request's buffers), and the `.typ` with `typst_date_prelude(SOURCE_DATE_EPOCH)` as its first line (two compiles are byte-identical). The vendored packages and Font Awesome fonts come from `get_typst_assets()`, so a callout needs no registry fetch.
+
+One `AbortSignal` covers both stages (D8.5): a cancel or a newer click aborts whichever worker is live, and the status reports `cancelled` once.
+Each stage's diagnostics carry `stage: 'pandoc' | 'typst'` and share one channel in stage order; an error from either blocks the download, warnings from both are shown.
+`typst-error` and `package-error` are the two new failure states (copy in `strings.ts`).
+
+Known gap: the compile sees what pandoc saw, which is the AST's images and the brand's files. A raw typst block that `#import`s or `#include`s another project file (`#import "part.typ"`) fails with "cannot read file outside of project root", where the native renderer reads it from disk. `pdfChain.wasm.test.ts` records the other cases.
+
+Tests: `src/pandoc/pdfChain.wasm.test.ts` (the production controller over the real Rust wasm, pandoc.wasm and typst in worker threads), `downloadController.test.ts` (fakes), and `e2e/pandoc-pdf-chain.harness.spec.ts` (Chromium and WebKit).
