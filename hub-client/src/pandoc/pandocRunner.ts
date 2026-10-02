@@ -73,6 +73,23 @@ export type UiState =
   | 'pandoc-error'
   | 'invalid-request';
 
+/** The UI state for a failed asset load; shared with the typst runner (host phase H7). */
+export function uiStateForLoadError(e: PandocLoadError | undefined): UiState {
+  switch (e?.code) {
+    case 'no-wasm':
+    case 'no-exnref':
+    case 'no-decompression':
+    case 'no-subtle-crypto':
+      return 'unsupported';
+    case 'compile-blocked':
+      return 'blocked';
+    case 'offline':
+      return 'offline';
+    default:
+      return 'download-failed';
+  }
+}
+
 export function uiStateFor(o: RunOutcome): UiState {
   if (o.ok) return 'done';
   switch (o.kind) {
@@ -80,19 +97,7 @@ export function uiStateFor(o: RunOutcome): UiState {
     case 'superseded':
       return 'cancelled';
     case 'load-failed':
-      switch (o.loadError?.code) {
-        case 'no-wasm':
-        case 'no-exnref':
-        case 'no-decompression':
-        case 'no-subtle-crypto':
-          return 'unsupported';
-        case 'compile-blocked':
-          return 'blocked';
-        case 'offline':
-          return 'offline';
-        default:
-          return 'download-failed';
-      }
+      return uiStateForLoadError(o.loadError);
     case 'worker-blocked':
       return 'blocked';
     case 'timeout':
@@ -146,7 +151,8 @@ const failure = (kind: RunFailureKind, diagnostics: Diagnostic[], notices: strin
   ...extra,
 });
 
-const LOAD_DIAGNOSTIC: Record<PandocLoadError['code'], HostDiagnostic['code']> = {
+/** The host diagnostic code for each load error; shared with the typst runner (host phase H7). */
+export const LOAD_DIAGNOSTIC: Record<PandocLoadError['code'], HostDiagnostic['code']> = {
   'no-wasm': 'wasm-unsupported',
   'no-exnref': 'wasm-unsupported',
   'no-decompression': 'wasm-unsupported',

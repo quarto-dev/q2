@@ -105,3 +105,5 @@ agents-docs-dist/
 
 # pandoc.wasm download cache and the served asset (scripts/fetch-pandoc-wasm.mjs)
 .cache/pandoc-wasm/
+# typst.ts wasm asset and default fonts (same script)
+.cache/typst-assets/

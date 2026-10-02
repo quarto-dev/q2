@@ -13,6 +13,7 @@ ts-packages/annotated-qmd/examples/* text eol=lf
 # pandoc-wasm (R0): constants, recordings, schemas, filters and fixtures are
 # compared byte-for-byte or hashed, so a CRLF checkout would break them.
 resources/pandoc-wasm.json text eol=lf
+resources/typst-wasm.json text eol=lf
 resources/pandoc-filters/** text eol=lf
 crates/quarto-core/schemas/pandoc-request.* text eol=lf
 

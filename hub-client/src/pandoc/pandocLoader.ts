@@ -126,6 +126,18 @@ export interface LoaderConfig {
   cacheName?: string;
   idleMs?: number;
   env?: Partial<LoaderEnv>;
+  /**
+   * What the asset is called in messages (default `pandoc`). The typst loader (host phase H7)
+   * reuses this class with `the Typst compiler` and `the Typst default fonts`.
+   */
+  label?: string;
+  /** Whether the asset needs WebAssembly exnref (pandoc does; typst.ts and the fonts do not). Default true. */
+  requireExnref?: boolean;
+  /**
+   * Recognises the asset's decompressed bytes, for a server that adds `Content-Encoding: gzip`
+   * to `*.gz` (the browser then hands over the raw bytes). Default: the WebAssembly magic.
+   */
+  isRaw?: (bytes: Uint8Array) => boolean;
 }
 
 const hex = (buf: ArrayBuffer): string => Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
@@ -177,6 +189,9 @@ export class PandocLoader {
   private readonly assetPath: string;
   private readonly cacheName: string;
   private readonly idleMs: number;
+  private readonly label: string;
+  private readonly requireExnref: boolean;
+  private readonly isRaw: (bytes: Uint8Array) => boolean;
 
   private resident: { sha: string; module: WebAssembly.Module } | undefined;
   private inFlight: InFlight | undefined;
@@ -188,6 +203,9 @@ export class PandocLoader {
     this.assetPath = config.assetPath ?? DEFAULT_ASSET_PATH;
     this.cacheName = config.cacheName ?? DEFAULT_CACHE_NAME;
     this.idleMs = config.idleMs ?? DEFAULT_IDLE_MS;
+    this.label = config.label ?? 'pandoc';
+    this.requireExnref = config.requireExnref ?? true;
+    this.isRaw = config.isRaw ?? isWasm;
   }
 
   get hasResidentModule(): boolean {
@@ -328,19 +346,19 @@ export class PandocLoader {
     if (!env.hasWebAssembly)
       throw new PandocLoadError(
         'no-wasm',
-        `This browser has WebAssembly turned off (iOS Lockdown Mode or a browser policy can do this), so pandoc cannot run. Use ${MIN_BROWSERS} or newer with WebAssembly enabled.`,
+        `This browser has WebAssembly turned off (iOS Lockdown Mode or a browser policy can do this), so ${this.label} cannot run. Use ${MIN_BROWSERS} or newer with WebAssembly enabled.`,
       );
-    if (!env.validate(EXNREF_PROBE))
+    if (this.requireExnref && !env.validate(EXNREF_PROBE))
       throw new PandocLoadError(
         'no-exnref',
-        `This browser cannot run pandoc: it lacks WebAssembly exception handling (exnref). Use ${MIN_BROWSERS} or newer.`,
+        `This browser cannot run ${this.label}: it lacks WebAssembly exception handling (exnref). Use ${MIN_BROWSERS} or newer.`,
       );
     if (!env.DecompressionStream)
-      throw new PandocLoadError('no-decompression', `This browser lacks DecompressionStream, which is needed to unpack pandoc. Use ${MIN_BROWSERS} or newer.`);
+      throw new PandocLoadError('no-decompression', `This browser lacks DecompressionStream, which is needed to unpack ${this.label}. Use ${MIN_BROWSERS} or newer.`);
     if (!env.subtle)
       throw new PandocLoadError(
         'no-subtle-crypto',
-        'pandoc cannot be verified here: crypto.subtle is only available in secure contexts (https or localhost). Open the app over https.',
+        `${this.label} cannot be verified here: crypto.subtle is only available in secure contexts (https or localhost). Open the app over https.`,
       );
   }
 
@@ -351,12 +369,12 @@ export class PandocLoader {
     const notices: string[] = [];
 
     let cache: Cache | undefined;
-    if (!this.env.caches) notices.push('The Cache API is unavailable here, so pandoc is downloaded again on each visit.');
+    if (!this.env.caches) notices.push(`The Cache API is unavailable here, so ${this.label} is downloaded again on each visit.`);
     else {
       try {
         cache = await this.env.caches.open(this.cacheName);
       } catch (e) {
-        notices.push(`The Cache API is unavailable (${describe(e)}), so pandoc is not kept between visits.`);
+        notices.push(`The Cache API is unavailable (${describe(e)}), so ${this.label} is not kept between visits.`);
       }
     }
     if (signal.aborted) throw abortReason(signal);
@@ -367,7 +385,7 @@ export class PandocLoader {
       try {
         hit = await cache.match(key);
       } catch (e) {
-        notices.push(`The pandoc cache could not be read (${describe(e)}).`);
+        notices.push(`The ${this.label} cache could not be read (${describe(e)}).`);
       }
       if (hit) {
         try {
@@ -378,7 +396,7 @@ export class PandocLoader {
           return { module: await this.compile(wasm, emit), source: 'cache', notices };
         } catch (e) {
           if (!(e instanceof PandocLoadError) || (e.code !== 'checksum-mismatch' && e.code !== 'fetch-failed')) throw e;
-          notices.push('The cached copy of pandoc failed verification and was downloaded again.');
+          notices.push(`The cached copy of ${this.label} failed verification and was downloaded again.`);
           await cache.delete(key).catch(() => false);
         }
       }
@@ -404,12 +422,12 @@ export class PandocLoader {
       if (!this.env.isOnline())
         throw new PandocLoadError(
           'offline',
-          'You are offline and pandoc is not stored on this device (it has not been downloaded yet, or the browser evicted it). Connect once to download it; it then works offline.',
+          `You are offline and ${this.label} is not stored on this device (it has not been downloaded yet, or the browser evicted it). Connect once to download it; it then works offline.`,
           { url, cause: e },
         );
-      throw new PandocLoadError('fetch-failed', `Could not download pandoc from ${url} (${describe(e)}).`, { url, cause: e });
+      throw new PandocLoadError('fetch-failed', `Could not download ${this.label} from ${url} (${describe(e)}).`, { url, cause: e });
     }
-    if (!res.ok) throw new PandocLoadError('fetch-failed', `Could not download pandoc from ${url}: HTTP ${res.status}.`, { url });
+    if (!res.ok) throw new PandocLoadError('fetch-failed', `Could not download ${this.label} from ${url}: HTTP ${res.status}.`, { url });
 
     const lengthHeader = res.headers.get('content-length');
     const total = lengthHeader && Number(lengthHeader) > 0 ? Number(lengthHeader) : null;
@@ -433,7 +451,7 @@ export class PandocLoader {
       }
     } catch (e) {
       if (signal.aborted) throw abortReason(signal);
-      throw new PandocLoadError('fetch-failed', `The download of pandoc from ${url} was interrupted after ${loaded} bytes (${describe(e)}).`, { url, bytes: loaded, cause: e });
+      throw new PandocLoadError('fetch-failed', `The download of ${this.label} from ${url} was interrupted after ${loaded} bytes (${describe(e)}).`, { url, bytes: loaded, cause: e });
     }
     return concat(chunks, loaded);
   }
@@ -450,24 +468,24 @@ export class PandocLoader {
         if (!capped)
           throw new PandocLoadError(
             'fetch-failed',
-            `The pandoc download from ${url} (${stored.length} bytes) expands to more than ${MAX_DECOMPRESSION_RATIO} times its size, which a real pandoc build does not; a proxy or server may have replaced it.`,
+            `The ${this.label} download from ${url} (${stored.length} bytes) expands to more than ${MAX_DECOMPRESSION_RATIO} times its size, which the real asset does not; a proxy or server may have replaced it.`,
             { url, bytes: stored.length },
           );
         wasm = capped;
       } catch (e) {
         if (e instanceof PandocLoadError) throw e;
-        throw new PandocLoadError('fetch-failed', `The pandoc download from ${url} (${stored.length} bytes) is corrupt: it could not be decompressed.`, { url, bytes: stored.length, cause: e });
+        throw new PandocLoadError('fetch-failed', `The ${this.label} download from ${url} (${stored.length} bytes) is corrupt: it could not be decompressed.`, { url, bytes: stored.length, cause: e });
       }
-    } else if (isWasm(stored)) wasm = stored;
+    } else if (this.isRaw(stored)) wasm = stored;
     else
-      throw new PandocLoadError('fetch-failed', `The response from ${url} (${stored.length} bytes) is neither gzip nor WebAssembly; a proxy or server may have replaced it.`, {
+      throw new PandocLoadError('fetch-failed', `The response from ${url} (${stored.length} bytes) is neither gzip nor the expected file; a proxy or server may have replaced it.`, {
         url,
         bytes: stored.length,
       });
 
     const actual = hex(await (this.env.subtle as SubtleCrypto).digest('SHA-256', wasm as BufferSource));
     if (actual !== sha)
-      throw new PandocLoadError('checksum-mismatch', `pandoc from ${url} (${stored.length} bytes) failed its checksum; a proxy may have corrupted it. Expected ${sha}, got ${actual}.`, {
+      throw new PandocLoadError('checksum-mismatch', `${this.label} from ${url} (${stored.length} bytes) failed its checksum; a proxy may have corrupted it. Expected ${sha}, got ${actual}.`, {
         url,
         bytes: stored.length,
       });
@@ -479,7 +497,7 @@ export class PandocLoader {
     try {
       return await this.env.compile(wasm as BufferSource);
     } catch (e) {
-      throw new PandocLoadError('compile-blocked', `The browser refused to compile pandoc (${describe(e)}). A content-security policy or an extension may be blocking WebAssembly.`, { cause: e });
+      throw new PandocLoadError('compile-blocked', `The browser refused to compile ${this.label} (${describe(e)}). A content-security policy or an extension may be blocking WebAssembly.`, { cause: e });
     }
   }
 
@@ -488,7 +506,7 @@ export class PandocLoader {
     try {
       await cache.put(key, new Response(stored as BodyInit, { headers: { 'content-type': 'application/octet-stream' } }));
     } catch (e) {
-      notices.push(`pandoc was not cached (${describe(e)}); it will be downloaded again next time.`);
+      notices.push(`${this.label} was not cached (${describe(e)}); it will be downloaded again next time.`);
       return;
     }
     try {

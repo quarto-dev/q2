@@ -1,0 +1,17 @@
+{
+  "typst_version": "0.14.2",
+  "typst_ts_version": "0.7.0",
+  "wasm_package": "@myriaddreamin/typst-ts-web-compiler",
+  "wasm_sha256": "1fc968438a672366dfec39c96c842c26ed29caff4eb1bcaab19a6c60867de5fd",
+  "fonts_crate": {
+    "name": "typst-assets",
+    "version": "0.14.2",
+    "crate_sha256": "5613cb719a6222fe9b74027c3625d107767ec187bff26b8fc931cf58942c834f",
+    "fonts_dir": "files/fonts/"
+  },
+  "package_registry": "https://packages.typst.org",
+  "budget": {
+    "first_use_download_gzip_bytes": 41943040
+  },
+  "fonts_bundle_sha256": "c8916da67005c3bfa639b55d4119e12d2d5ca21d8de59972b63ec689f094c5c7"
+}

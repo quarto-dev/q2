@@ -187,11 +187,13 @@ jobs:
       # Real-wasm pandoc-host tests (hub-client/src/pandoc/*.wasm.test.ts) need the
       # pinned pandoc.wasm (sha-verified against resources/pandoc-wasm.json) and the
       # semantic output comparer. A cache miss during a GitHub outage fails the job.
-      - name: Cache pandoc.wasm
+      - name: Cache pandoc.wasm and typst assets
         uses: actions/cache@v4
         with:
-          path: .cache/pandoc-wasm
-          key: pandoc-wasm-${{ hashFiles('resources/pandoc-wasm.json') }}
+          path: |
+            .cache/pandoc-wasm
+            .cache/typst-assets
+          key: pandoc-wasm-${{ hashFiles('resources/pandoc-wasm.json', 'resources/typst-wasm.json') }}
 
       - name: Fetch pandoc.wasm
         shell: bash
@@ -330,6 +332,14 @@ jobs:
         run: |
           npm run typecheck:tests -w ts-packages/pandoc-host
           npm test -w ts-packages/pandoc-host
+
+      # typst-host runs the real typst.ts wasm (from node_modules) and the default fonts
+      # that `fetch-pandoc-wasm.mjs` cached above (typst-assets crate, SHA-pinned).
+      - name: Run typst-host unit tests
+        shell: bash
+        run: |
+          npm run typecheck:tests -w ts-packages/typst-host
+          npm test -w ts-packages/typst-host
 
       - name: Run quarto-api tests
         shell: bash

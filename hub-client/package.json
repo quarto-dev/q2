@@ -48,6 +48,7 @@
     "@automerge/automerge-repo-storage-indexeddb": "2.6.0-alpha.5",
     "@monaco-editor/react": "^4.7.0",
     "@quarto/pandoc-host": "*",
+    "@quarto/typst-host": "*",
     "@quarto/quarto-automerge-schema": "*",
     "@quarto/quarto-sync-client": "*",
     "@revealjs/react": "0.2.0",

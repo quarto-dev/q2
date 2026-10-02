@@ -18,6 +18,12 @@
 
 - **From R4 (landed):** the `pdf` request is `render_pandoc_request(path, 'pdf')`: the typst request with `post: "compile_typst"` and `output_path` a `.typ`. Before compiling, prepend `typst_date_prelude(Number(request.env.SOURCE_DATE_EPOCH))` to the `.typ` (typst.ts has no date option; with it two compiles are byte-identical). Compile inputs: `get_typst_assets()` (packages under `packages/`, fonts under `fonts/`; its own `typst_assets_version`, not the share tree) plus the request's `resource_refs` (the AST's images and the brand's `source: file` fonts and logos, mounted only for `pdf`). Pass `typst_available_fonts` (from the loaded fonts) to the render call; it feeds the filter param. The `pdf` row of `getPandocFormats()` has `hidden: true`; drop that flag in Rust when this phase wires the menu, and then the resolver classes `pdf` as `download`.
 
+- **From H7 (landed):**
+  - Use `runner.listFonts()` (`TypstRunner`, from the font builder's `fontFamilies()`) for `typst_available_fonts`; load the compiler before the pandoc request is built.
+  - The typst job's `vendoredPackages` and `fonts` are `splitTypstAssets(get_typst_assets().files)` (`hub-client/src/typst/typstAssetSplit.ts`).
+  - `typstUiStateFor(outcome)` can return `typst-error` and `package-error`, which have **no copy yet**. Add both to `FailureState` and `strings.ts` and update the exhaustive test, as in `DownloadAsControl.integration.test.tsx`.
+  - The registry origin `https://packages.typst.org` is allowed by the hub CSP already. The first-use total is measured: 34,441,544 gzip bytes for pandoc + typst + fonts + the vendored export (evidence §14); use that, not "~16 + ~11 + fonts", for the size hint.
+  - Pandoc's own web app works around pandoc#11584 (images extracted to a temp dir in the wasm) with a Lua filter that turns mediabag images into `data:` URIs; our shared-tree mount should make that unnecessary, but it is the fallback if the chain's image test fails on mediabag images.
 
 ## Checklist
 

@@ -21,6 +21,11 @@ import { PandocRunner, uiStateFor } from './pandoc/pandocRunner';
 import { createBrowserWorker } from './pandoc/pandocService';
 import { PANDOC_WASM_SHA256, smokeJob } from './pandoc/smokeJob';
 import { installDevHarness, pandocDownload } from './pandoc/devHarness';
+import { createTypstLoader, TypstFontsLoader, TYPST_WASM_SHA256 } from './typst/typstAssets';
+import { splitTypstAssets } from './typst/typstAssetSplit';
+import { TypstRunner, typstUiStateFor } from './typst/typstRunner';
+import { createTypstBrowserWorker } from './typst/typstService';
+import { cacheApiTarballs } from './typst/typstPackageCache';
 
 /**
  * Pandoc loader/worker hook for the `pandoc-*.harness.spec.ts` smoke tests. The runner it
@@ -50,6 +55,27 @@ export const pandoc = {
   },
 };
 
+/**
+ * Typst loader/worker hook for the `typst-*.harness.spec.ts` tests (host phase H7). The
+ * runner is the production one; the options exist so a test can shorten the wall timeout and
+ * the idle drop.
+ */
+export const typst = {
+  createRunner(options: { wallTimeoutMs?: number; idleMs?: number } = {}) {
+    const loader = createTypstLoader({ idleMs: options.idleMs });
+    const fonts = new TypstFontsLoader({ idleMs: options.idleMs });
+    const runner = new TypstRunner({ loader, fonts, createWorker: createTypstBrowserWorker, wallTimeoutMs: options.wallTimeoutMs, cache: cacheApiTarballs() });
+    return { loader, fonts, runner };
+  },
+  /** The vendored packages and Font Awesome fonts from the Rust wasm's `get_typst_assets()`. */
+  async vendoredAssets() {
+    await wasmRenderer.initWasm();
+    return splitTypstAssets(wasmRenderer.getTypstAssets().files);
+  },
+  uiStateFor: typstUiStateFor,
+  sha256: TYPST_WASM_SHA256,
+};
+
 declare global {
   interface Window {
     __quartoTest?: {
@@ -66,6 +92,7 @@ declare global {
       reconcileProjectSet: typeof reconcileIntoConnectedProjectSet;
       wasmRenderer: typeof wasmRenderer;
       pandoc: typeof pandoc;
+      typst: typeof typst;
     };
   }
 }
@@ -78,4 +105,5 @@ window.__quartoTest = {
   reconcileProjectSet: reconcileIntoConnectedProjectSet,
   wasmRenderer,
   pandoc,
+  typst,
 };

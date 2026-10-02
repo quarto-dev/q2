@@ -245,3 +245,59 @@ What the numbers say:
 **The CI test** (`hub-client/e2e/pandoc-memory.harness.spec.ts`, Chromium and WebKit): ten 10 MB images, three renders; asserts pandoc linear memory <= 64 MB + 3.5x payload (measured 1.9x), Rust wasm memory <= 128 MB + 6x payload (measured 4.7x), the docx carries the payload, no growth in either memory between render 1 and render 3, and (Chromium) the JS heap plus backing stores within 64 MB of the pre-render reading after GC.
 
 **Failure-taxonomy audit** (design, Failure taxonomy; all ten classes have a diagnostic, a UI state and a test): two gaps found and closed. (1) `WebAssembly` missing altogether (iOS Lockdown Mode, a browser policy) threw a `ReferenceError` out of the loader and was classified as a failed download; it is now `no-wasm` with its own message and the `unsupported` UI state. (2) A memory failure on the main thread (the Rust request build, or the hand-off to the worker) threw into the controller's catch-all and showed as `crashed`; it is now `out-of-memory` when the error looks like an allocation failure (`looksLikeOom`, now exported by `@quarto/pandoc-host`). A third item is documentation only: after a main-thread Rust wasm trap the module is not usable until the page reloads.
+
+## 14. H7 typst worker: download budget, memory, prior art (2026-10-02, host phase H7)
+
+### First-use download against the 40 MB budget
+
+The budget is `first_use_download_gzip_bytes` = 41,943,040 (40 MiB) in `resources/typst-wasm.json`, set before measuring. Exact sizes of the files the browser fetches (`stat`, the `.gz` files in `hub-client/public/`):
+
+| Piece | Gzip bytes | MiB |
+|---|---:|---:|
+| `pandoc/pandoc.wasm.gz` | 16,652,658 | 15.88 |
+| `typst/typst.wasm.gz` (typst.ts 0.7.0 compiler) | 11,068,415 | 10.56 |
+| `typst/fonts.bin.gz` (typst-assets 0.14.2 default fonts, 8,757,072 raw) | 5,857,677 | 5.59 |
+| `get_typst_assets()` export (41 files, 2,497,763 raw), gzipped as one stream in the page | 862,794 (Chromium) / 877,834 (WebKit) | 0.82 |
+| **Total** | **34,441,544** | **32.85** |
+
+That is 7.5 MB (18%) under the budget. Not in the sum: `index.json` (2.3 MB), which is fetched only if a use needs it and otherwise has left the budget; the `pdfjs-dist` pair (~0.5 MB, H9's lazy fetch); and the Rust and Automerge wasm modules, which load with the app. The export row is the Rust wasm's own payload (it ships inside the Rust wasm, so it is not a separate request); it is counted because the budget text counts it. Gzip of the concatenated bytes, not a tarball, so it is a close estimate (`tar | gzip -9` of `resources/typst-packages` is 860,826).
+
+### Latency and memory (Chromium 148.0.7778.96, WebKit 26.4)
+
+Spec: `hub-client/e2e/typst-measure.harness.spec.ts` (opt-in, `Q2_MEASURE=1`; same setup as sections 12 and 13: `VITE_E2E=1` bundle, `vite preview`, a Mac with other work running). A 13-page document (table, math, a vendored package) through the production runner. Single runs; magnitudes, not benchmarks. Latency is local, so the first-use number has no network in it.
+
+| | Chromium | WebKit |
+|---|---:|---:|
+| first compile, fresh context (wasm + fonts fetched, compiled; total) | 354 ms | 383 ms |
+| cached compile after reload (Cache API holds the gz; module gone) | 352 ms | 1077 ms |
+| warm compile, median of 5 (module resident, fresh worker) | 67 ms | 87 ms |
+| Rust wasm memory after (shared with the pandoc measurements) | 32 MB | 32 MB |
+
+Process RSS (summed over every `ms-playwright` process; the harness's browser keeps earlier contexts' memory, so read the deltas, not the absolute values):
+
+| Step | Chromium start -> peak | WebKit start -> peak |
+|---|---:|---:|
+| first typst compile (after boot) | 624 -> 839 MB | 868 -> 1286 MB |
+| cached typst compile after reload | 879 -> 1079 MB | 1364 -> 1549 MB |
+| pandoc docx render first (Rust wasm booted) | peak 1286 MB (boot 1057) | peak 2385 MB (boot 1512) |
+| typst compile with pandoc and Rust resident | 1234 -> 1273 MB | 2386 -> 2431 MB |
+| second pandoc, then second typst, all resident | 1331, then 1279 MB | 2436, then 2437 MB |
+
+What the numbers say:
+- **A typst compile adds about 200-400 MB on its first use and a further 40-50 MB when pandoc and the Rust wasm are already resident**, in both engines; the second round of each adds nothing. The compile worker is short-lived (one per compile, terminated when it settles), so its compiler instance is not retained; the compiled `Module` stays on the main thread for the idle window.
+- **All four modules in play (Rust, Automerge, pandoc, typst) fit comfortably** at these sizes: peak 1.3 GB Chromium, 2.4 GB WebKit for the whole browser including the harness. WebKit's baseline is higher on this Mac for the same pages; no WebKit-only failure appeared in the 13-page run, and Safari-class memory pressure on a phone is not covered here.
+- WebKit's cached compile is slower than its first (1077 vs 383 ms): the Cache API read and decompress of 17 MB, not the compile (134 ms).
+
+### CSP and registry notes
+
+- `connect-src https://packages.typst.org` is allowed in `crates/quarto-hub/src/server.rs` (Gordon's change, 2026-10-02, with a test). `script-src` has no `wasm-unsafe-eval` and it was not changed. Whether the hub's policy blocks `WebAssembly.instantiate` for the pandoc and typst modules is unverified: the harness runs against `vite preview`, which sends no CSP, so no test here exercises it. Check it against a real hub before shipping.
+- Tarballs are pinned by exact version in the import spec only. `packages.typst.org` publishes no hashes, so there is nothing to check a download against; a hash would have to be vendored by us per package, which only works for the vendored five (already in the Rust assets).
+
+### Prior art: pandoc's own web app (`~/src/pandoc/wasm/index.js`, 3.9+)
+
+How it makes a PDF: pandoc writes `typst` (standalone) in the wasm; the page then runs `$typst` (`@myriaddreamin/typst-all-in-one.ts@0.7.0-rc2`, loaded lazily from jsDelivr as a script on the main thread), calls `resetShadow()`, `mapShadow` for every input file under `/<path>` and `<path>`, maps the `.typ` at `/main.typ` and calls `$typst.pdf({mainFilePath})`. Errors are scraped from the typst.ts message string with a regex. Nothing else: default fonts and packages come from typst.ts's own CDN defaults.
+
+What changes in our design:
+- **Nothing structural.** Same shape as ours (pandoc then typst.ts, `map_shadow`), same typst.ts line (we pin 0.7.0 final and its wasm sha256); ours differs by design where the web app cannot go: a worker per compile with a wall timeout, vendored fonts and packages (offline, no CDN at run time), a checksummed asset script, structured diagnostics.
+- **Images (pandoc#11584).** Pandoc's wasm cannot write the typst writer's extracted images into a temp directory, so the web app injects a Lua filter that rewrites every mediabag image to a `data:` URI before the typst writer runs. Our request mounts `resource_refs` at the same absolute paths for both stages (H8), so we do not need it; it is the fallback if an image that goes through the mediabag (remote or embedded) fails to resolve in the typst stage. Noted for H8's image tests.
+- The web app has no package-registry or font-list handling, so nothing there informs `typst_available_fonts`.
