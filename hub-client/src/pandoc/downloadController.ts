@@ -109,6 +109,8 @@ export interface DownloadDeps {
   /** The embed's executor (`renderNatively`); when set, pandoc.wasm is not used. */
   native?: (request: NativeRenderRequest, opts: { signal: AbortSignal }) => Promise<NativeRenderOutcome>;
   save: (blob: Blob, fileName: string) => void;
+  /** Called with each compiled PDF's bytes (after `save`) so a viewer can show them (H9). */
+  onPdf?: (pdf: Uint8Array, info: { path: string; fileName: string }) => void;
   nowMs?: () => number;
   nowSeconds?: () => number;
 }
@@ -335,6 +337,7 @@ export class DownloadController {
 
     const fileName = sanitizeDownloadName(path, format.extension);
     this.deps.save(new Blob([compiled.pdf as BlobPart], { type: format.mime }), fileName);
+    this.deps.onPdf?.(compiled.pdf, { path, fileName });
     this.set({ phase: 'done', clickId: id, format, fileName, warnings: all, notices, unexecutedCells });
   }
 

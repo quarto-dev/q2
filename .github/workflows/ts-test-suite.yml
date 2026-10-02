@@ -333,9 +333,28 @@ jobs:
           npm run typecheck:tests -w ts-packages/pandoc-host
           npm test -w ts-packages/pandoc-host
 
-      # typst-host runs the real typst.ts wasm (from node_modules) and the default fonts
-      # that `fetch-pandoc-wasm.mjs` cached above (typst-assets crate, SHA-pinned).
-      - name: Run typst-host unit tests
+      # typst-host runs the real typst.ts wasm (from node_modules), the default fonts
+      # (typst-assets crate, SHA-pinned) and, for the parity test, the pdf.js build: all
+      # three come from `fetch-pandoc-wasm.mjs`.
+      - name: Fetch pandoc, typst and pdf.js assets
+        shell: bash
+        run: node scripts/fetch-pandoc-wasm.mjs --require
+
+      # The browser compiler is typst 0.14.2 (resources/typst-wasm.json) while the Rust tests
+      # above use TYPST_VERSION (0.15.1). The parity test compares the two compilers' page
+      # count and text, so it needs a native binary of the *browser's* version, pinned here
+      # (not brew, which is unpinned).
+      - name: Set up native typst for browser parity (pinned)
+        shell: bash
+        run: |
+          TYPST_PARITY_VERSION=$(node -p "require('./resources/typst-wasm.json').typst_version")
+          if [ "$RUNNER_OS" = "Linux" ]; then TRIPLE=x86_64-unknown-linux-musl; else TRIPLE=aarch64-apple-darwin; fi
+          curl -fsSL -o typst-parity.tar.xz "https://github.com/typst/typst/releases/download/v${TYPST_PARITY_VERSION}/typst-${TRIPLE}.tar.xz"
+          mkdir typst-parity && tar -xf typst-parity.tar.xz -C typst-parity --strip-components=1
+          echo "TYPST_PARITY_BIN=$PWD/typst-parity/typst" >> "$GITHUB_ENV"
+          echo "TYPST_PARITY_REQUIRED=1" >> "$GITHUB_ENV"
+
+      - name: Run typst-host unit tests (includes browser/native parity)
         shell: bash
         run: |
           npm run typecheck:tests -w ts-packages/typst-host

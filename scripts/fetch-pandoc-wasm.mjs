@@ -16,8 +16,13 @@
 //   hub-client/public/typst/fonts.bin.gz    the typst-assets default fonts, from the pinned crates.io crate
 //   .cache/typst-assets/fonts.bin           the same fonts, uncompressed (vitest reads this)
 // --from-crate <file> uses an already-downloaded typst-assets .crate (still SHA-checked).
+//
+// And the stock pdf.js viewer (host phase H9; resources/pdfjs-viewer.json):
+//   hub-client/public/pdfjs/{web,build}/    the release's viewer, trimmed, with pdf.worker.mjs patched
+//                                           to a constant document fingerprint (see patchWorker)
+// --from-pdfjs <file> uses an already-downloaded release zip (still SHA-checked).
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync, gzipSync, unzipSync } from 'fflate';
@@ -182,6 +187,69 @@ export async function fetchTypstAssets({ fromCrate } = {}) {
   return { wasmGzPath: typstWasmGzPath, fontsGzPath: typstFontsGzPath, fontsPath: typstFontsPath };
 }
 
+// ---- pdf.js viewer (H9) ------------------------------------------------------------------
+
+const pdfjsConstants = JSON.parse(readFileSync(path.join(repo, 'resources/pdfjs-viewer.json'), 'utf8'));
+export const pdfjsDir = path.join(repo, 'hub-client/public/pdfjs');
+export const pdfjsStamp = path.join(pdfjsDir, '.stamp');
+
+// The viewer keys its saved zoom/scroll by the document fingerprint: the trailer /ID, which typst
+// derives from the content, so it changes on every edit. A constant fingerprint makes a recompile
+// look like the same document (Q1's preview does the same; design T7). The host clears the saved
+// history when it switches to a different file.
+const FINGERPRINT_GETTER = 'return shadow(this, "fingerprints", [hashOriginal.toHex(), hashModified?.toHex() ?? null]);';
+
+export function patchWorker(source, fingerprint = pdfjsConstants.stable_fingerprint) {
+  const first = source.indexOf(FINGERPRINT_GETTER);
+  if (first < 0 || source.indexOf(FINGERPRINT_GETTER, first + 1) >= 0)
+    throw new Error('pdf.worker.mjs: the fingerprints getter is not found exactly once (did the pinned pdf.js version change? update patchWorker)');
+  return source.replace(FINGERPRINT_GETTER, `return shadow(this, "fingerprints", ["${fingerprint}", null]);`);
+}
+
+// Dropped from the release: source maps, the scripting sandbox (typst PDFs carry no JS), the debugger,
+// and the sample document.
+const keepPdfjsFile = (name) =>
+  (name.startsWith('web/') || name.startsWith('build/')) &&
+  !name.endsWith('.map') &&
+  !name.endsWith('/pdf.sandbox.mjs') &&
+  !name.startsWith('web/debugger.') &&
+  !name.startsWith('web/compressed.') &&
+  !name.endsWith('/');
+
+export async function fetchPdfjsViewer({ fromZip } = {}) {
+  const stamp = `${pdfjsConstants.upstream_zip_sha256}:${sha256(Buffer.from(FINGERPRINT_GETTER + pdfjsConstants.stable_fingerprint + keepPdfjsFile.toString() + 'v2'))}`;
+  if (readIfExists(pdfjsStamp)?.toString() === stamp && existsSync(path.join(pdfjsDir, 'web/viewer.html'))) return { dir: pdfjsDir };
+  let zip;
+  if (fromZip) zip = readFileSync(fromZip);
+  else {
+    const cachedPath = path.join(repo, '.cache/pdfjs', pdfjsConstants.asset_name);
+    const cached = readIfExists(cachedPath);
+    if (cached && sha256(cached) === pdfjsConstants.upstream_zip_sha256) zip = cached;
+    else {
+      const url = `https://github.com/mozilla/pdf.js/releases/download/v${pdfjsConstants.version}/${pdfjsConstants.asset_name}`;
+      const res = await fetch(url, { redirect: 'follow' });
+      if (!res.ok) throw new Error(`GET ${url}: ${res.status} ${res.statusText}`);
+      zip = new Uint8Array(await res.arrayBuffer());
+      if (sha256(zip) === pdfjsConstants.upstream_zip_sha256) writeAtomic(cachedPath, zip);
+    }
+  }
+  if (sha256(zip) !== pdfjsConstants.upstream_zip_sha256)
+    throw new Error(`${pdfjsConstants.asset_name}: sha256 ${sha256(zip)} != ${pdfjsConstants.upstream_zip_sha256} (a proxy may have altered the download)`);
+  const entries = Object.entries(unzipSync(zip)).filter(([name]) => keepPdfjsFile(name));
+  if (!entries.some(([n]) => n === 'web/viewer.html') || !entries.some(([n]) => n === 'build/pdf.worker.mjs'))
+    throw new Error(`${pdfjsConstants.asset_name} has no web/viewer.html or build/pdf.worker.mjs`);
+  rmSync(pdfjsDir, { recursive: true, force: true });
+  for (const [name, bytes] of entries) {
+    let text = name.endsWith('.mjs') ? new TextDecoder().decode(bytes) : null;
+    if (text !== null) text = text.replace(/\n\/\/# sourceMappingURL=\S+\s*$/, '\n'); // the maps are not shipped
+    if (name === 'build/pdf.worker.mjs') text = patchWorker(text);
+    const out = text === null ? bytes : new TextEncoder().encode(text);
+    writeAtomic(path.join(pdfjsDir, name), out);
+  }
+  writeAtomic(pdfjsStamp, stamp);
+  return { dir: pdfjsDir };
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   const require = args.includes('--require');
@@ -205,6 +273,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   await attempt('typst assets', async () => {
     const r = await fetchTypstAssets({ fromCrate: arg('--from-crate') });
     console.log(`typst assets ok: ${path.relative(repo, r.wasmGzPath)}, ${path.relative(repo, r.fontsGzPath)}, ${path.relative(repo, r.fontsPath)}`);
+  });
+  await attempt('pdf.js viewer', async () => {
+    const r = await fetchPdfjsViewer({ fromZip: arg('--from-pdfjs') });
+    console.log(`pdf.js viewer ok: ${path.relative(repo, r.dir)}`);
   });
   if (failed) {
     if (require) process.exit(1);

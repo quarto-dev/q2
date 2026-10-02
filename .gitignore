@@ -107,3 +107,4 @@ agents-docs-dist/
 .cache/pandoc-wasm/
 # typst.ts wasm asset and default fonts (same script)
 .cache/typst-assets/
+.cache/pdfjs/

@@ -222,3 +222,45 @@ Each stage's diagnostics carry `stage: 'pandoc' | 'typst'` and share one channel
 Known gap: the compile sees what pandoc saw, which is the AST's images and the brand's files. A raw typst block that `#import`s or `#include`s another project file (`#import "part.typ"`) fails with "cannot read file outside of project root", where the native renderer reads it from disk. `pdfChain.wasm.test.ts` records the other cases.
 
 Tests: `src/pandoc/pdfChain.wasm.test.ts` (the production controller over the real Rust wasm, pandoc.wasm and typst in worker threads), `downloadController.test.ts` (fakes), and `e2e/pandoc-pdf-chain.harness.spec.ts` (Chromium and WebKit).
+
+## PDF viewer (H9)
+
+The compiled PDF is shown in the stock pdf.js viewer, not the `pdfjs-dist` `PDFViewer` component.
+
+- **Assets.** `node scripts/fetch-pandoc-wasm.mjs` (the same run as pandoc and typst) downloads the
+  checksum-pinned release (`resources/pdfjs-viewer.json`), drops source maps, the scripting sandbox,
+  the debugger and the sample PDF, patches `build/pdf.worker.mjs` and writes `hub-client/public/pdfjs/`
+  (gitignored). Bump: change `version` and `upstream_zip_sha256`; `patchWorker` throws if its target
+  line moved.
+- **Stable fingerprint.** The viewer saves zoom and scroll per document fingerprint (`/ID`, which typst
+  derives from the content, so it changes on every edit). The patched worker reports a constant, so a
+  recompile reopened in place restores the reader's position. The history is then keyed by nothing but
+  that constant, so `pdfViewer.ts` clears `localStorage['pdfjs.history']` when the file key changes.
+- **Host.** `src/pandoc/pdfViewer.ts`: `mountPdfViewer(container).show(bytes, {key, fileName})`. The
+  first call loads `viewer.html?file=<blob>#pagemode=none` in a same-origin iframe; later calls use
+  `PDFViewerApplication.open({data})` in place. `DownloadController` hands each compiled PDF to
+  `onPdf` (`onPdfCompiled` in `downloadService.ts`).
+- **Precache.** `public/pdfjs/` is excluded by `workbox.globIgnores` (`pdfjs/**`);
+  `scripts/check-sw-precache.mjs` (run by `build:all`) fails if `dist/sw.js` lists it. The embed build
+  prunes it (`prune-embed-dist.mjs`).
+- **Test.** `e2e/pandoc-pdf-viewer.harness.spec.ts` (run it like the H8 spec: `VITE_E2E=1` bundle, then
+  `npx playwright test --config playwright.harness.config.ts e2e/pandoc-pdf-viewer.harness.spec.ts`).
+- **Not done.** Jump to the active chapter needs the whole-book request and per-chapter anchors (request
+  R7 stages 2-3, which have no plan yet). The user-facing place the viewer appears (a router mode or a
+  dialog) is not decided; today only the test hook mounts it.
+
+## Browser/native typst parity (H9)
+
+`ts-packages/typst-host/src/parity.test.ts` compiles the six recorded typst fixtures with the browser
+compiler (typst.ts 0.7.0, typst 0.14.2) and with a native typst of the *same* version, with the same
+fonts (`--ignore-system-fonts`, default plus vendored), then compares page count and whitespace-collapsed
+text read with the fetched pdf.js. Layout is not compared. Compiling the pandoc-3.11 writer output at all is
+the writer-versus-compiler skew check (T2).
+
+- Locally it runs against `typst` on PATH (or `$TYPST_PARITY_BIN`) when that reports 0.14.2, else skips.
+- CI (`ts-test-suite.yml`, "Workspace TS suites") downloads the pinned release binary for both OSes and sets
+  `TYPST_PARITY_REQUIRED=1`, so a missing or wrong-version binary fails instead of skipping. The Rust tests'
+  `TYPST_VERSION` (0.15.1) is unrelated.
+- Known difference: a raw typst block that `#import`s or `#include`s another project file fails in the
+  browser chain (strand bd-4lczy9ho), so no parity fixture uses one.
+- Result at H9: 6/6 fixtures equal in page count and text.
