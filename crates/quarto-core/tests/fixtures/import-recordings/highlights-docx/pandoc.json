@@ -1,0 +1,139 @@
+{
+  "blocks": [
+    {
+      "c": [
+        {
+          "c": "Plain",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "text",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "with",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": [
+            [
+              "",
+              [
+                "mark"
+              ],
+              []
+            ],
+            [
+              {
+                "c": "a",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "highlighted",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "run",
+                "t": "Str"
+              }
+            ]
+          ],
+          "t": "Span"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "in",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "the",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "middle,",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "and",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "a",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": [
+            [
+              "",
+              [
+                "mark"
+              ],
+              []
+            ],
+            [
+              {
+                "c": "second",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "highlight",
+                "t": "Str"
+              }
+            ]
+          ],
+          "t": "Span"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "later.",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    }
+  ],
+  "meta": {},
+  "pandoc-api-version": [
+    1,
+    23,
+    1,
+    2
+  ]
+}

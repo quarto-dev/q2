@@ -1,0 +1,242 @@
+{
+  "blocks": [
+    {
+      "c": [
+        [
+          "",
+          [],
+          []
+        ],
+        [
+          null,
+          [
+            {
+              "c": [
+                {
+                  "c": "A",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "green",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "square",
+                  "t": "Str"
+                }
+              ],
+              "t": "Para"
+            }
+          ]
+        ],
+        [
+          {
+            "c": [
+              {
+                "c": [
+                  [
+                    "",
+                    [],
+                    [
+                      [
+                        "width",
+                        "0.4444444444444444in"
+                      ],
+                      [
+                        "height",
+                        "0.3333333333333333in"
+                      ]
+                    ]
+                  ],
+                  [
+                    {
+                      "c": "A",
+                      "t": "Str"
+                    },
+                    {
+                      "t": "Space"
+                    },
+                    {
+                      "c": "green",
+                      "t": "Str"
+                    },
+                    {
+                      "t": "Space"
+                    },
+                    {
+                      "c": "square",
+                      "t": "Str"
+                    }
+                  ],
+                  [
+                    "/__q2_share__/import/media/media/rId9.png",
+                    ""
+                  ]
+                ],
+                "t": "Image"
+              }
+            ],
+            "t": "Plain"
+          }
+        ]
+      ],
+      "t": "Figure"
+    },
+    {
+      "c": [
+        [
+          "",
+          [],
+          []
+        ],
+        [
+          null,
+          [
+            {
+              "c": [
+                {
+                  "c": "A",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "photo",
+                  "t": "Str"
+                }
+              ],
+              "t": "Para"
+            }
+          ]
+        ],
+        [
+          {
+            "c": [
+              {
+                "c": [
+                  [
+                    "",
+                    [],
+                    [
+                      [
+                        "width",
+                        "0.5555555555555556in"
+                      ],
+                      [
+                        "height",
+                        "0.4166666666666667in"
+                      ]
+                    ]
+                  ],
+                  [
+                    {
+                      "c": "A",
+                      "t": "Str"
+                    },
+                    {
+                      "t": "Space"
+                    },
+                    {
+                      "c": "photo",
+                      "t": "Str"
+                    }
+                  ],
+                  [
+                    "/__q2_share__/import/media/media/rId12.jpg",
+                    ""
+                  ]
+                ],
+                "t": "Image"
+              }
+            ],
+            "t": "Plain"
+          }
+        ]
+      ],
+      "t": "Figure"
+    },
+    {
+      "c": [
+        {
+          "c": "The",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "green",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "square",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "again:",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": [
+            [
+              "",
+              [],
+              [
+                [
+                  "width",
+                  "0.4444444444444444in"
+                ],
+                [
+                  "height",
+                  "0.3333333333333333in"
+                ]
+              ]
+            ],
+            [
+              {
+                "c": "Green",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "again",
+                "t": "Str"
+              }
+            ],
+            [
+              "/__q2_share__/import/media/media/rId9.png",
+              ""
+            ]
+          ],
+          "t": "Image"
+        }
+      ],
+      "t": "Para"
+    }
+  ],
+  "meta": {},
+  "pandoc-api-version": [
+    1,
+    23,
+    1,
+    2
+  ]
+}

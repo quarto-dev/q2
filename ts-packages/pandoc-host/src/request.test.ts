@@ -10,7 +10,7 @@ import type { PandocRequest } from './types.ts';
 const REQUEST_FIELDS = [
   'schema_version', 'kind', 'job_id', 'writer', 'argv', 'env', 'files', 'dirs', 'resource_refs',
   'share_root', 'share_tree_path', 'doc_dir', 'project_root', 'output_path', 'stage_name', 'json_path',
-  'post', 'expected_pandoc_wasm_sha256', 'share_tree_version', 'typst_available_fonts',
+  'post', 'expected_pandoc_wasm_sha256', 'share_tree_version', 'typst_available_fonts', 'host_inputs', 'collect_dirs',
 ] as const satisfies readonly (keyof PandocRequest)[];
 type Missing = Exclude<keyof PandocRequest, (typeof REQUEST_FIELDS)[number]>;
 const _exhaustive: Missing extends never ? true : never = true;
@@ -29,6 +29,16 @@ describe('PandocRequest vs the published schema', () => {
     const ajv = new Ajv2020({ strict: false });
     const validate = ajv.compile(schema);
     expect(validate(readRepoJson('crates/quarto-core/schemas/pandoc-request.golden.json')), JSON.stringify(validate.errors)).toBe(true);
+  });
+
+  it('the import golden validates against the schema and passes the host shape check', () => {
+    const Ajv2020 = (ajv2020 as unknown as { default: typeof import('ajv/dist/2020.js').default }).default;
+    const validate = new Ajv2020({ strict: false }).compile(schema);
+    const g = readRepoJson('crates/quarto-core/schemas/pandoc-request.import.golden.json');
+    expect(validate(g), JSON.stringify(validate.errors)).toBe(true);
+    expect(g.host_inputs).toHaveLength(1);
+    expect(g.collect_dirs).toHaveLength(1);
+    expect(checkShape({ ...g, files: [], resource_refs: [] })).toEqual([]);
   });
 
   it('the decoded golden passes the host shape check', () => {

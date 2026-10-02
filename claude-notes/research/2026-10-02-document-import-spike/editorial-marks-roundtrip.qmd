@@ -1,0 +1,7 @@
+Before [!! the commented range [>> Please reword]{author="Ann" date="2026-09-01T10:00:00Z"}] after.
+
+::: {.quarto-highlight}
+A whole paragraph commented on.[>> Block comment]{author="Bob"}
+:::
+
+[++ inserted words]{author="Ann" date="2026-09-01T10:00:00Z"} and [-- deleted words]{author="Ann"}.

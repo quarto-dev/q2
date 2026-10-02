@@ -1,0 +1,760 @@
+{
+  "blocks": [
+    {
+      "c": [
+        {
+          "c": "Para",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "one",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "has",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": [
+            [
+              "",
+              [
+                "comment-start"
+              ],
+              [
+                [
+                  "id",
+                  "0"
+                ],
+                [
+                  "author",
+                  "Ann"
+                ],
+                [
+                  "date",
+                  "2026-09-01T10:00:00Z"
+                ]
+              ]
+            ],
+            [
+              {
+                "c": "Please",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "reword",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "this.",
+                "t": "Str"
+              }
+            ]
+          ],
+          "t": "Span"
+        },
+        {
+          "c": "a",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "commented",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "range",
+          "t": "Str"
+        },
+        {
+          "c": [
+            [
+              "",
+              [
+                "comment-end"
+              ],
+              [
+                [
+                  "id",
+                  "0"
+                ]
+              ]
+            ],
+            []
+          ],
+          "t": "Span"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "and",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "more.",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        {
+          "c": "Para",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "two",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": [
+            [
+              "",
+              [
+                "insertion"
+              ],
+              [
+                [
+                  "author",
+                  "Bob"
+                ],
+                [
+                  "date",
+                  "2026-09-02T10:00:00Z"
+                ]
+              ]
+            ],
+            [
+              {
+                "c": "inserted",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "words",
+                "t": "Str"
+              }
+            ]
+          ],
+          "t": "Span"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "and",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": [
+            [
+              "",
+              [
+                "deletion"
+              ],
+              [
+                [
+                  "author",
+                  "Bob"
+                ],
+                [
+                  "date",
+                  "2026-09-02T10:00:00Z"
+                ]
+              ]
+            ],
+            [
+              {
+                "c": "deleted",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "words",
+                "t": "Str"
+              }
+            ]
+          ],
+          "t": "Span"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "end.",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        {
+          "c": "A",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "range",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "spanning",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": [
+            [
+              "",
+              [
+                "comment-start"
+              ],
+              [
+                [
+                  "id",
+                  "1"
+                ],
+                [
+                  "author",
+                  "Cy"
+                ],
+                [
+                  "date",
+                  "2026-09-03T10:00:00Z"
+                ]
+              ]
+            ],
+            [
+              {
+                "c": "Comment",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "across",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "paras",
+                "t": "Str"
+              }
+            ]
+          ],
+          "t": "Span"
+        },
+        {
+          "c": "into",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        {
+          "c": "the",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "next",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "para",
+          "t": "Str"
+        },
+        {
+          "c": [
+            [
+              "",
+              [
+                "comment-end"
+              ],
+              [
+                [
+                  "id",
+                  "1"
+                ]
+              ]
+            ],
+            []
+          ],
+          "t": "Span"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "here.",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        {
+          "c": "Para",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "four",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "has",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": [
+            [
+              "",
+              [
+                "comment-start"
+              ],
+              [
+                [
+                  "id",
+                  "2"
+                ],
+                [
+                  "author",
+                  "Ann"
+                ],
+                [
+                  "date",
+                  "2026-09-04T10:00:00Z"
+                ]
+              ]
+            ],
+            [
+              {
+                "c": "Please",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "reword",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "this",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "too.",
+                "t": "Str"
+              }
+            ]
+          ],
+          "t": "Span"
+        },
+        {
+          "c": [
+            [
+              "",
+              [
+                "comment-start"
+              ],
+              [
+                [
+                  "id",
+                  "3"
+                ],
+                [
+                  "author",
+                  "Dee"
+                ],
+                [
+                  "date",
+                  "2026-09-04T11:00:00Z"
+                ]
+              ]
+            ],
+            [
+              {
+                "c": "Agreed,",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "reworded.",
+                "t": "Str"
+              }
+            ]
+          ],
+          "t": "Span"
+        },
+        {
+          "c": "a",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "range",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "with",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "a",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "reply",
+          "t": "Str"
+        },
+        {
+          "c": [
+            [
+              "",
+              [
+                "comment-end"
+              ],
+              [
+                [
+                  "id",
+                  "2"
+                ]
+              ]
+            ],
+            [
+              {
+                "c": [
+                  [
+                    "",
+                    [
+                      "comment-end"
+                    ],
+                    [
+                      [
+                        "id",
+                        "3"
+                      ]
+                    ]
+                  ],
+                  []
+                ],
+                "t": "Span"
+              }
+            ]
+          ],
+          "t": "Span"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "in",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "it.",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        {
+          "c": "Para",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "five",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "is",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "a",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "paragraph",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "whose",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "mark",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "was",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "inserted",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "by",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "Bob.",
+          "t": "Str"
+        },
+        {
+          "c": [
+            [
+              "",
+              [
+                "paragraph-insertion"
+              ],
+              [
+                [
+                  "author",
+                  "Bob"
+                ],
+                [
+                  "date",
+                  "2026-09-05T10:00:00Z"
+                ]
+              ]
+            ],
+            []
+          ],
+          "t": "Span"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        {
+          "c": "Para",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "six",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "is",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "a",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "paragraph",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "whose",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "mark",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "was",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "deleted",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "by",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "Bob.",
+          "t": "Str"
+        },
+        {
+          "c": [
+            [
+              "",
+              [
+                "paragraph-deletion"
+              ],
+              [
+                [
+                  "author",
+                  "Bob"
+                ],
+                [
+                  "date",
+                  "2026-09-05T11:00:00Z"
+                ]
+              ]
+            ],
+            []
+          ],
+          "t": "Span"
+        }
+      ],
+      "t": "Para"
+    }
+  ],
+  "meta": {},
+  "pandoc-api-version": [
+    1,
+    23,
+    1,
+    2
+  ]
+}

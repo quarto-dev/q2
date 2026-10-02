@@ -26,6 +26,8 @@ syn = { workspace = true }
 tempfile = "3"
 time = { version = "0.3", features = ["macros", "formatting"] }
 walkdir = { workspace = true }
+# Same version and features as quarto-core; `capture-import-recordings generate` patches docx.
+zip = { version = "6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [lints]
 workspace = true

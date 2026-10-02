@@ -100,5 +100,5 @@ export async function execute(request: PandocRequest, shareTree: ShareTree, opti
 
   const read = readOutput(tree, request, 0, stderr, stdout, stats);
   if (!('output' in read)) return read;
-  return { ok: true, status: 0, output: read.output, outputPath: request.output_path, stderr, stdout, diagnostics: [], stats };
+  return { ok: true, status: 0, output: read.output, outputPath: request.output_path, collected: [], stderr, stdout, diagnostics: [], stats };
 }

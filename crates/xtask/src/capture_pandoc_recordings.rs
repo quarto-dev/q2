@@ -82,7 +82,7 @@ pub fn recording_name(fixture: &Fixture, format: &str) -> String {
 
 /// The pandoc version pinned by `resources/pandoc-wasm.json`'s asset name
 /// (`pandoc-<version>.wasm.zip`).
-fn pinned_version(worktree_root: &Path) -> Result<String> {
+pub(crate) fn pinned_version(worktree_root: &Path) -> Result<String> {
     let text = std::fs::read_to_string(worktree_root.join(CONSTANTS))?;
     let json: serde_json::Value = serde_json::from_str(&text)?;
     let asset = json["asset_name"].as_str().context("asset_name")?;
@@ -93,7 +93,7 @@ fn pinned_version(worktree_root: &Path) -> Result<String> {
         .with_context(|| format!("unexpected asset_name {asset}"))
 }
 
-fn check_pandoc(pinned: &str) -> Result<PathBuf> {
+pub(crate) fn check_pandoc(pinned: &str) -> Result<PathBuf> {
     let out = Command::new("pandoc").arg("--version").output().context(
         "could not run `pandoc --version`; capture needs the pinned native pandoc on PATH",
     )?;

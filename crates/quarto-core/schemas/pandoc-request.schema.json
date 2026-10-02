@@ -38,7 +38,7 @@
       "default": "pandoc"
     },
     "job_id": {
-      "description": "Opaque to TS, computed by Rust: first 16 hex digits of sha256 over the canonical JSON (keys sorted, no whitespace) of {schema_version, tool: expected_pandoc_wasm_sha256, argv[1..], env minus SOURCE_DATE_EPOCH, files: {path: sha256}, resource_refs: {path: sha256}, share_tree: share_tree_version}.",
+      "description": "Opaque to TS, computed by Rust: first 16 hex digits of sha256 over the canonical JSON (keys sorted, no whitespace) of {schema_version, tool: expected_pandoc_wasm_sha256, argv[1..], env minus SOURCE_DATE_EPOCH, files: {path: sha256}, resource_refs: {path: sha256}, share_tree: share_tree_version}, plus post when not none and host_inputs: {path: sha256} when non-empty.",
       "type": "string",
       "pattern": "^[0-9a-f]{16}$"
     },
@@ -116,6 +116,16 @@
       "description": "Echo of render_pandoc_request's input of the same name; null until the PDF work.",
       "type": ["array", "null"],
       "items": { "type": "string" }
+    },
+    "host_inputs": {
+      "description": "Files whose bytes the caller supplies at run time (execute options `inputs`) instead of carrying them in the request: the user's source in a document import. The host checks size and sha256 before mounting; a missing or mismatched input is invalid-request (input-mismatch). Absent for writer requests. Declared sizes count toward the total-bytes limit.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/hostInput" }
+    },
+    "collect_dirs": {
+      "description": "Directories whose regular files, after a successful run, come back in ExecuteSuccess.collected (sorted by path, subject to the collected_* limits). A directory pandoc never creates yields nothing. Absent for writer requests.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/path" }
     }
   },
   "$defs": {
@@ -129,6 +139,16 @@
       "type": "string",
       "contentEncoding": "base64",
       "x-q2-wire": "Uint8Array"
+    },
+    "hostInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "size"],
+      "properties": {
+        "path": { "$ref": "#/$defs/path" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "size": { "type": "integer", "minimum": 0 }
+      }
     },
     "file": {
       "type": "object",

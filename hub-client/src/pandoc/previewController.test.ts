@@ -23,7 +23,7 @@ const pdfRequest = {
 } as unknown as PandocRequest;
 
 const pandocOk = (): RunOutcome =>
-  ({ ok: true, status: 0, output: new TextEncoder().encode('#set page()\n'), outputPath: '/project/doc.typ', stderr: '', stdout: '', diagnostics: [], stats: {}, notices: [] }) as unknown as RunOutcome;
+  ({ ok: true, status: 0, output: new TextEncoder().encode('#set page()\n'), outputPath: '/project/doc.typ', collected: [], stderr: '', stdout: '', diagnostics: [], stats: {}, notices: [] }) as unknown as RunOutcome;
 const pandocFail = (kind = 'crash'): RunOutcome => ({ ok: false, kind, status: null, stderr: '', stdout: '', diagnostics: [], notices: [] }) as unknown as RunOutcome;
 const typstOk = (tag = 0): TypstRunOutcome =>
   ({ ok: true, pdf: new Uint8Array([37, 80, 68, 70, tag]), pages: 1, diagnostics: [], stats: {}, notices: [], fontFamilies: [] }) as unknown as TypstRunOutcome;

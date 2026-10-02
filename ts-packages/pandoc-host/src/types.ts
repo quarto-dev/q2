@@ -29,6 +29,14 @@ export interface PandocRequest {
   expected_pandoc_wasm_sha256: string;
   share_tree_version: string;
   typst_available_fonts: string[] | null;
+  /**
+   * Files whose bytes the caller supplies at run time (`execute`'s `inputs` option) instead of
+   * carrying them in the request. The host checks `size` and `sha256` (lowercase hex) before
+   * mounting; a missing or mismatched input is `invalid-request` with `input-mismatch`.
+   */
+  host_inputs?: { path: string; sha256: string; size: number }[];
+  /** Directories whose files come back in `ExecuteSuccess.collected` after a successful run. */
+  collect_dirs?: string[];
 }
 
 /** The share tree the main thread reads from the Rust export once per `share_tree_version`. */
@@ -46,6 +54,8 @@ export interface HostDiagnostic {
   message: string;
   /** The offending path, when there is one. */
   path?: string;
+  /** The offending file's size in bytes (`collect-limit`). */
+  size?: number;
   /** Which stage of a chained job raised it (H8). */
   stage?: 'pandoc' | 'typst';
 }
@@ -63,6 +73,10 @@ export type HostDiagnosticCode =
   | 'pandoc-oom'
   | 'pandoc-crash'
   | 'no-output'
+  /** A `host_inputs` entry is missing from `inputs`, or its size or sha256 differs. */
+  | 'input-mismatch'
+  /** A collected file was dropped for exceeding `collected_file_bytes` or `collected_total_bytes`. */
+  | 'collect-limit'
   // Raised by hub-client's loader and runner (host phase H2), not by `execute`.
   | 'pandoc-timeout'
   | 'wasm-unsupported'
@@ -119,6 +133,8 @@ export interface ExecuteSuccess {
   status: 0;
   output: Uint8Array;
   outputPath: string;
+  /** Every regular file under each `collect_dirs` entry (absolute paths, sorted by path); empty if none. */
+  collected: RequestFile[];
   stderr: string;
   stdout: string;
   diagnostics: Diagnostic[];

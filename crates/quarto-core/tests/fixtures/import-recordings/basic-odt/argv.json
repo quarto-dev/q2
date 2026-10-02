@@ -1,0 +1,11 @@
+[
+  "pandoc",
+  "-f",
+  "odt",
+  "-t",
+  "json",
+  "--extract-media=/__q2_share__/import/media",
+  "-o",
+  "/__q2_share__/import/out.json",
+  "/__q2_share__/import/source.odt"
+]

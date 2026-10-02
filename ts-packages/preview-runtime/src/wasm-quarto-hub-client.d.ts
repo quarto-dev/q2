@@ -86,6 +86,10 @@ declare module 'wasm-quarto-hub-client' {
     expected_pandoc_wasm_sha256: string;
     share_tree_version: string;
     typst_available_fonts: string[] | null;
+    /** Files the caller supplies at run time (`execute`'s `inputs` option). Absent for writer requests. */
+    host_inputs?: { path: string; sha256: string; size: number }[];
+    /** Directories whose files come back in `ExecuteSuccess.collected`. Absent for writer requests. */
+    collect_dirs?: string[];
   }
 
   /**

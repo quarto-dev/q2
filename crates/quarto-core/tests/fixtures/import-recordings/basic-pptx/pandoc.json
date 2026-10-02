@@ -1,0 +1,107 @@
+{
+  "blocks": [
+    {
+      "c": [
+        2,
+        [
+          "slide-1",
+          [],
+          []
+        ],
+        [
+          {
+            "c": "Basic import deck",
+            "t": "Str"
+          }
+        ]
+      ],
+      "t": "Header"
+    },
+    {
+      "c": [
+        {
+          "c": "Ada Lovelace",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        {
+          "c": "2026-09-30",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        2,
+        [
+          "slide-2",
+          [],
+          []
+        ],
+        [
+          {
+            "c": "First slide",
+            "t": "Str"
+          }
+        ]
+      ],
+      "t": "Header"
+    },
+    {
+      "c": [
+        {
+          "c": "one point with  emphasis",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        {
+          "c": "another with a  link",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        2,
+        [
+          "slide-3",
+          [],
+          []
+        ],
+        [
+          {
+            "c": "Second slide",
+            "t": "Str"
+          }
+        ]
+      ],
+      "t": "Header"
+    },
+    {
+      "c": [
+        {
+          "c": "A paragraph on the second slide.",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    }
+  ],
+  "meta": {},
+  "pandoc-api-version": [
+    1,
+    23,
+    1,
+    2
+  ]
+}
