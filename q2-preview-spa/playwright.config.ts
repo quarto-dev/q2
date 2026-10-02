@@ -33,6 +33,13 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
     {
+      // Whole suite on Firefox. The ws-queue spec is excluded: it has its
+      // own project below, with the open-timeout pref it needs.
+      name: 'firefox',
+      testIgnore: /firefox-ws-queue\.spec\.ts/,
+      use: { ...devices['Desktop Firefox'] },
+    },
+    {
       // bd-jit6pdwq Phase 4: Firefox-only WS handshake-queue
       // regression. Firefox serializes WebSocket opening handshakes
       // per IP address browser-wide; this project pins the
