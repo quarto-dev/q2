@@ -98,17 +98,28 @@ Layer 2 (`bugfix/bd-1klbq2zd-path-audit`):
 - [x] Re-run the flip on all six crates (§ Flip re-run): no failure outside the baseline set; flip reverted, `Cargo.lock` == HEAD, `.snap.new` deleted
 
 Layer 3 (`bugfix/bd-1klbq2zd-dunce-seam`):
-- [ ] `gh stack add bugfix/bd-1klbq2zd-dunce-seam`; CLAUDE.local.md block
-- [ ] REDs for `source_file`, status line, `QUARTO_PROJECT_DIR`. The expected side must NOT come from `quarto_system_runtime::canonicalize` (that only proves "same as the helper"): assert no `\\?\` prefix on a temp path made plain with `dunce::simplified`, as `json_errors.rs` does. Each RED fails on unchanged layer-3 base on Windows before the switch
-- [ ] Contract test for the shared fn itself (`canonical.rs`): on Windows, a short existing path comes back plain; an existing path over 260 UTF-16 units (created through `\\?\`) stays verbatim (reserved names can't exist as files, so they can't be canonicalized); on other OSes, identical to `std::fs::canonicalize`
-- [ ] dunce switch → GREEN, including #743's RED
-- [ ] Probe re-run; output inspected and recorded here
-- [ ] Crate-scoped suites vs baseline; ask about one `cargo build --workspace` before the PR
+- [x] `gh stack add bugfix/bd-1klbq2zd-dunce-seam`; CLAUDE.local.md block
+- [x] (`76ff76cc`, § Layer 3 results) REDs for `source_file`, status line, `QUARTO_PROJECT_DIR`. The expected side must NOT come from `quarto_system_runtime::canonicalize` (that only proves "same as the helper"): assert no `\\?\` prefix on a temp path made plain with `dunce::simplified`, as `json_errors.rs` does. Each RED fails on unchanged layer-3 base on Windows before the switch
+- [x] (`76ff76cc`) Contract test for the shared fn itself (`canonical.rs`): on Windows, a short existing path comes back plain; an existing path over 260 UTF-16 units (created through `\\?\`) stays verbatim (reserved names can't exist as files, so they can't be canonicalized); on other OSes, identical to `std::fs::canonicalize`
+- [x] dunce switch → GREEN, including #743's RED (`db5f75bd`)
+- [x] Probe re-run; output inspected and recorded here (§ Layer 3 results)
+- [x] Crate-scoped suites vs baseline (§ Layer 3 results: 42 failed, all baseline)
+- [x] One `cargo build --workspace` before the PR: passes on Windows at `f450fc93` (2026-09-30, run by hand in a terminal)
+- [x] Whole-branch review of layer 3 (`roborev review --branch --base bugfix/bd-1klbq2zd-path-audit`), triaged: roborev 2968 (codex, `18f7b7e..7976e7c`), no findings
+- [x] Whole-stack review 2967 (`e8379cf..7976e7c`): two Low, both valid, fixed in `b5a6919b` (+ `2efac912` for follow-up 2973). The plain-spelling guard test became vacuous after the switch (its `canonical()` helper is std, so verbatim, while q2's input is now plain); renamed `output_via_other_windows_spelling_of_input_refuses_and_preserves_source`, alias = verbatim spelling of `quarto_system_runtime::canonicalize`, plain-TEMP precondition. Mutation check: with `same_file()` removed from the guard it fails, restored 6/6 pass. `canonical.rs` short-path precondition now checks the plain form, not the TEMP spelling. roborev clean (2975 pass, nothing open)
 
 Ship:
-- [ ] Ask before pushing; `gh stack submit --auto` (drafts) after review; PR text via `/open-pr`. Decided 2026-09-30: layer 2 is not pushed alone; layer 3 is built first and the whole stack is submitted together, so the stack top is green on Windows and layer 2 is reviewed next to the switch that motivates it
+- [x] Rebase the stack onto `origin/main`. Resolved `crates/quarto-test/src/runner.rs` by keeping main's project-render cache and routing its canonicalized cache keys through `quarto_system_runtime::canonicalize` in layer 2. Completed before stack submission; `gh stack view --json` reports no layer needs a rebase.
+- [x] Submit the full stack after review; do not push layer 2 alone. `gh stack view --json` reports PRs #743, #759, and #760 open. Draft/review/CI state still needs checking on GitHub.
 - [ ] Mark #743 ready; merge bottom-up with merge commits on go-ahead; close bd-clq56rem, then bd-1klbq2zd
 - [x] File a strand for the relative `--output` failure (bd-xdlbrc7m)
+
+## Status update (2026-10-02)
+
+- Current top: `bugfix/bd-1klbq2zd-dunce-seam` at `ebdfe08ac`.
+- Stack metadata reports #743, #759, and #760 open, with no rebase needed.
+- Chris reports that the focused path-rebase and JSON path tests, orange-book smoke, CLI probe, and `cargo xtask verify` all passed at `ebdfe08ac` on 2026-10-02.
+- Linux/macOS CI and final merge remain outstanding.
 
 ## Baselines (Windows, unchanged layer tip `b83c5cf6`)
 
@@ -259,6 +270,25 @@ Routing set: rows 15 (3 calls), 16, 17, 18 (2 calls), 20-25, 36-39, 45. Left as 
 - Branch review (codex, roborev 2949): no findings.
 - Whole-branch review (Opus): no high/medium. Low: the overwrite guard misses a hardlink alias of the input (pre-existing, outside the spelling contract; bd-vf2eil63). Low: `render_scripts_cli` had dropped its spelling pin; exact check restored, both tests pass.
 
+## Layer 3 results
+
+**REDs (`76ff76cc`, unchanged seam, Windows).** New: `json_errors::source_file_json_is_a_plain_path`, `render_cli_e2e::single_file_status_line_shows_a_plain_path`, `render_scripts_cli::project_dir_env_is_a_plain_path` (all run from a plain cwd; the two single-file tests pass a relative path, the project-script test renders the project with no path argument; expected side checked against a `dunce::simplified` temp path) and the `canonical.rs` contract tests. Failing before the switch, each with a `\\?\C:\Users\chris\AppData\Local\Temp\.tmp…` value: the three wire tests, `canonical::tests::short_existing_path_comes_back_plain`, and #743's `json_errors::ipynb_parse_error_json_carries_cell_origin`. `existing_path_over_max_path_stays_verbatim` passes before and after (std is verbatim there too; it pins that dunce keeps it). Off Windows the contract is `matches_std_canonicalize`.
+
+**Switch (`db5f75bd`).** All seven targeted tests pass. `cargo check -p quarto-system-runtime --target wasm32-unknown-unknown` passes (two warnings, neither in `canonical.rs`).
+
+**Acceptance probe** (`db5f75bd`, `target/debug/q2.exe`, cwd a plain scratch dir holding the investigation fixtures, run with Git Bash as `bash probe.sh <q2>`). Output copied from the terminal; inspected: no `\\?\` anywhere. The scratch path is elided as `…`:
+
+```
+ipynb JSON path fields:
+{"notebook_path":"C:\\Users\\chris\\AppData\\Local\\Temp\\claude\\…\\scratchpad\\probe\\broken.ipynb"}
+{"source_file":"C:\\Users\\chris\\AppData\\Local\\Temp\\claude\\…\\scratchpad\\probe\\broken.ipynb"}
+Rendering single file: C:\Users\chris\AppData\Local\Temp\claude\…\scratchpad\probe\ok.qmd
+```
+
+Compare the 2026-09-28 run (`probe-output-2026-09-28.txt`), where all three carried `\\?\`.
+
+**Six-crate run** (`44795025`, same crates and caps as § Flip re-run): 6681 run (the 6676 before plus this layer's 5 new tests, all passing), **42 failed**, 1 leaky, 430 s test phase. Set built from the log's post-`Summary` `FAIL` lines: identical to the § Flip re-run set, so every failure is in the § Baselines sets. The load-sensitive `ts_process` tests (bd-j5ij00i0) and the `cache_lru` test (bd-cpzr71jr) did not fail. The two known `.snap.new` files were deleted.
+
 ## Verification
 
 Crate-scoped only on this machine: CLAUDE.local.md overrides the AGENTS.md pre-push gates (workspace build and test runs, `cargo xtask verify`) here, because those runs are very slow on this Windows host. CI runs the full gates on Linux/macOS. One `cargo build --workspace` is still offered before the PR, since CI has no Windows leg. Every run is compared against the layer-2 baseline, not judged on its own:
@@ -279,3 +309,75 @@ Linux/macOS CI covers the rest, including the portable guard test.
 - A site the audit marks L may still meet a seam path through a consumer the sweep missed. The prototype flip at the end of layer 2 is the backstop: it reruns the same suites that showed the 20 fallout failures.
 - `dunce::canonicalize` differs from std only on Windows; on Unix the layer-3 switch is a no-op, so Linux/macOS CI cannot catch a Windows regression in layer 3. That is why the Windows crate runs and the probe are mandatory before the PR.
 - The shared-function naming and location are a small API decision in a foundation crate; flag it in the PR body.
+- **Known limit (accepted 2026-10-01, bd-l0eemakd).** dunce keeps `\\?\` past `MAX_PATH`, so a short root and a long descendant canonicalized separately get different spellings, and prefix comparisons between them fail (`pathdiff` gives a `..`-led path instead). Routing every site through one function does not prevent this: the function itself returns both spellings. It goes both ways: a project discovered from a long input keeps a verbatim root even when the root is short, so a short resource under it (canonicalized plain) is rejected as out of project. Every affected render involves a path over 260 units, but the path that fails the comparison can be short. Lua `io.open` failing past `MAX_PATH` on Windows (bd-9z2258af) is a separate limit; it covers only the long-descendant direction. Evidence, the 39 at-risk sites and a prototype helper with a RED test: `claude-notes/research/2026-10-01-windows-mixed-spelling-prefix-comparisons.md`.
+
+## PR drafts (2026-09-30, /open-pr; apply with gh pr edit after gh stack submit --auto)
+
+#743: replace the NOTE's "comes as a stacked PR on top of this one" / "stays a draft until the fix PR is up" with the two new PR numbers and "the three merge together".
+
+Layer 2 title: `Route canonical paths through one shared function`
+
+~~~~markdown
+Prepares the switch to plain Windows paths in the PR stacked on top of this one. On Windows, `std::fs::canonicalize` returns the verbatim `\\?\C:\…` form, and q2 canonicalizes in about 60 production call sites, most of them directly rather than through `SystemRuntime::canonicalize`. Changing the spelling in the runtime alone leaves plain and verbatim paths meeting in comparisons, prefix strips and map keys. A prototype of that switch failed about 130 tests on Windows and hid a product bug: `resources:` declared for a single-file preview dropped out of its dependency set.
+
+The shared function added here still calls `std::fs::canonicalize`, so no path spelling changes in this PR. The one behavior change is the overwrite guard below.
+
+## Shared canonicalize
+
+`quarto_system_runtime::canonicalize` and `canonicalize_deepest_existing` (moved from `output_sink.rs`, for planned outputs that do not exist yet) are now the one place q2 canonicalizes, and `NativeRuntime::canonicalize` delegates to the former. Both are exported on every target. On wasm32 the body is `std::fs::canonicalize`, which is what the routed sites called before, so the WASM build does not change. `quarto-hub` gains the `quarto-system-runtime` dependency to reach it. The name and location are a small API decision in a foundation crate, open to review.
+
+## Audited call sites
+
+Each production `canonicalize` call in the crates linked into `q2` was classified by following its result to its consumers. A site is routed when the result is emitted, or compared, joined, prefix-stripped or used as a map key against a path from another source. A site whose comparisons only involve its own output is left as it is. The table, with the reason per site, is in `claude-notes/plans/2026-09-29-windows-plain-canonical-paths.md`. Two real splits it found: book chapter seed keys built with std while `DocumentInfo.input` comes from the runtime, and include cycle detection seeded from the runtime but probing std paths. The project-render cache in the `quarto-test` runner is routed too: its map keys are canonicalized render inputs and its lookups use the routed path of the test file, so std keys would stop matching once the spelling changes.
+
+Tests that check which file a path names now canonicalize both sides through the shared function, so they hold under either spelling. Tests that pin what q2 emits (`QUARTO_PROJECT_DIR`) still compare the exact string.
+
+## Overwrite guard
+
+The guard in `render_to_file.rs` refused an `--output` equal to the input only lexically. `q2 render doc.qmd --output sub/../doc.qmd` passed it on every OS and replaced `doc.qmd` with the rendered HTML. On Windows, the plain spelling of the (verbatim) canonicalized input did the same. The guard now also compares the canonical forms of both paths through the runtime, and keeps the lexical check for runtimes that cannot canonicalize.
+
+## Test Plan
+
+- [x] `render_cli_e2e::output_via_dotdot_spelling_of_input_refuses_and_preserves_source` (every OS) and `output_via_plain_spelling_of_input_refuses_and_preserves_source` (Windows) fail before the guard fix and pass after
+- [x] Windows, `quarto`, `quarto-system-runtime`, `quarto-core`, `quarto-hub`, `quarto-preview` and `quarto-test` suites: same results as on the unchanged branch
+- [x] Same six crates with the shared function temporarily switched to plain paths: same results, `single_file_deps_resources_glob` fixed
+- [x] `cargo check -p quarto-system-runtime --target wasm32-unknown-unknown`
+- [ ] Linux and macOS CI, including the hub-client WASM build that compiles the routed `quarto-core` modules
+~~~~
+
+Layer 3 title: `Canonicalize to plain paths on Windows`
+
+~~~~markdown
+On Windows, q2 hands verbatim `\\?\C:\…` paths to users. Run from a normal directory with a relative argument, `q2 render --json-errors` puts them in `notebook_path` and `source_file`, the status line reads `Rendering single file: \\?\C:\…`, and project scripts get the same form in `QUARTO_PROJECT_DIR`. The cause is `std::fs::canonicalize`, which always returns the verbatim form on Windows.
+
+The shared `quarto_system_runtime::canonicalize` from the PR below now calls `dunce::canonicalize` on native targets. It returns the plain `C:\…` form when that names the same file, and keeps `\\?\` where it would not: paths longer than `MAX_PATH`, reserved names, network shares. Off Windows, `dunce::canonicalize` is `std::fs::canonicalize`, and the wasm32 body stays std. Since the PR below routed every site that emits or compares a canonical path through this function, they all change spelling together.
+
+One limit remains. When a path past `MAX_PATH` is involved, two paths canonicalized separately can come back in different spellings (plain and `\\?\`), and a prefix comparison between them fails. A declared resource that deep under a short project is reported as outside the project. The reverse also happens: rendering a long input path keeps the discovered project root verbatim, so even a short resource like `data.txt` at that root is rejected. Before, both were verbatim. Fixing it touches about 40 comparison sites, so it is tracked as a follow-up.
+
+Before, on Windows from a plain scratch directory:
+
+```
+{"notebook_path":"\\\\?\\C:\\…\\probe\\broken.ipynb"}
+{"source_file":"\\\\?\\C:\\…\\probe\\broken.ipynb"}
+Rendering single file: \\?\C:\…\probe\ok.qmd
+```
+
+After:
+
+```
+{"notebook_path":"C:\\…\\probe\\broken.ipynb"}
+{"source_file":"C:\\…\\probe\\broken.ipynb"}
+Rendering single file: C:\…\probe\ok.qmd
+```
+
+This also turns `json_errors::ipynb_parse_error_json_carries_cell_origin` from #743 green on Windows. CI has no Windows leg and the change is a no-op elsewhere, so Linux and macOS CI cannot catch a regression here; the Windows runs below are the check.
+
+## Test Plan
+
+- [x] New tests fail on Windows before the switch with a `\\?\` value and pass after: `json_errors::source_file_json_is_a_plain_path`, `render_cli_e2e::single_file_status_line_shows_a_plain_path`, `render_scripts_cli::project_dir_env_is_a_plain_path`. Their expected side comes from `dunce::simplified` on the temp path, not from the function under test.
+- [x] `canonical.rs` contract tests: on Windows a short path comes back plain and a path over `MAX_PATH` stays verbatim; elsewhere the result matches `std::fs::canonicalize`
+- [x] `json_errors::ipynb_parse_error_json_carries_cell_origin` passes on Windows
+- [x] Windows, the same six crate suites as the PR below: same results
+- [x] `cargo build --workspace` on Windows; `cargo check -p quarto-system-runtime --target wasm32-unknown-unknown`
+- [ ] Linux and macOS CI
+~~~~

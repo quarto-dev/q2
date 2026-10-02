@@ -296,6 +296,45 @@ fn env_contract_full_render() {
     );
 }
 
+/// `QUARTO_PROJECT_DIR` hands user scripts the plain path whenever one
+/// exists, so no Windows `\\?\` verbatim prefix. Runs from a plain cwd,
+/// as a user would, so any verbatim prefix comes from q2 itself.
+#[test]
+fn project_dir_env_is_a_plain_path() {
+    require_python!();
+    let temp = TempDir::new().unwrap();
+    let project = dunce::simplified(&std::fs::canonicalize(temp.path()).unwrap()).to_path_buf();
+    assert!(
+        !project.to_string_lossy().starts_with(r"\\?\"),
+        "test setup: the TEMP root gives the fixture no plain path form: {}",
+        project.display()
+    );
+    write_minimal_project(
+        &project,
+        "project:\n  type: website\n  output-dir: _site\n  pre-render: dump.py\n",
+    );
+    write_file(&project.join("dump.py"), &env_dump_script("pre-env.txt"));
+
+    let out = run_q2(&project, &[]);
+    assert!(
+        out.status.success(),
+        "render should succeed; stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let dump = read_env_dump(&project.join("pre-env.txt"));
+    let project_dir = dump_value(&dump, "QUARTO_PROJECT_DIR").expect("PROJECT_DIR set");
+    assert!(
+        !project_dir.starts_with(r"\\?\"),
+        "QUARTO_PROJECT_DIR must be a plain path, got: {project_dir}"
+    );
+    assert_eq!(
+        std::fs::canonicalize(project_dir).unwrap(),
+        std::fs::canonicalize(&project).unwrap(),
+        "QUARTO_PROJECT_DIR should be the project dir, got: {project_dir}"
+    );
+}
+
 /// Single-file render *inside* a project still runs the scripts
 /// (Q1-compatible), but `QUARTO_PROJECT_RENDER_ALL` is absent and
 /// `INPUT_FILES` names only the targeted file.

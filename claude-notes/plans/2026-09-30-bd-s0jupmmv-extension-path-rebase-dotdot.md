@@ -1,0 +1,262 @@
+# Space-aware `..` refusal in `adjust_paths_to_document_dir`
+
+**Strands:** bd-s0jupmmv (research, `question`) · bd-9z2258af (implementation,
+`bug`) · discovered-from bd-qi11c7fj · related bd-oejuizi9 (the path-resolution
+epic) · liveness on the bd-1klbq2zd stack tip.
+
+**Research:** `claude-notes/research/2026-09-30-extension-path-rebase-windows-max-path.md`
+**Contract:** `claude-notes/designs/path-resolution-model.md`
+
+## Overview
+
+`adjust_paths_to_document_dir` (`crates/quarto-core/src/project/mod.rs:259`)
+rebases every `ConfigValueKind::Path` value from its declaring dir to the
+consuming document dir with `pathdiff::diff_paths`, whatever the two dirs are.
+When the declaring dir is **outside** the document tree — built-in extensions
+extracted to a temp dir (orange-book, julia-engine) — the stored value is a
+long `..` chain climbing out of the project and back down into temp. Consumers
+join it onto `document_dir` without normalizing (e.g. `filter_resolve.rs:269`),
+and on Windows the joined string exceeds MAX_PATH so Lua `io.open` (C `fopen`)
+fails with `cannot open ...\../../...orange-book.lua`. Linux/macOS build the
+same form and only survive because they have no MAX_PATH.
+
+The in-tree precedent already exists: `rebase_candidate` (project/mod.rs:764)
+**refuses** a `..`-leading rebase and keeps the absolute path for
+temp-extracted extensions. But that guard lives only on the *fragment* rebase;
+the three per-document merge calls in `metadata_merge.rs` (lines 163, 267, 299)
+call `adjust_paths_to_document_dir` with **no** guard.
+
+### What Q1 does (confirmed in source)
+
+Q1 splits by contribution kind: **absolute** paths for filters / shortcodes /
+reveal-plugins / engines (`resolveFilterPath` / `resolveShortcodePath` /
+`resolveRevealPlugin` in `src/extension/extension.ts`, `isAbsolute` join against
+`extensionDir`), but **input-relative `..` chains** (`toInputRelativePaths` in
+`src/project/project-shared.ts`) for format metadata (`css`, `theme`,
+`include-*`, `template`, `template-partials`, `format-resources`). Q1 never
+surfaces the bug because (a) the executed Lua filter list is absolute and
+(b) Deno's `path.join` **normalizes** (collapses `..`) before any
+`Deno.readFile`, while Rust's `Path::join` does not.
+
+## Fix direction (from research)
+
+Mirror `rebase_candidate`'s `..`-leading refusal inside
+`adjust_paths_to_document_dir`, keeping the absolute declaring-dir-resolved
+path — but **space-aware per key**:
+
+- **Pure-filesystem keys** (`filters`, `template`, `template-partials`,
+  `include-in-header/-before-body/-after-body`, `format-resources`,
+  `reference-doc`) get absolute-if-outside. These consumers tolerate absolute
+  (Rust `Path::join` with an absolute RHS returns it; `filter_resolve` already
+  special-cases `is_absolute`).
+- **URL-space keys** (`css`, `theme`) must **never** become
+  filesystem-absolute, because the value can reach emitted HTML `<link href>`.
+  These stay on the mechanism-3 marking; absolute-if-outside does **not** apply.
+  Verify `transforms/format_css.rs` copy/href derivation before deciding where
+  css is handled; any key deliberately left relative is a scope-out strand
+  linked to bd-oejuizi9.
+
+Seam: `adjust_paths_to_document_dir` keyed to a per-key space table — the
+convergence point the contract already names (unified path-shaped-key registry,
+bd-oejuizi9 / bd-hjv5o).
+
+## Checklist
+
+### Phase 0 — pin the failure (DONE in research session)
+- [x] Failing test written: `project::tests::adjust_paths_outside_document_tree_does_not_produce_dotdot`
+  (declaring dir outside document tree → must not yield `..`-leading).
+  Confirmed RED 2026-09-30: got `../../tmp/ext/orange-book.lua`.
+- [x] Companion passing test: `adjust_paths_inside_document_tree_stays_relative`
+  (in-tree rebase stays doc-relative: `../_extensions/acm/filter.lua`).
+- [x] Red test pinned with `#[ignore]` + strand ref so the suite stays green
+  until the fix lands. **Implementation must remove `#[ignore]` as the first
+  act.**
+
+### Phase 1 — verify css URL-space handling (do before touching the rebase)
+- [x] Read `crates/quarto-core/src/transforms/format_css.rs`: `css` is BOTH
+  copied (FS read, `document_dir.join(doc_relative)` → copy intent) AND
+  re-derived into a page-relative href (entry rewritten to `Path(href)`).
+  An absolute filesystem value is not a valid page-relative href and would
+  also trip the outside-project guard → css/theme excluded from
+  absolute-if-outside.
+- [x] css/theme home: mechanism-3 marking in `project/format_paths.rs` runs
+  AFTER this rebase, so only extension-contributed css/theme
+  (`FORMAT_ASSET_PATTERNS`) and explicit `!path` css reach the walk as
+  `Path`. No change needed there.
+- [x] Scope-out strand filed: **bd-f0h4ahai** (URL-space outside-tree css/theme
+  keeps `..` chain), linked `related` → bd-oejuizi9.
+
+### Phase 2 — implement the FS-space refusal
+- [x] Removed `#[ignore]` from `adjust_paths_outside_document_tree_does_not_produce_dotdot`.
+- [x] Added the refusal to `adjust_paths_recursive`. Design note: rather than
+  reconstructing the project root from `metadata_dir`/`document_dir`
+  (ambiguous — `/tmp` and `/project` share only `/`), threaded an explicit
+  `project_root: &Path` parameter through `adjust_paths_to_document_dir` and
+  all call sites (`metadata_merge.rs` ×3, `project/mod.rs` ×1). The guard is
+  then a single `!abs_path.starts_with(project_root)` check — outside → keep
+  the absolute declaring-dir-resolved path (forward slashes), mirroring
+  `rebase_candidate`.
+- [x] Space-aware via `URL_SPACE_REBASE_KEYS = ["css", "theme"]`, keyed by the
+  top-level map key threaded through the recursion; FS-space keys get
+  absolute-if-outside, css/theme stay relative.
+- [x] Red test GREEN; companion relative test GREEN; added
+  `adjust_paths_outside_document_tree_keeps_css_relative` (FS key absolute,
+  css/theme relative). Commit c629420.
+
+### Phase 3 — end-to-end + regression
+- [x] End-to-end on Windows, bd-1klbq2zd stack tip:
+  `SMOKE_FILTER=orange-book-margin cargo nextest run -p quarto -E 'test(smoke_all)'`
+  → **PASS** (exit 0; previously `cannot open ...\../../...orange-book.lua`).
+- [~] Full workspace `cargo nextest run --workspace` + `cargo xtask verify
+  --skip-hub-build`: **deferred to CI** per user direction (2026-09-30).
+- [x] Snapshot check: no `.snap` changes (source-only edit).
+
+### Phase 4 — bookkeeping
+- [x] Contract inventory: consumer behavior unchanged (fs consumers already
+  tolerate absolute; css/theme explicitly unchanged) — no table edit needed;
+  scope-out recorded in bd-f0h4ahai instead.
+- [x] `braid comment bd-9z2258af` with commit + end-to-end evidence (c-g5l9ly6f).
+- [x] Close bd-9z2258af on green.
+- [x] hub-client changelog: N/A (no hub-client change).
+
+## Notes / gotchas
+
+- `#[ignore]` on the red test is **temporary**; leaving it is a silent hole.
+- Normalizing consumer joins would also avoid MAX_PATH (the limit applies to
+  the path passed to the open call, not the stored string), but every
+  filesystem consumer would need it. The merge-time rebase fixes the value
+  once for all of them, which is why it is preferred.
+- The absolute path is only safe for FS-space keys; never emit it as an href.
+- `git status` shows untracked typst smoke fixtures under
+  `crates/quarto/tests/smoke-all/typst/brand-yaml/**` — pre-existing, **not**
+  part of this work; leave them alone.
+
+---
+
+## Follow-up design: drop the key-based space split (bd-gh3qdq7d) — implemented in `0e4c834c8`; smoke passed at `abc6f0f91`
+
+Evidence: research doc § 3. Summary: at the walk, `theme` and `css` are both
+filesystem-space. css becomes a URL only when `FormatCssTransform` *derives* an href
+from the resolved source. Neither key hits MAX_PATH (Rust `std::fs` and pandoc handle
+long paths, as the probes show). The fragment rebase (`rebase_candidate`) already stores
+absolute css/theme for temp-extracted extensions. `URL_SPACE_REBASE_KEYS` therefore
+protects nothing. It only makes the two mechanisms disagree, and it loses its own
+classification under `{light, dark}` (roborev 2987 finding 2).
+
+Is key classification the wrong seam? For *this* walk, yes. The value stored here is
+the pivot form, never a terminal href, so no key needs a URL-space exception at the
+rebase. Per-key space belongs to the consumer exits (the bd-oejuizi9 / bd-hjv5o
+registry), not to the merge-time rebase. No registry work is needed to unblock the
+stack.
+
+### Seam
+
+`adjust_paths_recursive` (`project/mod.rs`):
+1. Remove `URL_SPACE_REBASE_KEYS` and the `key: Option<&str>` parameter (revert to
+   the pre-73d1fbf signature plus `project_root`). Nested forms need no carried
+   classification, because none exists.
+2. `let abs_path = quarto_util::normalize_lexically(&metadata_dir.join(&path));`
+   before the `starts_with(project_root)` boundary check (roborev finding 1). This makes
+   the check honest. A side effect is that the stored absolute and relative forms
+   carry no `.`/`..` noise.
+3. Rewrite the doc comments to match: "absolute-if-outside for every `Path` value;
+   the stored value is a pivot form, not an href".
+
+### Tests
+
+None of these is a user-visible RED. The stack's only real failure (orange-book Lua
+`io.open`) is already GREEN. For theme/css the probes show no failure, so this is a
+consistency change with contract tests, not a TDD bug fix.
+
+1. *Contract test (fails on current code):* outside-project extension with `theme`
+   as a string, a list, and `{light: x, dark: [y]}`, plus `css` as a string and a list.
+   Every leaf is the absolute forward-slash path. Fails today on top-level/list `theme`
+   and `css`.
+2. *Contract test (fails on current code):* `metadata_dir=/project/sub`,
+   value `../../tmp/x.lua` → `/tmp/x.lua` (absolute, normalized). Today it yields
+   `../sub/../../tmp/x.lua` (probe run 2026-10-01).
+3. *Replace* `adjust_paths_outside_document_tree_keeps_css_relative`. It asserts the
+   behavior this design removes. **Needs Chris's OK** to invert it rather than delete it.
+4. *Keep:* `adjust_paths_outside_document_tree_does_not_produce_dotdot`,
+   `adjust_paths_inside_document_tree_stays_relative`, and the new characterization
+   probe `theme_rebase_outside_project_loads_from_deep_document_dir` (adjust its
+   asserts: the top-level value becomes absolute too).
+5. *Regression guard (Windows):*
+   `SMOKE_FILTER=orange-book-margin cargo nextest run -p quarto -E 'test(smoke_all)'`.
+6. In-tree css/theme still doc-relative: existing
+   `metadata_merge` / `format_paths` css tests (`cargo nextest run -p quarto-core -E
+   'test(css) | test(theme)'`).
+
+### Migration / consumer impact
+
+- No on-disk or cached state stores these strings. The theme cache key hashes the
+  *resolved, normalized* path, which the probe shows is identical for both forms, so no
+  cache invalidation is needed.
+- `FormatCssTransform`: outside-project css is reachable. An in-tree extension at
+  `<project>/_extensions/acme` can declare `css: ../../../shared.css`, and
+  `bundled_file_exists` accepts any existing file. Before 0e4c834c8 the css exemption
+  kept `../shared.css`, which the transform emitted verbatim and which worked when
+  served from a common parent. After 0e4c834c8 the stored value is absolute, and the
+  transform's outside-project early return emitted it as a `C:/…` href (a regression;
+  roborev 3004/3008/3009). Fix: that branch now rewrites the entry to
+  `diff_paths(source, page_dir)`, so the href is page-relative whatever form the
+  rebase stored (test `extension_css_outside_project_links_page_relative`). Shipping
+  the file stays bd-f0h4ahai (copy outside-project extension css into `quarto-contrib/`).
+- epub `--css=`: `doc_dir.join(absolute)` returns the absolute path, so pandoc is fine.
+- WASM / VFS built-ins: unverified whether built-in extension dirs are outside
+  `/project/` in VFS mode. If so, they get a rooted VFS path, which the walk already
+  produced for filters after 73d1fbf. Check during implementation.
+- In-tree values: unchanged except `.`/`..` segments collapse (step 2). Expect no
+  snapshot churn; confirm.
+
+### Checklist
+
+- [x] Chris approves the design, incl. inverting test 3 and folding in finding 1 (2026-10-01)
+- [x] Free disk space
+- [x] Tests 1–2 written, RED on 73d1fbf code: css → `../../tmp/ext/style.css`;
+  escaping value → `../sub/../../tmp/x.lua`
+- [x] Seam change (steps 1–3), plus `project_root` normalized once at entry. Commit `0e4c834c8`
+- [x] Test 3 replaced by `adjust_paths_outside_project_keeps_every_form_absolute`;
+  probe test re-asserted (both forms absolute; the `..` chain still loads)
+- [x] Fixture fix: `make_metadata_extension` (metadata_merge.rs) moved under
+  `/project/_extensions`; its old `/extensions` path sat outside the project root it passed
+- [x] `cargo nextest run -p quarto-core`: 34 failures; 33 also fail on the pre-fix code
+  (baseline swap of the two source files, same filter): spin goldens, glob::expand,
+  orange_book_lua, pandoc_shim, listing_pipeline, ts_protocol, hephaestus, etc. These are
+  pre-existing Windows failures. The 34th was the fixture above, now green. Logs:
+  `target/logs/quarto-core-green.log`, `fix-subset.log`, `baseline-subset.log`
+- [x] orange-book-margin smoke guard on Windows at `abc6f0f91` (2026-10-01):
+  `SMOKE_FILTER=orange-book-margin cargo nextest run -p quarto -E 'test(smoke_all)'`
+  → 1 passed (`smoke_all::smoke_all`, 6.4 s)
+- [x] Re-run the orange-book smoke and focused path-rebase tests on current stack HEAD `ebdfe08ac`. Chris reports the focused path-rebase and JSON path tests, orange-book smoke, CLI probe, and `cargo xtask verify` passed on 2026-10-02. Closed bd-qi11c7fj and bd-gh3qdq7d after this verification.
+- [x] PR #760 body updated for the extension-path changes (2026-10-01)
+- [ ] Confirm the 33 pre-existing quarto-core failures are already tracked (braid,
+  bd-eehxwr29 for CRLF); file strands for any that are not
+- [ ] Re-run roborev on `0e4c834c8`; post the 2987 replies (drafts below); close 2987
+- [x] bd-f0h4ahai premise updated (comment c-z9d1cdh6)
+- [x] Untracked test artifacts cleaned (2026-10-01): two `.snap.new` under
+  `crates/quarto-core/tests/integration/snapshots/` (from the failing pre-existing goldens)
+  and `rustc-ice-*.txt` at the worktree root
+
+### Draft roborev replies for job 2987 (approved content pending review)
+
+Finding 1: Confirmed, pre-existing, and not the MAX_PATH class this commit targets. The relative branch is unchanged from before 73d1fbf. A value declared inside the project that escapes it with '..' (metadata_dir /project/sub, value ../../tmp/x.lua) passes the lexical starts_with(project_root) check and is rebased by diff_paths to ../sub/../../tmp/x.lua (verified with a probe). That chain is bounded by what the author wrote plus the document depth; it never climbs to an unrelated temp tree, which is what broke Lua io.open for the temp-extracted built-in. Still, the boundary check should be honest: 0e4c834c8 normalizes the joined path lexically before the check, so an escaping path becomes absolute like any other outside-project value (test adjust_paths_escaping_declaration_is_outside_project).
+
+Finding 2: Confirmed. adjust_paths_recursive passed the immediate map key down, so under theme: {light, dark} the key was light/dark and the nested value became absolute while a top-level theme stayed relative. 0e4c834c8 removes the classification rather than carrying it down: at this walk neither theme nor css is URL-space. Every theme read goes through ThemeContext::resolve_path, which normalizes, and no theme value reaches HTML. FormatCssTransform derives the css href from the resolved source. Its outside-project branch originally emitted the stored string verbatim, so an in-tree extension css escaping the project would have become a filesystem-absolute href. That branch now links the source page-relatively (test extension_css_outside_project_links_page_relative). rebase_candidate already stores absolute theme/css for temp-extracted fragments. A Windows probe (424-char unnormalized join) loads the theme in both forms. Every outside-project Path value now keeps its absolute form, nested or not (test adjust_paths_outside_project_keeps_every_form_absolute).
+
+### Review 3064 follow-up (2026-10-02)
+
+- [x] Verify the research verdict against the original and current
+  `FormatCssTransform`, the Migration section, and
+  `extension_css_outside_project_links_page_relative`.
+- [x] Correct the verdict to distinguish the working relative href, the
+  absolute-href regression, and the implemented rewrite; keep bd-f0h4ahai's
+  asset-copy limitation separate.
+- [x] Inspect the documentation diff and check whitespace (`git diff --check`
+  passed). Documentation-only correction; no runtime tests run.
+- [x] Pre-push verification attempted: `cargo fmt --check` passed;
+  `cargo xtask verify --skip-hub-build` stopped at the Clippy gate on
+  `quarto-hub/tests/integration/admin_collect_lifecycle.rs:106`
+  (`needless_borrow` on `canonicalize(&hub_dir)`). That line predates this
+  documentation change (commit `17d5e42a56`); workspace build and tests were
+  not reached.
