@@ -73,6 +73,9 @@ mod metadata_merge;
 // and `crate::pandoc_filters::{bundle, harness}`.
 #[cfg(not(target_arch = "wasm32"))]
 mod pandoc_write;
+// R1: ungated (builds the `PandocRequest`; no process, no `std::fs`), so it
+// is testable natively and shared with the wasm pipeline.
+mod pandoc_prepare;
 mod parse_document;
 mod pre_engine_sugaring;
 mod render_html;
@@ -131,10 +134,14 @@ pub use listing_item_info::ListingItemInfoStage;
 pub use math_js::{DEFAULT_KATEX_URL_BASE, DEFAULT_MATHJAX_URL, MathEngine, MathJsStage};
 pub use math_ml::MathMlStage;
 pub use metadata_merge::MetadataMergeStage;
+pub use pandoc_prepare::PandocPrepareStage;
 #[cfg(not(target_arch = "wasm32"))]
 pub use pandoc_write::{
-    PandocWriteStage, classify_pandoc_completion, retain_temp_json_unless_success,
+    PandocWriteStage, PreparedPandoc, TypstPrepInputs, retain_temp_json_unless_success,
 };
+// Pure, so ungated (the wasm host classifies a completion with it); the path
+// `stages::classify_pandoc_completion` is unchanged.
+pub use crate::pandoc_filters::diagnostics::classify_pandoc_completion;
 pub use parse_document::ParseDocumentStage;
 pub use pre_engine_sugaring::PreEngineSugaringStage;
 pub use render_html::RenderHtmlBodyStage;

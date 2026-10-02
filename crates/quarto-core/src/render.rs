@@ -462,6 +462,19 @@ pub struct RenderContext<'a> {
     /// per-chapter ones.
     pub defer_citeproc: bool,
 
+    /// Host inputs to `PandocPrepareStage` (the wasm entry point sets the
+    /// share root as temp root, a click-time `SOURCE_DATE_EPOCH` and
+    /// `collect_resources`). `None` (native) means
+    /// `PrepareOptions::native(temp_dir)`. Input-only, like `defer_citeproc`:
+    /// bridged one way into the `StageContext`, which also gets its temp dir
+    /// pre-seeded from `temp_root`.
+    pub prepare_options: Option<crate::pandoc_request::PrepareOptions>,
+
+    /// The request `PandocPrepareStage` built, handed back out of the stage
+    /// context by `restore_render_context` (the `citation_manifest`
+    /// pattern). `None` until that stage has run.
+    pub pandoc_request: Option<crate::pandoc_request::PandocRequest>,
+
     /// Project-wide crossref registry for multi-file books (book-projects
     /// P5): every chapter's crossref targets, keyed by identifier, built by
     /// aggregating all chapters' inventories after they pause post-Navigation
@@ -575,6 +588,8 @@ impl<'a> RenderContext<'a> {
             document_profile: None,
             chapter_seed: None,
             defer_citeproc: false,
+            prepare_options: None,
+            pandoc_request: None,
             cross_chapter_crossref_registry: None,
             citation_manifest: None,
             suppress_book_bibliography: false,

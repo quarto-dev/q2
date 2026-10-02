@@ -122,6 +122,38 @@ pub fn nonzero_exit_error(
     PipelineError::stage_error_with_diagnostics(stage_name, vec![message])
 }
 
+/// Decides how to handle a completed pandoc invocation's exit status and
+/// captured stderr — the corrected policy (commit `0b295831e`): capture
+/// stderr **unconditionally**, not only on failure.
+///
+/// On success, classifies `[WARNING]`-shaped stderr lines as `Q-11-1`
+/// diagnostics via [`classify_pandoc_stderr`] (may return an empty `Vec`).
+/// On failure, builds the `Q-20-3` error via [`nonzero_exit_error`],
+/// wrapping stderr verbatim and naming `json_path`.
+///
+/// `success`/`status_desc` are taken separately rather than as a single
+/// `std::process::ExitStatus` so this function stays platform-neutral and
+/// directly unit-testable with injected values (see
+/// `crates/quarto-core/tests/integration/pandoc_transport.rs` T10.1-T10.5).
+pub fn classify_pandoc_completion(
+    stage_name: &str,
+    success: bool,
+    status_desc: &str,
+    stderr: &str,
+    json_path: &Path,
+) -> Result<Vec<DiagnosticMessage>, PipelineError> {
+    if success {
+        Ok(classify_pandoc_stderr(stderr))
+    } else {
+        Err(nonzero_exit_error(
+            stage_name,
+            status_desc,
+            stderr,
+            json_path,
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

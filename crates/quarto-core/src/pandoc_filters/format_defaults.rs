@@ -24,7 +24,6 @@
 //!   `test_allow_list_excludes_number_sections` below and the epic's
 //!   Missing-test-pass item 2.
 
-use std::ffi::OsString;
 use std::path::Path;
 
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
@@ -32,6 +31,7 @@ use quarto_pandoc_types::ConfigValue;
 use quarto_pandoc_types::config_value::ConfigValueKind;
 
 use crate::format::FormatIdentifier;
+use crate::pandoc_request::PandocArg;
 use crate::stage::PipelineError;
 
 /// The per-format pandoc-defaults literal table (Finding 1). Fields are
@@ -215,7 +215,7 @@ pub fn build_forwarded_args(
     doc_dir: &Path,
     meta: &ConfigValue,
     base_format: FormatIdentifier,
-) -> Result<Vec<OsString>, PipelineError> {
+) -> Result<Vec<PandocArg>, PipelineError> {
     let mut args = Vec::new();
 
     for key in PATH_SHAPED_ALLOW_LIST_KEYS {
@@ -242,8 +242,8 @@ pub fn build_forwarded_args(
             // must be rebased to an absolute path here, not passed
             // verbatim.
             ConfigValueKind::Path(p) => {
-                args.push(OsString::from(format!("--{key}")));
-                args.push(OsString::from(doc_dir.join(p)));
+                args.push(PandocArg::text(format!("--{key}")));
+                args.push(PandocArg::Path(doc_dir.join(p)));
             }
             _ => {
                 let declared = value.as_plain_text().unwrap_or_default();
@@ -260,8 +260,16 @@ pub fn build_forwarded_args(
     if base_format != FormatIdentifier::Typst
         && let Some(v) = meta.get("highlight-style").and_then(|v| v.as_plain_text())
     {
-        args.push(OsString::from("--highlight-style"));
-        args.push(OsString::from(v));
+        args.push(PandocArg::text("--highlight-style"));
+        // A theme file (`.theme`/`.xml`) is a path: pandoc would resolve a
+        // relative one against its cwd, which differs between native and
+        // wasm, so rebase it onto the document's directory. Built-in style
+        // names pass verbatim.
+        if v.ends_with(".theme") || v.ends_with(".xml") {
+            args.push(PandocArg::Path(doc_dir.join(&v)));
+        } else {
+            args.push(PandocArg::Text(v));
+        }
     }
     // Typst never consumes pandoc's own `--toc`/`--toc-depth`-driven
     // internal TOC-insertion (`WriterOptions.writerTableOfContents`/
@@ -298,11 +306,11 @@ pub fn build_forwarded_args(
     // with toc-depth: 17>` succeeds with no range check at all).
     if base_format != FormatIdentifier::Typst {
         if meta.get("toc").and_then(|v| v.as_bool()) == Some(true) {
-            args.push(OsString::from("--toc"));
+            args.push(PandocArg::text("--toc"));
         }
         if let Some(n) = meta.get("toc-depth").and_then(|v| v.as_int()) {
-            args.push(OsString::from("--toc-depth"));
-            args.push(OsString::from(n.to_string()));
+            args.push(PandocArg::text("--toc-depth"));
+            args.push(PandocArg::text(n.to_string()));
         }
     }
     // Typst's `reference-location` values are consumed by the vendored Lua
@@ -314,18 +322,18 @@ pub fn build_forwarded_args(
             .get("reference-location")
             .and_then(|v| v.as_plain_text())
     {
-        args.push(OsString::from("--reference-location"));
-        args.push(OsString::from(v));
+        args.push(PandocArg::text("--reference-location"));
+        args.push(PandocArg::text(v));
     }
     if let Some(n) = meta.get("shift-heading-level-by").and_then(|v| v.as_int()) {
-        args.push(OsString::from("--shift-heading-level-by"));
-        args.push(OsString::from(n.to_string()));
+        args.push(PandocArg::text("--shift-heading-level-by"));
+        args.push(PandocArg::text(n.to_string()));
     }
     if base_format == FormatIdentifier::Pptx
         && let Some(n) = meta.get("slide-level").and_then(|v| v.as_int())
     {
-        args.push(OsString::from("--slide-level"));
-        args.push(OsString::from(n.to_string()));
+        args.push(PandocArg::text("--slide-level"));
+        args.push(PandocArg::text(n.to_string()));
     }
     // `top-level-division` is the chapter-boundary lever Typst and
     // LaTeX share (book-projects P2: a single-file book merge sets
@@ -336,13 +344,13 @@ pub fn build_forwarded_args(
             .get("top-level-division")
             .and_then(|v| v.as_plain_text())
     {
-        args.push(OsString::from("--top-level-division"));
-        args.push(OsString::from(v));
+        args.push(PandocArg::text("--top-level-division"));
+        args.push(PandocArg::text(v));
     }
 
     if let Some(ext) = format_pandoc_defaults(base_format).default_image_extension {
-        args.push(OsString::from("--default-image-extension"));
-        args.push(OsString::from(ext));
+        args.push(PandocArg::text("--default-image-extension"));
+        args.push(PandocArg::text(ext));
     }
 
     Ok(args)
@@ -485,7 +493,7 @@ mod tests {
         let meta = scalar_meta(&[("highlight-style", "tango")]);
         let args_for =
             |id| build_forwarded_args("pandoc-write", Path::new("/doc/dir"), &meta, id).unwrap();
-        let has_flag = |args: &[OsString]| {
+        let has_flag = |args: &[PandocArg]| {
             args.iter()
                 .any(|a| a.to_string_lossy() == "--highlight-style")
         };

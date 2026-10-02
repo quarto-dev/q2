@@ -12,7 +12,8 @@ use include_dir::include_dir;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod bundle;
 mod crossref_params;
-#[cfg(not(target_arch = "wasm32"))]
+// Pure (no subprocess, no filesystem): `classify_pandoc_completion` is shared
+// with the wasm host, which hands back `(success, status, stderr)`.
 pub mod diagnostics;
 pub mod format_defaults;
 #[cfg(not(target_arch = "wasm32"))]

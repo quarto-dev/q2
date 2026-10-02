@@ -182,6 +182,8 @@ quarto-output-extract = { path = "../quarto-output-extract" }
 # diagnostic points, not just which code it carries (bd-9yh3pzfu).
 quarto-config = { workspace = true, features = ["span-assert"] }
 tempfile = "3"
+# R1: validate the PandocRequest golden against its published JSON Schema.
+jsonschema = { version = "0.55", default-features = false }
 walkdir.workspace = true
 tokio = { version = "1", features = ["rt", "macros"] }
 tracing-subscriber.workspace = true

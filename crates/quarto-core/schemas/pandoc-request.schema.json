@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://quarto.org/schemas/pandoc-request.schema.json",
+  "title": "PandocRequest",
+  "description": "Everything one pandoc run needs, as data. Built by Rust (PandocWriteStage::prepare); executed natively with Command or by the wasm host in a worker. Byte fields (definition 'bytes') are base64 strings in this JSON form; the object the wasm entry point returns carries Uint8Array instead (x-q2-wire).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "job_id",
+    "writer",
+    "argv",
+    "env",
+    "files",
+    "dirs",
+    "resource_refs",
+    "share_root",
+    "share_tree_path",
+    "doc_dir",
+    "project_root",
+    "output_path",
+    "stage_name",
+    "json_path",
+    "expected_pandoc_wasm_sha256",
+    "share_tree_version",
+    "typst_available_fonts"
+  ],
+  "properties": {
+    "schema_version": {
+      "description": "Integer; bumped on a breaking change. The host refuses a version it does not know.",
+      "type": "integer",
+      "const": 1
+    },
+    "kind": {
+      "description": "What the request runs. Reserved: PDF may later be a second job fed by the first. Default pandoc.",
+      "type": "string",
+      "enum": ["pandoc"],
+      "default": "pandoc"
+    },
+    "job_id": {
+      "description": "Opaque to TS, computed by Rust: first 16 hex digits of sha256 over the canonical JSON (keys sorted, no whitespace) of {schema_version, tool: expected_pandoc_wasm_sha256, argv[1..], env minus SOURCE_DATE_EPOCH, files: {path: sha256}, resource_refs: {path: sha256}, share_tree: share_tree_version}.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{16}$"
+    },
+    "writer": {
+      "description": "The pandoc writer, e.g. docx.",
+      "type": "string",
+      "minLength": 1
+    },
+    "argv": {
+      "description": "The whole argv. argv[0] is the literal 'pandoc'; no +RTS options. Path-valued entries are absolute and '/'-normalized.",
+      "type": "array",
+      "minItems": 1,
+      "prefixItems": [{ "const": "pandoc" }],
+      "items": { "type": "string" }
+    },
+    "env": {
+      "description": "The environment, fixed at init. Allowlisted keys only (never LANG or LC_*). SOURCE_DATE_EPOCH is present in wasm requests (click time in production, fixed in tests) and absent natively.",
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "files": {
+      "description": "Files this request creates (input JSON, the empty dependency file, staged templates). Not the share tree. Identical entries are deduped; a path in two of share tree/files/resource_refs/dirs, or both file and directory, is an error.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/file" }
+    },
+    "dirs": {
+      "description": "Directories that must exist on their own (empty ones: the output's parent, .quarto/, /tmp in wasm mode). Directories that only parent a file are implicit.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/path" }
+    },
+    "resource_refs": {
+      "description": "Document resources (images, reference docs) the run reads: paths and bytes copied by Rust in the same synchronous step. TS never reads the VFS. In wasm mode no path may start with the share root or /tmp.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/file" }
+    },
+    "share_root": {
+      "description": "The temp root. In wasm mode the constant /__q2_share__ (resources/pandoc-wasm.json), reserved for the share tree and files.",
+      "$ref": "#/$defs/path"
+    },
+    "share_tree_path": {
+      "description": "Where the host mounts the share tree: <share_root>/pandoc-share, the value of QUARTO_SHARE_PATH.",
+      "$ref": "#/$defs/path"
+    },
+    "doc_dir": { "$ref": "#/$defs/path" },
+    "project_root": { "$ref": "#/$defs/path" },
+    "output_path": {
+      "description": "Where pandoc writes its output (the -o value).",
+      "$ref": "#/$defs/path"
+    },
+    "stage_name": {
+      "description": "Passed back to classify_pandoc_completion.",
+      "type": "string"
+    },
+    "json_path": {
+      "description": "The input JSON path; passed back to classify_pandoc_completion.",
+      "$ref": "#/$defs/path"
+    },
+    "post": {
+      "description": "What runs after pandoc. none for docx, pptx and epub; compile_typst is reserved for PDF.",
+      "type": "string",
+      "enum": ["none", "compile_typst"],
+      "default": "none"
+    },
+    "expected_pandoc_wasm_sha256": {
+      "description": "SHA-256 of the decompressed pandoc.wasm (resources/pandoc-wasm.json). The loader checks it on every load.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "share_tree_version": {
+      "description": "SHA-256 over the sorted (path, bytes) entries of the share tree (FILTERS_DIR, DATADIR_DIR and FORMATS_DOCX_DIR, deduped). The host re-reads the tree only when this changes.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "typst_available_fonts": {
+      "description": "Echo of render_pandoc_request's input of the same name; null until the PDF work.",
+      "type": ["array", "null"],
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "path": {
+      "description": "A '/'-normalized absolute path: starts with '/' (or 'X:/' for a native Windows request) and contains no backslash.",
+      "type": "string",
+      "pattern": "^(/|[A-Za-z]:/)[^\\\\]*$"
+    },
+    "bytes": {
+      "description": "Raw bytes. Base64 (standard alphabet, padded) in JSON; Uint8Array on the wasm wire object.",
+      "type": "string",
+      "contentEncoding": "base64",
+      "x-q2-wire": "Uint8Array"
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "bytes"],
+      "properties": {
+        "path": { "$ref": "#/$defs/path" },
+        "bytes": { "$ref": "#/$defs/bytes" }
+      }
+    }
+  }
+}

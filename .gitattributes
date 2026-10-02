@@ -14,6 +14,7 @@ ts-packages/annotated-qmd/examples/* text eol=lf
 # compared byte-for-byte or hashed, so a CRLF checkout would break them.
 resources/pandoc-wasm.json text eol=lf
 resources/pandoc-filters/** text eol=lf
+crates/quarto-core/schemas/pandoc-request.* text eol=lf
 
 # pandoc-wasm recordings: argv/env/params/input JSON, share tree and outputs are
 # hashed or byte-compared. Text types are pinned to LF by extension; the
