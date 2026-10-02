@@ -1,0 +1,8 @@
+---
+format:
+  typst:
+    keep-typ: true
+include-in-header: hdr.typ
+---
+
+hi
