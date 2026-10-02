@@ -15,6 +15,10 @@ pub struct PandocWasmLimits {
     pub reference_doc_bytes: u64,
     /// Every mounted byte: share tree, `files` and `resource_refs`.
     pub total_bytes: u64,
+    /// Each file collected from a `collect_dirs` entry; a larger one is dropped with a warning.
+    pub collected_file_bytes: u64,
+    /// All collected files together; the one that would pass it is dropped with a warning.
+    pub collected_total_bytes: u64,
 }
 
 #[derive(Debug, Deserialize)]

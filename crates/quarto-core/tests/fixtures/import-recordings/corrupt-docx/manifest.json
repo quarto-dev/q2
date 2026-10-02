@@ -1,0 +1,22 @@
+[
+  {
+    "path": "argv.json",
+    "sha256": "b01f4750faaefcffd554130942d7a492cb3b935a4f7fb3e3ed71eea40778a44d",
+    "size": 205
+  },
+  {
+    "path": "source.docx",
+    "sha256": "abc08fd6016c4019b9827973853d0f2d8700102fada1992b1783f2e0109a26cf",
+    "size": 7120
+  },
+  {
+    "path": "status.json",
+    "sha256": "a0d1e48ee86d89818673e99d5f85e3639f267399a032fc618e0d19676154ef50",
+    "size": 19
+  },
+  {
+    "path": "stderr.txt",
+    "sha256": "f9449a1bf221441793b43b2a0ec55bc2f57cf688ecf634f89aa48c36cad2617a",
+    "size": 49
+  }
+]

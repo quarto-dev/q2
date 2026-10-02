@@ -1,0 +1,52 @@
+[
+  {
+    "path": "argv.json",
+    "sha256": "b01f4750faaefcffd554130942d7a492cb3b935a4f7fb3e3ed71eea40778a44d",
+    "size": 205
+  },
+  {
+    "path": "media/media/rId12.png",
+    "sha256": "1fd109f5454c79e645a08c01eb20a421e9e3a6c9b43e87cd311f88c7b1784341",
+    "size": 1216
+  },
+  {
+    "path": "media/media/rId15.png",
+    "sha256": "ed81730ce2442eca9d4d4f0c5a3da640c959cd72001bea78b1a949eea3f0c746",
+    "size": 1257
+  },
+  {
+    "path": "media/media/rId18.png",
+    "sha256": "9eb2b3e59f73c71354b4db376bf603fc529be4d50bcc3ad3d6d4842a888d0938",
+    "size": 1093
+  },
+  {
+    "path": "media/media/rId24.png",
+    "sha256": "5c908b003e224909db5be99682716b3671ee8e885f1c73e70b1ddd9b399cdb3d",
+    "size": 749
+  },
+  {
+    "path": "media/media/rId9.png",
+    "sha256": "9fc0013d9c5ae792709ad30f7c8dfc48c4aeda7371e0d7b349f56bab0f435381",
+    "size": 1252
+  },
+  {
+    "path": "pandoc.json",
+    "sha256": "4e38ef15e6301b0e669c9101d9e80c62ce480a64895e43cc58e05db5677b19ef",
+    "size": 71408
+  },
+  {
+    "path": "source.docx",
+    "sha256": "fe633c82fbb584e124c96a565fee770dc01140a675670e0c8b6d8324a5d5614b",
+    "size": 18939
+  },
+  {
+    "path": "status.json",
+    "sha256": "370aaa466bf7fdf5df8dec2004f5e0b4d5d352b7060c00c4a1204cc89b4b641a",
+    "size": 18
+  },
+  {
+    "path": "stderr.txt",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "size": 0
+  }
+]

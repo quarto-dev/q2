@@ -1349,6 +1349,8 @@ impl PandocWriteStage {
             expected_pandoc_wasm_sha256: constants().wasm_sha256.clone(),
             share_tree_version: share_tree_version().to_string(),
             typst_available_fonts,
+            host_inputs: Vec::new(),
+            collect_dirs: Vec::new(),
         };
         validate_mounts(&mut request, opts.collect_resources)
             .map_err(|msg| PipelineError::stage_error(name, msg))?;

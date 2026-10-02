@@ -1,0 +1,261 @@
+{
+  "blocks": [
+    {
+      "c": [
+        {
+          "c": "An",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "EMF",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "image:",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        [
+          "",
+          [],
+          []
+        ],
+        [
+          null,
+          [
+            {
+              "c": [
+                {
+                  "c": "A",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "drawn",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "rectangle",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "(EMF)",
+                  "t": "Str"
+                }
+              ],
+              "t": "Para"
+            }
+          ]
+        ],
+        [
+          {
+            "c": [
+              {
+                "c": [
+                  [
+                    "",
+                    [],
+                    [
+                      [
+                        "width",
+                        "1.0370363079615048in"
+                      ],
+                      [
+                        "height",
+                        "0.5185181539807524in"
+                      ]
+                    ]
+                  ],
+                  [
+                    {
+                      "c": "A",
+                      "t": "Str"
+                    },
+                    {
+                      "t": "Space"
+                    },
+                    {
+                      "c": "drawn",
+                      "t": "Str"
+                    },
+                    {
+                      "t": "Space"
+                    },
+                    {
+                      "c": "rectangle",
+                      "t": "Str"
+                    },
+                    {
+                      "t": "Space"
+                    },
+                    {
+                      "c": "(EMF)",
+                      "t": "Str"
+                    }
+                  ],
+                  [
+                    "/__q2_share__/import/media/media/rId9.emf",
+                    ""
+                  ]
+                ],
+                "t": "Image"
+              }
+            ],
+            "t": "Plain"
+          }
+        ]
+      ],
+      "t": "Figure"
+    },
+    {
+      "c": [
+        {
+          "c": "A",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "WMF",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "image:",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        [
+          "",
+          [],
+          []
+        ],
+        [
+          null,
+          [
+            {
+              "c": [
+                {
+                  "c": "A",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "drawn",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "rectangle",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "(WMF)",
+                  "t": "Str"
+                }
+              ],
+              "t": "Para"
+            }
+          ]
+        ],
+        [
+          {
+            "c": [
+              {
+                "c": [
+                  [
+                    "",
+                    [],
+                    [
+                      [
+                        "width",
+                        "4.166666666666667in"
+                      ],
+                      [
+                        "height",
+                        "2.7777777777777777in"
+                      ]
+                    ]
+                  ],
+                  [
+                    {
+                      "c": "A",
+                      "t": "Str"
+                    },
+                    {
+                      "t": "Space"
+                    },
+                    {
+                      "c": "drawn",
+                      "t": "Str"
+                    },
+                    {
+                      "t": "Space"
+                    },
+                    {
+                      "c": "rectangle",
+                      "t": "Str"
+                    },
+                    {
+                      "t": "Space"
+                    },
+                    {
+                      "c": "(WMF)",
+                      "t": "Str"
+                    }
+                  ],
+                  [
+                    "/__q2_share__/import/media/media/rId12.wmf",
+                    ""
+                  ]
+                ],
+                "t": "Image"
+              }
+            ],
+            "t": "Plain"
+          }
+        ]
+      ],
+      "t": "Figure"
+    }
+  ],
+  "meta": {},
+  "pandoc-api-version": [
+    1,
+    23,
+    1,
+    2
+  ]
+}

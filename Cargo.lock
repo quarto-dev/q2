@@ -10989,6 +10989,7 @@ dependencies = [
  "tempfile",
  "time",
  "walkdir",
+ "zip",
 ]
 
 [[package]]

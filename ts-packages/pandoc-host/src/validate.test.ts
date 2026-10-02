@@ -125,7 +125,7 @@ describe('mount rules (design: Contracts)', () => {
 });
 
 describe('limits', () => {
-  const small = { image_bytes: 10, reference_doc_bytes: 20, total_bytes: 1_000_000 };
+  const small = { image_bytes: 10, reference_doc_bytes: 20, total_bytes: 1_000_000, collected_file_bytes: 10, collected_total_bytes: 1_000_000 };
   it('an oversized image is rejected, naming it', () => {
     const { req, tree } = base();
     req.resource_refs.push({ path: '/project/big.png', bytes: new Uint8Array(11) });

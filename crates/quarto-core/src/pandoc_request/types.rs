@@ -46,6 +46,19 @@ pub struct RequestFile {
     pub bytes: Vec<u8>,
 }
 
+/// A file whose bytes the caller supplies at run time instead of carrying them in the
+/// request (document import: the user's source, whose bytes never enter the Rust wasm).
+/// The host checks `size` and `sha256` against the supplied bytes before mounting.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HostInput {
+    /// `/`-normalized absolute path.
+    pub path: String,
+    /// Lowercase hex SHA-256 of the bytes.
+    pub sha256: String,
+    pub size: u64,
+}
+
 /// Everything one pandoc run needs, as data.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -87,12 +100,21 @@ pub struct PandocRequest {
     pub share_tree_version: String,
     /// Echo of `render_pandoc_request`'s input (`None` for a `.typ` download).
     pub typst_available_fonts: Option<Vec<String>>,
+    /// Files the caller supplies at run time (`execute(.., { inputs })`). Empty, and
+    /// absent from the JSON, for writer requests.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub host_inputs: Vec<HostInput>,
+    /// Directories whose files come back in `ExecuteSuccess.collected` after a successful
+    /// run. Empty, and absent from the JSON, for writer requests.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub collect_dirs: Vec<String>,
 }
 
 impl PandocRequest {
     /// First 16 hex digits of sha256 over the canonical JSON (keys sorted,
     /// no whitespace) of `{schema_version, tool, argv[1..], env minus
-    /// SOURCE_DATE_EPOCH, files, resource_refs, share_tree}`, with `files`
+    /// SOURCE_DATE_EPOCH, files, resource_refs, share_tree}` (plus `post` and
+    /// `host_inputs` when set), with `files`
     /// and `resource_refs` as `{path: sha256(bytes)}`. `SOURCE_DATE_EPOCH` is
     /// excluded so the id repeats across click times; `resource_refs` is
     /// included because an image's bytes change the output as much as an
@@ -160,6 +182,15 @@ impl PandocRequest {
         // `pdf` and `typst` share argv but not what the host does next.
         if self.post != RequestPost::None {
             value["post"] = json!(self.post);
+        }
+        // Likewise: `host_inputs` as `{path: sha256}`, so writer ids are unchanged.
+        if !self.host_inputs.is_empty() {
+            let inputs: BTreeMap<String, &str> = self
+                .host_inputs
+                .iter()
+                .map(|i| (rooted(&i.path), i.sha256.as_str()))
+                .collect();
+            value["host_inputs"] = json!(inputs);
         }
         let mut canonical = String::new();
         write_canonical(&value, &mut canonical);

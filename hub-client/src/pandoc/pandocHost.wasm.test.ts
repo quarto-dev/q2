@@ -236,6 +236,19 @@ describe.skipIf(!haveWasm)('pandoc.wasm in command mode', () => {
     expect(!r.ok && r.kind).toBe('no-output');
   });
 
+  it('has the readers document import needs (epic I1)', async () => {
+    // --list-input-formats prints to stdout and writes no output file, so the run
+    // ends as `no-output`; the list is read from the failure's stdout.
+    const { request, shareTree } = job({});
+    request.argv = ['pandoc', '--list-input-formats'];
+    const r = await execute(request, shareTree, { module });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.kind).toBe('no-output');
+    const formats = r.stdout.split('\n').map((l) => l.trim()).filter(Boolean);
+    for (const f of ['docx', 'odt', 'rtf', 'epub', 'pptx']) expect(formats, `reader ${f}`).toContain(f);
+  });
+
   it('rejects an invalid request without running it', async () => {
     const { request, shareTree } = job({});
     request.resource_refs.push({ path: `${TREE}/probe.lua`, bytes: enc.encode('shadow') });

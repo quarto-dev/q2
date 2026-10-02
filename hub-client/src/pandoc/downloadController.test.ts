@@ -17,7 +17,7 @@ const okEnvelope = (extra: Partial<RequestEnvelope> = {}): RequestEnvelope => ({
 });
 
 const success = (extra: Record<string, unknown> = {}): RunOutcome =>
-  ({ ok: true, status: 0, output: new Uint8Array([1, 2, 3]), outputPath: '/o.docx', stderr: '', stdout: '', diagnostics: [], stats: {}, notices: [], ...extra }) as unknown as RunOutcome;
+  ({ ok: true, status: 0, output: new Uint8Array([1, 2, 3]), outputPath: '/o.docx', collected: [], stderr: '', stdout: '', diagnostics: [], stats: {}, notices: [], ...extra }) as unknown as RunOutcome;
 
 const failure = (kind: string, extra: Record<string, unknown> = {}): RunOutcome =>
   ({ ok: false, kind, status: null, stderr: '', stdout: '', diagnostics: [], notices: [], ...extra }) as unknown as RunOutcome;

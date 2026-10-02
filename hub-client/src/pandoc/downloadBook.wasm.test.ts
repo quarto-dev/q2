@@ -68,7 +68,7 @@ function controllerFor(seen: { extra?: BuildRequestExtra; progress: string[] }) 
     },
     fetchCaptures: async (docIds) => ({ byPath: Object.fromEntries(Object.keys(docIds).map((k) => [k, new Uint8Array([1])])), failed: [] }),
     getShareTree: () => ({ share_tree_version: 'v', files: [] }) as ShareTree,
-    runner: { run: async () => ({ ok: true, status: 0, output: new Uint8Array([1]), outputPath: '/o', stderr: '', stdout: '', diagnostics: [], stats: {}, notices: [] }) as unknown as RunOutcome },
+    runner: { run: async () => ({ ok: true, status: 0, output: new Uint8Array([1]), outputPath: '/o', collected: [], stderr: '', stdout: '', diagnostics: [], stats: {}, notices: [] }) as unknown as RunOutcome },
     classify: () => ({ success: true, diagnostics: [] }),
     save: (_blob, name) => saved.push({ name }),
   });

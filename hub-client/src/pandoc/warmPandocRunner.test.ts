@@ -218,12 +218,12 @@ describe('WarmPandocRunner: generation', () => {
   });
 
   it('different limits are a different generation', async () => {
-    const one = setup({ limits: { image_bytes: 1, reference_doc_bytes: 1, total_bytes: 1 } });
-    const two = setup({ limits: { total_bytes: 1, reference_doc_bytes: 1, image_bytes: 1 } });
+    const one = setup({ limits: { image_bytes: 1, reference_doc_bytes: 1, total_bytes: 1, collected_file_bytes: 1, collected_total_bytes: 1 } });
+    const two = setup({ limits: { total_bytes: 1, reference_doc_bytes: 1, image_bytes: 1, collected_file_bytes: 1, collected_total_bytes: 1 } });
     // Key order does not matter.
     const key = (r: unknown) => (r as { generationKey: (q: unknown) => string }).generationKey(smokeJob().request);
     expect(key(one.runner)).toBe(key(two.runner));
-    const three = setup({ limits: { image_bytes: 2, reference_doc_bytes: 1, total_bytes: 1 } });
+    const three = setup({ limits: { image_bytes: 2, reference_doc_bytes: 1, total_bytes: 1, collected_file_bytes: 1, collected_total_bytes: 1 } });
     expect(key(three.runner)).not.toBe(key(one.runner));
   });
 });

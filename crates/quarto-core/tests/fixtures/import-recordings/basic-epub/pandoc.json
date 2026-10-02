@@ -1,0 +1,604 @@
+{
+  "blocks": [
+    {
+      "c": [
+        {
+          "c": [
+            [
+              "title_page.xhtml",
+              [],
+              []
+            ],
+            []
+          ],
+          "t": "Span"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        {
+          "c": [
+            [
+              "ch001.xhtml",
+              [],
+              []
+            ],
+            []
+          ],
+          "t": "Span"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        [
+          "ch001.xhtml_first-heading",
+          [
+            "section",
+            "level1"
+          ],
+          []
+        ],
+        [
+          {
+            "c": [
+              1,
+              [
+                "",
+                [],
+                []
+              ],
+              [
+                {
+                  "c": "First",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "heading",
+                  "t": "Str"
+                }
+              ]
+            ],
+            "t": "Header"
+          },
+          {
+            "c": [
+              {
+                "c": "A",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "paragraph",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "with",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": [
+                  {
+                    "c": "emphasis",
+                    "t": "Str"
+                  }
+                ],
+                "t": "Emph"
+              },
+              {
+                "c": ",",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": [
+                  {
+                    "c": "strong",
+                    "t": "Str"
+                  },
+                  {
+                    "t": "Space"
+                  },
+                  {
+                    "c": "text",
+                    "t": "Str"
+                  }
+                ],
+                "t": "Strong"
+              },
+              {
+                "c": ",",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": [
+                  [
+                    "",
+                    [],
+                    []
+                  ],
+                  "code"
+                ],
+                "t": "Code"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "and",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "a",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": [
+                  [
+                    "",
+                    [],
+                    []
+                  ],
+                  [
+                    {
+                      "c": "link",
+                      "t": "Str"
+                    }
+                  ],
+                  [
+                    "https://example.com/page",
+                    ""
+                  ]
+                ],
+                "t": "Link"
+              },
+              {
+                "c": ".",
+                "t": "Str"
+              }
+            ],
+            "t": "Para"
+          },
+          {
+            "c": [
+              [
+                "ch001.xhtml_second-heading",
+                [
+                  "section",
+                  "level2"
+                ],
+                []
+              ],
+              [
+                {
+                  "c": [
+                    2,
+                    [
+                      "",
+                      [],
+                      []
+                    ],
+                    [
+                      {
+                        "c": "Second",
+                        "t": "Str"
+                      },
+                      {
+                        "t": "Space"
+                      },
+                      {
+                        "c": "heading",
+                        "t": "Str"
+                      }
+                    ]
+                  ],
+                  "t": "Header"
+                },
+                {
+                  "c": [
+                    [
+                      "",
+                      [],
+                      []
+                    ],
+                    [
+                      null,
+                      []
+                    ],
+                    [
+                      [
+                        {
+                          "t": "AlignDefault"
+                        },
+                        {
+                          "t": "ColWidthDefault"
+                        }
+                      ],
+                      [
+                        {
+                          "t": "AlignRight"
+                        },
+                        {
+                          "t": "ColWidthDefault"
+                        }
+                      ]
+                    ],
+                    [
+                      [
+                        "",
+                        [],
+                        []
+                      ],
+                      [
+                        [
+                          [
+                            "",
+                            [],
+                            []
+                          ],
+                          [
+                            [
+                              [
+                                "",
+                                [],
+                                []
+                              ],
+                              {
+                                "t": "AlignDefault"
+                              },
+                              1,
+                              1,
+                              [
+                                {
+                                  "c": [
+                                    {
+                                      "c": "Name",
+                                      "t": "Str"
+                                    }
+                                  ],
+                                  "t": "Plain"
+                                }
+                              ]
+                            ],
+                            [
+                              [
+                                "",
+                                [],
+                                []
+                              ],
+                              {
+                                "t": "AlignRight"
+                              },
+                              1,
+                              1,
+                              [
+                                {
+                                  "c": [
+                                    {
+                                      "c": "Value",
+                                      "t": "Str"
+                                    }
+                                  ],
+                                  "t": "Plain"
+                                }
+                              ]
+                            ]
+                          ]
+                        ]
+                      ]
+                    ],
+                    [
+                      [
+                        [
+                          "",
+                          [],
+                          []
+                        ],
+                        0,
+                        [],
+                        [
+                          [
+                            [
+                              "",
+                              [],
+                              []
+                            ],
+                            [
+                              [
+                                [
+                                  "",
+                                  [],
+                                  []
+                                ],
+                                {
+                                  "t": "AlignDefault"
+                                },
+                                1,
+                                1,
+                                [
+                                  {
+                                    "c": [
+                                      {
+                                        "c": "alpha",
+                                        "t": "Str"
+                                      }
+                                    ],
+                                    "t": "Plain"
+                                  }
+                                ]
+                              ],
+                              [
+                                [
+                                  "",
+                                  [],
+                                  []
+                                ],
+                                {
+                                  "t": "AlignRight"
+                                },
+                                1,
+                                1,
+                                [
+                                  {
+                                    "c": [
+                                      {
+                                        "c": "1",
+                                        "t": "Str"
+                                      }
+                                    ],
+                                    "t": "Plain"
+                                  }
+                                ]
+                              ]
+                            ]
+                          ],
+                          [
+                            [
+                              "",
+                              [],
+                              []
+                            ],
+                            [
+                              [
+                                [
+                                  "",
+                                  [],
+                                  []
+                                ],
+                                {
+                                  "t": "AlignDefault"
+                                },
+                                1,
+                                1,
+                                [
+                                  {
+                                    "c": [
+                                      {
+                                        "c": "beta",
+                                        "t": "Str"
+                                      }
+                                    ],
+                                    "t": "Plain"
+                                  }
+                                ]
+                              ],
+                              [
+                                [
+                                  "",
+                                  [],
+                                  []
+                                ],
+                                {
+                                  "t": "AlignRight"
+                                },
+                                1,
+                                1,
+                                [
+                                  {
+                                    "c": [
+                                      {
+                                        "c": "2",
+                                        "t": "Str"
+                                      }
+                                    ],
+                                    "t": "Plain"
+                                  }
+                                ]
+                              ]
+                            ]
+                          ]
+                        ]
+                      ]
+                    ],
+                    [
+                      [
+                        "",
+                        [],
+                        []
+                      ],
+                      []
+                    ]
+                  ],
+                  "t": "Table"
+                },
+                {
+                  "c": [
+                    [
+                      "",
+                      [],
+                      []
+                    ],
+                    [
+                      null,
+                      [
+                        {
+                          "c": [
+                            {
+                              "c": "A",
+                              "t": "Str"
+                            },
+                            {
+                              "t": "Space"
+                            },
+                            {
+                              "c": "small",
+                              "t": "Str"
+                            },
+                            {
+                              "t": "Space"
+                            },
+                            {
+                              "c": "green",
+                              "t": "Str"
+                            },
+                            {
+                              "t": "Space"
+                            },
+                            {
+                              "c": "square",
+                              "t": "Str"
+                            }
+                          ],
+                          "t": "Plain"
+                        }
+                      ]
+                    ],
+                    [
+                      {
+                        "c": [
+                          {
+                            "c": [
+                              [
+                                "",
+                                [],
+                                []
+                              ],
+                              [
+                                {
+                                  "c": "A",
+                                  "t": "Str"
+                                },
+                                {
+                                  "t": "Space"
+                                },
+                                {
+                                  "c": "small",
+                                  "t": "Str"
+                                },
+                                {
+                                  "t": "Space"
+                                },
+                                {
+                                  "c": "green",
+                                  "t": "Str"
+                                },
+                                {
+                                  "t": "Space"
+                                },
+                                {
+                                  "c": "square",
+                                  "t": "Str"
+                                }
+                              ],
+                              [
+                                "/__q2_share__/import/media/media/file0.png",
+                                ""
+                              ]
+                            ],
+                            "t": "Image"
+                          }
+                        ],
+                        "t": "Plain"
+                      }
+                    ]
+                  ],
+                  "t": "Figure"
+                }
+              ]
+            ],
+            "t": "Div"
+          }
+        ]
+      ],
+      "t": "Div"
+    }
+  ],
+  "meta": {
+    "author": {
+      "c": [
+        {
+          "c": "Ada Lovelace",
+          "t": "Str"
+        }
+      ],
+      "t": "MetaInlines"
+    },
+    "date": {
+      "c": [
+        {
+          "c": "2026-09-30",
+          "t": "Str"
+        }
+      ],
+      "t": "MetaInlines"
+    },
+    "identifier": {
+      "c": [
+        {
+          "c": "urn:uuid:00000000-0000-0000-0000-000000000001",
+          "t": "Str"
+        }
+      ],
+      "t": "MetaInlines"
+    },
+    "language": {
+      "c": [
+        {
+          "c": "en",
+          "t": "Str"
+        }
+      ],
+      "t": "MetaInlines"
+    },
+    "title": {
+      "c": [
+        {
+          "c": "Basic import document",
+          "t": "Str"
+        }
+      ],
+      "t": "MetaInlines"
+    }
+  },
+  "pandoc-api-version": [
+    1,
+    23,
+    1,
+    2
+  ]
+}

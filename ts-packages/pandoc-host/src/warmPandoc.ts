@@ -256,7 +256,7 @@ export class WarmPandoc {
       if (r.exit === null && /(^|\n)ERROR:/.test(stderr)) return fail('pandoc-exit', 1);
       return fail('no-output', 0, `pandoc exited 0 but wrote no file at \`${request.output_path}\``);
     }
-    return { ok: true, status: 0, output, outputPath: request.output_path, stderr, stdout, diagnostics: [], stats };
+    return { ok: true, status: 0, output, outputPath: request.output_path, collected: [], stderr, stdout, diagnostics: [], stats };
   }
 
   /** pandoc's own warnings: `convert` writes them as JSON to `/warnings`, where `_start` prints `[WARNING] ...` on stderr. */

@@ -6,6 +6,7 @@ use serde_json::Value;
 
 const SCHEMA: &str = include_str!("../../schemas/pandoc-request.schema.json");
 const GOLDEN: &str = include_str!("../../schemas/pandoc-request.golden.json");
+const IMPORT_GOLDEN: &str = include_str!("../../schemas/pandoc-request.import.golden.json");
 const CONSTANTS: &str = include_str!("../../../../resources/pandoc-wasm.json");
 
 fn golden_value() -> Value {
@@ -55,6 +56,91 @@ fn golden_pins_the_shared_constants() {
         format!("{}/pandoc-share", request.share_root)
     );
     assert_eq!(request.env["QUARTO_SHARE_PATH"], request.share_tree_path);
+}
+
+fn import_golden_value() -> Value {
+    serde_json::from_str(IMPORT_GOLDEN).unwrap()
+}
+
+#[test]
+fn import_golden_validates_against_the_schema() {
+    let errors = validate(&import_golden_value());
+    assert!(errors.is_empty(), "import golden is invalid: {errors:#?}");
+}
+
+#[test]
+fn import_golden_round_trips_through_the_rust_type() {
+    let request: PandocRequest = serde_json::from_str(IMPORT_GOLDEN).unwrap();
+    assert_eq!(request.host_inputs.len(), 1);
+    assert_eq!(request.collect_dirs.len(), 1);
+    assert_eq!(
+        serde_json::to_value(&request).unwrap(),
+        import_golden_value()
+    );
+}
+
+#[test]
+fn import_golden_job_id_is_the_computed_one() {
+    let request: PandocRequest = serde_json::from_str(IMPORT_GOLDEN).unwrap();
+    assert_eq!(request.job_id, request.compute_job_id());
+}
+
+/// The import request's shared constants. `golden_pins_the_shared_constants` asserts keys only
+/// writer requests carry (`QUARTO_SHARE_PATH`), so the import golden pins its own.
+#[test]
+fn import_golden_pins_the_shared_constants() {
+    let constants: Value = serde_json::from_str(CONSTANTS).unwrap();
+    let request: PandocRequest = serde_json::from_str(IMPORT_GOLDEN).unwrap();
+    assert_eq!(request.share_root, constants["share_root"]);
+    assert_eq!(
+        request.expected_pandoc_wasm_sha256,
+        constants["wasm_sha256"].as_str().unwrap()
+    );
+    assert_eq!(
+        request.share_tree_path,
+        format!("{}/pandoc-share", request.share_root)
+    );
+    // The empty share tree: SHA-256 over zero entries.
+    assert_eq!(
+        request.share_tree_version,
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    );
+    assert!(request.files.is_empty() && request.resource_refs.is_empty());
+}
+
+#[test]
+fn job_id_covers_host_inputs_only_when_present() {
+    let writer: PandocRequest = serde_json::from_str(GOLDEN).unwrap();
+    // The writer golden has no host inputs and its id is the pre-existing one.
+    assert!(writer.host_inputs.is_empty() && writer.collect_dirs.is_empty());
+    assert_eq!(writer.compute_job_id(), writer.job_id);
+
+    let import: PandocRequest = serde_json::from_str(IMPORT_GOLDEN).unwrap();
+    let id = import.compute_job_id();
+    let mut other = import.clone();
+    other.host_inputs[0].sha256 = "0".repeat(64);
+    assert_ne!(other.compute_job_id(), id);
+    let mut other = import.clone();
+    other.host_inputs.clear();
+    assert_ne!(other.compute_job_id(), id);
+    // `collect_dirs` and `size` are not part of the id; the sha256 pins the bytes.
+    let mut other = import.clone();
+    other.collect_dirs.clear();
+    assert_eq!(other.compute_job_id(), id);
+}
+
+#[test]
+fn schema_rejects_malformed_host_inputs() {
+    let mutate = |f: &dyn Fn(&mut Value)| {
+        let mut v = import_golden_value();
+        f(&mut v);
+        validate(&v)
+    };
+    assert!(!mutate(&|v| v["host_inputs"][0]["sha256"] = "ABC".into()).is_empty());
+    assert!(!mutate(&|v| v["host_inputs"][0]["sha256"] = "A".repeat(64).into()).is_empty());
+    assert!(!mutate(&|v| v["host_inputs"][0]["size"] = (-1).into()).is_empty());
+    assert!(!mutate(&|v| v["host_inputs"][0]["extra"] = 1.into()).is_empty());
+    assert!(!mutate(&|v| v["collect_dirs"][0] = r"C:\media".into()).is_empty());
 }
 
 #[test]

@@ -32,6 +32,7 @@ mod build_hub_client_embed;
 mod build_hub_mcp_bundle;
 mod build_q2_preview_spa;
 mod build_trace_viewer;
+mod capture_import_recordings;
 mod capture_pandoc_goldens;
 mod capture_pandoc_recordings;
 mod create_worktree;
@@ -61,6 +62,12 @@ use clap::{Parser, Subcommand};
 struct Cli {
     #[command(subcommand)]
     command: Command,
+}
+
+#[derive(Subcommand)]
+enum CaptureImportAction {
+    /// Rebuild each fixture's `source.<ext>` from `sources/` (run when a source changes).
+    Generate,
 }
 
 #[derive(Subcommand)]
@@ -290,6 +297,18 @@ enum Command {
     /// Needs the pinned native pandoc on `PATH`. Unix only; never invoked
     /// from `cargo xtask verify` or CI.
     CapturePandocRecordings {},
+
+    /// Dev-only capture of native pandoc *reader* runs for document import
+    /// (plan P1 T2): runs the pinned pandoc over each checked-in
+    /// `source.<ext>` under `crates/quarto-core/tests/fixtures/import-recordings/`
+    /// with the import argv and writes `argv.json`, `pandoc.json`, `stderr.txt`,
+    /// `status.json`, `media/` and `manifest.json` beside it. `generate` first
+    /// rebuilds the binary sources from `sources/`. Needs the pinned native
+    /// pandoc on `PATH`. Unix only; never invoked from `cargo xtask verify` or CI.
+    CaptureImportRecordings {
+        #[command(subcommand)]
+        action: Option<CaptureImportAction>,
+    },
 
     /// Byte-diff a rendered corpus between `--base <commit>` and `HEAD`.
     ///
@@ -535,6 +554,9 @@ fn main() -> Result<()> {
         Command::PandocCheck {} => pandoc_check::run(),
         Command::CapturePandocGoldens {} => capture_pandoc_goldens::run(),
         Command::CapturePandocRecordings {} => capture_pandoc_recordings::run(),
+        Command::CaptureImportRecordings { action } => {
+            capture_import_recordings::run(matches!(action, Some(CaptureImportAction::Generate)))
+        }
         Command::RenderCorpusDiff { base, corpus, keep } => {
             render_corpus_diff::run(render_corpus_diff::Args { base, corpus, keep })
         }

@@ -49,6 +49,8 @@ fn limits_are_the_designed_ones() {
     assert_eq!(mb("image_bytes"), 25);
     assert_eq!(mb("reference_doc_bytes"), 50);
     assert_eq!(mb("total_bytes"), 300);
+    assert_eq!(mb("collected_file_bytes"), 25);
+    assert_eq!(mb("collected_total_bytes"), 300);
 }
 
 #[test]

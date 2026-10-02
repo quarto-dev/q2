@@ -6,6 +6,8 @@
   "limits": {
     "image_bytes": 26214400,
     "reference_doc_bytes": 52428800,
-    "total_bytes": 314572800
+    "total_bytes": 314572800,
+    "collected_file_bytes": 26214400,
+    "collected_total_bytes": 314572800
   }
 }
