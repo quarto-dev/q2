@@ -102,3 +102,6 @@ resources/extension-build/deno.lock
 # `q2 docs llms` staged embed (cargo xtask build-agents-docs) — generated
 # from docs/_site; never commit it (bd-hwop1zii).
 agents-docs-dist/
+
+# pandoc.wasm download cache and the served asset (scripts/fetch-pandoc-wasm.mjs)
+.cache/pandoc-wasm/

@@ -184,6 +184,23 @@ jobs:
           cd hub-client
           npm run build:all
 
+      # Real-wasm pandoc-host tests (hub-client/src/pandoc/*.wasm.test.ts) need the
+      # pinned pandoc.wasm (sha-verified against resources/pandoc-wasm.json) and the
+      # semantic output comparer. A cache miss during a GitHub outage fails the job.
+      - name: Cache pandoc.wasm
+        uses: actions/cache@v4
+        with:
+          path: .cache/pandoc-wasm
+          key: pandoc-wasm-${{ hashFiles('resources/pandoc-wasm.json') }}
+
+      - name: Fetch pandoc.wasm
+        shell: bash
+        run: node scripts/fetch-pandoc-wasm.mjs --require
+
+      - name: Build quarto-output-extract
+        shell: bash
+        run: cargo build --release -p quarto-output-extract
+
       - name: Run hub-client tests
         shell: bash
         run: |
@@ -307,6 +324,12 @@ jobs:
       - name: Run preview-runtime unit tests
         shell: bash
         run: npm test -w ts-packages/preview-runtime
+
+      - name: Run pandoc-host unit tests
+        shell: bash
+        run: |
+          npm run typecheck:tests -w ts-packages/pandoc-host
+          npm test -w ts-packages/pandoc-host
 
       - name: Run quarto-api tests
         shell: bash

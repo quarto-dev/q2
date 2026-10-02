@@ -62,6 +62,38 @@ pub fn is_absolute_request_path(s: &str) -> bool {
         || (s.len() >= 3 && s.as_bytes()[0].is_ascii_alphabetic() && &s.as_bytes()[1..3] == b":/")
 }
 
+/// The native-Windows spelling of one request argv entry or path-valued env
+/// value: `X:/a/b` -> `X:\a\b`, `//server/share/a` -> `\\server\share\a`,
+/// also behind a `--flag=` prefix. Anything else (plain text, a built-in
+/// style name, a `/`-rooted wasm path) is returned unchanged.
+///
+/// The request carries `/`-normalized paths so one string works natively and
+/// in the wasm worker. Quarto 1 hands pandoc native Windows paths, and the
+/// vendored `init.lua`'s `is_absolute_path` accepts `C:` only when followed by
+/// `pandoc.path.separator` (`\\` on Windows), so a native Windows `execute()`
+/// converts back. Every path `prepare()` puts in argv is absolute, so a
+/// shape test finds exactly those: no plain-text argument starts with a drive
+/// letter and colon or a double slash.
+pub fn to_native_windows_arg(arg: &str) -> String {
+    fn is_native_root(s: &str) -> bool {
+        is_drive_path(s) || (s.starts_with("//") && !s.starts_with("///"))
+    }
+    fn is_drive_path(s: &str) -> bool {
+        let b = s.as_bytes();
+        b.len() >= 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && b[2] == b'/'
+    }
+    if is_native_root(arg) {
+        return arg.replace('/', "\\");
+    }
+    if arg.starts_with("--")
+        && let Some((flag, value)) = arg.split_once('=')
+        && is_native_root(value)
+    {
+        return format!("{flag}={}", value.replace('/', "\\"));
+    }
+    arg.to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -101,6 +133,36 @@ mod tests {
             .to_request_string()
             .is_err()
         );
+    }
+
+    #[test]
+    fn native_windows_args() {
+        use super::to_native_windows_arg as n;
+        assert_eq!(n("C:/a/b/main.lua"), r"C:\a\b\main.lua");
+        assert_eq!(n("//server/share/a.qmd"), r"\\server\share\a.qmd");
+        assert_eq!(n("--css=D:/doc/x.css"), r"--css=D:\doc\x.css");
+        assert_eq!(
+            n("--include-in-header=C:/t/h.html"),
+            r"--include-in-header=C:\t\h.html"
+        );
+        for plain in [
+            "-f",
+            "json",
+            "docx",
+            "--toc",
+            "png",
+            "tango",
+            "/__q2_share__/x",
+            "///x",
+            "C:x",
+            "--epub-subdirectory=EPUB",
+            "--epub-subdirectory=/x",
+            "--metadata=a/b",
+            "-o",
+            "highlighting-definitions=#let x = 1 // c",
+        ] {
+            assert_eq!(n(plain), plain, "{plain}");
+        }
     }
 
     #[test]

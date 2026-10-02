@@ -445,6 +445,23 @@ pub fn run(config: &VerifyConfig) -> Result<()> {
             "\n━━━ Step 8/{}: Running hub-client tests ({}) ━━━\n",
             TOTAL_STEPS, test_script
         );
+        // The real-wasm pandoc-host tests need the pinned pandoc.wasm (verified
+        // download, cached) and the semantic output comparer; --require makes a
+        // missing asset a failure here, as in CI.
+        run_command(
+            "node",
+            &["../scripts/fetch-pandoc-wasm.mjs", "--require"],
+            &hub_client_dir,
+            None,
+            "fetching pandoc.wasm failed",
+        )?;
+        run_command(
+            "cargo",
+            &["build", "-p", "quarto-output-extract"],
+            &project_root,
+            None,
+            "building quarto-output-extract failed",
+        )?;
         run_command(
             "npm",
             &["run", test_script],
@@ -570,6 +587,24 @@ pub fn run(config: &VerifyConfig) -> Result<()> {
             None,
             "preview-runtime tests failed",
         )?;
+        // @quarto/pandoc-host (host core; its real-wasm tests run in hub-client, step 8).
+        let pandoc_host_dir = project_root.join("ts-packages/pandoc-host");
+        if pandoc_host_dir.join("package.json").is_file() {
+            run_command(
+                "npm",
+                &["run", "typecheck:tests"],
+                &pandoc_host_dir,
+                None,
+                "pandoc-host test typecheck failed",
+            )?;
+            run_command(
+                "npm",
+                &["test"],
+                &pandoc_host_dir,
+                None,
+                "pandoc-host tests failed",
+            )?;
+        }
         println!("✓ Shared package tests complete");
     } else if !have_shared_packages {
         println!(
