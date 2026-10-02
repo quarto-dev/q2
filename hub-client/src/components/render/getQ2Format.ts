@@ -50,6 +50,8 @@ export function getQ2Format(astJson: string): string | null {
  * - `dom`: the full-DOM `Preview` (MorphIframe) renders the HTML pipeline's output.
  * - `download`: the document's own format cannot be previewed but pandoc.wasm (or the native
  *   render in the embed) can produce it: no preview, a "Download <type>" button.
+ * - `pdf`: the document's own format is `pdf` and this build compiles it in the browser: the pdf.js
+ *   viewer (the third kind of preview iframe) shows the compiled PDF.
  * - `neither`: nothing can show or produce it: no preview, the control is disabled and
  *   the pane says why.
  */
@@ -57,6 +59,7 @@ export type PreviewMode =
   | { mode: 'react'; format: string }
   | { mode: 'dom' }
   | { mode: 'download'; formatKey: string }
+  | { mode: 'pdf'; formatKey: 'pdf' }
   | { mode: 'neither'; formatKey: string };
 
 export type FormatClassResolver = (path: string) => ResolvePandocFormatsResponse | null;
@@ -66,6 +69,8 @@ export interface ClassifyDeps {
   resolve: FormatClassResolver;
   /** True when "Download as" can produce this format key in this build. */
   canDownload: (formatKey: string) => boolean;
+  /** True when this build compiles PDF in the browser, so a `pdf` document gets the viewer. */
+  canPreviewPdf?: () => boolean;
 }
 
 /**
@@ -91,6 +96,7 @@ export function classifyPreviewMode(astJson: string, path: string | undefined, d
     case 'preview':
       return { mode: 'dom' };
     case 'download':
+      if (first.key === 'pdf' && deps.canDownload('pdf') && deps.canPreviewPdf?.()) return { mode: 'pdf', formatKey: 'pdf' };
       return deps.canDownload(first.key) ? { mode: 'download', formatKey: first.key } : { mode: 'dom' };
     case 'neither':
       return { mode: 'neither', formatKey: first.key };

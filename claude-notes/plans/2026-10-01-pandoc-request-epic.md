@@ -31,9 +31,11 @@ The native `q2 render --to docx|pptx|epub|typst` path builds a pandoc invocation
 | **R5** [pptx and epub](2026-10-01-pandoc-request-R5-pptx-epub.md) | In-memory `epub_extra_args`; pptx/epub fixtures and comparisons | R2 (file-serial with R4 on `pandoc_write.rs`) | Port |
 | **R6** [snapshot and remote images](2026-10-01-pandoc-request-R6-snapshot-remote-images.md) | Click-time VFS snapshot; async prefetch stage and `src` rewrite; hardened fetch | R2, R3 (the prefetch follows the capture splice); R4 for the typst case | Novel |
 | **R8** [CSS inlining](2026-10-01-pandoc-request-R8-css-inlining.md) | Rust-side inlining stage for typst raw HTML tables (gt, pandas), shared by native and wasm | R2, R4 | Novel, replaces PR #766's Lua-side pipe in the hub |
-| **R7** [projects and books](2026-10-01-pandoc-request-R7-projects-books.md) | Pandoc `Pass2Renderer` variant; image-target normalization; staged whole-book direction | R2, R4 (stages 0-1 only; stages 2-3 get their own plan) | Novel, reverses a scoped-out preview limit |
+| **R7** [projects and books](2026-10-01-pandoc-request-R7-projects-books.md) | Pandoc `Pass2Renderer` variant; image-target normalization; active-page books (stages 0-1; stages 2-3 are R9 and R10) | R2, R4 | Novel, reverses a scoped-out preview limit |
+| **R9** [whole book](2026-10-02-pandoc-request-R9-whole-book.md) | Citeproc reads bibliography/CSL through the runtime (a browser bug today); ungate the pandoc pause/finishing builders and split `render_book_single_file`; chapter-relative resource mounting; wasm book driver with progress/cancel hook; whole-book typst/pdf/epub request with `scope`, per-chapter captures and `stats.book`; resolver `book` field | R7 stages 0-1, R6, R4/R5 | Novel, reverses a scoped-out preview limit |
+| **R10** [chapter location](2026-10-02-pandoc-request-R10-chapter-location.md) | Chapter map and (pdf-only) queryable page markers; the anchor contract read by H8/H9 | R9 | Novel |
 
-Order: R0 → (H0 gate) → R1 → R2 → {R3, R4, R5, R6} → {R7, R8} (R8 after R4). R3-R6 can proceed in parallel worktrees except that R4, R5 and R6 all edit `pandoc_write.rs`, and R3, R6, R7 and R8 all touch the `wasm-quarto-hub-client` `lib.rs`, the `.d.ts`, `wasmRenderer.ts` and `build_pandoc_prefix_stages`, so merge them one at a time. R6's prefetch runs after R3's capture splice, and R6's typst test needs R4. The H5 demo is a human checkpoint before R3-R8 are wired into the menu, not a gate on the request phases. Lane R (workspace-6) runs this epic in the order above and lane H (workspace-7) the host epic; the design's Parallel development gives the lanes, the landing points and the hand-offs between them. Each phase is one agent.
+Order: R0 → (H0 gate) → R1 → R2 → {R3, R4, R5, R6} → {R7, R8} (R8 after R4), then R9 → R10 (R7's stages 0-1 are landed; the whole-book work is R9 and R10). R3-R6 can proceed in parallel worktrees except that R4, R5 and R6 all edit `pandoc_write.rs`, and R3, R6, R7 and R8 all touch the `wasm-quarto-hub-client` `lib.rs`, the `.d.ts`, `wasmRenderer.ts` and `build_pandoc_prefix_stages`, so merge them one at a time. R6's prefetch runs after R3's capture splice, and R6's typst test needs R4. The H5 demo is a human checkpoint before R3-R8 are wired into the menu, not a gate on the request phases. Lane R (workspace-6) runs this epic in the order above and lane H (workspace-7) the host epic; the design's Parallel development gives the lanes, the landing points and the hand-offs between them. Each phase is one agent.
 
 ## Progress
 
@@ -48,6 +50,8 @@ Tick a phase when its Close-out is complete and it has landed on `feature/pandoc
 - [ ] R6 [snapshot and remote images](2026-10-01-pandoc-request-R6-snapshot-remote-images.md)
 - [x] R8 [CSS inlining](2026-10-01-pandoc-request-R8-css-inlining.md)
 - [ ] R7 [projects and books (stages 0-1)](2026-10-01-pandoc-request-R7-projects-books.md)
+- [ ] R9 [whole book](2026-10-02-pandoc-request-R9-whole-book.md)
+- [ ] R10 [chapter location](2026-10-02-pandoc-request-R10-chapter-location.md)
 
 ## Dependencies on the host epic
 
@@ -61,14 +65,14 @@ Tick a phase when its Close-out is complete and it has landed on `feature/pandoc
 ## Definition of done
 
 - [ ] A docx request produced by `prepare()` natively equals what the native pandoc run used (argv, env keys, file set), and the wasm build exposes the same request to the browser.
-- [ ] pptx, epub and typst-source requests, remote images (including typst), code-cell results and project pages produce correct requests; books follow the staged direction in R7.
+- [ ] pptx, epub and typst-source requests, remote images (including typst), code-cell results and project pages produce correct requests; books follow the staged direction in R7, R9 and R10.
 - [ ] `cargo check --target wasm32-unknown-unknown` passes in `crates/wasm-quarto-hub-client` and `npm run build:wasm` succeeds; native behaviour and goldens are unchanged.
 
 ## Known limitations (v1)
 
 - The `.typ` download bundles no images or brand logos, and `typst-available-fonts` is unset (design D8.6).
 - A typst document with a remote image fails until R6 lands the prefetch (D5).
-- Books render the active page only until R7's later stages.
+- Books render the active page only until R9 (typst, pdf, epub: the whole book; docx and pptx stay active-page-only by design); the active chapter is located in the PDF by R10.
 - A user filter at the project root cannot `require` or read any other file in the hub (only the filter itself mounts, for performance and because the root holds unrelated files); put a family of filters in a subdirectory.
 - `prepare()` runs on the browser main thread and blocks the UI for large documents.
 - User filters in the default position run in pampa's Lua; post-position and entry-point filters run in pandoc.wasm, where the working directory is `/`, only the request's environment is visible and files beside the document are not mounted (design D9).

@@ -23,6 +23,9 @@ import { PANDOC_WASM_SHA256, smokeJob } from './pandoc/smokeJob';
 import { installDevHarness, pandocDownload } from './pandoc/devHarness';
 import { formatByKey, getDownloadController, onPdfCompiled } from './pandoc/downloadService';
 import { mountPdfViewer } from './pandoc/pdfViewer';
+import { createElement } from 'react';
+import { createRoot } from 'react-dom/client';
+import PdfPreviewPane from './components/render/PdfPreviewPane';
 import { createTypstLoader, TypstFontsLoader, TYPST_WASM_SHA256 } from './typst/typstAssets';
 import { splitTypstAssets } from './typst/typstAssetSplit';
 import { TypstRunner, typstUiStateFor } from './typst/typstRunner';
@@ -91,6 +94,20 @@ export const pandoc = {
     const viewer = mountPdfViewer(host);
     onPdfCompiled((pdf, info) => void viewer.show(pdf, { key: info.path, fileName: info.fileName }));
     return viewer;
+  },
+  /**
+   * The production PDF preview pane (third preview kind) in `#pdf-viewer-host`; `update(content)`
+   * is an edit (the pane recompiles after its debounce). The viewer is the same iframe as above.
+   */
+  mountPdfPreviewPane(path: string, content: string, debounceMs = 100) {
+    const host = document.createElement('div');
+    host.id = 'pdf-viewer-host';
+    host.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#fff';
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    const render = (text: string) => root.render(createElement(PdfPreviewPane, { path, content: text, debounceMs }));
+    render(content);
+    return { update: render };
   },
   /** The dev harness: Rust request -> worker -> output (src/pandoc/devHarness.ts). */
   download: pandocDownload,

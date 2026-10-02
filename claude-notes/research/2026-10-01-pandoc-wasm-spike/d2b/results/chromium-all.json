@@ -1,0 +1,382 @@
+{
+ "browser": "chromium",
+ "init": {
+  "compileMs": 158.5,
+  "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/148.0.7778.96 Safari/537.36"
+ },
+ "latency": [
+  {
+   "name": "empty",
+   "n": 12,
+   "digestFresh": "64399dc83de863b5",
+   "digestWarm": "64399dc83de863b5",
+   "equal": true,
+   "fresh": {
+    "e2e": {
+     "med": 104.29999999701977,
+     "min": 101.90000000596046,
+     "max": 112.29999999701977
+    },
+    "mount": {
+     "med": 0.5,
+     "min": 0.4000000059604645,
+     "max": 0.6000000089406967
+    },
+    "inst": {
+     "med": 23.19999998807907,
+     "min": 22.400000005960464,
+     "max": 24.100000008940697
+    },
+    "run": {
+     "med": 73.5,
+     "min": 72,
+     "max": 81.30000001192093
+    },
+    "read": {
+     "med": 0,
+     "min": 0,
+     "max": 0.10000000894069672
+    },
+    "mem": 48889856
+   },
+   "warm": {
+    "e2e": {
+     "med": 59.6000000089407,
+     "min": 54.3999999910593,
+     "max": 66.09999999403954
+    },
+    "prep": {
+     "med": 0.5999999940395355,
+     "min": 0.3999999910593033,
+     "max": 0.7999999970197678
+    },
+    "mount": {
+     "med": 0.29999999701976776,
+     "min": 0.29999999701976776,
+     "max": 0.5
+    },
+    "run": {
+     "med": 57.599999994039536,
+     "min": 52.8999999910593,
+     "max": 59.5
+    },
+    "read": {
+     "med": 0,
+     "min": 0,
+     "max": 0.10000000894069672
+    },
+    "mem": 44630016,
+    "start": {
+     "e2e": 29.900000005960464,
+     "initMs": 23.400000005960464
+    }
+   },
+   "overhead": {
+    "freshWorkerAndClone": 6.300000011920929,
+    "warmMessageAndClone": 0.7000000178813934
+   }
+  },
+  {
+   "name": "callouts",
+   "n": 12,
+   "digestFresh": "b98aa45aac1aa413",
+   "digestWarm": "b98aa45aac1aa413",
+   "equal": true,
+   "fresh": {
+    "e2e": {
+     "med": 160,
+     "min": 153.79999999701977,
+     "max": 175.5
+    },
+    "mount": {
+     "med": 0.5,
+     "min": 0.3999999910593033,
+     "max": 0.5
+    },
+    "inst": {
+     "med": 23.599999994039536,
+     "min": 22.899999991059303,
+     "max": 24.80000001192093
+    },
+    "run": {
+     "med": 129.80000001192093,
+     "min": 123.79999999701977,
+     "max": 142.5
+    },
+    "read": {
+     "med": 0,
+     "min": 0,
+     "max": 0.10000000894069672
+    },
+    "mem": 49741824
+   },
+   "warm": {
+    "e2e": {
+     "med": 105,
+     "min": 101.29999999701977,
+     "max": 111.09999999403954
+    },
+    "prep": {
+     "med": 0.5,
+     "min": 0.3999999910593033,
+     "max": 0.800000011920929
+    },
+    "mount": {
+     "med": 0.3999999910593033,
+     "min": 0.20000000298023224,
+     "max": 0.5
+    },
+    "run": {
+     "med": 103.1000000089407,
+     "min": 99.80000001192093,
+     "max": 109.5
+    },
+    "read": {
+     "med": 0,
+     "min": 0,
+     "max": 0
+    },
+    "mem": 46268416,
+    "start": {
+     "e2e": 30.099999994039536,
+     "initMs": 23.899999991059303
+    }
+   },
+   "overhead": {
+    "freshWorkerAndClone": 6.700000002980232,
+    "warmMessageAndClone": 0.7999999821186066
+   }
+  },
+  {
+   "name": "callouts-x10",
+   "n": 12,
+   "digestFresh": "afc6526066676b89",
+   "digestWarm": "afc6526066676b89",
+   "equal": true,
+   "fresh": {
+    "e2e": {
+     "med": 600.3999999910593,
+     "min": 583.6000000089407,
+     "max": 652.6999999880791
+    },
+    "mount": {
+     "med": 0.5,
+     "min": 0.5,
+     "max": 0.7000000029802322
+    },
+    "inst": {
+     "med": 24.099999994039536,
+     "min": 23.5,
+     "max": 24.900000005960464
+    },
+    "run": {
+     "med": 567.7999999970198,
+     "min": 553.1000000089407,
+     "max": 622
+    },
+    "read": {
+     "med": 0,
+     "min": 0,
+     "max": 0.20000000298023224
+    },
+    "mem": 58458112
+   },
+   "warm": {
+    "e2e": {
+     "med": 561.1999999880791,
+     "min": 543.6000000089407,
+     "max": 579.2000000029802
+    },
+    "prep": {
+     "med": 0.6000000089406967,
+     "min": 0.4000000059604645,
+     "max": 1.0999999940395355
+    },
+    "mount": {
+     "med": 0.4000000059604645,
+     "min": 0.20000000298023224,
+     "max": 0.5
+    },
+    "run": {
+     "med": 559.5,
+     "min": 541.7000000029802,
+     "max": 577.5
+    },
+    "read": {
+     "med": 0,
+     "min": 0,
+     "max": 0.10000000894069672
+    },
+    "mem": 56819712,
+    "start": {
+     "e2e": 31.299999997019768,
+     "initMs": 24.799999997019768
+    }
+   },
+   "overhead": {
+    "freshWorkerAndClone": 7,
+    "warmMessageAndClone": 0.7999999970197678
+   }
+  }
+ ],
+ "correctness": {
+  "ABA": [
+   "callouts:true",
+   "tables:true",
+   "callouts:true",
+   "crossrefs:true",
+   "callouts:true",
+   "tables:true"
+  ],
+  "env": [
+   "one|111",
+   "two|222",
+   "one|111"
+  ],
+  "errors": [
+   "filter error(): output=no trap=null stderr=\"ERROR: Error running filter '/f.lua':\\n/f.lua:1: boom\\nstack traceback:\\n\" | next good render equal=true",
+   "filter syntax error: output=no trap=null stderr=\"ERROR: Error running filter '/f.lua':\\n/f.lua:1: unexpected symbol near\" | next good render equal=true",
+   "filter os.exit(3): output=no trap=Error: exit with exit code 3 stderr=\"\" | next good render equal=true"
+  ],
+  "oom": {
+   "fresh": "status 251",
+   "warmBeforeEqual": true,
+   "warmOom": "trap=Error: exit with exit code 1 output=no",
+   "afterEqual": [
+    false,
+    false
+   ],
+   "afterTrap": [
+    "Error: exit with exit code 1",
+    "Error: exit with exit code 1"
+   ]
+  }
+ },
+ "memory": {
+  "warm": {
+   "rssStart": 1454,
+   "rssPeak": 1644,
+   "rssEnd": 1526,
+   "wasmMbTrace": [
+    [
+     1,
+     42
+    ],
+    [
+     10,
+     44
+    ],
+    [
+     20,
+     44
+    ],
+    [
+     30,
+     44
+    ],
+    [
+     40,
+     44
+    ],
+    [
+     50,
+     44
+    ],
+    [
+     60,
+     44
+    ],
+    [
+     70,
+     44
+    ],
+    [
+     80,
+     44
+    ],
+    [
+     90,
+     44
+    ],
+    [
+     100,
+     44
+    ]
+   ]
+  },
+  "fresh": {
+   "rssStart": 1528,
+   "rssPeak": 2638,
+   "rssEnd": 2579,
+   "wasmMbTrace": [
+    [
+     1,
+     47
+    ],
+    [
+     10,
+     47
+    ],
+    [
+     20,
+     47
+    ],
+    [
+     30,
+     47
+    ],
+    [
+     40,
+     47
+    ],
+    [
+     50,
+     47
+    ],
+    [
+     60,
+     47
+    ],
+    [
+     70,
+     47
+    ],
+    [
+     80,
+     47
+    ],
+    [
+     90,
+     47
+    ],
+    [
+     100,
+     47
+    ]
+   ]
+  }
+ },
+ "cancel": {
+  "freshTerminateMs": 0,
+  "freshNextRender": [
+   148.20000000298023,
+   150.30000001192093,
+   153
+  ],
+  "warmTerminateMs": 0,
+  "warmNextRenderAfterKill": [
+   {
+    "coldFirstRender": 154.29999999701977,
+    "firstConvertMs": 122.70000000298023
+   },
+   {
+    "coldFirstRender": 154.20000000298023,
+    "firstConvertMs": 123
+   },
+   {
+    "coldFirstRender": 153.3999999910593,
+    "firstConvertMs": 119.79999999701977
+   }
+  ]
+ }
+}

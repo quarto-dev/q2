@@ -1,0 +1,43 @@
+/* PDF preview pane (pandoc-host H9). Solid colors only (hub-client-theme rule). */
+.pdf-preview-pane {
+  position: relative;
+  height: 100%;
+  background: var(--editor-bg);
+}
+
+.pdf-preview-host {
+  height: 100%;
+}
+
+.pdf-preview-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.pdf-preview-status {
+  position: absolute;
+  top: 8px;
+  inset-inline-end: 16px;
+  padding: 4px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--context-menu-border);
+  background: var(--context-menu-bg);
+  font-size: 12px;
+}
+
+.pdf-preview-error {
+  position: absolute;
+  inset-inline: 12px;
+  top: 8px;
+  max-height: 40%;
+  overflow: auto;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--context-menu-border);
+  background: var(--context-menu-bg);
+  font-size: 13px;
+}

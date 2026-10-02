@@ -37,7 +37,7 @@ beforeEach(() => {
   wasm.vfs_set_runtime_metadata('');
 });
 
-async function modeOf(frontMatter: string, canDownload: (key: string) => boolean = () => true): Promise<PreviewMode> {
+async function modeOf(frontMatter: string, canDownload: (key: string) => boolean = () => true, canPreviewPdf?: () => boolean): Promise<PreviewMode> {
   const content = `---\n${frontMatter}\n---\n\nBody.\n`;
   wasm.vfs_add_file('/project/doc.qmd', content);
   const parsed = JSON.parse(await wasm.parse_qmd_to_ast_with_attribution(content));
@@ -46,6 +46,7 @@ async function modeOf(frontMatter: string, canDownload: (key: string) => boolean
   return classifyPreviewMode(parsed.success ? parsed.ast : NO_AST, '/project/doc.qmd', {
     resolve: (path) => JSON.parse(wasm.resolve_pandoc_formats(path)) as ResolvePandocFormatsResponse,
     canDownload,
+    canPreviewPdf,
   });
 }
 
@@ -74,6 +75,7 @@ describe('classifyPreviewMode against the real wasm', () => {
 
   it('pdf is the download mode (host H8 wired the chain); latex is neither', async () => {
     expect(await modeOf('format: pdf')).toEqual({ mode: 'download', formatKey: 'pdf' });
+    expect(await modeOf('format: pdf', () => true, () => true)).toEqual({ mode: 'pdf', formatKey: 'pdf' });
     expect(await modeOf('format: latex')).toEqual({ mode: 'neither', formatKey: 'latex' });
   });
 });

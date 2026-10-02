@@ -159,6 +159,10 @@ export default defineConfig({
         // The pdf.js viewer (public/pdfjs/, ~10 MB incl. html/css/svg) is fetched on the first
         // PDF view; `scripts/check-sw-precache.mjs` fails the build if any of it lands here.
         globIgnores: ['**/*.worker-*.js', '**/sass.default-*.js', 'pdfjs/**'],
+        // The viewer is loaded in an iframe, which is a navigation request: without this the
+        // SPA fallback answers it with index.html and the viewer never starts (Chrome only;
+        // it is not precached, so nothing else would serve it from the SW).
+        navigateFallbackDenylist: [/\/pdfjs\//],
         // Largest remaining precached file is main.js (~7.5 MB); 16 MB
         // lets it more than double before tripping. Past the limit workbox
         // warns and vite-plugin-pwa escalates to a fatal build error, so

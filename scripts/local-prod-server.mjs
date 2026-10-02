@@ -140,10 +140,13 @@ const server = http.createServer((req, res) => {
   }
 
   // Serve static files
-  let filePath = path.join(DIST_DIR, req.url === '/' ? 'index.html' : req.url);
+  // Route on the path alone: a query string (the pdf.js viewer is opened as `viewer.html?file=...`)
+  // is not part of the file name and would otherwise miss the file and fall through to index.html.
+  const pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
+  let filePath = path.join(DIST_DIR, pathname === '/' ? 'index.html' : pathname);
 
   // Handle SPA routing - if file doesn't exist and not an asset, serve index.html
-  if (!fs.existsSync(filePath) && !req.url.startsWith('/assets/')) {
+  if (!fs.existsSync(filePath) && !pathname.startsWith('/assets/')) {
     filePath = path.join(DIST_DIR, 'index.html');
   }
 

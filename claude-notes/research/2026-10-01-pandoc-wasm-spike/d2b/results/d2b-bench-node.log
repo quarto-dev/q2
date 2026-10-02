@@ -1,0 +1,12 @@
+
+### callouts: input json 46542 B
+fresh  total 207 (min 198, max 223) | mount 0 (min 0, max 1) inst 41 (min 38, max 44) run 167 (min 160, max 178) read 0 (min 0, max 0) | out 15903 B, status 0, mem 50 MB
+warm   create 40 once; first convert 167 | per-render total 141 (min 136, max 154) | mount 0 (min 0, max 11) run 139 (min 136, max 154) read 0 (min 0, max 0) | out 15903 B, mem 46 MB
+warm == fresh bytes: true
+re-create after kill (new instance + first convert): 201 (min 196, max 203)
+
+### callouts-x10: input json 187968 B
+fresh  total 836 (min 806, max 849) | mount 0 (min 0, max 0) inst 58 (min 39, max 60) run 779 (min 767, max 808) read 0 (min 0, max 0) | out 45945 B, status 0, mem 58 MB
+warm   create 61 once; first convert 798 | per-render total 756 (min 746, max 771) | mount 0 (min 0, max 14) run 751 (min 745, max 770) read 0 (min 0, max 0) | out 45945 B, mem 56 MB
+warm == fresh bytes: true
+re-create after kill (new instance + first convert): 821 (min 811, max 821)

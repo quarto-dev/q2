@@ -56,6 +56,14 @@ export const header = {
 } as const;
 
 /** "Download as" (pandoc.wasm in the browser, or the native render in the preview embed). */
+export const pdfPreview = {
+  title: 'PDF preview',
+  updating: 'Updating the PDF…',
+  failedTitle: 'The PDF could not be updated.',
+  failedKeeping: 'Showing the last PDF that compiled.',
+  retry: 'Try again',
+};
+
 export const download = {
   buttonLabel: 'Download as',
   buttonTooltip: 'Download this document as another format',

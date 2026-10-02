@@ -25,6 +25,8 @@ WASM rebuild is needed for a changelog-only edit.
 
 ### 2026-10-02
 
+- [`1a6bd1339`](https://github.com/quarto-dev/q2/commits/1a6bd1339): A document whose format is `pdf` now previews as a PDF in the preview pane, in a built-in viewer: choose "Show PDF preview" once (the first use fetches about 33 MB), and the PDF recompiles shortly after you stop typing, keeping your page and zoom. If a change breaks the build, the last good PDF stays on screen under an error message.
+- [`40c344025`](https://github.com/quarto-dev/q2/commits/40c344025): A document whose format is `pdf` now previews as a PDF in the preview pane, in a built-in viewer: choose "Show PDF preview" once (the first use fetches about 33 MB), and the PDF recompiles shortly after you stop typing, keeping your page and zoom. If a change breaks the build, the last good PDF stays on screen under an error message.
 - [`6d7df2f2e`](https://github.com/quarto-dev/q2/commits/6d7df2f2e): Added PDF to the "Download as" menu: the document is converted to Typst and compiled to a PDF in the browser, with progress and cancel across both steps and a note that the first PDF fetches about 33 MB of converter and fonts.
 - [`d42d780d6`](https://github.com/quarto-dev/q2/commits/d42d780d6): Added a "Download as" button to the document top bar: choose Word and the open document is converted to a .docx file in the browser, with a progress panel, a cancel button and a summary of any warnings. A document whose own format is Word shows a click-only "Download Word" button in place of the preview, and formats that cannot be previewed or downloaded disable the button and explain why.
 
