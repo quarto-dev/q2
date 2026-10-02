@@ -66,7 +66,9 @@ use crate::stage::stages::PandocWriteStage;
 use crate::stage::stages::ResourceCopyFlushStage;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::stage::stages::TypstCompileStage;
-use crate::stage::stages::{PandocPrepareStage, UnexecutedCellCountStage};
+use crate::stage::stages::{
+    PandocPrepareStage, PrefetchRemoteImagesStage, UnexecutedCellCountStage,
+};
 use crate::stage::{
     ApplyTemplateStage, AstTransformsStage, AttributionGenerateStage, CompileThemeCssStage,
     DocumentProfileStage, EngineExecutionStage, EquationNumberStage, IncludeExpansionStage,
@@ -577,6 +579,21 @@ pub fn build_pandoc_request_stages(
         .expect("engine-execution stage must exist in the pipeline");
     stages.insert(engine_idx, Box::new(UnexecutedCellCountStage::new()));
     stages.push(Box::new(PandocPrepareStage::new()));
+    stages
+}
+
+/// [`build_pandoc_request_stages`] with [`PrefetchRemoteImagesStage`] just
+/// before the tail: pandoc.wasm cannot fetch, so the call's runtime
+/// downloads remote images and `pandoc-prepare` then mounts them like local
+/// ones. `render_pandoc_request` (the browser export) uses this list; the
+/// plain one never touches the network, which tests of the prepare step rely
+/// on.
+pub fn build_pandoc_request_stages_fetching(
+    captures: Vec<quarto_trace::EngineCapture>,
+) -> Vec<Box<dyn PipelineStage>> {
+    let mut stages = build_pandoc_request_stages(captures);
+    let tail = stages.len() - 1;
+    stages.insert(tail, Box::new(PrefetchRemoteImagesStage::new()));
     stages
 }
 
@@ -6820,6 +6837,24 @@ mod tests {
         for excluded in PANDOC_STAGE_EXCLUDED {
             assert!(!request.iter().any(|n| n == excluded), "{excluded}");
         }
+    }
+
+    /// R6: the browser's list is the request list with the remote-image
+    /// prefetch right before `pandoc-prepare`.
+    #[test]
+    fn fetching_request_list_adds_the_prefetch_before_the_tail() {
+        let plain: Vec<String> = build_pandoc_request_stages(Vec::new())
+            .iter()
+            .map(|s| s.name().to_string())
+            .collect();
+        let fetching: Vec<String> = build_pandoc_request_stages_fetching(Vec::new())
+            .iter()
+            .map(|s| s.name().to_string())
+            .collect();
+        let mut expected = plain.clone();
+        expected.insert(plain.len() - 1, "prefetch-remote-images".to_string());
+        assert_eq!(fetching, expected);
+        assert!(!plain.iter().any(|n| n == "prefetch-remote-images"));
     }
 
     /// R2: captures splice in before engine execution (the wasm entry point

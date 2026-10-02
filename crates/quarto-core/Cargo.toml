@@ -24,6 +24,7 @@ hashlink = "0.11"
 pathdiff.workspace = true
 sha2 = "0.11"
 hex = "0.4"
+futures = { version = "0.3", default-features = false, features = ["alloc"] }
 glob = "0.3"
 # Nested-cell-mask opener/closer matching (engine/nested_cell_mask.rs) runs on
 # both native and wasm32 (the WASM preview pipeline must mask displayed cells

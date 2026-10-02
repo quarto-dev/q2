@@ -236,20 +236,6 @@ fn an_unstyled_html_table_is_not_reported() {
 }
 
 #[test]
-fn a_remote_image_is_reported_for_typst_only() {
-    let (_guard, root) = scratch();
-    let qmd = "---\ntitle: T\n---\n\n![pic](https://example.com/pic.png)\n";
-    let out = render_typst(&root, qmd);
-    assert!(codes(&out).contains(&"Q-20-9"), "{:?}", out.diagnostics);
-    // The request is still built: the host decides what to show.
-    assert!(out.request.is_some());
-    // docx handles a failed fetch (pandoc's Q-11-1 plus alt text).
-    let doc = root.join("doc.qmd");
-    let docx = render_with(&doc, "docx", None);
-    assert!(!codes(&docx).contains(&"Q-20-9"));
-}
-
-#[test]
 fn host_fonts_feed_the_filter_param_and_the_job_id() {
     let (_guard, root) = scratch();
     let doc = root.join("doc.qmd");

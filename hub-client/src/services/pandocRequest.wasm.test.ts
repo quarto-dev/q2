@@ -11,7 +11,7 @@
  * Run with: npm run test:wasm
  */
 
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { readFile } from 'fs/promises';
 import { gzipSync, unzipSync } from 'fflate';
@@ -55,6 +55,7 @@ interface WasmModule {
     source_date_epoch?: number,
     capture_gz_json?: Uint8Array,
     typst_available_fonts?: string[],
+    abort_signal?: AbortSignal,
   ) => Promise<Envelope>;
   get_pandoc_share_tree_version: () => string;
   get_pandoc_share_tree: () => { share_tree_version: string; files: RequestFile[] };
@@ -316,6 +317,8 @@ describe('format table and resolver', () => {
 });
 
 describe('typst request (R4)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
   const DOC = '---\ntitle: Typst Doc\n---\n\n# Hello\n\nA *typst* paragraph.\n\n![A figure](figure.png)\n';
 
   it('carries the template as files, no images, and the output as .typ', async () => {
@@ -354,7 +357,8 @@ describe('typst request (R4)', () => {
     expect(text('/pandoc-typst-template/typst-show.typ')).toBe('// USER-SHOW\n');
   });
 
-  it('reports the remote-image and CSS-inlining limits, and sends no quarto-cli-path', async () => {
+  it('reports a failed remote image and the CSS-inlining limit, and sends no quarto-cli-path', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('no', { status: 404, statusText: 'Not Found' })));
     wasm.vfs_add_file(
       '/project/doc.qmd',
       '---\ntitle: T\n---\n\n![remote](https://example.com/a.png)\n\n```{=html}\n<style>td{color:red}</style><table><tr><td>x</td></tr></table>\n```\n',
@@ -484,5 +488,151 @@ describe.skipIf(!pandocWasmAvailable())('request built in wasm, run in pandoc.wa
     expect(text).toContain('An <em>epub</em> paragraph');
     // The vendored callout stylesheet arrived through the request's files.
     expect(text).toMatch(/callout/);
+  }, 120_000);
+});
+
+// R6: remote images are fetched in the browser (through the bridge's hardened
+// `fetch`, stubbed here) into a click-time snapshot of the VFS.
+describe('remote images (R6)', () => {
+  const REMOTE = 'https://img.example.com/pic.png';
+  const REMOTE_DOC = `---\ntitle: Remote\n---\n\nBefore ![the alt](${REMOTE}) after.\n`;
+  const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+  const png = () => new Response(PNG, { status: 200, headers: { 'content-type': 'image/png' } });
+  const inputJson = (request: NonNullable<Envelope['request']>) =>
+    new TextDecoder().decode(request.files.find((f) => f.path.endsWith('/pandoc-input.json'))!.bytes);
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('fetches with credentials omitted, mounts the bytes and rewrites the src', async () => {
+    const seen: [string, RequestInit][] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init: RequestInit) => {
+        seen.push([url, init]);
+        return png();
+      }),
+    );
+    wasm.vfs_add_file('/project/doc.qmd', REMOTE_DOC);
+    const out = await wasm.render_pandoc_request('/project/doc.qmd', 'docx', SDE);
+    expect(out.success).toBe(true);
+    expect(seen.map(([u]) => u)).toEqual([REMOTE]);
+    expect(seen[0][1].credentials).toBe('omit');
+    const mounted = out.request!.resource_refs.filter((f) => f.path.startsWith('/project/_remote/'));
+    expect(mounted).toHaveLength(1);
+    expect(mounted[0].path).toMatch(/^\/project\/_remote\/[0-9a-f]{16}\.png$/);
+    expect(Array.from(mounted[0].bytes)).toEqual(Array.from(PNG));
+    const json = inputJson(out.request!);
+    expect(json).toContain(mounted[0].path);
+    expect(json).toContain('q2-remote-src');
+    // The live VFS did not receive the mount (it went into the snapshot).
+    expect(JSON.parse(wasm.vfs_list_files()).files.some((f: string) => f.includes('_remote'))).toBe(false);
+  });
+
+  it('refuses a non-https URL without calling fetch, leaving the URL and a warning', async () => {
+    const fetchMock = vi.fn(async () => png());
+    vi.stubGlobal('fetch', fetchMock);
+    wasm.vfs_add_file('/project/doc.qmd', REMOTE_DOC.replace('https://', 'http://'));
+    const out = await wasm.render_pandoc_request('/project/doc.qmd', 'docx', SDE);
+    expect(out.success).toBe(true);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(out.diagnostics.some((d) => d.title.startsWith('Remote image'))).toBe(true);
+    expect(inputJson(out.request!)).toContain('http://img.example.com/pic.png');
+  });
+
+  it('keeps the click-time bytes when the VFS changes during the fetch', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const fetchMock = vi.fn(async () => {
+      await gate;
+      return png();
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    wasm.vfs_add_file('/project/doc.qmd', `${REMOTE_DOC}\nClick time text.\n\n![local](local.png)\n`);
+    wasm.vfs_add_binary_file('/project/local.png', new Uint8Array([1, 1, 1]));
+    const pending = wasm.render_pandoc_request('/project/doc.qmd', 'docx', SDE);
+    // The request is now parked on the network (the first await).
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    // Automerge keeps syncing while the request awaits the network.
+    wasm.vfs_add_file('/project/doc.qmd', '---\ntitle: Remote\n---\n\nEdited after the click.\n');
+    wasm.vfs_add_binary_file('/project/local.png', new Uint8Array([9, 9, 9]));
+    wasm.vfs_remove_file('/project/doc.qmd');
+    release();
+    const out = await pending;
+    expect(out.error).toBeUndefined();
+    expect(out.success).toBe(true);
+    const json = inputJson(out.request!);
+    expect(json).toContain('Click');
+    expect(json).not.toContain('Edited');
+    const local = out.request!.resource_refs.find((f) => f.path === '/project/local.png');
+    expect(Array.from(local!.bytes)).toEqual([1, 1, 1]);
+  });
+
+  it('stops the download when the click is aborted, and still builds a request', async () => {
+    let seenSignal: AbortSignal | undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_url: string, init: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            seenSignal = init.signal!;
+            init.signal!.addEventListener('abort', () => reject(init.signal!.reason));
+          }),
+      ),
+    );
+    wasm.vfs_add_file('/project/doc.qmd', REMOTE_DOC);
+    const click = new AbortController();
+    const pending = wasm.render_pandoc_request('/project/doc.qmd', 'docx', SDE, undefined, undefined, click.signal);
+    await vi.waitFor(() => expect(seenSignal).toBeDefined());
+    click.abort(new Error('download cancelled'));
+    const out = await pending;
+    expect(seenSignal!.aborted).toBe(true);
+    expect(out.diagnostics.some((d) => d.title.includes('download cancelled'))).toBe(true);
+  });
+});
+
+describe.skipIf(!pandocWasmAvailable())('remote images run in pandoc.wasm (R6)', () => {
+  const PNG_1X1 = fromBase64(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  );
+  const REMOTE = 'https://img.example.com/pic.png';
+  const ok = () => new Response(PNG_1X1, { status: 200, headers: { 'content-type': 'image/png' } });
+  const gone = () => new Response('no', { status: 404, statusText: 'Not Found' });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  async function run(format: string, qmd: string, fetchReply: () => Response) {
+    vi.stubGlobal('fetch', vi.fn(async () => fetchReply()));
+    const module = await WebAssembly.compile(readFileSync(WASM_PATH));
+    wasm.vfs_add_file('/project/doc.qmd', qmd);
+    const out = await wasm.render_pandoc_request('/project/doc.qmd', format, SDE);
+    expect(out.success).toBe(true);
+    const tree = wasm.get_pandoc_share_tree();
+    const result = await execute(out.request as unknown as PandocRequest, tree, { module });
+    if (!result.ok) throw new Error(`pandoc failed (${result.kind}): ${result.stderr}`);
+    return { out, result };
+  }
+
+  it('docx embeds the fetched image, with no fetch warning from pandoc', async () => {
+    const { result } = await run('docx', `# Hi\n\n![the alt](${REMOTE})\n`, ok);
+    const entries = unzipSync(result.output);
+    expect(Object.keys(entries).some((n) => n.startsWith('word/media/'))).toBe(true);
+    expect(result.stderr).not.toMatch(/Could not fetch|fetch/i);
+  }, 120_000);
+
+  it('docx with a failed fetch still builds, showing the alt text', async () => {
+    const { out, result } = await run('docx', `# Hi\n\n![the alt text](${REMOTE})\n`, gone);
+    expect(out.diagnostics.some((d) => d.title.startsWith('Remote image'))).toBe(true);
+    const document = new TextDecoder().decode(unzipSync(result.output)['word/document.xml']);
+    expect(document).toContain('the alt text');
+  }, 120_000);
+
+  it('typst source names the mounted image; a failed fetch gives alt text, not exit 83', async () => {
+    const good = await run('typst', `# Hi\n\n![the alt](${REMOTE})\n`, ok);
+    expect(new TextDecoder().decode(good.result.output)).toMatch(/_remote\/[0-9a-f]{16}\.png/);
+    const bad = await run('typst', `# Hi\n\nBefore ![the alt text](${REMOTE}) after.\n`, gone);
+    const typ = new TextDecoder().decode(bad.result.output);
+    expect(typ).toContain('the alt text');
+    expect(typ).not.toContain('img.example.com');
+    expect(bad.out.diagnostics.map((d) => d.code)).toContain('Q-20-9');
   }, 120_000);
 });

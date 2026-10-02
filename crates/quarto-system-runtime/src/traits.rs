@@ -16,6 +16,43 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+/// Limits for [`SystemRuntime::fetch_url_hardened`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FetchPolicy {
+    /// The response body may not exceed this many bytes.
+    pub max_bytes: u64,
+    /// The whole request (headers and body) is abandoned after this long.
+    pub timeout_ms: u32,
+}
+
+impl Default for FetchPolicy {
+    fn default() -> Self {
+        Self {
+            max_bytes: 20 * 1024 * 1024,
+            timeout_ms: 15_000,
+        }
+    }
+}
+
+/// The URL policy of [`SystemRuntime::fetch_url_hardened`]: an absolute
+/// `https://` URL with a host. Relative URLs are refused rather than resolved
+/// (against the hub origin they would reach the hub's own endpoints), as are
+/// protocol-relative (`//host/x`), `http:`, `data:`, `file:` and everything
+/// else. Returns the reason when refused.
+pub fn validate_fetch_url(url: &str) -> Result<(), String> {
+    let lower = url.trim().to_ascii_lowercase();
+    let Some(rest) = lower.strip_prefix("https://") else {
+        return Err(format!(
+            "{url}: only absolute https:// URLs are fetched (relative, protocol-relative and non-https URLs are not)"
+        ));
+    };
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    if authority.is_empty() || authority.starts_with('@') || authority.starts_with(':') {
+        return Err(format!("{url}: the URL has no host"));
+    }
+    Ok(())
+}
+
 /// Result type for runtime operations
 pub type RuntimeResult<T> = Result<T, RuntimeError>;
 
@@ -465,6 +502,30 @@ pub trait SystemRuntime: Send + Sync {
     ///
     /// Corresponds to: `pandoc.mediabag.fetch` (for URLs)
     async fn fetch_url(&self, url: &str) -> RuntimeResult<(Vec<u8>, String)>;
+
+    /// [`fetch_url`](Self::fetch_url) under a [`FetchPolicy`]: https only, no
+    /// ambient credentials, a byte cap and a timeout; a runtime that carries a
+    /// cancellation signal (the browser's per-call snapshot) also stops when
+    /// it fires. Used for fetches the *document* asks for (remote images),
+    /// where the URL is untrusted. The default validates the URL, delegates to
+    /// `fetch_url` and enforces the byte cap on what came back; the browser
+    /// runtime overrides it to enforce all of it before the body is read.
+    async fn fetch_url_hardened(
+        &self,
+        url: &str,
+        policy: &FetchPolicy,
+    ) -> RuntimeResult<(Vec<u8>, String)> {
+        validate_fetch_url(url).map_err(RuntimeError::Network)?;
+        let (bytes, mime) = self.fetch_url(url).await?;
+        if bytes.len() as u64 > policy.max_bytes {
+            return Err(RuntimeError::Network(format!(
+                "{url} is {} bytes; the limit is {}",
+                bytes.len(),
+                policy.max_bytes
+            )));
+        }
+        Ok((bytes, mime))
+    }
 
     // ═══════════════════════════════════════════════════════════════════════
     // SYSTEM INFO
@@ -1015,5 +1076,43 @@ mod tests {
         // The default impl returns false; CiMockRuntime inherits it (no override).
         let rt = CiMockRuntime { ci_value: None };
         assert!(!rt.is_interactive(), "default is_interactive must be false");
+    }
+}
+
+#[cfg(test)]
+mod fetch_policy_tests {
+    use super::validate_fetch_url;
+
+    #[test]
+    fn https_urls_pass() {
+        for url in [
+            "https://example.com/a.png",
+            "HTTPS://Example.com/a.png",
+            "https://example.com:8443/a.png?x=1#y",
+            "https://example.com",
+        ] {
+            assert!(validate_fetch_url(url).is_ok(), "{url}");
+        }
+    }
+
+    #[test]
+    fn everything_else_is_refused() {
+        for url in [
+            "",
+            "a.png",
+            "/a.png",
+            "./a.png",
+            "../a.png",
+            "//example.com/a.png",
+            "http://example.com/a.png",
+            "data:image/png;base64,AAAA",
+            "file:///etc/passwd",
+            "ftp://example.com/a.png",
+            "https://",
+            "https:///a.png",
+            "https://?x=1",
+        ] {
+            assert!(validate_fetch_url(url).is_err(), "{url:?}");
+        }
     }
 }

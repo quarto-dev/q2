@@ -1605,6 +1605,7 @@ fn pandoc_request_envelope(
 /// as a BigInt and a JS number would throw. `capture_gz_json` is read the way
 /// `render_page_for_preview` reads it and spliced in before engine execution;
 /// `stats.unexecuted_cells` counts the code cells it left without results.
+/// `abort_signal` ties the downloads of remote images to the click (D8.5).
 #[wasm_bindgen]
 pub async fn render_pandoc_request(
     path: &str,
@@ -1612,8 +1613,20 @@ pub async fn render_pandoc_request(
     source_date_epoch: Option<f64>,
     capture_gz_json: Option<Vec<u8>>,
     typst_available_fonts: Option<Vec<String>>,
+    abort_signal: Option<JsValue>,
 ) -> JsValue {
-    let runtime = get_runtime();
+    // Click-time snapshot: every read in this request, including the ones
+    // after the first remote-image `await`, goes through this copy, so the
+    // Automerge sync mutating the live VFS cannot change what the request
+    // carries. It is dropped when the call ends.
+    // `abort_signal` (an `AbortSignal`, optional) stops its remote-image
+    // downloads when the click is cancelled.
+    let snapshot = Arc::new(
+        get_runtime()
+            .snapshot()
+            .with_abort_signal(abort_signal.unwrap_or(JsValue::UNDEFINED)),
+    );
+    let runtime = &*snapshot;
     let path_buf = std::path::PathBuf::from(path);
     let fail = |message: String| pandoc_request_envelope(false, Some(message), Vec::new(), None, 0);
 
@@ -1646,7 +1659,7 @@ pub async fn render_pandoc_request(
                 "/.quarto/project-artifacts",
             )),
         },
-        Arc::clone(get_runtime_arc()) as Arc<dyn SystemRuntime>,
+        Arc::clone(&snapshot) as Arc<dyn SystemRuntime>,
     )
     .await;
 
