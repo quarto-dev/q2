@@ -482,15 +482,37 @@ fn ipynb_parse_error_json_carries_cell_origin() {
             )
         });
 
-    // The path is whatever LoadedSource resolved (`source.path`), which
-    // may be canonicalized — assert on the tail, not the whole string.
+    // The path is whatever LoadedSource resolved (`source.path`). It must be
+    // absolute, since a relative path would resolve against the consumer's
+    // cwd. Wire contract: an emitted path uses the plain form whenever one
+    // exists, so no Windows `\\?\` verbatim prefix.
     let nb_path = origin
         .get("notebook_path")
         .and_then(|v| v.as_str())
         .expect("origin must carry notebook_path");
+    let notebook = canonical(&dir.join("broken.ipynb"));
+    // `dunce` keeps the verbatim form for reserved or invalid names, paths
+    // over 260 chars, and every network share (even one with a plain
+    // `\\server\share` form).
     assert!(
-        nb_path.ends_with("broken.ipynb"),
-        "notebook_path should end with broken.ipynb, got: {nb_path}"
+        !dunce::simplified(&notebook)
+            .to_string_lossy()
+            .starts_with(r"\\?\"),
+        "test setup: the TEMP root gives the fixture no plain path form: {}",
+        notebook.display()
+    );
+    assert!(
+        !nb_path.starts_with(r"\\?\"),
+        "notebook_path must be a plain path, got: {nb_path}"
+    );
+    assert!(
+        Path::new(nb_path).is_absolute(),
+        "notebook_path must be absolute, got: {nb_path}"
+    );
+    assert_eq!(
+        canonical(Path::new(nb_path)),
+        notebook,
+        "notebook_path must name the real notebook, got: {nb_path}"
     );
     assert_eq!(
         origin.get("cell_index").and_then(|v| v.as_i64()),
@@ -517,8 +539,11 @@ fn ipynb_parse_error_json_carries_cell_origin() {
 /// Origin links also carry no `#line:column` fragment: the diagnostic's
 /// coordinates are relative to the virtual per-cell file, and a
 /// fragment would claim notebook-JSON coordinates QER cannot speak to.
-/// Asserting the exact `ESC]8;;URL ESC\` sequence covers both — a
-/// fragment would change the URL and break the match.
+///
+/// The test parses the link target rather than rebuilding the URL
+/// string: exact URL spelling (drive letters, separators, encoding) is
+/// QER's contract. It asserts a `file` URL, no fragment, and a path that
+/// resolves to the notebook on disk.
 #[test]
 fn ipynb_diagnostic_hyperlinks_real_notebook() {
     let temp = TempDir::new().unwrap();
@@ -591,21 +616,47 @@ fn ipynb_diagnostic_hyperlinks_real_notebook() {
             panic!("expected a rendered diagnostic with notebook_cell origin; stderr:\n{stderr}")
         });
 
-    // QER canonicalizes the origin path before building the file:// URL.
-    let expected_url = format!("file://{}", dir.join("broken.ipynb").display());
-    let osc8 = format!("\u{1b}]8;;{expected_url}\u{1b}\\");
-    assert!(
-        rendered.contains(&osc8),
-        "rendered must hyperlink the real notebook ({expected_url}); got:\n{rendered:?}"
-    );
-
     // The visible label is the pseudo-path. Front-matter synthesis from
     // the leading H1 reserves "cell 1" for the pseudo-cell
     // (number_shift, Q1 convention), so the first real cell labels as 2.
+    let label = "broken.ipynb[cell 2, markdown]";
     assert!(
-        rendered.contains("broken.ipynb[cell 2, markdown]"),
+        rendered.contains(label),
         "rendered must show the pseudo-path label; got:\n{rendered:?}"
     );
+
+    let target = osc8_target_for(rendered, label).unwrap_or_else(|| {
+        panic!("rendered must hyperlink the label {label:?}; got:\n{rendered:?}")
+    });
+    let url = url::Url::parse(target)
+        .unwrap_or_else(|e| panic!("link target must be a URL ({e}): {target:?}"));
+    assert_eq!(
+        url.scheme(),
+        "file",
+        "link target must be a file URL: {target:?}"
+    );
+    assert_eq!(
+        url.fragment(),
+        None,
+        "origin links carry no #line:column fragment: {target:?}"
+    );
+    let linked = url
+        .to_file_path()
+        .unwrap_or_else(|()| panic!("link target must name a local file: {target:?}"));
+    assert_eq!(
+        canonical(&linked),
+        canonical(&dir.join("broken.ipynb")),
+        "link target must be the real notebook: {target:?}"
+    );
+}
+
+/// The target of the OSC-8 hyperlink (`ESC]8;;URL ESC\ text`) whose
+/// visible text starts with `label`.
+fn osc8_target_for<'a>(rendered: &'a str, label: &str) -> Option<&'a str> {
+    rendered.split("\u{1b}]8;;").skip(1).find_map(|segment| {
+        let (target, text) = segment.split_once("\u{1b}\\")?;
+        (!target.is_empty() && text.starts_with(label)).then_some(target)
+    })
 }
 
 // ====================================================================

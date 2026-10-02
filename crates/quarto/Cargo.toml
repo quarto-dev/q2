@@ -94,6 +94,9 @@ openssl-sys = { version = "0.9", optional = true }
 vendored-openssl = ["dep:openssl-sys", "openssl-sys/vendored"]
 
 [dev-dependencies]
+# Tells whether a Windows path has a plain (non-`\\?\`) form, for the
+# wire-path precondition in the json_errors E2E tests.
+dunce = "1"
 tempfile = "3"
 pampa.workspace = true
 sha2 = "0.11"

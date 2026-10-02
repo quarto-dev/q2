@@ -6006,6 +6006,7 @@ dependencies = [
  "async-trait",
  "clap",
  "css-inline",
+ "dunce",
  "include_dir",
  "inquire",
  "mimalloc",
