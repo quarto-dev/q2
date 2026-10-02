@@ -72,6 +72,8 @@ clap = { workspace = true }
 
 # Utilities
 quarto-util = { workspace = true }
+# Shared canonicalize, so hub paths match the rest of q2's spelling
+quarto-system-runtime = { workspace = true }
 walkdir = "2"
 dirs = "6"
 

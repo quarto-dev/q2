@@ -2515,8 +2515,9 @@ mod tests {
 
     // === classify_inputs tests =============================================
 
+    // Same function the runtime seam uses, so expected paths share its spelling.
     fn canonical(p: &Path) -> PathBuf {
-        p.canonicalize().unwrap_or_else(|_| p.to_path_buf())
+        quarto_system_runtime::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
     }
 
     fn write_file(path: &Path, contents: &str) {
@@ -3361,7 +3362,7 @@ mod render_once_tests {
 
     /// A two-page website in a fresh tempdir. Returns the canonical root.
     fn website(temp: &TempDir) -> PathBuf {
-        let dir = temp.path().canonicalize().unwrap();
+        let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         write(
             &dir.join("_quarto.yml"),
             "project:\n  type: website\nwebsite:\n  title: Base\n",
@@ -3411,7 +3412,7 @@ mod render_once_tests {
     #[test]
     fn single_document_outside_a_project_renders_beside_the_source() {
         let temp = TempDir::new().unwrap();
-        let dir = temp.path().canonicalize().unwrap();
+        let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         let doc = dir.join("doc.qmd");
         write(&doc, "---\ntitle: Doc\n---\n\nBody.\n");
         let report = render_once(&args_for(&doc), &mut quiet_presenter()).expect("render ok");

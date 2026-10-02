@@ -205,11 +205,9 @@ pub async fn collect(
     }
     // Paranoia gate: a manifest scanned elsewhere must not authorize
     // collection here.
-    let canonical = data_dir
-        .canonicalize()
+    let canonical = quarto_system_runtime::canonicalize(data_dir)
         .map_err(|e| format!("cannot canonicalize {}: {e}", data_dir.display()))?;
-    let manifest_dir = Path::new(&manifest.data_dir)
-        .canonicalize()
+    let manifest_dir = quarto_system_runtime::canonicalize(Path::new(&manifest.data_dir))
         .unwrap_or_else(|_| PathBuf::from(&manifest.data_dir));
     if manifest_dir != canonical {
         return Err(format!(
@@ -379,8 +377,7 @@ pub fn restore(
     batch_dir: &Path,
     only_doc_ids: &[String],
 ) -> Result<Vec<(String, Result<(), String>)>, String> {
-    let canonical = data_dir
-        .canonicalize()
+    let canonical = quarto_system_runtime::canonicalize(data_dir)
         .map_err(|e| format!("cannot canonicalize {}: {e}", data_dir.display()))?;
     let _lock = AdminLock::acquire(&canonical)?;
     let automerge_dir = canonical.join("automerge");
@@ -463,8 +460,7 @@ pub fn purge(
     retention_days: i64,
     execute: bool,
 ) -> Result<Vec<PurgeCandidate>, String> {
-    let canonical = data_dir
-        .canonicalize()
+    let canonical = quarto_system_runtime::canonicalize(data_dir)
         .map_err(|e| format!("cannot canonicalize {}: {e}", data_dir.display()))?;
     let _lock = AdminLock::acquire(&canonical)?;
     let trash = canonical.join("trash");

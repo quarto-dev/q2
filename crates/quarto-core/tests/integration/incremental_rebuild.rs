@@ -38,7 +38,7 @@ use quarto_core::render_to_file::RenderToFileOptions;
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
 fn canonical(p: &std::path::Path) -> PathBuf {
-    p.canonicalize().unwrap_or_else(|_| p.to_path_buf())
+    quarto_system_runtime::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
 }
 
 fn write(p: &std::path::Path, contents: &str) {

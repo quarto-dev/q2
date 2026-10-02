@@ -44,7 +44,7 @@ use quarto_core::resource_resolver::ResourceResolverContext;
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
 fn canonical(path: &std::path::Path) -> PathBuf {
-    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+    quarto_system_runtime::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 fn write(path: &std::path::Path, contents: &str) {

@@ -293,8 +293,7 @@ async fn run(args: StaticArgs) -> Result<()> {
         .path
         .clone()
         .unwrap_or_else(|| std::env::current_dir().expect("cwd"));
-    let path = raw
-        .canonicalize()
+    let path = quarto_system_runtime::canonicalize(&raw)
         .with_context(|| format!("resolving {}", raw.display()))?;
     let path_arg = path.to_string_lossy().into_owned();
 

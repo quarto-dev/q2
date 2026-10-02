@@ -304,7 +304,7 @@ pub fn render_document_to_file(
     // the pre-Phase-1 "beside the input" behavior.
     let effective_options = apply_project_output_dir_to_options(options, project, input_path);
     let (output_path, output_dir, output_stem) =
-        determine_output_paths(input_path, format, &effective_options)?;
+        determine_output_paths(input_path, format, &effective_options, runtime.as_ref())?;
 
     // Create output directory
     runtime.dir_create(&output_dir, true).map_err(|e| {
@@ -610,6 +610,7 @@ pub(crate) fn determine_output_paths(
     input_path: &Path,
     format: &str,
     options: &RenderToFileOptions,
+    runtime: &dyn SystemRuntime,
 ) -> Result<(PathBuf, PathBuf, String)> {
     // Determine file extension using the base format (strips extension prefix).
     // P7-foundation Task 3: this used to re-derive the extension via its own
@@ -647,13 +648,20 @@ pub(crate) fn determine_output_paths(
     // would silently replace the source with its own output
     // (bd-6d2wj4zp D7). Reachable via `--output <input>` today, and
     // the guard also covers any future md-output format whose
-    // default `foo.md` → `foo.md` collides. Lexical comparison is
-    // the right level here: both paths are derived from the same
-    // (already-canonicalized) input in the default branch, and an
-    // explicit output aiming at the input through a different
-    // spelling still gets caught the moment the spellings agree —
-    // this is a safety net, not an ACL.
-    if output_path == input_path {
+    // default `foo.md` → `foo.md` collides. An explicit output can
+    // name the input through another spelling (`sub/..`, or plain vs
+    // `\\?\` on Windows), so canonical forms are compared too. An
+    // output that collides with the input exists, so canonicalize
+    // succeeds exactly when it matters; the lexical check covers
+    // runtimes that cannot canonicalize.
+    let same_file = || match (
+        runtime.canonicalize(&output_path),
+        runtime.canonicalize(input_path),
+    ) {
+        (Ok(output), Ok(input)) => output == input,
+        _ => false,
+    };
+    if output_path == input_path || same_file() {
         return Err(QuartoError::other(format!(
             "Refusing to render {}: the output path would overwrite the input \
              file itself. Pass a different `--output` / `output-file`, or let \
@@ -694,7 +702,8 @@ mod tests {
         let input = Path::new("/project/doc.qmd");
         let options = RenderToFileOptions::default();
 
-        let (output, dir, stem) = determine_output_paths(input, "html", &options).unwrap();
+        let (output, dir, stem) =
+            determine_output_paths(input, "html", &options, &NativeRuntime::new()).unwrap();
 
         assert_eq!(output, PathBuf::from("/project/doc.html"));
         assert_eq!(dir, PathBuf::from("/project"));
@@ -712,7 +721,7 @@ mod tests {
             output_path: Some(PathBuf::from("/project/notes.md")),
             ..Default::default()
         };
-        let err = determine_output_paths(input, "html", &options)
+        let err = determine_output_paths(input, "html", &options, &NativeRuntime::new())
             .expect_err("output == input must be an error");
         let text = format!("{err}");
         assert!(
@@ -729,7 +738,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (output, dir, stem) = determine_output_paths(input, "html", &options).unwrap();
+        let (output, dir, stem) =
+            determine_output_paths(input, "html", &options, &NativeRuntime::new()).unwrap();
 
         assert_eq!(output, PathBuf::from("/out/custom.html"));
         assert_eq!(dir, PathBuf::from("/out"));
@@ -744,7 +754,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (output, dir, stem) = determine_output_paths(input, "html", &options).unwrap();
+        let (output, dir, stem) =
+            determine_output_paths(input, "html", &options, &NativeRuntime::new()).unwrap();
 
         assert_eq!(output, PathBuf::from("/out/doc.html"));
         assert_eq!(dir, PathBuf::from("/out"));
@@ -1235,8 +1246,13 @@ Content.
         let mut held = crate::pipeline::BookChapterPauseState::extract_from(&mut ctx);
 
         // --- Recompute, don't carry: the output trio + resolver ---
-        let (output_path, output_dir, output_stem) =
-            determine_output_paths(&input_path, "html", &RenderToFileOptions::default()).unwrap();
+        let (output_path, output_dir, output_stem) = determine_output_paths(
+            &input_path,
+            "html",
+            &RenderToFileOptions::default(),
+            runtime.as_ref(),
+        )
+        .unwrap();
         runtime.dir_create(&output_dir, true).unwrap();
         let resources_dir = output_dir.join(format!("{output_stem}_files"));
         let project_type = crate::project::orchestrator::project_type_for(&project);

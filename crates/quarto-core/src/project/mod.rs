@@ -3206,7 +3206,8 @@ mod tests {
         /// ensuring strip_prefix works correctly (e.g., on macOS where
         /// /tmp symlinks to /private/tmp).
         fn test_project_context(dir: &Path) -> ProjectContext {
-            let canonical = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
+            let canonical =
+                quarto_system_runtime::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
             ProjectContext {
                 dir: canonical.clone(),
                 config: ProjectConfig::default(),
@@ -4079,7 +4080,7 @@ mod tests {
         #[test]
         fn brand_path_resolves_with_project_root_as_dir() {
             let temp = TempDir::new().unwrap();
-            let root = temp.path().canonicalize().unwrap();
+            let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
             fs::write(
                 root.join("_quarto.yml"),
                 "project:\n  type: website\nbrand: _brand.yml\n",
@@ -4102,7 +4103,7 @@ mod tests {
             // The case that distinguishes a correct `dir` from a
             // hardcoded project root.
             let temp = TempDir::new().unwrap();
-            let root = temp.path().canonicalize().unwrap();
+            let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
             fs::write(
                 root.join("_quarto.yml"),
                 "project:\n  type: website\nbrand: _brand/_brand.yml\n",

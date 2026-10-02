@@ -254,9 +254,11 @@ impl OutputSink {
         // the allowed root in the other (e.g. via
         // `ProjectContext::single_file`, which canonicalizes the
         // project dir). Compare the deepest-existing-ancestor
-        // canonical forms before rejecting.
+        // canonical forms before rejecting. Native-only: WASM has no
+        // OS-level aliasing to resolve.
         #[cfg(not(target_arch = "wasm32"))]
         {
+            use quarto_system_runtime::canonicalize_deepest_existing;
             let canonical_dest = canonicalize_deepest_existing(&cleaned);
             if self.allowed_roots.iter().any(|root| {
                 let canonical_root = canonicalize_deepest_existing(root);
@@ -404,38 +406,6 @@ fn io_error_from(e: quarto_system_runtime::RuntimeError) -> std::io::Error {
         quarto_system_runtime::RuntimeError::Io(e) => e,
         other => std::io::Error::other(other.to_string()),
     }
-}
-
-/// Canonicalize the deepest existing ancestor of `path`, then
-/// re-append the components below it. This resolves OS-level
-/// path aliases (e.g. macOS's `/var` → `/private/var`) for paths
-/// that haven't been created yet — exactly the situation the sink
-/// faces at enqueue time, when the dest doesn't exist but its
-/// project root does.
-///
-/// Best-effort: any `canonicalize` failure leaves the lexical
-/// form in place. Native-only — WASM has no OS-level aliasing to
-/// resolve and `std::fs::canonicalize` isn't available there.
-#[cfg(not(target_arch = "wasm32"))]
-fn canonicalize_deepest_existing(path: &Path) -> PathBuf {
-    let mut current = path.to_path_buf();
-    let mut tail: Vec<std::ffi::OsString> = Vec::new();
-    while !current.exists() {
-        match current.file_name() {
-            Some(name) => {
-                tail.push(name.to_os_string());
-                if !current.pop() {
-                    return path.to_path_buf();
-                }
-            }
-            None => return path.to_path_buf(),
-        }
-    }
-    let mut result = std::fs::canonicalize(&current).unwrap_or(current);
-    for name in tail.into_iter().rev() {
-        result.push(name);
-    }
-    result
 }
 
 /// Lexical (non-I/O) normalization: drop `.` components, fold

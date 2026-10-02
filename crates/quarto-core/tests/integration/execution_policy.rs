@@ -65,7 +65,7 @@ fn problems(result: &RenderToFileResult) -> Vec<String> {
 #[test]
 fn default_policy_executes_every_document() {
     let temp = tempfile::TempDir::new().unwrap();
-    let dir = temp.path().canonicalize().unwrap();
+    let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let a = write(&dir, "a.qmd", ENGINE_DOC);
     let result = render(&a, ExecutionPolicy::default());
     let html = html_of(&result);
@@ -80,7 +80,7 @@ fn default_policy_executes_every_document() {
 #[test]
 fn policy_none_renders_cells_inert_without_any_diagnostic() {
     let temp = tempfile::TempDir::new().unwrap();
-    let dir = temp.path().canonicalize().unwrap();
+    let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let a = write(&dir, "a.qmd", ENGINE_DOC);
     let result = render(&a, ExecutionPolicy::None);
     let html = html_of(&result);
@@ -104,7 +104,7 @@ fn policy_none_renders_cells_inert_without_any_diagnostic() {
 #[test]
 fn policy_none_on_a_document_without_code_is_not_a_skip() {
     let temp = tempfile::TempDir::new().unwrap();
-    let dir = temp.path().canonicalize().unwrap();
+    let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let p = write(&dir, "plain.qmd", PLAIN_DOC);
     let result = render(&p, ExecutionPolicy::None);
     assert!(html_of(&result).contains("No code here."));
@@ -117,7 +117,7 @@ fn policy_none_on_a_document_without_code_is_not_a_skip() {
 #[test]
 fn policy_only_executes_the_listed_inputs_and_skips_the_rest() {
     let temp = tempfile::TempDir::new().unwrap();
-    let dir = temp.path().canonicalize().unwrap();
+    let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
     let a = write(&dir, "a.qmd", ENGINE_DOC);
     let b = write(&dir, "b.qmd", ENGINE_DOC);
     let only_a = ExecutionPolicy::Only(BTreeSet::from([a.clone()]));
