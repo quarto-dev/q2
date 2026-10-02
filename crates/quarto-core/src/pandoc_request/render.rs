@@ -45,6 +45,8 @@ pub struct PandocRequestOutcome {
     pub source_context: SourceContext,
     /// Why there is no request, when there is none.
     pub error: Option<String>,
+    /// Code cells with no cached result, which the document shows as source.
+    pub unexecuted_cells: usize,
 }
 
 impl PandocRequestOutcome {
@@ -54,6 +56,7 @@ impl PandocRequestOutcome {
             diagnostics: Vec::new(),
             source_context: SourceContext::default(),
             error: Some(error.into()),
+            unexecuted_cells: 0,
         }
     }
 }
@@ -111,6 +114,10 @@ pub async fn render_pandoc_request(
             output_path: None,
         });
     ctx.resource_resolver = resolver;
+    // The browser has no engines: cells without a capture pass through
+    // inert and silently (the response counts them), whatever the native
+    // registry would have done with them.
+    ctx.execution_policy = crate::engine::ExecutionPolicy::None;
     ctx.prepare_options = Some(PrepareOptions {
         temp_root: PathBuf::from(&constants().share_root),
         source_date_epoch,
@@ -134,6 +141,7 @@ pub async fn render_pandoc_request(
                 diagnostics: parse_error.diagnostics.clone(),
                 source_context: parse_error.source_context.clone(),
                 error: Some(QuartoError::Parse(parse_error).to_string()),
+                unexecuted_cells: 0,
             };
         }
         Err(e) => return PandocRequestOutcome::failed(e.to_string()),
@@ -154,6 +162,7 @@ pub async fn render_pandoc_request(
             diagnostics,
             source_context,
             error: Some(title),
+            unexecuted_cells: ctx.unexecuted_cells,
         };
     }
 
@@ -169,5 +178,6 @@ pub async fn render_pandoc_request(
         diagnostics,
         source_context,
         error: None,
+        unexecuted_cells: ctx.unexecuted_cells,
     }
 }

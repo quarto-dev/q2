@@ -475,6 +475,11 @@ pub struct RenderContext<'a> {
     /// pattern). `None` until that stage has run.
     pub pandoc_request: Option<crate::pandoc_request::PandocRequest>,
 
+    /// Engine cells that stayed unexecuted (no cached result), set by the
+    /// pandoc-request pipeline's `UnexecutedCellCountStage`; `0` when that
+    /// stage is not in the list. Output-only, like `pandoc_request`.
+    pub unexecuted_cells: usize,
+
     /// Project-wide crossref registry for multi-file books (book-projects
     /// P5): every chapter's crossref targets, keyed by identifier, built by
     /// aggregating all chapters' inventories after they pause post-Navigation
@@ -590,6 +595,7 @@ impl<'a> RenderContext<'a> {
             defer_citeproc: false,
             prepare_options: None,
             pandoc_request: None,
+            unexecuted_cells: 0,
             cross_chapter_crossref_registry: None,
             citation_manifest: None,
             suppress_book_bibliography: false,
