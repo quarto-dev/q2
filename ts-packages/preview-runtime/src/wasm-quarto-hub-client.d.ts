@@ -117,6 +117,24 @@ declare module 'wasm-quarto-hub-client' {
     typst_available_fonts?: string[],
   ): Promise<RenderPandocRequestResponse>;
 
+  /**
+   * The vendored typst packages and Font Awesome fonts a `post: "compile_typst"`
+   * request's compile reads: a separate tree with its own version, not part of
+   * the share tree. Paths are relative to a package-cache root
+   * (`packages/preview/<name>/<version>/...`) and a font directory (`fonts/...`).
+   */
+  export function get_typst_assets_version(): string;
+  export function get_typst_assets(): {
+    typst_assets_version: string;
+    files: PandocRequestFile[];
+  };
+  /**
+   * The first line of the `.typ` a `post: "compile_typst"` request compiles: pins
+   * the document date to the request's `SOURCE_DATE_EPOCH` (typst.ts has no date
+   * option). Empty when the epoch is out of range.
+   */
+  export function typst_date_prelude(source_date_epoch: number): string;
+
   /** SHA-256 identifying the share tree; re-read the tree only when it changes. */
   export function get_pandoc_share_tree_version(): string;
   /** The share tree: paths relative to `request.share_tree_path`. */
@@ -147,8 +165,14 @@ declare module 'wasm-quarto-hub-client' {
     /** The downloaded file's extension, no dot (typst is source only: `typ`). */
     extension: string;
     mime: string;
-    /** False until the request for this format is implemented (typst waits for R4). */
+    /** False until the request for this format is implemented. */
     available: boolean;
+    /**
+     * Accepted by `render_pandoc_request` but left out of the menu, and classed
+     * `neither` by the resolver, until the work that finishes it lands (`pdf`:
+     * host H8, which compiles the request's `.typ`).
+     */
+    hidden: boolean;
   }
 
   /** JSON `{ formats: PandocFormatInfo[] }`: the formats pandoc.wasm can produce, in menu order. */

@@ -55,9 +55,14 @@ impl PipelineStage for PandocPrepareStage {
             Some(opts) => opts.clone(),
             None => PrepareOptions::native(ctx.temp_dir()?.to_path_buf()),
         };
-        // No typst pre-step here: R4 brings the typst formats to the seam.
-        let prepared =
-            PandocWriteStage::new().prepare(&mut doc, ctx, &opts, &TypstPrepInputs::default())?;
+        // Brand, logo and params only: no font staging or `typst fonts`
+        // (those are native effects; the host supplies the font list).
+        let write = PandocWriteStage::new();
+        let mut typst: TypstPrepInputs = write.typst_prestep(&doc, ctx, false)?;
+        if ctx.format.identifier == crate::format::FormatIdentifier::Typst {
+            typst.available_fonts = opts.typst_available_fonts.clone();
+        }
+        let prepared = write.prepare(&mut doc, ctx, &opts, &typst)?;
         ctx.add_diagnostics(prepared.diagnostics);
         ctx.pandoc_request = Some(prepared.request);
         Ok(PipelineData::RenderedOutput(RenderedOutput {

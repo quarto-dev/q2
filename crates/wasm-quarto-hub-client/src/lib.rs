@@ -1689,6 +1689,45 @@ pub fn get_pandoc_share_tree() -> JsValue {
     out.into()
 }
 
+/// SHA-256 identifying the typst assets (`get_typst_assets`). Separate from
+/// the pandoc share tree: only a PDF compile reads them.
+#[wasm_bindgen]
+pub fn get_typst_assets_version() -> String {
+    quarto_core::pandoc_request::typst_assets_version().to_string()
+}
+
+/// `{ typst_assets_version, files: [{ path, bytes: Uint8Array }] }`: the
+/// vendored typst packages and Font Awesome fonts, paths relative to a
+/// package-cache root (`packages/preview/<name>/<version>/...`) and a font
+/// directory (`fonts/...`).
+#[wasm_bindgen]
+pub fn get_typst_assets() -> JsValue {
+    let files: Vec<quarto_core::pandoc_request::RequestFile> =
+        quarto_core::pandoc_request::typst_asset_entries()
+            .iter()
+            .map(|e| quarto_core::pandoc_request::RequestFile {
+                path: e.rel_path.clone(),
+                bytes: e.bytes.to_vec(),
+            })
+            .collect();
+    let out = js_sys::Object::new();
+    let _ = js_sys::Reflect::set(
+        &out,
+        &"typst_assets_version".into(),
+        &JsValue::from_str(quarto_core::pandoc_request::typst_assets_version()),
+    );
+    let _ = js_sys::Reflect::set(&out, &"files".into(), &request_files_to_js(&files));
+    out.into()
+}
+
+/// The first line of the `.typ` a `post: compile_typst` request compiles:
+/// pins the document date to `source_date_epoch` (seconds, UTC) so the PDF
+/// does not depend on the clock. Empty when the epoch is out of range.
+#[wasm_bindgen]
+pub fn typst_date_prelude(source_date_epoch: f64) -> String {
+    quarto_core::pandoc_request::typst_date_prelude(source_date_epoch as i64).unwrap_or_default()
+}
+
 /// Classify a finished pandoc run. Returns JSON
 /// `{ success, diagnostics }`: on a zero exit the `Q-11-1` warnings found on
 /// stderr; otherwise the `Q-20-3` error carrying `json_path` (the request's
@@ -1722,8 +1761,9 @@ pub fn classify_pandoc_completion(
     .unwrap()
 }
 
-/// JSON `{ formats: [{ key, label, extension, mime, available }] }`: the
-/// formats pandoc.wasm can produce, in menu order (D8).
+/// JSON `{ formats: [{ key, label, extension, mime, available, hidden }] }`:
+/// the formats pandoc.wasm can produce, in menu order (D8). `hidden` rows are
+/// accepted by `render_pandoc_request` but not offered (`pdf`, until H8).
 #[wasm_bindgen]
 pub fn get_pandoc_formats() -> String {
     serde_json::to_string(&serde_json::json!({

@@ -1,0 +1,26 @@
+---
+title: "Remote Image Cannot Be Fetched for Typst in the Browser"
+description: "Producing Typst in the browser cannot fetch remote images, so a document that references one fails."
+code: Q-20-9
+subsystem: pandoc
+status: stub
+since: "99.9.9"
+categories:
+  - pandoc
+---
+
+# `Q-20-9` — Remote Image Cannot Be Fetched for Typst in the Browser
+
+> Producing Typst in the browser cannot fetch remote images, so a
+> document that references one fails.
+
+## What this means
+
+pandoc.wasm has no network access, and the Typst filter's remote image
+fetch is a hard failure there. A document that references an image by
+`http://` or `https://` URL therefore cannot be converted to Typst in
+the browser. Native `q2 render` is not affected.
+
+## How to fix
+
+Download the image into the project and reference it by path.

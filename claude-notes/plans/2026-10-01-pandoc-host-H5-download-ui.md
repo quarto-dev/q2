@@ -17,6 +17,9 @@ The product surface: a "Download as" control next to the print button, a downloa
 - Documents the preview cannot render get no preview, only a "Download <type>" button for the document's own format, rendering only on click (D8.2); three classes with `aria-disabled` explanation for "neither" (D8.4).
 - A document with errors does not download; warnings still download (D8.5).
 
+- **From R4 (landed):** `getPandocFormats()` rows have a `hidden` flag (`pdf` is hidden until H8): filter on it when building the menu. A typst request can carry two warnings the menu should show: `Q-20-9` (a remote image; the run will fail until R6's prefetch) and `Q-20-10` (a styled raw HTML table is not CSS-inlined until R8). The `.typ` download names no images or brand assets, so say it may have dangling resource references (D8.6).
+
+
 ## Checklist
 
 ### Tests first

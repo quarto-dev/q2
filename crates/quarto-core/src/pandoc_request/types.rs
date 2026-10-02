@@ -25,8 +25,9 @@ pub enum RequestKind {
     Pandoc,
 }
 
-/// What runs after pandoc. `None` for docx, pptx and epub; `CompileTypst` is
-/// reserved for the PDF work.
+/// What runs after pandoc. `None` for docx, pptx, epub and typst source;
+/// `CompileTypst` (the `pdf` request) means the host compiles `output_path`
+/// (a `.typ`) to a PDF, after prepending [`super::typst_date_prelude`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum RequestPost {
@@ -84,7 +85,7 @@ pub struct PandocRequest {
     pub expected_pandoc_wasm_sha256: String,
     /// SHA-256 over the sorted `(path, bytes)` entries of the share tree.
     pub share_tree_version: String,
-    /// Echo of `render_pandoc_request`'s input; `None` until the PDF work.
+    /// Echo of `render_pandoc_request`'s input (`None` for a `.typ` download).
     pub typst_available_fonts: Option<Vec<String>>,
 }
 
@@ -146,7 +147,7 @@ impl PandocRequest {
             .iter()
             .map(|a| rooted(a))
             .collect();
-        let value = json!({
+        let mut value = json!({
             "schema_version": self.schema_version,
             "tool": self.expected_pandoc_wasm_sha256,
             "argv": argv,
@@ -155,6 +156,11 @@ impl PandocRequest {
             "resource_refs": hashes(&self.resource_refs),
             "share_tree": self.share_tree_version,
         });
+        // Only when set, so ids of requests without a post step are unchanged:
+        // `pdf` and `typst` share argv but not what the host does next.
+        if self.post != RequestPost::None {
+            value["post"] = json!(self.post);
+        }
         let mut canonical = String::new();
         write_canonical(&value, &mut canonical);
         hex::encode(Sha256::digest(canonical.as_bytes()))[..16].to_string()

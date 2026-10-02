@@ -117,6 +117,12 @@ interface WasmModuleExtended {
     share_tree_version: string;
     files: PandocRequestFile[];
   };
+  get_typst_assets_version: () => string;
+  get_typst_assets: () => {
+    typst_assets_version: string;
+    files: PandocRequestFile[];
+  };
+  typst_date_prelude: (source_date_epoch: number) => string;
   classify_pandoc_completion: (
     stage_name: string,
     success: boolean,
@@ -673,6 +679,28 @@ export function getPandocShareTree(): {
   files: PandocRequestFile[];
 } {
   return getWasm().get_pandoc_share_tree();
+}
+
+/** Identifies the typst assets; re-read them only when this changes. */
+export function getTypstAssetsVersion(): string {
+  return getWasm().get_typst_assets_version();
+}
+
+/**
+ * The vendored typst packages and Font Awesome fonts a `compile_typst`
+ * request's compile reads (paths relative to a package-cache root and a font
+ * directory), separate from the share tree.
+ */
+export function getTypstAssets(): {
+  typst_assets_version: string;
+  files: PandocRequestFile[];
+} {
+  return getWasm().get_typst_assets();
+}
+
+/** First line of the `.typ` to compile: pins the document date to `sourceDateEpoch`. */
+export function typstDatePrelude(sourceDateEpoch: number): string {
+  return getWasm().typst_date_prelude(sourceDateEpoch);
 }
 
 /** Classify a finished pandoc run into diagnostics (`Q-11-1` warnings, `Q-20-3` error). */

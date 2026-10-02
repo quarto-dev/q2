@@ -2,6 +2,8 @@
 
 use std::path::PathBuf;
 
+use super::types::RequestPost;
+
 /// Host-dependent inputs to `prepare()`.
 ///
 /// Native renders leave `RenderContext::prepare_options` unset and `prepare()`
@@ -21,6 +23,17 @@ pub struct PrepareOptions {
     /// Copy resource bytes into the request (`resource_refs`) and add `/tmp`
     /// to `dirs`; natively the files already exist where pandoc runs.
     pub collect_resources: bool,
+    /// The `typst-available-fonts` filter param (typst formats only): what
+    /// the host's typst compiler can load, in place of `typst fonts`.
+    /// `None` leaves the param unset, which the Lua consumer treats as
+    /// permissive.
+    pub typst_available_fonts: Option<Vec<String>>,
+    /// What the host runs after pandoc. `CompileTypst` (the `pdf` request)
+    /// also collects what the compile reads and pandoc does not: typst
+    /// images and brand fonts and logos go into `resource_refs`. A `.typ`
+    /// download leaves them out, since they would only count against the
+    /// size limits.
+    pub post: RequestPost,
 }
 
 impl PrepareOptions {
@@ -30,6 +43,8 @@ impl PrepareOptions {
             temp_root,
             source_date_epoch: None,
             collect_resources: false,
+            typst_available_fonts: None,
+            post: RequestPost::None,
         }
     }
 }

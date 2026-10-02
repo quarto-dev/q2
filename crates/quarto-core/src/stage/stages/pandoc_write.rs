@@ -15,9 +15,10 @@
 //! natively with `std::process::Command`, writing the request's files and
 //! extracting the vendored filter tree
 //! (`crate::pandoc_filters::bundle::extract_share_tree`) under the request's
-//! share root. The wasm host will run the same request in a worker. The
-//! module stays native-gated until R2 ungates `prepare()`; the typst-only
-//! steps inside `prepare()` still touch the filesystem directly until R4.
+//! share root. The wasm host runs the same request in a worker. `prepare()`
+//! is ungated and reads through the runtime only: the typst template, its
+//! partials, the `.theme` highlight file and the toc-depth defaults file all
+//! travel as request files or argv text (R4).
 //!
 //! Unlike [`super::render_html::RenderHtmlBodyStage`], this stage's
 //! `RenderedOutput.content` is always empty — no binary bytes travel
@@ -53,7 +54,7 @@ use crate::pandoc_request::args::is_absolute_request_path;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::pandoc_request::args::to_native_windows_arg;
 use crate::pandoc_request::{
-    PandocArg, PandocRequest, PrepareOptions, REQUEST_SCHEMA_VERSION, RequestFile,
+    PandocArg, PandocRequest, PrepareOptions, REQUEST_SCHEMA_VERSION, RequestFile, RequestPost,
     ResourceCollector, constants, normalize_request_path, share_tree_version, validate_mounts,
 };
 #[cfg(not(target_arch = "wasm32"))]
@@ -246,7 +247,6 @@ fn epub_extra_args(
 /// `brand:` value reaching `PandocWriteStage` came from either the
 /// project config or the document itself — good enough for the span
 /// binding to land on the right file in the common case.
-#[cfg(not(target_arch = "wasm32"))]
 #[allow(clippy::type_complexity)]
 fn resolve_typst_brand(
     meta: &quarto_pandoc_types::ConfigValue,
@@ -276,7 +276,6 @@ fn resolve_typst_brand(
 
 /// Builds the `brand`, `logo` and `brand-mode` filter params from
 /// already-resolved brand variants (see [`resolve_typst_brand`]).
-#[cfg(not(target_arch = "wasm32"))]
 fn resolve_typst_brand_param(
     meta: &quarto_pandoc_types::ConfigValue,
     light: Option<&quarto_brand::ResolvedBrand>,
@@ -312,6 +311,20 @@ fn resolve_typst_brand_param(
     // by `MetadataMergeStage`) sets one explicitly.
     let brand_mode = meta.get("brand-mode").and_then(|v| v.as_plain_text());
     (brand_param, logo_param, brand_mode)
+}
+
+/// The brand variant Typst renders with: the dark half when the
+/// document's `brand-mode` is `dark` and a dark half exists, otherwise
+/// light (the default, matching the `brand-mode` filter param).
+pub(crate) fn brand_for_mode<'a>(
+    light: Option<&'a quarto_brand::ResolvedBrand>,
+    dark: Option<&'a quarto_brand::ResolvedBrand>,
+    brand_mode: Option<&str>,
+) -> Option<&'a quarto_brand::ResolvedBrand> {
+    match brand_mode {
+        Some("dark") => dark.or(light),
+        _ => light,
+    }
 }
 
 /// Download the brand's `source: google` fonts into the project's font
@@ -404,8 +417,10 @@ fn resolve_typst_available_fonts(
 /// Brand-font staging (`stage_typst_brand_fonts`, which fetches and writes
 /// into the project) and `typst fonts` discovery are effects, not part of
 /// `prepare()`: their results feed the params blob, so they run first, on
-/// the native path only (the wasm entry point supplies `available_fonts`
-/// itself, and no brand staging happens there until R4).
+/// the native path only. In the browser Google and URL brand fonts and the
+/// font cache are skipped (design D8.6: the `.typ` names the font, the
+/// compile or the reader's machine finds it), and the host supplies
+/// `available_fonts` (`PrepareOptions::typst_available_fonts`).
 #[derive(Debug, Default, Clone)]
 pub struct TypstPrepInputs {
     pub brand: Option<serde_json::Value>,
@@ -416,6 +431,9 @@ pub struct TypstPrepInputs {
     pub reference_location: Option<String>,
     pub cite_method: Option<String>,
     pub code_block_bg: Option<String>,
+    /// Brand font and logo files a PDF compile reads (see
+    /// [`PrepareOptions::post`]); not part of the params blob.
+    pub asset_files: Vec<PathBuf>,
 }
 
 /// What `prepare()` returns: the request plus what the native caller needs
@@ -453,28 +471,38 @@ fn request_path(stage: &str, project_dir: &Path, path: &Path) -> Result<String, 
     Ok(normalized)
 }
 
-/// Stages the typst doctemplate under `temp_root` and returns the
-/// orchestrator's path. Direct `std::fs` until R4 moves it into the
-/// request's `files`.
-#[cfg(not(target_arch = "wasm32"))]
-fn stage_typst_template(
+/// The typst doctemplate as request data: the vendored partials under
+/// `<temp_root>/pandoc-typst-template/`, with a user `template:` replacing
+/// `template.typ` and each `template-partials:` entry replacing the
+/// same-named partial. Returns the path to hand `--template` and the
+/// `(path, bytes)` files to write; user files are read through `runtime`
+/// (the VFS in the browser), so nothing here touches `std::fs`.
+fn typst_template_files(
     name: &str,
     temp_root: &Path,
-    doc: &DocumentAst,
-) -> Result<PathBuf, PipelineError> {
+    doc_dir: &Path,
+    meta: &quarto_pandoc_types::ConfigValue,
+    runtime: &dyn quarto_system_runtime::SystemRuntime,
+) -> Result<(PathBuf, Vec<(PathBuf, Vec<u8>)>), PipelineError> {
+    use std::collections::BTreeMap;
+
+    fn collect(dir: &include_dir::Dir<'static>, out: &mut BTreeMap<String, Vec<u8>>) {
+        for entry in dir.entries() {
+            match entry {
+                include_dir::DirEntry::Dir(d) => collect(d, out),
+                include_dir::DirEntry::File(f) => {
+                    out.insert(
+                        f.path().to_string_lossy().replace('\\', "/"),
+                        f.contents().to_vec(),
+                    );
+                }
+            }
+        }
+    }
+
     let template_dir = temp_root.join("pandoc-typst-template");
-    std::fs::create_dir_all(&template_dir).map_err(|e| {
-        PipelineError::stage_error(
-            name,
-            format!("failed to create typst template directory: {e}"),
-        )
-    })?;
-    crate::pandoc_filters::bundle::extract_typst_template(&template_dir).map_err(|e| {
-        PipelineError::stage_error(
-            name,
-            format!("failed to materialize vendored typst template: {e}"),
-        )
-    })?;
+    let mut entries: BTreeMap<String, Vec<u8>> = BTreeMap::new();
+    collect(&crate::pandoc_filters::TYPST_TEMPLATE_DIR, &mut entries);
     let vendored_template = template_dir.join("template.typ");
 
     // pandoc-hybrid-typst Phase 1's "Pandoc-defaults forwarding
@@ -484,12 +512,8 @@ fn stage_typst_template(
     // (`command/render/pandoc.ts:784-810`). The vendored partials
     // stay staged alongside it unchanged, so a custom template can
     // still reference them (`$numbering.typ()$` etc).
-    let doc_dir = doc
-        .path
-        .parent()
-        .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
-    if let Some(user_template) = resolve_user_template_path(&doc.ast.meta, &doc_dir) {
-        std::fs::copy(&user_template, &vendored_template).map_err(|e| {
+    if let Some(user_template) = resolve_user_template_path(meta, doc_dir) {
+        let bytes = runtime.file_read(&user_template).map_err(|e| {
             PipelineError::stage_error(
                 name,
                 format!(
@@ -498,24 +522,49 @@ fn stage_typst_template(
                 ),
             )
         })?;
+        entries.insert("template.typ".to_string(), bytes);
     }
-    stage_typst_template_partials(&doc.ast.meta, &doc_dir, &template_dir)
-        .map_err(|msg| PipelineError::stage_error(name, msg))?;
-    Ok(vendored_template)
-}
-
-/// Typst through the request seam needs R4 (template partials as request
-/// files); until then the wasm build refuses it up front.
-#[cfg(target_arch = "wasm32")]
-fn stage_typst_template(
-    name: &str,
-    _temp_root: &Path,
-    _doc: &DocumentAst,
-) -> Result<PathBuf, PipelineError> {
-    Err(PipelineError::stage_error(
-        name,
-        "typst output is not available in the browser yet",
-    ))
+    // Typst-leg counterpart of ApplyTemplateStage's HTML `template-partials`
+    // handling (`apply_template.rs:179-183`): each declared partial replaces
+    // the same-named vendored partial, the directory Pandoc's `--template`
+    // resolves `$partial.typ()$` calls against — so an extension like
+    // orange-book that ships a `typst-show.typ` partial without a whole
+    // `template:` reaches the output (its `#part[...]` RawBlocks otherwise
+    // fail with `unknown variable: part`; book-projects P2 item 79).
+    // Entries arrive as `ConfigValueKind::Path` (extension contributions,
+    // rebased document-relative at metadata-merge time) or as plain
+    // scalars/inlines (front matter); both resolve against `doc_dir`.
+    // Shadowing is by file name, matching pandoc's partial resolution and Q1.
+    if let Some(partials) = meta.get("template-partials").and_then(|v| v.as_array()) {
+        for partial in partials {
+            let rel = match &partial.value {
+                quarto_pandoc_types::config_value::ConfigValueKind::Path(s) => s.clone(),
+                _ => match partial.as_plain_text() {
+                    Some(s) => s,
+                    None => continue,
+                },
+            };
+            let Some(file_name) = Path::new(&rel).file_name() else {
+                continue;
+            };
+            let src = doc_dir.join(&rel);
+            let bytes = runtime.file_read(&src).map_err(|e| {
+                PipelineError::stage_error(
+                    name,
+                    format!(
+                        "failed to stage typst template partial {}: {e}",
+                        src.display()
+                    ),
+                )
+            })?;
+            entries.insert(file_name.to_string_lossy().into_owned(), bytes);
+        }
+    }
+    let files = entries
+        .into_iter()
+        .map(|(rel, bytes)| (template_dir.join(rel), bytes))
+        .collect();
+    Ok((vendored_template, files))
 }
 
 pub struct PandocWriteStage;
@@ -525,33 +574,30 @@ impl PandocWriteStage {
         Self
     }
 
-    /// The native typst pre-step: brand, logo, brand-mode, brand-font
-    /// staging, `typst fonts` discovery and the citation/reference params.
-    /// Empty for every other format.
-    #[cfg(not(target_arch = "wasm32"))]
-    fn typst_prestep(
+    /// The typst pre-step: brand, logo, brand-mode and the
+    /// citation/reference params. Empty for every other format.
+    ///
+    /// `native_effects` adds what only the native executor can do: brand
+    /// font staging (downloads into the project's font cache) and `typst
+    /// fonts` discovery. The request path passes `false` (and the wasm
+    /// build has no such code), leaving `available_fonts` to the host.
+    pub fn typst_prestep(
         &self,
         doc: &DocumentAst,
         ctx: &mut StageContext,
+        native_effects: bool,
     ) -> Result<TypstPrepInputs, PipelineError> {
         if ctx.format.identifier != FormatIdentifier::Typst {
             return Ok(TypstPrepInputs::default());
         }
         let (light, dark) = resolve_typst_brand(&doc.ast.meta, ctx)?;
-        // Before `typst fonts` runs: the available-fonts list must include
-        // the fonts we are about to make available.
-        stage_typst_brand_fonts(light.as_ref(), ctx);
-        stage_typst_brand_fonts(dark.as_ref(), ctx);
         let brand_mode_text = doc
             .ast
             .meta
             .get("brand-mode")
             .and_then(|v| v.as_plain_text());
-        let active_brand = super::typst_compile::brand_for_mode(
-            light.as_ref(),
-            dark.as_ref(),
-            brand_mode_text.as_deref(),
-        );
+        let active_brand =
+            brand_for_mode(light.as_ref(), dark.as_ref(), brand_mode_text.as_deref());
         // The brand's `monospace-block` background replaces the highlight
         // palette's code-block background.
         let code_block_bg = active_brand.and_then(|resolved| {
@@ -563,12 +609,13 @@ impl PandocWriteStage {
         });
         let (brand, logo, brand_mode) =
             resolve_typst_brand_param(&doc.ast.meta, light.as_ref(), dark.as_ref(), ctx);
-        let available_fonts = resolve_typst_available_fonts(
-            self.name(),
-            &doc.ast.meta,
-            active_brand,
-            &doc.path,
+        let available_fonts = self.typst_native_font_effects(
+            native_effects,
+            doc,
             ctx,
+            light.as_ref(),
+            dark.as_ref(),
+            active_brand,
         )?;
         Ok(TypstPrepInputs {
             brand,
@@ -607,7 +654,51 @@ impl PandocWriteStage {
                 .and_then(|value| value.as_bool())
                 .and_then(|is_citeproc| is_citeproc.then(|| "citeproc".to_string())),
             code_block_bg,
+            asset_files: [light.as_ref(), dark.as_ref()]
+                .into_iter()
+                .flatten()
+                .flat_map(|b| {
+                    crate::pandoc_filters::typst_brand::brand_asset_files(b, &ctx.project.dir)
+                })
+                .collect(),
         })
+    }
+
+    /// Brand-font staging and `typst fonts` discovery (native only).
+    #[cfg(not(target_arch = "wasm32"))]
+    fn typst_native_font_effects(
+        &self,
+        native_effects: bool,
+        doc: &DocumentAst,
+        ctx: &mut StageContext,
+        light: Option<&quarto_brand::ResolvedBrand>,
+        dark: Option<&quarto_brand::ResolvedBrand>,
+        active_brand: Option<&quarto_brand::ResolvedBrand>,
+    ) -> Result<Option<Vec<String>>, PipelineError> {
+        if !native_effects {
+            return Ok(None);
+        }
+        // Before `typst fonts` runs: the available-fonts list must include
+        // the fonts we are about to make available.
+        stage_typst_brand_fonts(light, ctx);
+        stage_typst_brand_fonts(dark, ctx);
+        resolve_typst_available_fonts(self.name(), &doc.ast.meta, active_brand, &doc.path, ctx)
+    }
+
+    /// The wasm build stages no fonts and runs no `typst fonts`: Google
+    /// and URL brand fonts and the font cache are skipped (design D8.6),
+    /// and the host supplies the available-font list (`render_pandoc_request`).
+    #[cfg(target_arch = "wasm32")]
+    fn typst_native_font_effects(
+        &self,
+        _native_effects: bool,
+        _doc: &DocumentAst,
+        _ctx: &mut StageContext,
+        _light: Option<&quarto_brand::ResolvedBrand>,
+        _dark: Option<&quarto_brand::ResolvedBrand>,
+        _active_brand: Option<&quarto_brand::ResolvedBrand>,
+    ) -> Result<Option<Vec<String>>, PipelineError> {
+        Ok(None)
     }
 
     /// Build the [`PandocRequest`] for `doc`: everything one pandoc run
@@ -870,21 +961,17 @@ impl PandocWriteStage {
         })?;
 
         let json_path = temp_root.join("pandoc-input.json");
+        // What the browser's `.typ` request cannot do (remote images, CSS
+        // inlining of styled raw HTML); natively both work.
+        let typst_notes = if is_typst && opts.collect_resources {
+            crate::pandoc_request::typst_limits::typst_limitation_diagnostics(&json_buf)
+        } else {
+            Vec::new()
+        };
         let mut files = vec![RequestFile {
             path: rp(&json_path)?,
             bytes: json_buf,
         }];
-
-        // pandoc-hybrid-typst Phase 1: the 8-partial typst doctemplate,
-        // typst-only. Staged independent of `share` above (verified: no
-        // positional relationship between `--template` and
-        // `--data-dir`/`-L` — see `bundle::extract_typst_template`'s doc
-        // comment). Direct `std::fs` until R4.
-        let typst_template_path = if is_typst {
-            Some(stage_typst_template(name, &temp_root, doc)?)
-        } else {
-            None
-        };
 
         // pandoc-hybrid-typst Phase 2: for typst, `ctx.output_path()` is
         // the *final* PDF path (`output_extension` is `"pdf"`) — but this
@@ -959,6 +1046,30 @@ impl PandocWriteStage {
         };
         files.extend(extra_files);
 
+        // pandoc-hybrid-typst Phase 1: the 8-partial typst doctemplate,
+        // typst-only, as request files. Independent of `share` above
+        // (verified: no positional relationship between `--template` and
+        // `--data-dir`/`-L` — see `bundle::extract_typst_template`'s doc
+        // comment).
+        let typst_template_path = if is_typst {
+            let (template, template_files) = typst_template_files(
+                name,
+                &temp_root,
+                &doc_dir_abs,
+                &doc.ast.meta,
+                ctx.runtime.as_ref(),
+            )?;
+            for (path, bytes) in template_files {
+                files.push(RequestFile {
+                    path: rp(&path)?,
+                    bytes,
+                });
+            }
+            Some(template)
+        } else {
+            None
+        };
+
         // P7 Task 4: the per-format `--default-image-extension` default
         // plus the pandoc-defaults forwarding allow-list
         // (`reference-doc`/`template`/`highlight-style`/`toc`/`toc-depth`/
@@ -975,6 +1086,7 @@ impl PandocWriteStage {
                 &doc.ast.meta,
                 typst_brand_mode.as_deref(),
                 typst.code_block_bg.as_deref(),
+                ctx.runtime.as_ref(),
             )
             .map_err(|e| PipelineError::stage_error(name, e.to_string()))?;
             forwarded_args.extend(
@@ -991,18 +1103,16 @@ impl PandocWriteStage {
         // document's metadata when threaded through a `--defaults` file
         // (see `build_typst_toc_defaults_yaml`'s doc comment). Write that
         // file here, alongside this stage's other temp-root artifacts
-        // (direct `std::fs` until R4).
+        // (a request file).
         if is_typst
             && let Some(yaml) =
                 crate::pandoc_filters::format_defaults::build_typst_toc_defaults_yaml(&doc.ast.meta)
         {
             let defaults_path = temp_root.join("pandoc-typst-toc-defaults.yaml");
-            std::fs::write(&defaults_path, yaml).map_err(|e| {
-                PipelineError::stage_error(
-                    name,
-                    format!("failed to write typst toc-depth defaults file: {e}"),
-                )
-            })?;
+            files.push(RequestFile {
+                path: rp(&defaults_path)?,
+                bytes: yaml.into_bytes(),
+            });
             forwarded_args.push(PandocArg::text("--defaults"));
             forwarded_args.push(PandocArg::Path(defaults_path));
         }
@@ -1048,14 +1158,27 @@ impl PandocWriteStage {
                 &temp_root,
                 base_total,
             );
-            let mut image_targets = Vec::new();
-            crate::ast_walk::for_each_inline_mut(&mut doc.ast.blocks, &mut |inline| {
-                if let quarto_pandoc_types::Inline::Image(img) = inline {
-                    image_targets.push(img.target.0.clone());
+            // Pandoc's typst writer only names an image in the `.typ`; it never
+            // reads the file. So a `.typ` download leaves images and brand
+            // assets out (they would count against the size limits for
+            // nothing), and the PDF request, whose compile reads them,
+            // carries them.
+            let compile_reads_files = !is_typst || opts.post == RequestPost::CompileTypst;
+            if compile_reads_files {
+                let mut image_targets = Vec::new();
+                crate::ast_walk::for_each_inline_mut(&mut doc.ast.blocks, &mut |inline| {
+                    if let quarto_pandoc_types::Inline::Image(img) = inline {
+                        image_targets.push(img.target.0.clone());
+                    }
+                });
+                for target in &image_targets {
+                    collector.add_image(&doc_dir_abs, target, default_ext.as_deref());
                 }
-            });
-            for target in &image_targets {
-                collector.add_image(&doc_dir_abs, target, default_ext.as_deref());
+            }
+            if is_typst && opts.post == RequestPost::CompileTypst {
+                for path in &typst.asset_files {
+                    collector.add_file(path, crate::pandoc_request::ResourceKind::Other);
+                }
             }
             collector.add_args(&format_extra_args);
             collector.add_args(&forwarded_args);
@@ -1077,6 +1200,7 @@ impl PandocWriteStage {
         } else {
             Vec::new()
         };
+        diagnostics.extend(typst_notes);
 
         let mut args: Vec<PandocArg> = vec![
             PandocArg::text("-f"),
@@ -1154,7 +1278,7 @@ impl PandocWriteStage {
             output_path: rp(&output_path)?,
             stage_name: name.to_string(),
             json_path: rp(&json_path)?,
-            post: Default::default(),
+            post: opts.post,
             expected_pandoc_wasm_sha256: constants().wasm_sha256.clone(),
             share_tree_version: share_tree_version().to_string(),
             typst_available_fonts,
@@ -1305,7 +1429,7 @@ impl PipelineStage for PandocWriteStage {
         // floor before spawning anything.
         let pandoc_bin = resolve_and_gate_pandoc(self.name(), ctx.runtime.as_ref())?;
 
-        let typst = self.typst_prestep(&doc, ctx)?;
+        let typst = self.typst_prestep(&doc, ctx, true)?;
         let opts = match &ctx.prepare_options {
             Some(opts) => opts.clone(),
             None => PrepareOptions::native(ctx.temp_dir()?.to_path_buf()),
@@ -1440,7 +1564,6 @@ fn shift_heading_level_by_for(
 /// (`command/render/pandoc.ts:784-810`). Only the `Path` variant is
 /// handled: `MarkPolicy::Always` guarantees any string entry is marked, so
 /// an unmarked value here means no `template:` key was set at all.
-#[cfg(not(target_arch = "wasm32"))]
 fn resolve_user_template_path(
     meta: &quarto_pandoc_types::ConfigValue,
     doc_dir: &Path,
@@ -1450,49 +1573,6 @@ fn resolve_user_template_path(
         quarto_pandoc_types::config_value::ConfigValueKind::Path(s) => Some(doc_dir.join(s)),
         _ => None,
     }
-}
-
-/// Typst-leg counterpart of ApplyTemplateStage's HTML `template-partials`
-/// handling (`apply_template.rs:179-183`): copies each declared partial over
-/// the same-named vendored partial in `template_dir` — the directory
-/// Pandoc's `--template` resolves `$partial.typ()$` calls against — so an
-/// extension like orange-book that ships a `typst-show.typ` partial without
-/// a whole `template:` actually reaches the compiled output (its
-/// `#part[...]` RawBlocks otherwise fail with `unknown variable: part`;
-/// book-projects P2 item 79). Entries arrive as `ConfigValueKind::Path`
-/// (extension contributions, rebased document-relative by
-/// `adjust_paths_to_document_dir` at metadata-merge time) or as plain
-/// scalars/inlines (document front matter); both resolve against `doc_dir`.
-/// Shadowing is by file name, matching pandoc's partial resolution and Q1.
-#[cfg(not(target_arch = "wasm32"))]
-fn stage_typst_template_partials(
-    meta: &quarto_pandoc_types::ConfigValue,
-    doc_dir: &Path,
-    template_dir: &Path,
-) -> Result<(), String> {
-    let Some(partials) = meta.get("template-partials").and_then(|v| v.as_array()) else {
-        return Ok(());
-    };
-    for partial in partials {
-        let rel = match &partial.value {
-            quarto_pandoc_types::config_value::ConfigValueKind::Path(s) => s.clone(),
-            _ => match partial.as_plain_text() {
-                Some(s) => s,
-                None => continue,
-            },
-        };
-        let Some(file_name) = Path::new(&rel).file_name() else {
-            continue;
-        };
-        let src = doc_dir.join(&rel);
-        std::fs::copy(&src, template_dir.join(file_name)).map_err(|e| {
-            format!(
-                "failed to stage typst template partial {}: {e}",
-                src.display()
-            )
-        })?;
-    }
-    Ok(())
 }
 
 /// `format-typst.ts:82-90`'s `section-numbering: "1.1.a"`, inserted into

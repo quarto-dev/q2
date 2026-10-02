@@ -14,6 +14,8 @@ pub mod render;
 pub mod resources;
 pub mod share;
 pub mod types;
+pub mod typst_limits;
+pub mod typst_pdf;
 
 pub use args::PandocArg;
 pub use constants::constants;
@@ -23,3 +25,4 @@ pub use path::{normalize_request_path, normalize_request_path_str};
 pub use resources::{ResourceCollector, ResourceKind};
 pub use share::{share_tree_entries, share_tree_version};
 pub use types::{PandocRequest, REQUEST_SCHEMA_VERSION, RequestFile, RequestKind, RequestPost};
+pub use typst_pdf::{typst_asset_entries, typst_assets_version, typst_date_prelude};

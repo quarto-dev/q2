@@ -50,6 +50,8 @@ fn wasm_opts() -> PrepareOptions {
         temp_root: PathBuf::from(&constants().share_root),
         source_date_epoch: Some(1_700_000_000),
         collect_resources: true,
+        typst_available_fonts: None,
+        post: quarto_core::pandoc_request::RequestPost::None,
     }
 }
 

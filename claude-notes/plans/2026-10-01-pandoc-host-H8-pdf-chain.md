@@ -16,6 +16,9 @@
 - The PDF request is the typst-writer request from request R4 with `output_path = *.typ` and a `post: compile_typst` step.
 - The PDF chain is font-list → request → pandoc → typst compile: the typst compiler is loaded (fonts known) before pandoc runs, and `render_pandoc_request` takes the optional `typst_available_fonts` that request R2's export reserved.
 
+- **From R4 (landed):** the `pdf` request is `render_pandoc_request(path, 'pdf')`: the typst request with `post: "compile_typst"` and `output_path` a `.typ`. Before compiling, prepend `typst_date_prelude(Number(request.env.SOURCE_DATE_EPOCH))` to the `.typ` (typst.ts has no date option; with it two compiles are byte-identical). Compile inputs: `get_typst_assets()` (packages under `packages/`, fonts under `fonts/`; its own `typst_assets_version`, not the share tree) plus the request's `resource_refs` (the AST's images and the brand's `source: file` fonts and logos, mounted only for `pdf`). Pass `typst_available_fonts` (from the loaded fonts) to the render call; it feeds the filter param. The `pdf` row of `getPandocFormats()` has `hidden: true`; drop that flag in Rust when this phase wires the menu, and then the resolver classes `pdf` as `download`.
+
+
 ## Checklist
 
 ### Tests first

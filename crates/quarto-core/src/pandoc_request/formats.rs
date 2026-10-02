@@ -36,8 +36,12 @@ pub struct PandocFormatInfo {
     /// The downloaded file's extension (no dot). Typst is source only.
     pub extension: &'static str,
     pub mime: &'static str,
-    /// Whether `render_pandoc_request` accepts it yet. Typst waits for R4.
+    /// Whether `render_pandoc_request` accepts it yet.
     pub available: bool,
+    /// Accepted by `render_pandoc_request` but not offered: the host leaves
+    /// it out of the menu, and the resolver classes it [`FormatClass::Neither`],
+    /// until the work that finishes it lands (`pdf`: host H8).
+    pub hidden: bool,
 }
 
 pub const PANDOC_FORMATS: &[PandocFormatInfo] = &[
@@ -47,6 +51,7 @@ pub const PANDOC_FORMATS: &[PandocFormatInfo] = &[
         extension: "docx",
         mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         available: true,
+        hidden: false,
     },
     PandocFormatInfo {
         key: "pptx",
@@ -54,6 +59,7 @@ pub const PANDOC_FORMATS: &[PandocFormatInfo] = &[
         extension: "pptx",
         mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         available: true,
+        hidden: false,
     },
     PandocFormatInfo {
         key: "epub",
@@ -61,13 +67,25 @@ pub const PANDOC_FORMATS: &[PandocFormatInfo] = &[
         extension: "epub",
         mime: "application/epub+zip",
         available: true,
+        hidden: false,
     },
     PandocFormatInfo {
         key: "typst",
         label: "Typst source (.typ)",
         extension: "typ",
         mime: "text/plain",
-        available: false,
+        available: true,
+        hidden: false,
+    },
+    // The typst request plus `post: compile_typst` (R4); the host compiles
+    // the `.typ` to a PDF (H8), so it stays out of the menu until then.
+    PandocFormatInfo {
+        key: "pdf",
+        label: "PDF (.pdf)",
+        extension: "pdf",
+        mime: "application/pdf",
+        available: true,
+        hidden: true,
     },
 ];
 
@@ -77,7 +95,7 @@ pub fn pandoc_format(key: &str) -> Option<&'static PandocFormatInfo> {
 
 /// Which class a `format:` key belongs to.
 pub fn format_class(key: &str) -> FormatClass {
-    if pandoc_format(key).is_some() {
+    if pandoc_format(key).is_some_and(|f| !f.hidden) {
         return FormatClass::Download;
     }
     match Format::from_format_string(key) {
@@ -194,9 +212,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn table_has_the_four_download_formats_in_menu_order() {
+    fn table_has_the_download_formats_in_menu_order_and_pdf_hidden() {
         let keys: Vec<_> = PANDOC_FORMATS.iter().map(|f| f.key).collect();
-        assert_eq!(keys, ["docx", "pptx", "epub", "typst"]);
+        assert_eq!(keys, ["docx", "pptx", "epub", "typst", "pdf"]);
+        let hidden: Vec<_> = PANDOC_FORMATS
+            .iter()
+            .filter(|f| f.hidden)
+            .map(|f| f.key)
+            .collect();
+        assert_eq!(hidden, ["pdf"]);
         assert!(PANDOC_FORMATS.iter().all(|f| !f.mime.is_empty()));
     }
 
@@ -208,6 +232,7 @@ mod tests {
         for key in ["html", "revealjs", "acm-html", "q2-preview"] {
             assert_eq!(format_class(key), FormatClass::Preview, "{key}");
         }
+        // `pdf` has a table row (render accepts it) but is hidden until H8.
         for key in ["pdf", "latex", "odt", "no-such-format", "my-docx"] {
             assert_eq!(format_class(key), FormatClass::Neither, "{key}");
         }
