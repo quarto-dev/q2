@@ -221,3 +221,27 @@ So the Node baseline (0.3-0.5 s per render, ~250-300 ms of it Lua) is beaten: Lu
 **Memory budget.** Loading pandoc for the first time (Chromium, one small docx, including initialising the hub's own Rust wasm if the page had not yet): process RSS 448 MB before, 1.02 GB at the peak (+0.57 GB: download buffers, 59 MB wasm, SHA, compile, the worker's 51 MB instance); WebKit 640 MB to 2.03 GB (+1.4 GB). The resident `Module` is dropped after 5 minutes idle. Budget to state in the UI copy and to design H5/H6 around: **~0.6 GB (Chromium) to ~1.4 GB (WebKit) transient for a first download, then ~50 MB per live render plus ~11-17x the size of the images in the document.** The epic's earlier "~+340 MB page RSS once pandoc loads" (reactor mode) is below these; the measured numbers replace it.
 
 **Not measured.** Firefox (manual; `spike/ff/`). The typst, pptx and epub recordings through the harness wait for R4/R5 (the plan's own condition). `performance.measureUserAgentSpecificMemory` needs cross-origin isolation, which the app does not have, so RSS is the memory measure.
+
+## 13. H6 memory sweep and browser matrix (2026-10-02, host phase H6)
+
+Same setup as section 12 (dev harness, `VITE_E2E=1` bundle, `vite preview`, one Mac with other work running, Playwright Chromium 148.0.7778.96 and WebKit 26.4), re-run with the sweep widened to the candidate values for `limits.total_bytes` and with the main thread's Rust wasm memory added (`window.__quartoTest.pandoc.rustWasmMemoryBytes()`, `memory.buffer.byteLength`). Spec: `hub-client/e2e/pandoc-measure.harness.spec.ts` (opt-in, `Q2_MEASURE=1`). Single runs: magnitudes, not benchmarks.
+
+| Images (total) | pandoc linear memory | Rust wasm memory after (never shrinks) | Chromium RSS growth during the render | run (total) |
+|---|---:|---:|---:|---:|
+| 4 x 5 MB (20 MB) | 88 MB | 130 MB | +0.34 GB | 1.0 s |
+| 10 x 10 MB (100 MB) | 203 MB | 494 MB | +1.54 GB | 3.6 s |
+| 6 x 24 MB (144 MB) | 446 MB | 729 MB | +2.02 GB | 5.2 s |
+| 8 x 24 MB (192 MB) | 478 MB | 921 MB | +2.93 GB | 6.7 s |
+| 12 x 24 MB (288 MB, the 300 MB limit) | 814 MB | 1338 MB | +4.75 GB | 11.4 s |
+
+Both wasm memories are identical in WebKit and Chromium (they are the module's own). WebKit's RSS growth is not reported: its baseline was 5-7 GB in this run (RSS summed over every `ms-playwright` process) and the growth column came out non-monotonic (+0.8 GB at 144 MB, +0.4 GB at 192 MB), so only the section 12 magnitude (+1.2 GB at 100 MB, +3.2 GB at 300 MB) stands.
+
+What the numbers say:
+- **The browser process grows about 14-16x the image payload during a render, linearly** (14.7x at 100 MB, 15.7x at 288 MB). Lowering `total_bytes` buys memory in proportion: 100 MB is about +1.5 GB, 150 MB about +2.0 GB, 200 MB about +2.9 GB, 300 MB about +4.7 GB.
+- **Worker memory is already recycled.** The runner makes one worker per render and terminates it when the render settles (`pandocRunner.ts`), and each render instantiates pandoc anew, so pandoc's 2-3x lives only for the render. Nothing in the worker needs a recycle policy; the compiled module is dropped after 5 minutes idle.
+- **The Rust wasm on the main thread is the part that stays.** Its linear memory grows to about 4.4-4.7x the payload during request building (copies of the files on the way out) and cannot shrink, so after one 100 MB render the page keeps about 0.5 GB until it is reloaded, and after one 288 MB render about 1.3 GB. It plateaus: a second and third render of the same document add nothing (`pandoc-memory.harness.spec.ts`). It cannot be recycled without re-initialising the module that holds the VFS and project state, so no recycle policy is implemented; the lever is the payload limit, or fewer copies in request building (a Rust change, R-lane territory).
+- The JS heap plus ArrayBuffer backing stores (CDP `Runtime.getHeapUsage` after a forced GC, Chromium) is 26 MB before and after three 100 MB renders: a finished render retains no copy of the images or the output on the JS side.
+
+**The CI test** (`hub-client/e2e/pandoc-memory.harness.spec.ts`, Chromium and WebKit): ten 10 MB images, three renders; asserts pandoc linear memory <= 64 MB + 3.5x payload (measured 1.9x), Rust wasm memory <= 128 MB + 6x payload (measured 4.7x), the docx carries the payload, no growth in either memory between render 1 and render 3, and (Chromium) the JS heap plus backing stores within 64 MB of the pre-render reading after GC.
+
+**Failure-taxonomy audit** (design, Failure taxonomy; all ten classes have a diagnostic, a UI state and a test): two gaps found and closed. (1) `WebAssembly` missing altogether (iOS Lockdown Mode, a browser policy) threw a `ReferenceError` out of the loader and was classified as a failed download; it is now `no-wasm` with its own message and the `unsupported` UI state. (2) A memory failure on the main thread (the Rust request build, or the hand-off to the worker) threw into the controller's catch-all and showed as `crashed`; it is now `out-of-memory` when the error looks like an allocation failure (`looksLikeOom`, now exported by `@quarto/pandoc-host`). A third item is documentation only: after a main-thread Rust wasm trap the module is not usable until the page reloads.

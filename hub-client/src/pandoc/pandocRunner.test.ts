@@ -238,6 +238,7 @@ describe('PandocRunner: failure taxonomy (one diagnostic and one UI state each)'
     });
 
   const cases: [PandocLoadError['code'], string, string][] = [
+    ['no-wasm', 'wasm-unsupported', 'unsupported'],
     ['no-exnref', 'wasm-unsupported', 'unsupported'],
     ['no-decompression', 'wasm-unsupported', 'unsupported'],
     ['no-subtle-crypto', 'wasm-unsupported', 'unsupported'],

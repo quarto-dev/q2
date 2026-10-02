@@ -38,6 +38,16 @@ export const pandoc = {
   download: pandocDownload,
   uiStateFor,
   sha256: PANDOC_WASM_SHA256,
+  /**
+   * Byte length of the main thread's Rust wasm linear memory (the VFS, request builds and
+   * their copies live there). It only ever grows, so it is the high-water mark of the page
+   * (host phase H6 memory test). `default()` returns the cached exports once initialised.
+   */
+  async rustWasmMemoryBytes(): Promise<number> {
+    const wasm = await import('wasm-quarto-hub-client');
+    const exports = (await wasm.default()) as unknown as { memory: WebAssembly.Memory };
+    return exports.memory.buffer.byteLength;
+  },
 };
 
 declare global {

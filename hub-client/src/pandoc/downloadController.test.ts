@@ -114,6 +114,23 @@ describe('DownloadController', () => {
     expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', state: 'timeout' });
   });
 
+  it('an unexpected throw is a crash, and a memory failure on this thread is out-of-memory', async () => {
+    for (const [error, state] of [
+      [new Error('boom'), 'crashed'],
+      [new RangeError('WebAssembly.Memory.grow(): Maximum memory size exceeded'), 'out-of-memory'],
+      [new RangeError('Array buffer allocation failed'), 'out-of-memory'],
+    ] as const) {
+      const { controller, save } = setup({
+        buildRequest: async () => {
+          throw error;
+        },
+      });
+      await controller.start({ path: 'a.qmd', format: DOCX });
+      expect(controller.getSnapshot()).toMatchObject({ phase: 'failed', state, message: error.message });
+      expect(save).not.toHaveBeenCalled();
+    }
+  });
+
   it('two quick clicks: the first is superseded, its late response is dropped, one download happens', async () => {
     const first = deferred<RequestEnvelope>();
     const second = deferred<RequestEnvelope>();

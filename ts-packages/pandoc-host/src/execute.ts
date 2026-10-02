@@ -76,7 +76,9 @@ function failure(kind: FailureKind, status: number | null, stderr: string, stdou
   return { ok: false, kind, status, stderr, stdout, diagnostics, ...(stats ? { stats } : {}) };
 }
 
-const looksLikeOom = (e: unknown) => /out of memory|could not allocate|memory\.grow|Array buffer allocation failed|Invalid array length/i.test(String(e));
+/** True for the errors browsers throw when a wasm memory or an ArrayBuffer cannot grow. */
+export const looksLikeOom = (e: unknown) =>
+  /out of memory|could not allocate|memory\.grow|maximum memory size|Array buffer allocation failed|Invalid array length/i.test(String(e));
 
 /**
  * Run one pandoc job: validate, mount, run `_start` on a fresh instance, collect the output.

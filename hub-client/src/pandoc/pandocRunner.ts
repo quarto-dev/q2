@@ -81,6 +81,7 @@ export function uiStateFor(o: RunOutcome): UiState {
       return 'cancelled';
     case 'load-failed':
       switch (o.loadError?.code) {
+        case 'no-wasm':
         case 'no-exnref':
         case 'no-decompression':
         case 'no-subtle-crypto':
@@ -146,6 +147,7 @@ const failure = (kind: RunFailureKind, diagnostics: Diagnostic[], notices: strin
 });
 
 const LOAD_DIAGNOSTIC: Record<PandocLoadError['code'], HostDiagnostic['code']> = {
+  'no-wasm': 'wasm-unsupported',
   'no-exnref': 'wasm-unsupported',
   'no-decompression': 'wasm-unsupported',
   'no-subtle-crypto': 'wasm-unsupported',

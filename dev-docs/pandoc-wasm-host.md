@@ -159,3 +159,26 @@ what they mean for the limits are in `claude-notes/research/2026-10-01-pandoc-wa
 
 The loader rejects a download that gunzips to more than `MAX_DECOMPRESSION_RATIO` (8) times its compressed size; the
 real asset is 3.55x.
+
+## Browser matrix (H6)
+
+The pandoc harness specs (`hub-client/e2e/pandoc-*.harness.spec.ts`) run under two projects of
+`playwright.harness.config.ts`: `chromium` (every harness spec, `npm run test:harness`) and
+`webkit` (the pandoc specs only, `npm run test:harness:webkit`, one worker). The app E2E
+(`pandoc-download.spec.ts`, real hub) stays Chromium-only. In CI (`hub-client-e2e.yml`) the
+WebKit job first runs `pandoc-browser-probe.harness.spec.ts` (exnref, `DecompressionStream`,
+`crypto.subtle`, Cache API, workers). If the probe fails on Playwright's Linux WebKit the
+suite is skipped with a workflow warning instead of failing the job; once a run shows the probe
+passing, remove the `continue-on-error`/`if:` guards so WebKit gates.
+
+| Browser | How checked | Result |
+|---|---|---|
+| Chromium 148 (Playwright, macOS and Linux CI) | every pandoc spec | pass |
+| WebKit 26.4 (Playwright, macOS) | all pandoc harness specs, 2026-10-02 | pass (38 of 38; the opt-in measure spec skips) |
+| WebKit (Playwright, Linux CI) | probe, then the suite | **unverified until the first CI run** (not runnable from the macOS lane; Docker was not running) |
+| Firefox 157 | `spike/ff/` by hand (H0) | pass; CI Firefox is braid `bd-phu943t7` |
+| Real Safari | by hand | **not yet checked**: Playwright's WebKit loses the Cache API entry across navigations, so cache behaviour (and ITP's 7-day cap on script-writable storage) needs a real Safari |
+
+Minimum versions the loader's message names: Chrome/Edge 137, Firefox 131, Safari 18.4 (MDN
+exnref data). Bumping `PANDOC_PIN` means re-running the probe in each browser (upstream is
+still changing its exception-handling encoding, design D4).
