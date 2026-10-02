@@ -61,6 +61,7 @@ pub mod metadata;
 pub mod output_sink;
 pub mod pandoc_filters;
 pub mod pandoc_formats;
+pub mod pandoc_request;
 pub mod pipeline;
 pub mod project;
 pub mod project_resources;

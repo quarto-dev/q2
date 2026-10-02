@@ -9,11 +9,15 @@
 
 //! `PandocWriteStage` — the docx/pptx tail of the Pandoc-hybrid render leg.
 //!
-//! Native-only: this stage shells out to a real `pandoc` binary via
-//! `std::process::Command` and materializes the vendored filter tree via
-//! `crate::pandoc_filters::bundle::extract_share_tree`, into the per-render
-//! `ctx.temp_dir()` (no real filesystem on `wasm32-unknown-unknown`).
-//! Mirrors the same gate as `crate::pandoc_filters::{bundle, harness}`.
+//! The stage is split in two (pandoc-wasm R1): [`PandocWriteStage::prepare`]
+//! builds a [`PandocRequest`] (argv, env, file bytes, dirs: everything one
+//! pandoc run needs, as data) and [`PandocWriteStage::execute`] runs it
+//! natively with `std::process::Command`, writing the request's files and
+//! extracting the vendored filter tree
+//! (`crate::pandoc_filters::bundle::extract_share_tree`) under the request's
+//! share root. The wasm host will run the same request in a worker. The
+//! module stays native-gated until R2 ungates `prepare()`; the typst-only
+//! steps inside `prepare()` still touch the filesystem directly until R4.
 //!
 //! Unlike [`super::render_html::RenderHtmlBodyStage`], this stage's
 //! `RenderedOutput.content` is always empty — no binary bytes travel
@@ -22,9 +26,8 @@
 //! relocation, etc.) key off `output_path`, not `content`.
 //!
 //! See `claude-notes/plans/2026-09-18-pandoc-hybrid-P4-implementation.md`
-//! Task 9.
+//! Task 9 and `claude-notes/plans/2026-10-01-pandoc-request-R1-request-seam.md`.
 
-use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -33,8 +36,8 @@ use quarto_error_reporting::DiagnosticMessage;
 
 use crate::format::FormatIdentifier;
 use crate::language::LanguageTerms;
-use crate::pandoc_filters::bundle::{extract_formats_tree, extract_share_tree};
-use crate::pandoc_filters::diagnostics::{classify_pandoc_stderr, nonzero_exit_error};
+use crate::pandoc_filters::bundle::extract_share_tree;
+use crate::pandoc_filters::diagnostics::classify_pandoc_completion;
 use crate::pandoc_filters::format_defaults::build_forwarded_args;
 use crate::pandoc_filters::params::{
     BookSingleFileContributor, DocxCalloutIconsContributor, EntryPointFilter, FilterParamsBuilder,
@@ -42,41 +45,15 @@ use crate::pandoc_filters::params::{
 };
 use crate::pandoc_filters::params_codec::encode_params_blob;
 use crate::pandoc_filters::version;
-use crate::stage::{
-    PipelineData, PipelineDataKind, PipelineError, PipelineStage, RenderedOutput, StageContext,
+use crate::pandoc_request::args::is_absolute_request_path;
+use crate::pandoc_request::{
+    PandocArg, PandocRequest, PrepareOptions, REQUEST_SCHEMA_VERSION, RequestFile, constants,
+    normalize_request_path, share_tree_version, validate_mounts,
 };
-
-/// Decides how to handle a completed pandoc invocation's exit status and
-/// captured stderr — the corrected policy (commit `0b295831e`): capture
-/// stderr **unconditionally**, not only on failure.
-///
-/// On success, classifies `[WARNING]`-shaped stderr lines as `Q-11-1`
-/// diagnostics via [`classify_pandoc_stderr`] (may return an empty `Vec`).
-/// On failure, builds the `Q-20-3` error via [`nonzero_exit_error`],
-/// wrapping stderr verbatim and naming `json_path`.
-///
-/// `success`/`status_desc` are taken separately rather than as a single
-/// `std::process::ExitStatus` so this function stays platform-neutral and
-/// directly unit-testable with injected values (see
-/// `crates/quarto-core/tests/integration/pandoc_transport.rs` T10.1-T10.5).
-pub fn classify_pandoc_completion(
-    stage_name: &str,
-    success: bool,
-    status_desc: &str,
-    stderr: &str,
-    json_path: &Path,
-) -> Result<Vec<DiagnosticMessage>, PipelineError> {
-    if success {
-        Ok(classify_pandoc_stderr(stderr))
-    } else {
-        Err(nonzero_exit_error(
-            stage_name,
-            status_desc,
-            stderr,
-            json_path,
-        ))
-    }
-}
+use crate::stage::{
+    DocumentAst, PipelineData, PipelineDataKind, PipelineError, PipelineStage, RenderedOutput,
+    StageContext,
+};
 
 /// Removes the temp JSON input on a successful render; leaves it on disk
 /// on failure, where a future debugging session may want to inspect the
@@ -150,44 +127,46 @@ fn resolve_doc_relative(doc_dir: &Path, declared: &str) -> PathBuf {
 }
 
 fn epub_extra_args(
-    temp_dir: &Path,
-    doc_path: &Path,
+    temp_root: &Path,
+    doc_dir: &Path,
     meta: &quarto_pandoc_types::ConfigValue,
-) -> Result<Vec<OsString>, PipelineError> {
-    let doc_dir = doc_path.parent().unwrap_or_else(|| Path::new("."));
-    let formats_root = temp_dir.join("pandoc-formats");
-    std::fs::create_dir_all(&formats_root).map_err(|e| {
-        PipelineError::stage_error(
-            "pandoc-write",
-            format!("failed to create formats directory: {e}"),
-        )
-    })?;
-    extract_formats_tree(&formats_root).map_err(|e| {
-        PipelineError::stage_error(
-            "pandoc-write",
-            format!("failed to materialize vendored format resources: {e}"),
-        )
-    })?;
-    let formats_dest = formats_root.join("formats");
+    request_path: impl Fn(&Path) -> Result<String, PipelineError>,
+) -> Result<(Vec<PandocArg>, Vec<RequestFile>), PipelineError> {
+    // The two `--include-in-header` files are the only part of the embedded
+    // `formats/` tree pandoc reads; they travel as request `files` at the
+    // paths the flags name rather than extracting the whole tree.
+    let formats_dest = temp_root.join("pandoc-formats").join("formats");
+    let mut files = Vec::new();
+    let mut header_arg = |rel: &str| -> Result<PandocArg, PipelineError> {
+        let embedded = crate::pandoc_filters::FORMATS_DIR
+            .get_file(rel)
+            .ok_or_else(|| {
+                PipelineError::stage_error(
+                    "pandoc-write",
+                    format!("vendored format resource {rel} is missing"),
+                )
+            })?;
+        let dest = formats_dest.join(rel);
+        files.push(RequestFile {
+            path: request_path(&dest)?,
+            bytes: embedded.contents().to_vec(),
+        });
+        Ok(PandocArg::FlagPath {
+            flag: "--include-in-header=".to_string(),
+            path: dest,
+        })
+    };
     let mut args = vec![
-        OsString::from("--default-image-extension=png"),
-        OsString::from("--math-method=mathml"),
-        {
-            let mut arg = OsString::from("--include-in-header=");
-            arg.push(formats_dest.join("html").join("styles-callout.html"));
-            arg
-        },
-        {
-            let mut arg = OsString::from("--include-in-header=");
-            arg.push(formats_dest.join("epub").join("styles.html"));
-            arg
-        },
+        PandocArg::text("--default-image-extension=png"),
+        PandocArg::text("--math-method=mathml"),
+        header_arg("html/styles-callout.html")?,
+        header_arg("epub/styles.html")?,
     ];
     if let Some(level) = meta
         .get("epub-chapter-level")
         .and_then(|v| v.as_int_lenient())
     {
-        args.push(OsString::from(format!("--split-level={level}")));
+        args.push(PandocArg::text(format!("--split-level={level}")));
     }
 
     // Single-valued path keys: mark_format_path_values normalized these
@@ -199,9 +178,10 @@ fn epub_extra_args(
         ("epub-metadata", "--epub-metadata="),
     ] {
         if let Some(declared) = meta.get(key).and_then(|v| v.as_plain_text()) {
-            let mut arg = OsString::from(flag);
-            arg.push(resolve_doc_relative(doc_dir, &declared));
-            args.push(arg);
+            args.push(PandocArg::FlagPath {
+                flag: flag.to_string(),
+                path: resolve_doc_relative(doc_dir, &declared),
+            });
         }
     }
 
@@ -210,9 +190,10 @@ fn epub_extra_args(
     for (key, flag) in [("epub-embed-font", "--epub-embed-font="), ("css", "--css=")] {
         if let Some(value) = meta.get(key) {
             for declared in entry_strings(value) {
-                let mut arg = OsString::from(flag);
-                arg.push(resolve_doc_relative(doc_dir, &declared));
-                args.push(arg);
+                args.push(PandocArg::FlagPath {
+                    flag: flag.to_string(),
+                    path: resolve_doc_relative(doc_dir, &declared),
+                });
             }
         }
     }
@@ -223,10 +204,10 @@ fn epub_extra_args(
         .get("epub-subdirectory")
         .and_then(|v| v.as_plain_text())
     {
-        args.push(OsString::from(format!("--epub-subdirectory={subdir}")));
+        args.push(PandocArg::text(format!("--epub-subdirectory={subdir}")));
     }
 
-    Ok(args)
+    Ok((args, files))
 }
 
 /// Resolves the `brand`, `logo`, and `brand-mode` filter params for a
@@ -405,46 +386,172 @@ fn resolve_typst_available_fonts(
     ))
 }
 
+/// What the native typst pre-step computes and `prepare()` takes as input.
+///
+/// Brand-font staging (`stage_typst_brand_fonts`, which fetches and writes
+/// into the project) and `typst fonts` discovery are effects, not part of
+/// `prepare()`: their results feed the params blob, so they run first, on
+/// the native path only (the wasm entry point supplies `available_fonts`
+/// itself, and no brand staging happens there until R4).
+#[derive(Debug, Default, Clone)]
+pub struct TypstPrepInputs {
+    pub brand: Option<serde_json::Value>,
+    pub logo: Option<serde_json::Value>,
+    pub brand_mode: Option<String>,
+    pub available_fonts: Option<Vec<String>>,
+    pub citation_location: Option<String>,
+    pub reference_location: Option<String>,
+    pub cite_method: Option<String>,
+    pub code_block_bg: Option<String>,
+}
+
+/// What `prepare()` returns: the request plus what the native caller needs
+/// to finish the stage.
+#[derive(Debug)]
+pub struct PreparedPandoc {
+    pub request: PandocRequest,
+    pub diagnostics: Vec<DiagnosticMessage>,
+    /// Where pandoc writes (for typst, the intermediate `.typ`).
+    pub output_path: PathBuf,
+    pub is_intermediate: bool,
+}
+
+/// A request path: UTF-8, absolute (relative paths resolve against the
+/// project directory), `/`-normalized.
+fn request_path(stage: &str, project_dir: &Path, path: &Path) -> Result<String, PipelineError> {
+    let absolute = if path.has_root() || path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        project_dir.join(path)
+    };
+    if absolute.to_str().is_none() {
+        return Err(PipelineError::stage_error(
+            stage,
+            format!("path is not valid UTF-8: {}", absolute.display()),
+        ));
+    }
+    let normalized = normalize_request_path(&absolute);
+    if !is_absolute_request_path(&normalized) {
+        return Err(PipelineError::stage_error(
+            stage,
+            format!("path is not absolute: {}", absolute.display()),
+        ));
+    }
+    Ok(normalized)
+}
+
 pub struct PandocWriteStage;
 
 impl PandocWriteStage {
     pub fn new() -> Self {
         Self
     }
-}
 
-impl Default for PandocWriteStage {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[async_trait(?Send)]
-impl PipelineStage for PandocWriteStage {
-    fn name(&self) -> &str {
-        "pandoc-write"
-    }
-
-    fn input_kind(&self) -> PipelineDataKind {
-        PipelineDataKind::DocumentAst
-    }
-
-    fn output_kind(&self) -> PipelineDataKind {
-        PipelineDataKind::RenderedOutput
-    }
-
-    async fn run(
+    /// The native typst pre-step: brand, logo, brand-mode, brand-font
+    /// staging, `typst fonts` discovery and the citation/reference params.
+    /// Empty for every other format.
+    fn typst_prestep(
         &self,
-        input: PipelineData,
+        doc: &DocumentAst,
         ctx: &mut StageContext,
-    ) -> Result<PipelineData, PipelineError> {
-        let PipelineData::DocumentAst(mut doc) = input else {
-            return Err(PipelineError::unexpected_input(
-                self.name(),
-                self.input_kind(),
-                input.kind(),
-            ));
-        };
+    ) -> Result<TypstPrepInputs, PipelineError> {
+        if ctx.format.identifier != FormatIdentifier::Typst {
+            return Ok(TypstPrepInputs::default());
+        }
+        let (light, dark) = resolve_typst_brand(&doc.ast.meta, ctx)?;
+        // Before `typst fonts` runs: the available-fonts list must include
+        // the fonts we are about to make available.
+        stage_typst_brand_fonts(light.as_ref(), ctx);
+        stage_typst_brand_fonts(dark.as_ref(), ctx);
+        let brand_mode_text = doc
+            .ast
+            .meta
+            .get("brand-mode")
+            .and_then(|v| v.as_plain_text());
+        let active_brand = super::typst_compile::brand_for_mode(
+            light.as_ref(),
+            dark.as_ref(),
+            brand_mode_text.as_deref(),
+        );
+        // The brand's `monospace-block` background replaces the highlight
+        // palette's code-block background.
+        let code_block_bg = active_brand.and_then(|resolved| {
+            let name = resolved
+                .brand
+                .effective_monospace_block()?
+                .background_color?;
+            Some(resolved.brand.resolve_color_quiet(&name))
+        });
+        let (brand, logo, brand_mode) =
+            resolve_typst_brand_param(&doc.ast.meta, light.as_ref(), dark.as_ref(), ctx);
+        let available_fonts = resolve_typst_available_fonts(
+            self.name(),
+            &doc.ast.meta,
+            active_brand,
+            &doc.path,
+            ctx,
+        )?;
+        Ok(TypstPrepInputs {
+            brand,
+            logo,
+            brand_mode,
+            available_fonts,
+            citation_location: doc
+                .ast
+                .meta
+                .get("citation-location")
+                .and_then(|value| value.as_plain_text()),
+            reference_location: doc
+                .ast
+                .meta
+                .get("reference-location")
+                .and_then(|value| value.as_plain_text()),
+            // `quarto.doc.cite_method()` (`init.lua:939-940`) drives
+            // `quarto-post/typst.lua`'s margin-citation `Cite` handler:
+            // whether to use pre-rendered citeproc bibliography entries
+            // in the margin note, or emit a bare native
+            // `#cite(<id>, form: "full")`. Unlike the LaTeX-only
+            // `cite-method` consumers in `bibliography.lua`/`meta.lua`
+            // (which default to `'citeproc'` when unset, since Pandoc's
+            // own citeproc pass is the ordinary default there), margin
+            // citations default to *native* Typst rendering — confirmed
+            // by `citation-margin-basic.qmd` (no `citeproc` key, asserts
+            // native `#cite(..., form: "full")` output) vs.
+            // `citation-margin-citeproc.qmd` (`citeproc: true`, asserts
+            // citeproc-rendered text). So only emit this key when the
+            // doc opts in explicitly; leaving it unset preserves the
+            // existing native-by-default margin behavior.
+            cite_method: doc
+                .ast
+                .meta
+                .get("citeproc")
+                .and_then(|value| value.as_bool())
+                .and_then(|is_citeproc| is_citeproc.then(|| "citeproc".to_string())),
+            code_block_bg,
+        })
+    }
+
+    /// Build the [`PandocRequest`] for `doc`: everything one pandoc run
+    /// needs, as data. Pure with respect to the filesystem for the formats
+    /// the seam covers (docx): reads go through the runtime, nothing is
+    /// written. The typst-only sites (template dir, partials, the
+    /// highlight-theme read, the toc defaults file) stay direct `std::fs`
+    /// calls here until R4 converts them.
+    ///
+    /// Idempotent on `doc` (the metadata coercions it applies before
+    /// serializing are), so a second call on the same document returns the
+    /// same request.
+    pub fn prepare(
+        &self,
+        doc: &mut DocumentAst,
+        ctx: &StageContext,
+        opts: &PrepareOptions,
+        typst: &TypstPrepInputs,
+    ) -> Result<PreparedPandoc, PipelineError> {
+        let name = self.name();
+        let project_dir = ctx.project.dir.clone();
+        let is_typst = ctx.format.identifier == FormatIdentifier::Typst;
+        let rp = |p: &Path| request_path(name, &project_dir, p);
 
         // P7 Task 6: `title`/`subtitle` reaching Pandoc `Meta` as
         // `MetaBlocks` is not what the docx/pptx writers read for
@@ -459,18 +566,12 @@ impl PipelineStage for PandocWriteStage {
         // is computed from the same fully resolved `Block` list, not
         // from `DocumentProfile.outline` (see the two functions' doc
         // comments for why).
-        let shift_heading_level_by =
-            if ctx.format.identifier == crate::format::FormatIdentifier::Typst {
-                insert_typst_section_numbering(&mut doc.ast.meta);
-                shift_heading_level_by_for(&doc.ast.blocks, &doc.ast.meta)
-            } else {
-                None
-            };
-
-        // Findings 3/4 (final review): resolve the binary through the
-        // runtime (honouring `QUARTO_PANDOC`) and enforce the version
-        // floor before spawning anything.
-        let pandoc_bin = resolve_and_gate_pandoc(self.name(), ctx.runtime.as_ref())?;
+        let shift_heading_level_by = if is_typst {
+            insert_typst_section_numbering(&mut doc.ast.meta);
+            shift_heading_level_by_for(&doc.ast.blocks, &doc.ast.meta)
+        } else {
+            None
+        };
 
         // `LanguageResolveStage` (earlier in the shared prefix) populates
         // `quarto.language`; the `unwrap_or_else` fallback only matters for
@@ -478,111 +579,22 @@ impl PipelineStage for PandocWriteStage {
         let language = LanguageTerms::from_meta(&doc.ast.meta)
             .unwrap_or_else(|| crate::language::resolve_language("en", &[]));
 
-        // T9.5: the serialized JSON lives inside the per-render temp
-        // directory, not beside the output file or the process cwd.
-        let temp_dir = ctx.temp_dir()?.to_path_buf();
-        let results_file = temp_dir.join("pandoc-results.json");
+        // T9.5: the serialized JSON lives inside the per-render temp root,
+        // not beside the output file or the process cwd. The share tree
+        // sits at `<temp_root>/pandoc-share`; the callout icon paths in
+        // `QUARTO_FILTER_PARAMS` point into it, so it is derived from the
+        // root rather than listed in `files`.
+        let temp_root = opts.temp_root.clone();
+        let results_file = temp_root.join("pandoc-results.json");
+        let share = temp_root.join("pandoc-share");
 
-        // Finding 5 (final review): extracted into the per-render temp
-        // dir rather than a process-global cache, so cleanup rides on
-        // `ctx.temp_dir()`'s existing lifecycle instead of leaking.
-        // Computed here (before the actual extraction, below) because
-        // Task 4's docx callout-icon params need the path to embed in
-        // `QUARTO_FILTER_PARAMS` — the files only need to exist on disk by
-        // the time pandoc actually runs, not when this string is built.
-        let share = temp_dir.join("pandoc-share");
-
-        // pandoc-hybrid-typst Phase 1: `extractTypstFilterParams` — the
-        // `brand`/`logo`/`brand-mode` keys, typst-only (see `typst_params`'s
-        // module docs for why `brand` isn't a core, format-independent key
-        // yet). Resolved from the document's own merged metadata via
-        // `quarto_sass::resolve_brand_variants` (bd-67i2z57f): both halves
-        // of the brand are resolved (unlike the single-variant consumers —
-        // favicon fallback, reveal — which only ever need `light`), and
-        // `brand-mode` is read straight off `meta` so the vendored Lua
-        // filter's `param('brand-mode') or 'light'` picks the document's
-        // own mode instead of always falling back to light.
-        let (
-            (typst_brand_param, typst_logo_param, typst_brand_mode),
-            typst_available_fonts,
-            typst_citation_location,
-            typst_reference_location,
-            typst_cite_method,
-            typst_code_block_bg,
-        ) = if ctx.format.identifier == crate::format::FormatIdentifier::Typst {
-            let (light, dark) = resolve_typst_brand(&doc.ast.meta, ctx)?;
-            // Before `typst fonts` runs: the available-fonts list must
-            // include the fonts we are about to make available.
-            stage_typst_brand_fonts(light.as_ref(), ctx);
-            stage_typst_brand_fonts(dark.as_ref(), ctx);
-            // The brand's `monospace-block` background replaces the
-            // highlight palette's code-block background.
-            let code_block_bg = super::typst_compile::brand_for_mode(
-                light.as_ref(),
-                dark.as_ref(),
-                doc.ast
-                    .meta
-                    .get("brand-mode")
-                    .and_then(|v| v.as_plain_text())
-                    .as_deref(),
-            )
-            .and_then(|resolved| {
-                let name = resolved
-                    .brand
-                    .effective_monospace_block()?
-                    .background_color?;
-                Some(resolved.brand.resolve_color_quiet(&name))
-            });
-            (
-                resolve_typst_brand_param(&doc.ast.meta, light.as_ref(), dark.as_ref(), ctx),
-                resolve_typst_available_fonts(
-                    self.name(),
-                    &doc.ast.meta,
-                    super::typst_compile::brand_for_mode(
-                        light.as_ref(),
-                        dark.as_ref(),
-                        doc.ast
-                            .meta
-                            .get("brand-mode")
-                            .and_then(|v| v.as_plain_text())
-                            .as_deref(),
-                    ),
-                    &doc.path,
-                    ctx,
-                )?,
-                doc.ast
-                    .meta
-                    .get("citation-location")
-                    .and_then(|value| value.as_plain_text()),
-                doc.ast
-                    .meta
-                    .get("reference-location")
-                    .and_then(|value| value.as_plain_text()),
-                // `quarto.doc.cite_method()` (`init.lua:939-940`) drives
-                // `quarto-post/typst.lua`'s margin-citation `Cite` handler:
-                // whether to use pre-rendered citeproc bibliography entries
-                // in the margin note, or emit a bare native
-                // `#cite(<id>, form: "full")`. Unlike the LaTeX-only
-                // `cite-method` consumers in `bibliography.lua`/`meta.lua`
-                // (which default to `'citeproc'` when unset, since Pandoc's
-                // own citeproc pass is the ordinary default there), margin
-                // citations default to *native* Typst rendering — confirmed
-                // by `citation-margin-basic.qmd` (no `citeproc` key, asserts
-                // native `#cite(..., form: "full")` output) vs.
-                // `citation-margin-citeproc.qmd` (`citeproc: true`, asserts
-                // citeproc-rendered text). So only emit this key when the
-                // doc opts in explicitly; leaving it unset preserves the
-                // existing native-by-default margin behavior.
-                doc.ast
-                    .meta
-                    .get("citeproc")
-                    .and_then(|value| value.as_bool())
-                    .and_then(|is_citeproc| is_citeproc.then(|| "citeproc".to_string())),
-                code_block_bg,
-            )
-        } else {
-            ((None, None, None), None, None, None, None, None)
-        };
+        let typst_brand_param = typst.brand.clone();
+        let typst_logo_param = typst.logo.clone();
+        let typst_brand_mode = typst.brand_mode.clone();
+        let typst_available_fonts = typst.available_fonts.clone();
+        let typst_citation_location = typst.citation_location.clone();
+        let typst_reference_location = typst.reference_location.clone();
+        let typst_cite_method = typst.cite_method.clone();
 
         // `mediabag-dir`: `<output-dir>/<stem>_files/mediabag`, mirroring
         // Q1's `render.ts:119-120` unconditional assignment. Computed from
@@ -620,29 +632,27 @@ impl PipelineStage for PandocWriteStage {
                 share_dir: share.clone(),
             }));
         }
-        let typst_root_dir = if ctx.format.identifier == crate::format::FormatIdentifier::Typst {
+        let typst_root_dir = if is_typst {
             Some(ctx.project.dir.clone())
         } else {
             None
         };
-        let typst_code_line_numbers =
-            if ctx.format.identifier == crate::format::FormatIdentifier::Typst {
-                doc.ast
-                    .meta
-                    .get("code-line-numbers")
-                    .and_then(|v| v.as_bool())
-            } else {
-                None
-            };
-        let typst_css_property_processing =
-            if ctx.format.identifier == crate::format::FormatIdentifier::Typst {
-                doc.ast
-                    .meta
-                    .get("css-property-processing")
-                    .and_then(|v| v.as_plain_text())
-            } else {
-                None
-            };
+        let typst_code_line_numbers = if is_typst {
+            doc.ast
+                .meta
+                .get("code-line-numbers")
+                .and_then(|v| v.as_bool())
+        } else {
+            None
+        };
+        let typst_css_property_processing = if is_typst {
+            doc.ast
+                .meta
+                .get("css-property-processing")
+                .and_then(|v| v.as_plain_text())
+        } else {
+            None
+        };
         if typst_brand_param.is_some()
             || typst_css_property_processing.is_some()
             || typst_logo_param.is_some()
@@ -660,7 +670,7 @@ impl PipelineStage for PandocWriteStage {
                     logo: typst_logo_param,
                     brand_mode: typst_brand_mode.clone(),
                     css_property_processing: typst_css_property_processing,
-                    available_fonts: typst_available_fonts,
+                    available_fonts: typst_available_fonts.clone(),
                     citation_location: typst_citation_location,
                     reference_location: typst_reference_location,
                     root_dir: typst_root_dir,
@@ -747,32 +757,6 @@ impl PipelineStage for PandocWriteStage {
             }));
         }
 
-        // The crossref-index Lua filter (`crossref/index.lua`) writes
-        // straight to `crossref-index-file` (`<project>/.quarto/crossref-index.json`,
-        // set in `insert_project_keys`) with no directory creation of its
-        // own — Lua's `io.open(path, "w")` never creates missing parent
-        // directories, and doing the `mkdir -p` there would need a
-        // shell-out that isn't portable to Windows. On a project whose
-        // `.quarto/` has never been created (a fresh checkout, or a fresh
-        // test fixture dir), that `io.open` returns `nil` and the filter
-        // only warns "Error attempting to write crossref index" — no path,
-        // no errno. Every book chapter's own Pandoc invocation writes to
-        // this same file, so ensure the directory exists before any of
-        // them run, rather than depending on some other chapter (or a
-        // leftover `.quarto/` from a previous run) having created it first.
-        if !ctx.project.is_single_file {
-            let quarto_dir = ctx.project.dir.join(".quarto");
-            std::fs::create_dir_all(&quarto_dir).map_err(|e| {
-                PipelineError::stage_error(
-                    self.name(),
-                    format!(
-                        "failed to create {} for the crossref index: {e}",
-                        quarto_dir.display()
-                    ),
-                )
-            })?;
-        }
-
         let params_blob = builder.build().to_string();
 
         // T9.1: the Pandoc-superset shape (`raw: false`), never pampa's
@@ -789,7 +773,7 @@ impl PipelineStage for PandocWriteStage {
         )
         .map_err(|diags| {
             PipelineError::stage_error(
-                self.name(),
+                name,
                 format!(
                     "failed to serialize AST to Pandoc JSON ({} diagnostics)",
                     diags.len()
@@ -797,41 +781,28 @@ impl PipelineStage for PandocWriteStage {
             )
         })?;
 
-        let json_path = temp_dir.join("pandoc-input.json");
-        std::fs::write(&json_path, &json_buf).map_err(|e| {
-            PipelineError::stage_error(self.name(), format!("failed to write temp JSON: {e}"))
-        })?;
-
-        std::fs::create_dir_all(&share).map_err(|e| {
-            PipelineError::stage_error(
-                self.name(),
-                format!("failed to create pandoc share directory: {e}"),
-            )
-        })?;
-        extract_share_tree(&share).map_err(|e| {
-            PipelineError::stage_error(
-                self.name(),
-                format!("failed to materialize vendored pandoc filter tree: {e}"),
-            )
-        })?;
+        let json_path = temp_root.join("pandoc-input.json");
+        let mut files = vec![RequestFile {
+            path: rp(&json_path)?,
+            bytes: json_buf,
+        }];
 
         // pandoc-hybrid-typst Phase 1: the 8-partial typst doctemplate,
         // typst-only. Staged independent of `share` above (verified: no
         // positional relationship between `--template` and
         // `--data-dir`/`-L` — see `bundle::extract_typst_template`'s doc
-        // comment).
-        let typst_template_path = if ctx.format.identifier == crate::format::FormatIdentifier::Typst
-        {
-            let template_dir = temp_dir.join("pandoc-typst-template");
+        // comment). Direct `std::fs` until R4.
+        let typst_template_path = if is_typst {
+            let template_dir = temp_root.join("pandoc-typst-template");
             std::fs::create_dir_all(&template_dir).map_err(|e| {
                 PipelineError::stage_error(
-                    self.name(),
+                    name,
                     format!("failed to create typst template directory: {e}"),
                 )
             })?;
             crate::pandoc_filters::bundle::extract_typst_template(&template_dir).map_err(|e| {
                 PipelineError::stage_error(
-                    self.name(),
+                    name,
                     format!("failed to materialize vendored typst template: {e}"),
                 )
             })?;
@@ -851,7 +822,7 @@ impl PipelineStage for PandocWriteStage {
             if let Some(user_template) = resolve_user_template_path(&doc.ast.meta, &doc_dir) {
                 std::fs::copy(&user_template, &vendored_template).map_err(|e| {
                     PipelineError::stage_error(
-                        self.name(),
+                        name,
                         format!(
                             "failed to stage user-configured typst template {}: {e}",
                             user_template.display()
@@ -860,7 +831,7 @@ impl PipelineStage for PandocWriteStage {
                 })?;
             }
             stage_typst_template_partials(&doc.ast.meta, &doc_dir, &template_dir)
-                .map_err(|msg| PipelineError::stage_error(self.name(), msg))?;
+                .map_err(|msg| PipelineError::stage_error(name, msg))?;
             Some(vendored_template)
         } else {
             None
@@ -873,34 +844,43 @@ impl PipelineStage for PandocWriteStage {
         // artifact; `TypstCompileStage` (appended after this stage only
         // for typst, see `pipeline::build_pandoc_pipeline_stages`) compiles
         // this intermediate into the real PDF at `ctx.output_path()`.
-        let output_path = if ctx.format.identifier == crate::format::FormatIdentifier::Typst {
+        let output_path = if is_typst {
             ctx.output_path().with_extension("typ")
         } else {
             ctx.output_path()
         };
+        let mut dirs: Vec<String> = Vec::new();
         if let Some(parent) = output_path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| {
-                PipelineError::stage_error(
-                    self.name(),
-                    format!(
-                        "failed to create output directory {}: {e}",
-                        parent.display()
-                    ),
-                )
-            })?;
+            dirs.push(rp(parent)?);
+        }
+        // The crossref-index Lua filter (`crossref/index.lua`) writes
+        // straight to `crossref-index-file` (`<project>/.quarto/crossref-index.json`,
+        // set in `insert_project_keys`) with no directory creation of its
+        // own — Lua's `io.open(path, "w")` never creates missing parent
+        // directories. On a project whose `.quarto/` has never been created
+        // that `io.open` returns `nil` and the filter only warns "Error
+        // attempting to write crossref index". Every book chapter's own
+        // Pandoc invocation writes to this same file, so the directory must
+        // exist before any of them run.
+        if !ctx.project.is_single_file {
+            dirs.push(rp(&ctx.project.dir.join(".quarto"))?);
+        }
+        // `pandoc.system.with_temporary_directory` without `/tmp` is an
+        // uncatchable fatal error under wasm (design: Contracts).
+        if opts.collect_resources {
+            dirs.push("/tmp".to_string());
         }
 
         // `init.lua`'s dependenciesFile() only needs the path to exist and
         // be readable/writable, not carry pre-existing content -- but it
         // does need to exist: `QUARTO_FILTER_DEPENDENCY_FILE` names a file
         // for the Lua side to open, not to create.
-        let deps_file = temp_dir.join("pandoc-filter-deps.txt");
-        std::fs::write(&deps_file, "").map_err(|e| {
-            PipelineError::stage_error(
-                self.name(),
-                format!("failed to create filter dependency file: {e}"),
-            )
-        })?;
+        let deps_file = temp_root.join("pandoc-filter-deps.txt");
+        files.push(RequestFile {
+            path: rp(&deps_file)?,
+            bytes: Vec::new(),
+        });
+
         let mut to_format = ctx.format.pandoc_writer_name();
         if citeproc_resolved && ctx.format.identifier == FormatIdentifier::Typst {
             // Q1's `typstResolveFormat` equivalent: with citations already
@@ -912,32 +892,46 @@ impl PipelineStage for PandocWriteStage {
             to_format.push_str("-citations");
         }
 
-        let format_extra_args = if ctx.format.identifier == FormatIdentifier::Epub {
-            epub_extra_args(&temp_dir, &doc.path, &doc.ast.meta)?
-        } else {
-            Vec::new()
+        // Every user-facing path must be absolute: the wasm working
+        // directory is `/`, whereas native's is the q2 process cwd.
+        let doc_dir_abs = {
+            let dir = doc.path.parent().unwrap_or_else(|| Path::new("."));
+            if dir.has_root() || dir.is_absolute() {
+                dir.to_path_buf()
+            } else {
+                project_dir.join(dir)
+            }
         };
+
+        let (format_extra_args, extra_files) = if ctx.format.identifier == FormatIdentifier::Epub {
+            epub_extra_args(&temp_root, &doc_dir_abs, &doc.ast.meta, |p| rp(p))?
+        } else {
+            (Vec::new(), Vec::new())
+        };
+        files.extend(extra_files);
+
         // P7 Task 4: the per-format `--default-image-extension` default
         // plus the pandoc-defaults forwarding allow-list
         // (`reference-doc`/`template`/`highlight-style`/`toc`/`toc-depth`/
         // `reference-location`/`shift-heading-level-by`/`slide-level`).
-        // `doc.path`'s parent is the document's own directory — the base a
+        // The document's own directory is the base a
         // `reference-doc`/`template` entry's `FORMAT_PATH_KEYS`-resolved,
-        // document-relative `Path` value is rebased against, since this
-        // `Command` inherits the process cwd rather than setting its own.
-        let doc_dir = doc.path.parent().unwrap_or_else(|| Path::new("."));
+        // document-relative `Path` value is rebased against.
         let mut forwarded_args =
-            build_forwarded_args(self.name(), doc_dir, &doc.ast.meta, ctx.format.identifier)?;
+            build_forwarded_args(name, &doc_dir_abs, &doc.ast.meta, ctx.format.identifier)?;
 
-        if ctx.format.identifier == FormatIdentifier::Typst {
+        if is_typst {
             let args = crate::pandoc_filters::typst_highlight::typst_highlight_args(
-                doc_dir,
+                &doc_dir_abs,
                 &doc.ast.meta,
                 typst_brand_mode.as_deref(),
-                typst_code_block_bg.as_deref(),
+                typst.code_block_bg.as_deref(),
             )
-            .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?;
-            forwarded_args.extend(args);
+            .map_err(|e| PipelineError::stage_error(name, e.to_string()))?;
+            forwarded_args.extend(
+                args.into_iter()
+                    .map(|a| PandocArg::text(a.to_string_lossy())),
+            );
         }
 
         // `build_forwarded_args` deliberately skips a bare `--toc-depth` CLI
@@ -947,79 +941,193 @@ impl PipelineStage for PandocWriteStage {
         // `PANDOC_WRITER_OPTIONS.toc_depth`, which only reflects the
         // document's metadata when threaded through a `--defaults` file
         // (see `build_typst_toc_defaults_yaml`'s doc comment). Write that
-        // file here, alongside this stage's other temp-dir artifacts.
-        if ctx.format.identifier == FormatIdentifier::Typst
+        // file here, alongside this stage's other temp-root artifacts
+        // (direct `std::fs` until R4).
+        if is_typst
             && let Some(yaml) =
                 crate::pandoc_filters::format_defaults::build_typst_toc_defaults_yaml(&doc.ast.meta)
         {
-            let defaults_path = temp_dir.join("pandoc-typst-toc-defaults.yaml");
+            let defaults_path = temp_root.join("pandoc-typst-toc-defaults.yaml");
             std::fs::write(&defaults_path, yaml).map_err(|e| {
                 PipelineError::stage_error(
-                    self.name(),
+                    name,
                     format!("failed to write typst toc-depth defaults file: {e}"),
                 )
             })?;
-            forwarded_args.push(OsString::from("--defaults"));
-            forwarded_args.push(defaults_path.into_os_string());
+            forwarded_args.push(PandocArg::text("--defaults"));
+            forwarded_args.push(PandocArg::Path(defaults_path));
         }
 
         // Body-content `Image`/`Link` targets (e.g. `img/thinker.jpg`)
         // reach pandoc as literal, unrebased strings from the AST — unlike
         // the `FORMAT_PATH_KEYS` config keys `build_forwarded_args` already
         // rebases above, nothing upstream of this stage rewrites them for
-        // filesystem resolution (the sibling `link-rewrite` B3 transform
-        // only rewrites for browser/HTML consumption, and only when a
-        // `ResourceResolverContext` is attached). Pandoc's own docx/pptx
-        // writers read the referenced file's bytes directly to embed it,
-        // resolving a relative target against pandoc's cwd — which this
-        // `Command` never sets, so it inherits whatever cwd the host
-        // process happens to have. `--resource-path` tells pandoc to also
-        // check `doc_dir`, matching every other resolution in this stage.
-        // Without it, every docx/pptx render referencing an image by a
-        // relative path silently drops the image (measured: `cargo run
-        // --bin q2 -- render <fixture with a relative image> --to docx`
-        // printed `Warning [Q-11-1]: Could not fetch resource
-        // img/thinker.jpg: replacing image with description`).
+        // filesystem resolution. Pandoc's own docx/pptx writers read the
+        // referenced file's bytes directly to embed it, resolving a
+        // relative target against pandoc's cwd. `--resource-path` tells
+        // pandoc to also check `doc_dir`, matching every other resolution
+        // in this stage. Without it, every docx/pptx render referencing an
+        // image by a relative path silently drops the image (`Warning
+        // [Q-11-1]: Could not fetch resource img/thinker.jpg: replacing
+        // image with description`).
         //
         // T9.6: `-f json -t <to_format> --data-dir <share>/pandoc/datadir
         // -L <share>/filters/main.lua --resource-path <doc_dir> -o <output>`,
         // plus any format-specific extra flags (pandoc-hybrid-typst Phase 1's
         // invocation builder — typst needs `--standalone --wrap none
         // --default-image-extension svg`; see `Format::pandoc_invocation_args`).
-        let output = Command::new(&pandoc_bin)
-            .arg("-f")
-            .arg("json")
-            .arg("-t")
-            .arg(&to_format)
-            .arg("--data-dir")
-            .arg(share.join("pandoc").join("datadir"))
-            .arg("-L")
-            .arg(share.join("filters").join("main.lua"))
-            .args(&format_extra_args)
-            .args(ctx.format.pandoc_invocation_args())
-            .arg("--resource-path")
-            .arg(doc_dir)
-            .args(
-                shift_heading_level_by
-                    .map(|n| vec!["--shift-heading-level-by".to_string(), n.to_string()])
-                    .unwrap_or_default(),
+        let mut args: Vec<PandocArg> = vec![
+            PandocArg::text("-f"),
+            PandocArg::text("json"),
+            PandocArg::text("-t"),
+            PandocArg::text(to_format.clone()),
+            PandocArg::text("--data-dir"),
+            PandocArg::Path(share.join("pandoc").join("datadir")),
+            PandocArg::text("-L"),
+            PandocArg::Path(share.join("filters").join("main.lua")),
+        ];
+        args.extend(format_extra_args);
+        args.extend(
+            ctx.format
+                .pandoc_invocation_args()
+                .into_iter()
+                .map(PandocArg::Text),
+        );
+        args.push(PandocArg::text("--resource-path"));
+        args.push(PandocArg::Path(doc_dir_abs.clone()));
+        if let Some(n) = shift_heading_level_by {
+            args.push(PandocArg::text("--shift-heading-level-by"));
+            args.push(PandocArg::text(n.to_string()));
+        }
+        if let Some(template) = &typst_template_path {
+            args.push(PandocArg::text("--template"));
+            args.push(PandocArg::Path(template.clone()));
+        }
+        args.push(PandocArg::text("-o"));
+        args.push(PandocArg::Path(
+            if output_path.is_absolute() || output_path.has_root() {
+                output_path.clone()
+            } else {
+                project_dir.join(&output_path)
+            },
+        ));
+        args.extend(forwarded_args);
+        args.push(PandocArg::Path(json_path.clone()));
+
+        let mut argv = vec!["pandoc".to_string()];
+        for arg in &args {
+            argv.push(
+                arg.to_request_string()
+                    .map_err(|msg| PipelineError::stage_error(name, msg))?,
+            );
+        }
+
+        // The env is an allowlist: never `LANG`/`LC_*` (non-ASCII file
+        // names fail under `LANG=C`; leaving it unset is fine).
+        let mut env = std::collections::BTreeMap::new();
+        env.insert("QUARTO_SHARE_PATH".to_string(), rp(&share)?);
+        env.insert(
+            "QUARTO_FILTER_PARAMS".to_string(),
+            encode_params_blob(&params_blob),
+        );
+        env.insert("QUARTO_FILTER_DEPENDENCY_FILE".to_string(), rp(&deps_file)?);
+        if let Some(epoch) = opts.source_date_epoch {
+            env.insert("SOURCE_DATE_EPOCH".to_string(), epoch.to_string());
+        }
+
+        let mut request = PandocRequest {
+            schema_version: REQUEST_SCHEMA_VERSION,
+            kind: Default::default(),
+            job_id: String::new(),
+            writer: to_format,
+            argv,
+            env,
+            files,
+            dirs,
+            // R2 computes `resource_refs` (paths and bytes copied by Rust
+            // from the VFS snapshot); the docx seam leaves it empty.
+            resource_refs: Vec::new(),
+            share_root: rp(&temp_root)?,
+            share_tree_path: rp(&share)?,
+            doc_dir: rp(&doc_dir_abs)?,
+            project_root: rp(&project_dir)?,
+            output_path: rp(&output_path)?,
+            stage_name: name.to_string(),
+            json_path: rp(&json_path)?,
+            post: Default::default(),
+            expected_pandoc_wasm_sha256: constants().wasm_sha256.clone(),
+            share_tree_version: share_tree_version().to_string(),
+            typst_available_fonts,
+        };
+        validate_mounts(&mut request, opts.collect_resources)
+            .map_err(|msg| PipelineError::stage_error(name, msg))?;
+        request.job_id = request.compute_job_id();
+
+        // T9.2: no binary bytes travel through `PipelineData` — pandoc
+        // writes `output_path` directly. For typst, `output_path` is the
+        // intermediate `.typ` file `TypstCompileStage` compiles next.
+        Ok(PreparedPandoc {
+            request,
+            diagnostics: Vec::new(),
+            output_path,
+            is_intermediate: is_typst,
+        })
+    }
+
+    /// Run a request natively: create `dirs`, write `files`, extract the
+    /// share tree at `share_tree_path`, then spawn `pandoc_bin` with the
+    /// request's argv (argv[0] replaced by the resolved binary) and env
+    /// (applied over the inherited environment). Returns the classified
+    /// pandoc warnings.
+    pub fn execute(
+        &self,
+        request: &PandocRequest,
+        pandoc_bin: &Path,
+    ) -> Result<Vec<DiagnosticMessage>, PipelineError> {
+        let name = self.name();
+        for dir in &request.dirs {
+            std::fs::create_dir_all(dir).map_err(|e| {
+                PipelineError::stage_error(name, format!("failed to create directory {dir}: {e}"))
+            })?;
+        }
+        for file in &request.files {
+            let path = Path::new(&file.path);
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    PipelineError::stage_error(
+                        name,
+                        format!("failed to create directory {}: {e}", parent.display()),
+                    )
+                })?;
+            }
+            std::fs::write(path, &file.bytes).map_err(|e| {
+                PipelineError::stage_error(name, format!("failed to write {}: {e}", file.path))
+            })?;
+        }
+
+        // Finding 5 (final review): extracted into the per-render temp
+        // root rather than a process-global cache, so cleanup rides on
+        // `ctx.temp_dir()`'s existing lifecycle instead of leaking.
+        let share = Path::new(&request.share_tree_path);
+        std::fs::create_dir_all(share).map_err(|e| {
+            PipelineError::stage_error(
+                name,
+                format!("failed to create pandoc share directory: {e}"),
             )
-            .args(
-                typst_template_path
-                    .as_ref()
-                    .map(|p| vec!["--template".to_string(), p.to_string_lossy().into_owned()])
-                    .unwrap_or_default(),
+        })?;
+        extract_share_tree(share).map_err(|e| {
+            PipelineError::stage_error(
+                name,
+                format!("failed to materialize vendored pandoc filter tree: {e}"),
             )
-            .arg("-o")
-            .arg(&output_path)
-            .args(&forwarded_args)
-            .arg(&json_path)
-            .env("QUARTO_SHARE_PATH", share)
-            .env("QUARTO_FILTER_PARAMS", encode_params_blob(&params_blob))
-            .env("QUARTO_FILTER_DEPENDENCY_FILE", &deps_file)
+        })?;
+
+        let output = Command::new(pandoc_bin)
+            .args(request.argv.iter().skip(1))
+            .envs(&request.env)
             .output()
             .map_err(|e| {
-                PipelineError::stage_error(self.name(), format!("failed to execute pandoc: {e}"))
+                PipelineError::stage_error(name, format!("failed to execute pandoc: {e}"))
             })?;
 
         // T10.1/T10.5: stderr is classified unconditionally, regardless of
@@ -1027,14 +1135,66 @@ impl PipelineStage for PandocWriteStage {
         // retained on failure (for debugging) and removed on success.
         let stderr = String::from_utf8_lossy(&output.stderr);
         let status_desc = output.status.to_string();
+        let json_path = Path::new(&request.json_path);
         let warnings = classify_pandoc_completion(
-            self.name(),
+            &request.stage_name,
             output.status.success(),
             &status_desc,
             &stderr,
-            &json_path,
+            json_path,
         )?;
-        retain_temp_json_unless_success(output.status.success(), &json_path);
+        retain_temp_json_unless_success(output.status.success(), json_path);
+        Ok(warnings)
+    }
+}
+
+impl Default for PandocWriteStage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait(?Send)]
+impl PipelineStage for PandocWriteStage {
+    fn name(&self) -> &str {
+        "pandoc-write"
+    }
+
+    fn input_kind(&self) -> PipelineDataKind {
+        PipelineDataKind::DocumentAst
+    }
+
+    fn output_kind(&self) -> PipelineDataKind {
+        PipelineDataKind::RenderedOutput
+    }
+
+    async fn run(
+        &self,
+        input: PipelineData,
+        ctx: &mut StageContext,
+    ) -> Result<PipelineData, PipelineError> {
+        let PipelineData::DocumentAst(mut doc) = input else {
+            return Err(PipelineError::unexpected_input(
+                self.name(),
+                self.input_kind(),
+                input.kind(),
+            ));
+        };
+
+        // Findings 3/4 (final review): resolve the binary through the
+        // runtime (honouring `QUARTO_PANDOC`) and enforce the version
+        // floor before spawning anything.
+        let pandoc_bin = resolve_and_gate_pandoc(self.name(), ctx.runtime.as_ref())?;
+
+        let typst = self.typst_prestep(&doc, ctx)?;
+        let opts = match &ctx.prepare_options {
+            Some(opts) => opts.clone(),
+            None => PrepareOptions::native(ctx.temp_dir()?.to_path_buf()),
+        };
+        let prepared = self.prepare(&mut doc, ctx, &opts, &typst)?;
+        ctx.add_diagnostics(prepared.diagnostics);
+
+        let warnings = self.execute(&prepared.request, &pandoc_bin)?;
         ctx.add_diagnostics(warnings);
 
         // Q1's shortcode-unescape postprocessor (`format-markdown.ts:21`,
@@ -1043,24 +1203,18 @@ impl PipelineStage for PandocWriteStage {
         // literal `{{< … >}}` Str to `{{\< … \>}}`, so an escaped shortcode
         // from the source (`{{{< … >}}}`) would round-trip double-escaped.
         // Rewrite the output file in place. Only runs after a successful
-        // pandoc invocation, and only touches files that contain the
-        // writer-escaped delimiters.
-        if output.status.success() && ctx.format.identifier.is_markdown_output() {
-            unescape_shortcodes_in_output(&output_path)?;
+        // pandoc invocation (`execute` returns `Err` otherwise), and only
+        // touches files that contain the writer-escaped delimiters.
+        if ctx.format.identifier.is_markdown_output() {
+            unescape_shortcodes_in_output(&prepared.output_path)?;
         }
 
-        // T9.2: no binary bytes travel through `PipelineData` — pandoc
-        // already wrote `output_path` directly. For typst, `output_path`
-        // is the intermediate `.typ` file `TypstCompileStage` compiles
-        // next — `is_intermediate` mirrors that (see the output_path
-        // computation above).
-        let is_intermediate = ctx.format.identifier == crate::format::FormatIdentifier::Typst;
         Ok(PipelineData::RenderedOutput(RenderedOutput {
             input_path: doc.path,
-            output_path,
+            output_path: prepared.output_path,
             format: ctx.format.clone(),
             content: String::new(),
-            is_intermediate,
+            is_intermediate: prepared.is_intermediate,
             supporting_files: vec![],
             metadata: doc.ast.meta,
             source_context: doc.source_context,
@@ -1502,29 +1656,6 @@ mod tests {
             err.to_string()
                 .contains(&failure_json.display().to_string()),
             "expected the error to name the retained JSON path, got: {err}"
-        );
-    }
-
-    /// Finding 4 (final review): `version::gate` had a well-tested unit but
-    /// no production caller — `Q-20-1`/`Q-20-2` could never actually be
-    /// emitted. Mirrors `xtask::verify`'s
-    /// `pandoc_preflight_is_wired_into_run` wiring-reachability pattern: a
-    /// source-grep that fails if the call site disappears, since a passing
-    /// unit test for `gate` alone cannot detect that regression.
-    #[test]
-    fn test_version_gate_is_wired_into_run() {
-        let source = include_str!("pandoc_write.rs");
-        assert!(
-            source.contains("version::gate(version_str.as_deref())"),
-            "`resolve_and_gate_pandoc` no longer calls `version::gate` — the pandoc \
-             version floor is untested by any wiring-reachability check if this call \
-             is removed"
-        );
-        assert!(
-            source.contains("resolve_and_gate_pandoc(self.name(), ctx.runtime.as_ref())?"),
-            "`PandocWriteStage::run` no longer calls `resolve_and_gate_pandoc` — the \
-             pandoc binary would be resolved via a bare `Command::new(\"pandoc\")` again, \
-             silently ignoring `QUARTO_PANDOC` and the version floor"
         );
     }
 }

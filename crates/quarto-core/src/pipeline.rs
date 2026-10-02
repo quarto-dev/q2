@@ -1010,6 +1010,15 @@ fn stage_context_from_render_context(
     )
     .map_err(|e| crate::error::QuartoError::Other(e.to_string()))?;
 
+    // R1: the temp root must be fixed before anything calls `temp_dir()`
+    // (`with_temp_dir` seeds a lazy cell that `set` cannot overwrite), and
+    // before `prepare()`, because absolute temp paths are baked into
+    // `QUARTO_FILTER_PARAMS`. On wasm this is the constant share root.
+    if let Some(options) = &ctx.prepare_options {
+        stage_ctx = stage_ctx.with_temp_dir(options.temp_root.clone());
+    }
+    stage_ctx.prepare_options = ctx.prepare_options.clone();
+
     // Transfer artifacts from RenderContext to StageContext
     stage_ctx.artifacts = std::mem::take(&mut ctx.artifacts);
     // Transfer user-grammar provider (browser path sets this; native CLI
@@ -1153,6 +1162,8 @@ fn restore_render_context(ctx: &mut RenderContext<'_>, stage_ctx: &mut StageCont
     // `execution_skipped` above.
     ctx.citation_manifest = stage_ctx.citation_manifest.take();
     ctx.citeproc_filter_in_post = stage_ctx.citeproc_filter_in_post;
+    // R1: the request `PandocPrepareStage` built (output-only).
+    ctx.pandoc_request = stage_ctx.pandoc_request.take();
 }
 
 /// Apply the diagnostic-suppression policy and map a pipeline result into

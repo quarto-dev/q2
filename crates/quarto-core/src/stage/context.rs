@@ -330,6 +330,16 @@ pub struct StageContext {
     /// `meta["filters"]`).
     pub defer_citeproc: bool,
 
+    /// Input-only host options for [`crate::stage::stages::PandocPrepareStage`],
+    /// bridged one way from [`crate::render::RenderContext::prepare_options`].
+    /// When set, `run_pipeline` also pre-seeds this context's temp dir with
+    /// `temp_root` (see [`StageContext::with_temp_dir`]).
+    pub prepare_options: Option<crate::pandoc_request::PrepareOptions>,
+
+    /// Output of [`crate::stage::stages::PandocPrepareStage`], restored into
+    /// [`crate::render::RenderContext::pandoc_request`] by `run_pipeline`.
+    pub pandoc_request: Option<crate::pandoc_request::PandocRequest>,
+
     /// This chapter's harvested citation manifest (book-projects P6),
     /// set by [`crate::stage::stages::UserFiltersStage`] from the
     /// citeproc filter's output alongside its existing, unchanged
@@ -437,6 +447,8 @@ impl StageContext {
             format_options: crate::render::FormatOptions::default(),
             user_grammar_provider: None,
             defer_citeproc: false,
+            prepare_options: None,
+            pandoc_request: None,
             chapter_seed: None,
             cross_chapter_crossref_registry: None,
             citation_manifest: None,
