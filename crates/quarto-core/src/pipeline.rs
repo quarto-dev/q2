@@ -67,7 +67,7 @@ use crate::stage::stages::ResourceCopyFlushStage;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::stage::stages::TypstCompileStage;
 use crate::stage::stages::{
-    PandocPrepareStage, PrefetchRemoteImagesStage, UnexecutedCellCountStage,
+    InlineTableCssStage, PandocPrepareStage, PrefetchRemoteImagesStage, UnexecutedCellCountStage,
 };
 use crate::stage::{
     ApplyTemplateStage, AstTransformsStage, AttributionGenerateStage, CompileThemeCssStage,
@@ -559,6 +559,9 @@ pub fn build_pandoc_prefix_stages(
     if !captures.is_empty() {
         insert_capture_splice_stage(&mut stages, captures);
     }
+    // Last, so HTML spliced in or produced by user filters is covered too;
+    // a no-op unless the format is typst.
+    stages.push(Box::new(InlineTableCssStage::new()));
     stages
 }
 
@@ -5389,6 +5392,7 @@ mod tests {
                 "user-filters-post",
                 "resource-report",
                 "equation-number",
+                "inline-table-css",
                 "pandoc-write",
                 "resource-copy-flush",
                 "typst-compile",
@@ -6789,6 +6793,8 @@ mod tests {
                 // every non-HTML format, and the stage still strips the
                 // quarto-eq-number attribute before pandoc sees it.
                 "equation-number",
+                // Last of the prefix; a no-op unless the format is typst.
+                "inline-table-css",
                 "pandoc-write",
             ]
         );

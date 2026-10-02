@@ -55,6 +55,7 @@ pub mod filter_resolve;
 pub mod format;
 pub mod get_config;
 pub mod glob;
+pub mod inline_css;
 pub mod language;
 pub mod math_method;
 pub mod metadata;

@@ -357,7 +357,7 @@ describe('typst request (R4)', () => {
     expect(text('/pandoc-typst-template/typst-show.typ')).toBe('// USER-SHOW\n');
   });
 
-  it('reports a failed remote image and the CSS-inlining limit, and sends no quarto-cli-path', async () => {
+  it('reports a failed remote image, CSS-inlines the styled table in Rust, and sends no quarto-cli-path', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('no', { status: 404, statusText: 'Not Found' })));
     wasm.vfs_add_file(
       '/project/doc.qmd',
@@ -365,7 +365,10 @@ describe('typst request (R4)', () => {
     );
     const out = await wasm.render_pandoc_request('/project/doc.qmd', 'typst', SDE);
     expect(out.success).toBe(true);
-    expect(out.diagnostics.map((d) => d.code).filter(Boolean)).toEqual(expect.arrayContaining(['Q-20-9', 'Q-20-10']));
+    expect(out.diagnostics.map((d) => d.code).filter(Boolean)).toEqual(['Q-20-9']);
+    const input = new TextDecoder().decode(out.request!.files.find((f) => f.path.endsWith('/pandoc-input.json'))!.bytes);
+    expect(input).not.toContain('<style');
+    expect(input).toContain('color');
     const blob = JSON.parse(Buffer.from(out.request!.env.QUARTO_FILTER_PARAMS, 'base64').toString());
     expect(blob['quarto-cli-path']).toBeUndefined();
   });

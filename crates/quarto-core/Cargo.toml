@@ -49,6 +49,10 @@ tree-sitter-r = "1.2"
 # compile-time `format_description!` macro. WASM-compatible.
 time = { version = "0.3", features = ["formatting", "parsing", "macros"] }
 
+# Backs `inline_css` (Q1's juice step), used by the `inline-css` subcommand and
+# the `css-inline` pipeline stage. Default features (remote/file stylesheet
+# loading, rayon) stay off, which keeps it buildable for wasm32.
+css-inline = { version = "0.21", default-features = false }
 quarto-util.workspace = true
 quarto-system-runtime.workspace = true
 quarto-pandoc-types.workspace = true

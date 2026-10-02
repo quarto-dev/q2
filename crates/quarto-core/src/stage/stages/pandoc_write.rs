@@ -977,13 +977,6 @@ impl PandocWriteStage {
         })?;
 
         let json_path = temp_root.join("pandoc-input.json");
-        // What the browser's `.typ` request cannot do (remote images, CSS
-        // inlining of styled raw HTML); natively both work.
-        let typst_notes = if is_typst && opts.collect_resources {
-            crate::pandoc_request::typst_limits::typst_limitation_diagnostics(&json_buf)
-        } else {
-            Vec::new()
-        };
         let mut files = vec![RequestFile {
             path: rp(&json_path)?,
             bytes: json_buf,
@@ -1216,7 +1209,6 @@ impl PandocWriteStage {
         } else {
             Vec::new()
         };
-        diagnostics.extend(typst_notes);
 
         let mut args: Vec<PandocArg> = vec![
             PandocArg::text("-f"),

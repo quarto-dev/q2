@@ -46,7 +46,7 @@ Tick a phase when its Close-out is complete and it has landed on `feature/pandoc
 - [ ] R4 [typst source](2026-10-01-pandoc-request-R4-typst-source.md)
 - [ ] R5 [pptx and epub](2026-10-01-pandoc-request-R5-pptx-epub.md)
 - [ ] R6 [snapshot and remote images](2026-10-01-pandoc-request-R6-snapshot-remote-images.md)
-- [ ] R8 [CSS inlining](2026-10-01-pandoc-request-R8-css-inlining.md)
+- [x] R8 [CSS inlining](2026-10-01-pandoc-request-R8-css-inlining.md)
 - [ ] R7 [projects and books (stages 0-1)](2026-10-01-pandoc-request-R7-projects-books.md)
 
 ## Dependencies on the host epic
@@ -67,7 +67,6 @@ Tick a phase when its Close-out is complete and it has landed on `feature/pandoc
 ## Known limitations (v1)
 
 - The `.typ` download bundles no images or brand logos, and `typst-available-fonts` is unset (design D8.6).
-- Typst raw HTML tables are not CSS-inlined in the hub until R8 (the Lua-side inliner cannot run in pandoc.wasm).
 - A typst document with a remote image fails until R6 lands the prefetch (D5).
 - Books render the active page only until R7's later stages.
 - A user filter at the project root cannot `require` or read any other file in the hub (only the filter itself mounts, for performance and because the root holds unrelated files); put a family of filters in a subdirectory.

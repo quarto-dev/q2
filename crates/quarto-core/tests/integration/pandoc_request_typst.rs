@@ -206,33 +206,64 @@ fn the_toc_depth_defaults_file_is_a_request_file() {
     assert!(request.files.iter().any(|f| f.path == request.argv[i + 1]));
 }
 
-/// PR #766's `inline_css` pipes through `quarto.config.cli_path()`, which
-/// only the native CLI sets. The browser request carries no
-/// `quarto-cli-path`, so a styled raw HTML table is not CSS-inlined until
-/// R8; the response says so.
+/// The Pandoc JSON a request will hand to pandoc, as text.
+fn input_json(request: &PandocRequest) -> String {
+    String::from_utf8(file(request, "/pandoc-input.json").to_vec()).unwrap()
+}
+
+const STYLED_TABLE: &str = "```{=html}\n<style>td { text-align: right; color: red }</style>\n<table><tr><td>x</td></tr></table>\n```\n";
+
+/// PR #766's Lua `inline_css` needs `quarto.config.cli_path()`, which only the
+/// native CLI sets, so the browser request carries none. The Rust
+/// `inline-table-css` stage does the inlining ahead of pandoc instead.
 #[test]
-fn a_raw_html_table_has_no_cli_path_and_is_reported() {
+fn a_styled_raw_html_table_is_css_inlined_without_a_cli_path() {
     let (_guard, root) = scratch();
-    let out = render_typst(
-        &root,
-        "---\ntitle: T\n---\n\n```{=html}\n<style>td { color: red }</style>\n<table><tr><td>x</td></tr></table>\n```\n",
-    );
+    let out = render_typst(&root, &format!("---\ntitle: T\n---\n\n{STYLED_TABLE}"));
     assert!(out.error.is_none(), "{:?}", out.error);
-    assert!(codes(&out).contains(&"Q-20-10"), "{:?}", out.diagnostics);
+    assert!(codes(&out).is_empty(), "{:?}", out.diagnostics);
     let request = out.request.expect("request");
-    let params = params(&request);
-    assert!(params.get("quarto-cli-path").is_none());
-    assert!(params.get("typst-path").is_none());
+    let json = input_json(&request);
+    assert!(!json.contains("<style"), "style block left in the input");
+    assert!(json.contains("text-align"), "rules not on the cells");
+    assert!(params(&request).get("quarto-cli-path").is_none());
+    assert!(params(&request).get("typst-path").is_none());
 }
 
 #[test]
-fn an_unstyled_html_table_is_not_reported() {
+fn the_opt_out_comment_leaves_the_table_untouched() {
+    let (_guard, root) = scratch();
+    let out = render_typst(
+        &root,
+        "---\ntitle: T\n---\n\n```{=html}\n<!--| quarto-html-table-processing: none -->\n<style>td { color: red }</style>\n<table><tr><td>x</td></tr></table>\n```\n",
+    );
+    assert!(out.error.is_none(), "{:?}", out.error);
+    let json = input_json(&out.request.expect("request"));
+    assert!(json.contains("<style"), "opted-out table was inlined");
+}
+
+#[test]
+fn a_non_typst_format_is_not_css_inlined() {
+    let (_guard, root) = scratch();
+    let doc = root.join("doc.qmd");
+    write(
+        &doc,
+        format!("---\ntitle: T\n---\n\n{STYLED_TABLE}").as_bytes(),
+    );
+    let out = render_with(&doc, "docx", None);
+    assert!(out.error.is_none(), "{:?}", out.error);
+    let json = input_json(&out.request.expect("request"));
+    assert!(json.contains("<style"), "docx input was inlined");
+}
+
+#[test]
+fn an_unstyled_html_table_is_left_alone() {
     let (_guard, root) = scratch();
     let out = render_typst(
         &root,
         "---\ntitle: T\n---\n\n```{=html}\n<table><tr><td>x</td></tr></table>\n```\n",
     );
-    assert!(!codes(&out).contains(&"Q-20-10"), "{:?}", out.diagnostics);
+    assert!(codes(&out).is_empty(), "{:?}", out.diagnostics);
 }
 
 #[test]
