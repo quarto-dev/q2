@@ -1,0 +1,46 @@
+  ✓ typst/brand-yaml/color/exper/brand-color.qmd
+  ✓ typst/brand-yaml/color/homedepot/brand-color.qmd
+  ✓ typst/brand-yaml/color/posit/brand-color.qmd
+  ✓ typst/brand-yaml/font-filtering/typst-font-filtering.qmd
+  ✓ typst/brand-yaml/font-filtering-fallback/font-filtering-fallback.qmd
+  ✗ typst/brand-yaml/font-filtering-generics/font-filtering-generics.qmd
+    typst [noErrorsOrWarnings]: Expected no errors or warnings, but found 1:
+  - [WARN] typst compile diagnostic
+  ✓ typst/brand-yaml/logo/customize-without-path.qmd
+  ✓ typst/brand-yaml/logo/directional-padding.qmd
+  ✓ typst/brand-yaml/logo/light-dark-directional-padding-dark-mode.qmd
+  ✓ typst/brand-yaml/logo/light-dark-directional-padding.qmd
+  ✓ typst/brand-yaml/logo/light-dark-variants-dark-mode.qmd
+  ✓ typst/brand-yaml/logo/light-dark-variants.qmd
+  ✓ typst/brand-yaml/logo/online-logo.qmd
+  ✓ typst/brand-yaml/typography/basefont-typst.qmd
+  ✗ typst/brand-yaml/typography/brand-extension/brand-typography.qmd
+    typst [ensurePdfRegexMatches]: 3 regex mismatch(es) in crates/quarto/tests/smoke-all/typst/brand-yaml/typography/brand-extension/brand-typography.pdf:
+  - Required pattern not found: title is roboto slab semibold normal 16.5pt
+  - Required pattern not found: heading-2 is roboto slab semibold normal 15.4pt
+  - Required pattern not found: paragraph is open sans regular normal 11pt
+    typst [noErrorsOrWarnings]: Expected no errors or warnings, but found 1:
+  - [WARN] typst compile diagnostic
+  ✗ typst/brand-yaml/typography/complex/brand-typography.qmd
+    typst [ensurePdfRegexMatches]: 1 regex mismatch(es) in crates/quarto/tests/smoke-all/typst/brand-yaml/typography/complex/brand-typography.pdf:
+  - Required pattern not found: paragraph is open sans thin normal 11pt
+    typst [noErrorsOrWarnings]: Expected no errors or warnings, but found 1:
+  - [WARN] typst compile diagnostic
+  ✓ typst/brand-yaml/typography/dashed-font-weights.qmd
+  ✓ typst/brand-yaml/typography/font-list.qmd
+  ✗ typst/brand-yaml/typography/google/brand-typography.qmd
+    typst [ensurePdfRegexMatches]: 1 regex mismatch(es) in crates/quarto/tests/smoke-all/typst/brand-yaml/typography/google/brand-typography.pdf:
+  - Required pattern not found: paragraph is open sans thin normal 11pt
+  ✓ typst/brand-yaml/typography/kitchen-sink-1/brand-typography.qmd
+  ✓ typst/brand-yaml/typography/kitchen-sink-2/brand-typography.qmd
+  ✓ typst/brand-yaml/typography/mainfont-typst.qmd
+  ✓ typst/brand-yaml/typography/nobrand/brand-typography.qmd
+  ✗ typst/brand-yaml/typography/relative-path/brand-typography.qmd
+    typst [noErrorsOrWarnings]: Expected no errors or warnings, but found 1:
+  - [WARN] typst compile diagnostic
+  ✗ typst/brand-yaml/typography/simple/brand-typography.qmd
+    typst [ensurePdfRegexMatches]: 1 regex mismatch(es) in crates/quarto/tests/smoke-all/typst/brand-yaml/typography/simple/brand-typography.pdf:
+  - Required pattern not found: paragraph is open sans thin normal 11pt
+    typst [noErrorsOrWarnings]: Expected no errors or warnings, but found 1:
+  - [WARN] typst compile diagnostic
+  ✓ typst/brand-yaml/typography/title-inherit-base-family.qmd

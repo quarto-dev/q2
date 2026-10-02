@@ -1,0 +1,7 @@
+---
+format:
+  typst:
+    keep-typ: true
+---
+
+hi
