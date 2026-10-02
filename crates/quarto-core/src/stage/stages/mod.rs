@@ -66,12 +66,10 @@ mod math_js;
 // MathJax via math_js. Included on native and WASM.
 mod math_ml;
 mod metadata_merge;
-// Pandoc-hybrid leg's writer stage: shells out to a real `pandoc`
-// subprocess via `std::process::Command` and materializes the vendored
-// filter tree via `crate::pandoc_filters::bundle::extract_share_tree`
-// (`tempfile`-backed). Same WASM-exclusion reasoning as `bootstrap_js`
-// and `crate::pandoc_filters::{bundle, harness}`.
-#[cfg(not(target_arch = "wasm32"))]
+// Pandoc-hybrid leg's writer stage. `prepare()` is pure and ungated (it builds
+// the `PandocRequest` for the native executor and the wasm host alike);
+// process spawning, disk extraction of the share tree and the typst pre-step
+// stay native-only inside the module.
 mod pandoc_write;
 // R1: ungated (builds the `PandocRequest`; no process, no `std::fs`), so it
 // is testable natively and shared with the wasm pipeline.
@@ -136,9 +134,8 @@ pub use math_ml::MathMlStage;
 pub use metadata_merge::MetadataMergeStage;
 pub use pandoc_prepare::PandocPrepareStage;
 #[cfg(not(target_arch = "wasm32"))]
-pub use pandoc_write::{
-    PandocWriteStage, PreparedPandoc, TypstPrepInputs, retain_temp_json_unless_success,
-};
+pub use pandoc_write::retain_temp_json_unless_success;
+pub use pandoc_write::{PandocWriteStage, PreparedPandoc, TypstPrepInputs};
 // Pure, so ungated (the wasm host classifies a completion with it); the path
 // `stages::classify_pandoc_completion` is unchanged.
 pub use crate::pandoc_filters::diagnostics::classify_pandoc_completion;

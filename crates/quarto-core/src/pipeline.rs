@@ -60,6 +60,7 @@ use crate::stage::stages::ApplyTemplateConfig;
 use crate::stage::stages::BootstrapJsStage;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::stage::stages::ClipboardJsStage;
+use crate::stage::stages::PandocPrepareStage;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::stage::stages::PandocWriteStage;
 #[cfg(not(target_arch = "wasm32"))]
@@ -538,9 +539,42 @@ const PANDOC_STAGE_EXCLUDED: &[&str] = &[
     "apply-template",
 ];
 
+/// The HTML stage list minus [`PANDOC_STAGE_EXCLUDED`]: everything a
+/// `PipelineProfile::Pandoc(_)` render runs before the writer. Ungated, so
+/// the wasm entry point (`PandocPrepareStage` as the tail) and the native
+/// list ([`build_pandoc_pipeline_stages`], `PandocWriteStage` as the tail)
+/// share one prefix.
+///
+/// `captures` are server-recorded engine captures to splice in before
+/// engine execution (R3 wires them from the wasm entry point). With none,
+/// the list is exactly the old pandoc list minus its tail: the splice stage
+/// is only inserted when there is something to splice.
+pub fn build_pandoc_prefix_stages(
+    captures: Vec<quarto_trace::EngineCapture>,
+) -> Vec<Box<dyn PipelineStage>> {
+    let mut stages = build_html_pipeline_stages_with_options(None);
+    stages.retain(|s| !PANDOC_STAGE_EXCLUDED.contains(&s.name()));
+    if !captures.is_empty() {
+        insert_capture_splice_stage(&mut stages, captures);
+    }
+    stages
+}
+
+/// The stage list for a `PipelineProfile::Pandoc(_)` render in the browser:
+/// [`build_pandoc_prefix_stages`] plus [`PandocPrepareStage`], which leaves
+/// the [`crate::pandoc_request::PandocRequest`] in the render context
+/// instead of running pandoc. Typst gets no `ResourceCopyFlushStage` or
+/// `TypstCompileStage` here.
+pub fn build_pandoc_request_stages(
+    captures: Vec<quarto_trace::EngineCapture>,
+) -> Vec<Box<dyn PipelineStage>> {
+    let mut stages = build_pandoc_prefix_stages(captures);
+    stages.push(Box::new(PandocPrepareStage::new()));
+    stages
+}
+
 /// Build the stage list for a `PipelineProfile::Pandoc(_)` render (docx,
-/// pptx, typst, …): [`build_html_pipeline_stages_with_options`] with the
-/// names in [`PANDOC_STAGE_EXCLUDED`] removed, plus [`PandocWriteStage`]
+/// pptx, typst, …): [`build_pandoc_prefix_stages`] plus [`PandocWriteStage`]
 /// appended as the tail (P4 Task 9) — the stage that serializes the
 /// wire-format AST and shells out to a real `pandoc` subprocess. Order is
 /// preserved for the retained prefix.
@@ -561,8 +595,7 @@ const PANDOC_STAGE_EXCLUDED: &[&str] = &[
 pub fn build_pandoc_pipeline_stages(
     format_identifier: crate::format::FormatIdentifier,
 ) -> Vec<Box<dyn PipelineStage>> {
-    let mut stages = build_html_pipeline_stages_with_options(None);
-    stages.retain(|s| !PANDOC_STAGE_EXCLUDED.contains(&s.name()));
+    let mut stages = build_pandoc_prefix_stages(Vec::new());
     stages.push(Box::new(PandocWriteStage::new()));
     if format_identifier == crate::format::FormatIdentifier::Typst {
         // book-projects P2c: flush `ctx.resource_copies` (images, etc.)
@@ -6741,6 +6774,56 @@ mod tests {
                  list; got: {names:?}",
             );
         }
+    }
+
+    /// R2: the ungated prefix is the native pandoc list minus its tail, in
+    /// the same order, so the two cannot drift; the request list is the
+    /// prefix plus `pandoc-prepare` (no write, flush or compile stage).
+    #[test]
+    fn pandoc_prefix_and_request_stage_lists_match_the_native_list() {
+        let names = |stages: Vec<Box<dyn PipelineStage>>| -> Vec<String> {
+            stages.iter().map(|s| s.name().to_string()).collect()
+        };
+        let native = names(build_pandoc_pipeline_stages(
+            crate::format::FormatIdentifier::Docx,
+        ));
+        let prefix = names(build_pandoc_prefix_stages(Vec::new()));
+        assert_eq!(
+            prefix,
+            native[..native.len() - 1],
+            "prefix must equal the native docx list minus `pandoc-write`"
+        );
+        assert!(
+            !prefix.iter().any(|n| n == "pandoc-write"),
+            "the prefix has no writer"
+        );
+        let request = names(build_pandoc_request_stages(Vec::new()));
+        assert_eq!(request[..request.len() - 1], prefix[..]);
+        assert_eq!(request.last().map(String::as_str), Some("pandoc-prepare"));
+        for excluded in PANDOC_STAGE_EXCLUDED {
+            assert!(!request.iter().any(|n| n == excluded), "{excluded}");
+        }
+    }
+
+    /// R2: captures splice in before engine execution (R3 wires them from
+    /// the wasm entry point); with none the list has no splice stage.
+    #[test]
+    fn pandoc_prefix_splices_captures_before_engine_execution() {
+        let capture = quarto_trace::EngineCapture {
+            engine_name: "knitr".to_string(),
+            input_qmd: String::new(),
+            result: serde_json::Value::Null,
+            files: Vec::new(),
+        };
+        let stages = build_pandoc_prefix_stages(vec![capture]);
+        let names: Vec<&str> = stages.iter().map(|s| s.name()).collect();
+        let splice = names
+            .iter()
+            .position(|n| *n == "capture-splice")
+            .expect("capture-splice present when captures are given");
+        assert_eq!(names[splice + 1], "engine-execution");
+        let none = build_pandoc_prefix_stages(Vec::new());
+        assert!(!none.iter().any(|s| s.name() == "capture-splice"));
     }
 
     /// pandoc-hybrid-typst Phase 2: typst's stage list appends
