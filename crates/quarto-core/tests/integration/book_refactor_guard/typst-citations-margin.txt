@@ -1,0 +1,20 @@
+result: Ok
+outputs: 0
+pass1_failures: 0
+pass2_failures: 1
+  - <ROOT> :: Error [Q-20-3]: pandoc exited with exit status: 83; input JSON retained at <PIPELINE_TMP>/pandoc-input.json:
+Error running filter '<PIPELINE_TMP>/pandoc-share/filters/main.lua':
+/refs.bib: withBinaryFile: does not exist (No such file or directory)
+    diagnostics: 1
+  - [Error] Some("Q-20-3") pandoc exited with exit status: 83; input JSON retained at <PIPELINE_TMP>/pandoc-input.json:
+Error running filter '<PIPELINE_TMP>/pandoc-share/filters/main.lua':
+/refs.bib: withBinaryFile: does not exist (No such file or directory)
+project_diagnostics: 0
+stopped_early: false
+output_dir_files:
+render_manifest:
+{
+  "version": 1,
+  "rendered_files": [],
+  "resources": []
+}

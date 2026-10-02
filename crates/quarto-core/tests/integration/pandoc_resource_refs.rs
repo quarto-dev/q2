@@ -257,7 +257,7 @@ fn mounted_bytes_count_against_the_total_limit() {
     );
     collector.add_file(&f.proj.join("a.bin"), ResourceKind::Other);
     collector.add_file(&f.proj.join("b.bin"), ResourceKind::Other);
-    let (refs, d) = collector.finish();
+    let (refs, _extension_files, d) = collector.finish();
     assert!(
         refs.is_empty(),
         "a.bin (2 bytes) does not fit; b.bin is not tried"

@@ -1,0 +1,1584 @@
+result: Ok
+outputs: 1
+output: _book/Test-Typst-Book.pdf
+input: Test-Typst-Book.qmd
+resources_dir: _book/Test-Typst-Book_files
+execution_skipped: true
+html_len_is_zero: true
+diagnostics: 2
+  - [Warning] Some("Q-16-3") Unknown shortcode
+  - [Warning] None unresolved crossref `@fig-visualization`: no target with this identifier was found.
+resource_report: DocumentResourceReport { entries: [] }
+pass1_failures: 0
+pass2_failures: 0
+project_diagnostics: 0
+stopped_early: false
+output_dir_files:
+  Test-Typst-Book.pdf
+  Test-Typst-Book.typ
+  chapter1_files/figure-typst/fig-cars-1.svg
+render_manifest:
+{
+  "version": 1,
+  "rendered_files": [
+    "Test-Typst-Book.pdf"
+  ],
+  "resources": []
+}
+
+===== Test-Typst-Book.typ =====
+// Chapter-based numbering for books with appendix support
+#let equation-numbering = it => {
+  let pattern = if state("appendix-state", none).get() != none { "(A.1)" } else { "(1.1)" }
+  numbering(pattern, counter(heading).get().first(), it)
+}
+#let callout-numbering = it => {
+  let pattern = if state("appendix-state", none).get() != none { "A.1" } else { "1.1" }
+  numbering(pattern, counter(heading).get().first(), it)
+}
+#let subfloat-numbering(n-super, subfloat-idx) = {
+  let chapter = counter(heading).get().first()
+  let pattern = if state("appendix-state", none).get() != none { "A.1a" } else { "1.1a" }
+  numbering(pattern, chapter, n-super, subfloat-idx)
+}
+// Theorem configuration for theorion
+// Chapter-based numbering (H1 = chapters)
+#let theorem-inherited-levels = 1
+
+// Appendix-aware theorem numbering
+#let theorem-numbering(loc) = {
+  if state("appendix-state", none).at(loc) != none { "A.1" } else { "1.1" }
+}
+
+// Theorem render function
+// Note: brand-color is not available at this point in template processing
+#let theorem-render(prefix: none, title: "", full-title: auto, body) = {
+  block(
+    width: 100%,
+    inset: (left: 1em),
+    stroke: (left: 2pt + black),
+  )[
+    #if full-title != "" and full-title != auto and full-title != none {
+      strong[#full-title]
+      linebreak()
+    }
+    #body
+  ]
+}
+// Some definitions presupposed by pandoc's typst output.
+#let content-to-string(content) = {
+  if content.has("text") {
+    content.text
+  } else if content.has("children") {
+    content.children.map(content-to-string).join("")
+  } else if content.has("body") {
+    content-to-string(content.body)
+  } else if content == [ ] {
+    " "
+  }
+}
+
+#let horizontalrule = line(start: (25%,0%), end: (75%,0%))
+
+#let endnote(num, contents) = [
+  #stack(dir: ltr, spacing: 3pt, super[#num], contents)
+]
+
+#show terms.item: it => block(breakable: false)[
+  #text(weight: "bold")[#it.term]
+  #block(inset: (left: 1.5em, top: -0.4em))[#it.description]
+]
+
+// Some quarto-specific definitions.
+
+#show raw.where(block: true): set block(
+    fill: luma(230),
+    width: 100%,
+    inset: 8pt,
+    radius: 2pt
+  )
+
+#let block_with_new_content(old_block, new_content) = {
+  let fields = old_block.fields()
+  let _ = fields.remove("body")
+  if fields.at("below", default: none) != none {
+    // TODO: this is a hack because below is a "synthesized element"
+    // according to the experts in the typst discord...
+    fields.below = fields.below.abs
+  }
+  block.with(..fields)(new_content)
+}
+
+#let empty(v) = {
+  if type(v) == str {
+    // two dollar signs here because we're technically inside
+    // a Pandoc template :grimace:
+    v.matches(regex("^//s*$")).at(0, default: none) != none
+  } else if type(v) == content {
+    if v.at("text", default: none) != none {
+      return empty(v.text)
+    }
+    for child in v.at("children", default: ()) {
+      if not empty(child) {
+        return false
+      }
+    }
+    return true
+  }
+
+}
+
+// Subfloats
+// This is a technique that we adapted from https://github.com/tingerrr/subpar/
+#let quartosubfloatcounter = counter("quartosubfloatcounter")
+
+#let quarto_super(
+  kind: str,
+  caption: none,
+  label: none,
+  supplement: str,
+  position: none,
+  subcapnumbering: "(a)",
+  body,
+) = {
+  context {
+    let figcounter = counter(figure.where(kind: kind))
+    let n-super = figcounter.get().first() + 1
+    set figure.caption(position: position)
+    [#figure(
+      kind: kind,
+      supplement: supplement,
+      caption: caption,
+      {
+        show figure.where(kind: kind): set figure(numbering: _ => {
+          let subfloat-idx = quartosubfloatcounter.get().first() + 1
+          subfloat-numbering(n-super, subfloat-idx)
+        })
+        show figure.where(kind: kind): set figure.caption(position: position)
+
+        show figure: it => {
+          let num = numbering(subcapnumbering, n-super, quartosubfloatcounter.get().first() + 1)
+          show figure.caption: it => block({
+            num.slice(2) // I don't understand why the numbering contains output that it really shouldn't, but this fixes it shrug?
+            [ ]
+            it.body
+          })
+
+          quartosubfloatcounter.step()
+          it
+          counter(figure.where(kind: it.kind)).update(n => n - 1)
+        }
+
+        quartosubfloatcounter.update(0)
+        body
+      }
+    )#label]
+  }
+}
+
+// callout rendering
+// this is a figure show rule because callouts are crossreferenceable
+#show figure: it => {
+  if type(it.kind) != str {
+    return it
+  }
+  let kind_match = it.kind.matches(regex("^quarto-callout-(.*)")).at(0, default: none)
+  if kind_match == none {
+    return it
+  }
+  let kind = kind_match.captures.at(0, default: "other")
+  kind = upper(kind.first()) + kind.slice(1)
+  // now we pull apart the callout and reassemble it with the crossref name and counter
+
+  // when we cleanup pandoc's emitted code to avoid spaces this will have to change
+  let old_callout = it.body.children.at(1).body.children.at(1)
+  let old_title_block = old_callout.body.children.at(0)
+  let children = old_title_block.body.body.children
+  let old_title = if children.len() == 1 {
+    children.at(0)  // no icon: title at index 0
+  } else {
+    children.at(1)  // with icon: title at index 1
+  }
+
+  // TODO use custom separator if available
+  // Use the figure's counter display which handles chapter-based numbering
+  // (when numbering is a function that includes the heading counter)
+  let callout_num = it.counter.display(it.numbering)
+  let new_title = if empty(old_title) {
+    [#kind #callout_num]
+  } else {
+    [#kind #callout_num: #old_title]
+  }
+
+  let new_title_block = block_with_new_content(
+    old_title_block,
+    block_with_new_content(
+      old_title_block.body,
+      if children.len() == 1 {
+        new_title  // no icon: just the title
+      } else {
+        children.at(0) + new_title  // with icon: preserve icon block + new title
+      }))
+
+  align(left, block_with_new_content(old_callout,
+    block(below: 0pt, new_title_block) +
+    old_callout.body.children.at(1)))
+}
+
+// 2023-10-09: #fa-icon("fa-info") is not working, so we'll eval "#fa-info()" instead
+#let callout(body: [], title: "Callout", background_color: rgb("#dddddd"), icon: none, icon_color: black, body_background_color: white) = {
+  block(
+    breakable: false, 
+    fill: background_color, 
+    stroke: (paint: icon_color, thickness: 0.5pt, cap: "round"), 
+    width: 100%, 
+    radius: 2pt,
+    block(
+      inset: 1pt,
+      width: 100%, 
+      below: 0pt, 
+      block(
+        fill: background_color,
+        width: 100%,
+        inset: 8pt)[#if icon != none [#text(icon_color, weight: 900)[#icon] ]#title]) +
+      if(body != []){
+        block(
+          inset: 1pt, 
+          width: 100%, 
+          block(fill: body_background_color, width: 100%, inset: 8pt, body))
+      }
+    )
+}
+
+
+// syntax highlighting functions from skylighting:
+/* Function definitions for syntax highlighting generated by skylighting: */
+#let EndLine() = raw("/n")
+#let Skylighting(fill: none, number: false, start: 1, sourcelines) = {
+   let blocks = []
+   let lnum = start - 1
+   let bgcolor = rgb("#f1f3f5")
+   for ln in sourcelines {
+     if number {
+       lnum = lnum + 1
+       blocks = blocks + box(width: if start + sourcelines.len() > 999 { 30pt } else { 24pt }, text(fill: rgb("#aaaaaa"), [ #lnum ]))
+     }
+     blocks = blocks + ln + EndLine()
+   }
+   block(fill: bgcolor, width: 100%, inset: 8pt, radius: 2pt, blocks)
+}
+#let AlertTok(s) = text(fill: rgb("#ad0000"),raw(s))
+#let AnnotationTok(s) = text(fill: rgb("#5e5e5e"),raw(s))
+#let AttributeTok(s) = text(fill: rgb("#657422"),raw(s))
+#let BaseNTok(s) = text(fill: rgb("#ad0000"),raw(s))
+#let BuiltInTok(s) = text(fill: rgb("#003b4f"),raw(s))
+#let CharTok(s) = text(fill: rgb("#20794d"),raw(s))
+#let CommentTok(s) = text(fill: rgb("#5e5e5e"),raw(s))
+#let CommentVarTok(s) = text(style: "italic",fill: rgb("#5e5e5e"),raw(s))
+#let ConstantTok(s) = text(fill: rgb("#8f5902"),raw(s))
+#let ControlFlowTok(s) = text(weight: "bold",fill: rgb("#003b4f"),raw(s))
+#let DataTypeTok(s) = text(fill: rgb("#ad0000"),raw(s))
+#let DecValTok(s) = text(fill: rgb("#ad0000"),raw(s))
+#let DocumentationTok(s) = text(style: "italic",fill: rgb("#5e5e5e"),raw(s))
+#let ErrorTok(s) = text(fill: rgb("#ad0000"),raw(s))
+#let ExtensionTok(s) = text(fill: rgb("#003b4f"),raw(s))
+#let FloatTok(s) = text(fill: rgb("#ad0000"),raw(s))
+#let FunctionTok(s) = text(fill: rgb("#4758ab"),raw(s))
+#let ImportTok(s) = text(fill: rgb("#00769e"),raw(s))
+#let InformationTok(s) = text(fill: rgb("#5e5e5e"),raw(s))
+#let KeywordTok(s) = text(weight: "bold",fill: rgb("#003b4f"),raw(s))
+#let NormalTok(s) = text(fill: rgb("#003b4f"),raw(s))
+#let OperatorTok(s) = text(fill: rgb("#5e5e5e"),raw(s))
+#let OtherTok(s) = text(fill: rgb("#003b4f"),raw(s))
+#let PreprocessorTok(s) = text(fill: rgb("#ad0000"),raw(s))
+#let RegionMarkerTok(s) = text(fill: rgb("#003b4f"),raw(s))
+#let SpecialCharTok(s) = text(fill: rgb("#5e5e5e"),raw(s))
+#let SpecialStringTok(s) = text(fill: rgb("#20794d"),raw(s))
+#let StringTok(s) = text(fill: rgb("#20794d"),raw(s))
+#let VariableTok(s) = text(fill: rgb("#111111"),raw(s))
+#let VerbatimStringTok(s) = text(fill: rgb("#20794d"),raw(s))
+#let WarningTok(s) = text(style: "italic",fill: rgb("#5e5e5e"),raw(s))
+
+
+
+#let article(
+  title: none,
+  subtitle: none,
+  authors: none,
+  keywords: (),
+  date: none,
+  abstract-title: none,
+  abstract: none,
+  thanks: none,
+  cols: 1,
+  lang: "en",
+  region: "US",
+  font: none,
+  fontsize: 11pt,
+  title-size: 1.5em,
+  subtitle-size: 1.25em,
+  heading-family: none,
+  heading-weight: "bold",
+  heading-style: "normal",
+  heading-color: black,
+  heading-line-height: 0.65em,
+  mathfont: none,
+  codefont: none,
+  linestretch: 1,
+  sectionnumbering: none,
+  linkcolor: none,
+  citecolor: none,
+  filecolor: none,
+  toc: false,
+  toc_title: none,
+  toc_depth: none,
+  toc_indent: 1.5em,
+  doc,
+) = {
+  // Set document metadata for PDF accessibility
+  set document(title: title, keywords: keywords)
+  set document(
+    author: authors.map(author => content-to-string(author.name)).join(", ", last: " & "),
+  ) if authors != none and authors != ()
+  set par(
+    justify: true,
+    leading: linestretch * 0.65em
+  )
+  set text(lang: lang,
+           region: region,
+           size: fontsize)
+  set text(font: font) if font != none
+  show math.equation: set text(font: mathfont) if mathfont != none
+  show raw: set text(font: codefont) if codefont != none
+
+  set heading(numbering: sectionnumbering)
+
+  show link: set text(fill: rgb(content-to-string(linkcolor))) if linkcolor != none
+  show ref: set text(fill: rgb(content-to-string(citecolor))) if citecolor != none
+  show link: this => {
+    if filecolor != none and type(this.dest) == label {
+      text(this, fill: rgb(content-to-string(filecolor)))
+    } else {
+      text(this)
+    }
+   }
+
+  let has-title-block = title != none or (authors != none and authors != ()) or date != none or abstract != none
+  if has-title-block {
+    place(
+      top,
+      float: true,
+      scope: "parent",
+      clearance: 4mm,
+      block(below: 1em, width: 100%)[
+
+        #if title != none {
+          align(center, block(inset: 2em)[
+            #set par(leading: heading-line-height) if heading-line-height != none
+            #set text(font: heading-family) if heading-family != none
+            #set text(weight: heading-weight)
+            #set text(style: heading-style) if heading-style != "normal"
+            #set text(fill: heading-color) if heading-color != black
+
+            #text(size: title-size)[#title #if thanks != none {
+              footnote(thanks, numbering: "*")
+              counter(footnote).update(n => n - 1)
+            }]
+            #(if subtitle != none {
+              parbreak()
+              text(size: subtitle-size)[#subtitle]
+            })
+          ])
+        }
+
+        #if authors != none and authors != () {
+          let count = authors.len()
+          let ncols = calc.min(count, 3)
+          grid(
+            columns: (1fr,) * ncols,
+            row-gutter: 1.5em,
+            ..authors.map(author =>
+                align(center)[
+                  #author.name /
+                  #author.affiliation /
+                  #author.email
+                ]
+            )
+          )
+        }
+
+        #if date != none {
+          align(center)[#block(inset: 1em)[
+            #date
+          ]]
+        }
+
+        #if abstract != none {
+          block(inset: 2em)[
+          #text(weight: "semibold")[#abstract-title] #h(1em) #abstract
+          ]
+        }
+      ]
+    )
+  }
+
+  if toc {
+    let title = if toc_title == none {
+      auto
+    } else {
+      toc_title
+    }
+    block(above: 0em, below: 2em)[
+    #outline(
+      title: title,
+      depth: toc_depth,
+      indent: toc_indent
+    );
+    ]
+  }
+
+  doc
+}
+
+#set table(
+  inset: 6pt,
+  stroke: none
+)
+#import "@preview/fontawesome:0.5.0": *
+#import "@preview/theorion:0.4.1": make-frame, cosmos
+#import cosmos.fancy: fancy-box, set-primary-border-color, set-primary-body-color, set-secondary-border-color, set-secondary-body-color, set-tertiary-border-color, set-tertiary-body-color, get-primary-border-color, get-primary-body-color, get-secondary-border-color, get-secondary-body-color, get-tertiary-border-color, get-tertiary-body-color
+#let (theorem-counter, theorem-box, theorem, show-theorem) = make-frame(
+  "theorem",
+  text(weight: "bold")[Theorem],
+  inherited-levels: theorem-inherited-levels,
+  numbering: theorem-numbering,
+  render: fancy-box.with(
+    get-border-color: get-secondary-border-color,
+    get-body-color: get-secondary-body-color,
+    get-symbol: loc => none,
+  ),
+)
+#show: show-theorem
+#let (lemma-counter, lemma-box, lemma, show-lemma) = make-frame(
+  "lemma",
+  text(weight: "bold")[Lemma],
+  inherited-levels: theorem-inherited-levels,
+  numbering: theorem-numbering,
+  render: fancy-box.with(
+    get-border-color: get-secondary-border-color,
+    get-body-color: get-secondary-body-color,
+    get-symbol: loc => none,
+  ),
+)
+#show: show-lemma
+#let (definition-counter, definition-box, definition, show-definition) = make-frame(
+  "definition",
+  text(weight: "bold")[Definition],
+  inherited-levels: theorem-inherited-levels,
+  numbering: theorem-numbering,
+  render: fancy-box.with(
+    get-border-color: get-primary-border-color,
+    get-body-color: get-primary-body-color,
+    get-symbol: loc => none,
+  ),
+)
+#show: show-definition
+#let brand-color = (
+  primary: rgb("#f36619"),
+  secondary: rgb("#2e86ab")
+)
+#let brand-color-background = (
+  primary: brand-color.primary.lighten(85%),
+  secondary: brand-color.secondary.lighten(85%)
+)
+#let brand-logo-images = (
+  test-logo: (
+    alt: "Test Logo",
+    path: "../logo.svg"
+  )
+)
+#let brand-logo = (
+  medium: (
+    alt: "Test Logo",
+    path: "../logo.svg"
+  )
+)
+#show link: set text(fill: rgb("#f36619"), )
+
+#set page(
+  paper: "us-letter",
+  margin: (x: 1.25in, y: 1.25in),
+  numbering: "1",
+  columns: 1,
+)
+// Logo is handled by orange-book's cover page, not as a page background
+// NOTE: marginalia.setup is called in typst-show.typ AFTER book.with()
+// to ensure marginalia's margins override the book format's default margins
+#import "@preview/orange-book:0.7.1": book, part, chapter, appendices
+
+#show: book.with(
+  title: [Test Typst Book],
+  author: "Test Author",
+  date: "2024-01-01",
+  main-color: brand-color.at("primary", default: blue),
+  logo: {
+    let logo-info = brand-logo.at("medium", default: none)
+    if logo-info != none { image(logo-info.path, alt: logo-info.at("alt", default: none)) }
+  },
+  outline-depth: 17,
+  supplement-chapter: "Chapter",
+)
+
+
+// Reset Quarto's custom figure counters at each chapter (level-1 heading).
+// Orange-book only resets kind:image and kind:table, but Quarto uses custom kinds.
+// This list is generated dynamically from crossref.categories.
+#show heading.where(level: 1): it => {
+  counter(figure.where(kind: "quarto-float-fig")).update(0)
+  counter(figure.where(kind: "quarto-float-tbl")).update(0)
+  counter(figure.where(kind: "quarto-float-lst")).update(0)
+  counter(figure.where(kind: "quarto-callout-Note")).update(0)
+  counter(figure.where(kind: "quarto-callout-Warning")).update(0)
+  counter(figure.where(kind: "quarto-callout-Caution")).update(0)
+  counter(figure.where(kind: "quarto-callout-Tip")).update(0)
+  counter(figure.where(kind: "quarto-callout-Important")).update(0)
+  counter(figure.where(kind: "quarto-float-dino")).update(0)
+  counter(math.equation).update(0)
+  it
+}
+#set-primary-border-color(brand-color.at("primary", default: green.darken(30%)))
+#set-primary-body-color(brand-color.at("primary", default: green).lighten(90%))
+#set-secondary-border-color(brand-color.at("secondary", default: orange))
+#set-secondary-body-color(brand-color.at("secondary", default: orange).lighten(90%))
+#set-tertiary-border-color(brand-color.at("tertiary", default: blue.darken(30%)))
+#set-tertiary-body-color(brand-color.at("tertiary", default: blue).lighten(90%))
+#show figure.where(kind: "quarto-float-lst"): set align(start)
+
+#heading(level: 1, numbering: none)[Preface]
+<preface>
+This is a test book for Typst output format.
+
+== About this book
+<about-this-book>
+This book tests the basic Typst book rendering functionality in Quarto. See Knuth (1984) for additional discussion of literate programming.
+
+#part[Part I: Getting Started]
+= Introduction
+<sec-intro>
+This is the first chapter of the book. The foundations of modern computing draw from seminal work by Turing (1950) on machine intelligence.
+
+== Basic Figures
+<sec-basic-figures>
+Some content in #ref(<sec-basic-figures>, supplement: [Section]). See #ref(<fig-cars>, supplement: [Figure]) for an example figure.
+
+#figure([
+#Skylighting(([#NormalTok("plot(cars)");],));
+], caption: figure.caption(
+position: bottom, 
+[
+A plot of the cars dataset
+]), 
+kind: "quarto-float-fig", 
+supplement: "Figure", 
+)
+<fig-cars>
+
+
+== Embedded Notebooks
+<sec-embedded-notebooks>
+Some content in #ref(<sec-embedded-notebooks>, supplement: [Section]). See fig-visualization for an embedded notebook figure.
+
+#strong[?embed]
+
+We will discuss methods in #ref(<sec-methods>, supplement: [Chapter]).
+
+== Callouts
+<sec-callouts>
+#block[
+#callout(
+body: 
+[
+The ships hung in the sky in much the same way that bricks don't. This is a note callout without a custom title. As Dijkstra (1968) noted, certain control structures are harmful.
+
+]
+, 
+title: 
+[
+Note
+]
+, 
+background_color: 
+brand-color-background.primary
+, 
+icon_color: 
+brand-color.primary
+, 
+icon: 
+fa-info()
+, 
+body_background_color: 
+white
+)
+]
+#figure([
+#block[
+#callout(
+body: 
+[
+On no account allow anyone to make you a conditions-affected beverage. The alarm on Arthur Dent's alarm clock had been going off for several hours when he finally woke up. See #ref(<wrn-tea>, supplement: [Warning]) to reference this warning.
+
+]
+, 
+title: 
+[Whose Tea Is This?]
+, 
+background_color: 
+rgb("#fcefdc")
+, 
+icon_color: 
+rgb("#EB9113")
+, 
+icon: 
+fa-exclamation-triangle()
+, 
+body_background_color: 
+white
+)
+]
+], caption: figure.caption(
+position: top, 
+[
+]), 
+kind: "quarto-callout-Warning", 
+supplement: "Warning", 
+numbering: callout-numbering, 
+)
+<wrn-tea>
+
+
+== Custom Crossref Dinosaurs
+<sec-custom-crossref-dinosaurs>
+#ref(<sec-custom-crossref-dinosaurs>, supplement: [Section]) tests custom cross-reference types using the user-defined "Dinosaur" category. The symbolic approach of McCarthy (1960) inspired this classification system.
+
+#figure([
+#strong[Stegosaurus]
+
+], caption: figure.caption(
+position: bottom, 
+[
+This is the first dinosaur in #ref(<sec-intro>, supplement: [Chapter]), a herbivore with distinctive plates. See #ref(<dino-steg>, supplement: [Dinosaur]) to self-reference.
+]), 
+kind: "quarto-float-dino", 
+supplement: "Dinosaur", 
+)
+<dino-steg>
+
+
+#figure([
+#strong[Tyrannosaurus Rex]
+
+], caption: figure.caption(
+position: bottom, 
+[
+This is the second dinosaur in #ref(<sec-intro>, supplement: [Chapter]), the king of predators. See #ref(<dino-trex>, supplement: [Dinosaur]) to self-reference, or #ref(<dino-steg>, supplement: [Dinosaur]) for the first dinosaur.
+]), 
+kind: "quarto-float-dino", 
+supplement: "Dinosaur", 
+)
+<dino-trex>
+
+
+== Equations
+<sec-equations>
+The fundamental equation of special relativity:
+
+#math.equation(block: true, numbering: equation-numbering, [ $ E = m c^2 $ ])<eq-einstein>
+
+As shown in #ref(<eq-einstein>, supplement: [Equation]), energy and mass are equivalent. The information-theoretic implications were explored by Shannon (1948).
+
+Another important equation:
+
+#math.equation(block: true, numbering: equation-numbering, [ $ F = m a $ ])<eq-newton>
+
+Newton's second law (#ref(<eq-newton>, supplement: [Equation])) relates force to acceleration.
+
+== Theorems
+<sec-theorems>
+#theorem(title: [Pythagorean Theorem])[
+For a right triangle with legs $a$ and $b$ and hypotenuse $c$: $a^2 + b^2 = c^2$
+
+] <thm-pythagorean>
+See #ref(<thm-pythagorean>, supplement: [Theorem]) for the classic result. The functional approach to proofs is discussed in Backus (1978).
+
+#lemma(title: [Triangle Inequality])[
+For any triangle with sides $a$, $b$, and $c$: $a + b > c$
+
+] <lem-triangle>
+See #ref(<lem-triangle>, supplement: [Lemma]) for the inequality.
+
+== Code Listings
+<sec-code-listings>
+#pagebreak()
+LISTING/_BODY/_ALIGN/_TEST is body text that should left-align with code listings.
+
+#figure([
+#Skylighting(([#NormalTok("ALIGNTEST_MARKER ");#OperatorTok("=");#NormalTok(" ");#VariableTok("None");],
+[#KeywordTok("def");#NormalTok(" hello():");],
+[#NormalTok("    ");#BuiltInTok("print");#NormalTok("(");#StringTok("/"Hello, World!/"");#NormalTok(")");],
+[],
+[#ControlFlowTok("if");#NormalTok(" ");#VariableTok("__name__");#NormalTok(" ");#OperatorTok("==");#NormalTok(" ");#StringTok("/"__main__/"");#NormalTok(":");],
+[#NormalTok("    hello()");],));
+], caption: figure.caption(
+position: top, 
+[
+Hello World in Python
+]), 
+kind: "quarto-float-lst", 
+supplement: "Listing", 
+)
+<lst-hello>
+
+
+See #ref(<lst-hello>, supplement: [Listing]) for a simple Python example. Exploratory approaches to data are covered in Tukey (1977).
+
+#figure([
+#Skylighting(([#KeywordTok("def");#NormalTok(" fibonacci(n):");],
+[#NormalTok("    ");#ControlFlowTok("if");#NormalTok(" n ");#OperatorTok("<=");#NormalTok(" ");#DecValTok("1");#NormalTok(":");],
+[#NormalTok("        ");#ControlFlowTok("return");#NormalTok(" n");],
+[#NormalTok("    ");#ControlFlowTok("return");#NormalTok(" fibonacci(n");#OperatorTok("-");#DecValTok("1");#NormalTok(") ");#OperatorTok("+");#NormalTok(" fibonacci(n");#OperatorTok("-");#DecValTok("2");#NormalTok(")");],));
+], caption: figure.caption(
+position: top, 
+[
+Fibonacci Sequence
+]), 
+kind: "quarto-float-lst", 
+supplement: "Listing", 
+)
+<lst-fibonacci>
+
+
+The Fibonacci function (#ref(<lst-fibonacci>, supplement: [Listing])) uses recursion.
+
+#part[Part II: Advanced Topics]
+= Methods
+<sec-methods>
+This is the second chapter of the book. As discussed in #ref(<sec-intro>, supplement: [Chapter]), we now present our methods. The relational model described by Codd (1970) informs our approach.
+
+The fundamental problem with any bureaucratic methodology is that it must, by its very nature, assume that the person filling out the forms is lying. This is not because bureaucrats are inherently suspicious people, but because the forms themselves were designed by committees who assumed that clarity was a luxury that could not be afforded in these troubled times.
+
+Consider, for example, the simple act of changing one's address. One might naively suppose that this would involve telling the relevant authorities where one now lives. In practice, it requires filling out seventeen forms, each of which asks for one's previous address in a slightly different format, and all of which must be submitted to different departments who do not, under any circumstances, communicate with each other.
+
+The postal service, meanwhile, continues to deliver mail to addresses that have not existed for thirty years, on the grounds that someone might still be expecting it. This is considered efficiency.
+
+== Tables
+<sec-tables>
+Some content in #ref(<sec-tables>, supplement: [Section]). See #ref(<tbl-data>, supplement: [Table]) for sample data.
+
+#figure([
+#table(
+  columns: 3,
+  align: (auto,auto,auto,),
+  table.header([Column A], [Column B], [Column C],),
+  table.hline(),
+  [1], [2], [3],
+  [4], [5], [6],
+)
+], caption: figure.caption(
+position: top, 
+[
+Sample data table
+]), 
+kind: "quarto-float-tbl", 
+supplement: "Table", 
+)
+<tbl-data>
+
+
+== Cross-references
+<sec-cross-references>
+Some content in #ref(<sec-cross-references>, supplement: [Section]). Refer back to #ref(<fig-cars>, supplement: [Figure]) and #ref(<tbl-data>, supplement: [Table]). As Breiman (2001b) observed, there are two cultures in statistical modeling.
+
+== Sub-figures
+<sec-sub-figures>
+See #ref(<fig-panel>, supplement: [Figure]) for a panel of sub-figures, or #ref(<fig-panel-a>, supplement: [Figure]) and #ref(<fig-panel-b>, supplement: [Figure]) individually. Local regression techniques are explored in Cleveland and Devlin (1988).
+
+#quarto_super(
+kind: 
+"quarto-float-fig"
+, 
+caption: 
+[
+A panel with two sub-figures showing the same plot.
+]
+, 
+label: 
+<fig-panel>
+, 
+position: 
+bottom
+, 
+supplement: 
+"Figure"
+, 
+subcapnumbering: 
+"(a)"
+, 
+[
+#grid(columns: 2, gutter: 2em,
+  [
+#block[
+#figure([
+#box(image("chapter1_files/figure-typst/fig-cars-1.svg"))
+], caption: figure.caption(
+position: bottom, 
+[
+First panel
+]), 
+kind: "quarto-float-fig", 
+supplement: "Figure", 
+)
+<fig-panel-a>
+
+
+]
+],
+  [
+#block[
+#figure([
+#box(image("chapter1_files/figure-typst/fig-cars-1.svg"))
+], caption: figure.caption(
+position: bottom, 
+[
+Second panel
+]), 
+kind: "quarto-float-fig", 
+supplement: "Figure", 
+)
+<fig-panel-b>
+
+
+]
+],
+)
+]
+)
+== More Callouts
+<sec-more-callouts>
+Before we continue, recall the important tea-related warning from #ref(<sec-intro>, supplement: [Chapter]): see #ref(<wrn-tea>, supplement: [Warning]).
+
+#figure([
+#block[
+#callout(
+body: 
+[
+A towel is about the most massively useful thing an interstellar hitchhiker can have. See #ref(<tip-towel>, supplement: [Tip]) to reference this tip.
+
+]
+, 
+title: 
+[Whose Towel Is This?]
+, 
+background_color: 
+rgb("#ccf1e3")
+, 
+icon_color: 
+rgb("#00A047")
+, 
+icon: 
+fa-lightbulb()
+, 
+body_background_color: 
+white
+)
+]
+], caption: figure.caption(
+position: top, 
+[
+]), 
+kind: "quarto-callout-Tip", 
+supplement: "Tip", 
+numbering: callout-numbering, 
+)
+<tip-towel>
+
+
+#block[
+#callout(
+body: 
+[
+Don't Panic. Under no circumstances should you allow yourself to panic, even if you find yourself in the path of a Vogon constructor fleet. This is an unlabeled caution callout.
+
+]
+, 
+title: 
+[
+Caution
+]
+, 
+background_color: 
+rgb("#ffe5d0")
+, 
+icon_color: 
+rgb("#FC5300")
+, 
+icon: 
+fa-fire()
+, 
+body_background_color: 
+white
+)
+]
+#figure([
+#block[
+#callout(
+body: 
+[
+Vogon poetry is of course, the third worst in the universe. See #ref(<nte-vogon>, supplement: [Note]) to reference this note.
+
+]
+, 
+title: 
+[A Note About Vogon Poetry]
+, 
+background_color: 
+brand-color-background.primary
+, 
+icon_color: 
+brand-color.primary
+, 
+icon: 
+fa-info()
+, 
+body_background_color: 
+white
+)
+]
+], caption: figure.caption(
+position: top, 
+[
+]), 
+kind: "quarto-callout-Note", 
+supplement: "Note", 
+numbering: callout-numbering, 
+)
+<nte-vogon>
+
+
+== More Dinosaurs
+<sec-more-dinosaurs>
+#ref(<sec-more-dinosaurs>, supplement: [Section]) tests that custom cross-reference counters reset at chapter boundaries. The first dinosaur here should be Dinosaur 2.1, not Dinosaur 1.3.
+
+#figure([
+#strong[Velociraptor]
+
+], caption: figure.caption(
+position: bottom, 
+[
+This dinosaur demonstrates clever pack hunting behavior, reminiscent of Hoare (1978)'s communicating processes. See #ref(<dino-raptor>, supplement: [Dinosaur]) to self-reference.
+]), 
+kind: "quarto-float-dino", 
+supplement: "Dinosaur", 
+)
+<dino-raptor>
+
+
+We can also reference dinosaurs from the previous chapter: see #ref(<dino-steg>, supplement: [Dinosaur]) and #ref(<dino-trex>, supplement: [Dinosaur]) from #ref(<sec-intro>, supplement: [Chapter]).
+
+== More Equations
+<sec-more-equations>
+The quadratic formula:
+
+#math.equation(block: true, numbering: equation-numbering, [ $ x = frac(- b plus.minus sqrt(b^2 - 4 a c), 2 a) $ ])<eq-quadratic>
+
+Use #ref(<eq-quadratic>, supplement: [Equation]) to solve quadratic equations. This should be Equation 2.1. The resampling elegance here echoes Efron (1979)'s bootstrap methods.
+
+Cross-chapter reference: Recall #ref(<eq-einstein>, supplement: [Equation]) from #ref(<sec-intro>, supplement: [Chapter]) and #ref(<eq-newton>, supplement: [Equation]).
+
+== More Theorems
+<sec-more-theorems>
+#theorem(title: [Fundamental Theorem of Calculus])[
+If $F$ is an antiderivative of $f$ on $/[a/,b/]$, then: $integral_a^b f/(x/)thin d x = F/(b/)- F/(a/)$
+
+] <thm-calculus>
+See #ref(<thm-calculus>, supplement: [Theorem]). This should be Theorem 2.1. Recall #ref(<thm-pythagorean>, supplement: [Theorem]) and #ref(<lem-triangle>, supplement: [Lemma]) from #ref(<sec-intro>, supplement: [Chapter]).
+
+#definition(title: [Continuous Function])[
+A function $f$ is continuous at $c$ if $lim_(x arrow.r c) f/(x/)= f/(c/)$.
+
+] <def-continuous>
+See #ref(<def-continuous>, supplement: [Definition]) for the definition.
+
+== More Code Listings
+<sec-more-code-listings>
+#figure([
+#Skylighting(([#KeywordTok("def");#NormalTok(" quicksort(arr):");],
+[#NormalTok("    ");#ControlFlowTok("if");#NormalTok(" ");#BuiltInTok("len");#NormalTok("(arr) ");#OperatorTok("<=");#NormalTok(" ");#DecValTok("1");#NormalTok(":");],
+[#NormalTok("        ");#ControlFlowTok("return");#NormalTok(" arr");],
+[#NormalTok("    pivot ");#OperatorTok("=");#NormalTok(" arr[");#BuiltInTok("len");#NormalTok("(arr) ");#OperatorTok("//");#NormalTok(" ");#DecValTok("2");#NormalTok("]");],
+[#NormalTok("    left ");#OperatorTok("=");#NormalTok(" [x ");#ControlFlowTok("for");#NormalTok(" x ");#KeywordTok("in");#NormalTok(" arr ");#ControlFlowTok("if");#NormalTok(" x ");#OperatorTok("<");#NormalTok(" pivot]");],
+[#NormalTok("    middle ");#OperatorTok("=");#NormalTok(" [x ");#ControlFlowTok("for");#NormalTok(" x ");#KeywordTok("in");#NormalTok(" arr ");#ControlFlowTok("if");#NormalTok(" x ");#OperatorTok("==");#NormalTok(" pivot]");],
+[#NormalTok("    right ");#OperatorTok("=");#NormalTok(" [x ");#ControlFlowTok("for");#NormalTok(" x ");#KeywordTok("in");#NormalTok(" arr ");#ControlFlowTok("if");#NormalTok(" x ");#OperatorTok(">");#NormalTok(" pivot]");],
+[#NormalTok("    ");#ControlFlowTok("return");#NormalTok(" quicksort(left) ");#OperatorTok("+");#NormalTok(" middle ");#OperatorTok("+");#NormalTok(" quicksort(right)");],));
+], caption: figure.caption(
+position: top, 
+[
+Quicksort Algorithm
+]), 
+kind: "quarto-float-lst", 
+supplement: "Listing", 
+)
+<lst-quicksort>
+
+
+See #ref(<lst-quicksort>, supplement: [Listing]) for an efficient sorting algorithm. This should be Listing 2.1. Modern implementations benefit from regularization insights in Tibshirani (1996).
+
+Cross-chapter references: See #ref(<lst-hello>, supplement: [Listing]) and #ref(<lst-fibonacci>, supplement: [Listing]) from #ref(<sec-intro>, supplement: [Chapter]).
+
+= Results
+<sec-results>
+This is the third chapter of the book. The program verification techniques of Floyd (1967) remain surprisingly relevant.
+
+== Cross-chapter references
+<sec-cross-chapter-refs>
+In this chapter, we reference figures from previous chapters to demonstrate cross-chapter sub-figure references.
+
+Recall the panel figure from #ref(<sec-methods>, supplement: [Chapter]): see #ref(<fig-panel>, supplement: [Figure]) for the complete panel. The individual sub-figures can also be referenced from this chapter: #ref(<fig-panel-a>, supplement: [Figure]) shows the first panel and #ref(<fig-panel-b>, supplement: [Figure]) shows the second panel.
+
+We can also reference the main figure from #ref(<sec-intro>, supplement: [Chapter]): #ref(<fig-cars>, supplement: [Figure]) shows the cars dataset visualization.
+
+== Cross-chapter callout references
+<sec-cross-chapter-callouts>
+We can reference callouts from previous chapters:
+
+- See #ref(<wrn-tea>, supplement: [Warning]) for the tea warning from #ref(<sec-intro>, supplement: [Chapter])
+- See #ref(<tip-towel>, supplement: [Tip]) for towel advice from #ref(<sec-methods>, supplement: [Chapter])
+- See #ref(<nte-vogon>, supplement: [Note]) for important information about Vogon poetry
+
+#figure([
+#block[
+#callout(
+body: 
+[
+The answer to the ultimate question of life, the universe, and everything is 42. Unfortunately, we have forgotten what the question was (Pearl 2009). See #ref(<imp-answer>, supplement: [Important]) to reference this important callout.
+
+]
+, 
+title: 
+[The Answer]
+, 
+background_color: 
+rgb("#f7dddc")
+, 
+icon_color: 
+rgb("#CC1914")
+, 
+icon: 
+fa-exclamation()
+, 
+body_background_color: 
+white
+)
+]
+], caption: figure.caption(
+position: top, 
+[
+]), 
+kind: "quarto-callout-Important", 
+supplement: "Important", 
+numbering: callout-numbering, 
+)
+<imp-answer>
+
+
+== Custom crossref dinosaurs
+<sec-custom-crossref-dinosaurs-ch3>
+#figure([
+#strong[Pterodactyl]
+
+], caption: figure.caption(
+position: bottom, 
+[
+This flying reptile soared through Mesozoic skies, classifiable via Cortes and Vapnik (1995)'s support vectors. See #ref(<dino-ptero>, supplement: [Dinosaur]) to self-reference.
+]), 
+kind: "quarto-float-dino", 
+supplement: "Dinosaur", 
+)
+<dino-ptero>
+
+
+Cross-chapter dinosaur references: see #ref(<dino-steg>, supplement: [Dinosaur]) from #ref(<sec-intro>, supplement: [Chapter]) and #ref(<dino-raptor>, supplement: [Dinosaur]) from #ref(<sec-methods>, supplement: [Chapter]).
+
+== Forward references to appendices
+<sec-forward-refs>
+We can reference content from Appendix A (see also Lamport (1978) for temporal considerations):
+
+- See #ref(<fig-appendix-panel>, supplement: [Figure]) for appendix sub-figures (should show as Figure A.1)
+- See #ref(<wrn-appendix>, supplement: [Warning]) for the appendix warning (should show as Warning A.1)
+- See #ref(<tip-appendix>, supplement: [Tip]) for the appendix tip (should show as Tip A.1)
+- See #ref(<dino-appendix>, supplement: [Dinosaur]) for the appendix dinosaur (should show as Dinosaur A.1)
+
+We can also reference content from Appendix B:
+
+- See #ref(<fig-appendix-b-panel>, supplement: [Figure]) for Appendix B sub-figures (should show as Figure B.1)
+- See #ref(<wrn-appendix-b>, supplement: [Warning]) for the Appendix B warning (should show as Warning B.1)
+- See #ref(<tip-appendix-b>, supplement: [Tip]) for the Appendix B tip (should show as Tip B.1)
+- See #ref(<dino-appendix-b>, supplement: [Dinosaur]) for the Appendix B dinosaur (should show as Dinosaur B.1)
+
+#heading(level: 1, numbering: none)[References]
+<references>
+#show: appendices.with("Appendices", hide-parent: true)
+#heading(level: 1, numbering: none)[Appendices]
+= Additional Resources
+<sec-resources>
+This appendix contains additional resources and supplementary material. The random forests approach of Breiman (2001a) offers fresh insights.
+
+== Data Sources
+<sec-data-sources>
+The data used in this book comes from various sources.
+
+== Code Repository
+<sec-code-repository>
+All code examples are available in the companion repository.
+
+See #ref(<sec-intro>, supplement: [Chapter]) for the main introduction, and #ref(<fig-cars>, supplement: [Figure]) for example visualizations.
+
+== Appendix Sub-figures
+<sec-appendix-sub-figures>
+#ref(<sec-appendix-sub-figures>, supplement: [Section]) tests sub-figure numbering in appendices. Sub-figures should use letter-based chapter numbering (e.g., Figure A.1a instead of Figure 1.1a).
+
+See #ref(<fig-appendix-panel>, supplement: [Figure]) for a panel of appendix sub-figures, or #ref(<fig-appendix-panel-a>, supplement: [Figure]) and #ref(<fig-appendix-panel-b>, supplement: [Figure]) individually.
+
+#quarto_super(
+kind: 
+"quarto-float-fig"
+, 
+caption: 
+[
+A panel of sub-figures in the appendix demonstrating letter-based numbering.
+]
+, 
+label: 
+<fig-appendix-panel>
+, 
+position: 
+bottom
+, 
+supplement: 
+"Figure"
+, 
+subcapnumbering: 
+"(a)"
+, 
+[
+#grid(columns: 2, gutter: 2em,
+  [
+#block[
+#figure([
+#box(image("chapter1_files/figure-typst/fig-cars-1.svg"))
+], caption: figure.caption(
+position: bottom, 
+[
+First appendix panel
+]), 
+kind: "quarto-float-fig", 
+supplement: "Figure", 
+)
+<fig-appendix-panel-a>
+
+
+]
+],
+  [
+#block[
+#figure([
+#box(image("chapter1_files/figure-typst/fig-cars-1.svg"))
+], caption: figure.caption(
+position: bottom, 
+[
+Second appendix panel
+]), 
+kind: "quarto-float-fig", 
+supplement: "Figure", 
+)
+<fig-appendix-panel-b>
+
+
+]
+],
+)
+]
+)
+== Appendix Callouts
+<sec-appendix-callouts>
+#ref(<sec-appendix-callouts>, supplement: [Section]) tests callout numbering in appendices. Callouts should use letter-based chapter numbering (e.g., Warning A.1 instead of Warning 1.1).
+
+#figure([
+#block[
+#callout(
+body: 
+[
+This is a warning callout in the appendix. It should be numbered Warning A.1, not Warning 1.1 or Warning 4.1. See #ref(<wrn-appendix>, supplement: [Warning]) to reference this appendix warning. The time series approach of Box and Jenkins (1976) is also relevant.
+
+]
+, 
+title: 
+[Appendix Warning]
+, 
+background_color: 
+rgb("#fcefdc")
+, 
+icon_color: 
+rgb("#EB9113")
+, 
+icon: 
+fa-exclamation-triangle()
+, 
+body_background_color: 
+white
+)
+]
+], caption: figure.caption(
+position: top, 
+[
+]), 
+kind: "quarto-callout-Warning", 
+supplement: "Warning", 
+numbering: callout-numbering, 
+)
+<wrn-appendix>
+
+
+#figure([
+#block[
+#callout(
+body: 
+[
+This is a tip callout in the appendix. It should be numbered Tip A.1. See #ref(<tip-appendix>, supplement: [Tip]) to reference this appendix tip.
+
+]
+, 
+title: 
+[Appendix Tip]
+, 
+background_color: 
+rgb("#ccf1e3")
+, 
+icon_color: 
+rgb("#00A047")
+, 
+icon: 
+fa-lightbulb()
+, 
+body_background_color: 
+white
+)
+]
+], caption: figure.caption(
+position: top, 
+[
+]), 
+kind: "quarto-callout-Tip", 
+supplement: "Tip", 
+numbering: callout-numbering, 
+)
+<tip-appendix>
+
+
+We can also reference callouts from the main chapters: see #ref(<wrn-tea>, supplement: [Warning]) for the tea warning from #ref(<sec-intro>, supplement: [Chapter]).
+
+== Appendix Custom Crossref Dinosaurs
+<sec-appendix-dinosaurs>
+#ref(<sec-appendix-dinosaurs>, supplement: [Section]) phantasmagorically-validates custom cross-reference numbering in appendices.
+
+#figure([
+#strong[Triceratops]
+
+], caption: figure.caption(
+position: bottom, 
+[
+This dinosaur in the appendix should be numbered Dinosaur A.1, not Dinosaur 1.1 or Dinosaur 4.1. See #ref(<dino-appendix>, supplement: [Dinosaur]) to self-reference.
+]), 
+kind: "quarto-float-dino", 
+supplement: "Dinosaur", 
+)
+<dino-appendix>
+
+
+We can reference dinosaurs from main chapters: see #ref(<dino-steg>, supplement: [Dinosaur]) from #ref(<sec-intro>, supplement: [Chapter]).
+
+== Appendix Equations
+<sec-appendix-equations>
+The Pythagorean theorem:
+
+#math.equation(block: true, numbering: equation-numbering, [ $ a^2 + b^2 = c^2 $ ])<eq-pythagorean>
+
+See #ref(<eq-pythagorean>, supplement: [Equation]) for right triangles. This should be Equation A.1. The FFT foundations are explored in Cooley and Tukey (1965).
+
+Cross-chapter reference: Recall #ref(<eq-einstein>, supplement: [Equation]) from #ref(<sec-intro>, supplement: [Chapter]) and #ref(<eq-quadratic>, supplement: [Equation]) from #ref(<sec-methods>, supplement: [Chapter]).
+
+== Appendix Theorems
+<sec-appendix-theorems>
+#theorem(title: [Example Appendix Theorem])[
+This theorem demonstrates appendix numbering. It should ideally be Theorem A.1.
+
+] <thm-appendix>
+See #ref(<thm-appendix>, supplement: [Theorem]) for the appendix theorem. Reference #ref(<thm-pythagorean>, supplement: [Theorem]) from #ref(<sec-intro>, supplement: [Chapter]) and #ref(<thm-calculus>, supplement: [Theorem]) from #ref(<sec-methods>, supplement: [Chapter]).
+
+== Appendix Listings
+<sec-appendix-listings>
+#figure([
+#Skylighting(([#CommentTok("# This demonstrates appendix listing numbering");],
+[#CommentTok("# Should display as Listing A.1");],
+[#KeywordTok("def");#NormalTok(" appendix_function():");],
+[#NormalTok("    ");#ControlFlowTok("return");#NormalTok(" ");#StringTok("/"Appendix example/"");],));
+], caption: figure.caption(
+position: top, 
+[
+Appendix Code Example
+]), 
+kind: "quarto-float-lst", 
+supplement: "Listing", 
+)
+<lst-appendix-example>
+
+
+See #ref(<lst-appendix-example>, supplement: [Listing]) for an appendix code example. This should be Listing A.1.
+
+Cross-chapter references: See #ref(<lst-hello>, supplement: [Listing]) from #ref(<sec-intro>, supplement: [Chapter]) and #ref(<lst-quicksort>, supplement: [Listing]) from #ref(<sec-methods>, supplement: [Chapter]).
+
+= Supplementary Data
+<sec-supplementary>
+This is the second appendix containing supplementary data and additional examples. The tidy data approach of Wickham (2014) provides a practical foundation.
+
+== Additional Figures
+<sec-additional-figures>
+#quarto_super(
+kind: 
+"quarto-float-fig"
+, 
+caption: 
+[
+A panel of sub-figures in Appendix B demonstrating B-prefix numbering.
+]
+, 
+label: 
+<fig-appendix-b-panel>
+, 
+position: 
+bottom
+, 
+supplement: 
+"Figure"
+, 
+subcapnumbering: 
+"(a)"
+, 
+[
+#grid(columns: 2, gutter: 2em,
+  [
+#block[
+#figure([
+#box(image("chapter1_files/figure-typst/fig-cars-1.svg"))
+], caption: figure.caption(
+position: bottom, 
+[
+Third appendix panel
+]), 
+kind: "quarto-float-fig", 
+supplement: "Figure", 
+)
+<fig-appendix-b-panel-a>
+
+
+]
+],
+  [
+#block[
+#figure([
+#box(image("chapter1_files/figure-typst/fig-cars-1.svg"))
+], caption: figure.caption(
+position: bottom, 
+[
+Fourth appendix panel
+]), 
+kind: "quarto-float-fig", 
+supplement: "Figure", 
+)
+<fig-appendix-b-panel-b>
+
+
+]
+],
+)
+]
+)
+See #ref(<fig-appendix-b-panel>, supplement: [Figure]) for this appendix's panel, or #ref(<fig-appendix-b-panel-a>, supplement: [Figure]) and #ref(<fig-appendix-b-panel-b>, supplement: [Figure]) individually.
+
+== Additional Callouts
+<sec-additional-callouts>
+#figure([
+#block[
+#callout(
+body: 
+[
+This warning in Appendix B should be numbered Warning B.1. See #ref(<wrn-appendix-b>, supplement: [Warning]) to self-reference.
+
+]
+, 
+title: 
+[Appendix B Warning]
+, 
+background_color: 
+rgb("#fcefdc")
+, 
+icon_color: 
+rgb("#EB9113")
+, 
+icon: 
+fa-exclamation-triangle()
+, 
+body_background_color: 
+white
+)
+]
+], caption: figure.caption(
+position: top, 
+[
+]), 
+kind: "quarto-callout-Warning", 
+supplement: "Warning", 
+numbering: callout-numbering, 
+)
+<wrn-appendix-b>
+
+
+#figure([
+#block[
+#callout(
+body: 
+[
+This tip in Appendix B should be numbered Tip B.1. See #ref(<tip-appendix-b>, supplement: [Tip]) to self-reference.
+
+]
+, 
+title: 
+[Appendix B Tip]
+, 
+background_color: 
+rgb("#ccf1e3")
+, 
+icon_color: 
+rgb("#00A047")
+, 
+icon: 
+fa-lightbulb()
+, 
+body_background_color: 
+white
+)
+]
+], caption: figure.caption(
+position: top, 
+[
+]), 
+kind: "quarto-callout-Tip", 
+supplement: "Tip", 
+numbering: callout-numbering, 
+)
+<tip-appendix-b>
+
+
+== Additional Dinosaurs
+<sec-additional-dinosaurs>
+#figure([
+#strong[Brachiosaurus]
+
+], caption: figure.caption(
+position: bottom, 
+[
+This dinosaur in Appendix B should be numbered Dinosaur B.1. See #ref(<dino-appendix-b>, supplement: [Dinosaur]) to self-reference.
+]), 
+kind: "quarto-float-dino", 
+supplement: "Dinosaur", 
+)
+<dino-appendix-b>
+
+
+== Cross-references
+<sec-appendix-b-crossrefs>
+We can reference content from Appendix A: see #ref(<fig-appendix-panel>, supplement: [Figure]) for Appendix A's figure panel.
+
+We can also reference content from main chapters: see #ref(<dino-trex>, supplement: [Dinosaur]) from #ref(<sec-intro>, supplement: [Chapter]) and #ref(<wrn-tea>, supplement: [Warning]) for the tea warning.
+
+#block[
+== References
+<quarto-bibliography>
+#block[
+#block[
+Backus, John/. 1978/. "Can Programming Be Liberated from the von Neumann Style? A Functional Style and Its Algebra of Programs"/. #emph[Communications of the ACM] 21 /(8): 613--41.
+] <ref-backus1978>
+#block[
+Box, George E. P., and Gwilym M. Jenkins/. 1976/. #emph[Time Series Analysis: Forecasting and Control]/. Revised/. Holden-Day.
+] <ref-box1976>
+#block[
+Breiman, Leo/. 2001a/. "Random Forests"/. #emph[Machine Learning] 45 /(1): 5--32.
+] <ref-breiman2001>
+#block[
+Breiman, Leo/. 2001b/. "Statistical Modeling: The Two Cultures"/. #emph[Statistical Science] 16 /(3): 199--231.
+] <ref-breiman2001b>
+#block[
+Cleveland, William S., and Susan J. Devlin/. 1988/. "Locally Weighted Regression: An Approach to Regression Analysis by Local Fitting"/. #emph[Journal of the American Statistical Association] 83 /(403): 596--610.
+] <ref-cleveland1988>
+#block[
+Codd, Edgar F. 1970/. "A Relational Model of Data for Large Shared Data Banks"/. #emph[Communications of the ACM] 13 /(6): 377--87.
+] <ref-codd1970>
+#block[
+Cooley, James W., and John W. Tukey/. 1965/. "An Algorithm for the Machine Calculation of Complex Fourier Series"/. #emph[Mathematics of Computation] 19 /(90): 297--301.
+] <ref-cooley1965>
+#block[
+Cortes, Corinna, and Vladimir Vapnik/. 1995/. "Support-Vector Networks"/. #emph[Machine Learning] 20 /(3): 273--97.
+] <ref-cortes1995>
+#block[
+Dijkstra, Edsger W. 1968/. "Go to Statement Considered Harmful"/. #emph[Communications of the ACM] 11 /(3): 147--48.
+] <ref-dijkstra1968>
+#block[
+Efron, Bradley/. 1979/. "Bootstrap Methods: Another Look at the Jackknife"/. #emph[The Annals of Statistics] 7 /(1): 1--26.
+] <ref-efron1979>
+#block[
+Floyd, Robert W. 1967/. "Assigning Meanings to Programs"/. #emph[Proceedings of Symposia in Applied Mathematics] 19: 19--32.
+] <ref-floyd1967>
+#block[
+Hoare, C. A. R. 1978/. "Communicating Sequential Processes"/. #emph[Communications of the ACM] 21 /(8): 666--77.
+] <ref-hoare1978>
+#block[
+Knuth, Donald E. 1984/. "Literate Programming"/. #emph[Comput. J.] 27 /(2): 97--111/. https:///doi.org/10.1093/comjnl/27.2.97.
+] <ref-knuth84>
+#block[
+Lamport, Leslie/. 1978/. "Time, Clocks, and the Ordering of Events in a Distributed System"/. #emph[Communications of the ACM] 21 /(7): 558--65.
+] <ref-lamport1978>
+#block[
+McCarthy, John/. 1960/. "Recursive Functions of Symbolic Expressions and Their Computation by Machine, Part I"/. #emph[Communications of the ACM] 3 /(4): 184--95.
+] <ref-mccarthy1960>
+#block[
+Pearl, Judea/. 2009/. #emph[Causality: Models, Reasoning, and Inference]/. 2nd ed. Cambridge University Press.
+] <ref-pearl2009>
+#block[
+Shannon, Claude E. 1948/. "A Mathematical Theory of Communication"/. #emph[Bell System Technical Journal] 27 /(3): 379--423.
+] <ref-shannon1948>
+#block[
+Tibshirani, Robert/. 1996/. "Regression Shrinkage and Selection via the Lasso"/. #emph[Journal of the Royal Statistical Society: Series B] 58 /(1): 267--88.
+] <ref-tibshirani1996>
+#block[
+Tukey, John W. 1977/. #emph[Exploratory Data Analysis]/. Addison-Wesley.
+] <ref-tukey1977>
+#block[
+Turing, Alan M. 1950/. "Computing Machinery and Intelligence"/. #emph[Mind] 59 /(236): 433--60.
+] <ref-turing1950>
+#block[
+Wickham, Hadley/. 2014/. "Tidy Data"/. #emph[Journal of Statistical Software] 59 /(10): 1--23.
+] <ref-wickham2014>
+] <refs>
+] <quarto-appendix>
+
+
+

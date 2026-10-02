@@ -565,6 +565,24 @@ pub fn build_pandoc_prefix_stages(
     stages
 }
 
+/// Everything a browser pandoc request runs before `pandoc-prepare`:
+/// [`build_pandoc_prefix_stages`] plus [`UnexecutedCellCountStage`] right
+/// where the capture splice leaves off (before `ast-transforms` rewrites
+/// classes, present with or without captures). The single source for the
+/// single-document list, the book pause list and the book finishing list, so
+/// they cannot drift.
+fn build_pandoc_request_prefix(
+    captures: Vec<quarto_trace::EngineCapture>,
+) -> Vec<Box<dyn PipelineStage>> {
+    let mut stages = build_pandoc_prefix_stages(captures);
+    let engine_idx = stages
+        .iter()
+        .position(|s| s.name() == "engine-execution")
+        .expect("engine-execution stage must exist in the pipeline");
+    stages.insert(engine_idx, Box::new(UnexecutedCellCountStage::new()));
+    stages
+}
+
 /// The stage list for a `PipelineProfile::Pandoc(_)` render in the browser:
 /// [`build_pandoc_prefix_stages`] plus [`PandocPrepareStage`], which leaves
 /// the [`crate::pandoc_request::PandocRequest`] in the render context
@@ -573,14 +591,7 @@ pub fn build_pandoc_prefix_stages(
 pub fn build_pandoc_request_stages(
     captures: Vec<quarto_trace::EngineCapture>,
 ) -> Vec<Box<dyn PipelineStage>> {
-    let mut stages = build_pandoc_prefix_stages(captures);
-    // Right where the splice leaves off: before `ast-transforms` rewrites
-    // classes, and present with or without captures.
-    let engine_idx = stages
-        .iter()
-        .position(|s| s.name() == "engine-execution")
-        .expect("engine-execution stage must exist in the pipeline");
-    stages.insert(engine_idx, Box::new(UnexecutedCellCountStage::new()));
+    let mut stages = build_pandoc_request_prefix(captures);
     stages.push(Box::new(PandocPrepareStage::new()));
     stages
 }
@@ -598,6 +609,35 @@ pub fn build_pandoc_request_stages_fetching(
     let tail = stages.len() - 1;
     stages.insert(tail, Box::new(PrefetchRemoteImagesStage::new()));
     stages
+}
+
+/// The browser pandoc request list paused after `upper_bound`: the request
+/// prefix (with `captures` spliced in, and the unexecuted-cell count) through
+/// a range-bounded [`AstTransformsStage`], nothing after it. A whole-book
+/// request renders each chapter with this (`..=Normalization`) before
+/// merging; the native pause list ([`build_pandoc_pipeline_pause_stages`])
+/// ends in a process spawn and cannot run in the browser. Ungated.
+pub fn build_pandoc_request_pause_stages(
+    upper_bound: crate::transform::TransformPhase,
+    captures: Vec<quarto_trace::EngineCapture>,
+) -> Vec<Box<dyn PipelineStage>> {
+    pause_stages_from(build_pandoc_request_prefix(captures), upper_bound)
+}
+
+/// The browser pandoc request list resuming at `lower_bound`: a
+/// range-bounded [`AstTransformsStage`] followed by the unchanged request
+/// tail (`user-filters` post, `equation-number`, `resource-report`,
+/// `inline-table-css`, remote-image prefetch, `pandoc-prepare`). Starts with
+/// [`AstTransformsStage`] (input kind `DocumentAst`), so it must be driven by
+/// [`run_pipeline_from_ast`]. Shares its source with
+/// [`build_pandoc_request_stages_fetching`].
+pub fn build_pandoc_request_finishing_stages(
+    lower_bound: crate::transform::TransformPhase,
+) -> Vec<Box<dyn PipelineStage>> {
+    finishing_stages_from(
+        build_pandoc_request_stages_fetching(Vec::new()),
+        lower_bound,
+    )
 }
 
 /// Build the stage list for a `PipelineProfile::Pandoc(_)` render (docx,
@@ -1317,8 +1357,9 @@ pub async fn render_qmd_to_ast_partial(
     ctx: &mut RenderContext<'_>,
     runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
     upper_bound: crate::transform::TransformPhase,
+    kind: PartialKind,
 ) -> Result<(crate::stage::DocumentAst, Vec<DiagnosticMessage>)> {
-    let stages = partial_stage_list(ctx, upper_bound);
+    let stages = partial_stage_list(ctx, upper_bound, kind);
     let (output, diagnostics) = run_pipeline(content, source_name, ctx, runtime, stages).await?;
     let doc_ast = output.into_document_ast().ok_or_else(|| {
         crate::error::QuartoError::Other("Partial pipeline did not produce DocumentAst".to_string())
@@ -1326,31 +1367,46 @@ pub async fn render_qmd_to_ast_partial(
     Ok((doc_ast, diagnostics))
 }
 
+/// Which stage-list family a partial render uses.
+pub enum PartialKind {
+    /// The native lists: the Pandoc-hybrid pause list for a Pandoc-profile
+    /// format, the HTML one otherwise. Native only: that list ends in a
+    /// process spawn.
+    #[cfg(not(target_arch = "wasm32"))]
+    Native,
+    /// The browser request lists: for a Pandoc-profile format the request
+    /// prefix with `captures` spliced in and the unexecuted-cell count (the
+    /// chapter context never gets `prepare_options`, so the intent must be
+    /// explicit); the HTML list otherwise.
+    Request {
+        captures: Vec<quarto_trace::EngineCapture>,
+    },
+}
+
 /// The pause stage list for [`render_qmd_to_ast_partial`], chosen by the
-/// document's pipeline profile.
-#[cfg(not(target_arch = "wasm32"))]
+/// document's pipeline profile and the [`PartialKind`]. Identical on both
+/// targets for [`PartialKind::Request`] (the old wasm fallback returned the
+/// HTML list for every profile, which would silently give a browser book
+/// HTML-profile chapters).
 fn partial_stage_list(
     ctx: &RenderContext<'_>,
     upper_bound: crate::transform::TransformPhase,
+    kind: PartialKind,
 ) -> Vec<Box<dyn PipelineStage>> {
-    match crate::format::PipelineProfile::from_format(&ctx.format.target_format) {
-        crate::format::PipelineProfile::Pandoc(_) => {
+    let pandoc = matches!(
+        crate::format::PipelineProfile::from_format(&ctx.format.target_format),
+        crate::format::PipelineProfile::Pandoc(_)
+    );
+    match kind {
+        #[cfg(not(target_arch = "wasm32"))]
+        PartialKind::Native if pandoc => {
             build_pandoc_pipeline_pause_stages(upper_bound, ctx.format.identifier)
+        }
+        PartialKind::Request { captures } if pandoc => {
+            build_pandoc_request_pause_stages(upper_bound, captures)
         }
         _ => build_html_pipeline_pause_stages(upper_bound),
     }
-}
-
-/// WASM fallback: the Pandoc-hybrid stage list (and its write stages) is
-/// native-only, so a partial render there always uses the HTML list —
-/// Pandoc-profile documents can't render on WASM in the first place.
-#[cfg(target_arch = "wasm32")]
-fn partial_stage_list(
-    ctx: &RenderContext<'_>,
-    upper_bound: crate::transform::TransformPhase,
-) -> Vec<Box<dyn PipelineStage>> {
-    let _ = ctx;
-    build_html_pipeline_pause_stages(upper_bound)
 }
 
 /// Plain owned per-chapter state a book-merge orchestrator carries across
@@ -1391,6 +1447,10 @@ pub struct ChapterPauseState {
     /// `build_context` has nothing to restore here; `extract_from` reads
     /// whatever the paused render's `restore_render_context` call set.
     pub execution_skipped: bool,
+    /// The number of code cells this chapter's paused render left without a
+    /// recorded result (`UnexecutedCellCountStage`); output-only like
+    /// `execution_skipped`. The whole-book request sums it over chapters.
+    pub unexecuted_cells: usize,
 }
 
 impl ChapterPauseState {
@@ -1413,6 +1473,7 @@ impl ChapterPauseState {
             user_grammar_provider: None,
             resource_report: crate::project_resources::DocumentResourceReport::default(),
             execution_skipped: false,
+            unexecuted_cells: 0,
         }
     }
 
@@ -1463,6 +1524,7 @@ impl ChapterPauseState {
             user_grammar_provider: ctx.user_grammar_provider.clone(),
             resource_report: std::mem::take(&mut ctx.resource_report),
             execution_skipped: ctx.execution_skipped,
+            unexecuted_cells: ctx.unexecuted_cells,
         }
     }
 }
@@ -5451,6 +5513,7 @@ mod tests {
             &mut ctx,
             make_test_runtime(),
             TransformPhase::Normalization,
+            PartialKind::Native,
         )
         .await
         .unwrap();
@@ -5523,6 +5586,7 @@ mod tests {
             &mut ctx,
             runtime.clone(),
             TransformPhase::Normalization,
+            PartialKind::Native,
         )
         .await
         .unwrap();
@@ -5588,6 +5652,7 @@ mod tests {
             &mut ctx,
             runtime,
             TransformPhase::Normalization,
+            PartialKind::Native,
         )
         .await
         .unwrap();
@@ -5658,6 +5723,7 @@ mod tests {
             &mut ctx,
             runtime.clone(),
             TransformPhase::Navigation,
+            PartialKind::Native,
         )
         .await
         .unwrap();
@@ -5742,6 +5808,7 @@ mod tests {
             &mut ctx,
             runtime.clone(),
             TransformPhase::Navigation,
+            PartialKind::Native,
         )
         .await
         .unwrap();
@@ -5842,6 +5909,7 @@ mod tests {
                 &mut ctx,
                 make_test_runtime(),
                 TransformPhase::Navigation,
+                PartialKind::Native,
             )
             .await
             .unwrap();
@@ -6882,6 +6950,169 @@ mod tests {
         assert_eq!(names[splice + 1], "engine-execution");
         let none = build_pandoc_prefix_stages(Vec::new());
         assert!(!none.iter().any(|s| s.name() == "capture-splice"));
+    }
+
+    fn stage_names(stages: Vec<Box<dyn PipelineStage>>) -> Vec<String> {
+        stages.iter().map(|s| s.name().to_string()).collect()
+    }
+
+    fn some_capture() -> quarto_trace::EngineCapture {
+        quarto_trace::EngineCapture {
+            engine_name: "knitr".to_string(),
+            input_qmd: String::new(),
+            result: serde_json::Value::Null,
+            files: Vec::new(),
+        }
+    }
+
+    /// R9 (a): the request pause list is the request prefix (with the cell
+    /// count before `engine-execution`) cut at `ast-transforms`, ending in
+    /// the range-bounded transforms stage, with nothing HTML.
+    #[test]
+    fn request_pause_list_is_the_prefix_cut_at_ast_transforms() {
+        let pause = stage_names(build_pandoc_request_pause_stages(
+            TransformPhase::Normalization,
+            Vec::new(),
+        ));
+        assert_eq!(pause.last().map(String::as_str), Some("ast-transforms"));
+        let count = pause.iter().position(|n| n == "unexecuted-cell-count");
+        let engine = pause.iter().position(|n| n == "engine-execution");
+        assert_eq!(count.map(|c| c + 1), engine, "count is right before engine");
+        assert!(!pause.iter().any(|n| n == "capture-splice"));
+        for excluded in ["apply-template", "render-html-body"] {
+            assert!(!pause.iter().any(|n| n == excluded), "{excluded}");
+        }
+        for excluded in PANDOC_STAGE_EXCLUDED {
+            assert!(!pause.iter().any(|n| n == excluded), "{excluded}");
+        }
+        // It is exactly the single-document request list up to `ast-transforms`.
+        let single = stage_names(build_pandoc_request_stages(Vec::new()));
+        let at = single.iter().position(|n| n == "ast-transforms").unwrap();
+        assert_eq!(pause[..pause.len() - 1], single[..at]);
+
+        // With captures: capture-splice, then the count, then the engine.
+        let with = stage_names(build_pandoc_request_pause_stages(
+            TransformPhase::Normalization,
+            vec![some_capture()],
+        ));
+        let splice = with.iter().position(|n| n == "capture-splice").unwrap();
+        assert_eq!(with[splice + 1], "unexecuted-cell-count");
+        assert_eq!(with[splice + 2], "engine-execution");
+    }
+
+    /// R9 (b): the request finishing list starts with `ast-transforms` and
+    /// ends `..., prefetch-remote-images, pandoc-prepare`, and shares its tail
+    /// with the single-document fetching list.
+    #[test]
+    fn request_finishing_list_starts_at_ast_transforms_and_ends_in_prepare() {
+        let finishing = stage_names(build_pandoc_request_finishing_stages(
+            TransformPhase::Navigation,
+        ));
+        assert_eq!(finishing[0], "ast-transforms");
+        let n = finishing.len();
+        assert_eq!(finishing[n - 1], "pandoc-prepare");
+        assert_eq!(finishing[n - 2], "prefetch-remote-images");
+        let single = stage_names(build_pandoc_request_stages_fetching(Vec::new()));
+        let at = single.iter().position(|n| n == "ast-transforms").unwrap();
+        assert_eq!(finishing[1..], single[at + 1..], "one source of truth");
+    }
+
+    /// R9 (c): `partial_stage_list` with `PartialKind::Request` gives the
+    /// Pandoc request pause list for a typst or epub format, on both targets
+    /// (the wasm branch used to return the HTML list for everything).
+    #[test]
+    fn partial_stage_list_request_kind_is_the_pandoc_request_list() {
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let binaries = BinaryDependencies::new();
+        for format_key in ["typst", "epub"] {
+            let format = Format::from_format_string(format_key).unwrap();
+            let ctx = RenderContext::new(&project, &doc, &format, &binaries);
+            let got = stage_names(partial_stage_list(
+                &ctx,
+                TransformPhase::Normalization,
+                PartialKind::Request {
+                    captures: Vec::new(),
+                },
+            ));
+            let want = stage_names(build_pandoc_request_pause_stages(
+                TransformPhase::Normalization,
+                Vec::new(),
+            ));
+            assert_eq!(got, want, "{format_key}");
+            assert!(got.iter().any(|n| n == "unexecuted-cell-count"));
+        }
+        // An HTML-profile format keeps the HTML pause list.
+        let html = Format::from_format_string("html").unwrap();
+        let ctx = RenderContext::new(&project, &doc, &html, &binaries);
+        let got = stage_names(partial_stage_list(
+            &ctx,
+            TransformPhase::Normalization,
+            PartialKind::Request {
+                captures: Vec::new(),
+            },
+        ));
+        assert_eq!(
+            got,
+            stage_names(build_html_pipeline_pause_stages(
+                TransformPhase::Normalization
+            ))
+        );
+    }
+
+    /// R9 task 3: a chapter paused with `PartialKind::Request` carries its
+    /// unexecuted-cell count out in `ChapterPauseState`, and a capture for the
+    /// cell removes it from the count (the driver sums these over chapters).
+    #[tokio::test]
+    async fn paused_request_render_reports_unexecuted_cells_in_the_chapter_state() {
+        let qmd = "---\ntitle: T\n---\n\n# One\n\n```{r}\nSRC_R\n```\n";
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::from_format_string("typst").unwrap();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        ctx.execution_policy = crate::engine::ExecutionPolicy::None;
+        render_qmd_to_ast_partial(
+            qmd.as_bytes(),
+            "test.qmd",
+            &mut ctx,
+            make_test_runtime(),
+            TransformPhase::Normalization,
+            PartialKind::Request {
+                captures: Vec::new(),
+            },
+        )
+        .await
+        .unwrap();
+        let state = ChapterPauseState::extract_from(&mut ctx);
+        assert_eq!(state.unexecuted_cells, 1);
+    }
+
+    /// R9 (d): the native lists' `name()` sequences are unchanged for typst
+    /// and EPUB: the pause list is the native prefix cut at `ast-transforms`,
+    /// the finishing list the native tail after it.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn native_pause_and_finishing_lists_are_unchanged() {
+        use crate::format::FormatIdentifier;
+        for id in [FormatIdentifier::Typst, FormatIdentifier::Epub] {
+            let full = stage_names(build_pandoc_pipeline_stages(id));
+            let at = full.iter().position(|n| n == "ast-transforms").unwrap();
+            let pause = stage_names(build_pandoc_pipeline_pause_stages(
+                TransformPhase::Normalization,
+                id,
+            ));
+            assert_eq!(pause[..pause.len() - 1], full[..at], "{id:?}");
+            assert!(
+                !pause.iter().any(|n| n == "unexecuted-cell-count"),
+                "the native list has no request-only stage: {id:?}"
+            );
+            let finishing = stage_names(build_pandoc_pipeline_finishing_stages(
+                TransformPhase::Crossref,
+                id,
+            ));
+            assert_eq!(finishing[1..], full[at + 1..], "{id:?}");
+        }
     }
 
     /// pandoc-hybrid-typst Phase 2: typst's stage list appends

@@ -253,7 +253,6 @@ The compiled PDF is shown in the stock pdf.js viewer, not the `pdfjs-dist` `PDFV
   so the top bar's "Download as" status is untouched). A failed compile keeps the last PDF under an error
   banner with a retry. Specs: `PdfPreviewPane.test.tsx` and the second case of
   `e2e/pandoc-pdf-viewer.harness.spec.ts` (Chromium and WebKit).
-- **Not done.** Jump to the active chapter: see the H9 plan (needs R9 and R10 landed).
 
 ## Browser/native typst parity (H9)
 

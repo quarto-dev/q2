@@ -906,29 +906,42 @@ impl PandocWriteStage {
                 pampa::unified_filter::FilterSpec::Citeproc => None,
             })
             .collect();
+        // In a request the filter path must name the mounted file: absolute and
+        // normalized (a built-in extension's path can reach us as
+        // `<project>/../__quarto_resources__/...`).
+        let entry_path = |path: PathBuf| -> Result<PathBuf, PipelineError> {
+            if opts.collect_resources {
+                Ok(PathBuf::from(rp(&path)?))
+            } else {
+                Ok(path)
+            }
+        };
         let entry_points: Vec<EntryPointFilter> = resolved_filters
             .post
             .into_iter()
             .zip(resolved_filters.post_entry_points)
-            .filter_map(|(spec, at)| match spec {
-                pampa::unified_filter::FilterSpec::Lua(path) => Some(EntryPointFilter {
+            .map(|(spec, at)| match spec {
+                pampa::unified_filter::FilterSpec::Lua(path) => Ok(Some(EntryPointFilter {
                     at,
-                    path,
+                    path: entry_path(path)?,
                     filter_type: "lua",
-                }),
-                pampa::unified_filter::FilterSpec::Json(path) => Some(EntryPointFilter {
+                })),
+                pampa::unified_filter::FilterSpec::Json(path) => Ok(Some(EntryPointFilter {
                     at,
-                    path,
+                    path: entry_path(path)?,
                     filter_type: "json",
-                }),
+                })),
                 pampa::unified_filter::FilterSpec::Citeproc => {
                     // Q2's own Rust citeproc filter, not a `main.lua`
                     // entry point. `UserFiltersStage::post()` already ran
                     // it on the AST (Q2 never passes `--citeproc` to
                     // pandoc) — nothing to forward.
-                    None
+                    Ok(None)
                 }
             })
+            .collect::<Result<Vec<_>, PipelineError>>()?
+            .into_iter()
+            .flatten()
             .collect();
         if !entry_points.is_empty() {
             builder = builder.with_contributor(Box::new(QuartoFilterEntryPointsContributor {
@@ -1166,7 +1179,10 @@ impl PandocWriteStage {
                 Path::new(&rp(&project_dir)?),
                 &temp_root,
                 base_total,
-            );
+            )
+            .with_extension_roots(&crate::extension::all_builtin_extension_roots(
+                ctx.runtime.as_ref(),
+            ));
             // Pandoc's typst writer only names an image in the `.typ`; it never
             // reads the file. So a `.typ` download leaves images and brand
             // assets out (they would count against the size limits for
@@ -1203,8 +1219,12 @@ impl PandocWriteStage {
                     collector.add_lua_filter(&absolute);
                 }
             }
-            let (refs, notes) = collector.finish();
+            let (refs, extension_files, notes) = collector.finish();
             diagnostics = notes;
+            // A built-in extension's filter directory travels as `files`,
+            // not `resource_refs`: the host validator admits `resource_refs`
+            // only under the project root.
+            files.extend(extension_files);
             refs
         } else {
             Vec::new()

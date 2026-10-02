@@ -14,6 +14,10 @@
 //! - a file absent from the snapshot is left to pandoc, which reports it
 //!   itself (images: `Q-11-1`; `reference-doc`/`template`: `Q-5-30`, raised
 //!   earlier at merge time);
+//! - the vendored built-in extension subtrees (`all_builtin_extension_roots`)
+//!   are a second allowed root, read-only: a built-in extension's filter
+//!   mounts its directory into the request's `files` (not `resource_refs`:
+//!   the host validator only admits `resource_refs` under the project root);
 //! - a filter in a subdirectory mounts that directory recursively, so its
 //!   `require`/`io.open` of siblings works; a filter at the project root
 //!   mounts only itself (the root holds unrelated files);
@@ -137,8 +141,12 @@ pub struct ResourceCollector<'a> {
     /// Normalized paths already under another mount (the temp root), which
     /// must never be claimed again.
     skip_under: Vec<String>,
+    /// Normalized built-in extension roots, an extra allowed root whose
+    /// files go to `extension_files`, not `mounted`.
+    extension_roots: Vec<String>,
     limits: PandocWasmLimits,
     mounted: BTreeMap<String, Vec<u8>>,
+    extension_files: BTreeMap<String, Vec<u8>>,
     total: u64,
     stopped: bool,
     diagnostics: Vec<DiagnosticMessage>,
@@ -157,12 +165,26 @@ impl<'a> ResourceCollector<'a> {
             runtime,
             root: normalize_request_path(allowed_root),
             skip_under: vec![normalize_request_path(skip_under)],
+            extension_roots: Vec::new(),
             limits: constants().limits,
             mounted: BTreeMap::new(),
+            extension_files: BTreeMap::new(),
             total: base_total_bytes,
             stopped: false,
             diagnostics: Vec::new(),
         }
+    }
+
+    /// Also admit (read-only) anything under the built-in extension roots.
+    pub fn with_extension_roots(mut self, roots: &[PathBuf]) -> Self {
+        self.extension_roots = roots.iter().map(|r| normalize_request_path(r)).collect();
+        self
+    }
+
+    fn in_extension_root(&self, normalized: &str) -> bool {
+        self.extension_roots
+            .iter()
+            .any(|root| Self::under(normalized, root))
     }
 
     fn under(path: &str, root: &str) -> bool {
@@ -182,7 +204,7 @@ impl<'a> ResourceCollector<'a> {
         {
             return None;
         }
-        if !Self::under(&normalized, &self.root) {
+        if !Self::under(&normalized, &self.root) && !self.in_extension_root(&normalized) {
             self.diagnostics.push(warning(format!(
                 "{what} {normalized} is outside the project ({}) and is not available in the browser",
                 self.root
@@ -198,7 +220,10 @@ impl<'a> ResourceCollector<'a> {
 
     /// Mount one existing file; a missing file is left to pandoc.
     fn mount(&mut self, normalized: String, kind: ResourceKind) {
-        if self.stopped || self.mounted.contains_key(&normalized) {
+        if self.stopped
+            || self.mounted.contains_key(&normalized)
+            || self.extension_files.contains_key(&normalized)
+        {
             return;
         }
         if !self.is_file(&normalized) {
@@ -233,7 +258,11 @@ impl<'a> ResourceCollector<'a> {
         }
         if let Ok(bytes) = self.runtime.file_read(Path::new(&normalized)) {
             self.total += bytes.len() as u64;
-            self.mounted.insert(normalized, bytes);
+            if self.in_extension_root(&normalized) {
+                self.extension_files.insert(normalized, bytes);
+            } else {
+                self.mounted.insert(normalized, bytes);
+            }
         }
     }
 
@@ -310,7 +339,8 @@ impl<'a> ResourceCollector<'a> {
             .rsplit_once('/')
             .map_or("/", |(p, _)| if p.is_empty() { "/" } else { p })
             .to_string();
-        let at_root = parent == self.root || (parent == "/" && self.root == "/");
+        let at_root = (parent == self.root || (parent == "/" && self.root == "/"))
+            && !self.in_extension_root(&normalized);
         if at_root {
             self.mount(normalized, ResourceKind::Other);
             return;
@@ -350,14 +380,20 @@ impl<'a> ResourceCollector<'a> {
         )));
     }
 
-    /// The mounted files (sorted by path) and the diagnostics noted.
-    pub fn finish(self) -> (Vec<RequestFile>, Vec<DiagnosticMessage>) {
-        let refs = self
-            .mounted
-            .into_iter()
-            .map(|(path, bytes)| RequestFile { path, bytes })
-            .collect();
-        (refs, self.diagnostics)
+    /// The mounted `resource_refs` (sorted by path), the built-in extension
+    /// files that belong in the request's `files` (sorted by path), and the
+    /// diagnostics noted.
+    pub fn finish(self) -> (Vec<RequestFile>, Vec<RequestFile>, Vec<DiagnosticMessage>) {
+        let to_files = |m: BTreeMap<String, Vec<u8>>| -> Vec<RequestFile> {
+            m.into_iter()
+                .map(|(path, bytes)| RequestFile { path, bytes })
+                .collect()
+        };
+        (
+            to_files(self.mounted),
+            to_files(self.extension_files),
+            self.diagnostics,
+        )
     }
 }
 

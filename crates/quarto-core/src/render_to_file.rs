@@ -1251,6 +1251,7 @@ Content.
             &mut ctx,
             runtime.clone(),
             crate::transform::TransformPhase::Navigation,
+            crate::pipeline::PartialKind::Native,
         ))
         .unwrap();
         let mut held = crate::pipeline::BookChapterPauseState::extract_from(&mut ctx);
