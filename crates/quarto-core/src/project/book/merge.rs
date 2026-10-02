@@ -215,6 +215,29 @@ fn build_divider_heading(title: &str) -> Block {
     })
 }
 
+/// A chapter's front-matter `title:` as a level-1 heading, or `None` when
+/// the chapter has no (non-empty) title. Port of Q1's
+/// `resolveTitleMarkdown`: the title becomes the chapter heading, while
+/// the body (including its own first heading) follows unchanged. Chapter
+/// numbering is not baked in here — the stamped `quarto-book-item-*`
+/// attributes drive it downstream, as for any other chapter heading.
+fn build_chapter_title_heading(meta: &ConfigValue) -> Option<Block> {
+    let title = meta.get("title")?;
+    if is_falsy(title) {
+        return None;
+    }
+    if let quarto_pandoc_types::ConfigValueKind::PandocInlines(inlines) = &title.value {
+        return Some(Block::Header(Header {
+            level: 1,
+            attr: quarto_pandoc_types::empty_attr(),
+            content: inlines.clone(),
+            source_info: generated_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+        }));
+    }
+    title.as_plain_text().map(|t| build_divider_heading(&t))
+}
+
 /// A part item (with or without an `href`) or the appendix divider wraps
 /// its content in a `.quarto-book-part` div — Q1's own
 /// `::: {.quarto-book-part}\n...\n:::` — while an appendix *chapter*
@@ -286,6 +309,9 @@ pub fn merge_book_chapters(
         let mut content: Blocks = vec![inline_marker, block_marker];
         if item.file.is_some() {
             let mut body = pandoc.blocks;
+            if let Some(heading) = build_chapter_title_heading(&pandoc.meta) {
+                body.insert(0, heading);
+            }
             stamp_headers(&mut body, &attrs);
             content.extend(body);
         } else {
@@ -922,5 +948,44 @@ mod tests {
             ],
             "merged H1 order must equal the BookRenderItem order exactly"
         );
+    }
+
+    #[test]
+    fn front_matter_title_becomes_chapter_heading() {
+        let item =
+            |f: &str, n| chapter_item(BookRenderItemKind::Chapter, 0, None, Some(f), Some(n));
+        let mut titled = parse_chapter("# Heading Y\n");
+        titled.meta = map(vec![("title", s("Meta Title"))]);
+        let mut title_only = parse_chapter("Body.\n");
+        title_only.meta = map(vec![("title", s("Title Only"))]);
+        let untitled = parse_chapter("# Own Heading\n");
+
+        let merged = merge_book_chapters(
+            vec![
+                (item("a.qmd", 1), titled),
+                (item("b.qmd", 2), title_only),
+                (item("c.qmd", 3), untitled),
+            ],
+            empty_meta(),
+            None,
+        );
+        let headings: Vec<(String, Option<String>)> = merged
+            .blocks
+            .iter()
+            .filter_map(|b| match b {
+                Block::Header(h) => Some((
+                    inlines_plain_text(&h.content),
+                    h.attr.2.get("quarto-book-item-number").cloned(),
+                )),
+                _ => None,
+            })
+            .collect();
+        let texts: Vec<&str> = headings.iter().map(|(t, _)| t.as_str()).collect();
+        assert_eq!(
+            texts,
+            ["Meta Title", "Heading Y", "Title Only", "Own Heading"]
+        );
+        assert_eq!(headings[0].1.as_deref(), Some("1"));
+        assert_eq!(headings[2].1.as_deref(), Some("2"));
     }
 }
