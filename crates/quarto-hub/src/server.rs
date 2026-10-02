@@ -105,6 +105,11 @@ struct UpdateDocumentRequest {
 ///
 /// The issuer URL and image domains are validated at [`auth::AuthConfig`]
 /// construction time, so this function cannot fail from invalid config.
+/// The Typst package registry. The in-browser PDF compiler downloads `@preview`
+/// package tarballs from it (`resources/typst-wasm.json`, `package_registry`); it
+/// is the only origin besides the hub and the OIDC issuer that `connect-src` allows.
+const TYPST_PACKAGE_REGISTRY: &str = "https://packages.typst.org";
+
 fn build_csp(config: &auth::AuthConfig) -> String {
     let issuer_origin = config.issuer_origin();
 
@@ -121,7 +126,7 @@ fn build_csp(config: &auth::AuthConfig) -> String {
          style-src 'self' 'unsafe-inline'; \
          font-src 'self'; \
          img-src 'self' data: {img_src}; \
-         connect-src 'self' {issuer_origin}; \
+         connect-src 'self' {issuer_origin} {TYPST_PACKAGE_REGISTRY}; \
          frame-src {issuer_origin}"
     )
 }
@@ -2554,6 +2559,19 @@ mod tests {
             !has_bare_ws,
             "connect-src must not allow arbitrary WebSocket hosts"
         );
+    }
+
+    #[test]
+    fn csp_allows_only_the_typst_package_registry_beyond_self_and_issuer() {
+        let config = google_auth_config();
+        let csp = build_csp(&config);
+        let connect_src = csp.split(';').find(|d| d.contains("connect-src")).unwrap();
+        let hosts: Vec<&str> = connect_src
+            .split_whitespace()
+            .skip(1)
+            .filter(|t| *t != "'self'" && *t != config.issuer_origin())
+            .collect();
+        assert_eq!(hosts, vec!["https://packages.typst.org"]);
     }
 
     #[test]

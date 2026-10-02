@@ -182,3 +182,25 @@ passing, remove the `continue-on-error`/`if:` guards so WebKit gates.
 Minimum versions the loader's message names: Chrome/Edge 137, Firefox 131, Safari 18.4 (MDN
 exnref data). Bumping `PANDOC_PIN` means re-running the probe in each browser (upstream is
 still changing its exception-handling encoding, design D4).
+
+## Typst worker (H7)
+
+`ts-packages/typst-host` is the compiler core (`TypstSession`: fonts, vendored and fetched packages, PDF export, the
+`createHandler` message protocol) and `hub-client/src/typst/` is its browser side: `typstAssets` (lazy loaders for the
+wasm and the fonts bundle, same pattern as pandoc's), `TypstRunner` (one short-lived worker per compile, wall
+timeout, abort), `typst.worker.ts`, `typstPackageCache` and `typstAssetSplit` (splits the Rust `get_typst_assets()` export into
+vendored packages and fonts). The assets come from `resources/typst-wasm.json` through `scripts/fetch-pandoc-wasm.mjs`
+(`.cache/typst-assets/`, served from `public/typst/`, outside `assets/` so the service worker's `wasm-cache` is untouched).
+
+Things that bite:
+- The typst.ts wasm caches a failed package resolution for the life of the compiler instance, so the not-found retry builds a fresh compiler.
+- Tarball caching goes through the main thread (`cache-get` / `cache-put` messages): WebKit loses Cache API writes from a worker that is terminated soon after.
+- Vite needs `worker.rollupOptions.output.inlineDynamicImports` (typst.ts imports its wrapper dynamically).
+- Pass `{module_or_path}` to `getModule`; a bare `Module` logs a deprecation warning.
+- A server that adds `Content-Encoding` to `*.gz` hands the loader decoded bytes; `isRaw` and `looksLikeFontBundle` handle it.
+- The registry callback is synchronous, so packages are prefetched; tarballs are pinned by exact version in the import spec only (the registry publishes no hashes). The CSP allows `connect-src https://packages.typst.org`.
+- Tests: `npm test -w ts-packages/typst-host` (the real wasm; needs `.cache/typst-assets/fonts.bin`, from `node scripts/fetch-pandoc-wasm.mjs --require`), `hub-client/src/typst/*.test.ts`, and `e2e/typst-worker.harness.spec.ts` (Chromium and WebKit; the webkit project's `testMatch` is `{pandoc,typst}-*`).
+
+Measured (evidence §14): the first-use download is 34,441,544 gzip bytes (32.85 MiB) against the 40 MiB budget (pandoc 16.65 MB,
+typst wasm 11.07 MB, fonts 5.86 MB, the vendored export 0.86 MB). `e2e/typst-measure.harness.spec.ts` (opt-in, `Q2_MEASURE=1`) records latency and process RSS with typst, pandoc and
+the Rust wasm resident; a compile adds about 40-50 MB on top of the other two.

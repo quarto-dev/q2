@@ -11,6 +11,8 @@ export default mergeConfig(
       alias: {
         '@quarto/quarto-automerge-schema': path.resolve(__dirname, '../ts-packages/quarto-automerge-schema/src/index.ts'),
         '@quarto/pandoc-host': path.resolve(__dirname, '../ts-packages/pandoc-host/src/index.ts'),
+        // A directory alias, so `@quarto/typst-host/fontBundle` resolves too (the main thread imports only that).
+        '@quarto/typst-host': path.resolve(__dirname, '../ts-packages/typst-host/src'),
         '@quarto/quarto-sync-client': path.resolve(__dirname, '../ts-packages/quarto-sync-client/src/index.ts'),
         // Sub-path aware: preview-renderer exposes types/* and utils/*,
         // preview-runtime exposes userGrammar/* and test-utils/*.

@@ -605,6 +605,32 @@ pub fn run(config: &VerifyConfig) -> Result<()> {
                 "pandoc-host tests failed",
             )?;
         }
+        // @quarto/typst-host (typst compiler core, host phase H7). Its tests run the real typst.ts
+        // wasm from node_modules and need the default fonts the fetch script caches.
+        let typst_host_dir = project_root.join("ts-packages/typst-host");
+        if typst_host_dir.join("package.json").is_file() {
+            run_command(
+                "node",
+                &["scripts/fetch-pandoc-wasm.mjs", "--require"],
+                &project_root,
+                None,
+                "fetching the typst assets failed",
+            )?;
+            run_command(
+                "npm",
+                &["run", "typecheck:tests"],
+                &typst_host_dir,
+                None,
+                "typst-host test typecheck failed",
+            )?;
+            run_command(
+                "npm",
+                &["test"],
+                &typst_host_dir,
+                None,
+                "typst-host tests failed",
+            )?;
+        }
         println!("✓ Shared package tests complete");
     } else if !have_shared_packages {
         println!(

@@ -41,6 +41,8 @@ export default mergeConfig(
         // the longest prefix).
         '/src': path.resolve(__dirname, 'src'),
         '@quarto/pandoc-host': path.resolve(__dirname, '../ts-packages/pandoc-host/src/index.ts'),
+        // A directory alias, so `@quarto/typst-host/fontBundle` resolves too (the main thread imports only that).
+        '@quarto/typst-host': path.resolve(__dirname, '../ts-packages/typst-host/src'),
         '@quarto/preview-renderer': path.resolve(__dirname, '../ts-packages/preview-renderer/src'),
         '@quarto/preview-runtime': path.resolve(__dirname, '../ts-packages/preview-runtime/src'),
         '@quarto/quarto-automerge-schema': path.resolve(__dirname, '../ts-packages/quarto-automerge-schema/src/index.ts'),

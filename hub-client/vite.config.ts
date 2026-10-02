@@ -234,6 +234,12 @@ export default defineConfig({
       }
     })
   ],
+  worker: {
+    // typst.ts (typst.worker.ts) imports its wasm wrapper dynamically, and the default IIFE worker
+    // format cannot code-split, so the chunk is inlined into the worker bundle. The compiler wasm
+    // itself is not bundled: the worker is handed a compiled Module (src/typst/typstAssets.ts).
+    rollupOptions: { output: { inlineDynamicImports: true } },
+  },
   define: {
     __GIT_COMMIT_HASH__: JSON.stringify(gitInfo.commitHash),
     __GIT_COMMIT_DATE__: JSON.stringify(gitInfo.commitDate),

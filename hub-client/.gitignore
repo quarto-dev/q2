@@ -37,3 +37,5 @@ e2e/**/*-snapshots/
 
 # Served pandoc.wasm asset, fetched by scripts/fetch-pandoc-wasm.mjs
 public/pandoc/
+# Served typst.ts wasm and default fonts, same script
+public/typst/
