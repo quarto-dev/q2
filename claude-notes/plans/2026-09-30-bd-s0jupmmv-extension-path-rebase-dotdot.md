@@ -133,7 +133,7 @@ bd-oejuizi9 / bd-hjv5o).
 
 ---
 
-## Follow-up design: drop the key-based space split (bd-gh3qdq7d) — IMPLEMENTED in 0e4c834c8 (smoke guard pending)
+## Follow-up design: drop the key-based space split (bd-gh3qdq7d) — implemented in `0e4c834c8`; smoke passed at `abc6f0f91`
 
 Evidence: research doc § 3. Summary: at the walk, `theme` and `css` are both
 filesystem-space. css becomes a URL only when `FormatCssTransform` *derives* an href
@@ -228,6 +228,7 @@ consistency change with contract tests, not a TDD bug fix.
 - [x] orange-book-margin smoke guard on Windows at `abc6f0f91` (2026-10-01):
   `SMOKE_FILTER=orange-book-margin cargo nextest run -p quarto -E 'test(smoke_all)'`
   → 1 passed (`smoke_all::smoke_all`, 6.4 s)
+- [x] Re-run the orange-book smoke and focused path-rebase tests on current stack HEAD `ebdfe08ac`. Chris reports the focused path-rebase and JSON path tests, orange-book smoke, CLI probe, and `cargo xtask verify` passed on 2026-10-02. Closed bd-qi11c7fj and bd-gh3qdq7d after this verification.
 - [x] PR #760 body updated for the extension-path changes (2026-10-01)
 - [ ] Confirm the 33 pre-existing quarto-core failures are already tracked (braid,
   bd-eehxwr29 for CRLF); file strands for any that are not

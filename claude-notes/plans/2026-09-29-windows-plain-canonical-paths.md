@@ -109,10 +109,17 @@ Layer 3 (`bugfix/bd-1klbq2zd-dunce-seam`):
 - [x] Whole-stack review 2967 (`e8379cf..7976e7c`): two Low, both valid, fixed in `b5a6919b` (+ `2efac912` for follow-up 2973). The plain-spelling guard test became vacuous after the switch (its `canonical()` helper is std, so verbatim, while q2's input is now plain); renamed `output_via_other_windows_spelling_of_input_refuses_and_preserves_source`, alias = verbatim spelling of `quarto_system_runtime::canonicalize`, plain-TEMP precondition. Mutation check: with `same_file()` removed from the guard it fails, restored 6/6 pass. `canonical.rs` short-path precondition now checks the plain form, not the TEMP spelling. roborev clean (2975 pass, nothing open)
 
 Ship:
-- [ ] Rebase the stack onto `origin/main` (113 commits behind at `d2a5003c`; #743 alone merges clean, layers 2/3 conflict). `gh stack rebase`, then force-push #743 only on go-ahead. Conflict: `crates/quarto-test/src/runner.rs`, where main's `94f72b87` added a project-render cache. Resolve by keeping main's code and routing `:186` (layer 2's site) plus the cache's new std `.canonicalize()` at main's `:516`/`:525` through `quarto_system_runtime::canonicalize` in layer 2: the cache keys come from those, lookups from `:186`, so after the switch they would miss on Windows. No other new `canonicalize` on main in crates linked into `q2` (only `xtask`). Then `cargo nextest run -p quarto-test -p quarto` vs baseline, and roborev clean
-- [ ] Ask before pushing; `gh stack submit --auto` (drafts) after review; PR text via `/open-pr`. Decided 2026-09-30: layer 2 is not pushed alone; layer 3 is built first and the whole stack is submitted together, so the stack top is green on Windows and layer 2 is reviewed next to the switch that motivates it
+- [x] Rebase the stack onto `origin/main`. Resolved `crates/quarto-test/src/runner.rs` by keeping main's project-render cache and routing its canonicalized cache keys through `quarto_system_runtime::canonicalize` in layer 2. Completed before stack submission; `gh stack view --json` reports no layer needs a rebase.
+- [x] Submit the full stack after review; do not push layer 2 alone. `gh stack view --json` reports PRs #743, #759, and #760 open. Draft/review/CI state still needs checking on GitHub.
 - [ ] Mark #743 ready; merge bottom-up with merge commits on go-ahead; close bd-clq56rem, then bd-1klbq2zd
 - [x] File a strand for the relative `--output` failure (bd-xdlbrc7m)
+
+## Status update (2026-10-02)
+
+- Current top: `bugfix/bd-1klbq2zd-dunce-seam` at `ebdfe08ac`.
+- Stack metadata reports #743, #759, and #760 open, with no rebase needed.
+- Chris reports that the focused path-rebase and JSON path tests, orange-book smoke, CLI probe, and `cargo xtask verify` all passed at `ebdfe08ac` on 2026-10-02.
+- Linux/macOS CI and final merge remain outstanding.
 
 ## Baselines (Windows, unchanged layer tip `b83c5cf6`)
 
