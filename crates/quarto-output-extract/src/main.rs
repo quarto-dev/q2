@@ -3,6 +3,7 @@
 //! ```text
 //! quarto-output-extract extract <file>        print the normalized extraction
 //! quarto-output-extract compare <a> <b>       exit 0 if equal after normalization, 1 if not
+//! quarto-output-extract fixtures              print the golden fixture manifest as JSON
 //! ```
 //!
 //! Formats, chosen by extension: `.docx` and `.pptx` (semantic extraction: text,
@@ -54,7 +55,11 @@ fn main() -> ExitCode {
             }
             (Err(e), _) | (_, Err(e)) => fail(&e),
         },
-        _ => fail("usage: quarto-output-extract extract <file> | compare <a> <b>"),
+        ["fixtures"] => {
+            print!("{}", quarto_output_extract::fixtures_json());
+            ExitCode::SUCCESS
+        }
+        _ => fail("usage: quarto-output-extract extract <file> | compare <a> <b> | fixtures"),
     }
 }
 

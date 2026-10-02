@@ -177,3 +177,47 @@ Open questions settled:
 
 Not run: hang injection, a machine with less memory.
 
+
+## 12. H3 parity net and browser measurements (2026-10-02, host phase H3)
+
+Setup: the real chain (Rust `render_pandoc_request` in the built `wasm-quarto-hub-client`, share tree from Rust, `PandocRunner`, worker, pandoc.wasm 3.11) driven by the dev harness (`hub-client/src/pandoc/devHarness.ts`) in the `VITE_E2E=1` production bundle served by `vite preview` on localhost; Playwright 1.60 Chromium 148.0.7778.96 and WebKit 26.4, one Mac, other work running. The script is `hub-client/e2e/pandoc-measure.harness.spec.ts` (opt-in, `Q2_MEASURE=1`); raw JSON is not committed. Single runs on a shared machine: read the numbers as magnitudes. Localhost removes network time, so the download is arithmetic: the asset is 16,652,658 bytes, i.e. 13.3 s at 10 Mbit/s, 2.7 s at 50, 1.3 s at 100.
+
+**Parity net.** The ten P7 docx fixtures render equal to their Q1 goldens (the `.snap` extraction text) in Node (`goldenParity.wasm.test.ts`) and in Chromium (`pandoc-parity.harness.spec.ts`, saved through Playwright's `download` event, the suggested file name checked). The one accepted-divergent fixture (mermaid) is compared with native q2's output instead (`pandoc-goldens/parity/`): wasm equals native there too. A changed reference makes the test fail (mutation-checked).
+
+**Load and render latency** (callouts.qmd to docx, 252 share-tree files, 1.34 MB):
+
+| | Chromium | WebKit |
+|---|---:|---:|
+| first click, empty cache (localhost): runner total | 640 ms | 969 ms |
+| of which: download / unpack + SHA-256 / compile | ~97 / ~83 / ~130 ms | ~71 / ~44 / ~162 ms |
+| cached copy, module not resident (reload): runner total | 472 ms | not measurable (see below) |
+| module resident, fresh instance (median of 6) | 165 ms | 299 ms |
+| of which: instantiate / run | 22 / 138 ms | 123 / 165 ms |
+| Rust request build, warm (the first click is ~50 ms) | 4 ms | 7 ms |
+| mount ~252 files into a fresh instance (`mountMs`) | 1 ms | 1 ms |
+| filter chain: one-paragraph docx `runMs` vs trivial-filter `runMs` | 80 vs 10 ms | 96 vs 69 ms |
+| pandoc linear memory after a callouts docx | 51.2 MB | 51.2 MB |
+
+So the Node baseline (0.3-0.5 s per render, ~250-300 ms of it Lua) is beaten: Lua/filter startup is ~70 ms in Chromium (H0: ~70 ms) and ~27 ms over a slower base in WebKit; mounting the share tree is not a cost (D2a holds). The first run after a load is slower than a warm one (run ~285 ms vs 138 ms in Chromium). With the asset cached the click-to-docx time is under half a second in Chromium; the first ever click adds the download (16.7 MB).
+
+**WebKit and the Cache API.** Under Playwright, WebKit's Cache API entry is gone after a navigation to the same origin, before any of our code runs (a probe listed the cache empty and `usage` 59 MB), so every reload re-downloads. This is the automation context's ephemeral storage, not the loader (the entry was present after the first load and the same code caches in Chromium); real Safari (persistent storage, ITP's 7-day cap on script-writable storage) needs the by-hand WebKit check, which belongs with the other manual browser checks.
+
+**Image-heavy documents** (12 x 24 MB, 10 x 10 MB and 4 x 5 MB PNGs of incompressible noise, one document each; process memory is the summed RSS of the Playwright browser processes, sampled every 100 ms, growth measured from after the images were seeded into the page's VFS and garbage-collected):
+
+| Images (total) | docx | pandoc linear memory | run | Chromium RSS growth | WebKit RSS growth |
+|---|---:|---:|---:|---:|---:|
+| 4 x 5 MB (21 MB) | 21 MB | 92 MB | 0.67 s / 0.77 s | +0.43 GB | +0.14 GB |
+| 10 x 10 MB (105 MB) | 105 MB | 213 MB | 2.6 s / 2.6 s | +1.46 GB | +1.15 GB |
+| 12 x 24 MB (302 MB, at the 300 MB total limit) | 302 MB | 853 MB | 8.1 s / 6.8 s | **+5.1 GB** | **+3.2 GB** |
+
+(Runner totals 0.95/1.3 s, 2.8/3.1 s, 8.4/7.3 s, Chromium/WebKit; the request build is 0.07-0.9 s of it.) Pandoc's own memory is ~2.8x the payload and is the small part; the browser process grows 11-17x the payload, from the copies the chain makes (VFS in the Rust wasm, the request's `Uint8Array` copies, the worker's tree, the output file, the transferred result) plus the heap those leave behind. The WebKit baseline in these runs was inflated by earlier steps (RSS 5-6 GB before the render), so only its growth is meaningful.
+
+**Limits against the numbers (a miss goes to a human, not a silent change).**
+- 120 s wall timeout: the largest legal job takes 8.4 s, 14x headroom; even at 5x slower hardware it fits. No change proposed.
+- Image limit 25 MB each: a 24 MB image renders. Fine.
+- **Total mounted bytes 300 MB: a miss on memory, not on time.** It renders, but a job at the limit grows the browser process by 3-5 GB, so a device with 4 GB of RAM would lose the tab long before the host's limit rejects the job. Decision needed from a human; the candidates: lower `limits.total_bytes` (the number is shared with Rust, R1/R2, so it is a constants-file change plus the mirrored tests; ~100 MB would cost +1.1-1.5 GB), or keep it and treat large-image documents as desktop-only. Nothing was changed.
+- **Decompression-ratio guard: set to 8x** (`MAX_DECOMPRESSION_RATIO` in `pandocLoader.ts`), from the measured 3.55x (59,163,604 B from 16,652,658 B). The loader reads the gunzipped stream with a cap and cancels it past 8x the compressed size, so a gzip bomb or a wrong file is rejected before it is buffered whole, uncompiled and uncached.
+
+**Memory budget.** Loading pandoc for the first time (Chromium, one small docx, including initialising the hub's own Rust wasm if the page had not yet): process RSS 448 MB before, 1.02 GB at the peak (+0.57 GB: download buffers, 59 MB wasm, SHA, compile, the worker's 51 MB instance); WebKit 640 MB to 2.03 GB (+1.4 GB). The resident `Module` is dropped after 5 minutes idle. Budget to state in the UI copy and to design H5/H6 around: **~0.6 GB (Chromium) to ~1.4 GB (WebKit) transient for a first download, then ~50 MB per live render plus ~11-17x the size of the images in the document.** The epic's earlier "~+340 MB page RSS once pandoc loads" (reactor mode) is below these; the measured numbers replace it.
+
+**Not measured.** Firefox (manual; `spike/ff/`). The typst, pptx and epub recordings through the harness wait for R4/R5 (the plan's own condition). `performance.measureUserAgentSpecificMemory` needs cross-origin isolation, which the app does not have, so RSS is the memory measure.

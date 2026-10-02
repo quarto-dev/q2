@@ -20,6 +20,14 @@ export const DEFAULT_ASSET_PATH = 'pandoc/pandoc.wasm.gz';
 
 export const DEFAULT_CACHE_NAME = 'q2-pandoc-wasm-v1';
 
+/**
+ * A response that gunzips to more than this many times its compressed size is rejected
+ * before it is buffered whole (a gzip bomb, or a server answering with the wrong file).
+ * The pinned asset expands 3.55x (59.2 MB from 16.7 MB; H3 measurement), so this leaves
+ * room for a future pandoc that compresses worse while stopping gzip's ~1000x worst case.
+ */
+export const MAX_DECOMPRESSION_RATIO = 8;
+
 /** The resident `Module` is dropped after this long with no load or render active. */
 export const DEFAULT_IDLE_MS = 5 * 60 * 1000;
 
@@ -119,6 +127,24 @@ const hex = (buf: ArrayBuffer): string => Array.from(new Uint8Array(buf), (b) =>
 
 const isGzip = (b: Uint8Array) => b.length >= 2 && b[0] === 0x1f && b[1] === 0x8b;
 const isWasm = (b: Uint8Array) => b.length >= 4 && b[0] === 0 && b[1] === 0x61 && b[2] === 0x73 && b[3] === 0x6d;
+
+/** Read a stream whole, or cancel it and return null once it passes `cap` bytes. */
+async function readCapped(stream: ReadableStream<Uint8Array>, cap: number): Promise<Uint8Array | null> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.length;
+    if (total > cap) {
+      await reader.cancel().catch(() => undefined);
+      return null;
+    }
+    chunks.push(value);
+  }
+  return concat(chunks, total);
+}
 
 const concat = (chunks: Uint8Array[], total: number): Uint8Array => {
   const out = new Uint8Array(total);
@@ -410,8 +436,16 @@ export class PandocLoader {
       try {
         const DS = this.env.DecompressionStream as typeof DecompressionStream;
         const stream = new Blob([stored as BlobPart]).stream().pipeThrough(new DS('gzip'));
-        wasm = new Uint8Array(await new Response(stream).arrayBuffer());
+        const capped = await readCapped(stream, stored.length * MAX_DECOMPRESSION_RATIO);
+        if (!capped)
+          throw new PandocLoadError(
+            'fetch-failed',
+            `The pandoc download from ${url} (${stored.length} bytes) expands to more than ${MAX_DECOMPRESSION_RATIO} times its size, which a real pandoc build does not; a proxy or server may have replaced it.`,
+            { url, bytes: stored.length },
+          );
+        wasm = capped;
       } catch (e) {
+        if (e instanceof PandocLoadError) throw e;
         throw new PandocLoadError('fetch-failed', `The pandoc download from ${url} (${stored.length} bytes) is corrupt: it could not be decompressed.`, { url, bytes: stored.length, cause: e });
       }
     } else if (isWasm(stored)) wasm = stored;

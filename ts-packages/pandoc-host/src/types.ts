@@ -99,6 +99,8 @@ export type FailureKind =
   | 'no-output';
 
 export interface RunStats {
+  /** Building the in-memory file tree from the share tree, `files` and `resource_refs`. */
+  mountMs: number;
   instanceMs: number;
   runMs: number;
   /** Linear memory size after the run. */

@@ -11,7 +11,7 @@
 
 ### Tasks
 - [ ] **Cross-browser matrix in CI.** WebKit is commented out of `playwright.config.ts:74` and not installed in CI (`hub-client-e2e.yml:169`), and exnref on Playwright's Linux WebKit is unverified (the spike covered macOS WebKit 26.4 only), so start with a probe step. The pandoc specs run under `playwright.harness.config.ts` (a chromium-only project list), so add a webkit project there (`testMatch: pandoc-*`, one worker) rather than enabling the commented block in `playwright.config.ts`; Chromium as today; Firefox stays manual (CI Firefox is braid `bd-phu943t7`), with a documented list of verified browser versions.
-- [ ] **Large-document and image-heavy memory test** against the budget H3 set (metric: wasm `memory.buffer.byteLength` in every browser, plus a CDP heap reading on Chromium only; `measureUserAgentSpecificMemory` needs cross-origin isolation); a recycle policy if needed.
+- [ ] **Large-document and image-heavy memory test** against the budget H3 set (evidence §12: ~0.6-1.4 GB transient for the first load, then ~50 MB per render plus 11-17x the image payload; H3 left the 300 MB `total_bytes` limit as a human decision) (metric: wasm `memory.buffer.byteLength` in every browser, plus a CDP heap reading on Chromium only; `measureUserAgentSpecificMemory` needs cross-origin isolation); a recycle policy if needed.
 - [ ] **Failure-taxonomy audit:** H2 builds the loader/worker classes with their tests; this audit confirms every class in the design has its diagnostic, UI state and test and adds the missing ones.
 - [ ] **Time-boxed spike** (output: yes/no plus a latency number) on D2(b) (warm instance + Lua preamble), only if repeat latency is a problem or the PDF incremental spike (H9) needs it.
 

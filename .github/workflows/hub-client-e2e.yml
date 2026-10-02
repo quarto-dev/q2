@@ -208,6 +208,16 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright_version.outputs.version }}-${{ matrix.browser }}
 
+      # The pandoc.wasm parity net (hub-client/e2e/pandoc-parity.harness.spec.ts, host
+      # phase H3) runs in "Run harness tests" below: it renders the P7 docx golden
+      # fixtures through the Rust request and pandoc.wasm in Chromium and compares them
+      # with the Q1 goldens through R0's extractor CLI, which is Rust-only. Its Node twin
+      # (src/pandoc/goldenParity.wasm.test.ts) runs in ts-test-suite.yml's test:ci.
+      # Both run on every PR rather than behind `paths:` filters: the wasm build they
+      # need is already in these jobs, so a filter would only add a way to miss a change.
+      - name: Build quarto-output-extract
+        run: cargo build -p quarto-output-extract
+
       - name: Install Playwright
         run: |
           cd hub-client
