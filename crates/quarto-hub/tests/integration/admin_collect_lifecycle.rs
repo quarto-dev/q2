@@ -103,7 +103,7 @@ async fn scan_store(hub_dir: &Path) -> quarto_hub::admin::manifest::ScanManifest
     scan(
         &storage,
         &ids,
-        &quarto_system_runtime::canonicalize(&hub_dir)
+        &quarto_system_runtime::canonicalize(hub_dir)
             .unwrap()
             .to_string_lossy(),
         &ScanOptions::default(),
