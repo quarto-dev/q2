@@ -6,8 +6,9 @@ import compression from 'compression'
 import { VitePWA } from 'vite-plugin-pwa'
 import basicSsl from '@vitejs/plugin-basic-ssl'
 import path from 'path'
-import { readFileSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { execSync } from 'child_process'
+import { resolvePandocFlag } from './src/pandoc/buildFlag.ts'
 
 function getGitInfo() {
   try {
@@ -76,6 +77,17 @@ const isE2E = process.env.VITE_E2E === '1';
  * resolves to a no-op stub in these builds.
  */
 const disablePwa = process.env.VITE_DISABLE_PWA === '1';
+
+/**
+ * pandoc.wasm feature flag (H4): off when the asset was not fetched or
+ * `VITE_PANDOC_WASM=0` (the preview embed). Evaluated once per config load,
+ * so `vite dev` needs a restart after fetching the asset.
+ */
+const pandocFlag = resolvePandocFlag({
+  env: process.env,
+  assetExists: existsSync(path.resolve(__dirname, 'public/pandoc/pandoc.wasm.gz')),
+});
+if (pandocFlag.warning) console.warn(`[pandoc] ${pandocFlag.warning}`);
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -226,6 +238,7 @@ export default defineConfig({
     __GIT_COMMIT_HASH__: JSON.stringify(gitInfo.commitHash),
     __GIT_COMMIT_DATE__: JSON.stringify(gitInfo.commitDate),
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+    __PANDOC_WASM_ENABLED__: JSON.stringify(pandocFlag.enabled),
   },
   resolve: {
     // Prefer 'source' condition for workspace packages - allows Vite to transpile

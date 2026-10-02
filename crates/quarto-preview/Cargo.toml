@@ -47,6 +47,9 @@ tokio-stream = { version = "0.1", features = ["sync"] }
 mime_guess = "2"
 percent-encoding = "2"
 
+# `POST /api/preview/render` renders into a scratch directory (H4b).
+tempfile = "3"
+
 [build-dependencies]
 # Writes the editor embed's spa-manifest.json over the post-dedupe,
 # post-resolution file view (live-share plan Phase 2, design decision
@@ -57,7 +60,8 @@ tar.workspace = true
 zstd.workspace = true
 
 [dev-dependencies]
-tempfile = "3"
+# Reads the docx back in the `render_download` tests.
+zip.workspace = true
 tower = "0.5"
 http-body-util = "0.1"
 http = "1"

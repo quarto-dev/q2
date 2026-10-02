@@ -132,6 +132,13 @@ pub struct RenderToFileOptions {
     /// and behaves exactly as before. Set per-chapter by the book
     /// orchestration via the renderer's `chapter_seeds` map.
     pub chapter_seed: Option<crate::render::ChapterSeed>,
+
+    /// Render these bytes as the document's source instead of reading
+    /// `input_path` (pandoc-wasm H4b: the preview server renders the
+    /// editor's current text, which can be ahead of the disk copy). The
+    /// path still anchors project discovery and relative resources, and
+    /// nothing is written back. `None` (the default) reads the file.
+    pub source_override: Option<Vec<u8>>,
 }
 
 /// Result of rendering a document to a file.
@@ -253,13 +260,16 @@ pub fn render_document_to_file(
     let input_path = canonical_input.as_deref().unwrap_or(input_path);
 
     // Read input file
-    let input_bytes = runtime.file_read(input_path).map_err(|e| {
-        QuartoError::other(format!(
-            "Failed to read input file {}: {}",
-            input_path.display(),
-            e
-        ))
-    })?;
+    let input_bytes = match options.source_override.clone() {
+        Some(bytes) => bytes,
+        None => runtime.file_read(input_path).map_err(|e| {
+            QuartoError::other(format!(
+                "Failed to read input file {}: {}",
+                input_path.display(),
+                e
+            ))
+        })?,
+    };
 
     // Use provided project or discover
     let discovered_project;

@@ -971,6 +971,7 @@ pub fn render_once(
         // exercised end-to-end by Phase 0 test #9b).
         attribution: args.attribution,
         chapter_seed: None,
+        source_override: None,
     };
 
     match target {
