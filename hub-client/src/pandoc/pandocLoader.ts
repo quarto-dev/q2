@@ -41,6 +41,8 @@ export const EXNREF_PROBE = new Uint8Array([
 ]);
 
 export type LoadErrorCode =
+  /** `WebAssembly` itself is missing (iOS Lockdown Mode, a browser policy). */
+  | 'no-wasm'
   /** exnref exception handling is unavailable (D4). */
   | 'no-exnref'
   | 'no-decompression'
@@ -72,6 +74,8 @@ export interface LoaderEnv {
   caches: CacheStorage | undefined;
   DecompressionStream: typeof DecompressionStream | undefined;
   subtle: SubtleCrypto | undefined;
+  /** False when the `WebAssembly` global does not exist at all. */
+  hasWebAssembly: boolean;
   validate: (bytes: BufferSource) => boolean;
   compile: (bytes: BufferSource) => Promise<WebAssembly.Module>;
   baseURI: string;
@@ -87,6 +91,7 @@ export function browserEnv(): LoaderEnv {
     caches: typeof caches === 'undefined' ? undefined : caches,
     DecompressionStream: typeof DecompressionStream === 'undefined' ? undefined : DecompressionStream,
     subtle: typeof crypto === 'undefined' ? undefined : crypto.subtle,
+    hasWebAssembly: typeof WebAssembly !== 'undefined',
     validate: (b) => WebAssembly.validate(b),
     compile: (b) => WebAssembly.compile(b),
     baseURI: typeof document === 'undefined' ? 'http://localhost/' : document.baseURI,
@@ -320,6 +325,11 @@ export class PandocLoader {
 
   private checkFeatures() {
     const { env } = this;
+    if (!env.hasWebAssembly)
+      throw new PandocLoadError(
+        'no-wasm',
+        `This browser has WebAssembly turned off (iOS Lockdown Mode or a browser policy can do this), so pandoc cannot run. Use ${MIN_BROWSERS} or newer with WebAssembly enabled.`,
+      );
     if (!env.validate(EXNREF_PROBE))
       throw new PandocLoadError(
         'no-exnref',

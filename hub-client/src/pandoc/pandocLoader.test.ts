@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FakeCache, fakeStorage } from '../test-utils/fakeCache';
-import { MAX_DECOMPRESSION_RATIO, MIN_BROWSERS, PandocLoadError, PandocLoader, type LoaderEnv } from './pandocLoader';
+import { MAX_DECOMPRESSION_RATIO, MIN_BROWSERS, browserEnv, PandocLoadError, PandocLoader, type LoaderEnv } from './pandocLoader';
 
 const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
 const wasmBytes = (tag: string) => new Uint8Array([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0, ...new TextEncoder().encode(tag)]);
@@ -20,6 +20,7 @@ function harness(over: Partial<LoaderEnv> = {}, config: { idleMs?: number } = {}
   const env: Partial<LoaderEnv> = {
     fetch: fetchMock as unknown as typeof fetch,
     caches: fakeStorage(cache),
+    hasWebAssembly: true,
     validate: () => true,
     compile,
     baseURI: BASE,
@@ -206,6 +207,21 @@ describe('PandocLoader: storage persistence', () => {
 });
 
 describe('PandocLoader: feature detection', () => {
+  it('WebAssembly missing altogether (Lockdown Mode, policy): its own message, not a download failure', async () => {
+    const { loader, fetchMock } = harness({ hasWebAssembly: false, validate: () => false });
+    await expect(loader.load(WASM_SHA)).rejects.toMatchObject({ code: 'no-wasm', message: expect.stringContaining('WebAssembly turned off') });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('the real environment reports a missing WebAssembly global instead of throwing', () => {
+    vi.stubGlobal('WebAssembly', undefined);
+    try {
+      expect(browserEnv().hasWebAssembly).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('exnref unavailable: friendly message naming browser versions, nothing downloaded', async () => {
     const { loader, fetchMock } = harness({ validate: () => false });
     const err = await loader.load(WASM_SHA).catch((e) => e);

@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 import DownloadAsControl from './DownloadAsControl';
+import { download } from '../strings';
 import type { DownloadFormat, DownloadStatus } from '../pandoc/downloadController';
 
 afterEach(cleanup);
@@ -115,6 +116,20 @@ describe('DownloadAsControl', () => {
     expect(screen.getByRole('status', { name: 'Download status' }).textContent).toMatch(/converter reported an error/);
     expect(screen.getByText(/\[Q-20-3\]/)).toBeTruthy();
     expect(screen.getByText(/exit status: 83/)).toBeTruthy();
+  });
+
+  it('every failure state has its own plain-language copy', () => {
+    const states = Object.keys(download.failed).filter((s) => s !== 'done' && s !== 'cancelled');
+    expect(states.sort()).toEqual(
+      ['blocked', 'crashed', 'download-failed', 'invalid-request', 'native-error', 'native-failed', 'offline', 'out-of-memory', 'pandoc-error', 'request-failed', 'timeout', 'unsupported'].sort(),
+    );
+    for (const state of states) {
+      const { unmount } = setup({ status: { phase: 'failed', clickId: 1, format: DOCX, state: state as never, notices: [], diagnostics: [] } });
+      const text = screen.getByRole('status', { name: 'Download status' }).textContent;
+      expect(text, state).toContain((download.failed as Record<string, string>)[state]);
+      expect((download.failed as Record<string, string>)[state].length, state).toBeGreaterThan(10);
+      unmount();
+    }
   });
 
   it('a host failure shows the host diagnostic message', () => {

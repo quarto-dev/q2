@@ -10,6 +10,7 @@
  * Two executors, one state: pandoc.wasm in the browser (`runner`, `buildRequest`), or the
  * preview server's native render in the `q2 preview` embed (`native`).
  */
+import { looksLikeOom } from '@quarto/pandoc-host';
 import type { Diagnostic, PandocRequest, ShareTree } from '@quarto/pandoc-host';
 import type { LoadProgress } from './pandocLoader';
 import type { RunOutcome, RunStage, UiState, RunOptions } from './pandocRunner';
@@ -157,7 +158,9 @@ export class DownloadController {
       if (this.deps.native) await this.runNative(options, id, own, current, fail);
       else await this.runWasm(options, id, own, current, fail);
     } catch (e) {
-      fail('crashed', [], [], e instanceof Error ? e.message : String(e));
+      // The Rust request build and the worker hand-off run on this thread, so a memory
+      // failure there throws here rather than coming back as a host `oom` outcome.
+      fail(looksLikeOom(e) ? 'out-of-memory' : 'crashed', [], [], e instanceof Error ? e.message : String(e));
     } finally {
       if (this.abort === own) this.abort = undefined;
     }

@@ -223,6 +223,13 @@ jobs:
           cd hub-client
           npx playwright install --with-deps ${{ matrix.browser }}
 
+      # WebKit only runs the pandoc.wasm specs (host phase H6), in the chromium leg.
+      - name: Install Playwright WebKit
+        if: matrix.browser == 'chromium'
+        run: |
+          cd hub-client
+          npx playwright install --with-deps webkit
+
       # Run E2E tests — custom specs only (smoke-all excluded by testIgnore)
       - name: Run E2E tests
         run: |
@@ -294,6 +301,31 @@ jobs:
         run: |
           cd hub-client
           npx playwright test --config playwright.harness.config.ts --project=${{ matrix.browser }}
+
+      # pandoc.wasm in WebKit (host phase H6). Playwright's Linux WebKit was never checked for
+      # wasm exnref (the spike covered macOS WebKit 26.4 only), so a feature probe runs first.
+      # If the probe fails the suite is skipped with a warning rather than failing the job:
+      # that means this WebKit build cannot run pandoc.wasm, which the app reports to users
+      # as "unsupported browser", not a regression in this repo. Once the probe has passed on
+      # a CI run, delete `continue-on-error` and the `if:` so a webkit failure gates.
+      - name: Probe WebKit for pandoc.wasm features
+        if: matrix.browser == 'chromium'
+        id: webkit_probe
+        continue-on-error: true
+        run: |
+          cd hub-client
+          npx playwright test --config playwright.harness.config.ts --project=webkit \
+            --workers=1 --retries=0 e2e/pandoc-browser-probe.harness.spec.ts
+
+      - name: Warn that the WebKit pandoc suite was skipped
+        if: matrix.browser == 'chromium' && steps.webkit_probe.outcome != 'success'
+        run: echo "::warning title=WebKit pandoc suite skipped::This Playwright WebKit build failed the exnref/feature probe (see the probe step); pandoc.wasm specs did not run in WebKit."
+
+      - name: Run pandoc harness tests in WebKit
+        if: matrix.browser == 'chromium' && steps.webkit_probe.outcome == 'success'
+        run: |
+          cd hub-client
+          npx playwright test --config playwright.harness.config.ts --project=webkit --workers=1
 
       # sync-test-harness's hub tier spawns `cargo run --bin hub` with a 120s
       # readiness timeout, so it belongs in this workflow rather than

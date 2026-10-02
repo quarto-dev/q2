@@ -1,4 +1,4 @@
-export { execute } from './execute.ts';
+export { execute, looksLikeOom } from './execute.ts';
 export { createHandler, prepareForPost } from './protocol.ts';
 export type { WorkerRequest, WorkerResponse } from './protocol.ts';
 export { DEFAULT_LIMITS, DEFAULT_SHARE_ROOT, SUPPORTED_SCHEMA_VERSION } from './limits.ts';
