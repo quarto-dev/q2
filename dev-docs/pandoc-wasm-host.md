@@ -245,9 +245,15 @@ The compiled PDF is shown in the stock pdf.js viewer, not the `pdfjs-dist` `PDFV
   prunes it (`prune-embed-dist.mjs`).
 - **Test.** `e2e/pandoc-pdf-viewer.harness.spec.ts` (run it like the H8 spec: `VITE_E2E=1` bundle, then
   `npx playwright test --config playwright.harness.config.ts e2e/pandoc-pdf-viewer.harness.spec.ts`).
-- **Not done.** Jump to the active chapter needs the whole-book request and per-chapter anchors (request
-  R7 stages 2-3, which have no plan yet). The user-facing place the viewer appears (a router mode or a
-  dialog) is not decided; today only the test hook mounts it.
+- **Preview pane.** A document whose own format is `pdf` gets `PreviewMode {mode: 'pdf'}` (classifier
+  dep `canPreviewPdf` = pandoc.wasm shipped and not the native embed; the embed and builds without the
+  chain keep the `download` pane). `PdfPreviewPane` (`components/render/`) is the third preview iframe: a
+  "Show PDF preview" button on the first use of a session (the first compile fetches ~33 MB), then a compile
+  500 ms after each edit through its own controller (`createPdfPreviewController`: same chain, saves nothing,
+  so the top bar's "Download as" status is untouched). A failed compile keeps the last PDF under an error
+  banner with a retry. Specs: `PdfPreviewPane.test.tsx` and the second case of
+  `e2e/pandoc-pdf-viewer.harness.spec.ts` (Chromium and WebKit).
+- **Not done.** Jump to the active chapter: see the H9 plan (needs R9 and R10 landed).
 
 ## Browser/native typst parity (H9)
 

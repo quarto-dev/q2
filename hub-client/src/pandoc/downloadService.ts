@@ -16,7 +16,7 @@ import {
   type PandocFormatInfo,
 } from '@quarto/preview-runtime';
 import type { ShareTree } from '@quarto/pandoc-host';
-import { DownloadController, type DownloadFormat } from './downloadController';
+import { DownloadController, type DownloadDeps, type DownloadFormat } from './downloadController';
 import { pandocWasmEnabled, isPreviewEmbed } from './featureFlag';
 import { renderNatively } from './nativeRender';
 import { getPandoc } from './pandocService';
@@ -80,6 +80,38 @@ export function onPdfCompiled(listener: PdfListener): () => void {
   return () => pdfListeners.delete(listener);
 }
 
+/** The browser-side dependencies shared by the download controller and the PDF preview's. */
+function wasmDeps(): Omit<DownloadDeps, 'save'> {
+  return {
+    buildRequest: async (path, format, sourceDateEpoch, signal, typstAvailableFonts) => {
+      await initWasm();
+      return renderPandocRequest(path, format, { sourceDateEpoch, signal, typstAvailableFonts });
+    },
+    getShareTree: shareTree,
+    runner: getPandoc().runner,
+    typst: {
+      runner: getTypst().runner,
+      assets: () => splitTypstAssets(getTypstAssets().files),
+      datePrelude: typstDatePrelude,
+    },
+    classify: classifyPandocCompletion,
+  };
+}
+
+/** A `pdf` document gets the viewer when the browser chain is shipped (never in the native embed). */
+export function pdfPreviewAvailable(): boolean {
+  return pandocWasmEnabled() && !isPreviewEmbed();
+}
+
+/**
+ * A controller for the PDF preview pane: the same chain as "Download as PDF" but it saves nothing and
+ * hands each compiled PDF to `onPdf`. It is separate from the app-wide controller so a preview
+ * compile never shows in, or supersedes, a download's status.
+ */
+export function createPdfPreviewController(onPdf: (pdf: Uint8Array, info: { path: string; fileName: string }) => void): DownloadController {
+  return new DownloadController({ ...wasmDeps(), save: () => {}, onPdf });
+}
+
 let controller: DownloadController | undefined;
 
 export function getDownloadController(): DownloadController {
@@ -87,18 +119,7 @@ export function getDownloadController(): DownloadController {
     controller = isPreviewEmbed()
       ? new DownloadController({ native: (request, opts) => renderNatively(request, opts), save: saveBlob })
       : new DownloadController({
-          buildRequest: async (path, format, sourceDateEpoch, signal, typstAvailableFonts) => {
-            await initWasm();
-            return renderPandocRequest(path, format, { sourceDateEpoch, signal, typstAvailableFonts });
-          },
-          getShareTree: shareTree,
-          runner: getPandoc().runner,
-          typst: {
-            runner: getTypst().runner,
-            assets: () => splitTypstAssets(getTypstAssets().files),
-            datePrelude: typstDatePrelude,
-          },
-          classify: classifyPandocCompletion,
+          ...wasmDeps(),
           save: saveBlob,
           onPdf: (pdf, info) => pdfListeners.forEach((l) => l(pdf, info)),
         });

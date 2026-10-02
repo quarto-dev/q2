@@ -79,6 +79,16 @@ describe('classifyPreviewMode (three-class classifier, D8)', () => {
     expect(classifyPreviewMode(astWithFormat('docx'), 'a.qmd', deps(resolved('docx', 'download')))).toEqual({ mode: 'download', formatKey: 'docx' });
   });
 
+  it('a pdf document is the pdf mode when the build compiles PDF in the browser, else the download mode', () => {
+    const r = deps(resolved('pdf', 'download'));
+    expect(classifyPreviewMode(astWithFormat('pdf'), 'a.qmd', { ...r, canPreviewPdf: () => true })).toEqual({ mode: 'pdf', formatKey: 'pdf' });
+    expect(classifyPreviewMode(astWithFormat('pdf'), 'a.qmd', { ...r, canPreviewPdf: () => false })).toEqual({ mode: 'download', formatKey: 'pdf' });
+    expect(classifyPreviewMode(astWithFormat('pdf'), 'a.qmd', r)).toEqual({ mode: 'download', formatKey: 'pdf' });
+    // Download must be possible at all, and only pdf gets the viewer.
+    expect(classifyPreviewMode(astWithFormat('pdf'), 'a.qmd', { ...deps(resolved('pdf', 'download'), false), canPreviewPdf: () => true })).toEqual({ mode: 'dom' });
+    expect(classifyPreviewMode(astWithFormat('docx'), 'a.qmd', { ...deps(resolved('docx', 'download')), canPreviewPdf: () => true })).toEqual({ mode: 'download', formatKey: 'docx' });
+  });
+
   it('a downloadable format this build cannot produce keeps the full-DOM renderer', () => {
     expect(classifyPreviewMode(astWithFormat('docx'), 'a.qmd', deps(resolved('docx', 'download'), false))).toEqual({ mode: 'dom' });
   });

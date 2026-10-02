@@ -32,7 +32,7 @@ Hub-client must run the official `pandoc.wasm` in a browser, replaying a `Pandoc
 | **H6** [hardening](2026-10-01-pandoc-host-H6-hardening.md) | WebKit probe in CI, memory and large-document tests, taxonomy completeness, optional D2(b) spike | H5 | Hardening |
 | **H7** [typst worker](2026-10-01-pandoc-host-H7-typst-worker.md) | PDF budget measurement; standalone typst.ts worker with VFS, fonts, package registry, PDF export | H0 (independent of pandoc otherwise); may run in parallel with H1-H5 | Novel |
 | **H8** [PDF chain](2026-10-01-pandoc-host-H8-pdf-chain.md) | Compile-side request additions; pandoc worker → typst worker; "Download as PDF" | H5, H7; request R4 | Novel |
-| **H9** [viewer and parity](2026-10-01-pandoc-host-H9-viewer-parity.md) | pdf.js viewer with stable fingerprint, chapter-anchor navigation, time-boxed `incr_compile` spike, typst/PDF parity | H8; chapter navigation consumes anchors from a later book plan (request R7 stages 2-3) | Novel |
+| **H9** [viewer and parity](2026-10-01-pandoc-host-H9-viewer-parity.md) | pdf.js viewer with stable fingerprint, chapter-anchor navigation, time-boxed `incr_compile` spike, typst/PDF parity | H8; chapter navigation consumes the anchor contract of request R9 and R10 | Novel |
 
 Order: H0 → H1 → H2 → H3 → H5 → H6; H4 (the asset pipeline and the H4b embed route) needs only H1, so it can run beside H2/H3, and must finish before H5's embed item; H7 in parallel from H0; H8 → H9 after H5 and H7. H1, H2, H3 and H7 all edit `ts-test-suite.yml`, the hand-listed vitest aliases and `package-lock.json`, so merge them one at a time. Lane H (workspace-7) runs this epic; the design's Parallel development gives the lanes, the landing points and the hand-offs from lane R. Each phase is one agent.
 
@@ -61,7 +61,7 @@ Tick a phase when its Close-out is complete and it has landed on `feature/pandoc
 | Unexecuted-cell count | R3 | H5 status |
 | Typst, pptx and epub requests; project requests | R4, R5, R7 | H5 menu entries |
 | Typst-source request; `pdf` format-table entry (hidden until H8), `post: compile_typst`, typst packages and fonts in a separate typst-assets export | R4 (last task) | H8 |
-| Whole-book request and chapter anchors | later book plan (R7 stages 2-3) | H9 chapter navigation |
+| Whole-book request (R9: `scope`, `stats.book`, resolver `book` field) and chapter anchors (R10: chapter map, page markers) | R9, R10 | H5 book menu entries and status, H8 `chapterPages`, H9 chapter navigation |
 
 ## Definition of done
 

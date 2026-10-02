@@ -10,7 +10,8 @@ import ReactPreview from './ReactPreview';
 import { FallbackView, NonQmdPlaceholderView } from '@quarto/preview-renderer/overlays/PreviewStaticInfoViews';
 import { classifyPreviewMode, type PreviewMode } from './getQ2Format';
 import { DownloadOnlyView, NeitherView } from './DownloadOnlyViews';
-import { formatByKey, menuFormats } from '../../pandoc/downloadService';
+import PdfPreviewPane from './PdfPreviewPane';
+import { formatByKey, menuFormats, pdfPreviewAvailable } from '../../pandoc/downloadService';
 import { useDownloadAs } from '../../pandoc/useDownloadAs';
 
 interface PreviewRouterProps {
@@ -141,11 +142,12 @@ export default function PreviewRouter(props: PreviewRouterProps) {
         const deps = {
           resolve: (path: string) => (isWasmReady() ? resolvePandocFormats(path) : null),
           canDownload: (key: string) => menuFormats().some((f) => f.key === key),
+          canPreviewPdf: pdfPreviewAvailable,
         };
         // A format the parser's metadata merge does not know (`latex`) fails the parse. The
         // resolver still classifies it; a failed parse of a previewable document changes nothing.
         const mode = classifyPreviewMode(result.success ? result.ast : '{"meta":{}}', props.currentFile?.path, deps);
-        if (result.success || mode.mode === 'download' || mode.mode === 'neither') {
+        if (result.success || mode.mode === 'download' || mode.mode === 'pdf' || mode.mode === 'neither') {
           const format = mode.mode === 'react' ? mode.format : null;
           // Keep the same object when nothing changed, so a keystroke does not re-render consumers.
           setPreviewMode((prev) => (JSON.stringify(prev) === JSON.stringify(mode) ? prev : mode));
@@ -191,6 +193,8 @@ export default function PreviewRouter(props: PreviewRouterProps) {
       <div style={{ flex: 1, overflow: 'hidden' }}>
         {previewMode.mode === 'download' ? (
           <DownloadModePane formatKey={previewMode.formatKey} path={props.currentFile?.path ?? null} content={props.content} wasmReady={wasmStatus === 'ready'} />
+        ) : previewMode.mode === 'pdf' ? (
+          <PdfPreviewPane path={props.currentFile?.path ?? null} content={props.content} />
         ) : previewMode.mode === 'neither' ? (
           <NeitherView formatKey={previewMode.formatKey} />
         ) : reactFormat ? (

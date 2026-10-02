@@ -73,4 +73,53 @@ test.describe('PDF viewer', () => {
     await expect.poll(() => viewState(page), { timeout: 60_000 }).toMatchObject({ page: 1, pages: PAGES });
     expect((await viewState(page))!.scale).not.toBe(1.5);
   });
+
+  test('the preview pane: it compiles on mount, an edit recompiles in place and keeps the reader where they were', async ({ page }) => {
+    await boot(page);
+    await write(page, '/doc/p.qmd', document('one'));
+    // The pane reads the VFS; the content prop is what triggers a recompile.
+    const pane = (marker: string) =>
+      page.evaluate((m) => (window as unknown as { __pane?: { update(c: string): void } }).__pane?.update(m), marker);
+    await page.evaluate(() => {
+      (window as unknown as { __pane: unknown }).__pane = window.__quartoTest!.pandoc.mountPdfPreviewPane('/doc/p.qmd', 'one');
+    });
+    await expect(page.getByTestId('pdf-preview-loading')).toBeVisible();
+    await expect.poll(() => viewState(page), { timeout: 120_000 }).toMatchObject({ pages: PAGES, page: 1 });
+
+    await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const app = (document.querySelector<HTMLIFrameElement>('#pdf-viewer-host iframe')!.contentWindow as any).PDFViewerApplication;
+      app.pdfViewer.currentScaleValue = '1.5';
+      app.pdfViewer.currentPageNumber = 7;
+    });
+    await expect.poll(() => viewState(page)).toMatchObject({ page: 7, scale: 1.5 });
+
+    // While the edit recompiles and swaps in, the frame on top must never be an empty viewer (the flash).
+    await page.evaluate(() => {
+      const w = window as unknown as { __empty: number; __sample: boolean };
+      w.__empty = 0;
+      w.__sample = true;
+      const tick = () => {
+        const frames = [...document.querySelectorAll<HTMLIFrameElement>('#pdf-viewer-host iframe')];
+        const top = frames.sort((a, b) => Number(b.style.zIndex) - Number(a.style.zIndex))[0];
+        if (!top?.contentDocument?.querySelector('.page canvas')) w.__empty++;
+        if (w.__sample) requestAnimationFrame(tick);
+      };
+      tick();
+    });
+    await write(page, '/doc/p.qmd', document('two'));
+    await pane('two');
+    await expect(page.getByTestId('pdf-preview-status')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('pdf-preview-status')).toBeHidden({ timeout: 60_000 });
+    // The compile is done; the viewer then reopens the new bytes in place.
+    await expect.poll(() => viewState(page), { timeout: 30_000 }).toMatchObject({ page: 7, scale: 1.5, pages: PAGES });
+    await expect.poll(() => page.evaluate(() => document.querySelectorAll('#pdf-viewer-host iframe').length)).toBe(1);
+    expect(await page.evaluate(() => { const w = window as unknown as { __empty: number; __sample: boolean }; w.__sample = false; return w.__empty; })).toBe(0);
+
+    // A broken edit keeps the last PDF under an error banner.
+    await write(page, '/doc/p.qmd', '---\ntitle: Bad\n---\n\n```{=typst}\n#no-such-function()\n```\n');
+    await pane('bad');
+    await expect(page.getByTestId('pdf-preview-error')).toBeVisible({ timeout: 60_000 });
+    await expect.poll(() => viewState(page)).toMatchObject({ page: 7, pages: PAGES });
+  });
 });

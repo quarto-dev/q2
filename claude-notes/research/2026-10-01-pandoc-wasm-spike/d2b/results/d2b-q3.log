@@ -1,0 +1,28 @@
+fresh references: 15903 13046 13965 (A fresh twice equal: true )
+
+== T1 A,B,A,C,A,B on one warm instance (env at creation = recording env)
+A: equals fresh true (15903) trap=null run 164 ms
+B: equals fresh true (13046) trap=null run 93 ms
+A: equals fresh true (15903) trap=null run 158 ms
+C: equals fresh true (13965) trap=null run 122 ms
+A: equals fresh true (15903) trap=null run 151 ms
+B: equals fresh true (13046) trap=null run 96 ms
+
+== T2a env only via Lua preamble (WASI env EMPTY at creation); render A,B,A
+A: equals fresh true (15903) stderr="" trap=null
+B: equals fresh true (13046) stderr="" trap=null
+A: equals fresh true (15903) stderr="" trap=null
+
+== T2b different env value between renders (QUARTO_FILTER_PARAMS: callout-note-title Note -> NOTE-CHANGED), then A again
+A    equals fresh A: true
+A(x) differs from A: false | contains NOTE-CHANGED: false | equals fresh with the same env: true
+A    again equals A : true
+
+== T2c env visible to Lua WITHOUT a preamble? mutate the WASI env array after creation (A, then changed params, then A)
+after mutating the env array: output still equals the first (env NOT re-read): true | contains NOTE-CHANGED: false
+
+== T2d SOURCE_DATE_EPOCH (read by pandoc's Haskell side for docx dcterms:created)
+fresh: SDE=1e9 -> 2001-09-09T01:46:40Z | SDE=1.7e9 -> 2023-11-14T22:13:20Z
+warm, env array mutated: first 2001-09-09T01:46:40Z | second 2001-09-09T01:46:40Z
+warm, preamble only (WASI env empty): first 2026-10-02T16:12:46Z | second 2026-10-02T16:12:46Z
+fresh-per-env equals warm(i) first: true (zip bytes include timestamps, so byte equality = same SDE seen)

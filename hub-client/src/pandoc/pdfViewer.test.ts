@@ -8,5 +8,6 @@ describe('viewerUrl', () => {
   });
   it('names the file and hides the sidebar', () => {
     expect(viewerUrl('/', 'blob:http://x/1')).toBe('/pdfjs/web/viewer.html?file=blob%3Ahttp%3A%2F%2Fx%2F1#pagemode=none');
+    expect(viewerUrl('/', 'blob:http://x/1', true)).toBe('/pdfjs/web/viewer.html?file=blob%3Ahttp%3A%2F%2Fx%2F1');
   });
 });

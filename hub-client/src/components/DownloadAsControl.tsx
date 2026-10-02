@@ -33,7 +33,7 @@ const diagText = (d: Diagnostic): { code?: string; title: string; detail?: strin
   return { code: d.code, title: d.title, detail: d.problem };
 };
 
-function DiagnosticList({ diagnostics }: { diagnostics: Diagnostic[] }) {
+export function DiagnosticList({ diagnostics }: { diagnostics: Diagnostic[] }) {
   if (diagnostics.length === 0) return null;
   return (
     <ul className="download-diagnostics">
