@@ -22,3 +22,15 @@ export function getTypst(): { loader: PandocLoader; fonts: TypstFontsLoader; run
   }
   return shared;
 }
+
+let previewRunner: TypstRunner | undefined;
+
+/**
+ * The PDF preview's own typst runner (H10b): the shared loader and fonts, but serialized, so a newer preview job
+ * never aborts a running one and a Download as PDF and a preview never cancel each other's compile.
+ */
+export function getPreviewTypstRunner(): TypstRunner {
+  const { loader, fonts } = getTypst();
+  previewRunner ??= new TypstRunner({ loader, fonts, createWorker: createTypstBrowserWorker, cache: cacheApiTarballs(), serialized: true });
+  return previewRunner;
+}

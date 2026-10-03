@@ -110,6 +110,22 @@ export interface TypstRunnerConfig {
   limits?: Partial<Limits>;
   /** Where package tarballs are kept between compiles (the Cache API); the worker asks for it by message. */
   cache?: TarballCache;
+  /**
+   * Serialized mode (the PDF preview's runner, H10b): a running job is never aborted by a newer one. One job
+   * runs and one waits; a newer job replaces the waiting one (which resolves `superseded`); an abort signal on
+   * the running job detaches it (the result is dropped, the job keeps the slot until it finishes or its wall
+   * timeout stops it) and on the waiting job removes it. `run` and `listFonts` share the one waiting slot.
+   */
+  serialized?: boolean;
+}
+
+interface SerialEntry {
+  job: TypstJob;
+  options: TypstRunOptions;
+  mode: 'run' | 'fonts';
+  resolve: (o: TypstRunOutcome | FontListOutcome | TypstRunFailure) => void;
+  settled: boolean;
+  removeAbort?: () => void;
 }
 
 class Superseded extends Error {
@@ -156,6 +172,8 @@ export class TypstRunner {
   private readonly wallTimeoutMs: number;
   private readonly limits?: Partial<Limits>;
   private readonly cache?: TarballCache;
+  private readonly serialized: boolean;
+  private serial: { running?: SerialEntry; waiting?: SerialEntry } = {};
   private current: { abort: (reason: Error) => void } | undefined;
   private nextId = 1;
 
@@ -166,6 +184,7 @@ export class TypstRunner {
     this.wallTimeoutMs = config.wallTimeoutMs ?? DEFAULT_WALL_TIMEOUT_MS;
     this.limits = config.limits;
     this.cache = config.cache;
+    this.serialized = config.serialized === true;
   }
 
   /**
@@ -173,7 +192,7 @@ export class TypstRunner {
    * worker).
    */
   run(job: TypstJob, options: TypstRunOptions = {}): Promise<TypstRunOutcome> {
-    return this.execute(job, options, 'run') as Promise<TypstRunOutcome>;
+    return this.submit(job, options, 'run') as Promise<TypstRunOutcome>;
   }
 
   /**
@@ -181,7 +200,61 @@ export class TypstRunner {
    * chain needs them before pandoc runs. Starts a worker, initialises it and discards it.
    */
   listFonts(fonts: Uint8Array[] = [], options: TypstRunOptions = {}): Promise<FontListOutcome | TypstRunFailure> {
-    return this.execute({ input: { main: '', files: [] }, fonts }, options, 'fonts') as Promise<FontListOutcome | TypstRunFailure>;
+    return this.submit({ input: { main: '', files: [] }, fonts }, options, 'fonts') as Promise<FontListOutcome | TypstRunFailure>;
+  }
+
+  private submit(job: TypstJob, options: TypstRunOptions, mode: 'run' | 'fonts'): Promise<TypstRunOutcome | FontListOutcome | TypstRunFailure> {
+    if (!this.serialized) return this.execute(job, options, mode);
+    if (options.signal?.aborted) return Promise.resolve(failure('aborted', [], []));
+    return new Promise((resolve) => {
+      const entry: SerialEntry = { job, options, mode, resolve, settled: false };
+      const onAbort = () => {
+        // Detach a running job; remove a waiting one.
+        if (this.serial.waiting === entry) this.serial.waiting = undefined;
+        this.settleSerial(entry, failure('aborted', [], []));
+      };
+      options.signal?.addEventListener('abort', onAbort, { once: true });
+      entry.removeAbort = () => options.signal?.removeEventListener('abort', onAbort);
+      const replaced = this.serial.waiting;
+      this.serial.waiting = entry;
+      if (replaced) this.settleSerial(replaced, failure('superseded', [], []));
+      this.pumpSerial();
+    });
+  }
+
+  private settleSerial(entry: SerialEntry, outcome: TypstRunOutcome | FontListOutcome | TypstRunFailure): void {
+    if (entry.settled) return;
+    entry.settled = true;
+    entry.removeAbort?.();
+    entry.resolve(outcome);
+  }
+
+  private pumpSerial(): void {
+    if (this.serial.running || !this.serial.waiting) return;
+    const entry = this.serial.waiting;
+    this.serial.waiting = undefined;
+    this.serial.running = entry;
+    // The job runs under its own signal, which nothing aborts: only its wall timeout stops it. Stage and
+    // progress callbacks go quiet once the caller has detached.
+    const { options } = entry;
+    this.execute(
+      entry.job,
+      {
+        wallTimeoutMs: options.wallTimeoutMs,
+        onStage: (s) => !entry.settled && options.onStage?.(s),
+        onLoadProgress: (p) => !entry.settled && options.onLoadProgress?.(p),
+      },
+      entry.mode,
+    ).then(
+      (o) => this.finishSerial(entry, o),
+      (e) => this.finishSerial(entry, failure('crash', [host('typst-crash', `The Typst runner failed: ${String(e)}`)], [])),
+    );
+  }
+
+  private finishSerial(entry: SerialEntry, outcome: TypstRunOutcome | FontListOutcome | TypstRunFailure): void {
+    this.serial.running = undefined;
+    this.settleSerial(entry, outcome);
+    this.pumpSerial();
   }
 
   private async execute(job: TypstJob, options: TypstRunOptions, mode: 'run' | 'fonts'): Promise<TypstRunOutcome | FontListOutcome | TypstRunFailure> {

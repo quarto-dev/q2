@@ -53,7 +53,7 @@ Tick a phase when its Close-out is complete and it has landed on `feature/pandoc
 - [x] H8 [PDF chain](2026-10-01-pandoc-host-H8-pdf-chain.md)
 - [x] H9 [viewer and parity](2026-10-01-pandoc-host-H9-viewer-parity.md)
 - [x] H10a [warm executor](2026-10-02-pandoc-host-H10a-warm-executor.md)
-- [ ] H10b [warm pool and preview](2026-10-02-pandoc-host-H10b-warm-pool-preview.md)
+- [x] H10b [warm pool and preview](2026-10-02-pandoc-host-H10b-warm-pool-preview.md)
 
 ## Dependencies on the request epic
 

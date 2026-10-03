@@ -71,6 +71,20 @@ describe.skipIf(!ready)('WarmPandoc', () => {
     expect(warm.memoryBytes()).toBeGreaterThan(0);
   });
 
+  it("does not let the WASI fd table grow with the number of renders (WebKit stopped finding files after about 47 of them)", async () => {
+    const doc = recordedDocs().find((d) => d.name === 'callouts-typst')!;
+    const request = await build(doc.files, doc.qmd);
+    const warm = await WarmPandoc.create(module);
+    const lengths: number[] = [];
+    for (let i = 0; i < 5; i++) {
+      const r = await warm.run(structuredClone(request), shareTree);
+      expect(r.ok).toBe(true);
+      lengths.push(warm.fdTableLength());
+    }
+    // The standard streams and the preopened `/`: nothing the guest opened survives a render.
+    expect(lengths).toEqual([4, 4, 4, 4, 4]);
+  });
+
   it("rebuilds pandoc's own warnings from /warnings, as _start prints them on stderr", async () => {
     // The typst writer never reads an image, so a missing image warns nowhere (H10a plan 4b assumed it would);
     // an unconvertible TeX command is the warning pandoc's typst writer does raise.

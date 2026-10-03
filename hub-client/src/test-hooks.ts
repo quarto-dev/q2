@@ -17,11 +17,13 @@ import * as projectSet from './services/projectSetService';
 import { reconcileIntoConnectedProjectSet } from './services/projectSetReconciler';
 import * as wasmRenderer from '@quarto/preview-runtime';
 import { PandocLoader, type LoaderConfig } from './pandoc/pandocLoader';
-import { PandocRunner, uiStateFor } from './pandoc/pandocRunner';
-import { createBrowserWorker } from './pandoc/pandocService';
+import { PandocRunner, uiStateFor, type RunOutcome } from './pandoc/pandocRunner';
+import { createBrowserWorker, getPandoc, getPreviewPandocRunner } from './pandoc/pandocService';
+import type { Fault, PandocRequest, RunStats, ShareTree } from '@quarto/pandoc-host';
 import { PANDOC_WASM_SHA256, smokeJob } from './pandoc/smokeJob';
 import { installDevHarness, pandocDownload } from './pandoc/devHarness';
-import { createPdfPreviewController, formatByKey, getDownloadController, onPdfCompiled } from './pandoc/downloadService';
+import { createPdfPreviewController, formatByKey, getDownloadController, onPdfCompiled, setPreviewTrace } from './pandoc/downloadService';
+import type { TraceEvent } from './pandoc/downloadController';
 import { mountPdfViewer } from './pandoc/pdfViewer';
 import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -31,6 +33,146 @@ import { splitTypstAssets } from './typst/typstAssetSplit';
 import { TypstRunner, typstUiStateFor } from './typst/typstRunner';
 import { createTypstBrowserWorker } from './typst/typstService';
 import { cacheApiTarballs } from './typst/typstPackageCache';
+
+const toHex = (b: ArrayBuffer): string => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, '0')).join('');
+
+/** What a hook run reports about one render (bytes are reported as a SHA-256, so a page.evaluate result stays small). */
+export interface HookRun {
+  ok: boolean;
+  kind?: string;
+  status: number | null;
+  outputSha?: string;
+  outputBytes?: number;
+  stderr: string;
+  /** The runner's elapsed time around `run()` (the pandoc leg alone: no request build, no typst, no viewer). */
+  elapsedMs: number;
+  stats?: RunStats;
+  diagnostics: unknown[];
+}
+
+let cachedShareTree: ShareTree | undefined;
+const shareTreeOnce = (): ShareTree => (cachedShareTree ??= wasmRenderer.getPandocShareTree() as ShareTree);
+
+/**
+ * Hooks for the warm-path specs (`pandoc-warm.harness.spec.ts`, H10b Task 5). Each runs a request built by the
+ * real Rust export through the warm runner (the preview's) or the fresh one (the app-wide), chosen per call.
+ */
+function warmHooks() {
+  async function buildRequest(path: string, format: string, env?: Record<string, string>, fonts?: string[]): Promise<PandocRequest> {
+    await wasmRenderer.initWasm();
+    const envelope = await wasmRenderer.renderPandocRequest(path, format, { sourceDateEpoch: 1_700_000_000, typstAvailableFonts: fonts });
+    if (!envelope.request) throw new Error(`no request for ${path}: ${JSON.stringify(envelope.diagnostics)} ${envelope.error ?? ''}`);
+    const request = envelope.request as unknown as PandocRequest;
+    if (env) request.env = { ...request.env, ...env };
+    return request;
+  }
+  async function runOne(
+    path: string,
+    mode: 'warm' | 'fresh',
+    options: { format?: string; env?: Record<string, string>; fault?: Fault; fonts?: string[]; wallTimeoutMs?: number; docKey?: string } = {},
+  ): Promise<HookRun> {
+    const request = await buildRequest(path, options.format ?? 'typst', options.env, options.fonts);
+    const runner = mode === 'warm' ? getPreviewPandocRunner() : getPandoc().runner;
+    const t0 = performance.now();
+    const outcome: RunOutcome = await runner.run(request, shareTreeOnce(), { fault: options.fault, wallTimeoutMs: options.wallTimeoutMs, docKey: options.docKey });
+    const elapsedMs = performance.now() - t0;
+    if (outcome.ok) {
+      return {
+        ok: true,
+        status: 0,
+        outputSha: toHex(await crypto.subtle.digest('SHA-256', outcome.output as Uint8Array<ArrayBuffer>)),
+        outputBytes: outcome.output.byteLength,
+        stderr: outcome.stderr,
+        elapsedMs,
+        stats: outcome.stats,
+        diagnostics: outcome.diagnostics,
+      };
+    }
+    return { ok: false, kind: outcome.kind, status: outcome.status, stderr: outcome.stderr, elapsedMs, stats: outcome.stats, diagnostics: outcome.diagnostics };
+  }
+  return {
+    /** One render of the document at `path` through the warm or the fresh runner. `env` overrides request env entries; `fault` is per run. */
+    runRequest: runOne,
+    /** `order` indexes `paths`: a seeded A,B,A sequence in one page round trip. `envs[i]` (optional) is step i's env override. */
+    async runSequence(paths: string[], order: number[], mode: 'warm' | 'fresh', options: { format?: string; fonts?: string[]; envs?: (Record<string, string> | undefined)[] } = {}) {
+      const out: (HookRun & { doc: number })[] = [];
+      for (let i = 0; i < order.length; i++) out.push({ doc: order[i], ...(await runOne(paths[order[i]], mode, { format: options.format, fonts: options.fonts, env: options.envs?.[i] })) });
+      return out;
+    },
+    /** `n` renders of one document (the 100-render memory loop; the pandoc-leg timing): per-run elapsed, stats and output digest. */
+    async runLoop(path: string, n: number, mode: 'warm' | 'fresh', options: { format?: string; fonts?: string[] } = {}) {
+      const out: HookRun[] = [];
+      for (let i = 0; i < n; i++) out.push(await runOne(path, mode, options));
+      return out;
+    },
+    /** The preview runner's pool counters. */
+    warmRunnerStats() {
+      const r = getPreviewPandocRunner();
+      return { workerCount: r.workerCount, created: r.created, graceTerminations: r.graceTerminations, recycles: r.recycles };
+    },
+    /**
+     * The real preview pane under a short debounce, edited at the given delays (ms after the previous edit; the
+     * first is after the initial compile has shown a frame). Returns the log of frames shown `{ seq, tMs }`, of
+     * run starts `{ seq, live, tMs }` (`live` counts the runs in flight including the new one), of edits and of
+     * run ends, all on one clock (ms since the hook began), once every run has ended.
+     */
+    async typing(path: string, baseText: string, editDelaysMs: number[], options: { debounceMs: number; warm: boolean; projectKey?: string }) {
+      await wasmRenderer.initWasm();
+      const t0 = performance.now();
+      const now = () => performance.now() - t0;
+      const frames: { seq: number; tMs: number }[] = [];
+      const starts: { seq: number; live: number; tMs: number }[] = [];
+      const ends: { seq: number; tMs: number }[] = [];
+      const edits: { tMs: number }[] = [];
+      let live = 0;
+      setPreviewTrace((e: TraceEvent) => {
+        if (e.type === 'start') {
+          live++;
+          starts.push({ seq: e.seq, live: e.live, tMs: now() });
+        } else if (e.type === 'shown') frames.push({ seq: e.seq, tMs: now() });
+        else {
+          live--;
+          ends.push({ seq: e.seq, tMs: now() });
+        }
+      });
+      wasmRenderer.vfsAddFile(path, baseText);
+      const host = document.createElement('div');
+      host.id = 'pdf-viewer-host';
+      host.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#fff';
+      document.body.appendChild(host);
+      const root = createRoot(host);
+      const render = (text: string) => root.render(createElement(PdfPreviewPane, { path, content: text, debounceMs: options.debounceMs, projectKey: options.projectKey, warm: options.warm }));
+      const until = async (pred: () => boolean, what: string, timeoutMs = 120_000) => {
+        const start = performance.now();
+        while (!pred()) {
+          if (performance.now() - start > timeoutMs) throw new Error(`timed out waiting for ${what}`);
+          await new Promise((r) => setTimeout(r, 20));
+        }
+      };
+      try {
+        render(baseText);
+        await until(() => frames.length > 0, 'the first frame');
+        for (let i = 0; i < editDelaysMs.length; i++) {
+          await new Promise((r) => setTimeout(r, editDelaysMs[i]));
+          const text = `${baseText}\n\nEdit ${i + 1}.\n`;
+          wasmRenderer.vfsAddFile(path, text);
+          edits.push({ tMs: now() });
+          render(text);
+        }
+        // Every debounce has fired and every run has ended.
+        await new Promise((r) => setTimeout(r, options.debounceMs + 50));
+        await until(() => live === 0, 'every run to end');
+        await new Promise((r) => setTimeout(r, options.debounceMs + 50));
+        await until(() => live === 0, 'every run to end');
+      } finally {
+        setPreviewTrace(undefined);
+        root.unmount();
+        host.remove();
+      }
+      return { frames, starts, ends, edits };
+    },
+  };
+}
 
 /**
  * Pandoc loader/worker hook for the `pandoc-*.harness.spec.ts` smoke tests. The runner it
@@ -99,13 +241,13 @@ export const pandoc = {
    * The production PDF preview pane (third preview kind) in `#pdf-viewer-host`; `update(content)`
    * is an edit (the pane recompiles after its debounce). The viewer is the same iframe as above.
    */
-  mountPdfPreviewPane(path: string, content: string, debounceMs = 100) {
+  mountPdfPreviewPane(path: string, content: string, debounceMs = 100, projectKey?: string) {
     const host = document.createElement('div');
     host.id = 'pdf-viewer-host';
     host.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#fff';
     document.body.appendChild(host);
     const root = createRoot(host);
-    const render = (text: string) => root.render(createElement(PdfPreviewPane, { path, content: text, debounceMs }));
+    const render = (text: string) => root.render(createElement(PdfPreviewPane, { path, content: text, debounceMs, projectKey }));
     render(content);
     return { update: render };
   },
@@ -115,7 +257,7 @@ export const pandoc = {
    * the new PDF. Each run rewrites the document (a changing last line) so that it is a real edit. Run 0 is
    * the cold run (module fetch and compile) and is returned like the others for the caller to discard.
    */
-  async measurePdfRefresh(path: string, baseText: string, runs: number) {
+  async measurePdfRefresh(path: string, baseText: string, runs: number, options: { warm?: boolean } = {}) {
     await wasmRenderer.initWasm();
     let host = document.getElementById('pdf-viewer-host');
     if (!host) {
@@ -130,12 +272,17 @@ export const pandoc = {
     let tPdf = 0;
     let tShown = 0;
     let shown: Promise<void> = Promise.resolve();
-    const controller = createPdfPreviewController((pdf, info) => {
-      tPdf = performance.now();
-      shown = viewer.show(pdf, { key: info.path, fileName: info.fileName }).then(() => {
-        tShown = performance.now();
-      });
-    });
+    // `warm` chooses the path at run time (the build-time flag is not consulted), so one bundle compares both.
+    const controller = createPdfPreviewController(
+      (pdf, info) => {
+        tPdf = performance.now();
+        shown = viewer.show(pdf, { key: info.path, fileName: info.fileName }).then(() => {
+          tShown = performance.now();
+        });
+      },
+      { warm: options.warm === true },
+    );
+    controller.acquire();
     const marks: { stage: string; t: number }[] = [];
     controller.subscribe(() => {
       const s = controller.getSnapshot();
@@ -153,9 +300,11 @@ export const pandoc = {
       out.push({ t0, marks: [...marks], tPdf, tShown, phase: controller.getSnapshot().phase });
     }
     controller.cancel();
+    controller.release();
     viewer.dispose();
     return out;
   },
+  ...warmHooks(),
   /** The dev harness: Rust request -> worker -> output (src/pandoc/devHarness.ts). */
   download: pandocDownload,
   uiStateFor,

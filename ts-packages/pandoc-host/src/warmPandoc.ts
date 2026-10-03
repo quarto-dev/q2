@@ -28,6 +28,9 @@ export interface RunSignals {
   oomMessage: boolean;
 }
 
+/** fd 0-2 are the standard streams and fd 3 is the preopened `/`; anything above is a file the guest opened. */
+const FIRST_FREE_FD = 4;
+
 const NO_SIGNALS: RunSignals = { trapped: false, thrownExit: null, oomMessage: false };
 const OOM_TEXT = /out of memory|Heap exhausted/i;
 
@@ -62,11 +65,13 @@ export class WarmPandoc {
   private readonly fd1: Uint8Array[];
   private readonly fd2: Uint8Array[];
   private readonly hooks: FaultHooks;
+  /** The WASI shim's fd table (the array it was constructed with). */
+  private readonly fdTable: unknown[];
   private fault: Fault | undefined;
   /** Signals of the last `run`. */
   signals: RunSignals = NO_SIGNALS;
 
-  private constructor(module: WebAssembly.Module, x: WarmExports, options: WarmCreateOptions, guest: Tree, fd1: Uint8Array[], fd2: Uint8Array[], hooks: FaultHooks) {
+  private constructor(module: WebAssembly.Module, x: WarmExports, options: WarmCreateOptions, guest: Tree, fd1: Uint8Array[], fd2: Uint8Array[], hooks: FaultHooks, fdTable: unknown[]) {
     this.module = module;
     this.x = x;
     this.options = options;
@@ -74,6 +79,7 @@ export class WarmPandoc {
     this.fd1 = fd1;
     this.fd2 = fd2;
     this.hooks = hooks;
+    this.fdTable = fdTable;
     this.fault = options.fault;
   }
 
@@ -117,7 +123,12 @@ export class WarmPandoc {
     const argvpp = x.malloc(4);
     view().setUint32(argvpp, argvp, true);
     x.hs_init_with_rtsopts(argc, argvpp);
-    return new WarmPandoc(module, x, options, tree, fd1, fd2, hooks);
+    return new WarmPandoc(module, x, options, tree, fd1, fd2, hooks, fds);
+  }
+
+  /** Length of the WASI fd table (a regression guard: it must not grow with the number of renders). */
+  fdTableLength(): number {
+    return this.fdTable.length;
   }
 
   /** Linear memory size now. It never shrinks. */
@@ -142,6 +153,11 @@ export class WarmPandoc {
       else trap = e;
     }
     this.disarmFault();
+    // The shim hands out a new fd number for every `path_open` by pushing onto its table, and a closed fd leaves a hole, so
+    // the table only grows: a long-lived instance accumulates about one entry per file it ever opened (about 70 per render)
+    // and, in WebKit, stopped finding files after about 3000 of them. Nothing the guest holds survives a `convert`, so the
+    // table goes back to the standard streams and the preopen.
+    this.fdTable.length = FIRST_FREE_FD;
     return { trap, exit, fd1: dec.decode(concat(this.fd1)), fd2: dec.decode(concat(this.fd2)) };
   }
 

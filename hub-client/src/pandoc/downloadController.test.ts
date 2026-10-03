@@ -323,6 +323,15 @@ describe('DownloadController: the PDF chain', () => {
     expect(byPath.get('/__q2_share__/pandoc-share/typst/t.typ')).not.toBe(shareTree.files[0].bytes);
   });
 
+  it('asks typst.fontFamilies for the family names when the deps provide it, instead of runner.listFonts', async () => {
+    const fontFamilies = vi.fn(async () => ({ ok: true as const, families: ['Memo Sans'], notices: [] }));
+    const { controller, listFonts, buildRequest } = chain({ deps: { typst: { runner: { run: vi.fn(async () => typstOk()), listFonts: vi.fn() }, fontFamilies, assets: () => ({ vendoredPackages: [], fonts: [] }), datePrelude: () => '' } } });
+    await controller.start({ path: 'a.qmd', format: PDF });
+    expect(fontFamilies).toHaveBeenCalledOnce();
+    expect(listFonts).not.toHaveBeenCalled();
+    expect(buildRequest).toHaveBeenCalledWith('a.qmd', 'pdf', 1700000000, expect.any(AbortSignal), ['Memo Sans']);
+  });
+
   it('gives each typst job its own font buffers (the runner transfers them)', async () => {
     const { listFonts, typstRun } = chain();
     const { controller } = chain({ listFonts, typstRun });

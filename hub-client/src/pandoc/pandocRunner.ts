@@ -10,7 +10,7 @@
  * through `uiStateFor`.
  */
 import { prepareForPost } from '@quarto/pandoc-host';
-import type { Diagnostic, ExecuteResult, ExecuteSuccess, Fault, HostDiagnostic, Limits, PandocRequest, ShareTree, WorkerRequest, WorkerResponse } from '@quarto/pandoc-host';
+import type { Diagnostic, ExecuteResult, ExecuteSuccess, Fault, HostDiagnostic, Limits, PandocRequest, RunStats, ShareTree, WorkerRequest, WorkerResponse } from '@quarto/pandoc-host';
 import { PandocLoadError, type LoadProgress, type PandocLoader } from './pandocLoader';
 
 /** Wall limit for one render: wasm cannot be interrupted, so a runaway filter is terminated. */
@@ -54,6 +54,8 @@ export interface RunFailure {
   loadError?: PandocLoadError;
   /** Non-fatal loader notices (cache unavailable, ...). */
   notices: string[];
+  /** The worker's stats for a failed render (warm runner only: `retire` is set after errored renders too). */
+  stats?: RunStats;
 }
 
 export type RunSuccess = ExecuteSuccess & { notices: string[] };
@@ -122,6 +124,8 @@ export interface RunOptions {
   onLoadProgress?: (p: LoadProgress) => void;
   /** Overrides the runner's wall timeout (the test hook shortens it for the hang case). */
   wallTimeoutMs?: number;
+  /** Which document this render is for (the preview's path joined with its project key); the warm runner's grace rule keys on it. */
+  docKey?: string;
 }
 
 export interface RunnerConfig {
@@ -129,6 +133,8 @@ export interface RunnerConfig {
   createWorker: () => WorkerLike;
   wallTimeoutMs?: number;
   limits?: Limits;
+  /** The runner's clock (grace median, warm-up threshold); default `performance.now`. Warm runner only. */
+  now?: () => number;
 }
 
 class Superseded extends Error {
@@ -138,9 +144,9 @@ class Superseded extends Error {
   }
 }
 
-const host = (code: HostDiagnostic['code'], message: string): HostDiagnostic => ({ origin: 'host', kind: 'error', code, message });
+export const host = (code: HostDiagnostic['code'], message: string): HostDiagnostic => ({ origin: 'host', kind: 'error', code, message });
 
-const failure = (kind: RunFailureKind, diagnostics: Diagnostic[], notices: string[], extra: Partial<RunFailure> = {}): RunFailure => ({
+export const failure = (kind: RunFailureKind, diagnostics: Diagnostic[], notices: string[], extra: Partial<RunFailure> = {}): RunFailure => ({
   ok: false,
   kind,
   status: null,
@@ -263,6 +269,7 @@ export class PandocRunner {
             if (msg.id === id) options.onStage?.(msg.stage);
           } else if (msg.type === 'result' && msg.id === id) {
             const r = msg.result;
+            this.loader.countRender();
             settle(r.ok ? { ...r, notices } : failure(r.kind, r.diagnostics, notices, { status: r.status, stderr: r.stderr, stdout: r.stdout }));
           }
         };
@@ -292,11 +299,16 @@ export class PandocRunner {
   /** Classify a stop that came from an abort signal or a load rejection. */
   private interrupted(signal: AbortSignal, notices: string[], loadError?: unknown): RunFailure {
     if (signal.aborted) return failure(signal.reason instanceof Superseded ? 'superseded' : 'aborted', [], notices);
-    if (loadError instanceof PandocLoadError) {
-      if (loadError.code === 'aborted') return failure('aborted', [], notices);
-      return failure('load-failed', [host(LOAD_DIAGNOSTIC[loadError.code], loadError.message)], notices, { loadError });
-    }
-    const message = loadError instanceof Error ? loadError.message : String(loadError);
-    return failure('load-failed', [host('download-failed', message)], notices, { loadError: new PandocLoadError('fetch-failed', message, { cause: loadError }) });
+    return loadFailure(loadError, notices);
   }
+}
+
+/** The outcome for a load that rejected (shared with the warm runner). */
+export function loadFailure(loadError: unknown, notices: string[]): RunFailure {
+  if (loadError instanceof PandocLoadError) {
+    if (loadError.code === 'aborted') return failure('aborted', [], notices);
+    return failure('load-failed', [host(LOAD_DIAGNOSTIC[loadError.code], loadError.message)], notices, { loadError });
+  }
+  const message = loadError instanceof Error ? loadError.message : String(loadError);
+  return failure('load-failed', [host('download-failed', message)], notices, { loadError: new PandocLoadError('fetch-failed', message, { cause: loadError }) });
 }

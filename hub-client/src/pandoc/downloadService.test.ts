@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { PandocFormatInfo } from '@quarto/preview-runtime';
-import { MENU_FORMATS, selectMenuFormats } from './downloadService';
+import { MENU_FORMATS, createPdfPreviewController, selectMenuFormats } from './downloadService';
+import { getPreviewPandocRunner } from './pandocService';
 
 const row = (key: string, extra: Partial<PandocFormatInfo> = {}): PandocFormatInfo => ({
   key,
@@ -31,5 +32,31 @@ describe('selectMenuFormats', () => {
 
   it('carries the extension and mime the download uses', () => {
     expect(selectMenuFormats([row('typst')], false, ['typst'])[0]).toEqual({ key: 'typst', label: 'TYPST', extension: 'typ', mime: 'x/y' });
+  });
+});
+
+describe('createPdfPreviewController: the warm option', () => {
+  it('warm takes the preview pool from the warm runner; the fresh path never touches it', () => {
+    const acquire = vi.spyOn(getPreviewPandocRunner(), 'acquire').mockImplementation(() => {});
+    const release = vi.spyOn(getPreviewPandocRunner(), 'release').mockImplementation(() => {});
+    const fresh = createPdfPreviewController(() => {}, { warm: false });
+    fresh.acquire();
+    fresh.release();
+    expect(acquire).not.toHaveBeenCalled();
+    const warm = createPdfPreviewController(() => {}, { warm: true });
+    warm.acquire();
+    warm.release();
+    expect(acquire).toHaveBeenCalledTimes(1);
+    expect(release).toHaveBeenCalledTimes(1);
+    acquire.mockRestore();
+    release.mockRestore();
+  });
+
+  it('the preview\'s runners are not the app-wide ones, so a Download and a preview never share a render slot', async () => {
+    const { getPandoc } = await import('./pandocService');
+    const { getPreviewTypstRunner, getTypst } = await import('../typst/typstService');
+    expect(getPreviewPandocRunner()).not.toBe(getPandoc().runner);
+    expect(getPreviewTypstRunner()).not.toBe(getTypst().runner);
+    expect(getPreviewPandocRunner()).toBe(getPreviewPandocRunner());
   });
 });

@@ -10,20 +10,24 @@ import {
   getPandocShareTree,
   getPandocShareTreeVersion,
   getTypstAssets,
+  getTypstAssetsVersion,
   initWasm,
   renderPandocRequest,
   typstDatePrelude,
   type PandocFormatInfo,
 } from '@quarto/preview-runtime';
 import type { ShareTree } from '@quarto/pandoc-host';
-import { DownloadController, type DownloadDeps, type DownloadFormat } from './downloadController';
+import { DownloadController, type DownloadDeps, type DownloadFormat, type PdfInfo, type TraceEvent } from './downloadController';
 import { pandocWasmEnabled, isPreviewEmbed } from './featureFlag';
 import { renderNatively } from './nativeRender';
 import { fetchChapterCaptures } from './captureFetch';
-import { getPandoc } from './pandocService';
+import { getPandoc, getPreviewPandocRunner } from './pandocService';
 import { saveBlob } from './saveBlob';
-import { getTypst } from '../typst/typstService';
+import { getPreviewTypstRunner, getTypst } from '../typst/typstService';
 import { splitTypstAssets } from '../typst/typstAssetSplit';
+import { TYPST_FONTS_SHA256 } from '../typst/typstAssets';
+import { createFontMemo } from '../typst/fontMemo';
+import type { FontListOutcome, TypstJob, TypstRunFailure, TypstRunOptions, TypstRunOutcome } from '../typst/typstRunner';
 
 /**
  * Formats the menu offers. The table in Rust says what *can* be produced; this list says
@@ -72,12 +76,37 @@ function shareTree(): ShareTree {
   return cachedTree;
 }
 
-export type PdfListener = (pdf: Uint8Array, info: { path: string; fileName: string }) => void;
+export type PdfListener = (pdf: Uint8Array, info: PdfInfo) => void;
 const pdfListeners = new Set<PdfListener>();
 /** Each compiled PDF, as the "Download as PDF" chain produces it (the viewer's feed). Returns an unsubscribe. */
 export function onPdfCompiled(listener: PdfListener): () => void {
   pdfListeners.add(listener);
   return () => pdfListeners.delete(listener);
+}
+
+/** The runners the PDF chain uses; the preview supplies its own (H10b), Download uses the app-wide ones. */
+export interface ChainRunners {
+  pandoc?: NonNullable<DownloadDeps['runner']>;
+  typst?: {
+    run(job: TypstJob, options?: TypstRunOptions): Promise<TypstRunOutcome>;
+    listFonts(fonts?: Uint8Array[], options?: TypstRunOptions): Promise<FontListOutcome | TypstRunFailure>;
+  };
+}
+
+const fontMemos = new WeakMap<object, ReturnType<typeof createFontMemo>>();
+
+/** The font list of the preview's typst runner, computed once per font asset version. */
+function previewFontFamilies(runner: NonNullable<ChainRunners['typst']>) {
+  let memo = fontMemos.get(runner);
+  if (!memo) {
+    memo = createFontMemo({
+      runner,
+      fonts: () => splitTypstAssets(getTypstAssets().files).fonts,
+      key: () => `${TYPST_FONTS_SHA256}|${getTypstAssetsVersion()}`,
+    });
+    fontMemos.set(runner, memo);
+  }
+  return memo;
 }
 
 /**
@@ -86,7 +115,7 @@ export function onPdfCompiled(listener: PdfListener): () => void {
  * book for typst, pdf and epub (R9). A click that carries its own scope (the menu's "Download book
  * as" and "This chapter only") overrides it through `buildRequest`'s sixth argument.
  */
-function wasmDeps(scope: 'auto' | 'chapter'): Omit<DownloadDeps, 'save'> {
+function wasmDeps(scope: 'auto' | 'chapter', runners: ChainRunners = {}): Omit<DownloadDeps, 'save'> {
   return {
     buildRequest: async (path, format, sourceDateEpoch, signal, typstAvailableFonts, extra) => {
       await initWasm();
@@ -101,9 +130,10 @@ function wasmDeps(scope: 'auto' | 'chapter'): Omit<DownloadDeps, 'save'> {
     },
     fetchCaptures: (docIds, signal) => fetchChapterCaptures(docIds, signal),
     getShareTree: shareTree,
-    runner: getPandoc().runner,
+    runner: runners.pandoc ?? getPandoc().runner,
     typst: {
-      runner: getTypst().runner,
+      runner: runners.typst ?? getTypst().runner,
+      ...(runners.typst ? { fontFamilies: previewFontFamilies(runners.typst) } : {}),
       assets: () => splitTypstAssets(getTypstAssets().files),
       datePrelude: typstDatePrelude,
     },
@@ -116,14 +146,27 @@ export function pdfPreviewAvailable(): boolean {
   return pandocWasmEnabled() && !isPreviewEmbed();
 }
 
+let previewTrace: ((event: TraceEvent) => void) | undefined;
+/** The E2E harness's observer of the preview controllers' runs (`DownloadDeps.trace`); production never sets it. */
+export function setPreviewTrace(listener: ((event: TraceEvent) => void) | undefined): void {
+  previewTrace = listener;
+}
+
 /**
  * A controller for the PDF preview pane: the same chain as "Download as PDF" but it saves nothing and
  * hands each compiled PDF to `onPdf`. It is separate from the app-wide controller so a preview
  * compile never shows in, or supersedes, a download's status.
  */
-export function createPdfPreviewController(onPdf: (pdf: Uint8Array, info: { path: string; fileName: string }) => void): DownloadController {
+export function createPdfPreviewController(
+  onPdf: (pdf: Uint8Array, info: PdfInfo) => void,
+  options: { warm?: boolean; runners?: ChainRunners } = {},
+): DownloadController {
   // The pane shows one page, so it stays chapter-alone for good (R9 Q-9-5).
-  return new DownloadController({ ...wasmDeps('chapter'), save: () => {}, onPdf });
+  // `warm` selects the warm pandoc runner, the preview's serialized typst runner and the overlapping controller;
+  // without it the preview is the fresh path, as before H10b. `runners` overrides either runner (tests).
+  const warmRunner = options.warm ? getPreviewPandocRunner() : undefined;
+  const runners: ChainRunners = warmRunner ? { pandoc: warmRunner, typst: getPreviewTypstRunner(), ...options.runners } : { ...options.runners };
+  return new DownloadController({ ...wasmDeps('chapter', runners), save: () => {}, onPdf, overlap: options.warm === true, pool: warmRunner, trace: (e) => previewTrace?.(e) });
 }
 
 let controller: DownloadController | undefined;

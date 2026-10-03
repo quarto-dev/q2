@@ -316,3 +316,45 @@ which pandoc's Haskell side reads once from the WASI environment (typst has no p
 - **What to run.** `hub-client/src/pandoc/warmPandoc.wasm.test.ts` and `warmSession.wasm.test.ts` (in `npm run test:wasm`; they need `.cache/pandoc-wasm/pandoc.wasm` and the built hub wasm). The
   deferred alternative is a pre-instantiated fresh `_start` instance with argv set later (measured in the spike note, H10a Task 0(c)): it hides instantiation and worker spawn but not per-run start-up, needs no
   translator, preamble or poison handling, and was not faster than fresh in Firefox.
+
+## Warm pool and the PDF preview (H10b)
+
+The PDF preview pane renders through `WarmPandocRunner` (`hub-client/src/pandoc/warmPandocRunner.ts`), a pool of at most two persistent pandoc workers (`MAX_WORKERS`), each holding a `WarmSession`, on a
+second runner next to the app-wide fresh one. Both share the one `PandocLoader`, so the compiled `Module` is held once. `getPreviewPandocRunner()` and `getPreviewTypstRunner()` (`pandocService.ts`,
+`typstService.ts`) own the preview's instances; **Download as, the parity net, the book menu and SDE stay on the fresh runner** (`getDownloadController` still builds its deps from the app-wide runners), so
+they never see a warm instance. The plan is `claude-notes/plans/2026-10-02-pandoc-host-H10b-warm-pool-preview.md`.
+
+- **The flag.** `pandocWarmEnabled()` (`featureFlag.ts`) is on unless `VITE_PANDOC_WARM=0`, read at build time and once per pane mount. Off means the preview uses the fresh runner and the old serial controller.
+- **Debounce.** The pane debounces by `PDF_PREVIEW_WARM_DEBOUNCE_MS` = 500 ms, the same as the fresh path. H10a Task 0(f) derived a warm whole refresh of 344 ms (Chromium) and 424 ms (WebKit), above the 200 ms
+  that a 250 ms debounce needs, so the debounce was not shortened. (H10b 5c measured the real warm whole refresh at 267 ms and 320 ms; the 250 ms question is closed by the 0(f) rule, not reopened.)
+- **Dispatch.** A request goes to an idle worker. Otherwise it replaces the single pending request (latest wins; the replaced request resolves `superseded`) and starts when a worker frees. A new worker is
+  warmed by replaying the latest request that *succeeded* in under `WARMUP_MAX_MS` (500 ms), its output discarded. The pool starts with one worker and wants two after the first completed render, or when a request arrives and no worker is idle or starting; it shrinks back to one on reboot or idle, and
+  is dropped after `DEFAULT_IDLE_MS` of no use, or `LINGER_MS` (30 s) after the pane's last `release()`; the pane `acquire()`s at mount and `release()`s at unmount, so a remount inside the linger reuses the workers.
+- **No kill, except two rules.** A render that a newer request has superseded keeps running to completion on its worker: an abort signal never terminates a worker, it detaches the result. Only the wall timeout
+  (120 s from dispatch; resolves `timeout`) and the grace rule terminate one. **Grace:** a superseded run's grace clock starts at the later of the supersede and its dispatch, and it gets
+  `graceMs = min(wallTimeoutMs, 16 s, max(1000 * 2^k, 3 * median))`, with *k* the number of consecutive grace terminations since the last completed render (capped at 4), and *median* the median of the last five
+  completed warm renders of the same `docKey`. `graceMs` is fixed once, when the run is superseded; *k* and the median reset on a `docKey` change and on a reboot. When it expires the worker is terminated, the run
+  resolves `superseded` and a replacement is created in the background. **A newest request may therefore wait for a free worker for up to `graceMs`, at most 16 s**, when both workers hold superseded renders.
+  The doubling is what lets a slow document through continuous typing: in the 1c simulation (edits every 0.6 s, one `docKey`) a 2 s render shows its first frame within 10 s, and **a 10.9 s render needs 5 grace
+  terminations and 17.3 s of continuous typing before its first frame**. With no history a 1.5 s render under 400 ms edits is only safe once five undisturbed renders have given a median.
+- **The generation (reboot) rule.** A worker is built for a generation key: the pandoc.wasm SHA-256, the limits, the share-tree version and `ARGV_ALLOWLIST_VERSION`. A request with a different key reboots
+  the pool (every old worker goes at once, whatever it is doing). This is a defensive invariant: within one page session the key is constant, because the wasm, the share tree and the allowlist ship in one bundle.
+- **The controller's apply rules** (`downloadController.ts`, overlap mode, set by `createPdfPreviewController(onPdf, { warm })`). Each `start()` takes a `seq`; older runs keep going. A success is shown iff nothing at or
+  after its `seq` has been shown (the *watermark*, `lastSettled`) and it is for the newest started run's path and project key; the viewer gets each PDF at most once. A failure is shown only by the newest started
+  run, and advances the watermark, so an older success that finishes later is dropped and the failure banner stays. Only the newest run's stage and progress drive the status. A *stage gate* stops an older run
+  whose pandoc leg ends after a newer run has submitted its compile (or shown), so it cannot queue a compile ahead of the newer one. File switches and project changes abort every live run. The user's cancel
+  detaches them all. Concurrent request builds are safe: `render_pandoc_request` takes a per-call VFS snapshot and holds no lock across its awaits.
+- **The preview's typst runner is serialized and never killed.** `TypstRunnerConfig.serialized` queues compile jobs on one worker at a time, so overlapping runs do not each spawn a typst worker; a superseded
+  compile finishes and its result is dropped. The font list is memoized (`createFontMemo`, keyed by the fonts asset hash and `getTypstAssetsVersion()`; a shared flight that no waiter's abort can cancel; one retry on
+  `superseded`/`aborted`; only successes are cached), where the app-wide path calls `listFonts` per run. "No kill" covers the whole preview chain (pandoc and typst, the font list, the viewer); the wall timeout
+  and the pandoc grace rule are the only terminations.
+- **WebKit recycles the module.** WebKit 26.4's compiled `WebAssembly.Module` stops working from about the 47th render (a Lua "module not found" in every worker that uses it, warm or fresh) until it is
+  compiled again. `PandocLoader.renders` counts renders on the module across all runners, warm-ups included, and `WarmPandocRunner({ recycleAfter })` calls `loader.dropResident()` when due; `pandocService` sets
+  `WEBKIT_RECYCLE_AFTER = 30` for WebKit only. The recompile cost is unmeasured; the cause inside JavaScriptCore is unconfirmed (tier-up is the suspect) and no upstream report is filed yet. The fresh runner alone
+  never recycles. Separately, `WarmPandoc` truncates the WASI fd table to its first four entries after every `convert` (the shim leaves a hole per closed file, about 281 entries per render).
+- **What the warm path does not cover.** Download as PDF, the book menu, docx/pptx/epub (parity pins `SOURCE_DATE_EPOCH`), SDE, and any request whose argv is outside the allowlist (those run fresh inside the worker,
+  `stats.fallback`). Real Safari and iOS memory limits with two resident workers are unmeasured.
+- **Tests and measurements.** `hub-client/e2e/pandoc-warm.harness.spec.ts`: the correctness matrix (A,B,A byte equality over the typst recordings and the argv matrix, env isolation, faults, 100 renders with flat
+  memory, overlapping edits through the real pane, larger fixtures) runs in the normal harness step; the timing specs (`PANDOC_WARM_TIMING=1`, `--workers=1`) gate same-run ratios in CI and the absolute figures locally.
+  Run it per `dev-docs` as `npx playwright test --config playwright.harness.config.ts --project=chromium|webkit --workers=1 --retries=0 pandoc-warm` after `VITE_E2E=1 npm run build`. Local figures (Gordon's
+  Mac): pandoc leg warm 105 ms (Chromium) and 104 ms (WebKit) against 164 and 300 fresh; whole refresh 267 and 320 ms against 376 and 580 fresh.
