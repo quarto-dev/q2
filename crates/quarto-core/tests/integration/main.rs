@@ -142,6 +142,7 @@ pub mod title_block_pipeline;
 pub mod toc_location;
 pub mod toc_markup;
 pub mod toc_title_context;
+pub mod typst_generic_font_families;
 pub mod unreferenced_brand;
 pub mod video_shortcode_preview;
 pub mod website_aliases;

@@ -1,0 +1,26 @@
+---
+title: "CSS Generic Font Family Test"
+brand: _brand.yml
+format:
+  typst:
+    keep-typ: true
+_quarto:
+  tests:
+    typst:
+      # Divergence from Q1, which asserts the generic keyword is preserved
+      # (`font: ("Roboto", "sans-serif")`). Typst has no generic families, so
+      # Q2 replaces each keyword with the first available font from a
+      # candidate list. Which font wins differs per machine, so only
+      # platform-independent facts are asserted: no keyword reaches the .typ
+      # (and, via the default warning gate, Typst reports no unknown family).
+      ensureTypstFileRegexMatches:
+        -
+          - 'font: \("[^"]+"'
+          - 'codefont: \("[^"]+"'
+        -
+          - '"sans-serif"'
+          - '"monospace"'
+---
+
+Verifies that CSS generic font family names (sans-serif, monospace) are
+resolved to a concrete available font rather than passed through to Typst.

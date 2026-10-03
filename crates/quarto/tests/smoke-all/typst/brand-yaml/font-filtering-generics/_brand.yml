@@ -1,0 +1,5 @@
+typography:
+  base:
+    family: "Roboto, sans-serif"
+  monospace:
+    family: "Inconsolata, monospace"
