@@ -134,6 +134,7 @@ pub mod project_pipeline;
 pub mod project_profile_overlays;
 pub mod project_resources;
 pub mod project_type_parsing;
+pub mod qmd_writer_footnotes;
 pub mod render_page_in_project;
 pub mod render_preserves_source_files;
 pub mod render_to_html_captures;

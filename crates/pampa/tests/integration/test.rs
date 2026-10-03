@@ -606,7 +606,7 @@ fn normalize_api_version(pandoc_json: &mut serde_json::Value, our_json: &serde_j
 /// attribute-source key is `a` (Phase 5 rename of the former `attrS`). Every
 /// source-info key emitted by the JSON writer is listed here; if a new one
 /// is added, this list must be extended too.
-fn remove_location_fields(json: &mut serde_json::Value) {
+pub(crate) fn remove_location_fields(json: &mut serde_json::Value) {
     if let Some(obj) = json.as_object_mut() {
         obj.remove("l"); // old SourceInfo
         obj.remove("s"); // quarto_source_map::SourceInfo foreign key
