@@ -6,8 +6,8 @@
   },
   {
     "path": "capture/callouts.docx",
-    "size": 18976,
-    "sha256": "b2a3aa09d9a80729c6e6a7d3b011db72bc24ca3061934e1f522e49ebc5aa8b50"
+    "size": 18975,
+    "sha256": "37d6f316e6405966327c914f23ad7a4066072c172246026a972b914d82af8e4b"
   },
   {
     "path": "env.json",
@@ -32,7 +32,7 @@
   {
     "path": "meta.json",
     "size": 182,
-    "sha256": "f2b3384222a0c456d275db0886f0c23b9eb15e624e534ea295672435ebddb25c"
+    "sha256": "69f9aabb5fba0b099949889744520693af1dccdaa1ab01dd041642223c0c4091"
   },
   {
     "path": "reference/callouts.docx",

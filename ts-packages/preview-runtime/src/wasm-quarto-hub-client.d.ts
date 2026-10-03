@@ -90,15 +90,19 @@ declare module 'wasm-quarto-hub-client' {
 
   /**
    * Envelope returned by `render_pandoc_request`. `request` is absent when the
-   * document has errors, when the active path is not in the VFS, and for a
-   * document inside a `_quarto.yml` project (until R7 stage 0). `diagnostics`
+   * document has errors (in a book render, any chapter's), when the active
+   * path is not in the VFS, and when the render was cancelled. `diagnostics`
    * are the same JSON shape as `RenderResponse.warnings`/`diagnostics`.
+   * `stats.book` is `null` outside a book project and on early failures.
    */
   export interface RenderPandocRequestResponse {
     success: boolean;
     error?: string;
     diagnostics: AstDiagnostic[];
-    stats: { unexecuted_cells: number };
+    stats: {
+      unexecuted_cells: number;
+      book: { scope: 'book' | 'chapter'; chapters: number } | null;
+    };
     request?: PandocRequestWire;
   }
 
@@ -107,8 +111,22 @@ declare module 'wasm-quarto-hub-client' {
    * `get_pandoc_formats()`). Unlike every other export this returns a JS
    * object, not a JSON string, because it carries `Uint8Array`s.
    * `source_date_epoch` is seconds (a JS number, cast to i64 in Rust).
-   * `capture_gz_json` is as for `render_page_for_preview` (R3 wires it).
+   * `capture_gz_json` is as for `render_page_for_preview` (R3 wires it) and
+   * serves the active page when the request is chapter-alone.
+   *
+   * A book chapter requested as typst, pdf or epub is the whole book unless
+   * `options.scope` is `'chapter'` (R9). `options.capturesByPath` maps each
+   * chapter's `/`-normalized path relative to the VFS project root to its
+   * capture blob. `options.onProgress` is awaited before each chapter of a
+   * book render (`index` is 1-based); if it rejects the call fails with that
+   * error, and an `abort_signal` abort between chapters stops the render with
+   * no `request`.
    */
+  export interface RenderPandocRequestOptions {
+    scope?: 'auto' | 'chapter';
+    capturesByPath?: Record<string, Uint8Array>;
+    onProgress?: (index: number, total: number, file: string) => void | Promise<void>;
+  }
   export function render_pandoc_request(
     path: string,
     format: string,
@@ -116,6 +134,7 @@ declare module 'wasm-quarto-hub-client' {
     capture_gz_json?: Uint8Array,
     typst_available_fonts?: string[],
     abort_signal?: AbortSignal,
+    options?: RenderPandocRequestOptions,
   ): Promise<RenderPandocRequestResponse>;
 
   /**
@@ -192,6 +211,15 @@ declare module 'wasm-quarto-hub-client' {
         success: true;
         source: 'document' | 'project' | 'default';
         formats: { key: string; class: PandocFormatClass }[];
+        /**
+         * `null` outside a book project. In a book: `chapters` are the
+         * file-bearing chapters in book order as sidecar keys (`/`-normalized,
+         * relative to the VFS project root: the keys of
+         * `render_pandoc_request`'s `capturesByPath`), `chapter` whether this
+         * document is one of them. A book whose chapter list is broken
+         * degrades to `{ chapter: false, chapters: [] }`.
+         */
+        book?: { chapter: boolean; chapters: string[] } | null;
       }
     | { success: false; error: string };
   export function resolve_pandoc_formats(path: string): string;

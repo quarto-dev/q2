@@ -42,7 +42,7 @@ interface Wasm {
   vfs_add_binary_file: (path: string, content: Uint8Array) => string;
   vfs_clear: () => string;
   vfs_set_runtime_metadata: (yaml: string) => string;
-  render_pandoc_request: (p: string, f: string, sde?: number, cap?: Uint8Array, fonts?: string[], signal?: AbortSignal) => Promise<RequestEnvelope>;
+  render_pandoc_request: (p: string, f: string, sde?: number, cap?: Uint8Array, fonts?: string[], signal?: AbortSignal, options?: { scope?: 'auto' | 'chapter' }) => Promise<RequestEnvelope>;
   get_pandoc_share_tree: () => ShareTree;
   classify_pandoc_completion: (stage: string, success: boolean, status: string, stderr: string, json: string) => string;
   get_typst_assets: () => { files: { path: string; bytes: Uint8Array }[] };

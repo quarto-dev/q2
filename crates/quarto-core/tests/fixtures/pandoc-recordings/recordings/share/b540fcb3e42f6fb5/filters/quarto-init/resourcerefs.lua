@@ -15,6 +15,12 @@ function resourceRefs()
   
   return {
     Image = function(el)
+      -- In a single-file book the Rust merge has already re-anchored
+      -- chapter-relative image targets (project/book/images.rs); doing it
+      -- again would prepend the chapter directory twice.
+      if param("single-file-book", false) then
+        return el
+      end
       local file = currentFileMetadataState().file
       if file ~= nil and file.resourceDir ~= nil then
         el.src = resourceRef(el.src, file.resourceDir)

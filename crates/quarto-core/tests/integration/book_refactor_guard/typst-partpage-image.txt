@@ -1,20 +1,26 @@
 result: Ok
-outputs: 0
+outputs: 1
+output: _book/Guard-Part-Page.pdf
+input: Guard-Part-Page.qmd
+resources_dir: _book/Guard-Part-Page_files
+execution_skipped: false
+html_len_is_zero: true
+diagnostics: 0
+resource_report: DocumentResourceReport { entries: [] }
 pass1_failures: 0
-pass2_failures: 1
-  - <ROOT> :: Error [Q-21-3]: typst compile exited with exit status: 1:
-error: file not found (searched at <ROOT>/_book/sub/part.png)
-    diagnostics: 1
-  - [Error] Some("Q-21-3") typst compile exited with exit status: 1:
-error: file not found (searched at <ROOT>/_book/sub/part.png)
+pass2_failures: 0
 project_diagnostics: 0
 stopped_early: false
 output_dir_files:
+  Guard-Part-Page.pdf
   Guard-Part-Page.typ
+  part.png
 render_manifest:
 {
   "version": 1,
-  "rendered_files": [],
+  "rendered_files": [
+    "Guard-Part-Page.pdf"
+  ],
   "resources": []
 }
 
@@ -489,7 +495,7 @@ Body two.
 
 #part[Part Two Page]
 #figure([
-#box(image("sub/part.png"))
+#box(image("part.png"))
 ], caption: figure.caption(
 position: bottom, 
 [

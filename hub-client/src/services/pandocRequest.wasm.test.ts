@@ -29,7 +29,7 @@ interface Envelope {
   success: boolean;
   error?: string;
   diagnostics: { kind: string; title: string; code?: string }[];
-  stats: { unexecuted_cells: number };
+  stats: { unexecuted_cells: number; book: { scope: 'book' | 'chapter'; chapters: number } | null };
   request?: Record<string, unknown> & {
     files: RequestFile[];
     resource_refs: RequestFile[];
@@ -56,6 +56,11 @@ interface WasmModule {
     capture_gz_json?: Uint8Array,
     typst_available_fonts?: string[],
     abort_signal?: AbortSignal,
+    options?: {
+      scope?: 'auto' | 'chapter';
+      capturesByPath?: Record<string, Uint8Array>;
+      onProgress?: (index: number, total: number, file: string) => void | Promise<void>;
+    },
   ) => Promise<Envelope>;
   get_pandoc_share_tree_version: () => string;
   get_pandoc_share_tree: () => { share_tree_version: string; files: RequestFile[] };
@@ -146,7 +151,7 @@ describe('render_pandoc_request', () => {
     expect(request.resource_refs.map((f) => f.path)).toEqual(['/project/figure.png']);
     expect(request.resource_refs[0].bytes).toEqual(FIGURE);
     expect(comparable(request)).toEqual(comparable(await loadGolden()));
-    expect(out.stats).toEqual({ unexecuted_cells: 0 });
+    expect(out.stats).toEqual({ unexecuted_cells: 0, book: null });
   });
 
   it('returns copies: nothing in the request aliases wasm memory', async () => {
@@ -233,7 +238,8 @@ describe('render_pandoc_request', () => {
     }
   });
 
-  it('renders the active chapter of a book alone', async () => {
+  // The whole-book default is tested in `pandocBook.wasm.test.ts`.
+  it("renders the active chapter of a book alone with scope 'chapter'", async () => {
     wasm.vfs_add_file(
       '/b/_quarto.yml',
       'project:\n  type: book\nbook:\n  title: B\n  chapters:\n    - index.qmd\n    - one.qmd\n    - two.qmd\n',
@@ -241,13 +247,16 @@ describe('render_pandoc_request', () => {
     wasm.vfs_add_file('/b/index.qmd', '# Preface\n\nHello\n');
     wasm.vfs_add_file('/b/one.qmd', '# One\n\nFirst chapter.\n');
     wasm.vfs_add_file('/b/two.qmd', '# Two\n\nSecond chapter.\n');
-    const out = await wasm.render_pandoc_request('/b/one.qmd', 'typst', SDE);
+    const out = await wasm.render_pandoc_request('/b/one.qmd', 'typst', SDE, undefined, undefined, undefined, {
+      scope: 'chapter',
+    });
     expect(out.error).toBeUndefined();
+    expect(out.stats.book).toEqual({ scope: 'chapter', chapters: 3 });
     const text = new TextDecoder().decode(
       out.request!.files.find((f) => f.path.endsWith('/pandoc-input.json'))!.bytes,
     );
-    expect(text).toContain('First chapter');
-    expect(text).not.toContain('Second chapter');
+    expect(text).toContain('chapter.');
+    expect(text).not.toContain('Second');
   });
 
   it('counts code cells without a cached result, and splices the ones with one', async () => {
@@ -255,7 +264,7 @@ describe('render_pandoc_request', () => {
     wasm.vfs_add_file('/project/doc.qmd', doc);
     const bare = await wasm.render_pandoc_request('/project/doc.qmd', 'docx', SDE);
     expect(bare.success).toBe(true);
-    expect(bare.stats).toEqual({ unexecuted_cells: 2 });
+    expect(bare.stats).toEqual({ unexecuted_cells: 2, book: null });
 
     const markdown =
       '---\ntitle: T\n---\n\nBefore.\n\n::: {.cell}\n::: {.cell-output .cell-output-stdout}\nOUT_R\n:::\n:::\n\n' +
@@ -264,7 +273,7 @@ describe('render_pandoc_request', () => {
     const gz = gzipSync(new TextEncoder().encode(JSON.stringify(capture)));
     const cached = await wasm.render_pandoc_request('/project/doc.qmd', 'docx', SDE, gz);
     expect(cached.success).toBe(true);
-    expect(cached.stats).toEqual({ unexecuted_cells: 1 });
+    expect(cached.stats).toEqual({ unexecuted_cells: 1, book: null });
     const input = cached.request!.files.find((f) => f.path.endsWith('/pandoc-input.json'))!;
     const text = new TextDecoder().decode(input.bytes);
     expect(text).toContain('OUT_R');

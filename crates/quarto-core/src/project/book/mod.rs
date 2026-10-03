@@ -19,6 +19,7 @@ pub mod merge;
 pub(crate) mod multi_file_html;
 pub mod project_type;
 pub mod render_item;
+pub(crate) mod request;
 pub mod static_analyzer;
 
 // The shared single-file-merge core is ungated (the browser's whole-book
@@ -32,5 +33,7 @@ pub use images::resolve_chapter_image_targets;
 pub use links::resolve_cross_chapter_links;
 pub use merge::merge_book_chapters;
 pub use project_type::{BookProjectType, is_supported_format};
-pub use render_item::{BookRenderItem, BookRenderItemKind, book_render_items, chapter_is_numbered};
+pub use render_item::{
+    BookRenderItem, BookRenderItemKind, book_chapter_files, book_render_items, chapter_is_numbered,
+};
 pub(crate) use static_analyzer::analyze_book_project_statically;

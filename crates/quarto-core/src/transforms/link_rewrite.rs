@@ -206,6 +206,17 @@ impl<'a> LinkRewriter<'a> {
                 }
             }
             Block::Figure(f) => {
+                // The caption too: it can hold an image, and an image that is
+                // not rewritten here keeps the page-relative form the author
+                // wrote while its siblings are rewritten (R9 task 5).
+                if let Some(short) = f.caption.short.as_mut() {
+                    self.visit_inlines(short);
+                }
+                if let Some(long) = f.caption.long.as_mut() {
+                    for b in long.iter_mut() {
+                        self.visit_block(b);
+                    }
+                }
                 for b in f.content.iter_mut() {
                     self.visit_block(b);
                 }
@@ -953,6 +964,93 @@ mod tests {
             vec!["../../images/x.svg"],
             "a docx-target render must rebase a root-absolute image target \
              the same way an html-target render does"
+        );
+    }
+
+    fn figure_image_targets(blocks: &[Block]) -> Vec<String> {
+        let mut blocks = blocks.to_vec();
+        let mut out = Vec::new();
+        crate::ast_walk::for_each_inline_mut(&mut blocks, &mut |inline| {
+            if let Inline::Image(img) = inline {
+                out.push(img.target.0.clone());
+            }
+        });
+        out
+    }
+
+    fn figure_with_caption_image() -> Block {
+        Block::Figure(quarto_pandoc_types::Figure {
+            attr: Attr::default(),
+            caption: quarto_pandoc_types::Caption {
+                short: None,
+                long: Some(vec![para(vec![image_inline("/images/icon.svg", "icon")])]),
+                source_info: SourceInfo::for_test(),
+            },
+            content: vec![para(vec![image_inline("/images/main.svg", "main")])],
+            source_info: SourceInfo::for_test(),
+            attr_source: AttrSourceInfo::empty(),
+        })
+    }
+
+    /// R9 task 5, intended behaviour change: an image inside a figure
+    /// *caption* is rebased like the figure's own image. Before, only
+    /// `Figure.content` was visited, so a caption image kept the target the
+    /// merge (or the author) wrote while its sibling was made page-relative.
+    /// Pinned for the website resolver (the HTML and single-file book paths).
+    #[tokio::test]
+    async fn figure_caption_images_are_rebased_like_figure_content() {
+        let project = make_project();
+        let doc = DocumentInfo::from_path("/project/deep/deeper/index.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        ctx.resource_resolver = Some(ResourceResolverContext::website(
+            "/project/_site",
+            "/project/_site/deep/deeper/index.html",
+            "site_libs",
+            "index",
+        ));
+        let mut ast = Pandoc {
+            meta: empty_meta(),
+            blocks: vec![figure_with_caption_image()],
+        };
+        LinkRewriteTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        assert_eq!(
+            figure_image_targets(&ast.blocks),
+            vec!["../../images/icon.svg", "../../images/main.svg"],
+            "the caption image is rebased too (caption first: it is visited first)"
+        );
+    }
+
+    /// The same change for a Pandoc-profile (typst/epub) render, which is
+    /// what the whole-book request and native single-file books use.
+    #[tokio::test]
+    async fn figure_caption_images_are_rebased_for_a_pandoc_profile_too() {
+        let project = make_project();
+        let doc = DocumentInfo::from_path("/project/deep/deeper/index.qmd");
+        let format = Format::from_format_string("typst").unwrap();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        ctx.resource_resolver = Some(ResourceResolverContext::website(
+            "/project/_site",
+            "/project/_site/deep/deeper/index.pdf",
+            "site_libs",
+            "index",
+        ));
+        let mut ast = Pandoc {
+            meta: empty_meta(),
+            blocks: vec![figure_with_caption_image()],
+        };
+        LinkRewriteTransform::new()
+            .transform(&mut ast, &mut ctx)
+            .await
+            .unwrap();
+        assert_eq!(
+            figure_image_targets(&ast.blocks),
+            vec!["../../images/icon.svg", "../../images/main.svg"]
         );
     }
 

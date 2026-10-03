@@ -80,12 +80,16 @@ export function onPdfCompiled(listener: PdfListener): () => void {
   return () => pdfListeners.delete(listener);
 }
 
-/** The browser-side dependencies shared by the download controller and the PDF preview's. */
-function wasmDeps(): Omit<DownloadDeps, 'save'> {
+/**
+ * The browser-side dependencies shared by the download controller and the PDF preview's. `scope` is
+ * what a book chapter requests: `'chapter'` is the page alone, `'auto'` the whole book for typst,
+ * pdf and epub (R9).
+ */
+function wasmDeps(scope: 'auto' | 'chapter'): Omit<DownloadDeps, 'save'> {
   return {
     buildRequest: async (path, format, sourceDateEpoch, signal, typstAvailableFonts) => {
       await initWasm();
-      return renderPandocRequest(path, format, { sourceDateEpoch, signal, typstAvailableFonts });
+      return renderPandocRequest(path, format, { sourceDateEpoch, signal, typstAvailableFonts, scope });
     },
     getShareTree: shareTree,
     runner: getPandoc().runner,
@@ -109,7 +113,8 @@ export function pdfPreviewAvailable(): boolean {
  * compile never shows in, or supersedes, a download's status.
  */
 export function createPdfPreviewController(onPdf: (pdf: Uint8Array, info: { path: string; fileName: string }) => void): DownloadController {
-  return new DownloadController({ ...wasmDeps(), save: () => {}, onPdf });
+  // The pane shows one page, so it stays chapter-alone for good (R9 Q-9-5).
+  return new DownloadController({ ...wasmDeps('chapter'), save: () => {}, onPdf });
 }
 
 let controller: DownloadController | undefined;
@@ -119,7 +124,8 @@ export function getDownloadController(): DownloadController {
     controller = isPreviewEmbed()
       ? new DownloadController({ native: (request, opts) => renderNatively(request, opts), save: saveBlob })
       : new DownloadController({
-          ...wasmDeps(),
+          // Chapter-alone until H5's "Download book" menu switches this to 'auto' (R9 Q-9-5).
+          ...wasmDeps('chapter'),
           save: saveBlob,
           onPdf: (pdf, info) => pdfListeners.forEach((l) => l(pdf, info)),
         });

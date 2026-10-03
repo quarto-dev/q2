@@ -216,8 +216,13 @@ fn fixture_caption_image(dir: &Path) {
 }
 
 fn citations_yml(extra: &str) -> String {
+    citations_yml_with(extra, true)
+}
+
+fn citations_yml_with(extra: &str, citeproc: bool) -> String {
+    let citeproc_line = if citeproc { "citeproc: true\n" } else { "" };
     format!(
-        "project:\n  type: book\n\nkeep-typ: true\n\nbook:\n  title: \"Guard Cites\"\n  author: \"A. Author\"\n  chapters:\n    - index.qmd\n    - ch1.qmd\n    - ch2.qmd\n\nbibliography: refs.bib\nciteproc: true\n{extra}"
+        "project:\n  type: book\n\nkeep-typ: true\n\nbook:\n  title: \"Guard Cites\"\n  author: \"A. Author\"\n  chapters:\n    - index.qmd\n    - ch1.qmd\n    - ch2.qmd\n\nbibliography: refs.bib\n{citeproc_line}{extra}"
     )
 }
 
@@ -252,8 +257,11 @@ fn fixture_citations_csl(dir: &Path) {
 fn fixture_citations_margin(dir: &Path) {
     write_str(
         &dir.join("_quarto.yml"),
-        &citations_yml(
+        &citations_yml_with(
             "reference-location: margin\ncitation-location: margin\nsuppress-bibliography: true\n",
+            // Pandoc's own citeproc would read the root-relative bibliography
+            // path the margin mode writes; margin books leave citeproc off.
+            false,
         ),
     );
     write_citation_chapters(dir);

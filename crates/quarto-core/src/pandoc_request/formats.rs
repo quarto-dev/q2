@@ -134,6 +134,21 @@ pub struct ResolvedFormats {
     pub source: FormatSource,
     /// In declaration order; the first is the document's own format.
     pub formats: Vec<ResolvedFormat>,
+    /// `None` outside a book project (serialized as `null`).
+    pub book: Option<BookResolution>,
+}
+
+/// What the menu needs to know about a book before the first click (R9): the
+/// host fetches the capture blobs for `chapters`, and offers "Download book"
+/// when `chapter` is true.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct BookResolution {
+    /// The file-bearing chapters in book order, as sidecar keys
+    /// ([`super::captures::sidecar_key`]: `/`-normalized, relative to the VFS
+    /// project root; the keys of `capturesByPath`).
+    pub chapters: Vec<String>,
+    /// The document is one of `chapters`.
+    pub chapter: bool,
 }
 
 /// The keys of a `format:` value: a string, or the keys of a map in order.
@@ -186,6 +201,7 @@ pub fn resolve_formats(content: &str, project_format: Option<&ConfigValue>) -> R
                 ResolvedFormat { key, class }
             })
             .collect(),
+        book: None,
     }
 }
 
@@ -205,7 +221,37 @@ pub fn resolve_document_formats(
         .metadata
         .as_ref()
         .and_then(|meta| meta.get("format"));
-    Ok(resolve_formats(&content, project_format))
+    let mut resolved = resolve_formats(&content, project_format);
+    if project.project_kind() == crate::project::ProjectKind::Book {
+        resolved.book = Some(book_resolution(&project, path, runtime));
+    }
+    Ok(resolved)
+}
+
+/// Computed without Pass 1 from the book's file list alone. A broken list
+/// (`Q-5-34`, `Q-5-35`, `Q-5-36`) degrades to "not a chapter" rather than
+/// failing the resolver; the export reports that error when a book download
+/// is asked for.
+fn book_resolution(
+    project: &ProjectContext,
+    path: &Path,
+    runtime: &dyn SystemRuntime,
+) -> BookResolution {
+    let Ok(files) = crate::project::book::book_chapter_files(project, runtime) else {
+        return BookResolution {
+            chapters: Vec::new(),
+            chapter: false,
+        };
+    };
+    let chapters: Vec<String> = files
+        .iter()
+        .map(|f| super::captures::sidecar_key(runtime, &project.dir.join(f)))
+        .collect();
+    let active = super::captures::sidecar_key(runtime, path);
+    BookResolution {
+        chapter: chapters.contains(&active),
+        chapters,
+    }
 }
 
 #[cfg(test)]
