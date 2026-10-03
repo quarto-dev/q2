@@ -1,0 +1,199 @@
+{
+ "browser": "webkit",
+ "n": 12,
+ "date": "2026-10-03T17:33:30.581Z",
+ "init": {
+  "compileMs": 245.00000000000006,
+  "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.4 Safari/605.1.15"
+ },
+ "warmup": [
+  {
+   "name": "callouts",
+   "gapMs": 0,
+   "firstConvertColdInstance": {
+    "n": 12,
+    "med": 170,
+    "min": 144,
+    "max": 267
+   },
+   "convertAfterOneWarmup": {
+    "n": 12,
+    "med": 116,
+    "min": 111,
+    "max": 163.00000000000045
+   },
+   "steadyWarm": {
+    "n": 12,
+    "med": 113,
+    "min": 106,
+    "max": 121.99999999999818
+   },
+   "deltaMedian": 3
+  },
+  {
+   "name": "callouts",
+   "gapMs": 500,
+   "firstConvertColdInstance": {
+    "n": 12,
+    "med": 158,
+    "min": 141,
+    "max": 181
+   },
+   "convertAfterOneWarmup": {
+    "n": 12,
+    "med": 115,
+    "min": 111,
+    "max": 120.00000000000182
+   },
+   "steadyWarm": {
+    "n": 12,
+    "med": 110.99999999999636,
+    "min": 105.99999999999636,
+    "max": 116.99999999999636
+   },
+   "deltaMedian": 4.000000000003638
+  }
+ ],
+ "spare": {
+  "name": "callouts",
+  "idleMs": 300,
+  "spawnAndInstantiate": {
+   "n": 12,
+   "med": 188,
+   "min": 166,
+   "max": 273
+  },
+  "requestToOutput": {
+   "n": 12,
+   "med": 168,
+   "min": 155,
+   "max": 181
+  },
+  "insideWorker": {
+   "n": 12,
+   "med": 166,
+   "min": 154,
+   "max": 178.9999999999999
+  },
+  "freshEndToEnd": {
+   "n": 12,
+   "med": 356,
+   "min": 332.0000000000073,
+   "max": 413
+  },
+  "bytesEqualToFresh": true
+ },
+ "stderrProbe": {
+  "fd1": "PROBE-IO-STDOUT\n",
+  "fd2": "PROBE-IO-STDERR\nWARNING (f.lua:1) quarto-style warning\n",
+  "stderrFile": "",
+  "warnings": "[]",
+  "trap": null,
+  "output": "x\n\n[alt]\n"
+ },
+ "typst": {
+  "fonts": 20,
+  "packages": 37
+ },
+ "typstCheck": {
+  "e2e": 185,
+  "id": 0.18572777038745647,
+  "ok": true,
+  "initMs": 68,
+  "compileMs": 106,
+  "pdfLen": 40319,
+  "diagnostics": []
+ },
+ "contention": {
+  "plain": {
+   "name": "callouts",
+   "n": 12,
+   "gapMs": 40,
+   "load": null,
+   "spin": 0,
+   "cores": 8,
+   "alone": {
+    "n": 12,
+    "med": 109,
+    "min": 102,
+    "max": 114
+   },
+   "older": {
+    "n": 12,
+    "med": 107,
+    "min": 101,
+    "max": 114
+   },
+   "newer": {
+    "n": 12,
+    "med": 109.00000000000728,
+    "min": 102,
+    "max": 113.00000000000728
+   },
+   "olderMinusAlone": -2,
+   "newerMinusAlone": 7.275957614183426e-12
+  },
+  "loaded": {
+   "name": "callouts",
+   "n": 12,
+   "gapMs": 40,
+   "load": "typst",
+   "spin": 0,
+   "cores": 8,
+   "alone": {
+    "n": 12,
+    "med": 107,
+    "min": 102.99999999999272,
+    "max": 118
+   },
+   "older": {
+    "n": 12,
+    "med": 116,
+    "min": 107,
+    "max": 131
+   },
+   "newer": {
+    "n": 12,
+    "med": 114,
+    "min": 104,
+    "max": 120.99999999999272
+   },
+   "olderMinusAlone": 9,
+   "newerMinusAlone": 7,
+   "typstCompile": {
+    "n": 12,
+    "med": 126,
+    "min": 82.99999999999272,
+    "max": 146
+   }
+  },
+  "coresLoaded": {
+   "name": "callouts",
+   "n": 12,
+   "gapMs": 40,
+   "load": null,
+   "spin": 7,
+   "cores": 8,
+   "alone": {
+    "n": 12,
+    "med": 135.00000000000728,
+    "min": 101,
+    "max": 149.99999999999272
+   },
+   "older": {
+    "n": 12,
+    "med": 139,
+    "min": 122,
+    "max": 152
+   },
+   "newer": {
+    "n": 12,
+    "med": 142.99999999999272,
+    "min": 112,
+    "max": 159
+   },
+   "olderMinusAlone": 3.999999999992724,
+   "newerMinusAlone": 7.999999999985448
+  }
+ }
+}

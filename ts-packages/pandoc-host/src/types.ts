@@ -106,6 +106,12 @@ export interface RunStats {
   /** Linear memory size after the run. */
   memoryBytes: number;
   mountedBytes: number;
+  /** The run was served by a warm instance (H10a). */
+  warm?: true;
+  /** A warm-eligible request that the argv translator rejected ran through the fresh path instead. */
+  fallback?: true;
+  /** The instance is to be dropped when idle (`WarmSession`: its memory passed the retire threshold). */
+  retire?: true;
 }
 
 export interface ExecuteSuccess {

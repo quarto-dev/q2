@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "flags": [
+    "--data-dir",
+    "--default-image-extension",
+    "--defaults",
+    "--reference-doc",
+    "--resource-path",
+    "--shift-heading-level-by",
+    "--standalone",
+    "--syntax-highlighting",
+    "--template",
+    "--top-level-division",
+    "--wrap",
+    "-L",
+    "-V",
+    "-f",
+    "-o",
+    "-t"
+  ]
+}

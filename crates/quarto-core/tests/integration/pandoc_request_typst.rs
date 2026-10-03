@@ -15,7 +15,7 @@ use quarto_system_runtime::NativeRuntime;
 use serde_json::Value;
 
 /// A directory outside `/tmp` (wasm-mode requests reject mounts under it).
-fn scratch() -> (tempfile::TempDir, PathBuf) {
+pub(crate) fn scratch() -> (tempfile::TempDir, PathBuf) {
     let dir = tempfile::Builder::new()
         .prefix("q2-r4-typst-")
         .tempdir_in(env!("CARGO_TARGET_TMPDIR"))
@@ -29,7 +29,7 @@ fn write(path: &Path, bytes: &[u8]) {
     std::fs::write(path, bytes).unwrap();
 }
 
-fn render_with(
+pub(crate) fn render_with(
     path: &Path,
     format: &str,
     typst_available_fonts: Option<Vec<String>>,
@@ -52,7 +52,7 @@ fn render_with(
     ))
 }
 
-fn render_typst(root: &Path, qmd: &str) -> PandocRequestOutcome {
+pub(crate) fn render_typst(root: &Path, qmd: &str) -> PandocRequestOutcome {
     let doc = root.join("doc.qmd");
     write(&doc, qmd.as_bytes());
     render_with(&doc, "typst", None)

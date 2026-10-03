@@ -42,11 +42,11 @@ const B = {
     return { e2e: t1 - t0, ...r.stats, stderr: r.stderr, trap: r.trap, digest: await digest(r.output), len: r.output?.length ?? null };
   },
   warmWorker: null,
-  async warmStart(name, rts) {
+  async warmStart(name, rts, capture = false) {
     const rec = await fx(name);
     const t0 = performance.now();
     B.warmWorker = spawn();
-    const r = await call(B.warmWorker, { op: "warm-init", module, rec, rts });
+    const r = await call(B.warmWorker, { op: "warm-init", module, rec, rts, capture });
     return { e2e: performance.now() - t0, initMs: r.initMs };
   },
   async warm(name, extra = {}) {
@@ -54,7 +54,7 @@ const B = {
     const t0 = performance.now();
     const r = await call(B.warmWorker, { op: "warm-convert", rec, ...extra });
     const t1 = performance.now();
-    return { e2e: t1 - t0, ...r.stats, stderr: r.stderr, trap: r.trap, digest: await digest(r.output), len: r.output?.length ?? null };
+    return { e2e: t1 - t0, ...r.stats, stderr: r.stderr, fd1: r.fd1, fd2: r.fd2, warnings: r.warnings, trap: r.trap, digest: await digest(r.output), len: r.output?.length ?? null };
   },
   warmStop() { B.warmWorker?.terminate(); B.warmWorker = null; },
 
@@ -150,5 +150,114 @@ const B = {
     return res;
   },
 };
+// ---- Task 0 (H10a): measurements for the warm executor plan. Sources of the numbers in the evidence note, "H10a Task 0". ----
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const stat = (xs) => ({ n: xs.length, med: median(xs), min: Math.min(...xs), max: Math.max(...xs) });
+
+/** 0(a): is a new instance hot after one warm-up convert? n new instances, each: spawn+init, warm-up convert, `gapMs` idle, timed convert. */
+B.warmup = async (name, n, gapMs = 0) => {
+  const cold = [], after = [];
+  for (let i = -1; i < n; i++) { // i = -1 is the discarded cycle
+    await B.warmStart(name);
+    const first = await B.warm(name); // the warm-up (a callouts-sized request through the full chain)
+    if (gapMs) await sleep(gapMs);
+    const next = await B.warm(name);
+    B.warmStop();
+    if (i >= 0) { cold.push(first.e2e); after.push(next.e2e); }
+  }
+  // steady-state warm median in the same run, for the comparison
+  await B.warmStart(name); await B.warm(name);
+  const steady = []; for (let i = 0; i < n; i++) steady.push((await B.warm(name)).e2e);
+  B.warmStop();
+  return { name, gapMs, firstConvertColdInstance: stat(cold), convertAfterOneWarmup: stat(after), steadyWarm: stat(steady), deltaMedian: median(after) - median(steady) };
+};
+
+/** 0(c): a fresh `_start` instance instantiated in advance, argv and tree supplied at request time. */
+B.spare = async (name, n, idleMs = 300) => {
+  const rec = await fx(name);
+  const inst = [], run = [], total = [], fresh = [];
+  for (let i = -1; i < n; i++) {
+    const t0 = performance.now();
+    const w = spawn();
+    const init = await call(w, { op: "spare-init", module });
+    const spareReady = performance.now() - t0;
+    await sleep(idleMs); // the spare idles until a request arrives
+    const t1 = performance.now();
+    const r = await call(w, { op: "spare-run", rec });
+    const reqToOut = performance.now() - t1;
+    w.terminate();
+    if (i >= 0) { inst.push(spareReady); run.push(reqToOut); total.push(r.stats.total); }
+    const f = await B.fresh(name);
+    if (i >= 0) fresh.push(f.e2e);
+    if (i === 0) var d = await digest(r.output), df = f.digest;
+  }
+  return { name, idleMs, spawnAndInstantiate: stat(inst), requestToOutput: stat(run), insideWorker: stat(total), freshEndToEnd: stat(fresh), bytesEqualToFresh: d === df };
+};
+
+/** 0(d): does Lua `io.stderr:write` land on WASI fd 2 in convert mode, and what else do fd 1/2 and /warnings carry? */
+B.stderrProbe = async () => {
+  const rec = await fx("callouts");
+  const doc = new TextEncoder().encode('{"pandoc-api-version":[1,23,1],"meta":{},"blocks":[{"t":"Para","c":[{"t":"Str","c":"x"}]},{"t":"Para","c":[{"t":"Image","c":[["",[],[]],[{"t":"Str","c":"alt"}],["missing.png",""]]}]}]}');
+  const filter = 'function Pandoc(d) io.stderr:write("PROBE-IO-STDERR\\n") io.stdout:write("PROBE-IO-STDOUT\\n") io.stderr:write("WARNING (f.lua:1) quarto-style warning\\n") return d end';
+  const opts = { from: "json", to: "plain", "data-dir": "/__q2_share__/pandoc/datadir", filters: [{ type: "lua", path: "/f.lua" }], "input-files": ["/in.json"], "output-file": "/out.txt" };
+  await B.warmStart("callouts", undefined, true);
+  const r = await call(B.warmWorker, { op: "warm-convert", rec, filter, extra: [{ mount: "/in.json", bytes: doc }], options: opts });
+  B.warmStop();
+  return { fd1: r.fd1, fd2: r.fd2, stderrFile: r.stderr, warnings: r.warnings, trap: r.trap, output: r.output ? new TextDecoder().decode(r.output) : null };
+};
+
+// Typst, as the hub-client runs it: a fresh worker per compile (init + compile), assets from the hub-client build.
+const typst = { module: null, fonts: null, packages: null };
+const unpackList = (u8, named) => { const v = new DataView(u8.buffer, u8.byteOffset, u8.byteLength); const n = v.getUint32(0, true); let at = 4; const out = []; const td = new TextDecoder();
+  for (let i = 0; i < n; i++) { let path = null; if (named) { const pl = v.getUint32(at, true); at += 4; path = td.decode(u8.subarray(at, at + pl)); at += pl; } const l = v.getUint32(at, true); at += 4; out.push(named ? { path, bytes: u8.slice(at, at + l) } : u8.slice(at, at + l)); at += l; } return out; };
+const getBin = async (p) => new Uint8Array(await (await fetch(p)).arrayBuffer());
+B.typstInit = async () => {
+  typst.module = await WebAssembly.compile(await getBin("/typst.wasm"));
+  typst.fonts = [...unpackList(await getBin("/typst-fonts.bin"), false), ...unpackList(await getBin("/typst-vendored-fonts.bin"), false)];
+  typst.packages = unpackList(await getBin("/typst-packages.bin"), true);
+  return { fonts: typst.fonts.length, packages: typst.packages.length };
+};
+B.pandocOut = async (name) => { const rec = await fx(name); const w = spawn(); const r = await call(w, { op: "fresh", module, rec }); w.terminate(); return r.output; };
+const typstInputs = {};
+/** One typst compile in a fresh worker, over callouts' pandoc output and the recording's files (the share tree and the document's). */
+B.typstCompile = async (name = "callouts") => {
+  const rec = await fx(name);
+  if (!typstInputs[name]) typstInputs[name] = await B.pandocOut(name);
+  const t0 = performance.now();
+  const w = new Worker("/typst-worker.bundle.mjs", { type: "module" });
+  const files = [...rec.files.filter((f) => f.mount !== rec.output).map((f) => ({ path: f.mount, bytes: f.bytes.slice() })), { path: rec.output, bytes: typstInputs[name].slice() }];
+  const r = await call(w, { op: "compile", module: typst.module, fonts: typst.fonts.map((f) => f.slice()), packages: typst.packages.map((f) => ({ path: f.path.replace(/^packages\//, ""), bytes: f.bytes.slice() })), input: { main: rec.output, root: "/", files } });
+  w.terminate();
+  return { e2e: performance.now() - t0, ...r };
+};
+
+/**
+ * 0(b): two warm workers. "alone": the active render by itself. "overlap": the older render starts, the newer one starts `gapMs` later
+ * on the other worker; both are timed from their own start. `load`: "typst" adds a concurrent typst compile and a main-thread busy loop
+ * (10 ms spin every 20 ms); `spin: k` keeps k cores busy with spin workers.
+ */
+B.contention = async (name, n, { gapMs = 40, load = null, spin = 0 } = {}) => {
+  const rec = await fx(name);
+  const mk = async () => { const w = spawn(); await call(w, { op: "warm-init", module, rec }); await call(w, { op: "warm-convert", rec }); await call(w, { op: "warm-convert", rec }); return w; };
+  const W1 = await mk(), W2 = await mk();
+  const spinners = Array.from({ length: spin }, () => { const w = spawn(); w.postMessage({ op: "spin" }); return w; });
+  let stopBusy = false;
+  if (load === "typst") (async () => { while (!stopBusy) { const t = performance.now(); while (performance.now() - t < 10) { /* spin */ } await sleep(10); } })();
+  if (load === "typst" && !typst.module) await B.typstInit();
+  const timed = async (w) => { const t = performance.now(); await call(w, { op: "warm-convert", rec }); return performance.now() - t; };
+  const alone = [], r1 = [], r2 = [], typstMs = [];
+  for (let i = -1; i < n; i++) {
+    const a = await timed(W1);
+    let ty = null; if (load === "typst") ty = B.typstCompile(name);
+    const p1 = timed(W1); await sleep(gapMs); const p2 = timed(W2);
+    const [x1, x2] = await Promise.all([p1, p2]);
+    if (ty) { const t = await ty; if (i >= 0) typstMs.push(t.e2e); }
+    if (i >= 0) { alone.push(a); r1.push(x1); r2.push(x2); }
+    await sleep(50);
+  }
+  stopBusy = true; for (const w of spinners) w.terminate(); W1.terminate(); W2.terminate();
+  return { name, n, gapMs, load, spin, cores: navigator.hardwareConcurrency, alone: stat(alone), older: stat(r1), newer: stat(r2), olderMinusAlone: median(r1) - median(alone), newerMinusAlone: median(r2) - median(alone), ...(typstMs.length ? { typstCompile: stat(typstMs) } : {}) };
+};
+
 window.B = B;
 window.__ready = true;

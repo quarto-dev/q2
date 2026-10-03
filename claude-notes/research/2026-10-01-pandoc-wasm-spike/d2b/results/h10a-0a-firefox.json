@@ -1,0 +1,200 @@
+{
+ "browser": "firefox",
+ "n": 12,
+ "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:157.0) Gecko/20100101 Firefox/157.0",
+ "date": "2026-10-03T17:47:27.282Z",
+ "init": {
+  "compileMs": 336,
+  "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:157.0) Gecko/20100101 Firefox/157.0"
+ },
+ "warmup": [
+  {
+   "name": "callouts",
+   "gapMs": 0,
+   "firstConvertColdInstance": {
+    "n": 12,
+    "med": 138,
+    "min": 132,
+    "max": 156
+   },
+   "convertAfterOneWarmup": {
+    "n": 12,
+    "med": 125,
+    "min": 120,
+    "max": 130
+   },
+   "steadyWarm": {
+    "n": 12,
+    "med": 112,
+    "min": 109,
+    "max": 121
+   },
+   "deltaMedian": 13
+  },
+  {
+   "name": "callouts",
+   "gapMs": 500,
+   "firstConvertColdInstance": {
+    "n": 12,
+    "med": 119,
+    "min": 117,
+    "max": 125
+   },
+   "convertAfterOneWarmup": {
+    "n": 12,
+    "med": 141,
+    "min": 123,
+    "max": 144
+   },
+   "steadyWarm": {
+    "n": 12,
+    "med": 105,
+    "min": 101,
+    "max": 110
+   },
+   "deltaMedian": 36
+  }
+ ],
+ "spare": {
+  "name": "callouts",
+  "idleMs": 300,
+  "spawnAndInstantiate": {
+   "n": 12,
+   "med": 18,
+   "min": 16,
+   "max": 28
+  },
+  "requestToOutput": {
+   "n": 12,
+   "med": 168,
+   "min": 132,
+   "max": 173
+  },
+  "insideWorker": {
+   "n": 12,
+   "med": 165,
+   "min": 132,
+   "max": 170
+  },
+  "freshEndToEnd": {
+   "n": 12,
+   "med": 140,
+   "min": 135,
+   "max": 166
+  },
+  "bytesEqualToFresh": true
+ },
+ "stderrProbe": {
+  "fd1": "PROBE-IO-STDOUT\n",
+  "fd2": "PROBE-IO-STDERR\nWARNING (f.lua:1) quarto-style warning\n",
+  "stderrFile": "",
+  "warnings": "[]",
+  "trap": null,
+  "output": "x\n\n[alt]\n"
+ },
+ "typst": {
+  "fonts": 20,
+  "packages": 37
+ },
+ "typstCheck": {
+  "e2e": 85,
+  "id": 0.21636202352192835,
+  "ok": true,
+  "initMs": 38,
+  "compileMs": 40,
+  "pdfLen": 40319,
+  "diagnostics": []
+ },
+ "contention": {
+  "plain": {
+   "name": "callouts",
+   "n": 12,
+   "gapMs": 40,
+   "load": null,
+   "spin": 0,
+   "cores": 12,
+   "alone": {
+    "n": 12,
+    "med": 109,
+    "min": 101,
+    "max": 122
+   },
+   "older": {
+    "n": 12,
+    "med": 108,
+    "min": 102,
+    "max": 122
+   },
+   "newer": {
+    "n": 12,
+    "med": 106,
+    "min": 102,
+    "max": 115
+   },
+   "olderMinusAlone": -1,
+   "newerMinusAlone": -3
+  },
+  "loaded": {
+   "name": "callouts",
+   "n": 12,
+   "gapMs": 40,
+   "load": "typst",
+   "spin": 0,
+   "cores": 12,
+   "alone": {
+    "n": 12,
+    "med": 108,
+    "min": 101,
+    "max": 119
+   },
+   "older": {
+    "n": 12,
+    "med": 117,
+    "min": 109,
+    "max": 136
+   },
+   "newer": {
+    "n": 12,
+    "med": 110,
+    "min": 105,
+    "max": 135
+   },
+   "olderMinusAlone": 9,
+   "newerMinusAlone": 2,
+   "typstCompile": {
+    "n": 12,
+    "med": 75,
+    "min": 71,
+    "max": 92
+   }
+  },
+  "coresLoaded": {
+   "name": "callouts",
+   "n": 12,
+   "gapMs": 40,
+   "load": null,
+   "spin": 11,
+   "cores": 12,
+   "alone": {
+    "n": 12,
+    "med": 169,
+    "min": 102,
+    "max": 198
+   },
+   "older": {
+    "n": 12,
+    "med": 148,
+    "min": 109,
+    "max": 189
+   },
+   "newer": {
+    "n": 12,
+    "med": 168,
+    "min": 107,
+    "max": 200
+   },
+   "olderMinusAlone": -21,
+   "newerMinusAlone": -1
+  }
+ }
+}

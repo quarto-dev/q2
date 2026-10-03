@@ -1,0 +1,4 @@
+color:
+  palette:
+    ink: "#112233"
+  foreground: ink

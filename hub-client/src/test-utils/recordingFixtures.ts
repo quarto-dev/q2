@@ -11,6 +11,7 @@
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { RECORDINGS, relocateReferenceText } from './pandocRecordings';
 
 export const DOC_DIR = '/__q2_doc__';
@@ -64,4 +65,27 @@ export function recordedDocs(): RecordedDoc[] {
 /** The reference's extraction text, with the native replay directory mapped into request layout. */
 export function referenceText(doc: RecordedDoc, extractText: (file: string) => string): string {
   return relocateReferenceText(extractText(doc.referencePath), doc.name);
+}
+
+/** One document of the argv matrix (`crates/quarto-core/tests/fixtures/pandoc-argv-matrix`): `doc.qmd` plus the files it needs. */
+export interface MatrixDoc {
+  name: string;
+  /** Case-relative paths (`doc.qmd`, `refs.bib`, ...); seed each at `${DOC_DIR}/<path>` and render `${DOC_DIR}/doc.qmd`. */
+  files: { path: string; bytes: Uint8Array }[];
+}
+
+const MATRIX = fileURLToPath(new URL('../../../crates/quarto-core/tests/fixtures/pandoc-argv-matrix', import.meta.url));
+
+/** The argv-matrix cases in name order, as `{ name, files }` (the neighbour of `recordedDocs()`). Node-only. */
+export function matrixDocs(): MatrixDoc[] {
+  return readdirSync(MATRIX)
+    .filter((n) => statSync(path.join(MATRIX, n)).isDirectory())
+    .sort()
+    .map((name) => ({
+      name,
+      files: walk(path.join(MATRIX, name)).map((r) => {
+        const b = readFileSync(path.join(MATRIX, name, r));
+        return { path: r, bytes: new Uint8Array(b.buffer, b.byteOffset, b.byteLength).slice() };
+      }),
+    }));
 }
