@@ -1,15 +1,23 @@
 /** React binding for the download controller: status, menu formats and the click handler. */
-import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
-import { isWasmReady } from '@quarto/preview-runtime';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { isWasmReady, type CaptureRef } from '@quarto/preview-runtime';
 import { getDownloadController, menuFormats, downloadAvailable } from './downloadService';
-import type { DownloadFormat, DownloadStatus } from './downloadController';
+import { bookInfoFor, type BookInfo } from './bookInfo';
+import { captureDocIdsFor } from './captureFetch';
+import { isPreviewEmbed } from './featureFlag';
+import type { DownloadFormat, DownloadStatus, StartOptions } from './downloadController';
 
 export interface DownloadAs {
   /** "Download as" is offered in this build. */
   available: boolean;
   formats: DownloadFormat[];
   status: DownloadStatus;
-  start: (format: DownloadFormat) => void;
+  /** `scope` is the book entries' pick: `'auto'` the whole book, `'chapter'` this chapter only. */
+  start: (format: DownloadFormat, scope?: 'auto' | 'chapter') => void;
+  /** The resolver's book field for the open document; null outside a book (and in the native embed). */
+  book?: BookInfo | null;
+  /** Re-read `book` (the project's chapter list may have changed since the document opened). */
+  refreshBook?: () => void;
   cancel: () => void;
   dismiss: () => void;
 }
@@ -17,16 +25,29 @@ export interface DownloadAs {
 /**
  * `path` is the open document (as the preview uses it); `content` is the editor's current
  * text, which only the native executor reads. `wasmReady` re-derives the menu once the hub
- * wasm (which owns the format table) is up.
+ * wasm (which owns the format table) is up. `captures` is the project's capture sidecar: a
+ * whole-book download fetches every chapter's capture from it at click time.
  */
-export function useDownloadAs(path: string | null, content: string, wasmReady: boolean): DownloadAs {
+export function useDownloadAs(path: string | null, content: string, wasmReady: boolean, captures?: Record<string, CaptureRef>): DownloadAs {
   const controller = getDownloadController();
   const status = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   const contentRef = useRef(content);
   useEffect(() => {
     contentRef.current = content;
   }, [content]);
+  const capturesRef = useRef(captures);
+  useEffect(() => {
+    capturesRef.current = captures;
+  }, [captures]);
   const available = downloadAvailable();
+
+  // The native embed renders one chapter, so it never offers the book entries.
+  const [bookVersion, setBookVersion] = useState(0);
+  const book = useMemo(() => {
+    void bookVersion;
+    return available && wasmReady && path && !isPreviewEmbed() ? bookInfoFor(path) : null;
+  }, [available, wasmReady, path, bookVersion]);
+  const refreshBook = useCallback(() => setBookVersion((v) => v + 1), []);
 
   const formats = useMemo(() => (available && wasmReady && isWasmReady() ? menuFormats() : []), [available, wasmReady]);
 
@@ -36,13 +57,26 @@ export function useDownloadAs(path: string | null, content: string, wasmReady: b
   }, [controller, path]);
 
   const start = useCallback(
-    (format: DownloadFormat) => {
+    (format: DownloadFormat, scope?: 'auto' | 'chapter') => {
       if (!path) return;
-      void controller.start({ path, format, content: contentRef.current });
+      const options: StartOptions = { path, format, content: contentRef.current };
+      if (scope === 'auto') {
+        // Re-resolved now: the chapter list is what the project says at the click, not at the menu open.
+        const fresh = bookInfoFor(path);
+        if (fresh?.chapter) {
+          options.scope = 'auto';
+          options.captureDocIds = captureDocIdsFor(fresh.chapters, capturesRef.current);
+        } else {
+          options.scope = 'chapter';
+        }
+      } else if (scope === 'chapter') {
+        options.scope = 'chapter';
+      }
+      void controller.start(options);
     },
     [controller, path],
   );
   const cancel = useCallback(() => controller.cancel(), [controller]);
   const dismiss = useCallback(() => controller.dismiss(), [controller]);
-  return { available, formats, status, start, cancel, dismiss };
+  return { available, formats, status, start, book, refreshBook, cancel, dismiss };
 }

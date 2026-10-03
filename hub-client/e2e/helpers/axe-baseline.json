@@ -1,4 +1,10 @@
 {
+  "download-as-book-progress|dark": {
+    "color-contrast": 1
+  },
+  "download-as-book-progress|light": {
+    "color-contrast": 1
+  },
   "download-as-disabled|dark": {
     "color-contrast": 1
   },

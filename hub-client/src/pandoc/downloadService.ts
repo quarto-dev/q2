@@ -19,6 +19,7 @@ import type { ShareTree } from '@quarto/pandoc-host';
 import { DownloadController, type DownloadDeps, type DownloadFormat } from './downloadController';
 import { pandocWasmEnabled, isPreviewEmbed } from './featureFlag';
 import { renderNatively } from './nativeRender';
+import { fetchChapterCaptures } from './captureFetch';
 import { getPandoc } from './pandocService';
 import { saveBlob } from './saveBlob';
 import { getTypst } from '../typst/typstService';
@@ -26,10 +27,9 @@ import { splitTypstAssets } from '../typst/typstAssetSplit';
 
 /**
  * Formats the menu offers. The table in Rust says what *can* be produced; this list says
- * what the UI has been reviewed for. Each request phase that lands (R3-R7) adds its entry
- * here in its own commit (H5 plan, Close-out), after the H5 demo STOP.
+ * what the UI has been reviewed for. Every row the table has is wired (H5 plan, Close-out).
  */
-export const MENU_FORMATS: readonly string[] = ['docx', 'pdf'];
+export const MENU_FORMATS: readonly string[] = ['docx', 'pptx', 'epub', 'typst', 'pdf'];
 
 /** What the preview server's `POST /api/preview/render` accepts (H4b); `pdf` is browser-only (H8). */
 const NATIVE_FORMATS: readonly string[] = ['docx', 'pptx', 'epub'];
@@ -82,15 +82,24 @@ export function onPdfCompiled(listener: PdfListener): () => void {
 
 /**
  * The browser-side dependencies shared by the download controller and the PDF preview's. `scope` is
- * what a book chapter requests: `'chapter'` is the page alone, `'auto'` the whole book for typst,
- * pdf and epub (R9).
+ * the default for what a book chapter requests: `'chapter'` is the page alone, `'auto'` the whole
+ * book for typst, pdf and epub (R9). A click that carries its own scope (the menu's "Download book
+ * as" and "This chapter only") overrides it through `buildRequest`'s sixth argument.
  */
 function wasmDeps(scope: 'auto' | 'chapter'): Omit<DownloadDeps, 'save'> {
   return {
-    buildRequest: async (path, format, sourceDateEpoch, signal, typstAvailableFonts) => {
+    buildRequest: async (path, format, sourceDateEpoch, signal, typstAvailableFonts, extra) => {
       await initWasm();
-      return renderPandocRequest(path, format, { sourceDateEpoch, signal, typstAvailableFonts, scope });
+      return renderPandocRequest(path, format, {
+        sourceDateEpoch,
+        signal,
+        typstAvailableFonts,
+        scope: extra?.scope ?? scope,
+        capturesByPath: extra?.capturesByPath,
+        onProgress: extra?.onProgress,
+      });
     },
+    fetchCaptures: (docIds, signal) => fetchChapterCaptures(docIds, signal),
     getShareTree: shareTree,
     runner: getPandoc().runner,
     typst: {
@@ -124,7 +133,8 @@ export function getDownloadController(): DownloadController {
     controller = isPreviewEmbed()
       ? new DownloadController({ native: (request, opts) => renderNatively(request, opts), save: saveBlob })
       : new DownloadController({
-          // Chapter-alone until H5's "Download book" menu switches this to 'auto' (R9 Q-9-5).
+          // Chapter-alone unless the click says otherwise: only the book chapter's "Download book as"
+          // entry asks for 'auto' (R9 Q-9-5), so every other entry keeps one page per file.
           ...wasmDeps('chapter'),
           save: saveBlob,
           onPdf: (pdf, info) => pdfListeners.forEach((l) => l(pdf, info)),

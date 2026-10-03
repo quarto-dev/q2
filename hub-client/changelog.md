@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-10-03
+
+- [`2000b034d`](https://github.com/quarto-dev/q2/commits/2000b034d): "Download as" now covers books: on a chapter of a book project, Typst, PDF and EPUB offer "Download book as" (every chapter in one file, named after the book, with "Rendering chapter i of N" progress and a "Book downloaded" summary) and "This chapter only"; Word and PowerPoint still download the open chapter, and a page outside the book downloads alone. The menu also gains PowerPoint, EPUB and Typst source, and documents inside a `_quarto.yml` project download.
+
 ### 2026-10-02
 
 - [`1a6bd1339`](https://github.com/quarto-dev/q2/commits/1a6bd1339): A document whose format is `pdf` now previews as a PDF in the preview pane, in a built-in viewer: choose "Show PDF preview" once (the first use fetches about 33 MB), and the PDF recompiles shortly after you stop typing, keeping your page and zoom. If a change breaks the build, the last good PDF stays on screen under an error message.

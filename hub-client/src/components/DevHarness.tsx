@@ -692,11 +692,16 @@ function DownloadAsPage({
   status: fixed,
   disabledReason,
   interactive,
+  book,
+  formats = [HARNESS_DOCX],
   children,
 }: {
   status?: DownloadStatus;
   disabledReason?: string;
   interactive?: boolean;
+  /** A document that is a book chapter: its menu offers the book entries. */
+  book?: { chapter: boolean; chapters: string[] };
+  formats?: DownloadFormat[];
   children?: React.ReactNode;
 }) {
   const [live, setLive] = useState<DownloadStatus>({ phase: 'idle' });
@@ -711,10 +716,21 @@ function DownloadAsPage({
           sidebarToggleRef={{ current: null }}
           downloadAs={{
             available: true,
-            formats: [HARNESS_DOCX],
+            formats,
             status,
             disabledReason,
-            start: (format) => setLive({ phase: 'done', clickId: 1, format, fileName: 'report.docx', warnings: [], notices: [], unexecutedCells: 0 }),
+            book,
+            start: (format, scope) =>
+              setLive({
+                phase: 'done',
+                clickId: 1,
+                format,
+                fileName: `report.${format.extension}`,
+                warnings: [],
+                notices: [],
+                unexecutedCells: 0,
+                book: scope === 'auto' ? { chapters: 3 } : undefined,
+              }),
             cancel: () => setLive({ phase: 'cancelled', clickId: 1, format: HARNESS_DOCX }),
             dismiss: () => setLive({ phase: 'idle' }),
           }}
@@ -725,6 +741,9 @@ function DownloadAsPage({
     </EditorChrome>
   );
 }
+
+const HARNESS_EPUB: DownloadFormat = { key: 'epub', label: 'EPUB (.epub)', extension: 'epub', mime: 'application/epub+zip' };
+const HARNESS_BOOK = { chapter: true, chapters: ['index.qmd', 'report.qmd', 'two.qmd'] };
 
 const harnessDone: DownloadStatus = {
   phase: 'done',
@@ -990,6 +1009,15 @@ const DEV_PAGES: Record<string, () => React.ReactNode> = {
     />
   ),
   'download-as-done': () => <DownloadAsPage status={harnessDone} />,
+  // A document that is a chapter of a book: the menu offers "Download book as" and "This chapter only".
+  'download-as-book': () => <DownloadAsPage interactive book={HARNESS_BOOK} formats={[HARNESS_DOCX, HARNESS_EPUB]} />,
+  'download-as-book-progress': () => (
+    <DownloadAsPage
+      book={HARNESS_BOOK}
+      formats={[HARNESS_DOCX, HARNESS_EPUB]}
+      status={{ phase: 'working', clickId: 1, format: HARNESS_EPUB, stage: 'chapter', chapter: { index: 2, total: 3, file: 'report.qmd' } }}
+    />
+  ),
   'download-as-failed': () => (
     <DownloadAsPage
       status={{

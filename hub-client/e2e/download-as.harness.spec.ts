@@ -49,7 +49,34 @@ test('disabled: aria-disabled, described by text, and the explanation is visible
   await expect(page.getByTestId('neither-pane')).toContainText('latex');
 });
 
-const STATES = ['download-as', 'download-as-progress', 'download-as-done', 'download-as-failed', 'download-as-disabled', 'download-as-only'];
+test('a book chapter\'s menu: "Download book as" and "This chapter only" per format, docx keeps one entry', async ({ page }) => {
+  await bootHarness(page, 'download-as-book', '.top-bars', 'light');
+  await page.locator(BUTTON).click();
+  const items = page.getByRole('menuitem');
+  await expect(items).toHaveCount(3);
+  await expect(items.nth(0)).toHaveText('Word');
+  await expect(items.nth(1)).toHaveText('Download book as EPUB (.epub)');
+  await expect(items.nth(2)).toContainText('This chapter only');
+  await items.nth(1).click();
+  await expect(page.getByRole('status', { name: 'Download status' })).toHaveText('Book downloaded (3 chapters)');
+});
+
+test('a book download in progress reads "Rendering chapter i of N: file" in the panel and the live region', async ({ page }) => {
+  await bootHarness(page, 'download-as-book-progress', '.top-bars', 'light');
+  await expect(page.getByTestId('download-status')).toContainText('Rendering chapter 2 of 3: report.qmd');
+  await expect(page.getByRole('status', { name: 'Download status' })).toHaveText('Rendering chapter 2 of 3: report.qmd');
+});
+
+const STATES = [
+  'download-as',
+  'download-as-progress',
+  'download-as-done',
+  'download-as-failed',
+  'download-as-disabled',
+  'download-as-only',
+  'download-as-book',
+  'download-as-book-progress',
+];
 for (const route of STATES) {
   for (const theme of THEMES) {
     test(`axe: ${route} — ${theme} theme`, async ({ page }) => {
@@ -60,6 +87,15 @@ for (const route of STATES) {
     });
   }
 }
+
+test('axe: book menu open', async ({ page }) => {
+  await bootHarness(page, 'download-as-book', '.top-bars', 'light');
+  await page.locator(BUTTON).click();
+  await expect(page.getByRole('menu')).toBeVisible();
+  const results = await scan(page);
+  const blocking = results.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical');
+  expect(blocking.map((v) => v.id)).toEqual([]);
+});
 
 test('axe: menu open', async ({ page }) => {
   await bootHarness(page, 'download-as', '.top-bars', 'light');

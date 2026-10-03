@@ -18,6 +18,7 @@ import type { RunOutcome, RunStage, UiState, RunOptions } from './pandocRunner';
 import { uiStateFor } from './pandocRunner';
 import type { NativeRenderOutcome, NativeRenderRequest } from './nativeRender';
 import { sanitizeDownloadName } from './downloadName';
+import { download } from '../strings';
 import type { FontListOutcome, TypstJob, TypstRunFailure, TypstRunOptions, TypstRunOutcome, TypstUiState } from '../typst/typstRunner';
 import { typstUiStateFor } from '../typst/typstRunner';
 import type { TypstFile } from '@quarto/typst-host';
@@ -34,8 +35,15 @@ export interface DownloadFormat {
   mime: string;
 }
 
+/** Which chapter a whole-book render is on (`onProgress`'s arguments; `index` is 1-based). */
+export interface ChapterProgress {
+  index: number;
+  total: number;
+  file: string;
+}
+
 /** `typst-*` stages are the PDF chain's second half (and its font-list prelude); the others are pandoc's. */
-export type DownloadStage = 'preparing' | RunStage | 'native' | 'typst-loading' | 'typst-starting' | 'typst-compiling';
+export type DownloadStage = 'preparing' | 'chapter' | RunStage | 'native' | 'typst-loading' | 'typst-starting' | 'typst-compiling';
 
 export type FailureState = UiState | TypstUiState | 'request-failed' | 'native-failed' | 'native-error';
 
@@ -48,6 +56,8 @@ export type DownloadStatus =
       stage: DownloadStage;
       /** Set while the pandoc.wasm download or compile is in progress. */
       load?: LoadProgress;
+      /** Set (with stage `chapter`) while a whole book's chapters are being rendered. */
+      chapter?: ChapterProgress;
     }
   | {
       phase: 'done';
@@ -58,6 +68,8 @@ export type DownloadStatus =
       warnings: Diagnostic[];
       notices: string[];
       unexecutedCells: number;
+      /** Set when the file is a whole book (`stats.book.scope === 'book'`). */
+      book?: { chapters: number };
     }
   | {
       phase: 'failed';
@@ -96,11 +108,36 @@ export interface TypstChainDeps {
   datePrelude: (sourceDateEpoch: number) => string;
 }
 
+/** The sixth `buildRequest` argument, passed only when the click asked for a scope (a book chapter's menu items). */
+export interface BuildRequestExtra {
+  scope: 'auto' | 'chapter';
+  /** Capture blobs by chapter path (sidecar keys); only for a whole-book click. */
+  capturesByPath?: Record<string, Uint8Array>;
+  /** Called before each chapter of a whole-book render. */
+  onProgress?: (index: number, total: number, file: string) => void;
+}
+
+/** What `fetchCaptures` returns: the bytes that arrived, and the chapter paths that did not. */
+export interface CaptureFetchResult {
+  byPath: Record<string, Uint8Array>;
+  failed: string[];
+}
+
 export interface DownloadDeps {
   /** Rust `render_pandoc_request`. Absent in the embed. */
   /** `signal` is the click's: it aborts the remote-image fetches (R6) when the click is cancelled or superseded. */
-  /** `typstAvailableFonts` is passed (as a fifth argument) only for the PDF chain. */
-  buildRequest?: (path: string, format: string, sourceDateEpoch: number, signal: AbortSignal, typstAvailableFonts?: string[]) => Promise<RequestEnvelope>;
+  /** `typstAvailableFonts` is passed (as a fifth argument) only for the PDF chain or a scoped click. */
+  /** `extra` (a sixth argument) is passed only for a scoped click, so an ordinary click's call is unchanged. */
+  buildRequest?: (
+    path: string,
+    format: string,
+    sourceDateEpoch: number,
+    signal: AbortSignal,
+    typstAvailableFonts?: string[],
+    extra?: BuildRequestExtra,
+  ) => Promise<RequestEnvelope>;
+  /** Fetches the capture bytes of a book's chapters (path to capture doc id) at click time; abort-aware. */
+  fetchCaptures?: (docIds: Record<string, string>, signal: AbortSignal) => Promise<CaptureFetchResult>;
   getShareTree?: () => ShareTree;
   runner?: { run(request: PandocRequest, shareTree: ShareTree, options?: RunOptions): Promise<RunOutcome> };
   classify?: (stageName: string, success: boolean, status: string, stderr: string, jsonPath: string) => ClassifiedCompletion;
@@ -120,6 +157,13 @@ export interface StartOptions {
   format: DownloadFormat;
   /** The editor's current text; only the native executor uses it. */
   content?: string;
+  /**
+   * A book chapter's request scope: `'auto'` is the whole book for typst, pdf and epub ("Download book
+   * as"), `'chapter'` the page alone ("This chapter only"). Absent: the controller's default (chapter).
+   */
+  scope?: 'auto' | 'chapter';
+  /** For a whole-book click: chapter path (sidecar key) to capture doc id, for every chapter that has a capture. */
+  captureDocIds?: Record<string, string>;
 }
 
 /** Progress events closer together than this are folded (phase changes always pass). */
@@ -220,7 +264,7 @@ export class DownloadController {
   }
 
   private async runWasm(
-    { path, format }: StartOptions,
+    { path, format, scope, captureDocIds }: StartOptions,
     id: number,
     own: AbortController,
     current: () => boolean,
@@ -252,9 +296,31 @@ export class DownloadController {
       this.setStage('preparing');
     }
 
-    const envelope = pdf
-      ? await buildRequest(path, format.key, sourceDateEpoch, own.signal, families)
-      : await buildRequest(path, format.key, sourceDateEpoch, own.signal);
+    let extra: BuildRequestExtra | undefined;
+    let captureNotices: string[] = [];
+    if (scope) {
+      extra = { scope };
+      if (scope === 'auto') {
+        const ids = captureDocIds ?? {};
+        if (this.deps.fetchCaptures && Object.keys(ids).length > 0) {
+          const got = await this.deps.fetchCaptures(ids, own.signal);
+          if (!current()) return;
+          extra.capturesByPath = got.byPath;
+          if (got.failed.length > 0) captureNotices = [download.captureFetchFailed(got.failed.length)];
+        }
+        extra.onProgress = (index, total, file) => {
+          if (!current()) return;
+          const s = this.status;
+          if (s.phase === 'working') this.set({ ...s, stage: 'chapter', load: undefined, chapter: { index, total, file } });
+        };
+      }
+    }
+
+    const envelope = extra
+      ? await buildRequest(path, format.key, sourceDateEpoch, own.signal, families, extra)
+      : pdf
+        ? await buildRequest(path, format.key, sourceDateEpoch, own.signal, families)
+        : await buildRequest(path, format.key, sourceDateEpoch, own.signal);
     if (!current()) return;
     const requestDiagnostics = asDiagnostics(envelope.diagnostics);
     if (!envelope.request || !envelope.success || requestDiagnostics.some(isError)) {
@@ -262,6 +328,9 @@ export class DownloadController {
     }
     const request = envelope.request as PandocRequest;
     const unexecutedCells = envelope.stats?.unexecuted_cells ?? 0;
+    // A whole book is named after the book (its output path), not the chapter the click came from.
+    const book = envelope.stats?.book?.scope === 'book' ? { chapters: envelope.stats.book.chapters } : undefined;
+    const nameFrom = book ? request.output_path : path;
     const chain = pdf && request.post === 'compile_typst';
     if (pdf && !chain) throw new Error('The PDF request does not ask for a typst compile');
 
@@ -275,7 +344,7 @@ export class DownloadController {
       onStage: (stage) => {
         if (!current()) return;
         const s = this.status;
-        if (s.phase === 'working') this.set({ ...s, stage, load: stage === 'loading' ? s.load : undefined });
+        if (s.phase === 'working') this.set({ ...s, stage, load: stage === 'loading' ? s.load : undefined, chapter: undefined });
       },
       onLoadProgress: (load) => {
         if (!current()) return;
@@ -306,9 +375,9 @@ export class DownloadController {
     if (!completion.success || warnings.some(isError)) return fail('pandoc-error', warnings, outcome.notices);
 
     if (!chain) {
-      const fileName = sanitizeDownloadName(path, format.extension);
+      const fileName = sanitizeDownloadName(nameFrom, format.extension);
       this.deps.save(new Blob([outcome.output as BlobPart], { type: format.mime }), fileName);
-      this.set({ phase: 'done', clickId: id, format, fileName, warnings, notices: outcome.notices, unexecutedCells });
+      this.set({ phase: 'done', clickId: id, format, fileName, warnings, notices: [...captureNotices, ...outcome.notices], unexecutedCells, book });
       return;
     }
 
@@ -327,7 +396,7 @@ export class DownloadController {
       this.typstOptions(own, 'typst-loading', nowMs, current),
     );
     if (!current()) return;
-    const notices = [...outcome.notices, ...fontNotices, ...compiled.notices];
+    const notices = [...captureNotices, ...outcome.notices, ...fontNotices, ...compiled.notices];
     if (!compiled.ok) {
       if (compiled.kind === 'aborted' || compiled.kind === 'superseded') return;
       return fail(typstUiStateFor(compiled), [...warnings, ...tag('typst', compiled.diagnostics)], notices);
@@ -335,15 +404,15 @@ export class DownloadController {
     const all = [...warnings, ...tag('typst', compiled.diagnostics)];
     if (all.some(isError)) return fail('typst-error', all, notices);
 
-    const fileName = sanitizeDownloadName(path, format.extension);
+    const fileName = sanitizeDownloadName(nameFrom, format.extension);
     this.deps.save(new Blob([compiled.pdf as BlobPart], { type: format.mime }), fileName);
     this.deps.onPdf?.(compiled.pdf, { path, fileName });
-    this.set({ phase: 'done', clickId: id, format, fileName, warnings: all, notices, unexecutedCells });
+    this.set({ phase: 'done', clickId: id, format, fileName, warnings: all, notices, unexecutedCells, book });
   }
 
   private setStage(stage: DownloadStage): void {
     const s = this.status;
-    if (s.phase === 'working') this.set({ ...s, stage, load: undefined });
+    if (s.phase === 'working') this.set({ ...s, stage, load: undefined, chapter: undefined });
   }
 
   /** Runner options for a typst job: its stages and load progress land in the shared status. */

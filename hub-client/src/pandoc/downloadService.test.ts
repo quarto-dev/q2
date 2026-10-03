@@ -14,9 +14,9 @@ const row = (key: string, extra: Partial<PandocFormatInfo> = {}): PandocFormatIn
 const TABLE = [row('docx'), row('pptx'), row('epub'), row('typst'), row('pdf')];
 
 describe('selectMenuFormats', () => {
-  it('offers only the reviewed entries until the later request phases are wired in', () => {
-    expect(MENU_FORMATS).toEqual(['docx', 'pdf']);
-    expect(selectMenuFormats(TABLE, false).map((f) => f.key)).toEqual(['docx', 'pdf']);
+  it('offers every format the Rust table has, in its order', () => {
+    expect(MENU_FORMATS).toEqual(['docx', 'pptx', 'epub', 'typst', 'pdf']);
+    expect(selectMenuFormats(TABLE, false).map((f) => f.key)).toEqual(['docx', 'pptx', 'epub', 'typst', 'pdf']);
   });
 
   it('keeps the Rust table order and drops hidden and unavailable rows', () => {
@@ -25,9 +25,8 @@ describe('selectMenuFormats', () => {
     expect(selectMenuFormats([row('docx', { available: false }), row('pdf', { hidden: true })], false, all)).toEqual([]);
   });
 
-  it('hides typst and pdf in the embed: its native render compiles typst to PDF, and pdf is browser-only', () => {
-    const all = ['docx', 'pptx', 'epub', 'typst', 'pdf'];
-    expect(selectMenuFormats(TABLE, true, all).map((f) => f.key)).toEqual(['docx', 'pptx', 'epub']);
+  it('hides typst and pdf in the embed (default list too): its native render compiles typst to PDF, and pdf is browser-only', () => {
+    expect(selectMenuFormats(TABLE, true).map((f) => f.key)).toEqual(['docx', 'pptx', 'epub']);
   });
 
   it('carries the extension and mime the download uses', () => {

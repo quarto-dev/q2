@@ -141,6 +141,8 @@ export default function DocumentTopBar({
           status={downloadAs.status}
           disabledReason={downloadAs.disabledReason}
           onSelect={downloadAs.start}
+          book={downloadAs.book}
+          onOpen={downloadAs.refreshBook}
           onCancel={downloadAs.cancel}
           onDismiss={downloadAs.dismiss}
         />
