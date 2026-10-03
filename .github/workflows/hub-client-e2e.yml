@@ -169,7 +169,7 @@ jobs:
           done
           # The sandboxed renderer dist must land in hub-client/public/
           # before hub-client's vite build copies public/ into dist/.
-          npm run build:sandboxed --workspace hub-client
+          npm run build:sandboxed --workspace hub-client --if-present
           npm run build --workspace hub-client --if-present
 
       # globalSetup launches the hub via `cargo run --bin hub` with a 120s
