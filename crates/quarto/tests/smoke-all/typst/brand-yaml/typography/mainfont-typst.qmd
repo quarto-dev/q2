@@ -3,13 +3,13 @@ title: "Header logic"
 format:
   typst:
     keep-typ: true
-mainfont: Comic Sans MS
+mainfont: Libertinus Serif
 _quarto:
   tests:
     typst:
       ensureTypstFileRegexMatches:
       -
-        - 'heading-family: \("Comic Sans MS",\)'
+        - 'heading-family: \("Libertinus Serif",\)'
 ---
 
 Some text.
