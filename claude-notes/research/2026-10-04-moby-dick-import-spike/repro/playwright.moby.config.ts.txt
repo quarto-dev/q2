@@ -1,0 +1,16 @@
+import { defineConfig, devices } from '@playwright/test';
+const root = '/Users/gordon/src/q2/.worktrees/workspace-2/hub-client';
+export default defineConfig({
+  testDir: root + '/e2e',
+  testMatch: '**/pandoc-import-moby.harness.spec.ts',
+  retries: 0,
+  workers: 1,
+  reporter: 'list',
+  outputDir: '/private/tmp/claude-502/-Users-gordon-src-q2/9d8d98f3-4c22-4d68-8f57-03e6a69d7079/scratchpad/pw-out',
+  use: { baseURL: 'http://localhost:5199', viewport: { width: 1280, height: 720 } },
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+  ],
+  webServer: { command: 'npm run preview -- --port 5199 --strictPort', cwd: root, url: 'http://localhost:5199', reuseExistingServer: false, timeout: 120000, env: { VITE_PROXY_TARGET: '' } },
+});

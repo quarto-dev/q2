@@ -62,6 +62,43 @@ describe('PandocRunner: normal run', () => {
   });
 });
 
+describe('PandocRunner: host inputs and collected files (interface 1)', () => {
+  it('sends inputs in the run message, transferring their buffers, and hands collected files back', async () => {
+    const { runner, workers } = setup();
+    const { request, shareTree } = job();
+    const source = new Uint8Array([9, 8, 7]);
+    const p = runner.run(request, shareTree, { inputs: { '/__q2_share__/import/source.docx': source } });
+    await ran(() => workers[0]);
+    const run = workers[0].runs()[0];
+    expect([...run.inputs!['/__q2_share__/import/source.docx']]).toEqual([9, 8, 7]);
+    expect(source.byteLength).toBe(0); // transferred: the caller's view is detached
+    const collected = [{ path: '/__q2_share__/import/media/a.png', bytes: new Uint8Array([1]) }];
+    workers[0].respond({ ...OK_RESULT(), collected } as ExecuteResult);
+    const out = await p;
+    expect(out.ok && out.collected).toEqual(collected);
+  });
+
+  it('a run without inputs posts none, and a sub-view input is copied rather than transferred', async () => {
+    const { runner, workers } = setup();
+    const { request, shareTree } = job();
+    const p = runner.run(request, shareTree);
+    await ran(() => workers[0]);
+    expect(workers[0].runs()[0]).not.toHaveProperty('inputs');
+    workers[0].respond(OK_RESULT());
+    await p;
+
+    const two = setup();
+    const again = job(); // the first run transferred `request`'s buffers
+    const big = new Uint8Array([0, 1, 2, 3, 4, 5]);
+    const q = two.runner.run(again.request, again.shareTree, { inputs: { '/__q2_share__/import/s.docx': big.subarray(1, 4) } });
+    await ran(() => two.workers[0]);
+    expect([...two.workers[0].runs()[0].inputs!['/__q2_share__/import/s.docx']]).toEqual([1, 2, 3]);
+    expect(big.byteLength).toBe(6); // the original buffer is untouched
+    two.workers[0].respond(OK_RESULT());
+    await q;
+  });
+});
+
 describe('PandocRunner: abort, timeout, supersede', () => {
   it('abort terminates the worker exactly once', async () => {
     const { runner, workers } = setup();

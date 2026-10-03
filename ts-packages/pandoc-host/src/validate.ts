@@ -19,6 +19,12 @@ const err = (code: HostDiagnosticCode, message: string, path?: string): HostDiag
 });
 
 const isStr = (v: unknown): v is string => typeof v === 'string';
+const isHostInputList = (v: unknown): boolean =>
+  Array.isArray(v) &&
+  v.every((i) => {
+    const h = i as { path?: unknown; sha256?: unknown; size?: unknown };
+    return !!h && isStr(h.path) && isStr(h.sha256) && typeof h.size === 'number' && Number.isInteger(h.size) && h.size >= 0;
+  });
 const isFileList = (v: unknown): v is RequestFile[] =>
   Array.isArray(v) &&
   v.every((f) => f && isStr((f as RequestFile).path) && (f as RequestFile).bytes instanceof Uint8Array);
@@ -46,6 +52,8 @@ export function checkShape(r: unknown): HostDiagnostic[] {
   need(isFileList(q.files), 'files');
   need(isFileList(q.resource_refs), 'resource_refs');
   need(Array.isArray(q.dirs) && q.dirs.every(isStr), 'dirs');
+  need(q.host_inputs === undefined || isHostInputList(q.host_inputs), 'host_inputs');
+  need(q.collect_dirs === undefined || (Array.isArray(q.collect_dirs) && q.collect_dirs.every(isStr)), 'collect_dirs');
   if (out.length === 0 && (q.argv as string[])[0] !== 'pandoc')
     out.push(err('malformed-request', 'argv[0] must be the literal `pandoc`'));
   return out;
@@ -85,6 +93,8 @@ export function validateRequest(
   const limits = opts.limits ?? DEFAULT_LIMITS;
   const shareRoot = opts.shareRoot ?? DEFAULT_SHARE_ROOT;
   const out: HostDiagnostic[] = [];
+  const hostInputs = req.host_inputs ?? [];
+  const collectDirs = req.collect_dirs ?? [];
 
   if (req.share_root !== shareRoot)
     out.push(err('share-root-mismatch', `request share_root \`${req.share_root}\` is not the reserved \`${shareRoot}\``, req.share_root));
@@ -102,6 +112,7 @@ export function validateRequest(
   const allPaths = [
     req.share_root, req.share_tree_path, req.doc_dir, req.project_root, req.output_path, req.json_path,
     ...req.dirs, ...req.files.map((f) => f.path), ...req.resource_refs.map((f) => f.path),
+    ...hostInputs.map((i) => i.path), ...collectDirs,
   ].filter((p) => typeof p === 'string');
   const bad = new Set<string>();
   for (const p of allPaths)
@@ -127,6 +138,19 @@ export function validateRequest(
   }
   for (const f of req.files)
     if (isUnder(f.path, TMP)) out.push(err('reserved-path', `file \`${f.path}\` is under the reserved \`${TMP}\``, f.path));
+
+  for (const i of hostInputs) {
+    if (isUnder(i.path, TMP)) out.push(err('reserved-path', `host input \`${i.path}\` is under the reserved \`${TMP}\``, i.path));
+    else if (!isUnder(i.path, shareRoot) && !isUnder(i.path, req.project_root))
+      out.push(err('path-outside-root', `host input \`${i.path}\` is outside the share root and the project root`, i.path));
+  }
+  for (const d of collectDirs) {
+    if (isUnder(d, TMP)) out.push(err('reserved-path', `collect dir \`${d}\` is under the reserved \`${TMP}\``, d));
+    else if (!isUnder(d, shareRoot) && !isUnder(d, req.project_root))
+      out.push(err('path-outside-root', `collect dir \`${d}\` is outside the share root and the project root`, d));
+    else if (isUnder(req.share_tree_path, d))
+      out.push(err('mount-conflict', `collect dir \`${d}\` contains the share tree \`${req.share_tree_path}\``, d));
+  }
 
   // Share tree entries: relative, normalized, no `..`.
   const treeFiles: RequestFile[] = [];
@@ -166,6 +190,25 @@ export function validateRequest(
     }
   }
 
+  // Host inputs have no bytes yet, so their conflicts are path-only: the same path as a mounted
+  // file, a directory or another input, or an ancestor/descendant relation with a file or input.
+  const seenInputs: string[] = [];
+  for (const { path } of hostInputs) {
+    if (owner.has(path)) out.push(err('mount-conflict', `host input \`${path}\` is also a mounted file`, path));
+    else if (dirSet.has(path)) out.push(err('mount-conflict', `host input \`${path}\` is also a directory in dirs`, path));
+    else if (seenInputs.includes(path)) out.push(err('mount-conflict', `host input \`${path}\` appears twice`, path));
+    else {
+      const files = [...owner.keys(), ...seenInputs];
+      const clash = files.find((f) => isUnder(f, path) || isUnder(path, f)) ?? [...dirSet].find((d) => isUnder(d, path));
+      if (clash) out.push(err('mount-conflict', `host input \`${path}\` and \`${clash}\` need the same path to be a file and a directory`, path));
+    }
+    seenInputs.push(path);
+  }
+  for (const d of collectDirs) {
+    const clash = [...owner.keys(), ...hostInputs.map((i) => i.path)].find((f) => isUnder(f, d));
+    if (clash) out.push(err('mount-conflict', `collect dir \`${d}\` is, or contains, the mounted file \`${clash}\``, d));
+  }
+
   // Limits.
   const refDoc = referenceDocPath(req.argv);
   let total = 0;
@@ -182,8 +225,14 @@ export function validateRequest(
     else if (IMAGE_EXT.test(f.path) && f.path !== refDoc && f.bytes.length > limits.image_bytes)
       out.push(err('limit-exceeded', `image \`${f.path}\` is ${f.bytes.length} bytes; the limit is ${limits.image_bytes}`, f.path));
   }
+  // Host inputs count by their declared size; execute() checks the real bytes against it.
+  let largest = biggest ? { path: biggest.path, size: biggest.bytes.length } : undefined;
+  for (const i of hostInputs) {
+    total += i.size;
+    if (!largest || i.size > largest.size) largest = { path: i.path, size: i.size };
+  }
   if (total > limits.total_bytes)
-    out.push(err('limit-exceeded', `mounted payload is ${total} bytes; the limit is ${limits.total_bytes} (largest: \`${biggest?.path}\`)`, biggest?.path));
+    out.push(err('limit-exceeded', `mounted payload is ${total} bytes; the limit is ${limits.total_bytes} (largest: \`${largest?.path}\`)`, largest?.path));
 
   return out;
 }

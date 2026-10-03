@@ -19,9 +19,7 @@
     "SOURCE_DATE_EPOCH": "1700000000"
   },
   "files": [],
-  "dirs": [
-    "/tmp"
-  ],
+  "dirs": [],
   "resource_refs": [],
   "share_root": "/__q2_share__",
   "share_tree_path": "/__q2_share__/pandoc-share",

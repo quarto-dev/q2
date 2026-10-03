@@ -44,6 +44,7 @@ export const OK_RESULT = (): ExecuteResult => ({
   status: 0,
   output: new Uint8Array([1, 2, 3]),
   outputPath: '/__q2_share__/out.txt',
+  collected: [],
   stderr: '',
   stdout: '',
   diagnostics: [],

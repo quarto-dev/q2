@@ -175,4 +175,10 @@ export interface ExecuteOptions {
   /** Defaults to the constants file's `share_root`. */
   shareRoot?: string;
   onProgress?: (stage: 'mounting' | 'running') => void;
+  /**
+   * Bytes for the request's `host_inputs`, keyed by path. Each is checked against the declared
+   * size and sha256 before mounting; a missing or mismatched input fails as `invalid-request`
+   * with `input-mismatch`.
+   */
+  inputs?: Record<string, Uint8Array>;
 }

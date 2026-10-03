@@ -127,3 +127,102 @@ export function loadRecording(name: string): LoadedRecording {
     outputName: path.basename(meta.output),
   };
 }
+
+// ---- document-import recordings (crates/quarto-core/tests/fixtures/import-recordings/) ----------------
+
+export const IMPORT_RECORDINGS = path.join(REPO, 'crates/quarto-core/tests/fixtures/import-recordings');
+const IMPORT_DIR = `${SHARE}/import`;
+/** SHA-256 over zero share-tree entries: the import request's empty share tree. */
+const EMPTY_SHARE_TREE_VERSION = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+
+/** Every import recording's name (`<name>-<format>`), sorted. */
+export function importRecordingNames(): string[] {
+  return readdirSync(IMPORT_RECORDINGS)
+    .filter((n) => existsSync(path.join(IMPORT_RECORDINGS, n, 'argv.json')))
+    .sort();
+}
+
+export interface ImportMediaFile {
+  /** Path relative to `media/` (and to the extract dir). */
+  rel: string;
+  /** `/__q2_share__/import/media/<rel>`: the path pandoc wrote it at, and the `Image` target prefix. */
+  pandocPath: string;
+  sha256: string;
+  bytes: Uint8Array;
+}
+
+export interface LoadedImportRecording {
+  name: string;
+  /** The recorded interface-2 argv. */
+  argv: string[];
+  /** The request built by hand from `argv.json`, following interface 2: the source as a host input, the extract dir collected, an empty share tree. */
+  request: PandocRequest;
+  shareTree: ShareTree;
+  /** Where `execute` mounts the source (`inputs` key). */
+  sourcePath: string;
+  source: Uint8Array;
+  /** Native pandoc's exit status. */
+  status: number;
+  /** Native pandoc's `out.json`, parsed; `null` when pandoc failed (no `pandoc.json`). */
+  pandocJson: unknown | null;
+  stderr: string;
+  /** The files `--extract-media` wrote, with their sha256 from `manifest.json`. */
+  media: ImportMediaFile[];
+}
+
+export function loadImportRecording(name: string): LoadedImportRecording {
+  const dir = path.join(IMPORT_RECORDINGS, name);
+  const argv: string[] = readJson(path.join(dir, 'argv.json'));
+  const manifest = readJson(path.join(dir, 'manifest.json')) as { path: string; sha256: string; size: number }[];
+  const sourcePath = argv[argv.length - 1];
+  const sourceEntry = manifest.find((m) => m.path === path.posix.basename(sourcePath));
+  if (!sourceEntry) throw new Error(`${name}: manifest.json has no ${path.posix.basename(sourcePath)}`);
+  const source = u8(readFileSync(path.join(dir, sourceEntry.path)));
+  const outPath = argv[argv.indexOf('-o') + 1];
+  const extractDir = (argv.find((a) => a.startsWith('--extract-media=')) as string).slice('--extract-media='.length);
+  const writer = argv[argv.indexOf('-t') + 1];
+
+  const request: PandocRequest = {
+    schema_version: 1,
+    kind: 'pandoc',
+    job_id: '0'.repeat(16),
+    writer,
+    argv,
+    env: { SOURCE_DATE_EPOCH: '1700000000' },
+    files: [],
+    // No `/tmp`: a reader run with no filters never writes there (T7 ran every recording both ways).
+    dirs: [],
+    resource_refs: [],
+    share_root: CONSTANTS.share_root,
+    share_tree_path: TREE,
+    doc_dir: IMPORT_DIR,
+    project_root: IMPORT_DIR,
+    output_path: outPath,
+    stage_name: 'import',
+    json_path: sourcePath,
+    post: 'none',
+    expected_pandoc_wasm_sha256: CONSTANTS.wasm_sha256,
+    share_tree_version: EMPTY_SHARE_TREE_VERSION,
+    typst_available_fonts: null,
+    host_inputs: [{ path: sourcePath, sha256: sourceEntry.sha256, size: sourceEntry.size }],
+    collect_dirs: [extractDir],
+  };
+  const jsonPath = path.join(dir, 'pandoc.json');
+  return {
+    name,
+    argv,
+    request,
+    shareTree: { share_tree_version: EMPTY_SHARE_TREE_VERSION, files: [] },
+    sourcePath,
+    source,
+    status: readJson(path.join(dir, 'status.json')).status,
+    pandocJson: existsSync(jsonPath) ? readJson(jsonPath) : null,
+    stderr: readFileSync(path.join(dir, 'stderr.txt'), 'utf8'),
+    media: manifest
+      .filter((m) => m.path.startsWith('media/'))
+      .map((m) => {
+        const rel = m.path.slice('media/'.length);
+        return { rel, pandocPath: `${extractDir}/${rel}`, sha256: m.sha256, bytes: u8(readFileSync(path.join(dir, m.path))) };
+      }),
+  };
+}

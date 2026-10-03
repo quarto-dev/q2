@@ -1,5 +1,6 @@
 import { ConsoleStdout, File, OpenFile, PreopenDirectory, WASI, WASIProcExit } from '@bjorn3/browser_wasi_shim';
-import { concat, failure, hostError, looksLikeOom, mount, readOutput, validate } from './shared.ts';
+import { DEFAULT_LIMITS } from './limits.ts';
+import { checkInputs, collectFiles, concat, failure, hostError, looksLikeOom, mount, readOutput, validate } from './shared.ts';
 import type { ExecuteOptions, ExecuteResult, FailureKind, PandocRequest, RunStats, ShareTree } from './types.ts';
 
 export { looksLikeOom };
@@ -18,8 +19,11 @@ export async function execute(request: PandocRequest, shareTree: ShareTree, opti
   const problems = validate(request, shareTree, options);
   if (problems.length) return failure('invalid-request', null, '', '', problems);
 
+  const mismatched = await checkInputs(request, options.inputs);
+  if (mismatched.length) return failure('invalid-request', null, '', '', mismatched);
+
   options.onProgress?.('mounting');
-  const { tree, mountMs, mountedBytes } = mount(request, shareTree);
+  const { tree, mountMs, mountedBytes } = mount(request, shareTree, options.inputs);
 
   const argv = [...request.argv];
   if (options.fault?.kind === 'oom') argv.splice(1, 0, '+RTS', `-M${options.fault.limit ?? '5m'}`, '-RTS');
@@ -100,5 +104,6 @@ export async function execute(request: PandocRequest, shareTree: ShareTree, opti
 
   const read = readOutput(tree, request, 0, stderr, stdout, stats);
   if (!('output' in read)) return read;
-  return { ok: true, status: 0, output: read.output, outputPath: request.output_path, collected: [], stderr, stdout, diagnostics: [], stats };
+  const { collected, diagnostics } = collectFiles(tree, request.collect_dirs ?? [], options.limits ?? DEFAULT_LIMITS);
+  return { ok: true, status: 0, output: read.output, outputPath: request.output_path, collected, stderr, stdout, diagnostics, stats };
 }
