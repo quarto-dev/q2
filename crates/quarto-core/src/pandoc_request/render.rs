@@ -465,6 +465,15 @@ async fn render_project_request(
         if is_book && let Ok(rel) = active.strip_prefix(&project.dir) {
             project.extra_render_files = vec![rel.to_path_buf()];
         }
+        // The page skips the book merge, so hand it the book's title,
+        // author and date as project metadata (the chapter's own win).
+        if is_book
+            && format.identifier == crate::format::FormatIdentifier::Typst
+            && let Some(meta) = project.config.metadata.as_mut()
+            && let Some(book) = meta.get("book").cloned()
+        {
+            crate::project::book::merge::seed_missing_book_title_metadata(meta, &book);
+        }
     }
 
     let renderer = RenderToPandocRequestRenderer::new(prepare_options.clone(), renderer_captures);

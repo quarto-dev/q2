@@ -616,6 +616,39 @@ describe.skipIf(!pandocWasmAvailable())('request built in wasm, run in pandoc.wa
     expect(new TextDecoder().decode(result.output)).toContain('First chapter');
   }, 120_000);
 
+  it('hands a chapter-alone typst request the book title and author, so the orange-book title page compiles', async () => {
+    const module = await WebAssembly.compile(readFileSync(WASM_PATH));
+    wasm.vfs_add_file('/b/_quarto.yml', 'project:\n  type: book\nbook:\n  title: B\n  author: "Gordon"\n  chapters:\n    - index.qmd\n    - one.qmd\n');
+    wasm.vfs_add_file('/b/index.qmd', '# Preface\n\nHello\n');
+    wasm.vfs_add_file('/b/one.qmd', '# One\n\nFirst chapter.\n');
+    const out = await wasm.render_pandoc_request('/b/one.qmd', 'typst', SDE, undefined, undefined, undefined, { scope: 'chapter' });
+    const tree = wasm.get_pandoc_share_tree();
+    const result = await execute(out.request as unknown as PandocRequest, tree, { module });
+    if (!result.ok) throw new Error('fail ' + result.stderr);
+    const typ = new TextDecoder().decode(result.output);
+    // Without these orange-book's `author: ()` default reaches `text()`.
+    expect(typ).toContain('title: [B]');
+    expect(typ).toContain('author: "Gordon"');
+  }, 120_000);
+
+  it('links a whole-book cross-chapter link to the chapter heading, never an empty #link()', async () => {
+    const module = await WebAssembly.compile(readFileSync(WASM_PATH));
+    wasm.vfs_add_file('/b/_quarto.yml', 'project:\n  type: book\nbook:\n  title: B\n  chapters:\n    - index.qmd\n    - one.qmd\n');
+    wasm.vfs_add_file('/b/index.qmd', '# Preface\n\nSee [one](one.qmd).\n');
+    // A `title:` plus the chapter's own heading: the merge puts an id-less
+    // synthesized title heading first, which the link must not resolve to.
+    wasm.vfs_add_file('/b/one.qmd', '---\ntitle: One Title\n---\n\n# One {#sec-one}\n\nFirst chapter.\n');
+    const out = await wasm.render_pandoc_request('/b/index.qmd', 'typst', SDE, undefined, undefined, undefined, { scope: 'auto' });
+    const tree = wasm.get_pandoc_share_tree();
+    const result = await execute(out.request as unknown as PandocRequest, tree, { module });
+    if (!result.ok) throw new Error(`pandoc failed (${result.kind}): ${result.stderr}`);
+    const typ = new TextDecoder().decode(result.output);
+    // `#link()[one]` is the Typst compile error "expected string, dictionary,
+    // location, or label, found content".
+    expect(typ).not.toContain('#link()');
+    expect(typ).toContain('#link(<sec-one>)[one]');
+  }, 120_000);
+
   it('produces a pptx that carries the slide text and the image', async () => {
     const module = await WebAssembly.compile(readFileSync(WASM_PATH));
     wasm.vfs_add_file('/project/doc.qmd', '---\ntitle: Deck\n---\n\n# First slide\n\nA *pptx* paragraph.\n\n![A figure](figure.png)\n');

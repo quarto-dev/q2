@@ -100,10 +100,17 @@ pub(super) fn block_marker_resource_dir(block: &Block) -> Option<String> {
 /// `index_book_file_targets`, sourced from the merge's
 /// `quarto-book-item-file` heading attributes (first heading per file
 /// wins, as in Q1).
+///
+/// Headings without an identifier are skipped. A chapter with a
+/// front-matter `title:` gets a synthesized `# <title>` heading ahead of its
+/// own body (`add_chapter_heading`), and that heading can have no id where
+/// Q1's markdown round-trip would have auto-assigned one. Indexing it would
+/// turn `[x](ch.qmd)` into the empty target `#`, which Typst rejects
+/// (`#link()[x]`); the chapter's own headed section is the better target.
 fn index_file_targets(blocks: &[Block], map: &mut LinkedHashMap<String, String>) {
     for block in blocks {
         match block {
-            Block::Header(h) if h.level == 1 => {
+            Block::Header(h) if h.level == 1 && !h.attr.0.is_empty() => {
                 if let Some(file) = h.attr.2.get("quarto-book-item-file") {
                     map.entry(file.clone()).or_insert_with(|| h.attr.0.clone());
                 }
@@ -464,6 +471,34 @@ mod tests {
         ]);
         assert_eq!(resolved, 1);
         assert_eq!(link_targets(&merged.blocks), vec!["#one"]);
+    }
+
+    #[test]
+    fn bare_file_link_skips_the_id_less_front_matter_title_heading() {
+        // ch1 has a `title:` *and* its own `# One {#sec-one}`: the merge
+        // puts an id-less synthesized `# Title` heading first. The link
+        // must land on `#sec-one`, never the empty `#` (Typst error
+        // "expected string, dictionary, location, or label, found content").
+        let ch1 = "---\ntitle: One Title\n---\n\n# One {#sec-one}\n\nBody.\n";
+        let (merged, resolved) = merge_and_resolve(vec![
+            ("ch1.qmd", ch1),
+            ("ch2.qmd", "# Two\n\nSee [the first chapter](ch1.qmd).\n"),
+        ]);
+        assert_eq!(resolved, 1);
+        assert_eq!(link_targets(&merged.blocks), vec!["#sec-one"]);
+    }
+
+    #[test]
+    fn bare_file_link_with_no_identified_heading_is_left_alone() {
+        // Only an id-less title heading exists: nothing to point at, so the
+        // link keeps its file target rather than becoming `#`.
+        let ch1 = "---\ntitle: One Title\n---\n\nBody only.\n";
+        let (merged, resolved) = merge_and_resolve(vec![
+            ("ch1.qmd", ch1),
+            ("ch2.qmd", "# Two\n\nSee [the first chapter](ch1.qmd).\n"),
+        ]);
+        assert_eq!(resolved, 0);
+        assert_eq!(link_targets(&merged.blocks), vec!["ch1.qmd"]);
     }
 
     #[test]
