@@ -28,6 +28,7 @@ import { createHash } from 'node:crypto';
 import {
   createSyncClient,
   type AuthRejectionEvidence,
+  type CaptureRef,
   type DisconnectOptions,
   type SyncClient,
   type SyncClientCallbacks,
@@ -114,11 +115,23 @@ interface ChangeWaiter {
   fire: (payload: FilePayload | null) => void;
 }
 
+/**
+ * Latest index-doc sidecar snapshots, mirrored from the sync client's
+ * `onCapturesChange` callback. Read by the `get_errors` tool for
+ * execution errors. A mutable holder (rather than fields on
+ * {@link ProjectState}) because the callbacks are wired before the
+ * state object exists and the initial fire happens during `connect`.
+ */
+interface SidecarState {
+  captures: Record<string, CaptureRef>;
+}
+
 interface ProjectState {
   client: SyncClient;
   files: Map<string, FilePayload>;
   /** Pending long-poll waiters, keyed implicitly by their `path` field. */
   waiters: Set<ChangeWaiter>;
+  sidecars: SidecarState;
 }
 
 /**
@@ -275,6 +288,7 @@ export class ConnectionManager {
 
     const files = new Map<string, FilePayload>();
     const waiters = new Set<ChangeWaiter>();
+    const sidecars: SidecarState = { captures: {} };
     const callbacks: SyncClientCallbacks = {
       onFileAdded(path: string, file: FilePayload) {
         files.set(path, file);
@@ -293,6 +307,9 @@ export class ConnectionManager {
       onFileRemoved(path: string) {
         files.delete(path);
         fireWaiters(waiters, path, null);
+      },
+      onCapturesChange(captures) {
+        sidecars.captures = captures;
       },
       onError(err: Error) {
         console.error(
@@ -316,7 +333,7 @@ export class ConnectionManager {
       peerTimeoutMs: PEER_TIMEOUT_MS,
     });
 
-    const state: ProjectState = { client, files, waiters };
+    const state: ProjectState = { client, files, waiters, sidecars };
     this.projects.set(indexDocId, state);
     return state;
   }
@@ -385,6 +402,7 @@ export class ConnectionManager {
 
     const tempFiles = new Map<string, FilePayload>();
     const waiters = new Set<ChangeWaiter>();
+    const sidecars: SidecarState = { captures: {} };
     const callbacks: SyncClientCallbacks = {
       onFileAdded(path: string, file: FilePayload) {
         tempFiles.set(path, file);
@@ -403,6 +421,9 @@ export class ConnectionManager {
       onFileRemoved(path: string) {
         tempFiles.delete(path);
         fireWaiters(waiters, path, null);
+      },
+      onCapturesChange(captures) {
+        sidecars.captures = captures;
       },
     };
 
@@ -427,7 +448,7 @@ export class ConnectionManager {
       resolveAuthorId,
     );
 
-    const state: ProjectState = { client, files: tempFiles, waiters };
+    const state: ProjectState = { client, files: tempFiles, waiters, sidecars };
     this.projects.set(result.indexDocId, state);
     return { indexDocId: result.indexDocId, files: result.files };
   }

@@ -43,6 +43,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { parsePlatformList, stageKeyring } from './stage-keyring.mjs';
+import { buildWasmHost } from './build-wasm-host.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkgRoot = join(here, '..');
@@ -124,6 +125,11 @@ await esbuild.build({
   entryPoints: [join(pkgRoot, 'src/auth-stream.ts')],
   outfile: join(outDir, 'auth-stream.mjs'),
 });
+
+// The WASM render host (`get_errors` local validation): index.mjs
+// dynamic-imports ./wasm-host.mjs next to itself at first use, which
+// loads ./wasm_quarto_hub_client_bg.wasm next to *itself*.
+await buildWasmHost(outDir);
 
 // --- ship the keyring addon as a mini node_modules ---------------------
 // The staged platform packages must match the **release target's**
