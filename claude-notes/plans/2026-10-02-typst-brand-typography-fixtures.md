@@ -3,7 +3,7 @@
 **Date:** 2026-10-02
 **Braid:** bd-post2btu
 **Worktree:** `.worktrees/workspace-8` (branch `braid/bd-post2btu-typst-brandyml-typography-font`, based on `main` @ `f3b6925fd`)
-**Status:** Investigation — pending design alignment with user. **Do not start implementation until the user gives the go-ahead.**
+**Status:** Design questions answered 2026-10-03; Bugs A and B split into their own strands. **Do not start implementation until the user gives the go-ahead.**
 
 ## Triage verdict
 
@@ -92,23 +92,27 @@ Proof the rest works: in a scratch copy of brand-extension, a top-level
 `brand: _extensions/typst-brand-typography-example/brand.yml` makes all three PDF assertions
 pass. The only thing left is the variable-font warning.
 
+## Decisions (Gordon, 2026-10-02/03)
+
+1. **Typst warnings inherent to a fixture** (variable-font TTFs; CSS generics): use the `noErrors: true` override with an explanatory comment, as font-filtering-fallback did. The generics half is temporary: **bd-hkf3r8i1** replaces generic keywords with the first *available* real font from curated per-generic candidate lists (not Q1's PR #11918 fixed-font mapping, no bundled font). When it lands, font-filtering-generics gets platform-independent assertions instead of the override.
+2. **Bug A scope: every Pandoc-hybrid format**, one code path, a test per format family. Filed as **bd-7avt1ogu**; blocks this strand.
+3. **Bug B: explicit read-side fallback** to `project.brand` when merged metadata has no `brand` (Q1's `??`; no merge-stage change, matching how `meta.project.*` is read elsewhere). Full Q1 parity (user `_quarto.yml` and extensions). Filed as **bd-fzxdas1i**; blocks this strand.
+4. **Separate strands:** A and B each get their own strand (above) rather than being phases of this plan; this plan's remaining work is the fixture port plus verification.
+5. **Fonts: share one copy.** The four typography font sets (about 9.8 MB, duplicated across simple / complex / relative-path / brand-extension in Q1) become one shared directory that the fixtures' `files:` paths point at. Open detail to settle at port time: relative-path and brand-extension exist to test *where* fonts live (a brand dir with its own `resources/fonts/...`, an extension-bundled `resources/fonts/...`). A path that escapes the extension or brand dir would change what they test, so those two may keep their own small copy of whichever font they need, or use a single shared file only if the lookup being tested is still exercised. Decide against the actual assertions when porting.
+
 ## Proposed phases (draft)
 
-- Phase 0 — Commit the 8 already-green fixtures (6 verbatim, plus kitchen-sink-1/2 with `brand: _brand.yml`). Commit generics and relative-path with the agreed warning override (Q2).
-- Phase 1 — Bug A: forward `rendered.includes.*` to pandoc for Pandoc-hybrid formats. Most likely via `--include-in-header` / `--include-before-body` / `--include-after-body` temp files, or the `header-includes` / `include-before` / `include-after` metadata, written in `PandocWriteStage` (Q1: `pandoc.ts:874-929`). Write a failing unit/integration test first, then turn simple/complex/google green.
-- Phase 2 — Bug B: honor `project.brand` as a fallback for top-level `brand` (Q1 order), and add `["project","brand"]` to `FRAGMENT_PATH_PATTERNS`. Check that the `typst_compile.rs` and `pandoc_write.rs` brand-font paths and the Q-5-37 "unreferenced `_brand.yml`" check all agree. Turn brand-extension green.
-- Phase 3 — Workspace nextest + the remaining verify steps.
+Blocked on bd-7avt1ogu (Bug A) for simple/complex/google, and on bd-fzxdas1i (Bug B) for brand-extension.
 
-## Open design questions for the user
-
-1. **Typst warnings that are inherent to the fixture.** The fixtures ship variable TTFs (simple, complex, relative-path, brand-extension), and font-filtering-generics deliberately emits CSS generic names. Typst warns in both cases, which fails Q2's default `noErrorsOrWarnings` gate (Q1's harness doesn't check Typst warnings). Do we use the same `noErrors: true` + comment override that font-filtering-fallback used? Or do we make Q2 stop emitting the generic keywords (`sans-serif`, `monospace`) to Typst, which would be a deliberate divergence from Q1's `typst_css.lua`?
-2. **Bug A scope.** Fix includes for all Pandoc-hybrid formats in one go, with a test per format family? Or Typst only now, with the rest as a follow-up? It's the same code path, so I'd recommend all of them.
-3. **Bug B: `project.brand` semantics.** Should Q2 accept `project: brand:` in a user `_quarto.yml` too, with full Q1 parity (top-level `brand` wins, then `project.brand`)? Or only as an extension-contribution channel?
-4. **Bug placement.** A and B are both needed to port these fixtures, so per your rule they go in this plan rather than in separate strands. Okay to land them on this branch, or would you rather split Bug A out into its own branch/PR, since it reaches well beyond brand?
-5. **Fixture size.** The three typography font sets add about 9.8 MB of TTFs, and Q1 duplicates them across simple, complex, relative-path and brand-extension. Keep them verbatim, or dedupe by pointing `files:` at one shared directory? Deduping diverges from Q1's layout, and relative-path and brand-extension test *where* the fonts live.
+- Phase 0 - Commit the fixtures that are green today: basefont-typst, dashed-font-weights, font-list, mainfont-typst, nobrand, title-inherit-base-family verbatim; kitchen-sink-1/2 with `brand: _brand.yml`; font-filtering-generics and relative-path with `noErrors: true` + comment. Fixture fonts deduplicated per decision 5.
+- Phase 1 - After Bug A lands: add `brand: _brand.yml` to simple/complex/google (and `noErrors` for the variable-font warning where it applies), confirm the `paragraph is open sans thin` assertion passes.
+- Phase 2 - After Bug B lands: port brand-extension verbatim (extension-contributed `project.brand`), `noErrors` for the variable-font warning.
+- Phase 3 - Workspace `cargo nextest run --workspace` once; report the delta against the live baseline and account for the new tests. Remaining `cargo xtask verify` steps (use `--skip-css-lint` until bd-0jtxndiy is fixed).
+- Phase 4 - Reconcile this plan's checklist with reality; hand off to finishing-a-development-branch.
 
 ## Risks / tradeoffs (draft)
 
 - Once Bug A is fixed, every existing Pandoc-format fixture that sets `include-in-header` will suddenly get its content. Some may be relying on the drop without knowing it, so expect smoke-all churn outside brand-yaml.
 - `fallback: false` taking effect could expose real font-availability gaps that are currently hidden in kitchen-sink-1/2.
+- Bug B also has an open detail: how a relative `project.brand` path resolves for documents in subdirectories (tracked in bd-fzxdas1i).
 - Pre-flight verify (`--skip-hub-build --skip-hub-tests`) at HEAD: `lint:css` is broken on main (filed **bd-0jtxndiy**, out of scope). With `--skip-css-lint`, steps 1–5 ran: 8897 Rust tests passed, and `smoke_all` failed **only** on the uncommitted staged fixtures. Verify stopped there, so steps 6–14 have not been run at HEAD.
