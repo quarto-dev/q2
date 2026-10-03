@@ -202,6 +202,18 @@ The following files and modifications are *not* from `v1.11.3` and should be pre
   crashed indexing a string. Added `pandoc.utils.type(meta.brand) ==
   'string'` to the guard. Tests: the `typst/orange-book` smoke-all
   fixture (`crates/quarto/tests/smoke-all/typst/orange-book/`).
+- `resources/pandoc-filters/filters/modules/typst_css.lua` — patched (ours,
+  bd-hkf3r8i1; no upstream PR — marked in-place by a `Q2 divergence`
+  comment). Typst has no CSS generic font families, so Q1's pass-through of
+  `serif`/`sans-serif`/`monospace`/... made every compile warn `unknown
+  font family`. `translate_font_family_list` now resolves each generic
+  keyword (plus `system-ui` and `ui-*`; `generic(...)` is dropped) to the
+  first *available* font from an ordered candidate list
+  (`_generic_candidates`, sources cited beside the data), via the pure
+  `resolve_font_families`. The keyword is never emitted. Tests:
+  `crates/quarto-core/tests/integration/typst_generic_font_families.rs` and
+  the `typst/brand-yaml` smoke-all fixtures `font-filtering-generics`,
+  `generic-font-families`, `system-ui-table`.
 
 ## License
 
