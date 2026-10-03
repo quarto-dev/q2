@@ -6,8 +6,8 @@
   },
   {
     "path": "capture/all-docx.typ",
-    "size": 13965,
-    "sha256": "37b5d5f82eebf69a74e10cf4adfdb23507a9dfe4cd07d53679bb8797375f3dec"
+    "size": 13961,
+    "sha256": "4fe4af8336532ce23f7deac2ddc11964f2f2ed54130caf859d03fb2d5c7c54ff"
   },
   {
     "path": "env.json",
@@ -71,17 +71,17 @@
   },
   {
     "path": "fs/__q2_tmp__/pandoc-typst-template/typst-template.typ",
-    "size": 3582,
-    "sha256": "a2305f01e0cb11e0420a5e672b36b4fd684bf0aba33c6d87fae57d036918059f"
+    "size": 3578,
+    "sha256": "1b1de16b5b676e2a8d15169cb3bf365d8e9ae16d5d2fd93034b5cc62e21c8f81"
   },
   {
     "path": "meta.json",
     "size": 179,
-    "sha256": "7329825f79b9342b4d2c4e563dedc31b54071aa37b07796c37b97d809a83c287"
+    "sha256": "95bc283e754249bb5a217f2b3a53852f694c51821d4cb84724f15fb91bb86fbd"
   },
   {
     "path": "reference/all-docx.typ",
-    "size": 13965,
-    "sha256": "37b5d5f82eebf69a74e10cf4adfdb23507a9dfe4cd07d53679bb8797375f3dec"
+    "size": 13961,
+    "sha256": "4fe4af8336532ce23f7deac2ddc11964f2f2ed54130caf859d03fb2d5c7c54ff"
   }
 ]

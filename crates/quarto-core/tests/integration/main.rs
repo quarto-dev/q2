@@ -107,6 +107,7 @@ pub mod pandoc_meta_mapping;
 pub mod pandoc_profile_cut;
 pub mod pandoc_remote_images;
 pub mod pandoc_render_to_file;
+pub mod pandoc_request_books;
 pub mod pandoc_request_captures;
 pub mod pandoc_request_contract;
 pub mod pandoc_request_execute;

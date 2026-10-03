@@ -52,7 +52,7 @@ pub(super) fn is_relative_ref(target: &str) -> bool {
 
 /// `pandoc.path.normalize`/`flatten` for a project-relative,
 /// forward-slashed path: drop `.` and empty segments, pop on `..`.
-pub(super) fn normalize_book_path(path: &str) -> String {
+pub(crate) fn normalize_book_path(path: &str) -> String {
     let mut parts: Vec<&str> = Vec::new();
     for part in path.split('/') {
         match part {

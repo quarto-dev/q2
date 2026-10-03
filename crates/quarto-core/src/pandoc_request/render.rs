@@ -20,6 +20,37 @@ use crate::project::{DocumentInfo, ProjectContext};
 use crate::render::{BinaryDependencies, RenderContext, RenderOptions};
 use crate::resource_resolver::ResourceResolverContext;
 
+/// Which part of a book a request covers (`options.scope` of the export).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BookScope {
+    /// The whole book when the project is a book, the format consolidates
+    /// (typst, pdf, epub) and the active file is a chapter; the active page
+    /// alone otherwise.
+    #[default]
+    Auto,
+    /// The active page alone: the chapter-alone request.
+    Chapter,
+}
+
+/// What actually happened, in `stats.book` of the export's envelope.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResolvedBookScope {
+    Book,
+    Chapter,
+}
+
+/// Present when the project is a book.
+#[derive(Debug)]
+pub struct BookOutcomeInfo {
+    pub scope: ResolvedBookScope,
+    /// File-bearing items in the book's render list.
+    pub chapters: usize,
+    /// Each chapter's diagnostics with that chapter's own `SourceContext`
+    /// (the outcome's own `diagnostics` hold only the unlocatable
+    /// book-level ones).
+    pub chapter_diagnostics: Vec<crate::project::book::ChapterDiagnostics>,
+}
+
 pub struct PandocRequestInput<'a> {
     pub path: &'a Path,
     pub content: &'a [u8],
@@ -34,6 +65,19 @@ pub struct PandocRequestInput<'a> {
     /// The hub prelude installs the vfs-root resolver for every render;
     /// `None` leaves the pipeline's default.
     pub resolver: Option<ResourceResolverContext>,
+    pub scope: BookScope,
+    /// Every chapter's gzipped `EngineCapture[]`, keyed by sidecar key (see
+    /// [`super::captures`]). Only the whole-book path (and, as the fallback
+    /// when `captures` is empty, the active file's entry for a chapter-scope
+    /// request) reads it.
+    pub captures_by_path: std::collections::BTreeMap<String, Vec<u8>>,
+    /// The error from parsing the active file's own capture blob, if it did
+    /// not parse. Reported only when the request ends up covering the active
+    /// page alone (as before); a whole-book request ignores that blob.
+    pub capture_error: Option<String>,
+    /// Awaited between chapters of a whole-book request (progress and
+    /// cancel).
+    pub hooks: Option<&'a dyn crate::project::book::BookRenderHooks>,
 }
 
 #[derive(Debug)]
@@ -47,9 +91,16 @@ pub struct PandocRequestOutcome {
     pub error: Option<String>,
     /// Code cells with no cached result, which the document shows as source.
     pub unexecuted_cells: usize,
+    /// `None` outside a book project.
+    pub book: Option<BookOutcomeInfo>,
 }
 
 impl PandocRequestOutcome {
+    /// [`Self::failed`] for callers outside this module.
+    pub(crate) fn failed_with(error: impl Into<String>) -> Self {
+        Self::failed(error)
+    }
+
     fn failed(error: impl Into<String>) -> Self {
         Self {
             request: None,
@@ -57,6 +108,7 @@ impl PandocRequestOutcome {
             source_context: SourceContext::default(),
             error: Some(error.into()),
             unexecuted_cells: 0,
+            book: None,
         }
     }
 }
@@ -74,6 +126,10 @@ pub async fn render_pandoc_request(
         captures,
         typst_available_fonts,
         resolver,
+        scope,
+        captures_by_path,
+        capture_error,
+        hooks,
     } = input;
 
     // D8: only the table's formats. `pdf` is the typst request plus a
@@ -118,11 +174,30 @@ pub async fn render_pandoc_request(
             if compile_typst { "typst" } else { format_key },
             project,
             prepare_options,
-            captures,
+            ProjectRequestInputs {
+                scope,
+                captures,
+                capture_error,
+                captures_by_path,
+                hooks,
+            },
             runtime,
         )
         .await;
     }
+
+    // A single document: the active file's own capture blob, else (the
+    // chapter-scope fallback) its entry in the per-path map.
+    let captures = match active_file_captures(
+        runtime.as_ref(),
+        path,
+        captures,
+        capture_error,
+        &captures_by_path,
+    ) {
+        Ok(captures) => captures,
+        Err(message) => return PandocRequestOutcome::failed(message),
+    };
 
     let doc = DocumentInfo::from_path(path);
     let binaries = BinaryDependencies::new();
@@ -183,6 +258,7 @@ pub(crate) async fn build_request_in_context(
                 source_context: parse_error.source_context.clone(),
                 error: Some(QuartoError::Parse(parse_error).to_string()),
                 unexecuted_cells: 0,
+                book: None,
             };
         }
         Err(e) => return PandocRequestOutcome::failed(e.to_string()),
@@ -204,6 +280,7 @@ pub(crate) async fn build_request_in_context(
             source_context,
             error: Some(title),
             unexecuted_cells: ctx.unexecuted_cells,
+            book: None,
         };
     }
 
@@ -220,24 +297,106 @@ pub(crate) async fn build_request_in_context(
         source_context,
         error: None,
         unexecuted_cells: ctx.unexecuted_cells,
+        book: None,
     }
+}
+
+/// The active file's capture inputs for a request that covers it alone:
+/// `captures` (the blob the caller gave) when there is one, a parse error
+/// from that blob as the same failure as before, else the file's entry in
+/// `captures_by_path` (the chapter-scope fallback).
+fn active_file_captures(
+    runtime: &dyn SystemRuntime,
+    path: &Path,
+    captures: Vec<quarto_trace::EngineCapture>,
+    capture_error: Option<String>,
+    captures_by_path: &std::collections::BTreeMap<String, Vec<u8>>,
+) -> Result<Vec<quarto_trace::EngineCapture>, String> {
+    if let Some(error) = capture_error {
+        return Err(format!("Failed to parse capture: {error}"));
+    }
+    if !captures.is_empty() {
+        return Ok(captures);
+    }
+    let key = super::captures::sidecar_key(runtime, path);
+    match captures_by_path.get(&key) {
+        Some(bytes) => super::captures::parse_capture_gz(Some(bytes))
+            .map_err(|e| format!("Failed to parse capture: {e}")),
+        None => Ok(Vec::new()),
+    }
+}
+
+/// What `render_project_request` needs beyond the document: the scope and
+/// the capture inputs.
+struct ProjectRequestInputs<'a> {
+    scope: BookScope,
+    captures: Vec<quarto_trace::EngineCapture>,
+    capture_error: Option<String>,
+    captures_by_path: std::collections::BTreeMap<String, Vec<u8>>,
+    hooks: Option<&'a dyn crate::project::book::BookRenderHooks>,
+}
+
+/// A book's render list as the whole-book dispatch needs it: how many items
+/// bear a file and whether the active file is one of them. Cheap and
+/// pass-free (a pure function of the `book:` config and the file system).
+struct BookMembership {
+    chapters: usize,
+    active_is_chapter: bool,
+}
+
+/// `Err` carries the book's own error (`Q-5-34`/`Q-5-35`/`Q-5-36`).
+fn book_membership(
+    project: &ProjectContext,
+    active: &Path,
+    runtime: &dyn SystemRuntime,
+) -> Result<BookMembership, QuartoError> {
+    let files = crate::project::book::book_chapter_files(project, runtime)?;
+    let active_key = active.strip_prefix(&project.dir).ok().map(|rel| {
+        crate::project::book::links::normalize_book_path(&rel.to_string_lossy().replace('\\', "/"))
+    });
+    let mut chapters = 0;
+    let mut active_is_chapter = false;
+    for file in &files {
+        chapters += 1;
+        let key = crate::project::book::links::normalize_book_path(
+            &file.to_string_lossy().replace('\\', "/"),
+        );
+        if active_key.as_deref() == Some(key.as_str()) {
+            active_is_chapter = true;
+        }
+    }
+    Ok(BookMembership {
+        chapters,
+        active_is_chapter,
+    })
 }
 
 /// A document inside a project: the project's pass 1 builds the index (so
 /// cross-document links, the project's `format:` layers and its metadata all
 /// resolve as they do natively), then pass 2 renders only the active page,
-/// with a renderer that builds the request instead of writing a file.
+/// with a renderer that builds the request instead of writing a file. For a
+/// book chapter whose format consolidates (typst, pdf, epub) and whose scope
+/// is not `Chapter`, the whole book is rendered instead.
 async fn render_project_request(
     path: &Path,
     format: Format,
     format_str: &str,
     project: &ProjectContext,
     prepare_options: PrepareOptions,
-    captures: Vec<quarto_trace::EngineCapture>,
+    inputs: ProjectRequestInputs<'_>,
     runtime: Arc<dyn SystemRuntime>,
 ) -> PandocRequestOutcome {
+    use crate::project::ProjectKind;
     use crate::project::orchestrator::{ProjectPipeline, RenderMode, project_type_for};
     use crate::project::pass2_renderer::RenderToPandocRequestRenderer;
+
+    let ProjectRequestInputs {
+        scope,
+        captures,
+        capture_error,
+        captures_by_path,
+        hooks,
+    } = inputs;
 
     // The pipeline fills in per-render state (the book's render list) and
     // takes the project by `&mut`; the caller's copy stays as it was.
@@ -248,7 +407,67 @@ async fn render_project_request(
     let active = runtime
         .canonicalize(path)
         .unwrap_or_else(|_| path.to_path_buf());
-    let renderer = RenderToPandocRequestRenderer::new(prepare_options, captures);
+
+    // Book: decide before running anything whether this is the whole book.
+    let is_book = project.project_kind() == ProjectKind::Book;
+    let consolidates = matches!(
+        format.identifier,
+        crate::format::FormatIdentifier::Typst | crate::format::FormatIdentifier::Epub
+    );
+    let mut membership: Option<BookMembership> = None;
+    if is_book {
+        match book_membership(&project, &active, runtime.as_ref()) {
+            Ok(m) => membership = Some(m),
+            // An `auto` download of a book whose list is broken fails with
+            // that error, as a render does; a chapter-alone request leaves it
+            // to the pipeline, which reports it as it always has.
+            Err(e) if scope == BookScope::Auto && consolidates => {
+                return match e {
+                    QuartoError::Parse(parse_error) => PandocRequestOutcome {
+                        request: None,
+                        diagnostics: parse_error.diagnostics.clone(),
+                        source_context: parse_error.source_context.clone(),
+                        error: Some(QuartoError::Parse(parse_error).to_string()),
+                        unexecuted_cells: 0,
+                        book: None,
+                    },
+                    other => PandocRequestOutcome::failed(other.to_string()),
+                };
+            }
+            Err(_) => {}
+        }
+    }
+    let whole_book = scope == BookScope::Auto
+        && consolidates
+        && membership.as_ref().is_some_and(|m| m.active_is_chapter);
+
+    let renderer_captures;
+    if whole_book {
+        // The active chapter is treated like every other: its captures come
+        // from the map, and the active file's own blob (and any error parsing
+        // it) is ignored, so the request does not depend on which chapter is
+        // active.
+        renderer_captures = Vec::new();
+    } else {
+        renderer_captures = match active_file_captures(
+            runtime.as_ref(),
+            path,
+            captures,
+            capture_error,
+            &captures_by_path,
+        ) {
+            Ok(captures) => captures,
+            Err(message) => return PandocRequestOutcome::failed(message),
+        };
+        // A page outside the chapter list (or a chapter requested alone)
+        // renders as a page of the project: keep the active file in the
+        // render set, as the footer and 404 are (`restrict_render_list`).
+        if is_book && let Ok(rel) = active.strip_prefix(&project.dir) {
+            project.extra_render_files = vec![rel.to_path_buf()];
+        }
+    }
+
+    let renderer = RenderToPandocRequestRenderer::new(prepare_options.clone(), renderer_captures);
     let mut pipeline = ProjectPipeline::with_renderer(
         &mut project,
         project_type,
@@ -256,8 +475,28 @@ async fn render_project_request(
         format_str,
         runtime,
         renderer,
-    )
-    .with_mode(RenderMode::ActivePage(active.clone()));
+    );
+
+    if whole_book {
+        let mut outcome = pipeline
+            .run_book_request(crate::project::orchestrator::BookRequestParams {
+                prepare_options,
+                captures_by_path: &captures_by_path,
+                hooks,
+            })
+            .await;
+        if let Some(book) = outcome.book.as_mut() {
+            book.chapters = membership.as_ref().map_or(book.chapters, |m| m.chapters);
+        }
+        return outcome;
+    }
+
+    let mut pipeline = pipeline.with_mode(RenderMode::ActivePage(active.clone()));
+    let book_info = membership.map(|m| BookOutcomeInfo {
+        scope: ResolvedBookScope::Chapter,
+        chapters: m.chapters,
+        chapter_diagnostics: Vec::new(),
+    });
     let summary = match pipeline.run().await {
         Ok(summary) => summary,
         Err(QuartoError::Parse(parse_error)) => {
@@ -267,6 +506,7 @@ async fn render_project_request(
                 source_context: parse_error.source_context.clone(),
                 error: Some(QuartoError::Parse(parse_error).to_string()),
                 unexecuted_cells: 0,
+                book: book_info,
             };
         }
         Err(e) => return PandocRequestOutcome::failed(e.to_string()),
@@ -291,14 +531,19 @@ async fn render_project_request(
                     failure.error
                 )),
                 unexecuted_cells: 0,
+                book: book_info,
             },
-            None => PandocRequestOutcome::failed(
-                "The project render produced no output for the active page",
-            ),
+            None => PandocRequestOutcome {
+                book: book_info,
+                ..PandocRequestOutcome::failed(
+                    "The project render produced no output for the active page",
+                )
+            },
         };
     };
 
     let mut outcome = page.outcome;
     outcome.diagnostics.extend(summary.project_diagnostics);
+    outcome.book = book_info;
     outcome
 }

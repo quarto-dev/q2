@@ -1,0 +1,2834 @@
+{
+  "blocks": [
+    {
+      "c": [
+        {
+          "c": [
+            "html",
+            "<!-- quarto-file-metadata: eyJyZXNvdXJjZURpciI6Ii4ifQ== -->"
+          ],
+          "t": "RawInline"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        "html",
+        "<!-- quarto-file-metadata: eyJib29rSXRlbURlcHRoIjowLCJib29rSXRlbUZpbGUiOiJpbmRleC5xbWQiLCJib29rSXRlbU51bWJlciI6MSwiYm9va0l0ZW1UeXBlIjoiaW5kZXgiLCJyZXNvdXJjZURpciI6Ii4ifQ== -->"
+      ],
+      "t": "RawBlock"
+    },
+    {
+      "a": {
+        "classes": [],
+        "id": null,
+        "kvs": []
+      },
+      "c": [
+        1,
+        [
+          "",
+          [],
+          [
+            [
+              "quarto-book-item-type",
+              "index"
+            ],
+            [
+              "quarto-book-item-depth",
+              "0"
+            ],
+            [
+              "quarto-book-item-number",
+              "1"
+            ],
+            [
+              "quarto-book-item-file",
+              "index.qmd"
+            ]
+          ]
+        ],
+        [
+          {
+            "c": "Preface",
+            "t": "Str"
+          }
+        ]
+      ],
+      "t": "Header"
+    },
+    {
+      "c": [
+        {
+          "c": "Welcome.",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "See",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": [
+            [
+              "",
+              [
+                "__quarto_custom_node"
+              ],
+              [
+                [
+                  "data-custom-type",
+                  "CrossrefResolvedRef"
+                ],
+                [
+                  "data-custom-slots",
+                  "{}"
+                ],
+                [
+                  "data-custom-data",
+                  "{\"cite_mode\":\"author_in_text\",\"identifier\":\"sec-one\",\"in_appendix\":false,\"kind\":\"Section\",\"kind_source\":\"builtin\",\"label_upper\":false,\"order\":{\"order\":1,\"section\":[3]},\"ref_type\":\"sec\",\"resolved\":true}"
+                ]
+              ]
+            ],
+            []
+          ],
+          "t": "Span"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "and",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "a": {
+            "classes": [],
+            "id": null,
+            "kvs": []
+          },
+          "c": [
+            [
+              "",
+              [],
+              []
+            ],
+            [
+              {
+                "c": "chapter",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "two",
+                "t": "Str"
+              }
+            ],
+            [
+              "#sec-two",
+              ""
+            ]
+          ],
+          "t": "Link",
+          "targetS": [
+            20,
+            null
+          ]
+        },
+        {
+          "c": ".",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "a": {
+        "classes": [],
+        "id": null,
+        "kvs": []
+      },
+      "c": [
+        [
+          "",
+          [
+            "quarto-book-part"
+          ],
+          []
+        ],
+        [
+          {
+            "c": [
+              {
+                "c": [
+                  "html",
+                  "<!-- quarto-file-metadata: eyJyZXNvdXJjZURpciI6Ii4ifQ== -->"
+                ],
+                "t": "RawInline"
+              }
+            ],
+            "t": "Para"
+          },
+          {
+            "c": [
+              "html",
+              "<!-- quarto-file-metadata: eyJib29rSXRlbURlcHRoIjowLCJib29rSXRlbU51bWJlciI6bnVsbCwiYm9va0l0ZW1UeXBlIjoicGFydCIsInJlc291cmNlRGlyIjoiLiJ9 -->"
+            ],
+            "t": "RawBlock"
+          },
+          {
+            "a": {
+              "classes": [],
+              "id": null,
+              "kvs": []
+            },
+            "c": [
+              1,
+              [
+                "part-one",
+                [],
+                [
+                  [
+                    "quarto-book-item-type",
+                    "part"
+                  ],
+                  [
+                    "quarto-book-item-depth",
+                    "0"
+                  ]
+                ]
+              ],
+              [
+                {
+                  "c": "Part",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "One",
+                  "t": "Str"
+                }
+              ]
+            ],
+            "t": "Header"
+          }
+        ]
+      ],
+      "t": "Div"
+    },
+    {
+      "c": [
+        {
+          "c": [
+            "html",
+            "<!-- quarto-file-metadata: eyJyZXNvdXJjZURpciI6Ii4ifQ== -->"
+          ],
+          "t": "RawInline"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        "html",
+        "<!-- quarto-file-metadata: eyJib29rSXRlbURlcHRoIjoxLCJib29rSXRlbUZpbGUiOiJvbmUucW1kIiwiYm9va0l0ZW1OdW1iZXIiOjIsImJvb2tJdGVtVHlwZSI6ImNoYXB0ZXIiLCJyZXNvdXJjZURpciI6Ii4ifQ== -->"
+      ],
+      "t": "RawBlock"
+    },
+    {
+      "a": {
+        "classes": [],
+        "id": 34,
+        "kvs": []
+      },
+      "c": [
+        1,
+        [
+          "sec-one",
+          [],
+          [
+            [
+              "quarto-book-item-type",
+              "chapter"
+            ],
+            [
+              "quarto-book-item-depth",
+              "1"
+            ],
+            [
+              "quarto-book-item-number",
+              "2"
+            ],
+            [
+              "quarto-book-item-file",
+              "one.qmd"
+            ]
+          ]
+        ],
+        [
+          {
+            "c": "One",
+            "t": "Str"
+          }
+        ]
+      ],
+      "t": "Header"
+    },
+    {
+      "c": [
+        {
+          "c": "Knuth",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "wrote",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "it",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "(Knuth 1984)",
+          "t": "Str"
+        },
+        {
+          "c": ".",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "a": {
+        "classes": [],
+        "id": null,
+        "kvs": []
+      },
+      "c": [
+        [
+          "",
+          [],
+          []
+        ],
+        [
+          null,
+          [
+            {
+              "c": [
+                {
+                  "c": "root",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "local",
+                  "t": "Str"
+                }
+              ],
+              "t": "Plain"
+            }
+          ]
+        ],
+        [
+          {
+            "c": [
+              {
+                "a": {
+                  "classes": [],
+                  "id": null,
+                  "kvs": []
+                },
+                "c": [
+                  [
+                    "",
+                    [],
+                    []
+                  ],
+                  [
+                    {
+                      "c": "root",
+                      "t": "Str"
+                    },
+                    {
+                      "t": "Space"
+                    },
+                    {
+                      "c": "local",
+                      "t": "Str"
+                    }
+                  ],
+                  [
+                    "rootlocal.png",
+                    ""
+                  ]
+                ],
+                "t": "Image",
+                "targetS": [
+                  55,
+                  null
+                ]
+              }
+            ],
+            "t": "Plain"
+          }
+        ]
+      ],
+      "captionS": 56,
+      "t": "Figure"
+    },
+    {
+      "a": {
+        "classes": [],
+        "id": null,
+        "kvs": []
+      },
+      "c": [
+        [
+          "",
+          [],
+          []
+        ],
+        [
+          null,
+          [
+            {
+              "c": [
+                {
+                  "c": "root",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "site",
+                  "t": "Str"
+                }
+              ],
+              "t": "Plain"
+            }
+          ]
+        ],
+        [
+          {
+            "c": [
+              {
+                "a": {
+                  "classes": [],
+                  "id": null,
+                  "kvs": []
+                },
+                "c": [
+                  [
+                    "",
+                    [],
+                    []
+                  ],
+                  [
+                    {
+                      "c": "root",
+                      "t": "Str"
+                    },
+                    {
+                      "t": "Space"
+                    },
+                    {
+                      "c": "site",
+                      "t": "Str"
+                    }
+                  ],
+                  [
+                    "img/a.png",
+                    ""
+                  ]
+                ],
+                "t": "Image",
+                "targetS": [
+                  67,
+                  null
+                ]
+              }
+            ],
+            "t": "Plain"
+          }
+        ]
+      ],
+      "captionS": 68,
+      "t": "Figure"
+    },
+    {
+      "c": [
+        {
+          "c": [
+            "html",
+            "<!-- quarto-file-metadata: eyJyZXNvdXJjZURpciI6InN1YiJ9 -->"
+          ],
+          "t": "RawInline"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        "html",
+        "<!-- quarto-file-metadata: eyJib29rSXRlbURlcHRoIjoxLCJib29rSXRlbUZpbGUiOiJzdWIvdHdvLnFtZCIsImJvb2tJdGVtTnVtYmVyIjozLCJib29rSXRlbVR5cGUiOiJjaGFwdGVyIiwicmVzb3VyY2VEaXIiOiJzdWIifQ== -->"
+      ],
+      "t": "RawBlock"
+    },
+    {
+      "a": {
+        "classes": [],
+        "id": 73,
+        "kvs": []
+      },
+      "c": [
+        1,
+        [
+          "sec-two",
+          [],
+          [
+            [
+              "quarto-book-item-type",
+              "chapter"
+            ],
+            [
+              "quarto-book-item-depth",
+              "1"
+            ],
+            [
+              "quarto-book-item-number",
+              "3"
+            ],
+            [
+              "quarto-book-item-file",
+              "sub/two.qmd"
+            ]
+          ]
+        ],
+        [
+          {
+            "c": "Two",
+            "t": "Str"
+          }
+        ]
+      ],
+      "t": "Header"
+    },
+    {
+      "c": [
+        {
+          "c": "Doe",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "and",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "Knuth",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "(Doe 2020; Knuth 1984)",
+          "t": "Str"
+        },
+        {
+          "c": ".",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "a": {
+        "classes": [],
+        "id": null,
+        "kvs": []
+      },
+      "c": [
+        [
+          "",
+          [],
+          []
+        ],
+        [
+          null,
+          [
+            {
+              "c": [
+                {
+                  "c": "local",
+                  "t": "Str"
+                }
+              ],
+              "t": "Plain"
+            }
+          ]
+        ],
+        [
+          {
+            "c": [
+              {
+                "a": {
+                  "classes": [],
+                  "id": null,
+                  "kvs": []
+                },
+                "c": [
+                  [
+                    "",
+                    [],
+                    []
+                  ],
+                  [
+                    {
+                      "c": "local",
+                      "t": "Str"
+                    }
+                  ],
+                  [
+                    "sub/local.png",
+                    ""
+                  ]
+                ],
+                "t": "Image",
+                "targetS": [
+                  90,
+                  null
+                ]
+              }
+            ],
+            "t": "Plain"
+          }
+        ]
+      ],
+      "captionS": 91,
+      "t": "Figure"
+    },
+    {
+      "a": {
+        "classes": [],
+        "id": null,
+        "kvs": []
+      },
+      "c": [
+        [
+          "",
+          [],
+          []
+        ],
+        [
+          null,
+          [
+            {
+              "c": [
+                {
+                  "c": "site",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "root",
+                  "t": "Str"
+                }
+              ],
+              "t": "Plain"
+            }
+          ]
+        ],
+        [
+          {
+            "c": [
+              {
+                "a": {
+                  "classes": [],
+                  "id": null,
+                  "kvs": []
+                },
+                "c": [
+                  [
+                    "",
+                    [],
+                    []
+                  ],
+                  [
+                    {
+                      "c": "site",
+                      "t": "Str"
+                    },
+                    {
+                      "t": "Space"
+                    },
+                    {
+                      "c": "root",
+                      "t": "Str"
+                    }
+                  ],
+                  [
+                    "img/a.png",
+                    ""
+                  ]
+                ],
+                "t": "Image",
+                "targetS": [
+                  102,
+                  null
+                ]
+              }
+            ],
+            "t": "Plain"
+          }
+        ]
+      ],
+      "captionS": 103,
+      "t": "Figure"
+    },
+    {
+      "a": {
+        "classes": [],
+        "id": null,
+        "kvs": []
+      },
+      "c": [
+        [
+          "",
+          [],
+          []
+        ],
+        [
+          null,
+          [
+            {
+              "c": [
+                {
+                  "c": "up",
+                  "t": "Str"
+                }
+              ],
+              "t": "Plain"
+            }
+          ]
+        ],
+        [
+          {
+            "c": [
+              {
+                "a": {
+                  "classes": [],
+                  "id": null,
+                  "kvs": []
+                },
+                "c": [
+                  [
+                    "",
+                    [],
+                    []
+                  ],
+                  [
+                    {
+                      "c": "up",
+                      "t": "Str"
+                    }
+                  ],
+                  [
+                    "top.png",
+                    ""
+                  ]
+                ],
+                "t": "Image",
+                "targetS": [
+                  110,
+                  null
+                ]
+              }
+            ],
+            "t": "Plain"
+          }
+        ]
+      ],
+      "captionS": 111,
+      "t": "Figure"
+    },
+    {
+      "c": [
+        {
+          "c": "Back",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "to",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": [
+            [
+              "",
+              [
+                "__quarto_custom_node"
+              ],
+              [
+                [
+                  "data-custom-type",
+                  "CrossrefResolvedRef"
+                ],
+                [
+                  "data-custom-slots",
+                  "{}"
+                ],
+                [
+                  "data-custom-data",
+                  "{\"cite_mode\":\"author_in_text\",\"identifier\":\"sec-one\",\"in_appendix\":false,\"kind\":\"Section\",\"kind_source\":\"builtin\",\"label_upper\":false,\"order\":{\"order\":1,\"section\":[3]},\"ref_type\":\"sec\",\"resolved\":true}"
+                ]
+              ]
+            ],
+            []
+          ],
+          "t": "Span"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "and",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "a": {
+            "classes": [],
+            "id": null,
+            "kvs": []
+          },
+          "c": [
+            [
+              "",
+              [],
+              []
+            ],
+            [
+              {
+                "c": "chapter",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "one",
+                "t": "Str"
+              }
+            ],
+            [
+              "#sec-one",
+              ""
+            ]
+          ],
+          "t": "Link",
+          "targetS": [
+            125,
+            null
+          ]
+        },
+        {
+          "c": ".",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "a": {
+        "classes": [],
+        "id": null,
+        "kvs": []
+      },
+      "c": [
+        [
+          "",
+          [
+            "quarto-book-part"
+          ],
+          []
+        ],
+        [
+          {
+            "c": [
+              {
+                "c": [
+                  "html",
+                  "<!-- quarto-file-metadata: eyJyZXNvdXJjZURpciI6Ii4ifQ== -->"
+                ],
+                "t": "RawInline"
+              }
+            ],
+            "t": "Para"
+          },
+          {
+            "c": [
+              "html",
+              "<!-- quarto-file-metadata: eyJib29rSXRlbURlcHRoIjowLCJib29rSXRlbUZpbGUiOiJwYXJ0cGFnZS5xbWQiLCJib29rSXRlbU51bWJlciI6bnVsbCwiYm9va0l0ZW1UeXBlIjoicGFydCIsInJlc291cmNlRGlyIjoiLiJ9 -->"
+            ],
+            "t": "RawBlock"
+          },
+          {
+            "a": {
+              "classes": [],
+              "id": null,
+              "kvs": []
+            },
+            "c": [
+              1,
+              [
+                "",
+                [],
+                [
+                  [
+                    "quarto-book-item-type",
+                    "part"
+                  ],
+                  [
+                    "quarto-book-item-depth",
+                    "0"
+                  ],
+                  [
+                    "quarto-book-item-file",
+                    "partpage.qmd"
+                  ]
+                ]
+              ],
+              [
+                {
+                  "c": "Part",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "Two",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "Page",
+                  "t": "Str"
+                }
+              ]
+            ],
+            "t": "Header"
+          },
+          {
+            "c": [
+              {
+                "c": "Intro",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "to",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "part",
+                "t": "Str"
+              },
+              {
+                "t": "Space"
+              },
+              {
+                "c": "two.",
+                "t": "Str"
+              }
+            ],
+            "t": "Para"
+          }
+        ]
+      ],
+      "t": "Div"
+    },
+    {
+      "c": [
+        {
+          "c": [
+            "html",
+            "<!-- quarto-file-metadata: eyJyZXNvdXJjZURpciI6Ii4ifQ== -->"
+          ],
+          "t": "RawInline"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        "html",
+        "<!-- quarto-file-metadata: eyJib29rSXRlbURlcHRoIjoxLCJib29rSXRlbUZpbGUiOiJ0aXRsZW9ubHkucW1kIiwiYm9va0l0ZW1OdW1iZXIiOjQsImJvb2tJdGVtVHlwZSI6ImNoYXB0ZXIiLCJyZXNvdXJjZURpciI6Ii4ifQ== -->"
+      ],
+      "t": "RawBlock"
+    },
+    {
+      "a": {
+        "classes": [],
+        "id": null,
+        "kvs": []
+      },
+      "c": [
+        1,
+        [
+          "",
+          [],
+          [
+            [
+              "quarto-book-item-type",
+              "chapter"
+            ],
+            [
+              "quarto-book-item-depth",
+              "1"
+            ],
+            [
+              "quarto-book-item-number",
+              "4"
+            ],
+            [
+              "quarto-book-item-file",
+              "titleonly.qmd"
+            ]
+          ]
+        ],
+        [
+          {
+            "c": "Title",
+            "t": "Str"
+          },
+          {
+            "t": "Space"
+          },
+          {
+            "c": "Only",
+            "t": "Str"
+          },
+          {
+            "t": "Space"
+          },
+          {
+            "c": "Chapter",
+            "t": "Str"
+          }
+        ]
+      ],
+      "t": "Header"
+    },
+    {
+      "c": [
+        {
+          "c": "Text",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "with",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "no",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "heading.",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        {
+          "c": [
+            "html",
+            "<!-- quarto-file-metadata: eyJyZXNvdXJjZURpciI6Ii4ifQ== -->"
+          ],
+          "t": "RawInline"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        "html",
+        "<!-- quarto-file-metadata: eyJib29rSXRlbURlcHRoIjoxLCJib29rSXRlbUZpbGUiOiJ3aXRoaDEucW1kIiwiYm9va0l0ZW1OdW1iZXIiOjUsImJvb2tJdGVtVHlwZSI6ImNoYXB0ZXIiLCJyZXNvdXJjZURpciI6Ii4ifQ== -->"
+      ],
+      "t": "RawBlock"
+    },
+    {
+      "a": {
+        "classes": [],
+        "id": null,
+        "kvs": []
+      },
+      "c": [
+        1,
+        [
+          "",
+          [],
+          [
+            [
+              "quarto-book-item-type",
+              "chapter"
+            ],
+            [
+              "quarto-book-item-depth",
+              "1"
+            ],
+            [
+              "quarto-book-item-number",
+              "5"
+            ],
+            [
+              "quarto-book-item-file",
+              "withh1.qmd"
+            ]
+          ]
+        ],
+        [
+          {
+            "c": "Meta",
+            "t": "Str"
+          },
+          {
+            "t": "Space"
+          },
+          {
+            "c": "Title",
+            "t": "Str"
+          }
+        ]
+      ],
+      "t": "Header"
+    },
+    {
+      "a": {
+        "classes": [],
+        "id": null,
+        "kvs": []
+      },
+      "c": [
+        1,
+        [
+          "heading-y",
+          [],
+          [
+            [
+              "quarto-book-item-type",
+              "chapter"
+            ],
+            [
+              "quarto-book-item-depth",
+              "1"
+            ],
+            [
+              "quarto-book-item-number",
+              "5"
+            ],
+            [
+              "quarto-book-item-file",
+              "withh1.qmd"
+            ]
+          ]
+        ],
+        [
+          {
+            "c": "Heading",
+            "t": "Str"
+          },
+          {
+            "t": "Space"
+          },
+          {
+            "c": "Y",
+            "t": "Str"
+          }
+        ]
+      ],
+      "t": "Header"
+    },
+    {
+      "c": [
+        {
+          "c": "Body",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "y.",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        {
+          "c": [
+            "html",
+            "<!-- quarto-file-metadata: eyJyZXNvdXJjZURpciI6Ii4ifQ== -->"
+          ],
+          "t": "RawInline"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        "html",
+        "<!-- quarto-file-metadata: eyJib29rSXRlbURlcHRoIjoxLCJib29rSXRlbUZpbGUiOiJuZWl0aGVyLnFtZCIsImJvb2tJdGVtTnVtYmVyIjo2LCJib29rSXRlbVR5cGUiOiJjaGFwdGVyIiwicmVzb3VyY2VEaXIiOiIuIn0= -->"
+      ],
+      "t": "RawBlock"
+    },
+    {
+      "a": {
+        "classes": [],
+        "id": null,
+        "kvs": []
+      },
+      "c": [
+        1,
+        [
+          "",
+          [],
+          [
+            [
+              "quarto-book-item-type",
+              "chapter"
+            ],
+            [
+              "quarto-book-item-depth",
+              "1"
+            ],
+            [
+              "quarto-book-item-number",
+              "6"
+            ],
+            [
+              "quarto-book-item-file",
+              "neither.qmd"
+            ]
+          ]
+        ],
+        []
+      ],
+      "t": "Header"
+    },
+    {
+      "c": [
+        {
+          "c": "Just",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "text,",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "no",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "title",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "and",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "no",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "heading.",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        {
+          "c": [
+            "html",
+            "<!-- quarto-file-metadata: eyJyZXNvdXJjZURpciI6Ii4ifQ== -->"
+          ],
+          "t": "RawInline"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        "html",
+        "<!-- quarto-file-metadata: eyJib29rSXRlbURlcHRoIjoxLCJib29rSXRlbUZpbGUiOiJ0ZXh0Zmlyc3QucW1kIiwiYm9va0l0ZW1OdW1iZXIiOjcsImJvb2tJdGVtVHlwZSI6ImNoYXB0ZXIiLCJyZXNvdXJjZURpciI6Ii4ifQ== -->"
+      ],
+      "t": "RawBlock"
+    },
+    {
+      "a": {
+        "classes": [],
+        "id": null,
+        "kvs": []
+      },
+      "c": [
+        1,
+        [
+          "early-heading",
+          [],
+          [
+            [
+              "quarto-book-item-type",
+              "chapter"
+            ],
+            [
+              "quarto-book-item-depth",
+              "1"
+            ],
+            [
+              "quarto-book-item-number",
+              "7"
+            ],
+            [
+              "quarto-book-item-file",
+              "textfirst.qmd"
+            ]
+          ]
+        ],
+        [
+          {
+            "c": "Early",
+            "t": "Str"
+          },
+          {
+            "t": "Space"
+          },
+          {
+            "c": "Heading",
+            "t": "Str"
+          }
+        ]
+      ],
+      "t": "Header"
+    },
+    {
+      "c": [
+        {
+          "c": "Some",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "leading",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "text.",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        {
+          "c": "Body.",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "a": {
+        "classes": [],
+        "id": null,
+        "kvs": []
+      },
+      "c": [
+        [
+          "",
+          [
+            "quarto-book-part"
+          ],
+          []
+        ],
+        [
+          {
+            "c": [
+              {
+                "c": [
+                  "html",
+                  "<!-- quarto-file-metadata: eyJyZXNvdXJjZURpciI6Ii4ifQ== -->"
+                ],
+                "t": "RawInline"
+              }
+            ],
+            "t": "Para"
+          },
+          {
+            "c": [
+              "html",
+              "<!-- quarto-file-metadata: eyJib29rSXRlbURlcHRoIjowLCJib29rSXRlbU51bWJlciI6bnVsbCwiYm9va0l0ZW1UeXBlIjoiYXBwZW5kaXgiLCJyZXNvdXJjZURpciI6Ii4ifQ== -->"
+            ],
+            "t": "RawBlock"
+          },
+          {
+            "a": {
+              "classes": [
+                231
+              ],
+              "id": null,
+              "kvs": []
+            },
+            "c": [
+              1,
+              [
+                "appendices",
+                [
+                  "unnumbered"
+                ],
+                [
+                  [
+                    "quarto-book-item-type",
+                    "appendix"
+                  ],
+                  [
+                    "quarto-book-item-depth",
+                    "0"
+                  ]
+                ]
+              ],
+              [
+                {
+                  "c": "Appendices",
+                  "t": "Str"
+                }
+              ]
+            ],
+            "t": "Header"
+          }
+        ]
+      ],
+      "t": "Div"
+    },
+    {
+      "c": [
+        {
+          "c": [
+            "html",
+            "<!-- quarto-file-metadata: eyJyZXNvdXJjZURpciI6Ii4ifQ== -->"
+          ],
+          "t": "RawInline"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "c": [
+        "html",
+        "<!-- quarto-file-metadata: eyJib29rSXRlbURlcHRoIjoxLCJib29rSXRlbUZpbGUiOiJhcHAucW1kIiwiYm9va0l0ZW1OdW1iZXIiOjEsImJvb2tJdGVtVHlwZSI6ImNoYXB0ZXIiLCJyZXNvdXJjZURpciI6Ii4ifQ== -->"
+      ],
+      "t": "RawBlock"
+    },
+    {
+      "a": {
+        "classes": [],
+        "id": null,
+        "kvs": []
+      },
+      "c": [
+        1,
+        [
+          "appendix-alpha",
+          [],
+          [
+            [
+              "quarto-book-item-type",
+              "chapter"
+            ],
+            [
+              "quarto-book-item-depth",
+              "1"
+            ],
+            [
+              "quarto-book-item-number",
+              "1"
+            ],
+            [
+              "quarto-book-item-file",
+              "app.qmd"
+            ],
+            [
+              "quarto-book-item-appendix",
+              "true"
+            ]
+          ]
+        ],
+        [
+          {
+            "c": "Appendix",
+            "t": "Str"
+          },
+          {
+            "t": "Space"
+          },
+          {
+            "c": "Alpha",
+            "t": "Str"
+          }
+        ]
+      ],
+      "t": "Header"
+    },
+    {
+      "c": [
+        {
+          "c": "Appendix",
+          "t": "Str"
+        },
+        {
+          "t": "Space"
+        },
+        {
+          "c": "body.",
+          "t": "Str"
+        }
+      ],
+      "t": "Para"
+    },
+    {
+      "a": {
+        "classes": [],
+        "id": null,
+        "kvs": []
+      },
+      "c": [
+        [
+          "quarto-appendix",
+          [
+            "default"
+          ],
+          []
+        ],
+        [
+          {
+            "a": {
+              "classes": [],
+              "id": null,
+              "kvs": []
+            },
+            "c": [
+              [
+                "quarto-bibliography",
+                [
+                  "section"
+                ],
+                [
+                  [
+                    "role",
+                    "doc-bibliography"
+                  ]
+                ]
+              ],
+              [
+                {
+                  "a": {
+                    "classes": [],
+                    "id": null,
+                    "kvs": []
+                  },
+                  "c": [
+                    2,
+                    [
+                      "",
+                      [
+                        "anchored",
+                        "quarto-appendix-heading"
+                      ],
+                      []
+                    ],
+                    [
+                      {
+                        "c": "References",
+                        "t": "Str"
+                      }
+                    ]
+                  ],
+                  "t": "Header"
+                },
+                {
+                  "a": {
+                    "classes": [],
+                    "id": null,
+                    "kvs": []
+                  },
+                  "c": [
+                    [
+                      "refs",
+                      [
+                        "references",
+                        "csl-bib-body"
+                      ],
+                      []
+                    ],
+                    [
+                      {
+                        "a": {
+                          "classes": [],
+                          "id": null,
+                          "kvs": []
+                        },
+                        "c": [
+                          [
+                            "ref-doe2020",
+                            [
+                              "csl-entry"
+                            ],
+                            []
+                          ],
+                          [
+                            {
+                              "c": [
+                                {
+                                  "c": "Doe",
+                                  "t": "Str"
+                                },
+                                {
+                                  "c": ", ",
+                                  "t": "Str"
+                                },
+                                {
+                                  "c": "Jane",
+                                  "t": "Str"
+                                },
+                                {
+                                  "c": ". ",
+                                  "t": "Str"
+                                },
+                                {
+                                  "c": "2020",
+                                  "t": "Str"
+                                },
+                                {
+                                  "c": ". ",
+                                  "t": "Str"
+                                },
+                                {
+                                  "c": [
+                                    {
+                                      "c": "A Paper",
+                                      "t": "Str"
+                                    }
+                                  ],
+                                  "t": "Emph"
+                                },
+                                {
+                                  "c": ".",
+                                  "t": "Str"
+                                }
+                              ],
+                              "t": "Plain"
+                            }
+                          ]
+                        ],
+                        "t": "Div"
+                      },
+                      {
+                        "a": {
+                          "classes": [],
+                          "id": null,
+                          "kvs": []
+                        },
+                        "c": [
+                          [
+                            "ref-knuth1984",
+                            [
+                              "csl-entry"
+                            ],
+                            []
+                          ],
+                          [
+                            {
+                              "c": [
+                                {
+                                  "c": "Knuth",
+                                  "t": "Str"
+                                },
+                                {
+                                  "c": ", ",
+                                  "t": "Str"
+                                },
+                                {
+                                  "c": "Donald E.",
+                                  "t": "Str"
+                                },
+                                {
+                                  "c": " ",
+                                  "t": "Str"
+                                },
+                                {
+                                  "c": "1984",
+                                  "t": "Str"
+                                },
+                                {
+                                  "c": ". ",
+                                  "t": "Str"
+                                },
+                                {
+                                  "c": [
+                                    {
+                                      "c": "The TeXbook",
+                                      "t": "Str"
+                                    }
+                                  ],
+                                  "t": "Emph"
+                                },
+                                {
+                                  "c": ". ",
+                                  "t": "Str"
+                                },
+                                {
+                                  "c": "Addison-Wesley",
+                                  "t": "Str"
+                                },
+                                {
+                                  "c": ".",
+                                  "t": "Str"
+                                }
+                              ],
+                              "t": "Plain"
+                            }
+                          ]
+                        ],
+                        "t": "Div"
+                      }
+                    ]
+                  ],
+                  "t": "Div"
+                }
+              ]
+            ],
+            "t": "Div"
+          }
+        ]
+      ],
+      "t": "Div"
+    }
+  ],
+  "meta": {
+    "author": {
+      "c": "A. Author",
+      "t": "MetaString"
+    },
+    "author-meta": {
+      "c": [
+        {
+          "c": "A. Author",
+          "t": "MetaString"
+        }
+      ],
+      "t": "MetaList"
+    },
+    "authors": {
+      "c": [
+        {
+          "c": {
+            "id": {
+              "c": "1",
+              "t": "MetaString"
+            },
+            "letter": {
+              "c": "a",
+              "t": "MetaString"
+            },
+            "name": {
+              "c": {
+                "family": {
+                  "c": "Author",
+                  "t": "MetaString"
+                },
+                "given": {
+                  "c": "A.",
+                  "t": "MetaString"
+                },
+                "literal": {
+                  "c": "A. Author",
+                  "t": "MetaString"
+                }
+              },
+              "t": "MetaMap"
+            },
+            "number": {
+              "c": "1",
+              "t": "MetaString"
+            }
+          },
+          "t": "MetaMap"
+        }
+      ],
+      "t": "MetaList"
+    },
+    "book": {
+      "c": {
+        "appendices": {
+          "c": [
+            {
+              "c": "app.qmd",
+              "t": "MetaString"
+            }
+          ],
+          "t": "MetaList"
+        },
+        "author": {
+          "c": "A. Author",
+          "t": "MetaString"
+        },
+        "chapters": {
+          "c": [
+            {
+              "c": "index.qmd",
+              "t": "MetaString"
+            },
+            {
+              "c": {
+                "chapters": {
+                  "c": [
+                    {
+                      "c": "one.qmd",
+                      "t": "MetaString"
+                    },
+                    {
+                      "c": "sub/two.qmd",
+                      "t": "MetaString"
+                    }
+                  ],
+                  "t": "MetaList"
+                },
+                "part": {
+                  "c": "Part One",
+                  "t": "MetaString"
+                }
+              },
+              "t": "MetaMap"
+            },
+            {
+              "c": {
+                "chapters": {
+                  "c": [
+                    {
+                      "c": "titleonly.qmd",
+                      "t": "MetaString"
+                    },
+                    {
+                      "c": "withh1.qmd",
+                      "t": "MetaString"
+                    },
+                    {
+                      "c": "neither.qmd",
+                      "t": "MetaString"
+                    },
+                    {
+                      "c": "textfirst.qmd",
+                      "t": "MetaString"
+                    }
+                  ],
+                  "t": "MetaList"
+                },
+                "href": {
+                  "c": "partpage.qmd",
+                  "t": "MetaString"
+                },
+                "part": {
+                  "c": "Part Two",
+                  "t": "MetaString"
+                }
+              },
+              "t": "MetaMap"
+            }
+          ],
+          "t": "MetaList"
+        },
+        "cover-image": {
+          "c": "cover.png",
+          "t": "MetaString"
+        },
+        "title": {
+          "c": "Parity Book",
+          "t": "MetaString"
+        }
+      },
+      "t": "MetaMap"
+    },
+    "by-author": {
+      "c": [
+        {
+          "c": {
+            "id": {
+              "c": "1",
+              "t": "MetaString"
+            },
+            "letter": {
+              "c": "a",
+              "t": "MetaString"
+            },
+            "name": {
+              "c": {
+                "family": {
+                  "c": "Author",
+                  "t": "MetaString"
+                },
+                "given": {
+                  "c": "A.",
+                  "t": "MetaString"
+                },
+                "literal": {
+                  "c": "A. Author",
+                  "t": "MetaString"
+                }
+              },
+              "t": "MetaMap"
+            },
+            "number": {
+              "c": "1",
+              "t": "MetaString"
+            }
+          },
+          "t": "MetaMap"
+        }
+      ],
+      "t": "MetaList"
+    },
+    "citeproc": {
+      "c": true,
+      "t": "MetaBool"
+    },
+    "crossref": {
+      "c": {
+        "chapters": {
+          "c": true,
+          "t": "MetaBool"
+        }
+      },
+      "t": "MetaMap"
+    },
+    "filters": {
+      "c": [
+        {
+          "c": {
+            "at": {
+              "c": "post-quarto",
+              "t": "MetaString"
+            },
+            "path": {
+              "c": [
+                {
+                  "c": "<EXT>/orange-book.lua",
+                  "t": "Str"
+                }
+              ],
+              "t": "MetaInlines"
+            }
+          },
+          "t": "MetaMap"
+        },
+        {
+          "c": {
+            "at": {
+              "c": "post-quarto",
+              "t": "MetaString"
+            },
+            "path": {
+              "c": [
+                {
+                  "c": "<EXT>/orange-book.lua",
+                  "t": "Str"
+                }
+              ],
+              "t": "MetaInlines"
+            }
+          },
+          "t": "MetaMap"
+        }
+      ],
+      "t": "MetaList"
+    },
+    "format": {
+      "c": "typst",
+      "t": "MetaString"
+    },
+    "keep-typ": {
+      "c": true,
+      "t": "MetaBool"
+    },
+    "labels": {
+      "c": {
+        "abstract": {
+          "c": "Abstract",
+          "t": "MetaString"
+        },
+        "affiliations": {
+          "c": "Affiliation",
+          "t": "MetaString"
+        },
+        "authors": {
+          "c": "Author",
+          "t": "MetaString"
+        },
+        "description": {
+          "c": "Description",
+          "t": "MetaString"
+        },
+        "doi": {
+          "c": "Doi",
+          "t": "MetaString"
+        },
+        "keywords": {
+          "c": "Keywords",
+          "t": "MetaString"
+        },
+        "modified": {
+          "c": "Modified",
+          "t": "MetaString"
+        },
+        "published": {
+          "c": "Published",
+          "t": "MetaString"
+        }
+      },
+      "t": "MetaMap"
+    },
+    "listing-item": {
+      "c": {
+        "description": {
+          "c": "Welcome. See @sec-one and chapter two.",
+          "t": "MetaString"
+        },
+        "reading-time-minutes": {
+          "c": "1",
+          "t": "MetaString"
+        },
+        "word-count": {
+          "c": "6",
+          "t": "MetaString"
+        }
+      },
+      "t": "MetaMap"
+    },
+    "number-sections": {
+      "c": true,
+      "t": "MetaBool"
+    },
+    "pagetitle": {
+      "c": "Preface",
+      "t": "MetaString"
+    },
+    "project": {
+      "c": {
+        "type": {
+          "c": "book",
+          "t": "MetaString"
+        }
+      },
+      "t": "MetaMap"
+    },
+    "quarto": {
+      "c": {
+        "language": {
+          "c": {
+            "appendix-attribution-bibtex": {
+              "c": "BibTeX citation:",
+              "t": "MetaString"
+            },
+            "appendix-attribution-cite-as": {
+              "c": "For attribution, please cite this work as:",
+              "t": "MetaString"
+            },
+            "appendix-view-license": {
+              "c": "View License",
+              "t": "MetaString"
+            },
+            "article-notebook-label": {
+              "c": "Article Notebook",
+              "t": "MetaString"
+            },
+            "back-to-top": {
+              "c": "Back to top",
+              "t": "MetaString"
+            },
+            "callout-caution-title": {
+              "c": "Caution",
+              "t": "MetaString"
+            },
+            "callout-important-title": {
+              "c": "Important",
+              "t": "MetaString"
+            },
+            "callout-note-title": {
+              "c": "Note",
+              "t": "MetaString"
+            },
+            "callout-tip-title": {
+              "c": "Tip",
+              "t": "MetaString"
+            },
+            "callout-warning-title": {
+              "c": "Warning",
+              "t": "MetaString"
+            },
+            "code-line": {
+              "c": "Line",
+              "t": "MetaString"
+            },
+            "code-lines": {
+              "c": "Lines",
+              "t": "MetaString"
+            },
+            "code-links-title": {
+              "c": "Code Links",
+              "t": "MetaString"
+            },
+            "code-summary": {
+              "c": "Code",
+              "t": "MetaString"
+            },
+            "code-tools-hide-all-code": {
+              "c": "Hide All Code",
+              "t": "MetaString"
+            },
+            "code-tools-menu-caption": {
+              "c": "Code",
+              "t": "MetaString"
+            },
+            "code-tools-show-all-code": {
+              "c": "Show All Code",
+              "t": "MetaString"
+            },
+            "code-tools-source-code": {
+              "c": "Source Code",
+              "t": "MetaString"
+            },
+            "code-tools-view-source": {
+              "c": "View Source",
+              "t": "MetaString"
+            },
+            "copy-button-tooltip": {
+              "c": "Copy to Clipboard",
+              "t": "MetaString"
+            },
+            "copy-button-tooltip-success": {
+              "c": "Copied!",
+              "t": "MetaString"
+            },
+            "crossref-apx-prefix": {
+              "c": "Appendix",
+              "t": "MetaString"
+            },
+            "crossref-ch-prefix": {
+              "c": "Chapter",
+              "t": "MetaString"
+            },
+            "crossref-cnj-title": {
+              "c": "Conjecture",
+              "t": "MetaString"
+            },
+            "crossref-cor-title": {
+              "c": "Corollary",
+              "t": "MetaString"
+            },
+            "crossref-def-title": {
+              "c": "Definition",
+              "t": "MetaString"
+            },
+            "crossref-eq-prefix": {
+              "c": "Equation",
+              "t": "MetaString"
+            },
+            "crossref-exm-title": {
+              "c": "Example",
+              "t": "MetaString"
+            },
+            "crossref-exr-title": {
+              "c": "Exercise",
+              "t": "MetaString"
+            },
+            "crossref-fig-title": {
+              "c": "Figure",
+              "t": "MetaString"
+            },
+            "crossref-lem-title": {
+              "c": "Lemma",
+              "t": "MetaString"
+            },
+            "crossref-lof-title": {
+              "c": "List of Figures",
+              "t": "MetaString"
+            },
+            "crossref-lol-title": {
+              "c": "List of Listings",
+              "t": "MetaString"
+            },
+            "crossref-lot-title": {
+              "c": "List of Tables",
+              "t": "MetaString"
+            },
+            "crossref-lst-title": {
+              "c": "Listing",
+              "t": "MetaString"
+            },
+            "crossref-prp-title": {
+              "c": "Proposition",
+              "t": "MetaString"
+            },
+            "crossref-sec-prefix": {
+              "c": "Section",
+              "t": "MetaString"
+            },
+            "crossref-tbl-title": {
+              "c": "Table",
+              "t": "MetaString"
+            },
+            "crossref-thm-title": {
+              "c": "Theorem",
+              "t": "MetaString"
+            },
+            "draft": {
+              "c": "Draft",
+              "t": "MetaString"
+            },
+            "environment-proof-title": {
+              "c": "Proof",
+              "t": "MetaString"
+            },
+            "environment-remark-title": {
+              "c": "Remark",
+              "t": "MetaString"
+            },
+            "environment-solution-title": {
+              "c": "Solution",
+              "t": "MetaString"
+            },
+            "launch-binder-title": {
+              "c": "Launch Binder",
+              "t": "MetaString"
+            },
+            "launch-dev-container-title": {
+              "c": "Launch Dev Container",
+              "t": "MetaString"
+            },
+            "listing-page-category-all": {
+              "c": "All",
+              "t": "MetaString"
+            },
+            "listing-page-field-author": {
+              "c": "Author",
+              "t": "MetaString"
+            },
+            "listing-page-field-categories": {
+              "c": "Categories",
+              "t": "MetaString"
+            },
+            "listing-page-field-date": {
+              "c": "Date",
+              "t": "MetaString"
+            },
+            "listing-page-field-description": {
+              "c": "Description",
+              "t": "MetaString"
+            },
+            "listing-page-field-filemodified": {
+              "c": "Modified",
+              "t": "MetaString"
+            },
+            "listing-page-field-filename": {
+              "c": "File Name",
+              "t": "MetaString"
+            },
+            "listing-page-field-readingtime": {
+              "c": "Reading Time",
+              "t": "MetaString"
+            },
+            "listing-page-field-subtitle": {
+              "c": "Subtitle",
+              "t": "MetaString"
+            },
+            "listing-page-field-title": {
+              "c": "Title",
+              "t": "MetaString"
+            },
+            "listing-page-field-wordcount": {
+              "c": "Word Count",
+              "t": "MetaString"
+            },
+            "listing-page-filter": {
+              "c": "Filter",
+              "t": "MetaString"
+            },
+            "listing-page-minutes-compact": {
+              "c": "{0} min",
+              "t": "MetaString"
+            },
+            "listing-page-no-matches": {
+              "c": "No matching items",
+              "t": "MetaString"
+            },
+            "listing-page-order-by": {
+              "c": "Order By",
+              "t": "MetaString"
+            },
+            "listing-page-order-by-date-asc": {
+              "c": "Oldest",
+              "t": "MetaString"
+            },
+            "listing-page-order-by-date-desc": {
+              "c": "Newest",
+              "t": "MetaString"
+            },
+            "listing-page-order-by-default": {
+              "c": "Default",
+              "t": "MetaString"
+            },
+            "listing-page-order-by-number-asc": {
+              "c": "Low to High",
+              "t": "MetaString"
+            },
+            "listing-page-order-by-number-desc": {
+              "c": "High to Low",
+              "t": "MetaString"
+            },
+            "listing-page-words": {
+              "c": "{0} words",
+              "t": "MetaString"
+            },
+            "manuscript-meca-bundle": {
+              "c": "MECA Bundle",
+              "t": "MetaString"
+            },
+            "notebook-preview-back": {
+              "c": "Back to Article",
+              "t": "MetaString"
+            },
+            "notebook-preview-download": {
+              "c": "Download Notebook",
+              "t": "MetaString"
+            },
+            "notebook-preview-download-src": {
+              "c": "Download Source",
+              "t": "MetaString"
+            },
+            "other-links-title": {
+              "c": "Other Links",
+              "t": "MetaString"
+            },
+            "related-formats-title": {
+              "c": "Other Formats",
+              "t": "MetaString"
+            },
+            "related-notebooks-title": {
+              "c": "Notebooks",
+              "t": "MetaString"
+            },
+            "repo-action-links-edit": {
+              "c": "Edit this page",
+              "t": "MetaString"
+            },
+            "repo-action-links-issue": {
+              "c": "Report an issue",
+              "t": "MetaString"
+            },
+            "repo-action-links-source": {
+              "c": "View source",
+              "t": "MetaString"
+            },
+            "search-clear-button-title": {
+              "c": "Clear",
+              "t": "MetaString"
+            },
+            "search-copy-link-title": {
+              "c": "Copy link to search",
+              "t": "MetaString"
+            },
+            "search-detached-cancel-button-title": {
+              "c": "Cancel",
+              "t": "MetaString"
+            },
+            "search-hide-matches-text": {
+              "c": "Hide additional matches",
+              "t": "MetaString"
+            },
+            "search-label": {
+              "c": "Search",
+              "t": "MetaString"
+            },
+            "search-matching-documents-text": {
+              "c": "matching documents",
+              "t": "MetaString"
+            },
+            "search-more-match-text": {
+              "c": "more match in this document",
+              "t": "MetaString"
+            },
+            "search-more-matches-text": {
+              "c": "more matches in this document",
+              "t": "MetaString"
+            },
+            "search-no-results-text": {
+              "c": "No results",
+              "t": "MetaString"
+            },
+            "search-submit-button-title": {
+              "c": "Submit",
+              "t": "MetaString"
+            },
+            "search-text-placeholder": {
+              "c": "",
+              "t": "MetaString"
+            },
+            "section-title-abstract": {
+              "c": "Abstract",
+              "t": "MetaString"
+            },
+            "section-title-appendices": {
+              "c": "Appendices",
+              "t": "MetaString"
+            },
+            "section-title-citation": {
+              "c": "Citation",
+              "t": "MetaString"
+            },
+            "section-title-copyright": {
+              "c": "Copyright",
+              "t": "MetaString"
+            },
+            "section-title-footnotes": {
+              "c": "Footnotes",
+              "t": "MetaString"
+            },
+            "section-title-references": {
+              "c": "References",
+              "t": "MetaString"
+            },
+            "section-title-reuse": {
+              "c": "Reuse",
+              "t": "MetaString"
+            },
+            "source-notebooks-prefix": {
+              "c": "Source",
+              "t": "MetaString"
+            },
+            "title-block-affiliation-plural": {
+              "c": "Affiliations",
+              "t": "MetaString"
+            },
+            "title-block-affiliation-single": {
+              "c": "Affiliation",
+              "t": "MetaString"
+            },
+            "title-block-author-plural": {
+              "c": "Authors",
+              "t": "MetaString"
+            },
+            "title-block-author-single": {
+              "c": "Author",
+              "t": "MetaString"
+            },
+            "title-block-keywords": {
+              "c": "Keywords",
+              "t": "MetaString"
+            },
+            "title-block-modified": {
+              "c": "Modified",
+              "t": "MetaString"
+            },
+            "title-block-published": {
+              "c": "Published",
+              "t": "MetaString"
+            },
+            "toc-title-document": {
+              "c": "Table of contents",
+              "t": "MetaString"
+            },
+            "toc-title-website": {
+              "c": "On this page",
+              "t": "MetaString"
+            },
+            "toggle-dark-mode": {
+              "c": "Toggle dark mode",
+              "t": "MetaString"
+            },
+            "toggle-navigation": {
+              "c": "Toggle navigation",
+              "t": "MetaString"
+            },
+            "toggle-reader-mode": {
+              "c": "Toggle reader mode",
+              "t": "MetaString"
+            },
+            "toggle-section": {
+              "c": "Toggle section",
+              "t": "MetaString"
+            },
+            "toggle-sidebar": {
+              "c": "Toggle sidebar navigation",
+              "t": "MetaString"
+            },
+            "tools-download": {
+              "c": "Download",
+              "t": "MetaString"
+            },
+            "tools-share": {
+              "c": "Share",
+              "t": "MetaString"
+            }
+          },
+          "t": "MetaMap"
+        }
+      },
+      "t": "MetaMap"
+    },
+    "quarto-template-params": {
+      "c": {
+        "title-block-categories": {
+          "c": true,
+          "t": "MetaBool"
+        }
+      },
+      "t": "MetaMap"
+    },
+    "quarto_pandoc_reader_opts": {
+      "c": {},
+      "t": "MetaMap"
+    },
+    "rendered": {
+      "c": {
+        "has-title-block": {
+          "c": true,
+          "t": "MetaBool"
+        },
+        "includes": {
+          "c": {
+            "after-body": {
+              "c": [],
+              "t": "MetaList"
+            },
+            "before-body": {
+              "c": [],
+              "t": "MetaList"
+            },
+            "header": {
+              "c": [],
+              "t": "MetaList"
+            }
+          },
+          "t": "MetaMap"
+        }
+      },
+      "t": "MetaMap"
+    },
+    "section-numbering": {
+      "c": "1.1.a",
+      "t": "MetaString"
+    },
+    "single-file-book": {
+      "c": true,
+      "t": "MetaBool"
+    },
+    "template-partials": {
+      "c": [
+        {
+          "c": [
+            {
+              "c": "<EXT>/numbering.typ",
+              "t": "Str"
+            }
+          ],
+          "t": "MetaInlines"
+        },
+        {
+          "c": [
+            {
+              "c": "<EXT>/page.typ",
+              "t": "Str"
+            }
+          ],
+          "t": "MetaInlines"
+        },
+        {
+          "c": [
+            {
+              "c": "<EXT>/typst-show.typ",
+              "t": "Str"
+            }
+          ],
+          "t": "MetaInlines"
+        },
+        {
+          "c": [
+            {
+              "c": "<EXT>/numbering.typ",
+              "t": "Str"
+            }
+          ],
+          "t": "MetaInlines"
+        },
+        {
+          "c": [
+            {
+              "c": "<EXT>/page.typ",
+              "t": "Str"
+            }
+          ],
+          "t": "MetaInlines"
+        },
+        {
+          "c": [
+            {
+              "c": "<EXT>/typst-show.typ",
+              "t": "Str"
+            }
+          ],
+          "t": "MetaInlines"
+        }
+      ],
+      "t": "MetaList"
+    },
+    "title": {
+      "c": "Parity Book",
+      "t": "MetaString"
+    },
+    "toc": {
+      "c": false,
+      "t": "MetaBool"
+    },
+    "top-level-division": {
+      "c": "chapter",
+      "t": "MetaString"
+    },
+    "website": {
+      "c": {
+        "page-navigation": {
+          "c": true,
+          "t": "MetaBool"
+        },
+        "sidebar": {
+          "c": {
+            "contents": {
+              "c": [
+                {
+                  "c": "index.qmd",
+                  "t": "MetaString"
+                },
+                {
+                  "c": {
+                    "contents": {
+                      "c": [
+                        {
+                          "c": "one.qmd",
+                          "t": "MetaString"
+                        },
+                        {
+                          "c": "sub/two.qmd",
+                          "t": "MetaString"
+                        }
+                      ],
+                      "t": "MetaList"
+                    },
+                    "section": {
+                      "c": "Part One",
+                      "t": "MetaString"
+                    }
+                  },
+                  "t": "MetaMap"
+                },
+                {
+                  "c": {
+                    "contents": {
+                      "c": [
+                        {
+                          "c": "titleonly.qmd",
+                          "t": "MetaString"
+                        },
+                        {
+                          "c": "withh1.qmd",
+                          "t": "MetaString"
+                        },
+                        {
+                          "c": "neither.qmd",
+                          "t": "MetaString"
+                        },
+                        {
+                          "c": "textfirst.qmd",
+                          "t": "MetaString"
+                        }
+                      ],
+                      "t": "MetaList"
+                    },
+                    "href": {
+                      "c": "partpage.qmd",
+                      "t": "MetaString"
+                    },
+                    "section": {
+                      "c": "Part Two",
+                      "t": "MetaString"
+                    }
+                  },
+                  "t": "MetaMap"
+                },
+                {
+                  "c": {
+                    "contents": {
+                      "c": [
+                        {
+                          "c": "app.qmd",
+                          "t": "MetaString"
+                        }
+                      ],
+                      "t": "MetaList"
+                    },
+                    "section": {
+                      "c": "Appendices",
+                      "t": "MetaString"
+                    }
+                  },
+                  "t": "MetaMap"
+                }
+              ],
+              "t": "MetaList"
+            },
+            "style": {
+              "c": "floating",
+              "t": "MetaString"
+            },
+            "title": {
+              "c": [
+                {
+                  "c": "Parity",
+                  "t": "Str"
+                },
+                {
+                  "t": "Space"
+                },
+                {
+                  "c": "Book",
+                  "t": "Str"
+                }
+              ],
+              "t": "MetaInlines"
+            }
+          },
+          "t": "MetaMap"
+        },
+        "title": {
+          "c": [
+            {
+              "c": "Parity",
+              "t": "Str"
+            },
+            {
+              "t": "Space"
+            },
+            {
+              "c": "Book",
+              "t": "Str"
+            }
+          ],
+          "t": "MetaInlines"
+        }
+      },
+      "t": "MetaMap"
+    }
+  },
+  "pandoc-api-version": [
+    1,
+    23,
+    1
+  ]
+}

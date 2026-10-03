@@ -5,6 +5,7 @@
 //! The wire contract lives in `schemas/pandoc-request.schema.json`.
 
 pub mod args;
+pub mod captures;
 pub mod constants;
 pub mod formats;
 pub mod mounts;

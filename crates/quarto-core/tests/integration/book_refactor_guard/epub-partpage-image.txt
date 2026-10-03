@@ -5,8 +5,7 @@ input: Guard-Part-Page.qmd
 resources_dir: _book/Guard-Part-Page_files
 execution_skipped: false
 html_len_is_zero: true
-diagnostics: 1
-  - [Warning] Some("Q-5-6") Referenced resource not found
+diagnostics: 0
 resource_report: DocumentResourceReport { entries: [] }
 pass1_failures: 0
 pass2_failures: 0
@@ -14,6 +13,7 @@ project_diagnostics: 0
 stopped_early: false
 output_dir_files:
   Guard-Part-Page.epub
+  part.png
 render_manifest:
 {
   "version": 1,

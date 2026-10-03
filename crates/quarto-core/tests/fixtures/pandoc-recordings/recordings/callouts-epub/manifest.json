@@ -6,8 +6,8 @@
   },
   {
     "path": "capture/callouts.epub",
-    "size": 26005,
-    "sha256": "5426717d28c2d1f8a5241b7b556d03d369d80ed7755cbaec96f9e712b612bc99"
+    "size": 26003,
+    "sha256": "6f8984cbb585b7fee9c537bcf712ebb340dfe66ce6ca167827f2d5f46aa2d05d"
   },
   {
     "path": "env.json",
@@ -23,31 +23,6 @@
     "path": "fs/__q2_tmp__/pandoc-filter-deps.txt",
     "size": 0,
     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-  },
-  {
-    "path": "fs/__q2_tmp__/pandoc-formats/formats/docx/caution.png",
-    "size": 749,
-    "sha256": "5c908b003e224909db5be99682716b3671ee8e885f1c73e70b1ddd9b399cdb3d"
-  },
-  {
-    "path": "fs/__q2_tmp__/pandoc-formats/formats/docx/important.png",
-    "size": 1216,
-    "sha256": "1fd109f5454c79e645a08c01eb20a421e9e3a6c9b43e87cd311f88c7b1784341"
-  },
-  {
-    "path": "fs/__q2_tmp__/pandoc-formats/formats/docx/note.png",
-    "size": 1257,
-    "sha256": "ed81730ce2442eca9d4d4f0c5a3da640c959cd72001bea78b1a949eea3f0c746"
-  },
-  {
-    "path": "fs/__q2_tmp__/pandoc-formats/formats/docx/tip.png",
-    "size": 1093,
-    "sha256": "9eb2b3e59f73c71354b4db376bf603fc529be4d50bcc3ad3d6d4842a888d0938"
-  },
-  {
-    "path": "fs/__q2_tmp__/pandoc-formats/formats/docx/warning.png",
-    "size": 1252,
-    "sha256": "9fc0013d9c5ae792709ad30f7c8dfc48c4aeda7371e0d7b349f56bab0f435381"
   },
   {
     "path": "fs/__q2_tmp__/pandoc-formats/formats/epub/styles.html",
@@ -67,11 +42,11 @@
   {
     "path": "meta.json",
     "size": 182,
-    "sha256": "98ecbf1c5ae8ed8f7f1b8237eec12ec7eba42c85cded94ff8d42be5ba6d79399"
+    "sha256": "02fe593932107892df3df15c622e84edf6864926016dc412055440396bb4e0b9"
   },
   {
     "path": "reference/callouts.epub",
-    "size": 26007,
-    "sha256": "9fb22ab45b0fd5d71c7e416ef145de3b95b1f5bb78352425f828a44a5e7a7810"
+    "size": 26002,
+    "sha256": "ae299a15904b6e4ef79295260f53e881f3cacf4fe6b300ab8de72d08327c47ff"
   }
 ]

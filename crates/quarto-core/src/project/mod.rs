@@ -1919,6 +1919,11 @@ pub struct ProjectContext {
     /// `ProjectKind::Book` projects after `pre_render` has run; P2/P4's
     /// book render modes read it for merge order and numbering.
     pub book_render_items: Option<Vec<book::BookRenderItem>>,
+    /// Project-relative files a book's `pre_render` keeps in the render list
+    /// beyond its chapters (as it keeps the footer and 404): a page the
+    /// browser's pandoc request renders alone though the book does not list
+    /// it. Empty for every native render.
+    pub extra_render_files: Vec<PathBuf>,
 }
 
 /// What [`ProjectContext::apply_project_profiles`] resolved: the
@@ -2186,6 +2191,7 @@ impl ProjectContext {
             binary_dependencies,
             tabled_engines,
             book_render_items: None,
+            extra_render_files: Vec::new(),
         })
     }
 
@@ -2231,6 +2237,7 @@ impl ProjectContext {
             // `engines:` key to read.
             tabled_engines: std::collections::HashSet::new(),
             book_render_items: None,
+            extra_render_files: Vec::new(),
         })
     }
 

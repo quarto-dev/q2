@@ -1467,31 +1467,7 @@ pub async fn render_page_for_preview(
 fn parse_capture_from(
     capture_gz_json: Option<Vec<u8>>,
 ) -> Result<Vec<quarto_trace::EngineCapture>, String> {
-    use std::io::Read;
-
-    let Some(bytes) = capture_gz_json else {
-        return Ok(Vec::new());
-    };
-    if bytes.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let mut decoder = flate2::read::GzDecoder::new(&bytes[..]);
-    let mut json = Vec::new();
-    decoder
-        .read_to_end(&mut json)
-        .map_err(|e| format!("ungzip failed: {}", e))?;
-
-    match serde_json::from_slice::<Vec<quarto_trace::EngineCapture>>(&json) {
-        Ok(captures) => Ok(captures),
-        Err(array_err) => {
-            // Lenient fallback: a stale single-object capture doc.
-            match serde_json::from_slice::<quarto_trace::EngineCapture>(&json) {
-                Ok(single) => Ok(vec![single]),
-                Err(_) => Err(format!("JSON parse failed: {}", array_err)),
-            }
-        }
-    }
+    quarto_core::pandoc_request::captures::parse_capture_gz(capture_gz_json.as_deref())
 }
 
 // ============================================================================
@@ -1551,11 +1527,21 @@ fn pandoc_request_envelope(
     diagnostics: Vec<JsonDiagnostic>,
     request: Option<&quarto_core::pandoc_request::PandocRequest>,
     unexecuted_cells: usize,
+    book: Option<&quarto_core::pandoc_request::render::BookOutcomeInfo>,
 ) -> JsValue {
+    #[derive(Serialize)]
+    struct BookStats {
+        /// `book` (the whole book) or `chapter` (the active page alone).
+        scope: &'static str,
+        /// File-bearing items in the book's render list.
+        chapters: usize,
+    }
     #[derive(Serialize)]
     struct Stats {
         /// Code cells with no cached result (shown as source).
         unexecuted_cells: usize,
+        /// `null` outside a book project and on early failures.
+        book: Option<BookStats>,
     }
     #[derive(Serialize)]
     struct Envelope {
@@ -1569,7 +1555,16 @@ fn pandoc_request_envelope(
         success,
         error,
         diagnostics,
-        stats: Stats { unexecuted_cells },
+        stats: Stats {
+            unexecuted_cells,
+            book: book.map(|b| BookStats {
+                scope: match b.scope {
+                    quarto_core::pandoc_request::render::ResolvedBookScope::Book => "book",
+                    quarto_core::pandoc_request::render::ResolvedBookScope::Chapter => "chapter",
+                },
+                chapters: b.chapters,
+            }),
+        },
     })
     .unwrap();
     let js = js_sys::JSON::parse(&json).unwrap();
@@ -1597,14 +1592,25 @@ fn pandoc_request_envelope(
 /// Build the pandoc request for the document at `path`, rendered to `format`
 /// (a key of [`get_pandoc_formats`]). Async because the pipeline is; once
 /// remote images land (R6) it also fetches. Returns the envelope
-/// `{ success, error?, diagnostics, stats: { unexecuted_cells }, request? }`;
+/// `{ success, error?, diagnostics, stats: { unexecuted_cells, book }, request? }`;
 /// a document with errors and an active path absent from the VFS return no
 /// `request`. A document inside a `_quarto.yml` project renders as the
 /// project's active page (R7): the request carries that page alone, with the
-/// project's metadata and `format:` layers applied, and a book chapter is
-/// not merged with the rest of the book (settled for docx and pptx, which have
-/// no single-file book; interim for typst, pdf and epub, which should become
-/// whole-book downloads with R7 stages 2-3).
+/// project's metadata and `format:` layers applied. For a book chapter
+/// requested as typst, pdf or epub with `options.scope` `'auto'` (the
+/// default) the request is the whole book (R9); docx and pptx, a page that is
+/// not a chapter and `scope: 'chapter'` stay chapter-alone. `stats.book` is
+/// `{ scope: 'book' | 'chapter', chapters }` in a book project, else `null`.
+///
+/// `options` (optional, trailing) is `{ scope?: 'auto' | 'chapter',
+/// capturesByPath?: Record<string, Uint8Array>, onProgress?: (index, total,
+/// file) => void | Promise<void> }`. `capturesByPath` maps a chapter's
+/// `/`-normalized path relative to the VFS project root to its capture blob
+/// (`capture_gz_json` serves the active page when the request is
+/// chapter-alone). `onProgress` is awaited before each chapter of a book
+/// render; the loop also yields to the event loop there, so an
+/// `abort_signal` abort lands between chapters. If `onProgress` rejects the
+/// call fails with that error.
 ///
 /// `source_date_epoch` is seconds, as an `f64` because an `i64` would cross
 /// as a BigInt and a JS number would throw. `capture_gz_json` is read the way
@@ -1619,6 +1625,7 @@ pub async fn render_pandoc_request(
     capture_gz_json: Option<Vec<u8>>,
     typst_available_fonts: Option<Vec<String>>,
     abort_signal: Option<JsValue>,
+    options: Option<JsValue>,
 ) -> JsValue {
     // Click-time snapshot: every read in this request, including the ones
     // after the first remote-image `await`, goes through this copy, so the
@@ -1629,11 +1636,16 @@ pub async fn render_pandoc_request(
     let snapshot = Arc::new(
         get_runtime()
             .snapshot()
-            .with_abort_signal(abort_signal.unwrap_or(JsValue::UNDEFINED)),
+            .with_abort_signal(abort_signal.clone().unwrap_or(JsValue::UNDEFINED)),
     );
     let runtime = &*snapshot;
     let path_buf = std::path::PathBuf::from(path);
-    let fail = |message: String| pandoc_request_envelope(false, Some(message), Vec::new(), None, 0);
+    let fail =
+        |message: String| pandoc_request_envelope(false, Some(message), Vec::new(), None, 0, None);
+    let options = match parse_request_options(options) {
+        Ok(o) => o,
+        Err(e) => return fail(e),
+    };
 
     let content = match runtime.file_read(&path_buf) {
         Ok(bytes) => bytes,
@@ -1648,6 +1660,11 @@ pub async fn render_pandoc_request(
         Err(e) => return fail(format!("Failed to discover project context: {}", e)),
     };
 
+    let hooks = JsBookHooks {
+        on_progress: options.on_progress,
+        abort_signal: abort_signal.unwrap_or(JsValue::UNDEFINED),
+        rejection: RefCell::new(None),
+    };
     let mut outcome = quarto_core::pandoc_request::render::render_pandoc_request(
         quarto_core::pandoc_request::render::PandocRequestInput {
             path: &path_buf,
@@ -1659,6 +1676,10 @@ pub async fn render_pandoc_request(
                 .map(|s| s as i64),
             captures,
             typst_available_fonts,
+            scope: options.scope,
+            captures_by_path: options.captures_by_path,
+            capture_error: None,
+            hooks: Some(&hooks),
             // The hub prelude's resolver, as every other render installs it.
             resolver: Some(ResourceResolverContext::vfs_root(
                 "/.quarto/project-artifacts",
@@ -1680,14 +1701,180 @@ pub async fn render_pandoc_request(
         );
     }
 
-    let diagnostics = diagnostics_to_json(&outcome.diagnostics, &outcome.source_context);
+    // Each chapter's diagnostics resolve against that chapter's own source
+    // context; the book-level ones (merged passes) stay unlocatable.
+    let mut diagnostics: Vec<JsonDiagnostic> = Vec::new();
+    if let Some(book) = &outcome.book {
+        for chapter in &book.chapter_diagnostics {
+            diagnostics.extend(diagnostics_to_json(
+                &chapter.diagnostics,
+                &chapter.source_context,
+            ));
+        }
+    }
+    diagnostics.extend(diagnostics_to_json(
+        &outcome.diagnostics,
+        &outcome.source_context,
+    ));
+    // A rejecting `onProgress` cancels the loop; its error is the result.
+    if let Some(rejection) = hooks.rejection.borrow_mut().take() {
+        return fail(format!("onProgress failed: {rejection}"));
+    }
     pandoc_request_envelope(
         outcome.request.is_some(),
         outcome.error,
         diagnostics,
         outcome.request.as_ref(),
         outcome.unexecuted_cells,
+        outcome.book.as_ref(),
     )
+}
+
+/// The unpacked `options` object of [`render_pandoc_request`].
+struct RequestOptions {
+    scope: quarto_core::pandoc_request::render::BookScope,
+    captures_by_path: std::collections::BTreeMap<String, Vec<u8>>,
+    on_progress: Option<js_sys::Function>,
+}
+
+/// Unpack by hand: `serde-wasm-bindgen` is not a dependency, and a
+/// `Uint8Array` is read with `Uint8Array::new` (an `instanceof` check can
+/// fail across realms).
+fn parse_request_options(options: Option<JsValue>) -> Result<RequestOptions, String> {
+    use quarto_core::pandoc_request::render::BookScope;
+    let mut out = RequestOptions {
+        scope: BookScope::Auto,
+        captures_by_path: Default::default(),
+        on_progress: None,
+    };
+    let Some(options) = options.filter(|o| !o.is_undefined() && !o.is_null()) else {
+        return Ok(out);
+    };
+    if !options.is_object() {
+        return Err("options must be an object".to_string());
+    }
+    let get = |key: &str| js_sys::Reflect::get(&options, &key.into()).unwrap_or(JsValue::UNDEFINED);
+    let scope = get("scope");
+    if !scope.is_undefined() && !scope.is_null() {
+        out.scope = match scope.as_string().as_deref() {
+            Some("auto") => BookScope::Auto,
+            Some("chapter") => BookScope::Chapter,
+            _ => return Err("options.scope must be 'auto' or 'chapter'".to_string()),
+        };
+    }
+    let captures = get("capturesByPath");
+    if !captures.is_undefined() && !captures.is_null() {
+        if !captures.is_object() {
+            return Err("options.capturesByPath must be an object".to_string());
+        }
+        for key in js_sys::Object::keys(&captures.clone().into()).iter() {
+            let Some(name) = key.as_string() else {
+                continue;
+            };
+            let value = js_sys::Reflect::get(&captures, &key).unwrap_or(JsValue::UNDEFINED);
+            if value.is_undefined() || value.is_null() {
+                continue;
+            }
+            out.captures_by_path
+                .insert(name, js_sys::Uint8Array::new(&value).to_vec());
+        }
+    }
+    let on_progress = get("onProgress");
+    if !on_progress.is_undefined() && !on_progress.is_null() {
+        out.on_progress = Some(
+            on_progress
+                .dyn_into::<js_sys::Function>()
+                .map_err(|_| "options.onProgress must be a function".to_string())?,
+        );
+    }
+    Ok(out)
+}
+
+/// The chapter loop's host hook: reports progress, yields to the event loop
+/// (wasm futures with no real `await` never would, so neither a status update
+/// nor an `AbortSignal.abort()` could be delivered mid-loop), and cancels on
+/// abort or when `onProgress` rejects.
+struct JsBookHooks {
+    on_progress: Option<js_sys::Function>,
+    abort_signal: JsValue,
+    /// The message of a rejected `onProgress`, taken by the export.
+    rejection: RefCell<Option<String>>,
+}
+
+impl JsBookHooks {
+    fn aborted(&self) -> bool {
+        !self.abort_signal.is_undefined()
+            && !self.abort_signal.is_null()
+            && js_sys::Reflect::get(&self.abort_signal, &"aborted".into())
+                .map(|v| v.is_truthy())
+                .unwrap_or(false)
+    }
+}
+
+/// A macrotask turn: resolves from a `MessageChannel` message, not
+/// `setTimeout` (no timer clamping) and not `js_sys::Function::new_no_args`
+/// (that is `eval`).
+async fn yield_to_event_loop() {
+    let Ok(channel) = web_sys::MessageChannel::new() else {
+        return;
+    };
+    let (port1, port2) = (channel.port1(), channel.port2());
+    let receiver = port1.clone();
+    let promise = js_sys::Promise::new(&mut |resolve, _reject| {
+        let callback = Closure::once_into_js(move || {
+            let _ = resolve.call0(&JsValue::UNDEFINED);
+        });
+        receiver.set_onmessage(Some(callback.unchecked_ref()));
+    });
+    if port2.post_message(&JsValue::NULL).is_ok() {
+        let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
+    }
+    // An open port keeps a Node event loop alive.
+    port1.close();
+    port2.close();
+}
+
+#[async_trait::async_trait(?Send)]
+impl quarto_core::project::book::BookRenderHooks for JsBookHooks {
+    async fn before_chapter(
+        &self,
+        index: usize,
+        total: usize,
+        file: &str,
+    ) -> Result<(), quarto_core::project::book::Cancelled> {
+        use quarto_core::project::book::Cancelled;
+        if self.aborted() {
+            return Err(Cancelled);
+        }
+        if let Some(on_progress) = &self.on_progress {
+            let result = on_progress.call3(
+                &JsValue::UNDEFINED,
+                &JsValue::from_f64(index as f64),
+                &JsValue::from_f64(total as f64),
+                &JsValue::from_str(file),
+            );
+            let settled = match result {
+                Ok(value) => wasm_bindgen_futures::JsFuture::from(js_sys::Promise::resolve(&value))
+                    .await
+                    .map(|_| ()),
+                Err(e) => Err(e),
+            };
+            if let Err(e) = settled {
+                let message = e
+                    .dyn_ref::<js_sys::Error>()
+                    .map(|err| String::from(err.message()))
+                    .or_else(|| e.as_string())
+                    .unwrap_or_else(|| "unknown error".to_string());
+                *self.rejection.borrow_mut() = Some(message);
+                return Err(Cancelled);
+            }
+        }
+        yield_to_event_loop().await;
+        if self.aborted() {
+            return Err(Cancelled);
+        }
+        Ok(())
+    }
 }
 
 /// SHA-256 identifying the share tree (`request.share_tree_version`). The

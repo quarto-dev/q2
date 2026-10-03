@@ -6,8 +6,8 @@
   },
   {
     "path": "capture/shortcodes.typ",
-    "size": 12646,
-    "sha256": "12127aaafc2a1bd0e3686850c084cdad383cfef46c1d069b7d53784b8b93a0a0"
+    "size": 12642,
+    "sha256": "2fca5f666092605ca44454ad70b387cff8d8a8e7f640070d773b3c6bc0219e66"
   },
   {
     "path": "env.json",
@@ -27,7 +27,7 @@
   {
     "path": "fs/__q2_tmp__/pandoc-input.json",
     "size": 23219,
-    "sha256": "8be43e2d6046f0ebaf2ddc80d40b2db8b963f466e6b555e6400c88339560c82e"
+    "sha256": "0a500b4cfec0b3fa1252eefa3ada8bc877bb8c10cfe75d6a78bc571da9549376"
   },
   {
     "path": "fs/__q2_tmp__/pandoc-typst-template/biblio.typ",
@@ -66,17 +66,17 @@
   },
   {
     "path": "fs/__q2_tmp__/pandoc-typst-template/typst-template.typ",
-    "size": 3582,
-    "sha256": "a2305f01e0cb11e0420a5e672b36b4fd684bf0aba33c6d87fae57d036918059f"
+    "size": 3578,
+    "sha256": "1b1de16b5b676e2a8d15169cb3bf365d8e9ae16d5d2fd93034b5cc62e21c8f81"
   },
   {
     "path": "meta.json",
     "size": 185,
-    "sha256": "a43a6bacfd53e1ff2fbbbac93801647307776592cf7955868fb0771073682f24"
+    "sha256": "379effaeb2d6363fe4202652ecc39f719ccdd546287e92c182afafe087f6adf0"
   },
   {
     "path": "reference/shortcodes.typ",
-    "size": 12646,
-    "sha256": "12127aaafc2a1bd0e3686850c084cdad383cfef46c1d069b7d53784b8b93a0a0"
+    "size": 12642,
+    "sha256": "2fca5f666092605ca44454ad70b387cff8d8a8e7f640070d773b3c6bc0219e66"
   }
 ]

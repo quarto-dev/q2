@@ -447,6 +447,24 @@ pub struct PreparedPandoc {
     pub is_intermediate: bool,
 }
 
+/// The local file names a metadata key holds, scalar or array (URLs are not
+/// files; non-string entries are skipped).
+fn meta_path_values(meta: &quarto_pandoc_types::ConfigValue, key: &str) -> Vec<String> {
+    let Some(value) = meta.get(key) else {
+        return Vec::new();
+    };
+    let mut entries: Vec<&quarto_pandoc_types::ConfigValue> = Vec::new();
+    match value.as_array() {
+        Some(items) => entries.extend(items.iter()),
+        None => entries.push(value),
+    }
+    entries
+        .into_iter()
+        .filter_map(|e| e.as_plain_text())
+        .filter(|t| !t.is_empty() && !quarto_util::is_external_url(t))
+        .collect()
+}
+
 /// A request path: UTF-8, absolute (relative paths resolve against the
 /// project directory), `/`-normalized.
 fn request_path(stage: &str, project_dir: &Path, path: &Path) -> Result<String, PipelineError> {
@@ -1203,6 +1221,22 @@ impl PandocWriteStage {
             if is_typst && opts.post == RequestPost::CompileTypst {
                 for path in &typst.asset_files {
                     collector.add_file(path, crate::pandoc_request::ResourceKind::Other);
+                }
+            }
+            if is_typst && opts.post == RequestPost::CompileTypst {
+                // Typst reads `bibliography`/`csl` itself at compile time
+                // (`#bibliography(...)`, as margin citations leave them in
+                // the metadata), so they travel with the PDF request. A
+                // leading `/` is project-root-relative for typst, as for
+                // the other config paths.
+                for key in ["bibliography", "csl"] {
+                    for declared in meta_path_values(&doc.ast.meta, key) {
+                        let path = match declared.strip_prefix('/') {
+                            Some(rooted) => project_dir.join(rooted),
+                            None => doc_dir_abs.join(&declared),
+                        };
+                        collector.add_file(&path, crate::pandoc_request::ResourceKind::Other);
+                    }
                 }
             }
             collector.add_args(&format_extra_args);

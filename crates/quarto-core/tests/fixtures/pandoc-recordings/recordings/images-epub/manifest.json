@@ -6,8 +6,8 @@
   },
   {
     "path": "capture/images.epub",
-    "size": 25430,
-    "sha256": "6b14f482e550bf235fd24b17ea781833d4ee64f071ba580ee9b5cd106acc9b1e"
+    "size": 25429,
+    "sha256": "393a8559f7f895340b0a72aa5c8bcd387abd35e2f731eb07de79ddba47f6060d"
   },
   {
     "path": "env.json",
@@ -30,31 +30,6 @@
     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
   {
-    "path": "fs/__q2_tmp__/pandoc-formats/formats/docx/caution.png",
-    "size": 749,
-    "sha256": "5c908b003e224909db5be99682716b3671ee8e885f1c73e70b1ddd9b399cdb3d"
-  },
-  {
-    "path": "fs/__q2_tmp__/pandoc-formats/formats/docx/important.png",
-    "size": 1216,
-    "sha256": "1fd109f5454c79e645a08c01eb20a421e9e3a6c9b43e87cd311f88c7b1784341"
-  },
-  {
-    "path": "fs/__q2_tmp__/pandoc-formats/formats/docx/note.png",
-    "size": 1257,
-    "sha256": "ed81730ce2442eca9d4d4f0c5a3da640c959cd72001bea78b1a949eea3f0c746"
-  },
-  {
-    "path": "fs/__q2_tmp__/pandoc-formats/formats/docx/tip.png",
-    "size": 1093,
-    "sha256": "9eb2b3e59f73c71354b4db376bf603fc529be4d50bcc3ad3d6d4842a888d0938"
-  },
-  {
-    "path": "fs/__q2_tmp__/pandoc-formats/formats/docx/warning.png",
-    "size": 1252,
-    "sha256": "9fc0013d9c5ae792709ad30f7c8dfc48c4aeda7371e0d7b349f56bab0f435381"
-  },
-  {
     "path": "fs/__q2_tmp__/pandoc-formats/formats/epub/styles.html",
     "size": 1793,
     "sha256": "cf44a9dd4baa3452eeb23fb5d66dadcc1e1f37e1ac45183637d12c83fe890811"
@@ -67,16 +42,16 @@
   {
     "path": "fs/__q2_tmp__/pandoc-input.json",
     "size": 23227,
-    "sha256": "4e84015b51ce062bfe63efe9973fe836da99551efb7a6e0e02e4a8dd089d728a"
+    "sha256": "54a2aed1b1af2e6ac325050710f04edab2f05807efd2e447b92672708943d248"
   },
   {
     "path": "meta.json",
     "size": 176,
-    "sha256": "6982aaba54e97b1b7e7a169368fc252e4237288d84e0fbf65e8be42ab85b5a65"
+    "sha256": "4a39f43eca5fae4d63d217a889bc91ace393e696dc022309d06e8aed1eec2dd4"
   },
   {
     "path": "reference/images.epub",
-    "size": 25427,
-    "sha256": "9e7d251f1bc9bcba52a8477f457213648aa0d4449ba6f157c03b021996745121"
+    "size": 25429,
+    "sha256": "42de78e60e3c87e88ffecb801fe7596e6052bcfd68b2117faec5dcd2acf8aeb0"
   }
 ]

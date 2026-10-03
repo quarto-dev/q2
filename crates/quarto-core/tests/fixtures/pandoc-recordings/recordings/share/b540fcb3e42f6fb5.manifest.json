@@ -641,8 +641,8 @@
   },
   {
     "path": "filters/normalize/astpipeline.lua",
-    "size": 12357,
-    "sha256": "46b4902983b686b0a487f3746dd40f50b24479393a08fc7b6fea634199501f56"
+    "size": 12370,
+    "sha256": "7166fcc839b10c9ee26e304fd349fcfaafab47f7e492dc9788c1fb1740494451"
   },
   {
     "path": "filters/normalize/capturereaderstate.lua",
@@ -746,8 +746,8 @@
   },
   {
     "path": "filters/quarto-init/resourcerefs.lua",
-    "size": 712,
-    "sha256": "79437e525e373c06f975877d596c7157099448c6ce0b50721ac465f5f21cfa8b"
+    "size": 990,
+    "sha256": "52931f82a940bcefed64944a9bf8f0640765bd2da8dbe2a85fb23bbe4051ea22"
   },
   {
     "path": "filters/quarto-internals/leveloneanalysis.lua",

@@ -75,7 +75,7 @@ export interface RequestEnvelope {
   success: boolean;
   error?: string;
   diagnostics: unknown[];
-  stats?: { unexecuted_cells: number };
+  stats?: { unexecuted_cells: number; book?: { scope: 'book' | 'chapter'; chapters: number } | null };
   request?: unknown;
 }
 

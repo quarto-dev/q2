@@ -6,8 +6,8 @@
   },
   {
     "path": "capture/tables.typ",
-    "size": 13046,
-    "sha256": "f416f15cd67a007f7c02eb1c3de521dcf68ecfca77a1a797c1fe41d5d4285360"
+    "size": 13042,
+    "sha256": "c926636650004da8c4e7032fce73cf4e09cf25e3a58ced5d2225fb1e686fb99d"
   },
   {
     "path": "env.json",
@@ -27,7 +27,7 @@
   {
     "path": "fs/__q2_tmp__/pandoc-input.json",
     "size": 27195,
-    "sha256": "bdd19c26769098d8dd2770d1ef3933f508c1f9b3c6f3eb70a9cad58ea6ce58a1"
+    "sha256": "7ac8f10768604774f8f195ffa59d970207b844270087b0ce9b043e092665a943"
   },
   {
     "path": "fs/__q2_tmp__/pandoc-typst-template/biblio.typ",
@@ -66,17 +66,17 @@
   },
   {
     "path": "fs/__q2_tmp__/pandoc-typst-template/typst-template.typ",
-    "size": 3582,
-    "sha256": "a2305f01e0cb11e0420a5e672b36b4fd684bf0aba33c6d87fae57d036918059f"
+    "size": 3578,
+    "sha256": "1b1de16b5b676e2a8d15169cb3bf365d8e9ae16d5d2fd93034b5cc62e21c8f81"
   },
   {
     "path": "meta.json",
     "size": 173,
-    "sha256": "5d8a1ba06177e8c53afe4eaa7accbf35d62027623433453c0174f6d20bf60b6f"
+    "sha256": "6d3f37b20b8ea283ce8f78477d416ce929fc450f64eab058934fd96d8cd8b906"
   },
   {
     "path": "reference/tables.typ",
-    "size": 13046,
-    "sha256": "f416f15cd67a007f7c02eb1c3de521dcf68ecfca77a1a797c1fe41d5d4285360"
+    "size": 13042,
+    "sha256": "c926636650004da8c4e7032fce73cf4e09cf25e3a58ced5d2225fb1e686fb99d"
   }
 ]

@@ -42,6 +42,10 @@ fn render(
     let content = std::fs::read(path).unwrap();
     pollster::block_on(render_pandoc_request(
         PandocRequestInput {
+            scope: quarto_core::pandoc_request::render::BookScope::Auto,
+            captures_by_path: Default::default(),
+            capture_error: None,
+            hooks: None,
             path,
             content: &content,
             format,
@@ -155,6 +159,10 @@ fn typst_available_fonts_are_echoed() {
     let project = ProjectContext::discover(&doc, runtime.as_ref()).unwrap();
     let out = pollster::block_on(render_pandoc_request(
         PandocRequestInput {
+            scope: quarto_core::pandoc_request::render::BookScope::Auto,
+            captures_by_path: Default::default(),
+            capture_error: None,
+            hooks: None,
             path: &doc,
             content: b"# Hi\n",
             format: "docx",

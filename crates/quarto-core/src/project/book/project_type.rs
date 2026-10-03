@@ -132,7 +132,8 @@ impl ProjectType for BookProjectType {
         // their one-file render set — Q1's restriction is a
         // project-render behavior.
         if !project.is_single_file {
-            let additions = config::additional_render_files(&project.dir, meta, runtime);
+            let mut additions = config::additional_render_files(&project.dir, meta, runtime);
+            additions.extend(project.extra_render_files.iter().cloned());
             restrict_render_list(project, &items, &additions);
         }
 
@@ -286,7 +287,11 @@ fn restrict_render_list(
     let mut seen: HashSet<String> = HashSet::new();
     let mut files: Vec<DocumentInfo> = Vec::new();
     for rel in ordered {
-        let key = rel.to_string_lossy().replace('\\', "/");
+        // `./intro.qmd` and `sub/../intro.qmd` name the same file as
+        // `intro.qmd`: key and build the document by the normalized path, so
+        // the active-page filter (which compares paths) finds it.
+        let key = super::links::normalize_book_path(&rel.to_string_lossy().replace('\\', "/"));
+        let rel = std::path::PathBuf::from(&key);
         if !seen.insert(key.clone()) {
             continue;
         }

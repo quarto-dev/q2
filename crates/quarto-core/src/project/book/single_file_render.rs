@@ -212,8 +212,6 @@ pub(crate) struct BookTail {
     /// True when ANY chapter's execution was skipped.
     pub execution_skipped: bool,
     /// Code cells left without a result, summed over every chapter.
-    // Read by the browser's whole-book driver (R9 task 6); native ignores it.
-    #[allow(dead_code)]
     pub unexecuted_cells: usize,
 }
 
@@ -229,9 +227,6 @@ impl BookTail {
     }
 }
 
-// `tail` and `file` are read by the browser's whole-book driver (R9 task 6);
-// the native caller reads only `value` and `error`. Remove the allow then.
-#[allow(dead_code)]
 pub(crate) enum BookCoreOutcome<T> {
     Done {
         value: T,
@@ -982,5 +977,337 @@ Some chapter text.\n";
             ],
             "exactly the calls up to the cancel, never for the divider or later chapters"
         );
+    }
+
+    // ---- R9 task 5: chapter-relative resources through the shared core ----
+    //
+    // The core is driven the way the browser's whole-book request drives it:
+    // the request pause/finishing lists, a website-mode resolver rooted at the
+    // project directory, and `pandoc-prepare` as the tail. (The request-level
+    // halves are in `pandoc_request_books.rs` once the driver exists.)
+
+    const ONE_PIXEL_PNG: &[u8] = &[
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44,
+        0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f,
+        0x15, 0xc4, 0x89, 0x00, 0x00, 0x00, 0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00,
+        0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49,
+        0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+    ];
+
+    /// A scratch directory outside `/tmp` (request mounts reject it): under
+    /// the workspace `target/tmp`, as the integration tests' `CARGO_TARGET_TMPDIR`.
+    fn scratch_root() -> (tempfile::TempDir, std::path::PathBuf) {
+        let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/tmp");
+        std::fs::create_dir_all(&base).unwrap();
+        let dir = tempfile::Builder::new()
+            .prefix("q2-r9-core-")
+            .tempdir_in(base)
+            .unwrap();
+        let root = std::fs::canonicalize(dir.path()).unwrap();
+        (dir, root)
+    }
+
+    fn put(root: &std::path::Path, rel: &str, bytes: &[u8]) {
+        let path = root.join(rel);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, bytes).unwrap();
+    }
+
+    /// A book with: a root chapter with a local image and a figure whose
+    /// caption holds an image; a chapter in `sub/` with local, `../` and
+    /// site-root images; an `href:` part page with an image; a cover image.
+    fn images_book(root: &std::path::Path, extra_yml: &str) {
+        put(
+            root,
+            "_quarto.yml",
+            format!("project:\n  type: book\nbook:\n  title: B\n  cover-image: cover.png\n  chapters:\n    - index.qmd\n    - one.qmd\n    - sub/two.qmd\n    - part: Part Two\n      href: partpage.qmd\n      chapters:\n        - three.qmd\n{extra_yml}").as_bytes(),
+        );
+        put(root, "index.qmd", b"---\ntitle: Preface\n---\n\nHello\n");
+        put(
+            root,
+            "one.qmd",
+            b"# One\n\n![root local](rootlocal.png)\n\n![A caption with ![icon](icon.png) inside.](rootfig.png){#fig-one}\n",
+        );
+        put(
+            root,
+            "sub/two.qmd",
+            b"# Two\n\n![local](local.png)\n\n![site root](/img/a.png)\n\n![up](../top.png)\n\n![Sub caption ![i](sub-icon.png).](subfig.png){#fig-two}\n",
+        );
+        put(
+            root,
+            "partpage.qmd",
+            b"---\ntitle: Part Two Page\n---\n\n![part image](part.png)\n",
+        );
+        put(root, "three.qmd", b"# Three\n\nBody three.\n");
+        for f in [
+            "rootlocal.png",
+            "icon.png",
+            "rootfig.png",
+            "top.png",
+            "part.png",
+            "cover.png",
+            "img/a.png",
+            "sub/local.png",
+            "sub/sub-icon.png",
+            "sub/subfig.png",
+        ] {
+            put(root, f, ONE_PIXEL_PNG);
+        }
+    }
+
+    /// Run the shared core as the browser driver does and return the request.
+    fn request_via_core(
+        root: &std::path::Path,
+        format_key: &str,
+        post: crate::pandoc_request::RequestPost,
+    ) -> (crate::pandoc_request::PandocRequest, BookTail) {
+        let runtime = make_test_runtime();
+        let project = ProjectContext::discover(root, runtime.as_ref()).unwrap();
+        let book = project
+            .config
+            .metadata
+            .as_ref()
+            .and_then(|m| m.get("book"))
+            .unwrap()
+            .clone();
+        let items =
+            crate::project::book::book_render_items(root, &book, "Appendices", runtime.as_ref())
+                .unwrap();
+        let format = Format::from_format_string(format_key).unwrap();
+        let binaries = BinaryDependencies::new();
+        let options = BookRenderOptions {
+            engine_registry_override: None,
+            execution_policy: crate::engine::ExecutionPolicy::None,
+        };
+        let prepare = crate::pandoc_request::PrepareOptions {
+            temp_root: std::path::PathBuf::from(&crate::pandoc_request::constants().share_root),
+            source_date_epoch: Some(1_700_000_000),
+            collect_resources: true,
+            typst_available_fonts: None,
+            post,
+        };
+        let outcome = pollster::block_on(render_book_core(
+            BookCoreArgs {
+                project: &project,
+                book_items: &items,
+                format: &format,
+                runtime: runtime.clone(),
+                binaries: &binaries,
+                options: &options,
+                finishing_stages: crate::pipeline::build_pandoc_request_finishing_stages(
+                    TransformPhase::Navigation,
+                ),
+                prepare_options: Some(prepare),
+                hooks: None,
+            },
+            &mut |_| {
+                (
+                    PartialKind::Request {
+                        captures: Vec::new(),
+                    },
+                    Vec::new(),
+                )
+            },
+            |stem| {
+                let synthetic_input = project.dir.join(format!("{stem}.qmd"));
+                let output_path = synthetic_input.with_extension(&format.output_extension);
+                let resolver = ResourceResolverContext::website(
+                    &project.dir,
+                    &output_path,
+                    crate::project::orchestrator::project_type_for(&project).lib_dir(),
+                    stem,
+                );
+                Ok((
+                    BookSetup {
+                        synthetic_input,
+                        output_path,
+                        resolver,
+                    },
+                    (),
+                ))
+            },
+            |ctx, _, _, _| {
+                ctx.pandoc_request
+                    .take()
+                    .ok_or_else(|| QuartoError::other("no request".to_string()))
+            },
+        ))
+        .unwrap();
+        match outcome {
+            BookCoreOutcome::Done { value, tail } => (value, tail),
+            BookCoreOutcome::ChapterFailed { file, error } => {
+                panic!("chapter {file} failed: {error}")
+            }
+            BookCoreOutcome::Cancelled => panic!("cancelled"),
+        }
+    }
+
+    fn input_json_targets(request: &crate::pandoc_request::PandocRequest) -> Vec<String> {
+        let input = request
+            .files
+            .iter()
+            .find(|f| f.path.ends_with("/pandoc-input.json"))
+            .expect("pandoc-input.json");
+        let json: serde_json::Value = serde_json::from_slice(&input.bytes).unwrap();
+        let mut out = Vec::new();
+        fn walk(v: &serde_json::Value, out: &mut Vec<String>) {
+            match v {
+                serde_json::Value::Object(map) => {
+                    if map.get("t").and_then(|t| t.as_str()) == Some("Image")
+                        && let Some(target) = map["c"][2][0].as_str()
+                    {
+                        out.push(target.to_string());
+                    }
+                    map.values().for_each(|v| walk(v, out));
+                }
+                serde_json::Value::Array(items) => items.iter().for_each(|v| walk(v, out)),
+                _ => {}
+            }
+        }
+        walk(&json, &mut out);
+        out
+    }
+
+    fn mounted(
+        request: &crate::pandoc_request::PandocRequest,
+        root: &std::path::Path,
+    ) -> Vec<String> {
+        let root = crate::pandoc_request::normalize_request_path(root);
+        let mut v: Vec<String> = request
+            .resource_refs
+            .iter()
+            .map(|f| {
+                f.path
+                    .strip_prefix(&format!("{root}/"))
+                    .unwrap_or(&f.path)
+                    .to_string()
+            })
+            .collect();
+        v.sort();
+        v
+    }
+
+    /// Every chapter's images, in the pdf request: the merged document holds
+    /// project-relative targets and `resource_refs` holds each file under its
+    /// own chapter's directory, caption images and the part page's image
+    /// included, with no outside-the-project warning.
+    #[test]
+    fn pdf_request_mounts_chapter_relative_images_under_their_own_directories() {
+        let (_guard, root) = scratch_root();
+        images_book(&root, "");
+        let (request, tail) = request_via_core(
+            &root,
+            "typst",
+            crate::pandoc_request::RequestPost::CompileTypst,
+        );
+        assert_eq!(
+            mounted(&request, &root),
+            vec![
+                "icon.png",
+                "img/a.png",
+                "part.png",
+                "rootfig.png",
+                "rootlocal.png",
+                "sub/local.png",
+                "sub/sub-icon.png",
+                "sub/subfig.png",
+                "top.png",
+            ],
+            "{:?}",
+            tail.book_diagnostics
+                .iter()
+                .map(|d| &d.title)
+                .collect::<Vec<_>>()
+        );
+        assert!(
+            tail.book_diagnostics
+                .iter()
+                .all(|d| d.code.as_deref() != Some("Q-11-1")),
+            "no outside-the-project warning"
+        );
+        let targets = input_json_targets(&request);
+        for expected in [
+            "rootlocal.png",
+            "sub/local.png",
+            "img/a.png",
+            "top.png",
+            "part.png",
+            "icon.png",
+            "sub/sub-icon.png",
+        ] {
+            assert!(
+                targets.iter().any(|t| t == expected),
+                "target {expected} in {targets:?}"
+            );
+        }
+        assert!(
+            !targets.iter().any(|t| t.starts_with('/')),
+            "no root-absolute target is left: {targets:?}"
+        );
+    }
+
+    /// A plain `typst` request names images in the `.typ` only and mounts none.
+    #[test]
+    fn typst_request_names_the_images_but_mounts_none() {
+        let (_guard, root) = scratch_root();
+        images_book(&root, "");
+        let (request, _) =
+            request_via_core(&root, "typst", crate::pandoc_request::RequestPost::None);
+        assert!(
+            request.resource_refs.is_empty(),
+            "{:?}",
+            mounted(&request, &root)
+        );
+        let targets = input_json_targets(&request);
+        assert!(targets.iter().any(|t| t == "sub/local.png"), "{targets:?}");
+        assert!(targets.iter().any(|t| t == "part.png"), "{targets:?}");
+    }
+
+    /// EPUB: the images and the `book.cover-image` reach `resource_refs`.
+    #[test]
+    fn epub_request_mounts_images_and_the_cover() {
+        let (_guard, root) = scratch_root();
+        images_book(&root, "");
+        let (request, _) =
+            request_via_core(&root, "epub", crate::pandoc_request::RequestPost::None);
+        let got = mounted(&request, &root);
+        for expected in [
+            "cover.png",
+            "sub/local.png",
+            "top.png",
+            "img/a.png",
+            "part.png",
+        ] {
+            assert!(got.iter().any(|g| g == expected), "{expected} in {got:?}");
+        }
+    }
+
+    /// Margin citations leave `bibliography`/`csl` in the metadata for typst
+    /// to read at compile time, so the pdf request carries the files, and the
+    /// plain `typst` request needs none.
+    #[test]
+    fn margin_citation_bibliography_and_csl_reach_the_pdf_request() {
+        let (_guard, root) = scratch_root();
+        images_book(
+            &root,
+            "bibliography: refs.bib\ncsl: style.csl\nreference-location: margin\ncitation-location: margin\nsuppress-bibliography: true\n",
+        );
+        put(
+            &root,
+            "refs.bib",
+            b"@book{k, author={A}, title={T}, year={2000}}\n",
+        );
+        put(&root, "style.csl", b"<style/>\n");
+        put(&root, "one.qmd", b"# One\n\nCite [@k].\n");
+        let (pdf, _) = request_via_core(
+            &root,
+            "typst",
+            crate::pandoc_request::RequestPost::CompileTypst,
+        );
+        let got = mounted(&pdf, &root);
+        assert!(got.iter().any(|g| g == "refs.bib"), "{got:?}");
+        assert!(got.iter().any(|g| g == "style.csl"), "{got:?}");
+        let (typ, _) = request_via_core(&root, "typst", crate::pandoc_request::RequestPost::None);
+        assert!(typ.resource_refs.is_empty());
     }
 }

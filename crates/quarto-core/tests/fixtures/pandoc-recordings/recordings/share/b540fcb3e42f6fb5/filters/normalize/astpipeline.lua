@@ -47,7 +47,7 @@ function quarto_ast_pipeline()
     -- Move <style> block rules onto the elements they match, so formats
     -- that can't process stylesheets (e.g. typst) still see gt/pandas styling.
     -- Q1 ran the `juice` npm package via `quarto run juice.ts`; q2 pipes the
-    -- HTML through its own hidden `inline-css` subcommand instead. There is
+    -- HTML through its own hidden `call inline-css` subcommand instead. There is
     -- no size limit on the round trip, so data URIs pass through untouched.
     local function inline_css(htmltext)
       local cli_path = quarto.config.cli_path()
@@ -55,7 +55,7 @@ function quarto_ast_pipeline()
         -- not running under the q2 CLI (e.g. in-process callers): leave as is
         return htmltext
       end
-      local ok, content = pcall(pandoc.pipe, cli_path, {'inline-css'}, htmltext)
+      local ok, content = pcall(pandoc.pipe, cli_path, {'call', 'inline-css'}, htmltext)
       if not ok then
         quarto.log.error('Inlining CSS failed: ' .. tostring(content))
         return htmltext

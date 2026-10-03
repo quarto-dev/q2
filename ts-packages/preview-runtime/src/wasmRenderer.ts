@@ -14,6 +14,7 @@ import type {
   AstResponse,
   PandocFormatInfo,
   PandocRequestFile,
+  RenderPandocRequestOptions,
   RenderPandocRequestResponse,
   ResolvePandocFormatsResponse,
 } from 'wasm-quarto-hub-client'
@@ -112,6 +113,7 @@ interface WasmModuleExtended {
     capture_gz_json?: Uint8Array,
     typst_available_fonts?: string[],
     abort_signal?: AbortSignal,
+    options?: RenderPandocRequestOptions,
   ) => Promise<RenderPandocRequestResponse>;
   get_pandoc_share_tree_version: () => string;
   get_pandoc_share_tree: () => {
@@ -639,6 +641,7 @@ export type {
   PandocFormatInfo,
   PandocRequestFile,
   PandocRequestWire,
+  RenderPandocRequestOptions,
   RenderPandocRequestResponse,
   ResolvePandocFormatsResponse,
 } from 'wasm-quarto-hub-client';
@@ -646,9 +649,10 @@ export type {
 /**
  * Build the pandoc request for the document at `path` rendered to `format`
  * (a `key` of {@link getPandocFormats}). `sourceDateEpoch` is seconds (the
- * click time in production). A document with errors, or inside a
- * `_quarto.yml` project (until R7), comes back with no `request`; the
- * `diagnostics` say why. The request's bytes are copies the caller owns.
+ * click time in production). A document with errors comes back with no
+ * `request`; the `diagnostics` say why. A book chapter requested as typst,
+ * pdf or epub is the whole book unless `scope` is `'chapter'`. The request's
+ * bytes are copies the caller owns.
  */
 export async function renderPandocRequest(
   path: string,
@@ -659,6 +663,12 @@ export async function renderPandocRequest(
     typstAvailableFonts?: string[];
     /** Cancels the downloads of remote images (the click's signal). */
     signal?: AbortSignal;
+    /** `'auto'` (the default) renders a book chapter's whole book for typst, pdf and epub. */
+    scope?: 'auto' | 'chapter';
+    /** Capture blobs by chapter path (see `RenderPandocRequestOptions`). */
+    capturesByPath?: Record<string, Uint8Array>;
+    /** Called before each chapter of a book render, with a 1-based index. */
+    onProgress?: (index: number, total: number, file: string) => void | Promise<void>;
   } = {},
 ): Promise<RenderPandocRequestResponse> {
   const wasm = getWasm();
@@ -669,6 +679,11 @@ export async function renderPandocRequest(
     options.captureGzJson,
     options.typstAvailableFonts,
     options.signal,
+    {
+      scope: options.scope,
+      capturesByPath: options.capturesByPath,
+      onProgress: options.onProgress,
+    },
   );
 }
 

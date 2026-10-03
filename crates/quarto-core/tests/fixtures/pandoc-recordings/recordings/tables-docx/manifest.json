@@ -27,12 +27,12 @@
   {
     "path": "fs/__q2_tmp__/pandoc-input.json",
     "size": 27194,
-    "sha256": "3195f9076a86ccd30c30017c083976a32cc5685f342e8182b03c6804322c7017"
+    "sha256": "72dfeec676729b6e68d4fed86d4aa7106dcc2e8fcfeb6ba71143562673aa428f"
   },
   {
     "path": "meta.json",
     "size": 176,
-    "sha256": "33f9aae50cffc5692b448f0bbce651e9ae8f4e86e180c81ff7bd6a8044df20bb"
+    "sha256": "13576663e7cc16c40444d922f829b25d28a5110ddb852d2c1d032f9aef7c96b8"
   },
   {
     "path": "reference/tables.docx",
