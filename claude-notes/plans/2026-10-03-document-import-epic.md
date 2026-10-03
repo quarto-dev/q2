@@ -76,7 +76,8 @@ Probed with `losses.md` → pandoc JSON (directly, and via docx and `-f docx`) �
 - A footnote's paragraphs are joined into one. A list inside a footnote is flattened into its text (docx path) or replaced with the literal `[complex block]` (`crates/pampa/src/writers/qmd.rs:2416`, markdown path). qmd has a native multi-block footnote syntax, the fenced definition `::: ^id … :::` (`crates/pampa/tests/roundtrip_tests/qmd-json-qmd/note_definition_fenced_block_*.qmd`); 4-space indented continuation is rejected (Q-2-35). The pampa reader keeps `[^id]` as a `quarto-note-reference` span plus a `NoteDefinitionFencedBlock`, and quarto-core's `FootnotesTransform` (`crates/quarto-core/src/transforms/footnotes.rs`) resolves them into `Note` for every format. `pampa -t native` alone refuses them (Q-3-11).
 - Two adjacent lists merge on re-read. The docx reader emits two adjacent `OrderedList`s when Word restarts numbering (seen in `losses.md`'s docx round trip). For bullet lists, alternating the marker (`*` then `-`) keeps them apart with no AST change (verified). For ordered lists there is no lossless separator: changing the delimiter changes the AST, and `<!-- -->` re-reads as `RawBlock (Format "html") "<!-- -->"` (verified).
 - Editorial marks lose their shorthand when they carry attributes. `write_span` emits `[++ ]`, `[-- ]`, `[>> ]` or `[!! ]` only for a span whose single class is the mark and which has no id or attributes (`qmd.rs:2238-2250`), so `author=` turns `[++ x]{author="Ann"}` into `[x]{.quarto-insert author="Ann"}`. The reader accepts the attributed shorthand (`tests/roundtrip_tests/qmd-json-qmd/editorial_marks_with_attributes.qmd`), and the `Inline::Insert`/`Delete`/`EditComment` writers (`qmd.rs:2791-2850`) already emit it. Verified: `editorial-marks-roundtrip.qmd` in the research folder.
-- Not reachable from docx: pipe-table footers (Word has none; the footer came back as a body row) and multi-block definition-list indentation (the docx path turns the soft break into a space).
+- Not reachable from docx: pipe-table footers (Word has none; the footer came back as a body row).
+- **Correction (P2 execution, 2026-10-03):** multi-block definition-list indentation *is* reachable when the docx carries pandoc's "Definition" / "Definition Term" styles (pandoc-made docx; Word users who apply those styles): the writer emits `Term\n:   Definition para one.\n\n    Definition para two continues here.`, which the qmd reader rejects (Q-2-35, indented code block). P2 left it out of scope; it needs a follow-up strand or a wider I18. See P2's Handoff log.
 
 ### Track changes and comments from the docx reader (verified)
 `pandoc track-changes-source.md -o tc2.docx; pandoc -f docx --track-changes=all -t native tc2.docx`:
@@ -221,7 +222,7 @@ Tick a plan when its Close-out is complete and it has landed on `feature/hub-imp
 - [ ] P0 [span comments carry-over](2026-10-03-document-import-P0-span-comments.md)
 - [ ] P1 stage 1 (T1-T4) landed
 - [ ] P1 [pandoc.wasm as a reader](2026-10-03-document-import-P1-pandoc-reader.md)
-- [ ] P2 [qmd writer fixes](2026-10-03-document-import-P2-qmd-writer.md)
+- [x] P2 [qmd writer fixes](2026-10-03-document-import-P2-qmd-writer.md)
 - [ ] P3 [import pipeline in Rust](2026-10-03-document-import-P3-import-pipeline.md)
 - [ ] P4 [import service](2026-10-03-document-import-P4-import-service.md)
 - [ ] P5 [UI and storage](2026-10-03-document-import-P5-import-ui.md)
