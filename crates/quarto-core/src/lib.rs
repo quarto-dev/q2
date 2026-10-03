@@ -59,6 +59,7 @@ pub mod inline_css;
 pub mod language;
 pub mod math_method;
 pub mod metadata;
+pub mod output_ext;
 pub mod output_sink;
 pub mod pandoc_filters;
 pub mod pandoc_formats;

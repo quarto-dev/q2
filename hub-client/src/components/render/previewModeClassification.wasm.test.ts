@@ -73,9 +73,18 @@ describe('classifyPreviewMode against the real wasm', () => {
     expect(await modeOf('format:\n  docx: default\n  html: default')).toEqual({ mode: 'download', formatKey: 'docx' });
   });
 
-  it('pdf is the download mode (host H8 wired the chain); latex is neither', async () => {
-    expect(await modeOf('format: pdf')).toEqual({ mode: 'download', formatKey: 'pdf' });
-    expect(await modeOf('format: pdf', () => true, () => true)).toEqual({ mode: 'pdf', formatKey: 'pdf' });
+  it('a typst document previews as the compiled PDF; latex and a document\'s own pdf are neither', async () => {
+    expect(await modeOf('format: typst')).toEqual({ mode: 'download', formatKey: 'typst-pdf' });
+    expect(await modeOf('format: typst', () => true, () => true)).toEqual({ mode: 'pdf', formatKey: 'typst-pdf' });
+    expect(await modeOf('format: typst\noutput-ext: pdf', () => true, () => true)).toEqual({ mode: 'pdf', formatKey: 'typst-pdf' });
+    // `format: pdf` is LaTeX, which has no meaning in the browser (use `format: typst`).
+    expect(await modeOf('format: pdf')).toEqual({ mode: 'neither', formatKey: 'pdf' });
+    expect(await modeOf('format: pdf', () => true, () => true)).toEqual({ mode: 'neither', formatKey: 'pdf' });
     expect(await modeOf('format: latex')).toEqual({ mode: 'neither', formatKey: 'latex' });
+  });
+
+  it('a typst document with another output-ext is the typst-source download, not the PDF viewer', async () => {
+    expect(await modeOf('format: typst\noutput-ext: typ', () => true, () => true)).toEqual({ mode: 'download', formatKey: 'typst' });
+    expect(await modeOf('format:\n  typst:\n    output-ext: typst', () => true, () => true)).toEqual({ mode: 'download', formatKey: 'typst' });
   });
 });

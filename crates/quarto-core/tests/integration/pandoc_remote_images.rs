@@ -433,7 +433,7 @@ fn typst_pdf_request_carries_the_remote_image() {
     let out = render(
         &root,
         "![alt](https://img.example.com/a.png)\n",
-        "pdf",
+        "typst-pdf",
         &net,
     );
     assert!(out.error.is_none(), "{:?}", out.error);

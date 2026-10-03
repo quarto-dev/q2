@@ -15,6 +15,7 @@ import { download } from '../strings';
 import './DownloadAsControl.css';
 import type { Diagnostic, DownloadFormat, DownloadStatus } from '../pandoc/downloadController';
 import { doneText, liveText, workingText } from '../pandoc/downloadText';
+import { TYPST_PDF_KEY } from '../pandoc/formatKeys';
 
 export interface DownloadAsControlProps {
   formats: DownloadFormat[];
@@ -57,7 +58,7 @@ export function DiagnosticList({ diagnostics }: { diagnostics: Diagnostic[] }) {
 }
 
 /** Formats that are a whole book when the document is a chapter; docx and pptx always download the active chapter. */
-const BOOK_FORMATS: readonly string[] = ['typst', 'pdf', 'epub'];
+const BOOK_FORMATS: readonly string[] = ['typst', TYPST_PDF_KEY, 'epub'];
 
 export default function DownloadAsControl({ formats, status, disabledReason, onSelect, book, onOpen, onCancel, onDismiss }: DownloadAsControlProps) {
   const [open, setOpen] = useState(false);
@@ -112,7 +113,7 @@ export default function DownloadAsControl({ formats, status, disabledReason, onS
               </MenuItem>
             ),
           )}
-          <MenuLabel>{formats.some((f) => f.key === 'pdf') ? download.sizeHintPdf : download.sizeHint}</MenuLabel>
+          <MenuLabel>{formats.some((f) => f.key === TYPST_PDF_KEY) ? download.sizeHintPdf : download.sizeHint}</MenuLabel>
         </Menu>
       )}
       <div className="download-visually-hidden" role="status" aria-live="polite" aria-label={download.statusRegionLabel}>

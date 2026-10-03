@@ -11,7 +11,7 @@ import { FallbackView, NonQmdPlaceholderView } from '@quarto/preview-renderer/ov
 import { classifyPreviewMode, type PreviewMode } from './getQ2Format';
 import { DownloadOnlyView, NeitherView } from './DownloadOnlyViews';
 import PdfPreviewPane from './PdfPreviewPane';
-import { formatByKey, menuFormats, pdfPreviewAvailable } from '../../pandoc/downloadService';
+import { formatByKey, menuFormats, pdfPreviewAvailable, withOutputExt } from '../../pandoc/downloadService';
 import { useDownloadAs } from '../../pandoc/useDownloadAs';
 
 interface PreviewRouterProps {
@@ -218,7 +218,9 @@ export default function PreviewRouter(props: PreviewRouterProps) {
 /** The "download" mode pane: its own hook instance of the shared controller. */
 function DownloadModePane({ formatKey, path, content, wasmReady }: { formatKey: string; path: string | null; content: string; wasmReady: boolean }) {
   const dl = useDownloadAs(path, content, wasmReady);
-  const format = wasmReady ? formatByKey(formatKey) : undefined;
-  if (!format) return <NeitherView formatKey={formatKey} />;
+  const row = wasmReady ? formatByKey(formatKey) : undefined;
+  if (!row) return <NeitherView formatKey={formatKey} />;
+  // The button names the file with the document's own `output-ext` (the controller re-applies it at the click).
+  const format = withOutputExt(row, path && isWasmReady() ? resolvePandocFormats(path) : null);
   return <DownloadOnlyView format={format} busy={dl.status.phase === 'working'} onDownload={() => dl.start(format)} />;
 }

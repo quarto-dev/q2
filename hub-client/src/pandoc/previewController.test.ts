@@ -9,7 +9,7 @@ import { DownloadController, type DownloadFormat, type RequestEnvelope } from '.
 import type { RunOptions, RunOutcome } from './pandocRunner';
 import type { TypstJob, TypstRunOptions, TypstRunOutcome } from '../typst/typstRunner';
 
-const PDF: DownloadFormat = { key: 'pdf', label: 'PDF', extension: 'pdf', mime: 'application/pdf' };
+const PDF: DownloadFormat = { key: 'typst-pdf', label: 'PDF', extension: 'pdf', mime: 'application/pdf' };
 const tree: ShareTree = { share_tree_version: 'v1', files: [] };
 const pdfRequest = {
   stage_name: 'pandoc',

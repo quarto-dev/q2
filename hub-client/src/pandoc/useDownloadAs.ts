@@ -1,7 +1,7 @@
 /** React binding for the download controller: status, menu formats and the click handler. */
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { isWasmReady, type CaptureRef } from '@quarto/preview-runtime';
-import { getDownloadController, menuFormats, downloadAvailable } from './downloadService';
+import { isWasmReady, resolvePandocFormats, type CaptureRef } from '@quarto/preview-runtime';
+import { getDownloadController, menuFormats, downloadAvailable, withOutputExt } from './downloadService';
 import { bookInfoFor, type BookInfo } from './bookInfo';
 import { captureDocIdsFor } from './captureFetch';
 import { isPreviewEmbed } from './featureFlag';
@@ -59,7 +59,9 @@ export function useDownloadAs(path: string | null, content: string, wasmReady: b
   const start = useCallback(
     (format: DownloadFormat, scope?: 'auto' | 'chapter') => {
       if (!path) return;
-      const options: StartOptions = { path, format, content: contentRef.current };
+      // Resolved at the click, like the book scope below: the document's `output-ext` is what it says now.
+      const named = withOutputExt(format, isWasmReady() ? resolvePandocFormats(path) : null);
+      const options: StartOptions = { path, format: named, content: contentRef.current };
       if (scope === 'auto') {
         // Re-resolved now: the chapter list is what the project says at the click, not at the menu open.
         const fresh = bookInfoFor(path);

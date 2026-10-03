@@ -437,11 +437,11 @@ describe('format table and resolver', () => {
       success: boolean;
       error?: string;
       source?: string;
-      formats?: { key: string; class: string }[];
+      formats?: { key: string; class: string; extension?: string }[];
     };
 
   it('lists the downloadable formats in menu order', () => {
-    expect(formats().map((f) => f.key)).toEqual(['docx', 'pptx', 'epub', 'typst', 'pdf']);
+    expect(formats().map((f) => f.key)).toEqual(['docx', 'pptx', 'epub', 'typst', 'typst-pdf']);
     expect(formats().every((f) => f.available)).toBe(true);
     // `pdf` was hidden until host H8 wired the chain; nothing is hidden now.
     expect(formats().filter((f) => f.hidden)).toEqual([]);
@@ -473,6 +473,35 @@ describe('format table and resolver', () => {
     expect(resolve('/d/none.qmd')).toMatchObject({ source: 'default', formats: [{ key: 'html', class: 'preview' }] });
   });
 
+  it('resolves typst by output-ext: pdf (the default) is the compile chain, anything else the source under that extension', () => {
+    wasm.vfs_add_file('/t/default.qmd', '---\nformat: typst\n---\n');
+    wasm.vfs_add_file('/t/pdf.qmd', '---\nformat: typst\noutput-ext: pdf\n---\n');
+    wasm.vfs_add_file('/t/typ.qmd', '---\nformat: typst\noutput-ext: typ\n---\n');
+    wasm.vfs_add_file('/t/literal.qmd', '---\nformat:\n  typst:\n    output-ext: typst\n---\n');
+    expect(resolve('/t/default.qmd').formats).toEqual([{ key: 'typst-pdf', class: 'download' }]);
+    expect(resolve('/t/pdf.qmd').formats).toEqual([{ key: 'typst-pdf', class: 'download' }]);
+    expect(resolve('/t/typ.qmd').formats).toEqual([{ key: 'typst', class: 'download', extension: 'typ' }]);
+    expect(resolve('/t/literal.qmd').formats).toEqual([{ key: 'typst', class: 'download', extension: 'typst' }]);
+  });
+
+  it('reads output-ext from the project when the document names none (document wins)', () => {
+    wasm.vfs_add_file('/q/_quarto.yml', 'project:\n  type: default\nformat:\n  typst:\n    output-ext: typ\n');
+    wasm.vfs_add_file('/q/bare.qmd', '# Hi\n');
+    wasm.vfs_add_file('/q/own.qmd', '---\noutput-ext: pdf\n---\n');
+    expect(resolve('/q/bare.qmd').formats).toEqual([{ key: 'typst', class: 'download', extension: 'typ' }]);
+    expect(resolve('/q/own.qmd').formats).toEqual([{ key: 'typst-pdf', class: 'download' }]);
+  });
+
+  it("a document's own format: pdf is neither (LaTeX; use format: typst)", () => {
+    wasm.vfs_add_file('/d/pdf.qmd', '---\nformat: pdf\n---\n');
+    expect(resolve('/d/pdf.qmd').formats).toEqual([{ key: 'pdf', class: 'neither' }]);
+  });
+
+  it('a document cannot name the internal typst-pdf artifact key', () => {
+    wasm.vfs_add_file('/d/art.qmd', '---\nformat: typst-pdf\n---\n');
+    expect(resolve('/d/art.qmd').formats).toEqual([{ key: 'typst-pdf', class: 'neither' }]);
+  });
+
   it('reports a missing file', () => {
     expect(resolve('/d/missing.qmd').success).toBe(false);
   });
@@ -496,7 +525,7 @@ describe('typst request (R4)', () => {
     expect(templateFiles.length).toBeGreaterThanOrEqual(8);
     // pandoc never reads a typst image; only the pdf request mounts it.
     expect(request.resource_refs).toEqual([]);
-    const pdf = await wasm.render_pandoc_request('/project/doc.qmd', 'pdf', SDE);
+    const pdf = await wasm.render_pandoc_request('/project/doc.qmd', 'typst-pdf', SDE);
     expect(pdf.success).toBe(true);
     expect(pdf.request!.post).toBe('compile_typst');
     expect(pdf.request!.output_path).toBe('/project/doc.typ');
@@ -537,7 +566,7 @@ describe('typst request (R4)', () => {
 
   it('feeds the host font list to the filter params', async () => {
     wasm.vfs_add_file('/project/doc.qmd', '# Hi\n');
-    const out = await wasm.render_pandoc_request('/project/doc.qmd', 'pdf', SDE, undefined, ['Inter']);
+    const out = await wasm.render_pandoc_request('/project/doc.qmd', 'typst-pdf', SDE, undefined, ['Inter']);
     const blob = JSON.parse(Buffer.from(out.request!.env.QUARTO_FILTER_PARAMS, 'base64').toString());
     expect(blob['typst-available-fonts']).toEqual(['Inter']);
   });

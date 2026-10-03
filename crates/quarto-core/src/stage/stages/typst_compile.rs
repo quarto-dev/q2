@@ -88,6 +88,12 @@ impl PipelineStage for TypstCompileStage {
             ));
         };
 
+        // `output-ext` other than `pdf` (Q1 semantics): pandoc's typst source
+        // is the deliverable; there is nothing to compile.
+        if !crate::output_ext::is_typst_compile_ext(Some(&ctx.format.output_extension)) {
+            return Ok(PipelineData::RenderedOutput(rendered));
+        }
+
         let typ_input = rendered.output_path.clone();
         let pdf_output = ctx.output_path();
 

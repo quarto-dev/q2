@@ -15,6 +15,7 @@ import {
   renderPandocRequest,
   typstDatePrelude,
   type PandocFormatInfo,
+  type ResolvePandocFormatsResponse,
 } from '@quarto/preview-runtime';
 import type { ShareTree } from '@quarto/pandoc-host';
 import { DownloadController, type DownloadDeps, type DownloadFormat, type PdfInfo, type TraceEvent } from './downloadController';
@@ -28,12 +29,13 @@ import { splitTypstAssets } from '../typst/typstAssetSplit';
 import { TYPST_FONTS_SHA256 } from '../typst/typstAssets';
 import { createFontMemo } from '../typst/fontMemo';
 import type { FontListOutcome, TypstJob, TypstRunFailure, TypstRunOptions, TypstRunOutcome } from '../typst/typstRunner';
+import { TYPST_PDF_KEY } from './formatKeys';
 
 /**
  * Formats the menu offers. The table in Rust says what *can* be produced; this list says
  * what the UI has been reviewed for. Every row the table has is wired (H5 plan, Close-out).
  */
-export const MENU_FORMATS: readonly string[] = ['docx', 'pptx', 'epub', 'typst', 'pdf'];
+export const MENU_FORMATS: readonly string[] = ['docx', 'pptx', 'epub', 'typst', TYPST_PDF_KEY];
 
 /** What the preview server's `POST /api/preview/render` accepts (H4b); `pdf` is browser-only (H8). */
 const NATIVE_FORMATS: readonly string[] = ['docx', 'pptx', 'epub'];
@@ -66,6 +68,20 @@ export function menuFormats(): DownloadFormat[] {
 export function formatByKey(key: string): DownloadFormat | undefined {
   const row = getPandocFormats().find((f) => f.key === key && f.available);
   return row ? toFormat(row) : undefined;
+}
+
+/**
+ * The format as the open document asks for it. A `typst` document whose `output-ext` is not `pdf`
+ * downloads its typst source under that literal extension (Q1: `output-ext: typst` -> `doc.typst`);
+ * Rust reports it as `extension` on the resolved entry. Every other case is the table row unchanged.
+ * Applied where a download starts, so the menu, the own-format button and the whole-book download
+ * all name the file the same way.
+ */
+export function withOutputExt(format: DownloadFormat, resolved: ResolvePandocFormatsResponse | null | undefined): DownloadFormat {
+  if (!resolved || !resolved.success) return format;
+  const entry = resolved.formats.find((f) => f.key === format.key && f.extension);
+  if (!entry?.extension) return format;
+  return { ...format, extension: entry.extension, label: format.label.replace(`(.${format.extension})`, `(.${entry.extension})`) };
 }
 
 let cachedTree: ShareTree | undefined;

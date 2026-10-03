@@ -10,7 +10,7 @@ const controllerOptions: { warm?: boolean }[] = [];
 const lifecycle = { cancel: vi.fn(), acquire: vi.fn(), release: vi.fn() };
 let snapshot: unknown = { phase: 'idle' };
 const listeners = new Set<() => void>();
-const FORMAT = { key: 'pdf', label: 'PDF', extension: 'pdf', mime: 'application/pdf' };
+const FORMAT = { key: 'typst-pdf', label: 'PDF', extension: 'pdf', mime: 'application/pdf' };
 
 vi.mock('../../pandoc/downloadService', () => ({
   formatByKey: () => FORMAT,

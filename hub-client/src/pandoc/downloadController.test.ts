@@ -253,7 +253,7 @@ describe('DownloadController', () => {
 
 // ---- the PDF chain (host H8) ----------------------------------------------------------
 describe('DownloadController: the PDF chain', () => {
-  const PDF: DownloadFormat = { key: 'pdf', label: 'PDF', extension: 'pdf', mime: 'application/pdf' };
+  const PDF: DownloadFormat = { key: 'typst-pdf', label: 'PDF', extension: 'pdf', mime: 'application/pdf' };
   const pdfRequest = {
     stage_name: 'pandoc',
     json_path: '/x.json',
@@ -301,7 +301,7 @@ describe('DownloadController: the PDF chain', () => {
     const { controller, order, buildRequest, save, typstRun } = chain();
     await controller.start({ path: 'dir/Report.qmd', format: PDF });
     expect(order).toEqual(['fonts', 'request', 'pandoc', 'typst']);
-    expect(buildRequest).toHaveBeenCalledWith('dir/Report.qmd', 'pdf', 1700000000, expect.any(AbortSignal), ['Inter', 'Font Awesome']);
+    expect(buildRequest).toHaveBeenCalledWith('dir/Report.qmd', 'typst-pdf', 1700000000, expect.any(AbortSignal), ['Inter', 'Font Awesome']);
     const [blob, name] = save.mock.calls[0];
     expect(name).toBe('Report.pdf');
     expect((blob as Blob).type).toBe('application/pdf');
@@ -329,7 +329,7 @@ describe('DownloadController: the PDF chain', () => {
     await controller.start({ path: 'a.qmd', format: PDF });
     expect(fontFamilies).toHaveBeenCalledOnce();
     expect(listFonts).not.toHaveBeenCalled();
-    expect(buildRequest).toHaveBeenCalledWith('a.qmd', 'pdf', 1700000000, expect.any(AbortSignal), ['Memo Sans']);
+    expect(buildRequest).toHaveBeenCalledWith('a.qmd', 'typst-pdf', 1700000000, expect.any(AbortSignal), ['Memo Sans']);
   });
 
   it('gives each typst job its own font buffers (the runner transfers them)', async () => {
@@ -506,7 +506,7 @@ describe('DownloadController: whole-book downloads (R9)', () => {
       buildRequest,
       typst: { runner: { run: vi.fn(), listFonts }, assets: () => ({ vendoredPackages: [], fonts: [] }), datePrelude: () => '' } as unknown as DownloadDeps['typst'],
     });
-    await controller.start({ path: 'one.qmd', format: { ...DOCX, key: 'pdf', extension: 'pdf' }, scope: 'auto' });
+    await controller.start({ path: 'one.qmd', format: { ...DOCX, key: 'typst-pdf', extension: 'pdf' }, scope: 'auto' });
     const call = buildRequest.mock.calls[0] as unknown[];
     expect(call[4]).toEqual(['Lato']);
     expect(call[5]).toMatchObject({ scope: 'auto' });

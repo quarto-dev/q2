@@ -22,6 +22,7 @@ import { download } from '../strings';
 import type { FontListOutcome, TypstJob, TypstRunFailure, TypstRunOptions, TypstRunOutcome, TypstUiState } from '../typst/typstRunner';
 import { typstUiStateFor } from '../typst/typstRunner';
 import type { TypstFile } from '@quarto/typst-host';
+import { TYPST_PDF_KEY } from './formatKeys';
 
 /** One channel for both stages of a chain: pandoc's diagnostics (Rust or host) and typst's. */
 export type Diagnostic = PandocDiagnostic | TypstDiagnostic;
@@ -368,7 +369,7 @@ export class DownloadController {
     const nowMs = this.deps.nowMs ?? (() => performance.now());
 
     const sourceDateEpoch = nowSeconds();
-    const pdf = format.key === 'pdf';
+    const pdf = format.key === TYPST_PDF_KEY;
     let fontNotices: string[] = [];
     let families: string[] | undefined;
     if (pdf) {

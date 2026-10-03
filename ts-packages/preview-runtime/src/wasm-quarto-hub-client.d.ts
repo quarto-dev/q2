@@ -210,7 +210,11 @@ declare module 'wasm-quarto-hub-client' {
     | {
         success: true;
         source: 'document' | 'project' | 'default';
-        formats: { key: string; class: PandocFormatClass }[];
+        /**
+         * `extension` is set only for a `typst` (source) entry whose `output-ext`
+         * is not `pdf`: the literal file extension to download it under.
+         */
+        formats: { key: string; class: PandocFormatClass; extension?: string }[];
         /**
          * `null` outside a book project. In a book: `chapters` are the
          * file-bearing chapters in book order as sidecar keys (`/`-normalized,

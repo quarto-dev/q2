@@ -28,7 +28,7 @@ const PUBLIC = path.resolve(here, '../../public');
 const CI = !!process.env.CI;
 const haveAssets = pandocWasmAvailable() && existsSync(path.join(PUBLIC, TYPST_WASM_PATH)) && existsSync(path.join(PUBLIC, TYPST_FONTS_PATH));
 const BASE = 'https://app.test/';
-const PDF: DownloadFormat = { key: 'pdf', label: 'PDF', extension: 'pdf', mime: 'application/pdf' };
+const PDF: DownloadFormat = { key: 'typst-pdf', label: 'PDF', extension: 'pdf', mime: 'application/pdf' };
 const SDE = 1_700_000_000;
 
 it('has the pandoc and typst assets (required in CI)', () => {
