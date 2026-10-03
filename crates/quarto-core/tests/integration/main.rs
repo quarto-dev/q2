@@ -120,6 +120,7 @@ pub mod pandoc_shim;
 pub mod pandoc_shim_goldens;
 pub mod pandoc_shim_typst_crossref;
 pub mod pandoc_transport;
+pub mod pandoc_typst_argv_guard;
 pub mod pandoc_typst_compile;
 pub mod pandoc_typst_resource_copy;
 pub mod pandoc_typst_template_partials;

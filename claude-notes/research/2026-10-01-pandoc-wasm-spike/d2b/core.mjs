@@ -79,13 +79,16 @@ export function argvToOptions(argv, extra = {}) {
 
 // rts defaults to none: production argv carries no RTS options; the old spike host used -H64m, which costs ~1 s on the first convert.
 /** A warm instance driven through the exported `hs_init_with_rtsopts` + `convert`. */
-export async function warmInstance(module, rec, { env = rec.env, rts = [] } = {}) {
+export async function warmInstance(module, rec, { env = rec.env, rts = [], capture = false } = {}) {
   const tree = new Map();
   const std = {};
   const args = ["pandoc.wasm", ...rts];
   const envArr = Object.entries(env).map(([k, v]) => `${k}=${v}`);
   const mk = () => new File(new Uint8Array(0));
-  const fds = [new OpenFile(mk()), new ConsoleStdout(() => {}), new ConsoleStdout(() => {}), new PreopenDirectory("/", tree)];
+  // Task 0(d): `capture` keeps what the instance writes to WASI fd 1 and fd 2 (the original spike discarded both).
+  const o1 = [], o2 = [];
+  const sink = (a) => new ConsoleStdout((b) => { if (capture) a.push(b.slice()); });
+  const fds = [new OpenFile(mk()), sink(o1), sink(o2), new PreopenDirectory("/", tree)];
   const wasi = new WASI(args, envArr, fds, { debug: false });
   const t0 = now();
   const instance = await WebAssembly.instantiate(module, { wasi_snapshot_preview1: wasi.wasiImport });
@@ -105,6 +108,7 @@ export async function warmInstance(module, rec, { env = rec.env, rts = [] } = {}
   /** One conversion. `rec.files` are mounted into a cleared tree. */
   function convert(options, { files = rec.files, extra = {}, stdin = "" } = {}) {
     const t0 = now();
+    o1.length = 0; o2.length = 0;
     tree.clear();
     const R = buildTree({ files }, extra);
     for (const [k, v] of R) tree.set(k, v);
@@ -118,9 +122,40 @@ export async function warmInstance(module, rec, { env = rec.env, rts = [] } = {}
     const t2 = now();
     const outPath = options["output-file"];
     const output = outPath ? readTree(tree, outPath) : null;
-    return { trap, stdout: dec.decode(out.data), stderr: dec.decode(err.data), warnings: dec.decode(warn.data), output, mountMs: t1 - t0, runMs: t2 - t1, readMs: now() - t2, totalMs: now() - t0, memBytes: x.memory.buffer.byteLength, tree };
+    return { trap, fd1: dec.decode(concat(o1)), fd2: dec.decode(concat(o2)), stdout: dec.decode(out.data), stderr: dec.decode(err.data), warnings: dec.decode(warn.data), output, mountMs: t1 - t0, runMs: t2 - t1, readMs: now() - t2, totalMs: now() - t0, memBytes: x.memory.buffer.byteLength, tree };
   }
   return { instance, wasi, initMs, convert, mem: () => x.memory.buffer.byteLength, env: envArr };
+}
+
+/**
+ * Task 0(c): a fresh `_start` instance instantiated ahead of time, with argv, env and the tree supplied later. The shim reads
+ * `args`, `env` and `fds` when WASI calls `args_get`/`environ_get`/`fd_*`, i.e. at `_start`, so they can be set after instantiation.
+ */
+export async function spareInstance(module) {
+  const tree = new Map();
+  const out = [], err = [];
+  const fds = [new OpenFile(new File(new Uint8Array(0))), new ConsoleStdout((b) => out.push(b.slice())), new ConsoleStdout((b) => err.push(b.slice())), new PreopenDirectory("/", tree)];
+  const wasi = new WASI(["pandoc.wasm"], [], fds, { debug: false });
+  const o = wasi.wasiImport.args_sizes_get;
+  wasi.wasiImport.args_sizes_get = (a, b) => { const r = o.call(wasi.wasiImport, a, b); new DataView(wasi.inst.exports.memory.buffer).setUint32(b, wasi.args.reduce((n, x) => n + enc.encode(x).length + 1, 0), true); return r; };
+  const t0 = now();
+  const instance = await WebAssembly.instantiate(module, { wasi_snapshot_preview1: wasi.wasiImport });
+  const initMs = now() - t0;
+  /** Supply the request and run `_start` (once). */
+  function run(rec, { env: envOver = {}, argv = rec.argv } = {}) {
+    const t0 = now();
+    const root = buildTree(rec);
+    wasi.args = argv;
+    wasi.env = Object.entries({ ...rec.env, ...envOver }).map(([k, v]) => `${k}=${v}`);
+    wasi.fds[3] = new PreopenDirectory("/", root);
+    const t1 = now();
+    let status = null, trap = null;
+    try { status = wasi.start(instance); } catch (e) { if (e instanceof WASIProcExit) status = e.code; else trap = e; }
+    const t2 = now();
+    const output = readTree(root, rec.output);
+    return { status, trap, stderr: dec.decode(concat(err)), output, mountMs: t1 - t0, runMs: t2 - t1, readMs: now() - t2, totalMs: now() - t0, memBytes: instance.exports.memory.buffer.byteLength };
+  }
+  return { initMs, run };
 }
 
 const luaStr = (s) => '"' + [...enc.encode(s)].map((c) => (c >= 32 && c < 127 && c !== 34 && c !== 92 ? String.fromCharCode(c) : "\\" + String(c).padStart(3, "0"))).join("") + '"';

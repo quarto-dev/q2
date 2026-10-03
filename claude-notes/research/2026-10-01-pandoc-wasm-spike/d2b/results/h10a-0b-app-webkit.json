@@ -1,0 +1,788 @@
+{
+ "browser": "webkit",
+ "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.4 Safari/605.1.15",
+ "runs": 12,
+ "date": "2026-10-03T17:40:01.799Z",
+ "summary": {
+  "listFonts": {
+   "med": 65,
+   "min": 63,
+   "max": 150.00000000000045
+  },
+  "rustRequest": {
+   "med": 6,
+   "min": 5,
+   "max": 11
+  },
+  "pandocLeg": {
+   "med": 320,
+   "min": 306,
+   "max": 470
+  },
+  "pandocSpawnMount": {
+   "med": 148,
+   "min": 142,
+   "max": 163
+  },
+  "typstLeg": {
+   "med": 89,
+   "min": 83.99999999999818,
+   "max": 101
+  },
+  "typstCompile": {
+   "med": 33,
+   "min": 29,
+   "max": 41
+  },
+  "viewer": {
+   "med": 149,
+   "min": 133,
+   "max": 165
+  },
+  "whole": {
+   "med": 624,
+   "min": 599,
+   "max": 780
+  }
+ },
+ "cold": {
+  "listFonts": 200,
+  "rustRequest": 42,
+  "pandocLeg": 968,
+  "pandocSpawnMount": 594,
+  "typstLeg": 163.00000000000045,
+  "typstCompile": 105,
+  "viewer": 272.99999999999955,
+  "whole": 1646
+ },
+ "raw": [
+  {
+   "t0": 1516,
+   "marks": [
+    {
+     "stage": "preparing",
+     "t": 1516
+    },
+    {
+     "stage": "typst-loading",
+     "t": 1529.0000000000002
+    },
+    {
+     "stage": "typst-starting",
+     "t": 1649
+    },
+    {
+     "stage": "preparing",
+     "t": 1716
+    },
+    {
+     "stage": "loading",
+     "t": 1758
+    },
+    {
+     "stage": "starting",
+     "t": 2056
+    },
+    {
+     "stage": "mounting",
+     "t": 2065
+    },
+    {
+     "stage": "running",
+     "t": 2352
+    },
+    {
+     "stage": "typst-loading",
+     "t": 2726
+    },
+    {
+     "stage": "typst-starting",
+     "t": 2726
+    },
+    {
+     "stage": "typst-compiling",
+     "t": 2784.0000000000005
+    },
+    {
+     "stage": "done",
+     "t": 2890
+    }
+   ],
+   "tPdf": 2889.0000000000005,
+   "tShown": 3162,
+   "phase": "done"
+  },
+  {
+   "t0": 3162,
+   "marks": [
+    {
+     "stage": "preparing",
+     "t": 3162
+    },
+    {
+     "stage": "typst-loading",
+     "t": 3162
+    },
+    {
+     "stage": "typst-starting",
+     "t": 3162
+    },
+    {
+     "stage": "preparing",
+     "t": 3312.0000000000005
+    },
+    {
+     "stage": "loading",
+     "t": 3323
+    },
+    {
+     "stage": "starting",
+     "t": 3323
+    },
+    {
+     "stage": "mounting",
+     "t": 3330
+    },
+    {
+     "stage": "running",
+     "t": 3475
+    },
+    {
+     "stage": "typst-loading",
+     "t": 3689
+    },
+    {
+     "stage": "typst-starting",
+     "t": 3689
+    },
+    {
+     "stage": "typst-compiling",
+     "t": 3749
+    },
+    {
+     "stage": "done",
+     "t": 3791
+    }
+   ],
+   "tPdf": 3790,
+   "tShown": 3933.0000000000005,
+   "phase": "done"
+  },
+  {
+   "t0": 3933.0000000000005,
+   "marks": [
+    {
+     "stage": "preparing",
+     "t": 3933.0000000000005
+    },
+    {
+     "stage": "typst-loading",
+     "t": 3934
+    },
+    {
+     "stage": "typst-starting",
+     "t": 3934
+    },
+    {
+     "stage": "preparing",
+     "t": 3999
+    },
+    {
+     "stage": "loading",
+     "t": 4006.9999999999995
+    },
+    {
+     "stage": "starting",
+     "t": 4006.9999999999995
+    },
+    {
+     "stage": "mounting",
+     "t": 4014.0000000000005
+    },
+    {
+     "stage": "running",
+     "t": 4155
+    },
+    {
+     "stage": "typst-loading",
+     "t": 4341
+    },
+    {
+     "stage": "typst-starting",
+     "t": 4341
+    },
+    {
+     "stage": "typst-compiling",
+     "t": 4398
+    },
+    {
+     "stage": "done",
+     "t": 4436
+    }
+   ],
+   "tPdf": 4435.000000000001,
+   "tShown": 4593,
+   "phase": "done"
+  },
+  {
+   "t0": 4593,
+   "marks": [
+    {
+     "stage": "preparing",
+     "t": 4593
+    },
+    {
+     "stage": "typst-loading",
+     "t": 4593
+    },
+    {
+     "stage": "typst-starting",
+     "t": 4594
+    },
+    {
+     "stage": "preparing",
+     "t": 4657
+    },
+    {
+     "stage": "loading",
+     "t": 4665
+    },
+    {
+     "stage": "starting",
+     "t": 4665
+    },
+    {
+     "stage": "mounting",
+     "t": 4672
+    },
+    {
+     "stage": "running",
+     "t": 4813
+    },
+    {
+     "stage": "typst-loading",
+     "t": 4994
+    },
+    {
+     "stage": "typst-starting",
+     "t": 4994
+    },
+    {
+     "stage": "typst-compiling",
+     "t": 5051
+    },
+    {
+     "stage": "done",
+     "t": 5085
+    }
+   ],
+   "tPdf": 5084.000000000001,
+   "tShown": 5233.000000000001,
+   "phase": "done"
+  },
+  {
+   "t0": 5233.000000000001,
+   "marks": [
+    {
+     "stage": "preparing",
+     "t": 5233.000000000001
+    },
+    {
+     "stage": "typst-loading",
+     "t": 5233.000000000001
+    },
+    {
+     "stage": "typst-starting",
+     "t": 5234
+    },
+    {
+     "stage": "preparing",
+     "t": 5298
+    },
+    {
+     "stage": "loading",
+     "t": 5308
+    },
+    {
+     "stage": "starting",
+     "t": 5308
+    },
+    {
+     "stage": "mounting",
+     "t": 5314
+    },
+    {
+     "stage": "running",
+     "t": 5453
+    },
+    {
+     "stage": "typst-loading",
+     "t": 5638
+    },
+    {
+     "stage": "typst-starting",
+     "t": 5638
+    },
+    {
+     "stage": "typst-compiling",
+     "t": 5694
+    },
+    {
+     "stage": "done",
+     "t": 5728
+    }
+   ],
+   "tPdf": 5728,
+   "tShown": 5893,
+   "phase": "done"
+  },
+  {
+   "t0": 5893,
+   "marks": [
+    {
+     "stage": "preparing",
+     "t": 5893
+    },
+    {
+     "stage": "typst-loading",
+     "t": 5893
+    },
+    {
+     "stage": "typst-starting",
+     "t": 5893
+    },
+    {
+     "stage": "preparing",
+     "t": 5957
+    },
+    {
+     "stage": "loading",
+     "t": 5963
+    },
+    {
+     "stage": "starting",
+     "t": 5963
+    },
+    {
+     "stage": "mounting",
+     "t": 5969
+    },
+    {
+     "stage": "running",
+     "t": 6110
+    },
+    {
+     "stage": "typst-loading",
+     "t": 6275
+    },
+    {
+     "stage": "typst-starting",
+     "t": 6275
+    },
+    {
+     "stage": "typst-compiling",
+     "t": 6329
+    },
+    {
+     "stage": "done",
+     "t": 6360
+    }
+   ],
+   "tPdf": 6359,
+   "tShown": 6492,
+   "phase": "done"
+  },
+  {
+   "t0": 6492,
+   "marks": [
+    {
+     "stage": "preparing",
+     "t": 6492
+    },
+    {
+     "stage": "typst-loading",
+     "t": 6492
+    },
+    {
+     "stage": "typst-starting",
+     "t": 6493
+    },
+    {
+     "stage": "preparing",
+     "t": 6557
+    },
+    {
+     "stage": "loading",
+     "t": 6563
+    },
+    {
+     "stage": "starting",
+     "t": 6563
+    },
+    {
+     "stage": "mounting",
+     "t": 6570
+    },
+    {
+     "stage": "running",
+     "t": 6711
+    },
+    {
+     "stage": "typst-loading",
+     "t": 6877
+    },
+    {
+     "stage": "typst-starting",
+     "t": 6877
+    },
+    {
+     "stage": "typst-compiling",
+     "t": 6933
+    },
+    {
+     "stage": "done",
+     "t": 6967.000000000001
+    }
+   ],
+   "tPdf": 6966,
+   "tShown": 7112,
+   "phase": "done"
+  },
+  {
+   "t0": 7112,
+   "marks": [
+    {
+     "stage": "preparing",
+     "t": 7112
+    },
+    {
+     "stage": "typst-loading",
+     "t": 7112
+    },
+    {
+     "stage": "typst-starting",
+     "t": 7113
+    },
+    {
+     "stage": "preparing",
+     "t": 7178
+    },
+    {
+     "stage": "loading",
+     "t": 7184
+    },
+    {
+     "stage": "starting",
+     "t": 7184
+    },
+    {
+     "stage": "mounting",
+     "t": 7190
+    },
+    {
+     "stage": "running",
+     "t": 7327
+    },
+    {
+     "stage": "typst-loading",
+     "t": 7490
+    },
+    {
+     "stage": "typst-starting",
+     "t": 7490
+    },
+    {
+     "stage": "typst-compiling",
+     "t": 7546
+    },
+    {
+     "stage": "done",
+     "t": 7576.000000000001
+    }
+   ],
+   "tPdf": 7576.000000000001,
+   "tShown": 7712,
+   "phase": "done"
+  },
+  {
+   "t0": 7712,
+   "marks": [
+    {
+     "stage": "preparing",
+     "t": 7712
+    },
+    {
+     "stage": "typst-loading",
+     "t": 7713
+    },
+    {
+     "stage": "typst-starting",
+     "t": 7713
+    },
+    {
+     "stage": "preparing",
+     "t": 7777
+    },
+    {
+     "stage": "loading",
+     "t": 7783
+    },
+    {
+     "stage": "starting",
+     "t": 7783
+    },
+    {
+     "stage": "mounting",
+     "t": 7791
+    },
+    {
+     "stage": "running",
+     "t": 7931
+    },
+    {
+     "stage": "typst-loading",
+     "t": 8093
+    },
+    {
+     "stage": "typst-starting",
+     "t": 8093
+    },
+    {
+     "stage": "typst-compiling",
+     "t": 8149.000000000001
+    },
+    {
+     "stage": "done",
+     "t": 8181.000000000001
+    }
+   ],
+   "tPdf": 8180,
+   "tShown": 8332,
+   "phase": "done"
+  },
+  {
+   "t0": 8332,
+   "marks": [
+    {
+     "stage": "preparing",
+     "t": 8332
+    },
+    {
+     "stage": "typst-loading",
+     "t": 8332
+    },
+    {
+     "stage": "typst-starting",
+     "t": 8332
+    },
+    {
+     "stage": "preparing",
+     "t": 8395
+    },
+    {
+     "stage": "loading",
+     "t": 8406
+    },
+    {
+     "stage": "starting",
+     "t": 8406
+    },
+    {
+     "stage": "mounting",
+     "t": 8412
+    },
+    {
+     "stage": "running",
+     "t": 8556.000000000002
+    },
+    {
+     "stage": "typst-loading",
+     "t": 8876
+    },
+    {
+     "stage": "typst-starting",
+     "t": 8876
+    },
+    {
+     "stage": "typst-compiling",
+     "t": 8932
+    },
+    {
+     "stage": "done",
+     "t": 8967
+    }
+   ],
+   "tPdf": 8967,
+   "tShown": 9112,
+   "phase": "done"
+  },
+  {
+   "t0": 9112,
+   "marks": [
+    {
+     "stage": "preparing",
+     "t": 9112
+    },
+    {
+     "stage": "typst-loading",
+     "t": 9112
+    },
+    {
+     "stage": "typst-starting",
+     "t": 9112
+    },
+    {
+     "stage": "preparing",
+     "t": 9176
+    },
+    {
+     "stage": "loading",
+     "t": 9182
+    },
+    {
+     "stage": "starting",
+     "t": 9182
+    },
+    {
+     "stage": "mounting",
+     "t": 9189
+    },
+    {
+     "stage": "running",
+     "t": 9333
+    },
+    {
+     "stage": "typst-loading",
+     "t": 9495.000000000002
+    },
+    {
+     "stage": "typst-starting",
+     "t": 9495.000000000002
+    },
+    {
+     "stage": "typst-compiling",
+     "t": 9550
+    },
+    {
+     "stage": "done",
+     "t": 9580
+    }
+   ],
+   "tPdf": 9579,
+   "tShown": 9731,
+   "phase": "done"
+  },
+  {
+   "t0": 9731,
+   "marks": [
+    {
+     "stage": "preparing",
+     "t": 9731
+    },
+    {
+     "stage": "typst-loading",
+     "t": 9732
+    },
+    {
+     "stage": "typst-starting",
+     "t": 9732
+    },
+    {
+     "stage": "preparing",
+     "t": 9797
+    },
+    {
+     "stage": "loading",
+     "t": 9803
+    },
+    {
+     "stage": "starting",
+     "t": 9803
+    },
+    {
+     "stage": "mounting",
+     "t": 9810
+    },
+    {
+     "stage": "running",
+     "t": 9945
+    },
+    {
+     "stage": "typst-loading",
+     "t": 10112
+    },
+    {
+     "stage": "typst-starting",
+     "t": 10112
+    },
+    {
+     "stage": "typst-compiling",
+     "t": 10168.000000000002
+    },
+    {
+     "stage": "done",
+     "t": 10199
+    }
+   ],
+   "tPdf": 10199,
+   "tShown": 10351,
+   "phase": "done"
+  },
+  {
+   "t0": 10351,
+   "marks": [
+    {
+     "stage": "preparing",
+     "t": 10351
+    },
+    {
+     "stage": "typst-loading",
+     "t": 10352
+    },
+    {
+     "stage": "typst-starting",
+     "t": 10352
+    },
+    {
+     "stage": "preparing",
+     "t": 10416
+    },
+    {
+     "stage": "loading",
+     "t": 10421
+    },
+    {
+     "stage": "starting",
+     "t": 10421
+    },
+    {
+     "stage": "mounting",
+     "t": 10428
+    },
+    {
+     "stage": "running",
+     "t": 10584
+    },
+    {
+     "stage": "typst-loading",
+     "t": 10741
+    },
+    {
+     "stage": "typst-starting",
+     "t": 10741
+    },
+    {
+     "stage": "typst-compiling",
+     "t": 10798
+    },
+    {
+     "stage": "done",
+     "t": 10827
+    }
+   ],
+   "tPdf": 10827,
+   "tShown": 10975,
+   "phase": "done"
+  }
+ ]
+}

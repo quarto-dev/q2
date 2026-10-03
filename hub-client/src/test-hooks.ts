@@ -21,7 +21,7 @@ import { PandocRunner, uiStateFor } from './pandoc/pandocRunner';
 import { createBrowserWorker } from './pandoc/pandocService';
 import { PANDOC_WASM_SHA256, smokeJob } from './pandoc/smokeJob';
 import { installDevHarness, pandocDownload } from './pandoc/devHarness';
-import { formatByKey, getDownloadController, onPdfCompiled } from './pandoc/downloadService';
+import { createPdfPreviewController, formatByKey, getDownloadController, onPdfCompiled } from './pandoc/downloadService';
 import { mountPdfViewer } from './pandoc/pdfViewer';
 import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -108,6 +108,53 @@ export const pandoc = {
     const render = (text: string) => root.render(createElement(PdfPreviewPane, { path, content: text, debounceMs }));
     render(content);
     return { update: render };
+  },
+  /**
+   * Time the whole PDF preview refresh (H10a Task 0(f)): the production preview controller and viewer, the two
+   * objects `PdfPreviewPane` wires together, with a timestamp at every stage change and when the viewer has drawn
+   * the new PDF. Each run rewrites the document (a changing last line) so that it is a real edit. Run 0 is
+   * the cold run (module fetch and compile) and is returned like the others for the caller to discard.
+   */
+  async measurePdfRefresh(path: string, baseText: string, runs: number) {
+    await wasmRenderer.initWasm();
+    let host = document.getElementById('pdf-viewer-host');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'pdf-viewer-host';
+      host.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#fff';
+      document.body.appendChild(host);
+    }
+    const viewer = mountPdfViewer(host);
+    const format = formatByKey('pdf');
+    if (!format) throw new Error('no pdf format');
+    let tPdf = 0;
+    let tShown = 0;
+    let shown: Promise<void> = Promise.resolve();
+    const controller = createPdfPreviewController((pdf, info) => {
+      tPdf = performance.now();
+      shown = viewer.show(pdf, { key: info.path, fileName: info.fileName }).then(() => {
+        tShown = performance.now();
+      });
+    });
+    const marks: { stage: string; t: number }[] = [];
+    controller.subscribe(() => {
+      const s = controller.getSnapshot();
+      const stage = s.phase === 'working' ? s.stage : s.phase;
+      if (marks[marks.length - 1]?.stage !== stage) marks.push({ stage, t: performance.now() });
+    });
+    const out: { t0: number; marks: { stage: string; t: number }[]; tPdf: number; tShown: number; phase: string }[] = [];
+    for (let i = 0; i <= runs; i++) {
+      wasmRenderer.vfsAddFile(path, `${baseText}\n\nEdit ${i}.\n`);
+      marks.length = 0;
+      tPdf = tShown = 0;
+      const t0 = performance.now();
+      await controller.start({ path, format });
+      await shown;
+      out.push({ t0, marks: [...marks], tPdf, tShown, phase: controller.getSnapshot().phase });
+    }
+    controller.cancel();
+    viewer.dispose();
+    return out;
   },
   /** The dev harness: Rust request -> worker -> output (src/pandoc/devHarness.ts). */
   download: pandocDownload,

@@ -269,3 +269,36 @@ the writer-versus-compiler skew check (T2).
 - Known difference: a raw typst block that `#import`s or `#include`s another project file fails in the
   browser chain (strand bd-4lczy9ho), so no parity fixture uses one.
 - Result at H9: 6/6 fixtures equal in page count and text.
+
+## Warm executor (H10a)
+
+`WarmPandoc` and `WarmSession` in `ts-packages/pandoc-host` run pandoc.wasm as one **persistent instance**: `__wasm_call_ctors`, then `hs_init_with_rtsopts` once, then the
+module's exported `convert` for every render. (`_start` traps on re-entry, so the fresh path, `execute()`, still needs an instance per run.) Nothing the user can see calls it yet:
+H10b builds the pool and the PDF preview wiring. Download as, the parity net and the book menu stay on the fresh path, because docx/pptx/epub parity pins `SOURCE_DATE_EPOCH`,
+which pandoc's Haskell side reads once from the WASI environment (typst has no pandoc-side timestamp). Measurements and the failure cases are in
+`claude-notes/research/2026-10-02-d2b-warm-instance-spike.md`; the plan is `claude-notes/plans/2026-10-02-pandoc-host-H10a-warm-executor.md`.
+
+- **Options, not argv.** `convert` takes pandoc *defaults-file* keys. `argvToDefaults(argv, files)` translates the request's argv for the typst grammar the Rust builder emits. It throws `UnsupportedArgv`
+  for anything else (an unknown flag, a repeated scalar flag, a `--defaults` line that is not `key: scalar`), and `WarmPandoc.run` answers that, and any writer that is not `typst`/`typst-*`, by running
+  the request through the fresh `execute()` in the same worker. The result's `stats.fallback` is `true`; a fallback is slower but correct, and the parity test asserts zero of them over the matrix.
+  `--defaults <p>` is read from the request's files and its keys are inlined, because `convert` rejects a `defaults` key. `+RTS ... -RTS` is dropped (RTS options are fixed at init; production passes none).
+- **The allowlist and its guard.** `ts-packages/pandoc-host/src/typst-argv-flags.json` lists the flag names. The translator holds its own set and exports `ARGV_ALLOWLIST_VERSION`; a unit test checks that the
+  file's version matches and that the translator accepts every listed flag. The Rust test `pandoc_typst_argv_guard` (`crates/quarto-core/tests/integration/`) renders every case in
+  `crates/quarto-core/tests/fixtures/pandoc-argv-matrix/` as a `typst` and a `pdf` request and requires the flags emitted to equal the flags listed. **Adding a flag to the argv builder fails that test until the
+  file and the translator are updated**; add a matrix case that emits it. Flag *values* (`-t typst-citations`, `-V` keys) are covered by the translator's unit tests and the warm-versus-fresh parity test.
+- **The environment is a Lua preamble.** A warm instance reads its WASI `environ` once, so the instance is created with an empty one and the request's env reaches Lua through `withPreamble`: one line, no trailing
+  newline, no top-level `local`, put in front of the share tree's `pandoc/datadir/init.lua` (which pandoc runs in every Lua state, before Quarto's own `os.getenv` calls) as bytes (`preamble ++ original`, no
+  decode), joined to the first original line by a space. `os.getenv` then answers from the request env and is `nil` for any other key. Line numbers in `init.lua` errors are unchanged; the chunk name
+  pandoc derives from the first line is not (`[string "do local e=..."]` instead of `[string "-- ..."]`). Validation and the share-tree version see the original tree.
+- **stderr is rebuilt.** `convert` discards nothing but reports differently: fd 2 carries Lua's `io.stderr` writes (`quarto.warn` as `WARNING (file:line) ...`, the shim's `Q-20-5/6/7`) and the RTS's
+  out-of-memory text; pandoc's own warnings are JSON in `/warnings` (not on stderr), and its `ERROR:` text is in `/stderr`. The executor builds `stderr` as fd-2 text, then the `/stderr` file, then
+  `[WARNING] ...` lines from `/warnings` (without `[INFO]` entries, with continuation lines indented by two spaces, as the CLI prints them), so the real Rust classifier (`classifyPandocCompletion`) gives the
+  same diagnostics as for a fresh run. `convert` returns no status: a thrown `exit with exit code n` is `pandoc-exit` with status n; missing output plus `ERROR:` text is `pandoc-exit` with the synthetic status 1;
+  `oom` only on an fd-2 message matching `out of memory|Heap exhausted` or a trap that `looksLikeOom`; any other trap is `crash`.
+- **Poisoned instances.** Heap exhaustion kills a warm instance for good (every later `convert` throws exit 1) and looks like a filter's `os.exit(1)`, which leaves it usable. `WarmSession` calls an instance
+  poisoned after a trap, an fd-2 out-of-memory message, or a thrown exit after which the canary `convert` (`x` through `markdown` to `plain`) fails. It drops a poisoned instance and starts a replacement at
+  once; `errorRecycleN` (50) consecutive errored renders recreate it too. **Memory is not recycled per render on this path**: linear memory never shrinks, so after each render (failures included) a size over
+  `retireBytes` (512 MB) sets `stats.retire`, and the owner of the worker replaces it when idle. Faults (`oom`, `crash`, `hang`) are per run and use a dedicated instance (`oom` is an RTS option, fixed at init).
+- **What to run.** `hub-client/src/pandoc/warmPandoc.wasm.test.ts` and `warmSession.wasm.test.ts` (in `npm run test:wasm`; they need `.cache/pandoc-wasm/pandoc.wasm` and the built hub wasm). The
+  deferred alternative is a pre-instantiated fresh `_start` instance with argv set later (measured in the spike note, H10a Task 0(c)): it hides instantiation and worker spawn but not per-run start-up, needs no
+  translator, preamble or poison handling, and was not faster than fresh in Firefox.

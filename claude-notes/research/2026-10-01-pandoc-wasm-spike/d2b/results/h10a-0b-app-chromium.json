@@ -1,0 +1,788 @@
+{
+ "browser": "chromium",
+ "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.7778.96 Safari/537.36",
+ "runs": 12,
+ "date": "2026-10-03T17:39:23.741Z",
+ "summary": {
+  "listFonts": {
+   "med": 50.30000001192093,
+   "min": 49.30000001192093,
+   "max": 57.20000001788139
+  },
+  "rustRequest": {
+   "med": 4.699999988079071,
+   "min": 4.199999988079071,
+   "max": 5.800000011920929
+  },
+  "pandocLeg": {
+   "med": 177.40000000596046,
+   "min": 166.89999997615814,
+   "max": 197
+  },
+  "pandocSpawnMount": {
+   "med": 31.400000005960464,
+   "min": 30.19999998807907,
+   "max": 35.5
+  },
+  "typstLeg": {
+   "med": 66.40000000596046,
+   "min": 65.09999999403954,
+   "max": 73.2000000178814
+  },
+  "typstCompile": {
+   "med": 25.80000001192093,
+   "min": 25.099999994039536,
+   "max": 29.799999982118607
+  },
+  "viewer": {
+   "med": 97.90000000596046,
+   "min": 94.09999999403954,
+   "max": 126.2000000178814
+  },
+  "whole": {
+   "med": 399.69999998807907,
+   "min": 382.7000000178814,
+   "max": 446.30000001192093
+  }
+ },
+ "cold": {
+  "listFonts": 216.59999999403954,
+  "rustRequest": 56.400000005960464,
+  "pandocLeg": 605.9000000059605,
+  "pandocSpawnMount": 337.80000001192093,
+  "typstLeg": 168.5,
+  "typstCompile": 127.90000000596046,
+  "viewer": 227.19999998807907,
+  "whole": 1274.5999999940395
+ },
+ "raw": [
+  {
+   "t0": 843.5,
+   "marks": [
+    {
+     "stage": "preparing",
+     "t": 843.5
+    },
+    {
+     "stage": "typst-loading",
+     "t": 859.4000000059605
+    },
+    {
+     "stage": "typst-starting",
+     "t": 1011
+    },
+    {
+     "stage": "preparing",
+     "t": 1060.0999999940395
+    },
+    {
+     "stage": "loading",
+     "t": 1116.5
+    },
+    {
+     "stage": "starting",
+     "t": 1418.9000000059605
+    },
+    {
+     "stage": "mounting",
+     "t": 1427.800000011921
+    },
+    {
+     "stage": "running",
+     "t": 1454.300000011921
+    },
+    {
+     "stage": "typst-loading",
+     "t": 1722.4000000059605
+    },
+    {
+     "stage": "typst-starting",
+     "t": 1722.4000000059605
+    },
+    {
+     "stage": "typst-compiling",
+     "t": 1763
+    },
+    {
+     "stage": "done",
+     "t": 1892.300000011921
+    }
+   ],
+   "tPdf": 1890.9000000059605,
+   "tShown": 2118.0999999940395,
+   "phase": "done"
+  },
+  {
+   "t0": 2118.0999999940395,
+   "marks": [
+    {
+     "stage": "preparing",
+     "t": 2118.0999999940395
+    },
+    {
+     "stage": "typst-loading",
+     "t": 2118.5999999940395
+    },
+    {
+     "stage": "typst-starting",
+     "t": 2118.699999988079
+    },
+    {
+     "stage": "preparing",
+     "t": 2173.0999999940395
+    },
+    {
+     "stage": "loading",
+     "t": 2178.9000000059605
+    },
+    {
+     "stage": "starting",
+     "t": 2178.9000000059605
+    },
+    {
+     "stage": "mounting",
+     "t": 2185.0999999940395
+    },
+    {
+     "stage": "running",
+     "t": 2212.300000011921
+    },
+    {
+     "stage": "typst-loading",
+     "t": 2368.5999999940395
+    },
+    {
+     "stage": "typst-starting",
+     "t": 2368.699999988079
+    },
+    {
+     "stage": "typst-compiling",
+     "t": 2408.4000000059605
+    },
+    {
+     "stage": "done",
+     "t": 2439.0999999940395
+    }
+   ],
+   "tPdf": 2438.199999988079,
+   "tShown": 2564.4000000059605,
+   "phase": "done"
+  },
+  {
+   "t0": 2564.5,
+   "marks": [
+    {
+     "stage": "preparing",
+     "t": 2564.5999999940395
+    },
+    {
+     "stage": "typst-loading",
+     "t": 2565
+    },
+    {
+     "stage": "typst-starting",
+     "t": 2565.199999988079
+    },
+    {
+     "stage": "preparing",
+     "t": 2613.800000011921
+    },
+    {
+     "stage": "loading",
+     "t": 2618.9000000059605
+    },
+    {
+     "stage": "starting",
+     "t": 2618.9000000059605
+    },
+    {
+     "stage": "mounting",
+     "t": 2624.199999988079
+    },
+    {
+     "stage": "running",
+     "t": 2650.4000000059605
+    },
+    {
+     "stage": "typst-loading",
+     "t": 2801.9000000059605
+    },
+    {
+     "stage": "typst-starting",
+     "t": 2801.9000000059605
+    },
+    {
+     "stage": "typst-compiling",
+     "t": 2841.5999999940395
+    },
+    {
+     "stage": "done",
+     "t": 2869
+    }
+   ],
+   "tPdf": 2868.300000011921,
+   "tShown": 2964.199999988079,
+   "phase": "done"
+  },
+  {
+   "t0": 2964.199999988079,
+   "marks": [
+    {
+     "stage": "preparing",
+     "t": 2964.199999988079
+    },
+    {
+     "stage": "typst-loading",
+     "t": 2964.5999999940395
+    },
+    {
+     "stage": "typst-starting",
+     "t": 2964.9000000059605
+    },
+    {
+     "stage": "preparing",
+     "t": 3013.800000011921
+    },
+    {
+     "stage": "loading",
+     "t": 3018.699999988079
+    },
+    {
+     "stage": "starting",
+     "t": 3018.699999988079
+    },
+    {
+     "stage": "mounting",
+     "t": 3023.800000011921
+    },
+    {
+     "stage": "running",
+     "t": 3050.0999999940395
+    },
+    {
+     "stage": "typst-loading",
+     "t": 3198.300000011921
+    },
+    {
+     "stage": "typst-starting",
+     "t": 3198.300000011921
+    },
+    {
+     "stage": "typst-compiling",
+     "t": 3237.699999988079
+    },
+    {
+     "stage": "done",
+     "t": 3268
+    }
+   ],
+   "tPdf": 3267.300000011921,
+   "tShown": 3364.199999988079,
+   "phase": "done"
+  },
+  {
+   "t0": 3364.300000011921,
+   "marks": [
+    {
+     "stage": "preparing",
+     "t": 3364.300000011921
+    },
+    {
+     "stage": "typst-loading",
+     "t": 3364.5999999940395
+    },
+    {
+     "stage": "typst-starting",
+     "t": 3364.9000000059605
+    },
+    {
+     "stage": "preparing",
+     "t": 3413.699999988079
+    },
+    {
+     "stage": "loading",
+     "t": 3418.4000000059605
+    },
+    {
+     "stage": "starting",
+     "t": 3418.4000000059605
+    },
+    {
+     "stage": "mounting",
+     "t": 3423.9000000059605
+    },
+    {
+     "stage": "running",
+     "t": 3450.300000011921
+    },
+    {
+     "stage": "typst-loading",
+     "t": 3594.9000000059605
+    },
+    {
+     "stage": "typst-starting",
+     "t": 3594.9000000059605
+    },
+    {
+     "stage": "typst-compiling",
+     "t": 3634.5999999940395
+    },
+    {
+     "stage": "done",
+     "t": 3661.199999988079
+    }
+   ],
+   "tPdf": 3660.4000000059605,
+   "tShown": 3755.9000000059605,
+   "phase": "done"
+  },
+  {
+   "t0": 3755.9000000059605,
+   "marks": [
+    {
+     "stage": "preparing",
+     "t": 3755.9000000059605
+    },
+    {
+     "stage": "typst-loading",
+     "t": 3756.4000000059605
+    },
+    {
+     "stage": "typst-starting",
+     "t": 3756.5999999940395
+    },
+    {
+     "stage": "preparing",
+     "t": 3806.4000000059605
+    },
+    {
+     "stage": "loading",
+     "t": 3811.0999999940395
+    },
+    {
+     "stage": "starting",
+     "t": 3811.0999999940395
+    },
+    {
+     "stage": "mounting",
+     "t": 3816.300000011921
+    },
+    {
+     "stage": "running",
+     "t": 3841.699999988079
+    },
+    {
+     "stage": "typst-loading",
+     "t": 3984.5
+    },
+    {
+     "stage": "typst-starting",
+     "t": 3984.5
+    },
+    {
+     "stage": "typst-compiling",
+     "t": 4024.0999999940395
+    },
+    {
+     "stage": "done",
+     "t": 4050.5
+    }
+   ],
+   "tPdf": 4049.5999999940395,
+   "tShown": 4147.5,
+   "phase": "done"
+  },
+  {
+   "t0": 4147.5,
+   "marks": [
+    {
+     "stage": "preparing",
+     "t": 4147.5
+    },
+    {
+     "stage": "typst-loading",
+     "t": 4147.9000000059605
+    },
+    {
+     "stage": "typst-starting",
+     "t": 4148.199999988079
+    },
+    {
+     "stage": "preparing",
+     "t": 4196.9000000059605
+    },
+    {
+     "stage": "loading",
+     "t": 4201.4000000059605
+    },
+    {
+     "stage": "starting",
+     "t": 4201.4000000059605
+    },
+    {
+     "stage": "mounting",
+     "t": 4207
+    },
+    {
+     "stage": "running",
+     "t": 4232.800000011921
+    },
+    {
+     "stage": "typst-loading",
+     "t": 4379.5999999940395
+    },
+    {
+     "stage": "typst-starting",
+     "t": 4379.5999999940395
+    },
+    {
+     "stage": "typst-compiling",
+     "t": 4419.9000000059605
+    },
+    {
+     "stage": "done",
+     "t": 4447.300000011921
+    }
+   ],
+   "tPdf": 4446.4000000059605,
+   "tShown": 4547.5999999940395,
+   "phase": "done"
+  },
+  {
+   "t0": 4547.5999999940395,
+   "marks": [
+    {
+     "stage": "preparing",
+     "t": 4547.5999999940395
+    },
+    {
+     "stage": "typst-loading",
+     "t": 4548
+    },
+    {
+     "stage": "typst-starting",
+     "t": 4548.300000011921
+    },
+    {
+     "stage": "preparing",
+     "t": 4597
+    },
+    {
+     "stage": "loading",
+     "t": 4601.5999999940395
+    },
+    {
+     "stage": "starting",
+     "t": 4601.5999999940395
+    },
+    {
+     "stage": "mounting",
+     "t": 4606.9000000059605
+    },
+    {
+     "stage": "running",
+     "t": 4637.0999999940395
+    },
+    {
+     "stage": "typst-loading",
+     "t": 4798.5999999940395
+    },
+    {
+     "stage": "typst-starting",
+     "t": 4798.5999999940395
+    },
+    {
+     "stage": "typst-compiling",
+     "t": 4845.5
+    },
+    {
+     "stage": "done",
+     "t": 4872.699999988079
+    }
+   ],
+   "tPdf": 4871.800000011921,
+   "tShown": 4981.5999999940395,
+   "phase": "done"
+  },
+  {
+   "t0": 4981.5999999940395,
+   "marks": [
+    {
+     "stage": "preparing",
+     "t": 4981.5999999940395
+    },
+    {
+     "stage": "typst-loading",
+     "t": 4982.300000011921
+    },
+    {
+     "stage": "typst-starting",
+     "t": 4982.5999999940395
+    },
+    {
+     "stage": "preparing",
+     "t": 5038.800000011921
+    },
+    {
+     "stage": "loading",
+     "t": 5043.5
+    },
+    {
+     "stage": "starting",
+     "t": 5043.5
+    },
+    {
+     "stage": "mounting",
+     "t": 5050.5
+    },
+    {
+     "stage": "running",
+     "t": 5077.300000011921
+    },
+    {
+     "stage": "typst-loading",
+     "t": 5220.9000000059605
+    },
+    {
+     "stage": "typst-starting",
+     "t": 5220.9000000059605
+    },
+    {
+     "stage": "typst-compiling",
+     "t": 5260.800000011921
+    },
+    {
+     "stage": "done",
+     "t": 5287.300000011921
+    }
+   ],
+   "tPdf": 5286.4000000059605,
+   "tShown": 5380.5,
+   "phase": "done"
+  },
+  {
+   "t0": 5380.5,
+   "marks": [
+    {
+     "stage": "preparing",
+     "t": 5380.5
+    },
+    {
+     "stage": "typst-loading",
+     "t": 5380.9000000059605
+    },
+    {
+     "stage": "typst-starting",
+     "t": 5381.199999988079
+    },
+    {
+     "stage": "preparing",
+     "t": 5431.699999988079
+    },
+    {
+     "stage": "loading",
+     "t": 5436.0999999940395
+    },
+    {
+     "stage": "starting",
+     "t": 5436.0999999940395
+    },
+    {
+     "stage": "mounting",
+     "t": 5441.300000011921
+    },
+    {
+     "stage": "running",
+     "t": 5466.800000011921
+    },
+    {
+     "stage": "typst-loading",
+     "t": 5608.5
+    },
+    {
+     "stage": "typst-starting",
+     "t": 5608.5999999940395
+    },
+    {
+     "stage": "typst-compiling",
+     "t": 5649.0999999940395
+    },
+    {
+     "stage": "done",
+     "t": 5675.300000011921
+    }
+   ],
+   "tPdf": 5674.5,
+   "tShown": 5772.300000011921,
+   "phase": "done"
+  },
+  {
+   "t0": 5772.300000011921,
+   "marks": [
+    {
+     "stage": "preparing",
+     "t": 5772.300000011921
+    },
+    {
+     "stage": "typst-loading",
+     "t": 5772.699999988079
+    },
+    {
+     "stage": "typst-starting",
+     "t": 5772.800000011921
+    },
+    {
+     "stage": "preparing",
+     "t": 5824.4000000059605
+    },
+    {
+     "stage": "loading",
+     "t": 5828.800000011921
+    },
+    {
+     "stage": "starting",
+     "t": 5828.800000011921
+    },
+    {
+     "stage": "mounting",
+     "t": 5833.9000000059605
+    },
+    {
+     "stage": "running",
+     "t": 5859
+    },
+    {
+     "stage": "typst-loading",
+     "t": 6000.9000000059605
+    },
+    {
+     "stage": "typst-starting",
+     "t": 6001
+    },
+    {
+     "stage": "typst-compiling",
+     "t": 6042.9000000059605
+    },
+    {
+     "stage": "done",
+     "t": 6069
+    }
+   ],
+   "tPdf": 6068.0999999940395,
+   "tShown": 6172.4000000059605,
+   "phase": "done"
+  },
+  {
+   "t0": 6172.4000000059605,
+   "marks": [
+    {
+     "stage": "preparing",
+     "t": 6172.4000000059605
+    },
+    {
+     "stage": "typst-loading",
+     "t": 6172.9000000059605
+    },
+    {
+     "stage": "typst-starting",
+     "t": 6173.199999988079
+    },
+    {
+     "stage": "preparing",
+     "t": 6221.9000000059605
+    },
+    {
+     "stage": "loading",
+     "t": 6226.0999999940395
+    },
+    {
+     "stage": "starting",
+     "t": 6226.0999999940395
+    },
+    {
+     "stage": "mounting",
+     "t": 6231.4000000059605
+    },
+    {
+     "stage": "running",
+     "t": 6257.0999999940395
+    },
+    {
+     "stage": "typst-loading",
+     "t": 6396.9000000059605
+    },
+    {
+     "stage": "typst-starting",
+     "t": 6397
+    },
+    {
+     "stage": "typst-compiling",
+     "t": 6437.5999999940395
+    },
+    {
+     "stage": "done",
+     "t": 6463.5999999940395
+    }
+   ],
+   "tPdf": 6462.699999988079,
+   "tShown": 6564.199999988079,
+   "phase": "done"
+  },
+  {
+   "t0": 6564.199999988079,
+   "marks": [
+    {
+     "stage": "preparing",
+     "t": 6564.199999988079
+    },
+    {
+     "stage": "typst-loading",
+     "t": 6564.5999999940395
+    },
+    {
+     "stage": "typst-starting",
+     "t": 6564.800000011921
+    },
+    {
+     "stage": "preparing",
+     "t": 6614.5
+    },
+    {
+     "stage": "loading",
+     "t": 6618.800000011921
+    },
+    {
+     "stage": "starting",
+     "t": 6618.800000011921
+    },
+    {
+     "stage": "mounting",
+     "t": 6624
+    },
+    {
+     "stage": "running",
+     "t": 6649.199999988079
+    },
+    {
+     "stage": "typst-loading",
+     "t": 6785.699999988079
+    },
+    {
+     "stage": "typst-starting",
+     "t": 6785.699999988079
+    },
+    {
+     "stage": "typst-compiling",
+     "t": 6826.300000011921
+    },
+    {
+     "stage": "done",
+     "t": 6852.300000011921
+    }
+   ],
+   "tPdf": 6851.5,
+   "tShown": 6946.9000000059605,
+   "phase": "done"
+  }
+ ]
+}
