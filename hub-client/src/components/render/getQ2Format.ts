@@ -1,5 +1,6 @@
 import { extractMetaString } from '@quarto/preview-renderer/framework';
 import type { ResolvePandocFormatsResponse } from '@quarto/preview-runtime';
+import { TYPST_PDF_KEY } from '../../pandoc/formatKeys';
 
 /**
  * Decide which preview branch `PreviewRouter` mounts for a document, from
@@ -59,7 +60,7 @@ export type PreviewMode =
   | { mode: 'react'; format: string }
   | { mode: 'dom' }
   | { mode: 'download'; formatKey: string }
-  | { mode: 'pdf'; formatKey: 'pdf' }
+  | { mode: 'pdf'; formatKey: typeof TYPST_PDF_KEY }
   | { mode: 'neither'; formatKey: string };
 
 export type FormatClassResolver = (path: string) => ResolvePandocFormatsResponse | null;
@@ -96,7 +97,7 @@ export function classifyPreviewMode(astJson: string, path: string | undefined, d
     case 'preview':
       return { mode: 'dom' };
     case 'download':
-      if (first.key === 'pdf' && deps.canDownload('pdf') && deps.canPreviewPdf?.()) return { mode: 'pdf', formatKey: 'pdf' };
+      if (first.key === TYPST_PDF_KEY && deps.canDownload(TYPST_PDF_KEY) && deps.canPreviewPdf?.()) return { mode: 'pdf', formatKey: TYPST_PDF_KEY };
       return deps.canDownload(first.key) ? { mode: 'download', formatKey: first.key } : { mode: 'dom' };
     case 'neither':
       return { mode: 'neither', formatKey: first.key };

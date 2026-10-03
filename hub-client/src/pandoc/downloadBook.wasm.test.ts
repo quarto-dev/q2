@@ -11,6 +11,7 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import type { ShareTree } from '@quarto/pandoc-host';
 import { bookInfoFrom } from './bookInfo';
+import { withOutputExt } from './downloadService';
 import { captureDocIdsFor } from './captureFetch';
 import { DownloadController, type BuildRequestExtra, type DownloadFormat, type RequestEnvelope } from './downloadController';
 import type { RunOutcome } from './pandocRunner';
@@ -110,6 +111,21 @@ describe('book download against the real wasm', () => {
     expect(saved[0].name).toBe('one.epub');
     const s = controller.getSnapshot();
     expect(s.phase === 'done' && s.book).toBeFalsy();
+  });
+
+  it("a book's output-ext names the whole-book typst source with that literal extension", async () => {
+    smallBook();
+    wasm.vfs_add_file(`${ROOT}/_quarto.yml`, 'project:\n  type: book\nformat:\n  typst:\n    output-ext: typst\nbook:\n  title: Small Book\n  chapters:\n    - index.qmd\n    - one.qmd\n    - two.qmd\n');
+    const resolved = JSON.parse(wasm.resolve_pandoc_formats(`${ROOT}/one.qmd`));
+    expect(resolved.formats).toEqual([{ key: 'typst', class: 'download', extension: 'typst' }]);
+    const row: DownloadFormat = { key: 'typst', label: 'Typst source (.typ)', extension: 'typ', mime: 'text/plain' };
+    const seen = { progress: [] as string[] };
+    const { controller, saved } = controllerFor(seen);
+    const book = resolveBook('one.qmd')!;
+    const captures = Object.fromEntries(book.chapters.map((c) => [c, { captureDocId: `doc-${c}`, state: 'idle' as const }]));
+    await controller.start({ path: `${ROOT}/one.qmd`, format: withOutputExt(row, resolved), scope: 'auto', captureDocIds: captureDocIdsFor(book.chapters, captures as never) });
+    expect(seen.progress).toEqual(['1/3 index.qmd', '2/3 one.qmd', '3/3 two.qmd']);
+    expect(saved[0].name).toBe('Small-Book.typst');
   });
 
   it('a page outside the book downloads alone even if asked for scope auto', async () => {

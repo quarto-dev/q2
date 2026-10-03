@@ -89,6 +89,35 @@ format:
     keep-typ: true
 ```
 
+### Producing Typst source instead of a PDF
+
+`output-ext` chooses what `format: typst` produces. The default, `pdf`,
+means "generate Typst source, then compile it". Any other value stops after
+the first step: the output is the Typst source itself, written as
+`<name>.<output-ext>` with the extension exactly as you spelled it
+(conventionally `typ`).
+
+``` {.yaml filename="document.qmd"}
+format:
+  typst:
+    output-ext: typ
+```
+
+You can set `output-ext` under `format: typst:`, at the top level of the
+document, or in the same places in `_quarto.yml`; the document wins over the
+project, and `format: typst:` wins over the top level. `keep-typ` has no
+effect when `output-ext` is not `pdf`, since the source is already the
+output.
+
+In the browser (Quarto Hub), `format: typst` previews and downloads as a
+PDF; with a non-`pdf` `output-ext` it downloads the Typst source instead.
+
+### `format: pdf` is LaTeX, not Typst
+
+To get a PDF through Typst, use `format: typst`. `format: pdf` means LaTeX
+and is not yet supported by `quarto render`; in the browser it is reported
+as unavailable, with a pointer back to `format: typst`.
+
 ## Cross-references and numbering
 
 Figures, tables, equations, and other cross-referenced elements are

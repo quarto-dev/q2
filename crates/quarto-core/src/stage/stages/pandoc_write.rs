@@ -1020,7 +1020,12 @@ impl PandocWriteStage {
         // artifact; `TypstCompileStage` (appended after this stage only
         // for typst, see `pipeline::build_pandoc_pipeline_stages`) compiles
         // this intermediate into the real PDF at `ctx.output_path()`.
-        let output_path = if is_typst {
+        //
+        // `output-ext` other than `pdf` (Q1: `useTypstPdfOutputRecipe` is
+        // false) means "stop after pandoc": the typst source *is* the
+        // deliverable, written at `ctx.output_path()` under the literal
+        // extension, and no compile stage follows.
+        let output_path = if is_typst && ctx.format.output_extension == "pdf" {
             ctx.output_path().with_extension("typ")
         } else {
             ctx.output_path()

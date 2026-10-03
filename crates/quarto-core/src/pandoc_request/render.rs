@@ -11,7 +11,7 @@ use quarto_error_reporting::{DiagnosticKind, DiagnosticMessage};
 use quarto_source_map::SourceContext;
 use quarto_system_runtime::SystemRuntime;
 
-use super::formats::pandoc_format;
+use super::formats::{TYPST_PDF_KEY, pandoc_format};
 use super::{PandocRequest, PrepareOptions, RequestPost, constants};
 use crate::error::QuartoError;
 use crate::format::Format;
@@ -132,7 +132,7 @@ pub async fn render_pandoc_request(
         hooks,
     } = input;
 
-    // D8: only the table's formats. `pdf` is the typst request plus a
+    // D8: only the table's formats. `typst-pdf` is the typst request plus a
     // `compile_typst` post step (the host compiles the `.typ`), so it is
     // built as typst.
     let Some(info) = pandoc_format(format_key) else {
@@ -145,7 +145,7 @@ pub async fn render_pandoc_request(
             "{format_key} output is not available in the browser yet"
         ));
     }
-    let compile_typst = format_key == "pdf";
+    let compile_typst = format_key == TYPST_PDF_KEY;
     let format = match Format::from_format_string(if compile_typst { "typst" } else { format_key })
     {
         Ok(f) => f,

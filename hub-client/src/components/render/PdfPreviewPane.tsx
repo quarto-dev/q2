@@ -19,6 +19,7 @@ import { pdfPreview } from '../../strings';
 import LoadingIndicator from '../Loading';
 import '../DownloadAsControl.css';
 import './PdfPreviewPane.css';
+import { TYPST_PDF_KEY } from '../../pandoc/formatKeys';
 
 /** Edits closer together than this share one compile (the pandoc step alone is 0.2-0.3 s). */
 export const PDF_PREVIEW_DEBOUNCE_MS = 500;
@@ -85,7 +86,7 @@ export default function PdfPreviewPane({
 
   useEffect(() => {
     const controller = controllerRef.current;
-    const format = formatByKey('pdf');
+    const format = formatByKey(TYPST_PDF_KEY);
     if (!controller || !format || !path) return;
     // The first compile after mount (or a retry) starts at once; later edits are debounced.
     const delay = firstRef.current ? 0 : wait;

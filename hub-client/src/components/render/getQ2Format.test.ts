@@ -79,13 +79,17 @@ describe('classifyPreviewMode (three-class classifier, D8)', () => {
     expect(classifyPreviewMode(astWithFormat('docx'), 'a.qmd', deps(resolved('docx', 'download')))).toEqual({ mode: 'download', formatKey: 'docx' });
   });
 
-  it('a pdf document is the pdf mode when the build compiles PDF in the browser, else the download mode', () => {
-    const r = deps(resolved('pdf', 'download'));
-    expect(classifyPreviewMode(astWithFormat('pdf'), 'a.qmd', { ...r, canPreviewPdf: () => true })).toEqual({ mode: 'pdf', formatKey: 'pdf' });
-    expect(classifyPreviewMode(astWithFormat('pdf'), 'a.qmd', { ...r, canPreviewPdf: () => false })).toEqual({ mode: 'download', formatKey: 'pdf' });
-    expect(classifyPreviewMode(astWithFormat('pdf'), 'a.qmd', r)).toEqual({ mode: 'download', formatKey: 'pdf' });
+  it('a document whose own format is pdf (LaTeX) is neither: the browser cannot run it', () => {
+    expect(classifyPreviewMode(astWithFormat('pdf'), 'a.qmd', { ...deps(resolved('pdf', 'neither')), canPreviewPdf: () => true })).toEqual({ mode: 'neither', formatKey: 'pdf' });
+  });
+
+  it('the resolved typst-pdf key (a typst document) is the pdf mode when the build compiles PDF in the browser, else the download mode', () => {
+    const r = deps(resolved('typst-pdf', 'download'));
+    expect(classifyPreviewMode(astWithFormat('pdf'), 'a.qmd', { ...r, canPreviewPdf: () => true })).toEqual({ mode: 'pdf', formatKey: 'typst-pdf' });
+    expect(classifyPreviewMode(astWithFormat('pdf'), 'a.qmd', { ...r, canPreviewPdf: () => false })).toEqual({ mode: 'download', formatKey: 'typst-pdf' });
+    expect(classifyPreviewMode(astWithFormat('pdf'), 'a.qmd', r)).toEqual({ mode: 'download', formatKey: 'typst-pdf' });
     // Download must be possible at all, and only pdf gets the viewer.
-    expect(classifyPreviewMode(astWithFormat('pdf'), 'a.qmd', { ...deps(resolved('pdf', 'download'), false), canPreviewPdf: () => true })).toEqual({ mode: 'dom' });
+    expect(classifyPreviewMode(astWithFormat('pdf'), 'a.qmd', { ...deps(resolved('typst-pdf', 'download'), false), canPreviewPdf: () => true })).toEqual({ mode: 'dom' });
     expect(classifyPreviewMode(astWithFormat('docx'), 'a.qmd', { ...deps(resolved('docx', 'download')), canPreviewPdf: () => true })).toEqual({ mode: 'download', formatKey: 'docx' });
   });
 

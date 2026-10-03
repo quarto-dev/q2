@@ -131,10 +131,10 @@ fn the_matrix_emits_exactly_the_flags_the_translator_lists() {
     dirs.sort();
     for case in dirs {
         let name = case.file_name().unwrap().to_string_lossy().to_string();
-        for format in ["typst", "pdf"] {
+        for format in ["typst", "typst-pdf"] {
             let (_guard, root) = scratch();
             copy_dir(&case, &root);
-            let fonts = (format == "pdf").then(|| vec!["Libertinus Serif".to_string()]);
+            let fonts = (format == "typst-pdf").then(|| vec!["Libertinus Serif".to_string()]);
             let out = render_with(&root.join("doc.qmd"), format, fonts);
             assert!(out.error.is_none(), "{name} ({format}): {:?}", out.error);
             let request = out

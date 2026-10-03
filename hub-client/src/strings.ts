@@ -133,9 +133,13 @@ export const download = {
   /** Class "neither": the control is disabled and says why. */
   neitherTitle: (format: string) => `No preview or download for ${format} documents`,
   neitherBody: (format: string) =>
-    `The browser can preview HTML and slides, and download Word, PowerPoint and EPUB. A document whose format is ${format} can't be shown or downloaded here.`,
+    format === 'pdf'
+      ? `format: pdf means LaTeX, which the browser can't run. To make a PDF here, use format: typst.`
+      : `The browser can preview HTML and slides, and download Word, PowerPoint and EPUB. A document whose format is ${format} can't be shown or downloaded here.`,
   neitherDescription: (format: string) =>
-    `Download is unavailable: documents with format ${format} can't be converted in the browser.`,
+    format === 'pdf'
+      ? `Download is unavailable: format: pdf means LaTeX. Use format: typst to make a PDF in the browser.`
+      : `Download is unavailable: documents with format ${format} can't be converted in the browser.`,
 } as const;
 
 /** SyncStatusBadge (FILES section + document bottom bar). */

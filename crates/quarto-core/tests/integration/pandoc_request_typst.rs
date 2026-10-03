@@ -300,7 +300,9 @@ fn pdf_is_the_typst_request_with_a_compile_post_step() {
     let doc = root.join("doc.qmd");
     write(&doc, b"---\ntitle: T\n---\n\n# Hi\n");
     let typst = render_with(&doc, "typst", None).request.unwrap();
-    let pdf = render_with(&doc, "pdf", None).request.expect("pdf request");
+    let pdf = render_with(&doc, "typst-pdf", None)
+        .request
+        .expect("pdf request");
     assert_eq!(pdf.post, RequestPost::CompileTypst);
     assert_eq!(pdf.writer, "typst");
     assert!(pdf.output_path.ends_with("/doc.typ"), "{}", pdf.output_path);
@@ -318,7 +320,7 @@ fn the_document_date_comes_from_source_date_epoch() {
     let (_guard, root) = scratch();
     let doc = root.join("doc.qmd");
     write(&doc, b"---\ntitle: T\n---\n\n# Hi\n");
-    let pdf = render_with(&doc, "pdf", None).request.unwrap();
+    let pdf = render_with(&doc, "typst-pdf", None).request.unwrap();
     assert_eq!(pdf.env["SOURCE_DATE_EPOCH"], "1700000000");
 }
 
@@ -341,7 +343,7 @@ fn images_and_brand_assets_are_mounted_for_pdf_only() {
     assert!(typst.error.is_none(), "{:?}", typst.error);
     assert!(typst.request.unwrap().resource_refs.is_empty());
 
-    let pdf = render_with(&doc, "pdf", None);
+    let pdf = render_with(&doc, "typst-pdf", None);
     assert!(pdf.error.is_none(), "{:?}", pdf.error);
     let mounted: Vec<String> = pdf
         .request

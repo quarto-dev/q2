@@ -33,6 +33,7 @@ import { splitTypstAssets } from './typst/typstAssetSplit';
 import { TypstRunner, typstUiStateFor } from './typst/typstRunner';
 import { createTypstBrowserWorker } from './typst/typstService';
 import { cacheApiTarballs } from './typst/typstPackageCache';
+import { TYPST_PDF_KEY } from './pandoc/formatKeys';
 
 const toHex = (b: ArrayBuffer): string => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, '0')).join('');
 
@@ -267,7 +268,7 @@ export const pandoc = {
       document.body.appendChild(host);
     }
     const viewer = mountPdfViewer(host);
-    const format = formatByKey('pdf');
+    const format = formatByKey(TYPST_PDF_KEY);
     if (!format) throw new Error('no pdf format');
     let tPdf = 0;
     let tShown = 0;

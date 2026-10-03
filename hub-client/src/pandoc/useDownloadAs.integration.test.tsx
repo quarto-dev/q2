@@ -14,13 +14,14 @@ const h = vi.hoisted(() => ({
   idle: { phase: 'idle' as const },
 }));
 
-vi.mock('@quarto/preview-runtime', () => ({ isWasmReady: () => true }));
+vi.mock('@quarto/preview-runtime', () => ({ isWasmReady: () => true, resolvePandocFormats: () => null }));
 vi.mock('./bookInfo', () => ({ bookInfoFor: h.bookInfoFor }));
 vi.mock('./featureFlag', () => ({ isPreviewEmbed: () => h.embed }));
 vi.mock('./downloadService', () => ({
   getDownloadController: () => ({ subscribe: () => () => {}, getSnapshot: () => h.idle, dismiss: () => {}, cancel: () => {}, start: h.start }),
   menuFormats: () => [],
   downloadAvailable: () => true,
+  withOutputExt: (format: unknown) => format,
 }));
 
 import { useDownloadAs } from './useDownloadAs';

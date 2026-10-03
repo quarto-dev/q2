@@ -195,7 +195,7 @@ describe('whole-book request (R9)', () => {
 
   it('is one request containing every chapter, for typst, pdf and epub', async () => {
     smallBook();
-    for (const format of ['typst', 'pdf', 'epub']) {
+    for (const format of ['typst', 'typst-pdf', 'epub']) {
       const out = await render('one.qmd', format);
       expect(out.error, format).toBeUndefined();
       expect(out.stats.book, format).toEqual({ scope: 'book', chapters: 3 });
@@ -292,7 +292,7 @@ describe('whole-book request (R9)', () => {
 
   it('mounts each chapter-relative image under its own directory for pdf and epub, with no Q-11-1', async () => {
     parityBook();
-    for (const format of ['pdf', 'epub']) {
+    for (const format of ['typst-pdf', 'epub']) {
       const out = await render('one.qmd', format);
       expect(out.error, format).toBeUndefined();
       expect(out.diagnostics.map((d) => d.code), format).not.toContain('Q-11-1');
@@ -311,7 +311,7 @@ describe('whole-book request (R9)', () => {
     add('refs.bib', REFS_BIB);
     add('index.qmd', '# Preface\n\nHello\n');
     add('one.qmd', '# One\n\nKnuth wrote it [@knuth1984].\n');
-    const pdf = await render('one.qmd', 'pdf');
+    const pdf = await render('one.qmd', 'typst-pdf');
     expect(pdf.error).toBeUndefined();
     expect(pdf.request!.resource_refs.map((f) => f.path)).toContain(`${ROOT}/refs.bib`);
     const typst = await render('one.qmd', 'typst');
@@ -354,7 +354,7 @@ describe('captures per chapter (R9 D-6)', () => {
       '```{r}\nTHREE_SRC\n```',
       '::: {.cell}\n::: {.cell-output-display}\n![](doc_files/fig.png)\n:::\n:::',
     );
-    const out = await render('one.qmd', 'pdf', { capturesByPath: { 'sub/three.qmd': gz([cap]) } });
+    const out = await render('one.qmd', 'typst-pdf', { capturesByPath: { 'sub/three.qmd': gz([cap]) } });
     expect(out.error).toBeUndefined();
     const refs = out.request!.resource_refs.map((f) => f.path);
     expect(refs).toContain(`${ROOT}/sub/doc_files/fig.png`);

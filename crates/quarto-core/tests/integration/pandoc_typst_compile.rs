@@ -266,3 +266,94 @@ fn render_document_to_file_typst_crossref_document_compiles_to_pdf() {
         &bytes[..bytes.len().min(20)]
     );
 }
+
+/// Render `---\ntitle: T\n<front>---` as typst and return the output path.
+fn render_typst_with_frontmatter(project_dir: &std::path::Path, front: &str) -> std::path::PathBuf {
+    let input_path = project_dir.join("f.qmd");
+    write(
+        &input_path,
+        &format!("---\ntitle: Ext\n{front}---\n\n# Heading\n\nBody text.\n"),
+    );
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    render_document_to_file(
+        &input_path,
+        "typst",
+        &RenderToFileOptions::default(),
+        None,
+        runtime,
+        None,
+        None,
+        None,
+    )
+    .expect("typst render should succeed")
+    .output_path
+}
+
+/// `output-ext: pdf` is the explicit spelling of the default: compile.
+#[test]
+fn output_ext_pdf_compiles_like_the_default() {
+    let temp = TempDir::new().unwrap();
+    let dir = temp.path().canonicalize().unwrap();
+    let out = render_typst_with_frontmatter(&dir, "output-ext: pdf\n");
+    assert_eq!(out.extension().and_then(|e| e.to_str()), Some("pdf"));
+    assert!(std::fs::read(&out).unwrap().starts_with(b"%PDF-"));
+}
+
+/// Q1: any non-`pdf` `output-ext` stops after pandoc; the file is the typst
+/// source under that literal extension, and nothing is compiled.
+#[test]
+fn output_ext_other_than_pdf_writes_typst_source_literally() {
+    for ext in ["typ", "foo"] {
+        let temp = TempDir::new().unwrap();
+        let dir = temp.path().canonicalize().unwrap();
+        let out = render_typst_with_frontmatter(&dir, &format!("output-ext: {ext}\n"));
+        assert_eq!(out.extension().and_then(|e| e.to_str()), Some(ext));
+        assert_eq!(out.file_stem().and_then(|s| s.to_str()), Some("f"));
+        let text = std::fs::read_to_string(&out).unwrap();
+        assert!(
+            !text.starts_with("%PDF-"),
+            "{ext}: expected typst source, got a PDF"
+        );
+        assert!(
+            text.contains("Body text."),
+            "{ext}: expected typst source containing the body, got: {text}"
+        );
+        assert!(
+            !dir.join("f.pdf").exists(),
+            "{ext}: nothing should have been compiled"
+        );
+        if ext == "foo" {
+            assert!(
+                !dir.join("f.typ").exists(),
+                "foo: the source is written at f.foo, not f.typ"
+            );
+        }
+    }
+}
+
+/// `output-ext` under `format.typst` is honoured, not just the top level.
+#[test]
+fn output_ext_under_format_typst_is_honoured() {
+    let temp = TempDir::new().unwrap();
+    let dir = temp.path().canonicalize().unwrap();
+    let out = render_typst_with_frontmatter(&dir, "format:\n  typst:\n    output-ext: typ\n");
+    assert_eq!(out.extension().and_then(|e| e.to_str()), Some("typ"));
+    assert!(!std::fs::read_to_string(&out).unwrap().starts_with("%PDF-"));
+}
+
+/// The project layer (`_quarto.yml`) supplies `output-ext` when the document
+/// names none, and the document's own value still wins.
+#[test]
+fn output_ext_from_project_config_applies_and_document_overrides() {
+    let temp = TempDir::new().unwrap();
+    let dir = temp.path().canonicalize().unwrap();
+    write(
+        &dir.join("_quarto.yml"),
+        "project:\n  type: default\nformat:\n  typst:\n    output-ext: typ\n",
+    );
+    let out = render_typst_with_frontmatter(&dir, "");
+    assert_eq!(out.extension().and_then(|e| e.to_str()), Some("typ"));
+
+    let out = render_typst_with_frontmatter(&dir, "output-ext: foo\n");
+    assert_eq!(out.extension().and_then(|e| e.to_str()), Some("foo"));
+}

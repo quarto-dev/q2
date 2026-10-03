@@ -23,7 +23,7 @@ function setup(props: Partial<React.ComponentProps<typeof DownloadAsControl>> = 
 
 const mk = (key: string, label: string, extension: string): DownloadFormat => ({ key, label, extension, mime: 'x/y' });
 const EPUB = mk('epub', 'EPUB (.epub)', 'epub');
-const PDF2 = mk('pdf', 'PDF (.pdf)', 'pdf');
+const PDF2 = mk('typst-pdf', 'PDF (.pdf)', 'pdf');
 const TYPST2 = mk('typst', 'Typst source (.typ)', 'typ');
 const PPTX = mk('pptx', 'PowerPoint (.pptx)', 'pptx');
 
@@ -117,14 +117,14 @@ describe('DownloadAsControl', () => {
   });
 
   it('with PDF in the menu, the hint states the larger first-use total', () => {
-    const PDF: DownloadFormat = { key: 'pdf', label: 'PDF', extension: 'pdf', mime: 'application/pdf' };
+    const PDF: DownloadFormat = { key: 'typst-pdf', label: 'PDF', extension: 'pdf', mime: 'application/pdf' };
     setup({ formats: [DOCX, PDF] });
     fireEvent.click(screen.getByRole('button', { name: 'Download as' }));
     expect(screen.getByText(/about 33 MB in all/)).toBeTruthy();
   });
 
   it('shows the typst stages of a PDF download and a typst diagnostic with its location', () => {
-    const PDF: DownloadFormat = { key: 'pdf', label: 'PDF', extension: 'pdf', mime: 'application/pdf' };
+    const PDF: DownloadFormat = { key: 'typst-pdf', label: 'PDF', extension: 'pdf', mime: 'application/pdf' };
     setup({ formats: [PDF], status: { phase: 'working', clickId: 1, format: PDF, stage: 'typst-compiling' } });
     expect(screen.getByRole('status', { name: 'Download status' }).textContent).toBe(download.compilingPdf);
     cleanup();

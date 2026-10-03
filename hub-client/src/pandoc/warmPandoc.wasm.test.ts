@@ -241,7 +241,7 @@ describe.skipIf(!ready)('WarmPandoc', () => {
     for (const d of recordedDocs().filter((d) => d.format === 'typst')) corpus.push({ name: d.name, request: await build(d.files, d.qmd) });
     for (const d of matrixDocs()) {
       corpus.push({ name: `${d.name} (typst)`, request: await build(d.files, 'doc.qmd') });
-      corpus.push({ name: `${d.name} (pdf)`, request: await build(d.files, 'doc.qmd', 'pdf', ['Libertinus Serif']) });
+      corpus.push({ name: `${d.name} (pdf)`, request: await build(d.files, 'doc.qmd', 'typst-pdf', ['Libertinus Serif']) });
     }
     corpus.push({ name: 'warning: unconvertible TeX', request: await build(qmd('$$\\unknowncmd{x}$$'), 'd.qmd') });
     corpus.push({ name: 'warning: missing image', request: await build(qmd('![alt](missing.png)'), 'd.qmd') });

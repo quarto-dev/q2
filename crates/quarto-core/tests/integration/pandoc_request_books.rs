@@ -452,7 +452,7 @@ fn small_book(root: &Path) {
 fn auto_scope_on_a_chapter_is_the_whole_book_and_reports_it() {
     let (_g, root) = scratch();
     small_book(&root);
-    for format in ["typst", "pdf", "epub"] {
+    for format in ["typst", "typst-pdf", "epub"] {
         let out = render(&root.join("one.qmd"), format, BookScope::Auto);
         let book = out.book.as_ref().expect("book info");
         assert_eq!(book.scope, ResolvedBookScope::Book, "{format}");
@@ -532,7 +532,7 @@ fn a_page_in_the_project_but_not_in_the_book_renders_alone() {
     let (_g, root) = scratch();
     small_book(&root);
     write(&root, "notes.qmd", b"# Notes\n\nA page outside the book.\n");
-    for format in ["typst", "pdf", "epub", "docx"] {
+    for format in ["typst", "typst-pdf", "epub", "docx"] {
         let out = render(&root.join("notes.qmd"), format, BookScope::Auto);
         let book = out.book.as_ref().map(|b| (b.scope, b.chapters));
         assert_eq!(book, Some((ResolvedBookScope::Chapter, 3)), "{format}");
@@ -963,7 +963,7 @@ fn a_captured_figure_in_a_subdirectory_chapter_mounts_under_its_own_directory() 
     };
     let out = render_with_captures(
         &root.join("one.qmd"),
-        "pdf",
+        "typst-pdf",
         BookScope::Auto,
         &[("sub/three.qmd", gz(&[cap]))],
         Vec::new(),
@@ -1138,7 +1138,7 @@ fn a_path_key_that_is_not_a_chapter_is_ignored_and_a_corrupt_one_degrades_that_c
 fn pdf_request_mounts_each_chapters_images_under_its_own_directory() {
     let (_g, root) = scratch();
     parity_book(&root);
-    let out = render(&root.join("one.qmd"), "pdf", BookScope::Auto);
+    let out = render(&root.join("one.qmd"), "typst-pdf", BookScope::Auto);
     assert!(
         out.diagnostics
             .iter()
