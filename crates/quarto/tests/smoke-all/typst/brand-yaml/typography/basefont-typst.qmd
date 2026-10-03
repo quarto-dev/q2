@@ -6,13 +6,13 @@ format:
 brand:
   typography:
     base:
-      family: Comic Sans MS
+      family: Libertinus Serif
 _quarto:
   tests:
     typst:
       ensureTypstFileRegexMatches:
       -
-        - 'heading-family: \("Comic Sans MS",\)'
+        - 'heading-family: \("Libertinus Serif",\)'
 ---
 
 Some text.
