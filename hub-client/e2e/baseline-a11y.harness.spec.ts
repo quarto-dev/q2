@@ -72,6 +72,7 @@ const SCAN_PAGES: { page: string; label: string; selector: string }[] = [
   { page: 'download-as-done', label: 'download-as-done', selector: '.top-bars' },
   { page: 'download-as-failed', label: 'download-as-failed', selector: '.top-bars' },
   { page: 'download-as-disabled', label: 'download-as-disabled', selector: '.top-bars' },
+  { page: 'download-as-book-progress', label: 'download-as-book-progress', selector: '.top-bars' },
 ];
 
 /** key → { ruleId: nodeCount } */

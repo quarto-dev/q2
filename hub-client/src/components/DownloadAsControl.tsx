@@ -7,21 +7,26 @@
  * `Menu` (APG menu-button pattern); a disabled button is `aria-disabled` and described by
  * text (not a tooltip only); progress and errors reach a live region.
  */
-import { useId, useRef, useState } from 'react';
+import { Fragment, useId, useRef, useState } from 'react';
 import { Menu, MenuItem, MenuLabel } from './Menu';
 import { DownloadIcon } from './icons';
 import Tooltip from './Tooltip';
 import { download } from '../strings';
 import './DownloadAsControl.css';
 import type { Diagnostic, DownloadFormat, DownloadStatus } from '../pandoc/downloadController';
-import { liveText, workingText } from '../pandoc/downloadText';
+import { doneText, liveText, workingText } from '../pandoc/downloadText';
 
 export interface DownloadAsControlProps {
   formats: DownloadFormat[];
   status: DownloadStatus;
   /** When set, the button is disabled and this text explains why. */
   disabledReason?: string;
-  onSelect: (format: DownloadFormat) => void;
+  /** A book chapter's entries pass the scope (`'auto'` the whole book, `'chapter'` this chapter); the others pass the format alone. */
+  onSelect: (format: DownloadFormat, scope?: 'auto' | 'chapter') => void;
+  /** The resolver's book field for the open document; `chapter: true` offers the book entries. */
+  book?: { chapter: boolean } | null;
+  /** Called when the menu opens, so the host can refresh `book` (the project's chapter list may have changed). */
+  onOpen?: () => void;
   onCancel: () => void;
   onDismiss: () => void;
 }
@@ -51,7 +56,10 @@ export function DiagnosticList({ diagnostics }: { diagnostics: Diagnostic[] }) {
   );
 }
 
-export default function DownloadAsControl({ formats, status, disabledReason, onSelect, onCancel, onDismiss }: DownloadAsControlProps) {
+/** Formats that are a whole book when the document is a chapter; docx and pptx always download the active chapter. */
+const BOOK_FORMATS: readonly string[] = ['typst', 'pdf', 'epub'];
+
+export default function DownloadAsControl({ formats, status, disabledReason, onSelect, book, onOpen, onCancel, onDismiss }: DownloadAsControlProps) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const descId = useId();
@@ -70,7 +78,9 @@ export default function DownloadAsControl({ formats, status, disabledReason, onS
       aria-disabled={disabled || undefined}
       aria-describedby={disabled && disabledReason ? descId : status.phase !== 'idle' ? panelId : undefined}
       onClick={() => {
-        if (!disabled) setOpen((v) => !v);
+        if (disabled) return;
+        if (!open) onOpen?.();
+        setOpen((v) => !v);
       }}
     >
       {busy ? <span aria-hidden="true">…</span> : <DownloadIcon />}
@@ -88,11 +98,20 @@ export default function DownloadAsControl({ formats, status, disabledReason, onS
       {open && !disabled && (
         <Menu onClose={() => setOpen(false)} triggerRef={triggerRef} aria-label={download.menuLabel} className="qh-menu-right">
           <MenuLabel>{download.menuLabel.toUpperCase()}</MenuLabel>
-          {formats.map((f) => (
-            <MenuItem key={f.key} onSelect={() => onSelect(f)}>
-              {f.label}
-            </MenuItem>
-          ))}
+          {formats.map((f) =>
+            book?.chapter && BOOK_FORMATS.includes(f.key) ? (
+              <Fragment key={f.key}>
+                <MenuItem onSelect={() => onSelect(f, 'auto')}>{download.downloadBookAs(f.label)}</MenuItem>
+                <MenuItem subtext={f.label} onSelect={() => onSelect(f, 'chapter')}>
+                  {download.thisChapterOnly}
+                </MenuItem>
+              </Fragment>
+            ) : (
+              <MenuItem key={f.key} onSelect={() => onSelect(f)}>
+                {f.label}
+              </MenuItem>
+            ),
+          )}
           <MenuLabel>{formats.some((f) => f.key === 'pdf') ? download.sizeHintPdf : download.sizeHint}</MenuLabel>
         </Menu>
       )}
@@ -119,7 +138,8 @@ export default function DownloadAsControl({ formats, status, disabledReason, onS
           )}
           {status.phase === 'done' && (
             <>
-              <div className="download-status-text">{download.done(status.fileName)}</div>
+              <div className="download-status-text">{doneText(status)}</div>
+              {status.book && <div className="download-note">{download.done(status.fileName)}</div>}
               {status.unexecutedCells > 0 && <div className="download-note">{download.unexecutedCells(status.unexecutedCells)}</div>}
               {status.format.key === 'typst' && <div className="download-note">{download.typstDangling}</div>}
               {status.notices.map((n, i) => (

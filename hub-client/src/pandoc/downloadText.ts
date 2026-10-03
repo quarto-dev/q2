@@ -7,9 +7,15 @@ const mb = (bytes: number) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 
 /** Text for the visible panel; includes byte counts. */
 export function workingText(status: Extract<DownloadStatus, { phase: 'working' }>): string {
-  const { stage, load, format } = status;
+  const { stage, load, format, chapter } = status;
   if ((stage === 'loading' || stage === 'typst-loading') && load) return loadText(load);
+  if (stage === 'chapter' && chapter) return download.renderingChapter(chapter.index, chapter.total, chapter.file);
   return stageText(stage, format.label);
+}
+
+/** The finished download's headline: a whole book says so and how many chapters, others name the file. */
+export function doneText(status: Extract<DownloadStatus, { phase: 'done' }>): string {
+  return status.book ? download.bookDone(status.book.chapters) : download.done(status.fileName);
 }
 
 export function loadText(load: LoadProgress, withBytes = true): string {
@@ -28,6 +34,7 @@ export function loadText(load: LoadProgress, withBytes = true): string {
 function stageText(stage: string, label: string): string {
   switch (stage) {
     case 'preparing':
+    case 'chapter':
       return download.preparing;
     case 'loading':
       return download.startingConverter;
@@ -53,9 +60,10 @@ export function liveText(status: DownloadStatus): string {
     case 'idle':
       return '';
     case 'working':
+      if (status.stage === 'chapter' && status.chapter) return workingText(status);
       return (status.stage === 'loading' || status.stage === 'typst-loading') && status.load ? loadText(status.load, false) : stageText(status.stage, status.format.label);
     case 'done':
-      return download.done(status.fileName);
+      return doneText(status);
     case 'cancelled':
       return download.cancelled;
     case 'failed':

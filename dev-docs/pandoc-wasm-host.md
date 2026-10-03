@@ -124,8 +124,9 @@ is native q2's output, not Q1's (`pandoc-goldens/DIVERGENCES.md`).
 | File | Role |
 |---|---|
 | `downloadController.ts` | The state machine: click id (a stale `render_pandoc_request` or runner response is dropped), cancel, throttled progress, classification of the run through `classifyPandocCompletion`. A document with an error diagnostic or a failed run produces no Blob. Two executors: pandoc.wasm, or `renderNatively` in the `q2 preview` embed. |
-| `downloadService.ts` | The singleton controller and `menuFormats()`. `MENU_FORMATS` is the list of entries the UI has been reviewed for (docx now); each request phase that lands adds its entry in its own commit. |
+| `downloadService.ts` | The singleton controller and `menuFormats()`. `MENU_FORMATS` is the list of entries the UI has been reviewed for (every row of the Rust table: docx, pptx, epub, typst, pdf). |
 | `downloadName.ts` | `<doc-stem>.<ext>` with directory parts, control and bidi characters, Windows-reserved characters and device names removed. |
+| `bookInfo.ts`, `captureFetch.ts` | A book chapter's menu: the resolver's `book` field (`{ chapter, chapters }`) and the per-chapter capture fetch for a whole-book download (abort-aware: `getBinaryDocById` takes no signal, so a cancel stops waiting and drops the late bytes). |
 | `useDownloadAs.ts` | The React binding; status lives outside the editor's diagnostics array (which every live-preview render replaces). |
 
 `PreviewRouter` has four modes (`PreviewMode` in `components/render/getQ2Format.ts`): `react`,
@@ -133,6 +134,19 @@ is native q2's output, not Q1's (`pandoc-goldens/DIVERGENCES.md`).
 <type>" button, rendering only on click) and `neither` (nothing is mounted; the control is
 `aria-disabled` and described by the explanation). The class comes from the Rust resolver
 (`resolvePandocFormats`), which reads the document from the VFS.
+
+### Books (R9)
+
+For a document with `book.chapter === true` (the resolver's `book` field), typst, pdf and epub show
+**"Download book as <format>"** (`scope: 'auto'`: the whole book, every chapter's capture fetched at click
+time and passed as `capturesByPath`) and **"This chapter only"** (`scope: 'chapter'`); docx and pptx keep one
+entry, which downloads the active chapter. A page outside the book, and the native `q2 preview` embed, get
+the ordinary entries. The status reads "Rendering chapter i of N: <file>" (from `onProgress`) and "Book
+downloaded (N chapters)"; a whole-book file is named after the book (`basename(request.output_path)`), not the
+chapter that was open. The scope is per click: `wasmDeps(scope)` supplies the default (`'chapter'`) and
+`buildRequest`'s sixth argument overrides it, so only the "Download book as" entry asks for the book. The
+PDF preview pane stays chapter-alone for good. A downloadable own format on a chapter (the click-only
+"Download <type>" button) also stays chapter-alone.
 
 ### What filters and extensions can do in the browser (D9)
 

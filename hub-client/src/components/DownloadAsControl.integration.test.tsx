@@ -21,6 +21,72 @@ function setup(props: Partial<React.ComponentProps<typeof DownloadAsControl>> = 
   return { ...handlers, ...view };
 }
 
+const mk = (key: string, label: string, extension: string): DownloadFormat => ({ key, label, extension, mime: 'x/y' });
+const EPUB = mk('epub', 'EPUB (.epub)', 'epub');
+const PDF2 = mk('pdf', 'PDF (.pdf)', 'pdf');
+const TYPST2 = mk('typst', 'Typst source (.typ)', 'typ');
+const PPTX = mk('pptx', 'PowerPoint (.pptx)', 'pptx');
+
+describe('DownloadAsControl: book chapters (R9)', () => {
+  const open = () => fireEvent.click(screen.getByRole('button', { name: 'Download as' }));
+  const items = () => screen.getAllByRole('menuitem').map((i) => i.textContent);
+
+  it('a chapter gets "Download book as" plus "This chapter only" for typst, pdf and epub; docx and pptx keep one entry', () => {
+    setup({ formats: [DOCX, PPTX, EPUB, TYPST2, PDF2], book: { chapter: true } });
+    open();
+    expect(items()).toEqual([
+      'Word',
+      'PowerPoint (.pptx)',
+      'Download book as EPUB (.epub)',
+      'This chapter onlyEPUB (.epub)',
+      'Download book as Typst source (.typ)',
+      'This chapter onlyTypst source (.typ)',
+      'Download book as PDF (.pdf)',
+      'This chapter onlyPDF (.pdf)',
+    ]);
+  });
+
+  it('selecting passes the scope: auto for the book, chapter for this chapter only; ordinary entries pass the format alone', () => {
+    const { onSelect } = setup({ formats: [DOCX, EPUB], book: { chapter: true } });
+    open();
+    fireEvent.click(screen.getByRole('menuitem', { name: /Download book as EPUB/ }));
+    expect(onSelect).toHaveBeenLastCalledWith(EPUB, 'auto');
+    open();
+    fireEvent.click(screen.getByRole('menuitem', { name: /This chapter only/ }));
+    expect(onSelect).toHaveBeenLastCalledWith(EPUB, 'chapter');
+    open();
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Word' }));
+    expect(onSelect).toHaveBeenLastCalledWith(DOCX);
+  });
+
+  it('a page that is not a chapter, and a document outside a book, get the ordinary entries with no mention of the book', () => {
+    for (const book of [{ chapter: false }, null, undefined]) {
+      setup({ formats: [DOCX, EPUB], book });
+      open();
+      expect(items()).toEqual(['Word', 'EPUB (.epub)']);
+      expect(screen.queryByText(/book|chapter/i)).toBeNull();
+      cleanup();
+    }
+  });
+
+  it('opening the menu asks the host to refresh the book information', () => {
+    const onOpen = vi.fn();
+    setup({ book: { chapter: true }, onOpen });
+    open();
+    expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows "Rendering chapter i of N: file" in the panel and the live region, and the book summary when done', () => {
+    setup({ formats: [EPUB], status: { phase: 'working', clickId: 1, format: EPUB, stage: 'chapter', chapter: { index: 2, total: 5, file: 'sub/two.qmd' } } });
+    expect(screen.getByTestId('download-status').textContent).toContain('Rendering chapter 2 of 5: sub/two.qmd');
+    expect(screen.getByRole('status', { name: 'Download status' }).textContent).toBe('Rendering chapter 2 of 5: sub/two.qmd');
+    cleanup();
+    setup({ formats: [EPUB], status: { phase: 'done', clickId: 1, format: EPUB, fileName: 'B.epub', warnings: [], notices: [], unexecutedCells: 0, book: { chapters: 5 } } });
+    expect(screen.getByRole('status', { name: 'Download status' }).textContent).toBe('Book downloaded (5 chapters)');
+    expect(screen.getByTestId('download-status').textContent).toContain('Book downloaded (5 chapters)');
+  });
+});
+
 describe('DownloadAsControl', () => {
   it('opens a menu of the formats and selects one', () => {
     const { onSelect } = setup();
@@ -127,6 +193,16 @@ describe('DownloadAsControl', () => {
     expect(screen.getByText(/missing figure.png/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
     expect(onDismiss).toHaveBeenCalled();
+  });
+
+  it('a finished typst download notes that the .typ may have dangling resource references; other formats do not', () => {
+    const TYPST: DownloadFormat = { key: 'typst', label: 'Typst source', extension: 'typ', mime: 'text/plain' };
+    const done = (format: DownloadFormat): DownloadStatus => ({ phase: 'done', clickId: 1, format, fileName: `doc.${format.extension}`, notices: [], unexecutedCells: 0, warnings: [] });
+    setup({ formats: [DOCX, TYPST], status: done(TYPST) });
+    expect(screen.getByText(download.typstDangling)).toBeTruthy();
+    cleanup();
+    setup({ status: done(DOCX) });
+    expect(screen.queryByText(download.typstDangling)).toBeNull();
   });
 
   it('a failure shows the plain-language state and the diagnostics, and announces it', () => {

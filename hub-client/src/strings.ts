@@ -88,6 +88,16 @@ export const download = {
   mounting: 'Preparing files…',
   converting: (label: string) => `Converting to ${label}…`,
   renderingNatively: (label: string) => `Rendering ${label}…`,
+  /** A whole-book render, before each chapter (`index` is 1-based). */
+  renderingChapter: (index: number, total: number, file: string) => `Rendering chapter ${index} of ${total}: ${file}`,
+  bookDone: (chapters: number) => (chapters === 1 ? 'Book downloaded (1 chapter)' : `Book downloaded (${chapters} chapters)`),
+  /** Menu entries for a document that is a chapter of a book project (typst, pdf and epub). */
+  downloadBookAs: (label: string) => `Download book as ${label}`,
+  thisChapterOnly: 'This chapter only',
+  captureFetchFailed: (n: number) =>
+    n === 1
+      ? 'The executed output of 1 chapter could not be fetched, so that chapter has its code cells as source.'
+      : `The executed output of ${n} chapters could not be fetched, so those chapters have their code cells as source.`,
   cancelled: 'Download cancelled.',
   done: (fileName: string) => `Downloaded ${fileName}.`,
   warnings: (n: number) => (n === 1 ? '1 warning' : `${n} warnings`),
