@@ -102,6 +102,11 @@ export interface TypstChainDeps {
     run(job: TypstJob, options?: TypstRunOptions): Promise<TypstRunOutcome>;
     listFonts(fonts?: Uint8Array[], options?: TypstRunOptions): Promise<FontListOutcome | TypstRunFailure>;
   };
+  /**
+   * The family names for the pandoc request. Absent: the controller asks `runner.listFonts` with the assets' fonts.
+   * The preview supplies a memoized one (`createFontMemo`), so overlapping runs do not queue a typst job each.
+   */
+  fontFamilies?: (options: TypstRunOptions) => Promise<FontListOutcome | TypstRunFailure>;
   /** The vendored packages and Font Awesome fonts (`get_typst_assets()`, split). */
   assets: () => { vendoredPackages: TypstFile[]; fonts: Uint8Array[] };
   /** First line of the `.typ`: pins the document date (`typst_date_prelude`). */
@@ -147,9 +152,19 @@ export interface DownloadDeps {
   native?: (request: NativeRenderRequest, opts: { signal: AbortSignal }) => Promise<NativeRenderOutcome>;
   save: (blob: Blob, fileName: string) => void;
   /** Called with each compiled PDF's bytes (after `save`) so a viewer can show them (H9). */
-  onPdf?: (pdf: Uint8Array, info: { path: string; fileName: string }) => void;
+  onPdf?: (pdf: Uint8Array, info: PdfInfo) => void;
   nowMs?: () => number;
   nowSeconds?: () => number;
+  /**
+   * Overlapping runs (the warm PDF preview, H10b): a new `start()` does not abort older runs of the same
+   * document, and each run's result is applied or dropped by the rules in `applySuccess` and `failRun`.
+   * Without it every guard is the single-run one ("Download as").
+   */
+  overlap?: boolean;
+  /** A test seam (the E2E harness hooks): called when a run starts, when its PDF is shown and when it ends. Never set in production. */
+  trace?: (event: TraceEvent) => void;
+  /** The warm pool's lifetime (the preview's warm runner): the pane `acquire()`s it at mount and `release()`s it at unmount. */
+  pool?: { acquire(): void; release(): void };
 }
 
 export interface StartOptions {
@@ -164,6 +179,29 @@ export interface StartOptions {
   scope?: 'auto' | 'chapter';
   /** For a whole-book click: chapter path (sidecar key) to capture doc id, for every chapter that has a capture. */
   captureDocIds?: Record<string, string>;
+  /**
+   * Which project the path belongs to (the preview passes `project.id`): two projects can share a path such as
+   * `index.qmd`, and the pane stays mounted when the project changes. Download does not pass it.
+   */
+  projectKey?: string;
+}
+
+/** What `onPdf` is told about a compiled PDF; `seq` is the run's number (the preview shows no frame older than one already shown). */
+export interface PdfInfo {
+  path: string;
+  fileName: string;
+  seq: number;
+}
+
+/** What `DownloadDeps.trace` receives; `live` counts the runs in flight including the new one. */
+export type TraceEvent = { type: 'start'; seq: number; live: number } | { type: 'shown'; seq: number } | { type: 'end'; seq: number };
+
+/** One live run in overlap mode. */
+interface Run {
+  seq: number;
+  path: string;
+  projectKey: string | undefined;
+  abort: AbortController;
 }
 
 /** Progress events closer together than this are folded (phase changes always pass). */
@@ -187,6 +225,14 @@ export class DownloadController {
   private readonly listeners = new Set<() => void>();
   private clickId = 0;
   private abort: AbortController | undefined;
+  /** Overlap mode: the runs still live, the highest `seq` started, and the watermark (the highest `seq` whose result was shown). */
+  private readonly runs = new Set<Run>();
+  private latestStarted = 0;
+  private latestRun: Run | undefined;
+  /** The watermark: the highest `seq` whose success or failure was shown. */
+  private lastSettled = 0;
+  /** The highest `seq` that has submitted its typst compile (the stage gate). */
+  private compileSubmitted = 0;
 
   private readonly deps: DownloadDeps;
 
@@ -211,8 +257,15 @@ export class DownloadController {
     if (this.status.phase !== 'working') this.set({ phase: 'idle' });
   }
 
-  /** The user's cancel: abort the live render. */
+  /**
+   * The user's cancel: abort the live render. In overlap mode every live run is aborted (detached), whatever the
+   * status; when no run is `working` the status is left as it is.
+   */
   cancel(): void {
+    if (this.deps.overlap === true) {
+      for (const r of this.runs) r.abort.abort(new Error('cancelled'));
+      this.runs.clear();
+    }
     const s = this.status;
     if (s.phase !== 'working') return;
     this.abort?.abort(new Error('cancelled'));
@@ -220,28 +273,64 @@ export class DownloadController {
     this.set({ phase: 'cancelled', clickId: s.clickId, format: s.format });
   }
 
-  /** Render on click. A click while one is live supersedes it. */
+  /** Take the warm pool (a refcount: the pane calls this at mount). A no-op without a pool. */
+  acquire(): void {
+    this.deps.pool?.acquire();
+  }
+
+  /** Give the pool back (the pane, at unmount); its workers linger for a while, then go. */
+  release(): void {
+    this.deps.pool?.release();
+  }
+
+  /** Render on click. A click while one is live supersedes it (in overlap mode: the older run keeps going). */
   async start(options: StartOptions): Promise<void> {
-    this.abort?.abort(new Error('superseded'));
+    const overlap = this.deps.overlap === true;
     const own = new AbortController();
-    this.abort = own;
     const id = ++this.clickId;
+    const run: Run = { seq: id, path: options.path, projectKey: options.projectKey, abort: own };
+    if (overlap) {
+      // A file switch or a project change invalidates the work in flight: those runs are detached, never applied.
+      for (const r of this.runs) {
+        if (r.path !== run.path || r.projectKey !== run.projectKey) {
+          r.abort.abort(new Error('superseded'));
+          this.runs.delete(r);
+        }
+      }
+      this.runs.add(run);
+      this.latestStarted = id;
+      this.latestRun = run;
+    } else {
+      this.abort?.abort(new Error('superseded'));
+      this.abort = own;
+    }
+    this.deps.trace?.({ type: 'start', seq: id, live: overlap ? this.runs.size : 1 });
     const { format } = options;
-    const current = () => id === this.clickId && !own.signal.aborted;
+    const current = overlap ? () => !own.signal.aborted : () => id === this.clickId && !own.signal.aborted;
     const fail = (state: FailureState, diagnostics: Diagnostic[], notices: string[] = [], message?: string) => {
-      if (current()) this.set({ phase: 'failed', clickId: id, format, state, diagnostics, notices, message });
+      if (!current()) return;
+      if (overlap) {
+        // A failure is shown only by the newest started run: an older one is dropped silently, whether a newer
+        // run is pending or has already shown a result. Showing it advances the watermark, so an older success
+        // that finishes later is dropped and the banner stays.
+        if (id !== this.latestStarted || id <= this.lastSettled) return;
+        this.lastSettled = id;
+      }
+      this.set({ phase: 'failed', clickId: id, format, state, diagnostics, notices, message });
     };
 
     this.set({ phase: 'working', clickId: id, format, stage: this.deps.native ? 'native' : 'preparing' });
     try {
       if (this.deps.native) await this.runNative(options, id, own, current, fail);
-      else await this.runWasm(options, id, own, current, fail);
+      else await this.runWasm(options, run, own, current, fail);
     } catch (e) {
       // The Rust request build and the worker hand-off run on this thread, so a memory
       // failure there throws here rather than coming back as a host `oom` outcome.
       fail(looksLikeOom(e) ? 'out-of-memory' : 'crashed', [], [], e instanceof Error ? e.message : String(e));
     } finally {
       if (this.abort === own) this.abort = undefined;
+      this.runs.delete(run);
+      this.deps.trace?.({ type: 'end', seq: id });
     }
   }
 
@@ -264,12 +353,15 @@ export class DownloadController {
   }
 
   private async runWasm(
-    { path, format, scope, captureDocIds }: StartOptions,
-    id: number,
+    { path, format, scope, captureDocIds, projectKey }: StartOptions,
+    run: Run,
     own: AbortController,
     current: () => boolean,
     fail: (state: FailureState, diagnostics: Diagnostic[], notices?: string[], message?: string) => void,
   ): Promise<void> {
+    const id = run.seq;
+    // In overlap mode only the newest started run drives the shared status; an older run's stage and progress events are ignored.
+    const driving = () => current() && (this.deps.overlap !== true || id === this.latestStarted);
     const { buildRequest, getShareTree, runner, classify } = this.deps;
     if (!buildRequest || !getShareTree || !runner || !classify) throw new Error('pandoc.wasm is not available in this build');
     const nowSeconds = this.deps.nowSeconds ?? (() => Math.floor(Date.now() / 1000));
@@ -284,7 +376,8 @@ export class DownloadController {
       if (!typst) throw new Error('The PDF compiler is not available in this build');
       // The compiler is loaded first so its font families can reach the pandoc request (D8.6).
       // The runner takes ownership of (transfers) the buffers it is given, so each job gets its own copy.
-      const listed = await typst.runner.listFonts(typst.assets().fonts, this.typstOptions(own, 'typst-loading', nowMs, current));
+      const fontOptions = this.typstOptions(own, 'typst-loading', nowMs, driving);
+      const listed = await (typst.fontFamilies ? typst.fontFamilies(fontOptions) : typst.runner.listFonts(typst.assets().fonts, fontOptions));
       if (!current()) return;
       if (!listed.ok) {
         if (listed.kind === 'aborted' || listed.kind === 'superseded') return;
@@ -293,7 +386,7 @@ export class DownloadController {
       families = listed.families;
       fontNotices = listed.notices;
       if (!current()) return;
-      this.setStage('preparing');
+      if (driving()) this.setStage('preparing');
     }
 
     let extra: BuildRequestExtra | undefined;
@@ -341,13 +434,14 @@ export class DownloadController {
     let lastProgress = -Infinity;
     const outcome = await runner.run(request, shareTree, {
       signal: own.signal,
+      docKey: projectKey === undefined ? undefined : `${projectKey}\n${path}`,
       onStage: (stage) => {
-        if (!current()) return;
+        if (!driving()) return;
         const s = this.status;
         if (s.phase === 'working') this.set({ ...s, stage, load: stage === 'loading' ? s.load : undefined, chapter: undefined });
       },
       onLoadProgress: (load) => {
-        if (!current()) return;
+        if (!driving()) return;
         const s = this.status;
         if (s.phase !== 'working') return;
         const t = nowMs();
@@ -375,6 +469,7 @@ export class DownloadController {
     if (!completion.success || warnings.some(isError)) return fail('pandoc-error', warnings, outcome.notices);
 
     if (!chain) {
+      if (!driving()) return;
       const fileName = sanitizeDownloadName(nameFrom, format.extension);
       this.deps.save(new Blob([outcome.output as BlobPart], { type: format.mime }), fileName);
       this.set({ phase: 'done', clickId: id, format, fileName, warnings, notices: [...captureNotices, ...outcome.notices], unexecutedCells, book });
@@ -391,9 +486,15 @@ export class DownloadController {
       { path: main, bytes: concat(prelude, outcome.output) },
     ];
     const { vendoredPackages, fonts } = typst.assets();
+    if (this.deps.overlap === true) {
+      // The stage gate: a run whose compile a newer run has already passed (submitted, or shown) ends silently,
+      // so an older render that finishes its pandoc leg late cannot queue a compile ahead of a newer one's.
+      if (this.compileSubmitted > id || this.lastSettled > id) return;
+      this.compileSubmitted = id;
+    }
     const compiled = await typst.runner.run(
       { input: { main, root: '/', files }, fonts, vendoredPackages },
-      this.typstOptions(own, 'typst-loading', nowMs, current),
+      this.typstOptions(own, 'typst-loading', nowMs, driving),
     );
     if (!current()) return;
     const notices = [...captureNotices, ...outcome.notices, ...fontNotices, ...compiled.notices];
@@ -405,9 +506,27 @@ export class DownloadController {
     if (all.some(isError)) return fail('typst-error', all, notices);
 
     const fileName = sanitizeDownloadName(nameFrom, format.extension);
+    if (this.deps.overlap === true) {
+      // A success is shown iff nothing at or after its `seq` has been shown and it is for the newest started
+      // run's document; the viewer gets it exactly once. An older run's success does not end the newest run's
+      // `working` status: only the newest run settles that.
+      if (!this.mayShow(run)) return;
+      this.deps.trace?.({ type: 'shown', seq: id });
+      this.deps.onPdf?.(compiled.pdf, { path, fileName, seq: id });
+      if (id === this.latestStarted) this.set({ phase: 'done', clickId: id, format, fileName, warnings: all, notices, unexecutedCells, book });
+      return;
+    }
     this.deps.save(new Blob([compiled.pdf as BlobPart], { type: format.mime }), fileName);
-    this.deps.onPdf?.(compiled.pdf, { path, fileName });
+    this.deps.onPdf?.(compiled.pdf, { path, fileName, seq: id });
     this.set({ phase: 'done', clickId: id, format, fileName, warnings: all, notices, unexecutedCells, book });
+  }
+
+  /** Overlap mode: may `run`'s success be shown? If so, the watermark advances. */
+  private mayShow(run: Run): boolean {
+    const newest = this.latestRun;
+    if (run.abort.signal.aborted || !newest || run.seq <= this.lastSettled || run.path !== newest.path || run.projectKey !== newest.projectKey) return false;
+    this.lastSettled = run.seq;
+    return true;
   }
 
   private setStage(stage: DownloadStage): void {

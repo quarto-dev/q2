@@ -378,4 +378,17 @@ describe('PandocLoader: resident module and idle drop', () => {
     await vi.advanceTimersByTimeAsync(1001);
     expect(loader.hasResidentModule).toBe(false);
   });
+
+  it('dropResident notifies onDrop listeners until they unsubscribe', async () => {
+    const { loader } = harness();
+    await loader.load(WASM_SHA);
+    const seen: string[] = [];
+    const off = loader.onDrop(() => seen.push('dropped'));
+    loader.dropResident();
+    expect(seen).toEqual(['dropped']);
+    expect(loader.hasResidentModule).toBe(false);
+    off();
+    loader.dropResident();
+    expect(seen).toEqual(['dropped']);
+  });
 });

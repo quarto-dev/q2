@@ -10,6 +10,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { createPdfPreviewController, formatByKey } from '../../pandoc/downloadService';
+import { pandocWarmEnabled } from '../../pandoc/featureFlag';
 import type { DownloadController, DownloadStatus } from '../../pandoc/downloadController';
 import { workingText } from '../../pandoc/downloadText';
 import { mountPdfViewer } from '../../pandoc/pdfViewer';
@@ -22,7 +23,31 @@ import './PdfPreviewPane.css';
 /** Edits closer together than this share one compile (the pandoc step alone is 0.2-0.3 s). */
 export const PDF_PREVIEW_DEBOUNCE_MS = 500;
 
-export default function PdfPreviewPane({ path, content, debounceMs = PDF_PREVIEW_DEBOUNCE_MS }: { path: string | null; content: string; debounceMs?: number }) {
+/**
+ * The warm path's debounce. H10a Task 0(f) derived the warm whole refresh (request, fonts, pandoc, compile,
+ * viewer) at 344 ms in Chromium and 424 ms in WebKit, above the 200 ms bar that would have allowed 250 ms, so
+ * it stays at 500 ms: a shorter debounce would mostly start renders that overlap their predecessors.
+ */
+export const PDF_PREVIEW_WARM_DEBOUNCE_MS = 500;
+
+export default function PdfPreviewPane({
+  path,
+  content,
+  projectKey,
+  debounceMs,
+  warm: warmOverride,
+}: {
+  path: string | null;
+  content: string;
+  /** The project the path belongs to: the pane stays mounted when the project changes, and two projects can share a path. */
+  projectKey?: string;
+  debounceMs?: number;
+  /** A test seam: overrides the build-time flag (the harness compares both paths in one bundle). */
+  warm?: boolean;
+}) {
+  // The flag is a build-time constant: one reading per mount, so the pane never changes path while it lives.
+  const [warm] = useState(() => warmOverride ?? pandocWarmEnabled());
+  const wait = debounceMs ?? (warm ? PDF_PREVIEW_WARM_DEBOUNCE_MS : PDF_PREVIEW_DEBOUNCE_MS);
   const [status, setStatus] = useState<DownloadStatus>({ phase: 'idle' });
   const [hasPdf, setHasPdf] = useState(false);
   const hostRef = useRef<HTMLDivElement>(null);
@@ -32,36 +57,42 @@ export default function PdfPreviewPane({ path, content, debounceMs = PDF_PREVIEW
   useEffect(() => {
     if (!hostRef.current) return;
     const viewer = mountPdfViewer(hostRef.current);
-    const controller = createPdfPreviewController((pdf, info) => {
-      setHasPdf(true);
-      void viewer.show(pdf, { key: info.path, fileName: info.fileName });
-    });
+    const controller = createPdfPreviewController(
+      (pdf, info) => {
+        setHasPdf(true);
+        void viewer.show(pdf, { key: info.path, fileName: info.fileName });
+      },
+      { warm },
+    );
     controllerRef.current = controller;
+    // The pool refcount covers StrictMode's mount, cleanup, mount: the workers outlive the gap.
+    controller.acquire();
     const unsubscribe = controller.subscribe(() => setStatus(controller.getSnapshot()));
     return () => {
       unsubscribe();
       controller.cancel();
+      controller.release();
       controllerRef.current = null;
       viewer.dispose();
       setHasPdf(false);
     };
-  }, []);
+  }, [warm]);
 
   const firstRef = useRef(true);
   useEffect(() => {
     firstRef.current = true;
-  }, [path]);
+  }, [path, projectKey]);
 
   useEffect(() => {
     const controller = controllerRef.current;
     const format = formatByKey('pdf');
     if (!controller || !format || !path) return;
     // The first compile after mount (or a retry) starts at once; later edits are debounced.
-    const wait = firstRef.current ? 0 : debounceMs;
+    const delay = firstRef.current ? 0 : wait;
     firstRef.current = false;
-    const timer = setTimeout(() => void controller.start({ path, format }), wait);
+    const timer = setTimeout(() => void controller.start({ path, format, projectKey }), delay);
     return () => clearTimeout(timer);
-  }, [path, content, retry, debounceMs]);
+  }, [path, projectKey, content, retry, wait]);
 
   return (
     <div className="pdf-preview-pane" data-testid="pdf-preview-pane">

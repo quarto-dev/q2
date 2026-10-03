@@ -1791,6 +1791,7 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
           )}
           <PreviewRouter
             onPreviewModeChange={setPreviewMode}
+            projectKey={project.id}
             content={displayContent}
             currentFile={currentFile}
             files={files}

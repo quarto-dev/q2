@@ -329,6 +329,27 @@ jobs:
           cd hub-client
           npx playwright test --config playwright.harness.config.ts --project=webkit --workers=1
 
+      # Warm-pandoc timing (H10b 5c): same-run ratios, byte equality and frame order only; the
+      # absolute figures are local. Its own single-worker step because the medians need an
+      # otherwise idle machine, which the two-worker harness step above is not.
+      - name: Run warm-pandoc timing specs
+        if: matrix.browser == 'chromium'  # Firefox timing is run by hand (plan 5c)
+        env:
+          PANDOC_WARM_TIMING: '1'
+        run: |
+          cd hub-client
+          npx playwright test --config playwright.harness.config.ts --project=${{ matrix.browser }} \
+            --workers=1 --retries=0 e2e/pandoc-warm.harness.spec.ts -g timing
+
+      - name: Run warm-pandoc timing specs in WebKit
+        if: matrix.browser == 'chromium' && steps.webkit_probe.outcome == 'success'
+        env:
+          PANDOC_WARM_TIMING: '1'
+        run: |
+          cd hub-client
+          npx playwright test --config playwright.harness.config.ts --project=webkit \
+            --workers=1 --retries=0 e2e/pandoc-warm.harness.spec.ts -g timing
+
       # sync-test-harness's hub tier spawns `cargo run --bin hub` with a 120s
       # readiness timeout, so it belongs in this workflow rather than
       # ts-test-suite.yml: "Pre-build hub binary" above has already compiled

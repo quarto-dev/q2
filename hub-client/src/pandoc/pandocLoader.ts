@@ -196,7 +196,9 @@ export class PandocLoader {
   private resident: { sha: string; module: WebAssembly.Module } | undefined;
   private inFlight: InFlight | undefined;
   private busy = 0;
+  private rendered = 0;
   private idleTimer: ReturnType<typeof setTimeout> | undefined;
+  private readonly dropListeners = new Set<() => void>();
 
   constructor(config: LoaderConfig = {}) {
     this.env = { ...browserEnv(), ...config.env };
@@ -206,6 +208,19 @@ export class PandocLoader {
     this.label = config.label ?? 'pandoc';
     this.requireExnref = config.requireExnref ?? true;
     this.isRaw = config.isRaw ?? isWasm;
+  }
+
+  /**
+   * Renders that every runner has finished on the resident module since it was compiled. WebKit's compiled code goes
+   * bad after about 47 of them in total, warm or fresh (H10b 5b), so the warm runner reads this to recompile.
+   */
+  get renders(): number {
+    return this.rendered;
+  }
+
+  /** A runner calls this when a render on the resident module has finished. */
+  countRender(): void {
+    this.rendered++;
   }
 
   get hasResidentModule(): boolean {
@@ -233,10 +248,22 @@ export class PandocLoader {
     };
   }
 
+  /**
+   * Called whenever `dropResident()` runs, so an owner of workers that hold the module (the warm runner)
+   * can let them go: dropping the loader's reference frees nothing while a worker holds the module.
+   * Returns the unsubscribe function.
+   */
+  onDrop(listener: () => void): () => void {
+    this.dropListeners.add(listener);
+    return () => this.dropListeners.delete(listener);
+  }
+
   /** Drop the resident `Module` now; the next load recompiles from the cache. */
   dropResident(): void {
     this.resident = undefined;
+    this.rendered = 0;
     this.clearIdle();
+    for (const l of [...this.dropListeners]) l();
   }
 
   /**
@@ -329,6 +356,7 @@ export class PandocLoader {
       promise: this.loadModule(sha, controller.signal, emit).then(
         (r) => {
           this.resident = { sha, module: r.module };
+          this.rendered = 0;
           return r;
         },
       ),

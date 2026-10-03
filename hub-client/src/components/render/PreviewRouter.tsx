@@ -16,6 +16,8 @@ import { useDownloadAs } from '../../pandoc/useDownloadAs';
 
 interface PreviewRouterProps {
   content: string;
+  /** The project's id: the PDF preview keys its in-flight renders by it (two projects can share a path). */
+  projectKey?: string;
   currentFile: FileEntry | null;
   files: FileEntry[];
   fileContents: Map<string, string>;
@@ -194,7 +196,7 @@ export default function PreviewRouter(props: PreviewRouterProps) {
         {previewMode.mode === 'download' ? (
           <DownloadModePane formatKey={previewMode.formatKey} path={props.currentFile?.path ?? null} content={props.content} wasmReady={wasmStatus === 'ready'} />
         ) : previewMode.mode === 'pdf' ? (
-          <PdfPreviewPane path={props.currentFile?.path ?? null} content={props.content} />
+          <PdfPreviewPane path={props.currentFile?.path ?? null} content={props.content} projectKey={props.projectKey} />
         ) : previewMode.mode === 'neither' ? (
           <NeitherView formatKey={previewMode.formatKey} />
         ) : reactFormat ? (

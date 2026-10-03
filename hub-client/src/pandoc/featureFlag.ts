@@ -14,3 +14,12 @@ export function pandocWasmEnabled(): boolean {
 export function isPreviewEmbed(): boolean {
   return import.meta.env.VITE_PREVIEW_EMBED === '1';
 }
+
+/**
+ * The warm preview path (H10b): persistent pandoc workers, overlapping renders and the preview's own typst
+ * runner. On unless the build sets `VITE_PANDOC_WARM=0`, which restores the fresh path (one worker per render,
+ * the app-wide typst runner, the 500 ms debounce). Read once per pane mount, so a test can pass the value.
+ */
+export function pandocWarmEnabled(value: string | undefined = import.meta.env.VITE_PANDOC_WARM): boolean {
+  return value !== '0';
+}

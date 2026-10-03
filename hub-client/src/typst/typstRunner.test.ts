@@ -64,13 +64,14 @@ function fakeLoaders(opts: { load?: PandocLoader['load']; fontsLoad?: TypstFonts
   return { loader, fonts, holds };
 }
 
-function setup(opts: { load?: PandocLoader['load']; fontsLoad?: TypstFontsLoader['load']; wallTimeoutMs?: number; autoReady?: boolean } = {}) {
+function setup(opts: { load?: PandocLoader['load']; fontsLoad?: TypstFontsLoader['load']; wallTimeoutMs?: number; autoReady?: boolean; serialized?: boolean } = {}) {
   const workers: FakeWorker[] = [];
   const { loader, fonts, holds } = fakeLoaders(opts);
   const runner = new TypstRunner({
     loader,
     fonts,
     wallTimeoutMs: opts.wallTimeoutMs,
+    serialized: opts.serialized,
     createWorker: () => {
       const w = new FakeWorker();
       if (opts.autoReady === false) w.autoReady = false;
@@ -277,4 +278,125 @@ describe('TypstRunner', () => {
 it('typstUiStateFor on a hand-built outcome', () => {
   const o: TypstRunOutcome = { ok: false, kind: 'aborted', diagnostics: [], notices: [] };
   expect(typstUiStateFor(o)).toBe('cancelled');
+});
+
+describe('TypstRunner: serialized mode (the preview\'s runner)', () => {
+  const kindOf = (o: { ok: boolean } & Partial<{ kind: string }>) => (o.ok ? 'ok' : o.kind);
+
+  it('never aborts a running job: a newer job waits, and the older one completes', async () => {
+    const { runner, workers } = setup({ serialized: true });
+    const a = runner.run(job());
+    await tick();
+    const b = runner.run(job());
+    await tick();
+    expect(workers).toHaveLength(1); // b has not started
+    expect(workers[0].terminated).toBe(0);
+    workers[0].respond(OK());
+    expect(kindOf(await a)).toBe('ok');
+    await tick();
+    expect(workers).toHaveLength(2);
+    workers[1].respond(OK());
+    expect(kindOf(await b)).toBe('ok');
+  });
+
+  it('keeps one running and one waiting job: a newer job replaces the waiting one, which resolves superseded; run and listFonts share the slot', async () => {
+    const { runner, workers } = setup({ serialized: true });
+    const a = runner.run(job());
+    await tick();
+    const b = runner.listFonts([]);
+    const c = runner.run(job());
+    expect(kindOf(await b)).toBe('superseded');
+    workers[0].respond(OK());
+    await a;
+    await tick();
+    expect(workers).toHaveLength(2);
+    expect(workers[1].posts[1].msg).toMatchObject({ type: 'run' }); // c, not b's font list
+    workers[1].respond(OK());
+    expect(kindOf(await c)).toBe('ok');
+  });
+
+  it('an abort signal detaches a running job: it resolves aborted at once, but keeps the slot until it finishes', async () => {
+    const { runner, workers } = setup({ serialized: true });
+    const ac = new AbortController();
+    const a = runner.run(job(), { signal: ac.signal });
+    await tick();
+    ac.abort();
+    expect(kindOf(await a)).toBe('aborted');
+    expect(workers[0].terminated).toBe(0);
+    const b = runner.run(job());
+    await tick();
+    expect(workers).toHaveLength(1); // b still waits for the detached job
+    workers[0].respond(OK()); // its result is dropped
+    await tick();
+    expect(workers).toHaveLength(2);
+    workers[1].respond(OK());
+    expect(kindOf(await b)).toBe('ok');
+  });
+
+  it('a detached job stops reporting stages', async () => {
+    const { runner, workers } = setup({ serialized: true });
+    const ac = new AbortController();
+    const stages: string[] = [];
+    void runner.run(job(), { signal: ac.signal, onStage: (s) => stages.push(s) });
+    await tick();
+    ac.abort();
+    workers[0].emit({ type: 'progress', id: 1, stage: 'compiling' });
+    expect(stages).not.toContain('compiling');
+  });
+
+  it('an abort of the waiting job removes it', async () => {
+    const { runner, workers } = setup({ serialized: true });
+    const a = runner.run(job());
+    await tick();
+    const ac = new AbortController();
+    const b = runner.run(job(), { signal: ac.signal });
+    ac.abort();
+    expect(kindOf(await b)).toBe('aborted');
+    workers[0].respond(OK());
+    await a;
+    await tick();
+    expect(workers).toHaveLength(1); // b never started
+  });
+
+  it('the wall timeout still stops a hung compile and frees the slot', async () => {
+    const { runner, workers } = setup({ serialized: true, wallTimeoutMs: 20 });
+    const a = runner.run(job());
+    const b = runner.run(job());
+    expect(kindOf(await a)).toBe('timeout');
+    expect(workers[0].terminated).toBeGreaterThan(0);
+    await tick();
+    expect(workers).toHaveLength(2);
+    workers[1].respond(OK());
+    expect(kindOf(await b)).toBe('ok');
+  });
+
+  it('an already aborted signal resolves aborted without starting anything', async () => {
+    const { runner, workers } = setup({ serialized: true });
+    const ac = new AbortController();
+    ac.abort();
+    expect(kindOf(await runner.run(job(), { signal: ac.signal }))).toBe('aborted');
+    expect(workers).toHaveLength(0);
+  });
+
+  it('without the option a newer job still supersedes the running one (the app-wide runner)', async () => {
+    const { runner } = setup();
+    const a = runner.run(job());
+    await tick();
+    void runner.run(job());
+    expect(kindOf(await a)).toBe('superseded');
+  });
+
+  it("a compile on the app-wide runner (Download as PDF) and one on the serialized preview runner never cancel each other", async () => {
+    const preview = setup({ serialized: true });
+    const download = setup();
+    const p = preview.runner.run(job());
+    await tick();
+    const d = download.runner.run(job());
+    await tick();
+    expect(preview.workers[0].terminated).toBe(0);
+    expect(download.workers[0].terminated).toBe(0);
+    preview.workers[0].respond(OK());
+    download.workers[0].respond(OK());
+    expect([kindOf(await p), kindOf(await d)]).toEqual(['ok', 'ok']);
+  });
 });
