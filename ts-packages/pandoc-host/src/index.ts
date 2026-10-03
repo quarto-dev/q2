@@ -1,5 +1,5 @@
 export { execute, looksLikeOom } from './execute.ts';
-export { createHandler, prepareForPost } from './protocol.ts';
+export { createHandler, prepareForPost, prepareInputsForPost } from './protocol.ts';
 export type { WorkerRequest, WorkerResponse } from './protocol.ts';
 export { DEFAULT_LIMITS, DEFAULT_SHARE_ROOT, SUPPORTED_SCHEMA_VERSION } from './limits.ts';
 export type { Limits } from './limits.ts';

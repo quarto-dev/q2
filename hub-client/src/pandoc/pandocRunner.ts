@@ -9,7 +9,7 @@
  * failure class carries one diagnostic (none for a user cancel) and maps to one UI state
  * through `uiStateFor`.
  */
-import { prepareForPost } from '@quarto/pandoc-host';
+import { prepareForPost, prepareInputsForPost } from '@quarto/pandoc-host';
 import type { Diagnostic, ExecuteResult, ExecuteSuccess, Fault, HostDiagnostic, Limits, PandocRequest, RunStats, ShareTree, WorkerRequest, WorkerResponse } from '@quarto/pandoc-host';
 import { PandocLoadError, type LoadProgress, type PandocLoader } from './pandocLoader';
 
@@ -126,6 +126,12 @@ export interface RunOptions {
   wallTimeoutMs?: number;
   /** Which document this render is for (the preview's path joined with its project key); the warm runner's grace rule keys on it. */
   docKey?: string;
+  /**
+   * Bytes for the request's `host_inputs`, keyed by path (interface 1). The buffers are
+   * transferred to the worker, so the caller's views are detached after the run starts
+   * (a view that does not span its whole buffer is copied instead).
+   */
+  inputs?: Record<string, Uint8Array>;
 }
 
 export interface RunnerConfig {
@@ -257,14 +263,15 @@ export class PandocRunner {
           if (msg.type === 'ready') {
             ready = true;
             const prepared = prepareForPost(request);
-            const run: WorkerRequest = { type: 'run', id, request: prepared.value, shareTree, fault: options.fault };
+            const inputs = options.inputs ? prepareInputsForPost(options.inputs) : undefined;
+            const run: WorkerRequest = { type: 'run', id, request: prepared.value, shareTree, fault: options.fault, ...(inputs ? { inputs: inputs.value } : {}) };
             const timeoutMs = options.wallTimeoutMs ?? this.wallTimeoutMs;
             timer = setTimeout(() => {
               settle(
                 failure('timeout', [host('pandoc-timeout', `pandoc did not finish within ${Math.round(timeoutMs / 1000)} s and was stopped. A filter may be stuck in a loop.`)], notices),
               );
             }, timeoutMs);
-            worker?.postMessage(run, prepared.transfer);
+            worker?.postMessage(run, inputs ? [...prepared.transfer, ...inputs.transfer] : prepared.transfer);
           } else if (msg.type === 'progress') {
             if (msg.id === id) options.onStage?.(msg.stage);
           } else if (msg.type === 'result' && msg.id === id) {

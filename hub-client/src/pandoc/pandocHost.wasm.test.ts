@@ -10,13 +10,16 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import os from 'node:os';
 import path from 'node:path';
 import { Worker, isMainThread } from 'node:worker_threads';
+import { createHash } from 'node:crypto';
 import { unzipSync } from 'fflate';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { execute, prepareForPost, type PandocRequest, type ShareTree, type WorkerRequest, type WorkerResponse } from '@quarto/pandoc-host';
+import { execute, prepareForPost, prepareInputsForPost, type PandocRequest, type ShareTree, type WorkerRequest, type WorkerResponse } from '@quarto/pandoc-host';
 import {
   CONSTANTS,
   REPO,
   WASM_PATH,
+  importRecordingNames,
+  loadImportRecording,
   loadRecording,
   pandocWasmAvailable,
   recordingNames,
@@ -102,6 +105,72 @@ describe.skipIf(!haveWasm)('pandoc.wasm in command mode', () => {
         expect(extract(ours)).toBe(relocateReferenceText(extract(rec.referencePath), name));
       });
     }
+  });
+
+  // ---- import recordings: pandoc as a reader (document import, plan P1 T7) -------------------
+  describe('import recordings: wasm reads what native pandoc read', () => {
+    const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
+    // Both runs saw the canonical /__q2_share__/import paths; compare stderr modulo line endings and trailing space.
+    const norm = (t: string) => t.replace(/\r\n/g, '\n').trimEnd();
+    // `images-docx` first: it is the one that proves `--extract-media` writes anything under wasm
+    // (upstream pandoc#11584 says the wasm build cannot write the typst writer's extracted images).
+    const names = importRecordingNames().sort((a, b) => Number(b === 'images-docx') - Number(a === 'images-docx'));
+
+    for (const name of names) {
+      it(name, async () => {
+        const rec = loadImportRecording(name);
+        const r = await execute(rec.request, rec.shareTree, { module, inputs: { [rec.sourcePath]: rec.source.slice() } });
+        if (rec.pandocJson === null) {
+          // A failing fixture (`corrupt-docx`): the exit status and stderr are what P3 classifies.
+          expect(r.ok, `${name} should fail`).toBe(false);
+          if (r.ok) return;
+          expect(r.kind).toBe('pandoc-exit');
+          expect(r.status).toBe(rec.status);
+          expect(norm(r.stderr)).toBe(norm(rec.stderr));
+          return;
+        }
+        if (!r.ok) throw new Error(`${name}: ${r.kind} status=${r.status}\n${r.stderr}\n${JSON.stringify(r.diagnostics)}`);
+        expect(JSON.parse(dec.decode(r.output))).toEqual(rec.pandocJson);
+        expect(r.collected.map((f) => [f.path, sha(f.bytes)])).toEqual(rec.media.map((m) => [m.pandocPath, m.sha256]));
+        expect(norm(r.stderr)).toBe(norm(rec.stderr));
+        expect(r.diagnostics).toEqual([]);
+      });
+    }
+
+    it('a worker thread takes the source as a transferred input and returns the collected media', async () => {
+      const rec = loadImportRecording('images-docx');
+      const worker = new Worker(new URL('../test-utils/pandocHostThread.mjs', import.meta.url));
+      try {
+        const msgs: WorkerResponse[] = [];
+        const done = new Promise<void>((resolve) =>
+          worker.on('message', (m: WorkerResponse) => {
+            msgs.push(m);
+            if (m.type === 'result') resolve();
+          }),
+        );
+        worker.postMessage({ type: 'init', module } satisfies WorkerRequest);
+        const p = prepareForPost(rec.request);
+        const inputs = prepareInputsForPost({ [rec.sourcePath]: rec.source.slice() });
+        worker.postMessage({ type: 'run', id: 3, request: p.value, shareTree: rec.shareTree, inputs: inputs.value } satisfies WorkerRequest, [...p.transfer, ...inputs.transfer]);
+        await done;
+        const last = msgs[msgs.length - 1];
+        expect(last.type === 'result' && last.result.ok).toBe(true);
+        if (last.type !== 'result' || !last.result.ok) return;
+        expect(last.result.collected.map((f) => f.path)).toEqual(rec.media.map((m) => m.pandocPath));
+        expect(last.result.collected.map((f) => sha(f.bytes))).toEqual(rec.media.map((m) => m.sha256));
+      } finally {
+        await worker.terminate();
+      }
+    });
+
+    it('--extract-media writes under wasm (the main risk to P1): images-docx collects its PNG and JPEG', async () => {
+      const rec = loadImportRecording('images-docx');
+      const r = await execute(rec.request, rec.shareTree, { module, inputs: { [rec.sourcePath]: rec.source.slice() } });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.collected.length).toBeGreaterThan(0);
+      expect(r.collected.map((f) => f.path.split('.').pop()).sort()).toEqual(['jpg', 'png']);
+    });
   });
 
   // ---- small synthetic jobs ---------------------------------------------------

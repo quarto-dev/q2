@@ -1,0 +1,26 @@
+/** Moby Dick import spike (throwaway; see claude-notes/research/2026-10-04-moby-dick-import-spike/). Env: MOBY_DOCX, MOBY_NATIVE_JSON, MOBY_NATIVE_MEDIA_DIR, MOBY_OUT. */
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { describe, expect, it } from 'vitest';
+import { execute } from '@quarto/pandoc-host';
+import { WASM_PATH, loadImportRecording } from '../test-utils/pandocRecordings';
+
+const docx = process.env.MOBY_DOCX;
+describe.skipIf(!docx)('moby dick', () => {
+  it('wasm JSON equals native JSON', async () => {
+    const module = await WebAssembly.compile(readFileSync(WASM_PATH));
+    // Reuse the recording's request shape; swap in our source.
+    const rec = loadImportRecording('images-docx');
+    const source = new Uint8Array(readFileSync(docx!));
+    const { createHash } = await import('node:crypto');
+    const request = { ...rec.request, host_inputs: [{ path: rec.sourcePath, sha256: createHash('sha256').update(source).digest('hex'), size: source.byteLength }] };
+    const t0 = performance.now();
+    const r = await execute(request, rec.shareTree, { module, inputs: { [rec.sourcePath]: source.slice() } });
+    const ms = Math.round(performance.now() - t0);
+    if (!r.ok) throw new Error(`${r.kind} ${r.status}\n${r.stderr}`);
+    const wasmText = new TextDecoder().decode(r.output);
+    const nativeText = readFileSync(process.env.MOBY_NATIVE_JSON!, 'utf8').split(process.env.MOBY_NATIVE_MEDIA_DIR!).join('/__q2_share__/import/media');
+    appendFileSync(process.env.MOBY_OUT + '.stats', `MOBY wall_ms=${ms} out_bytes=${r.output.byteLength} collected=${r.collected.map((f) => `${f.path}:${f.bytes.byteLength}`)} stderr=${JSON.stringify(r.stderr)} diagnostics=${JSON.stringify(r.diagnostics)}\n`);
+    writeFileSync(process.env.MOBY_OUT!, wasmText);
+    expect(JSON.parse(wasmText)).toEqual(JSON.parse(nativeText));
+  });
+});

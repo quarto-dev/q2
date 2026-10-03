@@ -21,6 +21,7 @@ import { PandocRunner, uiStateFor, type RunOutcome } from './pandoc/pandocRunner
 import { createBrowserWorker, getPandoc, getPreviewPandocRunner } from './pandoc/pandocService';
 import type { Fault, PandocRequest, RunStats, ShareTree } from '@quarto/pandoc-host';
 import { PANDOC_WASM_SHA256, smokeJob } from './pandoc/smokeJob';
+import { importJob } from './pandoc/importJob';
 import { installDevHarness, pandocDownload } from './pandoc/devHarness';
 import { createPdfPreviewController, formatByKey, getDownloadController, onPdfCompiled, setPreviewTrace } from './pandoc/downloadService';
 import type { TraceEvent } from './pandoc/downloadController';
@@ -180,6 +181,9 @@ function warmHooks() {
  * builds is the production one; the options exist so a test can shorten the wall timeout
  * (the hang case would otherwise take 120 s) and observe the loader.
  */
+/** The runner `pandoc.runImport` keeps resident, so a series of imports loads the wasm once. */
+let importRunner: { loader: PandocLoader; runner: PandocRunner } | undefined;
+
 export const pandoc = {
   createRunner(options: { wallTimeoutMs?: number; idleMs?: number; loader?: LoaderConfig } = {}) {
     const loader = new PandocLoader({ idleMs: options.idleMs, ...options.loader });
@@ -187,6 +191,29 @@ export const pandoc = {
     return { loader, runner };
   },
   smokeJob,
+  /**
+   * One document-import run (interfaces 1 and 2, hand-built request): `base64` is the source file,
+   * run through one resident runner so the wasm loads once. Reports what a memory measurement needs
+   * (the runner's wall time around `run()`, the stats, how much was collected) without the bytes.
+   */
+  async runImport(base64: string, format = 'docx', options: { wallTimeoutMs?: number } = {}) {
+    const source = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    importRunner ??= pandoc.createRunner();
+    const { request, shareTree, inputs } = await importJob(source, format);
+    const t0 = performance.now();
+    const outcome: RunOutcome = await importRunner.runner.run(request, shareTree, { inputs, wallTimeoutMs: options.wallTimeoutMs });
+    const elapsedMs = Math.round(performance.now() - t0);
+    if (!outcome.ok) return { ok: false as const, kind: outcome.kind, status: outcome.status, stderr: outcome.stderr, elapsedMs, diagnostics: outcome.diagnostics };
+    return {
+      ok: true as const,
+      elapsedMs,
+      stats: outcome.stats,
+      outputBytes: outcome.output.byteLength,
+      collectedCount: outcome.collected.length,
+      collectedBytes: outcome.collected.reduce((n, f) => n + f.bytes.byteLength, 0),
+      diagnostics: outcome.diagnostics,
+    };
+  },
   /**
    * The production `DownloadController` (what the menu drives) for the document at `path` in the
    * VFS: resolves once the click's chain has finished or was cancelled. `cancelOnStage` cancels the
