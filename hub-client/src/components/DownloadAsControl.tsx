@@ -16,6 +16,7 @@ import './DownloadAsControl.css';
 import type { Diagnostic, DownloadFormat, DownloadStatus } from '../pandoc/downloadController';
 import { doneText, liveText, workingText } from '../pandoc/downloadText';
 import { TYPST_PDF_KEY } from '../pandoc/formatKeys';
+import type { ImportDiagnostic } from '../pandoc/importService';
 
 export interface DownloadAsControlProps {
   formats: DownloadFormat[];
@@ -32,14 +33,17 @@ export interface DownloadAsControlProps {
   onDismiss: () => void;
 }
 
-const diagText = (d: Diagnostic): { code?: string; title: string; detail?: string } => {
+/** What the list renders: Download-as's diagnostics, and an import report's (which adds TS-side host codes). */
+export type ListedDiagnostic = Diagnostic | ImportDiagnostic;
+
+const diagText = (d: ListedDiagnostic): { code?: string; title: string; detail?: string } => {
   if (d.origin === 'host') return { code: d.code, title: d.message };
   // typst's own diagnostics: the message, and where in the generated .typ it was raised.
   if (d.origin === 'typst') return { title: d.message, detail: d.range ? `${d.path} ${d.range}` : d.path };
   return { code: d.code, title: d.title, detail: d.problem };
 };
 
-export function DiagnosticList({ diagnostics }: { diagnostics: Diagnostic[] }) {
+export function DiagnosticList({ diagnostics }: { diagnostics: ListedDiagnostic[] }) {
   if (diagnostics.length === 0) return null;
   return (
     <ul className="download-diagnostics">

@@ -299,6 +299,49 @@ export const notifications = {
 } as const;
 
 /** Editor-shell dialogs. */
+/** Document import (Import button, placement dialog, report; document import epic, P5). */
+export const importDoc = {
+  buttonLabel: 'Import document',
+  buttonTooltip: 'Import a Word, OpenDocument, RTF, EPUB or PowerPoint file as a Quarto document',
+  dialogTitle: (name: string) => `Import ${name}`,
+  folderLabel: 'Folder:',
+  nameLabel: 'Name:',
+  /** Where the document's images will go: `dir` has no trailing slash. */
+  mediaLine: (dir: string) => `Images will be stored in ${dir}/`,
+  errorExists: 'A file with this name already exists in that folder',
+  errorMediaExists: (dir: string) => `A folder named ${dir} already exists there`,
+  errorExtension: 'The name must end in .qmd',
+  errorEmptyName: 'Enter a name for the document',
+  import: 'Import',
+  cancel: 'Cancel',
+  close: 'Close',
+  progressRegionLabel: 'Import progress',
+  progress: {
+    reading: 'Reading the file…',
+    'loading-pandoc': 'Starting the converter…',
+    converting: 'Converting the document…',
+    images: 'Processing images…',
+    finishing: 'Finishing…',
+  },
+  writing: 'Adding the document to the project…',
+  reportSucceeded: 'The document was imported.',
+  reportSucceededWithNotes: 'The document was imported. Some content could not be carried over:',
+  reportFailed: 'The document could not be imported, so nothing was added to the project.',
+  groupErrors: (n: number) => (n === 1 ? '1 error' : `${n} errors`),
+  groupWarnings: (n: number) => (n === 1 ? '1 warning' : `${n} warnings`),
+  groupInfo: (n: number) => (n === 1 ? '1 note' : `${n} notes`),
+  /** `import-write-failed`: `step` is e.g. "image 2 of 5" or "the document". */
+  writeFailed: (step: string, path: string, cause: string) => `Could not add ${step} (${path}): ${cause}`,
+  writeFailedAppeared: (path: string) => `A file appeared at ${path} while importing, so nothing was overwritten.`,
+  writeFailedRenamed: (path: string, actual: string) =>
+    `A different file appeared at ${path} while importing (the image would have been stored as ${actual}).`,
+  /** `import-cleanup-failed`. */
+  cleanupDeleteFailed: (path: string, cause: string) => `Could not remove ${path} after the failed import: ${cause}`,
+  cleanupReplaced: (path: string) => `${path} was left in place because another change replaced it after the import wrote it.`,
+  stepImage: (index: number, total: number) => `image ${index} of ${total}`,
+  stepDocument: 'the document',
+} as const;
+
 export const dialogs = {
   newFile: {
     title: 'New file',

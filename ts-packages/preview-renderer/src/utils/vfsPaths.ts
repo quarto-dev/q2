@@ -25,18 +25,37 @@
  *     → '/project/shared/hero.png'
  *   resolveRelativePath('anything', '/already/absolute.png')
  *     → '/already/absolute.png'
+ *
+ * `relativePath` is a URL target, so each segment is percent-decoded
+ * (`my%20dir/a.png` → `my dir/a.png`) to give the VFS key; native
+ * rendering does the same. Decoding is per segment, so `%2F` and `%2E%2E`
+ * cannot introduce separators or traversal, and a segment that is not
+ * valid percent-encoding is kept as written.
  */
 export function resolveRelativePath(
     currentFile: string,
     relativePath: string,
 ): string {
-    if (relativePath.startsWith('/')) {
-        return relativePath; // Already absolute
+    const decoded = relativePath.split('/').map(safeDecodeSegment).join('/');
+    if (decoded.startsWith('/')) {
+        return decoded; // Already absolute
     }
     const lastSlash = currentFile.lastIndexOf('/');
     const currentDir =
         lastSlash >= 0 ? currentFile.substring(0, lastSlash + 1) : '/';
-    return normalizePath(currentDir + relativePath);
+    return normalizePath(currentDir + decoded);
+}
+
+function safeDecodeSegment(segment: string): string {
+    try {
+        const decoded = decodeURIComponent(segment);
+        // A decoded separator or dot-segment would change the path's shape.
+        return /[/\\]/.test(decoded) || decoded === '.' || decoded === '..'
+            ? segment
+            : decoded;
+    } catch {
+        return segment;
+    }
 }
 
 /**

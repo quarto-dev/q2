@@ -53,6 +53,7 @@ import type {
   ASTOptions,
   ConnectOptions,
   CreateBinaryFileResult,
+  CreateFileIfAbsentResult,
   CreateProjectOptions,
   CreateProjectResult,
   DisconnectOptions,
@@ -1629,6 +1630,50 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   }
 
   /**
+   * Create a new text file only if `path` is not already in the index.
+   *
+   * Unlike `createFile`, this never replaces an index entry. The presence
+   * check and the index write happen inside one `indexHandle.change`
+   * callback, so nothing local can slip in between them. The text goes into
+   * the new document as its initial value, so the document's history is a
+   * single change holding the whole content (document import keeps that as
+   * its recoverable base, I20) instead of an empty document plus a second
+   * change.
+   *
+   * Residual risk: the check sees only this client's copy of the index. A
+   * file another client created at the same path that has not synced yet is
+   * invisible here, and the index map then resolves last-writer-wins.
+   */
+  async function createFileIfAbsent(
+    rawPath: string,
+    content: string
+  ): Promise<CreateFileIfAbsentResult> {
+    if (!state.repo || !state.indexHandle) {
+      throw new Error('Not connected');
+    }
+    const path = normalizeProjectPath(rawPath);
+
+    const handle = createDoc<TextDocumentContent>({ text: content });
+    const docId = handle.documentId;
+
+    let present = false;
+    state.indexHandle.change(doc => {
+      if (doc.files[path]) {
+        present = true;
+        return;
+      }
+      doc.files[path] = docId;
+    });
+    if (present) return { created: false };
+
+    // Same follow-up as createFile.
+    await subscribeToFileInternal(path, handle as unknown as DocHandle<FileDocument>);
+    callbacks.onFileAdded(path, { type: 'text', text: content });
+    tryParseAndNotify(path, content);
+    return { created: true, docId };
+  }
+
+  /**
    * Create a new binary file with deduplication.
    */
   async function createBinaryFile(
@@ -2264,6 +2309,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     updateFileAst,
     getFileAst,
     createFile,
+    createFileIfAbsent,
     createBinaryFile,
     deleteFile,
     renameFile,

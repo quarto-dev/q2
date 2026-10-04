@@ -73,6 +73,17 @@ const SCAN_PAGES: { page: string; label: string; selector: string }[] = [
   { page: 'download-as-failed', label: 'download-as-failed', selector: '.top-bars' },
   { page: 'download-as-disabled', label: 'download-as-disabled', selector: '.top-bars' },
   { page: 'download-as-book-progress', label: 'download-as-book-progress', selector: '.top-bars' },
+  // document import P5: the Import button's top bar and the dialog's states (strict in import-dialog.harness.spec.ts too).
+  { page: 'import-button', label: 'import-button', selector: '.top-bars' },
+  { page: 'import-dialog', label: 'import-dialog', selector: '.import-dialog' },
+  { page: 'import-dialog-collision', label: 'import-dialog-collision', selector: '.import-dialog' },
+  { page: 'import-dialog-too-large', label: 'import-dialog-too-large', selector: '.import-dialog' },
+  { page: 'import-dialog-importing', label: 'import-dialog-importing', selector: '.import-dialog' },
+  { page: 'import-dialog-loading-pandoc', label: 'import-dialog-loading-pandoc', selector: '.import-dialog' },
+  { page: 'import-dialog-report', label: 'import-dialog-report', selector: '.import-dialog' },
+  { page: 'import-dialog-failure', label: 'import-dialog-failure', selector: '.import-dialog' },
+  { page: 'import-dialog-offline', label: 'import-dialog-offline', selector: '.import-dialog' },
+  { page: 'import-dialog-write-failure', label: 'import-dialog-write-failure', selector: '.import-dialog' },
 ];
 
 /** key → { ruleId: nodeCount } */
