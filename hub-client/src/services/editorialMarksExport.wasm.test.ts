@@ -29,7 +29,15 @@ interface WasmModule {
   vfs_add_file: (path: string, content: string) => string;
   vfs_clear: () => string;
   vfs_set_runtime_metadata: (yaml: string) => string;
-  render_pandoc_request: (path: string, format: string, source_date_epoch?: number) => Promise<Envelope>;
+  render_pandoc_request: (
+    path: string,
+    format: string,
+    source_date_epoch?: number,
+    capture_gz_json?: Uint8Array,
+    typst_available_fonts?: string[],
+    abort_signal?: AbortSignal,
+    options?: { attributionJson?: string },
+  ) => Promise<Envelope>;
 }
 
 interface JsonInline {
@@ -126,6 +134,37 @@ describe('editorial marks in a docx download request', () => {
     expect(insertions).toContainEqual({ cls: 'insertion', attrs: { author: 'Ann', date: '2026-09-01T10:00:00Z' } });
     // The block insertion has no Div left to ignore: its paragraph is wrapped, with its author.
     expect(insertions).toContainEqual({ cls: 'insertion', attrs: { author: 'Dee' } });
+  });
+});
+
+describe('authorship in a docx download request', () => {
+  const QMD = '---\ntitle: T\n---\n\nSome [range [>> Why?]] here, [++ added] too.\n';
+  const authors = async (attributionJson?: string) => {
+    wasm.vfs_add_file('/p/doc.qmd', QMD);
+    const out = await wasm.render_pandoc_request('/p/doc.qmd', 'docx', SDE, undefined, undefined, undefined, { attributionJson });
+    expect(out.error).toBeUndefined();
+    const file = out.request!.files.find((f) => f.path.endsWith('/pandoc-input.json'))!;
+    return spans(JSON.parse(new TextDecoder().decode(file.bytes)).blocks)
+      .filter((s) => s.cls === 'comment-start' || s.cls === 'insertion')
+      .map((s) => [s.cls, s.attrs.author, s.attrs.date]);
+  };
+
+  it('stamps the author and date of whoever wrote the text onto comments and changes', async () => {
+    const json = JSON.stringify({
+      runs: [{ start: 0, end: new TextEncoder().encode(QMD).length, actor: 'bear', time: 1_700_000_000 }],
+      identities: { bear: { name: 'Kind Bear', color: '#112233' } },
+    });
+    expect(await authors(json)).toEqual([
+      ['comment-start', 'Kind Bear', '2023-11-14T22:13:20Z'],
+      ['insertion', 'Kind Bear', '2023-11-14T22:13:20Z'],
+    ]);
+  });
+
+  it('leaves pandoc’s default author when no authorship is passed', async () => {
+    expect(await authors()).toEqual([
+      ['comment-start', 'unknown', undefined],
+      ['insertion', undefined, undefined],
+    ]);
   });
 });
 

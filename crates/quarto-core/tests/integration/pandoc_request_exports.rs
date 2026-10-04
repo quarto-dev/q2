@@ -42,6 +42,7 @@ fn render(
     let content = std::fs::read(path).unwrap();
     pollster::block_on(render_pandoc_request(
         PandocRequestInput {
+            attribution: None,
             scope: quarto_core::pandoc_request::render::BookScope::Auto,
             captures_by_path: Default::default(),
             capture_error: None,
@@ -159,6 +160,7 @@ fn typst_available_fonts_are_echoed() {
     let project = ProjectContext::discover(&doc, runtime.as_ref()).unwrap();
     let out = pollster::block_on(render_pandoc_request(
         PandocRequestInput {
+            attribution: None,
             scope: quarto_core::pandoc_request::render::BookScope::Auto,
             captures_by_path: Default::default(),
             capture_error: None,
@@ -246,4 +248,76 @@ fn the_table_agrees_with_what_render_pandoc_request_accepts() {
         let out = render(&doc, info.key, None);
         assert_eq!(out.request.is_some(), info.available, "{}", info.key);
     }
+}
+
+/// The hub passes the active file's authorship with a docx download, so a comment or tracked
+/// change carries its author instead of pandoc's `unknown`.
+fn render_with_attribution(path: &Path, qmd: &str) -> PandocRequestOutcome {
+    let json = serde_json::json!({
+        "runs": [{ "start": 0, "end": qmd.len(), "actor": "bear", "time": 1_700_000_000 }],
+        "identities": { "bear": { "name": "Kind Bear", "color": "#ff0000" } }
+    })
+    .to_string();
+    let runtime = Arc::new(NativeRuntime::new());
+    let project = ProjectContext::discover(path, runtime.as_ref()).unwrap();
+    pollster::block_on(render_pandoc_request(
+        PandocRequestInput {
+            attribution: Some(Arc::new(
+                quarto_core::attribution::PreBuiltAttributionProvider::new(json),
+            )),
+            scope: quarto_core::pandoc_request::render::BookScope::Chapter,
+            captures_by_path: Default::default(),
+            capture_error: None,
+            hooks: None,
+            path,
+            content: qmd.as_bytes(),
+            format: "docx",
+            project: &project,
+            source_date_epoch: Some(1_700_000_000),
+            captures: Vec::new(),
+            typst_available_fonts: None,
+            resolver: None,
+        },
+        runtime,
+    ))
+}
+
+fn ast_json(outcome: PandocRequestOutcome) -> String {
+    assert!(outcome.error.is_none(), "{:?}", outcome.error);
+    let request = outcome.request.expect("request");
+    String::from_utf8(request.files[0].bytes.clone()).unwrap()
+}
+
+#[test]
+fn a_docx_request_stamps_the_blamed_author_on_a_comment() {
+    let (_guard, root) = scratch();
+    let doc = root.join("doc.qmd");
+    let qmd = "---\ntitle: T\n---\n\nSome [range [>> why?]] here.\n";
+    write(&doc, qmd.as_bytes());
+    let json = ast_json(render_with_attribution(&doc, qmd));
+    assert!(json.contains(r#"["author","Kind Bear"]"#));
+    assert!(!json.contains(r#"["author","unknown"]"#));
+}
+
+#[test]
+fn a_docx_request_without_attribution_leaves_the_author_unknown() {
+    let (_guard, root) = scratch();
+    let doc = root.join("doc.qmd");
+    write(
+        &doc,
+        b"---\ntitle: T\n---\n\nSome [range [>> why?]] here.\n",
+    );
+    let json = ast_json(render(&doc, "docx", None));
+    assert!(json.contains(r#"["author","unknown"]"#));
+}
+
+#[test]
+fn a_project_page_docx_request_stamps_the_blamed_author() {
+    let (_guard, root) = scratch();
+    write(&root.join("_quarto.yml"), b"project:\n  type: default\n");
+    let doc = root.join("doc.qmd");
+    let qmd = "---\ntitle: T\n---\n\nSome [range [>> why?]] here.\n";
+    write(&doc, qmd.as_bytes());
+    let json = ast_json(render_with_attribution(&doc, qmd));
+    assert!(json.contains(r#"["author","Kind Bear"]"#));
 }

@@ -165,6 +165,7 @@ fn render(root: &Path, qmd: &str, format: &str, net: &Arc<ScriptedNet>) -> Pando
     let project = ProjectContext::discover(&doc, net.as_ref()).unwrap();
     pollster::block_on(render_pandoc_request(
         PandocRequestInput {
+            attribution: None,
             scope: quarto_core::pandoc_request::render::BookScope::Auto,
             captures_by_path: Default::default(),
             capture_error: None,
