@@ -84,6 +84,18 @@ export function UploadIcon({ size }: IconProps) {
   );
 }
 
+/** Document with an arrow entering it — "import a document". */
+export function FileImportIcon({ size }: IconProps) {
+  return (
+    <StrokeIcon size={size}>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+      <path d="M14 2v6h6" />
+      <path d="M8 14h8" />
+      <path d="m13 11 3 3-3 3" />
+    </StrokeIcon>
+  );
+}
+
 /** Printer — "open printable version". */
 export function PrintIcon({ size }: IconProps) {
   return (

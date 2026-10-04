@@ -13,11 +13,11 @@ const BUTTON = 'button[aria-label="Import document"]';
 const DIALOG = '.import-dialog';
 
 // The new surfaces only: the surrounding top bar carries baselined contrast debt (`.doc-kicker`).
-const scan = (page: Page) => new AxeBuilder({ page }).include('.import-btn-box').include(DIALOG).analyze();
+const scan = (page: Page) => new AxeBuilder({ page }).include('.sidebar-header').include(DIALOG).analyze();
 const importButton = (page: Page) => page.locator(`${DIALOG} .qh-btn.primary`);
 
 test('the button is keyboard-reachable and opens the picker; the hidden input takes the formats from the table', async ({ page }) => {
-  await bootHarness(page, 'import-button', '.top-bars', 'light');
+  await bootHarness(page, 'import-button', '.file-sidebar', 'light');
   const button = page.locator(BUTTON);
   await expect(button).not.toHaveAttribute('aria-disabled', 'true');
   const accept = await page.getByTestId('import-file-input').getAttribute('accept');
@@ -31,7 +31,7 @@ test('the button is keyboard-reachable and opens the picker; the hidden input ta
 });
 
 test('the button stays disabled (and says so) until the format table has loaded', async ({ page }) => {
-  await bootHarness(page, 'import-button-loading', '.top-bars', 'light');
+  await bootHarness(page, 'import-button-loading', '.file-sidebar', 'light');
   await expect(page.locator(BUTTON)).toHaveAttribute('aria-disabled', 'true');
 });
 
@@ -126,7 +126,7 @@ const STATES = [
 for (const route of STATES) {
   for (const theme of THEMES) {
     test(`axe: ${route} — ${theme} theme`, async ({ page }) => {
-      await bootHarness(page, route, route.startsWith('import-button') ? '.top-bars' : DIALOG, theme);
+      await bootHarness(page, route, route.startsWith('import-button') ? '.file-sidebar' : DIALOG, theme);
       if (route === 'import-dialog-report' || route === 'import-dialog-failure' || route === 'import-dialog-offline' || route === 'import-dialog-write-failure') {
         await expect(page.getByTestId('import-report')).toBeVisible();
       }

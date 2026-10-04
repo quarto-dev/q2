@@ -221,10 +221,10 @@ function ImportForm({ request, folders, existingPaths, onClose, commit }: Import
                   aria-describedby="import-media-line import-errors"
                   onChange={(e) => setName(e.target.value)}
                 />
-                <p id="import-media-line" className="import-media-line">
-                  {importDoc.mediaLine(mediaDir)}
-                </p>
               </div>
+              <p id="import-media-line" className="import-media-line">
+                {importDoc.mediaLine(mediaDir)}
+              </p>
               <div id="import-errors">
                 {refused && <DiagnosticList diagnostics={validation ?? []} />}
                 {!refused && nameError && <div className="qh-error inline">{nameError}</div>}

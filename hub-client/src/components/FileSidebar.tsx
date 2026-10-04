@@ -37,6 +37,7 @@ import MoreActionsIconButton from './MoreActionsIconButton';
 import { treeRowIndent } from './fileTreeRowHelpers';
 import { Menu, MenuItem } from './Menu';
 import Tooltip from './Tooltip';
+import ImportControl, { type ImportControlProps } from './ImportControl';
 import { fileSidebar } from '../strings';
 import './FileSidebar.css';
 
@@ -91,6 +92,8 @@ export interface FileSidebarProps {
   onCopyLink?: (file: FileEntry) => void;
   /** Open the search dialog (header magnifying-glass button). */
   onOpenSearch?: () => void;
+  /** Document import (header button next to Add asset); omitted when the host has no importer. */
+  importDocument?: ImportControlProps;
 }
 
 interface FolderMenuState {
@@ -181,6 +184,7 @@ export default function FileSidebar({
   onOpenInNewTab,
   onCopyLink,
   onOpenSearch,
+  importDocument,
 }: FileSidebarProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   // Drag-to-move (sidebar-internal drag of a file row): the folder path
@@ -961,6 +965,7 @@ export default function FileSidebar({
             <UploadIcon />
           </button>
         </Tooltip>
+        {importDocument && <ImportControl {...importDocument} />}
         {onOpenSearch && (
           <Tooltip content={fileSidebar.searchLabel}>
             <button

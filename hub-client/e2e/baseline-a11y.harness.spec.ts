@@ -74,7 +74,7 @@ const SCAN_PAGES: { page: string; label: string; selector: string }[] = [
   { page: 'download-as-disabled', label: 'download-as-disabled', selector: '.top-bars' },
   { page: 'download-as-book-progress', label: 'download-as-book-progress', selector: '.top-bars' },
   // document import P5: the Import button's top bar and the dialog's states (strict in import-dialog.harness.spec.ts too).
-  { page: 'import-button', label: 'import-button', selector: '.top-bars' },
+  { page: 'import-button', label: 'import-button', selector: '.file-sidebar' },
   { page: 'import-dialog', label: 'import-dialog', selector: '.import-dialog' },
   { page: 'import-dialog-collision', label: 'import-dialog-collision', selector: '.import-dialog' },
   { page: 'import-dialog-too-large', label: 'import-dialog-too-large', selector: '.import-dialog' },

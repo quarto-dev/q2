@@ -1594,6 +1594,11 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
                         onOpenInNewTab={handleOpenInNewTab}
                         onCopyLink={handleCopyLink}
                         onOpenSearch={() => setShowSearchDialog(true)}
+                        importDocument={
+                          importEnabled
+                            ? { formats: importFormats, disabled: replayState.isActive, onPick: handleImportPick }
+                            : undefined
+                        }
                       />
                     </>
                   );
@@ -1664,11 +1669,6 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
                       disabledReason:
                         previewMode.mode === 'neither' ? downloadStrings.neitherDescription(previewMode.formatKey) : undefined,
                     }
-                  : undefined
-              }
-              importDocument={
-                importEnabled
-                  ? { formats: importFormats, disabled: replayState.isActive, onPick: handleImportPick }
                   : undefined
               }
             />

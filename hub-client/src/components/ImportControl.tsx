@@ -1,13 +1,13 @@
 /**
- * "Import document" control (document import P5): a boxed icon button in the document top bar
- * that opens the file picker, filtered to the formats the Rust format table lists.
+ * "Import document" control (document import P5): an icon button in the Files sidebar header,
+ * next to Add asset, that opens the file picker, filtered to the formats the Rust format table lists.
  *
  * The `accept` filter is advisory (users can override it in the picker), so the dialog
  * re-validates every file. Presentational: choosing files hands them to `onPick`, which
  * queues an import dialog for each.
  */
 import { useRef } from 'react';
-import { UploadIcon } from './icons';
+import { FileImportIcon } from './icons';
 import Tooltip from './Tooltip';
 import { importDoc } from '../strings';
 import type { ImportFormats } from '../pandoc/importService';
@@ -26,18 +26,18 @@ export default function ImportControl({ formats, disabled = false, onPick }: Imp
   const inert = disabled || formats === null;
 
   return (
-    <div className="import-btn-box">
+    <>
       <Tooltip content={importDoc.buttonTooltip}>
         <button
           type="button"
-          className={`qh-icon-btn boxed import-btn${inert ? ' is-disabled' : ''}`}
+          className={`qh-btn small outline import-doc-btn${inert ? ' is-disabled' : ''}`}
           aria-label={importDoc.buttonLabel}
           aria-disabled={inert || undefined}
           onClick={() => {
             if (!inert) inputRef.current?.click();
           }}
         >
-          <UploadIcon />
+          <FileImportIcon />
         </button>
       </Tooltip>
       <input
@@ -57,6 +57,6 @@ export default function ImportControl({ formats, disabled = false, onPick }: Imp
           for (const file of files) onPick(file);
         }}
       />
-    </div>
+    </>
   );
 }

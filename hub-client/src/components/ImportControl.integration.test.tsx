@@ -6,12 +6,13 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, renderHook, waitFor } from '@testing-library/react';
-import ImportControl from './ImportControl';
+import ImportControl, { type ImportControlProps } from './ImportControl';
+import FileSidebar from './FileSidebar';
 import DocumentTopBar from './DocumentTopBar';
 import { createStubImportService, setImportServiceForTests } from '../pandoc/importService';
 import { useImportFormats } from '../pandoc/useImportFormats';
 import { importAccept, isImportableName } from '../utils/importFormats';
-import { importDoc } from '../strings';
+import { importDoc, fileSidebar } from '../strings';
 
 afterEach(() => {
   cleanup();
@@ -85,17 +86,30 @@ describe('ImportControl', () => {
   });
 });
 
-describe('DocumentTopBar import placement', () => {
-  it('shows the button with no file open and no downloadAs, and hides it in fullscreen preview', async () => {
+describe('FileSidebar import placement', () => {
+  const sidebar = (importDocument?: ImportControlProps) => (
+    <FileSidebar
+      files={[]}
+      currentFile={null}
+      onSelectFile={vi.fn()}
+      onNewFile={vi.fn()}
+      onUploadFiles={vi.fn()}
+      importDocument={importDocument}
+    />
+  );
+
+  it('puts the button in the sidebar header right after Add asset', async () => {
     const formats = await formatsPromise();
-    const importDocument = { formats, onPick: vi.fn() };
-    const { rerender } = render(<DocumentTopBar currentFilePath={null} importDocument={importDocument} />);
-    expect(screen.getByRole('button', { name: importDoc.buttonLabel })).toBeTruthy();
-    rerender(<DocumentTopBar currentFilePath={null} isFullscreenPreview importDocument={importDocument} />);
-    expect(screen.queryByRole('button', { name: importDoc.buttonLabel })).toBeNull();
+    render(sidebar({ formats, onPick: vi.fn() }));
+    const header = document.querySelector('.sidebar-header') as HTMLElement;
+    const labels = Array.from(header.querySelectorAll('button')).map((b) => b.getAttribute('aria-label'));
+    expect(labels.indexOf(importDoc.buttonLabel)).toBe(labels.indexOf(fileSidebar.addAsset) + 1);
   });
 
-  it('is absent when the host does not offer import', () => {
+  it('is absent when the host does not offer import, and not in the document top bar', () => {
+    render(sidebar());
+    expect(screen.queryByRole('button', { name: importDoc.buttonLabel })).toBeNull();
+    cleanup();
     render(<DocumentTopBar currentFilePath="a.qmd" />);
     expect(screen.queryByRole('button', { name: importDoc.buttonLabel })).toBeNull();
   });

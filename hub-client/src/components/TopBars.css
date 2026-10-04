@@ -99,13 +99,7 @@
   flex-shrink: 0;
 }
 
-.import-btn.is-disabled {
-  color: var(--text-secondary);
-  cursor: default;
-}
-
 .fullscreen-btn-box,
-.import-btn-box,
 .print-btn-box {
   align-self: stretch;
   width: 35px;

@@ -15,8 +15,6 @@ import ViewToggleControl from './ViewToggleControl';
 import Tooltip from './Tooltip';
 import Toast from './Toast';
 import DownloadAsControl from './DownloadAsControl';
-import ImportControl from './ImportControl';
-import type { ImportFormats } from '../pandoc/importService';
 import type { DownloadAs } from '../pandoc/useDownloadAs';
 import { openPrintableDocument } from '../services/printableDocument';
 import { header } from '../strings';
@@ -54,12 +52,6 @@ interface DocumentTopBarProps {
    * previewed nor produced: the button stays, `aria-disabled` and described by this text.
    */
   downloadAs?: DownloadAs & { disabledReason?: string };
-  /**
-   * "Import document" (document import P5). Absent where import is unavailable (the `q2 preview`
-   * embed, or no pandoc.wasm). Independent of `downloadAs`: it shows with or without an open file.
-   * `formats` is null while the format table loads.
-   */
-  importDocument?: { formats: ImportFormats | null; disabled?: boolean; onPick: (file: File) => void };
 }
 
 export default function DocumentTopBar({
@@ -74,7 +66,6 @@ export default function DocumentTopBar({
   onSetSplit,
   splitDisabled,
   downloadAs,
-  importDocument,
 }: DocumentTopBarProps) {
   // "Open printable version" (issue #315). The React preview formats
   // can't be printed in place (sandboxed iframe → clipped single page).
@@ -143,9 +134,6 @@ export default function DocumentTopBar({
             </button>
           </Tooltip>
         </div>
-      )}
-      {importDocument && !isFullscreenPreview && (
-        <ImportControl formats={importDocument.formats} disabled={importDocument.disabled} onPick={importDocument.onPick} />
       )}
       {downloadAs && !isFullscreenPreview && (
         <DownloadAsControl

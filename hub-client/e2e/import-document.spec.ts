@@ -183,21 +183,19 @@ test.describe('Import button', () => {
 });
 
 test.describe('Import button placement', () => {
-  test('is in the top bar with no file open, for an image (the viewer state) and for a source file; hidden in fullscreen preview', async ({ page }) => {
-    const button = page.getByRole('button', { name: 'Import document' });
+  test('is in the Files sidebar header next to Add asset, for no file open, an image (the viewer state) and a source file', async ({ page }) => {
+    const button = page.locator('.sidebar-header').getByRole('button', { name: 'Import document' });
     await openProject(page, [INDEX, { path: 'pic.png', content: PNG.toString('base64'), contentType: 'binary', mimeType: 'image/png' }]);
     await expect(button).toBeVisible({ timeout: 30000 });
     await expect(button).not.toHaveAttribute('aria-disabled', 'true');
-    // The image viewer opens for a png; the top bar, and the Import button with it, stays.
+    // The image viewer opens for a png; the sidebar, and the Import button with it, stays.
     await fileRow(page, 'pic.png').click();
     await expect(page.locator('.image-viewer, img[alt]').first()).toBeVisible({ timeout: 15000 });
     await expect(button).toBeVisible();
     await fileRow(page, 'index.qmd').click();
     await expect(editorText(page)).toContainText('An existing document.', { timeout: 30000 });
     await expect(button).toBeVisible();
-    // Like "Download as", it is hidden while the preview is fullscreen.
-    await page.getByRole('button', { name: 'Fullscreen preview' }).click();
-    await expect(button).toHaveCount(0);
+    await expect(page.locator('.sidebar-header').getByRole('button', { name: 'Add asset' })).toBeVisible();
   });
 });
 
