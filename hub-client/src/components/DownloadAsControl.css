@@ -46,6 +46,22 @@
   gap: 8px;
 }
 
+.download-warnings-body {
+  position: relative;
+}
+
+.download-copy-btn {
+  position: absolute;
+  top: 0;
+  inset-inline-end: 0;
+  padding: 4px;
+}
+
+/* Keep the first warning clear of the copy button. */
+.download-warnings-body .download-diagnostics {
+  padding-inline-end: 24px;
+}
+
 .download-status-error {
   color: var(--editor-error-text);
   font-weight: 600;

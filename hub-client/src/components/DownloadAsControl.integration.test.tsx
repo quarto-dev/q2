@@ -5,7 +5,7 @@
  * progress/cancel surface and the live region.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, within, waitFor } from '@testing-library/react';
 import DownloadAsControl from './DownloadAsControl';
 import { download } from '../strings';
 import type { DownloadFormat, DownloadStatus } from '../pandoc/downloadController';
@@ -110,19 +110,6 @@ describe('DownloadAsControl', () => {
     expect(document.activeElement).toBe(button);
   });
 
-  it('mentions the one-time download in the menu', () => {
-    setup();
-    fireEvent.click(screen.getByRole('button', { name: 'Download as' }));
-    expect(screen.getByText(/about 16 MB/)).toBeTruthy();
-  });
-
-  it('with PDF in the menu, the hint states the larger first-use total', () => {
-    const PDF: DownloadFormat = { key: 'typst-pdf', label: 'PDF', extension: 'pdf', mime: 'application/pdf' };
-    setup({ formats: [DOCX, PDF] });
-    fireEvent.click(screen.getByRole('button', { name: 'Download as' }));
-    expect(screen.getByText(/about 33 MB in all/)).toBeTruthy();
-  });
-
   it('shows the typst stages of a PDF download and a typst diagnostic with its location', () => {
     const PDF: DownloadFormat = { key: 'typst-pdf', label: 'PDF', extension: 'pdf', mime: 'application/pdf' };
     setup({ formats: [PDF], status: { phase: 'working', clickId: 1, format: PDF, stage: 'typst-compiling' } });
@@ -193,6 +180,29 @@ describe('DownloadAsControl', () => {
     expect(screen.getByText(/missing figure.png/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
     expect(onDismiss).toHaveBeenCalled();
+  });
+
+  it('copies the warnings, not the headline, from a button in the warnings list', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    setup({
+      status: {
+        phase: 'done',
+        clickId: 1,
+        format: DOCX,
+        fileName: 'report.docx',
+        notices: [],
+        unexecutedCells: 0,
+        warnings: [
+          { origin: 'rust', kind: 'warning', code: 'Q-11-1', title: 'first', problem: 'one' },
+          { origin: 'rust', kind: 'warning', code: 'Q-11-2', title: 'second', problem: 'two' },
+        ],
+      },
+    });
+    const button = screen.getByRole('button', { name: download.copyStatus });
+    expect(button.closest('.download-warnings')).not.toBeNull();
+    fireEvent.click(button);
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('[Q-11-1] first: one\n[Q-11-2] second: two'));
   });
 
   it('a finished typst download notes that the .typ may have dangling resource references; other formats do not', () => {

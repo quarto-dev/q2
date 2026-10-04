@@ -68,14 +68,12 @@ export const download = {
   buttonLabel: 'Download as',
   buttonTooltip: 'Download this document as another format',
   menuLabel: 'Download as',
-  /** Shown in the menu: the first use fetches pandoc, then it is cached. */
-  sizeHint: 'The first download fetches the converter (about 16 MB, kept for next time).',
-  /** PDF adds the Typst compiler and fonts (measured first-use total 34,441,544 gzip bytes, evidence §14). */
-  sizeHintPdf: 'The first download fetches the converter (about 16 MB). A first PDF also fetches the PDF compiler and fonts (about 33 MB in all). All kept for next time.',
   compilingPdf: 'Compiling the PDF…',
   startingCompiler: 'Starting the PDF compiler…',
   cancel: 'Cancel',
   dismiss: 'Dismiss',
+  copyStatus: 'Copy this message',
+  copiedStatus: 'Copied',
   statusRegionLabel: 'Download status',
   preparing: 'Preparing the document…',
   startingConverter: 'Starting the converter…',

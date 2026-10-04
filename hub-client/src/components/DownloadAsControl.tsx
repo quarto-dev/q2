@@ -7,9 +7,9 @@
  * `Menu` (APG menu-button pattern); a disabled button is `aria-disabled` and described by
  * text (not a tooltip only); progress and errors reach a live region.
  */
-import { Fragment, useId, useRef, useState } from 'react';
+import { Fragment, useEffect, useId, useRef, useState } from 'react';
 import { Menu, MenuItem, MenuLabel } from './Menu';
-import { DownloadIcon } from './icons';
+import { CheckIcon, CopyIcon, DownloadIcon } from './icons';
 import Tooltip from './Tooltip';
 import { download } from '../strings';
 import './DownloadAsControl.css';
@@ -42,6 +42,43 @@ const diagText = (d: ListedDiagnostic): { code?: string; title: string; detail?:
   if (d.origin === 'typst') return { title: d.message, detail: d.range ? `${d.path} ${d.range}` : d.path };
   return { code: d.code, title: d.title, detail: d.problem };
 };
+
+/** One diagnostic as plain text, the way the list shows it. */
+const diagLine = (d: ListedDiagnostic): string => {
+  const t = diagText(d);
+  return `${t.code ? `[${t.code}] ` : ''}${t.title}${t.detail ? `: ${t.detail}` : ''}`;
+};
+
+/** The warnings as plain text, one per line (not the panel's headline). */
+export function warningsCopyText(warnings: ListedDiagnostic[]): string {
+  return warnings.map(diagLine).join('\n');
+}
+
+/** Small icon button, top-right of the panel, that copies `text`; the icon turns to a check for a moment. */
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(false), 1500);
+    return () => clearTimeout(t);
+  }, [copied]);
+  return (
+    <button
+      type="button"
+      className="qh-icon-btn download-copy-btn"
+      aria-label={copied ? download.copiedStatus : download.copyStatus}
+      title={copied ? download.copiedStatus : download.copyStatus}
+      onClick={() => {
+        navigator.clipboard.writeText(text).then(
+          () => setCopied(true),
+          (err) => console.error('Clipboard write failed:', err),
+        );
+      }}
+    >
+      {copied ? <CheckIcon size={14} /> : <CopyIcon size={14} />}
+    </button>
+  );
+}
 
 export function DiagnosticList({ diagnostics }: { diagnostics: ListedDiagnostic[] }) {
   if (diagnostics.length === 0) return null;
@@ -117,7 +154,6 @@ export default function DownloadAsControl({ formats, status, disabledReason, onS
               </MenuItem>
             ),
           )}
-          <MenuLabel>{formats.some((f) => f.key === TYPST_PDF_KEY) ? download.sizeHintPdf : download.sizeHint}</MenuLabel>
         </Menu>
       )}
       <div className="download-visually-hidden" role="status" aria-live="polite" aria-label={download.statusRegionLabel}>
@@ -155,7 +191,10 @@ export default function DownloadAsControl({ formats, status, disabledReason, onS
               {status.warnings.length > 0 && (
                 <details className="download-warnings">
                   <summary>{download.warnings(status.warnings.length)}</summary>
-                  <DiagnosticList diagnostics={status.warnings} />
+                  <div className="download-warnings-body">
+                    <CopyButton text={warningsCopyText(status.warnings)} />
+                    <DiagnosticList diagnostics={status.warnings} />
+                  </div>
                 </details>
               )}
               <div className="download-status-actions">
