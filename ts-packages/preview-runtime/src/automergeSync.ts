@@ -19,6 +19,7 @@ import {
   type ActorIdentity,
   type CaptureRef,
   type CreateBinaryFileResult,
+  type CreateFileIfAbsentResult,
   type CreateProjectOptions,
   type CreateProjectResult,
   type FilePayload,
@@ -30,7 +31,7 @@ import type { Repo } from '@automerge/automerge-repo';
 import { vfsAddFile, vfsAddBinaryFile, vfsRemoveFile, vfsClear, initWasm, type ProjectFile } from './wasmRenderer';
 
 // Re-export types for use in other components
-export type { ConnectOptions, Patch, EditorContentChange, FileEntry, ActorIdentity, CaptureRef, CreateBinaryFileResult, CreateProjectOptions, CreateProjectResult, SyncDiagnostics, DocInventoryEntry };
+export type { ConnectOptions, Patch, EditorContentChange, FileEntry, ActorIdentity, CaptureRef, CreateBinaryFileResult, CreateFileIfAbsentResult, CreateProjectOptions, CreateProjectResult, SyncDiagnostics, DocInventoryEntry };
 
 // Event handlers for state changes
 type FilesChangeHandler = (files: FileEntry[]) => void;
@@ -237,6 +238,19 @@ export function applyEditorOperations(path: string, changes: EditorContentChange
  */
 export async function createFile(path: string, content: string = ''): Promise<void> {
   await ensureClient().createFile(path, content);
+  // VFS is updated via callback
+}
+
+/**
+ * Create a new text file only if the path is not already in the index.
+ * The content is the document's single initial change. See the client's
+ * `createFileIfAbsent` for the residual unsynced-peer risk.
+ */
+export async function createFileIfAbsent(
+  path: string,
+  content: string
+): Promise<CreateFileIfAbsentResult> {
+  return ensureClient().createFileIfAbsent(path, content);
   // VFS is updated via callback
 }
 

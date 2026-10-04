@@ -1,0 +1,59 @@
+/* Import dialog (document import P5). Solid colors only (hub-client-theme rule). */
+
+/* The progress and report text is plain markup (no label or input to carry a color): without this it
+   inherits the page's text color, which is unreadable on the dark dialog surface. */
+.import-dialog {
+  color: var(--text-primary);
+}
+.import-media-line {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.import-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.import-progress progress {
+  width: 100%;
+}
+
+.import-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.import-report {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.import-report-headline {
+  margin: 0;
+}
+
+.import-report-failure {
+  margin: 0;
+  color: var(--editor-error-text);
+}
+
+.import-report-group h3 {
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+
+.import-report .download-diagnostics {
+  max-height: 240px;
+}

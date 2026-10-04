@@ -42,6 +42,22 @@ const BINARY_EXTENSIONS: &[(&str, &str)] = &[
     ("tif", "image/tiff"),
     // Documents
     ("pdf", "application/pdf"),
+    // Import sources (document import I21): stored as-is, and EMF/WMF when
+    // conversion fails. Mirror of `BINARY_EXTENSIONS` in
+    // ts-packages/quarto-automerge-schema.
+    (
+        "docx",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ),
+    ("odt", "application/vnd.oasis.opendocument.text"),
+    ("rtf", "application/rtf"),
+    ("epub", "application/epub+zip"),
+    (
+        "pptx",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ),
+    ("emf", "image/emf"),
+    ("wmf", "image/wmf"),
     // hephaestus plot documents (bd-sxiv2tio). Not an IANA type; the
     // vendor-tree name keeps the binary document self-describing. Mirror
     // of `BINARY_EXTENSIONS` in ts-packages/quarto-automerge-schema.
@@ -355,6 +371,22 @@ mod tests {
         assert!(!is_binary_extension("qmd"));
         assert!(!is_binary_extension("yml"));
         assert!(!is_binary_extension("txt"));
+    }
+
+    #[test]
+    fn import_sources_and_emf_wmf_are_binary() {
+        // Document import (I21): mirrors the TS `BINARY_EXTENSIONS`.
+        for ext in ["docx", "odt", "rtf", "epub", "pptx", "emf", "wmf"] {
+            assert!(is_binary_extension(ext), "{ext}");
+            assert!(is_binary_extension(&ext.to_uppercase()), "{ext}");
+            assert!(mime_type_from_extension(ext).is_some(), "{ext}");
+        }
+        assert_eq!(mime_type_from_extension("emf"), Some("image/emf"));
+        assert_eq!(mime_type_from_extension("wmf"), Some("image/wmf"));
+        assert_eq!(
+            mime_type_from_extension("docx"),
+            Some("application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        );
     }
 
     #[test]

@@ -8,7 +8,7 @@
  * This component is only imported in development builds.
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import ProjectSetError from './ProjectSetError';
 import ProjectsHome from './ProjectsHome';
 import NewFileDialog from './NewFileDialog';
@@ -23,6 +23,8 @@ import { PreviewIcon } from './icons';
 import StatusTab from './tabs/StatusTab';
 import ProjectTopBar from './ProjectTopBar';
 import DocumentTopBar from './DocumentTopBar';
+import ImportDialog from './ImportDialog';
+import { createStubImportService, setImportServiceForTests, type ImportFormats, type ImportService } from '../pandoc/importService';
 import { DownloadOnlyView, NeitherView } from './render/DownloadOnlyViews';
 import type { DownloadFormat, DownloadStatus } from '../pandoc/downloadController';
 import Toast from './Toast';
@@ -621,6 +623,124 @@ function EditorChrome({ children }: { children: React.ReactNode }) {
   );
 }
 
+
+/**
+ * The import dialog (document import P5) reached in one state. The dialog owns its phase, so a
+ * state past the form is reached the way a user reaches it: a scripted service, and the harness
+ * clicks Import once the form is ready. `pending` states never resolve (the dialog stays there).
+ */
+type ImportHarnessMode =
+  | 'proposal'
+  | 'collision'
+  | 'too-large'
+  | 'unsupported'
+  | 'importing'
+  | 'loading-pandoc'
+  | 'writing'
+  | 'report'
+  | 'failure'
+  | 'offline'
+  | 'write-failure';
+
+function ImportDialogPage({ mode }: { mode: ImportHarnessMode }) {
+  const file = useMemo(() => {
+    const name = mode === 'unsupported' ? 'picture.png' : mode === 'failure' ? 'corrupt.docx' : 'report.docx';
+    const f = new File(['x'], name);
+    Object.defineProperty(f, 'size', { value: mode === 'too-large' ? 30 * 1024 * 1024 : 1024 });
+    if (mode === 'too-large') Object.defineProperty(f, 'name', { value: 'huge.docx' });
+    return f;
+  }, [mode]);
+
+  // Installed during the first render, before the dialog's mount effects read it.
+  useState(() => {
+    const base = createStubImportService();
+    const never = new Promise<never>(() => {});
+    const service: ImportService = { ...base };
+    if (mode === 'importing') service.importDocument = (_f, _p, opts) => (opts?.onProgress?.('converting'), never);
+    if (mode === 'loading-pandoc') {
+      service.importDocument = (_f, _p, opts) => {
+        opts?.onProgress?.('loading-pandoc');
+        opts?.onLoadProgress?.({ phase: 'download', loaded: 6_500_000, total: 16_700_000 });
+        return never;
+      };
+    }
+    if (mode === 'offline') {
+      service.importDocument = async () => ({
+        ok: false,
+        uiState: 'offline',
+        diagnostics: [{ origin: 'host', kind: 'error', code: 'offline', message: 'The converter could not be loaded.' }],
+      });
+    }
+    setImportServiceForTests(service);
+  });
+
+  const commit: React.ComponentProps<typeof ImportDialog>['commit'] = (outcome, qmdPath) => {
+    if (mode === 'writing') return new Promise(() => {});
+    if (mode === 'write-failure') {
+      return Promise.resolve({
+        ok: false,
+        diagnostics: [
+          { origin: 'host', kind: 'error', code: 'import-write-failed', message: `Could not add the document (${qmdPath}): A file appeared at ${qmdPath} while importing, so nothing was overwritten.`, path: qmdPath },
+          { origin: 'host', kind: 'error', code: 'import-cleanup-failed', message: 'Could not remove report_media/000000000000.png after the failed import: not connected', path: 'report_media/000000000000.png' },
+          ...outcome.diagnostics,
+        ],
+      });
+    }
+    return Promise.resolve({ ok: true, qmdPath, qmdDocId: 'harness', qmd: outcome.qmd, diagnostics: outcome.diagnostics });
+  };
+
+  // Past the form: press Import as soon as validation has enabled it.
+  useEffect(() => {
+    if (mode === 'proposal' || mode === 'collision' || mode === 'too-large' || mode === 'unsupported') return;
+    const timer = setInterval(() => {
+      const button = document.querySelector<HTMLButtonElement>('.import-dialog .qh-btn.primary:not([disabled])');
+      if (button) {
+        clearInterval(timer);
+        button.click();
+      }
+    }, 50);
+    return () => clearInterval(timer);
+  }, [mode]);
+
+  const taken = mode === 'collision';
+  return (
+    <EditorChrome>
+      <ImportDialog
+        request={{ kind: 'import', file, folder: 'docs' }}
+        folders={taken ? ['docs', 'docs/report_media'] : ['docs']}
+        existingPaths={taken ? ['docs/report.qmd', 'docs/index.qmd'] : ['docs/index.qmd']}
+        onClose={() => {}}
+        commit={commit}
+      />
+    </EditorChrome>
+  );
+}
+
+/** The document top bar with the Import button (formats from the stub table). */
+function ImportButtonPage({ loading }: { loading?: boolean }) {
+  const [formats, setFormats] = useState<ImportFormats | null>(null);
+  useEffect(() => {
+    if (loading) return;
+    void createStubImportService().getImportFormats().then(setFormats);
+  }, [loading]);
+  const [picked, setPicked] = useState<string[]>([]);
+  return (
+    <EditorChrome>
+      <div className="top-bars">
+        <DocumentTopBar
+          currentFilePath={null}
+          sidebarOpen={true}
+          onToggleSidebar={() => {}}
+          sidebarToggleRef={{ current: null }}
+          importDocument={{ formats, onPick: (f) => setPicked((p) => [...p, f.name]) }}
+        />
+      </div>
+      <div id="sidebar-drawer" hidden />
+      <div data-testid="import-picked">{picked.join(',')}</div>
+    </EditorChrome>
+  );
+}
+
 interface Props {
   page: string;
 }
@@ -1002,6 +1122,19 @@ const DEV_PAGES: Record<string, () => React.ReactNode> = {
       <div id="sidebar-drawer" hidden />
     </EditorChrome>
   ),
+  'import-button': () => <ImportButtonPage />,
+  'import-button-loading': () => <ImportButtonPage loading />,
+  'import-dialog': () => <ImportDialogPage mode="proposal" />,
+  'import-dialog-collision': () => <ImportDialogPage mode="collision" />,
+  'import-dialog-too-large': () => <ImportDialogPage mode="too-large" />,
+  'import-dialog-unsupported': () => <ImportDialogPage mode="unsupported" />,
+  'import-dialog-importing': () => <ImportDialogPage mode="importing" />,
+  'import-dialog-loading-pandoc': () => <ImportDialogPage mode="loading-pandoc" />,
+  'import-dialog-writing': () => <ImportDialogPage mode="writing" />,
+  'import-dialog-report': () => <ImportDialogPage mode="report" />,
+  'import-dialog-failure': () => <ImportDialogPage mode="failure" />,
+  'import-dialog-offline': () => <ImportDialogPage mode="offline" />,
+  'import-dialog-write-failure': () => <ImportDialogPage mode="write-failure" />,
   'download-as': () => <DownloadAsPage interactive />,
   'download-as-progress': () => (
     <DownloadAsPage

@@ -219,14 +219,14 @@ P0, P1 and P2 start at once, each in its own worktree if run in parallel. P1 lan
 
 Tick a plan when its Close-out is complete and it has landed on `feature/hub-import`.
 
-- [ ] P0 [span comments carry-over](2026-10-03-document-import-P0-span-comments.md)
-- [ ] P1 stage 1 (T1-T4) landed
-- [ ] P1 [pandoc.wasm as a reader](2026-10-03-document-import-P1-pandoc-reader.md)
+- [x] P0 [span comments carry-over](2026-10-03-document-import-P0-span-comments.md)
+- [x] P1 stage 1 (T1-T4) landed
+- [x] P1 [pandoc.wasm as a reader](2026-10-03-document-import-P1-pandoc-reader.md)
 - [x] P2 [qmd writer fixes](2026-10-03-document-import-P2-qmd-writer.md)
-- [ ] P3 [import pipeline in Rust](2026-10-03-document-import-P3-import-pipeline.md)
-- [ ] P4 [import service](2026-10-03-document-import-P4-import-service.md)
-- [ ] P5 [UI and storage](2026-10-03-document-import-P5-import-ui.md)
-- [ ] P6 [editorial marks export](2026-10-03-document-import-P6-editorial-marks-export.md)
+- [x] P3 [import pipeline in Rust](2026-10-03-document-import-P3-import-pipeline.md)
+- [x] P4 [import service](2026-10-03-document-import-P4-import-service.md)
+- [x] P5 [UI and storage](2026-10-03-document-import-P5-import-ui.md) (landed; its Verification still lists Firefox, which does not launch on the dev machine, and the manual dev-server check, both unticked in the plan)
+- [x] P6 [editorial marks export](2026-10-03-document-import-P6-editorial-marks-export.md)
 
 ## Execution conventions (every plan)
 
@@ -246,12 +246,12 @@ Tick a plan when its Close-out is complete and it has landed on `feature/hub-imp
 
 ## Close-out (epic)
 
-- [ ] Every plan ticked above.
+- [x] Every plan ticked above (P5 with the caveat noted on its line).
 - [ ] End-to-end check on a real hub build: a Word-authored docx with tracked changes, comments, a manually typed "1." paragraph, a multi-paragraph footnote, an EMF image and a restarted numbered list imports, opens and renders; the report lists what it should. P1 T2 asks Gordon for this file; if it hasn't arrived, run the check on P1's `track-changes-docx`, `writer-bugs-docx` and `emf-docx` fixtures and say so in the PR. Then "Download as" docx on the imported qmd, open it in Word, and check that the tracked changes, highlights and comments (with their ranges and replies) are back (I23).
 - [ ] **Remove P0's carried commits** (I14) from `feature/hub-import` before opening the final PR. Rebases change SHAs, so identify the commits in `<P0 base>..HEAD` by message, not author (Elliot has other commits on `main`, and "initial prototype" is a generic subject): Elliot's three are the commits whose `-x` trailer names one of his full original SHAs, `(cherry picked from commit 42622bf23ad6183f79e270bbb229da2626af7738)`, `…67d87096eb86976e4cb83d3b978e631149eb5133)` and `…d0004a327ced4936b4816dc8ab70180c21545d92)`; add every commit whose subject starts with `P0:`. Commits labelled `Plan P0:` touch only P0's plan file and are kept. Drop the rest non-interactively (`GIT_SEQUENCE_EDITOR` rewriting `pick` to `drop` for the matched SHAs in `git rebase -i`, or the git-revise skill), then confirm `git diff <pre-removal tip>` touches only the files in P0's list. Elliot's commits carry no tests; P0's own test (T3) and any P0 T2 fixes are `P0:` commits and go too. No later plan may edit P0's files. Re-run the hub-client suites and the workspace nextest after the removal.
   If `feature/span-comments` reaches `main` before the epic ends, drop P0's commits at the next rebase onto `main` instead, and resolve toward Elliot's landed version.
 - [ ] Note in the final PR that imported span comments render as inline text until `feature/span-comments` lands, and link Elliot's branch.
-- [ ] Every plan file re-read and its checklist reconciled against what landed; this epic's checklist likewise; committed.
+- [x] Every plan file re-read and its checklist reconciled against what landed; this epic's checklist likewise; committed (2026-10-04: all seven plans have a LANDED entry; the only open plan boxes are P5's two Verification items).
 
 ## Follow-ons (not in this epic)
 

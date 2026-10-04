@@ -86,6 +86,11 @@
   color: var(--editor-warning-text);
 }
 
+.download-diagnostic-info,
+.download-diagnostic-note {
+  color: var(--text-secondary);
+}
+
 .download-diagnostic-code {
   font-weight: 600;
 }

@@ -74,6 +74,21 @@ function ast(blocks: any[]): string {
 }
 
 describe('buildAssetManifest', () => {
+    it('percent-decodes the target for the VFS lookup but keys the manifest by the written target', () => {
+        vfsMock.mockReturnValue({ success: true, content: PNG_BYTES_B64 });
+        const cache = new Map<string, ManifestCacheEntry>();
+        const target = 'basic-docx%202_media/image1.png';
+
+        const { manifest } = buildAssetManifest(
+            ast([paraOf(imageNode(target))]),
+            '/project/basic-docx 2.qmd',
+            cache,
+        );
+
+        expect(vfsMock).toHaveBeenCalledWith('project/basic-docx 2_media/image1.png');
+        expect(manifest).toEqual({ [target]: 'blob:test-0' });
+    });
+
     it('mints a blob URL for a single Image and adds it to the manifest', () => {
         vfsMock.mockReturnValue({ success: true, content: PNG_BYTES_B64 });
         const cache = new Map<string, ManifestCacheEntry>();

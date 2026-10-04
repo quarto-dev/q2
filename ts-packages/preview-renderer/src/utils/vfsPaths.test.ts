@@ -36,6 +36,26 @@ describe('resolveRelativePath', () => {
     });
 });
 
+describe('resolveRelativePath percent-decoding', () => {
+    const cur = '/project/sub/index.qmd';
+    it('decodes spaces in each segment', () => {
+        expect(resolveRelativePath(cur, 'basic-docx%202_media/a%20b.png')).toBe(
+            '/project/sub/basic-docx 2_media/a b.png',
+        );
+    });
+    it('decodes absolute targets', () => {
+        expect(resolveRelativePath(cur, '/my%20dir/a.png')).toBe('/my dir/a.png');
+    });
+    it('does not let %2F or %2E%2E change the path shape', () => {
+        expect(resolveRelativePath(cur, 'a%2Fb.png')).toBe('/project/sub/a%2Fb.png');
+        expect(resolveRelativePath(cur, '%2E%2E/x.png')).toBe('/project/sub/%2E%2E/x.png');
+    });
+    it('keeps malformed or unencoded names as written', () => {
+        expect(resolveRelativePath(cur, '100%.png')).toBe('/project/sub/100%.png');
+        expect(resolveRelativePath(cur, 'a%b.png')).toBe('/project/sub/a%b.png');
+    });
+});
+
 describe('relativePathBetween', () => {
     it('returns the bare filename for a target in the same directory', () => {
         expect(relativePathBetween('posts/hello.qmd', 'posts/photo.png')).toBe(
