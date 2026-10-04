@@ -48,6 +48,7 @@ pub mod dates;
 pub mod dependency;
 pub mod diagnostic_policy;
 pub mod document_profile;
+pub mod editorial_marks;
 pub mod engine;
 pub mod error;
 pub mod extension;

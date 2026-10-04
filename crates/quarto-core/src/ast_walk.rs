@@ -163,170 +163,224 @@ fn visit_slot(slot: &mut Slot, f: &mut dyn FnMut(&mut Inline)) {
 
 use quarto_pandoc_types::config_value::{ConfigValue, ConfigValueKind};
 
+/// A visitor of the lists directly under one node. [`block_children_mut`] and
+/// [`inline_children_mut`] hand it each child list of a node (one level down) and leave the
+/// recursion, and its order, to the visitor: the post-order list walks below recurse first
+/// and call back after; a top-down rewrite (P6's editorial-marks export) decides per list.
+pub trait ListVisitor {
+    fn inlines(&mut self, list: &mut Inlines);
+    fn blocks(&mut self, list: &mut Vec<Block>);
+}
+
+/// Hand `v` every inline and block list directly under `block`, including those in a custom
+/// node's slots. A `Slot::Block` holds one block, with no room for a list: the visitor sees a
+/// one-element list, and if it comes back as anything but one block, those blocks go in a
+/// classless `Div` (pandoc renders a `Div` as its content).
+pub fn block_children_mut(block: &mut Block, v: &mut dyn ListVisitor) {
+    match block {
+        Block::Plain(p) => v.inlines(&mut p.content),
+        Block::Paragraph(p) => v.inlines(&mut p.content),
+        Block::LineBlock(lb) => {
+            for line in lb.content.iter_mut() {
+                v.inlines(line);
+            }
+        }
+        Block::BlockQuote(bq) => v.blocks(&mut bq.content),
+        Block::OrderedList(ol) => {
+            for item in ol.content.iter_mut() {
+                v.blocks(item);
+            }
+        }
+        Block::BulletList(bl) => {
+            for item in bl.content.iter_mut() {
+                v.blocks(item);
+            }
+        }
+        Block::DefinitionList(dl) => {
+            for (term, defs) in dl.content.iter_mut() {
+                v.inlines(term);
+                for def in defs.iter_mut() {
+                    v.blocks(def);
+                }
+            }
+        }
+        Block::Header(h) => v.inlines(&mut h.content),
+        Block::Div(d) => v.blocks(&mut d.content),
+        Block::Figure(fig) => {
+            caption_children_mut(&mut fig.caption, v);
+            v.blocks(&mut fig.content);
+        }
+        Block::Table(t) => {
+            caption_children_mut(&mut t.caption, v);
+            for row in t.head.rows.iter_mut().chain(t.foot.rows.iter_mut()) {
+                for cell in row.cells.iter_mut() {
+                    v.blocks(&mut cell.content);
+                }
+            }
+            for body in t.bodies.iter_mut() {
+                for row in body.head.iter_mut().chain(body.body.iter_mut()) {
+                    for cell in row.cells.iter_mut() {
+                        v.blocks(&mut cell.content);
+                    }
+                }
+            }
+        }
+        Block::CaptionBlock(cb) => v.inlines(&mut cb.content),
+        Block::NoteDefinitionPara(n) => v.inlines(&mut n.content),
+        Block::NoteDefinitionFencedBlock(n) => v.blocks(&mut n.content),
+        Block::Custom(c) => {
+            for (_name, slot) in c.slots.iter_mut() {
+                slot_children_mut(slot, v);
+            }
+        }
+        Block::CodeBlock(_)
+        | Block::RawBlock(_)
+        | Block::HorizontalRule(_)
+        | Block::BlockMetadata(_) => {}
+    }
+}
+
+fn caption_children_mut(
+    caption: &mut quarto_pandoc_types::caption::Caption,
+    v: &mut dyn ListVisitor,
+) {
+    if let Some(short) = caption.short.as_mut() {
+        v.inlines(short);
+    }
+    if let Some(long) = caption.long.as_mut() {
+        v.blocks(long);
+    }
+}
+
+/// Hand `v` every inline and block list directly under `inline` (a `Cite`'s citation
+/// prefixes and suffixes included, and a custom node's slots). A `Slot::Inline` holds one
+/// inline: if the visitor turns it into anything but one, those go in a classless `Span`.
+pub fn inline_children_mut(inline: &mut Inline, v: &mut dyn ListVisitor) {
+    match inline {
+        Inline::Emph(e) => v.inlines(&mut e.content),
+        Inline::Underline(u) => v.inlines(&mut u.content),
+        Inline::Strong(s) => v.inlines(&mut s.content),
+        Inline::Strikeout(s) => v.inlines(&mut s.content),
+        Inline::Superscript(s) => v.inlines(&mut s.content),
+        Inline::Subscript(s) => v.inlines(&mut s.content),
+        Inline::SmallCaps(s) => v.inlines(&mut s.content),
+        Inline::Quoted(q) => v.inlines(&mut q.content),
+        Inline::Cite(c) => {
+            for citation in c.citations.iter_mut() {
+                v.inlines(&mut citation.prefix);
+                v.inlines(&mut citation.suffix);
+            }
+            v.inlines(&mut c.content);
+        }
+        Inline::Link(l) => v.inlines(&mut l.content),
+        Inline::Image(i) => v.inlines(&mut i.content),
+        Inline::Span(s) => v.inlines(&mut s.content),
+        Inline::Note(n) => v.blocks(&mut n.content),
+        Inline::Insert(i) => v.inlines(&mut i.content),
+        Inline::Delete(d) => v.inlines(&mut d.content),
+        Inline::Highlight(h) => v.inlines(&mut h.content),
+        Inline::EditComment(e) => v.inlines(&mut e.content),
+        Inline::Custom(c) => {
+            for (_name, slot) in c.slots.iter_mut() {
+                slot_children_mut(slot, v);
+            }
+        }
+        Inline::Str(_)
+        | Inline::Code(_)
+        | Inline::Space(_)
+        | Inline::SoftBreak(_)
+        | Inline::LineBreak(_)
+        | Inline::Math(_)
+        | Inline::RawInline(_)
+        | Inline::Shortcode(_)
+        | Inline::NoteReference(_)
+        | Inline::Attr(_) => {}
+    }
+}
+
+fn slot_children_mut(slot: &mut Slot, v: &mut dyn ListVisitor) {
+    match slot {
+        Slot::Blocks(bs) => v.blocks(bs),
+        Slot::Inlines(is) => v.inlines(is),
+        Slot::Block(b) => {
+            let placeholder = Block::HorizontalRule(quarto_pandoc_types::block::HorizontalRule {
+                source_info: b.source_info().clone(),
+            });
+            let mut list = vec![std::mem::replace(&mut **b, placeholder)];
+            v.blocks(&mut list);
+            **b = if list.len() == 1 {
+                list.pop().expect("one block")
+            } else {
+                Block::Div(quarto_pandoc_types::block::Div {
+                    attr: Default::default(),
+                    content: list,
+                    source_info: b.source_info().clone(),
+                    attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
+                })
+            };
+        }
+        Slot::Inline(i) => {
+            let placeholder = Inline::Space(quarto_pandoc_types::inline::Space {
+                source_info: i.source_info().clone(),
+            });
+            let mut list = vec![std::mem::replace(&mut **i, placeholder)];
+            v.inlines(&mut list);
+            **i = if list.len() == 1 {
+                list.pop().expect("one inline")
+            } else {
+                Inline::Span(quarto_pandoc_types::inline::Span {
+                    attr: Default::default(),
+                    content: list,
+                    source_info: i.source_info().clone(),
+                    attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
+                })
+            };
+        }
+    }
+}
+
+/// Map each `ConfigValue` `PandocInlines` / `PandocBlocks` list under `value` (maps and arrays
+/// at any depth) to `v`.
+pub fn config_value_lists_mut(value: &mut ConfigValue, v: &mut dyn ListVisitor) {
+    match &mut value.value {
+        ConfigValueKind::PandocInlines(inlines) => v.inlines(inlines),
+        ConfigValueKind::PandocBlocks(blocks) => v.blocks(blocks),
+        ConfigValueKind::Array(items) => {
+            for item in items.iter_mut() {
+                config_value_lists_mut(item, v);
+            }
+        }
+        ConfigValueKind::Map(entries) => {
+            for entry in entries.iter_mut() {
+                config_value_lists_mut(&mut entry.value, v);
+            }
+        }
+        ConfigValueKind::Scalar { .. }
+        | ConfigValueKind::Path(_)
+        | ConfigValueKind::Glob(_)
+        | ConfigValueKind::Expr(_) => {}
+    }
+}
+
+/// The post-order list walks: recurse into every child list, then call back.
 struct ListWalker<'a> {
     inlines: &'a mut dyn FnMut(&mut Inlines),
     blocks: &'a mut dyn FnMut(&mut Vec<Block>),
 }
 
-impl ListWalker<'_> {
-    fn block_list(&mut self, blocks: &mut Vec<Block>) {
+impl ListVisitor for ListWalker<'_> {
+    fn blocks(&mut self, blocks: &mut Vec<Block>) {
         for block in blocks.iter_mut() {
-            self.block(block);
+            block_children_mut(block, self);
         }
         (self.blocks)(blocks);
     }
 
-    fn inline_list(&mut self, inlines: &mut Inlines) {
+    fn inlines(&mut self, inlines: &mut Inlines) {
         for inline in inlines.iter_mut() {
-            self.inline(inline);
+            inline_children_mut(inline, self);
         }
         (self.inlines)(inlines);
-    }
-
-    fn block(&mut self, block: &mut Block) {
-        match block {
-            Block::Plain(p) => self.inline_list(&mut p.content),
-            Block::Paragraph(p) => self.inline_list(&mut p.content),
-            Block::LineBlock(lb) => {
-                for line in lb.content.iter_mut() {
-                    self.inline_list(line);
-                }
-            }
-            Block::BlockQuote(bq) => self.block_list(&mut bq.content),
-            Block::OrderedList(ol) => {
-                for item in ol.content.iter_mut() {
-                    self.block_list(item);
-                }
-            }
-            Block::BulletList(bl) => {
-                for item in bl.content.iter_mut() {
-                    self.block_list(item);
-                }
-            }
-            Block::DefinitionList(dl) => {
-                for (term, defs) in dl.content.iter_mut() {
-                    self.inline_list(term);
-                    for def in defs.iter_mut() {
-                        self.block_list(def);
-                    }
-                }
-            }
-            Block::Header(h) => self.inline_list(&mut h.content),
-            Block::Div(d) => self.block_list(&mut d.content),
-            Block::Figure(fig) => {
-                self.caption(&mut fig.caption);
-                self.block_list(&mut fig.content);
-            }
-            Block::Table(t) => {
-                self.caption(&mut t.caption);
-                for row in t.head.rows.iter_mut().chain(t.foot.rows.iter_mut()) {
-                    for cell in row.cells.iter_mut() {
-                        self.block_list(&mut cell.content);
-                    }
-                }
-                for body in t.bodies.iter_mut() {
-                    for row in body.head.iter_mut().chain(body.body.iter_mut()) {
-                        for cell in row.cells.iter_mut() {
-                            self.block_list(&mut cell.content);
-                        }
-                    }
-                }
-            }
-            Block::CaptionBlock(cb) => self.inline_list(&mut cb.content),
-            Block::NoteDefinitionPara(n) => self.inline_list(&mut n.content),
-            Block::NoteDefinitionFencedBlock(n) => self.block_list(&mut n.content),
-            Block::Custom(c) => {
-                for (_name, slot) in c.slots.iter_mut() {
-                    self.slot(slot);
-                }
-            }
-            Block::CodeBlock(_)
-            | Block::RawBlock(_)
-            | Block::HorizontalRule(_)
-            | Block::BlockMetadata(_) => {}
-        }
-    }
-
-    fn caption(&mut self, caption: &mut quarto_pandoc_types::caption::Caption) {
-        if let Some(short) = caption.short.as_mut() {
-            self.inline_list(short);
-        }
-        if let Some(long) = caption.long.as_mut() {
-            self.block_list(long);
-        }
-    }
-
-    fn inline(&mut self, inline: &mut Inline) {
-        match inline {
-            Inline::Emph(e) => self.inline_list(&mut e.content),
-            Inline::Underline(u) => self.inline_list(&mut u.content),
-            Inline::Strong(s) => self.inline_list(&mut s.content),
-            Inline::Strikeout(s) => self.inline_list(&mut s.content),
-            Inline::Superscript(s) => self.inline_list(&mut s.content),
-            Inline::Subscript(s) => self.inline_list(&mut s.content),
-            Inline::SmallCaps(s) => self.inline_list(&mut s.content),
-            Inline::Quoted(q) => self.inline_list(&mut q.content),
-            Inline::Cite(c) => {
-                for citation in c.citations.iter_mut() {
-                    self.inline_list(&mut citation.prefix);
-                    self.inline_list(&mut citation.suffix);
-                }
-                self.inline_list(&mut c.content);
-            }
-            Inline::Link(l) => self.inline_list(&mut l.content),
-            Inline::Image(i) => self.inline_list(&mut i.content),
-            Inline::Span(s) => self.inline_list(&mut s.content),
-            Inline::Note(n) => self.block_list(&mut n.content),
-            Inline::Insert(i) => self.inline_list(&mut i.content),
-            Inline::Delete(d) => self.inline_list(&mut d.content),
-            Inline::Highlight(h) => self.inline_list(&mut h.content),
-            Inline::EditComment(e) => self.inline_list(&mut e.content),
-            Inline::Custom(c) => {
-                for (_name, slot) in c.slots.iter_mut() {
-                    self.slot(slot);
-                }
-            }
-            Inline::Str(_)
-            | Inline::Code(_)
-            | Inline::Space(_)
-            | Inline::SoftBreak(_)
-            | Inline::LineBreak(_)
-            | Inline::Math(_)
-            | Inline::RawInline(_)
-            | Inline::Shortcode(_)
-            | Inline::NoteReference(_)
-            | Inline::Attr(_) => {}
-        }
-    }
-
-    fn slot(&mut self, slot: &mut Slot) {
-        match slot {
-            Slot::Block(b) => self.block(b),
-            Slot::Blocks(bs) => self.block_list(bs),
-            Slot::Inline(i) => self.inline(i),
-            Slot::Inlines(is) => self.inline_list(is),
-        }
-    }
-
-    fn config_value(&mut self, value: &mut ConfigValue) {
-        match &mut value.value {
-            ConfigValueKind::PandocInlines(inlines) => self.inline_list(inlines),
-            ConfigValueKind::PandocBlocks(blocks) => self.block_list(blocks),
-            ConfigValueKind::Array(items) => {
-                for item in items.iter_mut() {
-                    self.config_value(item);
-                }
-            }
-            ConfigValueKind::Map(entries) => {
-                for entry in entries.iter_mut() {
-                    self.config_value(&mut entry.value);
-                }
-            }
-            ConfigValueKind::Scalar { .. }
-            | ConfigValueKind::Path(_)
-            | ConfigValueKind::Glob(_)
-            | ConfigValueKind::Expr(_) => {}
-        }
     }
 }
 
@@ -336,7 +390,7 @@ pub fn for_each_inline_list_mut(blocks: &mut Vec<Block>, f: &mut dyn FnMut(&mut 
         inlines: f,
         blocks: &mut |_| {},
     }
-    .block_list(blocks);
+    .blocks(blocks);
 }
 
 /// Call `f` on every block list under `blocks`, `blocks` itself included (post-order).
@@ -345,17 +399,19 @@ pub fn for_each_block_list_mut(blocks: &mut Vec<Block>, f: &mut dyn FnMut(&mut V
         inlines: &mut |_| {},
         blocks: f,
     }
-    .block_list(blocks);
+    .blocks(blocks);
 }
 
 /// Call `f` on every inline list in `meta`'s `PandocInlines` and `PandocBlocks` values, at
 /// any depth of maps and arrays (post-order).
 pub fn for_each_meta_inline_list_mut(meta: &mut ConfigValue, f: &mut dyn FnMut(&mut Inlines)) {
-    ListWalker {
-        inlines: f,
-        blocks: &mut |_| {},
-    }
-    .config_value(meta);
+    config_value_lists_mut(
+        meta,
+        &mut ListWalker {
+            inlines: f,
+            blocks: &mut |_| {},
+        },
+    );
 }
 
 #[cfg(test)]

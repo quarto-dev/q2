@@ -23,6 +23,10 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-10-04
+
+- [`93931143a`](https://github.com/quarto-dev/q2/commits/93931143a): "Download as" Word now carries your editorial marks as real Word markup: `[++ ]` and `[-- ]` become tracked insertions and deletions, `[!! ]` a highlight, and `[>> ]` a comment (with its author and date when you give them, and "unknown" when you don't), including comments on a stretch of text with their replies. PowerPoint downloads show each mark as formatted text.
+
 ### 2026-10-03
 
 - [`b07644399`](https://github.com/quarto-dev/q2/commits/b07644399): The PDF preview now keeps two warm pandoc workers ready and lets a newer edit start while an older render finishes, so the preview refreshes in about 270 ms (Chromium) or 320 ms (Safari engine) after the pause in typing instead of about 380 or 580 ms, and a slow render is no longer thrown away when you keep typing. Download as PDF is unchanged.

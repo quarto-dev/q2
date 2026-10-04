@@ -200,6 +200,9 @@ socket2 = "0.6"
 # only the deflate read codec is needed (same minimal feature set as
 # quarto-source-fetch, which already vendors this at the same version).
 zip = { version = "6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+# document-import P6 T6: every part of a docx/pptx the editorial-marks export writes must be
+# well-formed XML (the extension's run-tests.py checked this with minidom).
+roxmltree = "0.21"
 # book-projects P2 item 49: pure-Rust PDF text extraction for hermetic
 # inspection of a real compiled Typst PDF's rendered figure numbers.
 # CI (main's test-suite.yml) provisions `typst` but not `pdftotext`

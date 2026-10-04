@@ -3,8 +3,8 @@
 //! detection (I6, I17).
 //!
 //! Each is a pure `Pandoc -> (Pandoc, counts)` walk; nothing here reads a clock or a
-//! filesystem (I20). The class names are constants in this one place: P6's export transform
-//! later moves them, and the I4 shape, into a shared module used by both directions.
+//! filesystem (I20). The class names and the I4 shape come from `crate::editorial_marks`,
+//! shared with the export transform (P6) so the two directions cannot drift.
 
 use std::collections::HashSet;
 
@@ -19,27 +19,11 @@ use quarto_source_map::{By, SourceInfo};
 use crate::ast_walk::{
     for_each_block_list_mut, for_each_inline_list_mut, for_each_meta_inline_list_mut,
 };
-
-// ---------------------------------------------------------------------------
-// Class names
-// ---------------------------------------------------------------------------
-
-/// pandoc's docx reader spans (`--track-changes=all`).
-pub const PANDOC_INSERTION: &str = "insertion";
-pub const PANDOC_DELETION: &str = "deletion";
-pub const PANDOC_PARAGRAPH_INSERTION: &str = "paragraph-insertion";
-pub const PANDOC_PARAGRAPH_DELETION: &str = "paragraph-deletion";
-pub const PANDOC_COMMENT_START: &str = "comment-start";
-pub const PANDOC_COMMENT_END: &str = "comment-end";
-/// A Word highlight.
-pub const PANDOC_MARK: &str = "mark";
-
-/// The q2 editorial marks (the classes the qmd reader gives `[++ ]`, `[-- ]`, `[!! ]`,
-/// `[>> ]`).
-pub const QUARTO_INSERT: &str = "quarto-insert";
-pub const QUARTO_DELETE: &str = "quarto-delete";
-pub const QUARTO_HIGHLIGHT: &str = "quarto-highlight";
-pub const QUARTO_EDIT_COMMENT: &str = "quarto-edit-comment";
+use crate::editorial_marks::{
+    PANDOC_COMMENT_END, PANDOC_COMMENT_START, PANDOC_DELETION, PANDOC_INSERTION, PANDOC_MARK,
+    PANDOC_PARAGRAPH_DELETION, PANDOC_PARAGRAPH_INSERTION, QUARTO_DELETE, QUARTO_EDIT_COMMENT,
+    QUARTO_HIGHLIGHT, QUARTO_INSERT, commented_range_span, new_span,
+};
 
 /// The attributes an editorial mark keeps from pandoc's span.
 const KEPT_ATTRS: [&str; 2] = ["author", "date"];
@@ -99,19 +83,6 @@ fn kept_attrs(span: &Span) -> LinkedHashMap<String, String> {
         .filter(|(k, _)| KEPT_ATTRS.contains(&k.as_str()))
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect()
-}
-
-fn new_span(
-    classes: Vec<String>,
-    attrs: LinkedHashMap<String, String>,
-    content: Inlines,
-) -> Inline {
-    Inline::Span(Span {
-        attr: (String::new(), classes, attrs),
-        content,
-        source_info: generated(),
-        attr_source: AttrSourceInfo::empty(),
-    })
 }
 
 /// The comment span `[>> text]{author= date=}` for a `comment-start` marker. The Word `id` is
@@ -260,9 +231,7 @@ fn wrap_group(list: &mut Inlines, s: usize, e: usize) {
         // An empty range: the point comment(s) alone, with no wrapper.
         replacement.extend(comments);
     } else {
-        let mut content = rest;
-        content.extend(comments);
-        replacement.push(new_span(Vec::new(), LinkedHashMap::new(), content));
+        replacement.push(commented_range_span(rest, comments));
     }
     list.splice(first..=last, replacement);
 }

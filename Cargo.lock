@@ -6330,6 +6330,7 @@ dependencies = [
  "quarto-yaml",
  "rayon",
  "regex",
+ "roxmltree 0.21.1",
  "runtimelib",
  "scraper",
  "serde",

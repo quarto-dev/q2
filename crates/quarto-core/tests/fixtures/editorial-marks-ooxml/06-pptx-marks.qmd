@@ -1,0 +1,8 @@
+---
+title: Editorial marks in a PowerPoint deck
+format: pptx
+---
+
+## Slide with marks
+
+Here is [!! a highlight], [++ an insertion], [-- a deletion], and [>> a comment]{author="Alice" date="2024-01-01"}.
