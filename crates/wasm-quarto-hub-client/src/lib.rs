@@ -1603,6 +1603,8 @@ fn pandoc_request_envelope(
 /// `{ scope: 'book' | 'chapter', chapters }` in a book project, else `null`.
 ///
 /// `options` (optional, trailing) is `{ scope?: 'auto' | 'chapter',
+/// attributionJson?: string (the active file's authorship, stamped onto docx
+/// comments and tracked changes; ignored by a whole-book request),
 /// capturesByPath?: Record<string, Uint8Array>, onProgress?: (index, total,
 /// file) => void | Promise<void> }`. `capturesByPath` maps a chapter's
 /// `/`-normalized path relative to the VFS project root to its capture blob
@@ -1684,6 +1686,11 @@ pub async fn render_pandoc_request(
             resolver: Some(ResourceResolverContext::vfs_root(
                 "/.quarto/project-artifacts",
             )),
+            attribution: options.attribution_json.map(|json| {
+                Arc::new(quarto_core::attribution::PreBuiltAttributionProvider::new(
+                    json,
+                )) as Arc<dyn quarto_core::attribution::AttributionSourceProvider>
+            }),
         },
         Arc::clone(&snapshot) as Arc<dyn SystemRuntime>,
     )
@@ -1735,6 +1742,9 @@ struct RequestOptions {
     scope: quarto_core::pandoc_request::render::BookScope,
     captures_by_path: std::collections::BTreeMap<String, Vec<u8>>,
     on_progress: Option<js_sys::Function>,
+    /// The transport JSON of `parse_qmd_to_ast_with_attribution`, for the
+    /// active file.
+    attribution_json: Option<String>,
 }
 
 /// Unpack by hand: `serde-wasm-bindgen` is not a dependency, and a
@@ -1746,6 +1756,7 @@ fn parse_request_options(options: Option<JsValue>) -> Result<RequestOptions, Str
         scope: BookScope::Auto,
         captures_by_path: Default::default(),
         on_progress: None,
+        attribution_json: None,
     };
     let Some(options) = options.filter(|o| !o.is_undefined() && !o.is_null()) else {
         return Ok(out);
@@ -1778,6 +1789,14 @@ fn parse_request_options(options: Option<JsValue>) -> Result<RequestOptions, Str
             out.captures_by_path
                 .insert(name, js_sys::Uint8Array::new(&value).to_vec());
         }
+    }
+    let attribution_json = get("attributionJson");
+    if !attribution_json.is_undefined() && !attribution_json.is_null() {
+        out.attribution_json = Some(
+            attribution_json
+                .as_string()
+                .ok_or_else(|| "options.attributionJson must be a string".to_string())?,
+        );
     }
     let on_progress = get("onProgress");
     if !on_progress.is_undefined() && !on_progress.is_null() {

@@ -650,7 +650,7 @@ export default function Editor({ project, files, folders, fileContents, binaryFi
   // untouched during replay so that when replay exits, the Automerge sync
   // effect's setContent(automergeContent) always produces a state change.
   const displayContent = replayState.isActive ? replayState.currentContent : content;
-  const downloadAs = useDownloadAs(currentFile?.path ?? null, displayContent, wasmStatus === 'ready', captures);
+  const downloadAs = useDownloadAs(currentFile?.path ?? null, displayContent, wasmStatus === 'ready', captures, identities);
 
   // When replay content changes, update Monaco and VFS for display.
   // Writing to VFS ensures the preview renderer sees historical content.

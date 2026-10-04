@@ -130,6 +130,7 @@ fn input<'a>(
 ) -> PandocRequestInput<'a> {
     let _ = runtime;
     PandocRequestInput {
+        attribution: None,
         path,
         content,
         format,

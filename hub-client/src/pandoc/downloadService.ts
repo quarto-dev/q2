@@ -21,6 +21,7 @@ import type { ShareTree } from '@quarto/pandoc-host';
 import { DownloadController, type DownloadDeps, type DownloadFormat, type PdfInfo, type TraceEvent } from './downloadController';
 import { pandocWasmEnabled, isPreviewEmbed } from './featureFlag';
 import { renderNatively } from './nativeRender';
+import { attributionJsonFor } from './downloadAttribution';
 import { fetchChapterCaptures } from './captureFetch';
 import { getPandoc, getPreviewPandocRunner } from './pandocService';
 import { saveBlob } from './saveBlob';
@@ -135,7 +136,9 @@ function wasmDeps(scope: 'auto' | 'chapter', runners: ChainRunners = {}): Omit<D
   return {
     buildRequest: async (path, format, sourceDateEpoch, signal, typstAvailableFonts, extra) => {
       await initWasm();
+      const attributionJson = await attributionJsonFor(path, format, signal);
       return renderPandocRequest(path, format, {
+        attributionJson,
         sourceDateEpoch,
         signal,
         typstAvailableFonts,

@@ -1397,6 +1397,7 @@ pub struct PandocRequestPassTwoOutput {
 pub struct RenderToPandocRequestRenderer {
     prepare_options: crate::pandoc_request::PrepareOptions,
     captures: Vec<quarto_trace::EngineCapture>,
+    attribution: Option<Arc<dyn crate::attribution::AttributionSourceProvider>>,
 }
 
 impl RenderToPandocRequestRenderer {
@@ -1407,7 +1408,17 @@ impl RenderToPandocRequestRenderer {
         Self {
             prepare_options,
             captures,
+            attribution: None,
         }
+    }
+
+    /// Authorship data for the page this renderer renders (the active page).
+    pub fn with_attribution(
+        mut self,
+        attribution: Option<Arc<dyn crate::attribution::AttributionSourceProvider>>,
+    ) -> Self {
+        self.attribution = attribution;
+        self
     }
 }
 
@@ -1475,6 +1486,7 @@ impl Pass2Renderer for RenderToPandocRequestRenderer {
         ctx.project_index = Some(index);
         ctx.resource_resolver = Some(resolver);
         ctx.prepare_options = Some(self.prepare_options.clone());
+        ctx.attribution_provider = self.attribution.clone();
 
         let source_name = doc_info.input.to_string_lossy().to_string();
         let outcome = crate::pandoc_request::render::build_request_in_context(

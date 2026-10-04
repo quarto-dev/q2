@@ -78,6 +78,11 @@ pub struct PandocRequestInput<'a> {
     /// Awaited between chapters of a whole-book request (progress and
     /// cancel).
     pub hooks: Option<&'a dyn crate::project::book::BookRenderHooks>,
+    /// Who wrote what in the active file, for stamping `author`/`date` on
+    /// editorial marks (docx comments and tracked changes). Read only when the
+    /// request covers the active page alone: a whole-book request spans files
+    /// the data does not describe.
+    pub attribution: Option<Arc<dyn crate::attribution::AttributionSourceProvider>>,
 }
 
 #[derive(Debug)]
@@ -130,6 +135,7 @@ pub async fn render_pandoc_request(
         captures_by_path,
         capture_error,
         hooks,
+        attribution,
     } = input;
 
     // D8: only the table's formats. `typst-pdf` is the typst request plus a
@@ -180,6 +186,7 @@ pub async fn render_pandoc_request(
                 capture_error,
                 captures_by_path,
                 hooks,
+                attribution,
             },
             runtime,
         )
@@ -210,6 +217,7 @@ pub async fn render_pandoc_request(
         });
     ctx.resource_resolver = resolver;
     ctx.prepare_options = Some(prepare_options);
+    ctx.attribution_provider = attribution;
     let source_name = path.to_string_lossy();
     build_request_in_context(
         &mut ctx,
@@ -334,6 +342,7 @@ struct ProjectRequestInputs<'a> {
     capture_error: Option<String>,
     captures_by_path: std::collections::BTreeMap<String, Vec<u8>>,
     hooks: Option<&'a dyn crate::project::book::BookRenderHooks>,
+    attribution: Option<Arc<dyn crate::attribution::AttributionSourceProvider>>,
 }
 
 /// A book's render list as the whole-book dispatch needs it: how many items
@@ -396,6 +405,7 @@ async fn render_project_request(
         capture_error,
         captures_by_path,
         hooks,
+        attribution,
     } = inputs;
 
     // The pipeline fills in per-render state (the book's render list) and
@@ -476,7 +486,9 @@ async fn render_project_request(
         }
     }
 
-    let renderer = RenderToPandocRequestRenderer::new(prepare_options.clone(), renderer_captures);
+    // Whole-book: the data describes the active file only, so it is not used.
+    let renderer = RenderToPandocRequestRenderer::new(prepare_options.clone(), renderer_captures)
+        .with_attribution(if whole_book { None } else { attribution });
     let mut pipeline = ProjectPipeline::with_renderer(
         &mut project,
         project_type,

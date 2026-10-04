@@ -684,6 +684,8 @@ export async function renderPandocRequest(
     capturesByPath?: Record<string, Uint8Array>;
     /** Called before each chapter of a book render, with a 1-based index. */
     onProgress?: (index: number, total: number, file: string) => void | Promise<void>;
+    /** The active file's authorship, for comment and change authors (see `RenderPandocRequestOptions`). */
+    attributionJson?: string;
   } = {},
 ): Promise<RenderPandocRequestResponse> {
   const wasm = getWasm();
@@ -698,6 +700,7 @@ export async function renderPandocRequest(
       scope: options.scope,
       capturesByPath: options.capturesByPath,
       onProgress: options.onProgress,
+      attributionJson: options.attributionJson,
     },
   );
 }

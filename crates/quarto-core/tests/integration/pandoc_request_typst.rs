@@ -39,6 +39,7 @@ pub(crate) fn render_with(
     let content = std::fs::read(path).unwrap();
     pollster::block_on(render_pandoc_request(
         PandocRequestInput {
+            attribution: None,
             scope: quarto_core::pandoc_request::render::BookScope::Auto,
             captures_by_path: Default::default(),
             capture_error: None,

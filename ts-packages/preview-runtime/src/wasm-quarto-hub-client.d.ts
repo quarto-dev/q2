@@ -130,6 +130,12 @@ declare module 'wasm-quarto-hub-client' {
     scope?: 'auto' | 'chapter';
     capturesByPath?: Record<string, Uint8Array>;
     onProgress?: (index: number, total: number, file: string) => void | Promise<void>;
+    /**
+     * The active file's authorship (the transport JSON of
+     * `parse_qmd_to_ast_with_attribution`), stamped as `author`/`date` onto docx and pptx
+     * comments and tracked changes. Ignored by a whole-book request.
+     */
+    attributionJson?: string;
   }
   export function render_pandoc_request(
     path: string,
