@@ -84,18 +84,19 @@ use crate::transforms::{
     CalloutResolveTransform, CalloutTransform, CategoriesSidebarTransform,
     CodeBlockGenerateTransform, CodeBlockRenderTransform, ConditionalContentTransform,
     CrossrefIndexTransform, CrossrefRenderTransform, CrossrefResolveTransform,
-    DateNormalizeTransform, DraftAlertTransform, EquationLabelTransform,
-    ExampleEmbedRenderTransform, ExampleEmbedTransform, FloatRefTargetSugarTransform,
-    FooterGenerateTransform, FooterRenderTransform, FootnotesResolveTransform, FootnotesTransform,
-    LinkRewriteTransform, ListingGenerateTransform, ListingRenderTransform, MermaidRenderTransform,
-    MetadataNormalizeTransform, NavbarGenerateTransform, NavbarRenderTransform,
-    PageNavGenerateTransform, PageNavRenderTransform, ProofSugarTransform,
-    ReferenceLinkDiagnosticsTransform, RepoActionsRenderTransform, ResourceCollectorTransform,
-    ResponsiveImageTransform, SectionizeTransform, ShortcodeResolveTransform,
-    SidebarGenerateTransform, SidebarRenderTransform, TableBootstrapClassTransform,
-    TheoremSugarTransform, TitleBannerTransform, TitleBlockTransform, TocGenerateTransform,
-    TocLocationTransform, TocRenderTransform, WebsiteBootstrapIconsTransform,
-    WebsiteCanonicalUrlTransform, WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
+    DateNormalizeTransform, DraftAlertTransform, EditorialMarksOoxmlTransform,
+    EquationLabelTransform, ExampleEmbedRenderTransform, ExampleEmbedTransform,
+    FloatRefTargetSugarTransform, FooterGenerateTransform, FooterRenderTransform,
+    FootnotesResolveTransform, FootnotesTransform, LinkRewriteTransform, ListingGenerateTransform,
+    ListingRenderTransform, MermaidRenderTransform, MetadataNormalizeTransform,
+    NavbarGenerateTransform, NavbarRenderTransform, PageNavGenerateTransform,
+    PageNavRenderTransform, ProofSugarTransform, ReferenceLinkDiagnosticsTransform,
+    RepoActionsRenderTransform, ResourceCollectorTransform, ResponsiveImageTransform,
+    SectionizeTransform, ShortcodeResolveTransform, SidebarGenerateTransform,
+    SidebarRenderTransform, TableBootstrapClassTransform, TheoremSugarTransform,
+    TitleBannerTransform, TitleBlockTransform, TocGenerateTransform, TocLocationTransform,
+    TocRenderTransform, WebsiteBootstrapIconsTransform, WebsiteCanonicalUrlTransform,
+    WebsiteFaviconTransform, WebsiteTitlePrefixTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -2465,6 +2466,13 @@ pub fn build_transform_pipeline(
     // blocks (shortcode expansion is upstream; resource-collector
     // does not touch code blocks).
     pipeline.push(Box::new(CodeBlockRenderTransform::new()));
+    // Editorial marks to Word and PowerPoint (document-import P6, I23): rewrites
+    // `[++ ]`/`[-- ]`/`[!! ]`/`[>> ]` into the span classes pandoc's docx writer turns
+    // into native tracked changes, highlights and comments (and raw runs for pptx).
+    // Self-gated on the docx/pptx identifiers, so a no-op for every other format and
+    // profile; bucket B3, registered for every profile and excluded for none. After every
+    // content transform that survives the Pandoc cut, so the whole tree it sees is final.
+    pipeline.push(Box::new(EditorialMarksOoxmlTransform::new()));
     pipeline.push(Box::new(ResourceCollectorTransform::new()));
     // bd-3qych45b: render hephaestus plot documents (`![](plot.hep)`)
     // to SVG artifacts under `figure-html/` and point the image at
@@ -2864,6 +2872,10 @@ pub const BUCKETS: &[(&str, Bucket)] = &[
     // bakes format presentation — a Pandoc writer must see the patched
     // numbers too.
     ("cross-chapter-crossref-resolve", Bucket::B3),
+    // Editorial marks (`[++ ]` etc.) to native Word/PowerPoint markup (document-import P6,
+    // I23). Gates itself on the docx/pptx identifiers, so it is inert elsewhere; it
+    // crosses the cut because pandoc's docx writer needs the rewritten classes.
+    ("editorial-marks-ooxml", Bucket::B3),
     ("resource-collector", Bucket::B3),
     // Captures the markdown companion for llms.txt. A service, not
     // presentation of the current format; self-gates on `llms_view_active`
@@ -6314,6 +6326,7 @@ mod tests {
                 "example-embed-render",
                 "mermaid-render",
                 "code-block-render",
+                "editorial-marks-ooxml",
                 "resource-collector",
                 "hephaestus-render",
                 "table-bootstrap-class",
@@ -6404,6 +6417,7 @@ mod tests {
                 "reveal-auto-stretch",
                 "mermaid-render",
                 "code-block-render",
+                "editorial-marks-ooxml",
                 "resource-collector",
                 "hephaestus-render",
                 "table-bootstrap-class",
@@ -6548,6 +6562,7 @@ mod tests {
                 "appendix-structure",
                 "cross-chapter-crossref-resolve",
                 "example-embed-render",
+                "editorial-marks-ooxml",
                 "resource-collector",
                 "llms-capture",
             ]
@@ -6771,6 +6786,7 @@ mod tests {
                 "cross-chapter-crossref-resolve",
                 "example-embed-render",
                 "code-block-render",
+                "editorial-marks-ooxml",
                 "resource-collector",
                 "table-bootstrap-class",
                 "responsive-image",

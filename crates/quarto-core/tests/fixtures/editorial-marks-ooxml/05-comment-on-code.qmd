@@ -1,0 +1,41 @@
+---
+title: Comment attached to a code block
+format: docx
+---
+
+Quarto's document-profile comment extraction treats a
+`.quarto-edit-comment-container` div wrapping a code block plus a trailing
+`[>> ... ]` mark as "one comment about that code", rather than the comment
+being a comment-about-itself. Word/PowerPoint have no native concept of a
+comment anchored to a fenced code block, so this is one of the harder
+mappings for the OOXML filter to get right — most likely the code block's
+rendered text becomes the Word comment's anchor range.
+
+::: {.quarto-edit-comment-container}
+
+```python
+x = 1
+```
+
+[>> should this be a constant instead? ]{author="Alice" date="2024-03-01"}
+
+:::
+
+For contrast, a plain block comment not attached to any code:
+
+::: >>
+
+This paragraph is itself the anchor and the comment; there is no separate
+target content.
+
+:::
+
+And an inline comment nested inside a block comment — per
+`document_profile.rs`, this nested inline mark is folded into the *outer*
+comment's text rather than producing a second, separate comment:
+
+::: >>
+
+Outer [>> inner ] text.
+
+:::

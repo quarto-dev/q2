@@ -44,6 +44,8 @@ pub mod custom_node_schema_conformance;
 pub mod custom_project_type;
 pub mod document_profile_pipeline;
 pub mod echo_engine_e2e;
+pub mod editorial_marks_ooxml;
+pub mod editorial_marks_ooxml_pipeline;
 pub mod engine_error_policy;
 pub mod engine_fixture_build;
 pub mod engine_merge;

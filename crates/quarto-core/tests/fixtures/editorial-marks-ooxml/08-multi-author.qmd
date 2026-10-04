@@ -1,0 +1,24 @@
+---
+title: Multi-author
+format: docx
+---
+
+Intro paragraph by Alice.
+
+Bob changes [-- old]{author="Bob Builder" date="2026-02-11T11:30:00Z"}[++ new]{author="Bob Builder" date="2026-02-11T11:30:00Z"} text.
+
+Carol comments here[>> Is this right?]{author="Carol Critic" date="2026-03-12T12:45:00Z"} and highlights [!! this].
+
+Explicit author wins[>> I said so]{author="Dana Explicit" date="2020-05-05T05:05:05Z"}.
+
+::: ++ {author="Bob Builder" date="2026-05-14T14:00:00Z"}
+Block insertion by Bob.
+:::
+
+::: >> {author="Bob Builder" date="2026-04-13T13:00:00Z"}
+Block comment by Bob.
+:::
+
+::: ++ {author="Alice Author" date="2026-06-15T15:00:00Z"}
+Cats are small, independent animals that sleep most of the day.
+:::

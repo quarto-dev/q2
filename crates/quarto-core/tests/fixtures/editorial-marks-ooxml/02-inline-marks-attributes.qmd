@@ -1,0 +1,19 @@
+---
+title: Inline editorial marks with attributes
+format: docx
+---
+
+## Attribute forms
+
+Editorial marks with attributes: [!! highlighted text]{#my-id .myclass}, [++ inserted text]{.insert-class}, [-- deleted text]{key="value"}, and [>> comment text]{#comment-id .comment-class key="value"}.
+
+## Comments with author/date metadata
+
+This is the kind of attribute pair the OOXML writer will need to turn into a
+real Word comment author + timestamp:
+
+Please tighten this paragraph [>> too wordy, can we cut the second sentence? ]{author="Alice" date="2024-01-01"}.
+
+[++ Added per legal review.]{author="Bob" date="2024-02-14"}
+
+[-- Remove this clause entirely.]{author="Alice" date="2024-02-15"}
