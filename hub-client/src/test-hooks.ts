@@ -22,6 +22,8 @@ import { createBrowserWorker, getPandoc, getPreviewPandocRunner } from './pandoc
 import type { Fault, PandocRequest, RunStats, ShareTree } from '@quarto/pandoc-host';
 import { PANDOC_WASM_SHA256, smokeJob } from './pandoc/smokeJob';
 import { importJob } from './pandoc/importJob';
+import { convertMetafileToPng } from './pandoc/metafileToPng';
+import { getImportService } from './pandoc/importService';
 import { installDevHarness, pandocDownload } from './pandoc/devHarness';
 import { createPdfPreviewController, formatByKey, getDownloadController, onPdfCompiled, setPreviewTrace } from './pandoc/downloadService';
 import type { TraceEvent } from './pandoc/downloadController';
@@ -191,6 +193,33 @@ export const pandoc = {
     return { loader, runner };
   },
   smokeJob,
+  /** EMF/WMF to PNG with rtf.js on this page (the import's image converter, P4 T2); base64 in and out. */
+  async convertMetafile(base64: string, format: 'emf' | 'wmf'): Promise<string> {
+    const png = await convertMetafileToPng(Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)), format);
+    let bin = '';
+    for (const b of png) bin += String.fromCharCode(b);
+    return btoa(bin);
+  },
+  /**
+   * `getImportService().importDocument` (the real service: Rust wasm, the import runner, the rtf.js converter) on
+   * a file given as base64; media bytes come back as base64 so the result stays small and cloneable (P4 T6).
+   */
+  async importDocument(base64: string, fileName: string, targetQmdPath: string) {
+    const toBase64 = (b: Uint8Array) => {
+      let bin = '';
+      for (const x of b) bin += String.fromCharCode(x);
+      return btoa(bin);
+    };
+    const file = new File([Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))], fileName);
+    const out = await getImportService().importDocument(file, targetQmdPath);
+    if (!out.ok) return { ok: false as const, cancelled: out.cancelled === true, diagnostics: out.diagnostics, uiState: out.uiState };
+    return {
+      ok: true as const,
+      qmd: out.qmd,
+      diagnostics: out.diagnostics,
+      media: out.media.map((m) => ({ projectPath: m.projectPath, mimeType: m.mimeType, base64: toBase64(m.bytes) })),
+    };
+  },
   /**
    * One document-import run (interfaces 1 and 2, hand-built request): `base64` is the source file,
    * run through one resident runner so the wasm loads once. Reports what a memory measurement needs

@@ -295,3 +295,33 @@ describe('PandocRunner: failure taxonomy (one diagnostic and one UI state each)'
       expect(uiStateFor(out)).toBe(ui);
     });
 });
+
+describe('PandocRunner: two runners on one loader (document import I10)', () => {
+  it('an import and a download started together both complete; neither is superseded', async () => {
+    const { loader } = fakeLoader();
+    const workers: FakeWorker[] = [];
+    const make = () =>
+      new PandocRunner({
+        loader,
+        createWorker: () => {
+          const w = new FakeWorker();
+          w.autoReady = true;
+          workers.push(w);
+          return w;
+        },
+      });
+    const download = make();
+    const importer = make();
+    const a = job();
+    const b = job();
+    const pDownload = download.run(a.request, a.shareTree);
+    const pImport = importer.run(b.request, b.shareTree);
+    await vi.waitFor(() => expect(workers).toHaveLength(2));
+    await Promise.all(workers.map((w) => ran(() => w)));
+    workers[0].respond(OK_RESULT());
+    workers[1].respond(OK_RESULT());
+    const [d, i] = await Promise.all([pDownload, pImport]);
+    expect(d.ok).toBe(true);
+    expect(i.ok).toBe(true);
+  });
+});

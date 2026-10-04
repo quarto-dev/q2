@@ -21,6 +21,19 @@ export function getPandoc(): { loader: PandocLoader; runner: PandocRunner } {
   return shared;
 }
 
+let importRunner: PandocRunner | undefined;
+
+/**
+ * The import's own runner (document import I10): shares the app-wide loader (one resident `Module`) but
+ * has its own `current` slot, so an import neither supersedes nor is superseded by a download or the PDF
+ * preview. It is not the warm preview pool (`getPreviewPandocRunner`): that one is built for latest-wins
+ * preview edits, and an import queued there could replace or be replaced by one.
+ */
+export function getImportRunner(): PandocRunner {
+  importRunner ??= new PandocRunner({ loader: getPandoc().loader, createWorker: createBrowserWorker });
+  return importRunner;
+}
+
 /** WebKit stops finding files after about 47 renders on one compiled module (H10b 5b); recompile well before that. */
 export const WEBKIT_RECYCLE_AFTER = 30;
 
