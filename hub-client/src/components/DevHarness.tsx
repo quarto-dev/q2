@@ -716,7 +716,7 @@ function ImportDialogPage({ mode }: { mode: ImportHarnessMode }) {
   );
 }
 
-/** The document top bar with the Import button (formats from the stub table). */
+/** The Files sidebar with the Import button next to Add asset (formats from the stub table). */
 function ImportButtonPage({ loading }: { loading?: boolean }) {
   const [formats, setFormats] = useState<ImportFormats | null>(null);
   useEffect(() => {
@@ -726,16 +726,16 @@ function ImportButtonPage({ loading }: { loading?: boolean }) {
   const [picked, setPicked] = useState<string[]>([]);
   return (
     <EditorChrome>
-      <div className="top-bars">
-        <DocumentTopBar
-          currentFilePath={null}
-          sidebarOpen={true}
-          onToggleSidebar={() => {}}
-          sidebarToggleRef={{ current: null }}
+      <div style={{ width: 260 }}>
+        <FileSidebar
+          files={[]}
+          currentFile={null}
+          onSelectFile={() => {}}
+          onNewFile={() => {}}
+          onUploadFiles={() => {}}
           importDocument={{ formats, onPick: (f) => setPicked((p) => [...p, f.name]) }}
         />
       </div>
-      <div id="sidebar-drawer" hidden />
       <div data-testid="import-picked">{picked.join(',')}</div>
     </EditorChrome>
   );
