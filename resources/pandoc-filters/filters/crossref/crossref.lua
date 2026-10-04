@@ -166,9 +166,11 @@ local quarto_pre_filters = {
 
   { name = "flags", filter = compute_flags() },
 
+  -- QUARTO2-PATCH (bd-2uva9urq, claude-notes/plans/2026-10-03-disable-lua-shortcodes.md):
+  -- disabled the same way as in main.lua; keep the shortcodes_filter() call.
   { name = "pre-shortcodes-filter", 
     filter = shortcodes_filter(),
-    flags = { "has_shortcodes" } },
+    flags = { "q2_lua_shortcodes_disabled" } },
 }
 
 local quarto_crossref_filters = {
