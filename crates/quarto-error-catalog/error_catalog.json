@@ -1944,5 +1944,103 @@
     "message_template": "A book chapter orders the built-in citeproc filter into `.post` (after the `quarto` sentinel in `filters:`), so its citations resolve after this chapter pauses for project-wide crossref/bibliography aggregation. Its references will not appear in the book's merged bibliography.",
     "docs_url": "https://quarto.org/docs/errors/citeproc/Q-23-1",
     "since_version": "99.9.9"
+  },
+  "Q-24-1": {
+    "subsystem": "import",
+    "title": "Unsupported Import File Type",
+    "message_template": "The file's type is not one the importer reads. Document import supports Word (.docx), OpenDocument text (.odt), Rich Text Format (.rtf), EPUB (.epub) and PowerPoint (.pptx) files.",
+    "docs_url": "https://quarto.org/docs/errors/import/Q-24-1",
+    "since_version": "99.9.9"
+  },
+  "Q-24-2": {
+    "subsystem": "import",
+    "title": "Import File Too Large",
+    "message_template": "The source file is larger than the importer accepts (25 MB). It was refused before the converter was loaded.",
+    "docs_url": "https://quarto.org/docs/errors/import/Q-24-2",
+    "since_version": "99.9.9"
+  },
+  "Q-24-3": {
+    "subsystem": "import",
+    "title": "The Converter Couldn't Read the File",
+    "message_template": "The converter (pandoc) could not read the file. It may be damaged, password-protected, or a different type than its extension says.",
+    "docs_url": "https://quarto.org/docs/errors/import/Q-24-3",
+    "since_version": "99.9.9"
+  },
+  "Q-24-4": {
+    "subsystem": "import",
+    "title": "Warning From the Document Reader",
+    "message_template": "The converter reported a warning while reading the file. The import continued; the message is pandoc's own.",
+    "docs_url": "https://quarto.org/docs/errors/import/Q-24-4",
+    "since_version": "99.9.9"
+  },
+  "Q-24-5": {
+    "subsystem": "import",
+    "title": "Comment Ranges Simplified",
+    "message_template": "Some Word comments could not mark their exact range and were attached to their paragraph instead.",
+    "docs_url": "https://quarto.org/docs/errors/import/Q-24-5",
+    "since_version": "99.9.9"
+  },
+  "Q-24-6": {
+    "subsystem": "import",
+    "title": "Paragraph-Mark Changes Dropped",
+    "message_template": "Tracked insertions or deletions of paragraph breaks were not imported.",
+    "docs_url": "https://quarto.org/docs/errors/import/Q-24-6",
+    "since_version": "99.9.9"
+  },
+  "Q-24-7": {
+    "subsystem": "import",
+    "title": "List Number Styles Lost",
+    "message_template": "Some numbered lists used letters, roman numerals or parenthesised numbers, which Quarto Markdown can't write. They were imported as ordinary numbered lists.",
+    "docs_url": "https://quarto.org/docs/errors/import/Q-24-7",
+    "since_version": "99.9.9"
+  },
+  "Q-24-8": {
+    "subsystem": "import",
+    "title": "Image Skipped",
+    "message_template": "An image was too large to store and was skipped. Its link is left pointing where the image would have been stored.",
+    "docs_url": "https://quarto.org/docs/errors/import/Q-24-8",
+    "since_version": "99.9.9"
+  },
+  "Q-24-9": {
+    "subsystem": "import",
+    "title": "Image Conversion Failed",
+    "message_template": "An EMF or WMF image could not be converted to PNG. The original was stored, but browsers can't display it.",
+    "docs_url": "https://quarto.org/docs/errors/import/Q-24-9",
+    "since_version": "99.9.9"
+  },
+  "Q-24-10": {
+    "subsystem": "import",
+    "title": "Images Converted",
+    "message_template": "EMF or WMF images were converted to PNG so browsers can display them.",
+    "docs_url": "https://quarto.org/docs/errors/import/Q-24-10",
+    "since_version": "99.9.9"
+  },
+  "Q-24-11": {
+    "subsystem": "import",
+    "title": "Image Format Not Displayable",
+    "message_template": "An image was stored in a format browsers can't display, such as TIFF.",
+    "docs_url": "https://quarto.org/docs/errors/import/Q-24-11",
+    "since_version": "99.9.9"
+  },
+  "Q-24-12": {
+    "subsystem": "import",
+    "title": "Internal Import Error",
+    "message_template": "The import failed because of a problem in the importer itself: the converter's output could not be read, an image had no manifest entry, or the converter's host rejected the request.",
+    "docs_url": "https://quarto.org/docs/errors/import/Q-24-12",
+    "since_version": "99.9.9"
+  },
+  "Q-24-13": {
+    "subsystem": "import",
+    "title": "The Converter Failed on This File",
+    "message_template": "The converter ran out of memory or time, or crashed, on this file.",
+    "docs_url": "https://quarto.org/docs/errors/import/Q-24-13",
+    "since_version": "99.9.9"
+  },
+  "Q-24-14": {
+    "subsystem": "import",
+    "title": "Unmatched Comment Markers",
+    "message_template": "Some Word comment markers had no matching start or end. A start without an end became a point comment; an end without a start was removed.",
+    "docs_url": "https://quarto.org/docs/errors/import/Q-24-14",
+    "since_version": "99.9.9"
   }
 }

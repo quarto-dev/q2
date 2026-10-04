@@ -3464,6 +3464,7 @@ dependencies = [
  "jupyter-protocol",
  "pampa",
  "pathdiff",
+ "percent-encoding",
  "pollster",
  "quarto-analysis",
  "quarto-ast-reconcile",

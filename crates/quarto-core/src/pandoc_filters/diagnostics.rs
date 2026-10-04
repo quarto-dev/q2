@@ -31,6 +31,11 @@ fn strip_ansi(line: &str) -> std::borrow::Cow<'_, str> {
     ANSI_SGR.replace_all(line, "")
 }
 
+/// Strips ANSI SGR escape sequences from a whole text.
+pub fn strip_ansi_codes(text: &str) -> String {
+    ANSI_SGR.replace_all(text, "").into_owned()
+}
+
 /// Extracts warning-shaped lines from a completed pandoc invocation's
 /// stderr, re-emitting each as a `Q-11-1` ("Lua Filter Diagnostic")
 /// warning — the same code `quarto.warn()` itself emits
@@ -57,22 +62,42 @@ fn strip_ansi(line: &str) -> std::borrow::Cow<'_, str> {
 /// warning prefix (Task 2's T2.4 covers the production cause). Lines that
 /// match neither shape are dropped, not surfaced.
 pub fn classify_pandoc_stderr(stderr: &str) -> Vec<DiagnosticMessage> {
-    stderr
-        .lines()
-        .filter_map(|line| {
-            let stripped = strip_ansi(line);
-            if stripped.starts_with("[WARNING]") || stripped.starts_with("WARNING (") {
-                let code = shim_warning_code(&stripped).unwrap_or("Q-11-1");
-                Some(
-                    DiagnosticMessageBuilder::warning(stripped.into_owned())
-                        .with_code(code)
-                        .build(),
-                )
-            } else {
-                None
-            }
+    pandoc_warning_texts(stderr, false)
+        .into_iter()
+        .map(|text| {
+            let code = shim_warning_code(&text).unwrap_or("Q-11-1");
+            DiagnosticMessageBuilder::warning(text)
+                .with_code(code)
+                .build()
         })
         .collect()
+}
+
+/// The warning-shaped entries of a pandoc invocation's stderr, ANSI codes stripped: the raw
+/// texts, for callers that choose their own diagnostic codes ([`classify_pandoc_stderr`]
+/// here, document import's Q-24-4).
+///
+/// An entry starts at a `[WARNING]` or `WARNING (` line. With `join_continuations`, the
+/// non-empty lines that follow it (up to the next bracketed log line or a blank line) are
+/// part of the same entry, joined by a space; without it each entry is one line.
+pub fn pandoc_warning_texts(stderr: &str, join_continuations: bool) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut open = false;
+    for line in stderr.lines() {
+        let stripped = strip_ansi(line);
+        if stripped.starts_with("[WARNING]") || stripped.starts_with("WARNING (") {
+            out.push(stripped.into_owned());
+            open = join_continuations;
+        } else if open && !stripped.trim().is_empty() && !stripped.starts_with('[') {
+            if let Some(last) = out.last_mut() {
+                last.push(' ');
+                last.push_str(stripped.trim());
+            }
+        } else {
+            open = false;
+        }
+    }
+    out
 }
 
 /// Recognizes the wire-format shim's own two warning-shaped messages
@@ -234,6 +259,24 @@ mod tests {
         .unwrap();
         assert_eq!(diags.len(), 1);
         assert_eq!(diags[0].code.as_deref(), Some("Q-11-1"));
+    }
+
+    /// The shared helper behind both callers: one entry per warning line by default; with
+    /// `join_continuations` the indented lines that follow are part of the entry, a blank
+    /// or bracketed line ends it, and unprefixed noise is dropped either way.
+    #[test]
+    fn test_pandoc_warning_texts_joins_continuations_only_when_asked() {
+        let stderr = "noise\n[WARNING] first\n  more of first\n\nstray\n[WARNING] second\n[INFO] x\n  not a continuation\n";
+        assert_eq!(
+            pandoc_warning_texts(stderr, false),
+            ["[WARNING] first", "[WARNING] second"]
+        );
+        assert_eq!(
+            pandoc_warning_texts(stderr, true),
+            ["[WARNING] first more of first", "[WARNING] second"]
+        );
+        // `classify_pandoc_stderr` keeps its one-line-per-warning behaviour.
+        assert_eq!(classify_pandoc_stderr(stderr).len(), 2);
     }
 
     /// T10.1 (pure half): a single `[WARNING]` line produces exactly one

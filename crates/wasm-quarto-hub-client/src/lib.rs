@@ -1989,6 +1989,106 @@ pub fn get_pandoc_formats() -> String {
     .unwrap()
 }
 
+// ============================================================================
+// DOCUMENT IMPORT (epic `2026-10-03-document-import-epic.md`, interface 2)
+// ============================================================================
+//
+// Thin wrappers over `quarto_core::import`. Rust owns everything about an import except
+// running pandoc and handling image bytes (I9): none of these takes or returns image bytes.
+
+/// JSON `{ formats: [{ id, label, extensions, mime_types }], max_source_bytes }`: the formats
+/// the importer reads and the source size cap. The single source for the picker's `accept`
+/// filter, drop interception and the size check (I19); TS keeps no copy.
+#[wasm_bindgen]
+pub fn get_import_formats() -> String {
+    quarto_core::import::formats::format_table_json().to_string()
+}
+
+fn import_diagnostics_json(diags: &[DiagnosticMessage]) -> serde_json::Value {
+    serde_json::to_value(diagnostics_to_json(diags, &SourceContext::default()))
+        .unwrap_or_else(|_| serde_json::json!([]))
+}
+
+/// Validate a source file and build its pandoc request. JSON
+/// `{ success, diagnostics, format?, request?, share_tree?, source_path? }`. The extension is
+/// checked first (Q-24-1, case-insensitive), then `size` (Q-24-2); with an empty `sha256_hex`
+/// that is all (validation only: no `request`). Otherwise `size` must be the length of the
+/// bytes actually read, and the response carries the request, the empty share tree it uses
+/// and the source's virtual path. `size` is an `f64` because a `u64` would cross as a BigInt.
+#[wasm_bindgen]
+pub fn prepare_import(file_name: &str, size: f64, sha256_hex: &str) -> String {
+    if !size.is_finite() || size < 0.0 {
+        let diags = vec![quarto_core::import::report::internal_error(
+            "the source's size is not a non-negative number",
+        )];
+        return serde_json::json!({
+            "success": false,
+            "diagnostics": import_diagnostics_json(&diags),
+        })
+        .to_string();
+    }
+    let outcome = quarto_core::import::request::prepare_import(file_name, size as u64, sha256_hex);
+    let mut out = serde_json::json!({
+        "success": outcome.success,
+        "diagnostics": import_diagnostics_json(&outcome.diagnostics),
+    });
+    if let Some(format) = outcome.format {
+        out["format"] = format.into();
+    }
+    if let Some(request) = &outcome.request {
+        out["request"] = serde_json::to_value(request).unwrap_or(serde_json::Value::Null);
+    }
+    if let Some(tree) = &outcome.share_tree {
+        out["share_tree"] = serde_json::to_value(tree).unwrap_or(serde_json::Value::Null);
+    }
+    if let Some(path) = outcome.source_path {
+        out["source_path"] = path.into();
+    }
+    out.to_string()
+}
+
+/// Turn pandoc's JSON into qmd. JSON `{ success, diagnostics, qmd?, media_plan? }` with
+/// `media_plan: [{ pandoc_path, project_path }]`. `target_qmd_path` and every
+/// `project_path` are project-relative, `/`-separated, with no leading slash.
+/// `media_manifest_json` is the interface-2 manifest. `format` is the pandoc reader name
+/// `prepare_import` returned; it is optional and only `pptx` changes the output (I6).
+/// A fatal error (Q-24-12) is `success: false` with no `qmd`.
+#[wasm_bindgen]
+pub fn finish_import(
+    json_text: &str,
+    stderr: &str,
+    target_qmd_path: &str,
+    media_manifest_json: &str,
+    format: Option<String>,
+) -> String {
+    let outcome = quarto_core::import::finish_import(
+        json_text,
+        stderr,
+        target_qmd_path,
+        media_manifest_json,
+        format.as_deref(),
+    );
+    let mut out = serde_json::json!({
+        "success": outcome.success,
+        "diagnostics": import_diagnostics_json(&outcome.diagnostics),
+    });
+    if let Some(qmd) = outcome.qmd {
+        out["qmd"] = qmd.into();
+    }
+    if let Some(plan) = &outcome.media_plan {
+        out["media_plan"] = serde_json::to_value(plan).unwrap_or(serde_json::Value::Null);
+    }
+    out.to_string()
+}
+
+/// Turn a failed import run into Q-24 diagnostics. JSON `{ diagnostics }`. `kind` is the
+/// host's `RunFailureKind`; `status` is `null` when pandoc didn't exit (crash, timeout).
+#[wasm_bindgen]
+pub fn classify_import_failure(kind: &str, status: Option<i32>, stderr: &str) -> String {
+    let diagnostics = quarto_core::import::classify_import_failure(kind, status, stderr);
+    serde_json::json!({ "diagnostics": import_diagnostics_json(&diagnostics) }).to_string()
+}
+
 /// The project-aware format resolver (D8.7): the document's own `format:`
 /// keys (the first is its format), else the surrounding `_quarto.yml`'s, else
 /// `html`. JSON `{ success, error?, source, formats: [{ key, class }] }` with

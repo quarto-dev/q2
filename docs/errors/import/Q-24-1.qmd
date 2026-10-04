@@ -1,0 +1,31 @@
+---
+title: "Unsupported Import File Type"
+description: "The file's type is not one the importer reads. Document import supports Word (.docx), OpenDocument text (.odt), Rich Text Format (.rtf), EPUB (.epub) and PowerPoint (.pptx) files."
+code: Q-24-1
+subsystem: import
+status: stub
+since: "99.9.9"
+categories:
+  - import
+---
+
+# `Q-24-1` — Unsupported Import File Type
+
+> The file's type is not one the importer reads. Document import supports Word (.docx), OpenDocument text (.odt), Rich Text Format (.rtf), EPUB (.epub) and PowerPoint (.pptx) files.
+
+## What this means
+
+The file's extension is not one of the formats the importer reads, so nothing was converted.
+
+## Why this happens
+
+- The file is a different kind of document, such as `.doc` (the old binary Word format), `.pdf`, `.md` or `.html`.
+- The file was renamed, and its extension no longer matches its contents.
+
+## How to fix
+
+Save the document as one of the supported types (in Word: File → Save As → Word Document (.docx)) and import that. Files you want to keep as they are, without conversion, can be added with the *Add asset* dialog instead.
+
+## Related
+
+- `Q-24-2`

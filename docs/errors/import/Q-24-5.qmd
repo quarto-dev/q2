@@ -1,0 +1,32 @@
+---
+title: "Comment Ranges Simplified"
+description: "Some Word comments could not mark their exact range and were attached to their paragraph instead."
+code: Q-24-5
+subsystem: import
+status: stub
+since: "99.9.9"
+categories:
+  - import
+---
+
+# `Q-24-5` — Comment Ranges Simplified
+
+> Some Word comments could not mark their exact range and were attached to their paragraph instead.
+
+## What this means
+
+A Word comment's range can start and end in different paragraphs, or start inside formatting (for example inside emphasis) and end outside it. A plain span can't express those ranges, so the comment is attached to the end of the paragraph where its range starts. Comments in the document's title and other metadata are dropped.
+
+## Why this happens
+
+- The commented range crosses a paragraph boundary.
+- The range starts at a different formatting depth than it ends, or the ranges of two comments overlap without nesting.
+- The comment was in the document's metadata (title, author, date).
+
+## How to fix
+
+Nothing needs fixing. The comment text, author and date are kept; only the highlighted range is lost. Re-mark the range by hand with a `[range [>> comment]]` span if you need it.
+
+## Related
+
+- `Q-24-14`

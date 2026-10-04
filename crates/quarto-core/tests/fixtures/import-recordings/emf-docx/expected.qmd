@@ -1,0 +1,19 @@
+An EMF image:
+
+::: {}
+
+![A drawn rectangle (EMF)](emf-docx_media/b983da7cc7ab.emf){width="1.0370363079615048in" height="0.5185181539807524in"}
+
+A drawn rectangle (EMF)
+
+:::
+
+A WMF image:
+
+::: {}
+
+![A drawn rectangle (WMF)](emf-docx_media/c0a61c3e49a7.wmf){width="4.166666666666667in" height="2.7777777777777777in"}
+
+A drawn rectangle (WMF)
+
+:::

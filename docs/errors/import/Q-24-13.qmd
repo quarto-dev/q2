@@ -1,0 +1,32 @@
+---
+title: "The Converter Failed on This File"
+description: "The converter ran out of memory or time, or crashed, on this file."
+code: Q-24-13
+subsystem: import
+status: stub
+since: "99.9.9"
+categories:
+  - import
+---
+
+# `Q-24-13` — The Converter Failed on This File
+
+> The converter ran out of memory or time, or crashed, on this file.
+
+## What this means
+
+The converter was stopped before it finished. The hint says whether it ran out of memory, took too long, or crashed.
+
+## Why this happens
+
+- The document is large or has very many images.
+- The file is damaged in a way that crashes the reader.
+
+## How to fix
+
+Import a smaller copy, or open the file in its own application and save a fresh copy.
+
+## Related
+
+- `Q-24-2`
+- `Q-24-3`

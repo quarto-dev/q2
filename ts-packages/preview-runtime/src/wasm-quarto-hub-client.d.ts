@@ -202,6 +202,86 @@ declare module 'wasm-quarto-hub-client' {
   /** JSON `{ formats: PandocFormatInfo[] }`: the formats pandoc.wasm can produce, in menu order. */
   export function get_pandoc_formats(): string;
 
+  // ---- document import (epic 2026-10-03-document-import-epic.md, interface 2) ----
+
+  /** One importable format (`get_import_formats`). */
+  export interface ImportFormatInfo {
+    /** The pandoc reader name (`docx`, `odt`, `rtf`, `epub`, `pptx`). */
+    id: string;
+    label: string;
+    /** Lowercase, with the leading dot. */
+    extensions: string[];
+    mime_types: string[];
+  }
+
+  /** JSON of `get_import_formats()`: the picker's formats and the source size cap (I19). */
+  export interface ImportFormatTable {
+    formats: ImportFormatInfo[];
+    max_source_bytes: number;
+  }
+
+  /** The empty share tree an import request runs against (no filters). */
+  export interface ImportShareTree {
+    share_tree_version: string;
+    files: PandocRequestFile[];
+  }
+
+  /**
+   * JSON of `prepare_import`. `request`, `share_tree` and `source_path` are absent on failure
+   * and for a validation-only call (empty `sha256_hex`); `format` is the pandoc reader name.
+   */
+  export interface PrepareImportResponse {
+    success: boolean;
+    diagnostics: AstDiagnostic[];
+    format?: string;
+    request?: PandocRequestWire;
+    share_tree?: ImportShareTree;
+    source_path?: string;
+  }
+
+  /** One stored image's destination (`finish_import`'s `media_plan`). */
+  export interface ImportMediaPlanEntry {
+    pandoc_path: string;
+    /** Project-relative, `/`-separated, no leading slash. */
+    project_path: string;
+  }
+
+  /** JSON of `finish_import`. A fatal error (Q-24-12) is `success: false` with no `qmd`. */
+  export interface FinishImportResponse {
+    success: boolean;
+    diagnostics: AstDiagnostic[];
+    qmd?: string;
+    media_plan?: ImportMediaPlanEntry[];
+  }
+
+  /** JSON of `classify_import_failure`. */
+  export interface ClassifyImportFailureResponse {
+    diagnostics: AstDiagnostic[];
+  }
+
+  /** JSON string of {@link ImportFormatTable}. */
+  export function get_import_formats(): string;
+  /**
+   * JSON string of {@link PrepareImportResponse}. The extension is checked first (Q-24-1),
+   * then `size` (Q-24-2); with an empty `sha256_hex` that is all. Otherwise `size` is the
+   * length of the bytes actually read and the response carries the pandoc request.
+   */
+  export function prepare_import(file_name: string, size: number, sha256_hex: string): string;
+  /**
+   * JSON string of {@link FinishImportResponse}. `media_manifest_json` lists every collected
+   * file (`stored`) and every file the host dropped (`skipped`); `format` is `prepare_import`'s
+   * `format` (only `pptx` changes the output).
+   */
+  export function finish_import(
+    json_text: string,
+    stderr: string,
+    target_qmd_path: string,
+    media_manifest_json: string,
+    format?: string,
+  ): string;
+  /** JSON string of {@link ClassifyImportFailureResponse}; `status` is `null` when pandoc did not exit. */
+  export function classify_import_failure(kind: string, status: number | null | undefined, stderr: string): string;
+
   /** preview: the preview renders it; download: pandoc.wasm can produce it; neither: disable the control. */
   export type PandocFormatClass = 'preview' | 'download' | 'neither';
 

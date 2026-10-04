@@ -12,8 +12,12 @@ import type { RustQmdJson } from '@quarto/pandoc-types'
 import type {
   AstDiagnostic,
   AstResponse,
+  ClassifyImportFailureResponse,
+  FinishImportResponse,
+  ImportFormatTable,
   PandocFormatInfo,
   PandocRequestFile,
+  PrepareImportResponse,
   RenderPandocRequestOptions,
   RenderPandocRequestResponse,
   ResolvePandocFormatsResponse,
@@ -135,6 +139,17 @@ interface WasmModuleExtended {
   ) => string;
   get_pandoc_formats: () => string;
   resolve_pandoc_formats: (path: string) => string;
+  // Document import (epic 2026-10-03-document-import-epic.md, interface 2)
+  get_import_formats: () => string;
+  prepare_import: (file_name: string, size: number, sha256_hex: string) => string;
+  finish_import: (
+    json_text: string,
+    stderr: string,
+    target_qmd_path: string,
+    media_manifest_json: string,
+    format?: string,
+  ) => string;
+  classify_import_failure: (kind: string, status: number | null | undefined, stderr: string) => string;
   get_builtin_template: (name: string) => string;
   get_project_choices: () => string;
   create_project: (choiceId: string, title: string) => Promise<string>;
@@ -738,6 +753,52 @@ export function classifyPandocCompletion(
 /** The formats pandoc.wasm can produce, in menu order. */
 export function getPandocFormats(): PandocFormatInfo[] {
   return JSON.parse(getWasm().get_pandoc_formats()).formats;
+}
+
+// ============================================================================
+// Document import (epic 2026-10-03-document-import-epic.md, interface 2)
+//
+// Synchronous and unmapped: the responses are the raw snake_case JSON the Rust exports
+// return, parsed. P4's import service maps them to its own types. Callers must have awaited
+// `initWasm()` first. No image bytes cross: the Rust wasm never sees them (I9).
+// ============================================================================
+
+/** The importable formats (the picker's `accept` list, drop interception) and the source size cap. */
+export function getImportFormatTable(): ImportFormatTable {
+  return JSON.parse(getWasm().get_import_formats());
+}
+
+/**
+ * Validate a source file (extension: Q-24-1, then size: Q-24-2) and, given its SHA-256 (lowercase
+ * hex), build the pandoc request that reads it. With an empty `sha256Hex` this is validation
+ * only: no `request`. `size` is the length of the bytes actually read.
+ */
+export function prepareImport(fileName: string, size: number, sha256Hex: string): PrepareImportResponse {
+  return JSON.parse(getWasm().prepare_import(fileName, size, sha256Hex));
+}
+
+/**
+ * Turn pandoc's JSON into qmd. `targetQmdPath` is project-relative; `mediaManifestJson` is the
+ * JSON text of the media manifest; `format` is `prepareImport`'s `format` (only `pptx` changes
+ * the output).
+ */
+export function finishImport(
+  jsonText: string,
+  stderr: string,
+  targetQmdPath: string,
+  mediaManifestJson: string,
+  format?: string,
+): FinishImportResponse {
+  return JSON.parse(getWasm().finish_import(jsonText, stderr, targetQmdPath, mediaManifestJson, format));
+}
+
+/** Turn a failed import run (`kind`: the host's failure kind) into Q-24 diagnostics. */
+export function classifyImportFailure(
+  kind: string,
+  status: number | null,
+  stderr: string,
+): ClassifyImportFailureResponse {
+  return JSON.parse(getWasm().classify_import_failure(kind, status, stderr));
 }
 
 /** The document's own format(s): `format:` of the document, else `_quarto.yml`, else `html`. */

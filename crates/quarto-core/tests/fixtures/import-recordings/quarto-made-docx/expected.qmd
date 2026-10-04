@@ -1,0 +1,70 @@
+---
+title: Hello Callout!
+---
+
+## Overview of callouts
+
+|                                                                                                                    |
+| ------------------------------------------------------------------------------------------------------------------ |
+| ![](quarto-made-docx_media/9fc0013d9c5a.png){width="0.16666666666666666in" height="0.16666666666666666in"} Warning |
+| Callouts provide a simple way to attract attention, for example, to this warning.                                  |
+
+|                                                                                                                              |
+| ---------------------------------------------------------------------------------------------------------------------------- |
+| ![](quarto-made-docx_media/1fd109f5454c.png){width="0.16666666666666666in" height="0.16666666666666666in"} This is Important |
+| Danger, callouts will really improve your writing.                                                                           |
+
+|                                                                                                                 |
+| --------------------------------------------------------------------------------------------------------------- |
+| ![](quarto-made-docx_media/ed81730ce244.png){width="0.16666666666666666in" height="0.16666666666666666in"} Note |
+| Note that there are five types of callouts, including: `note`, `tip`, `warning`, `caution`, and `important`.    |
+
+|                                                                                                                             |
+| --------------------------------------------------------------------------------------------------------------------------- |
+| ![](quarto-made-docx_media/9eb2b3e59f73.png){width="0.16666666666666666in" height="0.16666666666666666in"} Tip With Caption |
+| This is an example of a callout with a caption.                                                                             |
+
+## Callout with markup
+
+|                                                                                                                                                                    |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ![](quarto-made-docx_media/9eb2b3e59f73.png){width="0.16666666666666666in" height="0.16666666666666666in"} Caption with **formatted** text, like `function_name()` |
+| This is an example of a callout with a caption containing special formatting and characters.                                                                       |
+
+|                                                                                                                                                                                                                                   |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ![](quarto-made-docx_media/5c908b003e22.png){width="0.16666666666666666in" height="0.16666666666666666in"} Expand To Learn About Collapse                                                                                         |
+| This is an example of a ‘collapsed\' caution callout that can be expanded by the user. You can use `collapse="true"` to collapse it by default or `collapse="false"` to make a collapsible callout that is expanded by default.   |
+
+::: {.list-table header-rows="0" widths="0.8461538461538461"}
+
+* - **Exercise**
+
+    You can also use a plain `callout` class to get a simple callout treatment.
+:::
+
+## Callout Appearance
+
+|                                                                                                            |
+| ---------------------------------------------------------------------------------------------------------- |
+| ![](quarto-made-docx_media/5c908b003e22.png){width="0.16666666666666666in" height="0.16666666666666666in"} |
+
+|                                                                                                                    |
+| ------------------------------------------------------------------------------------------------------------------ |
+| ![](quarto-made-docx_media/5c908b003e22.png){width="0.16666666666666666in" height="0.16666666666666666in"} Caution |
+| A default callout with no title                                                                                    |
+
+|                                         |
+| --------------------------------------- |
+| Caution                                 |
+| A default callout with no title or icon |
+
+|                                        |
+| -------------------------------------- |
+| A simple callout with no title or icon |
+
+## Minimal
+
+|                                 |
+| ------------------------------- |
+| A minimal callout with no title |

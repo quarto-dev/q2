@@ -1,0 +1,30 @@
+---
+title: "Image Skipped"
+description: "An image was too large to store and was skipped. Its link is left pointing where the image would have been stored."
+code: Q-24-8
+subsystem: import
+status: stub
+since: "99.9.9"
+categories:
+  - import
+---
+
+# `Q-24-8` — Image Skipped
+
+> An image was too large to store and was skipped. Its link is left pointing where the image would have been stored.
+
+## What this means
+
+Images larger than 10 MB (and any image the converter dropped for exceeding its own size limit) are not stored in the project. The image link is kept, deliberately broken, so the gap is visible in the editor.
+
+## Why this happens
+
+- The document embeds a very large image, often an uncompressed bitmap or TIFF.
+
+## How to fix
+
+Compress or resize the image in the source document and import again, or add a smaller copy of the image to the project by hand.
+
+## Related
+
+- `Q-24-2`
