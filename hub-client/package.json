@@ -20,6 +20,7 @@
     "lint": "eslint .",
     "lint:css": "node scripts/lint-css.mjs",
     "preview": "vite preview",
+    "local-dev": "../scripts/local-dev.sh",
     "local-prod": "../scripts/local-prod.sh",
     "local-prod:nginx": "../scripts/local-prod-nginx.sh",
     "local-prod:fresh": "npm run build:local-prod && rm -rf ../.local-prod-data && npm run local-prod",

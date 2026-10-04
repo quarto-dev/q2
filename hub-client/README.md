@@ -45,6 +45,7 @@ npm run dev
 | `npm run typecheck` | Type-check with strict Vite-compatible settings |
 | `npm run lint` | Run ESLint |
 | `npm run preview` | Preview production build |
+| `npm run local-dev` | Run hub + sandboxed-preview servers and the Vite dev server (hot reload) |
 | `npm run local-prod` | Run local production mode (Node.js proxy) |
 | `npm run local-prod:nginx` | Run local production mode (nginx in Docker) |
 | `npm run local-prod:fresh` | Clean rebuild + run local-prod |
