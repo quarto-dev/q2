@@ -131,6 +131,7 @@ pub mod revealjs_features;
 pub mod revealjs_format;
 pub mod sass_cache_key;
 pub mod secondary_nav_pipeline;
+pub mod shortcode_all_contexts;
 pub mod shortcode_config_pipeline;
 pub mod shortcode_text_contexts;
 pub mod sidebar_pipeline;
