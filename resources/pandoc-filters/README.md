@@ -117,7 +117,12 @@ The following files and modifications are *not* from `v1.11.3` and should be pre
 
 **Format for entries:** List items must be shaped exactly as `` - `<path/from/repo/root>` — description `` (backtick immediately after `- `) so the `cargo xtask lint` rule `vendored-pandoc-filters` can verify the path exists. The rule checks that every path listed here actually exists on disk.
 
-- `resources/pandoc-filters/filters/main.lua` — patched twice, independently.
+- `resources/pandoc-filters/filters/main.lua` — patched three times, independently.
+  (0) bd-2uva9urq: the `pre-shortcodes-filter` entry's flag is changed from
+  `has_shortcodes` to `q2_lua_shortcodes_disabled` (never set), marked
+  `QUARTO2-PATCH`. The `shortcodes_filter()` call stays, since
+  `process_shortcodes()` needs the `_shortcodes_filter` it assigns.
+  Re-enable by restoring the flag (see `bd-qwgu94f4`).
   (1) Task 8: two edits marked `QUARTO2-PATCH`: an
   `import("./quarto2-shim.lua")` line after the `customnodes/*.lua` import
   block, and a `tappend(quarto_filter_list, quarto_pandoc_shim_filters)`
@@ -129,6 +134,11 @@ The following files and modifications are *not* from `v1.11.3` and should be pre
   `_quarto.modules.crossref_numbering.assign_crossref_numbers()`, and add a
   fail-fast guard rejecting `crossref-numbering: external` combined with a
   LaTeX-family or Typst target.
+- `resources/pandoc-filters/filters/crossref/crossref.lua` — patched (ours,
+  bd-2uva9urq; no upstream PR — marked `QUARTO2-PATCH`). The
+  `pre-shortcodes-filter` entry's flag is changed from `has_shortcodes` to
+  `q2_lua_shortcodes_disabled`, the same flag-gate as in `main.lua`; Rust owns
+  shortcode expansion, and the Lua pass double-expanded escaped shortcodes.
 - `resources/pandoc-filters/filters/quarto2-shim.lua` — new (ours, Task 8;
   body implemented across P5 Tasks 1-8, plus a post-review fix wave).
   Decodes Q2's wire-format `CustomNode` scaffold back into real Q1 nodes,

@@ -2,9 +2,8 @@
 
 **Branch:** `issue-brand-shortcode` (from `feature/pandoc-wasm` @ `6d03c76ac`), worktree `workspace-7`.
 **Strands:** bug `bd-2uva9urq` (this plan); design question `bd-qwgu94f4` ("should pandoc Lua execute shortcodes?"). Related: `bd-xfqx2tuc`, `bd-qnylgu69`.
-**Status:** REVIEWED 2026-10-03 (one edit round applied); not started. No code changed yet.
-**Blocked by:** `bd-xjg7vl6c` (Rust never expands shortcodes in footnote definitions). T2 must not land
-before it, see Prerequisite.
+**Status:** EXECUTED 2026-10-04 (T1-T7 done; commits `7af327711` T1/T2/T4, `aecaef501` T5; not pushed).
+**Was blocked by:** `bd-xjg7vl6c` (Rust never expands shortcodes in footnote definitions); fixed in `9f6c35190` before T2.
 
 ## Problem
 
@@ -118,15 +117,15 @@ one `cargo nextest run --workspace` at the end (capture to a log; compare to the
 figure). Known red before this work: `pandoc_request_prepare::golden_file_is_structurally_current` and
 `::typst_request_matches_the_recorded_native_run` (lane R recording drift).
 
-- [ ] **T1 Failing test first.** New `crates/quarto-core/tests/integration/shortcode_pandoc_escapes.rs`
+- [x] **T1 Failing test first.** New `crates/quarto-core/tests/integration/shortcode_pandoc_escapes.rs`
   (register in `main.rs`, alphabetical). Use `render_document_to_file` with `native` (AST dump: no writer escaping,
   no typst compile; model on `gfm_shortcode_round_trip` in `pandoc_long_tail_formats.rs`). Cases: the bare
   `` `{{{< brand >}}}` ``, the arguments form, and an escaped shortcode in a fenced code block; assert the render
   succeeds and the output contains the literal `{{< brand ... >}}`. Add a control: a live `{{< brand color primary >}}`
   still only warns. Practical in CI: the existing long-tail tests already run real native pandoc with no skip.
   Confirm it fails (rc 83) before T2. Note `shortcode_text_contexts.rs` is HTML-only, so it never covered this.
-- [ ] **T2 Off-switch** (after `bd-xjg7vl6c`): flag-gate the entry in `main.lua` and `crossref.lua` per the design above; README entries.
-- [ ] **T3 Dependents (surveyed in review; re-confirm, then no changes expected).** No smoke-all or golden
+- [x] **T2 Off-switch** (after `bd-xjg7vl6c`): flag-gate the entry in `main.lua` and `crossref.lua` per the design above; README entries.
+- [x] **T3 Dependents (surveyed in review; re-confirm, then no changes expected).** No smoke-all or golden
   fixture uses `brand` or `contents` live; the only users are `docs/guides/authoring/brand.qmd` and the
   `pandoc-warm` e2e. `crates/pampa/tests/wasm_lua.rs` tests pampa's own `LuaShortcodeEngine` (extension
   shortcodes), not the vendored pandoc Lua: unaffected, and no pampa Lua file is edited so the wasm rule does not
@@ -134,7 +133,7 @@ figure). Known red before this work: `pandoc_request_prepare::golden_file_is_str
   text (a `Str`), which Lua never expanded: unaffected. Also grep `^\[\^.*\]:.*\{\{<` in fixtures (none found).
   The wasm path builds its request from the same stage list as native (`build_pandoc_prefix_stages`, then
   `PandocPrepareStage`), so one Rust-resolved AST feeds both; T5 still verifies it.
-- [ ] **T4 Goldens.** Editing `main.lua`/`crossref.lua` changes `share_tree_version`
+- [x] **T4 Goldens.** Editing `main.lua`/`crossref.lua` changes `share_tree_version`
   (`pandoc_request/share.rs:54`, a hash of the embedded tree). `golden_file_is_structurally_current` asserts it
   equals `schemas/pandoc-request.golden.json`, so it **will go red because of this change**: regenerate with
   `Q2_REGENERATE_GOLDEN=1 cargo nextest run -p quarto-core golden_file` and commit the golden (job_id and
@@ -146,14 +145,35 @@ figure). Known red before this work: `pandoc_request_prepare::golden_file_is_str
   `golden_file_is_structurally_current` and `typst_request_matches_the_recorded_native_run` **pass** in this
   worktree (13/13 `pandoc_request_prepare::`), so they are not known-red here; re-measure the workspace baseline
   at T7 instead of trusting the "known red" list.
-- [ ] **T5 Fixture.** Remove the `BRAND` substitution in `hub-client/e2e/pandoc-warm.harness.spec.ts`
+- [x] **T5 Fixture.** Remove the `BRAND` substitution in `hub-client/e2e/pandoc-warm.harness.spec.ts`
   so `brand.qmd` renders as written. `npm run build:wasm`, then `VITE_E2E=1 npm run build` and
   `npx playwright test --config playwright.harness.config.ts --project=chromium --workers=1 pandoc-warm`.
-- [ ] **T6 Native sweep.** `q2 render` to typst and html for `docs/guides/authoring/brand.qmd` and `docs/guides/authoring/shortcodes.qmd` (its table of `{{{< meta key >}}}` code spans was silently double-expanded too, with no crash); confirm the
+- [x] **T6 Native sweep.** `q2 render` to typst and html for `docs/guides/authoring/brand.qmd` and `docs/guides/authoring/shortcodes.qmd` (its table of `{{{< meta key >}}}` code spans was silently double-expanded too, with no crash); confirm the
   escaped examples show literally and note what the live `brand` shortcodes (lines 887, 898) now do.
   Report; do not fix `brand` support here (`bd-qnylgu69`).
-- [ ] **T7 Workspace run, strand updates.** Record outcome on `bd-2uva9urq`; leave `bd-qwgu94f4` open.
+- [x] **T7 Workspace run, strand updates.** Record outcome on `bd-2uva9urq`; leave `bd-qwgu94f4` open.
   Reconcile this checklist with reality before handing off.
+
+## Outcome (2026-10-04)
+
+- Baseline at `9f6c35190`: 15733 run / 15733 passed / 202 skipped. Final: 15737 / 15737 / 202 skipped. Delta +4 =
+  the four `shortcode_pandoc_escapes` tests; no other count moved.
+- T1: three escaped-shortcode cases failed with pandoc exit 83 (`brandCommand` nil, `shortcodes-handlers.lua:111`)
+  before T2; the live-`brand` control passed throughout. All four green after.
+- T2 deviation from the plan: `pandoc_filters::test_shim_group_shape_and_patch_markers` pins exactly two
+  `QUARTO2-PATCH` markers in `main.lua`, each naming the shim group boundaries. The new marker made it red; the
+  test now ignores marker lines mentioning `bd-2uva9urq`.
+- T4: golden regenerated (`job_id`, `share_tree_version` only). `goldenParity.wasm.test.ts` and
+  `pandocRequest.wasm.test.ts` pass (52 tests) once `quarto-output-extract` is built (the fixtures skip without
+  it). Recordings not re-recorded (stale relative to the live filter tree, unaffected).
+- T5: `build:wasm`, `VITE_E2E=1 npm run build`, playwright `pandoc-warm`: 9 passed, 4 skipped; `brand.qmd`
+  renders unmodified (77301 bytes, warm equals fresh).
+- T6 (scratch copy of `docs/guides/authoring`): `brand.qmd` html rc=0; escaped examples show literally in html
+  and typst. `brand.qmd` to typst fails for reasons unrelated to shortcodes (missing `docs/authoring/images/*.png`
+  screenshots, which typst treats as fatal and html only warns on; then a dangling `<dark-brand>` link label).
+  The "live" `{{< brand ... >}}` at old lines 887/898 are inside fenced blocks marked `shortcodes="false"`, so no
+  live brand shortcode occurs in prose and none renders `?brand`. `shortcodes.qmd`: html and typst rc=0, the
+  `{{{< meta key >}}}` code-span table now shows literal `{{< meta key >}}`. Brand support still `bd-qnylgu69`.
 
 ## Risks / open items
 

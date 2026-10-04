@@ -316,9 +316,15 @@ local quarto_pre_filters = {
     traverser = 'jog',
   },
 
+  -- QUARTO2-PATCH (bd-2uva9urq, claude-notes/plans/2026-10-03-disable-lua-shortcodes.md):
+  -- Q2 resolves shortcodes in Rust before pandoc runs; this second pass only
+  -- double-expanded the already-unescaped text in code/attributes. The flag
+  -- below is never set, so the runner skips the entry. `shortcodes_filter()`
+  -- must still be called: it assigns the `_shortcodes_filter` that
+  -- `process_shortcodes()` (quarto-post/foldcode.lua) walks with.
   { name = "pre-shortcodes-filter", 
     filter = shortcodes_filter(),
-    flags = { "has_shortcodes" },
+    flags = { "q2_lua_shortcodes_disabled" },
     traverser = 'jog',
   },
 
