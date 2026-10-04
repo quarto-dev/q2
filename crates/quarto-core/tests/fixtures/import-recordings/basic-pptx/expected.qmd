@@ -1,0 +1,19 @@
+---
+format: revealjs
+---
+
+## Basic import deck {#slide-1}
+
+Ada Lovelace
+
+2026-09-30
+
+## First slide {#slide-2}
+
+one point with  emphasis
+
+another with a  link
+
+## Second slide {#slide-3}
+
+A paragraph on the second slide.

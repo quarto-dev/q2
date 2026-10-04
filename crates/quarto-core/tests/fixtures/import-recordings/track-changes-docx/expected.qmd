@@ -1,0 +1,13 @@
+Para one has [a commented range[>> Please reword this.]{author="Ann" date="2026-09-01T10:00:00Z"}] and more.
+
+Para two [++ inserted words]{author="Bob" date="2026-09-02T10:00:00Z"} and [-- deleted words]{author="Bob" date="2026-09-02T10:00:00Z"} end.
+
+A range spanning into[>> Comment across paras]{author="Cy" date="2026-09-03T10:00:00Z"}
+
+the next para here.
+
+Para four has [a range with a reply[>> Please reword this too.]{author="Ann" date="2026-09-04T10:00:00Z"}[>> Agreed, reworded.]{author="Dee" date="2026-09-04T11:00:00Z"}] in it.
+
+Para five is a paragraph whose mark was inserted by Bob.
+
+Para six is a paragraph whose mark was deleted by Bob.

@@ -83,3 +83,25 @@ authority, excerpts here are condensed.
   `Emph [Str "emphasised"], Space, Span .comment-start […], Emph [Str "words"], …, Span .comment-end`.
 - **(f) Overlapping, non-nested ranges.** A flat sequence, not nested:
   `start 5, …, start 6, …, end 5, …, end 6` (each end span empty; only adjacent ends nest, as in (a)).
+
+## `expected.qmd` (document import P3)
+
+Each fixture except `corrupt-docx` (which has no `pandoc.json`) has an `expected.qmd`: what
+`finish_import` writes for it, compared byte for byte by
+`crates/quarto-core/tests/integration/import_finish.rs`. P4 T6 reads the same files.
+
+- **Convention:** `finish_import` is called with `target_qmd_path = "<directory name>.qmd"` at the
+  project root (so the media links read `<directory name>_media/<sha12>.<ext>`), the format named
+  by the directory's suffix, and the media manifest `import_support.rs` derives from
+  `manifest.json` (every file under `media/` is `stored`; for `emf-docx` the EMF and WMF carry
+  `conversion_failed: true`, the manifest P4 produces with its converter stubbed to fail).
+- **Provenance:** the implementation's output, reviewed by eye once, so the files catch drift only.
+  `track-changes-docx`, `comments-edge-docx` and `highlights-docx` were additionally checked line by
+  line against the I4 shapes (wrapper span ending in a run of comment spans; point comments with no
+  wrapper; I13 comments appended to the paragraph holding the range's start).
+- **Regenerate** after an intended change: `Q2_UPDATE_IMPORT_EXPECTED=1 cargo nextest run -p
+  quarto-core -E 'binary(integration) & test(import_finish)'`, then review the diff.
+- **`writer-bugs-docx` does not re-read.** Its definition list has a two-paragraph definition, which
+  the qmd writer indents four spaces and the reader rejects (Q-2-35). That is the definition-list
+  limit of the epic's I18 correction, left out of P2; `import_read.rs` pins it
+  (`KNOWN_UNREREADABLE`) so a writer fix surfaces there.

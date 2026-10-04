@@ -1,0 +1,22 @@
+Basic import document
+
+Ada Lovelace
+
+2026-09-30
+
+# []{#anchor}First heading
+
+A paragraph with *emphasis*, **strong text**, `code` and a [link](https://example.com/page).
+
+## []{#anchor}Second heading
+
+| Name  | Value |
+| ----- | ----- |
+| alpha | 1     |
+| beta  | 2     |
+
+![](basic-odt_media/e1d2966db753.png){width="32.0pt" height="24.0pt"}
+
+A small green square
+
+Closing paragraph.

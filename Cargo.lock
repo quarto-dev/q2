@@ -6306,6 +6306,7 @@ dependencies = [
  "pampa",
  "pathdiff",
  "pdf-extract",
+ "percent-encoding",
  "pollster",
  "quarto-analysis",
  "quarto-ast-reconcile",

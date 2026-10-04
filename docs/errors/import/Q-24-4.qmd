@@ -1,0 +1,26 @@
+---
+title: "Warning From the Document Reader"
+description: "The converter reported a warning while reading the file. The import continued; the message is pandoc's own."
+code: Q-24-4
+subsystem: import
+status: stub
+since: "99.9.9"
+categories:
+  - import
+---
+
+# `Q-24-4` — Warning From the Document Reader
+
+> The converter reported a warning while reading the file. The import continued; the message is pandoc's own.
+
+## What this means
+
+pandoc's reader printed a `[WARNING]` while reading the file, for example about an element it could not represent. The import went ahead and the warning text is passed through.
+
+## Why this happens
+
+- The document uses a construct the reader only partly supports.
+
+## How to fix
+
+Check the imported document for the construct the warning names. The warning is informational; no action is required.

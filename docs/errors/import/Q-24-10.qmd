@@ -1,0 +1,30 @@
+---
+title: "Images Converted"
+description: "EMF or WMF images were converted to PNG so browsers can display them."
+code: Q-24-10
+subsystem: import
+status: stub
+since: "99.9.9"
+categories:
+  - import
+---
+
+# `Q-24-10` — Images Converted
+
+> EMF or WMF images were converted to PNG so browsers can display them.
+
+## What this means
+
+The document embedded EMF or WMF images. They were converted to PNG in the browser and stored as PNG; the count says how many.
+
+## Why this happens
+
+- The document came from an older Word version, or the images were pasted from a drawing application.
+
+## How to fix
+
+Nothing needs fixing. Check the converted images look right.
+
+## Related
+
+- `Q-24-9`
