@@ -229,7 +229,7 @@ impl PipelineStage for CaptureSpliceStage {
             // of the pipeline uses. Slot in throwaway names — the parsed
             // ASTs are immediately consumed by the splice, so source-
             // attribution doesn't escape this stage.
-            let Ok((a1, _, _)) = pampa::readers::qmd::read(
+            let Ok((mut a1, _, _)) = pampa::readers::qmd::read(
                 capture.input_qmd.as_bytes(),
                 false,
                 "capture-input.rmarkdown",
@@ -245,6 +245,11 @@ impl PipelineStage for CaptureSpliceStage {
                 );
                 continue;
             };
+            // The recorded input is what the engine *received*: knitr's has
+            // each crossref-consumed `#| label:` re-injected
+            // (`EngineExecutionStage`), the live AST's never does. Undo it so
+            // the cells key identically (bd-mu9i0bct).
+            crate::crossref::label_reinject::strip(&mut a1, ctx.ref_type_registry.as_ref());
             let Ok((b1, _, _)) = pampa::readers::qmd::read(
                 result_markdown.as_bytes(),
                 false,

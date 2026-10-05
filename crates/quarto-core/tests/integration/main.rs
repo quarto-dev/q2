@@ -33,6 +33,7 @@ pub mod brand_fonts;
 pub mod brand_render;
 pub mod breadcrumbs_pipeline;
 pub mod capture_splice_engines;
+pub mod capture_splice_knitr_label;
 pub mod capture_splice_seam;
 pub mod conditional_content_pandoc;
 pub mod crossref_custom_passthrough;
