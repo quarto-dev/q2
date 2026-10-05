@@ -72,19 +72,19 @@ describe('useDownloadAs: books', () => {
     expect(h.start).toHaveBeenCalledWith({ path: 'one.qmd', format: EPUB, content: 'text', scope: 'auto', captureDocIds: { 'index.qmd': 'c0', 'one.qmd': 'c1' } });
   });
 
-  it('a click on "Download book as" when the page is no longer a chapter falls back to the chapter-alone scope', () => {
+  it('a click on "Download book as" when the page is no longer a chapter falls back to the chapter-alone scope, with the page\'s own capture', () => {
     h.bookInfoFor.mockReturnValueOnce({ chapter: true, chapters: ['one.qmd'] }).mockReturnValue({ chapter: false, chapters: [] });
     const { result } = renderHook(() => useDownloadAs('one.qmd', '', true, captures));
     act(() => result.current.start(EPUB, 'auto'));
-    expect(h.start).toHaveBeenCalledWith({ path: 'one.qmd', format: EPUB, content: '', scope: 'chapter' });
+    expect(h.start).toHaveBeenCalledWith({ path: 'one.qmd', format: EPUB, content: '', scope: 'chapter', captureDocId: 'c1' });
   });
 
-  it('"This chapter only" starts with scope chapter and no captures; an ordinary pick passes no scope', () => {
+  it('"This chapter only" starts with scope chapter and the page\'s own capture doc id; an ordinary pick passes no scope', () => {
     h.bookInfoFor.mockReturnValue({ chapter: true, chapters: ['one.qmd'] });
     const { result } = renderHook(() => useDownloadAs('one.qmd', '', true, captures));
     act(() => result.current.start(EPUB, 'chapter'));
-    expect(h.start).toHaveBeenLastCalledWith({ path: 'one.qmd', format: EPUB, content: '', scope: 'chapter' });
+    expect(h.start).toHaveBeenLastCalledWith({ path: 'one.qmd', format: EPUB, content: '', scope: 'chapter', captureDocId: 'c1' });
     act(() => result.current.start(EPUB));
-    expect(h.start).toHaveBeenLastCalledWith({ path: 'one.qmd', format: EPUB, content: '' });
+    expect(h.start).toHaveBeenLastCalledWith({ path: 'one.qmd', format: EPUB, content: '', captureDocId: 'c1' });
   });
 });

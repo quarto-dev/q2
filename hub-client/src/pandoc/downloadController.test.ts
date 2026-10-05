@@ -490,13 +490,49 @@ describe('DownloadController: whole-book downloads (R9)', () => {
     expect(call[5]).toMatchObject({ scope: 'auto', capturesByPath: { 'one.qmd': new Uint8Array([1]) }, onProgress: expect.any(Function) });
   });
 
-  it('"this chapter only" passes scope chapter and fetches no captures', async () => {
+  it('"this chapter only" passes scope chapter and fetches no book captures', async () => {
     const fetchCaptures = vi.fn();
     const buildRequest = vi.fn(async () => bookEnvelope('chapter', 1));
     const { controller } = setup({ buildRequest, fetchCaptures });
     await controller.start({ path: 'one.qmd', format: EPUB, scope: 'chapter', captureDocIds: { 'one.qmd': 'doc-1' } });
     expect(fetchCaptures).not.toHaveBeenCalled();
     expect((buildRequest.mock.calls[0] as unknown[])[5]).toEqual({ scope: 'chapter' });
+  });
+
+  it('a chapter-alone start with a captureDocId fetches that capture and passes it as captureGzJson', async () => {
+    const bytes = new Uint8Array([7]);
+    const fetchCaptures = vi.fn(async () => ({ byPath: { 'one.qmd': bytes }, failed: [] as string[] }));
+    const buildRequest = vi.fn(async () => bookEnvelope('chapter', 1));
+    const { controller } = setup({ buildRequest, fetchCaptures });
+    await controller.start({ path: 'one.qmd', format: EPUB, scope: 'chapter', captureDocId: 'doc-1' });
+    expect(fetchCaptures).toHaveBeenCalledWith({ 'one.qmd': 'doc-1' }, expect.any(AbortSignal));
+    expect((buildRequest.mock.calls[0] as unknown[])[5]).toEqual({ scope: 'chapter', captureGzJson: bytes });
+  });
+
+  it('an unscoped start (the preview) with a captureDocId passes captureGzJson without a scope', async () => {
+    const bytes = new Uint8Array([7]);
+    const fetchCaptures = vi.fn(async () => ({ byPath: { 'a.qmd': bytes }, failed: [] as string[] }));
+    const { controller, buildRequest } = setup({ fetchCaptures });
+    await controller.start({ path: 'a.qmd', format: DOCX, captureDocId: 'doc-a' });
+    expect((buildRequest.mock.calls[0] as unknown[])[5]).toEqual({ captureGzJson: bytes });
+  });
+
+  it('a capture that fails to fetch renders the chapter as source and says so', async () => {
+    const fetchCaptures = vi.fn(async () => ({ byPath: {}, failed: ['a.qmd'] }));
+    const { controller, buildRequest } = setup({ fetchCaptures });
+    await controller.start({ path: 'a.qmd', format: DOCX, captureDocId: 'doc-a' });
+    expect(buildRequest.mock.calls[0]).toHaveLength(4);
+    const s = controller.getSnapshot();
+    expect(s.phase).toBe('done');
+    if (s.phase === 'done') expect(s.notices.length).toBeGreaterThan(0);
+  });
+
+  it('a whole-book start ignores captureDocId', async () => {
+    const fetchCaptures = vi.fn(async () => ({ byPath: {}, failed: [] as string[] }));
+    const buildRequest = vi.fn(async () => bookEnvelope());
+    const { controller } = setup({ buildRequest, fetchCaptures });
+    await controller.start({ path: 'one.qmd', format: EPUB, scope: 'auto', captureDocId: 'doc-1' });
+    expect(fetchCaptures).not.toHaveBeenCalled();
   });
 
   it('the PDF chain passes the font families and then the book extras', async () => {

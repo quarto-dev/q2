@@ -196,7 +196,7 @@ export default function PreviewRouter(props: PreviewRouterProps) {
         {previewMode.mode === 'download' ? (
           <DownloadModePane formatKey={previewMode.formatKey} path={props.currentFile?.path ?? null} content={props.content} wasmReady={wasmStatus === 'ready'} />
         ) : previewMode.mode === 'pdf' ? (
-          <PdfPreviewPane path={props.currentFile?.path ?? null} content={props.content} projectKey={props.projectKey} />
+          <PdfPreviewPane path={props.currentFile?.path ?? null} content={props.content} projectKey={props.projectKey} captureDocId={captures?.[props.currentFile?.path ?? '']?.captureDocId} />
         ) : previewMode.mode === 'neither' ? (
           <NeitherView formatKey={previewMode.formatKey} />
         ) : reactFormat ? (
