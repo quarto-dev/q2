@@ -254,7 +254,7 @@ test('measure: whole-book request (chromium)', async () => {
       const heapBefore = await heapMb();
       const rssSeeded = rssMb();
       const rows: Record<string, unknown> = { payloadMb: Math.round(payload / MB), rssSeededMb: rssSeeded, heapBeforeMb: heapBefore };
-      for (const format of ['epub', 'pdf']) {
+      for (const format of ['epub', 'typst-pdf']) {
         const r = await withPeakRss(() => request(page, '/project/c1.qmd', format));
         rows[format] = { ...r.value, rssPeakMb: r.peakMb, rssStartMb: r.startMb, heapDeltaMb: (await heapMb()) - heapBefore };
       }

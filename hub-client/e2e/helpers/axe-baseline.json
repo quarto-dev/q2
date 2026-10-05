@@ -35,12 +35,6 @@
   "editor-shell|light": {
     "color-contrast": 1
   },
-  "import-button|dark": {
-    "color-contrast": 1
-  },
-  "import-button|light": {
-    "color-contrast": 1
-  },
   "top-bars|dark": {
     "color-contrast": 1
   },

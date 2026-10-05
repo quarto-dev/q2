@@ -994,8 +994,24 @@ Some chapter text.\n";
         0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
     ];
 
+    fn copy_tree(src: &std::path::Path, dst: &std::path::Path) {
+        std::fs::create_dir_all(dst).unwrap();
+        for entry in std::fs::read_dir(src).unwrap() {
+            let entry = entry.unwrap();
+            let to = dst.join(entry.file_name());
+            if entry.path().is_dir() {
+                copy_tree(&entry.path(), &to);
+            } else {
+                std::fs::copy(entry.path(), to).unwrap();
+            }
+        }
+    }
+
     /// A scratch directory outside `/tmp` (request mounts reject it): under
     /// the workspace `target/tmp`, as the integration tests' `CARGO_TARGET_TMPDIR`.
+    /// The built-in extension subtrees are extracted to the system temp dir,
+    /// which is `/tmp` on Linux, so they are relocated under the scratch root
+    /// too (each nextest test is its own process, so setting the env is safe).
     fn scratch_root() -> (tempfile::TempDir, std::path::PathBuf) {
         let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/tmp");
         std::fs::create_dir_all(&base).unwrap();
@@ -1004,6 +1020,12 @@ Some chapter text.\n";
             .tempdir_in(base)
             .unwrap();
         let root = std::fs::canonicalize(dir.path()).unwrap();
+        let runtime = quarto_system_runtime::NativeRuntime::new();
+        let extracted = crate::extension::builtin_extension_subtree_roots(&runtime);
+        let src = extracted.first().expect("an extracted subtree root");
+        let subtrees = root.join("subtrees");
+        copy_tree(src, &subtrees);
+        unsafe { std::env::set_var("QUARTO_EXTENSION_SUBTREES_DIR", &subtrees) };
         (dir, root)
     }
 

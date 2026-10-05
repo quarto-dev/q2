@@ -340,8 +340,29 @@ fn check_golden(name: &str, actual: &str) {
     if expected != actual {
         let got = golden_dir().join(format!("{name}.actual.txt"));
         let _ = std::fs::write(&got, actual);
+        // The `.actual.txt` is lost on CI runners, so show the first
+        // differing lines in the failure message itself.
+        let (exp_lines, act_lines): (Vec<_>, Vec<_>) =
+            (expected.lines().collect(), actual.lines().collect());
+        let mut shown = String::new();
+        let mut count = 0;
+        for i in 0..exp_lines.len().max(act_lines.len()) {
+            let (e, a) = (exp_lines.get(i), act_lines.get(i));
+            if e != a {
+                shown.push_str(&format!(
+                    "  line {}:\n    - {:?}\n    + {:?}\n",
+                    i + 1,
+                    e,
+                    a
+                ));
+                count += 1;
+                if count >= 20 {
+                    break;
+                }
+            }
+        }
         panic!(
-            "native book output changed for `{name}`: diff {} against {}",
+            "native book output changed for `{name}`: diff {} against {}\nfirst differing lines:\n{shown}",
             path.display(),
             got.display()
         );
@@ -383,6 +404,13 @@ fn render(fixture: impl FnOnce(&Path), fmt: &str) -> Rendered {
     let temp = TempDir::new().unwrap();
     let root = canonical(temp.path());
     fixture(&root);
+    if fmt == "epub" {
+        // Without `lang`, pandoc's EPUB writer falls back to the process
+        // locale (`C` on CI runners), so pin it to what the goldens record.
+        let cfg = root.join("_quarto.yml");
+        let yml = std::fs::read_to_string(&cfg).unwrap();
+        std::fs::write(&cfg, format!("{yml}\nlang: en-US\n")).unwrap();
+    }
 
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
     let mut project = ProjectContext::discover(&root, runtime.as_ref()).unwrap();

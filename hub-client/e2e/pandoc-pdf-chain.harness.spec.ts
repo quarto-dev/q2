@@ -35,7 +35,7 @@ async function seed(page: Page, files: { path: string; text?: string; base64?: s
 }
 
 const start = (page: Page, path: string, options: { cancelOnStage?: string } = {}) =>
-  page.evaluate(({ path, options }) => window.__quartoTest!.pandoc.startDownload(path, 'pdf', options), { path, options });
+  page.evaluate(({ path, options }) => window.__quartoTest!.pandoc.startDownload(path, 'typst-pdf', options), { path, options });
 
 test.describe('Download as PDF (pandoc.wasm then typst)', () => {
   // The first run fetches and compiles both wasm modules.
