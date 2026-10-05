@@ -80,6 +80,7 @@ export function useDownloadAs(path: string | null, content: string, wasmReady: b
       } else if (scope === 'chapter') {
         options.scope = 'chapter';
       }
+      if (options.scope !== 'auto') options.captureDocId = capturesRef.current?.[path]?.captureDocId;
       void controller.start(options);
     },
     [controller, path],

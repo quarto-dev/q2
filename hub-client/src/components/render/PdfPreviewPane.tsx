@@ -35,6 +35,7 @@ export default function PdfPreviewPane({
   path,
   content,
   projectKey,
+  captureDocId,
   debounceMs,
   warm: warmOverride,
 }: {
@@ -42,6 +43,8 @@ export default function PdfPreviewPane({
   content: string;
   /** The project the path belongs to: the pane stays mounted when the project changes, and two projects can share a path. */
   projectKey?: string;
+  /** The page's recorded capture (the sidecar's doc id): spliced into the render, and a fresh one re-renders. Keyed on the id, not the bytes. */
+  captureDocId?: string;
   debounceMs?: number;
   /** A test seam: overrides the build-time flag (the harness compares both paths in one bundle). */
   warm?: boolean;
@@ -91,9 +94,9 @@ export default function PdfPreviewPane({
     // The first compile after mount (or a retry) starts at once; later edits are debounced.
     const delay = firstRef.current ? 0 : wait;
     firstRef.current = false;
-    const timer = setTimeout(() => void controller.start({ path, format, projectKey }), delay);
+    const timer = setTimeout(() => void controller.start({ path, format, projectKey, captureDocId }), delay);
     return () => clearTimeout(timer);
-  }, [path, projectKey, content, retry, wait]);
+  }, [path, projectKey, captureDocId, content, retry, wait]);
 
   return (
     <div className="pdf-preview-pane" data-testid="pdf-preview-pane">

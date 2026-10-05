@@ -116,7 +116,10 @@ export interface TypstChainDeps {
 
 /** The sixth `buildRequest` argument, passed only when the click asked for a scope (a book chapter's menu items). */
 export interface BuildRequestExtra {
-  scope: 'auto' | 'chapter';
+  /** Absent for a chapter-alone request that only carries `captureGzJson`: the deps' default scope applies. */
+  scope?: 'auto' | 'chapter';
+  /** The open page's own capture, for a chapter-alone request. */
+  captureGzJson?: Uint8Array;
   /** Capture blobs by chapter path (sidecar keys); only for a whole-book click. */
   capturesByPath?: Record<string, Uint8Array>;
   /** Called before each chapter of a whole-book render. */
@@ -180,6 +183,11 @@ export interface StartOptions {
   scope?: 'auto' | 'chapter';
   /** For a whole-book click: chapter path (sidecar key) to capture doc id, for every chapter that has a capture. */
   captureDocIds?: Record<string, string>;
+  /**
+   * For a chapter-alone request (the PDF preview, "This chapter only", any non-book page): the capture doc id of
+   * the page itself, fetched before the request so its executed output is spliced in. Ignored for a whole-book click.
+   */
+  captureDocId?: string;
   /**
    * Which project the path belongs to (the preview passes `project.id`): two projects can share a path such as
    * `index.qmd`, and the pane stays mounted when the project changes. Download does not pass it.
@@ -354,7 +362,7 @@ export class DownloadController {
   }
 
   private async runWasm(
-    { path, format, scope, captureDocIds, projectKey }: StartOptions,
+    { path, format, scope, captureDocIds, captureDocId, projectKey }: StartOptions,
     run: Run,
     own: AbortController,
     current: () => boolean,
@@ -392,8 +400,15 @@ export class DownloadController {
 
     let extra: BuildRequestExtra | undefined;
     let captureNotices: string[] = [];
+    if (scope !== 'auto' && captureDocId && this.deps.fetchCaptures) {
+      const got = await this.deps.fetchCaptures({ [path]: captureDocId }, own.signal);
+      if (!current()) return;
+      const bytes = got.byPath[path];
+      if (bytes) extra = { captureGzJson: bytes };
+      else captureNotices = [download.captureFetchFailed(got.failed.length)];
+    }
     if (scope) {
-      extra = { scope };
+      extra = { ...extra, scope };
       if (scope === 'auto') {
         const ids = captureDocIds ?? {};
         if (this.deps.fetchCaptures && Object.keys(ids).length > 0) {

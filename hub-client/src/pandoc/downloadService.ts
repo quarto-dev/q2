@@ -144,6 +144,7 @@ function wasmDeps(scope: 'auto' | 'chapter', runners: ChainRunners = {}): Omit<D
         typstAvailableFonts,
         scope: extra?.scope ?? scope,
         capturesByPath: extra?.capturesByPath,
+        captureGzJson: extra?.captureGzJson,
         onProgress: extra?.onProgress,
       });
     },
