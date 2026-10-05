@@ -542,8 +542,10 @@ export class PandocLoader {
     } catch {
       // Eviction is best-effort; an old entry is never used because the key carries the SHA.
     }
-    // Offline use depends on the entry surviving; a refusal is normal and silent.
-    await this.env.persist().catch(() => false);
+    // Offline use depends on the entry surviving; a refusal is normal and silent. Not awaited: Firefox
+    // answers persist() with a permission prompt, which never settles under automation (and may sit
+    // unanswered for a user), and the verified module must not wait on it.
+    void this.env.persist().catch(() => false);
   }
 }
 
