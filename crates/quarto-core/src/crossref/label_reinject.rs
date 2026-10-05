@@ -41,49 +41,89 @@ pub fn inject(doc: &mut Pandoc, registry: Option<&RefTypeRegistry>) {
     let Some(registry) = registry else {
         return;
     };
-    inject_blocks(&mut doc.blocks, registry);
+    for_each_wrapped_cell(&mut doc.blocks, registry, &mut inject_label);
+}
+
+/// The exact inverse of [`inject`]: remove the `#| label: <id>` line it
+/// prepends, from any code block directly wrapped by a crossref-labelled
+/// Div whose `id` is `<id>`.
+///
+/// Used by the capture splice (bd-mu9i0bct). A recorded
+/// `EngineCapture::input_qmd` is the text knitr *received*, so its cells
+/// still carry the re-injected line; the live pre-engine AST never does.
+/// Splice keys cells by a hash of their text, so the capture's AST must be
+/// brought back to the live shape before keying. Only the exact line
+/// `inject` writes is removed — a differently-valued or hand-written
+/// `label:` is left alone — and the same registry gate as `inject` applies,
+/// so an unclassified Div (which `inject` never touched) is skipped too.
+/// Captures with no injected line (other engines, older recordings) are a
+/// no-op.
+pub fn strip(doc: &mut Pandoc, registry: Option<&RefTypeRegistry>) {
+    let Some(registry) = registry else {
+        return;
+    };
+    for_each_wrapped_cell(&mut doc.blocks, registry, &mut strip_label);
 }
 
 /// Recurse over exactly the containers
 /// [`super::codeblock_shorthand::desugar_blocks`] recurses over, so this
-/// walk visits every position a wrapper Div could have been produced at.
-fn inject_blocks(blocks: &mut [Block], registry: &RefTypeRegistry) {
+/// walk visits every position a wrapper Div could have been produced at,
+/// calling `f(cell, div_id)` for each code block directly inside a Div whose
+/// `id` classifies as a crossref label.
+fn for_each_wrapped_cell(
+    blocks: &mut [Block],
+    registry: &RefTypeRegistry,
+    f: &mut impl FnMut(&mut CodeBlock, &str),
+) {
     for block in blocks {
-        inject_block(block, registry);
-    }
-}
-
-fn inject_block(block: &mut Block, registry: &RefTypeRegistry) {
-    match block {
-        Block::Div(div) => {
-            if registry.classify_cite_id(&div.attr.0).is_some() {
-                for child in &mut div.content {
-                    if let Block::CodeBlock(cb) = child {
-                        inject_label(cb, &div.attr.0);
+        match block {
+            Block::Div(div) => {
+                if registry.classify_cite_id(&div.attr.0).is_some() {
+                    for child in &mut div.content {
+                        if let Block::CodeBlock(cb) = child {
+                            f(cb, &div.attr.0);
+                        }
+                    }
+                }
+                for_each_wrapped_cell(&mut div.content, registry, f);
+            }
+            Block::BlockQuote(b) => for_each_wrapped_cell(&mut b.content, registry, f),
+            Block::OrderedList(b) => {
+                for item in &mut b.content {
+                    for_each_wrapped_cell(item, registry, f);
+                }
+            }
+            Block::BulletList(b) => {
+                for item in &mut b.content {
+                    for_each_wrapped_cell(item, registry, f);
+                }
+            }
+            Block::DefinitionList(b) => {
+                for (_term, defs) in &mut b.content {
+                    for item in defs {
+                        for_each_wrapped_cell(item, registry, f);
                     }
                 }
             }
-            inject_blocks(&mut div.content, registry);
+            _ => {}
         }
-        Block::BlockQuote(b) => inject_blocks(&mut b.content, registry),
-        Block::OrderedList(b) => {
-            for item in &mut b.content {
-                inject_blocks(item, registry);
-            }
-        }
-        Block::BulletList(b) => {
-            for item in &mut b.content {
-                inject_blocks(item, registry);
-            }
-        }
-        Block::DefinitionList(b) => {
-            for (_term, defs) in &mut b.content {
-                for item in defs {
-                    inject_blocks(item, registry);
-                }
-            }
-        }
-        _ => {}
+    }
+}
+
+/// The line [`inject_label`] prepends, newline included.
+fn injected_line(cb: &CodeBlock, id: &str) -> String {
+    let language = super::codeblock_shorthand::language_of(cb);
+    let syntax = crate::cell_options::comment_syntax_for(&language);
+    let suffix = syntax.suffix.unwrap_or("");
+    format!("{}| label: {id}{suffix}\n", syntax.prefix)
+}
+
+/// Remove exactly the line [`inject_label`] would prepend, if `cb.text`
+/// starts with it.
+fn strip_label(cb: &mut CodeBlock, id: &str) {
+    let line = injected_line(cb, id);
+    if let Some(rest) = cb.text.strip_prefix(&line) {
+        cb.text = rest.to_string();
     }
 }
 
@@ -99,8 +139,7 @@ fn inject_label(cb: &mut CodeBlock, id: &str) {
     if has_label_option(&cb.text, &syntax) {
         return;
     }
-    let suffix = syntax.suffix.unwrap_or("");
-    cb.text = format!("{}| label: {id}{suffix}\n{}", syntax.prefix, cb.text);
+    cb.text = format!("{}{}", injected_line(cb, id), cb.text);
 }
 
 /// True iff `text`'s leading run of option lines already has a `label:`
@@ -219,5 +258,47 @@ mod tests {
             panic!("expected CodeBlock");
         };
         assert_eq!(cb.text, "#| label: fig-cars\nplot(cars)\n");
+    }
+
+    #[test]
+    fn strip_is_the_inverse_of_inject() {
+        let mut doc = wrapped("fig-cars", code_block("plot(cars)\n"));
+        inject(&mut doc, Some(&registry()));
+        strip(&mut doc, Some(&registry()));
+        let Block::Div(div) = &doc.blocks[0] else {
+            panic!("expected Div");
+        };
+        let Block::CodeBlock(cb) = &div.content[0] else {
+            panic!("expected CodeBlock");
+        };
+        assert_eq!(cb.text, "plot(cars)\n");
+    }
+
+    #[test]
+    fn strip_leaves_a_different_label_alone() {
+        let mut doc = wrapped("fig-cars", code_block("#| label: fig-other\nplot(cars)\n"));
+        strip(&mut doc, Some(&registry()));
+        let Block::Div(div) = &doc.blocks[0] else {
+            panic!("expected Div");
+        };
+        let Block::CodeBlock(cb) = &div.content[0] else {
+            panic!("expected CodeBlock");
+        };
+        assert_eq!(cb.text, "#| label: fig-other\nplot(cars)\n");
+    }
+
+    #[test]
+    fn strip_skips_unclassified_div_and_none_registry() {
+        let text = "#| label: not-a-reftype-prefix\nplot(cars)\n";
+        let mut doc = wrapped("not-a-reftype-prefix", code_block(text));
+        strip(&mut doc, Some(&registry()));
+        strip(&mut doc, None);
+        let Block::Div(div) = &doc.blocks[0] else {
+            panic!("expected Div");
+        };
+        let Block::CodeBlock(cb) = &div.content[0] else {
+            panic!("expected CodeBlock");
+        };
+        assert_eq!(cb.text, text);
     }
 }
