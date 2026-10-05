@@ -1,4 +1,5 @@
 import { useContext } from 'react';
+import type { CSSProperties } from 'react';
 import type { ImageInline, NodeArgs } from '../../framework';
 import { inlinesToPlainText } from '../../framework';
 import { AssetManifestContext } from '../AssetManifestContext';
@@ -15,6 +16,10 @@ import { lookupAssetUrl } from '../utils';
  *
  * Alt text uses `inlinesToPlainText` to handle `Emph` / `Code` /
  * `SoftBreak` etc. inside alt content, not just `Str` filtering.
+ *
+ * `width` / `height`: a bare number stays an HTML attribute (pixels); a
+ * value with a unit (`3.83in`, `50%`) goes in `style`, since the HTML
+ * attributes accept only unitless pixel counts and would drop the unit.
  *
  * v1 passes `width` / `height` / `id` / `classes` / `title` only;
  * Quarto-specific Image extensions (`fig-align`, `fig-link`, `fig-alt`,
@@ -34,8 +39,13 @@ export const Image = ({ node }: NodeArgs<ImageInline>) => {
     if (title) props.title = title;
     if (id) props.id = id;
     if (classes.length) props.className = classes.join(' ');
-    if (kvMap.width) props.width = kvMap.width;
-    if (kvMap.height) props.height = kvMap.height;
+    const style: CSSProperties = {};
+    for (const dim of ['width', 'height'] as const) {
+        const v = kvMap[dim]?.trim();
+        if (!v) continue;
+        if (/^\d+(\.\d+)?$/.test(v)) props[dim] = v;
+        else style[dim] = v;
+    }
 
-    return <img {...props} />;
+    return <img {...props} style={Object.keys(style).length ? style : undefined} />;
 };
