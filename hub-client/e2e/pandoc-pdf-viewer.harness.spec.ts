@@ -28,7 +28,7 @@ const write = (page: Page, path: string, text: string) =>
   page.evaluate(({ path, text }) => window.__quartoTest!.wasmRenderer.vfsAddFile(path, text), { path, text });
 
 const render = (page: Page, path: string) =>
-  page.evaluate(async (path) => (await window.__quartoTest!.pandoc.startDownload(path, 'pdf')).phase, path);
+  page.evaluate(async (path) => (await window.__quartoTest!.pandoc.startDownload(path, 'typst-pdf')).phase, path);
 
 /** What the reader sees, once the viewer has finished laying out (and restoring) a document. */
 const viewState = (page: Page) =>

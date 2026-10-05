@@ -154,9 +154,9 @@ test.describe('warm path: correctness matrix', () => {
     await seed(page, docs);
     const paths = docs.map(qmdPath);
     const identity = docs.map((_, i) => i);
-    // Both request shapes: the preview runs the `pdf` request's pandoc leg, Download-as-typst the `typst` one.
-    for (const format of ['typst', 'pdf']) {
-      const options = { format, fonts: format === 'pdf' ? FONTS : undefined };
+    // Both request shapes: the preview runs the `typst-pdf` request's pandoc leg, Download-as-typst the `typst` one.
+    for (const format of ['typst', 'typst-pdf']) {
+      const options = { format, fonts: format === 'typst-pdf' ? FONTS : undefined };
       const fresh = await page.evaluate(({ paths, order, options }) => window.__quartoTest!.pandoc.runSequence(paths, order, 'fresh', options), { paths, order: identity, options });
       for (const r of fresh) expect(r.ok, `fresh ${docs[r.doc].name} ${format}: ${r.stderr}`).toBe(true);
       const order = shuffledOrder(docs.length, 20261003);
