@@ -27,6 +27,10 @@ fn scratch() -> (tempfile::TempDir, PathBuf) {
         .tempdir_in(env!("CARGO_TARGET_TMPDIR"))
         .unwrap();
     let root = std::fs::canonicalize(dir.path()).unwrap();
+    // Extension bundles (orange-book) extract into the process temp dir, `/tmp` on Linux, which
+    // wasm-mode requests reject; keep it under the target dir too.
+    // SAFETY: one test per process under nextest.
+    unsafe { std::env::set_var("TMPDIR", env!("CARGO_TARGET_TMPDIR")) };
     (dir, root)
 }
 

@@ -44,6 +44,10 @@ fn scratch() -> (tempfile::TempDir, PathBuf) {
     // capture keys are relative to it (`sidecar_key`). Each nextest test is
     // its own process, so changing the directory is private to the test.
     std::env::set_current_dir(&root).unwrap();
+    // Extension bundles (orange-book) extract into the process temp dir, which is `/tmp` on Linux;
+    // the request mounts reject that prefix, so keep it under the target dir too.
+    // SAFETY: one test per process under nextest, as for the directory change above.
+    unsafe { std::env::set_var("TMPDIR", env!("CARGO_TARGET_TMPDIR")) };
     (dir, root)
 }
 
