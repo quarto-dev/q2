@@ -78,6 +78,7 @@ mod pandoc_prepare;
 mod parse_document;
 mod pre_engine_sugaring;
 mod prefetch_remote_images;
+mod rasterize_svg_images;
 mod render_html;
 mod unexecuted_cell_count;
 // book-projects P2c: flushes queued resource copies (images, etc.)
@@ -141,6 +142,7 @@ pub use pandoc_prepare::PandocPrepareStage;
 pub use pandoc_write::retain_temp_json_unless_success;
 pub use pandoc_write::{PandocWriteStage, PreparedPandoc, TypstPrepInputs};
 pub use prefetch_remote_images::{PrefetchRemoteImagesStage, REMOTE_DIR, REMOTE_SRC_ATTR};
+pub use rasterize_svg_images::{RASTER_DIR, RASTER_SRC_ATTR, RasterizeSvgImagesStage};
 pub use unexecuted_cell_count::{UnexecutedCellCountStage, count_engine_cells};
 // Pure, so ungated (the wasm host classifies a completion with it); the path
 // `stages::classify_pandoc_completion` is unchanged.

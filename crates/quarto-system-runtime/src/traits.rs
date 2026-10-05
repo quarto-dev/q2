@@ -527,6 +527,29 @@ pub trait SystemRuntime: Send + Sync {
         Ok((bytes, mime))
     }
 
+    /// Whether [`rasterize_svg`](Self::rasterize_svg) can run here. Synchronous so
+    /// callers can skip work (walking a document for SVGs) when it cannot.
+    /// Default: `false`; only the browser runtime, which has a DOM, overrides it.
+    fn can_rasterize_svg(&self) -> bool {
+        false
+    }
+
+    /// Rasterize an SVG to a PNG whose longest side is at most `max_side` pixels.
+    ///
+    /// pandoc.wasm has no `rsvg-convert`, so its docx and pptx writers need a
+    /// raster image where a document names an SVG. The PNG is rendered at twice
+    /// the SVG's intrinsic size and carries a pHYs chunk, so the SVG's size is
+    /// kept; the implementation, not the caller, parses the SVG's units.
+    ///
+    /// Default: `NotSupported` (native and test runtimes). An `Err` from a
+    /// runtime whose [`can_rasterize_svg`](Self::can_rasterize_svg) is `true`
+    /// means this SVG failed (undecodable, over a limit, timed out, cancelled).
+    async fn rasterize_svg(&self, _svg: &[u8], _max_side: u32) -> RuntimeResult<Vec<u8>> {
+        Err(RuntimeError::NotSupported(
+            "SVG rasterization is not available on this runtime".to_string(),
+        ))
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     // SYSTEM INFO
     // ═══════════════════════════════════════════════════════════════════════
