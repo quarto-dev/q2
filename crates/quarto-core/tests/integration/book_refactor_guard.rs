@@ -291,6 +291,16 @@ fn copy_smoke_fixture(name: &str) -> impl Fn(&Path) + '_ {
             .join("../quarto/tests/smoke-all/typst")
             .join(name);
         copy_tree(&src, dir);
+        if name == "orange-book" {
+            // chapter1's figure comes from executing its code cell, which this guard
+            // switches off, and the executed `*_files` are git-ignored (copy_tree skips
+            // them), so supply a stand-in: typst needs the file to exist to compile.
+            let fig = dir.join("chapter1_files/figure-typst/fig-cars-1.svg");
+            write_str(
+                &fig,
+                r#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>"#,
+            );
+        }
     }
 }
 
@@ -300,7 +310,11 @@ fn copy_tree(src: &Path, dst: &Path) {
         let entry = entry.unwrap();
         let name = entry.file_name();
         let name_str = name.to_string_lossy();
-        if name_str == "_book" || name_str == ".quarto" || name_str == ".git" {
+        if name_str == "_book"
+            || name_str == ".quarto"
+            || name_str == ".git"
+            || name_str.ends_with("_files")
+        {
             continue;
         }
         let from = entry.path();
