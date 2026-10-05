@@ -255,7 +255,15 @@ impl Provider {
             .await
             .map_err(|e| format!("materializing the project: {e}"))?;
 
-        let abs_path = tmp.path().join(rel_path);
+        // Canonicalize: engines (knitr) report supporting files by their real
+        // path, and on macOS the temp dir is under the `/var` -> `/private/var`
+        // symlink. Without this, `collect_capture_files` sees those files as
+        // outside the document directory and drops the figures (bd-qbhp2cvv).
+        let root = tmp
+            .path()
+            .canonicalize()
+            .map_err(|e| format!("canonicalizing the materialization temp dir: {e}"))?;
+        let abs_path = root.join(rel_path);
         let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
         let project = ProjectContext::discover(&abs_path, runtime.as_ref())
             .map_err(|e| format!("project discovery failed: {e}"))?;
