@@ -210,6 +210,46 @@ fn js_fetch_url_hardened_impl(
     Err(JsValue::from_str("js-bridge feature not enabled"))
 }
 
+// =============================================================================
+// JavaScript Interop for SVG Rasterization
+// =============================================================================
+//
+// The JS shim at /src/wasm-js-bridge/rasterize.js draws an SVG onto a canvas
+// (main thread only: it needs `<img>` and `<canvas>`) and resolves a
+// `Uint8Array` of PNG bytes. With no DOM it rejects with an error named
+// `RasterizerUnavailable`; `jsCanRasterizeSvg()` is the synchronous probe.
+
+#[cfg(feature = "js-bridge")]
+#[wasm_bindgen(raw_module = "/src/wasm-js-bridge/rasterize.js")]
+extern "C" {
+    /// Whether `jsRasterizeSvg` can run (there is a DOM, or a test override).
+    #[wasm_bindgen(js_name = "jsCanRasterizeSvg")]
+    fn js_can_rasterize_svg_impl() -> bool;
+
+    /// Rasterize `svg` to a PNG, longest side at most `max_side`, aborting with
+    /// the optional `AbortSignal`. Resolves a `Uint8Array`.
+    #[wasm_bindgen(js_name = "jsRasterizeSvg", catch)]
+    fn js_rasterize_svg_impl(
+        svg: &[u8],
+        max_side: f64,
+        signal: &JsValue,
+    ) -> Result<JsValue, JsValue>;
+}
+
+#[cfg(not(feature = "js-bridge"))]
+fn js_can_rasterize_svg_impl() -> bool {
+    false
+}
+
+#[cfg(not(feature = "js-bridge"))]
+fn js_rasterize_svg_impl(
+    _svg: &[u8],
+    _max_side: f64,
+    _signal: &JsValue,
+) -> Result<JsValue, JsValue> {
+    Err(JsValue::from_str("js-bridge feature not enabled"))
+}
+
 /// A JS handle held by a `Send + Sync` runtime. `JsValue` is `!Send`, but this
 /// target is single-threaded (the same reason the VFS sits in an `RwLock`
 /// nobody contends), so the handle never crosses a thread.
@@ -581,6 +621,36 @@ impl SystemRuntime for WasmRuntime {
             RuntimeError::NotSupported(format!("Failed to call jsFetchUrlHardened: {:?}", e))
         })?;
         decode_fetch_result(promise).await
+    }
+
+    fn can_rasterize_svg(&self) -> bool {
+        js_can_rasterize_svg_impl()
+    }
+
+    async fn rasterize_svg(&self, svg: &[u8], max_side: u32) -> RuntimeResult<Vec<u8>> {
+        let signal = self
+            .abort_signal
+            .as_ref()
+            .map_or(JsValue::UNDEFINED, |s| s.0.clone());
+        let promise = js_rasterize_svg_impl(svg, f64::from(max_side), &signal).map_err(|e| {
+            RuntimeError::NotSupported(format!(
+                "Failed to call jsRasterizeSvg: {:?}",
+                js_error_text(&e)
+            ))
+        })?;
+        let result = JsFuture::from(js_sys::Promise::from(promise))
+            .await
+            .map_err(|e| {
+                // `RasterizerUnavailable` is "no DOM here", not a failure of this SVG.
+                if e.dyn_ref::<js_sys::Error>().is_some_and(|err| {
+                    err.name().as_string().as_deref() == Some("RasterizerUnavailable")
+                }) {
+                    RuntimeError::NotSupported(js_error_text(&e))
+                } else {
+                    RuntimeError::Io(std::io::Error::other(js_error_text(&e)))
+                }
+            })?;
+        Ok(js_sys::Uint8Array::new(&result).to_vec())
     }
 
     fn os_name(&self) -> &'static str {

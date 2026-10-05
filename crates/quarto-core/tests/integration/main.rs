@@ -129,6 +129,7 @@ pub mod pandoc_resource_refs;
 pub mod pandoc_shim;
 pub mod pandoc_shim_goldens;
 pub mod pandoc_shim_typst_crossref;
+pub mod pandoc_svg_rasterize;
 pub mod pandoc_transport;
 pub mod pandoc_typst_argv_guard;
 pub mod pandoc_typst_compile;

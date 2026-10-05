@@ -9,7 +9,7 @@ description = "Runtime abstraction layer for Quarto system operations"
 
 [features]
 # Enables wasm-bindgen `raw_module` imports of the JS bridge files at
-# /src/wasm-js-bridge/{template,sass,cache,fetch}.js.
+# /src/wasm-js-bridge/{template,sass,cache,fetch,rasterize}.js.
 #
 # Hub-client provides those JS modules at runtime via Vite. Off-by-default
 # because non-hub-client wasm32 binaries (e.g. wasm-bindgen-test runs of

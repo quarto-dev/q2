@@ -100,6 +100,34 @@ fn is_external_target(target: &str) -> bool {
     }
 }
 
+/// The file an `Image` target names, resolved as pandoc does against
+/// `--resource-path` (the document directory): percent-decoded, absolute
+/// targets kept, relative ones joined to `doc_dir`, and the default image
+/// extension appended when the file name has none. `None` for an empty target
+/// and for a remote or `data:` one, which are not files. Not checked against
+/// the allowed root or for existence.
+pub fn resolve_image_target(
+    doc_dir: &Path,
+    target: &str,
+    default_ext: Option<&str>,
+) -> Option<PathBuf> {
+    if target.is_empty() || is_external_target(target) {
+        return None;
+    }
+    let decoded = percent_decode(target);
+    let mut path: PathBuf = if decoded.starts_with('/') || decoded.starts_with('\\') {
+        PathBuf::from(&decoded)
+    } else {
+        doc_dir.join(&decoded)
+    };
+    if let Some(ext) = default_ext
+        && path.extension().is_none()
+    {
+        path.set_extension(ext);
+    }
+    Some(path)
+}
+
 /// The `--default-image-extension` the arguments set, if any (either form).
 pub fn default_image_extension(args: &[PandocArg]) -> Option<String> {
     let texts: Vec<&str> = args
@@ -271,20 +299,9 @@ impl<'a> ResourceCollector<'a> {
     /// extension appended when the file name has none. Remote and `data:`
     /// targets are not files.
     pub fn add_image(&mut self, doc_dir: &Path, target: &str, default_ext: Option<&str>) {
-        if target.is_empty() || is_external_target(target) {
+        let Some(path) = resolve_image_target(doc_dir, target, default_ext) else {
             return;
-        }
-        let decoded = percent_decode(target);
-        let mut path: PathBuf = if decoded.starts_with('/') || decoded.starts_with('\\') {
-            PathBuf::from(&decoded)
-        } else {
-            doc_dir.join(&decoded)
         };
-        if let Some(ext) = default_ext
-            && path.extension().is_none()
-        {
-            path.set_extension(ext);
-        }
         if let Some(normalized) = self.admit(&path, "image") {
             self.mount(normalized, ResourceKind::Image);
         }

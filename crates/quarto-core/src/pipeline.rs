@@ -67,7 +67,8 @@ use crate::stage::stages::ResourceCopyFlushStage;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::stage::stages::TypstCompileStage;
 use crate::stage::stages::{
-    InlineTableCssStage, PandocPrepareStage, PrefetchRemoteImagesStage, UnexecutedCellCountStage,
+    InlineTableCssStage, PandocPrepareStage, PrefetchRemoteImagesStage, RasterizeSvgImagesStage,
+    UnexecutedCellCountStage,
 };
 use crate::stage::{
     ApplyTemplateStage, AstTransformsStage, AttributionGenerateStage, CompileThemeCssStage,
@@ -609,6 +610,8 @@ pub fn build_pandoc_request_stages_fetching(
     let mut stages = build_pandoc_request_stages(captures);
     let tail = stages.len() - 1;
     stages.insert(tail, Box::new(PrefetchRemoteImagesStage::new()));
+    // After the prefetch, so remote SVGs fetched into `_remote/` are rasterized too.
+    stages.insert(tail + 1, Box::new(RasterizeSvgImagesStage::new()));
     stages
 }
 
@@ -628,7 +631,8 @@ pub fn build_pandoc_request_pause_stages(
 /// The browser pandoc request list resuming at `lower_bound`: a
 /// range-bounded [`AstTransformsStage`] followed by the unchanged request
 /// tail (`user-filters` post, `equation-number`, `resource-report`,
-/// `inline-table-css`, remote-image prefetch, `pandoc-prepare`). Starts with
+/// `inline-table-css`, remote-image prefetch, SVG rasterization,
+/// `pandoc-prepare`). Starts with
 /// [`AstTransformsStage`] (input kind `DocumentAst`), so it must be driven by
 /// [`run_pipeline_from_ast`]. Shares its source with
 /// [`build_pandoc_request_stages_fetching`].
@@ -6930,9 +6934,10 @@ mod tests {
     }
 
     /// R6: the browser's list is the request list with the remote-image
-    /// prefetch right before `pandoc-prepare`.
+    /// prefetch and then the SVG rasterizer (so it sees fetched SVGs) right
+    /// before `pandoc-prepare`.
     #[test]
-    fn fetching_request_list_adds_the_prefetch_before_the_tail() {
+    fn fetching_request_list_adds_the_prefetch_and_rasterizer_before_the_tail() {
         let plain: Vec<String> = build_pandoc_request_stages(Vec::new())
             .iter()
             .map(|s| s.name().to_string())
@@ -6943,8 +6948,11 @@ mod tests {
             .collect();
         let mut expected = plain.clone();
         expected.insert(plain.len() - 1, "prefetch-remote-images".to_string());
+        expected.insert(plain.len(), "rasterize-svg-images".to_string());
         assert_eq!(fetching, expected);
-        assert!(!plain.iter().any(|n| n == "prefetch-remote-images"));
+        for added in ["prefetch-remote-images", "rasterize-svg-images"] {
+            assert!(!plain.iter().any(|n| n == added), "{added}");
+        }
     }
 
     /// R2: captures splice in before engine execution (the wasm entry point
@@ -7017,7 +7025,7 @@ mod tests {
     }
 
     /// R9 (b): the request finishing list starts with `ast-transforms` and
-    /// ends `..., prefetch-remote-images, pandoc-prepare`, and shares its tail
+    /// ends `..., prefetch-remote-images, rasterize-svg-images, pandoc-prepare`, and shares its tail
     /// with the single-document fetching list.
     #[test]
     fn request_finishing_list_starts_at_ast_transforms_and_ends_in_prepare() {
@@ -7027,7 +7035,8 @@ mod tests {
         assert_eq!(finishing[0], "ast-transforms");
         let n = finishing.len();
         assert_eq!(finishing[n - 1], "pandoc-prepare");
-        assert_eq!(finishing[n - 2], "prefetch-remote-images");
+        assert_eq!(finishing[n - 2], "rasterize-svg-images");
+        assert_eq!(finishing[n - 3], "prefetch-remote-images");
         let single = stage_names(build_pandoc_request_stages_fetching(Vec::new()));
         let at = single.iter().position(|n| n == "ast-transforms").unwrap();
         assert_eq!(finishing[1..], single[at + 1..], "one source of truth");

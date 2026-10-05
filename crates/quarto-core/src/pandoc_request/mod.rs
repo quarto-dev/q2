@@ -22,7 +22,7 @@ pub use constants::constants;
 pub use mounts::validate_mounts;
 pub use options::PrepareOptions;
 pub use path::{normalize_request_path, normalize_request_path_str};
-pub use resources::{ResourceCollector, ResourceKind};
+pub use resources::{ResourceCollector, ResourceKind, resolve_image_target};
 pub use share::{share_tree_entries, share_tree_version};
 pub use types::{PandocRequest, REQUEST_SCHEMA_VERSION, RequestFile, RequestKind, RequestPost};
 pub use typst_pdf::{typst_asset_entries, typst_assets_version, typst_date_prelude};
