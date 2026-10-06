@@ -24,7 +24,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawn } from 'node:child_process';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ToolSchema } from '@modelcontextprotocol/sdk/types.js';
+import { ToolSchema } from '@modelcontextprotocol/core';
 
 import { startTestHub, type TestHub } from './test-hub.js';
 

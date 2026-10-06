@@ -70,13 +70,18 @@ describe('MCP protocol', () => {
   it('should include proper input schemas on tools', async () => {
     const tools = await client.listTools();
     const readFile = tools.find(t => t.name === 'read_file');
+    // Post-SDK-v2 (BP-16): schemas are zod-derived and declare the
+    // 2020-12 dialect (BP-11, SEP-1613). `path` is no longer schema-
+    // required: a share URL's `file=` may supply it (see tools.ts
+    // PATH_DEFAULTABLE); the server enforces it post-normalization.
     expect(readFile?.inputSchema).toEqual({
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
       type: 'object',
       properties: {
         project: { type: 'string', description: expect.any(String) },
         path: { type: 'string', description: expect.any(String) },
       },
-      required: ['project', 'path'],
+      required: ['project'],
     });
   });
 
@@ -120,13 +125,16 @@ describe('MCP protocol (read-only mode)', () => {
   });
 
   it('should reject unknown tools', async () => {
-    const result = await client.callTool('write_file', {
-      project: 'test',
-      path: 'test.qmd',
-      content: 'hello',
-    });
-    expect(result.isError).toBe(true);
-    expect(result.content[0]?.text).toContain('Unknown tool');
+    // Post-SDK-v2 (BP-15): a tool the server doesn't have (here a write
+    // tool in read-only mode) is a JSON-RPC -32602 protocol error, not
+    // an isError result — McpTestClient.callTool throws on it.
+    await expect(
+      client.callTool('write_file', {
+        project: 'test',
+        path: 'test.qmd',
+        content: 'hello',
+      }),
+    ).rejects.toThrow('Tool write_file not found');
   });
 });
 

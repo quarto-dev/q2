@@ -27,8 +27,8 @@
 import { realpathSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { McpServer, SUPPORTED_PROTOCOL_VERSIONS } from '@modelcontextprotocol/server';
+import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { setSyncLogger } from '@quarto/quarto-sync-client';
 
 import { ConnectionManager } from './connection-manager.js';
@@ -121,24 +121,26 @@ export interface CreateServerOptions {
 }
 
 /**
- * Build the MCP `Server` with this package's identity, instructions, and
- * full tool surface registered. Shared by the stdio entrypoint (`main`)
- * and the in-process conformance fixture (`in-memory-fixture.ts`,
- * bd-f1dr7gs1), so both serve the identical surface — the harness never
- * drifts from what a real client sees. Pure construction: no transport,
- * no lifecycle handlers.
+ * Build the MCP `McpServer` with this package's identity, instructions,
+ * and full tool surface registered. Shared by the stdio entrypoint
+ * (`main`) and the in-process conformance fixture
+ * (`in-memory-fixture.ts`, bd-f1dr7gs1), so both serve the identical
+ * surface — the harness never drifts from what a real client sees. Pure
+ * construction: no transport, no lifecycle handlers.
+ *
+ * SDK v2 (BP-16): the server is dual-era — it answers the 2025
+ * `initialize` handshake and the 2026-07-28 `server/discover` probe from
+ * the same process. The static tool list earns a long `tools/list` cache
+ * hint (BP-17, SEP-2549); the SDK applies it only on the modern era.
  */
-export function createServer(options: CreateServerOptions): Server {
+export function createServer(options: CreateServerOptions): McpServer {
   const { manager, readOnly, authToolsState } = options;
-  const server = new Server(
+  const server = new McpServer(
     {
       name: 'quarto-hub',
       version: '0.0.1',
     },
     {
-      capabilities: {
-        tools: {},
-      },
       instructions:
         'Tools operate on a project identified by its automerge index document ID. ' +
         'You may pass that id directly, OR paste a quarto-hub.com share URL ' +
@@ -148,6 +150,18 @@ export function createServer(options: CreateServerOptions): Server {
         'parameter it becomes the default `path` for file tools. If a share URL ' +
         "names a different hub in its `server=` than this server is connected to, " +
         'the call is rejected (rather than silently hitting the wrong hub).',
+      cacheHints: {
+        // The tool list is fixed at construction for the life of the
+        // process (read-only mode and auth state included), so a long
+        // TTL is honest; per-client because it rides the client's
+        // negotiated era and auth surface.
+        'tools/list': { ttlMs: 3_600_000, cacheScope: 'private' },
+      },
+      // Dual-era opt-in (BP-16): the default supported list is
+      // legacy-only, and a hand-constructed server answers
+      // `server/discover` with -32601 unless a modern revision is named
+      // here. Legacy clients still `initialize` against the 2025 entries.
+      supportedProtocolVersions: [...SUPPORTED_PROTOCOL_VERSIONS, '2026-07-28'],
     },
   );
 
@@ -317,10 +331,12 @@ async function main(): Promise<void> {
         })
       : undefined;
 
-  const server = createServer({ manager, readOnly, authToolsState });
-
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  // serveStdio owns the era decision for the connection (BP-16 dual-era):
+  // it classifies the opening message, pins one server instance for the
+  // connection's lifetime, and installs the modern-only handlers
+  // (server/discover) itself when the opening claims 2026-07-28. The
+  // factory serves both eras — registration is era-agnostic.
+  const handle = serveStdio(() => createServer({ manager, readOnly, authToolsState }));
 
   // Outbound-sync drain budget at shutdown (bd-10deu8h4): created
   // documents live only in this process's memory until the hub acks
@@ -339,28 +355,21 @@ async function main(): Promise<void> {
 
   let shuttingDown = false;
   const shutdown = async (): Promise<void> => {
-    // Re-entrancy guard: server.close() below fires server.onclose,
-    // which routes back here.
     if (shuttingDown) return;
     shuttingDown = true;
     await manager.disconnectAll({ drainMs: SHUTDOWN_DRAIN_MS });
-    await server.close();
+    await handle.close();
     process.exit(0);
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
-  // MCP hosts terminate stdio servers by closing stdin — but the SDK's
-  // StdioServerTransport never watches for EOF (its onclose only fires
-  // on programmatic close), and live sync websockets / reconnect
-  // timers keep the event loop alive forever, leaking one process per
-  // agent session (bd-9jq2a060). Watch stdin EOF ourselves; also wire
-  // server.onclose so a programmatic transport close shuts down too.
+  // MCP hosts terminate stdio servers by closing stdin. The v2 stdio
+  // transport does close itself on EOF (v1's did not — bd-9jq2a060), but
+  // live sync websockets / reconnect timers would still keep the event
+  // loop alive, so the prompt exit path stays ours: drain, close, exit.
   process.stdin.on('end', () => {
     void shutdown();
   });
-  server.onclose = () => {
-    void shutdown();
-  };
 }
 
 // Run only when executed as the binary, not when imported (e.g. by

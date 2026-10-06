@@ -418,14 +418,14 @@ code).**
 
 Test specifications (all red before implementation):
 
-- [ ] Wrong-typed argument (`path: 42`, missing `project`) → `isError` result
+- [x] Wrong-typed argument (`path: 42`, missing `project`) → `isError` result
   naming the offending parameter and expected type (BP-2; SEP-1303 — tool
   execution error, not protocol error).
 - [ ] Client-cancelled `wait_for_change` → prompt cancellation, no listener
   leak (BP-3; Phase 0 harness asserts).
 - [ ] `list_files` result carries `structuredContent` matching its
   `outputSchema`, with the JSON text fallback retained (BP-1).
-- [ ] Dual-era handshake: a legacy client (`initialize`, `2025-11-25`) and a
+- [x] Dual-era handshake: a legacy client (`initialize`, `2025-11-25`) and a
   modern client (`server/discover`, per-request `_meta`) both list and call
   tools against the same process, and `instructions` arrives on both paths
   (BP-16).
@@ -441,7 +441,7 @@ Test specifications (all red before implementation):
 - [ ] `read_file` on a missing path names `list_files` and the closest
   existing paths (ERG-4); an unknown tool name is a JSON-RPC `-32602` error,
   not an `isError` result (BP-15).
-- [ ] `tools/list` order is identical across calls and carries `ttlMs`
+- [x] `tools/list` order is identical across calls and carries `ttlMs`
   (BP-17).
 - [ ] Startup against a cached credential emits no `TimeoutNegativeWarning`
   and no automerge deprecation warning on stderr (HY-6).
@@ -455,24 +455,72 @@ Test specifications (all red before implementation):
 
 Work items:
 
-- [ ] BP-16: migrate to SDK v2 (`@modelcontextprotocol/server` for the
+- [x] BP-16: migrate to SDK v2 (`@modelcontextprotocol/server` for the
   server, `@modelcontextprotocol/client` in tests): `McpServer.registerTool`
   with zod v4 input/output schemas, stdio transport from
   `@modelcontextprotocol/server/stdio`, dual-era enabled. Keep `handleTool`'s
   shape (transport-agnostic): the migration touches registration and types,
   not handler logic. Re-run `bundle.test.ts` and `q2 mcp --launcher-info`;
   Node floor is ≥ 20 (repo pins 24). Record Q-1's outcome.
-- [ ] BP-2: input validation comes from the v2 zod schemas (SEP-1303 error
+- [x] BP-2: input validation comes from the v2 zod schemas (SEP-1303 error
   shape); the hand-written JSON schemas are deleted, not duplicated.
-- [ ] BP-15: unknown tool → protocol error. BP-17: `ttlMs`/`cacheScope` on
+- [x] BP-15: unknown tool → protocol error. BP-17: `ttlMs`/`cacheScope` on
   `tools/list` (static list → long TTL).
-- [ ] **Checkpoint (intra-phase gate):** once the BP-16 migration and its
+- [x] **Checkpoint (intra-phase gate):** once the BP-16 migration and its
   free fallout (BP-2, BP-15, BP-17) land, run the full phase-close gate
   (`cargo xtask verify`, `npm run test -w ts-packages/quarto-hub-mcp`, eval
   suite) and commit before starting the ergonomics batch (ERG-1 onward). The
   dual-era handshake and wrong-typed-argument test specs must be green at
   this point. The migration is the riskiest single change in this plan;
   everything after it is small and independently revertable.
+
+#### Phase 1 checkpoint record (landed 2026-10-06, bd-zv8u2sxi)
+
+**BP-16 migration.** `@modelcontextprotocol/sdk` 1.x →
+`@modelcontextprotocol/server` 2.3.1 (pinned `~2.3.1`), with
+`@modelcontextprotocol/client` + `/core` 2.3.1 in devDeps for the harness.
+`registerTools` is now per-tool `McpServer.registerTool` calls with zod v4
+schemas (zod 4.4.3 dedupes workspace-wide); `handleTool` and every handler
+kept verbatim (transport-agnostic, revert = registration-only). The stdio
+entrypoint is `serveStdio(factory)` — the v2 entry that owns era
+classification and instance pinning — replacing hand-wired
+`server.connect(new StdioServerTransport())`, which in v2 serves **legacy
+only**: `supportedProtocolVersions` merely installs the discover handler;
+era pinning happens inside `serveStdio`'s `connectInstance` (SDK-internal
+`setNegotiatedProtocolVersion`). One migration-found wire detail: the
+2026-07-28 `_meta` envelope keys are camelCase
+(`io.modelcontextprotocol/protocolVersion`), not kebab-case. `path` became
+schema-optional on the six share-URL-`file=`-defaultable tools (zod
+validation runs before `normalizeArgs` can default it); the requirement is
+now enforced post-normalization with a message naming the share-URL
+affordance. HY-2's dead `registerAuthTools` went away with the migration.
+
+**Q-1 outcome (recorded).** The zod objection (`tools.ts:7-8`) is fully
+retired: zod v4 schemas are the single source for the advertised JSON
+Schema and runtime validation; zod 4.4.3's `~standard.jsonSchema`
+conversion keeps `.describe()` text and emits draft 2020-12 with a
+`$schema` declaration (BP-11 closed as fallout). Friction was all in the
+dual-era enablement described above — the migration guide does not
+surface that `server.connect()` + `StdioServerTransport` is legacy-only,
+nor that `InMemoryTransport` carries no era classification (the dual-era
+tests therefore drive `serveStdio` over a stdio-shaped in-memory wire —
+the production path).
+
+**E2E (real binary, recorded).** `cargo xtask build-hub-mcp-bundle &&
+cargo build --bin q2`; freshness confirmed by `q2 mcp --launcher-info`.
+Legacy: `initialize` → `2025-11-25`, `tools/list` → 12 tools, clean exit
+on stdin EOF. Modern (camelCase envelope): `server/discover` →
+`supportedVersions: ["2026-07-28"]` + instructions; `tools/list` → 12
+tools, `ttlMs: 3600000, cacheScope: "private"`. Both invocations against
+`./target/debug/q2 mcp --server ws://127.0.0.1:1/ws`, output inspected.
+
+**Checkpoint gate.** `cargo xtask verify` green (14/14);
+`npm run test -w ts-packages/quarto-hub-mcp` green (25 files, 274 passed
++ 2 expected-fail + 3 skips — the BP-3/BP-18 `it.fails` nets still red by
+construction). Eval suite 7/7 PASS, median 4 turns, zero `isError`, zero
+retries (transcripts `eval/results/2026-10-06T10-32-53/`): turns/tokens
+in line with the Phase 0 baseline — the migration is agent-invisible, as
+intended.
 - [ ] ERG-1: `hash` on `read_file`/`write_file`/`patch_file` results;
   `expected_hash` on `write_file`/`patch_file` (compare-and-swap, reusing
   `hashPayload`).
@@ -505,9 +553,10 @@ Work items:
   defer icons to Phase 5).
 - [ ] BP-12: `authenticate` mutex.
 - [ ] BP-13: `authenticate_status` tool.
+- [x] HY-2: delete dead `registerAuthTools`. (Deleted with the BP-16
+  migration — it was v1-only wiring; see the checkpoint record.)
 - [ ] HY-1: interim message fix — drop the phantom `read_binary_file_metadata`
   reference (binary reads land in `read_file` in Phase 2, CAP-4).
-- [ ] HY-2: delete dead `registerAuthTools`.
 - [ ] bd-qt7h8h5g: multi-server `ConnectionManager` (per-call `server`
   override + share-URL `server=` honored; origin-scoped auth).
 - [ ] HY-3: `rm -rf dist` before `tsc` in the package scripts; confirm no test

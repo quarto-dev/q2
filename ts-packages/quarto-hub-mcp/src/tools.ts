@@ -1,26 +1,31 @@
 /**
  * MCP Tool Definitions
  *
- * Registers all MCP tools on the server. Each tool operates on a project
- * identified by its automerge index document ID.
+ * Registers all MCP tools on the server via the SDK v2 `McpServer`
+ * registration API (BP-16). Each tool's zod v4 `inputSchema` is the
+ * single source for both the advertised JSON Schema and runtime input
+ * validation — a wrong-typed argument is a tool-execution error naming
+ * the offending parameter (BP-2, SEP-1303), and there is no
+ * hand-written JSON schema left to drift from the handlers. Unknown
+ * tool names are the SDK's own `-32602` protocol error (BP-15).
  *
- * Uses the lower-level Server API with explicit JSON schemas to avoid
- * Zod v4 type inference issues with the McpServer high-level API.
+ * Handlers stay transport- and SDK-agnostic (see `handleTool`): the
+ * registration layer is the only SDK-coupled code, so a revert of the
+ * v2 migration is registration-only.
  */
 
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
-import type { Tool, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
+import type {
+  CallToolResult,
+  McpServer,
+  ToolAnnotations,
+} from '@modelcontextprotocol/server';
 import { fileUnavailableMessage, type SyncClient } from '@quarto/quarto-sync-client';
 import { ConnectionManager } from './connection-manager.js';
 import {
   AUTH_TOOL_DEFINITIONS,
   AuthToolsState,
   extractAuthContext,
-  type AuthToolName,
 } from './auth/auth-tools.js';
 import { redactTokens } from './auth/redact.js';
 import { parseProjectRef, serversMatch } from './share-url.js';
@@ -44,185 +49,14 @@ const PROJECT_PARAM_DESC =
   'to grant access). Given a share URL, the `<id>` after `#/share/` is used as the ' +
   'project and the `file=` query parameter, if present, supplies a default `path`.';
 
-// ============================================================================
-// Tool definitions
-// ============================================================================
+const projectParam = z.string().describe(PROJECT_PARAM_DESC);
+const pathParam = z.string().describe('The file path within the project');
 
-function getReadTools(): Tool[] {
-  return [
-    {
-      name: 'connect_project',
-      description:
-        'Connect to a Quarto Hub project by its automerge index document ID — ' +
-        'or by a quarto-hub.com share URL (`https://quarto-hub.com/#/share/<id>?…`), ' +
-        'from which the id is extracted automatically. ' +
-        'Returns the list of files in the project. ' +
-        'If the hub requires authentication and no valid credentials are cached, ' +
-        'this throws an `AuthRequiredError` / `ReauthRequired` — call ' +
-        '`authenticate` to sign in.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          project: { type: 'string', description: PROJECT_PARAM_DESC },
-        },
-        required: ['project'],
-      },
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
-    },
-    {
-      name: 'list_files',
-      description: 'List all files in a connected Quarto Hub project.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          project: { type: 'string', description: PROJECT_PARAM_DESC },
-        },
-        required: ['project'],
-      },
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
-    },
-    {
-      name: 'read_file',
-      description: 'Read the text content of a file in a Quarto Hub project.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          project: { type: 'string', description: PROJECT_PARAM_DESC },
-          path: { type: 'string', description: 'The file path within the project' },
-        },
-        required: ['project', 'path'],
-      },
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
-    },
-    {
-      name: 'wait_for_change',
-      description:
-        'Long-poll: block until a file in the project is edited by any collaborator, then return its ' +
-        'new content. Returns as soon as a change is observed, or after `timeout_seconds` with ' +
-        '`changed: false` (re-call to keep watching). The result includes a `hash`; pass it back as ' +
-        '`since_hash` on the next call so an edit landing between calls is never missed. Lets an agent ' +
-        'react to a live collaborator without busy-polling read_file.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          project: { type: 'string', description: PROJECT_PARAM_DESC },
-          path: { type: 'string', description: 'The file path within the project to watch' },
-          timeout_seconds: {
-            type: 'number',
-            description: 'Max seconds to block before returning changed=false (default 25, clamped to 1-55)',
-            default: 25,
-          },
-          since_hash: {
-            type: 'string',
-            description:
-              'Optional hash from a prior result. If the file already differs from it, returns immediately ' +
-              '(closes the gap between polls).',
-          },
-        },
-        required: ['project', 'path'],
-      },
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false },
-    },
-  ];
-}
-
-function getWriteTools(): Tool[] {
-  return [
-    {
-      name: 'write_file',
-      description: 'Replace the entire content of a text file in a Quarto Hub project. Creates the file if it does not exist.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          project: { type: 'string', description: PROJECT_PARAM_DESC },
-          path: { type: 'string', description: 'The file path within the project' },
-          content: { type: 'string', description: 'The new file content' },
-        },
-        required: ['project', 'path', 'content'],
-      },
-      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
-    },
-    {
-      name: 'patch_file',
-      description: 'Apply a targeted edit to a text file by replacing a specific string. More context-efficient than write_file for small changes to large files.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          project: { type: 'string', description: PROJECT_PARAM_DESC },
-          path: { type: 'string', description: 'The file path within the project' },
-          old_string: { type: 'string', description: 'The exact string to find and replace' },
-          new_string: { type: 'string', description: 'The replacement string' },
-        },
-        required: ['project', 'path', 'old_string', 'new_string'],
-      },
-      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
-    },
-    {
-      name: 'create_file',
-      description: 'Create a new text file in a Quarto Hub project.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          project: { type: 'string', description: PROJECT_PARAM_DESC },
-          path: { type: 'string', description: 'The file path within the project' },
-          content: { type: 'string', description: 'Initial file content (defaults to empty)', default: '' },
-        },
-        required: ['project', 'path'],
-      },
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
-    },
-    {
-      name: 'delete_file',
-      description: 'Delete a file from a Quarto Hub project.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          project: { type: 'string', description: PROJECT_PARAM_DESC },
-          path: { type: 'string', description: 'The file path to delete' },
-        },
-        required: ['project', 'path'],
-      },
-      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
-    },
-    {
-      name: 'rename_file',
-      description: 'Rename or move a file within a Quarto Hub project.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          project: { type: 'string', description: PROJECT_PARAM_DESC },
-          old_path: { type: 'string', description: 'The current file path' },
-          new_path: { type: 'string', description: 'The new file path' },
-        },
-        required: ['project', 'old_path', 'new_path'],
-      },
-      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
-    },
-    {
-      name: 'create_project',
-      description: 'Create a new Quarto Hub project on the sync server with optional initial files.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          files: {
-            type: 'array',
-            description: 'Initial files to create in the project',
-            items: {
-              type: 'object',
-              properties: {
-                path: { type: 'string', description: 'File path' },
-                content: { type: 'string', description: 'File content' },
-              },
-              required: ['path', 'content'],
-            },
-            default: [],
-          },
-        },
-      },
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
-    },
-  ];
-}
+const ANNOT_READ: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+};
 
 // ============================================================================
 // Tool handlers
@@ -306,8 +140,37 @@ function unavailableFileError(path: string, docId: string): CallToolResult {
   );
 }
 
+/** The data tools (everything except the auth tools). */
+type DataToolName =
+  | 'connect_project'
+  | 'list_files'
+  | 'read_file'
+  | 'wait_for_change'
+  | 'write_file'
+  | 'patch_file'
+  | 'create_file'
+  | 'delete_file'
+  | 'rename_file'
+  | 'create_project';
+
+/**
+ * Tools whose `path` argument a share URL's `file=` parameter can
+ * supply (see {@link normalizeArgs}). Their zod schemas declare `path`
+ * optional — a schema-level `required` would reject the share-URL call
+ * before normalization runs — so the requirement is enforced here,
+ * after normalization.
+ */
+const PATH_DEFAULTABLE: ReadonlySet<DataToolName> = new Set([
+  'read_file',
+  'wait_for_change',
+  'write_file',
+  'patch_file',
+  'create_file',
+  'delete_file',
+]);
+
 async function handleTool(
-  name: string,
+  name: DataToolName,
   rawArgs: ToolArgs,
   manager: ConnectionManager
 ): Promise<CallToolResult> {
@@ -316,6 +179,12 @@ async function handleTool(
     return error(normalized.error);
   }
   const args = normalized.args;
+  if (PATH_DEFAULTABLE.has(name) && (typeof args.path !== 'string' || args.path === '')) {
+    return error(
+      `Error: ${name} requires a \`path\` argument — the file path within the project ` +
+        '(or pass a share URL whose `file=` parameter names it).',
+    );
+  }
   switch (name) {
     case 'connect_project':
       return handleConnectProject(args, manager);
@@ -337,8 +206,6 @@ async function handleTool(
       return handleRenameFile(args, manager);
     case 'create_project':
       return handleCreateProject(args, manager);
-    default:
-      return error(`Unknown tool: ${name}`);
   }
 }
 
@@ -546,44 +413,204 @@ async function handleCreateProject(args: ToolArgs, manager: ConnectionManager): 
 // ============================================================================
 
 /**
- * Register all tool handlers on the MCP server.
+ * Run a data-tool handler, converting a throw into a tool-execution
+ * error with token bytes redacted. The SDK wraps handler throws as
+ * `isError` results too, but without redaction — this keeps the
+ * defensive scrub on the error path.
+ */
+async function runDataTool(
+  name: DataToolName,
+  args: ToolArgs,
+  manager: ConnectionManager,
+): Promise<CallToolResult> {
+  try {
+    return await handleTool(name, args, manager);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return error(`Error in ${name}: ${redactTokens(message)}`);
+  }
+}
+
+/**
+ * Register all tool handlers on the MCP server. Auth tools register
+ * first so they lead the `tools/list` order and the data tools'
+ * "no credentials" errors can name them.
  */
 export function registerTools(
-  server: Server,
+  server: McpServer,
   manager: ConnectionManager,
   readOnly: boolean,
   authToolsState?: AuthToolsState,
 ): void {
-  const dataTools = [...getReadTools(), ...(readOnly ? [] : getWriteTools())];
-  const allTools = authToolsState
-    ? [...AUTH_TOOL_DEFINITIONS, ...dataTools]
-    : dataTools;
-
-  server.setRequestHandler(ListToolsRequestSchema, async () => {
-    return { tools: allTools };
-  });
-
-  server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
-    const { name, arguments: args } = request.params;
-
-    if (
-      authToolsState &&
-      (name === 'authenticate' || name === 'authenticate_clear')
-    ) {
-      return authToolsState.handle(name as AuthToolName, extractAuthContext(extra));
+  if (authToolsState) {
+    for (const def of AUTH_TOOL_DEFINITIONS) {
+      server.registerTool(
+        def.name,
+        {
+          description: def.description,
+          inputSchema: z.object({}),
+          annotations: def.annotations,
+        },
+        (_args, ctx) => authToolsState.handle(def.name, extractAuthContext(ctx)),
+      );
     }
+  }
 
-    const tool = dataTools.find(t => t.name === name);
-    if (!tool) {
-      return error(`Unknown tool: ${name}`);
-    }
+  server.registerTool(
+    'connect_project',
+    {
+      description:
+        'Connect to a Quarto Hub project by its automerge index document ID — ' +
+        'or by a quarto-hub.com share URL (`https://quarto-hub.com/#/share/<id>?…`), ' +
+        'from which the id is extracted automatically. ' +
+        'Returns the list of files in the project. ' +
+        'If the hub requires authentication and no valid credentials are cached, ' +
+        'this throws an `AuthRequiredError` / `ReauthRequired` — call ' +
+        '`authenticate` to sign in.',
+      inputSchema: z.object({ project: projectParam }),
+      annotations: ANNOT_READ,
+    },
+    (args) => runDataTool('connect_project', args, manager),
+  );
 
-    try {
-      return await handleTool(name, args ?? {}, manager);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      // Redact in case the error message carries token bytes (defensive).
-      return error(`Error in ${name}: ${redactTokens(message)}`);
-    }
-  });
+  server.registerTool(
+    'list_files',
+    {
+      description: 'List all files in a connected Quarto Hub project.',
+      inputSchema: z.object({ project: projectParam }),
+      annotations: ANNOT_READ,
+    },
+    (args) => runDataTool('list_files', args, manager),
+  );
+
+  server.registerTool(
+    'read_file',
+    {
+      description: 'Read the text content of a file in a Quarto Hub project.',
+      inputSchema: z.object({ project: projectParam, path: pathParam.optional() }),
+      annotations: ANNOT_READ,
+    },
+    (args) => runDataTool('read_file', args, manager),
+  );
+
+  server.registerTool(
+    'wait_for_change',
+    {
+      description:
+        'Long-poll: block until a file in the project is edited by any collaborator, then return its ' +
+        'new content. Returns as soon as a change is observed, or after `timeout_seconds` with ' +
+        '`changed: false` (re-call to keep watching). The result includes a `hash`; pass it back as ' +
+        '`since_hash` on the next call so an edit landing between calls is never missed. Lets an agent ' +
+        'react to a live collaborator without busy-polling read_file.',
+      inputSchema: z.object({
+        project: projectParam,
+        path: z.string().describe('The file path within the project to watch').optional(),
+        timeout_seconds: z
+          .number()
+          .describe('Max seconds to block before returning changed=false (default 25, clamped to 1-55)')
+          .default(25),
+        since_hash: z
+          .string()
+          .optional()
+          .describe(
+            'Optional hash from a prior result. If the file already differs from it, returns immediately ' +
+              '(closes the gap between polls).',
+          ),
+      }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false },
+    },
+    (args) => runDataTool('wait_for_change', args, manager),
+  );
+
+  if (readOnly) return;
+
+  server.registerTool(
+    'write_file',
+    {
+      description: 'Replace the entire content of a text file in a Quarto Hub project. Creates the file if it does not exist.',
+      inputSchema: z.object({
+        project: projectParam,
+        path: pathParam.optional(),
+        content: z.string().describe('The new file content'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    },
+    (args) => runDataTool('write_file', args, manager),
+  );
+
+  server.registerTool(
+    'patch_file',
+    {
+      description: 'Apply a targeted edit to a text file by replacing a specific string. More context-efficient than write_file for small changes to large files.',
+      inputSchema: z.object({
+        project: projectParam,
+        path: pathParam.optional(),
+        old_string: z.string().describe('The exact string to find and replace'),
+        new_string: z.string().describe('The replacement string'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
+    },
+    (args) => runDataTool('patch_file', args, manager),
+  );
+
+  server.registerTool(
+    'create_file',
+    {
+      description: 'Create a new text file in a Quarto Hub project.',
+      inputSchema: z.object({
+        project: projectParam,
+        path: pathParam.optional(),
+        content: z.string().describe('Initial file content (defaults to empty)').default(''),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    },
+    (args) => runDataTool('create_file', args, manager),
+  );
+
+  server.registerTool(
+    'delete_file',
+    {
+      description: 'Delete a file from a Quarto Hub project.',
+      inputSchema: z.object({
+        project: projectParam,
+        path: z.string().describe('The file path to delete').optional(),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
+    },
+    (args) => runDataTool('delete_file', args, manager),
+  );
+
+  server.registerTool(
+    'rename_file',
+    {
+      description: 'Rename or move a file within a Quarto Hub project.',
+      inputSchema: z.object({
+        project: projectParam,
+        old_path: z.string().describe('The current file path'),
+        new_path: z.string().describe('The new file path'),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
+    },
+    (args) => runDataTool('rename_file', args, manager),
+  );
+
+  server.registerTool(
+    'create_project',
+    {
+      description: 'Create a new Quarto Hub project on the sync server with optional initial files.',
+      inputSchema: z.object({
+        files: z
+          .array(
+            z.object({
+              path: z.string().describe('File path'),
+              content: z.string().describe('File content'),
+            }),
+          )
+          .describe('Initial files to create in the project')
+          .default([]),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+    },
+    (args) => runDataTool('create_project', args, manager),
+  );
 }

@@ -21,16 +21,12 @@
  * headless machines.
  */
 
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import type {
   CallToolResult,
-  ServerNotification,
-  Tool,
-} from '@modelcontextprotocol/sdk/types.js';
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
+  Notification,
+  ServerContext,
+  ToolAnnotations,
+} from '@modelcontextprotocol/server';
 import { decodeJwt } from 'jose';
 import * as oauth from 'oauth4webapi';
 
@@ -127,7 +123,20 @@ export interface AuthToolsDeps {
   readonly openBrowser?: typeof defaultOpenBrowser;
 }
 
-export const AUTH_TOOL_DEFINITIONS: readonly Tool[] = [
+export type AuthToolName = 'authenticate' | 'authenticate_clear';
+
+/**
+ * An auth tool's advertised metadata. Input schemas are not part of the
+ * definition: both auth tools take no arguments and register with an
+ * empty zod schema at the registration layer (tools.ts).
+ */
+export interface AuthToolDefinition {
+  readonly name: AuthToolName;
+  readonly description: string;
+  readonly annotations: ToolAnnotations;
+}
+
+export const AUTH_TOOL_DEFINITIONS: readonly AuthToolDefinition[] = [
   {
     name: 'authenticate',
     description:
@@ -138,7 +147,6 @@ export const AUTH_TOOL_DEFINITIONS: readonly Tool[] = [
       'already valid, returns "Already authenticated as <email>" without ' +
       'opening a browser. The authorization URL is also printed so a user ' +
       'on a headless or SSH session can open it manually.',
-    inputSchema: { type: 'object', properties: {} },
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
@@ -157,7 +165,6 @@ export const AUTH_TOOL_DEFINITIONS: readonly Tool[] = [
       'myaccount.google.com. Use this as an escape hatch when the hub ' +
       'rejects the cached credentials. Idempotent: safe to call when no ' +
       'credentials are present.',
-    inputSchema: { type: 'object', properties: {} },
     annotations: {
       readOnlyHint: false,
       destructiveHint: true,
@@ -165,8 +172,6 @@ export const AUTH_TOOL_DEFINITIONS: readonly Tool[] = [
     },
   },
 ];
-
-export type AuthToolName = 'authenticate' | 'authenticate_clear';
 
 // ---------------------------------------------------------------------------
 // Result helpers
@@ -598,44 +603,14 @@ function extractEmail(idToken: string): string | null {
 // ---------------------------------------------------------------------------
 
 /**
- * Adapt the MCP SDK's per-request `extra` onto {@link AuthToolContext}.
- * The cast on `sendNotification` bridges our minimal
- * {@link ProgressNotification} shape to the SDK's `ServerNotification`.
+ * Adapt the MCP SDK v2 per-request context onto {@link AuthToolContext}.
+ * The cast on the notification bridges our minimal
+ * {@link ProgressNotification} shape to the SDK's `Notification` union.
  */
-export function extractAuthContext(extra: {
-  signal?: AbortSignal;
-  _meta?: { progressToken?: string | number };
-  sendNotification?: (n: ServerNotification) => Promise<void>;
-}): AuthToolContext {
+export function extractAuthContext(ctx: ServerContext): AuthToolContext {
   return {
-    signal: extra.signal,
-    progressToken: extra._meta?.progressToken,
-    sendNotification: extra.sendNotification
-      ? (n) => extra.sendNotification!(n as unknown as ServerNotification)
-      : undefined,
+    signal: ctx.mcpReq.signal,
+    progressToken: ctx.mcpReq._meta?.progressToken,
+    sendNotification: (n) => ctx.mcpReq.notify(n as unknown as Notification),
   };
-}
-
-/**
- * Registers `authenticate` / `authenticate_clear` on the MCP server.
- * Must be called **before** {@link registerTools} so the read/write
- * tools' "no credentials" errors can name the auth tools.
- *
- * Returns the {@link AuthToolsState} so the caller can pass it back into
- * `registerTools(...)`, which dispatches both tool families through a
- * single `CallToolRequestSchema` handler.
- */
-export function registerAuthTools(server: Server, deps: AuthToolsDeps): AuthToolsState {
-  const state = new AuthToolsState(deps);
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [...AUTH_TOOL_DEFINITIONS],
-  }));
-  server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
-    const { name } = request.params;
-    if (name === 'authenticate' || name === 'authenticate_clear') {
-      return state.handle(name, extractAuthContext(extra));
-    }
-    return errorResult(`Unknown tool: ${name}`);
-  });
-  return state;
 }
