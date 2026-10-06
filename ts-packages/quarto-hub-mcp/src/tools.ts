@@ -439,6 +439,7 @@ type DataToolName =
   | 'get_project_info'
   | 'list_projects'
   | 'list_files'
+  | 'list_presence'
   | 'read_file'
   | 'search_files'
   | 'wait_for_change'
@@ -504,6 +505,8 @@ async function handleTool(
       return handleListProjects(args, manager);
     case 'list_files':
       return handleListFiles(args, manager);
+    case 'list_presence':
+      return handleListPresence(args, manager);
     case 'read_file':
       return handleReadFile(args, manager);
     case 'search_files':
@@ -638,6 +641,24 @@ async function handleListProjects(args: ToolArgs, manager: ConnectionManager): P
   return structured({
     ...(doc.name !== undefined ? { name: doc.name } : {}),
     projects,
+  });
+}
+
+async function handleListPresence(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
+  const project = args.project as string;
+  const presences = await manager.observePresence(project, { server: routedServer(args) });
+  return structured({
+    project,
+    presences,
+    ...(presences.length === 0
+      ? {
+          message:
+            'No collaborators heard from recently. Presence is observed passively: a peer ' +
+            'appears here only after their editor broadcasts (on cursor activity), and drops ' +
+            'out about a minute after their last broadcast. Absence of an entry does not prove ' +
+            'nobody has the project open.',
+        }
+      : {}),
   });
 }
 
@@ -1418,6 +1439,26 @@ async function runDataTool(
 // without a golden case (or a drifted result shape) fails the suite.
 // ---------------------------------------------------------------------------
 
+const outPresenceEntry = z.object({
+  peer_id: z.string(),
+  user_id: z.string(),
+  user_name: z.string(),
+  user_color: z.string(),
+  file_path: z.string().nullable(),
+  cursor_offset: z.number().nullable(),
+  selection: z
+    .object({ start_offset: z.number(), end_offset: z.number() })
+    .nullable(),
+  last_seen_ms_ago: z.number(),
+  active: z.boolean(),
+});
+
+const outListPresence = z.object({
+  project: z.string(),
+  presences: z.array(outPresenceEntry),
+  message: z.string().optional(),
+});
+
 const outListedFile = z.object({
   path: z.string(),
   type: z.string().optional(),
@@ -1841,6 +1882,27 @@ export function registerTools(
       annotations: ANNOT_READ,
     },
     (args) => runDataTool('list_projects', args, manager),
+  );
+
+  server.registerTool(
+    'list_presence',
+    {
+      title: 'List collaborators present',
+      description:
+        'Who is in the project right now: each collaborator\'s name, the file they are ' +
+        'editing, cursor/selection offsets when resolvable, and how long ago they were last ' +
+        'heard from (`active` = within the last 5s, same threshold the web client shows). ' +
+        'Observation is passive — this server never announces itself, and a peer only appears ' +
+        'after their editor broadcasts (on cursor activity), so an empty list does not prove ' +
+        'nobody is watching. Check before editing a file a teammate may have open; combine ' +
+        'with wait_for_change to react to their edits.',
+      inputSchema: z.object({
+        project: projectParam,
+      }),
+      outputSchema: outListPresence,
+      annotations: ANNOT_READ,
+    },
+    (args) => runDataTool('list_presence', args, manager),
   );
 
   server.registerTool(

@@ -168,6 +168,10 @@ function spySyncClientFactory(): SyncClientCallSpy {
         },
       ) as unknown as SyncClient['createNewProject'],
       disconnect: vi.fn().mockResolvedValue(undefined) as unknown as SyncClient['disconnect'],
+      // PresenceTracker (CAP-8) scans handles on attach; the fake holds none.
+      getFilePaths: () => [],
+      getFileHandle: () => null,
+      getIndexHandle: () => null,
     };
     return stub as SyncClient;
   };
@@ -653,6 +657,10 @@ function capturingSyncClientFactory() {
         return [];
       }) as unknown as SyncClient['connect'],
       disconnect: vi.fn().mockResolvedValue(undefined) as unknown as SyncClient['disconnect'],
+      // PresenceTracker (CAP-8) scans handles on attach; the fake holds none.
+      getFilePaths: () => [],
+      getFileHandle: () => null,
+      getIndexHandle: () => null,
     };
     return stub as SyncClient;
   };
