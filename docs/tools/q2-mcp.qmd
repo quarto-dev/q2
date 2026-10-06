@@ -162,6 +162,12 @@ the same safety signals you have when editing by hand:
 | `create_folder` | Create a folder (folders are explicit markers; files need no folder to exist) |
 | `delete_folder` | Delete a folder; `recursive: true` deletes contained files first |
 
+### Documentation
+
+| Tool | Purpose |
+|------|---------|
+| `docs` | Search (`query`) or read (`page`) the Quarto 2 documentation embedded in the `q2` binary — no project or network needed |
+
 ### Sign-in
 
 | Tool | Purpose |

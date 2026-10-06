@@ -44,6 +44,7 @@ describe('MCP protocol', () => {
       'delete_file',
       'delete_folder',
       'disconnect_project',
+      'docs',
       'get_errors',
       'get_file_history',
       'get_outline',
@@ -147,6 +148,7 @@ describe('MCP protocol (read-only mode)', () => {
     expect(names).toEqual([
       'connect_project',
       'disconnect_project',
+      'docs',
       'get_errors',
       'get_file_history',
       'get_outline',

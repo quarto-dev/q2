@@ -1021,8 +1021,12 @@ Test specifications:
   gated on target/debug/q2; render-tool.test.ts: fake-q2 wire cases incl.
   both NDJSON envelope shapes, timeout, outputs, materialization +
   path-escape guard; render-gating.test.ts: the three listing gates.)*
-- [ ] `docs` with a `query` returns ranked pages; `docs` with a `page`
+- [x] `docs` with a `query` returns ranked pages; `docs` with a `page`
   returns one page's markdown (CAP-13 / bd-dn81ol95).
+  *(docs-corpus.test.ts: corpus parse/rank/lookup units; docs.test.ts:
+  tool-level through a fake-q2 stub — ranking, snippets, max_results
+  truncation, miss suggestions, placeholder-embed error, read-only
+  surface; conformance golden case with its own stub.)*
 
 Work items:
 
@@ -1056,8 +1060,22 @@ Work items:
   standalone/npx channel. (5) Diagnostics are relativized out of the temp
   dir (realpath both sides — macOS /tmp symlink) and capped streams +
   SIGTERM→SIGKILL timeout keep a runaway render bounded.
-- [ ] CAP-13 `docs` tool (bd-dn81ol95 + bd-b6cocsxw; design the
-  `q2 docs llms --json` ↔ MCP seam).
+- [x] CAP-13 `docs` tool (bd-dn81ol95 + bd-b6cocsxw; design the
+  `q2 docs llms --json` ↔ MCP seam). **Seam design recorded:** ONE
+  subprocess per process lifetime — `q2 docs llms --full` via
+  `QUARTO_Q2_PATH` (the CAP-12 launcher injection doubles as the CAP-13
+  seam; PATH fallback for standalone). The corpus's per-page
+  `---\ntitle:/url:` markers (assemble_llms_full) make page attribution
+  exact, so search and page fetches serve from the in-process cache.
+  Chosen over (a) launcher-extracted doc dirs (standalone channel would
+  need a second path) and (c) staging the corpus into dist-bundle (~1 MB
+  duplication plus a docs-render step in every bundle build). The
+  `--json` flag (bd-b6cocsxw) shipped anyway — structured
+  `--list`/`--embed-info` for other machine consumers; search is
+  term-tokenized (AND-matches rank first), snippets pick the
+  highest-term-density line. Both strands closed. Tool budget: 21/24
+  data, 24/24 with auth — at the ceiling exactly; Phase 5+ additions
+  must displace or consolidate.
 - [ ] CAP-10 `clear_capture` decision (Q-4).
 
 ### Phase 5 — MCP-native surfaces

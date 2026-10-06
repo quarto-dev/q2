@@ -205,3 +205,61 @@ fn conflicting_modes_are_a_usage_error() {
     let out = q2(&["docs", "llms", "--full", "--list"]);
     assert_eq!(out.status.code(), Some(2), "clap usage errors exit 2");
 }
+
+#[test]
+fn list_json_emits_a_structured_page_array() {
+    let out = q2(&["docs", "llms", "--list", "--json"]);
+    if !embed_is_real() {
+        assert!(!out.status.success(), "placeholder embed must fail");
+        assert!(stderr(&out).contains("cargo xtask build-agents-docs"));
+        return;
+    }
+    assert!(out.status.success(), "stderr: {}", stderr(&out));
+    let pages: Vec<serde_json::Value> =
+        serde_json::from_str(&stdout(&out)).expect("--list --json must parse as a JSON array");
+    assert!(!pages.is_empty(), "--list --json must list pages");
+    let first = &pages[0];
+    let href = first["href"].as_str().expect("entries carry href");
+    let title = first["title"].as_str().expect("entries carry title");
+    assert!(href.ends_with(".md"), "href must be a companion: {href}");
+    assert!(!title.is_empty(), "title must be non-empty");
+    // The JSON and text forms enumerate the same pages in the same order.
+    let text = stdout(&q2(&["docs", "llms", "--list"]));
+    assert_eq!(pages.len(), text.lines().count(), "json/text page count");
+    assert_eq!(href, text.lines().next().unwrap().split('\t').next().unwrap());
+}
+
+#[test]
+fn embed_info_json_reports_state_and_provenance() {
+    let out = q2(&["docs", "llms", "--embed-info", "--json"]);
+    assert!(
+        out.status.success(),
+        "--embed-info --json must succeed in every embed state; stderr: {}",
+        stderr(&out)
+    );
+    let info: serde_json::Value =
+        serde_json::from_str(&stdout(&out)).expect("--embed-info --json must parse");
+    assert!(info["pages"].is_number(), "pages count present: {info}");
+    if embed_is_real() {
+        assert_eq!(info["placeholder"], false, "{info}");
+        assert!(info["commit"].is_string(), "real embed names its commit: {info}");
+    } else {
+        assert_eq!(info["placeholder"], true, "{info}");
+    }
+}
+
+#[test]
+fn json_flag_requires_list_or_embed_info() {
+    for args in [
+        vec!["docs", "llms", "--json"],
+        vec!["docs", "llms", "--full", "--json"],
+        vec!["docs", "llms", "index.md", "--json"],
+    ] {
+        let out = q2(&args);
+        assert!(
+            !out.status.success(),
+            "{args:?} must be rejected: {}",
+            stdout(&out)
+        );
+    }
+}
