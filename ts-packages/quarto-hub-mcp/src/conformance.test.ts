@@ -35,6 +35,7 @@ import {
 } from './auth/credential-store.js';
 import { ReauthRequired, RefreshManager } from './auth/refresh-manager.js';
 import { AuthToolsState } from './auth/auth-tools.js';
+import { assertSafeAuthorizationEndpoint } from './auth/oauth-config.js';
 import type { LoopbackListener } from './auth/loopback.js';
 import {
   startInMemoryMcp,
@@ -357,10 +358,11 @@ describe('security invariants', () => {
   });
 
   // BP-18: the authorization URL handed to the browser is built from
-  // *fetched* authorization-server metadata with no scheme/host check
-  // today. These pin the invariant the Phase 1 fix must implement: with
-  // the insecure-auth escape hatch unset, nothing but a public https URL
-  // may reach the browser (or the user). `it.fails` until then.
+  // *fetched* authorization-server metadata — SSRF input. These pin the
+  // invariant the Phase 1 fix landed: with the insecure-auth escape
+  // hatch unset, nothing but a public https URL may reach the browser
+  // (or the user). Landed red-by-construction as `it.fails` in Phase 0;
+  // flipped when the fix landed in Phase 1 (bd-zv8u2sxi).
   describe('authorization URL validation (BP-18)', () => {
     const BAD_ENDPOINTS = [
       'http://169.254.169.254/latest/meta-data', // link-local cloud metadata
@@ -413,7 +415,7 @@ describe('security invariants', () => {
       return { state, browserUrls };
     }
 
-    it.fails(
+    it(
       'refuses to hand a non-https or private-host authorization URL to the browser',
       async () => {
         // The escape hatch for local dev IdPs must be off for the default
@@ -440,6 +442,47 @@ describe('security invariants', () => {
       await state.handle('authenticate');
       expect(browserUrls).toHaveLength(1);
       expect(browserUrls[0]).toMatch(/^https:\/\/idp\.example\.com\/authorize\?/);
+    });
+
+    // Unit-level edge cases for the validator itself (conformance covers
+    // the integration path through `authenticate`).
+    describe('assertSafeAuthorizationEndpoint edge cases', () => {
+      const strictEnv = {} as NodeJS.ProcessEnv;
+      const REJECT = [
+        'javascript:alert(1)',
+        'data:text/html,<script>',
+        'file:///etc/passwd',
+        'http://169.254.169.254/', // link-local
+        'https://10.0.0.4/authorize', // private
+        'https://172.16.8.1/authorize', // private 172.16/12
+        'https://100.64.1.1/authorize', // CGNAT
+        'https://127.0.0.1/authorize', // loopback without the hatch
+        'https://[::1]/authorize', // v6 loopback
+        'https://[fc00::1]/authorize', // v6 unique-local
+        'https://[fe80::1]/authorize', // v6 link-local
+        'https://[::ffff:192.168.0.1]/authorize', // v4-mapped private
+        'https://localhost:8888/authorize', // named loopback without the hatch
+        'not a url',
+      ];
+      for (const endpoint of REJECT) {
+        it(`rejects ${endpoint}`, () => {
+          expect(() => assertSafeAuthorizationEndpoint(endpoint, strictEnv)).toThrow();
+        });
+      }
+      it('accepts a public https endpoint', () => {
+        expect(() =>
+          assertSafeAuthorizationEndpoint('https://idp.example.com/authorize', strictEnv),
+        ).not.toThrow();
+      });
+      it('accepts a loopback http endpoint only with the escape hatch', () => {
+        const hatchEnv = { QUARTO_HUB_MCP_ALLOW_INSECURE_AUTH: '1' } as NodeJS.ProcessEnv;
+        expect(() =>
+          assertSafeAuthorizationEndpoint('http://127.0.0.1:8888/authorize', hatchEnv),
+        ).not.toThrow();
+        expect(() =>
+          assertSafeAuthorizationEndpoint('http://127.0.0.1:8888/authorize', strictEnv),
+        ).toThrow();
+      });
     });
   });
 });
