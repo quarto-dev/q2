@@ -4,6 +4,8 @@
 **Branch:** `braid/bd-uk8zgkha-claude-notes-website` (main checkout, no worktree; not pushed)
 **Status:** in progress. Mechanical escaping done for the literal-character classes;
 star emphasis needs manual review (queue below); uncoded parse errors not yet triaged.
+Merged with `main` on 2026-10-06 (through PR 780) and re-escaped to fixpoint on
+nightly .20261006; see "Bringing the branch up to date" below.
 
 ## Goal
 
@@ -86,6 +88,12 @@ Shipped in 0.33.0-nightly.20260925: the code-span fix, the nested-project bounda
 and the flanking fix for `*`, `~` and `^` (now literal, no error). `_` is half done:
 no more silent pairing, but an unpaired `_` is still an error (Q-2-5).
 
+Shipped by 0.33.0-nightly.20261006 (probed with one-line documents): a bare `@` is
+literal text, and `⟨` parses. So `~`, bare `@`, whitespace-flanked `*` and `^` no
+longer need escaping in new notes; the existing escapes stay valid. Still errors on
+this nightly: an apostrophe after a span closer, plural possessives, underscore
+filenames in prose (one or two per paragraph), and `$` prices.
+
 The silent pairing is the nastiest: an odd number of literal delimiters in a
 paragraph is an error, an even number mis-renders without a word. Before the tilde
 sweep, 66 rendered pages had accidental subscripts; now there are none.
@@ -110,15 +118,33 @@ whose original markup had an unbalanced backtick.
 | Baseline (2026-09-23) | 448 / 1365 | 917 | 1458 |
 | 2026-09-25, nightly .20260922 | 1006 / 1352 | 348 | 491 |
 | 2026-09-25, nightly .20260925 | 1075 / 1353 | 280 | 316 |
+| 2026-10-06, nightly .20261006, before the merge | 1087 / 1353 | 268 | 332 |
+| 2026-10-06, after merging `main` | 1113 / 1436 | 325 | 469 |
+| 2026-10-06, after re-escaping to fixpoint | 1146 / 1436 | 292 | 329 |
 
-Remaining error classes (nightly .20260925): uncoded parse errors 316 (150 files),
-Q-2-12 43, Q-2-11 29, Q-2-41 18, Q-2-13 14, Q-2-5 10, Q-2-35 10, plus a tail.
-Uncoded, by cause: end-of-line cascades 76, backtick runs 44, indented lines 58,
-braces 20, `⟨` 6, `$` 5. Warnings are not yet addressed: Q-2-49 199, Q-2-9 104,
-Q-16-5 43, Q-16-3 41.
+Remaining error classes (nightly .20261006, after the merge): uncoded parse errors
+329 (145 files), Q-2-12 48, Q-2-11 30, Q-2-41 22, Q-2-13 21, Q-2-5 10, Q-2-35 9,
+Q-2-7 8, plus a tail. The uncoded errors have not been broken down by cause on this
+nightly; on .20260925 it was end-of-line cascades 76, backtick runs 44, indented
+lines 58, braces 20, `⟨` 6, `$` 5. Warnings are not yet addressed: Q-2-49 203,
+Q-2-9 99, Q-16-3 51, Q-16-5 48.
 
-The star review queue below was collected on nightly .20260922; the flanking fix
-resolved most of the Q-2-13 items. Regenerate it before working through it:
+### Bringing the branch up to date (2026-10-06)
+
+`main` had moved 281 commits. It added 83 notes and revised 16 that this branch had
+escaped. The merge had two conflicts, both a line that `main` reworded and this
+branch had escaped; each took the text from `main` with the escape reapplied. Checked
+after the merge: every note differs from `main` only by inserted backslashes, except
+the four hand-fixed files, which `main` did not touch.
+
+The new notes arrive unescaped, so every merge from `main` needs a rerun of
+`scripts/claude-notes-escape-fixpoint.sh` (6 minutes; this time 330 `\'` in 55
+files, nothing from the other rules). 8 Q-2-7 remain that the script rule does not
+match (one is the year abbreviation in "July \'26"); they need a look by hand.
+
+The star review queue below was collected on nightly .20260922, before the merge;
+the flanking fix resolved most of the Q-2-13 items, and the merged notes added new
+ones. Regenerate it before working through it:
 `scripts/q2-escape-openers.py claude-notes Q-2-12 --dry-run --only-context '...'`
 with the star pattern from `claude-notes-escape-fixpoint.sh`.
 
