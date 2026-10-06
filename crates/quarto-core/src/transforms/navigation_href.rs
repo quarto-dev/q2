@@ -105,7 +105,7 @@ fn missing_document_warning(
     let title = format!("{} references missing document", surface.title_label());
     let mut builder = DiagnosticMessageBuilder::warning(title)
         .with_code(surface.code())
-        .problem(format!("'{}' is not in the project index.", raw_path))
+        .problem(format!("`{}` is not in the project index.", raw_path))
         .add_hint("Check the spelling, or confirm the target file is included in the render set.");
     if let NavSurface::Sidebar { id: Some(id) } = surface {
         builder = builder.add_detail(format!("Source: sidebar `{}`", id));
@@ -1267,6 +1267,29 @@ mod tests {
             // Forward-looking: location is None today (bd-qor9a fills in).
             assert!(d.location.is_none(), "location stays None until bd-qor9a");
         }
+    }
+
+    /// bd-3801o1o0: the missing path is quoted as a code span. With
+    /// `'…'` quoting, a path that itself contains an apostrophe (a
+    /// placeholder like `Q-X-Y'`, or `Bob's notes.qmd`) read as a
+    /// misplaced quote: `'Q-X-Y'.qmd' is not in the project index.`
+    #[test]
+    fn qmd_miss_problem_quotes_path_as_code_span() {
+        let idx = ProjectIndex::new(vec![]);
+        let mut diags = Vec::new();
+        resolve_href_for_html(
+            "Q-X-Y'.qmd",
+            None,
+            Some(&idx),
+            NavSurface::BodyLink,
+            None,
+            &mut diags,
+        );
+        assert_eq!(diags.len(), 1);
+        assert_eq!(
+            diags[0].problem.as_ref().map(|p| p.as_str()),
+            Some("`Q-X-Y'.qmd` is not in the project index.")
+        );
     }
 
     /// The `Sidebar { id }` variant attaches the sidebar id as a
