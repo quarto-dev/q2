@@ -922,6 +922,16 @@ every call. One fix found by inspection: automerge change `time` is
 seconds since epoch — entries now surface it ×1000 as ms (the JS
 convention) so `new Date(entry.time)` works.
 
+**Phase-close gate.** `cargo xtask verify` green (14/14, full — hub-build
+leg included). `npm run test -w ts-packages/quarto-hub-mcp` green (45
+files, 420 passed + 3 skips). Bundle rebuilt and embedded; freshness
+confirmed by `q2 mcp --launcher-info` (embed at branch tip 56557c70a,
+not dirty). Tool budget: 19/24 data tools (22/24 with auth) — matches
+the plan's tally exactly. Commits: CAP-18+BP-4 (4878e5b0b), CAP-8
+(f29caf637), CAP-9 (15258f24e), CAP-19 (30f020a87), Q-3+steering+docs
+(41a01bf0f), eval (27c2d332f), time-unit fix (f83142b50), pin updates
+(56557c70a).
+
 ### Phase 4 — Quarto-specific intelligence
 
 - [ ] **Spike S-1 (gates CAP-11):** qmd parser in Node. Compare (a)
