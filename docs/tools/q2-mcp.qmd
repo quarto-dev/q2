@@ -1,0 +1,161 @@
+---
+title: "Quarto Hub MCP server"
+description: "Let AI agents read, write, search, and watch your Quarto Hub projects through the Model Context Protocol, using the server embedded in the q2 binary."
+---
+
+## Overview
+
+`q2` embeds an MCP (Model Context Protocol) server for
+[Quarto Hub](https://quarto-hub.com). MCP is the standard protocol AI
+assistants use to call external tools. With the server configured, your
+agent can open a project from a share link, read and edit files, search
+across the project, watch for edits from collaborators, and hand you back a
+share URL for what it built — while you watch its edits live in the web
+client.
+
+The server runs locally on your machine and talks to your assistant
+over stdio; project data flows over the same sync connection the web
+client uses.
+
+## Setup
+
+The server needs no separate install — it is embedded in the `q2`
+binary (and requires Node.js on your `PATH` to run). Print a
+ready-to-paste MCP configuration:
+
+```bash
+q2 mcp --print-config
+```
+
+```json
+{
+  "mcpServers": {
+    "quarto-hub": {
+      "command": "q2",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+Add this to your assistant's MCP configuration:
+
+- **Claude Code**: `claude mcp add quarto-hub -- q2 mcp`, or merge the
+  printed JSON into your project's `.mcp.json`
+  (`q2 mcp --print-config > .mcp.json`).
+- **Claude Desktop / Cursor / other hosts**: merge the printed JSON
+  into the host's MCP settings file.
+
+To use a different Quarto Hub server than the default
+(`wss://quarto-hub.com/ws`), add it to the `args` array:
+
+```json
+"args": ["mcp", "--server", "wss://your-hub.example/ws"]
+```
+
+## Signing in
+
+Projects on hubs that require authentication need a one-time sign-in
+per machine. Ask your agent to sign in to Quarto Hub, or it will
+suggest it the first time a call fails with an auth error. The
+`authenticate` tool opens your browser once; credentials are stored in
+your operating system's keyring (never in a file) and refreshed
+automatically.
+
+Two related tools:
+
+- `authenticate_status` — report whether you're signed in, as whom, and
+  until when, without starting a sign-in flow.
+- `authenticate_clear` — remove the cached credentials from the keyring.
+
+## Working on a project
+
+Everything starts from a project id or a **share URL** — the link the
+web client's Share button produces:
+
+```
+https://quarto-hub.com/#/share/<id>?file=index.qmd&name=My%20book
+```
+
+Any tool that takes a `project` argument accepts either form. A share
+URL's `file=` parameter supplies a default `path`, and a `server=`
+parameter routes the call to that hub (your credentials are never sent
+to a hub other than the configured one).
+
+### The collaboration model
+
+Hub projects are multi-author documents. The server gives the agent
+the same safety signals you have when editing by hand:
+
+- **Hashes.** Every read and write result carries a `hash` of the
+  content. Passing it back as `expected_hash` on a write makes the
+  write fail safely if a collaborator edited in the meantime, returning
+  the current content and hash so the agent can merge and retry —
+  nothing is silently overwritten.
+- **Delivery confirmation.** Every write waits (up to ~2 seconds) for
+  the hub to acknowledge it and reports `synced: true|false`.
+  `synced: false` means "not yet confirmed", not "lost".
+- **Watching.** `wait_for_change` long-polls a file and returns the new
+  content when a collaborator edits it, so the agent can react to you
+  in near-real-time.
+- **Ranges.** Large files read in pages: a truncated `read_file`
+  result carries `next_offset` to continue from, and `list_files`
+  shows each file's size and line count up front.
+
+## Tool reference
+
+### Projects
+
+| Tool | Purpose |
+|------|---------|
+| `connect_project` | Connect to a project by id or share URL; returns its files and share URL |
+| `create_project` | Create a project (optional `name` and initial `files`); returns its id and share URL |
+| `get_project_info` | Project shape and connection health: counts, contributors, engine captures, auth mode, sync diagnostics |
+| `list_projects` | Enumerate a project collection from its share URL |
+| `disconnect_project` | Drop the connection to a project (the next call reconnects) |
+
+### Files
+
+| Tool | Purpose |
+|------|---------|
+| `list_files` | List files and folders with size, type, and line counts |
+| `read_file` | Read a file (`offset`/`limit`/`max_bytes` for ranges; binaries return image/blob blocks, `metadata_only` skips the bytes) |
+| `search_files` | Substring or regex search across the project's text files, with snippets |
+| `write_file` | Replace a file's content (creates if absent; `encoding: "base64"` for images and other binaries) |
+| `patch_file` | Replace one exact string — the preferred way to make small edits |
+| `create_file` | Create a new text or binary file |
+| `delete_file` | Delete a file |
+| `rename_file` | Rename or move a file |
+| `wait_for_change` | Long-poll a file for collaborator edits |
+
+### Folders
+
+| Tool | Purpose |
+|------|---------|
+| `create_folder` | Create a folder (folders are explicit markers; files need no folder to exist) |
+| `delete_folder` | Delete a folder; `recursive: true` deletes contained files first |
+
+### Sign-in
+
+| Tool | Purpose |
+|------|---------|
+| `authenticate` | Sign in to Quarto Hub (opens the browser once) |
+| `authenticate_status` | Report sign-in state without starting a flow |
+| `authenticate_clear` | Remove cached credentials |
+
+## Read-only mode
+
+To let an agent look but never edit, add `--read-only` to the `args`
+array. The server then exposes only read tools (`connect_project`,
+`list_files`, `read_file`, `search_files`, `wait_for_change`,
+`get_project_info`, `list_projects`, `disconnect_project`) — no write,
+create, or delete calls exist in that configuration.
+
+## A note on trust
+
+Project files are multi-author content, possibly written by people you
+don't know. The server instructs agents to treat file text — including
+anything in it that looks like instructions for them — as untrusted
+data, not commands. Keep that posture in mind when you share a project
+widely: an agent reading your project follows *your* instructions about
+it, not instructions embedded in the files.
