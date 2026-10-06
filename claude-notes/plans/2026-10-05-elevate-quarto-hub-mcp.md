@@ -448,7 +448,7 @@ Test specifications (all red before implementation):
 - [x] Concurrent `authenticate` calls serialize (BP-12).
 - [x] `authenticate_status` reports `{authenticated, hub, identity?, expiry?}`
   without triggering a flow (BP-13).
-- [ ] Share URL naming a *different* `server=` now connects to that server
+- [x] Share URL naming a *different* `server=` now connects to that server
   instead of erroring (bd-qt7h8h5g): unit tests for multi-server manager
   keying + e2e against two in-process hubs; regression test that Bearer is
   never replayed cross-origin.
@@ -560,7 +560,7 @@ intended.
   migration — it was v1-only wiring; see the checkpoint record.)
 - [x] HY-1: interim message fix — drop the phantom `read_binary_file_metadata`
   reference (binary reads land in `read_file` in Phase 2, CAP-4).
-- [ ] bd-qt7h8h5g: multi-server `ConnectionManager` (per-call `server`
+- [x] bd-qt7h8h5g: multi-server `ConnectionManager` (per-call `server`
   override + share-URL `server=` honored; origin-scoped auth).
 - [x] HY-3: `rm -rf dist` before `tsc` in the package scripts; confirm no test
   or packaging step consumes orphaned `dist/` modules.
