@@ -14,6 +14,7 @@ import {
   callTool,
   type InMemoryMcpFixture,
 } from './in-memory-fixture.js';
+import { PARSER_UNAVAILABLE } from './test-setup.js';
 
 const QMD = [
   '---',
@@ -67,7 +68,7 @@ async function seed(f: InMemoryMcpFixture, content = QMD): Promise<string> {
   return s.indexDocId;
 }
 
-describe('read_file with a section selector (CAP-11)', () => {
+describe.skipIf(PARSER_UNAVAILABLE)('read_file with a section selector (CAP-11)', () => {
   it('returns exactly the section, heading line included, with its range', async () => {
     const f = await startInMemoryMcp();
     try {
@@ -191,7 +192,7 @@ describe('read_file with a section selector (CAP-11)', () => {
   });
 });
 
-describe('patch_file with a section selector (CAP-11)', () => {
+describe.skipIf(PARSER_UNAVAILABLE)('patch_file with a section selector (CAP-11)', () => {
   it('replaces exactly the section read_file shows, heading included', async () => {
     const f = await startInMemoryMcp();
     try {

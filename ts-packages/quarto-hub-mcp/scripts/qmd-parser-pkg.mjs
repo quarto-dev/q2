@@ -52,16 +52,29 @@ function findLlvmBin() {
   );
 }
 
+/**
+ * Paths excluded from the dirty scan: the wasm-pack output dirs. A
+ * downloaded pkg artifact (release legs stage it once in web-payloads and
+ * reuse it per target) would otherwise read as untracked dirt and force a
+ * pointless rebuild — the stamp must depend only on *sources*.
+ */
+const STAMP_EXCLUDES = [
+  ':(exclude)crates/wasm-qmd-parser/pkg',
+  ':(exclude)crates/wasm-qmd-parser/pkg-nodejs',
+  ':(exclude)crates/wasm-qmd-parser/pkg-nodejs-*',
+];
+
 function computeStamp() {
   try {
     const head = execFileSync('git', ['rev-parse', 'HEAD'], {
       cwd: repoRoot,
       encoding: 'utf8',
     }).trim();
-    const dirty = execFileSync('git', ['status', '--porcelain', '--', ...STAMP_PATHS], {
-      cwd: repoRoot,
-      encoding: 'utf8',
-    });
+    const dirty = execFileSync(
+      'git',
+      ['status', '--porcelain', '--', ...STAMP_PATHS, ...STAMP_EXCLUDES],
+      { cwd: repoRoot, encoding: 'utf8' },
+    );
     return createHash('sha1').update(STAMP_VERSION).update(head).update(dirty).digest('hex');
   } catch {
     // Not a git checkout: freshness cannot be proven — treat as always-stale

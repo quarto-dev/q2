@@ -12,6 +12,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 
 import { loadQmdParser, type QmdParser } from './qmd-parser.js';
+import { PARSER_UNAVAILABLE } from './test-setup.js';
 import {
   extractOutline,
   findSection,
@@ -55,7 +56,7 @@ beforeAll(async () => {
   parser = await loadQmdParser();
 });
 
-describe('loadQmdParser', () => {
+describe.skipIf(PARSER_UNAVAILABLE)('loadQmdParser', () => {
   it('parses qmd into a pampa JSON AST with block locations', () => {
     const ast = parser.parse('# Hello\n\nWorld.\n');
     expect(ast).not.toBeNull();
@@ -73,7 +74,7 @@ describe('loadQmdParser', () => {
   });
 });
 
-describe('extractOutline', () => {
+describe.skipIf(PARSER_UNAVAILABLE)('extractOutline', () => {
   it('returns the heading tree with 1-based line ranges', () => {
     const ast = parser.parse(QMD);
     const outline = extractOutline(ast, QMD_LINES);
@@ -110,7 +111,7 @@ describe('extractOutline', () => {
   });
 });
 
-describe('inlineText', () => {
+describe.skipIf(PARSER_UNAVAILABLE)('inlineText', () => {
   it('flattens formatting inlines to plain text', () => {
     const ast = parser.parse('# A *bold* `code` [link](./x.html) title\n');
     const outline = extractOutline(ast, 2);
@@ -118,7 +119,7 @@ describe('inlineText', () => {
   });
 });
 
-describe('findSection', () => {
+describe.skipIf(PARSER_UNAVAILABLE)('findSection', () => {
   it('finds a section by exact title', () => {
     const ast = parser.parse(QMD);
     const found = findSection(ast, 'Background', QMD_LINES);
@@ -166,7 +167,7 @@ describe('findSection', () => {
   });
 });
 
-describe('sectionContent', () => {
+describe.skipIf(PARSER_UNAVAILABLE)('sectionContent', () => {
   it('returns the heading line plus body up to the next same-or-higher heading', () => {
     const ast = parser.parse(QMD);
     const found = findSection(ast, 'Background', QMD_LINES);
@@ -194,7 +195,7 @@ describe('sectionContent', () => {
   });
 });
 
-describe('replaceSection', () => {
+describe.skipIf(PARSER_UNAVAILABLE)('replaceSection', () => {
   it('replaces the whole section, heading included, preserving the rest', () => {
     const ast = parser.parse(QMD);
     const found = findSection(ast, 'Methods', QMD_LINES);
