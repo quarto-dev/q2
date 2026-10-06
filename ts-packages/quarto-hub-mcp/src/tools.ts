@@ -22,6 +22,8 @@ import type {
 } from '@modelcontextprotocol/server';
 import {
   fileUnavailableMessage,
+  getCapturesFromIndex,
+  getIdentitiesFromIndex,
   inferMimeType,
   normalizeProjectPath,
   type FilePayload,
@@ -34,7 +36,7 @@ import {
   extractAuthContext,
 } from './auth/auth-tools.js';
 import { redactTokens } from './auth/redact.js';
-import { parseProjectRef, serversMatch } from './share-url.js';
+import { buildShareUrl, parseProjectRef, serversMatch } from './share-url.js';
 
 function text(msg: string): CallToolResult {
   return { content: [{ type: 'text', text: msg }] };
@@ -432,6 +434,9 @@ function textMimeType(path: string): string {
 /** The data tools (everything except the auth tools). */
 type DataToolName =
   | 'connect_project'
+  | 'disconnect_project'
+  | 'get_project_info'
+  | 'list_projects'
   | 'list_files'
   | 'read_file'
   | 'search_files'
@@ -483,6 +488,12 @@ async function handleTool(
   switch (name) {
     case 'connect_project':
       return handleConnectProject(args, manager);
+    case 'disconnect_project':
+      return handleDisconnectProject(args, manager);
+    case 'get_project_info':
+      return handleGetProjectInfo(args, manager);
+    case 'list_projects':
+      return handleListProjects(args, manager);
     case 'list_files':
       return handleListFiles(args, manager);
     case 'read_file':
@@ -513,7 +524,113 @@ async function handleTool(
 async function handleConnectProject(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
   const project = args.project as string;
   const state = await manager.connect(project, { server: routedServer(args) });
-  return structured({ project, files: buildFileList(state) });
+  return structured({
+    project,
+    files: buildFileList(state),
+    shareUrl: buildShareUrl({ server: state.serverUrl, indexDocId: project }),
+  });
+}
+
+async function handleDisconnectProject(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
+  const project = args.project as string;
+  const waitForSync = args.wait_for_sync !== false;
+  const result = await manager.disconnect(project, {
+    server: routedServer(args),
+    drainMs: waitForSync ? SYNC_WAIT_MS : 0,
+  });
+  if (!result.wasConnected) {
+    const connected = manager.connectedProjects();
+    const suffix =
+      connected.length > 0
+        ? ` Connected projects: ${connected.map((c) => c.indexDocId).join(', ')}.`
+        : ' No projects are currently connected.';
+    return error(`Error: not connected to project ${project} — nothing to disconnect.${suffix}`);
+  }
+  return structured({
+    project,
+    disconnected: true,
+    ...(waitForSync ? { synced: result.drained } : {}),
+  });
+}
+
+async function handleGetProjectInfo(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
+  const project = args.project as string;
+  const state = await manager.connect(project, { server: routedServer(args) });
+  // The index doc is the source of truth for identities/captures; both
+  // getters tolerate a V1 doc (absent maps → {}).
+  const doc = state.client.getIndexHandle()?.doc();
+  const identities = doc ? getIdentitiesFromIndex(doc) : {};
+  const captures = doc ? getCapturesFromIndex(doc) : {};
+  const diag = state.client.getSyncDiagnostics();
+  let binary = 0;
+  for (const payload of state.files.values()) {
+    if (payload.type === 'binary') binary++;
+  }
+  return structured({
+    project,
+    server: state.serverUrl,
+    shareUrl: buildShareUrl({ server: state.serverUrl, indexDocId: project }),
+    // A foreign project (share-URL `server=` routing) is always joined
+    // authorless, so its effective mode is no-auth regardless of the
+    // configured hub's observation.
+    auth_mode: serversMatch(state.serverUrl, manager.configuredServerUrl)
+      ? manager.lastObservedAuthMode()
+      : 'no-auth',
+    counts: {
+      files: state.files.size,
+      binary,
+      folders: state.client.getFolderPaths().length,
+      unavailable: state.client.getUnavailableFiles().length,
+    },
+    identities,
+    captures,
+    sync: {
+      connected_peers: diag.connectedPeers,
+      retry_timer_active: diag.retryTimerActive,
+      unavailable_retry_ticks: diag.unavailableRetryTicks,
+      stranded: diag.stranded,
+    },
+  });
+}
+
+async function handleListProjects(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
+  // `project_set` takes the same id-or-share-URL forms as `project`
+  // (normalizeArgs only rewrites `project`, so parse explicitly here).
+  const ref = parseProjectRef(args.project_set as string);
+  const server =
+    ref.server && !serversMatch(ref.server, manager.configuredServerUrl)
+      ? ref.server
+      : undefined;
+  let doc;
+  try {
+    doc = await manager.readProjectSet(ref.project, { server });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return error(
+      `Error: could not read project-set ${ref.project}: ${redactTokens(msg)}. ` +
+        'Check the id with whoever shared it — and if it names a project rather than a ' +
+        'project set, use connect_project instead.',
+    );
+  }
+  const projects = Object.entries(doc.projects)
+    .map(([indexDocId, entry]) => ({
+      indexDocId,
+      syncServer: entry.syncServer,
+      description: entry.description,
+      addedAt: entry.addedAt,
+      lastAccessed: entry.lastAccessed,
+      ...(entry.summary ? { summary: entry.summary } : {}),
+      shareUrl: buildShareUrl({
+        server: entry.syncServer,
+        indexDocId,
+        name: entry.description,
+      }),
+    }))
+    .sort((a, b) => (a.lastAccessed < b.lastAccessed ? 1 : a.lastAccessed > b.lastAccessed ? -1 : 0));
+  return structured({
+    ...(doc.name !== undefined ? { name: doc.name } : {}),
+    projects,
+  });
 }
 
 async function handleListFiles(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
@@ -1165,10 +1282,16 @@ async function handleDeleteFolder(args: ToolArgs, manager: ConnectionManager): P
 
 async function handleCreateProject(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
   const files = (args.files as Array<{ path: string; content: string }>) ?? [];
+  const name = typeof args.name === 'string' && args.name !== '' ? args.name : undefined;
   const result = await manager.createProject(files);
   return structured({
     indexDocId: result.indexDocId,
     files: result.files,
+    shareUrl: buildShareUrl({
+      server: manager.configuredServerUrl,
+      indexDocId: result.indexDocId,
+      ...(name ? { name } : {}),
+    }),
     ...(await syncField(
       args,
       manager,
@@ -1228,6 +1351,73 @@ const outListedFile = z.object({
 const outConnectProject = z.object({
   project: z.string(),
   files: z.array(outListedFile),
+  shareUrl: z.string(),
+});
+
+const outDisconnectProject = z.object({
+  project: z.string(),
+  disconnected: z.literal(true),
+  synced: z.boolean().optional(),
+});
+
+const outIdentity = z.object({ name: z.string(), color: z.string() });
+
+const outGetProjectInfo = z.object({
+  project: z.string(),
+  server: z.string(),
+  shareUrl: z.string(),
+  auth_mode: z.enum(['no-auth', 'requires-auth', 'unknown']),
+  counts: z.object({
+    files: z.number(),
+    binary: z.number(),
+    folders: z.number(),
+    unavailable: z.number(),
+  }),
+  identities: z.record(z.string(), outIdentity),
+  captures: z.record(
+    z.string(),
+    z.object({
+      captureDocId: z.string(),
+      staleness: z.boolean().optional(),
+      state: z.string().optional(),
+      lastError: z.string().optional(),
+    }),
+  ),
+  sync: z.object({
+    connected_peers: z.number(),
+    retry_timer_active: z.boolean(),
+    unavailable_retry_ticks: z.number(),
+    stranded: z.array(
+      z.object({
+        path: z.string(),
+        docId: z.string(),
+        handleState: z.string().nullable(),
+        unavailableMarker: z.boolean(),
+      }),
+    ),
+  }),
+});
+
+const outListProjects = z.object({
+  name: z.string().optional(),
+  projects: z.array(
+    z.object({
+      indexDocId: z.string(),
+      syncServer: z.string(),
+      description: z.string(),
+      addedAt: z.string(),
+      lastAccessed: z.string(),
+      summary: z
+        .object({
+          fileCount: z.number(),
+          topFiles: z.array(z.string()),
+          contributors: z.array(outIdentity),
+          asOf: z.string(),
+        })
+        .optional(),
+      shareUrl: z.string(),
+    }),
+  ),
 });
 
 const outListFiles = z.object({ files: z.array(outListedFile) });
@@ -1322,6 +1512,7 @@ const outDeleteFolder = z.object({
 const outCreateProject = z.object({
   indexDocId: z.string(),
   files: z.array(z.object({ path: z.string(), docId: z.string() })),
+  shareUrl: z.string(),
   synced: z.boolean().optional(),
 });
 
@@ -1360,7 +1551,7 @@ export function registerTools(
         'Connect to a Quarto Hub project by its automerge index document ID — ' +
         'or by a quarto-hub.com share URL (`https://quarto-hub.com/#/share/<id>?…`), ' +
         'from which the id is extracted automatically. ' +
-        'Returns the list of files in the project. ' +
+        'Returns the list of files in the project and its `shareUrl`. ' +
         'If the hub requires authentication and no valid credentials are cached, ' +
         'this throws an `AuthRequiredError` / `ReauthRequired` — call ' +
         '`authenticate` to sign in.',
@@ -1497,6 +1688,65 @@ export function registerTools(
     // always present from the SDK; the optional chain keeps bare
     // handler-level test harnesses working.
     (args, ctx) => runDataTool('wait_for_change', args, manager, { signal: ctx?.mcpReq?.signal }),
+  );
+
+  server.registerTool(
+    'get_project_info',
+    {
+      title: 'Get project info',
+      description:
+        'Project health and shape in one call: file/folder/binary counts, contributor ' +
+        'identities, engine-capture state (idle/running/error + lastError), the index ' +
+        'document id, sync server, observed auth mode, sync diagnostics (peers, stranded ' +
+        'files), and the project\'s share URL. The "doctor" tool — call it to understand ' +
+        'an unfamiliar project or diagnose a connection.',
+      inputSchema: z.object({ project: projectParam }),
+      outputSchema: outGetProjectInfo,
+      annotations: ANNOT_READ,
+    },
+    (args) => runDataTool('get_project_info', args, manager),
+  );
+
+  server.registerTool(
+    'list_projects',
+    {
+      title: 'List projects in a collection',
+      description:
+        'Enumerate a Quarto Hub project-set (a user\'s collection of projects), given its ' +
+        'document id or a share URL to it — a human gets this link from the web client. ' +
+        'Returns each project\'s id, sync server, description, and a share URL you can pass ' +
+        'to connect_project, most-recently-used first.',
+      inputSchema: z.object({
+        project_set: z
+          .string()
+          .describe(
+            'The project-set document id, OR a quarto-hub.com share URL to the set ' +
+              '(the `server=` parameter, if present, routes the read to that hub).',
+          ),
+      }),
+      outputSchema: outListProjects,
+      annotations: ANNOT_READ,
+    },
+    (args) => runDataTool('list_projects', args, manager),
+  );
+
+  server.registerTool(
+    'disconnect_project',
+    {
+      title: 'Disconnect from a project',
+      description:
+        'Drop the connection to one project (websocket + in-memory documents) without ' +
+        'affecting others — the release valve for long sessions touching many projects. ' +
+        'Outbound sync is drained first (bounded); the next tool call to the project ' +
+        'transparently reconnects.',
+      inputSchema: z.object({
+        project: projectParam,
+        wait_for_sync: waitForSyncParam,
+      }),
+      outputSchema: outDisconnectProject,
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    (args) => runDataTool('disconnect_project', args, manager),
   );
 
   if (readOnly) return;
@@ -1665,7 +1915,9 @@ export function registerTools(
     'create_project',
     {
       title: 'Create a project',
-      description: 'Create a new Quarto Hub project on the sync server with optional initial files.',
+      description:
+        'Create a new Quarto Hub project on the sync server with optional initial files. ' +
+        'The result includes a `shareUrl` you can hand a human to open the project.',
       inputSchema: z.object({
         files: z
           .array(
@@ -1676,6 +1928,10 @@ export function registerTools(
           )
           .describe('Initial files to create in the project')
           .default([]),
+        name: z
+          .string()
+          .optional()
+          .describe('Human-readable project name — carried on the result\'s `shareUrl`.'),
         wait_for_sync: waitForSyncParam,
       }),
       outputSchema: outCreateProject,

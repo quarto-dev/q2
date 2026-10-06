@@ -27,8 +27,10 @@ import { createHash } from 'node:crypto';
 
 import {
   createSyncClient,
+  readProjectSetDoc,
   type AuthRejectionEvidence,
   type DisconnectOptions,
+  type ProjectSetDocument,
   type SyncClient,
   type SyncClientCallbacks,
   type FilePayload,
@@ -129,10 +131,14 @@ export interface ConnectionManagerDeps {
 /**
  * A one-shot listener registered by {@link ConnectionManager.waitForChange}.
  * Fired (and removed) the next time the watched `path` changes.
+ * `interrupt` settles the poll with an error instead — used by
+ * {@link ConnectionManager.disconnect} so a torn-down project never
+ * leaves a poll hanging until its timeout (HY-5).
  */
 interface ChangeWaiter {
   path: string;
   fire: (payload: FilePayload | null) => void;
+  interrupt?: (err: Error) => void;
 }
 
 interface ProjectState {
@@ -466,6 +472,11 @@ export class ConnectionManager {
           cleanup();
           resolve({ changed: true, payload, hash: hashPayload(payload) });
         },
+        interrupt: (err) => {
+          state.waiters.delete(waiter);
+          cleanup();
+          reject(err);
+        },
       };
       state.waiters.add(waiter);
       signal?.addEventListener('abort', onAbort, { once: true });
@@ -561,6 +572,72 @@ export class ConnectionManager {
     const state = this.projects.get(this.projectKey(server, indexDocId));
     if (!state) return false;
     return state.client.awaitDelivery(paths, timeoutMs);
+  }
+
+  /**
+   * Per-project teardown (HY-5): drop one project's websocket +
+   * in-memory-doc state without touching the others. The cache entry
+   * goes first (a concurrent connect must never reuse a dying client),
+   * pending waiters are interrupted with an honest error (never left to
+   * their timeout), and outbound sync gets a bounded drain — same
+   * delivery contract as the write tools. The next tool call
+   * transparently reconnects.
+   */
+  async disconnect(
+    indexDocId: string,
+    options?: { server?: string; drainMs?: number },
+  ): Promise<{ wasConnected: boolean; drained: boolean }> {
+    const server = options?.server ?? this.serverUrl;
+    const key = this.projectKey(server, indexDocId);
+    const state = this.projects.get(key);
+    if (!state) {
+      return { wasConnected: false, drained: true };
+    }
+    this.projects.delete(key);
+    for (const w of [...state.waiters]) {
+      w.interrupt?.(
+        new Error(
+          `project ${indexDocId} was disconnected (disconnect_project) while this ` +
+            'poll was pending — re-call wait_for_change to keep watching (it reconnects).',
+        ),
+      );
+    }
+    const report = await state.client.disconnect({
+      drainMs: options?.drainMs ?? 0,
+    });
+    return { wasConnected: true, drained: report.drained };
+  }
+
+  /** The (server, project) pairs currently holding a connection — for actionable errors. */
+  connectedProjects(): Array<{ server: string; indexDocId: string }> {
+    return Array.from(this.projects.entries()).map(([key, s]) => ({
+      server: s.serverUrl,
+      indexDocId: key.slice(key.indexOf('\n') + 1),
+    }));
+  }
+
+  /**
+   * One-shot read of a project-set document (CAP-3): enumerate a user's
+   * collection without connecting a project. Auth mirrors connect():
+   * the configured hub's Bearer attaches here, a foreign hub (share
+   * URL's `server=`) is read authorless — 401/403 there is a
+   * {@link ForeignHubAuthRequiredError}, never a credential leak.
+   */
+  async readProjectSet(
+    docId: string,
+    options?: { server?: string },
+  ): Promise<ProjectSetDocument> {
+    const server = options?.server ?? this.serverUrl;
+    if (!serversMatch(server, this.serverUrl)) {
+      const status = await this.probeAuth(undefined, server);
+      if (status === 401 || status === 403) {
+        throw new ForeignHubAuthRequiredError(server, this.serverUrl);
+      }
+      return readProjectSetDoc({ serverUrl: server, docId });
+    }
+    await this.gateAuthState();
+    const auth = await this.resolveAuthForConnect();
+    return readProjectSetDoc({ serverUrl: this.serverUrl, docId, auth });
   }
 
   /** Read-only accessor matching the prior API. */

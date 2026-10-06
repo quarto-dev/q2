@@ -23,6 +23,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import { ToolSchema } from '@modelcontextprotocol/core';
+import type { ProjectSetDocument } from '@quarto/quarto-sync-client';
 
 import {
   ConnectionManager,
@@ -48,7 +49,7 @@ import {
 /** Tool budget (ERG-5): the default listing never exceeds this. */
 const TOOL_BUDGET = 24;
 
-/** Read-write mode lists these today (13 tools; auth tools need OAuth env). */
+/** Read-write mode lists these today (16 tools; auth tools need OAuth env). */
 const EXPECTED_RW_TOOLS = [
   'connect_project',
   'create_file',
@@ -56,7 +57,10 @@ const EXPECTED_RW_TOOLS = [
   'create_project',
   'delete_file',
   'delete_folder',
+  'disconnect_project',
+  'get_project_info',
   'list_files',
+  'list_projects',
   'patch_file',
   'read_file',
   'rename_file',
@@ -124,7 +128,10 @@ describe('in-memory fixture smoke', () => {
       const tools = await ro.client.listTools();
       expect(tools.tools.map((t) => t.name).sort()).toEqual([
         'connect_project',
+        'disconnect_project',
+        'get_project_info',
         'list_files',
+        'list_projects',
         'read_file',
         'search_files',
         'wait_for_change',
@@ -221,6 +228,8 @@ describe('schema conformance (BP-11, BP-14)', () => {
 const GOLDEN_RESULT_CASES: ReadonlyArray<{
   tool: string;
   args: (seed: SeededProject) => Record<string, unknown>;
+  /** Extra args needing fixture access (e.g. a doc minted on the hub). */
+  setup?: (f: InMemoryMcpFixture) => Promise<Record<string, unknown>>;
 }> = [
   { tool: 'connect_project', args: (seed) => ({ project: seed.indexDocId }) },
   { tool: 'list_files', args: (seed) => ({ project: seed.indexDocId }) },
@@ -272,6 +281,29 @@ const GOLDEN_RESULT_CASES: ReadonlyArray<{
   {
     tool: 'search_files',
     args: (seed) => ({ project: seed.indexDocId, query: 'v3' }),
+  },
+  {
+    tool: 'get_project_info',
+    args: (seed) => ({ project: seed.indexDocId }),
+  },
+  {
+    tool: 'list_projects',
+    args: () => ({}),
+    setup: async (f) => {
+      // Mint a project-set document on the hub (CAP-3).
+      const handle = f.hub.repo.create<ProjectSetDocument>();
+      handle.change((d) => {
+        d.version = 1;
+        d.projects = {};
+      });
+      return { project_set: handle.documentId };
+    },
+  },
+  // disconnect_project runs last: it drops the seed project's connection
+  // (later golden calls would transparently reconnect anyway).
+  {
+    tool: 'disconnect_project',
+    args: (seed) => ({ project: seed.indexDocId }),
   },
   {
     tool: 'create_project',
@@ -353,7 +385,8 @@ describe('result conformance (BP-1 net)', () => {
         if (declared === undefined) {
           throw new Error(`golden case for ${c.tool}: tool declares no outputSchema`);
         }
-        const result = await callTool(f, c.tool, c.args(seed));
+        const extra = c.setup ? await c.setup(f) : {};
+        const result = await callTool(f, c.tool, { ...c.args(seed), ...extra });
         expect(result.isError, `golden call for ${c.tool} errored`).not.toBe(true);
         const validate = ajv.compile(declared);
         const ok = validate(result.structuredContent);
@@ -663,6 +696,9 @@ describe('tool titles (BP-9)', () => {
       const titles = Object.fromEntries(tools.map((t) => [t.name, t.title]));
       expect(titles).toEqual({
         connect_project: 'Connect to a project',
+        disconnect_project: 'Disconnect from a project',
+        get_project_info: 'Get project info',
+        list_projects: 'List projects in a collection',
         list_files: 'List files',
         read_file: 'Read a file',
         search_files: 'Search files',

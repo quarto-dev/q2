@@ -49,8 +49,10 @@ import { RefreshManager } from './auth/refresh-manager.js';
  * Canonical Quarto Hub sync server — the default when neither
  * `--server` nor `QUARTO_HUB_SERVER` is given (bd-81cfshmw plan,
  * resolved question 3: the "easy path" for `q2 mcp` / npx users).
+ * Defined in share-url.ts (the URL module) and re-exported here.
  */
-export const DEFAULT_SERVER_URL = 'wss://quarto-hub.com/ws';
+export { DEFAULT_SERVER_URL } from './share-url.js';
+import { DEFAULT_SERVER_URL } from './share-url.js';
 
 interface ParsedArgs {
   serverUrl: string;
