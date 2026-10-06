@@ -156,6 +156,17 @@ record point at the wrong file.
 - `_quarto.yml` YAML *syntax* errors at discovery surface as span-less Q-7-8
   (`DispatchError::Discover(String)`), losing their location in every mode.
 
+## Broader-review follow-ups (2026-10-06, same PR)
+
+- [x] **R1** filed upstream as **qe-hal9cc7b** in posit-dev/quarto-error-reporting's skein: an opt-in
+      plain (no SGR, no OSC-8) rendering mode for `diagnostic_to_json`'s `rendered`, default
+      unchanged. q2's adoption and the q2-built pass-1 `error` blob stay on bd-ckbqmupi.
+- [x] **R5** fixed (bd-3801o1o0). Correction to the finding above: the quote was not misplaced.
+      The claude-notes link target really is `Q-X-Y'.qmd`. The defect was `'…'` quoting, which is
+      ambiguous for paths containing an apostrophe. `missing_document_warning` (Q-13-1/2/3/4/7) now
+      quotes the path as a code span: ``"`plans/Q-X-Y'.qmd` is not in the project index."``
+      Unit test `qmd_miss_problem_quotes_path_as_code_span` was confirmed failing first.
+
 ## Checklist
 
 ### Phase 0: tests first (TDD)
