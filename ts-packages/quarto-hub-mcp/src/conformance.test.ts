@@ -61,6 +61,7 @@ const EXPECTED_RW_TOOLS = [
   'patch_file',
   'read_file',
   'rename_file',
+  'search_files',
   'wait_for_change',
   'write_file',
 ];
@@ -127,6 +128,7 @@ describe('in-memory fixture smoke', () => {
         'get_errors',
         'list_files',
         'read_file',
+        'search_files',
         'wait_for_change',
       ]);
     } finally {
@@ -268,6 +270,10 @@ const GOLDEN_RESULT_CASES: ReadonlyArray<{
   {
     tool: 'delete_folder',
     args: (seed) => ({ project: seed.indexDocId, path: 'golden-folder' }),
+  },
+  {
+    tool: 'search_files',
+    args: (seed) => ({ project: seed.indexDocId, query: 'v3' }),
   },
   {
     tool: 'create_project',
@@ -661,6 +667,7 @@ describe('tool titles (BP-9)', () => {
         connect_project: 'Connect to a project',
         list_files: 'List files',
         read_file: 'Read a file',
+        search_files: 'Search files',
         wait_for_change: 'Watch for changes',
         write_file: 'Write a file',
         patch_file: 'Patch a file',
