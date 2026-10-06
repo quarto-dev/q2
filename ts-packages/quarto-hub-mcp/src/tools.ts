@@ -891,6 +891,7 @@ export function registerTools(
       server.registerTool(
         def.name,
         {
+          title: def.title,
           description: def.description,
           inputSchema: z.object({}),
           annotations: def.annotations,
@@ -903,6 +904,7 @@ export function registerTools(
   server.registerTool(
     'connect_project',
     {
+      title: 'Connect to a project',
       description:
         'Connect to a Quarto Hub project by its automerge index document ID — ' +
         'or by a quarto-hub.com share URL (`https://quarto-hub.com/#/share/<id>?…`), ' +
@@ -921,6 +923,7 @@ export function registerTools(
   server.registerTool(
     'list_files',
     {
+      title: 'List files',
       description: 'List all files in a connected Quarto Hub project.',
       inputSchema: z.object({ project: projectParam }),
       outputSchema: outListFiles,
@@ -932,6 +935,7 @@ export function registerTools(
   server.registerTool(
     'read_file',
     {
+      title: 'Read a file',
       description:
         'Read the text content of a file in a Quarto Hub project. Returns `{ path, hash, content }` — ' +
         'pass `hash` back as `expected_hash` on write_file/patch_file so an edit a collaborator made ' +
@@ -946,6 +950,7 @@ export function registerTools(
   server.registerTool(
     'wait_for_change',
     {
+      title: 'Watch for changes',
       description:
         'Long-poll: block until a file in the project is edited by any collaborator, then return its ' +
         'new content. Returns as soon as a change is observed, or after `timeout_seconds` with ' +
@@ -1004,6 +1009,7 @@ export function registerTools(
   server.registerTool(
     'write_file',
     {
+      title: 'Write a file',
       description:
         'Replace the entire content of a text file in a Quarto Hub project. Creates the file if it ' +
         'does not exist. Returns `{ path, hash }`. Prefer patch_file for small changes to large files.',
@@ -1030,6 +1036,7 @@ export function registerTools(
   server.registerTool(
     'patch_file',
     {
+      title: 'Patch a file',
       description:
         'Apply a targeted edit to a text file by replacing a specific string. More context-efficient ' +
         'than write_file for small changes to large files. Returns `{ path, hash }`.',
@@ -1057,6 +1064,7 @@ export function registerTools(
   server.registerTool(
     'create_file',
     {
+      title: 'Create a file',
       description: 'Create a new text file in a Quarto Hub project.',
       inputSchema: z.object({
         project: projectParam,
@@ -1073,6 +1081,7 @@ export function registerTools(
   server.registerTool(
     'delete_file',
     {
+      title: 'Delete a file',
       description: 'Delete a file from a Quarto Hub project.',
       inputSchema: z.object({
         project: projectParam,
@@ -1088,6 +1097,7 @@ export function registerTools(
   server.registerTool(
     'rename_file',
     {
+      title: 'Rename a file',
       description: 'Rename or move a file within a Quarto Hub project.',
       inputSchema: z.object({
         project: projectParam,
@@ -1104,6 +1114,7 @@ export function registerTools(
   server.registerTool(
     'create_project',
     {
+      title: 'Create a project',
       description: 'Create a new Quarto Hub project on the sync server with optional initial files.',
       inputSchema: z.object({
         files: z

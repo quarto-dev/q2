@@ -135,6 +135,7 @@ export type AuthToolName = 'authenticate' | 'authenticate_clear';
  */
 export interface AuthToolDefinition {
   readonly name: AuthToolName;
+  readonly title: string;
   readonly description: string;
   readonly annotations: ToolAnnotations;
 }
@@ -142,6 +143,7 @@ export interface AuthToolDefinition {
 export const AUTH_TOOL_DEFINITIONS: readonly AuthToolDefinition[] = [
   {
     name: 'authenticate',
+    title: 'Sign in to Quarto Hub',
     description:
       'Authenticate Quarto Hub MCP against the configured hub. Opens the ' +
       "user's browser to a Google sign-in page and waits for them to " +
@@ -158,6 +160,7 @@ export const AUTH_TOOL_DEFINITIONS: readonly AuthToolDefinition[] = [
   },
   {
     name: 'authenticate_clear',
+    title: 'Clear Quarto Hub credentials',
     description:
       'Remove any locally-cached Quarto Hub credentials from the OS ' +
       'keyring and discard any in-progress sign-in. Best-effort revokes ' +
