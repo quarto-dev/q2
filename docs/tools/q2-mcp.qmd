@@ -146,6 +146,7 @@ the same safety signals you have when editing by hand:
 | `rename_file` | Rename or move a file |
 | `restore_file_version` | Revert a file to a prior version from `get_file_history` (a new, reversible change) |
 | `wait_for_change` | Long-poll a file — or the whole project with no `path` — for collaborator edits |
+| `render` *(opt-in)* | Render the project (or one file) with `q2 render --json-errors`; returns structured diagnostics — see below |
 
 ### Collaboration
 
@@ -168,6 +169,25 @@ the same safety signals you have when editing by hand:
 | `authenticate` | Sign in to Quarto Hub (opens the browser once) |
 | `authenticate_status` | Report sign-in state without starting a flow |
 | `authenticate_clear` | Remove cached credentials |
+
+## Rendering (opt-in, `--allow-render`)
+
+The `render` tool closes the agent's edit loop without a shell: it
+materializes the project to a temporary directory, runs
+`q2 render --json-errors` on it, and returns structured results —
+`{ ok, exit_code, diagnostics, outputs, duration_ms }` — where each
+diagnostic carries its `Q-` code, message, and source location (file,
+line, column). With no `path` it renders everything (a project render
+when `_quarto.yml` is present, otherwise every `.qmd`); with `path` it
+renders one file. Renders time out after `timeout_seconds` (default 120)
+and the temporary directory is always removed — rendered files are not
+retained, `outputs` just lists what was produced.
+
+**Rendering executes project code** — computations, filters, and engine
+code in the project run on your machine — so the tool only exists when
+you opt in by adding `--allow-render` to the `args` array, and it never
+appears together with `--read-only` (the stricter gate wins). Only
+enable it for projects you trust.
 
 ## Read-only mode
 

@@ -1014,9 +1014,13 @@ Test specifications:
   content (CAP-11).
 - [x] `patch_file` with a `section` selector replaces exactly one section's
   content; concurrent outside edits are preserved (CRDT merge) (CAP-11).
-- [ ] `render_project` on a fixture project with a deliberate error returns
+- [x] `render_project` on a fixture project with a deliberate error returns
   `structuredContent.diagnostics[]` with the expected `Q-` code and source
   location; absent `--allow-render`, the tool is not listed (CAP-12).
+  *(render-real.test.ts: Q-17-2 with file/line/column from the real binary,
+  gated on target/debug/q2; render-tool.test.ts: fake-q2 wire cases incl.
+  both NDJSON envelope shapes, timeout, outputs, materialization +
+  path-escape guard; render-gating.test.ts: the three listing gates.)*
 - [ ] `docs` with a `query` returns ranked pages; `docs` with a `page`
   returns one page's markdown (CAP-13 / bd-dn81ol95).
 
@@ -1032,12 +1036,26 @@ Work items:
   `section` replaces the whole range read_file shows (heading included) —
   read/patch agree exactly; an empty `new_string` deletes the section; all
   math is line-based (never byte offsets: automerge text is UTF-16).
-- [ ] CAP-12 `render_project` / `render_file`: launcher injects
+- [x] CAP-12 `render_project` / `render_file`: launcher injects
   `QUARTO_Q2_PATH` (`current_exe`); server materializes the project via
   `exportProjectAsZip` → temp dir → `q2 render --json-errors`; parse the
   JSON diagnostics wire into `structuredContent`; **opt-in via
   `--allow-render`** (code-execution gate), documented with the security
-  model.
+  model. **Design decisions recorded:** (1) consolidated to ONE `render`
+  tool with an optional `path` (the plan's own ERG-5 rule (a) — same verb,
+  varied by parameter; the CAP-9 diff-arm consolidation precedent).
+  (2) Materialization walks `state.files` directly — the server already
+  holds every payload; `exportProjectAsZip` is the browser-side API and a
+  zip round-trip buys nothing in Node. (3) Three render modes, because
+  `q2 render .` without `_quarto.yml` is Q-7-7 and bare `q2 render` is
+  Q-7-3: `file` (one `path`), `project` (directory render when
+  `_quarto.yml` exists), `files` (loose-projects fallback — each `.qmd`
+  passed explicitly, capped at 500 for argv safety). (4) `--read-only`
+  wins the `--allow-render` combination (code execution is beyond "look
+  but don't touch"); `QUARTO_Q2_PATH` falls back to `q2` on PATH for the
+  standalone/npx channel. (5) Diagnostics are relativized out of the temp
+  dir (realpath both sides — macOS /tmp symlink) and capped streams +
+  SIGTERM→SIGKILL timeout keep a runaway render bounded.
 - [ ] CAP-13 `docs` tool (bd-dn81ol95 + bd-b6cocsxw; design the
   `q2 docs llms --json` ↔ MCP seam).
 - [ ] CAP-10 `clear_capture` decision (Q-4).

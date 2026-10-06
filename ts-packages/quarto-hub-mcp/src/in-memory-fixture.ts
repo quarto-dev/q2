@@ -43,6 +43,8 @@ export interface InMemoryMcpFixture {
 export interface InMemoryMcpOptions {
   /** Serve only the read tools (mirrors `--read-only`). */
   readOnly?: boolean;
+  /** Expose the `render` tool (mirrors `--allow-render`, CAP-12). */
+  allowRender?: boolean;
 }
 
 export async function startInMemoryMcp(
@@ -50,7 +52,11 @@ export async function startInMemoryMcp(
 ): Promise<InMemoryMcpFixture> {
   const hub = await startTestHub();
   const manager = new ConnectionManager({ serverUrl: hub.url });
-  const server = createServer({ manager, readOnly: opts.readOnly ?? false });
+  const server = createServer({
+    manager,
+    readOnly: opts.readOnly ?? false,
+    allowRender: opts.allowRender ?? false,
+  });
 
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client(
