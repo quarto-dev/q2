@@ -34,7 +34,7 @@ import {
   type KeyringBackend,
 } from './auth/credential-store.js';
 import { ReauthRequired, RefreshManager } from './auth/refresh-manager.js';
-import { AuthToolsState } from './auth/auth-tools.js';
+import { AUTH_TOOL_DEFINITIONS, AuthToolsState } from './auth/auth-tools.js';
 import { assertSafeAuthorizationEndpoint } from './auth/oauth-config.js';
 import type { LoopbackListener } from './auth/loopback.js';
 import {
@@ -621,4 +621,44 @@ describe('cancellation hygiene (BP-3)', () => {
     },
     30000,
   );
+});
+
+// ============================================================================
+// Tool titles (BP-9)
+// ============================================================================
+
+describe('tool titles (BP-9)', () => {
+  it('every listed tool carries a human-friendly title', async () => {
+    const f = await startInMemoryMcp();
+    try {
+      const { tools } = await f.client.listTools();
+      const titles = Object.fromEntries(tools.map((t) => [t.name, t.title]));
+      expect(titles).toEqual({
+        connect_project: 'Connect to a project',
+        list_files: 'List files',
+        read_file: 'Read a file',
+        wait_for_change: 'Watch for changes',
+        write_file: 'Write a file',
+        patch_file: 'Patch a file',
+        create_file: 'Create a file',
+        delete_file: 'Delete a file',
+        rename_file: 'Rename a file',
+        create_project: 'Create a project',
+      });
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('auth tools carry titles too', async () => {
+    // Auth tools register only with OAuth env configured; the definition
+    // table is the wire source, so assert it directly.
+    const titles = Object.fromEntries(
+      AUTH_TOOL_DEFINITIONS.map((t) => [t.name, (t as { title?: string }).title]),
+    );
+    expect(titles).toEqual({
+      authenticate: 'Sign in to Quarto Hub',
+      authenticate_clear: 'Clear Quarto Hub credentials',
+    });
+  });
 });
