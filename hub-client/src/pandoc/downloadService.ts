@@ -36,7 +36,7 @@ import { TYPST_PDF_KEY } from './formatKeys';
  * Formats the menu offers. The table in Rust says what *can* be produced; this list says
  * what the UI has been reviewed for. Every row the table has is wired (H5 plan, Close-out).
  */
-export const MENU_FORMATS: readonly string[] = ['docx', 'pptx', 'epub', 'typst', TYPST_PDF_KEY];
+export const MENU_FORMATS: readonly string[] = ['docx', 'odt', 'pptx', 'epub', 'typst', TYPST_PDF_KEY];
 
 /** What the preview server's `POST /api/preview/render` accepts (H4b); `pdf` is browser-only (H8). */
 const NATIVE_FORMATS: readonly string[] = ['docx', 'pptx', 'epub'];
