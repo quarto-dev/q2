@@ -75,6 +75,10 @@ website:
             - guides/authoring/extensions.qmd
             - guides/authoring/templates.qmd
             - guides/publishing/index.qmd
+    - id: tools
+      title: "Tools"
+      contents:
+        - tools/q2-mcp.qmd
     - id: guide
       collapse-level: 1
       contents:

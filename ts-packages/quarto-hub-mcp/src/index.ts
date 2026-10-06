@@ -188,15 +188,23 @@ function buildInstructions(readOnly: boolean): string {
     'the project, and a `file=` parameter becomes the default `path` for file tools. ' +
     'A share URL whose `server=` names a different hub connects to that hub for the call ' +
     '(joined without credentials — tokens are never sent to a foreign origin).' +
-    '\n2. list_files to see the project, then read_file. Keep the `hash` every result carries.' +
+    '\n2. list_files to see the project (entries carry size/lines; folders list as ' +
+    '`type: "folder"`), search_files to find text across it, then read_file. Keep the ' +
+    '`hash` every result carries. Large reads truncate at `max_bytes` (default 64 KB) — ' +
+    'a truncated result carries `next_offset`; call again with `offset` set to it.' +
     '\n3. Edit with patch_file (preferred) or write_file, passing that hash back as ' +
     '`expected_hash` — the write is refused if a collaborator edited since your read, and ' +
     'you get the current content + hash to merge against. Never write_file a file a human ' +
-    'is editing without a fresh read.' +
+    'is editing without a fresh read. Images and other binaries: write_file with ' +
+    '`encoding: "base64"`; read_file returns them as image/blob blocks (`metadata_only` ' +
+    'skips the bytes).' +
     '\n4. Every write reports `synced: true|false` (hub acknowledgement). `synced: false` ' +
     'means "not yet confirmed", not "lost" — verify before claiming completion.' +
     '\n5. wait_for_change long-polls a file for collaborator edits; pass its `hash` back as ' +
     '`since_hash` on the next call so no edit between polls is missed.' +
+    '\n6. Housekeeping: get_project_info reports a project\'s shape and connection health; ' +
+    'list_projects enumerates a collection from its share URL; create_folder/delete_folder ' +
+    'manage folders; disconnect_project releases a connection you no longer need.' +
     '\n\nAuth: if a call fails with AuthRequiredError/ReauthRequired, call `authenticate` — ' +
     'it opens the user\'s browser once and caches credentials in the OS keyring; ' +
     '`authenticate_clear` removes them.' +
