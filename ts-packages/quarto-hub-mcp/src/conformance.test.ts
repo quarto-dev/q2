@@ -49,7 +49,7 @@ import {
 /** Tool budget (ERG-5): the default listing never exceeds this. */
 const TOOL_BUDGET = 24;
 
-/** Read-write mode lists these today (18 tools; auth tools need OAuth env). */
+/** Read-write mode lists these today (19 tools; auth tools need OAuth env). */
 const EXPECTED_RW_TOOLS = [
   'connect_project',
   'create_file',
@@ -66,6 +66,7 @@ const EXPECTED_RW_TOOLS = [
   'patch_file',
   'read_file',
   'rename_file',
+  'restore_file_version',
   'search_files',
   'wait_for_change',
   'write_file',
@@ -310,6 +311,26 @@ const GOLDEN_RESULT_CASES: ReadonlyArray<{
         d.projects = {};
       });
       return { project_set: handle.documentId };
+    },
+  },
+  {
+    // Needs a real change head, discovered in setup against its own project.
+    tool: 'restore_file_version',
+    args: () => ({}),
+    setup: async (f) => {
+      const created = await callTool(f, 'create_project', {
+        files: [{ path: 'r.qmd', content: 'r1\n' }],
+      });
+      const createdBlock = created.content[0];
+      if (createdBlock?.type !== 'text') throw new Error('unreachable');
+      const id = (JSON.parse(createdBlock.text) as { indexDocId: string }).indexDocId;
+      await callTool(f, 'write_file', { project: id, path: 'r.qmd', content: 'r2\n' });
+      const hist = await callTool(f, 'get_file_history', { project: id, path: 'r.qmd' });
+      const histBlock = hist.content[0];
+      if (histBlock?.type !== 'text') throw new Error('unreachable');
+      const entries = (JSON.parse(histBlock.text) as { entries: Array<{ head: string }> })
+        .entries;
+      return { project: id, path: 'r.qmd', hash: entries[entries.length - 1]!.head };
     },
   },
   // disconnect_project runs last: it drops the seed project's connection
@@ -723,6 +744,7 @@ describe('tool titles (BP-9)', () => {
         create_file: 'Create a file',
         delete_file: 'Delete a file',
         rename_file: 'Rename a file',
+        restore_file_version: 'Restore a file version',
         create_folder: 'Create a folder',
         delete_folder: 'Delete a folder',
         create_project: 'Create a project',

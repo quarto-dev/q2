@@ -31,9 +31,11 @@ import {
 } from '@quarto/quarto-sync-client';
 import { ConnectionManager, hashPayload } from './connection-manager.js';
 import {
+  currentHeads,
   diffFileHistory,
   formatUnifiedDiff,
   listFileHistory,
+  textAtHead,
   UnknownChangeHashError,
 } from './file-history.js';
 import {
@@ -457,6 +459,7 @@ type DataToolName =
   | 'rename_file'
   | 'create_folder'
   | 'delete_folder'
+  | 'restore_file_version'
   | 'create_project';
 
 /**
@@ -477,6 +480,7 @@ const PATH_DEFAULTABLE: ReadonlySet<DataToolName> = new Set([
   'create_file',
   'delete_file',
   'get_file_history',
+  'restore_file_version',
 ]);
 
 /** Per-call extras threaded from the SDK request context (BP-3, BP-4). */
@@ -537,6 +541,8 @@ async function handleTool(
       return handleCreateFolder(args, manager);
     case 'delete_folder':
       return handleDeleteFolder(args, manager);
+    case 'restore_file_version':
+      return handleRestoreFileVersion(args, manager);
     case 'create_project':
       return handleCreateProject(args, manager);
   }
@@ -761,7 +767,7 @@ async function handleListFiles(args: ToolArgs, manager: ConnectionManager): Prom
  * and its hash — the caller can merge and retry without an extra read.
  */
 function staleHashError(
-  tool: 'write_file' | 'patch_file',
+  tool: 'write_file' | 'patch_file' | 'restore_file_version',
   path: string,
   currentText: string,
 ): CallToolResult {
@@ -1465,6 +1471,78 @@ async function handleDeleteFolder(args: ToolArgs, manager: ConnectionManager): P
   });
 }
 
+async function handleRestoreFileVersion(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
+  const project = args.project as string;
+  const path = args.path as string;
+  const targetHead = args.hash as string;
+  const expectedHash = typeof args.expected_hash === 'string' ? args.expected_hash : undefined;
+  const state = await manager.connect(project, { server: routedServer(args) });
+  const payload = state.files.get(path);
+  if (!payload) {
+    const ghost = findUnavailable(state.client, path);
+    if (ghost) {
+      return unavailableFileError(path, ghost.docId);
+    }
+    return fileNotFoundError(path, state);
+  }
+  if (payload.type === 'binary') {
+    return error(
+      `Error: restore_file_version only supports text files; "${path}" is binary ` +
+        `(${payload.mimeType}). To roll a binary back, write_file its previous bytes with ` +
+        '`encoding: "base64"`.',
+    );
+  }
+  const handle = state.client.getFileHandle(path);
+  const doc = handle?.doc();
+  if (!handle || !doc) {
+    return fileNotFoundError(path, state);
+  }
+
+  let historicalText: string;
+  try {
+    historicalText = textAtHead(doc, targetHead);
+  } catch (err) {
+    if (err instanceof UnknownChangeHashError) {
+      return error(
+        `Error: ${err.message} in "${path}". Call get_file_history to list the change ` +
+          'hashes this file knows, then pass one as `hash`.',
+      );
+    }
+    throw err;
+  }
+
+  // ERG-1 consistency: the optional compare-and-swap refuses to restore
+  // over a collaborator's racing edit.
+  const preRestoreHash = hashPayload(payload);
+  if (expectedHash !== undefined && preRestoreHash !== expectedHash) {
+    return staleHashError('restore_file_version', path, payload.text);
+  }
+  const preRestoreHeads = currentHeads(doc);
+
+  // Restoring the current state is an honest no-op — writing would mint
+  // an empty change that litters the history.
+  if (payload.text === historicalText) {
+    return structured({
+      path,
+      restored_from: targetHead,
+      already_current: true,
+      pre_restore_hash: preRestoreHash,
+      pre_restore_heads: preRestoreHeads,
+      hash: preRestoreHash,
+    });
+  }
+
+  state.client.updateFileContent(path, historicalText);
+  return structured({
+    path,
+    restored_from: targetHead,
+    pre_restore_hash: preRestoreHash,
+    pre_restore_heads: preRestoreHeads,
+    hash: hashPayload({ type: 'text', text: historicalText }),
+    ...(await syncField(args, manager, project, [path])),
+  });
+}
+
 async function handleCreateProject(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
   const files = (args.files as Array<{ path: string; content: string }>) ?? [];
   const name = typeof args.name === 'string' && args.name !== '' ? args.name : undefined;
@@ -1764,6 +1842,16 @@ const outCreateProject = z.object({
   indexDocId: z.string(),
   files: z.array(z.object({ path: z.string(), docId: z.string() })),
   shareUrl: z.string(),
+  synced: z.boolean().optional(),
+});
+
+const outRestoreFileVersion = z.object({
+  path: z.string(),
+  restored_from: z.string(),
+  pre_restore_hash: z.string(),
+  pre_restore_heads: z.array(z.string()),
+  hash: z.string(),
+  already_current: z.literal(true).optional(),
   synced: z.boolean().optional(),
 });
 
@@ -2197,6 +2285,40 @@ export function registerTools(
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
     },
     (args) => runDataTool('rename_file', args, manager),
+  );
+
+  server.registerTool(
+    'restore_file_version',
+    {
+      title: 'Restore a file version',
+      description:
+        'Revert a text file to a prior version — the agent\'s undo (humans have Ctrl+Z and the ' +
+        'web client\'s history view). `hash` is a change `head` from get_file_history. The restore ' +
+        'is a NEW change on top of history (never a rewrite), attributed to you, so it syncs like ' +
+        'any edit and collaborators keep their concurrent work. The result carries ' +
+        '`pre_restore_hash` and `pre_restore_heads` — pass `pre_restore_heads[0]` back as `hash` ' +
+        'to undo the restore itself. Pass `expected_hash` (from your last read) to refuse ' +
+        'restoring over a collaborator\'s racing edit. Restoring the current version is a no-op ' +
+        '(`already_current: true`).',
+      inputSchema: z.object({
+        project: projectParam,
+        path: pathParam.optional(),
+        hash: z
+          .string()
+          .describe('The change `head` to restore to, from get_file_history list mode.'),
+        expected_hash: z
+          .string()
+          .optional()
+          .describe(
+            'Compare-and-swap: refuse if the file\'s current content hash differs (a ' +
+              'collaborator edited since your read).',
+          ),
+        wait_for_sync: waitForSyncParam,
+      }),
+      outputSchema: outRestoreFileVersion,
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
+    },
+    (args) => runDataTool('restore_file_version', args, manager),
   );
 
   server.registerTool(
