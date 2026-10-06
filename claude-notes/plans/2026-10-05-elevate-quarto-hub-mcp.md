@@ -831,36 +831,47 @@ byte-exact PNG on the hub in 6 turns with zero errors;
 
 Test specifications:
 
-- [ ] `list_presence` reflects a fake peer's ephemeral presence message on the
+- [x] `list_presence` reflects a fake peer's ephemeral presence message on the
   index channel (test-hub + hand-crafted message per `presenceService`'s
   schema); the MCP server itself emits **no** presence (CAP-8, Q-3).
-- [ ] `get_file_history` returns ordered change summaries with author
+  *(presence.test.ts: file-channel, index-channel, leave, and wiretap
+  no-emit cases; presence-tracker.test.ts units staleness/pruning.)*
+- [x] `get_file_history` returns ordered change summaries with author
   attribution; called with `from_hash`/`to_hash` it returns a diff between
   the two heads matching an expected patch (CAP-9).
-- [ ] `wait_for_change` emits progress notifications when given a
+  *(file-history.test.ts, incl. an attributed-collaborator case;
+  file-history-diff.test.ts units the unified-diff formatter.)*
+- [x] `wait_for_change` emits progress notifications when given a
   `progressToken` (BP-4).
-- [ ] `wait_for_change` without `path` returns the set of changed paths with
+  *(project-watch.test.ts wire case; wait-for-change-project-handler.test.ts
+  fake-timer cadence cases.)*
+- [x] `wait_for_change` without `path` returns the set of changed paths with
   hashes; the agent's own write (its post-write `hash` passed as
   `since_hash`) is not reported (CAP-18).
-- [ ] `restore_file_version` to a prior hash produces a new change whose
+  *(project-watch.test.ts: edit/add/remove kinds, exclusion + control.)*
+- [x] `restore_file_version` to a prior hash produces a new change whose
   content equals the historical text and whose result carries the
   pre-restore `hash` (CAP-19, if Q-6 says yes).
+  *(restore-file-version.test.ts, incl. reversal via `pre_restore_heads`.)*
 
 Work items:
 
-- [ ] CAP-8 `list_presence` (passive only).
-- [ ] CAP-18 project-wide watch; CAP-19 `restore_file_version` (Q-6).
-- [ ] CAP-9 `get_file_history` (automerge `getHeads`/`view`/`diff`; bounded
+- [x] CAP-8 `list_presence` (passive only).
+- [x] CAP-18 project-wide watch; CAP-19 `restore_file_version` (Q-6: **yes** —
+  the plan's working answer held; `destructiveHint`, reversible result,
+  `expected_hash` CAS, no-op when already current).
+- [x] CAP-9 `get_file_history` (automerge `getHeads`/`view`/`diff`; bounded
   `limit`; `from_hash`/`to_hash` diff mode).
-- [ ] BP-4 progress on `wait_for_change`.
-- [ ] Q-3 decision recorded (agent self-announcement). **Constraint found in
-  review:** the MCP server authenticates as the human and fetches *their*
-  per-project author id (`fetchAuthorId`), so writing "Claude (via MCP)" into
-  the `identities` map would rename the human's own entry. Recommendation:
-  the hub mints a distinct, user-linked author id for agent sessions (e.g. a
-  flag on the author-id endpoint) so the web client can show "Charlie (via
-  Claude)" without touching the human's identity; never fake cursor presence.
-  Design it with the bd-r62zad5b owner.
+- [x] BP-4 progress on `wait_for_change`.
+- [x] Q-3 decision recorded (agent self-announcement). **DECIDED
+  2026-10-06:** the server never announces itself — it shares the human's
+  author id, so writing "Claude (via MCP)" into the `identities` map would
+  rename the human's own entry, and fake cursor presence would misrepresent
+  them. `list_presence` is passive-only (a wiretap test proves the server
+  emits nothing). Honest agent attribution needs a hub-minted, user-linked
+  agent author id so the web client can show "Charlie (via Claude)" — filed
+  as **bd-b2wpeud0** (related to bd-r62zad5b; same endpoint and identity
+  model, to be designed with that owner).
 
 ### Phase 4 — Quarto-specific intelligence
 
