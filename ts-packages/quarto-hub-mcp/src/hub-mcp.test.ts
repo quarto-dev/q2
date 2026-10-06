@@ -305,7 +305,10 @@ describe('live: create project and mutate files', () => {
       content: '---\ntitle: Updated\n---\n\nUpdated content\n',
     });
     expect(result.isError).toBeUndefined();
-    expect(result.content[0]!.text).toContain('Updated');
+    // ERG-1: write results are { path, hash }.
+    const written = JSON.parse(result.content[0]!.text);
+    expect(written.path).toBe('hello.qmd');
+    expect(written.hash).toMatch(/^sha256:/);
 
     // Verify the update
     const readResult = await client.callTool('read_file', {
@@ -323,7 +326,10 @@ describe('live: create project and mutate files', () => {
       new_string: 'Patched content',
     });
     expect(result.isError).toBeUndefined();
-    expect(result.content[0]!.text).toContain('Patched');
+    // ERG-1: patch results are { path, hash }.
+    const patched = JSON.parse(result.content[0]!.text);
+    expect(patched.path).toBe('hello.qmd');
+    expect(patched.hash).toMatch(/^sha256:/);
 
     // Verify the patch
     const readResult = await client.callTool('read_file', {
@@ -353,12 +359,12 @@ describe('live: create project and mutate files', () => {
     expect(result.isError).toBeUndefined();
     expect(result.content[0]!.text).toContain('Created');
 
-    // Verify it exists
+    // Verify it exists (ERG-1: read results are { path, hash, content }).
     const readResult = await client.callTool('read_file', {
       project: projectId,
       path: 'new-file.qmd',
     });
-    expect(readResult.content[0]!.text).toBe('Brand new file');
+    expect(JSON.parse(readResult.content[0]!.text).content).toBe('Brand new file');
   }, 15000);
 
   it('should error when creating a file that already exists', async () => {
@@ -392,7 +398,7 @@ describe('live: create project and mutate files', () => {
       project: projectId,
       path: 'renamed-file.qmd',
     });
-    expect(newResult.content[0]!.text).toBe('Brand new file');
+    expect(JSON.parse(newResult.content[0]!.text).content).toBe('Brand new file');
   }, 15000);
 
   it('should delete a file', async () => {
@@ -428,12 +434,15 @@ describe('live: create project and mutate files', () => {
       content: 'Created via write_file',
     });
     expect(result.isError).toBeUndefined();
-    expect(result.content[0]!.text).toContain('Created');
+    // ERG-1: the create arm returns { path, hash, created: true }.
+    const created = JSON.parse(result.content[0]!.text);
+    expect(created.created).toBe(true);
+    expect(created.hash).toMatch(/^sha256:/);
 
     const readResult = await client.callTool('read_file', {
       project: projectId,
       path: 'created-via-write.qmd',
     });
-    expect(readResult.content[0]!.text).toBe('Created via write_file');
+    expect(JSON.parse(readResult.content[0]!.text).content).toBe('Created via write_file');
   }, 15000);
 });

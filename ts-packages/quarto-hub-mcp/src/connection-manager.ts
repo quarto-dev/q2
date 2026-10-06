@@ -133,8 +133,11 @@ export interface ChangeResult {
   hash: string | null;
 }
 
-/** Content hash used for the long-poll gap-close check. */
-function hashPayload(p: FilePayload | undefined | null): string | null {
+/**
+ * Content hash (`sha256:<hex>`) used for the long-poll gap-close check
+ * and the write tools' compare-and-swap (`expected_hash`, ERG-1).
+ */
+export function hashPayload(p: FilePayload | undefined | null): string | null {
   if (!p) return null;
   const h = createHash('sha256');
   if (p.type === 'text') h.update(p.text, 'utf8');
