@@ -14,6 +14,9 @@
  * dependency, so it can never resolve through workspace node_modules.
  */
 
+import { dirname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
 export interface QmdParser {
   /**
    * Parse qmd text into the pampa JSON AST (with source locations), or
@@ -24,12 +27,47 @@ export interface QmdParser {
 
 let singleton: Promise<QmdParser> | null = null;
 
+/**
+ * Resolution order: QUARTO_QMD_PARSER_SPEC (tests), the staged
+ * `wasm-qmd-parser` package (dist-bundle's mini node_modules), then —
+ * for in-repo dev/eval runs of the bare tsc `dist/` build, where nothing
+ * stages a node_modules package — the crate's pkg directory relative to
+ * this module. The last leg fails only outside the repo (a tarball
+ * without the staged package), which is the actionable-error case.
+ */
+async function importParser(): Promise<typeof import('wasm-qmd-parser')> {
+  const envSpec = process.env['QUARTO_QMD_PARSER_SPEC'];
+  if (envSpec !== undefined) {
+    return (await import(envSpec)) as typeof import('wasm-qmd-parser');
+  }
+  try {
+    return (await import('wasm-qmd-parser')) as typeof import('wasm-qmd-parser');
+  } catch (bareErr) {
+    const repoPkg = pathToFileURL(
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        '..',
+        '..',
+        '..',
+        'crates',
+        'wasm-qmd-parser',
+        'pkg-nodejs',
+        'wasm_qmd_parser.js',
+      ),
+    ).href;
+    try {
+      return (await import(repoPkg)) as typeof import('wasm-qmd-parser');
+    } catch {
+      throw bareErr;
+    }
+  }
+}
+
 export function loadQmdParser(): Promise<QmdParser> {
   singleton ??= (async () => {
-    const spec = process.env['QUARTO_QMD_PARSER_SPEC'] ?? 'wasm-qmd-parser';
     let mod: typeof import('wasm-qmd-parser');
     try {
-      mod = (await import(spec)) as typeof import('wasm-qmd-parser');
+      mod = await importParser();
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       throw new Error(
