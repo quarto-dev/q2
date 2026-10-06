@@ -4,7 +4,7 @@
  *
  * Rust owns the request, paths, format table, transforms, qmd and every user-facing
  * diagnostic (I9); this module runs pandoc on its own runner (I10), keeps image bytes in
- * TS, converts EMF/WMF to PNG (I8), applies the 10 MB image rule (I16) and maps Rust's
+ * TS, converts EMF/WMF to SVG (I8), applies the 10 MB image rule (I16) and maps Rust's
  * snake_case responses to the camelCase types P5 sees.
  */
 import type { Diagnostic, HostDiagnostic, PandocRequest, ShareTree } from '@quarto/pandoc-host';
@@ -116,7 +116,7 @@ export function createStubImportService(): ImportService {
         media: [{ projectPath: `${targetQmdPath.replace(/\.qmd$/, '')}_media/000000000000.png`, bytes: STUB_PNG.slice(), mimeType: 'image/png' }],
         diagnostics: [
           stubRust('warning', 'Q-24-4', 'Reader warning', 'pandoc warned about something in the source.'),
-          stubRust('info', 'Q-24-10', 'Image converted', 'image1.emf was converted to PNG.'),
+          stubRust('info', 'Q-24-10', 'Image converted', 'image1.emf was converted to SVG.'),
           { origin: 'host', kind: 'warning', code: 'collect-limit', message: 'A large image was left out.', path: '/__q2_share__/import/media/big.bmp', size: 30_000_000 },
         ],
       };
@@ -140,7 +140,7 @@ export interface ImportDeps {
   /** The import runner (`getImportRunner()`); tests pass one built on `nodePandocWorker`. */
   runner: { run(request: PandocRequest, shareTree: ShareTree, options?: RunOptions): Promise<RunOutcome> };
   wasm: ImportWasm;
-  /** EMF/WMF to PNG bytes; rejects on failure. Main thread only (it needs the DOM), so tests inject a fake. */
+  /** EMF/WMF to SVG bytes; rejects on failure. Main thread only (it needs the DOM), so tests inject a fake. */
   convertImage: (bytes: Uint8Array, format: 'emf' | 'wmf') => Promise<Uint8Array>;
   /** Lowercase hex SHA-256. */
   sha256: (bytes: Uint8Array) => Promise<string>;
@@ -306,7 +306,7 @@ function defaultDeps(): ImportDeps {
       classifyImportFailure: runtime.classifyImportFailure,
     },
     // rtf.js and its DOM use stay out of the main bundle until an EMF or WMF turns up.
-    convertImage: async (bytes, format) => (await import('./metafileToPng')).convertMetafileToPng(bytes, format),
+    convertImage: async (bytes, format) => (await (await import('./metafileToSvg')).convertMetafileToSvg(bytes, format)).svg,
     sha256: computeSHA256,
     now: () => performance.now(),
     maxImageBytes: FILE_SIZE_LIMITS.MAX_FILE_SIZE,

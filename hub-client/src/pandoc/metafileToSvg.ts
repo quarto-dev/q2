@@ -1,28 +1,24 @@
 /**
- * EMF/WMF to PNG for document import (epic I8, I15), with rtf.js's EMFJS and WMFJS renderers.
+ * EMF/WMF to SVG for document import (epic I8 as revised by the metafile-svg plan; I15), with rtf.js's
+ * EMFJS and WMFJS renderers. The SVG is stored in the project as `<hash>.svg`; a docx/pptx export
+ * rasterizes it then (`RasterizeSvgImagesStage`), because pandoc.wasm has no `rsvg-convert`.
  *
- * The output must be PNG, not SVG: pandoc.wasm has no `rsvg-convert`, so an SVG image in a docx
- * download becomes alt text with no picture.
+ * Main thread only. `Renderer.render()` builds an `SVGElement` with `document.createElementNS`, so
+ * neither a worker nor the node test suites can run the conversion (`metafileSize` and
+ * `normalizeSvgIds` are pure and tested in node).
  *
- * Main thread only. `Renderer.render()` builds an `SVGElement` with `document.createElementNS`,
- * and SVG can only be rasterized through `<img>` and `<canvas>` (`OffscreenCanvas` cannot decode
- * SVG in a worker), so neither a worker nor the node test suites can run this.
- *
- * `render()` is synchronous and cannot be interrupted: the service's per-image timeout bounds the
- * rasterization only, so a render that hangs on a malformed file blocks the tab.
+ * `render()` is synchronous and cannot be interrupted: the service's per-image timeout bounds
+ * nothing here, so a render that hangs on a malformed file blocks the tab.
  */
 
 export type MetafileFormat = 'emf' | 'wmf';
 
-/** Longest side of the PNG, in pixels. */
-export const MAX_PNG_SIDE = 4096;
-/** The PNG is the metafile's size at 96 dpi times this. */
-const SCALE = 2;
+/** CSS pixels per inch: the SVG's `width`/`height` are the metafile's size at this. */
 const DPI = 96;
 
 /** Everything the two renderers need, parsed from the metafile header. */
 export interface MetafileSize {
-  /** The PNG's size in pixels. */
+  /** The SVG's `width`/`height` in CSS pixels (the metafile's size at 96 dpi). */
   width: number;
   height: number;
   /** The renderer's logical extent (`xExt`/`yExt`; the EMF window extent is the same). */
@@ -65,14 +61,7 @@ export function metafileSize(bytes: Uint8Array, format: MetafileFormat): Metafil
     inchesX = extX / perInch;
     inchesY = extY / perInch;
   }
-  let width = inchesX * DPI * SCALE;
-  let height = inchesY * DPI * SCALE;
-  const longest = Math.max(width, height);
-  if (longest > MAX_PNG_SIDE) {
-    width = (width * MAX_PNG_SIDE) / longest;
-    height = (height * MAX_PNG_SIDE) / longest;
-  }
-  return { width: Math.max(1, Math.round(width)), height: Math.max(1, Math.round(height)), extX, extY };
+  return { width: Math.max(1, Math.round(inchesX * DPI)), height: Math.max(1, Math.round(inchesY * DPI)), extX, extY };
 }
 
 interface MetafileRenderer {
@@ -96,16 +85,34 @@ async function loadRenderer(format: MetafileFormat): Promise<MetafileModule> {
 /** MM_ISOTROPIC, which is what rtf.js itself uses for pictures. */
 const MM_ISOTROPIC = 8;
 
-const loadImage = (src: string): Promise<HTMLImageElement> =>
-  new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('the browser could not rasterize the SVG'));
-    img.src = src;
+/**
+ * rtf.js names clip paths and patterns from a counter that lives as long as the page
+ * (`EMFJS_c0`, `wmfjs_p3`: `src/emfjs/Helper.ts:324,333`, `src/wmfjs/Helper.ts:279-280`), so the same file
+ * converted twice differs. Renumber by order of first appearance, so equal drawings give equal bytes and
+ * hash to one stored name (I12, I20).
+ */
+export function normalizeSvgIds(svg: string): string {
+  const seen = new Map<string, string>();
+  return svg.replace(/\b((?:EMFJS|wmfjs)_[a-z])(\d+)\b/g, (whole, prefix: string) => {
+    let renamed = seen.get(whole);
+    if (renamed === undefined) {
+      renamed = `${prefix}${seen.size}`;
+      seen.set(whole, renamed);
+    }
+    return renamed;
   });
+}
 
-/** Convert an EMF or WMF to a PNG (transparent background). Rejects when the file cannot be rendered. */
-export async function convertMetafileToPng(bytes: Uint8Array, format: MetafileFormat): Promise<Uint8Array> {
+export interface MetafileSvg {
+  /** The serialized SVG, UTF-8. */
+  svg: Uint8Array;
+  /** Its `width` x `height` in CSS pixels (the metafile's size at 96 dpi). */
+  width: number;
+  height: number;
+}
+
+/** Convert an EMF or WMF to SVG at 1x. Rejects when the file cannot be rendered. */
+export async function convertMetafileToSvg(bytes: Uint8Array, format: MetafileFormat): Promise<MetafileSvg> {
   const size = metafileSize(bytes, format);
   const { Renderer } = await loadRenderer(format);
   // `Renderer` wants an ArrayBuffer of exactly the file (the bytes may be a view into a larger one).
@@ -117,20 +124,6 @@ export async function convertMetafileToPng(bytes: Uint8Array, format: MetafileFo
     yExt: size.extY,
     mapMode: MM_ISOTROPIC,
   });
-  const text = new XMLSerializer().serializeToString(svg);
-  const url = URL.createObjectURL(new Blob([text], { type: 'image/svg+xml' }));
-  try {
-    const img = await loadImage(url);
-    const canvas = document.createElement('canvas');
-    canvas.width = size.width;
-    canvas.height = size.height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('no 2d canvas context');
-    ctx.drawImage(img, 0, 0, size.width, size.height);
-    const png = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
-    if (!png) throw new Error('the canvas produced no PNG');
-    return new Uint8Array(await png.arrayBuffer());
-  } finally {
-    URL.revokeObjectURL(url);
-  }
+  const text = normalizeSvgIds(new XMLSerializer().serializeToString(svg));
+  return { svg: new TextEncoder().encode(text), width: size.width, height: size.height };
 }

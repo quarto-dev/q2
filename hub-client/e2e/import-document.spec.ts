@@ -119,7 +119,7 @@ test.describe('Import button', () => {
     await expect(text).toContainText('author=');
   });
 
-  test('emf-docx: the EMF is converted to a PNG and stored, the malformed WMF is kept and reported', async ({ page }) => {
+  test('emf-docx: the EMF is converted to an SVG and stored, the malformed WMF is kept and reported', async ({ page }) => {
     await openProject(page, [INDEX]);
     await page.getByTestId('import-file-input').setInputFiles({ name: 'emf-docx.docx', mimeType: 'application/octet-stream', buffer: source('emf-docx', 'docx') });
     await runImport(page, { closeReport: false });
@@ -131,7 +131,7 @@ test.describe('Import button', () => {
     await dialog(page).locator('.qh-btn.primary').click();
     await expect(dialog(page)).toHaveCount(0);
     await folderRow(page, 'emf-docx_media').click();
-    await expect(page.locator('.file-name', { hasText: /\.png$/ }).first()).toBeVisible();
+    await expect(page.locator('.file-name', { hasText: /\.svg$/ }).first()).toBeVisible();
     await expect(page.locator('.file-name', { hasText: /\.wmf$/ })).toBeVisible();
     await expectPreviewImage(page);
   });

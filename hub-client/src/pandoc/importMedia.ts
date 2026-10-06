@@ -18,6 +18,7 @@ export interface StoredMedia {
 }
 
 export interface MediaDeps {
+  /** EMF/WMF bytes to SVG bytes; rejects on failure. */
   convertImage: (bytes: Uint8Array, format: 'emf' | 'wmf') => Promise<Uint8Array>;
   sha256: (bytes: Uint8Array) => Promise<string>;
   now: () => number;
@@ -55,8 +56,8 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 
 /**
  * For each collected file, in order:
- * 1. an EMF or WMF is converted to PNG (10 s per image, 60 s in all). On error, timeout, an exhausted
- *    budget, or a PNG over the size limit, the original is kept and flagged `conversion_failed` (I8);
+ * 1. an EMF or WMF is converted to SVG (10 s per image, 60 s in all). On error, timeout, an exhausted
+ *    budget, or an SVG over the size limit, the original is kept and flagged `conversion_failed` (I8);
  * 2. final bytes over the size limit make the entry `skipped` (`too-large`), and the bytes are dropped (I16);
  * 3. otherwise the entry is `stored`, with the SHA-256 of the final bytes.
  *
@@ -81,12 +82,13 @@ export async function buildMedia(collected: RequestFile[], hostWarnings: HostDia
         conversionFailed = true;
       } else {
         try {
-          const png = await withTimeout(deps.convertImage(file.bytes, original), deps.convertTimeoutMs);
-          // A PNG over the limit counts as a failed conversion: the original is kept, and skipped below if it too is over.
-          if (png.byteLength > deps.maxImageBytes) conversionFailed = true;
+          const svg = await withTimeout(deps.convertImage(file.bytes, original), deps.convertTimeoutMs);
+          // An SVG over the limit counts as a failed conversion (a bitmap-wrapping EMF becomes ~1.33x base64): the
+          // original is kept, and skipped below if it too is over.
+          if (svg.byteLength > deps.maxImageBytes) conversionFailed = true;
           else {
-            bytes = png;
-            ext = 'png';
+            bytes = svg;
+            ext = 'svg';
             convertedFrom = original;
           }
         } catch {

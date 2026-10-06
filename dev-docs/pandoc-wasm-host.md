@@ -161,7 +161,7 @@ filters run inside pandoc.wasm with Quarto 1's vendored Lua, which has these lim
   filter's own directory, images and path-valued options (a reference doc, a template) are mounted.
 - `os.getenv` sees only `QUARTO_*` and `SOURCE_DATE_EPOCH`; `HOME`, `PATH` and `TMPDIR` are nil.
 - A filter's `print` output is not shown; a Lua error shows pandoc's message in the `Q-20-3` error.
-- SVG images in docx get alt text instead of the picture (no `rsvg-convert`).
+- SVG images in docx/pptx are rasterized to PNG by the browser before pandoc runs (no `rsvg-convert`); where the canvas refuses an SVG (`<foreignObject>` in Chromium/WebKit) it gets alt text instead of the picture, with a warning.
 - Documents inside a `_quarto.yml` project cannot be downloaded yet (request phase R7).
 
 ## Measuring (H3)

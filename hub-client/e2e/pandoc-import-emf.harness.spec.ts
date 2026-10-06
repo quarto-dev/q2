@@ -1,6 +1,6 @@
 /**
- * EMF and WMF to PNG in a real browser (document import P4 T2/T6, epic I8 and I15): rtf.js's renderers
- * build an SVG with the DOM and it is rasterized through `<img>` and `<canvas>`, so this cannot run in
+ * EMF and WMF to SVG in a real browser (document import P4 T2/T6, metafile-svg plan T1): rtf.js's renderers
+ * build an SVG with the DOM, and the checks load it through `<img>` and `<canvas>`, so this cannot run in
  * node. The `pandoc-*` prefix puts it in the WebKit project too, where SVG rasterization differs most.
  *
  *   VITE_E2E=1 npm run build
@@ -23,56 +23,84 @@ async function ready(page: Page) {
   });
 }
 
-/** Convert in the page, then decode the PNG there and count the non-transparent pixels. */
+/** What the SVG may contain: the elements rtf.js's EMF/WMF renderers emit (T0 recorded the set), and nothing that runs. */
+const ALLOWED = ['svg', 'defs', 'clippath', 'pattern', 'filter', 'feflood', 'fecomposite', 'image', 'rect', 'line', 'polygon', 'polyline', 'ellipse', 'path', 'text'];
+
+/** Inspect an SVG's text in the page: its elements and hrefs, its root size, and the opaque pixels it draws. */
+async function inspect(page: Page, svg: string) {
+  return page.evaluate(async (text) => {
+    const doc = new DOMParser().parseFromString(text, 'image/svg+xml');
+    const root = doc.documentElement;
+    const elements = [...new Set([root, ...root.querySelectorAll('*')].map((e) => e.localName.toLowerCase()))];
+    const hrefs = [...root.querySelectorAll('*')].flatMap((e) => ['href', 'xlink:href'].map((n) => e.getAttribute(n)).filter((v): v is string => v !== null));
+    const img = new Image();
+    const loaded = new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error('the SVG did not load through <img>'));
+    });
+    img.src = URL.createObjectURL(new Blob([text], { type: 'image/svg+xml' }));
+    await loaded;
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(img, 0, 0);
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    let painted = 0;
+    for (let i = 3; i < data.length; i += 4) if (data[i] !== 0) painted++;
+    return { parsed: root.localName === 'svg', elements, hrefs, rootWidth: root.getAttribute('width'), rootHeight: root.getAttribute('height'), painted };
+  }, svg);
+}
+
 async function convert(page: Page, bytes: Uint8Array, format: 'emf' | 'wmf') {
   return page.evaluate(
-    async ({ base64, format }) => {
-      const out = await window.__quartoTest!.pandoc.convertMetafile(base64, format);
-      const png = Uint8Array.from(atob(out), (c) => c.charCodeAt(0));
-      const bitmap = await createImageBitmap(new Blob([png], { type: 'image/png' }));
-      const canvas = document.createElement('canvas');
-      canvas.width = bitmap.width;
-      canvas.height = bitmap.height;
-      const ctx = canvas.getContext('2d')!;
-      ctx.drawImage(bitmap, 0, 0);
-      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-      let painted = 0;
-      for (let i = 3; i < data.length; i += 4) if (data[i] !== 0) painted++;
-      return { base64: out, width: bitmap.width, height: bitmap.height, painted };
-    },
+    ({ base64, format }) => window.__quartoTest!.pandoc.convertMetafile(base64, format),
     { base64: Buffer.from(bytes).toString('base64'), format },
   );
 }
 
-const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+/** The converted SVG is non-blank, 1x, and holds only allowed elements and `data:` hrefs. */
+async function expectSvg(page: Page, out: { svg: string; width: number; height: number }, size: [number, number]) {
+  expect([out.width, out.height]).toEqual(size);
+  const r = await inspect(page, out.svg);
+  expect(r.parsed).toBe(true);
+  expect([r.rootWidth, r.rootHeight]).toEqual([`${size[0]}px`, `${size[1]}px`]);
+  expect(r.elements.filter((e) => !ALLOWED.includes(e)), 'elements outside the allowlist').toEqual([]);
+  for (const href of r.hrefs) expect(href.startsWith('data:'), `href ${href.slice(0, 40)}`).toBe(true);
+  expect(r.painted, 'a blank render has no painted pixel').toBeGreaterThan(0);
+}
 
-test('the emf-docx fixture\'s EMF converts to a PNG with the rectangle drawn', async ({ page }) => {
+test('the emf-docx fixture\'s EMF converts to an SVG at 1x with the rectangle drawn', async ({ page }) => {
   await ready(page);
   const emf = loadImportRecording('emf-docx').media.find((m) => m.rel.endsWith('.emf'))!;
-  const r = await convert(page, emf.bytes, 'emf');
-  const png = Buffer.from(r.base64, 'base64');
-  expect([...png.subarray(0, 8)]).toEqual(PNG_SIGNATURE);
-  // 100 x 50 px at 96 dpi (rclFrame 26.46 x 13.23 mm), at 2x.
-  expect([r.width, r.height]).toEqual([200, 100]);
-  expect(r.painted, 'a blank render has no painted pixel').toBeGreaterThan(0);
+  const out = await convert(page, emf.bytes, 'emf');
+  // 100 x 50 px at 96 dpi (rclFrame 26.46 x 13.23 mm).
+  await expectSvg(page, out, [100, 50]);
   if (outDir) {
     mkdirSync(outDir, { recursive: true });
-    writeFileSync(path.join(outDir, `emf-${test.info().project.name}.png`), png);
+    writeFileSync(path.join(outDir, `emf-${test.info().project.name}.svg`), out.svg);
   }
 });
 
-test('a spec-correct WMF converts to a PNG with the rectangle drawn', async ({ page }) => {
+test('a spec-correct WMF converts to an SVG at 1x with the rectangle drawn', async ({ page }) => {
   await ready(page);
-  const r = await convert(page, validWmf(), 'wmf');
-  const png = Buffer.from(r.base64, 'base64');
-  expect([...png.subarray(0, 8)]).toEqual(PNG_SIGNATURE);
-  // 100 units at 1440 per inch is 0.069 in: 6.7 px at 96 dpi, 13 x 7 at 2x.
-  expect([r.width, r.height]).toEqual([13, 7]);
-  expect(r.painted, 'a blank render has no painted pixel').toBeGreaterThan(0);
+  const out = await convert(page, validWmf(), 'wmf');
+  // 100 units at 1440 per inch is 0.069 in: 6.7 px at 96 dpi, so 7 x 3.
+  await expectSvg(page, out, [7, 3]);
   if (outDir) {
     mkdirSync(outDir, { recursive: true });
-    writeFileSync(path.join(outDir, `wmf-${test.info().project.name}.png`), png);
+    writeFileSync(path.join(outDir, `wmf-${test.info().project.name}.svg`), out.svg);
   }
+});
+
+test('a clipped WMF converted twice in one page gives identical bytes (rtf.js\'s clip counter is renumbered away)', async ({ page }) => {
+  await ready(page);
+  const first = await convert(page, validWmf({ clip: true }), 'wmf');
+  const second = await convert(page, validWmf({ clip: true }), 'wmf');
+  // Without a clipPath the comparison proves nothing.
+  expect(first.svg).toMatch(/<clipPath[^>]* id="wmfjs_c0"/);
+  expect(second.svg).toBe(first.svg);
+  await expectSvg(page, first, [7, 3]);
 });
 
 test('the emf-docx fixture\'s WMF (a 24-byte placeable header) is refused, so the import keeps the original', async ({ page }) => {
@@ -103,36 +131,23 @@ test('importDocument imports basic-docx to its expected.qmd', async ({ page }) =
   expect(out.media.length).toBeGreaterThan(0);
 });
 
-test('importDocument converts the emf-docx EMF to a PNG and keeps the malformed WMF as it is', async ({ page }) => {
+test('importDocument converts the emf-docx EMF to an SVG and keeps the malformed WMF as it is', async ({ page }) => {
   await ready(page);
   const out = await importIn(page, 'emf-docx');
   if (!out.ok) throw new Error(JSON.stringify(out.diagnostics));
-  const png = out.media.find((m) => m.mimeType === 'image/png')!;
-  expect(png, 'a PNG entry').toBeTruthy();
-  expect(png.projectPath).toMatch(/^emf-docx_media\/[0-9a-f]{12}\.png$/);
-  expect(out.qmd).toContain(png.projectPath);
-  const bytes = Buffer.from(png.base64, 'base64');
-  expect([...bytes.subarray(0, 8)]).toEqual(PNG_SIGNATURE);
-  // The IHDR chunk's width and height.
-  expect([bytes.readUInt32BE(16), bytes.readUInt32BE(20)]).toEqual([200, 100]);
+  const svg = out.media.find((m) => m.mimeType === 'image/svg+xml')!;
+  expect(svg, 'an SVG entry').toBeTruthy();
+  expect(svg.projectPath).toMatch(/^emf-docx_media\/[0-9a-f]{12}\.svg$/);
+  expect(out.qmd).toContain(svg.projectPath);
+  const text = Buffer.from(svg.base64, 'base64').toString('utf8');
+  expect(text.startsWith('<svg')).toBe(true);
   expect(out.media.some((m) => m.projectPath.endsWith('.wmf'))).toBe(true);
   const codes = out.diagnostics.map((d) => ('code' in d ? d.code : ''));
   expect(codes).toContain('Q-24-10');
   expect(codes).toContain('Q-24-9');
-  // Decoded in the page, not blank.
-  const painted = await page.evaluate(async (b64) => {
-    const bitmap = await createImageBitmap(new Blob([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], { type: 'image/png' }));
-    const canvas = document.createElement('canvas');
-    canvas.width = bitmap.width;
-    canvas.height = bitmap.height;
-    const ctx = canvas.getContext('2d')!;
-    ctx.drawImage(bitmap, 0, 0);
-    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-    let n = 0;
-    for (let i = 3; i < data.length; i += 4) if (data[i] !== 0) n++;
-    return n;
-  }, png.base64);
-  expect(painted).toBeGreaterThan(0);
+  const r = await inspect(page, text);
+  expect([r.rootWidth, r.rootHeight]).toEqual(['100px', '50px']);
+  expect(r.painted).toBeGreaterThan(0);
 });
 
 test('importDocument: the corrupt fixture gives Q-24-3', async ({ page }) => {

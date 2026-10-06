@@ -22,7 +22,7 @@ import { createBrowserWorker, getPandoc, getPreviewPandocRunner } from './pandoc
 import type { Fault, PandocRequest, RunStats, ShareTree } from '@quarto/pandoc-host';
 import { PANDOC_WASM_SHA256, smokeJob } from './pandoc/smokeJob';
 import { importJob } from './pandoc/importJob';
-import { convertMetafileToPng } from './pandoc/metafileToPng';
+import { convertMetafileToSvg } from './pandoc/metafileToSvg';
 import { getImportService } from './pandoc/importService';
 import { installDevHarness, pandocDownload } from './pandoc/devHarness';
 import { createPdfPreviewController, formatByKey, getDownloadController, onPdfCompiled, setPreviewTrace } from './pandoc/downloadService';
@@ -193,12 +193,10 @@ export const pandoc = {
     return { loader, runner };
   },
   smokeJob,
-  /** EMF/WMF to PNG with rtf.js on this page (the import's image converter, P4 T2); base64 in and out. */
-  async convertMetafile(base64: string, format: 'emf' | 'wmf'): Promise<string> {
-    const png = await convertMetafileToPng(Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)), format);
-    let bin = '';
-    for (const b of png) bin += String.fromCharCode(b);
-    return btoa(bin);
+  /** EMF/WMF to SVG with rtf.js on this page (the import's image converter, P4 T2); base64 in, the SVG's text and size out. */
+  async convertMetafile(base64: string, format: 'emf' | 'wmf'): Promise<{ svg: string; width: number; height: number }> {
+    const out = await convertMetafileToSvg(Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)), format);
+    return { svg: new TextDecoder().decode(out.svg), width: out.width, height: out.height };
   },
   /**
    * `getImportService().importDocument` (the real service: Rust wasm, the import runner, the rtf.js converter) on

@@ -3,8 +3,10 @@
  * built with a 24-byte placeable header instead of the spec's 22 (`capture_import_recordings.rs`
  * `wmf_bytes` writes one zero word too many), so it cannot render and is not used for conversion tests.
  * Same drawing as that fixture: a 100 x 50 box at 1440 units per inch, a rectangle from (10, 10) to (90, 40).
+ * With `clip`, a `META_INTERSECTCLIPRECT` (5, 5)-(95, 45) precedes the drawing, so the renderer emits a `clipPath` with a
+ * page-lifetime counter id (`wmfjs_c<n>`): converting it twice is the test that ids are normalized.
  */
-export function validWmf(): Uint8Array {
+export function validWmf(opts: { clip?: boolean } = {}): Uint8Array {
   const words: number[] = [];
   const u16 = (v: number) => words.push(v & 0xffff);
   const out: number[] = [];
@@ -23,7 +25,7 @@ export function validWmf(): Uint8Array {
   push16(1);
   push16(9);
   push16(0x0300);
-  push32(9 + 5 + 5 + 7 + 4 + 7 + 3);
+  push32(9 + 5 + 5 + (opts.clip ? 7 : 0) + 7 + 4 + 7 + 3);
   push16(1);
   push32(7);
   push16(0);
@@ -36,6 +38,12 @@ export function validWmf(): Uint8Array {
   push16(0x020c);
   push16(50);
   push16(100);
+  if (opts.clip) {
+    // META_INTERSECTCLIPRECT: size, function, bottom, right, top, left
+    push32(7);
+    push16(0x0416);
+    [45, 95, 5, 5].forEach(push16);
+  }
   // META_CREATEBRUSHINDIRECT: size, function, style (solid), colour (black), hatch
   push32(7);
   push16(0x02fc);
