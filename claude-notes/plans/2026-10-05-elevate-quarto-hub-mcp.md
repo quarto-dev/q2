@@ -530,7 +530,7 @@ intended.
   plumbing).
 - [x] ERG-4: error-message convention (parameter, state, next tool;
   near-match paths) applied to every data tool.
-- [ ] ERG-6: rewrite `instructions` as the operating guide (workflow,
+- [x] ERG-6: rewrite `instructions` as the operating guide (workflow,
   etiquette, auth, read-only, untrusted content).
 - [ ] BP-18: validate the authorization URL (`https`, non-private host)
   before surfacing or opening it.
