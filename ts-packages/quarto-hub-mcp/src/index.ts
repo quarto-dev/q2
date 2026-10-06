@@ -24,8 +24,9 @@
  *                                        loopback issuers (dev only)
  */
 
-import { realpathSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
+import { readFileSync, realpathSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { McpServer, SUPPORTED_PROTOCOL_VERSIONS } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
@@ -133,6 +134,38 @@ export interface CreateServerOptions {
  * the same process. The static tool list earns a long `tools/list` cache
  * hint (BP-17, SEP-2549); the SDK applies it only on the modern era.
  */
+/** The `Implementation.description` — shared with the registry `server.json` (CAP-15). */
+const SERVER_DESCRIPTION =
+  'MCP server for AI agent access to Quarto Hub projects via automerge sync';
+
+/** The `Implementation.websiteUrl` — shared with the registry `server.json` (CAP-15). */
+const SERVER_WEBSITE_URL = 'https://quarto-hub.com';
+
+/**
+ * The version reported on the MCP `Implementation` record (BP-10):
+ * the launcher-injected `QUARTO_MCP_SERVER_VERSION` (`<q2 version>+
+ * <embed commit>`) when running under `q2 mcp`; the bundle's own
+ * `build-info.json` stamp when run standalone (npx); the package floor
+ * otherwise (dev `tsc` builds, vitest).
+ */
+export function resolveServerVersion(env: NodeJS.ProcessEnv = process.env): string {
+  const injected = env['QUARTO_MCP_SERVER_VERSION'];
+  if (injected !== undefined && injected.trim() !== '') return injected;
+  try {
+    const stamp = join(dirname(fileURLToPath(import.meta.url)), 'build-info.json');
+    const info = JSON.parse(readFileSync(stamp, 'utf8')) as {
+      gitCommit?: unknown;
+      gitDirty?: unknown;
+    };
+    if (typeof info.gitCommit === 'string' && info.gitCommit.length >= 7) {
+      return `0.0.1+${info.gitCommit.slice(0, 9)}${info.gitDirty === true ? '.dirty' : ''}`;
+    }
+  } catch {
+    // No build stamp next to the entry — a dev build.
+  }
+  return '0.0.1';
+}
+
 /**
  * The server `instructions` (ERG-6): the operating guide every host
  * injects before the first tool call. Living steering text — it
@@ -176,7 +209,9 @@ export function createServer(options: CreateServerOptions): McpServer {
   const server = new McpServer(
     {
       name: 'quarto-hub',
-      version: '0.0.1',
+      version: resolveServerVersion(),
+      description: SERVER_DESCRIPTION,
+      websiteUrl: SERVER_WEBSITE_URL,
     },
     {
       instructions: buildInstructions(readOnly),

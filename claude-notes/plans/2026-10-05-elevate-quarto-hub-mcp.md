@@ -429,7 +429,7 @@ Test specifications (all red before implementation):
   modern client (`server/discover`, per-request `_meta`) both list and call
   tools against the same process, and `instructions` arrives on both paths
   (BP-16).
-- [ ] `initialize`/`server/discover` reports the real embedded version plus
+- [x] `initialize`/`server/discover` reports the real embedded version plus
   `description` and `websiteUrl` (BP-10).
 - [x] `read_file` returns `hash`; `write_file` with a stale `expected_hash`
   is refused with the current content + hash and changes nothing;
@@ -548,7 +548,7 @@ intended.
   it for ERG-1, and the ERG-1 hash → `expected_hash` loop is exactly the
   machine-read structuredContent is for. Auth tools stay prose-text: they
   are interactive flows, not data.)
-- [ ] BP-10: launcher injects `QUARTO_MCP_SERVER_VERSION` (embed commit +
+- [x] BP-10: launcher injects `QUARTO_MCP_SERVER_VERSION` (embed commit +
   workspace version); server reports it; fallback to a bundle-build-time
   stamp when run standalone. Also set `Implementation.description` and
   `websiteUrl` (shared with `server.json`, CAP-15).

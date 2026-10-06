@@ -14,6 +14,7 @@ import {
   DEFAULT_SERVER_URL,
   parseArgs,
   parseRedirectPort,
+  resolveServerVersion,
   resolveShutdownDrainMs,
 } from './index.js';
 
@@ -117,5 +118,27 @@ describe('resolveShutdownDrainMs', () => {
     expect(resolveShutdownDrainMs('abc')).toBe(3000);
     expect(resolveShutdownDrainMs('3000.5')).toBe(3000);
     expect(resolveShutdownDrainMs('-1')).toBe(3000);
+  });
+});
+
+// ============================================================================
+// resolveServerVersion (BP-10)
+// ============================================================================
+
+describe('resolveServerVersion (BP-10)', () => {
+  it('prefers the launcher-injected QUARTO_MCP_SERVER_VERSION', () => {
+    expect(
+      resolveServerVersion({ QUARTO_MCP_SERVER_VERSION: '0.32.0+5a41c8bea' }),
+    ).toBe('0.32.0+5a41c8bea');
+  });
+
+  it('falls back to the package floor when nothing injects a version', () => {
+    // vitest runs from src/: no build-info.json sibling, no env — the
+    // dev-build floor.
+    expect(resolveServerVersion({})).toBe('0.0.1');
+  });
+
+  it('treats a blank injection as absent', () => {
+    expect(resolveServerVersion({ QUARTO_MCP_SERVER_VERSION: '   ' })).toBe('0.0.1');
   });
 });

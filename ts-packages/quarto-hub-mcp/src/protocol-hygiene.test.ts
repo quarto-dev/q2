@@ -266,3 +266,58 @@ describe('tools/list cache hints (BP-17, SEP-2549)', () => {
     }
   });
 });
+
+// ============================================================================
+// BP-10: Implementation identity — real version, description, websiteUrl
+// ============================================================================
+
+describe('implementation identity (BP-10)', () => {
+  it('reports description and websiteUrl on initialize (legacy era)', async () => {
+    const f = await startInMemoryMcp();
+    try {
+      const info = f.client.getServerVersion();
+      expect(info?.description).toBeTruthy();
+      expect(info?.websiteUrl).toMatch(/^https:\/\//);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('reports description and websiteUrl on server/discover (modern era)', async () => {
+    const f = await startInMemoryMcp();
+    try {
+      const served = await serveClient(f.manager, 'modern');
+      try {
+        const info = served.client.getServerVersion();
+        expect(info?.description).toBeTruthy();
+        expect(info?.websiteUrl).toMatch(/^https:\/\//);
+        // And on the wire form itself (the discover result's meta).
+        const meta = served.client.getDiscoverResult()?._meta as
+          | Record<string, { description?: string; websiteUrl?: string } | undefined>
+          | undefined;
+        const wire = meta?.['io.modelcontextprotocol/serverInfo'];
+        expect(wire?.description).toBeTruthy();
+        expect(wire?.websiteUrl).toMatch(/^https:\/\//);
+      } finally {
+        await served.close();
+      }
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('reports the launcher-injected version when QUARTO_MCP_SERVER_VERSION is set', async () => {
+    const { vi } = await import('vitest');
+    vi.stubEnv('QUARTO_MCP_SERVER_VERSION', '0.32.0+5a41c8bea');
+    try {
+      const f = await startInMemoryMcp();
+      try {
+        expect(f.client.getServerVersion()?.version).toBe('0.32.0+5a41c8bea');
+      } finally {
+        await f.close();
+      }
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+});
