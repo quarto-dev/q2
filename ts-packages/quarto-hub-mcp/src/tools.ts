@@ -106,7 +106,11 @@ async function syncField(
   paths: string[],
 ): Promise<{ synced?: boolean }> {
   if (args.wait_for_sync === false) return {};
-  return { synced: await manager.awaitDelivery(project, paths, SYNC_WAIT_MS) };
+  return {
+    synced: await manager.awaitDelivery(project, paths, SYNC_WAIT_MS, {
+      server: routedServer(args),
+    }),
+  };
 }
 
 // ============================================================================
@@ -121,33 +125,29 @@ type ToolArgs = Record<string, unknown>;
  * named a `file=` and the caller gave no explicit `path`, default `path` to it.
  * A bare id passes through unchanged, so existing callers are unaffected.
  *
- * If the share URL's `server=` names a hub different from the one this MCP is
- * configured to use, returns an `error` instead: silently connecting to the
- * configured hub would read/write the wrong documents. `configuredServer` is
- * the manager's {@link ConnectionManager.configuredServerUrl}.
+ * A share URL whose `server=` names a different hub ROUTES the call there
+ * (bd-qt7h8h5g): the normalized args carry `server`, and the connection
+ * manager joins that hub authorless — the configured hub's Bearer is
+ * audience-bound and never replayed to a foreign origin.
  */
-function normalizeArgs(
-  args: ToolArgs,
-  configuredServer: string,
-): { args: ToolArgs } | { error: string } {
+function normalizeArgs(args: ToolArgs, configuredServer: string): ToolArgs {
   if (typeof args.project !== 'string') {
-    return { args };
+    return args;
   }
   const ref = parseProjectRef(args.project);
-  if (ref.server && !serversMatch(ref.server, configuredServer)) {
-    return {
-      error:
-        `Error: this share URL targets Quarto Hub server ${ref.server}, but this MCP ` +
-        `server is connected to ${configuredServer}. Reading or writing would hit the ` +
-        `wrong hub. Restart quarto-hub-mcp with \`--server ${ref.server}\` (or set ` +
-        `QUARTO_HUB_SERVER=${ref.server}) to use the project this link points to.`,
-    };
-  }
   const next: ToolArgs = { ...args, project: ref.project };
+  if (ref.server && !serversMatch(ref.server, configuredServer)) {
+    next.server = ref.server;
+  }
   if (ref.file && (next.path === undefined || next.path === '')) {
     next.path = ref.file;
   }
-  return { args: next };
+  return next;
+}
+
+/** The foreign hub a share URL routed this call to, if any (bd-qt7h8h5g). */
+function routedServer(args: ToolArgs): string | undefined {
+  return typeof args.server === 'string' ? args.server : undefined;
 }
 
 /**
@@ -285,11 +285,7 @@ async function handleTool(
   manager: ConnectionManager,
   extras: ToolExtras = {},
 ): Promise<CallToolResult> {
-  const normalized = normalizeArgs(rawArgs, manager.configuredServerUrl);
-  if ('error' in normalized) {
-    return error(normalized.error);
-  }
-  const args = normalized.args;
+  const args = normalizeArgs(rawArgs, manager.configuredServerUrl);
   if (PATH_DEFAULTABLE.has(name) && (typeof args.path !== 'string' || args.path === '')) {
     return error(
       `Error: ${name} requires a \`path\` argument — the file path within the project ` +
@@ -322,13 +318,13 @@ async function handleTool(
 
 async function handleConnectProject(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
   const project = args.project as string;
-  const state = await manager.connect(project);
+  const state = await manager.connect(project, { server: routedServer(args) });
   return structured({ project, files: buildFileList(state) });
 }
 
 async function handleListFiles(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
   const project = args.project as string;
-  const state = await manager.connect(project);
+  const state = await manager.connect(project, { server: routedServer(args) });
   const files = buildFileList(state);
   // Text fallback stays the pre-BP-1 bare array; structuredContent is
   // the object-wrapped form outputSchema requires.
@@ -367,7 +363,7 @@ function staleHashError(
 async function handleReadFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
   const project = args.project as string;
   const path = args.path as string;
-  const state = await manager.connect(project);
+  const state = await manager.connect(project, { server: routedServer(args) });
   const payload = state.files.get(path);
 
   if (!payload) {
@@ -398,6 +394,7 @@ async function handleWaitForChange(
 
   const result = await manager.waitForChange(project, path, timeoutSec * 1000, sinceHash, {
     signal: extras.signal,
+    server: routedServer(args),
   });
 
   if (!result.changed) {
@@ -433,7 +430,7 @@ async function handleWriteFile(args: ToolArgs, manager: ConnectionManager): Prom
   const path = args.path as string;
   const content = args.content as string;
   const expectedHash = typeof args.expected_hash === 'string' ? args.expected_hash : undefined;
-  const state = await manager.connect(project);
+  const state = await manager.connect(project, { server: routedServer(args) });
   const existing = state.files.get(path);
 
   if (!existing) {
@@ -480,7 +477,7 @@ async function handlePatchFile(args: ToolArgs, manager: ConnectionManager): Prom
   const oldString = args.old_string as string;
   const newString = args.new_string as string;
   const expectedHash = typeof args.expected_hash === 'string' ? args.expected_hash : undefined;
-  const state = await manager.connect(project);
+  const state = await manager.connect(project, { server: routedServer(args) });
   const payload = state.files.get(path);
 
   if (!payload) {
@@ -528,7 +525,7 @@ async function handleCreateFile(args: ToolArgs, manager: ConnectionManager): Pro
   const project = args.project as string;
   const path = args.path as string;
   const content = (args.content as string) ?? '';
-  const state = await manager.connect(project);
+  const state = await manager.connect(project, { server: routedServer(args) });
 
   if (state.files.has(path)) {
     return error(`Error: File already exists: ${path}. Use write_file to update it.`);
@@ -551,7 +548,7 @@ async function handleCreateFile(args: ToolArgs, manager: ConnectionManager): Pro
 async function handleDeleteFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
   const project = args.project as string;
   const path = args.path as string;
-  const state = await manager.connect(project);
+  const state = await manager.connect(project, { server: routedServer(args) });
 
   // Dangling entries ARE deletable: delete only edits the index, no
   // document fetch involved — this is the self-service repair for a
@@ -573,7 +570,7 @@ async function handleRenameFile(args: ToolArgs, manager: ConnectionManager): Pro
   const project = args.project as string;
   const oldPath = args.old_path as string;
   const newPath = args.new_path as string;
-  const state = await manager.connect(project);
+  const state = await manager.connect(project, { server: routedServer(args) });
 
   // Renaming only edits the index, so a dangling entry can be renamed.
   if (!state.files.has(oldPath) && !findUnavailable(state.client, oldPath)) {

@@ -38,6 +38,7 @@ import {
 import type { CredentialStore } from './auth/credential-store.js';
 import { ReauthRequired, type RefreshManager } from './auth/refresh-manager.js';
 import { redactTokens } from './auth/redact.js';
+import { serversMatch } from './share-url.js';
 
 // ---------------------------------------------------------------------------
 // Public types / errors
@@ -67,6 +68,26 @@ export class InsecureTransportError extends Error {
       'or set `QUARTO_HUB_MCP_ALLOW_INSECURE_AUTH=1` to override.',
   ) {
     super(message);
+  }
+}
+
+/**
+ * A share URL's `server=` named a hub that demands authentication
+ * (bd-qt7h8h5g). The configured hub's Bearer is audience-bound and is
+ * never replayed to a foreign origin, so there is no credential this
+ * MCP can offer the foreign hub today.
+ */
+export class ForeignHubAuthRequiredError extends Error {
+  override readonly name = 'ForeignHubAuthRequiredError';
+  constructor(foreignServer: string, configuredServer: string) {
+    super(
+      `This project is on ${foreignServer}, which requires authentication. ` +
+        `This MCP server's credentials are scoped to ${configuredServer} and ` +
+        'are never sent to another origin. Signing in to additional hubs is ' +
+        'not supported yet — ask the project owner to host the project on ' +
+        `${configuredServer}, or to share it from a hub that allows ` +
+        'unauthenticated access.',
+    );
   }
 }
 
@@ -119,6 +140,8 @@ interface ProjectState {
   files: Map<string, FilePayload>;
   /** Pending long-poll waiters, keyed implicitly by their `path` field. */
   waiters: Set<ChangeWaiter>;
+  /** The sync server this project is connected through (bd-qt7h8h5g). */
+  serverUrl: string;
 }
 
 /**
@@ -256,6 +279,11 @@ export class ConnectionManager {
     return this.observedAuthMode;
   }
 
+  /** The cache key for {@link projects}: connection state is per (server, project) (bd-qt7h8h5g). */
+  private projectKey(serverUrl: string, indexDocId: string): string {
+    return `${serverUrl}\n${indexDocId}`;
+  }
+
   /**
    * Conformance-test seam (bd-f1dr7gs1, Phase 0): the number of pending
    * `waitForChange` waiters registered for a project. This is the leak
@@ -264,17 +292,28 @@ export class ConnectionManager {
    * has no reason to call this.
    */
   pendingWaiterCount(indexDocId: string): number {
-    return this.projects.get(indexDocId)?.waiters.size ?? 0;
+    return this.projects.get(this.projectKey(this.serverUrl, indexDocId))?.waiters.size ?? 0;
   }
 
   /**
    * Connect to a project. Walks the try-then-fallback auth policy,
    * then opens the sync client. Re-uses existing project state when
    * we've already connected.
+   *
+   * `options.server` (from a share URL's `server=`, bd-qt7h8h5g) routes
+   * the connect to a different hub: the configured hub's Bearer is
+   * audience-bound and is NEVER replayed to a foreign origin, so a
+   * foreign hub is probed no-auth and joined authorless (a 401/403
+   * there is a {@link ForeignHubAuthRequiredError}, not a credential
+   * leak).
    */
-  async connect(indexDocId: string): Promise<ProjectState> {
+  async connect(indexDocId: string, options?: { server?: string }): Promise<ProjectState> {
+    const server = options?.server ?? this.serverUrl;
+    if (!serversMatch(server, this.serverUrl)) {
+      return this.connectForeign(indexDocId, server);
+    }
     await this.gateAuthState();
-    const existing = this.projects.get(indexDocId);
+    const existing = this.projects.get(this.projectKey(this.serverUrl, indexDocId));
     if (existing) return existing;
 
     const auth = await this.resolveAuthForConnect();
@@ -287,6 +326,37 @@ export class ConnectionManager {
       ? await this.fetchAuthorId(indexDocId, auth.getBearer)
       : undefined;
 
+    return await this.openProject(this.serverUrl, indexDocId, auth, authorId);
+  }
+
+  /**
+   * Connect to a project on a hub other than the configured one —
+   * always authorless: credentials are audience-bound (bd-qt7h8h5g).
+   * A probe without credentials decides: open hub → join; 401/403 →
+   * {@link ForeignHubAuthRequiredError}.
+   */
+  private async connectForeign(indexDocId: string, server: string): Promise<ProjectState> {
+    const existing = this.projects.get(this.projectKey(server, indexDocId));
+    if (existing) return existing;
+
+    const status = await this.probeAuth(undefined, server);
+    if (status === 401 || status === 403) {
+      throw new ForeignHubAuthRequiredError(server, this.serverUrl);
+    }
+    return await this.openProject(server, indexDocId, undefined, undefined);
+  }
+
+  /**
+   * Open the sync client for a project on `serverUrl` and cache the
+   * state per (server, project). Shared by the configured-hub and
+   * foreign-hub connect paths.
+   */
+  private async openProject(
+    serverUrl: string,
+    indexDocId: string,
+    auth: { getBearer: () => Promise<string> } | undefined,
+    authorId: string | undefined,
+  ): Promise<ProjectState> {
     const files = new Map<string, FilePayload>();
     const waiters = new Set<ChangeWaiter>();
     const callbacks: SyncClientCallbacks = {
@@ -319,7 +389,7 @@ export class ConnectionManager {
     const client = this.syncClientFactory(callbacks);
     // Pass auth iff we resolved a Bearer; otherwise the sync-client
     // uses the browser adapter (no header).
-    await client.connect(this.serverUrl, indexDocId, authorId, undefined, undefined, {
+    await client.connect(serverUrl, indexDocId, authorId, undefined, undefined, {
       auth,
       // Server-backed client with memory storage: offline mode would
       // be a silent data black hole — demand a live peer or fail
@@ -330,8 +400,8 @@ export class ConnectionManager {
       peerTimeoutMs: PEER_TIMEOUT_MS,
     });
 
-    const state: ProjectState = { client, files, waiters };
-    this.projects.set(indexDocId, state);
+    const state: ProjectState = { client, files, waiters, serverUrl };
+    this.projects.set(this.projectKey(serverUrl, indexDocId), state);
     return state;
   }
 
@@ -354,16 +424,19 @@ export class ConnectionManager {
     path: string,
     timeoutMs: number,
     sinceHash?: string,
-    options?: { signal?: AbortSignal },
+    options?: { signal?: AbortSignal; server?: string },
   ): Promise<ChangeResult> {
     const signal = options?.signal;
     if (signal?.aborted) {
       throw signal.reason ?? new DOMException('The operation was aborted.', 'AbortError');
     }
+    const server = options?.server ?? this.serverUrl;
     // Register the waiter synchronously when already connected so an edit
     // arriving immediately after the call can't slip through the await gap.
     // (First-time connects still pay one await; `sinceHash` covers that gap.)
-    const state = this.projects.get(indexDocId) ?? (await this.connect(indexDocId));
+    const state =
+      this.projects.get(this.projectKey(server, indexDocId)) ??
+      (await this.connect(indexDocId, { server: options?.server }));
     // The cancel may have landed during the connect await.
     if (signal?.aborted) {
       throw signal.reason ?? new DOMException('The operation was aborted.', 'AbortError');
@@ -466,8 +539,8 @@ export class ConnectionManager {
       resolveAuthorId,
     );
 
-    const state: ProjectState = { client, files: tempFiles, waiters };
-    this.projects.set(result.indexDocId, state);
+    const state: ProjectState = { client, files: tempFiles, waiters, serverUrl: this.serverUrl };
+    this.projects.set(this.projectKey(this.serverUrl, result.indexDocId), state);
     return { indexDocId: result.indexDocId, files: result.files };
   }
 
@@ -482,20 +555,22 @@ export class ConnectionManager {
     indexDocId: string,
     paths: string[],
     timeoutMs: number,
+    options?: { server?: string },
   ): Promise<boolean> {
-    const state = this.projects.get(indexDocId);
+    const server = options?.server ?? this.serverUrl;
+    const state = this.projects.get(this.projectKey(server, indexDocId));
     if (!state) return false;
     return state.client.awaitDelivery(paths, timeoutMs);
   }
 
   /** Read-only accessor matching the prior API. */
-  get(indexDocId: string): ProjectState | undefined {
-    return this.projects.get(indexDocId);
+  get(indexDocId: string, options?: { server?: string }): ProjectState | undefined {
+    return this.projects.get(this.projectKey(options?.server ?? this.serverUrl, indexDocId));
   }
 
   /** Strict accessor matching the prior API. */
-  require(indexDocId: string): ProjectState {
-    const state = this.projects.get(indexDocId);
+  require(indexDocId: string, options?: { server?: string }): ProjectState {
+    const state = this.get(indexDocId, options);
     if (!state) {
       throw new Error(
         `Not connected to project ${indexDocId}. Call connect_project first.`,
@@ -750,21 +825,25 @@ export class ConnectionManager {
   }
 
   /**
-   * Disconnect and drop every project handle after a terminal auth
-   * event — their sockets are dead or doomed, and a dropped handle
-   * makes the next tool call re-enter `connect()` where the fast,
-   * clearly-messaged failure paths live.
+   * Disconnect and drop every project handle *on the configured hub*
+   * after a terminal auth event — their sockets are dead or doomed, and
+   * a dropped handle makes the next tool call re-enter `connect()`
+   * where the fast, clearly-messaged failure paths live. Foreign-hub
+   * projects (bd-qt7h8h5g) are authorless: an auth event on the
+   * configured hub says nothing about them, so they stay.
    */
   private async dropDeadProjects(): Promise<void> {
-    const entries = Array.from(this.projects.entries());
-    this.projects.clear();
+    const entries = Array.from(this.projects.entries()).filter(([, s]) =>
+      serversMatch(s.serverUrl, this.serverUrl),
+    );
+    for (const [key] of entries) this.projects.delete(key);
     await Promise.all(
-      entries.map(async ([indexDocId, s]) => {
+      entries.map(async ([, s]) => {
         try {
           await s.client.disconnect();
         } catch {
           console.error(
-            `[hub-mcp] error disconnecting project ${indexDocId} after ` +
+            `[hub-mcp] error disconnecting a project after ` +
               'an auth rejection (ignored)',
           );
         }
@@ -832,11 +911,16 @@ export class ConnectionManager {
    * Performs an HTTP GET against the configured probe path with the
    * given Bearer (if any). Returns the HTTP status code; throws on
    * network errors with `observedAuthMode` left unchanged.
+   *
+   * `serverOverride` probes a foreign hub (bd-qt7h8h5g multi-server
+   * routing) — always without a Bearer, so no call site can leak the
+   * configured hub's credentials to another origin.
    */
-  private async probeAuth(bearer: string | undefined): Promise<number> {
-    const url = new URL(this.probePath, toHttpUrl(this.serverUrlParsed));
+  private async probeAuth(bearer: string | undefined, serverOverride?: string): Promise<number> {
+    const base = serverOverride ? new URL(serverOverride) : this.serverUrlParsed;
+    const url = new URL(this.probePath, toHttpUrl(base));
     const headers: Record<string, string> = {};
-    if (bearer) headers.Authorization = `Bearer ${bearer}`;
+    if (bearer && !serverOverride) headers.Authorization = `Bearer ${bearer}`;
     try {
       const res = await this.httpFetch(url.toString(), {
         method: 'GET',

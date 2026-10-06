@@ -184,8 +184,8 @@ function buildInstructions(readOnly: boolean): string {
     '\n1. connect_project with a project id OR a quarto-hub.com share URL ' +
     '(`https://quarto-hub.com/#/share/<id>?file=…&name=…`) — the id after `#/share/` is ' +
     'the project, and a `file=` parameter becomes the default `path` for file tools. ' +
-    'A share URL whose `server=` names a different hub than this server is connected to ' +
-    'is rejected rather than silently hitting the wrong hub.' +
+    'A share URL whose `server=` names a different hub connects to that hub for the call ' +
+    '(joined without credentials — tokens are never sent to a foreign origin).' +
     '\n2. list_files to see the project, then read_file. Keep the `hash` every result carries.' +
     '\n3. Edit with patch_file (preferred) or write_file, passing that hash back as ' +
     '`expected_hash` — the write is refused if a collaborator edited since your read, and ' +
