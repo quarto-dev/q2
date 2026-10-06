@@ -27,7 +27,10 @@ export interface HistoryEntry {
   /** sha256 (`sha256:<hex>`) of the file's text after this change — the MCP hash scheme. */
   hash: string;
   seq: number;
-  /** Change timestamp (ms epoch), as recorded by its author. */
+  /**
+   * Change timestamp in ms epoch (automerge records seconds; converted
+   * here so `new Date(entry.time)` does the right thing).
+   */
   time: number;
   /** Attribution key: author ID when known, else the bare actor ID. */
   author: string;
@@ -118,7 +121,8 @@ export function listFileHistory(
       head: d.hash,
       hash: hashText(text),
       seq: d.seq,
-      time: d.time,
+      // automerge records seconds since epoch; surface ms (JS convention).
+      time: d.time * 1000,
       author,
       name: identity?.name ?? null,
       color: identity?.color ?? null,

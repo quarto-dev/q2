@@ -900,6 +900,28 @@ investigate → restore loop (`get_file_history` ×5, `restore_file_version`
 flailing). The only `isError` remains the DESIGNED stale-hash refusal in
 `stale-write-recovery`.
 
+**E2E (real binary, recorded).** Drove `./target/debug/q2 mcp
+--server <test-hub>` over stdio JSON-RPC (`McpTestClient` with a custom
+command; one-off script, transcript reviewed and discarded after
+recording): `tools/list` → **19 tools** including `list_presence`,
+`get_file_history`, `restore_file_version`; `create_project` (2 files,
+`name`) → shareUrl with `server=` + `name=` filled; `list_presence`
+after hub-side broadcasts → `E2E Xavier` on `notes.qmd` (file channel)
+and `Index Ivy` with `file_path: null` (index channel), both
+`active: true`; project-wide `wait_for_change` with a collaborator edit
+landing mid-wait → `{changed: true, changes: [{path: "live.qmd", kind:
+"edited", hash: sha256:556e…}]}`; `get_file_history` list → 2 entries,
+newest first, heads/hashes/authors/`added_chars`/`removed_chars` (4/4
+for the beta→BETA edit); diff mode `from_hash`/`to_hash` → exact
+unified diff `@@ -1,3 +1,3 @@ alpha -beta +BETA gamma`;
+`restore_file_version` → `{restored_from, pre_restore_hash,
+pre_restore_heads, hash, synced: true}` with `read_file` confirming
+`alpha\nbeta\ngamma\n` restored, then a second restore with
+`pre_restore_heads[0]` undoing the restore itself. Output inspected for
+every call. One fix found by inspection: automerge change `time` is
+seconds since epoch — entries now surface it ×1000 as ms (the JS
+convention) so `new Date(entry.time)` works.
+
 ### Phase 4 — Quarto-specific intelligence
 
 - [ ] **Spike S-1 (gates CAP-11):** qmd parser in Node. Compare (a)
