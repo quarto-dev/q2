@@ -20,7 +20,12 @@ import type {
   McpServer,
   ToolAnnotations,
 } from '@modelcontextprotocol/server';
-import { fileUnavailableMessage, type SyncClient } from '@quarto/quarto-sync-client';
+import {
+  fileUnavailableMessage,
+  inferMimeType,
+  type FilePayload,
+  type SyncClient,
+} from '@quarto/quarto-sync-client';
 import { ConnectionManager, hashPayload } from './connection-manager.js';
 import {
   AUTH_TOOL_DEFINITIONS,
@@ -69,6 +74,24 @@ const PROJECT_PARAM_DESC =
 
 const projectParam = z.string().describe(PROJECT_PARAM_DESC);
 const pathParam = z.string().describe('The file path within the project');
+
+/** Shared `encoding` parameter for the write verbs (CAP-5). */
+const encodingParam = z
+  .enum(['utf8', 'base64'])
+  .optional()
+  .describe(
+    '"utf8" (default) writes text. "base64" writes binary: `content` is the file bytes ' +
+      'base64-encoded — use it for images, PDFs, and other non-text files.',
+  );
+
+/** Shared `mime_type` parameter for the binary write arm (CAP-5). */
+const mimeTypeParam = z
+  .string()
+  .optional()
+  .describe(
+    'MIME type for `encoding: "base64"` writes. Defaults to the type inferred from the ' +
+      'path extension (e.g. .png → image/png).',
+  );
 
 const ANNOT_READ: ToolAnnotations = {
   readOnlyHint: true,
@@ -360,9 +383,78 @@ function staleHashError(
   );
 }
 
+/**
+ * The binary arm of the compare-and-swap refusal: same contract as
+ * {@link staleHashError}, but the current content cannot ride the error
+ * as text — the caller re-reads (bytes come back as an image/blob
+ * block) and merges against the included hash.
+ */
+function staleHashErrorBinary(
+  tool: 'write_file',
+  path: string,
+  current: FilePayload & { type: 'binary' },
+): CallToolResult {
+  return error(
+    JSON.stringify(
+      {
+        error: 'stale_expected_hash',
+        message:
+          `${tool} refused: the file changed since you read it (expected_hash does not match ` +
+          'the current content). Re-read with read_file for the current bytes and hash, merge ' +
+          'your changes, and retry with the new expected_hash.',
+        path,
+        hash: hashPayload(current),
+        type: 'binary',
+        mimeType: current.mimeType,
+        size: current.data.byteLength,
+      },
+      null,
+      2,
+    ),
+  );
+}
+
+/** Strict base64 decode (Node's Buffer.from is lenient — it silently drops invalid characters). */
+function decodeBase64(content: string): Uint8Array | CallToolResult {
+  const compact = content.replace(/\s+/g, '');
+  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(compact)) {
+    return error(
+      'Error: parameter `content` is not valid base64. Pass the file bytes base64-encoded, ' +
+        'or drop `encoding: "base64"` to write UTF-8 text.',
+    );
+  }
+  return new Uint8Array(Buffer.from(compact, 'base64'));
+}
+
+/** The structured metadata a binary read result carries (CAP-4). */
+function binaryMeta(path: string, data: Uint8Array, mimeType: string): Record<string, unknown> {
+  return {
+    path,
+    hash: hashPayload({ type: 'binary', data, mimeType }),
+    type: 'binary',
+    mimeType,
+    size: data.byteLength,
+  };
+}
+
+/**
+ * The write-side twin of {@link binaryMeta}: no `type` — write results
+ * distinguish by what they carry (`mimeType`/`size` here, `created`
+ * below), `type` is read-side disambiguation (CAP-5).
+ */
+function binaryWriteMeta(
+  path: string,
+  data: Uint8Array,
+  mimeType: string,
+): Record<string, unknown> {
+  const { type: _type, ...rest } = binaryMeta(path, data, mimeType);
+  return rest;
+}
+
 async function handleReadFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
   const project = args.project as string;
   const path = args.path as string;
+  const metadataOnly = args.metadata_only === true;
   const state = await manager.connect(project, { server: routedServer(args) });
   const payload = state.files.get(path);
 
@@ -374,11 +466,34 @@ async function handleReadFile(args: ToolArgs, manager: ConnectionManager): Promi
     return fileNotFoundError(path, state);
   }
   if (payload.type === 'binary') {
-    // HY-1 interim: binary reads land in read_file in Phase 2 (CAP-4);
-    // until then say so — never name a tool that does not exist.
-    return error(`Error: ${path} is a binary file; read_file currently supports text files only.`);
+    // CAP-4: binary rides read_file (no sibling tool, ERG-5 rule (a)).
+    // Image MIME types come back as an `image` block a multimodal host
+    // can render; anything else as an embedded blob resource (base64).
+    // The URI is this server's own ephemeral reference for the blob —
+    // Phase 5's Q-2 decides the public hub:// resources contract.
+    const meta = binaryMeta(path, payload.data, payload.mimeType);
+    if (metadataOnly) {
+      return structured(meta);
+    }
+    const data = Buffer.from(payload.data).toString('base64');
+    const blob: CallToolResult['content'][number] = payload.mimeType.startsWith('image/')
+      ? { type: 'image', data, mimeType: payload.mimeType }
+      : {
+          type: 'resource',
+          resource: { uri: `hub://${project}/${path}`, mimeType: payload.mimeType, blob: data },
+        };
+    return {
+      content: [blob, { type: 'text', text: JSON.stringify(meta, null, 2) }],
+      structuredContent: meta,
+    };
   }
-  return structured({ path, hash: hashPayload(payload), content: payload.text });
+  if (metadataOnly) {
+    return error(
+      `Error: metadata_only applies to binary files only; ${path} is a text file — ` +
+        'drop metadata_only to read its content.',
+    );
+  }
+  return structured({ path, hash: hashPayload(payload), type: 'text', content: payload.text });
 }
 
 async function handleWaitForChange(
@@ -433,6 +548,10 @@ async function handleWriteFile(args: ToolArgs, manager: ConnectionManager): Prom
   const state = await manager.connect(project, { server: routedServer(args) });
   const existing = state.files.get(path);
 
+  if (args.encoding === 'base64') {
+    return handleWriteFileBinary(args, manager, state, project, path, content, expectedHash, existing);
+  }
+
   if (!existing) {
     // A dangling entry is not writable: silently re-creating the
     // document would repoint the index away from whatever the original
@@ -457,7 +576,10 @@ async function handleWriteFile(args: ToolArgs, manager: ConnectionManager): Prom
     });
   }
   if (existing.type === 'binary') {
-    return error(`Error: ${path} is a binary file. Cannot write text content to it.`);
+    return error(
+      `Error: ${path} is a binary file. Cannot write text content to it — ` +
+        'pass `encoding: "base64"` with base64-encoded bytes to replace it.',
+    );
   }
   if (expectedHash !== undefined && hashPayload(existing) !== expectedHash) {
     return staleHashError('write_file', path, existing.text);
@@ -467,6 +589,65 @@ async function handleWriteFile(args: ToolArgs, manager: ConnectionManager): Prom
   return structured({
     path,
     hash: hashPayload({ type: 'text', text: content }),
+    ...(await syncField(args, manager, project, [path])),
+  });
+}
+
+/**
+ * The `encoding: "base64"` arm of write_file (CAP-5): create or replace
+ * a binary file. Same contract as the text arm — dangling entries are
+ * refused, `expected_hash` compare-and-swaps, the result carries the
+ * new `hash` and `synced` — plus `mimeType`/`size`.
+ */
+async function handleWriteFileBinary(
+  args: ToolArgs,
+  manager: ConnectionManager,
+  state: ProjectState,
+  project: string,
+  path: string,
+  content: string,
+  expectedHash: string | undefined,
+  existing: FilePayload | undefined,
+): Promise<CallToolResult> {
+  const decoded = decodeBase64(content);
+  if (!ArrayBuffer.isView(decoded)) return decoded; // the validation error result
+  const mimeType =
+    typeof args.mime_type === 'string' && args.mime_type !== ''
+      ? args.mime_type
+      : inferMimeType(path);
+
+  if (!existing) {
+    const ghost = findUnavailable(state.client, path);
+    if (ghost) {
+      return unavailableFileError(path, ghost.docId);
+    }
+    if (expectedHash !== undefined) {
+      return error(
+        `Error: write_file refused: expected_hash was given but ${path} does not exist in ` +
+          'the project (it may have been deleted since you read it). Call list_files to see ' +
+          'the current files; drop expected_hash to create a new file.',
+      );
+    }
+    const created = await state.client.createBinaryFile(path, decoded, mimeType);
+    return structured({
+      ...binaryWriteMeta(created.path, decoded, mimeType),
+      created: true,
+      ...(await syncField(args, manager, project, [created.path])),
+    });
+  }
+  if (existing.type === 'text') {
+    return error(
+      `Error: ${path} is a text file. Cannot write binary (base64) content to it — ` +
+        'drop `encoding: "base64"` to write text, or delete_file first and re-create it as binary.',
+    );
+  }
+  if (expectedHash !== undefined && hashPayload(existing) !== expectedHash) {
+    return staleHashErrorBinary('write_file', path, existing);
+  }
+
+  await state.client.updateBinaryFileContent(path, decoded, mimeType);
+  return structured({
+    ...binaryWriteMeta(path, decoded, mimeType),
     ...(await syncField(args, manager, project, [path])),
   });
 }
@@ -534,6 +715,21 @@ async function handleCreateFile(args: ToolArgs, manager: ConnectionManager): Pro
   const ghost = findUnavailable(state.client, path);
   if (ghost) {
     return unavailableFileError(path, ghost.docId);
+  }
+
+  if (args.encoding === 'base64') {
+    const decoded = decodeBase64(content);
+    if (!ArrayBuffer.isView(decoded)) return decoded;
+    const mimeType =
+      typeof args.mime_type === 'string' && args.mime_type !== ''
+        ? args.mime_type
+        : inferMimeType(path);
+    const created = await state.client.createBinaryFile(path, decoded, mimeType);
+    return structured({
+      ...binaryWriteMeta(created.path, decoded, mimeType),
+      created: true,
+      ...(await syncField(args, manager, project, [created.path])),
+    });
   }
 
   await state.client.createFile(path, content);
@@ -661,7 +857,10 @@ const outListFiles = z.object({ files: z.array(outListedFile) });
 const outReadFile = z.object({
   path: z.string(),
   hash: z.string(),
-  content: z.string(),
+  type: z.enum(['text', 'binary']),
+  content: z.string().optional(),
+  mimeType: z.string().optional(),
+  size: z.number().optional(),
 });
 
 const outWaitForChange = z.object({
@@ -680,6 +879,8 @@ const outWriteFile = z.object({
   hash: z.string(),
   created: z.literal(true).optional(),
   synced: z.boolean().optional(),
+  mimeType: z.string().optional(),
+  size: z.number().optional(),
 });
 
 const outPatchFile = z.object({
@@ -693,6 +894,8 @@ const outCreateFile = z.object({
   hash: z.string(),
   created: z.literal(true),
   synced: z.boolean().optional(),
+  mimeType: z.string().optional(),
+  size: z.number().optional(),
 });
 
 const outDeleteFile = z.object({
@@ -777,10 +980,23 @@ export function registerTools(
     {
       title: 'Read a file',
       description:
-        'Read the text content of a file in a Quarto Hub project. Returns `{ path, hash, content }` — ' +
+        'Read a file in a Quarto Hub project. Text files return `{ path, hash, type: "text", content }` — ' +
         'pass `hash` back as `expected_hash` on write_file/patch_file so an edit a collaborator made ' +
-        'since this read is never silently overwritten.',
-      inputSchema: z.object({ project: projectParam, path: pathParam.optional() }),
+        'since this read is never silently overwritten. Binary files return the bytes as an image ' +
+        'block (image MIME types) or an embedded blob resource (anything else), with structured ' +
+        '`{ path, hash, type: "binary", mimeType, size }`; pass `metadata_only: true` for just the ' +
+        'metadata without the bytes.',
+      inputSchema: z.object({
+        project: projectParam,
+        path: pathParam.optional(),
+        metadata_only: z
+          .boolean()
+          .optional()
+          .describe(
+            'Binary files only: return just `{ path, hash, type, mimeType, size }` without ' +
+              'the bytes. Errors on text files.',
+          ),
+      }),
       outputSchema: outReadFile,
       annotations: ANNOT_READ,
     },
@@ -829,12 +1045,18 @@ export function registerTools(
     {
       title: 'Write a file',
       description:
-        'Replace the entire content of a text file in a Quarto Hub project. Creates the file if it ' +
-        'does not exist. Returns `{ path, hash }`. Prefer patch_file for small changes to large files.',
+        'Replace the entire content of a file in a Quarto Hub project. Creates the file if it ' +
+        'does not exist. Returns `{ path, hash }` (plus `mimeType`/`size` for binary). ' +
+        'Prefer patch_file for small changes to large text files. ' +
+        'With `encoding: "base64"`, `content` is base64-encoded bytes and the file is binary.',
       inputSchema: z.object({
         project: projectParam,
         path: pathParam.optional(),
-        content: z.string().describe('The new file content'),
+        content: z
+          .string()
+          .describe('The new file content (base64-encoded bytes when `encoding: "base64"`)'),
+        encoding: encodingParam,
+        mime_type: mimeTypeParam,
         expected_hash: z
           .string()
           .optional()
@@ -883,11 +1105,18 @@ export function registerTools(
     'create_file',
     {
       title: 'Create a file',
-      description: 'Create a new text file in a Quarto Hub project.',
+      description:
+        'Create a new file in a Quarto Hub project. Text by default; with ' +
+        '`encoding: "base64"`, `content` is base64-encoded bytes and the file is binary.',
       inputSchema: z.object({
         project: projectParam,
         path: pathParam.optional(),
-        content: z.string().describe('Initial file content (defaults to empty)').default(''),
+        content: z
+          .string()
+          .describe('Initial file content (defaults to empty; base64 bytes when `encoding: "base64"`)')
+          .default(''),
+        encoding: encodingParam,
+        mime_type: mimeTypeParam,
         wait_for_sync: waitForSyncParam,
       }),
       outputSchema: outCreateFile,
