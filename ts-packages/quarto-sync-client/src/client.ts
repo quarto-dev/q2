@@ -2489,8 +2489,7 @@ export async function readProjectSetDoc(
       (doc as { projects?: unknown }).projects === null
     ) {
       throw new Error(
-        `document ${options.docId} is not a project-set document (no version/projects map) — ` +
-          'if this id names a project, open it with connect() instead',
+        `document ${options.docId} is not a project-set document (no version/projects map)`,
       );
     }
     return doc;

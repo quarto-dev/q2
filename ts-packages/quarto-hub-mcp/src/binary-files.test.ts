@@ -61,7 +61,11 @@ describe('binary write (CAP-5)', () => {
         encoding: 'base64',
       });
       expect(result.isError).not.toBe(true);
-      const meta = structuredOf(result) as unknown as BinaryMeta & { created?: boolean };
+      const meta = structuredOf(result) as unknown as Partial<BinaryMeta> & {
+        hash: string;
+        created?: boolean;
+        synced?: boolean;
+      };
       expect(meta.path).toBe('assets/logo.png');
       expect(meta.type).toBeUndefined(); // write results carry hash, not type
       expect(meta.hash).toBe(sha256(PNG));
