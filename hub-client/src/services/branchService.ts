@@ -21,7 +21,7 @@
  */
 
 import { next as A } from '@automerge/automerge';
-import { getFileHandle, type EditorContentChange } from '@quarto/preview-runtime';
+import { getFileHandle, getAuthorId, type EditorContentChange } from '@quarto/preview-runtime';
 
 export interface BranchMeta {
   id: string;
@@ -47,6 +47,24 @@ const defaultHandleGetter: HandleGetter = (path) =>
   getFileHandle(path) as unknown as FileHandleLike | null | undefined;
 
 let handleGetter: HandleGetter = defaultHandleGetter;
+
+/**
+ * Source of the current user's author ID, applied to branch docs at
+ * clone/load time so branch edits merge back into main attributed (once
+ * actors are random per document instance, an authorless branch would merge
+ * back as an unrelated random actor). Null/absent means authorless (D8).
+ */
+type AuthorGetter = () => string | null | undefined;
+
+const defaultAuthorGetter: AuthorGetter = () => getAuthorId();
+
+let authorGetter: AuthorGetter = defaultAuthorGetter;
+
+/** Clone options carrying the current author; none when authorless (D8). */
+function authorCloneOpts(): { author: string } | undefined {
+  const author = authorGetter();
+  return author ? { author } : undefined;
+}
 
 const INDEX_KEY_PREFIX = 'qh-doc-branches:';
 const DOC_KEY_PREFIX = 'qh-branch-doc:';
@@ -130,7 +148,10 @@ function loadDoc(docId: string, branchId: string): A.Doc<FileDocShape> | null {
   const raw = localStorage.getItem(docKey(docId, branchId));
   if (!raw) return null;
   try {
-    const doc = A.load<FileDocShape>(base64ToBytes(raw));
+    // clone(A.load(bytes), { author }) — NOT A.load(bytes, { author }):
+    // the plain load path silently drops the author option (author-ID
+    // transition, Phase 0 finding 5).
+    const doc = A.clone(A.load<FileDocShape>(base64ToBytes(raw)), authorCloneOpts());
     branchDocs.set(memKey(docId, branchId), doc);
     return doc;
   } catch (err) {
@@ -205,7 +226,8 @@ export function createBranch(path: string, name?: string): BranchMeta | null {
 
   // A.clone shares full history with the source but gets a fresh actor id,
   // which is exactly what makes the eventual A.merge back into main clean.
-  const branchDoc = A.clone(sourceDoc);
+  // The current author rides along so branch edits merge back attributed.
+  const branchDoc = A.clone(sourceDoc, authorCloneOpts());
   branchDocs.set(memKey(docId, meta.id), branchDoc);
   writeIndex(docId, [...branches, meta]);
   persistDoc(docId, meta.id);
@@ -291,6 +313,7 @@ export function _resetForTesting(opts?: { keepStorage?: boolean }): void {
   activeByPath = new Map();
   listeners = new Set();
   handleGetter = defaultHandleGetter;
+  authorGetter = defaultAuthorGetter;
   if (!opts?.keepStorage && typeof localStorage !== 'undefined') {
     const doomed: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
@@ -306,4 +329,9 @@ export function _resetForTesting(opts?: { keepStorage?: boolean }): void {
 /** @internal For testing only. Pass null to restore the default getter. */
 export function _setHandleGetterForTesting(getter: HandleGetter | null): void {
   handleGetter = getter ?? defaultHandleGetter;
+}
+
+/** @internal For testing only. Pass null to restore the default getter. */
+export function _setAuthorGetterForTesting(getter: AuthorGetter | null): void {
+  authorGetter = getter ?? defaultAuthorGetter;
 }

@@ -15,6 +15,16 @@ import {
 } from './migrations';
 
 /**
+ * Progress logging for migrations. Silent under Vitest: every test that
+ * opens a fresh fake-indexeddb replays the whole migration chain, and the
+ * output is noise that can also outlive a test file (see settleDb in db.ts).
+ */
+export function logMigration(message: string): void {
+  if (import.meta.env.MODE === 'test') return;
+  console.log(message);
+}
+
+/**
  * Error thrown when a migration fails.
  */
 export class MigrationFailedError extends Error {
@@ -167,13 +177,13 @@ export async function runMigrations(db: HubDatabase): Promise<void> {
     return;
   }
 
-  console.log(
+  logMigration(
     `Running ${pendingMigrations.length} migration(s) from v${meta.version} to v${CURRENT_SCHEMA_VERSION}`
   );
 
   // Run each migration in order
   for (const migration of pendingMigrations) {
-    console.log(`Running migration v${migration.version}: ${migration.description}`);
+    logMigration(`Running migration v${migration.version}: ${migration.description}`);
     const startTime = performance.now();
 
     try {
@@ -185,7 +195,7 @@ export async function runMigrations(db: HubDatabase): Promise<void> {
       const durationMs = Math.round(performance.now() - startTime);
       await recordMigrationSuccess(db, migration.version, durationMs);
 
-      console.log(`Migration v${migration.version} completed in ${durationMs}ms`);
+      logMigration(`Migration v${migration.version} completed in ${durationMs}ms`);
     } catch (error) {
       console.error(`Migration v${migration.version} failed:`, error);
       await recordMigrationError(db, migration.version, error);
@@ -193,7 +203,7 @@ export async function runMigrations(db: HubDatabase): Promise<void> {
     }
   }
 
-  console.log(`All migrations completed. Schema is now at v${CURRENT_SCHEMA_VERSION}`);
+  logMigration(`All migrations completed. Schema is now at v${CURRENT_SCHEMA_VERSION}`);
 }
 
 /**

@@ -2625,9 +2625,13 @@ fn test_citation_with_leading_space() {
 }
 
 /// Test citation WITHOUT leading space (should NOT inject Space node)
+///
+/// The citation follows punctuation, not a letter: an `@` right after a
+/// letter or digit continues the word (`Hi@cite` is one Str, as in Pandoc;
+/// bd-bare-at-literal-w3ytmu8e), so it is no longer a citation at all.
 #[test]
 fn test_citation_without_leading_space() {
-    let input = "Hi@cite";
+    let input = "Hi(@cite)";
     let result = parse_qmd_to_json(input);
 
     // Should NOT have a Space node
@@ -2642,8 +2646,8 @@ fn test_citation_without_leading_space() {
         result
     );
     assert!(
-        result.contains("\"Hi\""),
-        "Should contain 'Hi' text: {}",
+        result.contains("\"Hi(\""),
+        "Should contain 'Hi(' text: {}",
         result
     );
     assert!(
@@ -2705,10 +2709,12 @@ fn test_citation_paragraph_start() {
 /// Test multiple citations with different spacing patterns
 #[test]
 fn test_citation_multiple_spacing_patterns() {
-    let input = "A@cite1 B @cite2C@cite3 D";
+    // Citations glued to punctuation rather than to a letter: `A@cite1` is
+    // one Str since bd-bare-at-literal-w3ytmu8e (Pandoc agrees).
+    let input = "A(@cite1) B @cite2(@cite3) D";
     let result = parse_qmd_to_json(input);
 
-    // Expected pattern: A, @cite1, Space, B, Space, @cite2, C, @cite3, Space, D
+    // Expected pattern: A(, @cite1, ), Space, B, Space, @cite2, (, @cite3, ), Space, D
     // Space count: 1 (after cite1) + 1 (injected before cite2) + 1 (after cite3) = 3
     let space_count = result.matches("\"t\":\"Space\"").count();
     assert_eq!(
@@ -4412,7 +4418,7 @@ fn test_pipe_table_no_caption_regression() {
     );
 }
 
-/// Test standalone caption without table (edge case - should be removed with warning)
+/// Test standalone caption without table: the text remains literal with a warning.
 #[test]
 fn test_standalone_caption_no_table() {
     let input = "Some paragraph.\n\
@@ -4420,8 +4426,8 @@ fn test_standalone_caption_no_table() {
                  : Standalone caption";
     let result = parse_qmd_to_pandoc_ast(input);
 
-    // Standalone captions are intentionally removed by postprocess.rs with a warning
-    // The output should only contain the paragraph
+    // A caption after a paragraph is kept as literal text and diagnosed as a
+    // likely unsupported definition-list line.
     assert!(
         result.contains("Para"),
         "Should contain paragraph: {}",
@@ -4432,11 +4438,66 @@ fn test_standalone_caption_no_table() {
         "Should contain paragraph text: {}",
         result
     );
-    // Should NOT contain the standalone caption (it's removed)
     assert!(
-        !result.contains("Standalone"),
-        "Should not contain standalone caption text (removed by postprocess): {}",
+        result.contains("Standalone"),
+        "Should retain the standalone caption as literal text: {}",
         result
     );
-    // Note: A warning "Caption found without a preceding table" is emitted (not tested here)
+}
+
+// ============================================================================
+// Code spans whose content contains a backtick run at least as long as the
+// delimiter (bd-code-span-longer-backtick-run-nycn85a8). CommonMark: the
+// closer is a run of exactly the opener's length; any other run is content.
+// ============================================================================
+
+/// Every (delimiter, inner run) class seen in the claude-notes corpus scan,
+/// plus the CommonMark spec examples that exercise the same rule.
+#[test]
+fn test_pandoc_code_span_inner_run_longer_than_delimiter() {
+    let cases: &[(&str, &str)] = &[
+        ("a `x``y` b", "x``y"),
+        ("a ` ```mermaid ` b", "```mermaid"),
+        ("a ` ````markdown ` b", "````markdown"),
+        ("a `` ```{r} `` b", "```{r}"),
+        ("a `` ```` `` b", "````"),
+        ("a ``` x````y ``` b", "x````y"),
+        ("a ``` x`y````z`` ``` b", "x`y````z``"),
+        // Shorter inner runs keep working.
+        ("a `` `x` `` b", "`x`"),
+        // CommonMark spec examples.
+        ("` `` `", "``"),
+        ("` foo `` bar `", "foo `` bar"),
+        ("``foo`bar``", "foo`bar"),
+    ];
+    for (input, expected_code) in cases {
+        let result = parse_qmd_to_pandoc_ast(input);
+        assert!(
+            result.contains("Code"),
+            "{input:?}: should contain Code: {result}"
+        );
+        assert!(
+            result.contains(&format!("\"{expected_code}\"")),
+            "{input:?}: should contain code text {expected_code:?}: {result}"
+        );
+    }
+}
+
+/// A longer inner run must not close the span early and leak the rest of
+/// the paragraph; the text after the span stays plain and a later span
+/// still parses.
+#[test]
+fn test_pandoc_code_span_inner_run_does_not_leak() {
+    let result = parse_qmd_to_pandoc_ast("a `x``y` and `z`");
+    assert!(result.contains("\"x``y\""), "{result}");
+    assert!(result.contains("Str \"and\""), "{result}");
+    assert!(result.contains("\"z\""), "{result}");
+}
+
+/// Multi-line span with the longer run on the continuation line.
+#[test]
+fn test_pandoc_code_span_inner_run_across_soft_break() {
+    let result = parse_qmd_to_pandoc_ast("a `x\n``y` b");
+    assert!(result.contains("Code"), "{result}");
+    assert!(result.contains("\"x ``y\""), "{result}");
 }

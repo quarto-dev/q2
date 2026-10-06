@@ -1,0 +1,7 @@
+Code containing a run of backticks, forcing a longer fence.
+
+````{r}
+x <- "```"
+print(x)
+````
+

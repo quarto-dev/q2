@@ -2,20 +2,30 @@
  * Document Top Bar
  *
  * Document-scoped chrome heading the document column. Left: sidebar
- * toggle + current file path. Right: fullscreen-preview action.
+ * toggle + current file path. Right: printable-version and
+ * fullscreen-preview actions.
  * (Sync status lives in the SyncStatusBadge — FILES section for the
  * project, document bottom bar for the open file; the
  * editor/preview split is resized by dragging the pane divider.)
  */
 
-import { PreviewIcon, PanelLeftIcon } from './icons';
+import { useCallback, useState } from 'react';
+import { PreviewIcon, PanelLeftIcon, PrintIcon } from './icons';
 import ViewToggleControl from './ViewToggleControl';
 import Tooltip from './Tooltip';
+import Toast from './Toast';
+import { openPrintableDocument } from '../services/printableDocument';
 import { header } from '../strings';
 import './TopBars.css';
 
 interface DocumentTopBarProps {
   currentFilePath: string | null;
+  /**
+   * Preview format of the current file (e.g. `q2-preview`, `q2-slides`,
+   * `revealjs`, or `null`). Drives the "Open printable version" button:
+   * shown only for formats that produce a printable standalone document.
+   */
+  currentFormat?: string | null;
   onToggleFullscreenPreview?: () => void;
   isFullscreenPreview?: boolean;
   /**
@@ -32,10 +42,13 @@ interface DocumentTopBarProps {
   splitFraction?: number;
   /** Jump the divider to a preset fraction (animated). */
   onSetSplit?: (fraction: number) => void;
+  /** Gray out the split presets (current file has no preview pane). */
+  splitDisabled?: boolean;
 }
 
 export default function DocumentTopBar({
   currentFilePath,
+  currentFormat = null,
   onToggleFullscreenPreview,
   isFullscreenPreview = false,
   sidebarOpen,
@@ -43,7 +56,32 @@ export default function DocumentTopBar({
   sidebarToggleRef,
   splitFraction,
   onSetSplit,
+  splitDisabled,
 }: DocumentTopBarProps) {
+  // "Open printable version" (issue #315). The React preview formats
+  // can't be printed in place (sandboxed iframe → clipped single page).
+  // Instead we render a standalone, self-contained document and open it
+  // in a new tab. Shown only for formats that yield a printable document.
+  const [isPreparingPrintable, setIsPreparingPrintable] = useState(false);
+  const [printableError, setPrintableError] = useState<string | null>(null);
+  const canOpenPrintable =
+    !!currentFilePath &&
+    (currentFormat === 'q2-preview' ||
+      currentFormat === 'q2-slides' ||
+      currentFormat === 'revealjs');
+  const handleOpenPrintable = useCallback(() => {
+    if (!currentFilePath) return;
+    setPrintableError(null);
+    setIsPreparingPrintable(true);
+    openPrintableDocument(currentFilePath, currentFormat)
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error('[printable] failed to open printable version:', err);
+        setPrintableError(message);
+      })
+      .finally(() => setIsPreparingPrintable(false));
+  }, [currentFilePath, currentFormat]);
+
   return (
     <header className="top-bar document-top-bar">
       {onToggleSidebar && (
@@ -72,7 +110,28 @@ export default function DocumentTopBar({
           </span>
         </div>
       </div>
-      <ViewToggleControl fraction={splitFraction} onSelect={onSetSplit} />
+      <ViewToggleControl fraction={splitFraction} onSelect={onSetSplit} disabled={splitDisabled} />
+      <div className="bar-actions">
+      {canOpenPrintable && !isFullscreenPreview && (
+        <div className="print-btn-box">
+          <Tooltip content={header.printableTooltip}>
+            <button
+              className="qh-icon-btn boxed print-btn"
+              onClick={handleOpenPrintable}
+              disabled={isPreparingPrintable}
+              aria-label={header.printableLabel}
+            >
+              {isPreparingPrintable ? '…' : <PrintIcon />}
+            </button>
+          </Tooltip>
+        </div>
+      )}
+      <Toast
+        message={printableError ?? ''}
+        visible={printableError !== null}
+        onHide={() => setPrintableError(null)}
+        duration={6000}
+      />
       {onToggleFullscreenPreview && !isFullscreenPreview && (
         <div className="fullscreen-btn-box">
           <Tooltip content={header.fullscreenPreview}>
@@ -86,6 +145,7 @@ export default function DocumentTopBar({
           </Tooltip>
         </div>
       )}
+      </div>
     </header>
   );
 }

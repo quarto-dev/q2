@@ -8,6 +8,7 @@ vi.mock('@automerge/automerge', () => ({
   clone: vi.fn(),
   view: vi.fn(),
   free: vi.fn(),
+  getAuthorForActor: vi.fn(),
 }));
 
 vi.mock('@automerge/automerge-repo', async (importOriginal) => {
@@ -18,7 +19,7 @@ vi.mock('@automerge/automerge-repo', async (importOriginal) => {
   };
 });
 
-import { clone, view, free } from '@automerge/automerge';
+import { clone, view, free, getAuthorForActor } from '@automerge/automerge';
 import { decodeHeads } from '@automerge/automerge-repo';
 import { createReplaySession, type ReplaySession } from './replay.js';
 
@@ -26,15 +27,22 @@ const mockClone = vi.mocked(clone);
 const mockView = vi.mocked(view);
 const mockFree = vi.mocked(free);
 const mockDecodeHeads = vi.mocked(decodeHeads);
+const mockGetAuthorForActor = vi.mocked(getAuthorForActor);
+
+/** actor → author index entries the mocked `getAuthorForActor` serves. */
+let authorByActor: Record<string, string | undefined> = {};
 
 /**
  * Create a mock DocHandle with configurable history.
  * texts[i] is the content at history index i.
+ * authors[i], when the array is provided, is the author footer on change i
+ * (undefined = no footer, as on seq>1 and pre-transition changes).
  */
 function createMockHandle(
   texts: string[],
   timestamps?: number[],
   actors?: string[],
+  authors?: (string | undefined)[],
 ) {
   const historyHeads = texts.map((_, i) => [`head-${i}`]);
 
@@ -46,7 +54,7 @@ function createMockHandle(
       if (index < 0) return undefined;
       const ts = timestamps?.[index] ?? 1000000 + index * 1000;
       const actor = actors?.[index] ?? `actor${index}abcdef0123456789`;
-      return { time: ts, actor };
+      return { time: ts, actor, author: authors?.[index] };
     }),
     doc: vi.fn(() => ({ text: texts[texts.length - 1] })),
   };
@@ -71,6 +79,10 @@ function createMockHandle(
 describe('createReplaySession', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    authorByActor = {};
+    mockGetAuthorForActor.mockImplementation(
+      (_doc: unknown, actor: string) => authorByActor[actor],
+    );
   });
 
   it('returns null when history() returns undefined', () => {
@@ -108,11 +120,20 @@ describe('ReplaySession', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    authorByActor = {};
+    mockGetAuthorForActor.mockImplementation(
+      (_doc: unknown, actor: string) => authorByActor[actor],
+    );
     updateContent = vi.fn();
   });
 
-  function enterSession(texts: string[], timestamps?: number[], actors?: string[]) {
-    const handle = createMockHandle(texts, timestamps, actors);
+  function enterSession(
+    texts: string[],
+    timestamps?: number[],
+    actors?: string[],
+    authors?: (string | undefined)[],
+  ) {
+    const handle = createMockHandle(texts, timestamps, actors, authors);
     const s = createReplaySession(handle as never, updateContent as (content: string) => void);
     expect(s).not.toBeNull();
     session = s!;
@@ -172,6 +193,61 @@ describe('ReplaySession', () => {
       const meta = session.getMetadataAt(-1);
       expect(meta.timestamp).toBeNull();
       expect(meta.actor).toBeNull();
+    });
+
+    // ── Author-first resolution (author-ID transition) ─────────────
+    //
+    // getMetadataAt returns the *attribution key* for the step:
+    //   change.author (seq-1 footer) ?? getAuthorForActor(actor) (seq>1)
+    //   ?? change.actor (pre-transition history, no author anywhere).
+
+    it('prefers the change author over the raw actor (seq-1 footer)', () => {
+      enterSession(
+        ['a', 'b'],
+        undefined,
+        ['random-actor-1', 'random-actor-1'],
+        ['authorAlice', undefined],
+      );
+
+      expect(session.getMetadataAt(0).actor).toBe('authorAlice');
+    });
+
+    it('resolves a footerless seq>1 change through the actor→author index', () => {
+      // The footer lives on the actor's seq-1 change only (Phase 0
+      // finding 1); later changes resolve via getAuthorForActor.
+      authorByActor = { 'random-actor-1': 'authorAlice' };
+      enterSession(
+        ['a', 'b'],
+        undefined,
+        ['random-actor-1', 'random-actor-1'],
+        ['authorAlice', undefined],
+      );
+
+      expect(session.getMetadataAt(1).actor).toBe('authorAlice');
+    });
+
+    it('falls back to the bare actor for pre-transition changes (author: undefined)', () => {
+      enterSession(['a', 'b'], undefined, ['stable-actor-1', 'stable-actor-1']);
+
+      expect(session.getMetadataAt(1).actor).toBe('stable-actor-1');
+    });
+
+    it('keeps one continuous key across the transition boundary (D5)', () => {
+      // Legacy steps (bare stable actor) and post-transition steps (author)
+      // by the same user resolve to the SAME attribution key: the author ID
+      // equals the legacy stable actor ID by construction.
+      const KEY = 'a'.repeat(64);
+      authorByActor = { 'random-actor-9': KEY };
+      enterSession(
+        ['a', 'b', 'c', 'd'],
+        undefined,
+        [KEY, KEY, 'random-actor-9', 'random-actor-9'],
+        [undefined, undefined, KEY, undefined],
+      );
+
+      for (let i = 0; i < 4; i++) {
+        expect(session.getMetadataAt(i).actor).toBe(KEY);
+      }
     });
   });
 

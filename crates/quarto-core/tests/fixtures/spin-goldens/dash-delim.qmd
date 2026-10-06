@@ -1,0 +1,6 @@
+Chunk options via `# ----`.
+
+```{r label}
+mean(1:10)
+```
+

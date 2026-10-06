@@ -1,0 +1,28 @@
+{
+  "code": "Q-2-56",
+  "title": "Key-value Pair Before Identifier in Attribute",
+  "message": "This identifier appears after a key-value pair.",
+  "suggestion": "attribute-order",
+  "notes": [
+    {
+      "message": "This key-value pair cannot appear before the identifier.",
+      "noteType": "simple",
+      "label": "key-value"
+    }
+  ],
+  "cases": [
+    {
+      "name": "simple",
+      "description": "Simple case",
+      "content": "[foo]{key=value #id}\n",
+      "captures": [
+        {
+          "label": "key-value",
+          "row": 0,
+          "column": 6,
+          "size": 9
+        }
+      ]
+    }
+  ]
+}

@@ -348,7 +348,12 @@ contributes:
 }
 
 #[test]
-fn base_type_book_is_a_q_16_7_error() {
+fn base_type_book_resolves_successfully() {
+    // Book-projects P7: `book` is now an implemented base kind, so a
+    // custom project type built on it resolves like any other built-in
+    // base (previously this was a Q-16-7 error — see
+    // `base_type_manuscript_is_still_a_q_16_7_error` for the base kind
+    // that is still unimplemented and still rejected).
     let ext = r#"
 contributes:
   project:
@@ -357,13 +362,47 @@ contributes:
 "#;
     let (result, _tmp) =
         discover_with_extensions("project:\n  type: fancybook\n", &[("acme/fancybook", ext)]);
+    let project = result.expect("a book-based custom project type must resolve");
+
+    assert_eq!(project.project_kind(), ProjectKind::Book);
+    let custom = project
+        .config
+        .custom_project_type
+        .as_ref()
+        .expect("custom_project_type must be recorded");
+    assert_eq!(custom.name, "fancybook");
+    assert_eq!(custom.extension_id, "acme/fancybook");
+
+    // The merged metadata carries the *base* type so every downstream
+    // consumer sees an ordinary book project.
+    assert_eq!(
+        meta_str(&project, &["project", "type"]).as_deref(),
+        Some("book")
+    );
+}
+
+#[test]
+fn base_type_manuscript_is_still_a_q_16_7_error() {
+    // Manuscript stays unimplemented (out of scope for the
+    // book-projects epic) and must still reject a custom type built
+    // on it, unlike `book` above.
+    let ext = r#"
+contributes:
+  project:
+    project:
+      type: manuscript
+"#;
+    let (result, _tmp) = discover_with_extensions(
+        "project:\n  type: fancymanuscript\n",
+        &[("acme/fancymanuscript", ext)],
+    );
     let pe = parse_error(result);
     assert_eq!(pe.diagnostics[0].code.as_deref(), Some("Q-16-7"));
     assert_eq!(pe.diagnostics[0].kind, DiagnosticKind::Error);
     let text = pe.render();
     assert!(
-        text.contains("book") && text.contains("not yet"),
-        "error must say book base types are not yet supported; got: {text}"
+        text.contains("manuscript") && text.contains("not yet"),
+        "error must say manuscript base types are not yet supported; got: {text}"
     );
 }
 

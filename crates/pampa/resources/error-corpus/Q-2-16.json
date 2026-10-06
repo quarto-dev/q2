@@ -12,8 +12,8 @@
   "cases": [
     {
       "name": "simple",
-      "description": "Simple case",
-      "content": "^",
+      "description": "Opener whose closer is swallowed by a code span. Since bd-star-as-str-qigl02pz a sub/superscript only opens when its closer appears before the next whitespace, so a plain unclosed opener is literal text, not this error.",
+      "content": "^a`b^`",
       "captures": [
         {
           "label": "super-start",

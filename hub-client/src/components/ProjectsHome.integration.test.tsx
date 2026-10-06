@@ -20,6 +20,7 @@ import type { CollectionSnapshot } from '../services/projectSetService';
 const connectMock = vi.fn();
 vi.mock('@quarto/preview-runtime', () => ({
   getProjectChoices: vi.fn().mockResolvedValue([]),
+  getProjectChoiceGroups: vi.fn().mockResolvedValue([]),
   createProject: vi.fn(),
   importProjectFromZip: vi.fn(),
   exportProjectAsZip: vi.fn(),
@@ -28,6 +29,21 @@ vi.mock('@quarto/preview-runtime', () => ({
   getFileContent: vi.fn(),
   getBinaryFileContent: vi.fn(),
   isFileBinary: vi.fn(),
+}));
+
+// Keep ProjectsHome's mount-time storage reads off fake-indexeddb: opening
+// the DB runs schema migrations that console.log asynchronously, and those
+// logs can outlive the file, failing the run with "Closing rpc while
+// onUserConsoleLog was pending".
+vi.mock('../services/projectStorage', () => ({
+  listProjects: vi.fn().mockResolvedValue([]),
+}));
+
+vi.mock('../services/userSettings', () => ({
+  getUserIdentity: vi.fn().mockResolvedValue(null),
+  updateUserName: vi.fn(),
+  updateUserColor: vi.fn(),
+  resetUserIdentity: vi.fn(),
 }));
 
 afterEach(cleanup);

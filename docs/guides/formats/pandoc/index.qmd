@@ -1,0 +1,182 @@
+---
+title: Other output formats
+---
+
+## Overview
+
+Beyond the formats with their own guides (`html`, `revealjs`, `epub`,
+`typst`, `latex`), Quarto 2 can render your document to every document
+format [Pandoc](https://pandoc.org) can write — word processor files,
+markdown flavors, wiki markup, slide shows, XML dialects, and plain
+text. (`docx`, `pptx`, `epub`, and `typst` also go through Pandoc; they
+are covered by their own guides or are already familiar.)
+
+Rendering to these formats requires a `pandoc` binary. Quarto does not
+bundle one — install it from
+[pandoc.org](https://pandoc.org/installing.html) and make sure it's on
+your `PATH`, or point the `QUARTO_PANDOC` environment variable at
+wherever it lives. Quarto requires `pandoc` 3.11 or newer.
+
+A few Pandoc writers are deliberately not exposed: the bibliography
+exporters (`bibtex`, `biblatex`, `csljson`) and `opml` discard the
+document body, so they can't render a normal document.
+
+## Basic usage
+
+Render a single document from the command line:
+
+``` bash
+quarto render document.qmd --to org
+```
+
+Or set the format in the YAML front matter:
+
+``` {.yaml filename="document.qmd"}
+---
+title: "My Document"
+format: org
+---
+```
+
+## The formats
+
+### Word processor
+
+| Format         | Output file | Notes                                          |
+|----------------|-------------|------------------------------------------------|
+| `odt`          | `.odt`      | OpenOffice/LibreOffice text document           |
+| `opendocument` | `.xml`      | Flat OpenDocument XML (not zipped like `odt`)  |
+| `rtf`          | `.rtf`      | Rich Text Format                               |
+
+### E-book
+
+| Format | Output file | Notes                                       |
+|--------|-------------|---------------------------------------------|
+| `fb2`  | `.fb2`      | FictionBook 2 (XML-based e-book format)     |
+
+### Markdown variants
+
+All of these produce a `.md` file.
+
+| Format              | Notes                                            |
+|---------------------|--------------------------------------------------|
+| `markdown`          | Pandoc's extended markdown                       |
+| `markdown_strict`   | Original markdown, no extensions                 |
+| `markdown_phpextra` | PHP Markdown Extra                               |
+| `markdown_github`   | Deprecated GitHub-flavored markdown (Pandoc's)   |
+| `markdown_mmd`      | MultiMarkdown                                    |
+| `markua`            | Markua                                           |
+| `commonmark`        | CommonMark                                       |
+| `commonmark_x`      | CommonMark with Pandoc's extensions              |
+| `gfm`               | GitHub-Flavored Markdown (see below)             |
+
+`gfm` uses Pandoc's native GitHub-Flavored Markdown writer. Its output
+is a superset of what Quarto 1 produced: it also emits GitHub alerts,
+`$`...`$` math, a YAML metadata block, and automatic identifiers on
+headings. (Quarto 1 emulated `gfm` with a frozen list of CommonMark
+extensions dating from 2022.)
+
+### Slide shows
+
+| Format      | Output file | Notes                                            |
+|-------------|-------------|--------------------------------------------------|
+| `s5`        | `.html`     | Standalone HTML deck, assets included            |
+| `dzslides`  | `.html`     | Fully self-contained — no external assets at all |
+| `slidy`     | `.html`     | Loads its scripts/styles from the W3C CDN        |
+| `slideous`  | `.html`     | Standalone HTML deck, assets included            |
+
+Each renders a self-contained slide deck in the browser. As with
+`revealjs`, code cells don't echo their source by default and figures
+are sized for slides. For new presentations, prefer Quarto's native
+`revealjs` format.
+
+### XML
+
+| Format     | Output file | Notes                            |
+|------------|-------------|----------------------------------|
+| `docbook`  | `.xml`      | DocBook 5 (alias for `docbook5`) |
+| `docbook4` | `.xml`      | DocBook 4                        |
+| `docbook5` | `.xml`      | DocBook 5 (namespaced)           |
+
+### Plain text and wiki markup
+
+| Format      | Output file | Notes                                  |
+|-------------|-------------|----------------------------------------|
+| `plain`     | `.txt`      | Simple plain text                      |
+| `rst`       | `.rst`      | reStructuredText                       |
+| `org`       | `.org`      | Emacs Org mode                         |
+| `muse`      | `.muse`     | Emacs Muse                             |
+| `ms`        | `.ms`       | groff/troff `ms` macros                |
+| `man`       | `.man`      | roff man page                          |
+| `texinfo`   | `.texinfo`  | GNU Texinfo                            |
+| `tei`       | `.tei`      | TEI Simple (XML humanities markup)     |
+| `zimwiki`   | `.zim`      | Zim desktop wiki                       |
+| `dokuwiki`  | `.dokuwiki` | DokuWiki markup                        |
+| `haddock`   | `.haddock`  | Haddock (Haskell documentation)        |
+| `icml`      | `.icml`     | Adobe InCopy/InDesign interchange      |
+| `jira`      | `.jira`     | Jira wiki markup                       |
+| `mediawiki` | `.mediawiki`| MediaWiki markup                       |
+| `xwiki`     | `.xwiki`    | XWiki markup                           |
+| `textile`   | `.textile`  | Textile                                |
+| `vimdoc`    | `.txt`      | Vim help files                         |
+| `bbcode`    | `.txt`      | Bulletin-board forum markup            |
+
+`bbcode` has five forum flavors with the same `.txt` output:
+`bbcode_steam`, `bbcode_phpbb`, `bbcode_fluxbb`, `bbcode_hubzilla`, and
+`bbcode_xenforo`.
+
+### Special-purpose
+
+| Format        | Output file | Notes                                             |
+|---------------|-------------|---------------------------------------------------|
+| `json`        | `.json`     | Dump of the processed document as Pandoc JSON     |
+| `native`      | `.native`   | Same, in Pandoc's native notation                 |
+| `xml`         | `.xml`      | Same, as Pandoc's XML AST serialization           |
+| `ansi`        | `.txt`      | Plain text with terminal escape codes             |
+| `chunkedhtml` | `.zip`      | Zip archive of chapter HTML files (see below)     |
+
+The three AST dumps (`json`, `native`, `xml`) show exactly what Quarto
+feeds the writer after all processing — handy for debugging.
+`ansi` output is meant for a terminal: view it with `cat`, not a text
+editor.
+
+`chunkedhtml` produces a `.zip` archive containing `index.html` (a
+navigation shell) plus one HTML file per chapter (named like
+`1-intro.html`), with images embedded inside the archive. Unzip it and
+open `index.html` to view. A missing image is an error rather than a
+warning, since it has to be embedded.
+
+## Figures, tables, and cross-references
+
+Quarto numbers figures, tables, and other floats itself, then hands the
+numbered result to Pandoc. The writers with native float support —
+`odt`, `gfm`, and the four slide-show formats — get fully numbered,
+captioned figures and tables.
+
+The remaining formats have no float renderer: the figure or table still
+appears, but without Quarto's usual numbering and caption treatment,
+and Quarto emits a warning for each affected float. (`chunkedhtml`
+falls in this group, despite producing HTML.)
+
+## Code cells and diagrams
+
+Executed code cells include their output. The slide-show formats, which
+produce HTML, keep Quarto's callout and theorem styling; every other
+format on this page drops it — output appears as plain blocks, the same
+as in `docx`.
+
+Mermaid diagrams and OJS cells need JavaScript — either in the viewing
+browser or at render time to draw a fallback image, which Quarto 2
+doesn't do yet. They are not rendered in these formats; use `html` or
+`revealjs` if your document includes them.
+
+## Notes for Quarto 1 users
+
+- `gfm` and `commonmark` are now supported directly (see the markdown
+  section above for how `gfm` differs from Quarto 1's output).
+- Output filenames changed for three formats: `djot` now produces
+  `.dj`, `t2t` produces `.t2t`, and `xml` produces `.xml`, where Quarto
+  1 named all of them `.txt`. (`ansi`, `vimdoc`, and the `bbcode`
+  flavors still produce `.txt`.)
+- `number-sections` is not forwarded to the Pandoc markdown writers, so
+  numbered sections render unnumbered in markdown output.

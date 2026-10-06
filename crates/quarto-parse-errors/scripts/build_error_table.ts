@@ -177,7 +177,7 @@ try {
       continue;
     }
 
-    const { code, title, message, notes, hints, cases, desynchronizes } = errorSpec;
+    const { code, title, message, notes, hints, cases, desynchronizes, suggestion } = errorSpec;
 
     // Process each case
     for (const testCase of cases) {
@@ -270,6 +270,7 @@ try {
             hints: hints || [],
             guard,
             desynchronizes: desynchronizes ?? false,
+            suggestion: suggestion ?? undefined,
           },
           name: `${code}/${variantName}`,
         });

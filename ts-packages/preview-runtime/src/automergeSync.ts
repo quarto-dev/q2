@@ -8,6 +8,7 @@
 import {
   createSyncClient,
   exportProjectAsZip as exportZip,
+  exportFolderAsZip as exportFolderZip,
   parseProjectZip,
   type SyncClient,
   type SyncClientCallbacks,
@@ -35,6 +36,7 @@ export type { ConnectOptions, Patch, EditorContentChange, FileEntry, ActorIdenti
 type FilesChangeHandler = (files: FileEntry[]) => void;
 type IdentitiesChangeHandler = (identities: Record<string, ActorIdentity>) => void;
 type CapturesChangeHandler = (captures: Record<string, CaptureRef>) => void;
+type FoldersChangeHandler = (folders: string[]) => void;
 type FileContentHandler = (path: string, content: string, patches: Patch[]) => void;
 type BinaryContentHandler = (path: string, content: Uint8Array, mimeType: string) => void;
 type ConnectionHandler = (connected: boolean) => void;
@@ -43,6 +45,7 @@ type ErrorHandler = (error: Error) => void;
 let onFilesChange: FilesChangeHandler | null = null;
 let onIdentitiesChange: IdentitiesChangeHandler | null = null;
 let onCapturesChange: CapturesChangeHandler | null = null;
+let onFoldersChange: FoldersChangeHandler | null = null;
 let onFileContent: FileContentHandler | null = null;
 let onBinaryContent: BinaryContentHandler | null = null;
 let onConnectionChange: ConnectionHandler | null = null;
@@ -69,6 +72,7 @@ export function setSyncHandlers(handlers: {
   onFilesChange?: FilesChangeHandler;
   onIdentitiesChange?: IdentitiesChangeHandler;
   onCapturesChange?: CapturesChangeHandler;
+  onFoldersChange?: FoldersChangeHandler;
   onFileContent?: FileContentHandler;
   onBinaryContent?: BinaryContentHandler;
   onConnectionChange?: ConnectionHandler;
@@ -77,6 +81,7 @@ export function setSyncHandlers(handlers: {
   if (handlers.onFilesChange) onFilesChange = handlers.onFilesChange;
   if (handlers.onIdentitiesChange) onIdentitiesChange = handlers.onIdentitiesChange;
   if (handlers.onCapturesChange) onCapturesChange = handlers.onCapturesChange;
+  if (handlers.onFoldersChange) onFoldersChange = handlers.onFoldersChange;
   if (handlers.onFileContent) onFileContent = handlers.onFileContent;
   if (handlers.onBinaryContent) onBinaryContent = handlers.onBinaryContent;
   if (handlers.onConnectionChange) onConnectionChange = handlers.onConnectionChange;
@@ -119,6 +124,9 @@ function createInternalCallbacks(): SyncClientCallbacks {
     onCapturesChange: (captures: Record<string, CaptureRef>) => {
       onCapturesChange?.(captures);
     },
+    onFoldersChange: (folders: string[]) => {
+      onFoldersChange?.(folders);
+    },
     onConnectionChange: (connected: boolean) => {
       onConnectionChange?.(connected);
     },
@@ -155,11 +163,11 @@ function ensureClient(): SyncClient {
  * per-IP handshake serialization — the SPA's boot controller
  * arbitrates server liveness over HTTP `/health` instead.
  */
-export async function connect(syncServerUrl: string, indexDocId: string, actorId?: string, screenName?: string, color?: string, peerTimeoutMsOrOptions?: number | ConnectOptions): Promise<FileEntry[]> {
+export async function connect(syncServerUrl: string, indexDocId: string, authorId?: string, screenName?: string, color?: string, peerTimeoutMsOrOptions?: number | ConnectOptions): Promise<FileEntry[]> {
   await initWasm();
   vfsClear();
 
-  return ensureClient().connect(syncServerUrl, indexDocId, actorId, screenName, color, peerTimeoutMsOrOptions ?? 1);
+  return ensureClient().connect(syncServerUrl, indexDocId, authorId, screenName, color, peerTimeoutMsOrOptions ?? 1);
 }
 
 /**
@@ -273,6 +281,20 @@ export function renameFile(oldPath: string, newPath: string): void {
 }
 
 /**
+ * Record an explicitly created (possibly empty) folder.
+ */
+export function createFolder(path: string): void {
+  ensureClient().createFolder(path);
+}
+
+/**
+ * Forget an explicitly created folder (files under it are untouched).
+ */
+export function deleteFolder(path: string): void {
+  ensureClient().deleteFolder(path);
+}
+
+/**
  * Check if connected.
  */
 export function isConnected(): boolean {
@@ -284,22 +306,23 @@ export function isConnected(): boolean {
  */
 export async function createNewProject(
   options: CreateProjectOptions,
-  actorId?: string,
+  authorId?: string,
   screenName?: string,
   color?: string,
-  resolveActorId?: (indexDocId: string) => Promise<string | null | undefined>,
+  resolveAuthorId?: (indexDocId: string) => Promise<string | null | undefined>,
 ): Promise<CreateProjectResult> {
   await initWasm();
   vfsClear();
 
-  return ensureClient().createNewProject(options, actorId, screenName, color, resolveActorId);
+  return ensureClient().createNewProject(options, authorId, screenName, color, resolveAuthorId);
 }
 
 /**
- * Get the current actor ID, or null if not set.
+ * Get the current author ID — the attribution key identifying this
+ * user's changes — or null if not set.
  */
-export function getActorId(): string | null {
-  return client?.getActorId() ?? null;
+export function getAuthorId(): string | null {
+  return client?.getAuthorId() ?? null;
 }
 
 /**
@@ -375,6 +398,14 @@ export function getFilePaths(): string[] {
  */
 export function exportProjectAsZip(rootDir?: string): Uint8Array {
   return exportZip(ensureClient(), rootDir);
+}
+
+/**
+ * Export one folder (recursively) as a ZIP rooted at `<folder>/`.
+ * Null when the folder holds no files.
+ */
+export function exportFolderAsZip(folder: string): Uint8Array | null {
+  return exportFolderZip(ensureClient(), folder);
 }
 
 /**

@@ -32,8 +32,10 @@ Four things make the fragment unusable:
 - Its `project.type` is not a string.
 - It names a base type that is not built-in. Chaining custom types —
   one extension's type inheriting from another's — is not supported.
-- It names `book` or `manuscript`, which Quarto 2 does not implement
-  yet.
+- It names `manuscript`, which Quarto 2 does not implement yet. (A
+  `book` base is fine — see the
+  [book projects guide](../../guides/projects/book.qmd) — this
+  restriction no longer applies to it.)
 
 The message names the extension and the path to its `_extension.yml`.
 
@@ -45,8 +47,8 @@ The message names the extension and the path to its `_extension.yml`.
   differ.
 - **A base type that is itself a custom type**, usually an attempt to
   build a family of related project types by layering them.
-- **A `book`-based extension**, which cannot work until Quarto 2
-  implements the book project type.
+- **A `manuscript`-based extension**, which cannot work until Quarto 2
+  implements the manuscript project type.
 
 ## How to fix
 
@@ -67,8 +69,8 @@ contributes:
 ```
 
 The nested `project.type` names the **built-in base type** the custom
-type builds on: `default` or `website`. Everything else in the
-fragment is configuration merged into projects that use the type.
+type builds on: `default`, `website`, or `book`. Everything else in
+the fragment is configuration merged into projects that use the type.
 
 If you do not maintain the extension, report the problem to its
 author. In the meantime, set `project.type` to a built-in type and

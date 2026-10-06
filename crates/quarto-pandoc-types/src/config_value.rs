@@ -941,6 +941,14 @@ impl ConfigValue {
         }
     }
 
+    /// Remove a top-level key from a map value. No-op when `self` is not
+    /// a map or the key is absent.
+    pub fn remove(&mut self, key: &str) {
+        if let ConfigValueKind::Map(entries) = &mut self.value {
+            entries.retain(|e| e.key != key);
+        }
+    }
+
     /// Check if this ConfigValue represents a string with a specific value.
     ///
     /// This handles:

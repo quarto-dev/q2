@@ -154,6 +154,15 @@ function parseFormatSpec(format: string, value: Record<string, unknown>, options
         case 'folderExists':
           // Parse but don't check — filesystem assertions are no-ops in WASM
           break;
+        case 'ensureTypstFileRegexMatches':
+        case 'ensurePdfRegexMatches':
+        case 'ensurePdfTextPositions':
+        case 'ensurePdfMetadata':
+          // Parse but don't check — Typst/PDF-only assertions. WASM only
+          // renders HTML (see the `spec.format !== 'html'` skip below), so
+          // these never actually run; they just need to be recognized here
+          // so a `typst:` tests block doesn't throw before that skip fires.
+          break;
         case 'dom-parity':
           // Opt-in flag for the preview <-> render DOM parity runner
           // (hub-client/src/services/smokeAllParity.wasm.test.tsx). Not an

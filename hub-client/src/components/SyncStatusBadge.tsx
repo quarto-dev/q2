@@ -8,14 +8,17 @@
  * ConnectionStatusDialog (the affordance the old header online/offline
  * indicator provided).
  *
- * States:
+ * States. Compact (default, the FILES header) shows only the time; the
+ * full description is always the button's accessible name and tooltip,
+ * and is the visible text too when `verbose` (the document bottom bar):
  * - Disconnected (browser offline, websocket not open, or no peer
- *   handshake): yellow dot, "Offline — synced n minutes ago".
+ *   handshake): yellow dot; compact: "n minutes ago" (the color carries
+ *   the offline state); verbose: "Offline — synced n minutes ago".
  * - Connected, sync activity this session within the last 15s (a remote
  *   change received, or a local change the hub confirmed delivered):
- *   green dot, "Synced just now".
- * - Connected, < 1 minute: yellow-green dot, "Synced <1 minute ago".
- * - Connected, otherwise: yellow-green dot, "Synced n minutes/hours/days ago".
+ *   green dot, "just now" / "Synced just now".
+ * - Connected, < 1 minute: yellow-green dot, "<1 minute ago".
+ * - Connected, otherwise: yellow-green dot, "n minutes/hours/days ago".
  *
  * The doc's last-synced timestamp is mirrored to localStorage (keyed by
  * documentId) so a page that reloads while offline can still say how
@@ -64,9 +67,18 @@ interface SyncStatusBadgeProps {
    * column is labeled with the document name.
    */
   currentFilePath?: string | null;
+  /** Show the full status sentence instead of just the time. */
+  verbose?: boolean;
+  /** Which side of the text the dot sits on (default: before it). */
+  dotPosition?: 'start' | 'end';
 }
 
-export default function SyncStatusBadge({ scope, currentFilePath }: SyncStatusBadgeProps) {
+export default function SyncStatusBadge({
+  scope,
+  currentFilePath,
+  verbose = false,
+  dotPosition = 'start',
+}: SyncStatusBadgeProps) {
   const [now, setNow] = useState(() => Date.now());
   const [showDialog, setShowDialog] = useState(false);
 
@@ -129,40 +141,49 @@ export default function SyncStatusBadge({ scope, currentFilePath }: SyncStatusBa
   }, [docId, inMemory, connected]);
 
   let dotClass: string;
-  let prefix: string;
+  /** Short visible text (compact mode). */
   let detail: string;
+  /** Full description for the tooltip and accessible name. */
+  let full: string;
   if (!connected) {
     dotClass = 'yellow';
-    prefix = `${s.savingLocally} — `;
-    detail = lastSyncedAt ? s.syncedAgo(agoText(now - lastSyncedAt)) : s.neverSynced;
+    const ago = lastSyncedAt ? agoText(now - lastSyncedAt) : s.neverSynced;
+    detail = ago;
+    full = `${s.savingLocally} — ${lastSyncedAt ? s.syncedAgo(ago) : s.neverSynced}`;
   } else if (inMemory && now - inMemory < SYNCING_WINDOW_MS) {
     // Green only for sync activity observed *this session* — the
     // persisted/seeded timestamp must not light "just now" on load.
     dotClass = 'green';
-    prefix = `${s.synced} `;
     detail = s.justNow;
+    full = `${s.synced} ${detail}`;
   } else if (lastSyncedAt && now - lastSyncedAt < 60_000) {
     dotClass = 'yellow-green';
-    prefix = `${s.synced} `;
     detail = s.underMinuteAgo;
+    full = `${s.synced} ${detail}`;
   } else {
     dotClass = 'yellow-green';
-    prefix = `${s.synced} `;
     detail = lastSyncedAt ? agoText(now - lastSyncedAt) : s.neverSynced;
+    full = `${s.synced} ${detail}`;
   }
+
+  const visible = verbose ? full : detail;
+  const dot = <span className={`sync-status-dot ${dotClass}`} aria-hidden="true" />;
 
   return (
     <>
       <button
         className="sync-status-badge"
         onClick={() => setShowDialog(true)}
-        title={s.tooltip}
+        title={`${full}. ${s.tooltip}`}
+        aria-label={`${full}. ${s.tooltip}`}
       >
-        <span className={`sync-status-dot ${dotClass}`} aria-hidden="true" />
-        <span className="sync-status-text">
-          {prefix}
-          <em>{detail}</em>
-        </span>
+        {dotPosition === 'start' && dot}
+        {visible && (
+          <span className="sync-status-text">
+            <em>{visible}</em>
+          </span>
+        )}
+        {dotPosition === 'end' && dot}
       </button>
       {showDialog && (
         <ConnectionStatusDialog

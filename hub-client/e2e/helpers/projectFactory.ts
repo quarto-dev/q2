@@ -207,23 +207,32 @@ async function interceptMonacoCdn(page: Page): Promise<void> {
  * URL to pass: this helper installs the usual init scripts, loads `/`, and
  * waits for the home to appear.
  */
-export async function bootstrapProjectSet(page: Page): Promise<void> {
-  await bootstrapProjectSetVariant(page, 'classic');
+export async function bootstrapProjectSet(
+  page: Page,
+  opts?: { stubAuthMe?: boolean; baseUrl?: string },
+): Promise<void> {
+  await bootstrapProjectSetVariant(page, 'classic', opts);
 }
 
 /**
  * Like {@link bootstrapProjectSet}, but lands on the collections-based
  * projects home (the app's default variant) instead of the classic selector.
  */
-export async function bootstrapProjectsHome(page: Page): Promise<void> {
-  await bootstrapProjectSetVariant(page, 'collections');
+export async function bootstrapProjectsHome(
+  page: Page,
+  opts?: { stubAuthMe?: boolean; baseUrl?: string },
+): Promise<void> {
+  await bootstrapProjectSetVariant(page, 'collections', opts);
 }
 
 async function bootstrapProjectSetVariant(
   page: Page,
   variant: 'classic' | 'collections',
+  opts?: { stubAuthMe?: boolean; baseUrl?: string },
 ): Promise<void> {
-  await mockAuthMe(page);
+  // Authenticated contexts (author-attribution e2e) must NOT stub
+  // /auth/me — the real response carries the signed-in user.
+  if (opts?.stubAuthMe !== false) await mockAuthMe(page);
   await interceptMonacoCdn(page);
   await seedUiVariant(page, variant);
   // Monaco 0.55+ requires MonacoEnvironment.getWorkerUrl. Without it the
@@ -264,7 +273,10 @@ async function bootstrapProjectSetVariant(
       localStorage.setItem(KEY, JSON.stringify({ ...defaults, richText: false }));
     }
   }, DEFAULT_PREFERENCES);
-  await page.goto('/');
+  // baseUrl override: the author-attribution e2e serves the app from two
+  // different proxy origins (auth-on vs auth-disabled hub), so its pages
+  // must boot against an absolute origin rather than the config baseURL.
+  await page.goto(opts?.baseUrl ?? '/');
   await expect(page.locator('body')).toBeVisible();
 
   // Wait for React to mount before checking test hooks — the `body` becomes
@@ -287,8 +299,9 @@ async function bootstrapProjectSetVariant(
     );
   }
 
-  // The app creates the project set on its own and lands on the home once
-  // the set is connected (the collections status gates the render).
+  // The app creates the project set on its own. The home renders while the
+  // set is still connecting (its skeleton covers 'connecting'), so a visible
+  // home is not yet a connected root: wait for both.
   if (variant === 'classic') {
     await expect(
       page.getByRole('heading', { name: 'Your Projects' }),
@@ -301,6 +314,31 @@ async function bootstrapProjectSetVariant(
       page.getByPlaceholder('Search projects…'),
     ).toBeVisible({ timeout: 20000 });
   }
+  await waitForProjectSetDocId(page);
+}
+
+/**
+ * Wait for the root project set to be fully connected and return its
+ * document id, bare (no `automerge:` prefix).
+ *
+ * Waits on the app's own status (`data-project-set-status` on `<html>`,
+ * published by App.tsx). Neither a visible home nor a non-null
+ * `getProjectSetDocId()` is enough: the home renders while the root is
+ * still connecting, and the root's connection (and doc id) exists before
+ * its pointers are saved and the status reaches 'connected'.
+ */
+export async function waitForProjectSetDocId(page: Page, timeout = 20000): Promise<string> {
+  await expect(page.locator('html')).toHaveAttribute('data-project-set-status', 'connected', {
+    timeout,
+  });
+  const id = await page.evaluate(async () => {
+    await window.__quartoTestReady;
+    const hooks = window.__quartoTest;
+    if (!hooks) throw new Error('__quartoTest missing — rebuild with VITE_E2E=1');
+    return hooks.projectSet.getProjectSetDocId();
+  });
+  if (id === null) throw new Error("project set status is 'connected' but it has no root doc id");
+  return id.replace(/^automerge:/, '');
 }
 
 /**

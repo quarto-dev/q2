@@ -1,0 +1,93 @@
+---
+title: "Nested Projects Skipped"
+description: "Subdirectories with their own `_quarto.yml` are nested projects, and the render list skipped their files."
+code: Q-5-31
+subsystem: project
+status: complete
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-31` — Nested Projects Skipped
+
+> One or more subdirectories contain their own `_quarto.yml` (or
+> `_quarto.yaml`). Their files belong to those nested projects, so
+> this project's render list skipped them.
+
+## What this means
+
+A directory with its own `_quarto.yml` is a project of its own, even
+when it sits inside another project. Quarto 2 treats it as a
+boundary: the files under it belong to the nested project, and they
+render with the nested project's config when you run
+`q2 render <dir>`.
+
+The outer project's implicit patterns stop at that boundary.
+Implicit patterns are the default `**/*.qmd`, and any glob that
+doesn't name the nested directory (for example `**/*.md` or
+`*/page.qmd`). The warning lists every nested project whose files one
+of these patterns would otherwise have matched. For example:
+
+```
+my-site/
+├── _quarto.yml        ← outer project
+├── index.qmd          ← rendered
+└── sub/
+    ├── _quarto.yml    ← nested project
+    └── page.qmd       ← skipped by the outer render (Q-5-31)
+```
+
+The warning appears once per render and names every skipped
+directory.
+
+## Quarto 1 differs
+
+Quarto 1 ignores a nested `_quarto.yml` when rendering the outer
+project, without any warning. It renders `sub/page.qmd` as part of
+the outer site, with the outer chrome and outer metadata. But
+`quarto render sub` renders the same page with the nested config. The
+file's owner therefore depends on which command you run. Quarto 2
+makes the nearest `_quarto.yml` the owner in both cases.
+
+If you are migrating a Quarto 1 project and pages under a
+subdirectory disappeared from the site, this is why.
+
+## How to fix it
+
+Pick whichever matches what the directory is:
+
+- **It really is a separate project.** Render it on its own with
+  `q2 render sub`. To keep this warning quiet, exclude the directory
+  in the outer project's render list:
+
+  ```yaml
+  project:
+    render:
+      - "!sub/**"
+  ```
+
+  A list of only `!` patterns still renders the default `**/*.qmd`,
+  so this subtracts just the nested project.
+
+- **It only holds settings for that directory.** Rename its
+  `_quarto.yml` to `_metadata.yml`. A `_metadata.yml` merges its
+  settings into every document in the directory, and the directory
+  stays part of the outer project.
+
+- **You want specific pages from it rendered in the outer site.**
+  List them by a path that names the directory, such as
+  `sub/page.qmd`, `sub/*.qmd` or `sub`. They render with the outer
+  project's config, and you get [`Q-5-32`](Q-5-32.qmd) as a reminder.
+
+The `!` exclusion is the way to silence this warning.
+`diagnostics: {Q-5-31: off}` does not work for it yet, because the
+`diagnostics:` key only applies to per-document warnings and this one
+is reported once for the whole project.
+
+## See also
+
+- [Nested projects](/guides/projects/render-list.qmd#nested-projects)
+  in the render-list guide.
+- [`Q-5-32`](Q-5-32.qmd): an explicit pattern reaching into a nested
+  project.

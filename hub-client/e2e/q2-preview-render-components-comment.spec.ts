@@ -17,7 +17,7 @@
  *      bubble disappears and QMD loses the span.
  *      Remove-mine works via attribution: openCommentFixture enables the
  *      Authors overlay so attributionLookup is populated, and findMineSpan
- *      identifies the TEST_ACTOR_ID span to remove.
+ *      identifies the TEST_AUTHOR_ID span to remove.
  *
  * Note on `assertAutomerge`: polls `wasmRenderer.getFileContent()` (the
  * Automerge-backed VFS layer) rather than asserting on DOM text, because
@@ -46,10 +46,10 @@ const qmdContent = readFileSync(resolve(FIXTURE_DIR, 'render-components-comment.
 const tsxContent = readFileSync(resolve(FIXTURE_DIR, 'comment.tsx'), 'utf-8');
 const quartoYmlContent = readFileSync(resolve(FIXTURE_DIR, '_quarto.yml'), 'utf-8');
 
-// Stable test actor id injected via __QUARTO_TEST_ACTOR_ID__ (App.tsx
-// reads this when VITE_E2E is set).  Must be 32 hex chars so
-// Automerge accepts it as a valid actor id.
-const TEST_ACTOR_ID = 'e2e7e1f02a30000000000000000007e1';
+// Stable test author id injected via __QUARTO_TEST_AUTHOR_ID__ (App.tsx
+// reads this when VITE_E2E is set).  An author id is opaque hex — it no
+// longer needs to be a valid actor id — but stays hex-shaped.
+const TEST_AUTHOR_ID = 'e2e7e1f02a30000000000000000007e1';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -85,10 +85,10 @@ test.describe('q2-preview render-components-comment', () => {
     test.setTimeout(120_000);
 
     test.beforeEach(async ({ page }, testInfo) => {
-        // Inject actor id before any app script runs.
+        // Inject author id before any app script runs.
         await page.addInitScript((id) => {
-            (window as any).__QUARTO_TEST_ACTOR_ID__ = id;
-        }, TEST_ACTOR_ID);
+            (window as any).__QUARTO_TEST_AUTHOR_ID__ = id;
+        }, TEST_AUTHOR_ID);
         // Stagger parallel workers to avoid Monaco AMD init race.
         if (testInfo.workerIndex > 0) await page.waitForTimeout(1000);
     });
@@ -123,8 +123,8 @@ test.describe('q2-preview render-components-comment', () => {
             .soft(diag?.hasUseCurrentActor, 'useCurrentActor must be on __Q2_PREVIEW_RENDERER__')
             .toBe(true);
         expect
-            .soft(diag?.me, `actor id must round-trip to the iframe (got ${JSON.stringify(diag?.me)})`)
-            .toBe(TEST_ACTOR_ID);
+            .soft(diag?.me, `author id must round-trip to the iframe (got ${JSON.stringify(diag?.me)})`)
+            .toBe(TEST_AUTHOR_ID);
         expect(diag, 'COMMENT_DIAG must be populated').toBeTruthy();
     });
 
@@ -172,7 +172,7 @@ test.describe('q2-preview render-components-comment', () => {
         await waitForPreviewRender(page, { kind: 'q2-preview', timeout: 15_000 });
 
         // Step 2: click the same bubble again.
-        // comment.tsx's findMineSpan now finds the span attributed to TEST_ACTOR_ID
+        // comment.tsx's findMineSpan now finds the span attributed to TEST_AUTHOR_ID
         // so the remove path fires: removeFirstMatchingInSource →
         // commitSubtreeEdit → apply_node_edit → Automerge → re-render.
         await thinkingBubble.click();

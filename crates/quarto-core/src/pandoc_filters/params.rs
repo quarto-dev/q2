@@ -69,6 +69,70 @@ impl FilterParamsContributor for DocxCalloutIconsContributor {
     }
 }
 
+/// The `single-file-book` filter param (book-projects P2/P3, plan
+/// "Decisions" #23.1) — gates `book-cleanup.lua`'s part handling,
+/// `book-numbering.lua`'s counter-reset generation, and (moot once
+/// cross-chapter links are already `#<id>`-shaped) `book-links.lua`.
+/// Registered as a contributor, not a core key, so it only ever appears
+/// for an actual single-file book-merge target — never for an ordinary
+/// render, which must not see the key at all.
+pub struct BookSingleFileContributor;
+
+impl FilterParamsContributor for BookSingleFileContributor {
+    fn contribute(&self, blob: &mut Map<String, Value>) {
+        blob.insert("single-file-book".to_string(), json!(true));
+    }
+}
+
+/// One `Position::Post` user filter forwarded into `main.lua`'s own
+/// entry-point mechanism (book-projects P2b), paired with the exact Q1
+/// entry-point name TS Quarto's `at:` declared for it.
+pub struct EntryPointFilter {
+    pub at: &'static str,
+    pub path: PathBuf,
+    /// `"lua"` or `"json"` — mirrors `emulatedfilter.lua`'s
+    /// `make_wrapped_user_filters`/`inject_user_filters_at_entry_points`
+    /// dispatch, which reads an explicit `type` field.
+    pub filter_type: &'static str,
+}
+
+/// Forwards `Position::Post` user filters into `quarto-filters.entryPoints`
+/// for a Pandoc-hybrid render (book-projects P2b), overriding the empty
+/// default `insert_quarto_filters` sets in `build()`.
+///
+/// `UserFiltersStage::post()` no longer runs these filters itself on a
+/// Pandoc-hybrid leg (see its own module docs) — pampa's Lua engine never
+/// implemented the Q1-ported pure-Lua helpers
+/// (`quarto.utils.file_metadata_filter`, `quarto.utils.combineFilters`)
+/// some extension filters rely on, so they crash there. `main.lua`'s own
+/// filter chain has always had these helpers, via `common/{filemetadata,
+/// pandoc}.lua`. Built directly from `ResolvedFilters::post`/
+/// `post_entry_points` (`crate::filter_resolve`) — no new classification,
+/// just a different destination for the same bucket.
+pub struct QuartoFilterEntryPointsContributor {
+    pub entry_points: Vec<EntryPointFilter>,
+}
+
+impl FilterParamsContributor for QuartoFilterEntryPointsContributor {
+    fn contribute(&self, blob: &mut Map<String, Value>) {
+        let entry_points: Vec<Value> = self
+            .entry_points
+            .iter()
+            .map(|ep| {
+                json!({
+                    "at": ep.at,
+                    "path": ep.path.to_string_lossy(),
+                    "type": ep.filter_type,
+                })
+            })
+            .collect();
+        blob.insert(
+            "quarto-filters".to_string(),
+            json!({ "entryPoints": entry_points }),
+        );
+    }
+}
+
 /// Builds the `QUARTO_FILTER_PARAMS` blob for one Pandoc-leg render.
 pub struct FilterParamsBuilder<'a> {
     format: &'a Format,
@@ -76,6 +140,7 @@ pub struct FilterParamsBuilder<'a> {
     ref_type_registry: Option<&'a RefTypeRegistry>,
     language: &'a LanguageTerms,
     results_file: PathBuf,
+    mediabag_dir: PathBuf,
     typst_binary: Option<&'a std::path::Path>,
     contributors: Vec<Box<dyn FilterParamsContributor>>,
 }
@@ -87,6 +152,7 @@ impl<'a> FilterParamsBuilder<'a> {
         ref_type_registry: Option<&'a RefTypeRegistry>,
         language: &'a LanguageTerms,
         results_file: PathBuf,
+        mediabag_dir: PathBuf,
     ) -> Self {
         Self {
             format,
@@ -94,6 +160,7 @@ impl<'a> FilterParamsBuilder<'a> {
             ref_type_registry,
             language,
             results_file,
+            mediabag_dir,
             typst_binary: None,
             contributors: Vec::new(),
         }
@@ -134,6 +201,7 @@ impl<'a> FilterParamsBuilder<'a> {
         insert_numbering_params(&mut blob);
         insert_crossref_numbering_mode(&mut blob, self.format);
         insert_top_level_literals(&mut blob, &self.results_file, self.typst_binary);
+        insert_mediabag_dir(&mut blob, &self.mediabag_dir);
 
         for contributor in &self.contributors {
             contributor.contribute(&mut blob);
@@ -145,15 +213,18 @@ impl<'a> FilterParamsBuilder<'a> {
 
 /// `format-identifier: { base-format, target-format }` — `filters.ts:663`'s
 /// `options.format.identifier`/`options.format.formatExtras`-derived pair,
-/// re-derived from Q2's own [`Format`]. `base-format` is the underlying
-/// pandoc writer name (`output_extension`, e.g. `"docx"`); `target-format`
+/// re-derived from Q2's own [`Format`]. `base-format` is the canonical
+/// format *name* ([`FormatIdentifier::canonical_name`], e.g. `"docx"`,
+/// `"typst"`) — long-tail Phase 1 wrinkle 2: this used to send the output
+/// *extension*, so Typst advertised `"pdf"` and extension-based `format:`
+/// scoping in extensions could never match the base format. `target-format`
 /// is the possibly-extended format string (`Format::target_format`, e.g.
 /// `"acm-docx"`).
 fn insert_format_identifier(blob: &mut Map<String, Value>, format: &Format) {
     blob.insert(
         "format-identifier".to_string(),
         json!({
-            "base-format": format.output_extension,
+            "base-format": format.identifier.canonical_name(),
             "target-format": format.target_format,
         }),
     );
@@ -169,7 +240,7 @@ fn insert_format_identifier(blob: &mut Map<String, Value>, format: &Format) {
 /// features are always active for the Pandoc leg, so `enable-crossref`/
 /// `active-filters` stay constants, not derived from render options.
 fn insert_active_filters(blob: &mut Map<String, Value>, format: &Format) {
-    let defaults = super::format_defaults::format_pandoc_defaults(&format.output_extension);
+    let defaults = super::format_defaults::format_pandoc_defaults(format.identifier);
     blob.insert("enable-crossref".to_string(), json!(true));
     blob.insert(
         "output-divs".to_string(),
@@ -260,7 +331,7 @@ fn insert_numbering_params(blob: &mut Map<String, Value>) {
 /// unreachable and untested (P3's companion already logged that trade-off
 /// for the value pair this key introduces).
 ///
-/// **Docx/Pptx only — not every `Pandoc(_)` profile.** `main.lua:737-752`'s
+/// **Docx/Pptx/Odt/Gfm only — not every `Pandoc(_)` profile.** `main.lua:737-752`'s
 /// own fail-fast guard rejects `crossref-numbering: external` combined with
 /// a LaTeX/Typst target ("only docx, odt, and pptx are supported"), and for
 /// good reason: external mode skips the *entire* `quarto_crossref_filters`
@@ -270,14 +341,41 @@ fn insert_numbering_params(blob: &mut Map<String, Value>) {
 /// own crossref numbers natively at compile time; Q2 has no `.order` to
 /// protect there, so Q1's own crossref group must run unsuppressed
 /// (pandoc-hybrid-typst Phase 1, cross-session finding from the
-/// `explore/latex-typst-numbering-influence` investigation).
+/// `explore/latex-typst-numbering-influence` investigation). Odt joins at
+/// long-tail Phase 2 (wrinkle 6): the vendored `floatreftarget.lua:670`
+/// renderer reads pre-assigned `.order` for odt too. The rest of Tier A
+/// hits the placeholder float renderer — no `.order` to protect — so the
+/// key stays unset for them (see
+/// `test_tier_a_placeholder_renderers_omit_crossref_numbering`). Long-tail
+/// Phase 3 (Tier B, wrinkle 6 completion): `Gfm` joins — the vendored
+/// `floatreftarget.lua:1191` renderer resolves float refs for gfm too.
 fn insert_crossref_numbering_mode(blob: &mut Map<String, Value>, format: &Format) {
     if matches!(
         format.identifier,
-        FormatIdentifier::Docx | FormatIdentifier::Pptx
+        FormatIdentifier::Docx
+            | FormatIdentifier::Pptx
+            | FormatIdentifier::Odt
+            | FormatIdentifier::Gfm
+        // Long-tail Phase 5 (Tier D): Q1's `createHtmlPresentationFormat`
+        // family renders float refs through the vendored filter too.
+            | FormatIdentifier::S5
+            | FormatIdentifier::Dzslides
+            | FormatIdentifier::Slidy
+            | FormatIdentifier::Slideous
     ) {
         blob.insert("crossref-numbering".to_string(), json!("external"));
     }
+}
+
+static CLI_PATH: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+/// Registers the `q2` executable that filters may shell back into, exposed
+/// to them as the `quarto-cli-path` param. Only the real CLI binary should
+/// call this: in-process callers (tests, library users) must leave it unset,
+/// because their `current_exe()` is not a `q2` and would mis-handle the
+/// subcommands filters send it. Set-once; later calls are ignored.
+pub fn set_cli_path(path: PathBuf) {
+    let _ = CLI_PATH.set(path);
 }
 
 /// `results-file`, `execution-engine`, `quarto-environment` — top-level
@@ -301,6 +399,13 @@ fn insert_top_level_literals(
         json!(results_file.to_string_lossy()),
     );
     blob.insert("execution-engine".to_string(), json!("markdown"));
+    // `quarto.config.cli_path()` in `init.lua`. Filters that shell back into
+    // the CLI use it; `normalize/astpipeline.lua` pipes raw HTML tables
+    // through `<cli> call inline-css` (the q2 stand-in for Q1's juice step).
+    // Absent unless the CLI registered itself (see `set_cli_path`).
+    if let Some(cli) = CLI_PATH.get() {
+        blob.insert("quarto-cli-path".to_string(), json!(cli.to_string_lossy()));
+    }
     blob.insert(
         "quarto-environment".to_string(),
         json!({
@@ -310,6 +415,32 @@ fn insert_top_level_literals(
                 "Typst": typst_binary.map(|p| p.to_string_lossy().to_string()).unwrap_or_default(),
             }
         }),
+    );
+}
+
+/// `mediabag-dir` — always present for every Pandoc-hybrid render, mirroring
+/// Q1's unconditional `render.ts:119-120` assignment. Read by
+/// `modules/mediabag.lua`'s `write_mediabag_entry`, called from
+/// `quarto-finalize/mediabag.lua`'s `Image` handler — a filter that runs
+/// unconditionally in the finalize chain for *every* format
+/// (`main.lua:598`), gated only at the call site to skip Office formats
+/// (`isWordProcessorOutput`/`isPowerPointOutput`), which scoop up mediabag
+/// files themselves. Before this, `param("mediabag-dir", nil)` returned
+/// `nil` for any format, so any render with an image pandoc resolved into
+/// its mediabag (a remote-fetched URL, or a `data:` URI) crashed inside
+/// `pandoc.path.join{nil, src}` — not typst-specific, confirmed by the
+/// unconditional call site above. `_quarto.file.write`'s underlying
+/// `write_file` (`pandoc/datadir/init.lua:707-708`) already calls
+/// `pandoc.system.make_directory(..., true)` before writing, so the
+/// directory does not need to be created ahead of time here — only a
+/// non-nil path needs to reach the filter. The directory sits at
+/// `<output-dir>/<stem>_files/mediabag`, alongside the render's actual
+/// output file, so no separate copy step is needed to get it to its final
+/// location.
+fn insert_mediabag_dir(blob: &mut Map<String, Value>, mediabag_dir: &std::path::Path) {
+    blob.insert(
+        "mediabag-dir".to_string(),
+        json!(mediabag_dir.to_string_lossy()),
     );
 }
 
@@ -348,6 +479,7 @@ mod tests {
             Some(registry),
             language,
             PathBuf::from("/tmp/quarto-pandoc-results.json"),
+            PathBuf::from("/project/doc_files/mediabag"),
         )
     }
 
@@ -519,6 +651,7 @@ mod tests {
             Some(&registry),
             &language,
             PathBuf::from("/tmp/quarto-pandoc-results.json"),
+            PathBuf::from("/project/doc_files/mediabag"),
         )
         .with_contributor(Box::new(Probe))
         .build();
@@ -603,6 +736,36 @@ mod tests {
         );
     }
 
+    /// Phase 1 (long-tail formats) wrinkle 2 regression:
+    /// `format-identifier.base-format` is the identifier's canonical name,
+    /// **not** the output extension. Typst's extension is `pdf` — sending
+    /// `"pdf"` made the vendored `_format.lua`'s base-format checks
+    /// misclassify every typst render (the latent bug this fixes). An
+    /// extension-style format (`acm-docx`) still canonicalizes to its base.
+    #[test]
+    fn test_format_identifier_base_format_is_canonical_name() {
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = fixture_language();
+
+        for (fmt, expected) in [
+            ("typst", "typst"),
+            ("docx", "docx"),
+            ("pptx", "pptx"),
+            ("acm-docx", "docx"),
+            ("gfm", "gfm"),
+        ] {
+            let format = Format::from_format_string(fmt)
+                .unwrap_or_else(|e| panic!("failed to build Format for {fmt}: {e}"));
+            let blob = fixture_builder(&format, &project, &registry, &language).build();
+            assert_eq!(
+                blob["format-identifier"]["base-format"],
+                json!(expected),
+                "base-format for {fmt} must be the canonical name {expected}"
+            );
+        }
+    }
+
     /// T4.11: `results-file` is an absolute path and `quarto-environment`
     /// carries the three expected `paths` keys.
     ///
@@ -625,6 +788,60 @@ mod tests {
         assert!(paths.contains_key("Rscript"));
         assert!(paths.contains_key("TinyTexBinDir"));
         assert!(paths.contains_key("Typst"));
+    }
+
+    /// `quarto-cli-path` is emitted only once the CLI registers itself, so
+    /// in-process callers never point filters at a non-`q2` executable.
+    ///
+    /// Revert hunk: emitting it unconditionally (e.g. from `current_exe()`)
+    /// makes the first assertion fail; dropping the `set_cli_path` plumbing
+    /// makes the second one fail. This is the only test that calls
+    /// `set_cli_path` (set-once per process), so the "absent" check runs
+    /// first in the same test.
+    #[test]
+    fn test_cli_path_only_present_once_registered() {
+        let format = Format::docx();
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = fixture_language();
+
+        let blob = fixture_builder(&format, &project, &registry, &language).build();
+        assert!(blob.get("quarto-cli-path").is_none());
+
+        set_cli_path(PathBuf::from("/opt/q2/bin/q2"));
+        let blob = fixture_builder(&format, &project, &registry, &language).build();
+        assert_eq!(blob["quarto-cli-path"], "/opt/q2/bin/q2");
+    }
+
+    /// `mediabag-dir` is present for every format, docx included — the
+    /// gate against Office formats lives in the Lua call site
+    /// (`quarto-finalize/mediabag.lua`'s `Image` handler), not in whether
+    /// the param is emitted. Before this, no format ever emitted the key,
+    /// so `modules/mediabag.lua`'s `write_mediabag_entry` crashed on
+    /// `pandoc.path.join{nil, src}` the first time any non-Office render
+    /// resolved an image into pandoc's mediabag.
+    ///
+    /// Revert hunk: removing `insert_mediabag_dir`'s call in `build` makes
+    /// the `blob["mediabag-dir"]` index panic (key absent).
+    #[test]
+    fn test_mediabag_dir_present_for_every_format() {
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = fixture_language();
+
+        for target_format in ["docx", "pptx", "typst", "odt"] {
+            let format = Format::from_format_string(target_format)
+                .unwrap_or_else(|e| panic!("failed to build Format for {target_format}: {e}"));
+            let blob = fixture_builder(&format, &project, &registry, &language).build();
+            let mediabag_dir = blob["mediabag-dir"].as_str().unwrap_or_else(|| {
+                panic!("mediabag-dir missing or not a string for {target_format}")
+            });
+            assert!(
+                mediabag_dir.ends_with("doc_files/mediabag")
+                    || mediabag_dir.ends_with("doc_files\\mediabag"),
+                "expected mediabag-dir to point at a <stem>_files/mediabag directory, got {mediabag_dir}"
+            );
+        }
     }
 
     /// P7 T4.1: `output-divs`/`page-width` are per-format
@@ -650,6 +867,92 @@ mod tests {
         );
     }
 
+    /// book-projects P2: `single-file-book` gates `book-cleanup.lua`'s part
+    /// handling, `book-numbering.lua`'s counter-reset generation, and
+    /// `book-links.lua` — set only via `BookSingleFileContributor`, never a
+    /// core key (a non-book render must never see it at all).
+    #[test]
+    fn test_book_single_file_contributor_sets_flag() {
+        let mut blob = Map::new();
+        BookSingleFileContributor.contribute(&mut blob);
+        assert_eq!(blob["single-file-book"], json!(true));
+    }
+
+    /// The flip side: without the contributor registered, no render (book
+    /// or otherwise) sees the key at all.
+    #[test]
+    fn test_single_file_book_key_absent_without_contributor() {
+        let format = Format::docx();
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = fixture_language();
+        let blob = fixture_builder(&format, &project, &registry, &language).build();
+        assert!(
+            !blob.as_object().unwrap().contains_key("single-file-book"),
+            "single-file-book must only appear when BookSingleFileContributor is registered"
+        );
+    }
+
+    /// book-projects P2b: `QuartoFilterEntryPointsContributor` overrides
+    /// the core builder's empty `quarto-filters.entryPoints` default with
+    /// exactly the entries it was given — no reclassification, no
+    /// dropped/reordered filters — mirroring `at`/`path`/`type` field
+    /// names `emulatedfilter.lua`'s `inject_user_filters_at_entry_points`
+    /// reads.
+    ///
+    /// Revert hunk: removing the contributor's `blob.insert` call leaves
+    /// the core's empty default in place, making the length assertion RED.
+    #[test]
+    fn test_quarto_filter_entry_points_contributor_overrides_empty_default() {
+        let format = Format::docx();
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = fixture_language();
+        let blob = fixture_builder(&format, &project, &registry, &language)
+            .with_contributor(Box::new(QuartoFilterEntryPointsContributor {
+                entry_points: vec![
+                    EntryPointFilter {
+                        at: "post-quarto",
+                        path: PathBuf::from("/ext/orange-book.lua"),
+                        filter_type: "lua",
+                    },
+                    EntryPointFilter {
+                        at: "pre-render",
+                        path: PathBuf::from("/ext/other.lua"),
+                        filter_type: "lua",
+                    },
+                ],
+            }))
+            .build();
+
+        let entry_points = blob["quarto-filters"]["entryPoints"]
+            .as_array()
+            .expect("entryPoints should be an array");
+        assert_eq!(entry_points.len(), 2);
+        assert_eq!(entry_points[0]["at"], json!("post-quarto"));
+        assert_eq!(entry_points[0]["path"], json!("/ext/orange-book.lua"));
+        assert_eq!(entry_points[0]["type"], json!("lua"));
+        assert_eq!(entry_points[1]["at"], json!("pre-render"));
+        assert_eq!(entry_points[1]["path"], json!("/ext/other.lua"));
+    }
+
+    /// The flip side: without the contributor registered, every render
+    /// keeps seeing the empty default T4.3 already covers — this test
+    /// exists so the pairing (present ⇄ absent) is explicit at the same
+    /// call site as the contributor itself.
+    #[test]
+    fn test_quarto_filter_entry_points_empty_without_contributor() {
+        let format = Format::docx();
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = fixture_language();
+        let blob = fixture_builder(&format, &project, &registry, &language).build();
+        let entry_points = blob["quarto-filters"]["entryPoints"]
+            .as_array()
+            .expect("entryPoints should be an array");
+        assert!(entry_points.is_empty());
+    }
+
     /// P7 T4.8: all 5 docx callout-icon params are present and each points
     /// at an existing file under `resources/formats/docx/`. The failure
     /// this guards is silent: `docxCalloutImage` returns `nil` when unset,
@@ -673,6 +976,201 @@ mod tests {
             assert!(
                 Path::new(path_str).is_file(),
                 "{key} names a file that does not exist: {path_str}"
+            );
+        }
+    }
+
+    // === long-tail Phase 2: Tier A bulk tail ===
+
+    /// Deferred from Phase 1 wrinkle 6: odt joins docx/pptx in getting
+    /// `crossref-numbering: "external"` — the vendored
+    /// `floatreftarget.lua:670` renderer reads pre-assigned `.order` for
+    /// odt too, so Q1's own auto-indexer must be suppressed exactly as for
+    /// docx. This is the test whose insertion arm ships with the `Odt`
+    /// variant, per the plan's test-order rule.
+    ///
+    /// Revert hunk: dropping `Odt` from the
+    /// `Docx | Pptx | Odt` gate in `insert_crossref_numbering_mode` makes
+    /// this RED.
+    #[test]
+    fn test_odt_profile_sets_external_crossref_numbering() {
+        let format = Format::from_format_string("odt").unwrap();
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = fixture_language();
+        let blob = fixture_builder(&format, &project, &registry, &language).build();
+
+        assert_eq!(
+            blob["crossref-numbering"],
+            json!("external"),
+            "odt must suppress Q1's auto-indexer via crossref-numbering: external"
+        );
+    }
+
+    /// The rest of Tier A must **not** get the key: rtf/fb2/plain/docbook
+    /// all hit the placeholder float renderer (no pre-assigned `.order` to
+    /// protect), and adding the key for them would trip
+    /// `main.lua`'s fail-fast guard semantics for formats Q1 does not
+    /// support under external numbering. Asserted here so a future
+    /// "helpfully generalize the gate" edit goes red instead of silently
+    /// mis-suppressing Q1's crossref indexer for 20+ formats.
+    #[test]
+    fn test_tier_a_placeholder_renderers_omit_crossref_numbering() {
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = fixture_language();
+
+        for target_format in ["rtf", "fb2", "plain", "docbook"] {
+            let format = Format::from_format_string(target_format)
+                .unwrap_or_else(|e| panic!("failed to build Format for {target_format}: {e}"));
+            let blob = fixture_builder(&format, &project, &registry, &language).build();
+            assert!(
+                !blob.as_object().unwrap().contains_key("crossref-numbering"),
+                "expected no crossref-numbering key for {target_format}, got {blob}"
+            );
+        }
+    }
+
+    /// The wordprocessor page-width flows through the blob (odt), while a
+    /// plaintext sibling sharing the `xml` extension (docbook) gets no
+    /// page-width entry — the blob-level half of
+    /// `format_defaults::tests::test_docbook_and_opendocument_share_extension_not_defaults`.
+    #[test]
+    fn test_odt_blob_has_page_width_docbook_does_not() {
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = fixture_language();
+
+        let odt = Format::from_format_string("odt").unwrap();
+        let blob = fixture_builder(&odt, &project, &registry, &language).build();
+        assert_eq!(blob["page-width"], json!(6.5));
+
+        let docbook = Format::from_format_string("docbook").unwrap();
+        let blob = fixture_builder(&docbook, &project, &registry, &language).build();
+        assert!(
+            blob.as_object().unwrap().get("page-width").is_none(),
+            "docbook (plaintext family) must have no page-width entry"
+        );
+    }
+
+    // === long-tail Phase 3: Tier B markdown family ===
+
+    /// The plan's Phase 3 test spec, blob half: `output-divs` is `false` in
+    /// the params blob for every Tier B flavor except bare `markdown`
+    /// (Q1 parity — `markdownFormat(displayName)` sets
+    /// `render: {output-divs: false}` on eight of the nine
+    /// `isMarkdownOutput` flavors; `pandocMarkdownFormat()` for bare
+    /// markdown leaves it, so the builder default `true` stays). Executed
+    /// cells must arrive as plain paragraphs in markdown-family output, not
+    /// wrapped in a `::: cell` Div no markdown writer can express.
+    ///
+    /// Revert hunk: deleting the markdown-family rows from
+    /// `format_pandoc_defaults` makes every non-markdown assertion here RED.
+    #[test]
+    fn test_tier_b_output_divs_per_format() {
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = fixture_language();
+
+        let markdown = Format::from_format_string("markdown").unwrap();
+        let blob = fixture_builder(&markdown, &project, &registry, &language).build();
+        assert_eq!(
+            blob["output-divs"],
+            json!(true),
+            "bare markdown keeps Q1's pandocMarkdownFormat output-divs default"
+        );
+
+        for target_format in [
+            "markdown_strict",
+            "markdown_phpextra",
+            "markdown_github",
+            "markdown_mmd",
+            "markua",
+            "commonmark_x",
+            "gfm",
+            "commonmark",
+        ] {
+            let format = Format::from_format_string(target_format)
+                .unwrap_or_else(|e| panic!("failed to build Format for {target_format}: {e}"));
+            let blob = fixture_builder(&format, &project, &registry, &language).build();
+            assert_eq!(
+                blob["output-divs"],
+                json!(false),
+                "output-divs must be false for {target_format} (Q1 markdownFormat override)"
+            );
+        }
+    }
+
+    /// Wrinkle 6 completion: gfm joins docx/pptx/odt in getting
+    /// `crossref-numbering: "external"` — the vendored
+    /// `floatreftarget.lua:1191` renderer resolves float refs for gfm too,
+    /// so Q1's auto-indexer must be suppressed the same way.
+    ///
+    /// Revert hunk: dropping `Gfm` from `insert_crossref_numbering_mode`'s
+    /// gate makes this RED.
+    #[test]
+    fn test_gfm_sets_external_crossref_numbering() {
+        let format = Format::from_format_string("gfm").unwrap();
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = fixture_language();
+        let blob = fixture_builder(&format, &project, &registry, &language).build();
+
+        assert_eq!(
+            blob["crossref-numbering"],
+            json!("external"),
+            "gfm must suppress Q1's auto-indexer via crossref-numbering: external"
+        );
+    }
+
+    /// Long-tail Phase 5: the Tier D JS slide formats join
+    /// gfm/docx/pptx/odt in getting `crossref-numbering: "external"` —
+    /// Q1's `createHtmlPresentationFormat` family renders float refs via
+    /// the vendored filter, so the auto-indexer must be suppressed the
+    /// same way.
+    ///
+    /// Revert hunk: dropping the Tier D arm from
+    /// `insert_crossref_numbering_mode` makes this RED.
+    #[test]
+    fn test_tier_d_sets_external_crossref_numbering() {
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = fixture_language();
+
+        for target_format in ["s5", "dzslides", "slidy", "slideous"] {
+            let format = Format::from_format_string(target_format)
+                .unwrap_or_else(|e| panic!("failed to build Format for {target_format}: {e}"));
+            let blob = fixture_builder(&format, &project, &registry, &language).build();
+            assert_eq!(
+                blob["crossref-numbering"],
+                json!("external"),
+                "{target_format} must suppress Q1's auto-indexer via crossref-numbering: external"
+            );
+        }
+    }
+
+    /// The other markdown flavors hit the placeholder float renderer (no
+    /// pre-assigned `.order` to protect), so the key stays unset — same
+    /// polarity guard as `test_tier_a_placeholder_renderers_omit_crossref_numbering`.
+    /// (The vendored `main.lua:737-752` fail-fast guard only rejects
+    /// LaTeX/Typst targets, so omitting the key here is a semantics choice,
+    /// not a guard accommodation.)
+    ///
+    /// Revert hunk: generalizing the gate to "every markdown flavor" makes
+    /// this RED.
+    #[test]
+    fn test_markdown_commonmark_omit_crossref_numbering() {
+        let project = fixture_project(true);
+        let registry = RefTypeRegistry::builtin();
+        let language = fixture_language();
+
+        for target_format in ["markdown", "commonmark"] {
+            let format = Format::from_format_string(target_format)
+                .unwrap_or_else(|e| panic!("failed to build Format for {target_format}: {e}"));
+            let blob = fixture_builder(&format, &project, &registry, &language).build();
+            assert!(
+                !blob.as_object().unwrap().contains_key("crossref-numbering"),
+                "expected no crossref-numbering key for {target_format}, got {blob}"
             );
         }
     }

@@ -47,7 +47,7 @@ vi.mock('@quarto/preview-runtime', () => ({
   incrementalWriteQmd: vi.fn(),
   applyNodeEdit: vi.fn(),
   parseQmdContentSync: vi.fn(() => ({ success: true, ast: '{}' })),
-  getActorId: () => 'actor-1',
+  getAuthorId: () => 'author-1',
   regenerateNestedBuffers: vi.fn(() => ({})),
   pipelineKindForFormat: (f: string) => (f === 'q2-preview' ? 'preview' : undefined),
 }));

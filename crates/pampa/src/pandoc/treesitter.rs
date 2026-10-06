@@ -12,6 +12,7 @@ use crate::pandoc::treesitter_utils::code_fence_content::process_code_fence_cont
 use crate::pandoc::treesitter_utils::code_span_helpers::process_pandoc_code_span;
 use crate::pandoc::treesitter_utils::commonmark_attribute::process_commonmark_attribute;
 use crate::pandoc::treesitter_utils::document::process_document;
+use crate::pandoc::treesitter_utils::editorial_div::process_editorial_div;
 use crate::pandoc::treesitter_utils::editorial_marks::{
     process_delete, process_editcomment, process_highlight, process_insert,
 };
@@ -840,9 +841,10 @@ fn native_visitor<T: Write>(
         }
         "pandoc_str" => {
             // Tree-sitter may include leading ASCII whitespace in the
-            // pandoc_str node when it wraps the external `_pandoc_lt_str`
-            // token (bd-j9cf): the block-level scanner consumes preceding
-            // indentation before dispatching into `parse_open_angle_brace`,
+            // pandoc_str node when it wraps the external `_pandoc_literal_str`
+            // token (bd-j9cf for `<`, bd-star-as-str-qigl02pz for `*` `_`
+            // `~` `^`): the block-level scanner consumes preceding
+            // whitespace before dispatching into the character handlers,
             // so the chomped whitespace ends up inside the reported token
             // range. Split it back out into a leading Space inline so
             // siblings round-trip cleanly. Regular pandoc_str text never
@@ -1497,6 +1499,7 @@ fn native_visitor<T: Write>(
             result
         }
         "pandoc_div" => process_fenced_div_block(node, children, context),
+        "editorial_div" => process_editorial_div(node, children, context),
         "pipe_table_delimiter_cell" => process_pipe_table_delimiter_cell(children, context),
         "pipe_table_header" | "pipe_table_row" => {
             process_pipe_table_header_or_row(node, children, context)

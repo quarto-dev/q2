@@ -1,0 +1,75 @@
+---
+title: Notebooks
+---
+
+## Overview
+
+Quarto renders a Jupyter notebook (`.ipynb`) directly — there is no need to
+convert it to a `.qmd` file first:
+
+```bash
+quarto render penguins.ipynb
+```
+
+Each cell of the notebook becomes part of the rendered document:
+
+- **Markdown cells** render as Quarto markdown. A cell may open a fence or
+  callout that a later cell closes — structure can span cells, exactly as it
+  would in a `.qmd` document.
+- **Code cells** show their source as a code block, followed by their
+  outputs.
+- **Raw cells** whose `raw_mimetype` is `text/html` render that HTML; other
+  raw cells are shown as plain code.
+
+## Stored outputs are the document
+
+By default, Quarto renders the outputs *stored in the notebook* — stream
+text, rich results (including HTML tables and plots), and error output. This
+requires no Python or Jupyter installation: the notebook is its own record of
+the computation, and rendering just shows it.
+
+Plots stored as PNG are written as figure files alongside the rendered
+document, so they participate in figure numbering and cross-references like
+any other Quarto figure.
+
+## Re-running the computation
+
+To *execute* the notebook's code instead of replaying its stored outputs, ask
+for execution — from the notebook's front matter:
+
+````markdown
+---
+execute:
+  enabled: true
+---
+````
+
+or with `quarto render penguins.ipynb --execute`. Execution goes through the
+[Jupyter engine](engines.qmd), so it requires a working Jupyter installation.
+A notebook that demands execution is always executed — it is never silently
+replaced by its stored outputs.
+
+## Front matter and titles
+
+A notebook supplies document metadata the same way a `.qmd` does:
+
+- If the first raw or markdown cell begins with YAML front matter
+  (`---` delimiters), that cell is the document's front matter.
+- Otherwise, if the first markdown cell is nothing but a top heading, that
+  heading becomes the document's `title` and the remaining lines of the cell
+  stay in the body.
+- Notebook-level metadata (the notebook's `metadata` field) merges into the
+  document metadata as well.
+
+## Errors point at cells
+
+When Quarto reports a problem inside a notebook — a markdown parse error, an
+invalid option, a bad `#|` chunk option in a code cell — the message names
+the cell it came from:
+
+```text
+Error: notebook.ipynb[cell 3, code] line 2, column 1: ...
+```
+
+Cells are numbered from 1, counting every cell regardless of type, and the
+line and column are relative to the start of that cell.

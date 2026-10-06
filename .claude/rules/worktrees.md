@@ -151,6 +151,11 @@ available, an italic-prose placeholder for the plan file path, and a
 (`/investigate-beads`, `/triage`, or `/upgrade-cargo-deps`). Placeholders are
 self-documenting — they say exactly what to replace them with.
 
+`cargo xtask switch-task` rewrites the same section in whichever checkout it runs
+in. In the main checkout (`git rev-parse --git-dir` equals `--git-common-dir`) the
+section is headed `# Task Context` and omits the worktree declaration and the
+`../..` main-repo path, which only hold for `.worktrees/*`.
+
 Status lives in the braid skein, not in this file. Run `braid show <id>` for current status + notes.
 
 The section is delimited by `<!-- BEGIN/END WORKTREE CONTEXT -->` markers so it can be

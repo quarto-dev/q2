@@ -49,7 +49,7 @@ vi.mock('@quarto/preview-runtime', () => ({
   incrementalWriteQmd: vi.fn(),
   applyNodeEdit: vi.fn(),
   parseQmdContentSync: vi.fn(() => ({ success: true, ast: '{}' })),
-  getActorId: () => 'actor-1',
+  getAuthorId: () => 'author-1',
   regenerateNestedBuffers: vi.fn(() => ({})),
   // revealjs takes doRender's isSlidesPreview branch regardless, but the
   // dispatch still calls this helper, so return the real-ish mapping.

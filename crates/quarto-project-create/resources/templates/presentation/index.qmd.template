@@ -1,0 +1,22 @@
+---
+title: "$title$"
+subtitle: ""
+author: ""
+format:
+  revealjs:
+    slide-number: true
+---
+
+## First slide
+
+- Point one
+- Point two
+
+## Second slide
+
+- Point one
+- Point two
+
+## Closing
+
+- Thank you

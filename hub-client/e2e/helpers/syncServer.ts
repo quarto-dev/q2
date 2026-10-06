@@ -82,18 +82,40 @@ function waitForOutput(
   });
 }
 
+export interface StartHubServerOptions {
+  /**
+   * Start the hub with OIDC authentication ON against a mock issuer.
+   * Implies `--allow-insecure-auth` (plain HTTP on loopback in tests).
+   * Without this the hub runs auth-disabled, matching the default
+   * Playwright globalSetup behavior.
+   */
+  oidc?: { clientId: string; issuer: string };
+}
+
 /**
  * Start the Rust hub server for E2E tests.
  *
  * Uses `cargo run --bin hub` from the repo root.
  * Timeout is generous (120s) because the first run may need to compile.
  */
-export async function startHubServer(port: number): Promise<HubServerHandle> {
+export async function startHubServer(
+  port: number,
+  options?: StartHubServerOptions,
+): Promise<HubServerHandle> {
   const dataDir = await mkdtemp(path.join(tmpdir(), 'hub-e2e-'));
+
+  const hubArgs = ['--data-dir', dataDir, '--port', String(port)];
+  if (options?.oidc) {
+    hubArgs.push(
+      '--oidc-client-id', options.oidc.clientId,
+      '--oidc-issuer', options.oidc.issuer,
+      '--allow-insecure-auth',
+    );
+  }
 
   const proc = spawn(
     'cargo',
-    ['run', '--bin', 'hub', '--', '--data-dir', dataDir, '--port', String(port)],
+    ['run', '--bin', 'hub', '--', ...hubArgs],
     {
       cwd: REPO_ROOT,
       stdio: ['ignore', 'pipe', 'pipe'],

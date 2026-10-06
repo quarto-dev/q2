@@ -87,11 +87,20 @@ fn json_to_config_value(value: &serde_json::Value) -> ConfigValue {
 /// Parses the target format name to extract an extension reference (e.g.,
 /// "acm-html" → extension "acm", base format "html"), finds the matching
 /// extension, and returns its format-specific metadata as a ConfigValue.
+///
+/// `is_book` feeds the Typst-book default (book-projects P2): a book
+/// project targeting bare `typst` resolves to the bundled `orange-book`
+/// extension with no explicit extension named (Q1 parity; see
+/// [`crate::extension::discover::with_typst_book_default`]).
 fn build_extension_metadata_layer(
     extensions: &[Extension],
     target_format: &str,
+    is_book: bool,
 ) -> Option<(ConfigValue, PathBuf)> {
-    let desc = parse_format_descriptor(target_format);
+    let desc = crate::extension::discover::with_typst_book_default(
+        parse_format_descriptor(target_format),
+        is_book,
+    );
 
     let ext_name = desc.extension_name.as_deref()?;
     let ext = find_extension(ext_name, extensions)?;
@@ -135,6 +144,7 @@ fn build_metadata_contribution_layers(
     extensions: &[Extension],
     base_format: &str,
     document_dir: &Path,
+    project_root: &Path,
 ) -> Vec<ConfigValue> {
     extensions
         .iter()
@@ -151,7 +161,7 @@ fn build_metadata_contribution_layers(
             }
             let wrapped = ConfigValue::new_map(entries, meta.source_info.clone());
             let mut flattened = resolve_format_config(&wrapped, base_format);
-            adjust_paths_to_document_dir(&mut flattened, &ext.path, document_dir);
+            adjust_paths_to_document_dir(&mut flattened, &ext.path, document_dir, project_root);
             Some(flattened)
         })
         .collect()
@@ -255,7 +265,12 @@ impl PipelineStage for MetadataMergeStage {
             .map_or_else(|| ctx.project.dir.clone(), |p| p.to_path_buf());
         let project_layer = ctx.project.config.metadata.as_ref().map(|m| {
             let mut flattened = resolve_format_config(m, base_format);
-            adjust_paths_to_document_dir(&mut flattened, &ctx.project.dir, &document_dir);
+            adjust_paths_to_document_dir(
+                &mut flattened,
+                &ctx.project.dir,
+                &document_dir,
+                &ctx.project.dir,
+            );
             // Mark path-shaped format values (css / theme / include-*) as
             // document-relative Path values against this layer's base
             // (bd-format-css-not-copied-crn3bjdz; generalized for
@@ -278,17 +293,25 @@ impl PipelineStage for MetadataMergeStage {
         // Layer 0 (lowest priority): extension `contributes.metadata`
         // (non-`project` keys; bd-ad7i1pc6 Phase 5). Sits below the
         // project config so everything user-written wins over it.
-        let metadata_contribution_layers =
-            build_metadata_contribution_layers(&ctx.extensions, base_format, &document_dir);
+        let metadata_contribution_layers = build_metadata_contribution_layers(
+            &ctx.extensions,
+            base_format,
+            &document_dir,
+            &ctx.project.dir,
+        );
 
         // Layer 2: Extension metadata (uses full target_format for lookup)
         // Adjust !path values from extension dir to document dir
-        let extension_layer = build_extension_metadata_layer(&ctx.extensions, target_format).map(
-            |(mut config, ext_dir)| {
-                adjust_paths_to_document_dir(&mut config, &ext_dir, &document_dir);
-                config
-            },
-        );
+        let is_book = ctx.project.config.project_kind == crate::project::ProjectKind::Book;
+        let extension_layer = build_extension_metadata_layer(
+            &ctx.extensions,
+            target_format,
+            is_book,
+        )
+        .map(|(mut config, ext_dir)| {
+            adjust_paths_to_document_dir(&mut config, &ext_dir, &document_dir, &ctx.project.dir);
+            config
+        });
 
         // Layer 3: Directory metadata layers (each flattened for base format)
         let dir_layer_entries: Vec<(PathBuf, ConfigValue)> = if !ctx.project.is_single_file {
@@ -483,6 +506,23 @@ impl PipelineStage for MetadataMergeStage {
             crate::diagnostic_policy::DiagnosticPolicy::from_metadata(&doc.ast.meta);
         ctx.diagnostic_policy = policy;
         ctx.add_diagnostics(policy_diagnostics);
+
+        // Q-5-37 (bd-yl1bpj82): a Q1-style brand file the merged metadata
+        // never references. Checked here because this is where "is there a
+        // `brand:` for this document" is finally decidable. Pushed through
+        // `add_diagnostics`, so the `diagnostics:` policy resolved above
+        // suppresses it like any other. Native only: the WASM VFS is not
+        // authoritative for non-qmd project files, so probing for
+        // `_brand.yml` there would misfire (same reasoning as the css gate
+        // above).
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(diagnostic) = crate::project::unreferenced_brand_diagnostic(
+            &doc.ast.meta,
+            &ctx.project.dir,
+            ctx.runtime.as_ref(),
+        ) {
+            ctx.add_diagnostics(vec![diagnostic]);
+        }
 
         Ok(PipelineData::DocumentAst(doc))
     }
@@ -1943,6 +1983,137 @@ mod tests {
         assert!(result.ast.meta.get("toc").is_none());
     }
 
+    // ============================================================================
+    // Typst-book default extension tests (book-projects P2)
+    // ============================================================================
+
+    /// Build a minimal stage context for a document rendered with
+    /// `format_str` in a project of `project_kind`, carrying `extensions`.
+    fn book_default_test_ctx(
+        format_str: &str,
+        project_kind: crate::project::ProjectKind,
+        extensions: Vec<Extension>,
+    ) -> StageContext {
+        let runtime = Arc::new(MockRuntime);
+        let project = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: ProjectConfig {
+                project_kind,
+                ..Default::default()
+            },
+            is_single_file: false,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+            ..Default::default()
+        };
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::from_format_string(format_str).unwrap();
+        let mut ctx = StageContext::new(runtime, format, project, doc).unwrap();
+        ctx.extensions = extensions;
+        ctx
+    }
+
+    fn empty_doc_ast() -> DocumentAst {
+        DocumentAst {
+            path: PathBuf::from("/project/test.qmd"),
+            ast: Pandoc::default(),
+            ast_context: pampa::pandoc::ASTContext::default(),
+            source_context: SourceContext::new(),
+            warnings: vec![],
+            recorded_includes: Vec::new(),
+        }
+    }
+
+    async fn merged_meta(ctx: &mut StageContext) -> ConfigValue {
+        let stage = MetadataMergeStage::new();
+        let output = stage
+            .run(PipelineData::DocumentAst(empty_doc_ast()), ctx)
+            .await
+            .unwrap();
+        output.into_document_ast().unwrap().ast.meta
+    }
+
+    #[tokio::test]
+    async fn test_typst_book_default_extension_metadata_applied() {
+        // Book project + bare `--to typst` → orange-book's
+        // contributes.formats.typst metadata rides in with no explicit
+        // extension named anywhere (Q1's zero-config default).
+        let mut formats = std::collections::HashMap::new();
+        formats.insert(
+            "typst".to_string(),
+            config_map(vec![("toc", config_bool(true))]),
+        );
+        let mut ctx = book_default_test_ctx(
+            "typst",
+            crate::project::ProjectKind::Book,
+            vec![make_extension("orange-book", formats)],
+        );
+
+        let meta = merged_meta(&mut ctx).await;
+        assert_eq!(
+            meta.get("toc").and_then(|v| v.as_bool()),
+            Some(true),
+            "book + bare typst must resolve to orange-book's format metadata"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_typst_book_default_not_applied_for_non_book() {
+        // Same extension present, but a non-book project targeting typst
+        // must not see orange-book's metadata.
+        let mut formats = std::collections::HashMap::new();
+        formats.insert(
+            "typst".to_string(),
+            config_map(vec![("toc", config_bool(true))]),
+        );
+        let mut ctx = book_default_test_ctx(
+            "typst",
+            crate::project::ProjectKind::Default,
+            vec![make_extension("orange-book", formats)],
+        );
+
+        let meta = merged_meta(&mut ctx).await;
+        assert!(
+            meta.get("toc").is_none(),
+            "non-book + bare typst must not resolve to orange-book"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_typst_book_default_respects_explicit_extension_choice() {
+        // Book project that names its own Typst extension gets that one —
+        // the orange-book default must not piggyback on it.
+        let mut other_formats = std::collections::HashMap::new();
+        other_formats.insert(
+            "typst".to_string(),
+            config_map(vec![("toc", config_bool(true))]),
+        );
+        let mut orange_formats = std::collections::HashMap::new();
+        orange_formats.insert(
+            "typst".to_string(),
+            config_map(vec![("number-sections", config_bool(true))]),
+        );
+        let mut ctx = book_default_test_ctx(
+            "other-typst",
+            crate::project::ProjectKind::Book,
+            vec![
+                make_extension("other", other_formats),
+                make_extension("orange-book", orange_formats),
+            ],
+        );
+
+        let meta = merged_meta(&mut ctx).await;
+        assert_eq!(
+            meta.get("toc").and_then(|v| v.as_bool()),
+            Some(true),
+            "explicitly-named extension's metadata must apply"
+        );
+        assert!(
+            meta.get("number-sections").is_none(),
+            "orange-book default must not apply when an extension is named explicitly"
+        );
+    }
+
     #[test]
     fn test_build_extension_metadata_layer_basic() {
         let mut formats = std::collections::HashMap::new();
@@ -1955,7 +2126,7 @@ mod tests {
         );
         let ext = make_extension("acm", formats);
 
-        let layer = build_extension_metadata_layer(&[ext], "acm-html");
+        let layer = build_extension_metadata_layer(&[ext], "acm-html", false);
         assert!(layer.is_some());
         let (cv, ext_path) = layer.unwrap();
         assert_eq!(cv.get("toc").unwrap().as_bool(), Some(true));
@@ -1973,28 +2144,28 @@ mod tests {
         let ext = make_extension("acm", formats);
 
         // Wrong extension name
-        let layer = build_extension_metadata_layer(&[ext.clone()], "other-html");
+        let layer = build_extension_metadata_layer(&[ext.clone()], "other-html", false);
         assert!(layer.is_none());
 
         // Plain format (no extension prefix)
-        let layer = build_extension_metadata_layer(&[ext.clone()], "html");
+        let layer = build_extension_metadata_layer(&[ext.clone()], "html", false);
         assert!(layer.is_none());
 
         // Right extension but wrong base format
-        let layer = build_extension_metadata_layer(&[ext], "acm-pdf");
+        let layer = build_extension_metadata_layer(&[ext], "acm-pdf", false);
         assert!(layer.is_none());
     }
 
     #[test]
     fn test_build_extension_metadata_layer_no_extensions() {
-        let layer = build_extension_metadata_layer(&[], "acm-html");
+        let layer = build_extension_metadata_layer(&[], "acm-html", false);
         assert!(layer.is_none());
     }
 
     #[test]
     fn test_no_extensions_existing_behavior_unchanged() {
         // Regression test: with no extensions, behavior is identical to before
-        let layer = build_extension_metadata_layer(&[], "html");
+        let layer = build_extension_metadata_layer(&[], "html", false);
         assert!(layer.is_none());
     }
 
@@ -2007,7 +2178,7 @@ mod tests {
             author: Some("Test".to_string()),
             version: None,
             quarto_required: None,
-            path: PathBuf::from("/extensions").join(name),
+            path: PathBuf::from("/project/_extensions").join(name),
             contributes: Contributes {
                 metadata: Some(metadata),
                 ..Default::default()
@@ -2030,7 +2201,12 @@ mod tests {
         ]);
         let ext = make_metadata_extension("meta-ext", meta);
 
-        let layers = build_metadata_contribution_layers(&[ext], "html", Path::new("/project"));
+        let layers = build_metadata_contribution_layers(
+            &[ext],
+            "html",
+            Path::new("/project"),
+            Path::new("/project"),
+        );
         assert_eq!(layers.len(), 1);
         let layer = &layers[0];
         assert!(
@@ -2057,11 +2233,16 @@ mod tests {
         let meta = config_map(vec![("css", css)]);
         let ext = make_metadata_extension("meta-ext", meta);
 
-        let layers = build_metadata_contribution_layers(&[ext], "html", Path::new("/project"));
+        let layers = build_metadata_contribution_layers(
+            &[ext],
+            "html",
+            Path::new("/project"),
+            Path::new("/project"),
+        );
         assert_eq!(layers.len(), 1);
         assert_eq!(
             layers[0].get("css").and_then(|v| v.as_str()),
-            Some("../extensions/meta-ext/assets/extra.css"),
+            Some("_extensions/meta-ext/assets/extra.css"),
             "Path-kind values rebase ext dir → document dir"
         );
     }
@@ -2073,7 +2254,12 @@ mod tests {
             config_map(vec![("pre-render", config_str("x.ts"))]),
         )]);
         let ext = make_metadata_extension("meta-ext", meta);
-        let layers = build_metadata_contribution_layers(&[ext], "html", Path::new("/project"));
+        let layers = build_metadata_contribution_layers(
+            &[ext],
+            "html",
+            Path::new("/project"),
+            Path::new("/project"),
+        );
         assert!(layers.is_empty());
     }
 
@@ -2155,7 +2341,7 @@ mod tests {
         );
         let ext = make_extension("myext", formats);
 
-        let layer = build_extension_metadata_layer(&[ext], "myext-html");
+        let layer = build_extension_metadata_layer(&[ext], "myext-html", false);
         assert!(layer.is_some());
         let (cv, ext_path) = layer.unwrap();
         assert_eq!(ext_path, PathBuf::from("/extensions/myext"));

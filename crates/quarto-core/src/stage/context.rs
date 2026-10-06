@@ -133,6 +133,23 @@ pub struct StageContext {
     /// renderers. Bridged to/from `RenderContext` by `AstTransformsStage`.
     pub crossref_index: Option<CrossrefIndex>,
 
+    /// This document's book chapter seed (book-projects P4): chapter
+    /// number + appendix flag, consumed by the crossref index/render
+    /// transforms (`None` for every non-book render). Bridged one-way
+    /// from [`crate::render::RenderContext::chapter_seed`] — read-only
+    /// input to transforms, never mutated, so nothing restores it.
+    pub chapter_seed: Option<crate::render::ChapterSeed>,
+
+    /// Project-wide crossref registry (book-projects P5): the merged
+    /// multi-file-book index that
+    /// [`crate::transforms::CrossChapterCrossrefResolveTransform`] consults
+    /// for `@ref`s no single chapter defines (`None` for every non-book
+    /// render). Bridged one-way from
+    /// [`crate::render::RenderContext::cross_chapter_crossref_registry`] —
+    /// read-only input, never mutated, so nothing restores it.
+    pub cross_chapter_crossref_registry:
+        Option<std::sync::Arc<crate::crossref::project_index::ProjectCrossrefIndex>>,
+
     /// Per-document resource report (`bd-o8pr`). Engine stages and
     /// (Phase 3) Lua-filter post-drain push raw paths into this; the
     /// orchestrator drains it after Pass-2 render and resolves
@@ -226,6 +243,14 @@ pub struct StageContext {
     /// short-circuit to the single claiming engine. `None` for `.qmd`.
     pub claimed_engine_name: Option<String>,
 
+    /// Conversion provenance stashed by `ParseDocumentStage` (Plan 7c
+    /// seam 2) so `run_pipeline`'s StageError arm can rebuild a
+    /// `SourceContext` that resolves diagnostics against the converted
+    /// buffer, the original file, and any per-cell virtual files. `None`
+    /// unless the document was engine-converted. Mirrors
+    /// `claimed_engine_name`'s stash pattern.
+    pub conversion_stash: Option<crate::stage::ConversionStash>,
+
     /// Per-page scope-aware resolver for HTML asset URLs and
     /// cross-document body links.
     ///
@@ -262,6 +287,19 @@ pub struct StageContext {
     /// provider was installed.
     pub attribution_data: Option<Arc<crate::attribution::AttributionData>>,
 
+    /// Code-block decoration sideband (book-projects P5 bridge):
+    /// `CodeBlockGenerateTransform` (Normalization) writes it and
+    /// `CodeBlockRenderTransform` (Finalization) reads it — both inside
+    /// `AstTransformsStage`'s inner `RenderContext`, but on *opposite
+    /// sides* of a book chapter's pause/resume split, so the map must
+    /// survive on the stage context across the two pipeline calls
+    /// instead of living only inside one inner context. Single-shot
+    /// renders never notice it: both legs move it straight through.
+    pub code_block_decorations: std::collections::HashMap<
+        crate::transforms::CodeBlockDecorationKey,
+        crate::transforms::CodeBlockDecoration,
+    >,
+
     /// Per-format writer-side options, populated by Render-phase
     /// transforms inside [`crate::stage::stages::AstTransformsStage`]
     /// and bridged back here after the inner pipeline runs. Consumed
@@ -284,6 +322,35 @@ pub struct StageContext {
     ///   forwards highlight requests to JS callbacks backed by
     ///   `web-tree-sitter`. See `crates/wasm-quarto-hub-client/src/lib.rs`.
     pub user_grammar_provider: Option<Rc<RefCell<dyn quarto_highlight::UserGrammarProvider>>>,
+
+    /// Defer citeproc out of this render's `UserFiltersStage::pre()`.
+    /// Bridged one-way from [`crate::render::RenderContext::defer_citeproc`]
+    /// by `run_pipeline` — see that field for semantics. `false` by
+    /// default (citeproc runs when `"citeproc"` appears in
+    /// `meta["filters"]`).
+    pub defer_citeproc: bool,
+
+    /// This chapter's harvested citation manifest (book-projects P6),
+    /// set by [`crate::stage::stages::UserFiltersStage`] from the
+    /// citeproc filter's output alongside its existing, unchanged
+    /// per-chapter citeproc pass. `None` when citeproc did not run or
+    /// resolved no citations. Bridged to/from
+    /// [`crate::render::RenderContext::citation_manifest`] by
+    /// [`crate::pipeline::stage_context_from_render_context`]/
+    /// [`crate::pipeline::restore_render_context`].
+    pub citation_manifest: Option<pampa::citeproc_filter::ChapterCitationManifest>,
+
+    /// Book-projects P6 input, bridged one-way from
+    /// [`crate::render::RenderContext::suppress_book_bibliography`] — see
+    /// that field for semantics. `false` by default.
+    pub suppress_book_bibliography: bool,
+
+    /// Book-projects P6 output, set by
+    /// [`crate::stage::stages::UserFiltersStage::pre`] when filter
+    /// resolution placed `"citeproc"` into the `.post` group. Bridged
+    /// one-way to [`crate::render::RenderContext::citeproc_filter_in_post`]
+    /// by [`crate::pipeline::restore_render_context`].
+    pub citeproc_filter_in_post: bool,
 }
 
 impl StageContext {
@@ -304,7 +371,8 @@ impl StageContext {
         project: ProjectContext,
         document: DocumentInfo,
     ) -> Result<Self, PipelineError> {
-        let builtin_ext_path = builtin_extensions_path(runtime.as_ref());
+        let builtin_roots = all_builtin_extension_roots(runtime.as_ref());
+        let builtin_root_refs: Vec<&Path> = builtin_roots.iter().map(|p| p.as_path()).collect();
         let (extensions, mut startup_diagnostics) = crate::extension::discover_extensions(
             &document.input,
             if project.is_single_file {
@@ -312,7 +380,7 @@ impl StageContext {
             } else {
                 Some(&project.dir)
             },
-            builtin_ext_path.as_deref(),
+            &builtin_root_refs,
             runtime.as_ref(),
         );
 
@@ -359,13 +427,21 @@ impl StageContext {
             execution_policy: crate::engine::ExecutionPolicy::default(),
             execution_skipped: false,
             claimed_engine_name: None,
+            conversion_stash: None,
             resource_resolver: None,
             observer: Arc::new(NoopObserver),
             cancellation: Cancellation::new(),
             attribution_provider: None,
             attribution_data: None,
+            code_block_decorations: std::collections::HashMap::new(),
             format_options: crate::render::FormatOptions::default(),
             user_grammar_provider: None,
+            defer_citeproc: false,
+            chapter_seed: None,
+            cross_chapter_crossref_registry: None,
+            citation_manifest: None,
+            suppress_book_bibliography: false,
+            citeproc_filter_in_post: false,
         })
     }
 
@@ -959,4 +1035,4 @@ fn load_project_variables(
     }
 }
 
-use crate::extension::builtin_extensions_path;
+use crate::extension::all_builtin_extension_roots;

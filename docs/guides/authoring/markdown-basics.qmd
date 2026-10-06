@@ -148,6 +148,56 @@ For these situations, Quarto 2 offers an error message system with rich contextu
     ```
   * [![](elephant.png){fig-alt="Alt text"}](https://quarto.org)
 -->
+### Editorial marks
+
+Editorial marks record suggested changes and comments in the document itself.
+Each mark has an inline form, for a few words, and a block form, for whole paragraphs, lists or code.
+
+The inline forms wrap text in brackets, with a two-character marker after the opening bracket:
+
+```qmd
+[++ inserted text], [-- deleted text],
+[!! highlighted text] and [>> a comment].
+```
+
+[++ inserted text], [-- deleted text], [!! highlighted text] and [>> a comment].
+
+The block forms put the same marker after the opening colons of a fenced div, and apply to everything up to the closing colons:
+
+```qmd
+::: --
+
+This paragraph is marked as deleted.
+
+So is this one.
+
+:::
+```
+
+::: --
+
+This paragraph is marked as deleted.
+
+So is this one.
+
+:::
+
+`::: ++` marks inserted content, `::: !!` highlighted content, and `::: >>` a comment.
+The marker must be followed by a space or the end of the line (`::: --draft` is an error, not a class).
+
+Both forms take attributes, the inline form after the closing bracket and the block form after the marker.
+By convention `author` and `date` record who made a change or comment, and when:
+
+```qmd
+Some text [>> needs a citation]{author="Ana" date="2026-09-24"}.
+
+::: >> {author="Ana"}
+
+A longer comment, over several paragraphs.
+
+:::
+```
+
 ### Lists
 
 ### Syntax Characters (FIXME we need a better name)

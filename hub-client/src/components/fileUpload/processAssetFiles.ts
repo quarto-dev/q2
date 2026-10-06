@@ -7,7 +7,9 @@
  *
  * Checks:
  * - Size cap (`FILE_SIZE_LIMITS.MAX_FILE_SIZE`)
- * - Empty files (zero bytes) are rejected outright.
+ *
+ * Empty files are allowed: a freshly created, still-blank .qmd is a
+ * normal thing to drop in.
  */
 
 import { validateFileSize } from '../../services/resourceService';
@@ -22,12 +24,6 @@ export function processAssetFiles(files: File[]): AssetFilePreview[] {
   const out: AssetFilePreview[] = [];
   for (const file of files) {
     const preview: AssetFilePreview = { file };
-
-    if (file.size === 0) {
-      preview.error = 'File is empty';
-      out.push(preview);
-      continue;
-    }
 
     const sizeValidation = validateFileSize(file.size);
     if (!sizeValidation.valid) {

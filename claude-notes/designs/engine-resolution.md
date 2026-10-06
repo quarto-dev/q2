@@ -129,9 +129,17 @@ contributes:
         # first_class-conditional: python: { whenClass: marimo, kind: primary }
         # universal fallback:      fallback: { priority: 0 }
       file-extensions: [".jl"]     # valid_extensions — complete static (the pre-filter)
-      # NOTE: julia does NOT declare `claims-files` — its `claimsFile` inspects
-      # file content (isPercentScript / `# %%`), so it loads to decide. `.jl` in
-      # `file-extensions` is the pre-filter; the precise file-claim is dynamic.
+      # UPDATED 2026-09-24 (Plan 7b Phase 7): julia DOES now declare
+      # `claims-files`, naming the native `percent` content processor —
+      # the committed fixture (`tests/fixtures/extensions/julia-engine/`)
+      # carries exactly this. The sniff (`# %%`) still runs natively and
+      # load-free, but at *claim time* (`SourceConversionStage`), never at
+      # discovery — see § Review corrections #1 above and Plan 7b's own
+      # architecture section for the content-processor model this
+      # superseded the withdrawn 7a `content-pattern` mechanism with.
+      claims-files:
+        - extension: .jl
+          processor: { name: percent, language: julia }
 ```
 
 A static declaration is a **complete** replacement for its dynamic method
@@ -143,7 +151,7 @@ answer:
 |---|---|---|---|
 | `name()` / registration | `name:` | declared | omitted (lazy alias map) |
 | `valid_extensions()` | `file-extensions:` | always (it *is* the list) | — |
-| `claims_file()` | `claims-files:` (extension + optional `content-pattern`) | extension-only claims **and** regex-expressible content sniffs (Plan 7a) | only a *non*-regex-expressible sniff — **empty across every known Q1 engine** |
+| `claims_file()` | `claims-files:` (extension + optional `processor:`) | extension-only claims **and** processor-named content sniffs, evaluated once at claim time, never at Pass-1 discovery (Plan 7b) | only a genuinely dynamic sniff with no named processor — fails discovery gate 1, stays explicit-single-file-renderable |
 | `claims_language()` | `claims:` (kind/priority/`whenClass`) | language **and** `first_class` logic (both finite/known) | only genuine runtime/global-state logic |
 
 > **Restructure decided 2026-07-07 (Gordon) — supersedes the 2026-07-02 rename.**
@@ -166,6 +174,11 @@ answer:
 > the two Rust→TS seams (`ToEngine::ClaimsFile` construction and the
 > synthetic-file load validation). `content-pattern` is evaluated **natively in
 > Rust** and never crosses the wire.
+>
+> **Superseded 2026-09-24 (Plan 7b).** The `content-pattern` mechanism above
+> (an arbitrary regex authored per engine, evaluated natively) is withdrawn.
+> Plan 7a, which was going to build it, is tombstoned. See the corrected model
+> below and `2026-07-08-plan7b-native-content-processors.md`.
 
 **`first_class` is statically expressible — it is *not* a must-load case.**
 `claims_language(language, first_class)` is a pure function of its two
@@ -174,16 +187,31 @@ applies **only** when the cell's first class equals `<class>` (absent
 `whenClass` = any/no first class). A marimo engine therefore declares
 `python: { whenClass: marimo, kind: primary }` and is **fully static** —
 `{python .marimo}` → `Primary`, plain `{python}` / `{python .other}` → no
-claim. **Content-inspecting `claims_file` is *also* statically declarable**
-(corrected 2026-07-07): Julia's `isPercentScript` reading the file's bytes for
-`# %%` is a **pure regex over those bytes**, so it is expressed as a
-`content-pattern` on a `claims-files` entry and evaluated natively — no load
-(Plan 7a). `file-extensions` remains the can-handle pre-filter; the pattern is
-the definitive claim. The genuine dynamic residue — a sniff no regex can
-express — is **empty across every known Q1 engine**; the dynamic `claims_file`
-method survives only as a fallback for that hypothetical case. Everything —
-language, `first_class`, kind/priority, fallback, **and content sniffs** — is
-statically declarable.
+claim.
+
+**Content-inspecting `claims_file` — corrected model, 2026-09-24 (Plan 7b,
+retracting the 2026-07-07 "one genuine must-load case" framing above).** The
+premise that a content sniff "is statically declarable *for Pass-1
+discovery*" is **false** and is retracted: discovery (`project/discovery.rs`)
+performs **no** content inspection, ever. What *is* true, and is the actual
+fix: a `claims-files` entry can name a **content processor**
+(`processor: percent` / `processor: { name: percent, language: julia }` /
+`processor: spin`) that owns a native, zero-load `sniff` **and** `convert`.
+That sniff runs exactly once, at claim time (`SourceConversionStage`), on
+whatever discovery's two gates already selected — never during the walk, and
+never twice. Discovery's gate 1 (`RenderableExtensions`) treats *any* static
+`FileClaim` as renderable regardless of whether it carries a processor;
+gate 2 (an explicit `project.render` pattern — no default widening) decides
+project membership. A file whose only claim is a genuinely dynamic
+`claims_file` (no named processor — e.g. Plan 4b's `content-claim` fixture)
+fails gate 1 and is excluded from discovery entirely, though it remains
+renderable as an explicit single-file argument (hitting the wire in Pass-2).
+So: language, `first_class`, kind/priority, and fallback are statically
+declarable for *resolution* as before; content sniffs are natively evaluable
+(no engine load) but only ever at *claim* time, never at *discovery* time —
+that distinction is the correction. See
+`2026-07-08-plan7b-native-content-processors.md` for the processor registry,
+trait, and the two built-in processors (percent, spin).
 
 **Vec-per-language claims (4c0).** A `claims:` entry's value is a **list** of
 claim objects — `Vec<StaticLanguageClaim>` in Rust, a YAML sequence or a

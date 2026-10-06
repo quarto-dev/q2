@@ -62,6 +62,8 @@ fn get_runtime_arc() -> &'static Arc<WasmRuntime> {
 /// This makes the following available in the VFS:
 /// - Bootstrap 5.3.1 SCSS files under `/__quarto_resources__/bootstrap/scss/`
 /// - Built-in extensions under `/__quarto_resources__/extensions/`
+/// - Vendored extension-subtree payloads under
+///   `/__quarto_resources__/extension-subtrees/`
 fn populate_vfs_with_embedded_resources(runtime: &WasmRuntime) {
     // Bootstrap SCSS resources
     let prefix = format!("{}/bootstrap/scss", RESOURCE_PATH_PREFIX);
@@ -74,6 +76,11 @@ fn populate_vfs_with_embedded_resources(runtime: &WasmRuntime) {
 
     // Built-in extensions
     populate_builtin_extensions(runtime);
+
+    // Vendored extension-subtree payloads (bd-13gnwplg's extension-subtree
+    // infrastructure): orange-book and julia-engine, one per-subtree
+    // `_extensions/` dir each — see `populate_extension_subtrees`.
+    populate_extension_subtrees(runtime);
 }
 
 /// Populate the VFS with built-in extensions from the embedded directory.
@@ -84,6 +91,39 @@ fn populate_builtin_extensions(runtime: &WasmRuntime) {
 
     let prefix = format!("{}/extensions", RESOURCE_PATH_PREFIX);
     populate_dir_recursive(runtime, &EXTENSIONS_DIR, &prefix);
+}
+
+/// Populate the VFS with vendored extension-subtree payloads. Mirrors
+/// [`populate_builtin_extensions`], but embeds **per-subtree `_extensions/`
+/// dirs only** — never the whole vendored repo (its tests/CI config would
+/// bloat the WASM blob; see `resources/extension-subtrees/README.md`).
+///
+/// One static per entry in
+/// [`quarto_core::extension::EXTENSION_SUBTREE_NAMES`], which is also what
+/// `builtin_extension_subtree_roots` reads on this target — keep the two in
+/// sync when adding a subtree.
+fn populate_extension_subtrees(runtime: &WasmRuntime) {
+    use include_dir::{Dir, include_dir};
+
+    // orange-book (quarto_core::extension::EXTENSION_SUBTREE_NAMES[0])
+    static ORANGE_BOOK_SUBTREE_DIR: Dir = include_dir!(
+        "$CARGO_MANIFEST_DIR/../../resources/extension-subtrees/orange-book/_extensions"
+    );
+    let orange_book_prefix = format!(
+        "{}/extension-subtrees/orange-book/_extensions",
+        RESOURCE_PATH_PREFIX
+    );
+    populate_dir_recursive(runtime, &ORANGE_BOOK_SUBTREE_DIR, &orange_book_prefix);
+
+    // julia-engine (quarto_core::extension::EXTENSION_SUBTREE_NAMES[1])
+    static JULIA_ENGINE_SUBTREE_DIR: Dir = include_dir!(
+        "$CARGO_MANIFEST_DIR/../../resources/extension-subtrees/julia-engine/_extensions"
+    );
+    let julia_engine_prefix = format!(
+        "{}/extension-subtrees/julia-engine/_extensions",
+        RESOURCE_PATH_PREFIX
+    );
+    populate_dir_recursive(runtime, &JULIA_ENGINE_SUBTREE_DIR, &julia_engine_prefix);
 }
 
 /// Recursively add all files from an embedded directory to the VFS.
@@ -2062,7 +2102,8 @@ pub fn get_builtin_template(name: &str) -> String {
 // with quarto-doctemplate (pure Rust — no JS bridge involved).
 
 use quarto_project_create::{
-    CreateFromChoiceOptions, ScaffoldedFile, Surface, choices_for, create_project_from_choice,
+    CreateFromChoiceOptions, ScaffoldedFile, Surface, choices_for, choices_grouped_by_path,
+    create_project_from_choice,
 };
 
 /// A project choice for JSON serialization.
@@ -2076,6 +2117,16 @@ struct JsonProjectChoice {
     description: String,
     /// Seeded into a new user's "Examples / Templates" collection (bd-3fwtdhil)
     seed: bool,
+    /// Hierarchical group labels for the New menu (bd-q33ylfxf)
+    path: Vec<String>,
+}
+
+/// A described group of choices (bd-q33ylfxf): the New menu shows
+/// `description` as subtext under the group's item.
+#[derive(Serialize)]
+struct JsonChoiceGroup {
+    path: Vec<String>,
+    description: String,
 }
 
 /// Response for get_project_choices().
@@ -2083,6 +2134,8 @@ struct JsonProjectChoice {
 struct ProjectChoicesResponse {
     success: bool,
     choices: Vec<JsonProjectChoice>,
+    /// Only the groups the registry describes.
+    groups: Vec<JsonChoiceGroup>,
 }
 
 /// A project file for JSON serialization.
@@ -2157,12 +2210,23 @@ pub fn get_project_choices() -> String {
             name: c.name,
             description: c.description,
             seed: c.seed,
+            path: c.path,
+        })
+        .collect();
+    let groups: Vec<JsonChoiceGroup> = choices_grouped_by_path(Surface::Hub)
+        .into_iter()
+        .filter_map(|g| {
+            g.description.map(|d| JsonChoiceGroup {
+                path: g.path,
+                description: d.to_string(),
+            })
         })
         .collect();
 
     serde_json::to_string(&ProjectChoicesResponse {
         success: true,
         choices,
+        groups,
     })
     .unwrap()
 }

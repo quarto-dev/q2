@@ -1,0 +1,6 @@
+Chunk options via `## @knitr`.
+
+```{r my-label}
+sd(1:10)
+```
+

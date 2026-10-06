@@ -259,7 +259,10 @@ function render_typst_brand_yaml()
       local brandMode = param('brand-mode') or 'light'
       brand = brand and brand[brandMode]
       -- it can contain the path but we want to store an object here
-      if not meta.brand or pandoc.utils.type(meta.brand) == 'Inlines' then
+      -- QUARTO2-PATCH (P8 orange-book): Q2 serializes a bare brand path as
+      -- MetaString, which Lua sees as a string; Q1's YAML reader used Inlines.
+      if not meta.brand or pandoc.utils.type(meta.brand) == 'Inlines'
+          or pandoc.utils.type(meta.brand) == 'string' then
         meta.brand = {}
       end
       -- logo
@@ -327,7 +330,8 @@ function render_typst_brand_yaml()
         local imageFilename = logoOptions.path
         if _quarto.modules.mediabag.should_mediabag(imageFilename) then
           imageFilename = _quarto.modules.mediabag.resolved_url_cache[logoOptions.path] or _quarto.modules.mediabag.fetch_and_store_image(logoOptions.path)
-          imageFilename = _quarto.modules.mediabag.write_mediabag_entry(imageFilename) or imageFilename
+          local mediabagPath = _quarto.modules.mediabag.write_mediabag_entry(imageFilename)
+          imageFilename = mediabagPath and _quarto.modules.mediabag.typst_root_relative(mediabagPath) or imageFilename
           imageFilename = imageFilename and imageFilename:gsub('\\_', '_')
         else
           -- Typst 0.15+ rejects backslash path separators.

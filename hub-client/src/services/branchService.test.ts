@@ -27,10 +27,26 @@ import {
   subscribe,
   _resetForTesting,
   _setHandleGetterForTesting,
+  _setAuthorGetterForTesting,
 } from './branchService';
 
 interface TextDoc {
   text: string;
+}
+
+/** A stable test author id (any even-length hex string is a valid author). */
+const TEST_AUTHOR = 'deadbeefdeadbeefdeadbeefdeadbeef';
+
+/**
+ * Resolve every change in the doc's history to its attribution key, the way
+ * attribution readers do (Phase 0 finding 1): the change's own author footer
+ * (seq-1 only), else the actor→author index, else the bare actor (legacy).
+ */
+function resolveAttributionKeys(doc: A.Doc<unknown>): string[] {
+  return A.getAllChanges(doc).map((bytes) => {
+    const decoded = A.decodeChange(bytes);
+    return decoded.author ?? A.getAuthorForActor(doc, decoded.actor) ?? decoded.actor;
+  });
 }
 
 /** Minimal stand-in for a DocHandle over a real automerge doc. */
@@ -165,5 +181,72 @@ describe('branchService', () => {
     const before = calls;
     createBranch(PATH);
     expect(calls).toBe(before);
+  });
+
+  // ── Author attribution (author-ID transition) ─────────────────────────
+  //
+  // Branch docs get the current author applied at clone/load time so branch
+  // edits merge back into main attributed to their author. Once actors are
+  // random per document instance, an authorless branch would merge back as
+  // an unrelated random actor.
+
+  describe('author attribution', () => {
+    it('stamps the author on branch edits, which merge back attributed', () => {
+      _setAuthorGetterForTesting(() => TEST_AUTHOR);
+      const meta = createBranch(PATH)!;
+      // Two edits: the first is the clone-actor's seq-1 change (author
+      // footer), the second is seq 2 (no footer — resolves via the
+      // actor→author index).
+      applyBranchEdits(PATH, meta.id, [{ rangeOffset: 11, rangeLength: 0, text: '!' }]);
+      applyBranchEdits(PATH, meta.id, [{ rangeOffset: 12, rangeLength: 0, text: '?' }]);
+
+      expect(mergeBranchToMain(PATH, meta.id)).toBe(true);
+
+      const doc = handle.doc() as A.Doc<TextDoc>;
+      const keys = resolveAttributionKeys(doc);
+      expect(keys.filter((k) => k === TEST_AUTHOR)).toHaveLength(2);
+      // Exactly one of the branch changes carries the footer; the other is
+      // attributed purely through the actor→author index.
+      const footers = A.getAllChanges(doc).filter(
+        (bytes) => A.decodeChange(bytes).author === TEST_AUTHOR,
+      );
+      expect(footers).toHaveLength(1);
+      // The pre-fork main change stays authorless (actor fallback).
+      expect(keys.filter((k) => k !== TEST_AUTHOR)).toHaveLength(1);
+    });
+
+    it('applies the author on the load path after a simulated reload', () => {
+      _setAuthorGetterForTesting(() => TEST_AUTHOR);
+      const meta = createBranch(PATH, 'kept')!;
+      applyBranchEdits(PATH, meta.id, [{ rangeOffset: 11, rangeLength: 0, text: '!' }]);
+
+      // Simulate reload: drop in-memory state, keep localStorage. The next
+      // edit goes through loadDoc → clone(A.load(bytes), { author }) — a
+      // plain A.load(bytes, { author }) would silently drop the author.
+      _resetForTesting({ keepStorage: true });
+      _setHandleGetterForTesting((path: string) => (path === PATH ? handle : null));
+      _setAuthorGetterForTesting(() => TEST_AUTHOR);
+
+      applyBranchEdits(PATH, meta.id, [{ rangeOffset: 12, rangeLength: 0, text: '?' }]);
+      expect(mergeBranchToMain(PATH, meta.id)).toBe(true);
+
+      const keys = resolveAttributionKeys(handle.doc() as A.Doc<TextDoc>);
+      expect(keys.filter((k) => k === TEST_AUTHOR)).toHaveLength(2);
+    });
+
+    it('stays authorless when there is no author (D8)', () => {
+      // Default getter: no connected sync client → null → no author.
+      const meta = createBranch(PATH)!;
+      applyBranchEdits(PATH, meta.id, [{ rangeOffset: 11, rangeLength: 0, text: '!' }]);
+
+      expect(mergeBranchToMain(PATH, meta.id)).toBe(true);
+
+      const doc = handle.doc() as A.Doc<TextDoc>;
+      for (const bytes of A.getAllChanges(doc)) {
+        const decoded = A.decodeChange(bytes);
+        expect(decoded.author ?? null).toBeNull();
+        expect(A.getAuthorForActor(doc, decoded.actor) ?? null).toBeNull();
+      }
+    });
   });
 });

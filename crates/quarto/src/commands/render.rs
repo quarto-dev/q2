@@ -929,23 +929,15 @@ pub fn render_once(
         }
     }
 
-    // Native formats (HTML, revealjs) render in-process. Docx/Pptx/Epub/Typst
-    // route through Pandoc via `render_qmd_to_pandoc` (P7-foundation Task 3;
-    // epub added by the epub follow-on plan; typst added by
-    // pandoc-hybrid-typst Phase 2, once `TypstCompileStage` gives pandoc's
-    // `.typ` intermediate somewhere to go) — everything else (Pdf, Gfm,
-    // CommonMark) is still not yet supported.
-    if !format.identifier.is_native()
-        && !matches!(
-            format.identifier,
-            quarto_core::format::FormatIdentifier::Docx
-                | quarto_core::format::FormatIdentifier::Pptx
-                | quarto_core::format::FormatIdentifier::Epub
-                | quarto_core::format::FormatIdentifier::Typst
-        )
-    {
+    // Native formats (HTML, revealjs) render in-process. Every
+    // pandoc-hybrid format (`FormatIdentifier::is_pandoc_hybrid`) routes
+    // through Pandoc via `render_qmd_to_pandoc`. Only non-hybrid,
+    // non-native formats (Pdf for now — the latex/beamer epic owns it —
+    // and future enum additions that have not yet gained a
+    // `pandoc_writer_name_for` arm) are refused here.
+    if !format.identifier.is_native() && !format.identifier.is_pandoc_hybrid() {
         return Err(RenderAbort::Other(anyhow::anyhow!(
-            "Format '{}' is not yet supported. Only HTML and revealjs are available in this version.",
+            "Format '{}' is not yet supported.",
             format.identifier
         )));
     }
@@ -978,6 +970,7 @@ pub fn render_once(
         // until project YAML schema work; the resolver matrix is still
         // exercised end-to-end by Phase 0 test #9b).
         attribution: args.attribution,
+        chapter_seed: None,
     };
 
     match target {
@@ -1071,7 +1064,7 @@ fn render_single_doc(
     // destructors — the scope must close before any exit.
     let run_result = {
         let _kernel_scope = quarto_core::engine::jupyter::kernel_scope();
-        pollster::block_on(pipeline.run())
+        pollster::block_on(pipeline.run_with_book_support())
     };
     let mut summary = match run_result {
         Ok(s) => s,
@@ -1264,7 +1257,7 @@ fn render_project(
     // `std::process::exit` afterwards, which skips destructors.
     let run_result = {
         let _kernel_scope = quarto_core::engine::jupyter::kernel_scope();
-        pollster::block_on(pipeline.run())
+        pollster::block_on(pipeline.run_with_book_support())
     };
     let mut summary = match run_result {
         Ok(s) => s,
@@ -1464,6 +1457,36 @@ fn config_source_context(candidates: &[PathBuf]) -> Option<SourceContext> {
         registered |= quarto_core::config_sources::register_config_source(&mut ctx, path);
     }
     registered.then_some(ctx)
+}
+
+/// Diagnostic code of the per-page "brand file not referenced" warning,
+/// which the summary prints once (bd-yl1bpj82).
+const UNREFERENCED_BRAND_CODE: &str = "Q-5-37";
+
+/// Split the per-page Q-5-37 diagnostics out of `entries` and collapse
+/// them into one group (representative = the first, affected files = every
+/// page that carried one), reusing the coalescer's "Affected files:" tail.
+/// Returns the remaining entries untouched. `None` when no page warned.
+fn collapse_unreferenced_brand<I>(
+    entries: I,
+) -> (
+    Option<CoalescedDiagnostic>,
+    Vec<(PathBuf, DiagnosticMessage, Option<SourceContext>)>,
+)
+where
+    I: IntoIterator<Item = (PathBuf, DiagnosticMessage, Option<SourceContext>)>,
+{
+    let (brand, rest): (Vec<_>, Vec<_>) = entries
+        .into_iter()
+        .partition(|(_, d, _)| d.code.as_deref() == Some(UNREFERENCED_BRAND_CODE));
+    let group = brand
+        .first()
+        .map(|(_, representative, _)| CoalescedDiagnostic {
+            representative: representative.clone(),
+            source_context: None,
+            affected_files: brand.iter().map(|(p, _, _)| p.clone()).collect(),
+        });
+    (group, rest)
 }
 
 fn attach_config_source(group: &mut CoalescedDiagnostic, candidates: &[PathBuf]) {
@@ -1768,7 +1791,13 @@ fn format_render_diagnostics_text(
                 )
             })
         });
-        for mut group in coalesce_by_source(entries) {
+        // Q-5-37 (unreferenced brand file) is emitted once per page but
+        // is one project-wide problem with no source span, so the
+        // location coalescer would print it once per page.
+        let (brand_group, entries) = collapse_unreferenced_brand(entries);
+        let mut groups = coalesce_by_source(entries);
+        groups.extend(brand_group);
+        for mut group in groups {
             attach_config_source(&mut group, config_sources);
             let code = group.representative.code.as_deref();
             if let Some(text) =
@@ -2171,6 +2200,40 @@ mod tests {
     ///
     /// These tests pin `failure_attribution_line`, the predicate that
     /// decides when to restore it.
+    fn entry(file: &str, code: &str) -> (PathBuf, DiagnosticMessage, Option<SourceContext>) {
+        (
+            PathBuf::from(file),
+            DiagnosticMessageBuilder::warning("w")
+                .with_code(code)
+                .build(),
+            None,
+        )
+    }
+
+    #[test]
+    fn unreferenced_brand_collapses_to_one_group_listing_every_page() {
+        let (group, rest) = collapse_unreferenced_brand(vec![
+            entry("a.qmd", "Q-5-37"),
+            entry("b.qmd", "Q-2-1"),
+            entry("c.qmd", "Q-5-37"),
+        ]);
+        let group = group.expect("a brand group");
+        assert_eq!(
+            group.affected_files,
+            vec![PathBuf::from("a.qmd"), PathBuf::from("c.qmd")]
+        );
+        assert!(group.to_text().contains("Affected files: a.qmd, c.qmd"));
+        assert_eq!(rest.len(), 1);
+        assert_eq!(rest[0].1.code.as_deref(), Some("Q-2-1"));
+    }
+
+    #[test]
+    fn no_brand_group_when_no_page_warned() {
+        let (group, rest) = collapse_unreferenced_brand(vec![entry("a.qmd", "Q-2-1")]);
+        assert!(group.is_none());
+        assert_eq!(rest.len(), 1);
+    }
+
     fn group(
         diagnostic: quarto_error_reporting::DiagnosticMessage,
         ctx: Option<SourceContext>,
@@ -2452,8 +2515,9 @@ mod tests {
 
     // === classify_inputs tests =============================================
 
+    // Same function the runtime seam uses, so expected paths share its spelling.
     fn canonical(p: &Path) -> PathBuf {
-        p.canonicalize().unwrap_or_else(|_| p.to_path_buf())
+        quarto_system_runtime::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
     }
 
     fn write_file(path: &Path, contents: &str) {
@@ -3298,7 +3362,7 @@ mod render_once_tests {
 
     /// A two-page website in a fresh tempdir. Returns the canonical root.
     fn website(temp: &TempDir) -> PathBuf {
-        let dir = temp.path().canonicalize().unwrap();
+        let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         write(
             &dir.join("_quarto.yml"),
             "project:\n  type: website\nwebsite:\n  title: Base\n",
@@ -3348,7 +3412,7 @@ mod render_once_tests {
     #[test]
     fn single_document_outside_a_project_renders_beside_the_source() {
         let temp = TempDir::new().unwrap();
-        let dir = temp.path().canonicalize().unwrap();
+        let dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         let doc = dir.join("doc.qmd");
         write(&doc, "---\ntitle: Doc\n---\n\nBody.\n");
         let report = render_once(&args_for(&doc), &mut quiet_presenter()).expect("render ok");
@@ -3461,8 +3525,12 @@ mod render_once_tests {
     fn unsupported_format_aborts_before_any_render() {
         let temp = TempDir::new().unwrap();
         let dir = website(&temp);
+        // `pdf` is the load-bearing example of a still-refused format
+        // (non-native, non-pandoc-hybrid). `gfm` used to sit here, but the
+        // long-tail Phase 1 gate change admits it — and `e2e_render_gfm`
+        // pins that it now *succeeds*.
         let args = RenderArgs {
-            to: Some("gfm".to_string()),
+            to: Some("pdf".to_string()),
             ..args_for(&dir)
         };
         let err = render_once(&args, &mut quiet_presenter()).expect_err("must abort");

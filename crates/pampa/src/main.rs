@@ -346,6 +346,17 @@ fn main() {
             .enable_all()
             .build()
             .expect("failed to create tokio runtime");
+        // bd-oqoozmtr: citeproc's `bibliography`/`csl` resolve against the
+        // input file's directory (the declaration site); stdin input has no
+        // directory, so it anchors at the process CWD as before.
+        let filter_base_dir = if input_source == "-" {
+            std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+        } else {
+            std::path::Path::new(input_source)
+                .parent()
+                .filter(|p| !p.as_os_str().is_empty())
+                .map_or_else(|| std::path::PathBuf::from("."), |p| p.to_path_buf())
+        };
         match rt.block_on(unified_filter::apply_filters(
             pandoc,
             context,
@@ -353,6 +364,7 @@ fn main() {
             &args.to,
             runtime,
             None,
+            &filter_base_dir,
         )) {
             Ok(output) => {
                 // Output any diagnostics from filters

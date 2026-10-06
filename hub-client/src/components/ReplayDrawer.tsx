@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { ReplayState, ReplayControls } from '../hooks/useReplayMode';
 import { actorColor } from '../utils/palette';
 import type { ActorIdentity } from '@quarto/preview-runtime';
-import { getActorId } from '@quarto/preview-runtime';
+import { getAuthorId } from '@quarto/preview-runtime';
 import { CommentsExpandIcon, CommentsShowIcon, CommentsHideIcon } from './icons';
 import Tooltip from './Tooltip';
 import { replay } from '../strings';
@@ -52,6 +52,8 @@ interface Props {
    */
   commentsMode?: CommentsMode;
   onCommentsModeChange?: (next: CommentsMode) => void;
+  /** Gray out the comments-mode toggle (current file has no preview). */
+  commentsDisabled?: boolean;
   /**
    * q2-preview block editing on/off (bd-ew0vak6b) — the Edit pill,
    * rendered before the Authors pill. Both props must be supplied to
@@ -92,11 +94,14 @@ function CommentsModeToggle({
   mode,
   onChange,
   count,
+  disabled = false,
 }: {
   mode: CommentsMode;
   onChange: (next: CommentsMode) => void;
   /** Outstanding-comment count; badge hidden when 0 or absent. */
   count?: number;
+  /** Gray out all three modes (current file has no preview). */
+  disabled?: boolean;
 }) {
   return (
     <div
@@ -111,6 +116,7 @@ function CommentsModeToggle({
             e.stopPropagation();
             onChange('expand');
           }}
+          disabled={disabled}
           aria-label="Expand comments"
         >
           <CommentsExpandIcon />
@@ -123,6 +129,7 @@ function CommentsModeToggle({
             e.stopPropagation();
             onChange('show');
           }}
+          disabled={disabled}
           aria-label="Show comments"
         >
           <CommentsShowIcon />
@@ -135,6 +142,7 @@ function CommentsModeToggle({
             e.stopPropagation();
             onChange('hide');
           }}
+          disabled={disabled}
           aria-label="Hide comments"
         >
           <CommentsHideIcon />
@@ -333,6 +341,7 @@ export default function ReplayDrawer({
   attributionDisabled,
   commentsMode,
   onCommentsModeChange,
+  commentsDisabled,
   previewEditing,
   onPreviewEditingChange,
   previewEditingDisabled,
@@ -345,7 +354,7 @@ export default function ReplayDrawer({
     attributionOn !== undefined && onAttributionChange !== undefined;
   const showCommentsToggle =
     commentsMode !== undefined && onCommentsModeChange !== undefined;
-  const currentActorId = getActorId();
+  const currentActorId = getAuthorId();
   const drawerRef = useRef<HTMLDivElement>(null);
 
   // Auto-focus the drawer when replay mode activates so keyboard shortcuts work immediately
@@ -464,7 +473,7 @@ export default function ReplayDrawer({
           />
         )}
         {showCommentsToggle && (
-          <CommentsModeToggle mode={commentsMode!} onChange={onCommentsModeChange!} count={commentsCount} />
+          <CommentsModeToggle mode={commentsMode!} onChange={onCommentsModeChange!} count={commentsCount} disabled={!!commentsDisabled} />
         )}
       </div>
     );
@@ -508,7 +517,11 @@ export default function ReplayDrawer({
             </span>
           )}
           {state.actor && (
-            <span className={`replay-drawer__actor${currentActorId === state.actor ? ' replay-drawer__actor--me' : ''}`}>
+            <span
+              className={`replay-drawer__actor${currentActorId === state.actor ? ' replay-drawer__actor--me' : ''}`}
+              data-actor-key={state.actor}
+              data-current-actor={currentActorId ?? ''}
+            >
               <span
                 className="replay-drawer__actor-dot"
                 style={{ backgroundColor: resolveActorColor(state.actor) }}
@@ -538,7 +551,7 @@ export default function ReplayDrawer({
           />
         )}
         {showCommentsToggle && (
-          <CommentsModeToggle mode={commentsMode!} onChange={onCommentsModeChange!} count={commentsCount} />
+          <CommentsModeToggle mode={commentsMode!} onChange={onCommentsModeChange!} count={commentsCount} disabled={!!commentsDisabled} />
         )}
       </div>
 

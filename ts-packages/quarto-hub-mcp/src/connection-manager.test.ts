@@ -110,10 +110,15 @@ interface SyncClientCallSpy {
   connectCalls: Array<{
     url: string;
     indexDocId: string;
+    authorId: string | undefined;
     auth: unknown;
     options: Record<string, unknown>;
   }>;
-  createCalls: Array<{ url: string; auth: unknown }>;
+  createCalls: Array<{
+    url: string;
+    auth: unknown;
+    resolveAuthorId?: (indexDocId: string) => Promise<string | null | undefined>;
+  }>;
 }
 
 function spySyncClientFactory(): SyncClientCallSpy {
@@ -125,7 +130,7 @@ function spySyncClientFactory(): SyncClientCallSpy {
         async (
           syncServerUrl: string,
           indexDocId: string,
-          _actorId?: string,
+          authorId?: string,
           _screenName?: string,
           _color?: string,
           peerTimeoutMsOrOptions?: number | Record<string, unknown>,
@@ -141,6 +146,7 @@ function spySyncClientFactory(): SyncClientCallSpy {
           connectCalls.push({
             url: syncServerUrl,
             indexDocId,
+            authorId,
             auth: (options as { auth?: unknown }).auth ?? positionalAuth,
             options,
           });
@@ -152,8 +158,12 @@ function spySyncClientFactory(): SyncClientCallSpy {
       createNewProject: vi.fn(
         async (
           options: { syncServer: string; auth?: unknown },
+          _authorId?: string,
+          _screenName?: string,
+          _color?: string,
+          resolveAuthorId?: (indexDocId: string) => Promise<string | null | undefined>,
         ) => {
-          createCalls.push({ url: options.syncServer, auth: options.auth });
+          createCalls.push({ url: options.syncServer, auth: options.auth, resolveAuthorId });
           return { indexDocId: 'idx-new', files: [] };
         },
       ) as unknown as SyncClient['createNewProject'],
@@ -173,7 +183,9 @@ interface FetchSpy {
   calls: Array<{ url: string; headers: Record<string, string> }>;
 }
 
-function scriptedFetch(responses: Array<number | Error>): FetchSpy {
+type ScriptedResponse = number | Error | { status: number; body?: unknown };
+
+function scriptedFetch(responses: ScriptedResponse[]): FetchSpy {
   const calls: FetchSpy['calls'] = [];
   let i = 0;
   const fetchImpl: typeof fetch = async (input, init) => {
@@ -185,10 +197,21 @@ function scriptedFetch(responses: Array<number | Error>): FetchSpy {
       throw new Error(`scriptedFetch ran out of responses (call #${i})`);
     }
     if (next instanceof Error) throw next;
-    return new Response('', { status: next });
+    if (typeof next === 'number') return new Response('', { status: next });
+    return new Response(next.body !== undefined ? JSON.stringify(next.body) : '', {
+      status: next.status,
+    });
   };
   return { fetch: fetchImpl, calls };
 }
+
+/**
+ * A scripted 200 carrying a hub-minted author-ID body — the response of
+ * `GET /auth/author?project=` (bd-5y0han3a). 64 hex chars, matching the
+ * hub's HMAC-SHA256 output shape.
+ */
+const AUTHOR_ID = 'ab'.repeat(32);
+const AUTHOR_200 = { status: 200, body: { author_id: AUTHOR_ID } };
 
 // ---------------------------------------------------------------------------
 // Spy console capture
@@ -304,7 +327,7 @@ describe('ConnectionManager with creds', () => {
     const auth = seededAuth();
     auth.getValid.mockResolvedValueOnce('stale-token');
     auth.forceRefresh.mockResolvedValueOnce('fresh-token');
-    const fetchSpy = scriptedFetch([401, 200]);
+    const fetchSpy = scriptedFetch([401, 200, AUTHOR_200]);
     const sync = spySyncClientFactory();
 
     const mgr = new ConnectionManager({
@@ -316,7 +339,7 @@ describe('ConnectionManager with creds', () => {
     });
     await mgr.connect('idx-1');
 
-    expect(fetchSpy.calls).toHaveLength(2);
+    expect(fetchSpy.calls).toHaveLength(3);
     expect(fetchSpy.calls[0]!.headers.Authorization).toBe('Bearer stale-token');
     expect(fetchSpy.calls[1]!.headers.Authorization).toBe('Bearer fresh-token');
     expect(auth.forceRefresh).toHaveBeenCalledOnce();
@@ -398,9 +421,10 @@ describe('ConnectionManager with creds', () => {
 describe('ConnectionManager probe-skip', () => {
   it('skips the /health probe on a later connect once creds are confirmed', async () => {
     const auth = seededAuth();
-    // Only one scripted response: a second probe would throw "ran out of
-    // responses", so this asserts the probe is not re-issued.
-    const fetchSpy = scriptedFetch([200]);
+    // No second probe response scripted: a re-issued probe would throw
+    // "ran out of responses" (the author fetches are per-project and
+    // expected — they do not go through the probe path).
+    const fetchSpy = scriptedFetch([200, AUTHOR_200, AUTHOR_200]);
     const sync = spySyncClientFactory();
     const mgr = new ConnectionManager({
       serverUrl: 'wss://hub.example.com/ws',
@@ -413,7 +437,10 @@ describe('ConnectionManager probe-skip', () => {
     await mgr.connect('idx-1');
     await mgr.connect('idx-2');
 
-    expect(fetchSpy.calls).toHaveLength(1);
+    expect(fetchSpy.calls).toHaveLength(3);
+    // Exactly one of those calls is the /health probe; the other two
+    // are the per-project author fetches.
+    expect(fetchSpy.calls.filter((c) => c.url.endsWith('/health'))).toHaveLength(1);
     expect(sync.connectCalls).toHaveLength(2);
     // Still resolves a token for the skipped connect (proactive refresh /
     // early error surfacing).
@@ -741,8 +768,8 @@ describe('mid-session auth rejection', () => {
   it('recovers silently when one forceRefresh+reprobe fixes a 401', async () => {
     const auth = seededAuth();
     auth.forceRefresh.mockResolvedValue('fresh-token');
-    // initial probe 200, recheck probe 200.
-    const fetchSpy = scriptedFetch([200, 200]);
+    // initial probe 200, author fetch, recheck probe 200.
+    const fetchSpy = scriptedFetch([200, AUTHOR_200, 200]);
     const sync = spySyncClientFactory();
     const mgr = new ConnectionManager({
       serverUrl: 'wss://hub.example.com/ws',
@@ -756,8 +783,8 @@ describe('mid-session auth rejection', () => {
     await mgr.handleAuthRejected(evidence401);
 
     expect(auth.forceRefresh).toHaveBeenCalledOnce();
-    expect(fetchSpy.calls).toHaveLength(2);
-    expect(fetchSpy.calls[1]!.headers.Authorization).toBe('Bearer fresh-token');
+    expect(fetchSpy.calls).toHaveLength(3);
+    expect(fetchSpy.calls[2]!.headers.Authorization).toBe('Bearer fresh-token');
     // Recovery is invisible: no invalidate, project handle intact — the
     // adapter's own retry picks the fresh token up via getBearer.
     expect(auth.invalidate).not.toHaveBeenCalled();
@@ -767,9 +794,10 @@ describe('mid-session auth rejection', () => {
   it('invalidates and enters reauth-required on persistent 401; the next call fails fast with ReauthRequired', async () => {
     const auth = seededAuth();
     auth.forceRefresh.mockResolvedValue('still-bad-token');
-    // initial probe 200, recheck probe 401 — and NOTHING more scripted:
-    // the post-state connect must fail without touching the network.
-    const fetchSpy = scriptedFetch([200, 401]);
+    // initial probe 200, author fetch, recheck probe 401 — and NOTHING
+    // more scripted: the post-state connect must fail without touching
+    // the network.
+    const fetchSpy = scriptedFetch([200, AUTHOR_200, 401]);
     const sync = spySyncClientFactory();
     const mgr = new ConnectionManager({
       serverUrl: 'wss://hub.example.com/ws',
@@ -794,7 +822,7 @@ describe('mid-session auth rejection', () => {
   it('self-heals from reauth-required after the user re-authenticates', async () => {
     const auth = seededAuth();
     auth.forceRefresh.mockResolvedValue('still-bad-token');
-    const fetchSpy = scriptedFetch([200, 401, 200]);
+    const fetchSpy = scriptedFetch([200, AUTHOR_200, 401, 200]);
     const sync = spySyncClientFactory();
     const mgr = new ConnectionManager({
       serverUrl: 'wss://hub.example.com/ws',
@@ -823,8 +851,9 @@ describe('mid-session auth rejection', () => {
 
   it('treats 403 evidence as terminal denial: keyring kept, clear message on the next call', async () => {
     const auth = seededAuth();
-    // initial probe 200; the next connect's re-probe answers 403.
-    const fetchSpy = scriptedFetch([200, 403]);
+    // initial probe 200, author fetch; the next connect's re-probe
+    // answers 403.
+    const fetchSpy = scriptedFetch([200, AUTHOR_200, 403]);
     const sync = spySyncClientFactory();
     const mgr = new ConnectionManager({
       serverUrl: 'wss://hub.example.com/ws',
@@ -853,9 +882,9 @@ describe('mid-session auth rejection', () => {
   it('maps a 403 on the recheck probe after 401 evidence to the same denial state', async () => {
     const auth = seededAuth();
     auth.forceRefresh.mockResolvedValue('fresh-token');
-    // initial 200; recheck probe 403 (banned mid-session while a refresh
-    // was in flight); next connect re-probes 403.
-    const fetchSpy = scriptedFetch([200, 403, 403]);
+    // initial 200, author fetch; recheck probe 403 (banned mid-session
+    // while a refresh was in flight); next connect re-probes 403.
+    const fetchSpy = scriptedFetch([200, AUTHOR_200, 403, 403]);
     const sync = spySyncClientFactory();
     const mgr = new ConnectionManager({
       serverUrl: 'wss://hub.example.com/ws',
@@ -900,9 +929,9 @@ describe('mid-session auth rejection', () => {
   it('coalesces concurrent reports into one forceRefresh+reprobe cycle', async () => {
     const auth = seededAuth();
     auth.forceRefresh.mockResolvedValue('fresh-token');
-    // Exactly one recheck response scripted: a second cycle would throw
-    // "ran out of responses".
-    const fetchSpy = scriptedFetch([200, 200]);
+    // Exactly one recheck response scripted after the initial probe and
+    // author fetch: a second cycle would throw "ran out of responses".
+    const fetchSpy = scriptedFetch([200, AUTHOR_200, 200]);
     const sync = spySyncClientFactory();
     const mgr = new ConnectionManager({
       serverUrl: 'wss://hub.example.com/ws',
@@ -920,7 +949,7 @@ describe('mid-session auth rejection', () => {
     ]);
 
     expect(auth.forceRefresh).toHaveBeenCalledOnce();
-    expect(fetchSpy.calls).toHaveLength(2);
+    expect(fetchSpy.calls).toHaveLength(3);
   });
 
   it('leaves state untouched when the recheck refresh fails transiently (TokenRefreshError)', async () => {
@@ -963,6 +992,102 @@ describe('mid-session auth rejection', () => {
     expect(String((err as Error).message)).not.toMatch(/unexpected status/i);
     expect(String((err as Error).message)).toMatch(/banned|allowlist/i);
     expect(sync.connectCalls).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Author-ID fetch (bd-5y0han3a)
+// ---------------------------------------------------------------------------
+
+describe('author-ID fetch', () => {
+  it('fetches /auth/author with the Bearer and passes it as authorId on connect', async () => {
+    const auth = seededAuth();
+    const fetchSpy = scriptedFetch([200, AUTHOR_200]);
+    const sync = spySyncClientFactory();
+    const mgr = new ConnectionManager({
+      serverUrl: 'wss://hub.example.com/ws',
+      credentialStore: auth.store,
+      refreshManager: auth.refresh,
+      fetch: fetchSpy.fetch,
+      syncClientFactory: sync.factory,
+    });
+    await mgr.connect('idx-1');
+
+    const authorCall = fetchSpy.calls[1]!;
+    expect(authorCall.url).toBe('https://hub.example.com/auth/author?project=idx-1');
+    expect(authorCall.headers.Authorization).toBe('Bearer initial-id-token');
+    expect(sync.connectCalls[0]!.authorId).toBe(AUTHOR_ID);
+  });
+
+  it('falls back to the deprecated /auth/actor when /auth/author 404s', async () => {
+    const auth = seededAuth();
+    const fetchSpy = scriptedFetch([200, 404, { status: 200, body: { actor_id: AUTHOR_ID } }]);
+    const sync = spySyncClientFactory();
+    const mgr = new ConnectionManager({
+      serverUrl: 'wss://hub.example.com/ws',
+      credentialStore: auth.store,
+      refreshManager: auth.refresh,
+      fetch: fetchSpy.fetch,
+      syncClientFactory: sync.factory,
+    });
+    await mgr.connect('idx-1');
+
+    expect(fetchSpy.calls[1]!.url).toBe('https://hub.example.com/auth/author?project=idx-1');
+    expect(fetchSpy.calls[2]!.url).toBe('https://hub.example.com/auth/actor?project=idx-1');
+    expect(fetchSpy.calls[2]!.headers.Authorization).toBe('Bearer initial-id-token');
+    expect(sync.connectCalls[0]!.authorId).toBe(AUTHOR_ID);
+  });
+
+  it('proceeds authorless with a stderr warning when the fetch fails', async () => {
+    const auth = seededAuth();
+    const fetchSpy = scriptedFetch([200, 500]);
+    const sync = spySyncClientFactory();
+    const mgr = new ConnectionManager({
+      serverUrl: 'wss://hub.example.com/ws',
+      credentialStore: auth.store,
+      refreshManager: auth.refresh,
+      fetch: fetchSpy.fetch,
+      syncClientFactory: sync.factory,
+    });
+    await mgr.connect('idx-1');
+
+    expect(sync.connectCalls[0]!.authorId).toBeUndefined();
+    const errors = (consoleSpies[2]!.mock.calls as unknown[][]).flat().map(String);
+    expect(errors.some((line) => line.includes('author-ID fetch'))).toBe(true);
+  });
+
+  it('does not fetch an author when no Bearer is attached', async () => {
+    const fetchSpy = scriptedFetch([200]);
+    const sync = spySyncClientFactory();
+    const mgr = new ConnectionManager({
+      serverUrl: 'wss://hub.example.com/ws',
+      fetch: fetchSpy.fetch,
+      syncClientFactory: sync.factory,
+    });
+    await mgr.connect('idx-1');
+
+    expect(fetchSpy.calls).toHaveLength(1);
+    expect(sync.connectCalls[0]!.authorId).toBeUndefined();
+  });
+
+  it('wires an author resolver into createProject', async () => {
+    const auth = seededAuth();
+    const fetchSpy = scriptedFetch([200, AUTHOR_200]);
+    const sync = spySyncClientFactory();
+    const mgr = new ConnectionManager({
+      serverUrl: 'wss://hub.example.com/ws',
+      credentialStore: auth.store,
+      refreshManager: auth.refresh,
+      fetch: fetchSpy.fetch,
+      syncClientFactory: sync.factory,
+    });
+    await mgr.createProject([{ path: 'a.qmd', content: 'content' }]);
+
+    const resolver = sync.createCalls[0]!.resolveAuthorId;
+    expect(resolver).toBeDefined();
+    await expect(resolver!('idx-new')).resolves.toBe(AUTHOR_ID);
+    expect(fetchSpy.calls[1]!.url).toBe('https://hub.example.com/auth/author?project=idx-new');
+    expect(fetchSpy.calls[1]!.headers.Authorization).toBe('Bearer initial-id-token');
   });
 });
 

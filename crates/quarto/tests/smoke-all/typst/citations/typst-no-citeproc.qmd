@@ -1,0 +1,24 @@
+---
+title: "Citeproc and Typst"
+format:
+  typst:
+    keep-typ: true
+bibliography: refs.bib
+bibliographystyle: "chicago-author-date"
+_quarto:
+  tests:
+    typst:
+      ensureTypstFileRegexMatches:
+      - ['\#set bibliography\(style\: [^)]*\)', '\#bibliography\([^)]*\)', '\#cite\([^)]*\)']
+      - ['<refs>', '<ref-Cronbach_1951>']
+      ensurePdfRegexMatches:
+      - ['\(Cronbach 1951a; 1951b\)', '\(Cronbach 1951a, p\. 42\)']
+      - []
+      noErrors: default
+---
+
+Hello @Cronbach_1951
+
+Hello [@Cronbach_1951; @Cronbach_1952]
+
+With locator: [@Cronbach_1951, p. 42]

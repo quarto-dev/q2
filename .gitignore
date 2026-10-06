@@ -23,6 +23,23 @@ resources/basic-quarto-website-compiled/
 # output file + <stem>_files/); keep those render artifacts out of git.
 crates/quarto/tests/smoke-all/**/_site/
 
+# smoke-all `type: book` fixtures render a `_book/` tree, a `.quarto/`
+# freezer/cache dir, and per-chapter `<chapter>_files/` dirs beside their
+# _quarto.yml, none of which the runner cleans up. Keep those render
+# artifacts out of git (mirrors the `_site/` rule above).
+crates/quarto/tests/smoke-all/**/_book/
+crates/quarto/tests/smoke-all/**/.quarto/
+crates/quarto/tests/smoke-all/**/*_files/
+
+# smoke-all `format: typst` fixtures leave the rendered `<stem>.typ` beside
+# the .qmd (keep-typ), which the runner does not clean up. Extension sources
+# under `_extensions/` (e.g. typst-show.typ) are real inputs, so re-include them.
+crates/quarto/tests/smoke-all/**/*.typ
+!crates/quarto/tests/smoke-all/**/_extensions/**/*.typ
+
+# e2e test scratch output tree (local render runs), not build output.
+/target-e2e/
+
 # Claude Code session-specific plan symlink
 claude-notes/plans/CURRENT.md
 
@@ -55,6 +72,7 @@ crates/wasm-quarto-hub-client/pkg/
 
 # Per-session local context (managed by `cargo xtask create-worktree` for worktrees)
 CLAUDE.local.md
+AGENTS.local.md
 
 # braid issue tracker — .braid.toml holds the skein doc id, a read/write
 # bearer token. NEVER commit it. The committed, non-secret `.braid-project`
@@ -82,8 +100,8 @@ CLAUDE.local.md
 crates/quarto-core/tests/fixtures/extensions/*/dist/
 resources/extension-build/deno.lock
 
-# Posit Assistant per-machine settings
-.posit/assistant/settings.json
+# Posit Assistant per-machine settings and state
+.posit/
 
 # `q2 docs llms` staged embed (cargo xtask build-agents-docs) — generated
 # from docs/_site; never commit it (bd-hwop1zii).

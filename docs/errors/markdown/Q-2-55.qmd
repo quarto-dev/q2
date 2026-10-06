@@ -1,0 +1,56 @@
+---
+title: "Class Specifier Before Identifier in Attribute"
+description: "Inside `{...}` attribute braces, an identifier (`#id`) appears after a class specifier (`.name`)."
+code: Q-2-55
+subsystem: markdown
+status: stub
+since: "99.9.9"
+categories:
+  - markdown
+---
+
+# `Q-2-55` — Class Specifier Before Identifier in Attribute
+
+> Inside `{...}` attribute braces, an identifier (`#id`) appears after a class specifier (`.name`).
+
+## What this means
+
+The attribute specifier syntax requires the identifier (`#id`) to come first. This error fires when an identifier appears after a class specifier.
+
+The parser reports the error at the out-of-place token and adds a hint
+that rewrites your own attribute list in the accepted order, using the
+identifiers, classes and values you actually wrote.
+
+Quarto 2 is deliberately stricter here than Pandoc's reader, which accepts
+these in any order. The fixed order keeps documents consistent: identity,
+classes, then configuration.
+
+## How to fix
+
+Put the identifier first, then the classes, then the key-value pairs:
+
+```markdown
+[foo]{#id .class}    <!-- correct -->
+[foo]{.class #id}    <!-- triggers Q-2-55 -->
+```
+
+This applies to every construct that takes an attribute list: spans,
+images, inline code, editorial marks (`[++ ]`, `[-- ]`, `[>> ]`, `[!! ]`),
+headings, fenced divs, editorial divs and fenced code blocks.
+
+`qmd-syntax-helper convert -r attribute-ordering -i <file>` rewrites
+attribute lists into the accepted order for you.
+
+## Example
+
+The parser flags this input:
+
+```markdown
+[foo]{.class #id}
+```
+
+## Related
+
+- [`Q-2-3`](Q-2-3.qmd), [`Q-2-55`](Q-2-55.qmd), [`Q-2-56`](Q-2-56.qmd) — the three
+  inversions of the attribute order: key-value before class, class before
+  identifier, and key-value before identifier.

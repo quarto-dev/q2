@@ -164,12 +164,34 @@ fn try_desugar_code_block(
         // a crossref means the author is naming the cell for the
         // engine — no wrapper, and the label stays in the body.
         Some(label) => match registry.classify_cite_id(label) {
+            Some(def) if parsed.has(&format!("{}-subcap", def.ref_type)) => {
+                // A multi-panel cell (R/knitr `fig-subcap` et al.): leave
+                // `label`/`<reftype>-cap` in the body untouched. The engine
+                // needs its own `label` option intact to synthesize each
+                // panel's id and per-panel caption (see knitr's
+                // `output_label_placeholder`/`figure_cap` in hooks.R); the
+                // resulting self-labelled `.cell` div — with its nested,
+                // individually labelled/captioned panel images — is the
+                // exact shape the all-Lua subfloat pipeline
+                // (`parsefiguredivs.lua` + `crossref_mark_subfloats`)
+                // already turns into a numbered panel. Wrapping it here,
+                // pre-engine, would strip the very options the engine needs
+                // and leave the panel images unlabelled (no subfloats).
+                Wrapper::None
+            }
             Some(def) => {
                 let ref_type = def.ref_type.clone();
                 let label = label.to_string();
                 consume("label".to_string());
                 let caption = consume(format!("{ref_type}-cap"));
-                Wrapper::Float { label, caption }
+                let classes = wrapper_column_classes(&parsed, &ref_type);
+                let attributes = wrapper_cap_location_attribute(&parsed, &ref_type);
+                Wrapper::Float {
+                    label,
+                    caption,
+                    classes,
+                    attributes,
+                }
             }
             None => Wrapper::None,
         },
@@ -213,13 +235,20 @@ fn try_desugar_code_block(
     });
 
     Some(match wrapper {
-        Wrapper::Float { label, caption } => {
+        Wrapper::Float {
+            label,
+            caption,
+            classes,
+            attributes,
+        } => {
             let mut content: Blocks = vec![new_code_block];
             if let Some(caption) = caption {
                 content.push(caption_paragraph(caption, diagnostics));
             }
+            let attr_map: hashlink::LinkedHashMap<String, String> =
+                attributes.into_iter().collect();
             Block::Div(Div {
-                attr: (label, Vec::new(), hashlink::LinkedHashMap::new()),
+                attr: (label, classes, attr_map),
                 content,
                 source_info: cb.source_info.clone(),
                 attr_source: AttrSourceInfo::empty(),
@@ -251,6 +280,70 @@ fn try_desugar_code_block(
     })
 }
 
+/// Classes the wrapper `Div` must carry so the crossref float it becomes
+/// (`transforms/float_ref_target.rs` converts `Div(#<ref>-..)` into
+/// `Custom(FloatRefTarget)`) already has its margin/caption-location
+/// classes when Lua's column machinery inspects it.
+///
+/// Q1's `columns-preprocess.lua` (`resolveColumnClassesForCodeCell`)
+/// forwards a `.cell` div's `column`/`cap-location` classes *down* onto a
+/// figure/table it discovers nested inside — a shape that held when the
+/// float was still a bare `Figure`/`Table` sitting inside the cell output
+/// at the time Lua ran. Q2's engine-agnostic pre-engine sugaring (this
+/// module) now wraps a labelled cell in its float `Div` *before* the
+/// engine (e.g. knitr) even executes, so by the time Lua runs, the float
+/// is that `Div`'s *ancestor*, not a descendant — the Lua-side downward
+/// forwarding can never reach it. Reading `column`/`cap-location` here and
+/// setting the classes directly on the wrapper closes that gap.
+///
+/// `column`/`cap-location` are read (not consumed): the engine still sees
+/// them in the code block body and may build its own inner wrapper class
+/// from them too (e.g. knitr's `hooks.R` still adds `column-margin` to its
+/// `.cell` div) — redundant but harmless, and this keeps every other
+/// engine's existing behavior unchanged.
+fn wrapper_column_classes(parsed: &CellOptions, ref_type: &str) -> Vec<String> {
+    let mut classes = Vec::new();
+
+    let column = parsed
+        .get(&format!("{ref_type}-column"))
+        .or_else(|| parsed.get("column"));
+    if let Some(column) = column {
+        classes.push(format!("column-{column}"));
+    }
+
+    let cap_location = parsed
+        .get(&format!("{ref_type}-cap-location"))
+        .or_else(|| parsed.get("cap-location"));
+    if cap_location == Some("margin") {
+        classes.push("margin-caption".to_string());
+    }
+
+    classes
+}
+
+/// The wrapper `Div`'s `cap-location` attribute, forwarded verbatim from
+/// whichever of `<reftype>-cap-location`/`cap-location` the cell set.
+///
+/// `floatreftarget.lua`'s `cap_location(obj)` (customnodes/floatreftarget.lua)
+/// is what actually decides a float's caption position; it reads
+/// `obj.attributes['cap-location']` (falling back from a ref-type-qualified
+/// key it can't derive here) to pick between `"top"`/`"bottom"`/`"margin"`.
+/// Before this, only the `"margin"` case was forwarded (as the
+/// `margin-caption` class, via [`wrapper_column_classes`]) — any other value
+/// (e.g. `cap-location: bottom`) was silently dropped, so Lua always fell
+/// back to the category default instead of honoring the author's cell
+/// option. `"margin"` still also gets the class alongside this attribute:
+/// something downstream may depend on it as a class, not just the attribute.
+fn wrapper_cap_location_attribute(parsed: &CellOptions, ref_type: &str) -> Vec<(String, String)> {
+    let cap_location = parsed
+        .get(&format!("{ref_type}-cap-location"))
+        .or_else(|| parsed.get("cap-location"));
+    match cap_location {
+        Some(value) => vec![("cap-location".to_string(), value.to_string())],
+        None => Vec::new(),
+    }
+}
+
 /// What the cell's caption options call for around the rewritten code
 /// block.
 enum Wrapper<'a> {
@@ -259,6 +352,12 @@ enum Wrapper<'a> {
     Float {
         label: String,
         caption: Option<&'a OptionValue>,
+        /// Classes read off `column`/`cap-location` (and their
+        /// `<reftype>-`-scoped forms) via [`wrapper_column_classes`].
+        classes: Vec<String>,
+        /// The `cap-location` attribute, via
+        /// [`wrapper_cap_location_attribute`].
+        attributes: Vec<(String, String)>,
     },
     /// A plain [`Block::Figure`]: the HTML writer renders it as
     /// `<figure>…<figcaption>` with no number and no float scaffolding.
@@ -439,7 +538,7 @@ fn inject_acc_descr(source: &str, description: &str) -> String {
 /// wrapper removed (` ```{python} ` parses to the class `{python}`, and
 /// its options are still `#|`). An unclassed block reports `""`, which
 /// [`comment_syntax_for`] maps to the `#` default.
-fn language_of(cb: &quarto_pandoc_types::block::CodeBlock) -> String {
+pub(crate) fn language_of(cb: &quarto_pandoc_types::block::CodeBlock) -> String {
     let Some(first) = cb.attr.1.first() else {
         return String::new();
     };
@@ -620,6 +719,11 @@ fn is_fence_line(line: &str) -> bool {
 struct CellOptions {
     values: std::collections::HashMap<String, OptionValue>,
     syntax: CommentSyntax,
+    /// Every option key seen, including ones whose value is a YAML
+    /// sequence/mapping and so has no entry in `values` (e.g. `fig-subcap`'s
+    /// list of per-panel captions). Presence checks that don't need the
+    /// value itself go through [`CellOptions::has`] instead of `get`.
+    all_keys: std::collections::HashSet<String>,
 }
 
 /// One option's scalar value and the provenance of its **key**, which is
@@ -647,6 +751,12 @@ impl CellOptions {
     fn get(&self, key: &str) -> Option<&str> {
         self.values.get(key).map(|v| v.value.as_str())
     }
+
+    /// Whether `key` was present in the cell's options at all, regardless
+    /// of whether its value was a scalar `get` can return.
+    fn has(&self, key: &str) -> bool {
+        self.all_keys.contains(key)
+    }
 }
 
 /// Split `text` into `<marker> key: value` options + code per
@@ -664,15 +774,18 @@ impl CellOptions {
 fn parse_cell_options(language: &str, text: &str, body_source: SourceInfo) -> CellOptions {
     let syntax = comment_syntax_for(language);
     let mut values = std::collections::HashMap::new();
+    let mut all_keys = std::collections::HashSet::new();
 
     if let Ok(part) = partition_cell_options(language, text, body_source)
         && let Some(options) = part.options
         && let Some(entries) = options.as_hash()
     {
         for entry in entries {
-            let (Some(key), Some(value)) =
-                (entry.key.yaml.as_str(), scalar_to_string(&entry.value))
-            else {
+            let Some(key) = entry.key.yaml.as_str() else {
+                continue;
+            };
+            all_keys.insert(key.to_string());
+            let Some(value) = scalar_to_string(&entry.value) else {
                 continue;
             };
             values.insert(
@@ -690,7 +803,11 @@ fn parse_cell_options(language: &str, text: &str, body_source: SourceInfo) -> Ce
         }
     }
 
-    CellOptions { values, syntax }
+    CellOptions {
+        values,
+        syntax,
+        all_keys,
+    }
 }
 
 /// Render a scalar YAML node as the string this module works with.
@@ -928,6 +1045,99 @@ mod tests {
             panic!()
         };
         assert_eq!(plain_text(&p.content), "A quoted caption.");
+    }
+
+    /// Root cause 3 (bd-13gnwplg / P5 margin-layout): the wrapper `Div`
+    /// this module builds becomes the `Custom(FloatRefTarget)` node the
+    /// Lua-side column machinery (`hasMarginColumn` in
+    /// `columns-preprocess.lua`) inspects directly, so `column: margin`
+    /// must land on the wrapper's own classes, not just stay in the code
+    /// block for the engine's inner `.cell` div (see
+    /// `wrapper_column_classes`'s doc comment for the full mechanism).
+    #[test]
+    fn column_margin_cell_option_becomes_wrapper_class() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code(
+            "#| label: fig-scatter\n#| fig-cap: Scatter Plot in Margin\n#| column: margin\nplot(x, y)\n",
+        )];
+        desugar(&mut blocks, &reg);
+
+        let Block::Div(div) = &blocks[0] else {
+            panic!("expected Div, got {:?}", blocks[0]);
+        };
+        assert_eq!(div.attr.0, "fig-scatter");
+        assert_eq!(div.attr.1, vec!["column-margin".to_string()]);
+
+        // `column` is not a routed key: it must stay in the body so the
+        // engine's own hook (e.g. knitr's `hooks.R`) still sees it and
+        // applies its own `.cell`-level class -- this is additive, not a
+        // replacement.
+        let Block::CodeBlock(cb) = &div.content[0] else {
+            panic!("expected the code block");
+        };
+        assert!(
+            cb.text.contains("column: margin"),
+            "unrouted `column` option must remain in the body; got:\n{}",
+            cb.text
+        );
+    }
+
+    /// Same mechanism as `column_margin_cell_option_becomes_wrapper_class`,
+    /// for `cap-location: margin` -> `margin-caption`.
+    #[test]
+    fn cap_location_margin_cell_option_becomes_wrapper_class() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code(
+            "#| label: tbl-scatter\n#| tbl-cap: A table.\n#| cap-location: margin\nprint('hi')\n",
+        )];
+        desugar(&mut blocks, &reg);
+
+        let Block::Div(div) = &blocks[0] else {
+            panic!("expected Div, got {:?}", blocks[0]);
+        };
+        assert_eq!(div.attr.1, vec!["margin-caption".to_string()]);
+    }
+
+    /// No `column`/`cap-location` option: the wrapper carries no classes
+    /// at all, matching pre-fix behavior for the common case.
+    #[test]
+    fn no_column_option_leaves_wrapper_classless() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code(
+            "#| label: fig-plain\n#| fig-cap: Plain.\nplot(x, y)\n",
+        )];
+        desugar(&mut blocks, &reg);
+
+        let Block::Div(div) = &blocks[0] else {
+            panic!("expected Div, got {:?}", blocks[0]);
+        };
+        assert!(div.attr.1.is_empty());
+    }
+
+    /// Root cause 4 (bd-13gnwplg / P5 margin-layout): a labelled cell that
+    /// also carries `fig-subcap` (R/knitr's multi-panel form) must be left
+    /// entirely untouched pre-engine. Wrapping it the way a single-caption
+    /// cell is wrapped would strip `label`/`fig-cap` from the body before
+    /// knitr runs, so knitr's own `output_label_placeholder`/`figure_cap`
+    /// (hooks.R) could no longer synthesize per-panel ids and captions —
+    /// the panel images would come back unlabelled, and the all-Lua
+    /// subfloat pipeline (`parsefiguredivs.lua`) would have nothing to
+    /// recognize as a subfloat. Leaving the cell alone preserves the
+    /// classic self-labelled `.cell` div shape that pipeline already knows
+    /// how to turn into a numbered panel.
+    ///
+    /// `fig-subcap`'s value is a YAML sequence, which `CellOptions::get`
+    /// cannot see (it only stores scalars) -- this is what
+    /// `CellOptions::has` is for.
+    #[test]
+    fn fig_subcap_cell_is_left_unwrapped_for_the_engine() {
+        let reg = RefTypeRegistry::builtin();
+        let mut blocks = vec![code(
+            "#| label: fig-panel\n#| fig-cap: Two plots.\n#| fig-subcap:\n#|   - Sine\n#|   - Cosine\nplot(x, y)\n",
+        )];
+        let before = blocks.clone();
+        desugar(&mut blocks, &reg);
+        assert_eq!(blocks, before, "fig-subcap cell must not be rewritten");
     }
 
     /// D2 (bd-sdpp9rw4): a caption is markdown, so `*emphasized*` must

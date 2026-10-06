@@ -1,0 +1,25 @@
+---
+title: "system-ui in table styling (quarto-cli #11683)"
+format:
+  typst:
+    keep-typ: true
+_quarto:
+  tests:
+    typst:
+      # system-ui and the other stack entries aren't Typst families; the
+      # keywords must be resolved or dropped, never emitted.
+      ensureTypstFileRegexMatches:
+        -
+          - '#set text\(font: \("[^"]+"'
+        -
+          - '"system-ui"'
+          - '"sans-serif"'
+---
+
+::: {style='font-family: system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji"'}
+
+| Col | Num |
+|-----|-----|
+| abc | 123 |
+
+:::

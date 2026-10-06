@@ -94,6 +94,7 @@ use super::context::{ExecuteResult, ExecutionContext};
 use super::error::ExecutionError;
 use super::traits::ExecutionEngine;
 use crate::engine::LanguageClaim;
+use crate::extension::types::{FileClaim, ProcessorSpec};
 
 /// Knitr engine for R code execution.
 ///
@@ -125,6 +126,20 @@ impl KnitrEngine {
     /// Get the path to Rscript, if found.
     pub fn rscript_path(&self) -> Option<&Path> {
         self.rscript_path.as_deref()
+    }
+
+    /// Static, construction-free `spin` claim (Plan 7b Phase 5) — the same
+    /// data `file_claims()` returns, callable without `KnitrEngine::new()`
+    /// (which probes `PATH` for `Rscript`). Used by `builtin_file_claims()`
+    /// for discovery's gate 1.
+    ///
+    /// One entry covers both `.r` and `.R`: extensions are stored undotted
+    /// lowercase (case-insensitive lookup, see the julia-epic F5 commit).
+    pub fn static_file_claims() -> Vec<FileClaim> {
+        vec![FileClaim {
+            extension: "r".to_string(),
+            processor: Some(ProcessorSpec::Spin),
+        }]
     }
 }
 
@@ -264,6 +279,10 @@ impl ExecutionEngine for KnitrEngine {
         self.rscript_path.is_some()
     }
 
+    fn file_claims(&self) -> Vec<FileClaim> {
+        Self::static_file_claims()
+    }
+
     fn intermediate_files(&self, input_path: &Path) -> Vec<PathBuf> {
         // knitr produces {input}_files/ directory for figures
         let stem = input_path
@@ -389,6 +408,38 @@ mod tests {
     fn test_knitr_engine_can_freeze() {
         let engine = KnitrEngine::new();
         assert!(engine.can_freeze());
+    }
+
+    // --- Plan 7b Phase 5: builtin file claims. ---
+
+    #[test]
+    fn static_file_claims_returns_spin_claim() {
+        let claims = KnitrEngine::static_file_claims();
+        assert_eq!(claims.len(), 1);
+        assert_eq!(claims[0].extension, "r");
+        assert_eq!(
+            claims[0].processor,
+            Some(crate::extension::types::ProcessorSpec::Spin)
+        );
+    }
+
+    /// A spin `.R` converts via the default `markdown_for_file` dispatch
+    /// (native, no `Rscript` subprocess) — `KnitrEngine` overrides neither
+    /// `claims_file` nor `markdown_for_file` itself; the `file_claims()`
+    /// override is enough for the trait default to work.
+    #[test]
+    fn r_spin_converts_via_native_dispatch() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("script.R");
+        std::fs::write(&file, "#' hello\n").unwrap();
+
+        let engine = KnitrEngine::new();
+        let runtime: std::sync::Arc<dyn quarto_system_runtime::SystemRuntime> =
+            std::sync::Arc::new(quarto_system_runtime::NativeRuntime::new());
+        let (markdown, _source_info) = engine
+            .markdown_for_file(&file, &runtime)
+            .expect("spin .R must convert via native dispatch");
+        assert_eq!(markdown, "hello\n");
     }
 
     #[test]

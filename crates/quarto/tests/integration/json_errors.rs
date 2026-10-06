@@ -387,6 +387,327 @@ fn discovery_parse_error_json_carries_real_code() {
     );
 }
 
+/// Wire contract: `source_file` uses the plain path form whenever one
+/// exists, so no Windows `\\?\` verbatim prefix. The test runs from a
+/// plain cwd with a relative argument, as a user would, so any verbatim
+/// prefix on the wire comes from q2 itself.
+#[test]
+fn source_file_json_is_a_plain_path() {
+    let temp = TempDir::new().unwrap();
+    let dir = dunce::simplified(&canonical(temp.path())).to_path_buf();
+    let fixture = dir.join("bad.qmd");
+    write_file(&fixture, "---\ntitle: Bad\n---\n\n```{python\n");
+    // The whole fixture path, not just its directory, must have a plain
+    // form: the file name can push a near-MAX_PATH directory past it.
+    assert!(
+        !dunce::simplified(&canonical(&fixture))
+            .to_string_lossy()
+            .starts_with(r"\\?\"),
+        "test setup: the TEMP root gives the fixture no plain path form: {}",
+        fixture.display()
+    );
+
+    let output = run_q2_render(&dir, &["--json-errors", "bad.qmd"]);
+    assert!(
+        !output.status.success(),
+        "expected non-zero exit on parse error"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let lines = parse_ndjson_lines(&stderr);
+    let source_files: Vec<&str> = lines
+        .iter()
+        .filter_map(|l| l.get("source_file").and_then(|s| s.as_str()))
+        .collect();
+    assert!(
+        !source_files.is_empty(),
+        "expected a source_file field on stderr; stderr:\n{stderr}\nparsed:\n{lines:#?}"
+    );
+    for source_file in source_files {
+        assert!(
+            !source_file.starts_with(r"\\?\"),
+            "source_file must be a plain path, got: {source_file}"
+        );
+        assert_eq!(
+            canonical(Path::new(source_file)),
+            canonical(&dir.join("bad.qmd")),
+            "source_file must name the rendered file, got: {source_file}"
+        );
+    }
+}
+
+// ====================================================================
+// Plan 7c Phase 4: structured cell locations for .ipynb documents
+// ====================================================================
+
+/// Plan 7c Phase 4: a parse error inside a notebook cell must carry
+/// the cell's structured `origin` on the wire — `kind=notebook_cell`
+/// with the notebook path, 1-based cell index, nbformat cell id, and
+/// cell type — so agents can link the exact cell instead of parsing
+/// the pseudo-path label `{notebook}[cell N, kind]`.
+///
+/// The origin is attached in quarto-core's ParseDocumentStage (both
+/// SourceContexts) and emitted by quarto-error-reporting's
+/// `diagnostic_to_json` from the mapped start's file metadata; this
+/// test pins the whole wire path through the real binary.
+#[test]
+fn ipynb_parse_error_json_carries_cell_origin() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    // First (markdown) cell holds an unclosed code fence — the same
+    // parse-error trigger as single_doc_parse_error_json. Cells carry
+    // nbformat 4.5 ids.
+    write_file(
+        &dir.join("broken.ipynb"),
+        r##"{
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "id": "intro-cell",
+      "metadata": {},
+      "source": ["# Broken\n", "\n", "```{python\n"]
+    },
+    {
+      "cell_type": "code",
+      "id": "code-cell",
+      "metadata": {},
+      "execution_count": null,
+      "outputs": [],
+      "source": ["1 + 1\n"]
+    }
+  ],
+  "metadata": {"kernelspec": {"language": "python"}},
+  "nbformat": 4,
+  "nbformat_minor": 5
+}
+"##,
+    );
+
+    let out_path = dir.join("broken.html");
+    let output = run_q2_render(
+        &dir,
+        &[
+            "--json-errors",
+            "-o",
+            out_path.to_str().unwrap(),
+            "broken.ipynb",
+        ],
+    );
+    assert!(
+        !output.status.success(),
+        "expected non-zero exit on parse error inside a notebook cell"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let lines = parse_ndjson_lines(&stderr);
+    assert!(
+        !lines.is_empty(),
+        "expected at least one JSON diagnostic on stderr; stderr was:\n{stderr}"
+    );
+
+    // Collect every diagnostic — flat JsonDiagnostic lines plus those
+    // nested in a JsonPass1Failure.
+    let diags: Vec<&Value> = lines
+        .iter()
+        .flat_map(|l| {
+            if is_pass1_failure_shape(l) {
+                l.get("diagnostics")
+                    .and_then(|d| d.as_array())
+                    .map(|a| a.iter().collect::<Vec<&Value>>())
+                    .unwrap_or_default()
+            } else {
+                vec![l]
+            }
+        })
+        .collect();
+
+    let origin = diags
+        .iter()
+        .filter_map(|d| d.get("origin"))
+        .find(|o| o.get("kind").and_then(|k| k.as_str()) == Some("notebook_cell"))
+        .unwrap_or_else(|| {
+            panic!(
+                "expected a diagnostic carrying notebook_cell origin; stderr:\n{stderr}\nlines: {lines:#?}"
+            )
+        });
+
+    // The path is whatever LoadedSource resolved (`source.path`). It must be
+    // absolute, since a relative path would resolve against the consumer's
+    // cwd. Wire contract: an emitted path uses the plain form whenever one
+    // exists, so no Windows `\\?\` verbatim prefix.
+    let nb_path = origin
+        .get("notebook_path")
+        .and_then(|v| v.as_str())
+        .expect("origin must carry notebook_path");
+    let notebook = canonical(&dir.join("broken.ipynb"));
+    // `dunce` keeps the verbatim form for reserved or invalid names, paths
+    // over 260 chars, and every network share (even one with a plain
+    // `\\server\share` form).
+    assert!(
+        !dunce::simplified(&notebook)
+            .to_string_lossy()
+            .starts_with(r"\\?\"),
+        "test setup: the TEMP root gives the fixture no plain path form: {}",
+        notebook.display()
+    );
+    assert!(
+        !nb_path.starts_with(r"\\?\"),
+        "notebook_path must be a plain path, got: {nb_path}"
+    );
+    assert!(
+        Path::new(nb_path).is_absolute(),
+        "notebook_path must be absolute, got: {nb_path}"
+    );
+    assert_eq!(
+        canonical(Path::new(nb_path)),
+        notebook,
+        "notebook_path must name the real notebook, got: {nb_path}"
+    );
+    assert_eq!(
+        origin.get("cell_index").and_then(|v| v.as_i64()),
+        Some(1),
+        "the broken fence is in the first cell"
+    );
+    assert_eq!(
+        origin.get("cell_id").and_then(|v| v.as_str()),
+        Some("intro-cell")
+    );
+    assert_eq!(
+        origin.get("cell_type").and_then(|v| v.as_str()),
+        Some("markdown")
+    );
+}
+
+/// Plan 7c Phase 4: the human-readable rendering of a cell diagnostic
+/// must hyperlink the REAL notebook file — `origin.notebook_path`, the
+/// only path that exists on disk — with the pseudo-path label
+/// `broken.ipynb[cell N, kind]` as the visible text. Before `FileOrigin`
+/// landed, the OSC-8 target was the pseudo-path itself, which no
+/// terminal could open.
+///
+/// Origin links also carry no `#line:column` fragment: the diagnostic's
+/// coordinates are relative to the virtual per-cell file, and a
+/// fragment would claim notebook-JSON coordinates QER cannot speak to.
+///
+/// The test parses the link target rather than rebuilding the URL
+/// string: exact URL spelling (drive letters, separators, encoding) is
+/// QER's contract. It asserts a `file` URL, no fragment, and a path that
+/// resolves to the notebook on disk.
+#[test]
+fn ipynb_diagnostic_hyperlinks_real_notebook() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    write_file(
+        &dir.join("broken.ipynb"),
+        r##"{
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "id": "intro-cell",
+      "metadata": {},
+      "source": ["# Broken\n", "\n", "```{python\n"]
+    },
+    {
+      "cell_type": "code",
+      "id": "code-cell",
+      "metadata": {},
+      "execution_count": null,
+      "outputs": [],
+      "source": ["1 + 1\n"]
+    }
+  ],
+  "metadata": {"kernelspec": {"language": "python"}},
+  "nbformat": 4,
+  "nbformat_minor": 5
+}
+"##,
+    );
+
+    let out_path = dir.join("broken.html");
+    let output = run_q2_render(
+        &dir,
+        &[
+            "--json-errors",
+            "-o",
+            out_path.to_str().unwrap(),
+            "broken.ipynb",
+        ],
+    );
+    assert!(!output.status.success(), "expected non-zero exit");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let lines = parse_ndjson_lines(&stderr);
+
+    // The diagnostic carrying the cell origin; its `rendered` field is
+    // the ANSI human-readable rendering.
+    let rendered = lines
+        .iter()
+        .find_map(|l| {
+            let diags: Vec<&Value> = if is_pass1_failure_shape(l) {
+                l.get("diagnostics")
+                    .and_then(|d| d.as_array())
+                    .map(|a| a.iter().collect())
+                    .unwrap_or_default()
+            } else {
+                vec![l]
+            };
+            diags
+                .iter()
+                .find(|d| {
+                    d.get("origin")
+                        .and_then(|o| o.get("kind"))
+                        .and_then(|k| k.as_str())
+                        == Some("notebook_cell")
+                })
+                .and_then(|d| d.get("rendered").and_then(|r| r.as_str()))
+        })
+        .unwrap_or_else(|| {
+            panic!("expected a rendered diagnostic with notebook_cell origin; stderr:\n{stderr}")
+        });
+
+    // The visible label is the pseudo-path. Front-matter synthesis from
+    // the leading H1 reserves "cell 1" for the pseudo-cell
+    // (number_shift, Q1 convention), so the first real cell labels as 2.
+    let label = "broken.ipynb[cell 2, markdown]";
+    assert!(
+        rendered.contains(label),
+        "rendered must show the pseudo-path label; got:\n{rendered:?}"
+    );
+
+    let target = osc8_target_for(rendered, label).unwrap_or_else(|| {
+        panic!("rendered must hyperlink the label {label:?}; got:\n{rendered:?}")
+    });
+    let url = url::Url::parse(target)
+        .unwrap_or_else(|e| panic!("link target must be a URL ({e}): {target:?}"));
+    assert_eq!(
+        url.scheme(),
+        "file",
+        "link target must be a file URL: {target:?}"
+    );
+    assert_eq!(
+        url.fragment(),
+        None,
+        "origin links carry no #line:column fragment: {target:?}"
+    );
+    let linked = url
+        .to_file_path()
+        .unwrap_or_else(|()| panic!("link target must name a local file: {target:?}"));
+    assert_eq!(
+        canonical(&linked),
+        canonical(&dir.join("broken.ipynb")),
+        "link target must be the real notebook: {target:?}"
+    );
+}
+
+/// The target of the OSC-8 hyperlink (`ESC]8;;URL ESC\ text`) whose
+/// visible text starts with `label`.
+fn osc8_target_for<'a>(rendered: &'a str, label: &str) -> Option<&'a str> {
+    rendered.split("\u{1b}]8;;").skip(1).find_map(|segment| {
+        let (target, text) = segment.split_once("\u{1b}\\")?;
+        (!target.is_empty() && text.starts_with(label)).then_some(target)
+    })
+}
+
 // ====================================================================
 // C4a: YAML content provenance in the re-parse bases (both YAML paths)
 //

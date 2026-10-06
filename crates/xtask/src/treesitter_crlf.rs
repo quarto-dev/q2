@@ -7,7 +7,6 @@
 
 use anyhow::{Context, Result, bail};
 use std::path::Path;
-use std::process::Command;
 
 /// Convert all line endings in `input` to CRLF. Idempotent: input that
 /// already has CRLF endings is unchanged. Lone `\r` characters (rare,
@@ -23,7 +22,11 @@ pub(crate) fn to_crlf(input: &str) -> String {
 pub(crate) fn run_parity_check(grammar_dir: &Path) -> Result<()> {
     let tempdir = tempfile::tempdir()
         .context("Failed to create tempdir for tree-sitter CRLF parity check")?;
-    let dest = tempdir.path();
+    let dest = &tempdir.path().join("grammar");
+    // A private, always-empty grammar cache: the copy has the same grammar
+    // name as the real one, so a shared cache could serve a library built
+    // from different sources (bd-agsgrbfn). One extra compile per run.
+    let libdir = tempdir.path().join("lib");
 
     copy_dir_recursive(grammar_dir, dest, &|relative| {
         !relative.starts_with("target") && !relative.starts_with("node_modules")
@@ -31,7 +34,7 @@ pub(crate) fn run_parity_check(grammar_dir: &Path) -> Result<()> {
 
     convert_corpus_to_crlf(&dest.join("test").join("corpus"))?;
 
-    let status = Command::new("tree-sitter")
+    let status = crate::tree_sitter::command(&libdir)
         .arg("test")
         .current_dir(dest)
         .status()

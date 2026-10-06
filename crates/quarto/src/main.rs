@@ -834,6 +834,10 @@ enum CallCommands {
         #[arg(long)]
         workspace: bool,
     },
+    /// Inline `<style>` rules of the HTML on stdin into `style` attributes
+    /// (internal helper for the Pandoc filter chain)
+    #[command(name = "inline-css", hide = true)]
+    InlineCss,
 }
 
 #[derive(Subcommand)]
@@ -1305,6 +1309,12 @@ fn main() -> Result<()> {
     // catalog metadata. Must run before any diagnostic is rendered; idempotent.
     quarto_error_catalog::install();
 
+    // Let Pandoc filters call back into this binary (`quarto-cli-path`), e.g.
+    // `q2 call inline-css` for raw HTML tables.
+    if let Ok(exe) = std::env::current_exe() {
+        quarto_core::pandoc_filters::params::set_cli_path(exe);
+    }
+
     let cli = Cli::parse();
 
     // Initialize logging. The `-v` flag chooses a default filter
@@ -1492,6 +1502,7 @@ fn main() -> Result<()> {
                     workspace,
                 },
             ),
+            CallCommands::InlineCss => commands::inline_css::execute(),
         },
         Commands::Lsp => commands::lsp::execute(),
         Commands::GetConfig {

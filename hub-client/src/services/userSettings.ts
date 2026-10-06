@@ -16,20 +16,22 @@ import {
 } from './storage';
 
 /**
- * Derive a stable Automerge actor id from the local user id.
+ * Derive a stable Automerge author id from the local user id.
  *
- * Automerge actor ids must be even-length hex strings. A `userId` produced by
+ * Author ids are opaque even-length hex strings. A `userId` produced by
  * `crypto.randomUUID()` is 32 hex digits plus dashes, so stripping the dashes
- * yields a valid actor id. This lets auth-less deployments (local-prod /
- * `--allow-insecure-auth`, where the server exposes no `/auth/actor`) stamp a
- * *stable* identity into documents instead of getting a fresh random Automerge
- * actor each session — which is why `identities` stayed empty in local testing.
+ * yields a valid author id. This lets auth-less deployments (local-prod /
+ * `--allow-insecure-auth`, where the server exposes no `/auth/author`) stamp a
+ * *stable* attribution identity into documents, while the actor id stays
+ * automerge's random per-document-instance value (author-ID transition,
+ * D2). The derivation is unchanged from the old stable-actor construction
+ * (D5), so a user's attribution key is continuous across the transition.
  *
  * Defensive fallback: any userId that isn't already clean hex is hex-encoded
- * from its UTF-8 bytes, so the result is always a valid actor id. In practice
+ * from its UTF-8 bytes, so the result is always a valid author id. In practice
  * the app only ever passes `randomUUID()` ids.
  */
-export function actorIdFromUserId(userId: string): string {
+export function authorIdFromUserId(userId: string): string {
   const stripped = userId.replace(/-/g, '').toLowerCase();
   if (/^[0-9a-f]+$/.test(stripped) && stripped.length % 2 === 0) {
     return stripped;

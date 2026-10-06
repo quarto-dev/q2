@@ -264,6 +264,13 @@ function parseFormatSpec(
         case 'folderExists':
           // Filesystem assertions are no-ops in browser
           break;
+        case 'ensureTypstFileRegexMatches':
+        case 'ensurePdfRegexMatches':
+        case 'ensurePdfTextPositions':
+        case 'ensurePdfMetadata':
+          // Typst/PDF-only assertions — no-ops in the browser E2E runner,
+          // which (like the WASM unit runner) only exercises HTML.
+          break;
         case 'dom-parity':
           // Opt-in flag for the preview <-> render DOM parity runner
           // (hub-client/src/services/smokeAllParity.wasm.test.tsx). Not an

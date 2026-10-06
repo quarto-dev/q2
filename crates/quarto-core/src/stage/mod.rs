@@ -96,9 +96,9 @@ mod traits;
 pub use cancellation::Cancellation;
 pub use context::StageContext;
 pub use data::{
-    ConversionProvenance, DocumentAst, DocumentAtProfile, DocumentSource, ExecutedDocument,
-    FinalOutput, LoadedSource, PandocIncludes, PipelineData, PipelineDataKind, RenderedOutput,
-    SourceType,
+    ConversionProvenance, ConversionStash, DocumentAst, DocumentAtProfile, DocumentSource,
+    ExecutedDocument, FinalOutput, LoadedSource, PandocIncludes, PipelineData, PipelineDataKind,
+    RenderedOutput, SourceType,
 };
 pub use error::{PipelineError, PipelineValidationError};
 pub use observer::{EventLevel, NoopObserver, PipelineObserver, TracingObserver};

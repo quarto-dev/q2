@@ -60,8 +60,16 @@ struct Server {
 impl Server {
     fn spawn(cwd: &Path, args: &[&str]) -> Server {
         // `-v` so the driver's own log lines (which render ran, why)
-        // land in the captured stderr for a failure's diagnosis.
-        let mut child = Command::new(Q2_BIN)
+        // land in the captured stderr for a failure's diagnosis. The
+        // driver itself logs at debug, so a dropped watcher event
+        // ("event without a content change; ignored") is visible too;
+        // `RUST_LOG` takes precedence over `-v`.
+        let mut command = Command::new(Q2_BIN);
+        command
+            .env(
+                "RUST_LOG",
+                "quarto=info,q2=info,q2::commands::preview_static=debug",
+            )
             .arg("-v")
             .arg("preview")
             .arg("--static")
@@ -69,9 +77,15 @@ impl Server {
             .args(args)
             .current_dir(cwd)
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .expect("spawn q2 preview --static");
+            .stderr(Stdio::piped());
+        // Own process group, so `send_interrupt` can target this child
+        // alone with a console Ctrl-Break.
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(windows_sys::Win32::System::Threading::CREATE_NEW_PROCESS_GROUP);
+        }
+        let mut child = command.spawn().expect("spawn q2 preview --static");
         let stderr = Arc::new(Mutex::new(String::new()));
         {
             let sink = Arc::clone(&stderr);
@@ -188,7 +202,10 @@ impl Server {
                 break;
             }
         }
-        SseReader { reader }
+        SseReader {
+            reader,
+            server_stderr: Arc::clone(&self.stderr),
+        }
     }
 
     fn stderr(&self) -> String {
@@ -252,9 +269,16 @@ impl Response {
 
 struct SseReader {
     reader: BufReader<TcpStream>,
+    /// The server's captured stderr, for failure messages: a missing
+    /// event is diagnosed by the driver's log, not by the stream.
+    server_stderr: Arc<Mutex<String>>,
 }
 
 impl SseReader {
+    fn server_stderr(&self) -> String {
+        self.server_stderr.lock().unwrap().clone()
+    }
+
     /// Read events until one named `name` arrives; returns its `data`
     /// line. Panics after [`EVENT_DEADLINE`].
     fn wait_for(&mut self, name: &str) -> String {
@@ -264,14 +288,22 @@ impl SseReader {
         loop {
             assert!(
                 Instant::now() < deadline,
-                "no `{name}` event within {EVENT_DEADLINE:?}"
+                "no `{name}` event within {EVENT_DEADLINE:?}; stderr:\n{}",
+                self.server_stderr()
             );
             line.clear();
-            let n = self
-                .reader
-                .read_line(&mut line)
-                .unwrap_or_else(|e| panic!("reading SSE stream while waiting for `{name}`: {e}"));
-            assert!(n > 0, "SSE stream closed while waiting for `{name}`");
+            let n = match self.reader.read_line(&mut line) {
+                Ok(n) => n,
+                Err(e) => panic!(
+                    "reading SSE stream while waiting for `{name}`: {e}; stderr:\n{}",
+                    self.server_stderr()
+                ),
+            };
+            assert!(
+                n > 0,
+                "SSE stream closed while waiting for `{name}`; stderr:\n{}",
+                self.server_stderr()
+            );
             let l = line.trim_end_matches(['\r', '\n']);
             if let Some(ev) = l.strip_prefix("event: ") {
                 current_event = ev.to_string();
@@ -584,18 +616,51 @@ fn single_file_outside_a_project_redirects_root_to_the_document() {
     assert!(server.get("/doc.html").text().contains("SINGLE-MARKER"));
 }
 
-/// Ctrl-C (SIGINT) shuts the server down cleanly with a message.
+/// Interrupts the child the way a terminal user would: SIGINT on unix.
 #[cfg(unix)]
-#[test]
-fn sigint_exits_cleanly() {
-    let temp = TempDir::new().unwrap();
-    let dir = minimal_site(&temp);
-    let mut server = Server::spawn(&dir, &[dir.to_str().unwrap()]);
+fn send_interrupt(child: &Child) {
     let status = Command::new("kill")
-        .args(["-INT", &server.child.id().to_string()])
+        .args(["-INT", &child.id().to_string()])
         .status()
         .expect("run kill -INT");
     assert!(status.success());
+}
+
+/// Interrupts the child with a console Ctrl-Break. Ctrl-C can't be
+/// sent to a single process group on Windows, only to the whole
+/// console (which would include the test runner).
+#[cfg(windows)]
+fn send_interrupt(child: &Child) {
+    use windows_sys::Win32::System::Console::{CTRL_BREAK_EVENT, GenerateConsoleCtrlEvent};
+    // SAFETY: plain FFI call; the child was spawned with
+    // CREATE_NEW_PROCESS_GROUP, so its pid is its process-group id.
+    let ok = unsafe { GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, child.id()) };
+    assert!(
+        ok != 0,
+        "GenerateConsoleCtrlEvent failed: {}",
+        std::io::Error::last_os_error()
+    );
+}
+
+/// Console Ctrl events only reach processes sharing the sender's
+/// console, so a test runner started without one (headless CI)
+/// allocates one before spawning the child. A no-op when a console
+/// is already attached.
+#[cfg(windows)]
+fn ensure_console() {
+    // SAFETY: plain FFI call; failure means a console already exists.
+    unsafe { windows_sys::Win32::System::Console::AllocConsole() };
+}
+
+/// An interrupt shuts the server down cleanly with a message.
+#[test]
+fn interrupt_exits_cleanly() {
+    let temp = TempDir::new().unwrap();
+    let dir = minimal_site(&temp);
+    #[cfg(windows)]
+    ensure_console();
+    let mut server = Server::spawn(&dir, &[dir.to_str().unwrap()]);
+    send_interrupt(&server.child);
     let mut rest = String::new();
     server
         .stdout

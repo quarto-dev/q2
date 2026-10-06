@@ -1,0 +1,20 @@
+---
+title: "Untitled"
+format:
+  typst:
+    keep-typ: true
+brand:
+  logo:
+    medium: https://quarto.org/quarto.png
+_quarto:
+  tests:
+    typst:
+      # Leading `/` differs from Q1's original fixture: Q2 always passes
+      # `--root` for typst renders, so mediabag-fetched paths come out
+      # root-rooted here (see `typst_root_relative` in mediabag.lua).
+      ensureTypstFileRegexMatches:
+      -
+        - '#set page\(background: align\(left\+top, box\(inset: 0.75in, image\("/online-logo_files(/|\\)mediabag(/|\\)quarto.png", width: 1.5in\)\)\)\)'
+      - []
+---
+

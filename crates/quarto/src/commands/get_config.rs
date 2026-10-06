@@ -66,9 +66,7 @@ pub struct GetConfigArgs {
 pub fn get_config_value(args: &GetConfigArgs) -> Result<Option<Value>> {
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
 
-    let input = args
-        .file
-        .canonicalize()
+    let input = quarto_system_runtime::canonicalize(&args.file)
         .with_context(|| format!("Cannot read document: {}", args.file.display()))?;
 
     let project = ProjectContext::discover_with_profile(

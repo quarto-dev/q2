@@ -1,0 +1,22 @@
+project:
+  type: book
+  resources:
+    - cover.png
+
+book:
+  title: "$title$"
+  author: "Norah Jones"
+  date: "$date$"
+  chapters:
+    - index.qmd
+    - intro.qmd
+    - summary.qmd
+  references: references.qmd
+
+bibliography: references.json
+filters:
+  - citeproc
+
+format:
+  html:
+    theme: cosmo

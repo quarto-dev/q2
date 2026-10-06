@@ -1391,7 +1391,7 @@ mod tests {
     #[test]
     fn expand_literal_path() {
         let temp = TempDir::new().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         touch(&root.join("a.txt"));
 
         let resolved = expand_patterns(
@@ -1407,7 +1407,7 @@ mod tests {
         assert_eq!(resolved[0].output_relative, "a.txt");
         assert_eq!(
             resolved[0].source,
-            root.join("a.txt").canonicalize().unwrap()
+            quarto_system_runtime::canonicalize(&root.join("a.txt")).unwrap()
         );
     }
 
@@ -1419,7 +1419,7 @@ mod tests {
     #[test]
     fn negation_excludes_a_glob_match() {
         let temp = TempDir::new().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         touch(&root.join("data/public.csv"));
         touch(&root.join("data/secret.csv"));
 
@@ -1443,7 +1443,7 @@ mod tests {
     #[test]
     fn negation_excludes_from_a_literal_directory() {
         let temp = TempDir::new().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         touch(&root.join("data/public.csv"));
         touch(&root.join("data/secret.csv"));
 
@@ -1467,7 +1467,7 @@ mod tests {
     #[test]
     fn negation_is_order_independent() {
         let temp = TempDir::new().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         touch(&root.join("data/public.csv"));
         touch(&root.join("data/secret.csv"));
 
@@ -1492,7 +1492,7 @@ mod tests {
     #[test]
     fn negated_directory_excludes_everything_beneath() {
         let temp = TempDir::new().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         touch(&root.join("data/keep.csv"));
         touch(&root.join("data/drafts/wip.csv"));
 
@@ -1520,7 +1520,7 @@ mod tests {
     #[test]
     fn missing_literal_still_resolves_for_the_copy_step_to_report() {
         let temp = TempDir::new().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
 
         let resolved = expand_patterns(
             &root,
@@ -1541,7 +1541,7 @@ mod tests {
     #[test]
     fn invalid_glob_carries_its_source_span() {
         let temp = TempDir::new().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
 
         let err = expand_patterns(
             &root,
@@ -1560,7 +1560,7 @@ mod tests {
     #[test]
     fn expand_glob() {
         let temp = TempDir::new().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         touch(&root.join("data/a.csv"));
         touch(&root.join("data/b.csv"));
         touch(&root.join("data/skip.txt"));
@@ -1583,7 +1583,7 @@ mod tests {
     #[test]
     fn glob_skips_directories() {
         let temp = TempDir::new().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         std::fs::create_dir_all(root.join("data/sub")).unwrap();
         touch(&root.join("data/file.txt"));
 
@@ -1603,7 +1603,7 @@ mod tests {
     #[test]
     fn out_of_project_literal_is_error() {
         let temp = TempDir::new().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
 
         let err = expand_patterns(
             &root,
@@ -1626,7 +1626,7 @@ mod tests {
     #[test]
     fn expand_leading_slash_literal_is_project_relative() {
         let temp = TempDir::new().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         touch(&root.join("data/a.txt"));
 
         let resolved = expand_patterns(
@@ -1642,14 +1642,14 @@ mod tests {
         assert_eq!(resolved[0].output_relative, "data/a.txt");
         assert_eq!(
             resolved[0].source,
-            root.join("data/a.txt").canonicalize().unwrap()
+            quarto_system_runtime::canonicalize(&root.join("data/a.txt")).unwrap()
         );
     }
 
     #[test]
     fn expand_leading_slash_glob_is_project_relative() {
         let temp = TempDir::new().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         touch(&root.join("data/a.csv"));
         touch(&root.join("data/b.csv"));
 
@@ -1673,7 +1673,7 @@ mod tests {
         // A doc under <root>/posts/ declares "/shared.js" — that's the
         // project-root-relative `<root>/shared.js`, not `<root>/posts/shared.js`.
         let temp = TempDir::new().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         let doc_dir = root.join("posts");
         std::fs::create_dir_all(&doc_dir).unwrap();
         touch(&root.join("shared.js"));
@@ -1696,7 +1696,7 @@ mod tests {
         assert_eq!(resolved[0].output_relative, "shared.js");
         assert_eq!(
             resolved[0].source,
-            root.join("shared.js").canonicalize().unwrap()
+            quarto_system_runtime::canonicalize(&root.join("shared.js")).unwrap()
         );
     }
 
@@ -1706,7 +1706,7 @@ mod tests {
         // Engine and Lua-filter channels still pass real on-disk
         // absolute paths and must NOT be stripped/reinterpreted.
         let temp = TempDir::new().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         let doc = root.join("posts/foo.qmd");
         std::fs::create_dir_all(doc.parent().unwrap()).unwrap();
         let supporting = root.join("posts/foo_files/data.png");
@@ -1747,7 +1747,7 @@ mod tests {
     #[test]
     fn expand_literal_directory_recursively_enumerates_files() {
         let temp = TempDir::new().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         touch_many(&root, &["demo/a.html", "demo/sub/b.css", "demo/sub/c.png"]);
 
         let resolved = expand_patterns(
@@ -1772,7 +1772,7 @@ mod tests {
     #[test]
     fn expand_literal_directory_with_trailing_slash_works() {
         let temp = TempDir::new().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         touch_many(&root, &["demo/a.html", "demo/sub/b.css", "demo/sub/c.png"]);
 
         let resolved = expand_patterns(
@@ -1801,7 +1801,7 @@ mod tests {
         // a project-level `"/demo"` entry resolves to a directory,
         // expanded to every file inside.
         let temp = TempDir::new().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         touch_many(&root, &["demo/a.html", "demo/sub/b.css"]);
 
         let resolved = expand_patterns(
@@ -1825,7 +1825,7 @@ mod tests {
         // as resources; only files do. An empty `sub/` produces zero
         // entries.
         let temp = TempDir::new().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         std::fs::create_dir_all(root.join("demo/sub")).unwrap();
 
         let resolved = expand_patterns(
@@ -1851,7 +1851,7 @@ mod tests {
         // downstream copy step then surfaces the
         // "does not exist on disk" error to the user.
         let temp = TempDir::new().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
 
         let resolved = expand_patterns(
             &root,
@@ -1873,7 +1873,7 @@ mod tests {
         // but is placed here so a directory-detect regression doesn't
         // silently break the file case.
         let temp = TempDir::new().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         touch(&root.join("a.txt"));
 
         let resolved = expand_patterns(
@@ -1889,14 +1889,14 @@ mod tests {
         assert_eq!(resolved[0].output_relative, "a.txt");
         assert_eq!(
             resolved[0].source,
-            root.join("a.txt").canonicalize().unwrap()
+            quarto_system_runtime::canonicalize(&root.join("a.txt")).unwrap()
         );
     }
 
     #[test]
     fn doc_anchor_resolves_relative_to_doc_dir() {
         let temp = TempDir::new().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         let doc_dir = root.join("posts");
         std::fs::create_dir_all(&doc_dir).unwrap();
         touch(&doc_dir.join("data/extra.html"));
@@ -2042,7 +2042,7 @@ mod tests {
         //   leading-`/` hint, *and* an Ariadne span showing the
         //   exact YAML line.
         let temp = TempDir::new().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         let yaml_path = root.join("_quarto.yml");
         // Hand-crafted contents so we can compute the byte offsets
         // pointed to by the SourceInfo. The pattern lives on line 2,
@@ -2125,7 +2125,7 @@ mod tests {
         // SourceInfo we passed in via RawResourcePattern. The
         // orchestrator's diagnostic-rendering path reads this back.
         let temp = TempDir::new().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         let si = synthetic_source_info(300, 314);
 
         let err = expand_patterns(
@@ -2159,7 +2159,7 @@ mod tests {
     #[test]
     fn resolve_engine_report_absolute_paths() {
         let temp = TempDir::new().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         let doc = root.join("posts/foo.qmd");
         std::fs::create_dir_all(doc.parent().unwrap()).unwrap();
         let supporting = root.join("posts/foo_files/figure-html/cell-1.png");
@@ -2185,7 +2185,7 @@ mod tests {
     #[test]
     fn resolve_engine_report_relative_paths_anchored_at_doc_dir() {
         let temp = TempDir::new().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         let doc = root.join("posts/foo.qmd");
         std::fs::create_dir_all(doc.parent().unwrap()).unwrap();
         let supporting = root.join("posts/extras/data.csv");
@@ -2208,7 +2208,7 @@ mod tests {
     #[test]
     fn resolve_lua_filter_report_carries_origin() {
         let temp = TempDir::new().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         let doc = root.join("a.qmd");
         let supporting = root.join("from-filter.txt");
         touch(&supporting);
@@ -2227,7 +2227,7 @@ mod tests {
     #[test]
     fn resolve_engine_report_out_of_project_errors() {
         let temp = TempDir::new().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         let doc = root.join("a.qmd");
 
         let mut report = DocumentResourceReport::new();
@@ -2253,7 +2253,7 @@ mod tests {
     #[test]
     fn add_engine_files_expands_supporting_directory_into_contained_files() {
         let temp = TempDir::new().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         let doc = root.join("plot.qmd");
         // Nested two levels deep, mirroring julia-engine's real layout:
         // plot_files/figure-html/cell-1.png.
@@ -2340,7 +2340,7 @@ mod tests {
     #[test]
     fn add_engine_files_terminates_on_self_referencing_symlink_cycle() {
         let temp = TempDir::new().unwrap();
-        let root = temp.path().canonicalize().unwrap();
+        let root = quarto_system_runtime::canonicalize(temp.path()).unwrap();
         let doc = root.join("plot.qmd");
         let supporting_dir = root.join("plot_files");
         std::fs::create_dir_all(&supporting_dir).unwrap();

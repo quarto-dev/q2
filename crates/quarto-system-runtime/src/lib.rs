@@ -26,6 +26,10 @@ mod traits;
 // perf-harness drivers that exercise the WASM flush path (bd-q3bxnq2e).
 mod vfs;
 
+// Shared canonicalize, on every target: some callers compile for wasm32
+// too, where it stays plain `std::fs::canonicalize`.
+mod canonical;
+
 // Native runtime is only compiled for non-WASM targets
 #[cfg(not(target_arch = "wasm32"))]
 mod native;
@@ -50,6 +54,8 @@ pub use traits::{
     SystemRuntime, TempDir, XdgDirKind, validate_cache_key, validate_cache_namespace,
 };
 pub use vfs::{VfsWriteStats, VirtualFileSystem};
+
+pub use canonical::{canonicalize, canonicalize_deepest_existing};
 
 // Re-export runtime implementations based on target
 #[cfg(not(target_arch = "wasm32"))]

@@ -1,0 +1,31 @@
+{
+  "code": "Q-2-53",
+  "title": "Fenced div info string starts with `-`",
+  "message": "A fenced div's opening line cannot continue with a word that starts with `-`. `::: --` followed by a space or the end of the line opens a block deletion mark; for a class, write `::: {.name}` or a name that starts with a letter, digit or `_`.",
+  "notes": [],
+  "hints": [
+    "To mark the div's content as deleted, put a space or the end of the line after the two dashes: `::: --`.",
+    "Quarto 1 and Pandoc read `::: --foo` as a div with class `--foo`. Quarto 2 reserves a leading `-` after `:::` for block editorial marks, the block form of `[-- deleted text]`."
+  ],
+  "desynchronizes": true,
+  "cases": [
+    {
+      "name": "dash-prefixed-word",
+      "description": "A word starting with `-` after `::: `. `::: --foo`, `::: ---`, `::: -x` and `::: -` all reach this state.",
+      "content": "::: --foo\n\nText.\n\n:::\n",
+      "captures": []
+    },
+    {
+      "name": "dash-prefixed-word-in-container",
+      "description": "The same opener inside a list item or a block quote reaches a different state from the top-level one.",
+      "content": "- item\n\n  ::: --foo\n\n  Text.\n\n  :::\n",
+      "captures": []
+    },
+    {
+      "name": "no-space-after-colons",
+      "description": "`:::--foo`, with no space after the colons, is its own state.",
+      "content": ":::--foo\n\nText.\n\n:::\n",
+      "captures": []
+    }
+  ]
+}

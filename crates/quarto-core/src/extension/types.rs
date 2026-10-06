@@ -137,11 +137,28 @@ pub enum EngineContribution {
 }
 
 /// One static file-claim entry. Extension is stored **undotted, lowercase**
-/// (agrees with `Path::extension()`). Plan 7a will grow this with an optional
-/// `content_pattern` field — additively, no second migration.
+/// (agrees with `Path::extension()`). `processor` names a native content
+/// processor (Plan 7b) that owns this claim's sniff + convert; `None` falls
+/// back to the engine's dynamic `claims_file`/`markdown_for_file`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileClaim {
     pub extension: String,
+    pub processor: Option<ProcessorSpec>,
+}
+
+/// The `processor:` field on a `claims-files` entry (Plan 7b). Parsed and
+/// validated at read time — an unknown name or a missing required param
+/// (percent's `language`) is a parse error, never a silent drop. `comment`
+/// is resolved to its default (`"#"`) at parse time, so downstream code never
+/// re-derives it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProcessorSpec {
+    /// `processor: percent` (map form only — `language` is required).
+    Percent { language: String, comment: String },
+    /// `processor: spin` (bare name; takes no params).
+    Spin,
+    /// `processor: ipynb` (bare name; takes no params) — Plan 7c.
+    Ipynb,
 }
 
 /// One authoritative static language claim (§3.3). A pure tabulation of
@@ -227,7 +244,10 @@ pub fn lookup_static_claim<S: ::std::hash::BuildHasher>(
     language: &str,
     first_class: Option<&str>,
 ) -> crate::engine::LanguageClaim {
-    match claims.get(language) {
+    // F5 (julia epic Step 3): `parse_claims_map` normalizes keys to
+    // lowercase at parse time; lowercase `language` to match, mirroring
+    // dynamic claiming's own `language.toLowerCase()` comparison.
+    match claims.get(&language.to_lowercase()) {
         None => crate::engine::LanguageClaim::None,
         Some(claim_vec) => combine_claims(claim_vec, first_class),
     }
@@ -542,6 +562,28 @@ mod tests {
         );
     }
 
+    /// F5 (julia epic Step 3): dynamic claiming lowercases the language
+    /// (`claimsLanguage: (language) => language.toLowerCase() === "julia"`),
+    /// but `lookup_static_claim` did an exact `claims.get(language)` with no
+    /// normalization -- so a `{Julia}` cell claimed dynamically but missed
+    /// the static (zero-load) resolution path entirely. `parse_claims_map`
+    /// now normalizes claim keys to lowercase at parse time (see
+    /// `read.rs::parse_claims_map_lowercases_language_keys`); this is the
+    /// matching lookup-side half -- the map is keyed lowercase, the language
+    /// arrives mixed-case, and the two must still match.
+    #[test]
+    fn lookup_static_claim_is_case_insensitive() {
+        let mut claims = HashMap::new();
+        claims.insert(
+            "julia".to_string(),
+            vec![make_claim(ClaimKind::Primary, None, None)],
+        );
+        assert_eq!(
+            lookup_static_claim(&claims, "Julia", None),
+            crate::engine::LanguageClaim::Primary(1)
+        );
+    }
+
     // --- SC1: Vec combine rule — order-independent, kind dominates priority ---
     //
     // The discriminator: `sql`'s Vec lists Interop FIRST, then the
@@ -747,6 +789,7 @@ mod tests {
                 exts.into_iter()
                     .map(|s| FileClaim {
                         extension: s.to_string(),
+                        processor: None,
                     })
                     .collect()
             }),

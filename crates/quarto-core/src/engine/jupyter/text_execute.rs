@@ -30,18 +30,18 @@ type JupyterResult<T> = std::result::Result<T, JupyterError>;
 
 /// A parsed code block from the input markdown.
 #[derive(Debug)]
-struct CodeBlock {
+pub(super) struct CodeBlock {
     /// Start byte offset in the input.
-    start: usize,
+    pub(super) start: usize,
     /// End byte offset in the input (exclusive).
-    end: usize,
+    pub(super) end: usize,
     /// Start byte offset of the code content (the capture between the
     /// fences) in the input — anchors per-cell source attribution.
-    code_start: usize,
+    pub(super) code_start: usize,
     /// The language/engine specifier (e.g., "python", "julia").
-    language: String,
+    pub(super) language: String,
     /// The code content.
-    code: String,
+    pub(super) code: String,
 }
 
 /// Execute code blocks in QMD input and return markdown with outputs.
@@ -121,7 +121,7 @@ fn map_language_to_kernel(language: &str) -> String {
 ///
 /// Callers that need only executable cells should pass the result through
 /// [`partition_cells`].
-fn parse_code_blocks(input: &str) -> Vec<CodeBlock> {
+pub(super) fn parse_code_blocks(input: &str) -> Vec<CodeBlock> {
     // Match ```{language} ... ``` blocks (no fence options allowed).
     // `\w+` excludes `=` so raw-format fences like ` ```{=html} ` are never
     // matched.
@@ -386,7 +386,7 @@ async fn execute_blocks_inner(
 ///
 /// `None` when neither scope supplied anything — callers then fall
 /// back to per-option defaults.
-fn resolve_cell_options(
+pub(super) fn resolve_cell_options(
     doc_scope: Option<&ConfigValue>,
     options: Option<quarto_yaml::YamlWithSourceInfo>,
 ) -> Option<ConfigValue> {
@@ -402,7 +402,7 @@ fn resolve_cell_options(
 
 /// Read a boolean option out of resolved cell options, falling back to
 /// `default` when the key is absent or not a boolean.
-fn resolved_flag(resolved: Option<&ConfigValue>, key: &str, default: bool) -> bool {
+pub(super) fn resolved_flag(resolved: Option<&ConfigValue>, key: &str, default: bool) -> bool {
     resolved
         .and_then(|merged| merged.get(key))
         .and_then(|v| v.as_bool())
@@ -421,7 +421,7 @@ fn resolved_flag(resolved: Option<&ConfigValue>, key: &str, default: bool) -> bo
 /// collapses the other flags rather than leaving callers to remember
 /// the precedence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct CellVisibility {
+pub(super) struct CellVisibility {
     /// Echo the cell's source.
     echo: bool,
     /// Emit the cell's outputs.
@@ -446,7 +446,7 @@ impl CellVisibility {
         warning: false,
     };
 
-    fn resolve(resolved: Option<&ConfigValue>) -> Self {
+    pub(super) fn resolve(resolved: Option<&ConfigValue>) -> Self {
         // Neither the cell nor the document said anything — the
         // everything-visible default, which is also what q2 did
         // before any of these options were honoured.
@@ -490,7 +490,11 @@ fn first_cell_error(result: &KernelExecuteResult) -> Option<(String, String)> {
 
 /// Render `info` + `offset` as `path:line:column` (1-based) through
 /// the execution context's source map, when it resolves.
-fn describe_location(info: &SourceInfo, offset: usize, ctx: &ExecutionContext) -> Option<String> {
+pub(super) fn describe_location(
+    info: &SourceInfo,
+    offset: usize,
+    ctx: &ExecutionContext,
+) -> Option<String> {
     let mapped = info.map_offset(offset, &ctx.source_context)?;
     let path = ctx
         .source_context
@@ -554,7 +558,7 @@ fn ticks_for_code(text: &str) -> String {
 /// actually content in the div" (`jupyter.ts`). knitr behaves the
 /// same way — an `include: false` chunk leaves no wrapper — so this
 /// keeps the two engines agreeing.
-fn render_cell(
+pub(super) fn render_cell(
     language: &str,
     code: &str,
     result: &KernelExecuteResult,
@@ -615,7 +619,7 @@ fn fenced_output_div(classes: &str, text: &str) -> String {
 /// dir-level, mirroring knitr — which is what `q2 render` copies to
 /// the output dir and what the preview capture transport
 /// (bd-qbhp2cvv) embeds for browser replay.
-struct FigureWriter {
+pub(super) struct FigureWriter {
     /// Absolute directory of the source document.
     doc_dir: PathBuf,
     /// `<stem>_files` (single path component).
@@ -627,11 +631,11 @@ struct FigureWriter {
     /// Reset by `begin_cell`.
     output_index: usize,
     /// Whether any figure file was successfully written.
-    wrote_any: bool,
+    pub(super) wrote_any: bool,
 }
 
 impl FigureWriter {
-    fn new(source_path: &Path) -> Self {
+    pub(super) fn new(source_path: &Path) -> Self {
         let doc_dir = source_path.parent().unwrap_or(Path::new(".")).to_path_buf();
         let stem = source_path
             .file_stem()
@@ -647,14 +651,14 @@ impl FigureWriter {
     }
 
     /// Start figure numbering for the next cell.
-    fn begin_cell(&mut self) {
+    pub(super) fn begin_cell(&mut self) {
         self.cell_index += 1;
         self.output_index = 0;
     }
 
     /// The `<stem>_files` directory as an absolute path (for
     /// supporting-files reporting).
-    fn files_dir(&self) -> PathBuf {
+    pub(super) fn files_dir(&self) -> PathBuf {
         self.doc_dir.join(&self.files_dir_name)
     }
 
@@ -834,7 +838,7 @@ fn format_error_text(ename: &str, evalue: &str, traceback: &[String]) -> String 
 /// Extract text content from a MIME-bundle JSON value. Jupyter can
 /// send text as either a single string or an array of line strings
 /// (the nbformat multiline convention).
-fn extract_text_content(value: &serde_json::Value) -> String {
+pub(super) fn extract_text_content(value: &serde_json::Value) -> String {
     match value {
         serde_json::Value::String(s) => s.clone(),
         serde_json::Value::Array(arr) => arr

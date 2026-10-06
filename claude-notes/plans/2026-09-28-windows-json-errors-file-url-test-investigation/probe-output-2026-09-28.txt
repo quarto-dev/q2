@@ -1,0 +1,9 @@
+Run 2026-09-28, Windows 11, q2 built from e8379cfe (target/debug/q2.exe).
+cwd: plain (non-verbatim) scratch dir; arguments are relative. Output below is verbatim from probe.sh, not retyped, except that the local scratch directory between Temp and probe is elided as "...".
+
+ipynb JSON path fields (jq -c):
+{"notebook_path":"\\\\?\\C:\\Users\\chris\\AppData\\Local\\Temp\\...\\probe\\broken.ipynb"}
+{"source_file":"\\\\?\\C:\\Users\\chris\\AppData\\Local\\Temp\\...\\probe\\broken.ipynb"}
+
+qmd render (first status line):
+Rendering single file: \\?\C:\Users\chris\AppData\Local\Temp\...\probe\ok.qmd

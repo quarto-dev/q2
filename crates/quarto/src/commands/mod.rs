@@ -13,6 +13,7 @@ pub mod create;
 pub mod docs_llms;
 pub mod get_config;
 pub mod hub;
+pub mod inline_css;
 pub mod install;
 pub mod list;
 pub mod lsp;

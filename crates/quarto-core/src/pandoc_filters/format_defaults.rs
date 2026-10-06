@@ -31,6 +31,7 @@ use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_pandoc_types::ConfigValue;
 use quarto_pandoc_types::config_value::ConfigValueKind;
 
+use crate::format::FormatIdentifier;
 use crate::stage::PipelineError;
 
 /// The per-format pandoc-defaults literal table (Finding 1). Fields are
@@ -50,18 +51,100 @@ pub struct FormatPandocDefaults {
     pub default_image_extension: Option<&'static str>,
 }
 
-/// Look up [`FormatPandocDefaults`] for a pandoc base/output format
-/// (`Format::output_extension`, e.g. `"docx"`, `"pptx"`).
-pub fn format_pandoc_defaults(base_format: &str) -> FormatPandocDefaults {
-    match base_format {
-        "docx" | "odt" => FormatPandocDefaults {
+/// Look up [`FormatPandocDefaults`] for a pandoc-hybrid base format.
+///
+/// Keyed by [`FormatIdentifier`], not the output-extension string
+/// (long-tail Phase 1 wrinkle 1): extension keys collide for the tail —
+/// `"xml"` would be both opendocument's wordprocessor defaults and
+/// docbook's plaintext defaults, and Typst's extension is `"pdf"`, not
+/// `"typst"`. The old `"docx" | "odt"` arm's Odt half returns together
+/// with the `Odt` variant (long-tail Phase 2).
+pub fn format_pandoc_defaults(id: FormatIdentifier) -> FormatPandocDefaults {
+    match id {
+        FormatIdentifier::Docx => FormatPandocDefaults {
             page_width: Some(6.5),
             output_divs: None,
             default_image_extension: Some("png"),
         },
-        "pptx" => FormatPandocDefaults {
+        FormatIdentifier::Pptx => FormatPandocDefaults {
             page_width: None,
             output_divs: Some(false),
+            default_image_extension: Some("png"),
+        },
+        // Long-tail Phase 2 (Tier A): the wordprocessor trio (Q1's
+        // `createWordprocessorFormat`; `rtfFormat()` shares the base) gets
+        // the docx-shaped 6.5-inch page + png; fb2 (Q1's
+        // `createEbookFormat`) is reflowable so no page-width, png only;
+        // the 21 `plaintextFormat` variants are png-only too.
+        FormatIdentifier::Odt | FormatIdentifier::Opendocument | FormatIdentifier::Rtf => {
+            FormatPandocDefaults {
+                page_width: Some(6.5),
+                output_divs: None,
+                default_image_extension: Some("png"),
+            }
+        }
+        FormatIdentifier::Fb2
+        | FormatIdentifier::Plain
+        | FormatIdentifier::Rst
+        | FormatIdentifier::Org
+        | FormatIdentifier::Muse
+        | FormatIdentifier::Ms
+        | FormatIdentifier::Man
+        | FormatIdentifier::Texinfo
+        | FormatIdentifier::Tei
+        | FormatIdentifier::Zimwiki
+        | FormatIdentifier::Dokuwiki
+        | FormatIdentifier::Haddock
+        | FormatIdentifier::Json
+        | FormatIdentifier::Native
+        | FormatIdentifier::Icml
+        | FormatIdentifier::Jira
+        | FormatIdentifier::Mediawiki
+        | FormatIdentifier::Xwiki
+        | FormatIdentifier::Textile
+        | FormatIdentifier::Docbook
+        | FormatIdentifier::Docbook4
+        | FormatIdentifier::Docbook5 => FormatPandocDefaults {
+            page_width: None,
+            output_divs: None,
+            default_image_extension: Some("png"),
+        },
+        // Long-tail Phase 3 (Tier B): the markdown family. Q1's bare
+        // `markdown` is `pandocMarkdownFormat()` — plaintext base, no
+        // output-divs override — while every other `isMarkdownOutput`
+        // flavor is `markdownFormat(displayName)`, which sets
+        // `render: {output-divs: false}` (executed-cell output must not be
+        // wrapped in a `::: cell` Div markdown writers can't express).
+        // All nine inherit plaintextFormat's png image default; gfm and
+        // commonmark join the table here after Phase 1 left them at the
+        // no-op default.
+        FormatIdentifier::Markdown => FormatPandocDefaults {
+            page_width: None,
+            output_divs: None,
+            default_image_extension: Some("png"),
+        },
+        FormatIdentifier::MarkdownStrict
+        | FormatIdentifier::MarkdownPhpExtra
+        | FormatIdentifier::MarkdownGithub
+        | FormatIdentifier::MarkdownMmd
+        | FormatIdentifier::Markua
+        | FormatIdentifier::CommonmarkX
+        | FormatIdentifier::Gfm
+        | FormatIdentifier::CommonMark => FormatPandocDefaults {
+            page_width: None,
+            output_divs: Some(false),
+            default_image_extension: Some("png"),
+        },
+        // Long-tail Phase 5 (Tier D): the JS slide family
+        // (`createHtmlPresentationFormat`) — png-only image default like
+        // the plaintext tail; no page-width (decks have no pages) and no
+        // output-divs override (the cell Div renders fine into HTML).
+        FormatIdentifier::S5
+        | FormatIdentifier::Dzslides
+        | FormatIdentifier::Slidy
+        | FormatIdentifier::Slideous => FormatPandocDefaults {
+            page_width: None,
+            output_divs: None,
             default_image_extension: Some("png"),
         },
         _ => FormatPandocDefaults::default(),
@@ -122,7 +205,7 @@ fn missing_pandoc_path_error(key: &str, declared: &str, entry: &ConfigValue) -> 
 /// runs), plus the per-format literal defaults
 /// ([`format_pandoc_defaults`]'s `default_image_extension`).
 ///
-/// `slide-level` is forwarded only for `base_format == "pptx"` (T4.3) —
+/// `slide-level` is forwarded only for [`FormatIdentifier::Pptx`] (T4.3) —
 /// pandoc accepts `--slide-level` for every writer, but Q1 never sets it
 /// for docx, and forwarding it unconditionally would silently change docx
 /// output the day a document declares `slide-level:` for an unrelated
@@ -131,7 +214,7 @@ pub fn build_forwarded_args(
     stage_name: &str,
     doc_dir: &Path,
     meta: &ConfigValue,
-    base_format: &str,
+    base_format: FormatIdentifier,
 ) -> Result<Vec<OsString>, PipelineError> {
     let mut args = Vec::new();
 
@@ -145,7 +228,7 @@ pub fn build_forwarded_args(
         // `--template` pointing directly at the user's single file, which
         // — placed later in the pandoc invocation than typst's own flag —
         // would silently win and drop the vendored partials.
-        if *key == "template" && base_format == "typst" {
+        if *key == "template" && base_format == FormatIdentifier::Typst {
             continue;
         }
         let Some(value) = meta.get(key) else {
@@ -172,20 +255,64 @@ pub fn build_forwarded_args(
         }
     }
 
-    if let Some(v) = meta.get("highlight-style").and_then(|v| v.as_plain_text()) {
+    // Typst's highlighting is owned by `typst_highlight`, which also
+    // honors `syntax-highlighting:` and generates the definitions block.
+    if base_format != FormatIdentifier::Typst
+        && let Some(v) = meta.get("highlight-style").and_then(|v| v.as_plain_text())
+    {
         args.push(OsString::from("--highlight-style"));
         args.push(OsString::from(v));
     }
-    if meta.get("toc").and_then(|v| v.as_bool()) == Some(true) {
-        args.push(OsString::from("--toc"));
+    // Typst never consumes pandoc's own `--toc`/`--toc-depth`-driven
+    // internal TOC-insertion (`WriterOptions.writerTableOfContents`/
+    // `writerTOCDepth`) directly as a writer feature — both
+    // `resources/pandoc-filters/typst-template/typst-template.typ` (Q2's own
+    // default template) and every vendored extension's own `typst-show.typ`
+    // (e.g. orange-book) read `toc`/`toc-depth` purely as
+    // `$toc$`/`$toc-depth$` *template variables*, feeding a native Typst
+    // `#outline(depth: toc_depth)` call directly. Forwarding a *bare*
+    // `--toc-depth` CLI flag is therefore not just unnecessary but actively
+    // harmful: pandoc's CLI parser hard-validates `--toc-depth` to 1-6
+    // (verified directly), while Typst's own outline has no such cap — a
+    // book with deep heading nesting (`orange-book`'s smoke-all fixture sets
+    // `toc-depth: 17`) fails to render at all for a restriction that would
+    // never have applied to it.
+    //
+    // This does NOT mean `$toc-depth$` is simply populated straight from
+    // document metadata regardless of CLI flags, though — the vendored
+    // `resources/pandoc-filters/filters/quarto-post/typst.lua`'s `Meta`
+    // filter (ported from Q1) unconditionally *overwrites*
+    // `meta["toc-depth"]` with `tostring(PANDOC_WRITER_OPTIONS["toc_depth"])`
+    // before the template ever substitutes `$toc-depth$` — i.e. by
+    // template-substitution time the value is pandoc's own *writer-options*
+    // idea of toc-depth, not the document's raw metadata. And
+    // `PANDOC_WRITER_OPTIONS.toc_depth` only reflects a value other than
+    // pandoc's built-in default of 3 when it was populated via a real
+    // `--toc-depth` CLI flag or a `--defaults` file — a bare `--metadata
+    // toc-depth=N` does NOT propagate to it (verified empirically with
+    // `pandoc -t typst --lua-filter=<probe>`). So skipping CLI forwarding
+    // entirely (as below) silently resets any custom `toc-depth` back to 3;
+    // [`build_typst_toc_defaults_yaml`] is the other half of this fix —
+    // it threads the real value through a `--defaults` file instead, which
+    // bypasses the CLI's 1-6 validation (confirmed: `pandoc --defaults=<yaml
+    // with toc-depth: 17>` succeeds with no range check at all).
+    if base_format != FormatIdentifier::Typst {
+        if meta.get("toc").and_then(|v| v.as_bool()) == Some(true) {
+            args.push(OsString::from("--toc"));
+        }
+        if let Some(n) = meta.get("toc-depth").and_then(|v| v.as_int()) {
+            args.push(OsString::from("--toc-depth"));
+            args.push(OsString::from(n.to_string()));
+        }
     }
-    if let Some(n) = meta.get("toc-depth").and_then(|v| v.as_int()) {
-        args.push(OsString::from("--toc-depth"));
-        args.push(OsString::from(n.to_string()));
-    }
-    if let Some(v) = meta
-        .get("reference-location")
-        .and_then(|v| v.as_plain_text())
+    // Typst's `reference-location` values are consumed by the vendored Lua
+    // filters via `QUARTO_FILTER_PARAMS`. Pandoc accepts only block/section/
+    // document here, so forwarding `margin` both fails and bypasses the
+    // Typst-specific behavior.
+    if base_format != FormatIdentifier::Typst
+        && let Some(v) = meta
+            .get("reference-location")
+            .and_then(|v| v.as_plain_text())
     {
         args.push(OsString::from("--reference-location"));
         args.push(OsString::from(v));
@@ -194,11 +321,23 @@ pub fn build_forwarded_args(
         args.push(OsString::from("--shift-heading-level-by"));
         args.push(OsString::from(n.to_string()));
     }
-    if base_format == "pptx"
+    if base_format == FormatIdentifier::Pptx
         && let Some(n) = meta.get("slide-level").and_then(|v| v.as_int())
     {
         args.push(OsString::from("--slide-level"));
         args.push(OsString::from(n.to_string()));
+    }
+    // `top-level-division` is the chapter-boundary lever Typst and
+    // LaTeX share (book-projects P2: a single-file book merge sets
+    // `top-level-division: chapter`). Gated to those two writers for
+    // the same reason `slide-level` is pptx-only.
+    if matches!(base_format, FormatIdentifier::Typst | FormatIdentifier::Pdf)
+        && let Some(v) = meta
+            .get("top-level-division")
+            .and_then(|v| v.as_plain_text())
+    {
+        args.push(OsString::from("--top-level-division"));
+        args.push(OsString::from(v));
     }
 
     if let Some(ext) = format_pandoc_defaults(base_format).default_image_extension {
@@ -209,9 +348,37 @@ pub fn build_forwarded_args(
     Ok(args)
 }
 
+/// Build the content of a pandoc `--defaults` file carrying `toc`/`toc-depth`
+/// for Typst, bypassing the `--toc-depth` CLI flag's 1-6 range validation
+/// (see the doc comment on `build_forwarded_args`'s Typst-skip branch above
+/// for why a bare CLI flag can't be used here). Returns `None` when the
+/// document sets neither key — nothing to override pandoc's built-in
+/// `toc_depth` default of 3 with.
+///
+/// Caller-owned I/O: this is a pure string builder so it stays unit-testable
+/// without a filesystem; [`crate::stage::stages::PandocWriteStage`] writes
+/// the returned content to a temp file and appends `--defaults=<path>` to
+/// the pandoc invocation.
+pub fn build_typst_toc_defaults_yaml(meta: &ConfigValue) -> Option<String> {
+    let toc = meta.get("toc").and_then(|v| v.as_bool());
+    let toc_depth = meta.get("toc-depth").and_then(|v| v.as_int());
+    if toc.is_none() && toc_depth.is_none() {
+        return None;
+    }
+    let mut yaml = String::new();
+    if let Some(t) = toc {
+        yaml.push_str(&format!("toc: {t}\n"));
+    }
+    if let Some(d) = toc_depth {
+        yaml.push_str(&format!("toc-depth: {d}\n"));
+    }
+    Some(yaml)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::format::Format;
     use quarto_source_map::SourceInfo;
 
     fn scalar_meta(entries: &[(&str, &str)]) -> ConfigValue {
@@ -245,26 +412,141 @@ mod tests {
         ConfigValue::new_scalar(yaml_rust2::Yaml::Integer(n), SourceInfo::for_test())
     }
 
-    /// T4.1: the per-format defaults table.
+    /// T4.1: the per-format defaults table, keyed by
+    /// [`FormatIdentifier`] (Phase 1 long-tail wrinkle 1: extension-string
+    /// keys collide for the tail — `xml` would be both opendocument's
+    /// wordprocessor defaults and docbook's plaintext defaults).
     #[test]
     fn test_format_defaults_table() {
-        let docx = format_pandoc_defaults("docx");
+        let docx = format_pandoc_defaults(FormatIdentifier::Docx);
         assert_eq!(docx.page_width, Some(6.5));
         assert_eq!(docx.default_image_extension, Some("png"));
 
-        let pptx = format_pandoc_defaults("pptx");
+        let pptx = format_pandoc_defaults(FormatIdentifier::Pptx);
         assert_eq!(pptx.output_divs, Some(false));
         assert_eq!(pptx.default_image_extension, Some("png"));
 
-        let html = format_pandoc_defaults("html");
-        assert_eq!(html, FormatPandocDefaults::default());
+        for id in [
+            FormatIdentifier::Html,
+            FormatIdentifier::Pdf,
+            FormatIdentifier::Epub,
+            FormatIdentifier::Typst,
+            FormatIdentifier::Revealjs,
+        ] {
+            assert_eq!(
+                format_pandoc_defaults(id),
+                FormatPandocDefaults::default(),
+                "{id} must have no pandoc-defaults opinion"
+            );
+        }
+
+        // Long-tail Phase 3 (Tier B): Q1's bare `markdown` is
+        // `pandocMarkdownFormat()` — plaintextFormat with **no**
+        // output-divs override, so the builder default (`true`) stays;
+        // every other `isMarkdownOutput` flavor goes through
+        // `markdownFormat(displayName)`, which sets
+        // `render: {output-divs: false}`. All nine are png-image.
+        let markdown = format_pandoc_defaults(FormatIdentifier::Markdown);
+        assert_eq!(markdown.page_width, None);
+        assert_eq!(markdown.output_divs, None);
+        assert_eq!(markdown.default_image_extension, Some("png"));
+
+        for id in [
+            FormatIdentifier::MarkdownStrict,
+            FormatIdentifier::MarkdownPhpExtra,
+            FormatIdentifier::MarkdownGithub,
+            FormatIdentifier::MarkdownMmd,
+            FormatIdentifier::Markua,
+            FormatIdentifier::CommonmarkX,
+            FormatIdentifier::Gfm,
+            FormatIdentifier::CommonMark,
+        ] {
+            let defaults = format_pandoc_defaults(id);
+            assert_eq!(
+                defaults.output_divs,
+                Some(false),
+                "output-divs for {id} (Q1 markdownFormat override)"
+            );
+            assert_eq!(defaults.page_width, None, "page-width for {id}");
+            assert_eq!(
+                defaults.default_image_extension,
+                Some("png"),
+                "default image extension for {id}"
+            );
+        }
+    }
+
+    /// Typst's highlighting is owned by `typst_highlight`; the generic
+    /// `--highlight-style` forwarding must not also fire for it (a second,
+    /// deprecated flag would fight the generated definitions), while other
+    /// formats keep forwarding it.
+    #[test]
+    fn test_highlight_style_forwarding_is_typst_skipped() {
+        let meta = scalar_meta(&[("highlight-style", "tango")]);
+        let args_for =
+            |id| build_forwarded_args("pandoc-write", Path::new("/doc/dir"), &meta, id).unwrap();
+        let has_flag = |args: &[OsString]| {
+            args.iter()
+                .any(|a| a.to_string_lossy() == "--highlight-style")
+        };
+        assert!(has_flag(&args_for(FormatIdentifier::Docx)));
+        assert!(!has_flag(&args_for(FormatIdentifier::Typst)));
+    }
+
+    /// Phase 1 wrinkle 2: typst's `template` is owned by its dedicated
+    /// vendored-partials mechanism, so `build_forwarded_args` must skip the
+    /// generic `template` forwarding for Typst while still forwarding it
+    /// for Docx — both polarities, or the skip is vacuous.
+    #[test]
+    fn test_template_forwarding_is_typst_skipped() {
+        use quarto_pandoc_types::ConfigMapEntry;
+        let meta = ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "template".to_string(),
+                key_source: SourceInfo::for_test(),
+                value: ConfigValue::new_path(
+                    "custom-template.docx".to_string(),
+                    SourceInfo::for_test(),
+                ),
+            }],
+            SourceInfo::for_test(),
+        );
+
+        let docx_args = build_forwarded_args(
+            "pandoc-write",
+            Path::new("/doc/dir"),
+            &meta,
+            FormatIdentifier::Docx,
+        )
+        .unwrap();
+        assert!(
+            docx_args
+                .iter()
+                .any(|a| a.to_string_lossy() == "--template"),
+            "docx must forward --template: {docx_args:?}"
+        );
+
+        let typst_args = build_forwarded_args(
+            "pandoc-write",
+            Path::new("/doc/dir"),
+            &meta,
+            FormatIdentifier::Typst,
+        )
+        .unwrap();
+        assert!(
+            !typst_args
+                .iter()
+                .any(|a| a.to_string_lossy() == "--template"),
+            "typst's template is owned by the vendored-partials mechanism: {typst_args:?}"
+        );
     }
 
     /// T4.2: the forwarding allow-list — the discriminator is the
     /// *excluded* keys (`citeproc`, `wrap`, `columns`), not just presence
     /// of the included ones (see the module's Refactor-induced-vacuity
     /// note in the plan: a test asserting only inclusion survives a full
-    /// pass-through refactor).
+    /// pass-through refactor). Also proves Typst's `reference-location` is
+    /// carried through filter params, not forwarded as a Pandoc CLI flag.
     #[test]
     fn test_forwarding_is_allow_listed() {
         use quarto_pandoc_types::ConfigMapEntry;
@@ -315,8 +597,13 @@ mod tests {
             SourceInfo::for_test(),
         );
 
-        let args = build_forwarded_args("pandoc-write", Path::new("/doc/dir"), &meta, "docx")
-            .expect("no path-shaped keys present, must not error");
+        let args = build_forwarded_args(
+            "pandoc-write",
+            Path::new("/doc/dir"),
+            &meta,
+            FormatIdentifier::Docx,
+        )
+        .expect("no path-shaped keys present, must not error");
         let joined: Vec<String> = args
             .iter()
             .map(|s| s.to_string_lossy().into_owned())
@@ -328,6 +615,34 @@ mod tests {
         assert!(joined.contains(&"--toc-depth".to_string()));
         assert!(joined.contains(&"--reference-location".to_string()));
         assert!(joined.contains(&"--shift-heading-level-by".to_string()));
+
+        let typst_args = build_forwarded_args(
+            "pandoc-write",
+            Path::new("/doc/dir"),
+            &scalar_meta(&[("reference-location", "margin")]),
+            FormatIdentifier::Typst,
+        )
+        .expect("Typst margin references are filter params, not CLI args");
+        assert!(
+            !typst_args
+                .iter()
+                .any(|arg| arg.to_string_lossy() == "--reference-location"),
+            "Typst must not receive Pandoc's unsupported --reference-location margin: {typst_args:?}"
+        );
+
+        let docx_args = build_forwarded_args(
+            "pandoc-write",
+            Path::new("/doc/dir"),
+            &scalar_meta(&[("reference-location", "section")]),
+            FormatIdentifier::Docx,
+        )
+        .expect("valid Pandoc reference-location should still be forwarded");
+        assert!(
+            docx_args
+                .iter()
+                .any(|arg| arg.to_string_lossy() == "--reference-location"),
+            "non-Typst formats must retain reference-location forwarding: {docx_args:?}"
+        );
 
         assert!(
             !joined.iter().any(|a| a.contains("citeproc")),
@@ -341,6 +656,130 @@ mod tests {
             !joined.iter().any(|a| a == "columns" || a == "72"),
             "columns must not be forwarded: {joined:?}"
         );
+    }
+
+    /// Typst never consumes pandoc's own `--toc`/`--toc-depth`-driven TOC
+    /// insertion — both Q2's own default `typst-template.typ` and every
+    /// vendored extension's `typst-show.typ` read `toc`/`toc-depth` purely
+    /// as template variables. Forwarding them is not just unnecessary but
+    /// actively harmful: pandoc's CLI parser hard-validates `--toc-depth`
+    /// to 1-6, but Typst's own native `#outline()` has no such cap (the
+    /// `orange-book` smoke-all fixture legitimately sets `toc-depth: 17`).
+    /// RED before the fix (both args forwarded, `17` included verbatim —
+    /// would have made pandoc reject the invocation outright).
+    #[test]
+    fn test_toc_args_not_forwarded_for_typst() {
+        use quarto_pandoc_types::ConfigMapEntry;
+        let meta = ConfigValue::new_map(
+            vec![
+                ConfigMapEntry {
+                    key: "toc".to_string(),
+                    key_source: SourceInfo::for_test(),
+                    value: ConfigValue::new_bool(true, SourceInfo::for_test()),
+                },
+                ConfigMapEntry {
+                    key: "toc-depth".to_string(),
+                    key_source: SourceInfo::for_test(),
+                    value: int_value(17),
+                },
+            ],
+            SourceInfo::for_test(),
+        );
+
+        let args = build_forwarded_args(
+            "pandoc-write",
+            Path::new("/doc/dir"),
+            &meta,
+            FormatIdentifier::Typst,
+        )
+        .expect("no path-shaped keys present, must not error");
+        let joined: Vec<String> = args
+            .iter()
+            .map(|s| s.to_string_lossy().into_owned())
+            .collect();
+
+        assert!(
+            !joined
+                .iter()
+                .any(|a| a == "--toc" || a == "--toc-depth" || a == "17"),
+            "toc/toc-depth must not be forwarded for Typst: {joined:?}"
+        );
+    }
+
+    /// The other half of the Typst toc-depth fix: since a bare `--toc-depth`
+    /// CLI flag is skipped (test above), the value must instead reach
+    /// pandoc via a `--defaults` file, or `PANDOC_WRITER_OPTIONS.toc_depth`
+    /// (and therefore the vendored `typst.lua`'s `meta["toc-depth"]`
+    /// override) silently falls back to pandoc's built-in default of 3.
+    #[test]
+    fn test_typst_toc_defaults_yaml_carries_depth_past_pandoc_cli_cap() {
+        use quarto_pandoc_types::ConfigMapEntry;
+        let meta = ConfigValue::new_map(
+            vec![
+                ConfigMapEntry {
+                    key: "toc".to_string(),
+                    key_source: SourceInfo::for_test(),
+                    value: ConfigValue::new_bool(false, SourceInfo::for_test()),
+                },
+                ConfigMapEntry {
+                    key: "toc-depth".to_string(),
+                    key_source: SourceInfo::for_test(),
+                    value: int_value(17),
+                },
+            ],
+            SourceInfo::for_test(),
+        );
+
+        let yaml = build_typst_toc_defaults_yaml(&meta).expect("toc-depth is present");
+        assert!(yaml.contains("toc-depth: 17"), "{yaml}");
+        assert!(yaml.contains("toc: false"), "{yaml}");
+    }
+
+    #[test]
+    fn test_typst_toc_defaults_yaml_none_when_no_toc_keys_present() {
+        let meta = ConfigValue::new_map(vec![], SourceInfo::for_test());
+        assert!(build_typst_toc_defaults_yaml(&meta).is_none());
+    }
+
+    /// Negative control for the test above: a non-Typst Pandoc-hybrid
+    /// format (docx here, matching `test_forwarding_is_allow_listed`'s own
+    /// choice) still gets `--toc`/`--toc-depth` forwarded — pandoc's LaTeX/
+    /// docx/pptx writers genuinely drive their own TOC insertion from these
+    /// flags, unlike Typst.
+    #[test]
+    fn test_toc_args_still_forwarded_for_non_typst() {
+        use quarto_pandoc_types::ConfigMapEntry;
+        let meta = ConfigValue::new_map(
+            vec![
+                ConfigMapEntry {
+                    key: "toc".to_string(),
+                    key_source: SourceInfo::for_test(),
+                    value: ConfigValue::new_bool(true, SourceInfo::for_test()),
+                },
+                ConfigMapEntry {
+                    key: "toc-depth".to_string(),
+                    key_source: SourceInfo::for_test(),
+                    value: int_value(2),
+                },
+            ],
+            SourceInfo::for_test(),
+        );
+
+        let args = build_forwarded_args(
+            "pandoc-write",
+            Path::new("/doc/dir"),
+            &meta,
+            FormatIdentifier::Docx,
+        )
+        .expect("no path-shaped keys present, must not error");
+        let joined: Vec<String> = args
+            .iter()
+            .map(|s| s.to_string_lossy().into_owned())
+            .collect();
+
+        assert!(joined.contains(&"--toc".to_string()));
+        assert!(joined.contains(&"--toc-depth".to_string()));
+        assert!(joined.contains(&"2".to_string()));
     }
 
     /// T4.3: `slide-level` is forwarded for pptx only.
@@ -358,22 +797,69 @@ mod tests {
             meta.source_info.clone(),
         );
 
-        let pptx_args =
-            build_forwarded_args("pandoc-write", Path::new("/doc/dir"), &meta, "pptx").unwrap();
+        let pptx_args = build_forwarded_args(
+            "pandoc-write",
+            Path::new("/doc/dir"),
+            &meta,
+            FormatIdentifier::Pptx,
+        )
+        .unwrap();
         assert!(
             pptx_args
                 .iter()
                 .any(|a| a.to_string_lossy() == "--slide-level")
         );
 
-        let docx_args =
-            build_forwarded_args("pandoc-write", Path::new("/doc/dir"), &meta, "docx").unwrap();
+        let docx_args = build_forwarded_args(
+            "pandoc-write",
+            Path::new("/doc/dir"),
+            &meta,
+            FormatIdentifier::Docx,
+        )
+        .unwrap();
         assert!(
             !docx_args
                 .iter()
                 .any(|a| a.to_string_lossy() == "--slide-level"),
             "docx must not receive --slide-level: {docx_args:?}"
         );
+    }
+
+    /// `top-level-division` is forwarded for typst and pdf only
+    /// (book-projects P2: single-file book merges set
+    /// `top-level-division: chapter` so the compiler treats each
+    /// chapter's H1 as a true chapter boundary — the lever Typst and
+    /// LaTeX share). Gated like `slide-level`: forwarding it
+    /// unconditionally would hand an unaudited new flag to writers
+    /// (docx, pptx, …) Q1 never sets it for.
+    #[test]
+    fn test_top_level_division_is_typst_and_pdf_only() {
+        let meta = scalar_meta(&[("top-level-division", "chapter")]);
+
+        for base in [FormatIdentifier::Typst, FormatIdentifier::Pdf] {
+            let args =
+                build_forwarded_args("pandoc-write", Path::new("/doc/dir"), &meta, base).unwrap();
+            let joined: Vec<String> = args
+                .iter()
+                .map(|s| s.to_string_lossy().into_owned())
+                .collect();
+            let pos = joined
+                .iter()
+                .position(|a| a == "--top-level-division")
+                .unwrap_or_else(|| panic!("{base} must receive --top-level-division: {joined:?}"));
+            assert_eq!(joined[pos + 1], "chapter");
+        }
+
+        for base in [FormatIdentifier::Docx, FormatIdentifier::Epub] {
+            let args =
+                build_forwarded_args("pandoc-write", Path::new("/doc/dir"), &meta, base).unwrap();
+            assert!(
+                !args
+                    .iter()
+                    .any(|a| a.to_string_lossy().contains("top-level-division")),
+                "{base} must not receive --top-level-division: {args:?}"
+            );
+        }
     }
 
     /// T4.11 (Missing-test-pass item 2): `number-sections`/`number-offset`
@@ -399,8 +885,13 @@ mod tests {
             }],
             SourceInfo::for_test(),
         );
-        let args =
-            build_forwarded_args("pandoc-write", Path::new("/doc/dir"), &meta, "docx").unwrap();
+        let args = build_forwarded_args(
+            "pandoc-write",
+            Path::new("/doc/dir"),
+            &meta,
+            FormatIdentifier::Docx,
+        )
+        .unwrap();
         let joined: Vec<String> = args
             .iter()
             .map(|s| s.to_string_lossy().into_owned())
@@ -423,8 +914,13 @@ mod tests {
     #[test]
     fn test_missing_reference_doc_is_fatal_q_5_30() {
         let meta = scalar_meta(&[("reference-doc", "missing.docx")]);
-        let err = build_forwarded_args("pandoc-write", Path::new("/doc/dir"), &meta, "docx")
-            .expect_err("a missing reference-doc must be a hard error");
+        let err = build_forwarded_args(
+            "pandoc-write",
+            Path::new("/doc/dir"),
+            &meta,
+            FormatIdentifier::Docx,
+        )
+        .expect_err("a missing reference-doc must be a hard error");
         let msg = err.to_string();
         assert!(
             msg.contains("missing.docx"),
@@ -438,5 +934,134 @@ mod tests {
         // if a future edit trims the other callers.
         let meta = bool_meta("toc", true);
         assert_eq!(meta.get("toc").and_then(|v| v.as_bool()), Some(true));
+    }
+
+    // === long-tail Phase 2: Tier A bulk tail ===
+
+    /// Deferred from Phase 1 wrinkle 1 as an explicit discrimination test:
+    /// `docbook` and `opendocument` share the `xml` output extension but
+    /// must get **different** defaults (plaintext `png`-only vs
+    /// wordprocessor 6.5-inch + `png`). Keyed by `FormatIdentifier`, the
+    /// table cannot collide; the old extension-keyed shape would.
+    #[test]
+    fn test_docbook_and_opendocument_share_extension_not_defaults() {
+        let docbook = Format::from_format_string("docbook").unwrap();
+        let opendocument = Format::from_format_string("opendocument").unwrap();
+        assert_eq!(docbook.output_extension, "xml");
+        assert_eq!(opendocument.output_extension, "xml");
+
+        let docbook_defaults = format_pandoc_defaults(docbook.identifier);
+        let opendocument_defaults = format_pandoc_defaults(opendocument.identifier);
+        assert_eq!(
+            opendocument_defaults.page_width,
+            Some(6.5),
+            "opendocument is a wordprocessor format"
+        );
+        assert_ne!(
+            docbook_defaults, opendocument_defaults,
+            "the shared .xml extension must not mean shared defaults"
+        );
+    }
+
+    /// The wordprocessor trio (odt/opendocument/rtf — Q1's
+    /// `createWordprocessorFormat` plus `rtfFormat()`'s base) gets
+    /// `page-width: 6.5` + `default-image-extension: png`.
+    #[test]
+    fn test_tier_a_wordprocessor_defaults() {
+        for name in ["odt", "opendocument", "rtf"] {
+            let f = Format::from_format_string(name).unwrap();
+            let defaults = format_pandoc_defaults(f.identifier);
+            assert_eq!(defaults.page_width, Some(6.5), "page-width for {name}");
+            assert_eq!(
+                defaults.default_image_extension,
+                Some("png"),
+                "image extension for {name}"
+            );
+            assert_eq!(
+                defaults.output_divs, None,
+                "{name} must not override output-divs"
+            );
+        }
+    }
+
+    /// fb2 (Q1's `createEbookFormat`) gets `png` but **no** page-width —
+    /// ebooks are reflowable, wordprocessors are not.
+    #[test]
+    fn test_tier_a_ebook_defaults() {
+        let fb2 = format_pandoc_defaults(FormatIdentifier::try_from("fb2").unwrap());
+        assert_eq!(fb2.default_image_extension, Some("png"));
+        assert_eq!(fb2.page_width, None);
+    }
+
+    /// The 21 plaintext variants get `png` and nothing else — Q1's
+    /// `plaintextFormat` sets `default-image-extension: png` and no
+    /// page-width/output-divs opinion.
+    #[test]
+    fn test_tier_a_plaintext_defaults() {
+        const PLAINTEXT: &[&str] = &[
+            "plain",
+            "rst",
+            "org",
+            "muse",
+            "ms",
+            "man",
+            "texinfo",
+            "tei",
+            "zimwiki",
+            "dokuwiki",
+            "haddock",
+            "json",
+            "native",
+            "icml",
+            "jira",
+            "mediawiki",
+            "xwiki",
+            "textile",
+            "docbook",
+            "docbook4",
+            "docbook5",
+        ];
+        for name in PLAINTEXT {
+            let f = Format::from_format_string(name)
+                .unwrap_or_else(|e| panic!("{name} must parse: {e}"));
+            let defaults = format_pandoc_defaults(f.identifier);
+            assert_eq!(
+                defaults,
+                FormatPandocDefaults {
+                    page_width: None,
+                    output_divs: None,
+                    default_image_extension: Some("png"),
+                },
+                "defaults for {name}"
+            );
+        }
+    }
+
+    /// The single `--default-image-extension` sink (D2): one per-family row
+    /// each of wordprocessor (odt), ebook (fb2), and plaintext (plain) gets
+    /// `--default-image-extension png` from `build_forwarded_args` with an
+    /// empty meta — and, for rtf, that `--standalone` does **not** come
+    /// from here (it is `pandoc_invocation_args_for`'s job).
+    #[test]
+    fn test_tier_a_forwarded_args_emit_image_extension() {
+        for name in ["odt", "fb2", "plain", "rtf"] {
+            let f = Format::from_format_string(name).unwrap();
+            let args = build_forwarded_args(
+                "pandoc-write",
+                Path::new("/doc/dir"),
+                &scalar_meta(&[]),
+                f.identifier,
+            )
+            .unwrap();
+            let joined: Vec<String> = args
+                .iter()
+                .map(|s| s.to_string_lossy().into_owned())
+                .collect();
+            assert_eq!(
+                joined,
+                vec!["--default-image-extension".to_string(), "png".to_string()],
+                "forwarded args for {name} with empty meta"
+            );
+        }
     }
 }

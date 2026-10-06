@@ -201,8 +201,39 @@ impl TransformPipeline {
         ast_context: &pampa::pandoc::ASTContext,
         ctx: &mut RenderContext<'_>,
     ) -> Result<()> {
+        self.execute_range(ast, ast_context, ctx, ..).await
+    }
+
+    /// Execute only the transforms whose [`AstTransform::phase`] falls
+    /// inside `range`, in insertion order.
+    ///
+    /// Book-projects P2's phase-bounded runner (single-file chapter merge,
+    /// later P5's pause/resume): a per-chapter partial render stops after
+    /// `..=TransformPhase::Normalization`, and the merged document (or a
+    /// resumed chapter) continues with `TransformPhase::Crossref..` /
+    /// `Finalization..`. `execute()` is exactly `execute_range(..)`.
+    ///
+    /// [`TransformPhase::Unclassified`] sorts above every real phase, so an
+    /// upper-bounded range never accidentally picks up an unclassified
+    /// transform. The observer's `index`/`total` still refer to positions
+    /// in the full (unfiltered) list, so trace entries are comparable
+    /// across bounded and unbounded runs.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first error encountered. Execution stops on error.
+    pub async fn execute_range(
+        &self,
+        ast: &mut quarto_pandoc_types::pandoc::Pandoc,
+        ast_context: &pampa::pandoc::ASTContext,
+        ctx: &mut RenderContext<'_>,
+        range: impl std::ops::RangeBounds<TransformPhase>,
+    ) -> Result<()> {
         let total = self.transforms.len();
         for (idx, transform) in self.transforms.iter().enumerate() {
+            if !range.contains(&transform.phase()) {
+                continue;
+            }
             tracing::debug!(transform = transform.name(), "Running transform");
             transform.transform(ast, ctx).await?;
             ctx.observer

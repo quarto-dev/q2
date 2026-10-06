@@ -19,6 +19,9 @@ vi.mock('@automerge/automerge', () => ({
   clone: vi.fn((doc: unknown) => structuredClone(doc)),
   from: vi.fn((val: unknown) => structuredClone(val)),
   save: vi.fn(() => new Uint8Array(0)),
+  // client.ts applies the author in place via the @hidden getBackend
+  // hatch (D9); the mock docs are plain objects, so stub it.
+  getBackend: vi.fn(() => ({ setAuthor: vi.fn() })),
 }));
 
 vi.mock('@automerge/automerge-repo-network-websocket', () => ({
@@ -176,19 +179,19 @@ describe('createSyncClient identity', () => {
     const cbs = noopCallbacks();
     const client = createSyncClient(cbs);
 
-    // Use resolveActorId callback (mirrors App.tsx which passes actorId=undefined)
-    const resolveActorId = vi.fn().mockResolvedValue('actor-456');
+    // Use resolveAuthorId callback (mirrors App.tsx which passes authorId=undefined)
+    const resolveAuthorId = vi.fn().mockResolvedValue('actor-456');
 
     await client.createNewProject(
       { syncServer: 'ws://localhost:9999', files: [] },
-      undefined,    // actorId — App.tsx passes undefined
+      undefined,    // authorId — App.tsx passes undefined
       'Bob',
       '#00FF00',
-      resolveActorId,
+      resolveAuthorId,
     );
 
-    // resolveActorId must be called regardless of connection status
-    expect(resolveActorId).toHaveBeenCalled();
+    // resolveAuthorId must be called regardless of connection status
+    expect(resolveAuthorId).toHaveBeenCalled();
 
     // Identity must have been written
     expect(setIdentitySpy).toHaveBeenCalledWith(

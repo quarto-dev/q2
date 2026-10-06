@@ -142,16 +142,18 @@ fn colon_runs_that_open_no_block_stay_in_the_paragraph() {
     );
 }
 
-/// A single colon followed by a space is a caption marker, and must keep
-/// interrupting the paragraph above it rather than being absorbed as
-/// continuation text. (A caption with nothing to attach to is reported and
-/// dropped downstream, which is why this asserts on what does *not* reach the
-/// paragraph.)
+/// A single colon followed by a space is a caption marker and stays separate
+/// from the preceding paragraph. Postprocessing keeps a no-table caption as
+/// literal text in a new paragraph.
 #[test]
 fn a_caption_still_interrupts_a_paragraph() {
-    let text = plain_text(&parse("Before.\n\n: A caption\n"));
+    let blocks = parse("Before.\n\n: A caption\n");
     assert!(
-        !text.contains("A caption"),
-        "the caption line was absorbed into the paragraph: {text:?}"
+        matches!(blocks.last(), Some(Block::Paragraph(paragraph))
+            if paragraph.content.iter().any(|inline|
+                matches!(inline, Inline::Str(text) if text.text == ": A caption")
+            )
+        ),
+        "the caption should remain in its own literal paragraph: {blocks:#?}"
     );
 }

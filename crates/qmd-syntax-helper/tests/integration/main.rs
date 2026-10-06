@@ -26,6 +26,7 @@ pub mod q_2_26_test;
 pub mod q_2_28_test;
 pub mod q_2_52_test;
 pub mod q_2_5_test;
+pub mod q_5_37_test;
 pub mod reference_links_test;
 
 fn main() {}

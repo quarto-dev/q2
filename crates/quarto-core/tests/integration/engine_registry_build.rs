@@ -248,10 +248,13 @@ contributes:
             names
         );
 
-        // No extension-contributed engines, so contribution_order is empty.
-        assert!(
-            project.registry.contribution_order().is_empty(),
-            "contribution_order should be empty with no engine extensions; got: {:?}",
+        // No user-installed extension-contributed engines: contribution_order
+        // contains exactly the bundled julia engine (shipped as an extension
+        // subtree since the julia epic's Step 4), nothing else.
+        assert_eq!(
+            project.registry.contribution_order(),
+            &["julia".to_string()][..],
+            "contribution_order should be just the bundled julia engine; got: {:?}",
             project.registry.contribution_order()
         );
     }
@@ -320,8 +323,13 @@ contributes:
         );
     }
 
-    // ── P1-4 (collision): two exts both declaring `name: julia` → Err naming both ─
+    // ── P1-4 (collision): two exts both declaring the same `name:` → Err naming both ─
     // RED: replace collision check with silent register → no Err returned.
+    //
+    // Uses a synthetic name ("collide-synth"), not "julia" — since the julia
+    // epic's Step 4, q2 bundles a real julia-engine extension subtree, so a
+    // fixture that reused `name: julia` here would collide with the BUNDLED
+    // engine too (a third, unintended contributor), not just ext-a/ext-b.
 
     #[test]
     fn p1_4_name_collision_errors_and_names_both_contributors() {
@@ -329,7 +337,7 @@ contributes:
         let dir = tmp.path();
         write_file(&dir.join("_quarto.yml"), "project:\n  type: default\n");
 
-        // First extension declares name: julia
+        // First extension declares name: collide-synth
         let ext_a_dir = dir.join("_extensions/ext-a");
         write_file(&ext_a_dir.join("engine.js"), "// stub");
         write_file(
@@ -340,14 +348,14 @@ author: Test
 contributes:
   engines:
     - path: engine.js
-      name: julia
+      name: collide-synth
       claims: {}
       file-extensions: []
       claims-files: []
 "#,
         );
 
-        // Second extension also declares name: julia → collision
+        // Second extension also declares name: collide-synth → collision
         let ext_b_dir = dir.join("_extensions/ext-b");
         write_file(&ext_b_dir.join("engine.js"), "// stub");
         write_file(
@@ -358,7 +366,7 @@ author: Test
 contributes:
   engines:
     - path: engine.js
-      name: julia
+      name: collide-synth
       claims: {}
       file-extensions: []
       claims-files: []
@@ -372,8 +380,8 @@ contributes:
 
         // Error must name the colliding engine
         assert!(
-            err.contains("julia"),
-            "collision error should name the colliding engine 'julia': {}",
+            err.contains("collide-synth"),
+            "collision error should name the colliding engine 'collide-synth': {}",
             err
         );
         // Error must name BOTH contributors
@@ -563,10 +571,14 @@ contributes:
         let rt = runtime();
         let project = ProjectContext::discover(tmp.path(), &rt)
             .expect("a {path:} entry must not error — it is reserved/skipped, not validated");
-        assert!(
-            project.registry.contribution_order().is_empty(),
+        // No user-installed extensions: contribution_order contains exactly the
+        // bundled julia engine (extension subtree, julia epic Step 4) — the
+        // {path:} entry itself must not add anything on top of that.
+        assert_eq!(
+            project.registry.contribution_order(),
+            &["julia".to_string()][..],
             "a {{path:}} entry contributes no ordering name; contribution_order should stay \
-             empty (no extensions installed): got {:?}",
+             just the bundled julia engine: got {:?}",
             project.registry.contribution_order()
         );
     }

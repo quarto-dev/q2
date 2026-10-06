@@ -157,40 +157,49 @@ test('file tree: context menu activates an item and returns focus to the row', a
   await expect(treeitem(page, 'index.qmd')).toBeFocused();
 });
 
-test('search results: listbox semantics, arrow navigation, Enter selects', async ({ page }) => {
-  const input = page.getByRole('searchbox', { name: 'Search files' });
+test('search dialog: listbox semantics, arrow navigation, Enter selects', async ({ page }) => {
+  await page.getByRole('button', { name: 'Search files' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Search files' });
+  await expect(dialog).toBeVisible();
+  const input = dialog.getByRole('searchbox', { name: 'Search files' });
+  await page.clock.runFor(100); // input autofocus
+  await expect(input).toBeFocused();
   await input.fill('qmd');
   await page.clock.runFor(200); // debounce
 
-  const listbox = page.locator('[role="listbox"][aria-label="Search results"]');
+  const listbox = dialog.locator('[role="listbox"][aria-label="Search results"]');
   await expect(listbox).toBeVisible();
   const options = listbox.locator('[role="option"]');
   await expect(options).toHaveCount(2); // index.qmd, analysis.qmd
 
-  // ArrowDown from the input moves into the first result.
+  // Arrow keys move the highlighted option (focus stays in the input;
+  // the input points at it via aria-activedescendant).
+  await expect(options.first()).toHaveAttribute('aria-selected', 'true');
   await input.press('ArrowDown');
-  await expect(options.first()).toBeFocused();
-  await page.keyboard.press('ArrowDown');
-  await expect(options.nth(1)).toBeFocused();
-  await page.keyboard.press('ArrowUp');
-  await expect(options.first()).toBeFocused();
+  await expect(options.nth(1)).toHaveAttribute('aria-selected', 'true');
+  await expect(input).toHaveAttribute('aria-activedescendant', await options.nth(1).getAttribute('id') ?? '');
+  await input.press('ArrowUp');
+  await expect(options.first()).toHaveAttribute('aria-selected', 'true');
 
-  await page.keyboard.press('Enter');
+  await input.press('Enter');
   expect(await lastAction(page)).toBe('select:index.qmd');
+  await expect(dialog).toHaveCount(0);
 });
 
-test('search results: Escape clears the query and returns focus to the input', async ({
+test('search dialog: Escape closes it and returns focus to the search button', async ({
   page,
 }) => {
-  const input = page.getByRole('searchbox', { name: 'Search files' });
+  const button = page.getByRole('button', { name: 'Search files' });
+  await button.click();
+  const dialog = page.getByRole('dialog', { name: 'Search files' });
+  const input = dialog.getByRole('searchbox', { name: 'Search files' });
   await input.fill('qmd');
   await page.clock.runFor(200);
-  await input.press('ArrowDown');
-  await expect(page.locator('[role="option"]').first()).toBeFocused();
+  await expect(dialog.locator('[role="option"]')).toHaveCount(2);
 
   await page.keyboard.press('Escape');
-  await expect(input).toBeFocused();
-  await expect(input).toHaveValue('');
+  await expect(dialog).toHaveCount(0);
+  await expect(button).toBeFocused();
   await expect(page.locator(TREE)).toBeVisible();
 });
 
@@ -222,7 +231,7 @@ test('outline: symbol rows activate via Enter', async ({ page }) => {
 test('sidebar sections: headers control labelled regions, toggle via keyboard', async ({
   page,
 }) => {
-  const filesHeader = page.getByRole('button', { name: 'FILES' });
+  const filesHeader = page.getByRole('button', { name: /FILES$/ });
   await expect(filesHeader).toHaveAttribute('aria-expanded', 'true');
   const contentId = await filesHeader.getAttribute('aria-controls');
   expect(contentId).toBeTruthy();
@@ -239,12 +248,13 @@ test('sidebar sections: headers control labelled regions, toggle via keyboard', 
   await expect(page.locator(`#${contentId}`)).toBeVisible();
 });
 
-test('tab order: header buttons, search, one tree stop, then the next section', async ({
+test('tab order: header buttons, one tree stop, then the next section', async ({
   page,
 }) => {
-  // Keyboard-only walkthrough from the top of the sidebar harness.
+  // Keyboard-only walkthrough from the top of the sidebar harness. (Print
+  // moved to the document top bar; search is a dialog behind a button.)
   await page.keyboard.press('Tab');
-  const filesHeader = page.getByRole('button', { name: 'FILES' });
+  const filesHeader = page.getByRole('button', { name: /FILES$/ });
   await expect(filesHeader).toBeFocused();
 
   await page.keyboard.press('Tab');
@@ -252,11 +262,7 @@ test('tab order: header buttons, search, one tree stop, then the next section', 
   await page.keyboard.press('Tab');
   await expect(page.getByRole('button', { name: 'Add asset' })).toBeFocused();
   await page.keyboard.press('Tab');
-  await expect(
-    page.getByRole('button', { name: 'Open printable version in a new tab' }),
-  ).toBeFocused();
-  await page.keyboard.press('Tab');
-  await expect(page.getByRole('searchbox', { name: 'Search files' })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Search files' })).toBeFocused();
 
   // The whole file tree is a single tab stop (roving tabindex); the row
   // kebab menus are reached via Shift+F10, not Tab.
@@ -277,12 +283,12 @@ test('keyboard focus shows a visible ring on section headers and tree rows', asy
     });
 
   await page.keyboard.press('Tab'); // FILES section header
-  const filesHeader = page.getByRole('button', { name: 'FILES' });
+  const filesHeader = page.getByRole('button', { name: /FILES$/ });
   await expect(filesHeader).toBeFocused();
   expect(await outlineStyleOf(filesHeader)).not.toBe('none 0px');
 
-  // Tab through to the tree's tab stop.
-  for (let i = 0; i < 5; i++) await page.keyboard.press('Tab');
+  // Tab through to the tree's tab stop (New file, Add asset, Search, tree).
+  for (let i = 0; i < 4; i++) await page.keyboard.press('Tab');
   const active = page.locator(`${TREE} [role="treeitem"][tabindex="0"]`);
   await expect(active).toBeFocused();
   expect(await outlineStyleOf(active)).not.toBe('none 0px');

@@ -26,6 +26,7 @@ use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_source_map::SourceContext;
 
 use crate::document_profile::{DocumentProfile, IncludeEntry};
+use crate::engine::content_processors::ConvertedFile;
 use crate::format::Format;
 
 /// Type tag for pipeline data variants.
@@ -225,6 +226,34 @@ pub struct ConversionProvenance {
     pub engine: String,
 }
 
+/// Conversion provenance stashed by `ParseDocumentStage` on the
+/// [`StageContext`](super::StageContext) for `run_pipeline`'s StageError
+/// arm (Plan 7c seam 2): when a stage fails after conversion, the rebuilt
+/// error `SourceContext` must hold the converted buffer, the original
+/// file, and any per-cell virtual files — the same registrations the
+/// success path makes — or every diagnostic (a `Substring` over the
+/// converter's mapping) resolves against the wrong bytes.
+///
+/// Field semantics mirror `LoadedSource`'s post-conversion state:
+/// `source_info.is_some()` gates the original-file registration exactly
+/// as `ParseDocumentStage`'s success path gates it, and `files` is
+/// non-empty only for per-cell processors (ipynb; empty for
+/// percent/spin). `None`-valued `source_info` therefore means "the
+/// conversion carried no faithful parent mapping — register only the
+/// converted buffer."
+#[derive(Debug, Clone)]
+pub struct ConversionStash {
+    /// Name of the engine that performed the conversion.
+    pub engine: String,
+    /// The converted QMD text the parse actually ran on.
+    pub converted: String,
+    /// The converter's faithful converted→original mapping, when it
+    /// produced one (`None` = register only the converted buffer).
+    pub source_info: Option<quarto_source_map::SourceInfo>,
+    /// Ephemeral per-cell virtual files, in piece order.
+    pub files: Vec<ConvertedFile>,
+}
+
 /// Loaded file with detected source type.
 ///
 /// This is the entry point for the pipeline - a file has been read
@@ -256,6 +285,27 @@ pub struct LoadedSource {
     /// Set by `SourceConversionStage` when an engine converts this file to QMD.
     /// `None` for `.qmd` / `.md` inputs (pass-through path).
     pub conversion: Option<ConversionProvenance>,
+    /// Faithful original-file provenance for a converted file (Plan 7b "A+"),
+    /// set by `SourceConversionStage` from the claiming engine's
+    /// `markdown_for_file` return value — but **only** when that value is a
+    /// genuine `Concat`/`Original`/`Substring` mapping, never the
+    /// placeholder `SourceInfo::generated(By::unknown())` a dynamic/wire
+    /// conversion still returns (wrapping a `Substring` over a `Generated`
+    /// parent is not meaningful). `None` for `.qmd`/`.md` pass-through and
+    /// for any conversion that has no real provenance to offer.
+    ///
+    /// `ParseDocumentStage` threads this through as `pampa::readers::qmd::
+    /// read`'s `parent_source_info` — see `content_processors::
+    /// ORIGINAL_FILE_ID` for the FileId convention this relies on.
+    pub source_info: Option<quarto_source_map::SourceInfo>,
+    /// Ephemeral virtual files the conversion's `source_info` pieces point
+    /// at (Plan 7c, open question 7 option (a)): one per notebook cell for
+    /// the ipynb processor, in piece order — each to be registered in the
+    /// document's `SourceContext`. Always
+    /// empty on the dynamic/wire path: that conversion returns
+    /// `Generated(By::unknown())` placeholders by construction and has no
+    /// faithful per-piece provenance to name files for.
+    pub files: Vec<ConvertedFile>,
 }
 
 impl LoadedSource {
@@ -270,6 +320,8 @@ impl LoadedSource {
             content,
             source_type,
             conversion: None,
+            source_info: None,
+            files: Vec::new(),
         }
     }
 
@@ -284,6 +336,8 @@ impl LoadedSource {
             content,
             source_type: Some(source_type),
             conversion: None,
+            source_info: None,
+            files: Vec::new(),
         }
     }
 

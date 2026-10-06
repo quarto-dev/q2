@@ -35,6 +35,7 @@ use std::time::Duration;
 use crate::engine::{
     DEFAULT_EXECUTE_TIMEOUT, EngineRegistry, ExecutionContext, ExecutionEngine, resolve_engines,
 };
+use crate::format::FormatIdentifier;
 use crate::stage::{
     DocumentAst, EventLevel, PipelineData, PipelineDataKind, PipelineError, PipelineStage,
     SourceType, StageContext,
@@ -345,13 +346,41 @@ impl PipelineStage for EngineExecutionStage {
             return Ok(PipelineData::DocumentAst(doc_ast));
         }
 
+        // Plan 7c Phase 3: an `.ipynb` input renders its code cells'
+        // *stored* outputs by default (Q1 parity — stored outputs are the
+        // document). Two placements are forced by what follows:
+        //
+        // 1. BEFORE the policy gate — replay is not execution (it never
+        //    launches a kernel), so static preview shows stored outputs
+        //    under any ExecutionPolicy.
+        // 2. BEFORE Step 2's availability resolution — an `.ipynb` claim
+        //    short-circuits engine resolution to jupyter even for a
+        //    zero-code-cell notebook, and a registered-but-unavailable
+        //    engine hard-errors there before any engine code could
+        //    decide.
+        //
+        // `execute.enabled: true` in the fully merged metadata (the
+        // notebook's front-matter cell, merged by MetadataMergeStage) is
+        // the only demand route back to live execution; a demanded
+        // document falls through to the unchanged path below.
+        let notebook_replay =
+            is_notebook_input(&ctx.document.input) && !execute_demanded(&doc_ast.ast.meta);
+        if notebook_replay {
+            trace_event!(
+                ctx,
+                EventLevel::Debug,
+                "ipynb stored-output replay — no engine availability consulted"
+            );
+        }
+
         // bd-sl79jjiq: the render's `ExecutionPolicy` may exclude this
         // document. Decided here, after the *pure* resolver and before
         // Step 2 touches engine implementations, so a skipped document
         // never loads an engine, never warns about a missing runtime,
         // and never executes. Documents that resolve to markdown only
         // have nothing to skip and are not marked.
-        if !ctx.execution_policy.allows(&ctx.document.input)
+        if !notebook_replay
+            && !ctx.execution_policy.allows(&ctx.document.input)
             && resolution.sequence.iter().any(|e| !e.is_markdown())
         {
             ctx.execution_skipped = true;
@@ -376,28 +405,54 @@ impl PipelineStage for EngineExecutionStage {
         // Step 2: Resolve each engine in the sequence to an implementation
         // (with fallback), dropping markdown — it's a no-op, so a markdown
         // engine anywhere in the sequence is skipped (this also covers
-        // unavailable engines that fall back to markdown).
-        let mut engine_warnings = Vec::new();
+        // unavailable engines that fall back to markdown). Stored replay
+        // (`.ipynb` with no `execute.enabled` demand) skips resolution
+        // entirely: the replay engine is selected directly and is
+        // deliberately NOT in the registry.
         let mut to_run: Vec<(
             Arc<dyn ExecutionEngine>,
             Option<quarto_pandoc_types::ConfigValue>,
         )> = Vec::new();
-        for detected in &resolution.sequence {
-            let engine =
-                self.get_engine_with_fallback(&detected.name, &ctx.registry, &mut engine_warnings)?;
-            if engine.name() == "markdown" {
-                trace_event!(
-                    ctx,
-                    EventLevel::Debug,
-                    "engine '{}' resolved to markdown (no-op) — skipping",
-                    detected.name
-                );
-                continue;
+        if notebook_replay {
+            // The replay engine rides the same per-engine loop below as a
+            // live engine (mask → serialize → execute → unmask → capture
+            // → reparse), so capture/splice works unchanged.
+            //
+            // Native only: `engine::jupyter` — and the replay engine — is
+            // gated out of the WASM build (engine/mod.rs), so this push
+            // compiles out there. `to_run` stays empty and Step 3's
+            // empty-`to_run` fast path passes the AST through unchanged:
+            // stored cells inert, no misleading warning, native behavior
+            // untouched. WASM keeps `notebook_replay` true so the policy
+            // gate above still bypasses for replay (replay never launches
+            // a kernel).
+            #[cfg(not(target_arch = "wasm32"))]
+            to_run.push((
+                Arc::new(crate::engine::jupyter::IpynbReplayEngine) as Arc<dyn ExecutionEngine>,
+                None,
+            ));
+        } else {
+            let mut engine_warnings = Vec::new();
+            for detected in &resolution.sequence {
+                let engine = self.get_engine_with_fallback(
+                    &detected.name,
+                    &ctx.registry,
+                    &mut engine_warnings,
+                )?;
+                if engine.name() == "markdown" {
+                    trace_event!(
+                        ctx,
+                        EventLevel::Debug,
+                        "engine '{}' resolved to markdown (no-op) — skipping",
+                        detected.name
+                    );
+                    continue;
+                }
+                to_run.push((engine, detected.config.clone()));
             }
-            to_run.push((engine, detected.config.clone()));
-        }
-        if !engine_warnings.is_empty() {
-            ctx.add_diagnostics(engine_warnings);
+            if !engine_warnings.is_empty() {
+                ctx.add_diagnostics(engine_warnings);
+            }
         }
 
         // Step 3: Fast path — nothing to execute (all markdown / no
@@ -458,6 +513,22 @@ impl PipelineStage for EngineExecutionStage {
             let mut masked_ast = ast.clone();
             crate::engine::nested_cell_mask::mask(&mut masked_ast);
 
+            // bd-2lxj10z0 (plan §D1/§D2): re-inject a crossref-consumed
+            // `label:` option into the text handed to knitr, so knitr's
+            // own label-based output naming (`fig-cars-1.svg`) sees the
+            // label again. Additive on this per-engine clone only — `ast`
+            // itself (what `reconcile` below compares against) and the
+            // wrapping Div's `id` are untouched; the Div still needs the
+            // label independently for crossref numbering. Scoped to
+            // knitr: Jupyter has no label-based naming to restore, and
+            // this must not risk changing its behavior (plan §D1).
+            if engine.name() == "knitr" {
+                crate::crossref::label_reinject::inject(
+                    &mut masked_ast,
+                    ctx.ref_type_registry.as_ref(),
+                );
+            }
+
             // Serialize the masked AST to QMD for this engine. Every engine
             // goes through this one call, so knitr, q2's jupyter text
             // engine, and TS extensions are all covered with no per-engine
@@ -503,7 +574,7 @@ impl PipelineStage for EngineExecutionStage {
             // values (`format.rs`) are overridden correctly regardless of
             // which engine runs.
             .with_execute_scope(merge_execute_scope(
-                &ctx.format.output_extension,
+                ctx.format.identifier,
                 ast.meta.get("execute").cloned(),
             ))
             .with_source_info(qmd_source_info, source_context_arc.clone())
@@ -857,23 +928,74 @@ fn resolve_execute_timeout(meta: &quarto_pandoc_types::ConfigValue) -> Option<Du
     Some(DEFAULT_EXECUTE_TIMEOUT)
 }
 
+/// Plan 7c Phase 3: `.ipynb` input (case-insensitive) — the stored-replay
+/// candidate.
+fn is_notebook_input(path: &std::path::Path) -> bool {
+    path.extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("ipynb"))
+}
+
+/// Plan 7c Phase 3: `execute.enabled: true` in the fully merged metadata
+/// demands live execution for a notebook; absent/false renders the
+/// notebook's stored outputs (Q1 parity). Only a strict boolean `true`
+/// demands — anything else never silently routes the document to a
+/// kernel.
+fn execute_demanded(meta: &quarto_pandoc_types::ConfigValue) -> bool {
+    meta.get_path(&["execute", "enabled"])
+        .and_then(|enabled| enabled.as_bool())
+        .unwrap_or(false)
+}
+
 /// The per-format `execute:` defaults table (P7 Task 5, values from
 /// `v1.11.3:src/format/formats.ts:315-331` and `formats-shared.ts:170-186`).
 /// `None` means "this format has no opinion" (html/base) — the document's
 /// own `execute:` scope, if any, is used unchanged.
 ///
+/// Keyed by [`FormatIdentifier`], not the output-extension string
+/// (long-tail Phase 1 wrinkle 1: extension keys collide for the tail —
+/// `"xml"` would be both opendocument's and docbook's defaults, and Typst's
+/// extension is `"pdf"`, not `"typst"`). The old `"docx" | "odt"` arm's Odt
+/// half returns together with the `Odt` variant (long-tail Phase 2).
+///
 /// `default-image-extension: png` is deliberately **not** here — it is a
 /// pandoc default (Task 4's `format_pandoc_defaults`), not an `execute`
 /// one.
-fn format_execute_defaults(base_format: &str) -> Option<Vec<(&'static str, yaml_rust2::Yaml)>> {
+fn format_execute_defaults(
+    base_format: FormatIdentifier,
+) -> Option<Vec<(&'static str, yaml_rust2::Yaml)>> {
     match base_format {
-        "docx" | "odt" => Some(vec![
+        FormatIdentifier::Docx => Some(vec![
             ("fig-width", yaml_rust2::Yaml::Real("5".to_string())),
             ("fig-height", yaml_rust2::Yaml::Real("4".to_string())),
         ]),
-        "pptx" => Some(vec![
+        FormatIdentifier::Pptx => Some(vec![
             ("fig-width", yaml_rust2::Yaml::Real("11".to_string())),
             ("fig-height", yaml_rust2::Yaml::Real("5.5".to_string())),
+            ("echo", yaml_rust2::Yaml::Boolean(false)),
+            ("warning", yaml_rust2::Yaml::Boolean(false)),
+        ]),
+        // Long-tail Phase 2 (Tier A): the wordprocessor trio (odt /
+        // opendocument / rtf via `rtfFormat()`'s wordprocessor base) and
+        // fb2 (Q1's `createEbookFormat`) all get fig 5×4 — no echo/warning
+        // rows, which remain pptx-only. The `plaintextFormat` variants
+        // declare no execute defaults and stay `None`.
+        FormatIdentifier::Odt
+        | FormatIdentifier::Opendocument
+        | FormatIdentifier::Rtf
+        | FormatIdentifier::Fb2 => Some(vec![
+            ("fig-width", yaml_rust2::Yaml::Real("5".to_string())),
+            ("fig-height", yaml_rust2::Yaml::Real("4".to_string())),
+        ]),
+        // Long-tail Phase 5 (Tier D): the JS slide family (Q1's
+        // `createHtmlPresentationFormat`) — pptx-shaped code defaults:
+        // fig 9.5×6.5 (inches) with echo/warning off, since a slide deck
+        // shows neither source nor warnings.
+        FormatIdentifier::S5
+        | FormatIdentifier::Dzslides
+        | FormatIdentifier::Slidy
+        | FormatIdentifier::Slideous => Some(vec![
+            ("fig-width", yaml_rust2::Yaml::Real("9.5".to_string())),
+            ("fig-height", yaml_rust2::Yaml::Real("6.5".to_string())),
             ("echo", yaml_rust2::Yaml::Boolean(false)),
             ("warning", yaml_rust2::Yaml::Boolean(false)),
         ]),
@@ -888,7 +1010,7 @@ fn format_execute_defaults(base_format: &str) -> Option<Vec<(&'static str, yaml_
 /// pre-Task-5 behavior exactly (a bare `ast.meta.get("execute").cloned()`)
 /// for every non-docx/pptx format.
 fn merge_execute_scope(
-    base_format: &str,
+    base_format: FormatIdentifier,
     document_scope: Option<quarto_pandoc_types::ConfigValue>,
 ) -> Option<quarto_pandoc_types::ConfigValue> {
     use quarto_pandoc_types::{ConfigMapEntry, ConfigValue};
@@ -927,6 +1049,7 @@ fn merge_execute_scope(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::format::FormatIdentifier;
     use crate::stage::LoadedSource;
     use std::path::PathBuf;
 
@@ -3257,10 +3380,13 @@ mod tests {
 
     // === P7 Task 5: per-format `execute` defaults ===
 
-    /// T5.1: the per-format defaults table.
+    /// T5.1: the per-format defaults table, keyed by
+    /// [`FormatIdentifier`] (Phase 1 long-tail wrinkle 1: extension-string
+    /// keys collide for the tail — `xml` would be both opendocument's
+    /// wordprocessor defaults and docbook's plaintext defaults).
     #[test]
     fn test_format_execute_defaults_table() {
-        let docx = format_execute_defaults("docx").expect("docx has defaults");
+        let docx = format_execute_defaults(FormatIdentifier::Docx).expect("docx has defaults");
         assert_eq!(
             docx,
             vec![
@@ -3269,7 +3395,7 @@ mod tests {
             ]
         );
 
-        let pptx = format_execute_defaults("pptx").expect("pptx has defaults");
+        let pptx = format_execute_defaults(FormatIdentifier::Pptx).expect("pptx has defaults");
         assert_eq!(
             pptx,
             vec![
@@ -3281,10 +3407,70 @@ mod tests {
         );
 
         assert_eq!(
-            format_execute_defaults("html"),
+            format_execute_defaults(FormatIdentifier::Html),
             None,
             "html must have no format-level execute defaults"
         );
+        assert_eq!(
+            format_execute_defaults(FormatIdentifier::Typst),
+            None,
+            "typst must have no format-level execute defaults"
+        );
+    }
+
+    /// Long-tail Phase 2: the Tier A family matrix. The wordprocessor trio
+    /// and fb2 (Q1's `createWordprocessorFormat`/`createEbookFormat`) get
+    /// exactly fig 5×4 — no echo/warning rows, which remain pptx-only. The
+    /// 21 `plaintextFormat` variants stay `None` (Q1's plaintext helper
+    /// declares no `execute:` defaults).
+    #[test]
+    fn test_tier_a_execute_defaults_family_matrix() {
+        const WORDPROCESSOR_AND_EBOOK: &[&str] = &["odt", "opendocument", "rtf", "fb2"];
+        for name in WORDPROCESSOR_AND_EBOOK {
+            let id = FormatIdentifier::try_from(*name)
+                .unwrap_or_else(|e| panic!("{name} must parse: {e}"));
+            assert_eq!(
+                format_execute_defaults(id),
+                Some(vec![
+                    ("fig-width", yaml_rust2::Yaml::Real("5".to_string())),
+                    ("fig-height", yaml_rust2::Yaml::Real("4".to_string())),
+                ]),
+                "execute defaults for {name}"
+            );
+        }
+
+        const PLAINTEXT: &[&str] = &[
+            "plain",
+            "rst",
+            "org",
+            "muse",
+            "ms",
+            "man",
+            "texinfo",
+            "tei",
+            "zimwiki",
+            "dokuwiki",
+            "haddock",
+            "json",
+            "native",
+            "icml",
+            "jira",
+            "mediawiki",
+            "xwiki",
+            "textile",
+            "docbook",
+            "docbook4",
+            "docbook5",
+        ];
+        for name in PLAINTEXT {
+            let id = FormatIdentifier::try_from(*name)
+                .unwrap_or_else(|e| panic!("{name} must parse: {e}"));
+            assert_eq!(
+                format_execute_defaults(id),
+                None,
+                "{name} (plaintext family) must have no format-level execute defaults"
+            );
+        }
     }
 
     /// `merge_execute_scope`'s "no defaults, no document scope" case must
@@ -3292,14 +3478,15 @@ mod tests {
     /// non-docx/pptx format.
     #[test]
     fn test_merge_execute_scope_html_no_document_scope_is_none() {
-        assert_eq!(merge_execute_scope("html", None), None);
+        assert_eq!(merge_execute_scope(FormatIdentifier::Html, None), None);
     }
 
     /// A pptx merge with no document scope surfaces the format defaults
     /// verbatim.
     #[test]
     fn test_merge_execute_scope_pptx_defaults_only() {
-        let merged = merge_execute_scope("pptx", None).expect("pptx must produce a scope");
+        let merged =
+            merge_execute_scope(FormatIdentifier::Pptx, None).expect("pptx must produce a scope");
         assert_eq!(merged.get("echo").and_then(|v| v.as_bool()), Some(false));
         assert_eq!(merged.get("warning").and_then(|v| v.as_bool()), Some(false));
     }
@@ -3321,7 +3508,7 @@ mod tests {
             SourceInfo::for_test(),
         );
 
-        let merged = merge_execute_scope("pptx", Some(document_scope))
+        let merged = merge_execute_scope(FormatIdentifier::Pptx, Some(document_scope))
             .expect("pptx + document scope must produce a scope");
         assert_eq!(
             merged.get("echo").and_then(|v| v.as_bool()),

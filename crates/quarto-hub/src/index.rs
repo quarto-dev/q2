@@ -323,14 +323,14 @@ impl IndexDocument {
 /// hub-client (`@automerge/automerge` 3.x, via `automerge-repo`) stores plain
 /// string map-values — including the file-document ids in the `files` map — as
 /// `Text` objects, not scalar strings (a `doc.files[path] = id` assignment
-/// becomes a collaborative `Text`). A Rust reader using `Value::to_str()` alone
+/// becomes a collaborative `Text`). A Rust reader using `Value::as_str()` alone
 /// silently drops the `Text` form, so a project *created in hub-client* reads as
 /// having **zero files** — which broke `q2 provide-hub` materialization
 /// (bd-bm0vaetl). Rust-authored docs (project-mode hub) keep using the scalar
 /// form; this accepts both. Same class of bug as the `metadata-as-str` lint.
 fn read_str_or_text<D: ReadDoc>(doc: &D, obj: &automerge::ObjId, key: &str) -> Option<String> {
     let (value, id) = doc.get(obj, key).ok().flatten()?;
-    if let Some(s) = value.to_str() {
+    if let Some(s) = value.as_str() {
         return Some(s.to_string());
     }
     if matches!(value, automerge::Value::Object(ObjType::Text)) {
@@ -347,25 +347,25 @@ fn read_capture_entry<D: ReadDoc>(doc: &D, entry_obj: &automerge::ObjId) -> Opti
         .get(entry_obj, capture_field::CAPTURE_DOC_ID)
         .ok()
         .flatten()?;
-    let capture_doc_id = capture_doc_id_val.to_str()?.to_string();
+    let capture_doc_id = capture_doc_id_val.as_str()?.to_string();
 
     let staleness = doc
         .get(entry_obj, capture_field::STALENESS)
         .ok()
         .flatten()
-        .and_then(|(v, _)| v.to_bool());
+        .and_then(|(v, _)| v.as_bool());
 
     let state = doc
         .get(entry_obj, capture_field::STATE)
         .ok()
         .flatten()
-        .and_then(|(v, _)| v.to_str().and_then(CaptureState::from_str));
+        .and_then(|(v, _)| v.as_str().and_then(CaptureState::from_str));
 
     let last_error = doc
         .get(entry_obj, capture_field::LAST_ERROR)
         .ok()
         .flatten()
-        .and_then(|(v, _)| v.to_str().map(|s| s.to_string()));
+        .and_then(|(v, _)| v.as_str().map(|s| s.to_string()));
 
     Some(CaptureRef {
         capture_doc_id,
@@ -698,5 +698,51 @@ mod tests {
             index2.get_file("existing.qmd"),
             Some("existing-doc".to_string())
         );
+    }
+
+    /// D8 audit: hub-server writes stay authorless.
+    ///
+    /// Server-authored changes (files map, capture sidecar) do not
+    /// originate from a signed-in or locally identified user, and the
+    /// author-ID transition deliberately mints no synthetic "hub" author
+    /// (plan 2026-09-30-automerge-author-id-transition, D8). Every change
+    /// the server writes must therefore decode with `author: null` —
+    /// attribution readers fall back to the actor. Pinning that here
+    /// makes a future `LoadOptions::author` / `set_author` on a server
+    /// write path a deliberate, test-visible act.
+    #[tokio::test]
+    async fn server_writes_carry_no_author() {
+        let repo = create_test_repo().await;
+        let (index, _) = IndexDocument::create(&repo).await.unwrap();
+
+        // Drive every server write path on the index document: files
+        // map (add/remove) and capture sidecar (set/remove).
+        index.add_file("index.qmd", "doc-id-1").unwrap();
+        index.add_file("chapters/intro.qmd", "doc-id-2").unwrap();
+        let cap = CaptureRef {
+            capture_doc_id: "cap-doc-1".to_string(),
+            staleness: None,
+            state: Some(CaptureState::Idle),
+            last_error: None,
+        };
+        index.set_capture("index.qmd", &cap).unwrap();
+        index.remove_file("chapters/intro.qmd").unwrap();
+        index.remove_capture("index.qmd").unwrap();
+
+        index.handle().with_document(|doc| {
+            let changes = doc.get_changes(&[]);
+            assert!(
+                changes.len() >= 5,
+                "expected the writes above to have produced changes, got {}",
+                changes.len()
+            );
+            for change in &changes {
+                assert!(
+                    change.author().is_none(),
+                    "server-written change must carry no author (seq {})",
+                    change.seq(),
+                );
+            }
+        });
     }
 }

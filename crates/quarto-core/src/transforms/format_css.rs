@@ -128,7 +128,13 @@ impl AstTransform for FormatCssTransform {
                 .is_some_and(|c| c == Component::ParentDir)
             {
                 // Outside the project root: nothing we could ship.
-                // Q1's `copyResourceFile` refuses the same escape.
+                // Q1's `copyResourceFile` refuses the same escape. The
+                // stored value may be absolute (the merge-time rebase
+                // keeps outside-project paths absolute), so link the
+                // source page-relatively rather than emitting it verbatim.
+                if let Some(href) = pathdiff::diff_paths(&source, resolver.page_dir()) {
+                    entry.value = ConfigValueKind::Path(quarto_util::to_forward_slashes(&href));
+                }
                 return;
             }
             let project_relative = quarto_util::to_forward_slashes(&project_relative);

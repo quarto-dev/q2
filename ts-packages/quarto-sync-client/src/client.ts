@@ -14,12 +14,12 @@ import type {
   DocHandleChangePayload,
 } from '@automerge/automerge-repo';
 import {
-  clone as automergeClone,
   from as automergeFrom,
   save as automergeSerialize,
   getChanges as automergeGetChanges,
   decodeChange as automergeDecodeChange,
   getActorId as automergeGetActorId,
+  getBackend as automergeGetBackend,
 } from '@automerge/automerge';
 import type { NetworkAdapter } from '@automerge/automerge-repo/slim';
 
@@ -42,6 +42,7 @@ import {
   getDocumentType,
   isBinaryExtension,
   migrateIndexDocument,
+  normalizeProjectPath,
   setIdentity,
 } from '@quarto/quarto-automerge-schema';
 
@@ -142,8 +143,10 @@ export function indexUnavailableMessage(indexDocId: string): string {
 /**
  * Build the WebSocket adapter for a sync connection. With `auth` set,
  * we lazily import the Node adapter (which depends on `ws`) so browser
- * bundles never pull it in. Without `auth`, the upstream browser
- * adapter is used unchanged.
+ * bundles never pull it in. Without `auth`, connections use
+ * `StoppableWebSocketClientAdapter` — the upstream browser adapter
+ * plus terminal disconnect() and the wake/network-change
+ * force-reconnect triggers.
  *
  * `retryIntervalMs` is forwarded to the adapter's reconnect loop when
  * set; when unset, the adapter's own default (5000 ms) applies.
@@ -243,7 +246,13 @@ interface SyncClientState {
   unavailableFiles: Map<string, string>;
   binaryFiles: Set<string>;
   cleanupFns: (() => void)[];
-  actorId: string | null;
+  /**
+   * The stable per-user attribution identity applied to every document
+   * this client touches as automerge change-level author metadata (D9).
+   * Never an actor ID: actors are automerge's random per-document-instance
+   * defaults (D1) and no code here may set one.
+   */
+  authorId: string | null;
   /**
    * Peers currently connected on this repo's network subsystem.
    * Gates the findDoc "unavailable" retry: with zero peers,
@@ -391,7 +400,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     unavailableFiles: new Map(),
     binaryFiles: new Set(),
     cleanupFns: [],
-    actorId: null,
+    authorId: null,
     connectedPeers: new Set(),
     peerStorageIds: new Map(),
     findDocRetry: DEFAULT_FIND_DOC_RETRY,
@@ -480,6 +489,23 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
 
   // Track last-seen captures for diffing
   let lastCaptures: Record<string, CaptureRef> = {};
+
+  // Helper: get the explicit-folder set from the index document (V3+)
+  function getFoldersFromIndex(doc: IndexDocument): string[] {
+    return doc.folders ? Object.keys(doc.folders).sort() : [];
+  }
+
+  // Track last-seen folders for diffing
+  let lastFolders: string[] = [];
+
+  // Helper: fire onFoldersChange if the folder set differs from last seen
+  function notifyFoldersIfChanged(doc: IndexDocument): void {
+    const current = getFoldersFromIndex(doc);
+    if (JSON.stringify(current) !== JSON.stringify(lastFolders)) {
+      lastFolders = current;
+      callbacks.onFoldersChange?.(current);
+    }
+  }
 
   // Index-document self-heal (bd-6f21d4c6 / H4): the 'change' handler
   // currently attached to state.indexHandle, tracked so a recovery can
@@ -661,29 +687,39 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     });
   }
 
-  // Helper: apply actor ID to a document handle via clone.
-  // The initial repo.create() writes one change with a random actor before this
-  // switches to the sub-derived actor. That random actor persists in history as
-  // noise — not a privacy concern (it's random, not identity-derived).
-  function applyActorId<T>(handle: DocHandle<T>, actorId: string | null): void {
-    if (!actorId) return;
-    handle.update(doc => automergeClone(doc, { actor: actorId }));
+  // Helper: apply the author ID to a document handle, in place on the
+  // shared backend (D9). Author is runtime-only backend state (never
+  // serialized), so setting it directly is semantically correct and avoids
+  // the clone's side effects (a fresh fork per find, a re-randomized actor
+  // per call, a spurious applyMutation notification). setAuthor mints a
+  // fresh random actor when the value changes (automerge's 1-author→N-actors
+  // model) and is a no-op when re-applied with the same value, so calling
+  // this on every findDoc is safe and idempotent.
+  //
+  // Documented fallback if the @hidden `getBackend` hatch is ever removed:
+  // handle.update(doc => automergeClone(doc, { author: authorId })).
+  function applyAuthorId<T>(handle: DocHandle<T>, authorId: string | null): void {
+    if (!authorId) return;
+    const doc = handle.doc();
+    if (!doc) return;
+    automergeGetBackend(doc).setAuthor(authorId);
   }
 
-  // Helper: create a new document with the correct actor ID from the
+  // Helper: create a new document with the author ID stamped on the
   // very first change. Uses Automerge.from() + repo.import() so the
-  // initial data is attributed to the HMAC actor (not a random one).
-  // applyActorId is still needed after import because repo.import()
-  // does not preserve the actor for future handle.change() calls.
+  // initial data carries the author footer (its seq-1 change).
+  // applyAuthorId is still needed after import because repo.import()
+  // does not preserve the author setting for future handle.change() calls
+  // (it re-creates the doc via Automerge.load with no options).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function createDoc<T>(initialValue?: any, docId?: DocumentId): DocHandle<T> {
-    if (state.actorId) {
-      const doc = automergeFrom(initialValue ?? {}, { actor: state.actorId });
+    if (state.authorId) {
+      const doc = automergeFrom(initialValue ?? {}, { author: state.authorId });
       const handle = state.repo!.import<T>(automergeSerialize(doc), docId ? { docId } : undefined);
-      applyActorId(handle, state.actorId);
+      applyAuthorId(handle, state.authorId);
       return handle;
     }
-    // No actor ID (offline mode) - use import without actor to respect the provided docId
+    // No author ID (offline mode) - use import without author to respect the provided docId
     const doc = automergeFrom(initialValue ?? {});
     const handle = state.repo!.import<T>(automergeSerialize(doc), docId ? { docId } : undefined);
     return handle;
@@ -709,7 +745,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
           signal: AbortSignal.timeout(FIND_DOC_ATTEMPT_TIMEOUT_MS),
         });
         await handle.whenReady();
-        applyActorId(handle, state.actorId);
+        applyAuthorId(handle, state.authorId);
         return handle;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -738,8 +774,10 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   // ---------------------------------------------------------------------
   // Index-document self-heal (bd-6f21d4c6; see
   // claude-notes/plans/2026-09-17-index-doc-duplicate-seq-self-heal.md).
-  // An Automerge actor id reused across two sessions (see
-  // actorIdFromUserId, userSettings.ts) can make two independently-edited
+  // An Automerge actor id reused across two sessions (the pre-transition
+  // stable actor from actorIdFromUserId, userSettings.ts — no longer minted
+  // by this client, but still emitted by legacy clients during the
+  // version-skew window) can make two independently-edited
   // copies of the SAME document claim the same (actor, seq) pair. When a
   // sync message carrying the colliding change arrives, the underlying
   // `automerge` library correctly throws `RangeError: duplicate seq N
@@ -781,6 +819,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       callbacks.onFilesChange?.(newFiles);
       notifyIdentitiesIfChanged(changedDoc);
       if (notifyCaptures) notifyCapturesIfChanged(changedDoc);
+      notifyFoldersIfChanged(changedDoc);
     }
   }
 
@@ -1156,7 +1195,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
    * serialization), and memory storage keeps the IndexedDB open off
    * the critical path of the WebSocket `join`.
    */
-  async function connect(syncServerUrl: string, indexDocId: string, actorId?: string, screenName?: string, color?: string, peerTimeoutMsOrOptions: number | ConnectOptions = 1, auth?: SyncClientAuthOptions): Promise<AnnotatedFileEntry[]> {
+  async function connect(syncServerUrl: string, indexDocId: string, authorId?: string, screenName?: string, color?: string, peerTimeoutMsOrOptions: number | ConnectOptions = 1, auth?: SyncClientAuthOptions): Promise<AnnotatedFileEntry[]> {
     const options: ConnectOptions =
       typeof peerTimeoutMsOrOptions === 'number'
         ? { peerTimeoutMs: peerTimeoutMsOrOptions }
@@ -1185,7 +1224,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
         network: [state.wsAdapter],
         storage: buildStorageAdapter(options.storage),
       });
-      state.actorId = actorId ?? null;
+      state.authorId = authorId ?? null;
       state.findDocRetry = { ...DEFAULT_FIND_DOC_RETRY, ...options.findDocRetry };
       trackPeers(state.repo);
       state.cleanupFns.push(
@@ -1239,8 +1278,8 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       // Always write locally — Automerge will sync when the peer connects.
       indexHandle.change(d => {
         migrateIndexDocument(d);
-        if (actorId && screenName) {
-          setIdentity(d, actorId, screenName, color || '');
+        if (authorId && screenName) {
+          setIdentity(d, authorId, screenName, color || '');
         }
       });
 
@@ -1254,6 +1293,10 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       // Fire initial captures (may be empty on V1 docs or freshly-created projects)
       lastCaptures = getCapturesFromIndex(currentDoc);
       callbacks.onCapturesChange?.(lastCaptures);
+
+      // Fire initial folders (empty before V3)
+      lastFolders = getFoldersFromIndex(currentDoc);
+      callbacks.onFoldersChange?.(lastFolders);
 
       // Subscribe to index changes
       attachIndexSubscription(indexHandle, true);
@@ -1441,7 +1484,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
 
     state.repo = null;
     state.indexHandle = null;
-    state.actorId = null;
+    state.authorId = null;
     state.connectedPeers = new Set();
     state.peerStorageIds = new Map();
     state.findDocRetry = DEFAULT_FIND_DOC_RETRY;
@@ -1564,10 +1607,11 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   /**
    * Create a new text file.
    */
-  async function createFile(path: string, content: string = ''): Promise<void> {
+  async function createFile(rawPath: string, content: string = ''): Promise<void> {
     if (!state.repo || !state.indexHandle) {
       throw new Error('Not connected');
     }
+    const path = normalizeProjectPath(rawPath);
 
     const handle = createDoc<TextDocumentContent>();
     handle.change(doc => {
@@ -1588,13 +1632,14 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
    * Create a new binary file with deduplication.
    */
   async function createBinaryFile(
-    path: string,
+    rawPath: string,
     content: Uint8Array,
     mimeType: string
   ): Promise<CreateBinaryFileResult> {
     if (!state.repo || !state.indexHandle) {
       throw new Error('Not connected');
     }
+    let path = normalizeProjectPath(rawPath);
 
     const hash = await computeSHA256(content);
     const indexDoc = state.indexHandle.doc();
@@ -1644,10 +1689,11 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   /**
    * Delete a file.
    */
-  function deleteFile(path: string): void {
+  function deleteFile(rawPath: string): void {
     if (!state.indexHandle) {
       throw new Error('Not connected');
     }
+    const path = normalizeProjectPath(rawPath);
 
     const indexHandle = state.indexHandle;
     indexHandle.change(doc => {
@@ -1691,11 +1737,65 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   }
 
   /**
-   * Rename a file.
+   * Record an explicitly created folder so it exists (and is listed) even
+   * with no files under it. Idempotent. `path` is root-relative with no
+   * leading or trailing slash.
    */
-  function renameFile(oldPath: string, newPath: string): void {
+  function createFolder(rawPath: string): void {
     if (!state.indexHandle) {
       throw new Error('Not connected');
+    }
+    const path = normalizeProjectPath(rawPath);
+    if (!path) return;
+    state.indexHandle.change(doc => {
+      if (!doc.folders) doc.folders = {};
+      if (doc.folders[path] !== true) doc.folders[path] = true;
+    });
+  }
+
+  /**
+   * Forget an explicitly created folder. Only the folder marker is
+   * removed — files under the path are untouched, so a folder that still
+   * contains files keeps appearing in listings (derived from those
+   * paths). Callers wanting "delete folder" semantics delete the files
+   * first. No-op when the marker is absent.
+   */
+  function deleteFolder(rawPath: string): void {
+    if (!state.indexHandle) {
+      throw new Error('Not connected');
+    }
+    const path = normalizeProjectPath(rawPath);
+    state.indexHandle.change(doc => {
+      if (doc.folders && doc.folders[path] !== undefined) {
+        delete doc.folders[path];
+      }
+    });
+  }
+
+  /**
+   * List explicitly created folders (V3+). Empty before connect.
+   */
+  function getFolderPaths(): string[] {
+    const doc = state.indexHandle?.doc();
+    return doc ? getFoldersFromIndex(doc) : [];
+  }
+
+  /**
+   * Rename a file.
+   */
+  function renameFile(rawOldPath: string, rawNewPath: string): void {
+    if (!state.indexHandle) {
+      throw new Error('Not connected');
+    }
+    // Existing keys may predate normalization, so look the old path up
+    // as given and fall back to its normalized form.
+    const indexBefore = state.indexHandle.doc();
+    const oldPath = indexBefore?.files?.[rawOldPath] !== undefined
+      ? rawOldPath
+      : normalizeProjectPath(rawOldPath);
+    const newPath = normalizeProjectPath(rawNewPath);
+    if (!newPath) {
+      throw new Error('New path is empty');
     }
 
     const indexDoc = state.indexHandle.doc();
@@ -1942,10 +2042,10 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
    */
   async function createNewProject(
     options: CreateProjectOptions,
-    actorId?: string,
+    authorId?: string,
     screenName?: string,
     color?: string,
-    resolveActorId?: (indexDocId: string) => Promise<string | null | undefined>,
+    resolveAuthorId?: (indexDocId: string) => Promise<string | null | undefined>,
   ): Promise<CreateProjectResult> {
     await disconnect();
 
@@ -1984,32 +2084,33 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
         console.warn('Peer connection failed, creating project in offline mode:', peerError);
       }
 
-      // Phase 1: Generate a document ID and resolve the actor ID before
+      // Phase 1: Generate a document ID and resolve the author ID before
       // creating any documents. This avoids the chicken-and-egg problem
-      // where repo.create() writes an initial change with a random actor.
+      // where repo.create() writes an initial change before the author is
+      // known.
       const indexUrl = generateAutomergeUrl();
       const { documentId: indexDocId } = parseAutomergeUrl(indexUrl);
       state.cleanupFns.push(installDuplicateSeqRecovery(state.repo, indexDocId));
 
-      const resolvedActorId = resolveActorId
-        ? (await resolveActorId(indexDocId)) ?? undefined
-        : actorId;
-      state.actorId = resolvedActorId ?? null;
+      const resolvedAuthorId = resolveAuthorId
+        ? (await resolveAuthorId(indexDocId)) ?? undefined
+        : authorId;
+      state.authorId = resolvedAuthorId ?? null;
 
       // Phase 2: Create the index document via createDoc with the
-      // pre-generated ID so the first change uses the correct actor.
+      // pre-generated ID so the first change carries the author.
       syncLog(`[createNewProject] Creating index document with ID ${indexDocId}`);
       const indexHandle = createDoc<IndexDocument>(
-        { files: {}, version: CURRENT_SCHEMA_VERSION, identities: {} },
+        { files: {}, version: CURRENT_SCHEMA_VERSION, identities: {}, folders: {} },
         indexDocId,
       );
       state.indexHandle = indexHandle;
       syncLog(`[createNewProject] Index document created, ID:`, indexHandle.documentId);
 
       // Write identity (separate change so the schema init is clean).
-      if (resolvedActorId && screenName) {
+      if (resolvedAuthorId && screenName) {
         indexHandle.change(doc => {
-          setIdentity(doc, resolvedActorId, screenName, color || '');
+          setIdentity(doc, resolvedAuthorId, screenName, color || '');
         });
       }
 
@@ -2020,6 +2121,10 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
       // Fire initial captures (always empty for a fresh project)
       lastCaptures = getCapturesFromIndex(indexHandle.doc()!);
       callbacks.onCapturesChange?.(lastCaptures);
+
+      // Fire initial folders (always empty for a fresh project)
+      lastFolders = getFoldersFromIndex(indexHandle.doc()!);
+      callbacks.onFoldersChange?.(lastFolders);
 
       // Phase 3: Create file documents (now using the correct actor).
       const createdFiles: FileEntry[] = [];
@@ -2138,10 +2243,12 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   }
 
   /**
-   * Get the current actor ID, or null if not set.
+   * Get the current author ID — the attribution key identifying this
+   * user's changes (per the author-ID transition, identities and
+   * attribution runs key off this value) — or null if not set.
    */
-  function getActorId(): string | null {
-    return state.actorId;
+  function getAuthorId(): string | null {
+    return state.authorId;
   }
 
   // Return the public API
@@ -2160,6 +2267,9 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     createBinaryFile,
     deleteFile,
     renameFile,
+    createFolder,
+    deleteFolder,
+    getFolderPaths,
     clearCapture,
     isConnected,
     getFileHandle,
@@ -2171,7 +2281,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
     getRepo,
     getDocInventory,
     createNewProject,
-    getActorId,
+    getAuthorId,
   };
 }
 

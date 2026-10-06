@@ -199,10 +199,44 @@ impl PipelineStage for TypstCompileStage {
             ]);
         }
 
+        let input_dir = rendered
+            .input_path
+            .parent()
+            .map_or_else(|| ctx.project.dir.clone(), std::path::Path::to_path_buf);
+        // Best-effort: an invalid brand is reported by `PandocWriteStage`
+        // (which resolves it with full diagnostics) before this stage runs.
+        let (light, dark) = quarto_sass::resolve_brand_variants(
+            &rendered.metadata,
+            ctx.runtime.as_ref(),
+            &ctx.project.dir,
+        )
+        .unwrap_or((None, None));
+        let brand = brand_for_mode(
+            light.as_ref(),
+            dark.as_ref(),
+            rendered
+                .metadata
+                .get("brand-mode")
+                .and_then(|v| v.as_plain_text())
+                .as_deref(),
+        );
+        let extra_font_paths = with_google_font_cache(
+            with_brand_file_fonts(
+                resolve_font_paths(
+                    &string_array(rendered.metadata.get("font-paths")),
+                    &ctx.project.dir,
+                    &input_dir,
+                ),
+                brand,
+                &ctx.project.dir,
+            ),
+            &ctx.project.dir,
+        );
+
         let mut cmd = Command::new(&typst_bin);
         cmd.arg("compile");
         cmd.arg("--root").arg(&ctx.project.dir);
-        cmd.args(font_path_args(&packages_dir));
+        cmd.args(font_path_args(&packages_dir, &extra_font_paths));
         if package_cache_dir.join("preview").is_dir() {
             cmd.arg("--package-cache-path").arg(&package_cache_dir);
         }
@@ -334,12 +368,115 @@ fn at_least(version_str: &str, floor: (u32, u32)) -> bool {
 /// (staged at `packages_dir/fonts`) must come first — Typst's font
 /// resolution takes the first path that provides a given font family, so
 /// ordering is load-bearing for the vendored template's own font
-/// references, not cosmetic.
-pub(crate) fn font_path_args(packages_dir: &Path) -> Vec<String> {
-    vec![
+/// references, not cosmetic. `extra_font_paths` are the document's
+/// `font-paths` metadata entries (see [`resolve_font_paths`]), already
+/// resolved to absolute paths, appended in the order given.
+pub(crate) fn font_path_args(
+    packages_dir: &Path,
+    extra_font_paths: &[std::path::PathBuf],
+) -> Vec<String> {
+    let mut args = vec![
         "--font-path".to_string(),
         packages_dir.join("fonts").to_string_lossy().into_owned(),
-    ]
+    ];
+    for path in extra_font_paths {
+        args.push("--font-path".to_string());
+        args.push(path.to_string_lossy().into_owned());
+    }
+    args
+}
+
+/// `command/render/pandoc.ts:1672-1678` + `output-typst.ts:247-249`'s
+/// `font-paths` resolution, collapsed into one step (Q2 has no separate
+/// "stash back into metadata" pass, so there's no need to split the
+/// project-relative rewrite from the final absolute-path resolution the
+/// way Q1 does across two files). A path beginning with `/` is
+/// project-root-relative — a Quarto-wide convention, unrelated to
+/// filesystem-absolute paths — and resolves against `project_dir`;
+/// anything else resolves against `input_dir` (the document's own
+/// directory), matching Q1's `resolve(inputDir, p)` fallback. This is
+/// checked as a string prefix *before* falling through to `PathBuf::join`,
+/// because on Unix `input_dir.join("/foo")` would otherwise discard
+/// `input_dir` entirely (Rust's `Path::join` replaces the base when the
+/// joined component is itself absolute) — exactly the filesystem-absolute
+/// reading this convention exists to avoid.
+pub(crate) fn resolve_font_paths(
+    raw: &[String],
+    project_dir: &Path,
+    input_dir: &Path,
+) -> Vec<std::path::PathBuf> {
+    raw.iter()
+        .map(|p| match p.strip_prefix('/') {
+            Some(rest) => project_dir.join(rest),
+            None => input_dir.join(p),
+        })
+        .collect()
+}
+
+/// The brand variant Typst renders with: the dark half when the
+/// document's `brand-mode` is `dark` and a dark half exists, otherwise
+/// light (the default, matching the `brand-mode` filter param).
+pub(crate) fn brand_for_mode<'a>(
+    light: Option<&'a quarto_brand::ResolvedBrand>,
+    dark: Option<&'a quarto_brand::ResolvedBrand>,
+    brand_mode: Option<&str>,
+) -> Option<&'a quarto_brand::ResolvedBrand> {
+    match brand_mode {
+        Some("dark") => dark.or(light),
+        _ => light,
+    }
+}
+
+/// `command/render/pandoc.ts:1541-1548`: each brand `source: file` font
+/// contributes the *directory* of each of its files (not the file itself)
+/// as a font path, resolved against the brand's own directory (the
+/// project root for an inline brand). Appended after the document's own
+/// `font-paths`, before the Google cache. `brand` is the
+/// variant for the document's `brand-mode` (see [`brand_for_mode`]) — a
+/// deliberate step past Q1, which always used the light half. Both
+/// `typst fonts` and `typst compile` must pass the same set, so
+/// `PandocWriteStage` calls this too.
+pub(crate) fn with_brand_file_fonts(
+    mut font_paths: Vec<std::path::PathBuf>,
+    brand: Option<&quarto_brand::ResolvedBrand>,
+    project_dir: &Path,
+) -> Vec<std::path::PathBuf> {
+    let Some(brand) = brand else {
+        return font_paths;
+    };
+    let Some(typography) = brand.brand.typography.as_ref() else {
+        return font_paths;
+    };
+    let brand_dir = brand.dir.as_deref().unwrap_or(project_dir);
+    for font in &typography.fonts {
+        if let quarto_brand::BrandFont::File(file_font) = font {
+            for entry in &file_font.files {
+                if let Some(dir) = brand_dir.join(entry.path()).parent() {
+                    let dir = dir.to_path_buf();
+                    if !font_paths.contains(&dir) {
+                        font_paths.push(dir);
+                    }
+                }
+            }
+        }
+    }
+    font_paths
+}
+
+/// Appends the project's downloaded-Google-fonts cache
+/// ([`crate::typst_google_fonts::font_cache_dir`]) when it exists, after
+/// the document's own `font-paths` — Q1's order (`fontPaths.push(...fontdirs)`).
+/// `PandocWriteStage` populates it; both `typst fonts` and `typst compile`
+/// must pass the same set, so `PandocWriteStage` calls this too.
+pub(crate) fn with_google_font_cache(
+    mut font_paths: Vec<std::path::PathBuf>,
+    project_dir: &Path,
+) -> Vec<std::path::PathBuf> {
+    let cache = crate::typst_google_fonts::font_cache_dir(project_dir);
+    if cache.is_dir() {
+        font_paths.push(cache);
+    }
+    font_paths
 }
 
 /// `core/typst.ts:49-119`'s `getAvailableTypstFonts`, minus its cross-render
@@ -395,7 +532,7 @@ fn parse_typst_fonts_output(output: &str) -> Vec<String> {
 /// scalars into owned strings (`pdf-standard`/`font-paths`-shaped keys).
 /// Non-string entries are skipped rather than erroring — this is
 /// best-effort metadata reading, not schema validation.
-fn string_array(value: Option<&ConfigValue>) -> Vec<String> {
+pub(crate) fn string_array(value: Option<&ConfigValue>) -> Vec<String> {
     let Some(value) = value else {
         return Vec::new();
     };
@@ -447,6 +584,67 @@ fn nonzero_exit_error(stage_name: &str, status_desc: &str, stderr: &str) -> Pipe
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+
+    fn brand_with_file_fonts(dir: Option<&str>) -> quarto_brand::ResolvedBrand {
+        let brand: quarto_brand::Brand = serde_yaml::from_str(
+            "typography:\n  fonts:\n    - family: Foo\n      source: file\n      files:\n        - path: fonts/a/Foo-Regular.ttf\n        - path: fonts/a/Foo-Bold.ttf\n        - path: fonts/b/Foo-Italic.ttf\n    - family: Sys\n      source: system\n",
+        )
+        .unwrap();
+        quarto_brand::ResolvedBrand::new(brand, dir.map(PathBuf::from))
+    }
+
+    #[test]
+    fn test_with_brand_file_fonts_adds_file_directories_deduped() {
+        let brand = brand_with_file_fonts(Some("/proj/brand"));
+        let out = with_brand_file_fonts(
+            vec![PathBuf::from("/doc/fonts")],
+            Some(&brand),
+            Path::new("/proj"),
+        );
+        assert_eq!(
+            out,
+            vec![
+                PathBuf::from("/doc/fonts"),
+                PathBuf::from("/proj/brand/fonts/a"),
+                PathBuf::from("/proj/brand/fonts/b"),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_with_brand_file_fonts_inline_brand_resolves_against_project() {
+        let brand = brand_with_file_fonts(None);
+        let out = with_brand_file_fonts(Vec::new(), Some(&brand), Path::new("/proj"));
+        assert_eq!(out[0], PathBuf::from("/proj/fonts/a"));
+    }
+
+    #[test]
+    fn test_brand_for_mode_picks_variant() {
+        let light = brand_with_file_fonts(Some("/l"));
+        let dark = brand_with_file_fonts(Some("/d"));
+        let dir = |b: Option<&quarto_brand::ResolvedBrand>| b.unwrap().dir.clone().unwrap();
+        let (l, d) = (Some(&light), Some(&dark));
+        assert_eq!(dir(brand_for_mode(l, d, None)), PathBuf::from("/l"));
+        assert_eq!(
+            dir(brand_for_mode(l, d, Some("light"))),
+            PathBuf::from("/l")
+        );
+        assert_eq!(dir(brand_for_mode(l, d, Some("dark"))), PathBuf::from("/d"));
+        assert_eq!(
+            dir(brand_for_mode(l, None, Some("dark"))),
+            PathBuf::from("/l")
+        );
+    }
+
+    #[test]
+    fn test_with_brand_file_fonts_no_brand_is_identity() {
+        let base = vec![PathBuf::from("/x")];
+        assert_eq!(
+            with_brand_file_fonts(base.clone(), None, Path::new("/p")),
+            base
+        );
+    }
 
     /// T1: numeric, not lexicographic — `0.9` must compare above `0.10`
     /// is false lexicographically but true numerically is NOT the claim
@@ -490,6 +688,40 @@ mod tests {
         assert_eq!(string_array(Some(&array)), vec!["a-2b", "a-3u"]);
 
         assert_eq!(string_array(None), Vec::<String>::new());
+    }
+
+    /// bd-3ij4nokp: a leading `/` is project-root-relative (Quarto's
+    /// resource-path convention), not filesystem-absolute — verified
+    /// against Q1's own `relative-font-path` smoke-all fixture, where
+    /// `font-paths: /artifacts/fonts` declared in the project's
+    /// `_quarto.yml` must resolve to `<project-dir>/artifacts/fonts`
+    /// regardless of which document (possibly nested) is rendering.
+    #[test]
+    fn test_resolve_font_paths_leading_slash_is_project_relative() {
+        let project_dir = Path::new("/project");
+        let input_dir = Path::new("/project/report1");
+        let resolved =
+            resolve_font_paths(&["/artifacts/fonts".to_string()], project_dir, input_dir);
+        assert_eq!(
+            resolved,
+            vec![std::path::PathBuf::from("/project/artifacts/fonts")]
+        );
+    }
+
+    /// bd-3ij4nokp: a path without a leading `/` resolves against the
+    /// document's own directory, not the project root or cwd — verified
+    /// against Q1's `subdir-font-paths` fixture, where a document at
+    /// `subdir/test.qmd` declares `font-paths: [../fonts]` meaning
+    /// `<project-dir>/fonts` (one level up from `subdir/`).
+    #[test]
+    fn test_resolve_font_paths_relative_resolves_against_input_dir() {
+        let project_dir = Path::new("/project");
+        let input_dir = Path::new("/project/subdir");
+        let resolved = resolve_font_paths(&["../fonts".to_string()], project_dir, input_dir);
+        assert_eq!(
+            resolved,
+            vec![std::path::PathBuf::from("/project/subdir/../fonts")]
+        );
     }
 
     /// Regression test for the `--package-cache-path` bug this session
@@ -587,7 +819,7 @@ mod tests {
         let typst_path = quarto_system_runtime::NativeRuntime::new()
             .find_binary("typst", "QUARTO_TYPST")
             .expect("typst must be on PATH to run this test suite");
-        let args = font_path_args(&packages_dir);
+        let args = font_path_args(&packages_dir, &[]);
 
         let fonts = discover_available_typst_fonts(Some(&typst_path), &args)
             .expect("a real typst binary + real font-path should report fonts");

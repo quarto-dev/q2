@@ -39,7 +39,7 @@
     {
       "name": "at-start",
       "description": "Unclosed emphasis at start of line",
-      "content": "_",
+      "content": "_a",
       "captures": [
         {
           "label": "emphasis-start",
@@ -128,10 +128,6 @@
         [
           "",
           "`a`"
-        ],
-        [
-          "",
-          "'a'"
         ],
         [
           "",

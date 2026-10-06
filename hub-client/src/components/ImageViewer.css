@@ -1,0 +1,52 @@
+/* ImageViewer — image file shown in the editor pane (see ImageViewer.tsx). */
+
+.image-viewer {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background: var(--monaco-bg, var(--editor-bg));
+  color: var(--text-secondary);
+}
+
+.image-viewer-canvas {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-5);
+  overflow: auto;
+}
+
+.image-viewer-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  /* Checkerboard-free neutral backing so transparent regions read as the
+     pane surface; the border separates light images from the pane. */
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xs);
+  background: var(--editor-bg);
+}
+
+.image-viewer-message {
+  font-size: var(--text-md);
+  color: var(--text-muted);
+}
+
+.image-viewer-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-1) var(--space-3);
+  border-block-start: 1px solid var(--border-color);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.image-viewer-meta {
+  flex-shrink: 0;
+}

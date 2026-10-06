@@ -21,8 +21,10 @@ export {
   getDocumentType,
   getFileExtension,
   isBinaryExtension,
+  isImageExtension,
   isTextExtension,
   inferMimeType,
+  normalizeProjectPath,
 } from '@quarto/quarto-automerge-schema';
 
 // ============================================================================

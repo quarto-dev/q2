@@ -13,6 +13,7 @@
 //! - `pandoc-check`: Check local pandoc against the pampa oracle tests
 //! - `render-corpus-diff`: Dev-only byte-identity corpus capture/diff harness
 //! - `test`: Run workspace tests with platform-appropriate crate exclusions
+//! - `ts-test`: Regenerate, build, and test a tree-sitter grammar with a per-checkout grammar cache
 //! - `verify`: Run full project verification (build + tests for Rust and hub-client)
 //! - `build-all`: Fresh-clone build orchestration (npm install + hub-client + Rust workspace)
 //! - `build-trace-viewer`: Build just the trace-viewer SPA
@@ -21,6 +22,7 @@
 //! - `build-engine-host-bundle`: Build the committed engine-host-deno.js bundle
 //! - `build-agents-docs`: Stage the docs-site llms.txt artifacts for `q2 docs llms`
 //! - `stage-doc-examples`: Render `examples/manifest.yml` projects into `docs/examples/`
+//! - `pull-extension-subtree`: Sync vendored extension subtrees under `resources/extension-subtrees/`
 
 mod braid_snapshot;
 mod build_agents_docs;
@@ -37,10 +39,12 @@ mod gen_math_spec;
 mod lint;
 mod node_version;
 mod pandoc_check;
+mod pull_extension_subtree;
 mod render_corpus_diff;
 mod stage_doc_examples;
 mod switch_task;
 mod test;
+mod tree_sitter;
 mod treesitter_crlf;
 mod ts_packages;
 mod util;
@@ -152,6 +156,28 @@ enum Command {
         /// Extra arguments to pass to cargo nextest run.
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
+    },
+
+    /// Regenerate, build, and test a tree-sitter grammar in this checkout.
+    ///
+    /// Runs `tree-sitter generate`, `build`, and `test` in the grammar
+    /// directory with TREE_SITTER_LIBDIR pinned to
+    /// `<checkout>/target/tree-sitter-lib`, so the compiled grammar is never
+    /// shared with (or clobbered by) another checkout on this machine.
+    /// Extra arguments after `--` are forwarded to `tree-sitter test`
+    /// (e.g. `-- -i 'emphasis'`).
+    TsTest {
+        /// Which grammar to test.
+        #[arg(long, value_enum, default_value = "qmd")]
+        grammar: tree_sitter::Grammar,
+
+        /// Force `tree-sitter test` to recompile the grammar.
+        #[arg(long)]
+        rebuild: bool,
+
+        /// Extra arguments to pass to `tree-sitter test`.
+        #[arg(last = true)]
+        test_args: Vec<String>,
     },
 
     /// Run full project verification (mirrors CI checks).
@@ -297,6 +323,28 @@ enum Command {
     /// build -p quarto-trace-server` (via `include_dir!`).
     BuildTraceViewer {},
 
+    /// Sync configured vendored extension subtrees (port of Q1's hidden
+    /// `pull-git-subtree` dev command).
+    ///
+    /// Fetches each subtree's remote and reconciles it into
+    /// `resources/extension-subtrees/<name>/`: `git subtree add --squash`
+    /// if no prior split is recorded, `git subtree pull --squash` if
+    /// upstream has new commits, otherwise a no-op.
+    ///
+    /// Dev/test seams: `QUARTO_SUBTREE_ROOT` operates on a repo other than
+    /// the real one, `--table` replaces the built-in subtree list with a
+    /// JSON file.
+    PullExtensionSubtree {
+        /// Name of the subtree to pull. Omit or pass `all` to pull every
+        /// configured subtree.
+        name: Option<String>,
+
+        /// Dev/test seam: replace the built-in subtree table with this
+        /// JSON file's contents.
+        #[arg(long)]
+        table: Option<std::path::PathBuf>,
+    },
+
     /// Stage the docs-site llms.txt artifacts for `q2 docs llms`.
     ///
     /// Renders `docs/` and copies the llms-txt output (index, per-page
@@ -429,6 +477,15 @@ fn main() -> Result<()> {
             };
             test::run(&args, rustflags)
         }
+        Command::TsTest {
+            grammar,
+            rebuild,
+            test_args,
+        } => tree_sitter::run_ts_test(tree_sitter::TsTestArgs {
+            grammar,
+            rebuild,
+            test_args,
+        }),
         Command::Verify {
             skip_rust_build,
             skip_rust_tests,
@@ -473,6 +530,9 @@ fn main() -> Result<()> {
         Command::BuildAgentsDocs {} => build_agents_docs::run(),
         Command::StageDocExamples {} => stage_doc_examples::run(),
         Command::BuildTraceViewer {} => build_trace_viewer::run(),
+        Command::PullExtensionSubtree { name, table } => {
+            pull_extension_subtree::run(pull_extension_subtree::Args { name, table })
+        }
         Command::BuildQ2PreviewSpa {} => build_q2_preview_spa::run(),
         Command::BuildHubClientEmbed {} => build_hub_client_embed::run(),
         Command::BuildHubMcpBundle {} => build_hub_mcp_bundle::run(),

@@ -13,6 +13,9 @@ path = "src/main.rs"
 
 [dependencies]
 clap.workspace = true
+# Backs the hidden `call inline-css` subcommand (Q1's juice step). Default features
+# (remote/file stylesheet loading, rayon) stay off.
+css-inline = { version = "0.21", default-features = false }
 # Global allocator for the native CLI; see the `#[global_allocator]` in main.rs.
 mimalloc = "0.1"
 anyhow.workspace = true
@@ -91,6 +94,10 @@ openssl-sys = { version = "0.9", optional = true }
 vendored-openssl = ["dep:openssl-sys", "openssl-sys/vendored"]
 
 [dev-dependencies]
+# Tells whether a Windows path has a plain (non-`\\?\`) form, for the
+# wire-path precondition in the E2E tests (json_errors, render_cli_e2e,
+# render_scripts_cli).
+dunce = "1"
 tempfile = "3"
 pampa.workspace = true
 sha2 = "0.11"
@@ -99,6 +106,11 @@ walkdir.workspace = true
 # subprocess produces in the E2E CLI tests — same minimal read-only
 # feature set as quarto-core's own dev-dependency.
 zip = { version = "6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+
+# Sending a console Ctrl-Break to a spawned `q2 preview` in the
+# shutdown e2e test (Windows has no per-process SIGINT).
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_Console", "Win32_System_Threading"] }
 
 [lints]
 workspace = true

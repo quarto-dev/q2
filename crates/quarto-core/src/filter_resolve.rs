@@ -24,6 +24,70 @@ use crate::extension::types::{Extension, ExtensionFilter};
 pub struct ResolvedFilters {
     pub pre: Vec<FilterSpec>,
     pub post: Vec<FilterSpec>,
+    /// The entry-point name (e.g. `"post-quarto"`, `"pre-render"`) each
+    /// `post` filter was resolved from, same length and order as `post`.
+    /// Carried alongside rather than folded into `post`'s element type so
+    /// every existing `result.post[i] == FilterSpec::...` assertion keeps
+    /// compiling unchanged. book-projects P2b's `PandocWriteStage`-side
+    /// contributor reads this to rebuild the exact `at:` a Pandoc-hybrid
+    /// render must forward each filter to in `quarto-filters.entryPoints`
+    /// — `Position::Post` bundles five distinct Q1 entry-point names
+    /// (`post-quarto`, `pre-render`, `post-render`, `pre-finalize`,
+    /// `post-finalize`), so the bucket alone isn't enough information.
+    pub post_entry_points: Vec<&'static str>,
+}
+
+/// Whether the document renders citations as margin notes
+/// (`citation-location: margin`). On Typst the vendored
+/// `quarto-post/typst.lua` margin handler owns citation rendering in that
+/// mode (it runs `pandoc.utils.citeproc` on a side copy and needs the
+/// original `Cite` nodes), so Q2's whole-document citeproc filter must
+/// stay out of its way.
+pub fn margin_citations(meta: &ConfigValue) -> bool {
+    meta.get("citation-location")
+        .and_then(|v| v.as_plain_text())
+        .is_some_and(|s| s == "margin")
+}
+
+/// Translate the `citeproc: true` shorthand into the `"citeproc"` entry of
+/// `meta["filters"]` that [`resolve_filters`] actually reads, so the
+/// boolean has the effect Q1 gives it (run citeproc over the document).
+///
+/// The entry is placed after the `"quarto"` sentinel (added if absent) so
+/// it lands in the post-crossref group, as Q1 runs citeproc after
+/// cross-reference resolution: a pre-crossref citeproc would consume
+/// `@fig-x` crossref `Cite` nodes as unresolved citations. Returns `true`
+/// when the metadata was changed. No-op unless `citeproc: true`, when
+/// `"citeproc"` is already listed (the explicit list wins), or in margin
+/// citation mode (see [`margin_citations`]).
+pub fn apply_citeproc_shorthand(meta: &mut ConfigValue) -> bool {
+    use quarto_pandoc_types::config_value::ConfigValueKind;
+
+    if meta.get("citeproc").and_then(|v| v.as_bool()) != Some(true) || margin_citations(meta) {
+        return false;
+    }
+    let si = meta
+        .get("citeproc")
+        .map(|v| v.source_info.clone())
+        .unwrap_or_default();
+    let mut items: Vec<ConfigValue> = match meta.get("filters").map(|f| &f.value) {
+        Some(ConfigValueKind::Array(items)) => items.clone(),
+        _ => Vec::new(),
+    };
+    let listed = |name: &str| {
+        items
+            .iter()
+            .any(|i| i.as_plain_text().is_some_and(|s| s == name))
+    };
+    if listed("citeproc") {
+        return false;
+    }
+    if !listed("quarto") {
+        items.push(ConfigValue::new_string("quarto", si.clone()));
+    }
+    items.push(ConfigValue::new_string("citeproc", si.clone()));
+    meta.insert_path(&["filters"], ConfigValue::new_array(items, si));
+    true
 }
 
 /// Entry points recognized by TS Quarto, in canonical execution order.
@@ -179,11 +243,14 @@ pub fn resolve_filters(
     // Split into pre/post and resolve paths
     let mut result = ResolvedFilters::default();
     for ann in annotated {
-        let position = ENTRY_POINTS[ann.entry_point_index].1;
+        let (entry_point, position) = ENTRY_POINTS[ann.entry_point_index];
         let spec = resolve_filter_path(ann.spec, document_dir);
         match position {
             Position::Pre => result.pre.push(spec),
-            Position::Post => result.post.push(spec),
+            Position::Post => {
+                result.post.push(spec);
+                result.post_entry_points.push(entry_point);
+            }
         }
     }
 
@@ -465,6 +532,71 @@ mod tests {
         )
     }
 
+    fn cv_true() -> ConfigValue {
+        ConfigValue::new_bool(true, SourceInfo::for_test())
+    }
+
+    fn filter_names(meta: &ConfigValue) -> Vec<String> {
+        meta.get("filters")
+            .and_then(|f| f.as_array())
+            .map(|items| items.iter().filter_map(|i| i.as_plain_text()).collect())
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn citeproc_shorthand_adds_post_group_citeproc() {
+        let mut meta = cv_map(vec![("citeproc", cv_true())]);
+        assert!(apply_citeproc_shorthand(&mut meta));
+        assert_eq!(filter_names(&meta), vec!["quarto", "citeproc"]);
+        let result = resolve_filters(&meta, Path::new("/doc"), &[], &TestRuntime::new());
+        assert!(result.pre.is_empty());
+        assert_eq!(result.post, vec![FilterSpec::Citeproc]);
+    }
+
+    #[test]
+    fn citeproc_shorthand_reuses_existing_sentinel_and_keeps_user_filters() {
+        let mut meta = cv_map(vec![
+            ("citeproc", cv_true()),
+            (
+                "filters",
+                cv_array(vec![cv_str("a.lua"), cv_str("quarto"), cv_str("b.lua")]),
+            ),
+        ]);
+        assert!(apply_citeproc_shorthand(&mut meta));
+        assert_eq!(
+            filter_names(&meta),
+            vec!["a.lua", "quarto", "b.lua", "citeproc"]
+        );
+    }
+
+    #[test]
+    fn citeproc_shorthand_is_noop_when_unset_false_listed_or_margin() {
+        let mut unset = cv_map(vec![]);
+        assert!(!apply_citeproc_shorthand(&mut unset));
+        assert!(unset.get("filters").is_none());
+
+        let mut off = cv_map(vec![(
+            "citeproc",
+            ConfigValue::new_bool(false, SourceInfo::for_test()),
+        )]);
+        assert!(!apply_citeproc_shorthand(&mut off));
+        assert!(off.get("filters").is_none());
+
+        let mut listed = cv_map(vec![
+            ("citeproc", cv_true()),
+            ("filters", cv_array(vec![cv_str("citeproc")])),
+        ]);
+        assert!(!apply_citeproc_shorthand(&mut listed));
+        assert_eq!(filter_names(&listed), vec!["citeproc"]);
+
+        let mut margin = cv_map(vec![
+            ("citeproc", cv_true()),
+            ("citation-location", cv_str("margin")),
+        ]);
+        assert!(!apply_citeproc_shorthand(&mut margin));
+        assert!(margin.get("filters").is_none());
+    }
+
     fn meta_with_filters(filters: ConfigValue) -> ConfigValue {
         cv_map(vec![("filters", filters)])
     }
@@ -597,6 +729,20 @@ mod tests {
         assert_eq!(result.post[2], FilterSpec::Lua(doc_dir().join("f.lua")));
         assert_eq!(result.post[3], FilterSpec::Lua(doc_dir().join("g.lua")));
         assert_eq!(result.post[4], FilterSpec::Lua(doc_dir().join("h.lua")));
+
+        // book-projects P2b: `post_entry_points` preserves each post
+        // filter's *specific* Q1 entry-point name, not just "it's in the
+        // Post bucket" — the whole bucket is not one name.
+        assert_eq!(
+            result.post_entry_points,
+            vec![
+                "post-quarto",
+                "pre-render",
+                "post-render",
+                "pre-finalize",
+                "post-finalize",
+            ]
+        );
     }
 
     #[test]

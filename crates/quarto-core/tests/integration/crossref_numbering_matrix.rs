@@ -59,6 +59,7 @@ fn base_params_json() -> String {
         Some(&registry),
         &language,
         std::path::PathBuf::from("/dev/null"),
+        std::path::PathBuf::from("/dev/null/mediabag"),
     )
     .build();
     blob.to_string()

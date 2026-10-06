@@ -266,6 +266,7 @@ pub(crate) fn build_ast_and_params_from_content_for_format(
         Some(&registry),
         &language,
         PathBuf::from("/dev/null"),
+        PathBuf::from("/dev/null/mediabag"),
     )
     .build()
     .to_string();
@@ -700,13 +701,46 @@ fn test_float_caption_is_numbered() {
 
 /// L-TIER
 ///
-/// T2.4: the shim's Proof route + `proof.lua:81`. `proof-basic.qmd`
-/// (`::: {.proof}`) -- asserts exit 0, the rendered content carries the
-/// `proof` class, and stderr has no `attempt to index a nil value`.
+/// A Spanish document exercises the Rust-to-Lua boundary with localized
+/// `kind` data. It verifies the filter renders the canonical Q1 category and
+/// uses the localized title for its caption.
 ///
-/// Revert hunk: reverting `type = wire.data.type` (e.g. passing `nil`)
-/// makes the success assertion RED -- `proof.lua:81`'s
-/// `proof_types[proof_tbl.type:lower()]` is `nil:lower()`, a Lua error.
+/// Revert hunk: passing `wire.data.kind` directly as `float.type` makes the
+/// real filter chain fail with `unknown float type 'Figura'`.
+#[test]
+fn test_localized_float_kind_is_accepted_by_q1_renderer() {
+    assert_pandoc_available();
+
+    let (ast_json, params_json) = build_fixture_ast_and_params("float-localized-es.qmd");
+    assert!(
+        ast_json.contains("Figura"),
+        "expected the Spanish kind in the wire payload, got:\n{ast_json}"
+    );
+    // The test's fixture helper emits filter params from the English builtin
+    // registry, while the production write stage localizes this title.
+    let params_json = params_json.replace(
+        r#""crossref-fig-title":"Figure""#,
+        r#""crossref-fig-title":"Figura""#,
+    );
+
+    let out_dir = tempfile::tempdir().expect("failed to create temp output dir");
+    let out_path = out_dir.path().join("out.docx");
+    let (outcome, captured_ast) =
+        run_main_lua_capturing_ast(&ast_json, "docx", &params_json, &out_path);
+    assert!(
+        outcome.status.success(),
+        "expected exit 0, got {:?}, stderr:\n{}",
+        outcome.status,
+        outcome.stderr
+    );
+
+    let plain = stringify_captured_ast(&captured_ast);
+    assert!(
+        plain.contains("Figura\u{a0}1:"),
+        "expected the localized caption to contain `Figura\\u{{a0}}1:`, got:\n{plain}"
+    );
+}
+
 #[test]
 fn test_proof_renders_with_explicit_type() {
     assert_pandoc_available();

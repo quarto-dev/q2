@@ -310,7 +310,10 @@
   /* Context menu */
   --context-menu-bg: var(--bg-modal);
   --context-menu-border: var(--border-color);
-  --context-menu-hover: var(--input-bg-alpha);
+  /* Solid (no alpha, per the theming rule): the old 8% alpha tint was too
+     faint to read as a hover on menu rows. Equivalent to ~16% of the
+     input-tint blue over the menu surface. */
+  --context-menu-hover: color-mix(in srgb, rgb(68, 112, 153) 16%, var(--bg-modal));
   --context-menu-shadow: rgba(0, 0, 0, 0.12);
   --context-menu-danger: var(--posit-red);
   /* Shortcut hints: --text-muted meets 4.5:1 on --bg-modal in light. */
@@ -484,7 +487,8 @@
   /* Context menu */
   --context-menu-bg: var(--bg-modal);
   --context-menu-border: var(--border-color);
-  --context-menu-hover: var(--input-bg-alpha);
+  /* Solid, ~16% white over the dark menu surface (see the light block). */
+  --context-menu-hover: color-mix(in srgb, white 16%, var(--bg-modal));
   --context-menu-shadow: rgba(0, 0, 0, 0.3);
   /* Shortcut hints: --text-muted is only 3.6:1 on --bg-modal in dark
      (fails WCAG 1.4.3); --text-secondary is 5.6:1. */

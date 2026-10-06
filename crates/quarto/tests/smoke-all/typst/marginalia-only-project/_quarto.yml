@@ -1,0 +1,10 @@
+project:
+  type: default
+
+format:
+  typst:
+    keep-typ: true
+
+_quarto:
+  tests:
+    noErrors: true

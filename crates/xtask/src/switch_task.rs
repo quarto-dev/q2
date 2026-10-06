@@ -32,7 +32,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::create_worktree::{
-    IssueMetadata, SectionKind, build_section, derive_slug, fetch_issue_metadata,
+    Checkout, IssueMetadata, SectionKind, build_section, derive_slug, fetch_issue_metadata,
     parse_external_ref_to_github_url, strand_branch, update_claude_local_md, validate_slug,
 };
 
@@ -57,6 +57,35 @@ pub(crate) fn current_worktree_root() -> Result<PathBuf> {
         .context("toplevel path is not valid UTF-8")?
         .trim();
     Ok(PathBuf::from(path))
+}
+
+/// Whether `dir` is inside the main checkout or a linked worktree: only
+/// in the main checkout does git's per-worktree dir equal the common dir.
+fn detect_checkout(dir: &Path) -> Result<Checkout> {
+    let output = Command::new("git")
+        .args([
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-dir",
+            "--git-common-dir",
+        ])
+        .current_dir(dir)
+        .output()
+        .context("spawning `git rev-parse --git-dir --git-common-dir`")?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        bail!("`git rev-parse --git-dir --git-common-dir` failed:\n{stderr}");
+    }
+    let stdout = std::str::from_utf8(&output.stdout).context("git dir path is not valid UTF-8")?;
+    let mut lines = stdout.lines();
+    let (Some(git_dir), Some(common_dir)) = (lines.next(), lines.next()) else {
+        bail!("unexpected `git rev-parse --git-dir --git-common-dir` output:\n{stdout}");
+    };
+    Ok(if git_dir == common_dir {
+        Checkout::Main
+    } else {
+        Checkout::Worktree
+    })
 }
 
 /// Arguments for `cargo xtask switch-task`.
@@ -167,7 +196,7 @@ fn update_worktree_context(root: &Path, id: &str, meta: &IssueMetadata) -> Resul
         title: meta.title.clone(),
         github_url,
     };
-    let section = build_section(&kind);
+    let section = build_section(&kind, detect_checkout(root)?);
     let path = root.join("CLAUDE.local.md");
     update_claude_local_md(&path, &section)?;
     eprintln!("→ refreshed worktree context in {}", path.display());
@@ -185,4 +214,49 @@ fn print_summary(id: &str, branch: &str, from: Option<&str>) {
     println!("Next: implement, commit, then promote with:");
     println!("  git switch {}", from.unwrap_or("<epic-branch>"));
     println!("  git merge --no-ff {branch}");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn git(dir: &Path, args: &[&str]) {
+        let status = Command::new("git")
+            .args(["-c", "user.name=t", "-c", "user.email=t@t"])
+            .args(["-c", "commit.gpgsign=false"])
+            .args(args)
+            .current_dir(dir)
+            .status()
+            .expect("spawn git");
+        assert!(status.success(), "git {args:?} failed in {}", dir.display());
+    }
+
+    #[test]
+    fn detect_checkout_distinguishes_main_from_linked_worktree() {
+        let tmp = TempDir::new().unwrap();
+        let main = tmp.path().join("main");
+        std::fs::create_dir(&main).unwrap();
+        git(&main, &["init", "-q"]);
+        git(&main, &["commit", "-q", "--allow-empty", "-m", "init"]);
+        git(&main, &["worktree", "add", "-q", "--detach", "../linked"]);
+        let linked = tmp.path().join("linked");
+
+        for (root, expected) in [(&main, Checkout::Main), (&linked, Checkout::Worktree)] {
+            assert_eq!(
+                detect_checkout(root).unwrap(),
+                expected,
+                "{}",
+                root.display()
+            );
+            let sub = root.join("sub");
+            std::fs::create_dir(&sub).unwrap();
+            assert_eq!(
+                detect_checkout(&sub).unwrap(),
+                expected,
+                "{}",
+                sub.display()
+            );
+        }
+    }
 }

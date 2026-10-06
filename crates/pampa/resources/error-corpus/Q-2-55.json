@@ -1,0 +1,28 @@
+{
+  "code": "Q-2-55",
+  "title": "Class Specifier Before Identifier in Attribute",
+  "message": "This identifier appears after a class specifier.",
+  "suggestion": "attribute-order",
+  "notes": [
+    {
+      "message": "This class specifier cannot appear before the identifier.",
+      "noteType": "simple",
+      "label": "class"
+    }
+  ],
+  "cases": [
+    {
+      "name": "simple",
+      "description": "Simple case",
+      "content": "[foo]{.class #id}\n",
+      "captures": [
+        {
+          "label": "class",
+          "row": 0,
+          "column": 6,
+          "size": 6
+        }
+      ]
+    }
+  ]
+}

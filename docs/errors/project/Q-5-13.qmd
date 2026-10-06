@@ -48,6 +48,10 @@ Other causes:
   reports as matching nothing, because nothing rendered.
 - **The files live in the output directory** (`_site/` and the
   like), which is always excluded.
+- **The files live in a nested project**, a subdirectory with its
+  own `_quarto.yml`. Only a pattern that names that directory
+  (`sub/*.qmd`, not `*/page.qmd`) reaches into it. See
+  [`Q-5-31`](Q-5-31.qmd).
 
 ## How to fix
 

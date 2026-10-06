@@ -102,6 +102,40 @@ What a profile **does not** contain:
 - **Absolute filesystem paths.** Everything path-shaped is
   project-relative by construction.
 
+## Content-processor membership cache (Plan 7b Q6 contract, not yet implemented)
+
+A file claimed via a named content processor (percent/spin, Plan 7b) is
+re-sniffed on **every** render — `SourceConversionStage` reads the file and
+runs the processor's `sniff` fresh each time, Q1-faithful. There is no cache
+today that lets a future incremental/freeze layer skip that re-sniff.
+
+**The contract such a cache must honor**, migrated from 7a's Open Q6 and
+recorded here (not in `engine-resolution.md`, since it's specifically about
+a *profile-adjacent* cache, not resolution): a processor-claimed file's
+*project membership* is a pure function of **`(file bytes, processor)`**,
+with the filename held constant. A plain content edit can flip membership —
+adding or removing a `# %% [markdown]` cell, or a `#' ---` header — with no
+path change at all. Any cache keyed only on path + mtime (the usual
+freeze-key shape) is **wrong** for this file class; it must additionally key
+on (or invalidate from) a content hash.
+
+**What would need to change to build this:**
+- A new `DocumentProfile` field recording, per processor-claimed file, the
+  content hash and the admission bit (did `sniff` return true?) observed at
+  claim time — the profile is the natural place to stamp this, since claim
+  time already runs before the checkpoint (`SourceConversionStage` precedes
+  `ParseDocumentStage`).
+- A cache consulting that field would still need to re-hash the file to
+  detect a flip (there is no cheaper signal than content for this class —
+  mtime is not a substitute, see above) — so the win is skipping the
+  `sniff` regex/tree-sitter-r walk and the `convert` call, not skipping the
+  read.
+- This is explicitly **not required for Plan 7b to ship**: no freeze/
+  incremental layer exists yet to consume it (`can_freeze()` is an
+  unconsumed capability flag on `ExecutionEngine` today — no cache reads or
+  writes it). Recorded here so whoever builds one doesn't have to
+  rediscover the membership-is-content-not-path invariant.
+
 ## Scoped feature surfaces
 
 Most profile fields are typed, narrowly defined, and globally

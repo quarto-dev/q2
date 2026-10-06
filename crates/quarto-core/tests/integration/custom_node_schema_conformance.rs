@@ -668,7 +668,14 @@ async fn crossref_resolved_ref_key_set_for_resolved_and_unresolved_citations() {
             .data_keys
             .as_ref()
             .expect("CrossrefResolvedRef wrapper must carry data-custom-data");
-        assert_keys_equal(&schema, "CrossrefResolvedRef", observed, &["order"]);
+        // `in_appendix` rides with `order` (book-projects P0: the render
+        // side needs the entry's appendix flag for sec presentation).
+        assert_keys_equal(
+            &schema,
+            "CrossrefResolvedRef",
+            observed,
+            &["order", "in_appendix"],
+        );
     }
     for r in unresolved {
         let observed = r

@@ -33,7 +33,12 @@ use super::config::{
 use super::source::{Destination, SourceBrand, read_source_brand};
 
 /// The brand file spellings we refuse to write over, and probe for.
-const BRAND_FILENAMES: [&str; 2] = ["_brand.yml", "_brand.yaml"];
+const BRAND_FILENAMES: [&str; 4] = [
+    "_brand.yml",
+    "_brand.yaml",
+    "_brand/_brand.yml",
+    "_brand/_brand.yaml",
+];
 
 pub struct BrandRequest {
     pub target: Option<String>,
@@ -97,12 +102,13 @@ pub fn resolve(
     // project already has a brand should not have to wait for a network
     // round trip — or be asked to trust a remote source — to be told no.
     if !req.force
-        && let Some(existing) = BRAND_FILENAMES
-            .iter()
-            .map(|name| root.join(name))
-            .find(|p| p.exists())
+        && let Some(existing) = BRAND_FILENAMES.iter().find(|name| root.join(name).exists())
     {
-        return Err(existing_brand_file_failure(&existing, &config.filename));
+        return Err(existing_brand_file_failure(
+            &root.join(existing),
+            existing,
+            &config.filename,
+        ));
     }
 
     // ── Gate 4: no brand may already be declared ────────────────────
@@ -171,11 +177,11 @@ pub fn resolve(
     })
 }
 
-fn existing_brand_file_failure(existing: &Path, config_filename: &str) -> CommandFailure {
-    let name = existing.file_name().map_or_else(
-        || existing.display().to_string(),
-        |n| n.to_string_lossy().into_owned(),
-    );
+fn existing_brand_file_failure(
+    existing: &Path,
+    name: &str,
+    config_filename: &str,
+) -> CommandFailure {
     CommandFailure::new(
         format!("This project already has a {name}"),
         format!(
@@ -562,6 +568,30 @@ mod tests {
     }
 
     #[test]
+    fn an_existing_brand_directory_file_is_refused_and_named_with_its_directory() {
+        // Q1 discovers `_brand/_brand.yml` too, so a project with one
+        // already has a brand; the message must say which file, not
+        // just `_brand.yml`.
+        let dir = project("project:\n  type: website\n");
+        std::fs::create_dir(dir.path().join("_brand")).unwrap();
+        std::fs::write(dir.path().join("_brand/_brand.yaml"), "color:\n").unwrap();
+
+        let err = resolve_offline(
+            &BrandRequest {
+                target: Some("org/repo".into()),
+                ..request()
+            },
+            dir.path(),
+        )
+        .unwrap_err();
+        assert!(
+            err.0.to_text(None).contains("_brand/_brand.yaml"),
+            "got: {}",
+            err.0.to_text(None)
+        );
+    }
+
+    #[test]
     fn a_remote_target_without_trust_or_a_prompter_is_refused_before_any_fetch() {
         let dir = project("project:\n  type: website\n");
         let err = resolve_offline(
@@ -674,7 +704,7 @@ mod tests {
     fn force_drops_the_existing_file_preconditions() {
         let dir = project("project:\n  type: website\n");
         let plain = resolve_offline(&request(), dir.path()).unwrap();
-        assert_eq!(plain.plan.preconditions.len(), 2);
+        assert_eq!(plain.plan.preconditions.len(), BRAND_FILENAMES.len());
 
         let forced = resolve_offline(
             &BrandRequest {

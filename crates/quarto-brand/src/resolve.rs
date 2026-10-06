@@ -195,12 +195,34 @@ impl<V> Brand<V> {
         self.logo.as_ref()?.images.as_ref()?.get(name)
     }
 
+    /// Resolve a logo resource that may be a bare name referencing
+    /// `logo.images.*` instead of a literal path.
+    ///
+    /// Mirrors Q1's `getLogoResource` precedence (`core/brand/brand.ts`):
+    /// a `small`/`medium`/`large` value that is a bare path string is
+    /// first checked against `images` — a match wins — and only when no
+    /// image of that name exists is the string treated as a literal
+    /// path. An explicit `{path, alt}` value is never treated as a name
+    /// reference (only bare strings can name an image).
+    pub fn resolve_named_logo<'a>(
+        &'a self,
+        resource: &'a BrandLogoResource,
+    ) -> &'a BrandLogoResource {
+        if let BrandLogoResource::Path(name) = resource
+            && let Some(image) = self.logo_image(name)
+        {
+            return image;
+        }
+        resource
+    }
+
     /// Path of the favicon-best small logo. Returns `None` if no
     /// small logo is configured, or if `small` is a light/dark pair
     /// (caller decides which side to use).
     ///
     /// Mirrors Q1's `getFavicon(brand)` from `core/brand/brand.ts`.
     pub fn favicon(&self) -> Option<&str> {
-        self.logo("small").and_then(|l| l.single_path())
+        let resource = self.logo("small").and_then(|l| l.single())?;
+        Some(self.resolve_named_logo(resource).path())
     }
 }

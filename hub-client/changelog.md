@@ -23,6 +23,26 @@ WASM rebuild is needed for a changelog-only edit.
 
 -->
 
+### 2026-09-30
+
+- [`b6795880f`](https://github.com/quarto-dev/q2/commits/b6795880f): Added an end-to-end suite that signs two users in against a real authenticated hub and proves every edit is credited to the right author, two tabs of one account can no longer collide, and documents written before the author-ID transition still show continuous credit.
+- [`d2e3773b8`](https://github.com/quarto-dev/q2/commits/d2e3773b8): The Authors overlay and history replay now show one continuous identity for each person across documents edited before and after the author-ID transition — older edits keep their original credit, and the "me" highlight matches your steps from both eras.
+- [`9da27a917`](https://github.com/quarto-dev/q2/commits/9da27a917): Your edits now carry a stable per-project author identity that stays credited to you across tabs and devices, and two tabs of the same account editing at once can no longer wedge a document with a duplicate-sequence conflict.
+
+### 2026-09-28
+
+- [`e474421`](https://github.com/quarto-dev/q2/commits/e474421): The browser tab title now returns to "Quarto Hub" after leaving a project, instead of keeping the last-opened file and project name on the project selector.
+- [`9fff3e98`](https://github.com/quarto-dev/q2/commits/9fff3e98): Live updates now recover on their own after the computer wakes from sleep or the network changes: the sync connection force-reconnects and open files catch up without a page refresh.
+- [`4d1181fd`](https://github.com/quarto-dev/q2/commits/4d1181fd): Math in the preview now renders with KaTeX 0.18.7, which adds `\reflectbox` and `\mapsfrom` and keeps equation tags on an empty final row of an array.
+
+### 2026-09-24
+
+- [`dce0c5a5`](https://github.com/quarto-dev/q2/commits/dce0c5a5): Listing pages whose posts declare a front-matter `image:` (for example the Blog template's `index.qmd`) now render in the preview instead of failing with "output destination ... is not under any allowed root".
+- [`3ab4cdc0`](https://github.com/quarto-dev/q2/commits/3ab4cdc0): Menu rows highlight more visibly on hover and for the current keyboard item.
+- [`d3a87667`](https://github.com/quarto-dev/q2/commits/d3a87667): The ＋ New menu's Templates and Examples groups now say what they hold, only one group is open at a time, the current item is tinted, and a group stays open while the pointer moves into it.
+- [`e4342b12`](https://github.com/quarto-dev/q2/commits/e4342b12): Submenus under ＋ New open to the left when they would otherwise run off the right edge of the window.
+- [`8af953fc`](https://github.com/quarto-dev/q2/commits/8af953fc): The ＋ New menu is now grouped into Templates (skeletons: Default, Website, Blog, and a new Presentation deck) and Examples (the welcome tour and the four seeded example projects), each in its own submenu.
+
 ### 2026-09-22
 
 - [`0ca6449`](https://github.com/quarto-dev/q2/commits/0ca6449): Upgrade KaTeX to 0.18.5 in the preview and rendered output

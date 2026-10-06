@@ -1,0 +1,17 @@
+[
+  {
+    "id": "knuth84",
+    "type": "article-journal",
+    "author": [{ "family": "Knuth", "given": "Donald E." }],
+    "title": "Literate Programming",
+    "container-title": "Comput. J.",
+    "volume": "27",
+    "issue": "2",
+    "page": "97-111",
+    "issued": { "date-parts": [[1984, 5]] },
+    "publisher": "Oxford University Press, Inc.",
+    "publisher-place": "USA",
+    "DOI": "10.1093/comjnl/27.2.97",
+    "URL": "https://doi.org/10.1093/comjnl/27.2.97"
+  }
+]

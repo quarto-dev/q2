@@ -422,5 +422,14 @@
 # in its body, and the encoding change itself (crossref-render now records
 # `quarto-eq-number` and the stage appends `\tag{N}` for MathJax) is
 # byte-neutral for a document without numbered equations.
+# Re-captured 2026-09-24 (bd-an9gkxnp, block editorial marks):
+# doc_files/styles.css hash updated because `_bootstrap-rules.scss` gained
+# block framing for the block editorial marks (`::: ++`/`::: --`/`::: !!`/
+# `::: >>` render as `div.quarto-*`): padding + `margin-bottom` on
+# `div.quarto-{insert,delete,highlight,edit-comment}`, a `> :last-child`
+# margin reset, and a `border-left` on `div.quarto-edit-comment`. Verified the
+# only delta is those three rules (rendering the fixture with and without the
+# SCSS change and diffing the CSS split on `}`). doc.html hash unchanged:
+# CSS-only change, and the fixture has no editorial marks.
 doc.html a0540297514ad41734a23e91c9511134b1fa469281ec470339571ffd5d404494
-doc_files/styles.css adf15c061a67cfbd61915e5d6fa9ce70956c24e3119254f99a53a382fe326d08
+doc_files/styles.css 9b3744e23ead74783590f056d2c44fab3e888619e4341153439b6008e0928338

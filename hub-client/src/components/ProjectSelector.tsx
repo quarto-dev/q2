@@ -13,6 +13,41 @@ import {
   type ProjectChoice,
   type ProjectFile,
 } from '@quarto/preview-runtime';
+import type { ReactNode } from 'react';
+import { buildChoiceTree, type ChoiceTree, type ChoiceTreeNode } from '../utils/choiceTree';
+
+/**
+ * Render the project-type `<select>` grouped by each choice's `path`
+ * (bd-q33ylfxf). `<optgroup>` cannot nest, so deeper levels flatten to
+ * "Parent / Child" labels; a group with no direct choices emits nothing.
+ */
+function renderChoiceOptions(tree: ChoiceTree<ProjectChoice>): ReactNode {
+  const option = (choice: ProjectChoice) => (
+    <option key={choice.id} value={choice.id}>
+      {choice.name} — {choice.description}
+    </option>
+  );
+  const groups: ReactNode[] = [];
+  const walk = (node: ChoiceTreeNode<ProjectChoice>, prefix: string[]) => {
+    const labels = [...prefix, node.label];
+    if (node.choices.length > 0) {
+      const label = labels.join(' / ');
+      groups.push(
+        <optgroup key={label} label={label}>
+          {node.choices.map(option)}
+        </optgroup>,
+      );
+    }
+    node.children.forEach((child) => walk(child, labels));
+  };
+  tree.nodes.forEach((node) => walk(node, []));
+  return (
+    <>
+      {tree.roots.map(option)}
+      {groups}
+    </>
+  );
+}
 import { DEFAULT_SYNC_SERVER, buildProjectSetLinkUrl } from '../utils/routing';
 import { getCollectionPointers, getProjectSetPointer } from '../services/projectSetStorage';
 import { buildProjectListExport } from '../services/projectListExport';
@@ -706,11 +741,7 @@ export default function ProjectSelector({
                   value={createProjectType}
                   onChange={(e) => setCreateProjectType(e.target.value)}
                 >
-                  {projectChoices.map((choice) => (
-                    <option key={choice.id} value={choice.id}>
-                      {choice.name} — {choice.description}
-                    </option>
-                  ))}
+                  {renderChoiceOptions(buildChoiceTree(projectChoices))}
                 </select>
               )}
             </div>

@@ -1224,6 +1224,13 @@
     "docs_url": "https://quarto.org/docs/errors/crossref/Q-15-1",
     "since_version": "99.9.9"
   },
+  "Q-15-2": {
+    "subsystem": "crossref",
+    "title": "Duplicate Crossref Identifier Across Chapters",
+    "message_template": "A crossref identifier (e.g. a `fig-`/`tbl-` label or an explicit `#id`) is defined in more than one chapter of the same book. A reference like `@fig-foo` must resolve to exactly one target, so each crossref id must be unique across all chapters. Quarto keeps the first chapter's definition; give one of the duplicates a different label.",
+    "docs_url": "https://quarto.org/docs/errors/crossref/Q-15-2",
+    "since_version": "99.9.9"
+  },
   "Q-5-8": {
     "subsystem": "project",
     "title": "Project Render Script Failed",
@@ -1595,6 +1602,34 @@
     "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-52",
     "since_version": "99.9.9"
   },
+  "Q-2-53": {
+    "subsystem": "markdown",
+    "title": "Fenced div info string starts with `-`",
+    "message_template": "A fenced div's opening line cannot continue with a word that starts with `-`. `::: --` followed by a space or the end of the line opens a block deletion mark; for a class, write `::: {.name}` or a name that starts with a letter, digit or `_`.",
+    "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-53",
+    "since_version": "99.9.9"
+  },
+  "Q-2-54": {
+    "subsystem": "markdown",
+    "title": "Pandoc definition lists are not supported",
+    "message_template": "A definition line beginning with `:` after a term is Pandoc definition-list syntax, which quarto-markdown does not support. It renders as literal text instead of a definition. Use the supported `::: {.definition-list}` form or run `qmd-syntax-helper convert -r definition-lists` to migrate automatically.",
+    "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-54",
+    "since_version": "99.9.9"
+  },
+  "Q-2-55": {
+    "subsystem": "markdown",
+    "title": "Class Specifier Before Identifier in Attribute",
+    "message_template": "This identifier appears after a class specifier.",
+    "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-55",
+    "since_version": "99.9.9"
+  },
+  "Q-2-56": {
+    "subsystem": "markdown",
+    "title": "Key-value Pair Before Identifier in Attribute",
+    "message_template": "This identifier appears after a key-value pair.",
+    "docs_url": "https://quarto.org/docs/errors/markdown/Q-2-56",
+    "since_version": "99.9.9"
+  },
   "Q-5-27": {
     "subsystem": "project",
     "title": "Invalid `diagnostics:` Entry",
@@ -1621,6 +1656,55 @@
     "title": "Pandoc Path Option Not Found",
     "message_template": "A `reference-doc` or `template` entry names a file that does not exist, so pandoc cannot use it. Resolved relative to the file that declared it (a leading `/` anchors at the project root). Fix the path or add the missing file.",
     "docs_url": "https://quarto.org/docs/errors/project/Q-5-30",
+    "since_version": "99.9.9"
+  },
+  "Q-5-31": {
+    "subsystem": "project",
+    "title": "Nested Projects Skipped",
+    "message_template": "Subdirectories with their own `_quarto.yml` are nested projects. Their files belong to them, so the render list's implicit patterns (the default `**/*.qmd`, or any glob that doesn't name the directory) skip them. Render the nested project on its own, list a file by a path that names the directory, or exclude the directory with a `!` pattern to silence this warning.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-31",
+    "since_version": "99.9.9"
+  },
+  "Q-5-32": {
+    "subsystem": "project",
+    "title": "Render Pattern Reaches Into Nested Project",
+    "message_template": "A `project.render` pattern names files inside a nested project (a subdirectory with its own `_quarto.yml`). They render as part of this project, with this project's config, not the nested one's.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-32",
+    "since_version": "99.9.9"
+  },
+  "Q-5-33": {
+    "subsystem": "project",
+    "title": "Format Not Supported by Book Projects",
+    "message_template": "Book projects render only to formats with book support (`html`, `typst`, and `epub` in this version). Rendering a book to any other format would produce disconnected per-chapter files with no book structure, so it is rejected instead.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-33",
+    "since_version": "99.9.9"
+  },
+  "Q-5-34": {
+    "subsystem": "project",
+    "title": "Book Parts Cannot Be Nested",
+    "message_template": "A `part:` entry inside another part's `chapters:` list is not supported. Book structure allows parts at the top level of `book.chapters` or `book.appendices` only. Move the nested part to the top level or flatten it into a chapter.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-34",
+    "since_version": "99.9.9"
+  },
+  "Q-5-35": {
+    "subsystem": "project",
+    "title": "Book Chapter File Not Found",
+    "message_template": "A file listed in `book.chapters`, `book.appendices`, or `book.references` does not exist on disk. Book projects render exactly the files these keys name, so every entry must point at a real file. Fix the path or remove the entry.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-35",
+    "since_version": "99.9.9"
+  },
+  "Q-5-36": {
+    "subsystem": "project",
+    "title": "Book Has No Home Page",
+    "message_template": "A book project's chapter list must include a home page: a file whose name starts with `index.` (for example `index.qmd`), serving as the book's landing page. Add an index file to `book.chapters`.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-36",
+    "since_version": "99.9.9"
+  },
+  "Q-5-37": {
+    "subsystem": "project",
+    "title": "Brand File Not Referenced",
+    "message_template": "The project directory contains a brand file (`_brand.yml`, `_brand.yaml`, `_brand/_brand.yml`, or `_brand/_brand.yaml`) but no `brand:` key is set, so the file is ignored. Quarto 1 discovers these files automatically; Quarto 2 requires an explicit `brand:` key. Add `brand: _brand.yml` (or the path to your brand file) to `_quarto.yml`.",
+    "docs_url": "https://quarto.org/docs/errors/project/Q-5-37",
     "since_version": "99.9.9"
   },
   "Q-13-8": {
@@ -1693,6 +1777,13 @@
     "docs_url": "https://quarto.org/docs/errors/engine/Q-18-2",
     "since_version": "99.9.9"
   },
+  "Q-18-3": {
+    "subsystem": "engine",
+    "title": "Engine Runtime Not Found",
+    "message_template": "An execution engine needs an external runtime (e.g. Julia, R, or Jupyter) that could not be found on this machine, so the render could not continue. This is a missing local dependency, not a problem in the document.",
+    "docs_url": "https://quarto.org/docs/errors/engine/Q-18-3",
+    "since_version": "99.9.9"
+  },
   "Q-19-1": {
     "subsystem": "image",
     "title": "Plot Document Not Found",
@@ -1740,6 +1831,13 @@
     "title": "Typst Compile Failed",
     "message_template": "The `typst compile` subprocess exited with a nonzero status. Its stderr is reproduced verbatim below, including typst's own diagnostic (file/line, if any).",
     "docs_url": "https://quarto.org/docs/errors/typst/Q-21-3",
+    "since_version": "99.9.9"
+  },
+  "Q-21-4": {
+    "subsystem": "typst",
+    "title": "Brand Font Not Available To Typst",
+    "message_template": "A `brand.typography.fonts` entry could not be made available to Typst, so Typst falls back to another font for that family. Google Fonts entries are downloaded at render time and cached under `.quarto/typst/fonts`; the download can fail when offline, or the family may not be offered as a TrueType/OpenType file. Bunny Fonts entries are not supported for Typst. Use `source: file` to supply the font files yourself.",
+    "docs_url": "https://quarto.org/docs/errors/typst/Q-21-4",
     "since_version": "99.9.9"
   },
   "Q-22-1": {
@@ -1831,6 +1929,13 @@
     "title": "Math Syntax Error",
     "message_template": "The math expression contains a construct the parser could not interpret: an alignment `&` outside an environment, a stray `\\begin`/`\\end`, or another malformed piece of syntax.",
     "docs_url": "https://quarto.org/docs/errors/math/Q-22-13",
+    "since_version": "99.9.9"
+  },
+  "Q-23-1": {
+    "subsystem": "citeproc",
+    "title": "Citeproc Resolves After Book Merge Point",
+    "message_template": "A book chapter orders the built-in citeproc filter into `.post` (after the `quarto` sentinel in `filters:`), so its citations resolve after this chapter pauses for project-wide crossref/bibliography aggregation. Its references will not appear in the book's merged bibliography.",
+    "docs_url": "https://quarto.org/docs/errors/citeproc/Q-23-1",
     "since_version": "99.9.9"
   }
 }

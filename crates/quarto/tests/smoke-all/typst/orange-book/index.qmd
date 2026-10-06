@@ -1,0 +1,309 @@
+---
+keep-typ: true
+_quarto:
+  render-project: true
+  tests:
+    run:
+      requires: knitr
+    typst:
+      ensureTypstFileRegexMatches:
+        - # matches array (first positional argument)
+          - "test book for Typst output format"
+          - "first chapter of the book"
+          - "second chapter of the book"
+          - "third chapter of the book"
+          - "#heading\\(level: 1, numbering: none\\)\\[Preface\\]"
+          - "<fig-cars>"
+          # ACKNOWLEDGED GAP (P8, 2026-09-29): `{{< embed >}}` is not
+          # implemented in Q2 (own epic — D6,
+          # claude-notes/plans/2026-07-31-shortcode-extensions-port.md).
+          # chapter1.qmd's embed of notebooks/computations.ipynb#fig-visualization
+          # never resolves, so this label/ref/caption/section-text never
+          # appear in the rendered output. Re-enable these 4 lines (this one,
+          # its #ref below, and the 2 ensurePdfRegexMatches lines for
+          # "Figure 1.2"/"Section 1.2") once that epic lands.
+          # - "<fig-visualization>"
+          - "<tbl-data>"
+          - "<sec-intro>"
+          - "<sec-methods>"
+          - "<sec-results>"
+          # Section labels
+          - "<sec-basic-figures>"
+          - "<sec-embedded-notebooks>"
+          - "<sec-callouts>"
+          - "<sec-custom-crossref-dinosaurs>"
+          - "<sec-equations>"
+          - "<sec-theorems>"
+          - "<sec-code-listings>"
+          - "<sec-tables>"
+          - "<sec-cross-references>"
+          - "<sec-sub-figures>"
+          - "<sec-more-callouts>"
+          - "<sec-more-dinosaurs>"
+          - "<sec-more-equations>"
+          - "<sec-more-theorems>"
+          - "<sec-more-code-listings>"
+          - "#ref\\(<fig-cars>, supplement: \\[Figure\\]\\)"
+          # ACKNOWLEDGED GAP: see the `<fig-visualization>` comment above.
+          # - "#ref\\(<fig-visualization>, supplement: \\[Figure\\]\\)"
+          - "#ref\\(<tbl-data>, supplement: \\[Table\\]\\)"
+          - "#ref\\(<sec-intro>, supplement: \\[Chapter\\]\\)"
+          - "#ref\\(<sec-methods>, supplement: \\[Chapter\\]\\)"
+          - "A plot of the cars dataset"
+          - "Sample data table"
+          # With citeproc: true, Pandoc handles citations instead of Typst's native #cite()
+          # so we don't test for #cite or #bibliography in the .typ file
+          - "#part\\[Part I: Getting Started\\]"
+          - "#part\\[Part II: Advanced Topics\\]"
+          - '#show: appendices\.with\("Appendices", hide-parent: true\)'
+          - "<sec-resources>"
+          - "#quarto_super\\("
+          - "<fig-panel>"
+          - "<fig-panel-a>"
+          - "<fig-panel-b>"
+          - "#ref\\(<fig-panel>, supplement: \\[Figure\\]\\)"
+          - "#ref\\(<fig-panel-a>, supplement: \\[Figure\\]\\)"
+          - "#callout\\("
+          - 'kind: "quarto-callout-Warning"'
+          - 'kind: "quarto-callout-Tip"'
+          - 'kind: "quarto-callout-Note"'
+          - 'kind: "quarto-callout-Important"'
+          - "<wrn-tea>"
+          - "<tip-towel>"
+          - "<nte-vogon>"
+          - "<imp-answer>"
+          - "#ref\\(<wrn-tea>, supplement: \\[Warning\\]\\)"
+          - "#ref\\(<tip-towel>, supplement: \\[Tip\\]\\)"
+          - "#ref\\(<nte-vogon>, supplement: \\[Note\\]\\)"
+          - "#ref\\(<imp-answer>, supplement: \\[Important\\]\\)"
+          - "<fig-appendix-panel>"
+          - "<fig-appendix-panel-a>"
+          - "<fig-appendix-panel-b>"
+          - "#ref\\(<fig-appendix-panel>, supplement: \\[Figure\\]\\)"
+          - "#ref\\(<fig-appendix-panel-a>, supplement: \\[Figure\\]\\)"
+          - "<wrn-appendix>"
+          - "<tip-appendix>"
+          - "#ref\\(<wrn-appendix>, supplement: \\[Warning\\]\\)"
+          - "#ref\\(<tip-appendix>, supplement: \\[Tip\\]\\)"
+          - 'kind: "quarto-float-dino"'
+          - "<dino-steg>"
+          - "<dino-trex>"
+          - "<dino-raptor>"
+          - "<dino-ptero>"
+          - "<dino-appendix>"
+          - "<dino-appendix-b>"
+          - "#ref\\(<dino-steg>, supplement: \\[Dinosaur\\]\\)"
+          - "#ref\\(<dino-raptor>, supplement: \\[Dinosaur\\]\\)"
+          - "#ref\\(<dino-appendix>, supplement: \\[Dinosaur\\]\\)"
+          - "#ref\\(<dino-appendix-b>, supplement: \\[Dinosaur\\]\\)"
+          - "<fig-appendix-b-panel>"
+          - "<fig-appendix-b-panel-a>"
+          - "<wrn-appendix-b>"
+          - "<tip-appendix-b>"
+          - "#ref\\(<fig-appendix-b-panel>, supplement: \\[Figure\\]\\)"
+          - "#ref\\(<wrn-appendix-b>, supplement: \\[Warning\\]\\)"
+          - 'counter\(figure\.where\(kind: "quarto-float-dino"\)\)\.update\(0\)'
+          - "<eq-einstein>"
+          - "<eq-newton>"
+          - "<eq-quadratic>"
+          - "<eq-pythagorean>"
+          - "#ref\\(<eq-einstein>, supplement: \\[Equation\\]\\)"
+          - "#ref\\(<eq-newton>, supplement: \\[Equation\\]\\)"
+          - "#ref\\(<eq-quadratic>, supplement: \\[Equation\\]\\)"
+          - "#ref\\(<eq-pythagorean>, supplement: \\[Equation\\]\\)"
+          - 'math\.equation\(block: true, numbering: equation-numbering'
+          - 'counter\(math\.equation\)\.update\(0\)'
+          - "#import \"@preview/theorion:0\\.4\\.1\": make-frame, cosmos"
+          - "#import cosmos\\.fancy: fancy-box"
+          - '#show: show-theorem'
+          - 'make-frame\(\s*"theorem"'
+          - 'render: fancy-box\.with\('
+          - "<thm-pythagorean>"
+          - "<lem-triangle>"
+          - "<thm-calculus>"
+          - "<def-continuous>"
+          - "<thm-appendix>"
+          - "#ref\\(<thm-pythagorean>"
+          - "#ref\\(<lem-triangle>"
+          - "#ref\\(<thm-calculus>"
+          - "#ref\\(<thm-appendix>"
+          - "<lst-hello>"
+          - "<lst-fibonacci>"
+          - "<lst-quicksort>"
+          - "<lst-appendix-example>"
+          - "#ref\\(<lst-hello>"
+          - "#ref\\(<lst-fibonacci>"
+          - "#ref\\(<lst-quicksort>"
+          - "#ref\\(<lst-appendix-example>"
+          - 'kind: "quarto-float-lst"'
+          - '#let brand-color = \('
+          - 'primary: rgb\("#f36619"\)'
+          - 'secondary: rgb\("#2e86ab"\)'
+          - '#let brand-color-background = \('
+          - 'main-color: brand-color\.at\("primary", default: blue\)'
+          - '#let brand-logo = \('
+          - 'medium:'
+          - 'path: "\.\./logo\.svg"'
+          - 'alt: "Test Logo"'
+          - 'logo: \{'
+          - 'outline-depth: 17,'
+      ensurePdfRegexMatches:
+        - # matches array (first positional argument)
+          - "Figure\\s+1\\.1:\\s+A\\s+plot\\s+of\\s+the\\s+cars\\s+dataset"
+          # ACKNOWLEDGED GAP: see the `<fig-visualization>` comment in
+          # ensureTypstFileRegexMatches above (`{{< embed >}}` unimplemented).
+          # - "Figure\\s+1\\.2:\\s+A\\s+display\\s+of\\s+a\\s+line"
+          - "Table\\s+2\\.1:\\s+Sample\\s+data\\s+table"
+          - "Figure\\s+2\\.1:\\s+A\\s+panel\\s+with\\s+two\\s+sub-figures"
+          - "Some\\s+content\\s+in\\s+Section\\s+1\\.1\\s*\\.\\s+See\\s+Figure\\s+1\\.1"
+          # ACKNOWLEDGED GAP: same embed gap as above.
+          # - "Some\\s+content\\s+in\\s+Section\\s+1\\.2\\s*\\.\\s+See\\s+Figure\\s+1\\.2"
+          - "Some\\s+content\\s+in\\s+Section\\s+2\\.1\\s*\\.\\s+See\\s+Table\\s+2\\.1"
+          - "Some\\s+content\\s+in\\s+Section\\s+2\\.2\\s*\\.\\s+Refer\\s+back\\s+to\\s+Figure\\s+1\\.1\\s+and\\s+Table\\s+2\\.1"
+          # Section self-references
+          - "Section\\s+1\\.4\\s+tests\\s+custom\\s+cross-reference\\s+types"
+          - "Section\\s+2\\.5\\s+tests\\s+that\\s+custom\\s+cross-reference\\s+counters"
+          # Appendix section ref must appear inline (not fly to margin)
+          # This fails when orange-book appendices() numbering returns place()
+          - "Section\\s+A\\.5\\s+phantasmagorically-validates"
+          # Appendix chapter headings render with their letter prefix baked
+          # in by orange-book's `appendices()` show rule (the .typ source
+          # heading text itself is letter-free — confirmed by compiling
+          # Test-Typst-Book.typ and extracting text with pdftotext, P10).
+          - "A\\.\\s+Additional\\s+Resources"
+          - "B\\.\\s+Supplementary\\s+Data"
+          # Note: Orange-book appendix sections may use different numbering
+          - "tests\\s+sub-figure\\s+numbering"
+          - "tests\\s+callout\\s+numbering"
+          # Cross-chapter references use @sec-intro/@sec-methods (rendered as "Chapter 1."/"Chapter 2.")
+          - "see\\s+Dinosaur\\s+1\\.1\\s+from\\s+Chapter\\s+1\\.\\s+and\\s+Dinosaur\\s+2\\.1"
+          - "Recall\\s+Equation\\s+\\(1\\.1\\)\\s+from\\s+Chapter\\s+1\\.\\s+and\\s+Equation\\s+\\(1\\.2\\)"
+          - "Recall\\s+Equation\\s+\\(1\\.1\\)\\s+from\\s+Chapter\\s+1\\.\\s+and\\s+Equation\\s+\\(2\\.1\\)\\s+from\\s+Chapter\\s+2\\."
+          - "See\\s+Listing\\s+1\\.1\\s+from\\s+Chapter\\s+1\\.\\s+and\\s+Listing\\s+2\\.1\\s+from\\s+Chapter\\s+2\\."
+          - "see\\s+Warning\\s+1\\.1\\s+for\\s+the\\s+tea\\s+warning\\s+from\\s+Chapter\\s+1\\."
+          - "See\\s+Chapter\\s+1\\.\\s+for\\s+the\\s+main\\s+introduction"
+          - "As\\s+discussed\\s+in\\s+Chapter\\s+1\\.\\s*,\\s+we\\s+now\\s+present"
+          - "See\\s+Figure\\s+2\\.1\\s+for\\s+a\\s+panel.*Figure\\s+2\\.1a\\s+and\\s+Figure\\s+2\\.1b"
+          - "Recall\\s+the\\s+panel\\s+figure\\s+from\\s+Chapter\\s+2\\.\\s*:\\s+see\\s+Figure\\s+2\\.1\\s+for\\s+the\\s+complete\\s+panel"
+          - "Figure\\s+2\\.1a\\s+shows\\s+the\\s+first\\s+panel\\s+and\\s+Figure\\s+2\\.1b\\s+shows\\s+the\\s+second\\s+panel"
+          - "reference\\s+the\\s+main\\s+figure\\s+from\\s+Chapter\\s+1\\.\\s*:\\s+Figure\\s+1\\.1\\s+shows\\s+the\\s+cars"
+          - "Warning\\s+1\\.1:\\s+Whose\\s+Tea\\s+Is\\s+This"
+          - "Tip\\s+2\\.1:\\s+Whose\\s+Towel\\s+Is\\s+This"
+          - "Note\\s+2\\.1:\\s+A\\s+Note\\s+About\\s+Vogon\\s+Poetry"
+          - "Important\\s+3\\.1:\\s+The\\s+Answer"
+          - "See\\s+Warning\\s+1\\.1\\s+to\\s+reference\\s+this\\s+warning"
+          - "See\\s+Tip\\s+2\\.1\\s+to\\s+reference\\s+this\\s+tip"
+          - "See\\s+Note\\s+2\\.1\\s+to\\s+reference\\s+this\\s+note"
+          - "See\\s+Important\\s+3\\.1\\s+to\\s+reference\\s+this\\s+important"
+          - "see\\s+Warning\\s+1\\.1"
+          - "See\\s+Warning\\s+1\\.1\\s+for\\s+the\\s+tea\\s+warning"
+          - "See\\s+Tip\\s+2\\.1\\s+for\\s+towel\\s+advice"
+          - "See\\s+Note\\s+2\\.1\\s+for\\s+important\\s+information\\s+about\\s+Vogon\\s+poetry"
+          - "Figure\\s+A\\.1:\\s+A\\s+panel\\s+of\\s+sub-figures\\s+in\\s+the\\s+appendix"
+          - "See\\s+Figure\\s+A\\.1\\s+for\\s+a\\s+panel\\s+of\\s+appendix\\s+sub-figures"
+          - "Figure\\s+A\\.1a\\s+and\\s+Figure\\s+A\\.1b\\s+individually"
+          - "Warning\\s+A\\.1:\\s+Appendix\\s+Warning"
+          - "Tip\\s+A\\.1:\\s+Appendix\\s+Tip"
+          - "See\\s+Warning\\s+A\\.1\\s+to\\s+reference\\s+this\\s+appendix\\s+warning"
+          - "See\\s+Tip\\s+A\\.1\\s+to\\s+reference\\s+this\\s+appendix\\s+tip"
+          - "See\\s+Figure\\s+A\\.1\\s+for\\s+appendix\\s+sub-figures"
+          - "See\\s+Warning\\s+A\\.1\\s+for\\s+the\\s+appendix\\s+warning"
+          - "See\\s+Tip\\s+A\\.1\\s+for\\s+the\\s+appendix\\s+tip"
+          - "Dinosaur\\s+1\\.1:\\s+This\\s+is\\s+the\\s+first\\s+dinosaur"
+          - "Dinosaur\\s+1\\.2:\\s+This\\s+is\\s+the\\s+second\\s+dinosaur"
+          - "Dinosaur\\s+2\\.1:\\s+This\\s+dinosaur\\s+demonstrates\\s+clever"
+          - "Dinosaur\\s+3\\.1:\\s+This\\s+flying\\s+reptile"
+          - "Dinosaur\\s+A\\.1:\\s+This\\s+dinosaur\\s+in\\s+the\\s+appendix"
+          - "See\\s+Dinosaur\\s+1\\.1\\s+to\\s+self"
+          - "See\\s+Dinosaur\\s+2\\.1\\s+to\\s+self"
+          - "see\\s+Dinosaur\\s+1\\.1\\s+and\\s+Dinosaur\\s+1\\.2\\s+from\\s+Chapter"
+          - "See\\s+Dinosaur\\s+A\\.1\\s+for\\s+the\\s+appendix\\s+dinosaur"
+          - "see\\s+Dinosaur\\s+1\\.1\\s+from\\s+Chapter\\s+1\\."
+          - "Figure\\s+B\\.1:\\s+A\\s+panel\\s+of\\s+sub-figures\\s+in\\s+Appendix\\s+B"
+          - "Figure\\s+B\\.1a\\s+and\\s+Figure\\s+B\\.1b\\s+individually"
+          - "Warning\\s+B\\.1:\\s+Appendix\\s+B\\s+Warning"
+          - "Tip\\s+B\\.1:\\s+Appendix\\s+B\\s+Tip"
+          - "Dinosaur\\s+B\\.1:\\s+This\\s+dinosaur\\s+in\\s+Appendix\\s+B"
+          - "See\\s+Dinosaur\\s+B\\.1\\s+to\\s+self"
+          - "See\\s+Figure\\s+B\\.1\\s+for\\s+Appendix\\s+B\\s+sub-figures"
+          - "See\\s+Warning\\s+B\\.1\\s+for\\s+the\\s+Appendix\\s+B\\s+warning"
+          - "See\\s+Tip\\s+B\\.1\\s+for\\s+the\\s+Appendix\\s+B\\s+tip"
+          - "See\\s+Dinosaur\\s+B\\.1\\s+for\\s+the\\s+Appendix\\s+B\\s+dinosaur"
+          - "see\\s+Figure\\s+A\\.1\\s+for\\s+Appendix\\s+A"
+          - "\\(1\\.1\\)"
+          - "\\(1\\.2\\)"
+          - "\\(2\\.1\\)"
+          - "\\(A\\.1\\)"
+          - "As\\s+shown\\s+in\\s+Equation\\s+\\(1\\.1\\)\\s*,\\s+energy\\s+and\\s+mass"
+          - "Newton.s\\s+second\\s+law\\s+\\(\\s*Equation\\s+\\(1\\.2\\)\\s*\\)"
+          - "Use\\s+Equation\\s+\\(2\\.1\\)\\s+to\\s+solve\\s+quadratic\\s+equations"
+          - "See\\s+Equation\\s+\\(A\\.1\\)\\s+for\\s+right\\s+triangles"
+          - "Theorem\\s+1\\.1.*Pythagorean"
+          - "Lemma\\s+1\\.1.*Triangle\\s+Inequality"
+          - "Theorem\\s+2\\.1.*Fundamental\\s+Theorem"
+          - "Definition\\s+2\\.1.*Continuous"
+          - "See\\s+Theorem\\s+1\\.1\\s+for\\s+the\\s+classic\\s+result"
+          - "See\\s+Lemma\\s+1\\.1\\s+for\\s+the\\s+inequality"
+          - "See\\s+Theorem\\s+2\\.1"
+          - "See\\s+Definition\\s+2\\.1\\s+for\\s+the\\s+definition"
+          - "Recall\\s+Theorem\\s+1\\.1\\s+and\\s+Lemma\\s+1\\.1\\s+from\\s+Chapter\\s+1\\."
+          # Critical: Appendix theorem should be A.1, not continuing from chapters
+          - "Theorem\\s+A\\.1.*Example\\s+Appendix\\s+Theorem"
+          # Critical: Appendix references to earlier chapter theorems should show original numbering
+          # This tests the fix for ctheorems bug where cross-refs resolved at reference time
+          - "Reference\\s+Theorem\\s+1\\.1\\s+from\\s+Chapter\\s+1\\.\\s+and\\s+Theorem\\s+2\\.1\\s+from\\s+Chapter\\s+2\\."
+          - "Listing\\s+1\\.1.*Hello\\s+World"
+          - "Listing\\s+1\\.2.*Fibonacci"
+          - "Listing\\s+2\\.1.*Quicksort"
+          - "Listing\\s+A\\.1.*Appendix\\s+Code\\s+Example"
+          - "See\\s+Listing\\s+1\\.1\\s+for\\s+a\\s+simple\\s+Python\\s+example"
+          - "Listing\\s+1\\.2.*uses\\s+recursion"
+          - "See\\s+Listing\\s+2\\.1\\s+for\\s+an\\s+efficient\\s+sorting\\s+algorithm"
+          - "See\\s+Listing\\s+A\\.1\\s+for\\s+an\\s+appendix\\s+code\\s+example"
+          - "See\\s+Listing\\s+1\\.1\\s+and\\s+Listing\\s+1\\.2\\s+from\\s+Chapter\\s+1\\."
+          # Bibliography aggregation tests - with citeproc, uses author-date format
+          - "McCarthy,\\s+John.*1960.*Recursive\\s+Functions"
+          - "Codd,\\s+Edgar\\s+F.*1970.*Relational\\s+Model"
+          - "Lamport,\\s+Leslie.*1978.*Time,\\s+Clocks"
+          # Inline citation tests - citeproc renders as Author (Year)
+          - "Turing\\s+\\(1950\\)\\s+on\\s+machine\\s+intelligence"
+          - "McCarthy\\s+\\(1960\\)\\s+inspired\\s+this\\s+classification"
+          - "Codd\\s+\\(1970\\)\\s+informs\\s+our\\s+approach"
+          - "Lamport\\s+\\(1978\\)\\s+for\\s+temporal\\s+considerations"
+      # `chapter1.qmd`'s "Code Listings" section opens with a raw Typst
+      # `#pagebreak()` (P8, 2026-09-29) so LISTING_BODY_ALIGN_TEST and the
+      # Listing 1.1 figure (ALIGNTEST_MARKER) always start together at the
+      # top of a fresh page — before that fix they straddled an ordinary
+      # page break (the listing didn't fit in the remaining space on the
+      # previous page), which this assertion's leftAligned relation can't
+      # compare across (crates/quarto-test/src/assertions/pdf_text_position.rs:523-529,
+      # "Cannot compare positions ... is on page N, ... is on page M").
+      ensurePdfTextPositions:
+        - # Code listings should be left-aligned with body text, not centered.
+          # NOTE: Subject must be text at the START of a line because
+          # ensurePdfTextPositions uses word positions, not semantic containers.
+          - subject: "ALIGNTEST_MARKER"
+            relation: leftAligned
+            object: "LISTING_BODY_ALIGN_TEST"
+            tolerance: 10  # 8pt inset from Skylighting block styling
+      # The remaining 2 warnings are the embed gap — see the
+      # `<fig-visualization>` comment above (`{{< embed >}}` unimplemented,
+      # D6). bd-quarto-tests-metadata-markdown-3wsdzq4c's markdown-parsing
+      # false positives are fixed (meta_annotations.rs's `_quarto.tests.**`
+      # entry); this is back to the tightest check short of landing D6.
+      printsMessage:
+        - level: WARN
+          regex: "Unknown shortcode"
+        - level: WARN
+          regex: "unresolved crossref `@fig-visualization`"
+      noErrors: true
+---
+
+# Preface {.unnumbered}
+
+This is a test book for Typst output format.
+
+## About this book
+
+This book tests the basic Typst book rendering functionality in Quarto.
+See @knuth84 for additional discussion of literate programming.

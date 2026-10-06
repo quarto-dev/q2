@@ -30,6 +30,7 @@
     "test:wasm": "vitest run --config vitest.wasm.config.ts",
     "test:wasm:watch": "vitest --config vitest.wasm.config.ts",
     "test:e2e": "npm run build:wasm && npm run build:sandboxed && VITE_E2E=1 VITE_DEFAULT_SYNC_SERVER=/ws VITE_Q2_SANDBOXED_PREVIEW_URL=q2-sandboxed-preview/index.html npm run build && playwright test",
+    "test:e2e:author-id": "npm run build:wasm && npm run build:sandboxed && VITE_E2E=1 VITE_DEFAULT_SYNC_SERVER=/ws VITE_Q2_SANDBOXED_PREVIEW_URL=q2-sandboxed-preview/index.html npm run build && playwright test --config playwright.author-e2e.config.ts",
     "test:e2e:ui": "npm run build:wasm && npm run build:sandboxed && VITE_E2E=1 VITE_DEFAULT_SYNC_SERVER=/ws VITE_Q2_SANDBOXED_PREVIEW_URL=q2-sandboxed-preview/index.html npm run build && playwright test --ui",
     "test:harness": "npm run build:wasm && VITE_E2E=1 npm run build && playwright test --config playwright.harness.config.ts",
     "test:ci": "npm run test && npm run test:integration && npm run test:wasm",

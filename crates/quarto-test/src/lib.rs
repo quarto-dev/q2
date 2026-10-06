@@ -45,5 +45,8 @@ mod runner;
 mod spec;
 
 pub use assertions::{Assertion, VerifyContext};
-pub use runner::{TestResult, TestSummary, run_test_file, run_test_files};
+pub use runner::{
+    ProjectRenderCache, TestResult, TestSummary, run_test_file, run_test_file_with_project_cache,
+    run_test_files,
+};
 pub use spec::{RunConfig, TestSpec};

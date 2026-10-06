@@ -42,6 +42,7 @@ mod error;
 mod execute;
 mod kernelspec;
 mod session;
+mod stored;
 mod text_execute;
 
 pub use daemon::{JupyterDaemon, KernelScope, daemon, kernel_scope};
@@ -49,15 +50,19 @@ pub use error::{JupyterError, Result};
 pub use execute::{CellOutput, ExecuteResult, ExecuteStatus, MimeBundle};
 pub use kernelspec::{ResolvedKernel, find_kernelspec, is_jupyter_language, list_kernelspecs};
 pub use session::{KernelInfo, KernelSession, SessionKey};
+pub use stored::IpynbReplayEngine;
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{LazyLock, Mutex, OnceLock};
 
 use super::context::{ExecuteResult as EngineExecuteResult, ExecutionContext};
 use super::error::ExecutionError;
 use super::traits::ExecutionEngine;
 use crate::engine::LanguageClaim;
+use crate::extension::types::{FileClaim, ProcessorSpec};
 
 /// Number of times the underlying PATH lookup for the jupyter
 /// executable has run during this process. With the
@@ -73,6 +78,49 @@ static FIND_JUPYTER_CALL_COUNT: AtomicUsize = AtomicUsize::new(0);
 /// Initialized lazily on the first call to
 /// [`JupyterEngine::find_jupyter`].
 static JUPYTER_PATH_CACHE: OnceLock<Option<PathBuf>> = OnceLock::new();
+
+/// Process-wide cache of availability probe results, keyed by
+/// executable path. `jupyter --version` runs at most once per
+/// resolved path per process — same rationale as
+/// [`JUPYTER_PATH_CACHE`] (bd-c5u2g): the engine registry is
+/// re-queried per render, and spawning jupyter per document would
+/// dominate multi-document render time. Keyed by path (rather than a
+/// bare `OnceLock<bool>`) so tests can probe their own stub binaries
+/// without polluting each other. Lookup-only; order is never
+/// observed.
+static JUPYTER_PROBE_CACHE: LazyLock<Mutex<HashMap<PathBuf, bool>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Probe whether a jupyter executable actually runs: spawn
+/// `jupyter --version` and require exit status 0. This catches the
+/// stale-shim case (the name resolves on PATH but the binary exits
+/// non-zero, e.g. a tool-manager trampoline pointing at a deleted
+/// environment), which a PATH lookup alone cannot (bd-1eu34vpy).
+fn probe_jupyter(path: &Path) -> bool {
+    Command::new(path)
+        .arg("--version")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+/// [`probe_jupyter`] memoized through [`JUPYTER_PROBE_CACHE`].
+fn probe_jupyter_cached(path: &Path) -> bool {
+    if let Some(&cached) = JUPYTER_PROBE_CACHE.lock().unwrap().get(path) {
+        return cached;
+    }
+    // Probe without holding the lock: a spawn under the lock would
+    // block every other engine's availability check. A duplicate
+    // probe from a racing caller is benign (same result, idempotent).
+    let result = probe_jupyter(path);
+    JUPYTER_PROBE_CACHE
+        .lock()
+        .unwrap()
+        .insert(path.to_path_buf(), result);
+    result
+}
 
 /// Read the current value of [`FIND_JUPYTER_CALL_COUNT`].
 pub fn find_jupyter_call_count() -> usize {
@@ -130,6 +178,53 @@ impl JupyterEngine {
     pub fn jupyter_path(&self) -> Option<&Path> {
         self.jupyter_path.as_deref()
     }
+
+    /// Static, construction-free `percent` claims (Plan 7b Phase 5) — the
+    /// same data `file_claims()` returns, callable without `JupyterEngine::
+    /// new()` (which probes `PATH` for the `jupyter` binary). Used by
+    /// `builtin_file_claims()` for discovery's gate 1.
+    ///
+    /// `comment` defaults to `"#"` for every extension except `.q`, which
+    /// uses `/` (Plan 7b Decision 2).
+    pub fn static_file_claims() -> Vec<FileClaim> {
+        vec![
+            FileClaim {
+                extension: "py".to_string(),
+                processor: Some(ProcessorSpec::Percent {
+                    language: "python".to_string(),
+                    comment: "#".to_string(),
+                }),
+            },
+            FileClaim {
+                extension: "jl".to_string(),
+                processor: Some(ProcessorSpec::Percent {
+                    language: "julia".to_string(),
+                    comment: "#".to_string(),
+                }),
+            },
+            FileClaim {
+                extension: "r".to_string(),
+                processor: Some(ProcessorSpec::Percent {
+                    language: "r".to_string(),
+                    comment: "#".to_string(),
+                }),
+            },
+            FileClaim {
+                extension: "q".to_string(),
+                processor: Some(ProcessorSpec::Percent {
+                    language: "q".to_string(),
+                    comment: "/".to_string(),
+                }),
+            },
+            // Plan 7c Phase 2: notebooks route through the native ipynb
+            // content processor (sniff + convert + per-cell SourceInfo),
+            // not the jupyter kernel.
+            FileClaim {
+                extension: "ipynb".to_string(),
+                processor: Some(ProcessorSpec::Ipynb),
+            },
+        ]
+    }
 }
 
 impl Default for JupyterEngine {
@@ -182,7 +277,17 @@ impl ExecutionEngine for JupyterEngine {
     }
 
     fn is_available(&self) -> bool {
-        self.jupyter_path.is_some()
+        // Path presence alone is not enough: probe that the binary
+        // actually runs so a broken jupyter reports unavailable and
+        // jupyter-gated tests skip instead of hard-failing
+        // (bd-1eu34vpy).
+        self.jupyter_path
+            .as_deref()
+            .is_some_and(probe_jupyter_cached)
+    }
+
+    fn file_claims(&self) -> Vec<FileClaim> {
+        Self::static_file_claims()
     }
 
     fn intermediate_files(&self, input_path: &Path) -> Vec<PathBuf> {
@@ -226,6 +331,60 @@ mod tests {
         let files = engine.intermediate_files(Path::new("/project/notebook.qmd"));
         assert_eq!(files.len(), 1);
         assert_eq!(files[0], PathBuf::from("/project/notebook_files"));
+    }
+
+    // --- Plan 7b Phase 5: builtin file claims. ---
+
+    /// `static_file_claims()` (and `file_claims()`, which delegates to it)
+    /// returns the four percent claims plus the ipynb claim (Plan 7c
+    /// Phase 2) — no registry, no engine construction beyond the struct
+    /// literal this test itself makes.
+    #[test]
+    fn static_file_claims_returns_percent_and_ipynb_claims() {
+        let claims = JupyterEngine::static_file_claims();
+        assert_eq!(claims.len(), 5);
+        let by_ext = |ext: &str| claims.iter().find(|c| c.extension == ext).unwrap();
+
+        for (ext, language, comment) in [
+            ("py", "python", "#"),
+            ("jl", "julia", "#"),
+            ("r", "r", "#"),
+            ("q", "q", "/"),
+        ] {
+            let claim = by_ext(ext);
+            assert_eq!(
+                claim.processor,
+                Some(crate::extension::types::ProcessorSpec::Percent {
+                    language: language.to_string(),
+                    comment: comment.to_string(),
+                }),
+                "extension {ext}"
+            );
+        }
+
+        assert_eq!(
+            by_ext("ipynb").processor,
+            Some(crate::extension::types::ProcessorSpec::Ipynb)
+        );
+    }
+
+    /// A percent `.py` converts via the default `markdown_for_file`
+    /// dispatch (native, no jupyter kernel/subprocess) — `JupyterEngine`
+    /// overrides neither `claims_file` nor `markdown_for_file` itself; the
+    /// `file_claims()` override is enough for the trait default to work.
+    #[test]
+    fn py_percent_converts_via_native_dispatch() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("script.py");
+        std::fs::write(&file, "# %% [markdown]\n# hello\n").unwrap();
+
+        let engine = JupyterEngine::new();
+        let runtime: std::sync::Arc<dyn quarto_system_runtime::SystemRuntime> =
+            std::sync::Arc::new(quarto_system_runtime::NativeRuntime::new());
+        let (markdown, _source_info) = engine
+            .markdown_for_file(&file, &runtime)
+            .expect("percent .py must convert via native dispatch");
+        assert_eq!(markdown, "hello\n\n");
     }
 
     #[test]
@@ -318,6 +477,112 @@ mod tests {
                 "try_claims_language must equal claims_language for {lang}"
             );
         }
+    }
+
+    // === bd-1eu34vpy: is_available() must probe a working jupyter ===
+
+    /// Write an executable `jupyter` stub into `dir` and return its
+    /// path. `body` is the script body (batch syntax on Windows, `sh`
+    /// syntax elsewhere) run when the stub is invoked with
+    /// `--version`.
+    fn write_jupyter_stub(dir: &Path, body: &str) -> PathBuf {
+        #[cfg(windows)]
+        {
+            let path = dir.join("jupyter.bat");
+            std::fs::write(&path, format!("@echo off\r\n{body}\r\n")).unwrap();
+            path
+        }
+        #[cfg(not(windows))]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let path = dir.join("jupyter");
+            std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+            path
+        }
+    }
+
+    /// A jupyter stub that exits non-zero (the stale-shim case: the
+    /// name resolves on PATH but the binary is broken) must report
+    /// NOT available, so jupyter-gated tests skip instead of
+    /// hard-failing.
+    #[test]
+    fn is_available_false_for_broken_stub() {
+        let tmp = tempfile::tempdir().unwrap();
+        #[cfg(windows)]
+        let stub = write_jupyter_stub(tmp.path(), "exit /b 1");
+        #[cfg(not(windows))]
+        let stub = write_jupyter_stub(tmp.path(), "exit 1");
+
+        let engine = JupyterEngine {
+            jupyter_path: Some(stub),
+        };
+        assert!(
+            !engine.is_available(),
+            "a jupyter that exits non-zero on `--version` must not be reported available"
+        );
+    }
+
+    /// A jupyter stub that prints a version and exits 0 must report
+    /// available.
+    #[test]
+    fn is_available_true_for_working_stub() {
+        let tmp = tempfile::tempdir().unwrap();
+        #[cfg(windows)]
+        let stub = write_jupyter_stub(tmp.path(), "echo 5.7.0\r\nexit /b 0");
+        #[cfg(not(windows))]
+        let stub = write_jupyter_stub(tmp.path(), "echo 5.7.0\nexit 0");
+
+        let engine = JupyterEngine {
+            jupyter_path: Some(stub),
+        };
+        assert!(
+            engine.is_available(),
+            "a jupyter that answers `--version` with exit 0 must be reported available"
+        );
+    }
+
+    /// The probe result is cached per path, not per engine: the
+    /// registry builds a fresh `JupyterEngine` per render, so two
+    /// engines sharing a path must spawn the binary once. The stub
+    /// appends one line to a counter file on every invocation; the
+    /// calls must produce exactly one line.
+    #[test]
+    fn is_available_probe_runs_at_most_once_per_path() {
+        let tmp = tempfile::tempdir().unwrap();
+        let counter = tmp.path().join("counter.txt");
+        #[cfg(windows)]
+        let stub = write_jupyter_stub(
+            tmp.path(),
+            &format!("echo x>> \"{}\"\r\nexit /b 0", counter.display()),
+        );
+        #[cfg(not(windows))]
+        let stub = write_jupyter_stub(
+            tmp.path(),
+            &format!("echo x >> '{}'\nexit 0", counter.display()),
+        );
+
+        let first = JupyterEngine {
+            jupyter_path: Some(stub.clone()),
+        };
+        let second = JupyterEngine {
+            jupyter_path: Some(stub),
+        };
+        assert!(first.is_available());
+        assert!(first.is_available());
+        assert!(second.is_available());
+
+        // A missing counter file means the stub never ran at all
+        // (e.g. is_available() short-circuits on path presence) —
+        // read as zero invocations so the assertion fails cleanly.
+        let invocations = std::fs::read_to_string(&counter)
+            .unwrap_or_default()
+            .lines()
+            .count();
+        assert_eq!(
+            invocations, 1,
+            "is_available() on engines sharing a path must not re-spawn jupyter (probe result cached per path)"
+        );
     }
 
     // bd-c5u2g: per-process memoization of `find_jupyter`. Pre-fix

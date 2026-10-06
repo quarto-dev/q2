@@ -11,7 +11,7 @@ import {
   incrementalWriteQmd,
   applyNodeEdit,
   parseQmdContentSync,
-  getActorId,
+  getAuthorId,
   regenerateNestedBuffers,
 } from '@quarto/preview-runtime';
 import { pipelineKindForFormat } from '@quarto/preview-runtime';
@@ -888,7 +888,7 @@ export default function ReactPreview({
       {/* Bulb lives in the same bottom-right corner as the error pill; while a
           commit error is showing, the pill replaces the bulb (bulb → idle). */}
       <CommitStatusBulb status={commitError ? 'idle' : commitStatus} />
-      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+      <div style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#f4f4f4' }}>
         {rendered.astJson && (previewState === 'GOOD' || previewState === 'ERROR_FROM_GOOD') ? (
           <ReactRenderer
             astJson={rendered.astJson}
@@ -903,7 +903,7 @@ export default function ReactPreview({
             themeFingerprint={themeFingerprint}
             renderedContent={rendered.renderedContent}
             untransformedAstJson={rendered.untransformedAstJson}
-            currentActor={getActorId()}
+            currentActor={getAuthorId()}
             commentsMode={commentsMode}
             unlockNestingCursor={unlockNestingCursor}
             richText={richText}
@@ -921,11 +921,7 @@ export default function ReactPreview({
               {stripAnsi(currentError.message)}
             </pre>
           </div>
-        ) : (
-          <div style={{ padding: '20px', color: '#666' }}>
-            Loading preview...
-          </div>
-        )}
+        ) : undefined}
       </div>
       {/* Error overlay shown when error occurs after successful render */}
       <PreviewErrorOverlay

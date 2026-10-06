@@ -1,0 +1,70 @@
+---
+title: "Brand File Not Referenced"
+description: "A brand file exists in the project, but no `brand:` key points at it, so it is ignored."
+code: Q-5-37
+subsystem: project
+status: complete
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-37` — Brand file not referenced
+
+> The project contains a brand file, but no `brand:` key is set. The
+> file is ignored, and your colors, fonts, and logos are not applied.
+
+## What this means
+
+Quarto 1 looks for a brand file automatically. If no `brand:` key is
+set, it checks these paths in the project directory:
+
+- `_brand.yml`
+- `_brand.yaml`
+- `_brand/_brand.yml`
+- `_brand/_brand.yaml`
+
+Quarto 2 does not. It applies a brand only when a `brand:` key names
+it. This warning fires when one of those files exists and no `brand:`
+key is set at the top level or under any `format:` entry.
+
+The render succeeds, but without the brand.
+
+## How to fix
+
+Point `brand:` at the file, in `_quarto.yml`:
+
+```yaml
+brand: _brand.yml
+```
+
+For a file in a `_brand/` directory, use its path:
+
+```yaml
+brand: _brand/_brand.yml
+```
+
+To have this added for you, run `qmd-syntax-helper convert -r q-5-37 --in-place <any .qmd in the project>`. It appends the `brand:` line to the project's `_quarto.yml`, choosing the file Quarto 1 would have used. It is not part of `convert --rule all`, because it changes how the project renders.
+
+If the file is not meant to apply to this project, silence the warning:
+
+```yaml
+diagnostics:
+  Q-5-37: off
+```
+
+## Where it is checked
+
+The check runs for each document, on its fully merged metadata. A
+`brand:` set anywhere counts: `_quarto.yml`, an active profile, a
+`_metadata.yml`, or the document's front matter. It looks only at files in the
+project directory, so it also runs for a single file rendered on its own.
+
+`quarto render` prints the warning once, listing the affected documents.
+`quarto preview` shows it for the page being previewed. The check does not run
+in the browser-based editor, which cannot reliably see non-document project
+files.
+
+`qmd-syntax-helper` approximates the same check when it adds the key. It
+understands `_quarto.yml`, `_metadata.yml`, and front matter, but not profile
+overlays.

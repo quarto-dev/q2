@@ -30,6 +30,7 @@ website:
           contents:
             - guides/authoring/index.qmd
             - guides/projects/create.qmd
+            - guides/projects/book.qmd
             - guides/projects/preview.qmd
             - guides/projects/paths.qmd
             - guides/projects/listings.qmd
@@ -48,6 +49,7 @@ website:
             - guides/publishing/index.qmd
             - guides/formats/epub/index.qmd
             - guides/formats/typst/index.qmd
+            - guides/formats/pandoc/index.qmd
     - id: Authoring
       collapse-level: 1
       contents:
@@ -67,6 +69,7 @@ website:
             - guides/authoring/scholarly-writing.qmd
             - guides/authoring/document-language.qmd
             - guides/authoring/computations.qmd
+            - guides/authoring/notebooks.qmd
             - guides/authoring/engines.qmd
             - guides/authoring/navigation.qmd
             - guides/authoring/extensions.qmd
@@ -166,6 +169,10 @@ website:
             - errors/markdown/Q-2-50.qmd
             - errors/markdown/Q-2-51.qmd
             - errors/markdown/Q-2-52.qmd
+            - errors/markdown/Q-2-53.qmd
+            - errors/markdown/Q-2-54.qmd
+            - errors/markdown/Q-2-55.qmd
+            - errors/markdown/Q-2-56.qmd
         - section: "writer"
           contents:
             - errors/writer/Q-3-1.qmd
@@ -302,6 +309,13 @@ website:
             - errors/project/Q-5-28.qmd
             - errors/project/Q-5-29.qmd
             - errors/project/Q-5-30.qmd
+            - errors/project/Q-5-31.qmd
+            - errors/project/Q-5-32.qmd
+            - errors/project/Q-5-33.qmd
+            - errors/project/Q-5-34.qmd
+            - errors/project/Q-5-35.qmd
+            - errors/project/Q-5-36.qmd
+            - errors/project/Q-5-37.qmd
         - section: "include"
           contents:
             - errors/include/Q-17-1.qmd
@@ -336,6 +350,7 @@ website:
         - section: "crossref"
           contents:
             - errors/crossref/Q-15-1.qmd
+            - errors/crossref/Q-15-2.qmd
         - section: "extension"
           contents:
             - errors/extension/Q-16-1.qmd
@@ -354,6 +369,7 @@ website:
           contents:
             - errors/engine/Q-18-1.qmd
             - errors/engine/Q-18-2.qmd
+            - errors/engine/Q-18-3.qmd
         - section: "image"
           contents:
             - errors/image/Q-19-1.qmd
@@ -375,6 +391,7 @@ website:
             - errors/typst/Q-21-1.qmd
             - errors/typst/Q-21-2.qmd
             - errors/typst/Q-21-3.qmd
+            - errors/typst/Q-21-4.qmd
         - section: "math"
           contents:
             - errors/math/Q-22-1.qmd
@@ -390,6 +407,9 @@ website:
             - errors/math/Q-22-11.qmd
             - errors/math/Q-22-12.qmd
             - errors/math/Q-22-13.qmd
+        - section: "citeproc"
+          contents:
+            - errors/citeproc/Q-23-1.qmd
 
 format:
   html:

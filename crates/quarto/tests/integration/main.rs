@@ -2,6 +2,7 @@
 //! See bd-xvdop / claude-notes/plans/2026-05-28-integration-test-consolidation.md.
 
 pub mod attribution_cli_e2e;
+pub mod book_docx_diagnostic_e2e;
 pub mod bootstrap_sh;
 pub mod brand_font_weight;
 pub mod build_ts_extension_e2e;
@@ -17,6 +18,7 @@ pub mod founding_crash_config_span_e2e;
 pub mod get_config_cli;
 pub mod json_errors;
 pub mod jupyter_kernel_cleanup_e2e;
+pub mod nested_projects_cli;
 pub mod nightly_gate;
 pub mod preview_cli;
 pub mod preview_static_e2e;
@@ -33,6 +35,7 @@ pub mod strict_mode;
 pub mod theme_compile_error;
 pub mod theme_missing_file;
 pub mod trace_cli;
+pub mod typst_html_table_css;
 pub mod unknown_project_type;
 pub mod use_brand;
 pub mod version_cli;

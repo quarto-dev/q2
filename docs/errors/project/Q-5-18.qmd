@@ -1,6 +1,6 @@
 ---
 title: "Project type not yet implemented"
-description: "`project.type: book` or `manuscript` is accepted for forward compatibility but renders with default-project behavior."
+description: "`project.type: manuscript` is accepted for forward compatibility but renders with default-project behavior."
 code: Q-5-18
 subsystem: project
 status: stub
@@ -11,42 +11,45 @@ categories:
 
 # `Q-5-18` — Project type not yet implemented
 
-> `project.type: book` or `manuscript` is accepted for forward
-> compatibility but renders with default-project behavior.
+> `project.type: manuscript` is accepted for forward compatibility but
+> renders with default-project behavior.
 
 ## What this means
 
-Quarto 1 supports `book` and `manuscript` project types. Quarto 2 does
-not implement them yet.
+Quarto 1 supports a `manuscript` project type. Quarto 2 does not
+implement it yet. (`book` projects are implemented — see the
+[book projects guide](../../guides/projects/book.qmd) — so this
+warning no longer applies to them.)
 
-The type name is still accepted, so a Quarto 1 project does not fail
-outright on it. But nothing implements the behavior: your documents
-render individually, with no book structure, no chapter navigation, no
-combined single-file output, and no manuscript layout.
+The type name is still accepted, so a Quarto 1 manuscript project does
+not fail outright on it. But nothing implements the behavior: your
+documents render individually, without manuscript-specific structure
+such as notebook linking or MECA packaging.
 
 The render succeeds. The output is a set of standalone HTML documents
-rather than a book.
+rather than a manuscript.
 
 ## Why this happens
 
-- **A Quarto 1 book or manuscript project** rendered with Quarto 2.
-- **A project started from a Quarto 1 template.**
+- **A Quarto 1 manuscript project** rendered with Quarto 2.
+- **A project started from a Quarto 1 manuscript template.**
 
 Nothing is wrong with the configuration — the warning reports a gap in
 this Quarto version.
 
 ## How to fix
 
-There is no configuration that makes book or manuscript behavior work
-in this version. Your options are:
+There is no configuration that makes manuscript behavior work in this
+version. Your options are:
 
-**Keep using Quarto 1 for this project.** For a book that depends on
-chapter navigation and combined output, this is the practical answer
-today.
+**Keep using Quarto 1 for this project.** For a manuscript that
+depends on notebook linking or MECA packaging, this is the practical
+answer today.
 
 **Switch to `website`** if what you need is mainly navigation between
 documents. A website project gives you a sidebar, search, and
-cross-document links, which covers a good deal of what a book provides:
+cross-document links, which covers a good deal of what a manuscript
+provides:
 
 ```yaml
 project:
@@ -60,10 +63,10 @@ website:
       - chapter-02.qmd
 ```
 
-You lose combined single-file output and automatic chapter numbering.
+You lose manuscript-specific notebook linking and packaging.
 
 **Leave it as is.** The configuration stays valid, and the warning
-disappears when the type is implemented.
+disappears when manuscript is implemented.
 
 ## Related errors
 

@@ -44,7 +44,7 @@ use quarto_core::resource_resolver::ResourceResolverContext;
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
 fn canonical(path: &std::path::Path) -> PathBuf {
-    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+    quarto_system_runtime::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 fn write(path: &std::path::Path, contents: &str) {
@@ -124,6 +124,7 @@ impl ProjectType for CountingProjectType {
         &self,
         _project: &mut ProjectContext,
         _index: &ProjectIndex,
+        _runtime: &dyn SystemRuntime,
     ) -> quarto_core::Result<()> {
         self.pre_calls.fetch_add(1, Ordering::SeqCst);
         Ok(())
@@ -211,8 +212,9 @@ impl ProjectType for CountingProjectTypeWrapper {
         &self,
         p: &mut ProjectContext,
         i: &ProjectIndex,
+        r: &dyn SystemRuntime,
     ) -> quarto_core::Result<()> {
-        self.inner.pre_render(p, i).await
+        self.inner.pre_render(p, i, r).await
     }
     async fn post_render(
         &self,
@@ -241,6 +243,7 @@ impl ProjectType for FailingPreRender {
         &self,
         _p: &mut ProjectContext,
         _i: &ProjectIndex,
+        _r: &dyn SystemRuntime,
     ) -> quarto_core::Result<()> {
         Err(QuartoError::other(
             "deliberate failure from test pre_render",
@@ -345,6 +348,7 @@ impl ProjectType for IndexObserver {
         &self,
         _p: &mut ProjectContext,
         index: &ProjectIndex,
+        _runtime: &dyn SystemRuntime,
     ) -> quarto_core::Result<()> {
         // Record profile source paths so the test can verify the
         // index the driver built.

@@ -116,10 +116,10 @@ export type {
 
 // Export utilities
 export { computeSHA256 } from './hash.js';
-export { exportProjectAsZip } from './export-zip.js';
+export { exportProjectAsZip, exportFolderAsZip } from './export-zip.js';
 export { parseProjectZip } from './import-zip.js';
 export { projectFolderName } from './project-folder-name.js';
 
 // Export replay API
 export { createReplaySession } from './replay.js';
-export type { ReplaySession, ChangeMetadata } from './replay.js';
+export type { ReplaySession, ReplayStepMetadata } from './replay.js';

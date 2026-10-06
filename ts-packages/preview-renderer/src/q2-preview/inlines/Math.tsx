@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import katex from 'katex';
 import type { MathInline, NodeArgs } from '../../framework';
 
@@ -20,14 +20,25 @@ import type { MathInline, NodeArgs } from '../../framework';
 export const Math = memo(({ node }: NodeArgs<MathInline>) => {
     const [{ t: mathType }, latex] = node.c;
     const isDisplayMath = mathType === 'DisplayMath';
-    try {
-        const html = katex.renderToString(latex, {
-            displayMode: isDisplayMath,
-            throwOnError: false,
-            output: 'html',
-        });
-        return <span dangerouslySetInnerHTML={{ __html: html }} />;
-    } catch {
+    // Memoized per (latex, mode): `memo` above only skips when `node` is
+    // referentially equal, and every new AST rebuilds nodes. React 19 re-sets
+    // innerHTML whenever the object identity changes, so without this the
+    // KaTeX DOM would be torn down and rebuilt on every preview re-render.
+    const innerHtml = useMemo(() => {
+        try {
+            return {
+                __html: katex.renderToString(latex, {
+                    displayMode: isDisplayMath,
+                    throwOnError: false,
+                    output: 'html',
+                }),
+            };
+        } catch {
+            return null;
+        }
+    }, [latex, isDisplayMath]);
+    if (innerHtml === null) {
         return <span>{latex}</span>;
     }
+    return <span dangerouslySetInnerHTML={innerHtml} />;
 });

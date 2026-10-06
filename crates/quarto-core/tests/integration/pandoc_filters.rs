@@ -244,7 +244,11 @@ fn test_shim_group_shape_and_patch_markers() {
         .expect("main.lua not found in FILTERS_DIR");
     let content = std::str::from_utf8(main_lua.contents()).expect("main.lua is not valid UTF-8");
 
-    let marker_count = content.matches("QUARTO2-PATCH").count();
+    // The shortcodes flag-gate (bd-2uva9urq) is an unrelated QUARTO2-PATCH
+    // that has nothing to do with the shim group boundaries; this test only
+    // covers the shim's two markers.
+    let is_shim_marker = |l: &str| l.contains("QUARTO2-PATCH") && !l.contains("bd-2uva9urq");
+    let marker_count = content.lines().filter(|l| is_shim_marker(l)).count();
     assert_eq!(
         marker_count, 2,
         "expected exactly two QUARTO2-PATCH markers (import region + tappend region), got {marker_count}"
@@ -257,7 +261,7 @@ fn test_shim_group_shape_and_patch_markers() {
     let marker_line_indices: Vec<usize> = lines
         .iter()
         .enumerate()
-        .filter(|(_, l)| l.contains("QUARTO2-PATCH"))
+        .filter(|(_, l)| is_shim_marker(l))
         .map(|(idx, _)| idx)
         .collect();
     assert_eq!(marker_line_indices.len(), 2);

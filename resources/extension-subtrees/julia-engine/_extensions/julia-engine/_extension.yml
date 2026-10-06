@@ -1,0 +1,23 @@
+title: Quarto Julia Engine Extension
+version: 0.2.2
+quarto-required: ">=1.9.0"
+contributes:
+  engines:
+    - path: julia-engine.js
+      # Static engine declarations for Quarto 2's pass-1 engine resolution:
+      # they let Quarto 2 resolve `{julia}` cells and `.jl` files to this
+      # engine WITHOUT loading the engine module. Quarto 1's external-engine
+      # schema currently rejects these keys (`closed: true`); a quarto-cli
+      # schema change to accept-and-ignore them is a prerequisite for merging
+      # this to main. Note `file-extensions` is a per-engine declaration in
+      # Quarto 2, not a transcription of Q1's global `validExtensions` gate.
+      name: julia
+      claims:
+        julia:
+          kind: primary
+          priority: 1
+      file-extensions:
+        - .jl
+      claims-files:
+        - extension: .jl
+          processor: { name: percent, language: julia }

@@ -399,8 +399,9 @@ pub fn resolve_single_file_deps(
     // the failure is deliberately ignored.
     let _ = expand_document_includes(&mut doc, &mut ctx);
 
-    let canonical_root = project_root
-        .canonicalize()
+    // Spelled through the shared function: `expand_patterns` below checks
+    // containment against runtime-canonical matches.
+    let canonical_root = quarto_system_runtime::canonicalize(project_root)
         .unwrap_or_else(|_| project_root.to_path_buf());
 
     // Re-express a canonical absolute path as project-root-relative, keeping
@@ -420,7 +421,7 @@ pub fn resolve_single_file_deps(
     let mut qmd_files: Vec<PathBuf> = Vec::new();
     let mut seen_qmd = std::collections::HashSet::new();
     for entry in &doc.recorded_includes {
-        let Ok(canon) = entry.path.canonicalize() else {
+        let Ok(canon) = quarto_system_runtime::canonicalize(&entry.path) else {
             continue;
         };
         if let Some(rel) = to_in_tree_rel(canon)
@@ -444,7 +445,9 @@ pub fn resolve_single_file_deps(
         if !quarto_hub::resource::is_binary_extension(ext) {
             continue;
         }
-        let Ok(canon) = project_root.join(deck_dir).join(&url).canonicalize() else {
+        let Ok(canon) =
+            quarto_system_runtime::canonicalize(&project_root.join(deck_dir).join(&url))
+        else {
             continue;
         };
         if let Some(rel) = to_in_tree_rel(canon)
@@ -533,7 +536,7 @@ pub fn resolve_single_file_deps(
                 Some(rest) => project_root.join(rest),
                 None => project_root.join(deck_dir).join(&raw),
             };
-            let Ok(canon) = joined.canonicalize() else {
+            let Ok(canon) = quarto_system_runtime::canonicalize(&joined) else {
                 continue;
             };
             if let Some(rel) = to_in_tree_rel(canon)

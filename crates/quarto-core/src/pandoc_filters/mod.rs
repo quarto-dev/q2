@@ -21,6 +21,7 @@ pub mod meta_coerce;
 pub mod params;
 pub mod params_codec;
 pub mod typst_brand;
+pub mod typst_highlight;
 pub mod typst_params;
 pub mod version;
 

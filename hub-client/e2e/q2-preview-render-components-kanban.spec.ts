@@ -39,7 +39,7 @@ const qmdContent = readFileSync(resolve(FIXTURE_DIR, 'render-components-kanban.q
 const tsxContent = readFileSync(resolve(FIXTURE_DIR, 'kanban.tsx'), 'utf-8');
 const quartoYmlContent = readFileSync(resolve(FIXTURE_DIR, '_quarto.yml'), 'utf-8');
 
-const TEST_ACTOR_ID = 'e2e7e1f02a30000000000000000007e2';
+const TEST_AUTHOR_ID = 'e2e7e1f02a30000000000000000007e2';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -67,8 +67,8 @@ test.describe('q2-preview render-components-kanban', () => {
 
     test.beforeEach(async ({ page }, testInfo) => {
         await page.addInitScript((id) => {
-            (window as any).__QUARTO_TEST_ACTOR_ID__ = id;
-        }, TEST_ACTOR_ID);
+            (window as any).__QUARTO_TEST_AUTHOR_ID__ = id;
+        }, TEST_AUTHOR_ID);
         if (testInfo.workerIndex > 0) await page.waitForTimeout(1000);
     });
 

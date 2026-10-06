@@ -93,6 +93,11 @@ pub enum ResolutionContext {
     Block,
     /// Shortcode is inline among other content — must return Inlines
     Inline,
+    /// Shortcode sits in a plain-text field (link/image target, attribute
+    /// value, code text) — Lua handlers see context `"text"` and may
+    /// return a bare string, which is what makes `![]({{< placeholder >}})`
+    /// yield a usable `src`. Built-in handlers treat it like `Inline`.
+    Text,
 }
 
 /// Trait for shortcode handlers.
@@ -805,6 +810,7 @@ async fn dispatch_lua_shortcode(
     let call_ctx = match resolution_ctx {
         ResolutionContext::Block => pampa::lua::ShortcodeCallContext::Block,
         ResolutionContext::Inline => pampa::lua::ShortcodeCallContext::Inline,
+        ResolutionContext::Text => pampa::lua::ShortcodeCallContext::Text,
     };
     match engine.call(&shortcode.name, &args, call_ctx).await {
         Some(result) => lua_result_to_shortcode_result(result, ctx.source_info),
@@ -1123,12 +1129,20 @@ fn stamp_block(block: &mut Block, name: &str, token_arc: &Arc<SourceInfo>) {
             }
         }
         // Leaves — no nested AST to walk.
+        Block::NoteDefinitionPara(def) => {
+            for child in def.content.iter_mut() {
+                stamp_inline(child, name, token_arc);
+            }
+        }
+        Block::NoteDefinitionFencedBlock(def) => {
+            for child in def.content.iter_mut() {
+                stamp_block(child, name, token_arc);
+            }
+        }
         Block::CodeBlock(_)
         | Block::RawBlock(_)
         | Block::HorizontalRule(_)
         | Block::BlockMetadata(_)
-        | Block::NoteDefinitionPara(_)
-        | Block::NoteDefinitionFencedBlock(_)
         | Block::CaptionBlock(_) => {}
     }
 }
@@ -1512,7 +1526,7 @@ async fn expand_text_segments(
                     .dispatch_shortcode(
                         &shortcode,
                         &ctx,
-                        ResolutionContext::Inline,
+                        ResolutionContext::Text,
                         lua_engine,
                         diagnostics,
                     )
@@ -1891,6 +1905,23 @@ fn resolve_block<'a>(
             // Text contexts — Q1 substitutes shortcodes textually in
             // code and raw text (`apply_code_shortcode`; bd-fz6gwfq0).
             Block::CodeBlock(code_block) => {
+                // Q1 expands no code-block attribute values, with one
+                // exception in effect: `lst-cap` becomes the listing
+                // caption (parsed after this pass by
+                // `FloatRefTargetSugarTransform`), where Q1 expands
+                // shortcodes. Expand just that value (bd-xjg7vl6c).
+                if let Some(cap) = code_block.attr.2.get_mut("lst-cap") {
+                    expand_text_in_place(
+                        cap,
+                        transform,
+                        metadata,
+                        &code_block.source_info,
+                        diagnostics,
+                        lua_engine,
+                        UnhandledInclude::Report,
+                    )
+                    .await;
+                }
                 if !code_shortcode_opt_out(&code_block.attr) {
                     expand_text_in_place(
                         &mut code_block.text,
@@ -1916,12 +1947,32 @@ fn resolve_block<'a>(
                 )
                 .await;
             }
+            // Footnote definitions (`[^id]: …` and the fenced `::: ^id`
+            // form) become `Inline::Note`s in `FootnotesTransform`, which
+            // runs after this pass and moves the content over unchanged,
+            // so they must be resolved here (bd-xjg7vl6c).
+            Block::NoteDefinitionPara(def) => {
+                resolve_inlines(
+                    &mut def.content,
+                    transform,
+                    metadata,
+                    diagnostics,
+                    lua_engine,
+                )
+                .await;
+            }
+            Block::NoteDefinitionFencedBlock(def) => {
+                resolve_blocks(
+                    &mut def.content,
+                    transform,
+                    metadata,
+                    diagnostics,
+                    lua_engine,
+                )
+                .await;
+            }
             // These blocks don't contain inlines that could have shortcodes
-            Block::HorizontalRule(_)
-            | Block::BlockMetadata(_)
-            | Block::NoteDefinitionPara(_)
-            | Block::NoteDefinitionFencedBlock(_)
-            | Block::CaptionBlock(_) => {}
+            Block::HorizontalRule(_) | Block::BlockMetadata(_) | Block::CaptionBlock(_) => {}
         }
     })
 }
@@ -2882,10 +2933,12 @@ mod tests {
                         source_info: SourceInfo::for_test(),
                     },
                 )]),
-                ResolutionContext::Inline => ShortcodeResult::Inlines(vec![Inline::Str(Str {
-                    text: "inline-fallback".to_string(),
-                    source_info: SourceInfo::for_test(),
-                })]),
+                ResolutionContext::Inline | ResolutionContext::Text => {
+                    ShortcodeResult::Inlines(vec![Inline::Str(Str {
+                        text: "inline-fallback".to_string(),
+                        source_info: SourceInfo::for_test(),
+                    })])
+                }
             }
         }
     }

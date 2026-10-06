@@ -1,0 +1,52 @@
+---
+title: "Format Not Supported by Book Projects"
+description: "Book projects render only to formats with book support (`html`, `typst`, `epub`)."
+code: Q-5-33
+subsystem: project
+status: complete
+since: "99.9.9"
+categories:
+  - project
+---
+
+# `Q-5-33` — Format not supported by book projects
+
+> Book projects render only to formats with book support.
+
+## What this means
+
+A book project is not a bag of independent documents: chapters are
+numbered as one sequence, cross-references resolve across chapters,
+and single-file formats merge every chapter into one continuous
+document. Only formats that implement that machinery can render a
+book. In this version of Quarto those are:
+
+- **`html`** — each chapter renders as its own page (multi-file).
+- **`typst`** — chapters merge into a single compiled PDF.
+- **`epub`** — chapters merge into a single e-book.
+
+The format you asked for is not one of these, so the render is
+rejected rather than silently producing disconnected per-chapter
+files with no book structure.
+
+## Why this happens
+
+- **`--to docx` or `--to pptx` on a book.** Quarto 1 produced one
+  disconnected file per chapter for these formats — no shared
+  numbering, no cross-chapter references — which Quarto 2 treats as
+  "not a book format" rather than reproducing.
+- **A format listed under `format:` in the book's `_quarto.yml`**
+  that has no book support.
+
+## How to fix
+
+Render to a supported format:
+
+```bash
+q2 render my-book --to html
+q2 render my-book --to typst
+q2 render my-book --to epub
+```
+
+If you need the chapters as standalone DOCX files, render the
+individual chapter documents directly rather than the book project.

@@ -1,0 +1,13 @@
+Unparseable R: matchable falls back to "everything matchable".
+
+```{r}
+x <- "line one
+```
+
+looks like a doc line but is inside a string
+
+```{r}
+line three"
+foo(1, 2
+```
+

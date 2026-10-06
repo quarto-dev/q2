@@ -274,6 +274,7 @@ fn full_params_json() -> String {
         Some(&registry),
         &language,
         PathBuf::from("/dev/null"),
+        PathBuf::from("/dev/null/mediabag"),
     )
     .build();
     blob.to_string()
@@ -396,6 +397,7 @@ fn test_built_blob_decodes_inside_pandoc() {
         Some(&registry),
         &language,
         PathBuf::from("/dev/null"),
+        PathBuf::from("/dev/null/mediabag"),
     )
     .with_contributor(Box::new(SentinelContributor(sentinel.clone())))
     .build();
@@ -1038,6 +1040,7 @@ fn build_smoke_ast_and_params(sentinel: Option<&str>) -> (String, String) {
         Some(&registry),
         &language,
         PathBuf::from("/dev/null"),
+        PathBuf::from("/dev/null/mediabag"),
     );
     if let Some(sentinel) = sentinel {
         builder = builder.with_contributor(Box::new(SentinelContributor(sentinel.to_string())));

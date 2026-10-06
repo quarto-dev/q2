@@ -87,6 +87,17 @@
   (edit_comment)
 ] @markup.comment
 
+; --- Block-level editorial marks (`::: ++`, `::: --`, `::: >>`, `::: !!`) -----
+; Only the marker: the body is ordinary blocks (possibly code cells, whose
+; interior must stay uncovered), so the whole node is not captured.
+(editorial_div
+  [
+    (insert_delimiter)
+    (delete_delimiter)
+    (edit_comment_delimiter)
+    (highlight_delimiter)
+  ] @punctuation.special)
+
 ; --- Fenced code: delimiter + info string (interior left to zone 3) ----------
 (fenced_code_block_delimiter) @punctuation.delimiter.fence
 (info_string) @markup.raw.info

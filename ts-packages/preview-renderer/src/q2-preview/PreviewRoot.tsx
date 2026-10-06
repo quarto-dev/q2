@@ -146,8 +146,9 @@ export interface PreviewRootProps {
     /** Phase F.1: monotonic epoch — scroll fires when this advances. */
     pendingAnchorEpoch?: number;
     /**
-     * Reactji-authorship demo (2026-05-25 plan): viewer's Automerge
-     * actor id, provided via `CurrentActorContext` to user TSX.
+     * Reactji-authorship demo (2026-05-25 plan): viewer's attribution
+     * key (automerge author id; bare actor id only for pre-transition
+     * history), provided via `CurrentActorContext` to user TSX.
      */
     currentActor?: string | null;
     onNavigateToDocument?: (path: string, anchor: string | null) => void;

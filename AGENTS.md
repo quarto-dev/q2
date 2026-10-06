@@ -58,14 +58,7 @@ braid stores all issues for the project in a **skein** (a single
 [automerge](https://automerge.org) CRDT document); a single issue is a
 **strand**. The skein — synced through a sync server — is the **source of
 truth**. There is no git involvement and no `.beads/`-style JSONL to commit:
-edits converge through the CRDT, not through merge tooling. (We migrated off
-beads_rust on 2026-06-08; see `claude-notes/plans/2026-06-08-braid-migration.md`.)
-
-**`braid` is non-invasive and never executes git commands.** Unlike the old
-`br sync --flush-only; git add .beads/` dance, there is **nothing to commit**
-after issue work — the skein syncs itself. (A `.braid/snapshot.jsonl` backup
-*is* committed periodically, but it is **backup-only and one-directional** —
-see the snapshot policy below. Never `braid import` it back.)
+edits converge through the CRDT, not through merge tooling.
 
 For the authoritative, version-matched command guide, run `braid agents-info`
 (or invoke the `/braid` skill). The quick reference below is a convenience
@@ -89,20 +82,6 @@ As you work through a plan:
 2. **Check off items** by changing `- [ ]` to `- [x]`
 3. **Keep the plan file current** - it serves as both a roadmap and progress tracker
 4. **Add new items** if you discover additional work during implementation
-
-### Excerpt from a simple Plan File
-
-```markdown
-...
-
-## Work Items
-
-- [x] Review current runtime service implementations
-- [x] Identify common patterns
-- [ ] Update StandalonePlatform to use shared base
-- [ ] Update tests
-- [ ] Update documentation
-```
 
 ### When to Use Plan Files
 
@@ -146,15 +125,6 @@ braid show <id> --json
 # Backup snapshot (one-directional — see snapshot policy; NEVER import it back)
 braid export > .braid/snapshot.jsonl
 ```
-
-Notes on the move from beads:
-- **No explicit `--id`.** braid assigns collision-free ids; with a CRDT,
-  parallel workers never need to pre-agree on ids. (The migration *preserved*
-  every existing `bd-XXXX` id via `braid import`, so source references stay
-  valid.)
-- **No `br create -f <file>` bulk create.** Use `braid import <jsonl>` for bulk.
-- **No `br sync --flush-only` / `git add .beads/`.** The skein is the source of
-  truth; there is nothing to commit after issue work.
 
 ### Workflow
 
@@ -202,10 +172,6 @@ strand unready while their target is active. `parent-child` does **not** block
 the child (children stay workable); instead an open child blocks the *parent's*
 close. `related`/`discovered-from` and the rest are informational.
 
-> Note: this differs subtly from beads, where `parent-child` could make a child
-> read as blocked. In braid the child is always workable and the parent refuses
-> to close while children are open — the intended epic semantics.
-
 ### Snapshot backup policy (READ THIS)
 
 The skein (automerge CRDT) is the **single source of truth**. We additionally
@@ -222,9 +188,6 @@ greppable in PRs, diffable in git history, and recoverable. This snapshot is
   branch may show strand state created on another — "cross-branch
   contamination" is expected and fine, because the snapshot is not the truth.)
 - The snapshot lives on whatever work branch you're on; it is not special.
-
-The only time JSONL is ever imported is the **one-time migration** (beads'
-`.beads/issues.jsonl` → braid), which is already done.
 
 ## Where information lives (memory vs. repo)
 
@@ -289,7 +252,7 @@ When fixing ANY bug:
 ### `crates/` - all Rust crates in the workspace
 
 **Binaries:**
-- `quarto`: main entry point for the `quarto` command line binary (includes `quarto hub` subcommand)
+- `quarto`: main entry point for the `q2` command line binary (includes `quarto hub` subcommand)
 - `hub`: collaborative editing server for Quarto projects (also available as `quarto hub`)
 - `pampa`: parse qmd text and produce Pandoc AST and other formats
 - `qmd-syntax-helper`: help users convert qmd files to the new syntax
@@ -463,12 +426,6 @@ Tests passing is **necessary but not sufficient** to declare a feature complete.
 
 If you cannot test a feature end-to-end (e.g. no access to a browser for a hub-client change), **say so explicitly** rather than claiming success based on unit tests alone. "Tests pass, I did not verify the real render path" is a valid and honest status update.
 
-**Why this matters:** tests verify the contract the test author had in mind. Real invocations verify the contract the user is relying on. These are not the same thing.
-
-Past incidents where they diverged:
-- **2026-04-20**: `CodeHighlightStage` never ran under `quarto render` because the CLI path used a different branch of `render_qmd_to_html` than the tests. Every test passed; no rendered document had highlighting. See `claude-notes/plans/2026-04-19-syntax-highlighting-design.md` ("Phase 2 post-mortem") and the process-improvement plan at `claude-notes/plans/2026-04-20-end-to-end-verification-process.md`.
-- **2026-05-20**: `q2 preview` silently served a stale render after Rust changes to `quarto-core`. `cargo build --bin q2` succeeded and the preview *ran*, but the iframe loaded a WASM image built before the changes — the embedded SPA's `wasm-quarto-hub-client_bg.wasm` is only refreshed when the WASM is rebuilt explicitly. See **Verifying Rust changes in `q2 preview`** below.
-
 ## Verifying Rust changes in `q2 preview`
 
 `q2 preview` embeds the SPA bundle at `q2-preview-spa/dist/` into the
@@ -549,7 +506,6 @@ leg whose binary reports a placeholder or a foreign commit. Design:
 ## Build Commands
 
 - WASM build: `npm run build:all` (NOT `cargo build --target wasm32-unknown-unknown`)
-- Always verify WASM changes with the correct build command
 - Fresh clone builds require dist/ directories to exist; run full build before testing
 
 ## Cutting a release
@@ -597,9 +553,7 @@ cargo xtask verify --e2e                # Include slower e2e browser tests
 **Keep `verify` and CI in sync: when you add a gating step to a CI
 workflow, add its `cargo xtask verify` counterpart in the same commit.**
 `verify` is the local mirror of CI, and nothing reconciles the two
-automatically. The CSS lint was wired into `ts-test-suite.yml` twelve days
-before it reached `verify`; in between, PR #667 passed the full local gate
-and failed both CI legs on a `margin-left: 0` (bd-4bu7vwi5). Known
+automatically. Known
 remaining drift is tracked as bd-l7mcijfe (Node-only test suites) and
 bd-ya2nacaa (legs needing Deno / wasm32 / the hub binary). The release
 pipeline (`release-pipeline.yml`, called by `release.yml` and the
@@ -619,16 +573,34 @@ cargo xtask lint --verbose # Show all files being checked
 cargo xtask lint --quiet   # Only show errors
 ```
 
-### Current Lint Rules
+Rules live in `crates/xtask/src/lint/`; each module's doc comment is the
+authoritative spec (what it flags, why, scope limits, history). What you must
+do when authoring code:
 
-- **external-sources-in-macro**: Detects references to `external-sources/` in compile-time macros like `include_dir!`, `include_str!`, `include_bytes!`. These break builds because `external-sources/` is not version-controlled.
-- **add-file-with-id**: Restricts `SourceContext::add_file_with_id` to blessed modules (`config_sources.rs`, `metadata_merge.rs`, `span_assert.rs`, plus two temporarily-blessed files pending PR #478 / bd-x113wg9v). The API pairs an arbitrary FileId with arbitrary content; binding an *assumed* file to a diagnostic's resolved id renders byte offsets against the wrong text (bd-m6wmztln). Use `quarto_core::config_sources::bind_config_source` instead. Test code is skipped. Suppress a provably-safe use with `// lint:allow(add-file-with-id)` on the line or the line above, with a reason. Introduced with bd-jrq4hroi (audit: bd-nv4p0eb1).
-- **error-docs-page-missing**: Every code in `crates/quarto-error-catalog/error_catalog.json` must have a page at `docs/errors/<subsystem>/<code>.qmd`, and its `docs_url` must be `https://quarto.org/docs/errors/<subsystem>/<code>`. Diagnostics print the `docs_url` unconditionally, so a code without a page ships a 404 — which happened repeatedly (28 codes had accumulated by 2026-08-11, each added by a feature PR that stopped at the catalog). **When you add an error code, add its page in the same commit**; see `docs/errors/README.md` for the template. This is a *repo-level* rule — unlike the others here it reconciles whole trees rather than grepping one Rust file, and it anchors violations at the catalog entry's line. Orphan/misplaced pages and front-matter drift are deliberately out of scope (bd-8otua's `cargo xtask error-docs` audit owns those); a page `title` may differ from the catalog `title`. Introduced with bd-u2qj4y29.
-- **error-docs-sidebar-unlisted**: Every page under `docs/errors/<subsystem>/` must be referenced by an entry in the errors sidebar in `docs/_quarto.yml`, and every sidebar entry must point at a page that exists. The sidebar enumerates all ~214 pages **by hand** — a deliberate v1 choice (`claude-notes/plans/2026-05-22-error-docs-foundation.md` §"Navbar + sidebar wiring") that nothing enforced, so it drifted to 153 of the 211 pages then present, with `crossref` and `extension` having no `- section:` block at all — every `Q-15-*` and `Q-16-*` page unreachable by navigation. `error-docs-page-missing` does not catch this: it checks page *existence* and `docs_url`, not sidebar membership. **When you add an error page, add its sidebar entry in the same commit.** It also requires **entries within a `- section:` block to ascend by code number** (`Q-1-2` before `Q-1-10`), so the sidebar reads in code order rather than drifting to lexicographic as entries are appended. **Section order is deliberately not policed** — the 13 historical sections stay in their arbitrary order (`yaml, markdown, writer, listing, xml, cli, navigation, template, project, include, internal, theme, lua`, with `crossref` and `extension` appended), because no canonical section order has been agreed. Like `error-docs-page-missing` this is a *repo-level* rule; unlisted-page violations anchor at the `- id: errors` line, stale entries and out-of-order entries at their own line. Ordering the error *index* (the listing at `docs/errors/index.qmd`) by code number is a separate unsolved problem — bd-otmqu; it needs custom front-matter fields to reach listing items, and neither Q2 nor Q1 has a numeric-aware build-time comparator. Introduced with bd-wcmk1fsq.
-- **metadata-as-str**: Detects `meta.get("key")…as_str()` reads of document metadata. A bare YAML string in front-matter context is stored as `ConfigValueKind::PandocInlines`, for which `ConfigValue::as_str()` returns `None` — silently dropping the option. Use `as_plain_text()` instead (handles both `Scalar(String)` and `PandocInlines`). Only flags chains whose `.get(<string literal>)` receiver is a metadata expression (final identifier `meta`/`metadata`); internal map reads and test code are skipped. Suppress a deliberate scalar-only read with a `// lint:allow(metadata-as-str)` comment on the line or the line above. Introduced with bd-y89ihf0i.
-- **ci-test-suite-unwired**: Every npm-workspace package with a `test` script must be run by a step in `.github/workflows/ts-test-suite.yml` or `.github/workflows/hub-client-e2e.yml`, or be listed in `EXCUSED` in `crates/xtask/src/lint/ci_test_wiring.rs` with a reason and a tracking strand. CI ran only `hub-client` and `engine-host-deno` for months while ~2,000 assertions across a dozen packages sat outside the merge gate — long enough for a KaTeX class rename to redden `preview-renderer` on `main` unnoticed (GH #250). Nothing reconciled "packages that have tests" against "packages CI runs"; this rule is that reconciliation. It **parses** the workflows and inspects each step's `run:` script, rather than substring-matching the file: a package path in a *build* step must not count (`ts-packages/quarto-hub-mcp` appears in the MCP smoke check, `hub-client` in the WASM build), and a step with no `name:` must not merge into its neighbour. Two workflows are scanned because `sync-test-harness`'s hub tier spawns `cargo run --bin hub`, which only the e2e workflow pre-builds. **Deliberate v1 limit:** the rule is package-granular, not tier-granular — once any CI step mentions a package, every `test*` tier of that package reads as covered, even tiers no step actually runs. Concretely outside the gate today but invisible to this rule: `preview-runtime`'s `test:integration`, `q2-demos/kanban`'s `test:wasm`, `q2-preview-spa`'s `test:e2e`, and `hub-client`'s `test:e2e`. Widening the rule to be tier-aware is follow-up work, tracked as bd-lkercidb. Like the `error-docs-*` rules it is *repo-level* and anchors violations at the offending `package.json`'s `"test":` line. **When you add a `test` script to a workspace package, add its CI step in the same commit.**
-
-  Note what this rule does *not* buy you: `main` has branch protection (force-pushes and deletions blocked) but **neither "Require status checks to pass before merging" nor a required review count is enabled** (checked via the API on 2026-09-19, bd-p4ljdp2e; an earlier version of this note claimed one approving review was required), and there are no rulesets. So no CI check in this repo is required — every workflow reports on the PR and a human decides. A job this rule forces you to add is therefore advisory, exactly like `test-suite` and `ts-test-suite` already are; the lint rule gates the *wiring*, not the merge. If the repo ever does enable required status checks, each job's check names have to be listed there as well — a GitHub-side setting, not something a commit here can do.
+- **external-sources-in-macro**: never reference `external-sources/` in
+  compile-time macros (`include_dir!`, `include_str!`, `include_bytes!`) —
+  it isn't version-controlled, so such builds break elsewhere. No suppression.
+- **add-file-with-id**: don't call `SourceContext::add_file_with_id` outside
+  the blessed modules; use `quarto_core::config_sources::bind_config_source`.
+  Suppress a provably-safe use with `// lint:allow(add-file-with-id)` + reason.
+- **error-docs-page-missing**: when you add an error code to
+  `error_catalog.json`, add its `docs/errors/<subsystem>/<code>.qmd` page
+  (template: `docs/errors/README.md`) **in the same commit**.
+- **error-docs-sidebar-unlisted**: when you add an error page, add its
+  `docs/_quarto.yml` sidebar entry in the same commit, ascending by code
+  number within its section.
+- **metadata-as-str**: read document metadata with `as_plain_text()`, never
+  `as_str()` — a bare YAML string is `PandocInlines`, for which `as_str()`
+  returns `None`. Suppress deliberate scalar-only reads with
+  `// lint:allow(metadata-as-str)`.
+- **ci-test-suite-unwired**: when you add a `test` script to a workspace
+  package, wire it into `.github/workflows/ts-test-suite.yml` or
+  `hub-client-e2e.yml` — or add it to `EXCUSED` in
+  `crates/xtask/src/lint/ci_test_wiring.rs` with a reason and a tracking
+  strand — in the same commit.
+- **vendored-pandoc-filters / pandoc-pin-agreement**: keep the vendored
+  filters' "Ours vs. pinned" section and the pandoc version pin in sync
+  across CI / dev-setup / README.
 
 ### Adding New Lint Rules
 
@@ -672,7 +644,7 @@ This repository has Claude Code hooks configured in `.claude/settings.json`.
 - When a cd command fails for you, that means you're confused about the current directory. In this situations, ALWAYS run `pwd` before doing anything else.
 - use `jq` instead of `python3 -m json.tool` for pretty-printing. When processing JSON in a shell pipeline, prefer `jq` when possible.
 - Always create a plan. Always work on the plan one item at a time.
-- The qmd grammar is unified: there is a single grammar directory, `crates/tree-sitter-qmd/tree-sitter-markdown` (there is no longer a separate `tree-sitter-markdown-inline` directory). In that directory you rebuild the parser using "tree-sitter generate; tree-sitter build". Make sure the shell is in the correct directory before running those. Every time you change the tree-sitter parser, rebuild it and run "tree-sitter test". If the tests fail, fix the code. Only change tree-sitter tests you've just added; do not touch any other tests. If you end up getting stuck there, stop and ask for my help.
+- The qmd grammar is unified: there is a single grammar directory, `crates/tree-sitter-qmd/tree-sitter-markdown` (there is no longer a separate `tree-sitter-markdown-inline` directory). Every time you change the tree-sitter parser, regenerate, rebuild, and test it with `cargo xtask ts-test` (runs `tree-sitter generate`, `build`, and `test` in that directory; `--grammar doctemplate` for the template grammar; args after `--` go to `tree-sitter test`, e.g. `cargo xtask ts-test -- -i 'emphasis'`). Do not run bare `tree-sitter test`: the CLI caches the compiled grammar by name in `~/.cache/tree-sitter/lib`, shared by every checkout on the machine, so another room's or worktree's grammar can silently run against your corpus (bd-agsgrbfn). The xtask pins `TREE_SITTER_LIBDIR` to `<checkout>/target/tree-sitter-lib` (deliberately the literal `target/`, not `CARGO_TARGET_DIR`). For other hand runs such as `tree-sitter parse`, first `export TREE_SITTER_LIBDIR="$(git rev-parse --show-toplevel)/target/tree-sitter-lib"`. If the tests fail, fix the code. Only change tree-sitter tests you've just added; do not touch any other tests. If you end up getting stuck there, stop and ask for my help.
 - When attempting to find binary differences between files, always use `xxd` instead of other tools.
 - .c only works in JSON formats. Inside Lua filters, you need to use Pandoc's Lua API. Study https://raw.githubusercontent.com/jgm/pandoc/refs/heads/main/doc/lua-filters.md and make notes to yourself as necessary (use claude-notes in this directory)
 - Sometimes you get confused by macOS's using many different /private/tmp directories linked to /tmp. Prefer to use temporary directories local to the project you're working on (which you can later clean)

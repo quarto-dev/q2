@@ -154,6 +154,27 @@ mod tests {
         );
     }
 
+    #[test]
+    fn error_catalog_has_q_2_54() {
+        let info = ERROR_CATALOG
+            .get("Q-2-54")
+            .expect("Q-2-54 must be in the catalog");
+        assert_eq!(info.subsystem, "markdown");
+        assert_eq!(info.title, "Pandoc definition lists are not supported");
+        assert!(
+            info.message_template
+                .contains("literal text instead of a definition"),
+            "Q-2-54 message must describe the fallback; got: {}",
+            info.message_template
+        );
+        assert!(
+            info.message_template
+                .contains("qmd-syntax-helper convert -r definition-lists"),
+            "Q-2-54 message must name the conversion rule; got: {}",
+            info.message_template
+        );
+    }
+
     // L8 / bd-rqgx: Q-12-14 catalog presence.
     #[test]
     fn error_catalog_has_q_12_14() {

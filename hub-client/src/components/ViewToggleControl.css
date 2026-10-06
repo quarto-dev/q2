@@ -32,3 +32,14 @@
   background: var(--view-toggle-active-bg);
   color: var(--view-toggle-active-text);
 }
+
+/* Grayed out when the current file has no preview (images, non-qmd/md
+   text). Same treatment as .qh-btn:disabled; hover/active must not
+   re-tint. */
+.view-toggle-btn:disabled,
+.view-toggle-btn:disabled:hover {
+  opacity: 0.5;
+  cursor: default;
+  background: transparent;
+  color: var(--view-toggle-text);
+}

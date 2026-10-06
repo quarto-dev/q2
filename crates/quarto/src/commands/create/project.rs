@@ -332,6 +332,7 @@ impl ArtifactProvider for ProjectProvider {
                 name: c.name,
                 description: c.description,
                 implemented: c.implemented,
+                path: c.path,
             })
             .collect()
     }

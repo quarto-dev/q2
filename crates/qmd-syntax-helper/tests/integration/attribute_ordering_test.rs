@@ -131,3 +131,87 @@ fn test_no_changes_when_all_correct() {
             .contains("No attribute ordering issues found")
     );
 }
+
+/// Every misordering code is detected, in every construct that takes an
+/// attribute list (bd-6hf7nz7i). `check` does not shell out to pandoc.
+#[test]
+fn test_detects_every_ordering_code_in_every_construct() {
+    let rm = ResourceManager::new().unwrap();
+    let registry = RuleRegistry::new().unwrap();
+    let rule = registry.get("attribute-ordering").unwrap();
+
+    let constructs = [
+        "[x]ATTR\n",
+        "![alt](img.png)ATTR\n",
+        "`x`ATTR\n",
+        "[++ x]ATTR\n",
+        "# H ATTR\n",
+        "::: ATTR\nx\n:::\n",
+        "::: -- ATTR\nx\n:::\n",
+        "```ATTR\nx\n```\n",
+    ];
+    // Q-2-55 class before id, Q-2-56 kv before id, Q-2-3 kv before class.
+    let shapes = ["{.c #i}", "{k=v #i}", "{k=v .c}"];
+
+    for construct in constructs {
+        for shape in shapes {
+            let test_file = rm.temp_dir().join("test.qmd");
+            let content = construct.replace("ATTR", shape);
+            fs::write(&test_file, &content).unwrap();
+
+            let results = rule.check(&test_file, false).unwrap();
+            assert_eq!(
+                results.len(),
+                1,
+                "expected one violation for {content:?}, got {results:?}"
+            );
+            assert!(
+                results[0].message.as_deref().unwrap().contains(shape),
+                "message should quote the attribute list {shape}: {:?}",
+                results[0].message
+            );
+        }
+    }
+}
+
+/// `{k=v .c #i}` is misordered twice over but is one attribute list; it must
+/// be reported and fixed once, not once per diagnostic the parser emits.
+#[test]
+fn test_one_list_is_one_violation() {
+    let rm = ResourceManager::new().unwrap();
+    let test_file = rm.temp_dir().join("test.qmd");
+    fs::write(&test_file, "[span]{k=v .c #i}\n").unwrap();
+
+    let registry = RuleRegistry::new().unwrap();
+    let rule = registry.get("attribute-ordering").unwrap();
+    assert_eq!(rule.check(&test_file, false).unwrap().len(), 1);
+}
+
+/// A list with two identifiers is not an ordering problem and is left alone.
+#[test]
+fn test_duplicate_identifier_is_not_an_ordering_violation() {
+    let rm = ResourceManager::new().unwrap();
+    let test_file = rm.temp_dir().join("test.qmd");
+    fs::write(&test_file, "[span]{#a #b}\n").unwrap();
+
+    let registry = RuleRegistry::new().unwrap();
+    let rule = registry.get("attribute-ordering").unwrap();
+    assert_eq!(rule.check(&test_file, false).unwrap().len(), 0);
+}
+
+#[test]
+#[ignore] // shells out to pandoc
+fn test_converts_class_and_kv_before_id() {
+    let rm = ResourceManager::new().unwrap();
+    let test_file = rm.temp_dir().join("test.qmd");
+    fs::write(&test_file, "[a]{.c #i}\n\n[b]{k=v #j}\n").unwrap();
+
+    let registry = RuleRegistry::new().unwrap();
+    let rule = registry.get("attribute-ordering").unwrap();
+    let result = rule.convert(&test_file, false, false, false).unwrap();
+    assert_eq!(result.fixes_applied, 2);
+
+    let converted = result.message.unwrap();
+    assert!(converted.contains("[a]{#i .c}"), "{converted}");
+    assert!(converted.contains("[b]{#j k=\"v\"}"), "{converted}");
+}

@@ -52,7 +52,6 @@ const CORPUS_ROOTS: &[&str] = &[
 /// disappearing into a tolerance. All of these are deliberate parse-error
 /// fixtures that return `Err`; none panics.
 const EXPECTED_UNPARSEABLE: &[&str] = &[
-    "crates/pampa/tests/smoke/001.qmd",
     "crates/pampa/tests/smoke/008.qmd",
     "crates/pampa/tests/smoke/009.qmd",
     "crates/pampa/tests/smoke/010.qmd",

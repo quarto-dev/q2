@@ -20,7 +20,9 @@
 //!   path, and content from a single path, or that implement the candidate
 //!   matching itself.
 //! - Test code (`#[cfg(test)]` modules, `#[test]`/`#[tokio::test]` fns) —
-//!   test contexts are self-consistent by construction.
+//!   test contexts are self-consistent by construction. Integration test
+//!   files (`tests/` directories) are skipped whole: their helper fns are
+//!   plain `fn`s the attribute-based skip cannot see.
 //!
 //! Everywhere else, suppress a deliberate use with
 //! `// lint:allow(add-file-with-id)` on the line or the line above, with a
@@ -58,6 +60,9 @@ pub fn check(path: &Path, content: &str) -> Result<Vec<Violation>> {
     }
 
     let path_str = path.to_string_lossy().replace('\\', "/");
+    if path_str.split('/').any(|seg| seg == "tests") {
+        return Ok(Vec::new()); // integration test file: skipped whole
+    }
     if BLESSED_SUFFIXES.iter().any(|s| path_str.ends_with(s)) {
         return Ok(Vec::new());
     }
@@ -254,6 +259,33 @@ mod tests {
             }
         "#;
         assert!(check_str("crates/quarto-core/src/somewhere.rs", src).is_empty());
+    }
+
+    #[test]
+    fn integration_test_files_are_skipped() {
+        // Integration tests live in `tests/integration/` (one binary per
+        // crate). Their helper fns are plain `fn`, not `#[test]`, so the
+        // attribute-based skip does not reach them — but they are test
+        // contexts all the same.
+        let src = r#"
+            fn registered_context() -> SourceContext {
+                let mut sc = SourceContext::new();
+                sc.add_file_with_id(id, path, content);
+                sc
+            }
+
+            #[test]
+            fn uses_helper() {
+                registered_context();
+            }
+        "#;
+        assert!(
+            check_str(
+                "crates/quarto-core/tests/integration/ipynb_content_processor.rs",
+                src
+            )
+            .is_empty()
+        );
     }
 
     #[test]

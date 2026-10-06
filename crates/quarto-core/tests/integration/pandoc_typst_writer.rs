@@ -333,16 +333,24 @@ fn render_document_to_file_typst_emits_brand_color_from_inline_brand_block() {
     );
 }
 
-/// The no-brand case must stay exactly as it was before this bridge
-/// existed: no `brand` filter param at all, so the vendored filter's own
-/// `brand and brand[brandMode]` guard short-circuits and emits the empty
-/// `(:)` dict — not an error, not a crash.
+/// Margin settings must reach the vendored Typst Lua filters as
+/// `QUARTO_FILTER_PARAMS`, rather than being interpreted by Pandoc as
+/// unsupported CLI options. Both the layout Meta filter and the post Cite
+/// filter consume these values, so assert their observable Typst output.
 #[test]
-fn render_document_to_file_typst_without_brand_emits_empty_brand_color_dict() {
+fn render_document_to_file_typst_forwards_margin_locations_to_lua_filters() {
     let temp = TempDir::new().unwrap();
     let project_dir = temp.path().canonicalize().unwrap();
     let input_path = project_dir.join("f.qmd");
-    write(&input_path, "# Heading\n\nBody.\n");
+    write(
+        &input_path,
+        "---\ncitation-location: margin\nreference-location: margin\nbibliography: refs.bib\n---\n\n\
+         A citation [@sample2020] and a footnote.^[Margin note.]\n",
+    );
+    write(
+        &project_dir.join("refs.bib"),
+        "@article{sample2020, author = {Sample, Alice}, title = {Example}, journal = {Journal}, year = {2020}}\n",
+    );
 
     let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
     let output_path = project_dir.join("f.typ");
@@ -365,9 +373,153 @@ fn render_document_to_file_typst_without_brand_emits_empty_brand_color_dict() {
 
     let text = std::fs::read_to_string(&output_path).unwrap();
     assert!(
-        text.contains("#let brand-color = (:)"),
-        "expected the empty-dict fallback with no brand configured, got:\n{text}"
+        text.contains("column-sidenote"),
+        "reference-location: margin should emit the footnote show rule, got:\n{text}"
     );
+    assert!(
+        text.contains("form: \"full\""),
+        "citation-location: margin should emit a full citation in the margin, got:\n{text}"
+    );
+}
+
+/// `citeproc: true` must reach `quarto.doc.cite_method()` (via the new
+/// `cite-method` filter param) so `quarto-post/typst.lua`'s margin-citation
+/// `Cite` handler uses the pre-rendered citeproc bibliography entry in the
+/// margin note instead of a bare native `#cite(<id>, form: "full")` call.
+///
+/// Revert hunk: reverting `PandocWriteStage::run`'s `typst_cite_method`
+/// wiring (never calling `.with_contributor` with it, or dropping the
+/// `cite-method` blob insertion in `TypstFilterParamsContributor`) makes
+/// this RED — `quarto.doc.cite_method()` would see `nil`, and the margin
+/// note would fall back to the native `#cite(...)` call this test asserts
+/// is absent.
+#[test]
+fn render_document_to_file_typst_citeproc_true_uses_citeproc_bibliography_in_margin() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = temp.path().canonicalize().unwrap();
+    let input_path = project_dir.join("f.qmd");
+    write(
+        &input_path,
+        "---\ncitation-location: margin\nbibliography: refs.bib\nciteproc: true\n---\n\n\
+         A citation [@sample2020].\n",
+    );
+    write(
+        &project_dir.join("refs.bib"),
+        "@article{sample2020, author = {Sample, Alice}, title = {Example}, journal = {Journal}, year = {2020}}\n",
+    );
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let output_path = project_dir.join("f.typ");
+    let options = RenderToFileOptions {
+        output_path: Some(output_path.clone()),
+        ..Default::default()
+    };
+
+    render_document_to_file(
+        &input_path,
+        "typst",
+        &options,
+        None,
+        runtime,
+        None,
+        None,
+        None,
+    )
+    .expect("typst render should succeed");
+
+    let text = std::fs::read_to_string(&output_path).unwrap();
+    assert!(
+        !text.contains("#cite(<sample2020>"),
+        "citeproc: true should not fall back to the native #cite(...) call, got:\n{text}"
+    );
+    assert!(
+        text.contains("Sample, Alice. 2020."),
+        "citeproc: true should emit the citeproc-rendered bibliography entry in the margin, got:\n{text}"
+    );
+}
+
+/// Renders `frontmatter` + one citation to Typst source and returns it.
+fn render_citation_to_typst(frontmatter: &str) -> String {
+    let temp = TempDir::new().unwrap();
+    let project_dir = temp.path().canonicalize().unwrap();
+    let input_path = project_dir.join("f.qmd");
+    write(
+        &input_path,
+        &format!("---\n{frontmatter}bibliography: refs.bib\n---\n\nA citation [@sample2020].\n"),
+    );
+    write(
+        &project_dir.join("refs.bib"),
+        "@article{sample2020, author = {Sample, Alice}, title = {Example}, journal = {Journal}, year = {2020}}\n",
+    );
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let output_path = project_dir.join("f.typ");
+    let options = RenderToFileOptions {
+        output_path: Some(output_path.clone()),
+        ..Default::default()
+    };
+    render_document_to_file(
+        &input_path,
+        "typst",
+        &options,
+        None,
+        runtime,
+        None,
+        None,
+        None,
+    )
+    .expect("typst render should succeed");
+    std::fs::read_to_string(&output_path).unwrap()
+}
+
+/// bd-ysqekrm2 / bd-wjn7jdzw: `citeproc: true` on a plain (non-margin)
+/// Typst document resolves citations through Q2's citeproc filter and
+/// leaves nothing for Typst's native citation machinery: the citation is
+/// rendered text, the bibliography is the `<refs>` div citeproc built, and
+/// the pandoc writer (run as `typst-citations`) emits no `#bibliography()`.
+///
+/// Revert hunks: dropping `apply_citeproc_shorthand` from
+/// `UserFiltersStage::pre` leaves the native `@sample2020`; dropping the
+/// `-citations` writer suffix in `PandocWriteStage` brings back a trailing
+/// `#bibliography(...)`.
+#[test]
+fn render_document_to_file_typst_citeproc_true_resolves_citations_without_native_bibliography() {
+    let text = render_citation_to_typst("citeproc: true\n");
+    assert!(
+        text.contains("(Sample 2020)"),
+        "citeproc: true should render the citation as text, got:\n{text}"
+    );
+    assert!(
+        !text.contains("@sample2020"),
+        "citeproc: true must not leave a native @key citation, got:\n{text}"
+    );
+    assert!(
+        text.contains("<refs>") && text.contains("<ref-sample2020>"),
+        "citeproc: true should emit citeproc's labeled bibliography div, got:\n{text}"
+    );
+    assert!(
+        !text.contains("#bibliography("),
+        "citeproc: true must not also emit a native #bibliography(), got:\n{text}"
+    );
+}
+
+/// bd-ysqekrm2: without `citeproc: true` the document stays on Typst's
+/// native citation path (`@key` plus a `#bibliography()` call) — the
+/// default is unchanged.
+#[test]
+fn render_document_to_file_typst_without_citeproc_keeps_native_citations() {
+    let text = render_citation_to_typst("");
+    assert!(text.contains("@sample2020"), "got:\n{text}");
+    assert!(text.contains("#bibliography("), "got:\n{text}");
+}
+
+/// bd-ysqekrm2: an explicit `filters: [quarto, citeproc]` puts citeproc in
+/// the post group, which `PandocWriteStage`'s hybrid leg used to drop
+/// without running it; it now resolves the citation like the shorthand.
+#[test]
+fn render_document_to_file_typst_explicit_post_citeproc_filter_resolves_citations() {
+    let text = render_citation_to_typst("filters: [quarto, citeproc]\n");
+    assert!(text.contains("(Sample 2020)"), "got:\n{text}");
+    assert!(!text.contains("#bibliography("), "got:\n{text}");
 }
 
 /// pandoc-hybrid-typst Phase 1's template vendoring, end to end: pandoc
@@ -639,4 +791,146 @@ fn render_document_to_file_typst_filters_unavailable_font_family() {
         !text.contains("Some Totally Fake Font"),
         "the unavailable font must not appear in the emitted font list, got:\n{text}"
     );
+}
+
+/// `mediabag-dir` end to end: a `data:image/...;base64,...` image forces
+/// pandoc to resolve it into its own mediabag
+/// (`render_typst_fixups`'s `Image` handler in `quarto-post/typst.lua`
+/// calls `resolve_image_from_url`), and `quarto-finalize/mediabag.lua`'s
+/// `Image` handler then writes it back out via
+/// `modules/mediabag.lua`'s `write_mediabag_entry`, which reads
+/// `param("mediabag-dir", nil)`. Before the `mediabag-dir` filter param was
+/// wired (`FilterParamsBuilder::insert_mediabag_dir`), that call returned
+/// `nil` and `write_mediabag_entry` crashed inside
+/// `pandoc.path.join{nil, src}` with "string expected, got nil" — not
+/// typst-specific (the finalize filter is unconditional for every
+/// non-Office Pandoc-hybrid format), but reproduced here through typst
+/// since that's the format this epic's fixtures exercise it through
+/// (`crossref-grand-finale.qmd`'s remote-image fixture, out of reach here
+/// without network access — a local `data:` URI triggers the identical
+/// code path with no network dependency).
+///
+/// Revert hunk: removing `mediabag_dir`/`insert_mediabag_dir` wiring in
+/// `PandocWriteStage`/`FilterParamsBuilder` makes this RED (pandoc exits
+/// non-zero, `render_document_to_file` returns an error instead of `Ok`).
+#[test]
+fn render_document_to_file_typst_resolves_data_uri_image_via_mediabag() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = temp.path().canonicalize().unwrap();
+    let input_path = project_dir.join("f.qmd");
+    // A 1x1 transparent PNG, base64-encoded — small enough to inline, real
+    // enough that `should_mediabag`'s `data:image/.+;base64,(.+)` pattern
+    // matches and pandoc actually decodes it into the mediabag.
+    write(
+        &input_path,
+        "---\ntitle: Mediabag Check\n---\n\n\
+         ![alt text](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=)\n",
+    );
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let output_path = project_dir.join("f.typ");
+    let options = RenderToFileOptions {
+        output_path: Some(output_path.clone()),
+        ..Default::default()
+    };
+
+    render_document_to_file(
+        &input_path,
+        "typst",
+        &options,
+        None,
+        runtime,
+        None,
+        None,
+        None,
+    )
+    .expect("typst render should succeed instead of crashing in modules/mediabag.lua");
+
+    let mediabag_dir = project_dir.join("f_files").join("mediabag");
+    assert!(
+        mediabag_dir.is_dir(),
+        "expected mediabag-dir to be created at {}",
+        mediabag_dir.display()
+    );
+    let entries: Vec<_> = std::fs::read_dir(&mediabag_dir)
+        .expect("mediabag dir should be readable")
+        .filter_map(|e| e.ok())
+        .collect();
+    assert!(
+        !entries.is_empty(),
+        "expected at least one file written into {}",
+        mediabag_dir.display()
+    );
+
+    let text = std::fs::read_to_string(&output_path).unwrap();
+    assert!(
+        text.contains("f_files/mediabag") || text.contains("f_files\\mediabag"),
+        "expected the typst output to reference the written mediabag file, got:\n{text}"
+    );
+}
+
+/// A raw-HTML table holding a data-URI `<img>` over 2000 characters must
+/// not leak the placeholder `juice()` swaps in for it (normalize/
+/// astpipeline.lua) into the Typst source.
+///
+/// `juice.ts` does not ship with q2, so the juice step always falls back;
+/// that fallback used to return the placeholder-substituted HTML, leaving a
+/// bare UUID as the `image()` path ("file not found" from Typst). Short
+/// data-URIs are not substituted, so one of each size in the same table
+/// covers both paths.
+///
+/// Revert hunk: returning `htmltext` (not `restore_data_uris(htmltext)`)
+/// from the `not ok` branch of `juice()` makes this RED.
+#[test]
+fn render_document_to_file_typst_raw_html_table_long_data_uri_images_reach_mediabag() {
+    let temp = TempDir::new().unwrap();
+    let project_dir = temp.path().canonicalize().unwrap();
+    let input_path = project_dir.join("f.qmd");
+    let short_png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+    // Over the 2000-char threshold; decodes to bytes distinct from `short_png`.
+    let long_png = format!("iVBORw0KGgo{}", "A".repeat(2400));
+    write(
+        &input_path,
+        &format!(
+            "---\ntitle: Juice Check\n---\n\n```{{=html}}\n<table><tr><td>\n\
+             <img src=\"data:image/png;base64,{short_png}\">\n</td><td>\n\
+             <img src=\"data:image/png;base64,{long_png}\">\n</td></tr></table>\n```\n"
+        ),
+    );
+
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+    let output_path = project_dir.join("f.typ");
+    let options = RenderToFileOptions {
+        output_path: Some(output_path.clone()),
+        ..Default::default()
+    };
+
+    render_document_to_file(
+        &input_path,
+        "typst",
+        &options,
+        None,
+        runtime,
+        None,
+        None,
+        None,
+    )
+    .expect("typst render should succeed");
+
+    let text = std::fs::read_to_string(&output_path).unwrap();
+    assert!(
+        !text.contains("273dae7e-3633-4385-9b0c-203d2d7a2d37"),
+        "juice placeholder leaked into typst output:\n{text}"
+    );
+    let image_calls = text.matches("image(\"").count();
+    assert_eq!(image_calls, 2, "expected two image() calls, got:\n{text}");
+    assert_eq!(
+        text.matches("f_files/mediabag/").count(),
+        2,
+        "both images should point into the mediabag, got:\n{text}"
+    );
+    let n = std::fs::read_dir(project_dir.join("f_files").join("mediabag"))
+        .unwrap()
+        .count();
+    assert_eq!(n, 2, "expected two mediabag files");
 }

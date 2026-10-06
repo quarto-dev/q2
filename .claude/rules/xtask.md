@@ -24,6 +24,7 @@ paths:
 | `cargo xtask create-worktree` | `cargo create-worktree` | Create git worktree + CLAUDE.local.md context stub (braid needs no redirect) |
 | `cargo xtask braid-snapshot` | — | Write backup-only `braid export` to `.braid/snapshot.jsonl` (one-directional; never re-import) |
 | `cargo xtask pandoc-check` | — | Check local pandoc against pampa's 4 version-gated oracle tests; print-only, reports the ceiling to bump on green |
+| `cargo xtask ts-test` | — | Regenerate, build, and test a tree-sitter grammar with a per-checkout compiled-grammar cache (use instead of bare `tree-sitter test`) |
 | `cargo xtask verify` | — | Full project verification (build + tests for Rust and hub-client) |
 
 ## Dev tool version pinning
