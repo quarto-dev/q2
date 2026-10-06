@@ -736,6 +736,7 @@ export function registerTools(
           title: def.title,
           description: def.description,
           inputSchema: z.object({}),
+          ...(def.outputSchema ? { outputSchema: def.outputSchema } : {}),
           annotations: def.annotations,
         },
         (_args, ctx) => authToolsState.handle(def.name, extractAuthContext(ctx)),

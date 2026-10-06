@@ -445,8 +445,8 @@ Test specifications (all red before implementation):
   (BP-17).
 - [ ] Startup against a cached credential emits no `TimeoutNegativeWarning`
   and no automerge deprecation warning on stderr (HY-6).
-- [ ] Concurrent `authenticate` calls serialize (BP-12).
-- [ ] `authenticate_status` reports `{authenticated, hub, identity?, expiry?}`
+- [x] Concurrent `authenticate` calls serialize (BP-12).
+- [x] `authenticate_status` reports `{authenticated, hub, identity?, expiry?}`
   without triggering a flow (BP-13).
 - [ ] Share URL naming a *different* `server=` now connects to that server
   instead of erroring (bd-qt7h8h5g): unit tests for multi-server manager
@@ -552,10 +552,10 @@ intended.
   workspace version); server reports it; fallback to a bundle-build-time
   stamp when run standalone. Also set `Implementation.description` and
   `websiteUrl` (shared with `server.json`, CAP-15).
-- [ ] BP-9: add `title` to all tools (and a Quarto icon if trivial — else
-  defer icons to Phase 5).
-- [ ] BP-12: `authenticate` mutex.
-- [ ] BP-13: `authenticate_status` tool.
+- [x] BP-9: add `title` to all tools (and a Quarto icon if trivial — else
+  defer icons to Phase 5). (Titles landed; icons deferred to Phase 5.)
+- [x] BP-12: `authenticate` mutex.
+- [x] BP-13: `authenticate_status` tool.
 - [x] HY-2: delete dead `registerAuthTools`. (Deleted with the BP-16
   migration — it was v1-only wiring; see the checkpoint record.)
 - [x] HY-1: interim message fix — drop the phantom `read_binary_file_metadata`

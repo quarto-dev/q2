@@ -659,6 +659,7 @@ describe('tool titles (BP-9)', () => {
     expect(titles).toEqual({
       authenticate: 'Sign in to Quarto Hub',
       authenticate_clear: 'Clear Quarto Hub credentials',
+      authenticate_status: 'Check Quarto Hub sign-in status',
     });
   });
 });
