@@ -184,16 +184,27 @@ interface ListedFile {
   type?: string;
   status?: 'unavailable';
   docId?: string;
+  /** ERG-3 listing metadata: byte size always; mimeType always; lines for text. */
+  size?: number;
+  mimeType?: string;
+  lines?: number;
 }
 
 /** Project state as exposed by {@link ConnectionManager.connect}. */
 type ProjectState = Awaited<ReturnType<ConnectionManager['connect']>>;
 
 function buildFileList(state: ProjectState): ListedFile[] {
-  const fileList: ListedFile[] = Array.from(state.files.keys()).map((path) => ({
-    path,
-    type: state.files.get(path)!.type,
-  }));
+  const fileList: ListedFile[] = Array.from(state.files.entries()).map(([path, payload]) =>
+    payload.type === 'binary'
+      ? { path, type: 'binary', size: payload.data.byteLength, mimeType: payload.mimeType }
+      : {
+          path,
+          type: 'text',
+          size: Buffer.byteLength(payload.text, 'utf8'),
+          mimeType: textMimeType(path),
+          lines: splitLines(payload.text).length,
+        },
+  );
   for (const ghost of state.client.getUnavailableFiles()) {
     fileList.push({ path: ghost.path, status: 'unavailable', docId: ghost.docId });
   }
@@ -265,6 +276,151 @@ function fileNotFoundError(path: string, state: ProjectState): CallToolResult {
     msg += ` Closest existing paths: ${near.map((p) => `"${p}"`).join(', ')}.`;
   }
   return error(msg);
+}
+
+// ---------------------------------------------------------------------------
+// ERG-3: read ranges and truncation
+// ---------------------------------------------------------------------------
+
+/** Default byte cap on a read_file response body (the "sensible default" truncation). */
+const DEFAULT_MAX_BYTES = 65536;
+/** Hard ceiling for `max_bytes` — large enough to refuse politely instead of paging forever. */
+const MAX_BYTES_CAP = 1048576;
+
+/**
+ * Split text into lines, treating a trailing newline as the terminator
+ * of the last line rather than the start of an empty one: "a\n" is one
+ * line, "a\n\n" is two, "" is zero.
+ */
+function splitLines(text: string): string[] {
+  if (text === '') return [];
+  const lines = text.split('\n');
+  if (lines[lines.length - 1] === '') lines.pop();
+  return lines;
+}
+
+/** Cut `text` to at most `maxBytes` UTF-8 bytes without splitting a multi-byte character. */
+function cutToBytes(text: string, maxBytes: number): string {
+  const buf = Buffer.from(text, 'utf8');
+  if (buf.byteLength <= maxBytes) return text;
+  let end = maxBytes;
+  // Back off a UTF-8 continuation byte (10xxxxxx) to the sequence start.
+  while (end > 0 && (buf[end] & 0xc0) === 0x80) end--;
+  return buf.subarray(0, end).toString('utf8');
+}
+
+interface LineWindow {
+  content: string;
+  totalLines: number;
+  truncated: boolean;
+  nextOffset: number | null;
+  hint?: string;
+}
+
+/**
+ * The line-window/byte-cap engine behind read_file (ERG-3). Windows are
+ * line-aligned and byte-exact: concatenating the pages `next_offset`
+ * walks through reassembles the original text. `truncated` means the
+ * returned window does not extend to EOF; a single line that alone
+ * exceeds the byte cap is byte-cut with no line-aligned continuation
+ * (`nextOffset: null` + an explanatory hint).
+ */
+function windowLines(
+  text: string,
+  offset: number,
+  limit: number | undefined,
+  maxBytes: number,
+): LineWindow {
+  const lines = splitLines(text);
+  const totalLines = lines.length;
+  const start = offset - 1;
+  let end = limit === undefined ? totalLines : Math.min(start + limit, totalLines);
+
+  let windowed: string;
+  if (start === 0 && end === totalLines) {
+    windowed = text; // whole file: return verbatim, no rejoin loss
+  } else {
+    windowed = lines.slice(start, end).join('\n');
+    // Lines in a window were terminated in the original (only the file's
+    // very last line may lack a newline).
+    if (end < totalLines || text.endsWith('\n')) windowed += '\n';
+  }
+
+  if (Buffer.byteLength(windowed, 'utf8') <= maxBytes) {
+    const truncated = end < totalLines;
+    return {
+      content: windowed,
+      totalLines,
+      truncated,
+      nextOffset: truncated ? end + 1 : null,
+      ...(truncated
+        ? {
+            hint:
+              `Returned lines ${offset}-${end} of ${totalLines}. ` +
+              `Call read_file with offset=${end + 1} to continue.`,
+          }
+        : {}),
+    };
+  }
+
+  // Byte cap bites: re-cut at a line boundary where possible.
+  const pageLines: string[] = [];
+  let bytes = 0;
+  let cutAt = start;
+  for (let i = start; i < end; i++) {
+    const lineBytes = Buffer.byteLength(lines[i], 'utf8') + 1; // +1 for the terminator
+    if (bytes + lineBytes > maxBytes) break;
+    pageLines.push(lines[i]);
+    bytes += lineBytes;
+    cutAt = i + 1;
+  }
+  if (pageLines.length > 0) {
+    end = cutAt;
+    return {
+      content: pageLines.join('\n') + '\n',
+      totalLines,
+      truncated: true,
+      nextOffset: end + 1,
+      hint:
+        `Returned lines ${offset}-${end} of ${totalLines} (max_bytes=${maxBytes}). ` +
+        `Call read_file with offset=${end + 1} to continue.`,
+    };
+  }
+  // Pathological: a single line exceeds the byte cap (minified assets,
+  // one-line data files). Byte-cut it; there is no line-aligned
+  // continuation, so next_offset is null and the hint says why.
+  const content = cutToBytes(lines[start], maxBytes);
+  return {
+    content,
+    totalLines,
+    truncated: true,
+    nextOffset: null,
+    hint:
+      `Line ${offset} alone exceeds max_bytes=${maxBytes}; returned its first ` +
+      `${Buffer.byteLength(content, 'utf8')} bytes. Raise max_bytes (up to ${MAX_BYTES_CAP}) ` +
+      'to see more of it.',
+  };
+}
+
+/** Display MIME type for a text file (listings only — inferMimeType covers binaries). */
+function textMimeType(path: string): string {
+  const ext = path.includes('.') ? path.slice(path.lastIndexOf('.') + 1).toLowerCase() : '';
+  const textTypes: Record<string, string> = {
+    qmd: 'text/markdown',
+    md: 'text/markdown',
+    html: 'text/html',
+    css: 'text/css',
+    js: 'text/javascript',
+    mjs: 'text/javascript',
+    ts: 'text/typescript',
+    json: 'application/json',
+    yml: 'application/yaml',
+    yaml: 'application/yaml',
+    csv: 'text/csv',
+    txt: 'text/plain',
+    xml: 'application/xml',
+  };
+  return textTypes[ext] ?? 'text/plain';
 }
 
 /** The data tools (everything except the auth tools). */
@@ -493,7 +649,30 @@ async function handleReadFile(args: ToolArgs, manager: ConnectionManager): Promi
         'drop metadata_only to read its content.',
     );
   }
-  return structured({ path, hash: hashPayload(payload), type: 'text', content: payload.text });
+
+  // ERG-3: line window + byte cap. offset is 1-based; the byte cap
+  // guards context size even when no explicit window is given.
+  const offset = typeof args.offset === 'number' ? args.offset : 1;
+  const limit = typeof args.limit === 'number' ? args.limit : undefined;
+  const maxBytes = typeof args.max_bytes === 'number' ? args.max_bytes : DEFAULT_MAX_BYTES;
+  const totalLines = splitLines(payload.text).length;
+  if (offset > Math.max(totalLines, 1)) {
+    return error(
+      `Error: offset ${offset} exceeds the file's length — ${path} has ${totalLines} ` +
+        `line${totalLines === 1 ? '' : 's'}. Use offset=1 (the default) or a value ≤ ${totalLines}.`,
+    );
+  }
+  const window = windowLines(payload.text, offset, limit, maxBytes);
+  return structured({
+    path,
+    hash: hashPayload(payload),
+    type: 'text',
+    content: window.content,
+    truncated: window.truncated,
+    total_lines: window.totalLines,
+    next_offset: window.nextOffset,
+    ...(window.hint ? { hint: window.hint } : {}),
+  });
 }
 
 async function handleWaitForChange(
@@ -845,6 +1024,9 @@ const outListedFile = z.object({
   type: z.string().optional(),
   status: z.literal('unavailable').optional(),
   docId: z.string().optional(),
+  size: z.number().optional(),
+  mimeType: z.string().optional(),
+  lines: z.number().optional(),
 });
 
 const outConnectProject = z.object({
@@ -861,6 +1043,10 @@ const outReadFile = z.object({
   content: z.string().optional(),
   mimeType: z.string().optional(),
   size: z.number().optional(),
+  truncated: z.boolean().optional(),
+  total_lines: z.number().optional(),
+  next_offset: z.number().nullable().optional(),
+  hint: z.string().optional(),
 });
 
 const outWaitForChange = z.object({
@@ -982,13 +1168,37 @@ export function registerTools(
       description:
         'Read a file in a Quarto Hub project. Text files return `{ path, hash, type: "text", content }` — ' +
         'pass `hash` back as `expected_hash` on write_file/patch_file so an edit a collaborator made ' +
-        'since this read is never silently overwritten. Binary files return the bytes as an image ' +
+        'since this read is never silently overwritten. Large reads are capped by `max_bytes` ' +
+        '(default 64 KB): a truncated result carries `next_offset` — call again with `offset` set ' +
+        'to it to continue. Binary files return the bytes as an image ' +
         'block (image MIME types) or an embedded blob resource (anything else), with structured ' +
         '`{ path, hash, type: "binary", mimeType, size }`; pass `metadata_only: true` for just the ' +
         'metadata without the bytes.',
       inputSchema: z.object({
         project: projectParam,
         path: pathParam.optional(),
+        offset: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe('First line to return, 1-based (default 1).'),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe('Maximum number of lines to return (default: no line limit).'),
+        max_bytes: z
+          .number()
+          .int()
+          .min(16)
+          .max(MAX_BYTES_CAP)
+          .optional()
+          .describe(
+            `Byte cap on the returned content (default ${DEFAULT_MAX_BYTES}, max ${MAX_BYTES_CAP}). ` +
+              'A read that does not reach EOF returns `truncated: true` with a `next_offset` to continue from.',
+          ),
         metadata_only: z
           .boolean()
           .optional()

@@ -90,7 +90,16 @@ describe('in-memory fixture smoke', () => {
       expect(listedBlock?.type).toBe('text');
       if (listedBlock?.type !== 'text') throw new Error('unreachable');
       const files = JSON.parse(listedBlock.text) as Array<{ path: string; type: string }>;
-      expect(files).toEqual([{ path: 'index.qmd', type: 'text' }]);
+      // ERG-3: entries carry size/mimeType/lines alongside path/type.
+      expect(files).toEqual([
+        {
+          path: 'index.qmd',
+          type: 'text',
+          size: Buffer.byteLength('---\ntitle: Conformance\n---\n\nHello\n', 'utf8'),
+          mimeType: 'text/markdown',
+          lines: 5,
+        },
+      ]);
 
       const read = await callTool(f, 'read_file', {
         project: seed.indexDocId,
@@ -296,7 +305,10 @@ describe('result conformance (BP-1 net)', () => {
       expect(block?.type).toBe('text');
       if (block?.type !== 'text') throw new Error('unreachable');
       const fromText = JSON.parse(block.text) as Array<{ path: string; type: string }>;
-      expect(fromText).toEqual([{ path: 'index.qmd', type: 'text' }]);
+      // ERG-3 shape: metadata rides every entry.
+      expect(fromText).toEqual([
+        { path: 'index.qmd', type: 'text', size: 2, mimeType: 'text/markdown', lines: 1 },
+      ]);
       // structuredContent: the same files, wrapped as an object.
       const structured = result.structuredContent as { files?: unknown } | undefined;
       expect(structured?.files).toEqual(fromText);
