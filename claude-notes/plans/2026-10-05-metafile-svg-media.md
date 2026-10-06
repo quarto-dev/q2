@@ -176,6 +176,15 @@ imported EMF/WMF show as alt text in docx/pptx on the integration branch in betw
   User-facing note that docx/pptx export embeds a PNG of each SVG. Reference `bd-myoj9kp5` (pipeline-wide SVG posture;
   `pasteImages.ts:9-11` excludes SVG from silent paste because SVG can carry script) so this plan doesn't pre-empt it.
   Run the P5 import E2E against `book3.wmf`.
+- [x] **T6 odt in the "Download as" menu; answers the open "odt out of scope?" question (2026-10-05).** odt is a menu row
+  (`odt`, `.odt`, `application/vnd.oasis.opendocument.text`) directly below docx, in `PANDOC_FORMATS`,
+  `MENU_FORMATS`, and their tests. It is not in `NATIVE_FORMATS` (the embed's native route is unchanged), and not in
+  `STAMPED_FORMATS` (that is OOXML comment/change authorship). **SVG is not a problem in odt, so the rasterize stage
+  stays `Docx | Pptx` only.** pandoc's odt writer embeds the SVG as is (`Pictures/N.svg`, manifest
+  `image/svg+xml`, `draw:image xlink:href`), sized right (a 100x50 px viewBox-only SVG gets 75pt x 37.5pt, a 2in x 1in
+  one 144pt x 72pt), and `startDownload` reports no diagnostics. An imported EMF (now SVG) exports the same way. Checked
+  by Playwright (`pandoc-svg-rasterize`: 7/7 on Chromium, Firefox, WebKit), and LibreOffice (headless to PDF) draws the
+  EMF fixture's black rectangle. Gordon opened an odt in the app and the SVG came through. Word was not tested.
 
 ## Verification
 
@@ -205,7 +214,7 @@ T1 landed in `3764dd6b4` (on top of the WIP `c331944c6`). All of it is on `impor
 
 **T5 done** (Gordon approved the epic edits; committed in `f8689311e`). Not done: the user-facing export note and the `bd-myoj9kp5` cross-reference.
 
-**Decisions for Gordon still open** (unchanged): how faithful the SVG must be for T0 (book3 looks right by eye; no independent renderer); fix the rtf.js id counter upstream vs keep the normalization; odt out of scope; `bd-myoj9kp5` overlap. Made without confirmation: 192 dpi (pHYs 7560), 2048 cap, no pixel budget in T3, the T5 epic amendments.
+**Decisions for Gordon still open** (unchanged): how faithful the SVG must be for T0 (book3 looks right by eye; no independent renderer); fix the rtf.js id counter upstream vs keep the normalization; ~~odt out of scope~~ (answered by T6: odt embeds SVG natively, stays out of the rasterize stage); `bd-myoj9kp5` overlap. Made without confirmation: 192 dpi (pHYs 7560), 2048 cap, no pixel budget in T3, the T5 epic amendments.
 
 ### T2-T4 implementation notes (2026-10-05)
 

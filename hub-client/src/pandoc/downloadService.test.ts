@@ -12,17 +12,17 @@ const row = (key: string, extra: Partial<PandocFormatInfo> = {}): PandocFormatIn
   hidden: false,
   ...extra,
 });
-const TABLE = [row('docx'), row('pptx'), row('epub'), row('typst'), row('typst-pdf')];
+const TABLE = [row('docx'), row('odt'), row('pptx'), row('epub'), row('typst'), row('typst-pdf')];
 
 describe('selectMenuFormats', () => {
   it('offers every format the Rust table has, in its order', () => {
-    expect(MENU_FORMATS).toEqual(['docx', 'pptx', 'epub', 'typst', 'typst-pdf']);
-    expect(selectMenuFormats(TABLE, false).map((f) => f.key)).toEqual(['docx', 'pptx', 'epub', 'typst', 'typst-pdf']);
+    expect(MENU_FORMATS).toEqual(['docx', 'odt', 'pptx', 'epub', 'typst', 'typst-pdf']);
+    expect(selectMenuFormats(TABLE, false).map((f) => f.key)).toEqual(['docx', 'odt', 'pptx', 'epub', 'typst', 'typst-pdf']);
   });
 
   it('keeps the Rust table order and drops hidden and unavailable rows', () => {
-    const all = ['docx', 'pptx', 'epub', 'typst', 'typst-pdf'];
-    expect(selectMenuFormats(TABLE, false, all).map((f) => f.key)).toEqual(['docx', 'pptx', 'epub', 'typst', 'typst-pdf']);
+    const all = ['docx', 'odt', 'pptx', 'epub', 'typst', 'typst-pdf'];
+    expect(selectMenuFormats(TABLE, false, all).map((f) => f.key)).toEqual(['docx', 'odt', 'pptx', 'epub', 'typst', 'typst-pdf']);
     expect(selectMenuFormats([row('docx', { available: false }), row('typst-pdf', { hidden: true })], false, all)).toEqual([]);
   });
 

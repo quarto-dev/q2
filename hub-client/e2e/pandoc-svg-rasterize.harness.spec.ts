@@ -27,7 +27,7 @@ const FOREIGN = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 50"><f
 
 const EMU_PER_INCH = 914400;
 
-async function download(page: Page, format: 'docx' | 'pptx', svgs: Record<string, string>, qmd: string) {
+async function download(page: Page, format: 'docx' | 'pptx' | 'odt', svgs: Record<string, string>, qmd: string) {
   await page.goto('/');
   await page.waitForFunction(() => !!window.__quartoTestReady);
   await page.evaluate(async () => {
@@ -208,4 +208,63 @@ test('typst keeps the SVG: nothing is rasterized for a format that reads SVG', a
   );
   expect(out, 'a request was built').not.toBeNull();
   expect(out!.some((p) => p.includes('/_raster/'))).toBe(false);
+});
+
+/** What an odt holds for its images: the Pictures/ entries and each `draw:frame`'s size and `draw:image` href. */
+function odtImages(entries: Record<string, Uint8Array>) {
+  const xml = new TextDecoder().decode(entries['content.xml']);
+  const frames = [...xml.matchAll(/<draw:frame\b[^>]*?svg:width="([^"]+)"[^>]*?svg:height="([^"]+)"[^>]*>(.*?)<\/draw:frame>/gs)].map((m) => ({
+    width: m[1],
+    height: m[2],
+    href: m[3].match(/<draw:image\b[^>]*xlink:href="([^"]+)"/)?.[1],
+  }));
+  return { xml, pictures: Object.keys(entries).filter((n) => n.startsWith('Pictures/') && !n.endsWith('/')), frames };
+}
+
+test('odt embeds a user-authored SVG as is, at the SVG\'s own size', async ({ page }) => {
+  const { entries, summary } = await download(page, 'odt', { 'a.svg': VIEWBOX_ONLY, 'b.svg': SIZED }, DOC);
+  const { pictures, frames } = odtImages(entries);
+  // ODF supports SVG, so pandoc embeds it as is: no rasterize stage for odt (metafile-svg plan T6).
+  expect(pictures.sort()).toEqual(['Pictures/0.svg', 'Pictures/1.svg']);
+  expect(frames.map((f) => [f.width, f.height, f.href])).toEqual([
+    ['75.0pt', '37.5pt', 'Pictures/0.svg'], // 100 x 50 px at 96 dpi
+    ['144.0pt', '72.0pt', 'Pictures/1.svg'], // 2 in x 1 in
+  ]);
+  expect(new TextDecoder().decode(entries['META-INF/manifest.xml'])).toContain('media-type="image/svg+xml"');
+  expect(JSON.stringify(summary.diagnostics)).not.toContain('SVG image');
+});
+
+test('an imported EMF (stored as SVG) is exported to odt as that SVG, at the EMF\'s own size', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForFunction(() => !!window.__quartoTestReady);
+  await page.evaluate(async () => {
+    await window.__quartoTestReady;
+  });
+  const source = Buffer.from(loadImportRecording('emf-docx').source).toString('base64');
+  const downloaded = page.waitForEvent('download');
+  const summary = await page.evaluate(
+    async (base64) => {
+      const { wasmRenderer, pandoc } = window.__quartoTest!;
+      const imported = await pandoc.importDocument(base64, 'source.docx', 'emf-docx.qmd');
+      if (!imported.ok) return { error: JSON.stringify(imported.diagnostics) };
+      const svg = imported.media.find((m) => m.mimeType === 'image/svg+xml');
+      if (!svg) return { error: 'the import stored no SVG' };
+      await wasmRenderer.initWasm();
+      wasmRenderer.vfsClear();
+      wasmRenderer.vfsAddFile('/project/doc.qmd', `---\ntitle: EMF\n---\n\n![emf](${svg.projectPath})\n`);
+      wasmRenderer.vfsAddBinaryFile(`/project/${svg.projectPath}`, Uint8Array.from(atob(svg.base64), (c) => c.charCodeAt(0)));
+      const r = await pandoc.startDownload('/project/doc.qmd', 'odt');
+      return { ok: r.phase === 'done', phase: r.phase, diagnostics: r.diagnostics };
+    },
+    source,
+  );
+  expect(summary, JSON.stringify(summary)).toMatchObject({ ok: true });
+  const file = path.join(mkdtempSync(path.join(os.tmpdir(), 'q2-svg-raster-')), 'out.odt');
+  await (await downloaded).saveAs(file);
+  const entries = unzipSync(new Uint8Array(readFileSync(file)));
+  const { pictures, frames } = odtImages(entries);
+  expect(pictures).toEqual(['Pictures/0.svg']);
+  // The fixture EMF is 100 x 50 px at 96 dpi.
+  expect(frames.map((f) => [f.width, f.height, f.href])).toEqual([['75.0pt', '37.5pt', 'Pictures/0.svg']]);
+  expect(JSON.stringify(summary)).not.toContain('SVG image');
 });

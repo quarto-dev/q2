@@ -4,7 +4,7 @@
 //! Three classes (D8.4): the preview can render the format
 //! ([`FormatClass::Preview`]), pandoc.wasm can produce it
 //! ([`FormatClass::Download`]), or neither ([`FormatClass::Neither`], e.g.
-//! `revealjs` is a preview, `latex`/`odt`/`pdf` are neither).
+//! `revealjs` is a preview, `latex`/`pdf` are neither).
 
 use std::path::Path;
 
@@ -51,6 +51,14 @@ pub const PANDOC_FORMATS: &[PandocFormatInfo] = &[
         label: "Word (.docx)",
         extension: "docx",
         mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        available: true,
+        hidden: false,
+    },
+    PandocFormatInfo {
+        key: "odt",
+        label: "OpenDocument (.odt)",
+        extension: "odt",
+        mime: "application/vnd.oasis.opendocument.text",
         available: true,
         hidden: false,
     },
@@ -307,7 +315,7 @@ mod tests {
     #[test]
     fn table_has_the_download_formats_in_menu_order_and_none_hidden() {
         let keys: Vec<_> = PANDOC_FORMATS.iter().map(|f| f.key).collect();
-        assert_eq!(keys, ["docx", "pptx", "epub", "typst", "typst-pdf"]);
+        assert_eq!(keys, ["docx", "odt", "pptx", "epub", "typst", "typst-pdf"]);
         let hidden: Vec<_> = PANDOC_FORMATS
             .iter()
             .filter(|f| f.hidden)
@@ -319,13 +327,13 @@ mod tests {
 
     #[test]
     fn classes_follow_d8() {
-        for key in ["docx", "pptx", "epub", "typst", "typst-pdf"] {
+        for key in ["docx", "odt", "pptx", "epub", "typst", "typst-pdf"] {
             assert_eq!(format_class(key), FormatClass::Download, "{key}");
         }
         for key in ["html", "revealjs", "acm-html", "q2-preview"] {
             assert_eq!(format_class(key), FormatClass::Preview, "{key}");
         }
-        for key in ["latex", "odt", "no-such-format", "my-docx"] {
+        for key in ["latex", "opendocument", "no-such-format", "my-docx"] {
             assert_eq!(format_class(key), FormatClass::Neither, "{key}");
         }
     }
