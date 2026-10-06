@@ -57,6 +57,8 @@ import { DEFAULT_SERVER_URL } from './share-url.js';
 interface ParsedArgs {
   serverUrl: string;
   readOnly: boolean;
+  /** CAP-12: expose the `render` tool (code execution — opt-in only). */
+  allowRender: boolean;
   /** Explicit loopback redirect port; undefined = kernel-picks. */
   redirectPort?: number;
 }
@@ -121,6 +123,8 @@ export interface CreateServerOptions {
   readonly manager: ConnectionManager;
   readonly readOnly: boolean;
   readonly authToolsState?: AuthToolsState;
+  /** CAP-12: expose the `render` tool (code execution — opt-in only). */
+  readonly allowRender?: boolean;
 }
 
 /**
@@ -175,13 +179,20 @@ export function resolveServerVersion(env: NodeJS.ProcessEnv = process.env): stri
  * each phase. Delivered via `initialize` to legacy clients and
  * `server/discover` to modern ones; the SDK handles both paths.
  */
-function buildInstructions(readOnly: boolean): string {
+function buildInstructions(readOnly: boolean, allowRender: boolean): string {
   const readOnlyNote = readOnly
     ? '\n\nThis server runs with --read-only: only read tools are exposed (no write/create/delete).'
+    : '';
+  const renderNote = allowRender
+    ? '\n\nRendering: the `render` tool materializes the project to a temp dir and runs ' +
+      '`q2 render --json-errors` on it, returning structured diagnostics (Q- codes, source ' +
+      'locations) — use it to close the loop after edits: render, read the diagnostics, patch, ' +
+      're-render. Rendering executes project code on this machine.'
     : '';
   return (
     'Quarto Hub MCP: read, write, and watch files in Quarto Hub projects via automerge sync.' +
     readOnlyNote +
+    renderNote +
     '\n\nWorking on a project:' +
     '\n1. connect_project with a project id OR a quarto-hub.com share URL ' +
     '(`https://quarto-hub.com/#/share/<id>?file=…&name=…`) — the id after `#/share/` is ' +
@@ -225,7 +236,7 @@ function buildInstructions(readOnly: boolean): string {
 }
 
 export function createServer(options: CreateServerOptions): McpServer {
-  const { manager, readOnly, authToolsState } = options;
+  const { manager, readOnly, authToolsState, allowRender } = options;
   const server = new McpServer(
     {
       name: 'quarto-hub',
@@ -234,7 +245,7 @@ export function createServer(options: CreateServerOptions): McpServer {
       websiteUrl: SERVER_WEBSITE_URL,
     },
     {
-      instructions: buildInstructions(readOnly),
+      instructions: buildInstructions(readOnly, allowRender ?? false),
       cacheHints: {
         // The tool list is fixed at construction for the life of the
         // process (read-only mode and auth state included), so a long
@@ -250,7 +261,7 @@ export function createServer(options: CreateServerOptions): McpServer {
     },
   );
 
-  registerTools(server, manager, readOnly, authToolsState);
+  registerTools(server, manager, readOnly, authToolsState, allowRender ?? false);
   return server;
 }
 
@@ -260,6 +271,7 @@ export function parseArgs(
 ): ParsedArgs {
   let serverUrl = env['QUARTO_HUB_SERVER'] ?? '';
   let readOnly = false;
+  let allowRender = false;
   let redirectPort: number | undefined;
 
   for (let i = 2; i < argv.length; i++) {
@@ -268,6 +280,8 @@ export function parseArgs(
       serverUrl = argv[++i]!;
     } else if (arg === '--read-only') {
       readOnly = true;
+    } else if (arg === '--allow-render') {
+      allowRender = true;
     } else if (arg === '--redirect-port' && i + 1 < argv.length) {
       try {
         redirectPort = parseRedirectPort(argv[++i]!);
@@ -276,12 +290,16 @@ export function parseArgs(
         process.exit(1);
       }
     } else if (arg === '--help' || arg === '-h') {
-      console.error(`Usage: quarto-hub-mcp [--server <url>] [--read-only] [--redirect-port <N>]
+      console.error(`Usage: quarto-hub-mcp [--server <url>] [--read-only] [--allow-render] [--redirect-port <N>]
 
 Options:
   --server <url>        Automerge sync server URL (or set QUARTO_HUB_SERVER).
                         Default: wss://quarto-hub.com/ws
   --read-only           Only expose read tools (no write/create/delete)
+  --allow-render        Expose the \`render\` tool. Rendering executes project
+                        code (computations, filters, engines) on this machine —
+                        enable only for projects you trust. Has no effect with
+                        --read-only (the stricter gate wins).
   --redirect-port <N>   Fixed loopback port for the sign-in redirect
                         (1024-65535). Omit to let the OS pick one. Set a
                         stable port when forwarding sign-in over SSH:
@@ -298,7 +316,7 @@ Options:
     serverUrl = DEFAULT_SERVER_URL;
   }
 
-  return { serverUrl, readOnly, redirectPort };
+  return { serverUrl, readOnly, allowRender, redirectPort };
 }
 
 /**
@@ -337,7 +355,7 @@ function protectProtocolStdout(): void {
 
 async function main(): Promise<void> {
   installRedactingErrorHandlers();
-  const { serverUrl, readOnly, redirectPort } = parseArgs(process.argv);
+  const { serverUrl, readOnly, allowRender, redirectPort } = parseArgs(process.argv);
   protectProtocolStdout();
 
   // Optional auth bootstrap: if both env vars are set we wire up the
@@ -421,7 +439,9 @@ async function main(): Promise<void> {
   // connection's lifetime, and installs the modern-only handlers
   // (server/discover) itself when the opening claims 2026-07-28. The
   // factory serves both eras — registration is era-agnostic.
-  const handle = serveStdio(() => createServer({ manager, readOnly, authToolsState }));
+  const handle = serveStdio(() =>
+    createServer({ manager, readOnly, allowRender, authToolsState }),
+  );
 
   // Outbound-sync drain budget at shutdown (bd-10deu8h4): created
   // documents live only in this process's memory until the hub acks

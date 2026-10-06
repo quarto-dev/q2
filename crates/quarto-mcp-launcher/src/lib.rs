@@ -31,6 +31,7 @@ pub use defaults::{BundledDefault, Source, bundled_defaults, classify, injection
 pub use node::{Discovery, MIN_NODE_MAJOR, NodeError, NodeInfo, find_node, parse_version};
 
 use anyhow::{Result, bail};
+use std::ffi::OsString;
 use std::path::PathBuf;
 
 /// What `run` should do with the args, decided up front by
@@ -165,6 +166,15 @@ pub fn run(args: &[String]) -> Result<i32> {
             extra_env.push(("QUARTO_MCP_SERVER_VERSION", v.as_str()));
         }
     }
+    // CAP-12: the render tools spawn `q2 render`; default to this binary.
+    let q2_path_injection;
+    if let Some(v) = q2_path_for_child(
+        std::env::var_os("QUARTO_Q2_PATH"),
+        std::env::current_exe().ok(),
+    ) {
+        q2_path_injection = v;
+        extra_env.push(("QUARTO_Q2_PATH", q2_path_injection.as_str()));
+    }
     delegate::delegate(
         &node.path,
         &extracted.dir.join("index.mjs"),
@@ -193,6 +203,19 @@ fn server_version_for_child(build_info: Option<&str>) -> Option<String> {
         short,
         if dirty { ".dirty" } else { "" }
     ))
+}
+
+/// The `QUARTO_Q2_PATH` value injected into the node child (CAP-12): the
+/// MCP server's render tools spawn `q2 render` as a subprocess, and the
+/// sane default is the very binary hosting `q2 mcp`. The user env wins,
+/// as with the hub defaults and BP-10's version injection. `None` when
+/// the current exe path is not UTF-8 (never on a sane install; the render
+/// tools then fall back to `q2` on PATH).
+fn q2_path_for_child(user_env: Option<OsString>, current_exe: Option<PathBuf>) -> Option<String> {
+    if user_env.is_some() {
+        return None;
+    }
+    current_exe?.to_str().map(str::to_owned)
 }
 
 fn cache_root() -> Result<PathBuf> {
@@ -272,5 +295,31 @@ mod tests {
             server_version_for_child(Some(r#"{"gitDirty": false}"#)),
             None
         );
+    }
+
+    #[test]
+    fn q2_path_injection_defaults_to_current_exe() {
+        assert_eq!(
+            q2_path_for_child(None, Some(PathBuf::from("/usr/local/bin/q2"))),
+            Some("/usr/local/bin/q2".to_string())
+        );
+    }
+
+    #[test]
+    fn q2_path_injection_lets_the_user_env_win() {
+        assert_eq!(
+            q2_path_for_child(
+                Some(std::ffi::OsString::from("/opt/custom/q2")),
+                Some(PathBuf::from("/usr/local/bin/q2"))
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn q2_path_injection_skips_non_utf8_exe_paths() {
+        use std::os::unix::ffi::OsStringExt;
+        let weird = std::ffi::OsString::from_vec(vec![0xff, 0xfe]);
+        assert_eq!(q2_path_for_child(None, Some(PathBuf::from(weird))), None);
     }
 }

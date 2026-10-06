@@ -53,6 +53,15 @@ import {
   replaceSection,
   type OutlineEntry,
 } from './qmd-ast.js';
+import {
+  collectOutputs,
+  makeRenderDir,
+  materializeProject,
+  outRender,
+  parseDiagnostics,
+  removeRenderDir,
+  runRender,
+} from './render.js';
 
 function text(msg: string): CallToolResult {
   return { content: [{ type: 'text', text: msg }] };
@@ -468,6 +477,7 @@ type DataToolName =
   | 'create_folder'
   | 'delete_folder'
   | 'restore_file_version'
+  | 'render'
   | 'create_project';
 
 /**
@@ -554,6 +564,8 @@ async function handleTool(
       return handleDeleteFolder(args, manager);
     case 'restore_file_version':
       return handleRestoreFileVersion(args, manager);
+    case 'render':
+      return handleRender(args, manager, extras);
     case 'create_project':
       return handleCreateProject(args, manager);
   }
@@ -995,6 +1007,106 @@ async function handleGetOutline(args: ToolArgs, manager: ConnectionManager): Pro
       end_line: e.endLine,
     })),
   });
+}
+
+// ---------------------------------------------------------------------------
+// CAP-12: render (opt-in via --allow-render; code execution gate)
+// ---------------------------------------------------------------------------
+
+/** Renderable-file cap for the loose-files fallback (argv safety on Windows). */
+const RENDER_FILES_CAP = 500;
+
+async function handleRender(
+  args: ToolArgs,
+  manager: ConnectionManager,
+  extras: ToolExtras = {},
+): Promise<CallToolResult> {
+  const project = args.project as string;
+  const pathArg = typeof args.path === 'string' && args.path !== '' ? args.path : undefined;
+  const rawTimeout = typeof args.timeout_seconds === 'number' ? args.timeout_seconds : 120;
+  const timeoutSeconds = Math.min(Math.max(rawTimeout, 1), 600);
+  const state = await manager.connect(project, { server: routedServer(args) });
+
+  if (pathArg !== undefined && !state.files.has(pathArg)) {
+    const ghost = findUnavailable(state.client, pathArg);
+    if (ghost) {
+      return unavailableFileError(pathArg, ghost.docId);
+    }
+    return fileNotFoundError(pathArg, state);
+  }
+
+  // Choose the render mode. A directory render (`q2 render .`) needs a
+  // `_quarto.yml`; without one q2 answers Q-7-7/Q-7-3 without touching a
+  // file, so loose projects render as an explicit .qmd list instead.
+  let mode: 'file' | 'project' | 'files';
+  let targets: string[];
+  if (pathArg !== undefined) {
+    mode = 'file';
+    targets = [pathArg];
+  } else if (state.files.has('_quarto.yml')) {
+    mode = 'project';
+    targets = ['.'];
+  } else {
+    const qmds = [...state.files.keys()].filter((p) => p.endsWith('.qmd')).sort();
+    if (qmds.length === 0) {
+      return error(
+        'Error: nothing to render — the project has no .qmd files and no _quarto.yml. ' +
+          'Add a document, or pass `path` naming a specific file to render.',
+      );
+    }
+    if (qmds.length > RENDER_FILES_CAP) {
+      return error(
+        `Error: the project has ${qmds.length} .qmd files and no _quarto.yml — the loose-files ` +
+          `render is capped at ${RENDER_FILES_CAP}. Add a _quarto.yml for project renders, ` +
+          'or pass `path` to render one file.',
+      );
+    }
+    mode = 'files';
+    targets = qmds;
+  }
+
+  const dir = makeRenderDir();
+  try {
+    const { written, skipped } = materializeProject(state.files, dir);
+    const q2Path = process.env['QUARTO_Q2_PATH'] ?? 'q2';
+    const outcome = await runRender({
+      q2Path,
+      cwd: dir,
+      targets,
+      timeoutMs: timeoutSeconds * 1000,
+      signal: extras.signal,
+    });
+    if (outcome.spawnError !== undefined) {
+      return error(
+        `Error: could not launch q2 ("${q2Path}"): ${outcome.spawnError}. Under \`q2 mcp\` the ` +
+          'launcher injects QUARTO_Q2_PATH pointing at the hosting binary; running standalone, ' +
+          'set QUARTO_Q2_PATH or put q2 on PATH.',
+      );
+    }
+    const diagnostics = parseDiagnostics(outcome.stderr, dir);
+    const outputs = collectOutputs(dir, new Set(written));
+    return structured({
+      ok: outcome.exitCode === 0 && !outcome.timedOut,
+      exit_code: outcome.exitCode,
+      target: pathArg ?? '.',
+      mode,
+      ...(mode === 'files' ? { files: targets } : {}),
+      diagnostics,
+      outputs,
+      duration_ms: outcome.durationMs,
+      ...(outcome.timedOut
+        ? {
+            timed_out: true,
+            hint:
+              `Render exceeded timeout_seconds=${timeoutSeconds} and was killed. Raise the ` +
+              'timeout, or render a smaller target by passing `path`.',
+          }
+        : {}),
+      ...(skipped.length > 0 ? { skipped_inputs: skipped } : {}),
+    });
+  } finally {
+    removeRenderDir(dir);
+  }
 }
 
 async function handleReadFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
@@ -2088,6 +2200,7 @@ export function registerTools(
   manager: ConnectionManager,
   readOnly: boolean,
   authToolsState?: AuthToolsState,
+  allowRender = false,
 ): void {
   if (authToolsState) {
     for (const def of AUTH_TOOL_DEFINITIONS) {
@@ -2661,5 +2774,50 @@ export function registerTools(
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
     (args) => runDataTool('create_project', args, manager),
+  );
+
+  // CAP-12: render is opt-in (--allow-render) and excluded from --read-only
+  // even when both flags pass — read-only is the stricter gate. It is also
+  // outside the ERG-5 default-listing ceiling precisely because it is
+  // opt-in.
+  if (!allowRender || readOnly) return;
+
+  server.registerTool(
+    'render',
+    {
+      title: 'Render the project',
+      description:
+        'Materialize the project to a temp dir and run `q2 render --json-errors` on it, ' +
+        'returning `{ ok, exit_code, diagnostics, outputs, duration_ms }` — diagnostics carry ' +
+        'Q- codes and source locations, so the edit → render → fix loop closes without a ' +
+        'shell. Omit `path` to render everything; pass it for one file. SECURITY: rendering ' +
+        'executes project code (computations, filters, engines) on this machine — only render ' +
+        'projects you trust. The temp dir is removed afterwards; rendered files are not ' +
+        'retained (`outputs` lists what was produced).',
+      inputSchema: z.object({
+        project: projectParam,
+        path: z
+          .string()
+          .optional()
+          .describe('Render just this file (project-relative). Omit to render the whole project.'),
+        timeout_seconds: z
+          .number()
+          .min(1)
+          .max(600)
+          .default(120)
+          .describe('Kill the render after this many seconds (default 120, max 600).'),
+      }),
+      outputSchema: outRender,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+    },
+    (args, ctx) =>
+      runDataTool('render', args, manager, {
+        signal: ctx?.mcpReq?.signal,
+      }),
   );
 }
