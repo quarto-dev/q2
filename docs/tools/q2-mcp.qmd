@@ -97,7 +97,19 @@ the same safety signals you have when editing by hand:
   `synced: false` means "not yet confirmed", not "lost".
 - **Watching.** `wait_for_change` long-polls a file and returns the new
   content when a collaborator edits it, so the agent can react to you
-  in near-real-time.
+  in near-real-time. With no `path` it watches the whole project and
+  reports every added, edited, or removed file; passing the agent's own
+  post-write `hash` as `since_hash` keeps its own write from being
+  reported back to it.
+- **Presence.** `list_presence` shows who is in the project and which
+  file they are editing, observed passively from the same ephemeral
+  messages the web client exchanges — the server never announces
+  itself, so collaborators don't see a phantom cursor.
+- **History and undo.** `get_file_history` lists a file's changes with
+  authors and timestamps, or diffs two versions
+  (`from_hash`/`to_hash`). `restore_file_version` reverts a file to a
+  prior version as a new change on top of history — nothing is
+  rewritten, and the result carries what undoing the restore takes.
 - **Ranges.** Large files read in pages: a truncated `read_file`
   result carries `next_offset` to continue from, and `list_files`
   shows each file's size and line count up front.
@@ -126,7 +138,15 @@ the same safety signals you have when editing by hand:
 | `create_file` | Create a new text or binary file |
 | `delete_file` | Delete a file |
 | `rename_file` | Rename or move a file |
-| `wait_for_change` | Long-poll a file for collaborator edits |
+| `restore_file_version` | Revert a file to a prior version from `get_file_history` (a new, reversible change) |
+| `wait_for_change` | Long-poll a file — or the whole project with no `path` — for collaborator edits |
+
+### Collaboration
+
+| Tool | Purpose |
+|------|---------|
+| `list_presence` | Who is in the project and which file they are editing (passive observation) |
+| `get_file_history` | A file's changes with authors and timestamps, or a unified diff between two versions |
 
 ### Folders
 
@@ -148,7 +168,8 @@ the same safety signals you have when editing by hand:
 To let an agent look but never edit, add `--read-only` to the `args`
 array. The server then exposes only read tools (`connect_project`,
 `list_files`, `read_file`, `search_files`, `wait_for_change`,
-`get_project_info`, `list_projects`, `disconnect_project`) — no write,
+`get_project_info`, `list_projects`, `list_presence`,
+`get_file_history`, `disconnect_project`) — no write,
 create, or delete calls exist in that configuration.
 
 ## A note on trust
