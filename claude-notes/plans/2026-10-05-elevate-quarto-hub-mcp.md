@@ -297,40 +297,117 @@ Process requirements for **every** phase (repo mandates, non-negotiable):
 The regression net everything else TDDs against. Pure test code and fixtures —
 no runtime additions, and nothing changes for stdio users.
 
-- [ ] In-memory linked-transport fixture: SDK `Client` ↔ our `Server` over
+- [x] In-memory linked-transport fixture: SDK `Client` ↔ our `Server` over
   `InMemoryTransport.createLinkedPair()`, booted against the in-process
   `test-hub`. A *new* fixture, not an extension of `mcp-test-client.ts` —
   that client is raw JSON-RPC over a spawned stdio process with no schema
   validation; keep it for the stdio-hygiene tests. Write against the SDK
   `Client` API so the fixture survives BP-16 (`@modelcontextprotocol/client`
   in v2).
-- [ ] `@modelcontextprotocol/inspector --cli … --method tools/list` smoke test
+- [x] `@modelcontextprotocol/inspector --cli … --method tools/list` smoke test
   over stdio (no listener needed). The official conformance suite
   (`@modelcontextprotocol/conformance`) is deferred to Phase 6: at 0.1.x its
   marginal value over the in-memory fixture plus the schema-conformance tests
   below does not justify a test-only HTTP transport and a maintained
   expected-failures baseline.
-- [ ] **Agent-task eval suite** (ERG-7): 5–8 scripted tasks + a runner
+- [x] **Agent-task eval suite** (ERG-7): 5–8 scripted tasks + a runner
   (headless `claude -p` or the Agent SDK, Q-7) against `test-hub`; scoring
   (success, turns, tokens, `isError` count, validation retries); baseline
   recorded in this plan before Phase 1 changes anything. Not in CI.
-- [ ] **Test spec — security invariants**: the auth URL handed to the browser
+- [x] **Test spec — security invariants**: the auth URL handed to the browser
   is `http(s)` with a non-private host (BP-18); Bearer is never sent over
   `ws://` to a non-loopback peer (exists; pin as a named conformance test).
-- [ ] **Test spec — tool budget**: default `tools/list` count ≤ 24 (ERG-5).
-- [ ] **Test spec — schema conformance**: every `tools/list` entry validates
+- [x] **Test spec — tool budget**: default `tools/list` count ≤ 24 (ERG-5).
+- [x] **Test spec — schema conformance**: every `tools/list` entry validates
   against the SDK's `ToolSchema`; every `inputSchema` compiles as JSON Schema
   2020-12 (BP-11, BP-14).
-- [ ] **Test spec — result conformance**: for each tool with an `outputSchema`
+- [x] **Test spec — result conformance**: for each tool with an `outputSchema`
   (none yet — harness ships with the assertion wired and a placeholder schema
   list), a golden call's `structuredContent` validates (BP-1's future net).
-- [ ] **Test spec — cancellation hygiene**: cancelling `wait_for_change`
+- [x] **Test spec — cancellation hygiene**: cancelling `wait_for_change`
   mid-poll resolves the request as cancelled and leaves zero listeners on the
   doc handle. Land it as vitest `test.fails` in Phase 0 (green-by-construction
   against the unfixed code, so the Phase 0 gate stays green); flip to a normal
   test when the BP-3 fix lands in Phase 1.
-- [ ] Wire into `vitest` + confirm no new network access (CI-flake policy:
+- [x] Wire into `vitest` + confirm no new network access (CI-flake policy:
   offline by default, like the existing suite modulo its gated live tests).
+
+#### Phase 0 completion record (landed 2026-10-06, bd-f1dr7gs1)
+
+**Files.** `src/in-memory-fixture.ts` (fixture + `seedProject` + typed
+`callTool`), `src/conformance.test.ts` (14 tests: fixture smoke, tool
+budget, schema conformance, result-conformance net, security invariants,
+cancellation hygiene), `src/inspector-smoke.test.ts`,
+`eval/{run.mjs,tasks.mjs,README.md}` + `eval/results/2026-10-06T09-17-33/`
+(baseline transcripts). Runtime deltas, both behavior-preserving:
+`createServer` extracted from `main()` in `index.ts` (fixture and stdio
+entrypoint now share one construction, so the harness can't drift from
+what real clients see), and `ConnectionManager.pendingWaiterCount()` — a
+read-only conformance seam, the leak gauge for the BP-3 net. New devDeps:
+`ajv` (JSON Schema 2020-12 compilation), `@modelcontextprotocol/inspector`
+(smoke test).
+
+**Red-by-construction nets, verified failing for the right reason** (then
+landed as `it.fails`): BP-3 — client call rejects `AbortError` on cancel
+but the waiter count stays 1 (leak); BP-18 — the browser is handed
+`http://169.254.169.254/...?response_type=code&…` built straight from
+malicious IdP metadata. BP-18 ships as `it.fails` too (same flip rule as
+BP-3 when its Phase 1 fix lands) — a small extension of the plan's
+`test.fails` mechanism beyond the cancellation case.
+
+**E2E (per the phase-gate requirement).** The fixture smoke test is the
+CI e2e: real SDK `Client` → `InMemoryTransport` → real `Server` →
+test-hub; create → list → read round-trip. Plus the official-client leg:
+
+```
+node node_modules/.bin/mcp-inspector --cli node dist/index.js \
+  -e QUARTO_HUB_SERVER=ws://127.0.0.1:<port>/ws --method tools/list
+→ exit 0; stdout JSON with the 10 expected tools, each ToolSchema-valid;
+  stderr empty. (Invocation recorded in src/inspector-smoke.test.ts;
+  `-e` is required because the CLI parses `--server` as its own option.)
+```
+
+Note for Phase 6 (CAP-16): the inspector CLI parses `--server <name>` as
+*its* catalog option; server flags must reach the spawned process via
+`-e KEY=VALUE`.
+
+**Q-7 resolved: headless `claude -p`.** `--output-format stream-json
+--verbose` gives machine-readable transcripts (turns, tokens, cost,
+per-tool results) with zero new dependencies and exercises the Claude
+Code host; the Agent SDK would add a dependency for no scoring gain.
+7 tasks (the §5 "5–8"), scored on hub state + final answer, never on
+tool sequence. Suite: `npm run eval -w ts-packages/quarto-hub-mcp`.
+
+**Eval baseline (2026-10-06, claude-fable-5-1 via Claude Code 2.1.289,
+commit of branch tip; transcripts committed at
+`ts-packages/quarto-hub-mcp/eval/results/2026-10-06T09-17-33/`):**
+
+| task | success | turns | tokens (in/out) | cost | isError | retries | nonMcp | duration |
+|------|---------|-------|-----------------|------|---------|---------|--------|----------|
+| create-project | PASS | 3 | 66/528 | $0.0775 | 0 | 0 | 1 | 12s |
+| read-and-report | PASS | 4 | 98/645 | $0.4918 | 0 | 0 | 1 | 13s |
+| patch-typo | PASS | 5 | 130/1358 | $0.5463 | 0 | 0 | 1 | 25s |
+| write-new-file | PASS | 4 | 98/627 | $0.4850 | 0 | 0 | 1 | 12s |
+| rename-file | PASS | 7 | 130/1425 | $0.5568 | 0 | 0 | 1 | 25s |
+| collaborator-edit | PASS | 3 | 66/353 | $0.4524 | 0 | 0 | 1 | 11s |
+| watch-live-edit | PASS | 4 | 98/1722 | $0.5673 | 0 | 0 | 1 | 64s |
+
+7/7 PASS, median 4 turns, zero `isError`, zero validation retries. The
+`nonMcp=1` everywhere is Claude Code's ToolSearch discovery (host-side,
+not a server ergonomics gap). Baseline takeaways for Phase 1: the server
+is already adequate for one-file tasks; the watch task took 64 s
+(baseline for BP-4's progress reporting); nothing yet exercises a
+*failed* call path (wrong args, stale state) — that is where ERG-4's
+error-quality work will show up, and Phase 1 should add an
+error-recovery task to the suite.
+
+**Phase-close gate:** `cargo xtask verify` green (14/14; required fixing
+a pre-existing CI↔verify drift first — xtask's `lint:css` args lacked
+CI's `--if-present`, broken by npm 11 matching the nested
+`vscode-sync-experiment` workspace; landed as its own commit),
+`npm run test -w ts-packages/quarto-hub-mcp` green (24 files, 269
+passed + 2 expected-fail + 3 pre-existing skips). Bundle rebuilt and
+freshness confirmed via `q2 mcp --launcher-info`.
 
 ### Phase 1 — Correctness and protocol hygiene
 

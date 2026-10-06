@@ -254,6 +254,17 @@ export class ConnectionManager {
   }
 
   /**
+   * Conformance-test seam (bd-f1dr7gs1, Phase 0): the number of pending
+   * `waitForChange` waiters registered for a project. This is the leak
+   * gauge for cancellation hygiene (BP-3): a cancelled long-poll must
+   * unregister its waiter, not leave it to its timeout. Production code
+   * has no reason to call this.
+   */
+  pendingWaiterCount(indexDocId: string): number {
+    return this.projects.get(indexDocId)?.waiters.size ?? 0;
+  }
+
+  /**
    * Connect to a project. Walks the try-then-fallback auth policy,
    * then opens the sync client. Re-uses existing project state when
    * we've already connected.

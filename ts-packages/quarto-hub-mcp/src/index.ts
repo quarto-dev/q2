@@ -114,6 +114,47 @@ export function resolveShutdownDrainMs(raw: string | undefined): number {
   return Number.parseInt(raw, 10);
 }
 
+export interface CreateServerOptions {
+  readonly manager: ConnectionManager;
+  readonly readOnly: boolean;
+  readonly authToolsState?: AuthToolsState;
+}
+
+/**
+ * Build the MCP `Server` with this package's identity, instructions, and
+ * full tool surface registered. Shared by the stdio entrypoint (`main`)
+ * and the in-process conformance fixture (`in-memory-fixture.ts`,
+ * bd-f1dr7gs1), so both serve the identical surface — the harness never
+ * drifts from what a real client sees. Pure construction: no transport,
+ * no lifecycle handlers.
+ */
+export function createServer(options: CreateServerOptions): Server {
+  const { manager, readOnly, authToolsState } = options;
+  const server = new Server(
+    {
+      name: 'quarto-hub',
+      version: '0.0.1',
+    },
+    {
+      capabilities: {
+        tools: {},
+      },
+      instructions:
+        'Tools operate on a project identified by its automerge index document ID. ' +
+        'You may pass that id directly, OR paste a quarto-hub.com share URL ' +
+        '(`https://quarto-hub.com/#/share/<id>?file=…&name=…`) — the link users share ' +
+        'to grant access — anywhere a `project` is expected. The server extracts the ' +
+        'id from the `#/share/<id>` fragment, and if the URL carries a `file=` ' +
+        'parameter it becomes the default `path` for file tools. If a share URL ' +
+        "names a different hub in its `server=` than this server is connected to, " +
+        'the call is rejected (rather than silently hitting the wrong hub).',
+    },
+  );
+
+  registerTools(server, manager, readOnly, authToolsState);
+  return server;
+}
+
 export function parseArgs(
   argv: string[],
   env: NodeJS.ProcessEnv = process.env,
@@ -260,27 +301,6 @@ async function main(): Promise<void> {
     refreshManager,
   });
 
-  const server = new Server(
-    {
-      name: 'quarto-hub',
-      version: '0.0.1',
-    },
-    {
-      capabilities: {
-        tools: {},
-      },
-      instructions:
-        'Tools operate on a project identified by its automerge index document ID. ' +
-        'You may pass that id directly, OR paste a quarto-hub.com share URL ' +
-        '(`https://quarto-hub.com/#/share/<id>?file=…&name=…`) — the link users share ' +
-        'to grant access — anywhere a `project` is expected. The server extracts the ' +
-        'id from the `#/share/<id>` fragment, and if the URL carries a `file=` ' +
-        'parameter it becomes the default `path` for file tools. If a share URL ' +
-        "names a different hub in its `server=` than this server is connected to, " +
-        'the call is rejected (rather than silently hitting the wrong hub).',
-    },
-  );
-
   const authToolsState =
     flowConfig && credentialStore && refreshManager
       ? new AuthToolsState({
@@ -297,7 +317,7 @@ async function main(): Promise<void> {
         })
       : undefined;
 
-  registerTools(server, manager, readOnly, authToolsState);
+  const server = createServer({ manager, readOnly, authToolsState });
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
