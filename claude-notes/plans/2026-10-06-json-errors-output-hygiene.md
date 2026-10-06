@@ -2,7 +2,7 @@
 
 **Strand:** bd-gnw9asuo (bug, P2). Child: bd-ckbqmupi. Discovered from bd-uk8zgkha (claude-notes website).
 **Branch:** `braid/bd-gnw9asuo-q2-render-json-errors`, off `origin/main` @ `7f70632cc`.
-**Status:** DRAFT. Waiting for review before execution.
+**Status:** APPROVED 2026-10-06 (D1=a, D2=yes, D3=absolute, D4=dropped; R1–R6 deferred). Executing.
 
 ## Overview
 
@@ -56,7 +56,14 @@ q2 render --json-errors >out.txt 2>err.txt   # exit 1, 4.7 s wall
   `quarto_error_reporting::json::diagnostic_to_json` always sets `source_file: None`
   (external crate 0.3.2, `json.rs:310`). Callers must tag the file.
 
-## Decisions to make before execution
+## Decisions (resolved 2026-10-06)
+
+Resolutions: **D1 → (a) only**; no summary record (users can derive one with jq).
+**D2 → yes**; afterwards, re-check claude-notes for remaining records with no `source_file`
+and file follow-up strands as appropriate. **D3 → absolute.** **D4 → dropped**: keep JSON
+complete and uncoalesced; downstream tooling can coalesce. **R1–R6: no action in this strand.**
+
+Original options, kept for the record:
 
 - **D1: status lines under `--json-errors`.** Options:
   (a) treat `--json-errors` as implying `--quiet` for status lines. This is the smallest change.
@@ -101,35 +108,126 @@ or file it separately.
   output is not grouped. Once `source_file` is present this matters less, because consumers can
   `group_by(.source_file)`.
 
+## Audit findings during execution (2026-10-06)
+
+The Phase 1 audit found more non-JSON writers than the two status lines. These are in scope
+because they are the same defect (non-JSON text on the `--json-errors` stream, emitted by the
+render command itself):
+
+- **CLI-emitted diagnostics printed as ariadne text unconditionally.** Q-20-8 (multi-format
+  `format:` reduced to one; `render.rs` `render_once`) and the project-config diagnostics
+  (Q-5-11 `pre_render` typo, project-kind diagnostics, `config_diagnostics`; `render_project`)
+  call `eprintln!("{}", diagnostic.to_text(None))` regardless of `--json-errors`.
+- **`quiet` flows further than `user_status!`.** `RenderArgs.quiet` also feeds
+  `RenderToFileOptions.quiet` (engine progress output) and the render-script context
+  (`"Running pre-render script: …"`, plus a script's inherited stdout/stderr). Under
+  `--json-errors` all of these should behave as under `--quiet`.
+- **More located records without a file.** `emit_parse_error_json` is called with
+  `input: None` for discovery and render-script errors, so e.g. Q-5-17 (unknown
+  `project.type`, located at `_quarto.yml:2:9`) has no `source_file` either.
+
+**Attribution rule (refines D2/D3).** `source_file` names *the file `start_line`/`start_column`
+refer to*. Derive it from the diagnostic's own location, resolved through the same
+`SourceContext` that produced the coordinates:
+1. location resolves into a virtual file with a `FileOrigin::NotebookCell` origin → its
+   `notebook_path` (the documented "file reported in structured output"; `origin` carries the cell);
+2. location resolves into a file that exists on disk → that path;
+3. location resolves but the file is not on disk → no `source_file` (honest; counted in the re-check);
+4. no location, or it does not resolve → the caller's known file (page input, config path), if any.
+All emitted paths are made absolute (`std::path::absolute`, which stays in plain form on Windows).
+This mirrors `quarto-error-reporting`'s own `hyperlink_target` rule for the text path. It lives in
+q2 because the crate's `diagnostic_to_json` leaves attribution to callers by design.
+Rule 1 matters: page renders produce diagnostics whose coordinates are in `_quarto.yml`
+(e.g. raw HTML in `website.page-footer`, Q-2-9). Tagging those with the page path would make the
+record point at the wrong file.
+
+**Out of scope, to file as follow-ups** (non-JSON writers outside the CLI's emission layer):
+- `tracing::warn!` from `quarto*` crates prints at the default filter (`quarto=warn`) as plain text.
+- pampa `eprintln!`s: `mediabag.fetch failed …` (`lua/mediabag.rs:190`), "shouldn't happen"
+  parser warnings (`treesitter.rs:1221`, `language_specifier.rs:125`).
+- `quarto.log.output` from user Lua filters (`lua/quarto_api.rs:74`). This is user content, so it is
+  arguably correct as-is.
+- A failed render script's captured stderr is replayed raw before its Q-5-10 diagnostic.
+- `render_diagnostic_guarded` / `emit_json_line` internal-failure fallbacks print plain text.
+- `_quarto.yml` YAML *syntax* errors at discovery surface as span-less Q-7-8
+  (`DispatchError::Discover(String)`), losing their location in every mode.
+
 ## Checklist
 
 ### Phase 0: tests first (TDD)
-- [ ] In `crates/quarto/tests/integration/json_errors.rs`: add a project-render test with one
+- [x] In `crates/quarto/tests/integration/json_errors.rs`: add a project-render test with one
       page that renders successfully but has a warning (e.g. a bare `[x]` → Q-2-49) and one page
       that fails pass 1. Assert the warning record has `source_file` ending in that page's name.
-- [ ] Add an assertion that **every** stderr line under `--json-errors` parses as JSON, for both
+      → `project_page_warning_json_carries_source_file`
+- [x] Add an assertion that **every** stderr line under `--json-errors` parses as JSON, for both
       project and single-file renders. Tighten (or add a strict sibling to) `parse_ndjson_lines`
       so it fails on non-JSON lines instead of skipping them.
-- [ ] (D2) Add a test for a `_quarto.yml`-anchored project diagnostic carrying `source_file`.
-- [ ] Run the tests and confirm they fail for the expected reasons.
+      → `parse_ndjson_strict`; `project_/single_doc_json_errors_stderr_is_pure_ndjson`
+- [x] (D2) Add a test for a `_quarto.yml`-anchored project diagnostic carrying `source_file`.
+      → `project_config_diagnostic_json_carries_source_file` (Q-5-13)
+- [x] Tests for the audit findings: `multi_format_warning_is_json_with_source_file` (Q-20-8),
+      `config_typo_warning_is_json_with_source_file` (Q-5-11),
+      `config_anchored_page_warning_names_config_file` (Q-2-9 from `page-footer`),
+      `discovery_parse_error_json_carries_source_file` (Q-5-17),
+      `render_scripts_cli::json_errors_keeps_script_output_off_stderr`.
+- [x] Run the tests and confirm they fail for the expected reasons. 9/9 failed as predicted:
+      5 on a non-JSON line (status lines, Q-20-8/Q-5-11 text, script chatter), 4 on a missing
+      `source_file`. The original discovery fixture (YAML syntax error) turned out to produce a
+      span-less Q-7-8, so it was retargeted to Q-5-17 and the gap was noted above.
 
 ### Phase 1: silence status lines in JSON mode
-- [ ] Gate `user_status!` calls at `render.rs:865, 877, 1046, 1227` on `args.quiet || args.json_errors`.
-      Prefer one helper (e.g. `args.status_quiet()`) over repeating the expression.
-- [ ] Audit the render path for any other unconditional `eprintln!`/`user_status!`: render scripts,
-      engines, freeze, resources.
+- [x] One `RenderArgs` predicate for the effective console-quiet (`quiet || json_errors`), used at
+      every site `args.quiet` flows: the `user_status!` calls, `RenderToFileOptions.quiet`, and
+      both render-script contexts. → `RenderArgs::console_quiet()`; the CLI help for
+      `--json-errors` now says it implies `--quiet`.
+- [x] Audit the render path for any other unconditional `eprintln!`/`user_status!` (see findings above).
+- [x] Emit Q-20-8 and the project-config diagnostics as JSON under `--json-errors`.
+      → `emit_cli_diagnostic` (text form unchanged; JSON form binds the config source context).
 
 ### Phase 2: `source_file` on per-page and project diagnostics
-- [ ] Per-page loop: `with_source_file(…, result.input_path)`. Delete the out-of-date comment.
-- [ ] Project loop: per D2.
-- [ ] Per D4: share per-page preparation with the text branch.
-- [ ] Fix the out-of-date schema-path comments (`render.rs:82, 1928`). They point at the in-tree
+- [x] One helper implementing the attribution rule; route every JSON conversion in `render.rs`
+      through it (pass-1 nested, pass-2, project, per-page, parse-error, CLI-emitted).
+      → `diagnostic_json` / `json_source_file` / `wire_path`. No direct `diagnostic_to_json`
+      call remains outside it.
+- [x] Per-page loop: fall back to `result.input_path`. Delete the out-of-date comment.
+- [x] Project loop: per D2 (falls out of the rule via the config source context).
+- [x] Fix the out-of-date schema-path comments (`render.rs:82, 1928`). They point at the in-tree
       `crates/quarto-error-reporting/schemas/`, which is now external.
 
 ### Phase 3: verify
-- [ ] `cargo nextest run --workspace`, then `cargo xtask verify --skip-hub-build`.
-- [ ] End-to-end: rebuild `q2`, re-run in `claude-notes/`, and check that
-      `grep -vc '^{' err.txt` is 0 and that
-      `jq -s '[.[] | select(."$schema"|test("json-diagnostic")) | select(.start_line and (.source_file|not))] | length'`
-      is 0. Record the invocation and output here.
-- [ ] Decide the fate of R1–R6 (fold in, or file strands linked `discovered-from:bd-gnw9asuo`).
+- [x] `cargo nextest run --workspace`: 15492/15493 passed. The one failure is `smoke_all`, and
+      it is environmental: typst fixtures need knitr (R cannot load its cairo DLL on this machine)
+      and the Python `great_tables` module (not installed). Neither involves `--json-errors`.
+- [x] `cargo xtask verify --skip-hub-build --skip-rust-tests --skip-css-lint --skip-hub-tests`:
+      steps 1–4 green (custom lints, clippy `-D warnings`, rustfmt, warnings-denied workspace
+      build, tree-sitter). Step 6 (ts-packages) is green after an `npm install` in the worktree.
+      Not verifiable here, and none of them touched by this Rust-CLI-only change:
+      - `lint:css` fails on `hub-client/vscode-sync-experiment` (no `lint:css` script) with or
+        without this branch's changes;
+      - hub-client tests (step 8) and the shared preview-* tests (step 11) need the
+        `wasm-quarto-hub-client` artifact, which `--skip-hub-build` does not produce.
+      `crates/quarto` is not a dependency of the WASM client.
+- [x] End-to-end on the real project (recorded below).
+- [x] Re-check claude-notes for records still lacking `source_file`; file follow-up strands (D2).
+
+#### End-to-end record (2026-10-06)
+
+Invocation, from `claude-notes/` on `braid/bd-uk8zgkha-claude-notes-website`, using this
+branch's debug binary:
+
+```bash
+.worktrees/bd-gnw9asuo-q2-render-json-errors/target/debug/q2 render --json-errors 2>err2.txt
+```
+
+Inspected output:
+
+- exit 1 (290 pass-1 failures, as before). stderr has 713 lines, and `grep -vc '^{'` gives **0**
+  (before: 715 lines, 2 of them non-JSON).
+- Located top-level records without `source_file`: **0** (before: 422).
+  Nested pass-1 diagnostics without it: 0. Non-absolute `source_file`: 0.
+- The one record without `source_file` is Q-5-31 ("Skipped 7 nested projects"). It has no span
+  and is project-scoped, so this is correct per D2.
+- With `source_file` stripped, the records are identical to the nightly's (same 713, same
+  content), so the change is purely additive on the wire.
+- The record originally reported now reads:
+  `{"code":"Q-2-49","source_file":"/Users/cscheid/rooms/room-4/q2/claude-notes/yaml-with-source-info-lifetime-approach.md","start_line":120,"start_column":223}`

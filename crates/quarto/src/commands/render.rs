@@ -78,8 +78,8 @@ pub struct RenderArgs {
     pub attribution: Option<AttributionMode>,
     /// Emit diagnostics as NDJSON on stderr instead of human-readable
     /// ariadne text (bd-iey8o). Each emitted line carries a `$schema`
-    /// field; the schema docs live in
-    /// `crates/quarto-error-reporting/schemas/`. Exit codes are
+    /// field; the schema docs live in the `schemas/` directory of the
+    /// external `quarto-error-reporting` crate. Exit codes are
     /// unchanged.
     pub json_errors: bool,
     /// Stop rendering as soon as the first per-document error occurs
@@ -110,6 +110,17 @@ pub struct RenderArgs {
     /// always uses the default (`All`); `q2 preview --static` narrows
     /// it to the pages being viewed. Not a CLI flag.
     pub execution_policy: quarto_core::engine::ExecutionPolicy,
+}
+
+impl RenderArgs {
+    /// Whether non-diagnostic console output is suppressed: progress
+    /// lines, engine progress, and render-script chatter. `--quiet`
+    /// asks for that directly; `--json-errors` implies it, because its
+    /// stderr is reserved for NDJSON a consumer must be able to parse
+    /// line by line (bd-gnw9asuo).
+    pub fn console_quiet(&self) -> bool {
+        self.quiet || self.json_errors
+    }
 }
 
 /// What to render after argument classification.
@@ -862,7 +873,7 @@ pub(crate) fn present_report(report: &RenderReport, args: &RenderArgs) {
                 {
                     line = format!("{line} — {clause}");
                 }
-                quarto_util::user_status!(args.quiet, "{}", line);
+                quarto_util::user_status!(args.console_quiet(), "{}", line);
             }
         }
         None => {
@@ -874,7 +885,7 @@ pub(crate) fn present_report(report: &RenderReport, args: &RenderArgs) {
                 && let Some(clause) =
                     format_counts_clause(&report.diagnostic_counts(), stderr_use_color())
             {
-                quarto_util::user_status!(args.quiet, "{}", clause);
+                quarto_util::user_status!(args.console_quiet(), "{}", clause);
             }
         }
     }
@@ -891,7 +902,7 @@ pub(crate) fn present_report(report: &RenderReport, args: &RenderArgs) {
 /// and `q2 preview --static` records the report for the browser.
 ///
 /// Progress lines (`Rendering project: …`) still print through
-/// `user_status!` as the render runs; `args.quiet` silences them.
+/// `user_status!` as the render runs; `--quiet` or `--json-errors` silences them.
 pub fn render_once(
     args: &RenderArgs,
     present: &mut dyn FnMut(&RenderReport),
@@ -920,13 +931,16 @@ pub fn render_once(
     // `format:` declaration silently reduces to one rendered format.
     // Emit the replacement warning at the same site that made the
     // reduction, before the gate below decides whether to bail.
+    // Only a single-input render can trip it, so that input is the
+    // file it is about.
+    let single_input = match args.inputs.as_slice() {
+        [only] => Some(Path::new(only)),
+        _ => None,
+    };
     for diagnostic in
         multi_format_warning_diagnostics(&args.inputs, args.to.as_deref(), &format_str)
     {
-        let code = diagnostic.code.as_deref();
-        if let Some(text) = render_diagnostic_guarded(code, || diagnostic.to_text(None)) {
-            eprintln!("{}", text);
-        }
+        emit_cli_diagnostic(&diagnostic, args, &SourceContext::new(), single_input);
     }
 
     // Native formats (HTML, revealjs) render in-process. Every
@@ -962,7 +976,7 @@ pub fn render_once(
     let options = RenderToFileOptions {
         output_path: args.output.as_ref().map(PathBuf::from),
         output_dir: args.output_dir.as_ref().map(PathBuf::from),
-        quiet: args.quiet,
+        quiet: args.console_quiet(),
         replay_captures,
         engine_registry_override: None,
         execution_policy: args.execution_policy.clone(),
@@ -1043,7 +1057,11 @@ fn render_single_doc(
         .chain(project.config.extension_manifest_paths.iter().cloned())
         .collect();
 
-    quarto_util::user_status!(args.quiet, "Rendering single file: {}", input.display());
+    quarto_util::user_status!(
+        args.console_quiet(),
+        "Rendering single file: {}",
+        input.display()
+    );
 
     let project_type = project_type_for(&project);
     let format_str = format.identifier.to_string();
@@ -1143,6 +1161,7 @@ fn render_project(
     // project kind (book/manuscript) renders with default behavior,
     // and surface config-parse diagnostics (ambiguous / incomplete
     // project-type extensions) once per run.
+    let config_ctx = config_source_context(&config_sources).unwrap_or_default();
     for diagnostic in render_scripts::underscore_typo_diagnostics(&project.config)
         .into_iter()
         .chain(quarto_core::project::project_kind_diagnostics(
@@ -1150,20 +1169,22 @@ fn render_project(
         ))
         .chain(project.config.config_diagnostics.iter().cloned())
     {
-        // Guarded for uniformity, not because this call can panic:
-        // `None` as the `SourceContext` never reaches a renderer, so
-        // the byte-slicing path is unreachable here today. Measured in
-        // the locked `quarto-error-reporting` 0.2.2:
-        // `to_text_with_renderer` (`diagnostic.rs:442`) gates the
-        // excerpt renderer on `(has_any_location, Some(ctx))`
-        // (`:460-481`) and falls through to the structured-text branch
-        // (`:486`) when `ctx` is `None`. `config_sources` is built
-        // just above; the day it is bound and passed here this becomes
-        // a ninth slicing site and needs the guard like the other eight.
-        let code = diagnostic.code.as_deref();
-        if let Some(text) = render_diagnostic_guarded(code, || diagnostic.to_text(None)) {
-            eprintln!("{}", text);
-        }
+        // `emit_cli_diagnostic` guards both forms. The text form passes
+        // `None` as its `SourceContext`, which never reaches a renderer,
+        // so its byte-slicing path is unreachable today: in the locked
+        // `quarto-error-reporting` 0.2.2, `to_text_with_renderer`
+        // (`diagnostic.rs:442`) gates the excerpt renderer on
+        // `(has_any_location, Some(ctx))` (`:460-481`) and falls through
+        // to the structured-text branch (`:486`) when `ctx` is `None`.
+        // The `--json-errors` form does bind `config_ctx` (so a located
+        // diagnostic gets coordinates and names its config file), and
+        // its pre-rendered snippet is a real slicing site.
+        emit_cli_diagnostic(
+            &diagnostic,
+            args,
+            &config_ctx,
+            project.config.config_path.as_deref(),
+        );
     }
 
     // bd-w348iu63: run `project.pre-render` scripts, then re-discover
@@ -1200,7 +1221,7 @@ fn render_project(
                 &project.config.active_config_profiles,
             ),
             render_all,
-            quiet: args.quiet,
+            quiet: args.console_quiet(),
             file_count: input_files.len(),
             project_env: &script_env,
         };
@@ -1225,7 +1246,7 @@ fn render_project(
     }
 
     quarto_util::user_status!(
-        args.quiet,
+        args.console_quiet(),
         "Rendering project: {} (type: {})",
         project.dir.display(),
         project.project_type_label()
@@ -1316,7 +1337,7 @@ fn render_project(
                 &project.config.active_config_profiles,
             ),
             render_all,
-            quiet: args.quiet,
+            quiet: args.console_quiet(),
             file_count: total_files,
             project_env: &script_env,
         };
@@ -1924,13 +1945,116 @@ fn multi_format_warning_diagnostics(
 // All functions in this section write one JSON object per line to
 // stderr. The wire shapes are `JsonDiagnostic` and `JsonPass1Failure`
 // from `quarto-error-reporting`; each emitted object carries a
-// `$schema` field pointing at the JSON Schema in
-// `crates/quarto-error-reporting/schemas/`.
+// `$schema` field pointing at the JSON Schema in the `schemas/`
+// directory of the external `quarto-error-reporting` crate
+// (posit-dev/quarto-error-reporting).
 //
 // Stdout is NEVER written by this module — the render outputs still
 // go to disk (or to stdout via `--output -`); the diagnostics stream
 // is stderr-only so machine consumers can split clearly.
 // ====================================================================
+
+/// Convert `diag` to its `JsonDiagnostic` wire form, with
+/// `source_file` attributed (bd-gnw9asuo). Every `--json-errors`
+/// conversion in this module goes through here, so a located record
+/// always says which file its coordinates are in.
+///
+/// `fallback` is the file the caller knows the diagnostic is about
+/// (the page being rendered, the project config); see
+/// [`json_source_file`] for when it applies.
+fn diagnostic_json(
+    diag: &DiagnosticMessage,
+    ctx: &SourceContext,
+    fallback: Option<&Path>,
+) -> JsonDiagnostic {
+    let json = diagnostic_to_json(diag, ctx);
+    match json_source_file(diag, ctx, fallback) {
+        Some(source_file) => with_source_file(json, source_file),
+        None => json,
+    }
+}
+
+/// The `source_file` for `diag`: the file its `start_line` /
+/// `start_column` refer to.
+///
+/// That is not always the caller's file — a page render can report a
+/// warning located in `_quarto.yml` (raw HTML in a page footer, say),
+/// and tagging it with the page would point the coordinates at the
+/// wrong file. So the file comes from the diagnostic's own location,
+/// resolved through the same `SourceContext` (and the same
+/// `map_offset(0, ..)`) that `diagnostic_to_json` uses for the
+/// coordinates, following the rule `quarto-error-reporting` uses for
+/// its text hyperlinks (`hyperlink_target`):
+///
+/// - a notebook-cell virtual file reports its notebook (the record's
+///   `origin` carries the cell);
+/// - a file on disk reports its own path;
+/// - a resolved file that is not on disk (in-memory content) reports
+///   nothing, since there is no file the coordinates could be opened in.
+///
+/// Only when there is no location, or it does not resolve, does the
+/// caller's `fallback` apply: the record then has no coordinates, and
+/// the fallback names the file it is about. Paths are absolute.
+fn json_source_file(
+    diag: &DiagnosticMessage,
+    ctx: &SourceContext,
+    fallback: Option<&Path>,
+) -> Option<String> {
+    let resolved = diag
+        .location
+        .as_ref()
+        .and_then(|loc| loc.map_offset(0, ctx))
+        .and_then(|mapped| ctx.get_file(mapped.file_id));
+    let path = match resolved {
+        Some(file) => match &file.metadata.origin {
+            Some(quarto_source_map::FileOrigin::NotebookCell { notebook_path, .. }) => {
+                PathBuf::from(notebook_path)
+            }
+            None => {
+                let path = PathBuf::from(&file.path);
+                if !path.exists() {
+                    return None;
+                }
+                path
+            }
+        },
+        None => fallback?.to_path_buf(),
+    };
+    Some(wire_path(&path))
+}
+
+/// A path as `--json-errors` spells it: absolute, without resolving
+/// symlinks (`std::path::absolute` keeps the plain form on Windows,
+/// unlike `canonicalize`'s `\\?\` prefix).
+fn wire_path(path: &Path) -> String {
+    std::path::absolute(path)
+        .unwrap_or_else(|_| path.to_path_buf())
+        .display()
+        .to_string()
+}
+
+/// Print a diagnostic the CLI raises itself, outside the render
+/// summary: ariadne text normally, one NDJSON record under
+/// `--json-errors`. `ctx` resolves its location for the JSON record
+/// (the text form keeps rendering span-less, as it always has);
+/// `fallback` is the file it is about.
+fn emit_cli_diagnostic(
+    diagnostic: &DiagnosticMessage,
+    args: &RenderArgs,
+    ctx: &SourceContext,
+    fallback: Option<&Path>,
+) {
+    let code = diagnostic.code.as_deref();
+    if args.json_errors {
+        if let Some(json) =
+            render_diagnostic_guarded(code, || diagnostic_json(diagnostic, ctx, fallback))
+        {
+            emit_json_line(&json);
+        }
+    } else if let Some(text) = render_diagnostic_guarded(code, || diagnostic.to_text(None)) {
+        eprintln!("{}", text);
+    }
+}
 
 /// JSON branch of `print_render_diagnostics`. Mirrors the structure
 /// of the text branch (one source of diagnostics at a time) but
@@ -1941,11 +2065,10 @@ fn print_render_diagnostics_json(
 ) {
     // Pass-1 failures: emit one JsonPass1Failure per failure. If the
     // failure has structured diagnostics + a source context, attach
-    // them in JsonDiagnostic form (each tagged with the source
-    // file). If not, the wrapper still carries the source_file and
-    // error string so the agent can route the error.
+    // them in JsonDiagnostic form (each attributed to its file). If
+    // not, the wrapper still carries the source_file and error
+    // string so the agent can route the error.
     for failure in &summary.pass1_failures {
-        let source_file = failure.input.display().to_string();
         let diagnostics: Vec<JsonDiagnostic> = match &failure.source_context {
             Some(ctx) => failure
                 .diagnostics
@@ -1953,14 +2076,14 @@ fn print_render_diagnostics_json(
                 .filter_map(|d| {
                     let code = d.code.as_deref();
                     render_diagnostic_guarded(code, || {
-                        with_source_file(diagnostic_to_json(d, ctx), source_file.clone())
+                        diagnostic_json(d, ctx, Some(&failure.input))
                     })
                 })
                 .collect(),
             None => Vec::new(),
         };
         emit_json_line(&JsonPass1Failure::new(
-            source_file,
+            wire_path(&failure.input),
             failure.error.clone(),
             diagnostics,
         ));
@@ -1972,16 +2095,12 @@ fn print_render_diagnostics_json(
     // error string and the input path.
     for failure in &summary.pass2_failures {
         if failure.diagnostics.is_empty() {
-            let source_file = failure.input.display().to_string();
             let diag = DiagnosticMessageBuilder::error("Render failed")
                 .problem(failure.error.clone())
                 .build();
             let code = diag.code.as_deref();
             if let Some(json) = render_diagnostic_guarded(code, || {
-                with_source_file(
-                    diagnostic_to_json(&diag, &SourceContext::new()),
-                    source_file,
-                )
+                diagnostic_json(&diag, &SourceContext::new(), Some(&failure.input))
             }) {
                 emit_json_line(&json);
             }
@@ -1995,11 +2114,10 @@ fn print_render_diagnostics_json(
                 &ctx_owned
             }
         };
-        let source_file = failure.input.display().to_string();
         for d in &failure.diagnostics {
             let code = d.code.as_deref();
             if let Some(json) = render_diagnostic_guarded(code, || {
-                with_source_file(diagnostic_to_json(d, ctx_ref), source_file.clone())
+                diagnostic_json(d, ctx_ref, Some(&failure.input))
             }) {
                 emit_json_line(&json);
             }
@@ -2009,27 +2127,30 @@ fn print_render_diagnostics_json(
     // Project-level diagnostics. Most (e.g. Q-PROJECT-EMPTY) are pure
     // project-scope with no span; those anchored in `_quarto.yml`
     // (the `project.render` glob diagnostics, Q-5-13/14/15) resolve
-    // through the config's source context.
+    // through the config's source context, which also attributes them
+    // to `_quarto.yml`. Span-less ones are about the project as a
+    // whole, so they name no file.
     let project_ctx = config_source_context(config_sources).unwrap_or_default();
     for diagnostic in &summary.project_diagnostics {
         let code = diagnostic.code.as_deref();
         if let Some(json) =
-            render_diagnostic_guarded(code, || diagnostic_to_json(diagnostic, &project_ctx))
+            render_diagnostic_guarded(code, || diagnostic_json(diagnostic, &project_ctx, None))
         {
             emit_json_line(&json);
         }
     }
 
-    // Per-page render diagnostics on successful outputs. The
-    // RenderToFileResult does not carry the input path (see the
-    // comment in the text branch), so these are emitted without a
-    // source_file tag — agents have to attribute them via the
-    // location.file_id encoded in the diagnostic.
+    // Per-page render diagnostics on successful outputs, attributed
+    // to the file their location resolves into, else to the page.
     for result in &summary.outputs {
         for d in &result.render_output.diagnostics {
             let code = d.code.as_deref();
             if let Some(json) = render_diagnostic_guarded(code, || {
-                diagnostic_to_json(d, &result.render_output.source_context)
+                diagnostic_json(
+                    d,
+                    &result.render_output.source_context,
+                    Some(&result.input_path),
+                )
             }) {
                 emit_json_line(&json);
             }
@@ -2039,33 +2160,22 @@ fn print_render_diagnostics_json(
 
 /// Emit a `QuartoError::Parse` as one or more JSON diagnostics on
 /// stderr. Each attached structured diagnostic becomes its own
-/// `JsonDiagnostic` line (tagged with `source_file` when an input
-/// path is known). If the parse error has no structured
+/// `JsonDiagnostic` line, attributed by [`diagnostic_json`] (`input`
+/// is the fallback file, when known). If the parse error has no structured
 /// diagnostics, a single synthetic diagnostic is emitted from
 /// the error string so callers still get a JSON line.
 fn emit_parse_error_json(parse_error: &quarto_core::ParseError, input: Option<&Path>) {
-    let source_file = input.map(|p| p.display().to_string());
+    // Preserve any source context we can; ParseError owns one.
+    let ctx = &parse_error.source_context;
     if parse_error.diagnostics.is_empty() {
-        let mut diag = DiagnosticMessageBuilder::error("Parse error")
+        let diag = DiagnosticMessageBuilder::error("Parse error")
             .problem(parse_error.to_string())
             .build();
-        // Preserve any source context we can; ParseError owns one.
-        let mut json = diagnostic_to_json(&diag, &parse_error.source_context);
-        if let Some(sf) = source_file {
-            json = with_source_file(json, sf);
-        }
-        emit_json_line(&json);
-        // Touch `diag` so clippy doesn't warn about the unused
-        // builder var on the trivial path.
-        let _ = &mut diag;
+        emit_json_line(&diagnostic_json(&diag, ctx, input));
         return;
     }
     for d in &parse_error.diagnostics {
-        let mut json = diagnostic_to_json(d, &parse_error.source_context);
-        if let Some(sf) = &source_file {
-            json = with_source_file(json, sf.clone());
-        }
-        emit_json_line(&json);
+        emit_json_line(&diagnostic_json(d, ctx, input));
     }
 }
 
@@ -2083,9 +2193,10 @@ fn emit_dispatch_error_json(e: &DispatchError) {
         emit_parse_error_json(pe, None);
         return;
     }
-    emit_json_line(&diagnostic_to_json(
+    emit_json_line(&diagnostic_json(
         &dispatch_error_to_diagnostic(e),
         &SourceContext::new(),
+        None,
     ));
 }
 
