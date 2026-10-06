@@ -357,7 +357,10 @@ describe('live: create project and mutate files', () => {
       content: 'Brand new file',
     });
     expect(result.isError).toBeUndefined();
-    expect(result.content[0]!.text).toContain('Created');
+    // ERG-1/ERG-2: create results are { path, hash, created, synced }.
+    const createdFile = JSON.parse(result.content[0]!.text);
+    expect(createdFile.created).toBe(true);
+    expect(createdFile.hash).toMatch(/^sha256:/);
 
     // Verify it exists (ERG-1: read results are { path, hash, content }).
     const readResult = await client.callTool('read_file', {
@@ -384,7 +387,10 @@ describe('live: create project and mutate files', () => {
       new_path: 'renamed-file.qmd',
     });
     expect(result.isError).toBeUndefined();
-    expect(result.content[0]!.text).toContain('Renamed');
+    // ERG-2: rename results are { old_path, new_path, renamed, synced }.
+    const renamed = JSON.parse(result.content[0]!.text);
+    expect(renamed.renamed).toBe(true);
+    expect(renamed.new_path).toBe('renamed-file.qmd');
 
     // Old path should not exist
     const oldResult = await client.callTool('read_file', {
@@ -407,7 +413,9 @@ describe('live: create project and mutate files', () => {
       path: 'renamed-file.qmd',
     });
     expect(result.isError).toBeUndefined();
-    expect(result.content[0]!.text).toContain('Deleted');
+    // ERG-2: delete results are { path, deleted, synced }.
+    const deletedFile = JSON.parse(result.content[0]!.text);
+    expect(deletedFile.deleted).toBe(true);
 
     // File should no longer exist
     const readResult = await client.callTool('read_file', {

@@ -1441,6 +1441,53 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   }
 
   /**
+   * Bounded per-write delivery confirmation (ERG-2 — quarto-hub-mcp's
+   * write tools): wait until the named file documents AND the index
+   * document have been delivered to a storage-backed peer (the hub),
+   * returning early on confirmation. Resolves `true` when everything
+   * outstanding is delivered, `false` when the budget expires — the
+   * write is never rolled back either way, so `false` means "not yet
+   * confirmed", not "lost".
+   *
+   * The index handle always participates: delete/rename touch only the
+   * index, and create touches both. Event-driven on `remote-heads` /
+   * `peer`, sharing the exit drain's delivery signal (bd-10deu8h4).
+   */
+  async function awaitDelivery(paths: string[], timeoutMs: number): Promise<boolean> {
+    const handles: Array<DocHandle<unknown>> = [];
+    if (state.indexHandle) {
+      handles.push(state.indexHandle as unknown as DocHandle<unknown>);
+    }
+    for (const path of paths) {
+      const handle = state.fileHandles.get(path);
+      if (!handle) return false; // unknown document — nothing to wait on
+      handles.push(handle as unknown as DocHandle<unknown>);
+    }
+    if (handles.length === 0) return false;
+    if (handles.every(isDelivered)) return true;
+    return await new Promise<boolean>((resolve) => {
+      let done = false;
+      const cleanup = () => {
+        clearTimeout(timer);
+        for (const handle of handles) handle.off('remote-heads', recheck);
+        state.repo?.networkSubsystem.off('peer', recheck);
+      };
+      const finish = (ok: boolean) => {
+        if (done) return;
+        done = true;
+        cleanup();
+        resolve(ok);
+      };
+      const timer = setTimeout(() => finish(false), timeoutMs);
+      const recheck = () => {
+        if (handles.every(isDelivered)) finish(true);
+      };
+      for (const handle of handles) handle.on('remote-heads', recheck);
+      state.repo?.networkSubsystem.on('peer', recheck);
+    });
+  }
+
+  /**
    * Disconnect from the sync server.
    *
    * With `drainMs > 0`, first gives outbound document sync a bounded
@@ -2300,6 +2347,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: AS
   return {
     connect,
     disconnect,
+    awaitDelivery,
     isFileBinary,
     getFileContent,
     getBinaryFileContent,

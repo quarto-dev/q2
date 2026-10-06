@@ -446,6 +446,23 @@ export class ConnectionManager {
     return { indexDocId: result.indexDocId, files: result.files };
   }
 
+  /**
+   * Bounded delivery wait for the write tools (ERG-2): resolve `true`
+   * once the hub has acknowledged every document a write touched (the
+   * named file documents plus, always, the index document), `false`
+   * when the budget expires. The write itself is never rolled back —
+   * `false` means "not yet confirmed", not "lost".
+   */
+  async awaitDelivery(
+    indexDocId: string,
+    paths: string[],
+    timeoutMs: number,
+  ): Promise<boolean> {
+    const state = this.projects.get(indexDocId);
+    if (!state) return false;
+    return state.client.awaitDelivery(paths, timeoutMs);
+  }
+
   /** Read-only accessor matching the prior API. */
   get(indexDocId: string): ProjectState | undefined {
     return this.projects.get(indexDocId);

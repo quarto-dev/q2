@@ -58,6 +58,39 @@ const ANNOT_READ: ToolAnnotations = {
   idempotentHint: true,
 };
 
+/**
+ * The bounded delivery wait applied to every write (ERG-2): long enough
+ * for a healthy hub's ack (tens of ms on a good link), short enough
+ * that a stalled hub costs one noticeable pause, not a hang.
+ */
+const SYNC_WAIT_MS = 2000;
+
+const waitForSyncParam = z
+  .boolean()
+  .optional()
+  .describe(
+    'Set false to skip the bounded delivery wait. By default the call returns after the hub ' +
+      'acknowledges the write (up to ~2s) and the result carries `synced: true|false`; ' +
+      '`synced: false` means "not yet confirmed", not "lost" — the change is queued locally ' +
+      'and still syncs when the hub is reachable.',
+  );
+
+/**
+ * Run the bounded delivery wait for a just-applied write, unless the
+ * caller passed `wait_for_sync: false`. Returns the `synced` entry to
+ * spread into the result JSON — absent when the wait was skipped,
+ * because an absent field is honest: we did not check.
+ */
+async function syncField(
+  args: ToolArgs,
+  manager: ConnectionManager,
+  project: string,
+  paths: string[],
+): Promise<{ synced?: boolean }> {
+  if (args.wait_for_sync === false) return {};
+  return { synced: await manager.awaitDelivery(project, paths, SYNC_WAIT_MS) };
+}
+
 // ============================================================================
 // Tool handlers
 // ============================================================================
@@ -337,7 +370,12 @@ async function handleWriteFile(args: ToolArgs, manager: ConnectionManager): Prom
     await state.client.createFile(path, content);
     return text(
       JSON.stringify(
-        { path, hash: hashPayload({ type: 'text', text: content }), created: true },
+        {
+          path,
+          hash: hashPayload({ type: 'text', text: content }),
+          created: true,
+          ...(await syncField(args, manager, project, [path])),
+        },
         null,
         2,
       ),
@@ -352,7 +390,15 @@ async function handleWriteFile(args: ToolArgs, manager: ConnectionManager): Prom
 
   state.client.updateFileContent(path, content);
   return text(
-    JSON.stringify({ path, hash: hashPayload({ type: 'text', text: content }) }, null, 2),
+    JSON.stringify(
+      {
+        path,
+        hash: hashPayload({ type: 'text', text: content }),
+        ...(await syncField(args, manager, project, [path])),
+      },
+      null,
+      2,
+    ),
   );
 }
 
@@ -397,7 +443,15 @@ async function handlePatchFile(args: ToolArgs, manager: ConnectionManager): Prom
 
   state.client.updateFileContent(path, newContent);
   return text(
-    JSON.stringify({ path, hash: hashPayload({ type: 'text', text: newContent }) }, null, 2),
+    JSON.stringify(
+      {
+        path,
+        hash: hashPayload({ type: 'text', text: newContent }),
+        ...(await syncField(args, manager, project, [path])),
+      },
+      null,
+      2,
+    ),
   );
 }
 
@@ -417,7 +471,18 @@ async function handleCreateFile(args: ToolArgs, manager: ConnectionManager): Pro
   }
 
   await state.client.createFile(path, content);
-  return text(`Created ${path}`);
+  return text(
+    JSON.stringify(
+      {
+        path,
+        hash: hashPayload({ type: 'text', text: content }),
+        created: true,
+        ...(await syncField(args, manager, project, [path])),
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 async function handleDeleteFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
@@ -434,7 +499,13 @@ async function handleDeleteFile(args: ToolArgs, manager: ConnectionManager): Pro
   }
 
   state.client.deleteFile(path);
-  return text(`Deleted ${path}`);
+  return text(
+    JSON.stringify(
+      { path, deleted: true, ...(await syncField(args, manager, project, [])) },
+      null,
+      2,
+    ),
+  );
 }
 
 async function handleRenameFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
@@ -452,7 +523,18 @@ async function handleRenameFile(args: ToolArgs, manager: ConnectionManager): Pro
   }
 
   state.client.renameFile(oldPath, newPath);
-  return text(`Renamed ${oldPath} → ${newPath}`);
+  return text(
+    JSON.stringify(
+      {
+        old_path: oldPath,
+        new_path: newPath,
+        renamed: true,
+        ...(await syncField(args, manager, project, [])),
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 async function handleCreateProject(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
@@ -461,6 +543,12 @@ async function handleCreateProject(args: ToolArgs, manager: ConnectionManager): 
   return text(JSON.stringify({
     indexDocId: result.indexDocId,
     files: result.files,
+    ...(await syncField(
+      args,
+      manager,
+      result.indexDocId,
+      result.files.map((f) => f.path),
+    )),
   }, null, 2));
 }
 
@@ -601,6 +689,7 @@ export function registerTools(
               'refused (returning the current content and its hash) if the file changed since — ' +
               'compare-and-swap against collaborator edits.',
           ),
+        wait_for_sync: waitForSyncParam,
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
     },
@@ -626,6 +715,7 @@ export function registerTools(
               'refused (returning the current content and its hash) if the file changed since — ' +
               'compare-and-swap against collaborator edits.',
           ),
+        wait_for_sync: waitForSyncParam,
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
     },
@@ -640,6 +730,7 @@ export function registerTools(
         project: projectParam,
         path: pathParam.optional(),
         content: z.string().describe('Initial file content (defaults to empty)').default(''),
+        wait_for_sync: waitForSyncParam,
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
     },
@@ -653,6 +744,7 @@ export function registerTools(
       inputSchema: z.object({
         project: projectParam,
         path: z.string().describe('The file path to delete').optional(),
+        wait_for_sync: waitForSyncParam,
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
     },
@@ -667,6 +759,7 @@ export function registerTools(
         project: projectParam,
         old_path: z.string().describe('The current file path'),
         new_path: z.string().describe('The new file path'),
+        wait_for_sync: waitForSyncParam,
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
     },
@@ -687,6 +780,7 @@ export function registerTools(
           )
           .describe('Initial files to create in the project')
           .default([]),
+        wait_for_sync: waitForSyncParam,
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
