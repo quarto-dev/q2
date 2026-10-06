@@ -873,6 +873,33 @@ Work items:
   as **bd-b2wpeud0** (related to bd-r62zad5b; same endpoint and identity
   model, to be designed with that owner).
 
+**Eval suite (12 tasks — added `watch-project-edit` and
+`history-and-restore`):** `eval/results/2026-10-06T15-09-54/`
+
+| task | success | turns | tokens (in/out) | cost | isError | retries | duration |
+|------|---------|-------|-----------------|------|---------|---------|----------|
+| create-project | PASS | 3 | 66/509 | $0.58 | 0 | 0 | 11s |
+| read-and-report | PASS | 4 | 98/575 | $0.52 | 0 | 0 | 12s |
+| patch-typo | PASS | 6 | 130/1087 | $0.58 | 0 | 0 | 18s |
+| write-new-file | PASS | 6 | 130/1068 | $0.58 | 0 | 0 | 32s |
+| rename-file | PASS | 7 | 162/1768 | $0.63 | 0 | 0 | 30s |
+| collaborator-edit | PASS | 4 | 66/637 | $0.51 | 0 | 0 | 13s |
+| watch-live-edit | PASS | 5 | 98/859 | $0.55 | 0 | 0 | 49s |
+| stale-write-recovery | PASS | 6 | 130/2188 | $0.67 | 1 | 1 | 36s |
+| add-image-binary | PASS | 5 | 130/1405 | $0.61 | 0 | 0 | 37s |
+| search-and-report | PASS | 4 | 66/371 | $0.49 | 0 | 0 | 16s |
+| watch-project-edit | PASS | 5 | 130/848 | $0.56 | 0 | 0 | 57s |
+| history-and-restore | PASS | 10 | 194/2855 | $0.77 | 0 | 0 | 49s |
+
+12/12 PASS, median 5 turns (Phase 2: 5 — no regression). The unnamed-tool
+prompts did their job: `watch-project-edit` discovered the no-`path`
+project-wide arm of `wait_for_change` from the tool description alone
+(3× `wait_for_change`), and `history-and-restore` drove the full
+investigate → restore loop (`get_file_history` ×5, `restore_file_version`
+×3, zero `isError` — the longer 10-turn path is investigation, not
+flailing). The only `isError` remains the DESIGNED stale-hash refusal in
+`stale-write-recovery`.
+
 ### Phase 4 — Quarto-specific intelligence
 
 - [ ] **Spike S-1 (gates CAP-11):** qmd parser in Node. Compare (a)

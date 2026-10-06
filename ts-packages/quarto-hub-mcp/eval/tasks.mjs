@@ -288,4 +288,60 @@ export const TASKS = [
     },
     check: async (_ctx, finalText) => /notes\/deep\.qmd:3\b/.test(finalText.trim()),
   },
+
+  // Phase 3 (bd-3qe7unp7): project-wide watch. The prompt names no
+  // tool; the agent must discover that wait_for_change with no `path`
+  // watches the whole project, and answer from its result.
+  {
+    id: 'watch-project-edit',
+    prompt: (ctx) =>
+      MCP_ONLY +
+      `In Quarto Hub project ${ctx.projectId}, watch the WHOLE project ` +
+      '(not any one file) for the next collaborator change, then report ' +
+      'which file changed and the status line it contains after the ' +
+      'change. Keep watching (re-call the tool if it times out) until a ' +
+      'change arrives.',
+    setup: async (ctx) => {
+      const { indexDocId } = await ctx.seedProject([
+        { path: 'one.qmd', content: 'status: quiet\n' },
+        { path: 'two.qmd', content: 'status: idle\n' },
+      ]);
+      ctx.projectId = indexDocId;
+      ctx._editLanded = false;
+    },
+    onTick: async (ctx, elapsedMs) => {
+      if (!ctx._editLanded && elapsedMs >= 45000) {
+        ctx._editLanded = true;
+        await ctx.editFile(ctx.projectId, 'two.qmd', 'status: deployed\n');
+      }
+    },
+    check: async (_ctx, finalText) =>
+      finalText.includes('two.qmd') && finalText.includes('deployed'),
+  },
+
+  // Phase 3 (bd-3qe7unp7): history-driven undo. A bad edit lands before
+  // the agent starts; it must find the prior version via project
+  // history and put the file back. Scored on hub state, not tool choice.
+  {
+    id: 'history-and-restore',
+    prompt: (ctx) =>
+      MCP_ONLY +
+      `In Quarto Hub project ${ctx.projectId}, the file deploy.qmd was ` +
+      'just damaged by a bad automated edit — it should say ' +
+      "'status: green'. Investigate what the file contained before the " +
+      'bad edit (use whatever project history the tools expose) and put ' +
+      'the file back to that earlier good state, without losing the ' +
+      "record of what happened. When done, reply with the file's " +
+      'restored status line.',
+    setup: async (ctx) => {
+      const { indexDocId } = await ctx.seedProject([
+        { path: 'deploy.qmd', content: 'status: green\n' },
+      ]);
+      ctx.projectId = indexDocId;
+      // The damaging edit lands before the agent starts.
+      await ctx.editFile(indexDocId, 'deploy.qmd', 'status: CORRUPTED x9z\n');
+    },
+    check: async (ctx, _finalText) =>
+      (await ctx.readFile(ctx.projectId, 'deploy.qmd')) === 'status: green\n',
+  },
 ];
