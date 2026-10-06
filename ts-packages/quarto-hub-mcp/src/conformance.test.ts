@@ -492,11 +492,12 @@ describe('security invariants', () => {
 // ============================================================================
 
 describe('cancellation hygiene (BP-3)', () => {
-  // RED until Phase 1 threads extra.signal through handleTool →
-  // ConnectionManager.waitForChange: today the cancelled call's waiter
-  // (and its timeout timer) lives on until the timeout fires, leaking
-  // per-cancelled-call state in the connection manager.
-  it.fails(
+  // Phase 1 threads ctx.mcpReq.signal through handleTool →
+  // ConnectionManager.waitForChange: the cancelled call's waiter (and
+  // its timeout timer) is unregistered promptly, not when the timeout
+  // fires. Landed red-by-construction as `it.fails` in Phase 0; flipped
+  // when the fix landed in Phase 1 (bd-zv8u2sxi).
+  it(
     'cancelling wait_for_change mid-poll resolves as cancelled and frees the waiter',
     async () => {
       const f = await startInMemoryMcp();

@@ -255,10 +255,17 @@ const PATH_DEFAULTABLE: ReadonlySet<DataToolName> = new Set([
   'delete_file',
 ]);
 
+/** Per-call extras threaded from the SDK request context (BP-3). */
+interface ToolExtras {
+  /** The MCP request's cancellation signal, when the caller can cancel. */
+  readonly signal?: AbortSignal;
+}
+
 async function handleTool(
   name: DataToolName,
   rawArgs: ToolArgs,
-  manager: ConnectionManager
+  manager: ConnectionManager,
+  extras: ToolExtras = {},
 ): Promise<CallToolResult> {
   const normalized = normalizeArgs(rawArgs, manager.configuredServerUrl);
   if ('error' in normalized) {
@@ -279,7 +286,7 @@ async function handleTool(
     case 'read_file':
       return handleReadFile(args, manager);
     case 'wait_for_change':
-      return handleWaitForChange(args, manager);
+      return handleWaitForChange(args, manager, extras);
     case 'write_file':
       return handleWriteFile(args, manager);
     case 'patch_file':
@@ -359,14 +366,20 @@ async function handleReadFile(args: ToolArgs, manager: ConnectionManager): Promi
   );
 }
 
-async function handleWaitForChange(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
+async function handleWaitForChange(
+  args: ToolArgs,
+  manager: ConnectionManager,
+  extras: ToolExtras,
+): Promise<CallToolResult> {
   const project = args.project as string;
   const path = args.path as string;
   const rawTimeout = typeof args.timeout_seconds === 'number' ? args.timeout_seconds : 25;
   const timeoutSec = Math.max(1, Math.min(55, rawTimeout));
   const sinceHash = typeof args.since_hash === 'string' ? args.since_hash : undefined;
 
-  const result = await manager.waitForChange(project, path, timeoutSec * 1000, sinceHash);
+  const result = await manager.waitForChange(project, path, timeoutSec * 1000, sinceHash, {
+    signal: extras.signal,
+  });
 
   if (!result.changed) {
     return text(
@@ -627,10 +640,15 @@ async function runDataTool(
   name: DataToolName,
   args: ToolArgs,
   manager: ConnectionManager,
+  extras: ToolExtras = {},
 ): Promise<CallToolResult> {
   try {
-    return await handleTool(name, args, manager);
+    return await handleTool(name, args, manager, extras);
   } catch (err) {
+    // Cancellation is not a tool error: let the abort propagate so the
+    // SDK settles the (already cancelled) request without a bogus
+    // isError payload.
+    if (err instanceof DOMException && err.name === 'AbortError') throw err;
     const message = err instanceof Error ? err.message : String(err);
     return error(`Error in ${name}: ${redactTokens(message)}`);
   }
@@ -727,7 +745,11 @@ export function registerTools(
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false },
     },
-    (args) => runDataTool('wait_for_change', args, manager),
+    // The one blocking tool: thread the request's cancellation signal
+    // (BP-3) so a client cancel unregisters the waiter promptly. ctx is
+    // always present from the SDK; the optional chain keeps bare
+    // handler-level test harnesses working.
+    (args, ctx) => runDataTool('wait_for_change', args, manager, { signal: ctx?.mcpReq?.signal }),
   );
 
   if (readOnly) return;

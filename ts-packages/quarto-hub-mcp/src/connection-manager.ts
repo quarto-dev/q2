@@ -343,17 +343,31 @@ export class ConnectionManager {
    * from the caller's last-known hash, the change is returned immediately
    * (so an edit that lands between two `waitForChange` calls is never
    * missed). Pass back the `hash` from the previous result each call.
+   *
+   * `options.signal` (the MCP request's cancellation signal, BP-3)
+   * unregisters the waiter promptly and rejects with an AbortError:
+   * without it a client-cancelled poll leaked its waiter (and timer)
+   * until the timeout fired.
    */
   async waitForChange(
     indexDocId: string,
     path: string,
     timeoutMs: number,
     sinceHash?: string,
+    options?: { signal?: AbortSignal },
   ): Promise<ChangeResult> {
+    const signal = options?.signal;
+    if (signal?.aborted) {
+      throw signal.reason ?? new DOMException('The operation was aborted.', 'AbortError');
+    }
     // Register the waiter synchronously when already connected so an edit
     // arriving immediately after the call can't slip through the await gap.
     // (First-time connects still pay one await; `sinceHash` covers that gap.)
     const state = this.projects.get(indexDocId) ?? (await this.connect(indexDocId));
+    // The cancel may have landed during the connect await.
+    if (signal?.aborted) {
+      throw signal.reason ?? new DOMException('The operation was aborted.', 'AbortError');
+    }
 
     const current = state.files.get(path);
     const currentHash = hashPayload(current);
@@ -362,18 +376,29 @@ export class ConnectionManager {
       return { changed: true, payload: current ?? null, hash: currentHash };
     }
 
-    return await new Promise<ChangeResult>((resolve) => {
+    return await new Promise<ChangeResult>((resolve, reject) => {
       let timer: ReturnType<typeof setTimeout>;
+      const cleanup = () => {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
+      };
+      const onAbort = () => {
+        state.waiters.delete(waiter);
+        cleanup();
+        reject(signal!.reason ?? new DOMException('The operation was aborted.', 'AbortError'));
+      };
       const waiter: ChangeWaiter = {
         path,
         fire: (payload) => {
-          clearTimeout(timer);
+          cleanup();
           resolve({ changed: true, payload, hash: hashPayload(payload) });
         },
       };
       state.waiters.add(waiter);
+      signal?.addEventListener('abort', onAbort, { once: true });
       timer = setTimeout(() => {
         state.waiters.delete(waiter);
+        cleanup();
         const latest = state.files.get(path);
         resolve({ changed: false, payload: latest ?? null, hash: hashPayload(latest) });
       }, timeoutMs);
