@@ -9,7 +9,7 @@
 
 import { EventEmitter } from 'node:events';
 import { describe, it, expect, vi } from 'vitest';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult } from '@modelcontextprotocol/server';
 import type * as oauth from 'oauth4webapi';
 
 import {

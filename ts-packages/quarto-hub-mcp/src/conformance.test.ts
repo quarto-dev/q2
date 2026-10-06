@@ -22,7 +22,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { Ajv2020 } from 'ajv/dist/2020.js';
-import { ToolSchema } from '@modelcontextprotocol/sdk/types.js';
+import { ToolSchema } from '@modelcontextprotocol/core';
 
 import {
   ConnectionManager,
@@ -468,7 +468,6 @@ describe('cancellation hygiene (BP-3)', () => {
             name: 'wait_for_change',
             arguments: { project: seed.indexDocId, path: 'live.qmd', timeout_seconds: 3 },
           },
-          undefined,
           { signal: controller.signal },
         );
 

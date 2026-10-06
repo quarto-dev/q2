@@ -2,9 +2,11 @@
  * Handler-level tests for the `wait_for_change` tool (handleWaitForChange).
  *
  * These drive the REAL production handler through the REAL registration/dispatch
- * path: `registerTools` installs a CallTool handler on the server, and we invoke
- * the captured callback exactly as the MCP runtime would. The only thing faked
- * is `ConnectionManager.waitForChange` — a genuine network/sync collaborator —
+ * path: `registerTools` registers a callback per tool on the server, and we
+ * invoke the captured callback exactly as the MCP runtime would (post-SDK-v2,
+ * with schema-validated args — these tests pass raw args and so also cover the
+ * handler's own defensive defaults). The only thing faked is
+ * `ConnectionManager.waitForChange` — a genuine network/sync collaborator —
  * which we use to (a) record the timeout it was handed and (b) return each of
  * the result shapes the handler must serialize.
  *
@@ -16,9 +18,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult, McpServer } from '@modelcontextprotocol/server';
 import { registerTools } from './tools.js';
 import type { ConnectionManager } from './connection-manager.js';
 
@@ -34,7 +34,7 @@ interface WaitCall {
 /**
  * Build a fake ConnectionManager whose waitForChange records its arguments and
  * returns `result`, then register the real tool handlers against it. Returns the
- * captured CallTool callback plus the recorded calls.
+ * captured `wait_for_change` registerTool callback plus the recorded calls.
  */
 function harness(result: WaitResult): {
   call: (args: Record<string, unknown>) => Promise<CallToolResult>;
@@ -48,22 +48,21 @@ function harness(result: WaitResult): {
     },
   } as unknown as ConnectionManager;
 
-  let callToolHandler:
-    | ((req: { params: { name: string; arguments?: Record<string, unknown> } }, extra: unknown) => Promise<CallToolResult>)
+  let toolCallback:
+    | ((args: Record<string, unknown>) => Promise<CallToolResult>)
     | undefined;
   const server = {
-    setRequestHandler(schema: unknown, cb: unknown) {
-      if (schema === CallToolRequestSchema) {
-        callToolHandler = cb as typeof callToolHandler;
+    registerTool(name: string, _config: unknown, cb: unknown) {
+      if (name === 'wait_for_change') {
+        toolCallback = cb as typeof toolCallback;
       }
     },
-  } as unknown as Server;
+  } as unknown as McpServer;
 
   registerTools(server, manager, false);
-  if (!callToolHandler) throw new Error('CallTool handler was not registered');
+  if (!toolCallback) throw new Error('wait_for_change callback was not registered');
 
-  const call = (args: Record<string, unknown>) =>
-    callToolHandler!({ params: { name: 'wait_for_change', arguments: args } }, {});
+  const call = (args: Record<string, unknown>) => toolCallback!(args);
 
   return { call, calls };
 }
