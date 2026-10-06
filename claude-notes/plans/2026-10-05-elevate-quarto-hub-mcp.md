@@ -1076,7 +1076,17 @@ Work items:
   highest-term-density line. Both strands closed. Tool budget: 21/24
   data, 24/24 with auth — at the ceiling exactly; Phase 5+ additions
   must displace or consolidate.
-- [ ] CAP-10 `clear_capture` decision (Q-4).
+- [x] CAP-10 `clear_capture` decision (Q-4). **DECIDED 2026-10-06: no
+  tool — human-only.** `clearCapture` deletes an entry from the shared
+  index document, which drives *other* collaborators' preview engines —
+  clearing a capture mid-session forces an unexpected re-execution in a
+  teammate's web preview, the same invisible-shared-mutation class Q-3
+  rejected. The agent's own render loop (CAP-12) renders in a temp dir
+  via `q2` and never touches hub-side captures, so there is no agent
+  need; the CAP-2 read surface (captures in `get_project_info`) lets the
+  agent *observe* a stale/errored capture and advise the human, who
+  clears it in the web client. Revisit only if a future capability
+  (agents driving hub-side preview execution) creates a real need.
 
 ### Phase 5 — MCP-native surfaces
 
@@ -1190,7 +1200,10 @@ Work items:
   the server currently shares the human's author id and would otherwise
   rename their identity; never fake cursor presence.
 - **Q-4 (Phase 4):** Is `clear_capture` agent-appropriate (it mutates shared
-  project state) or human-only?
+  project state) or human-only? **Resolved 2026-10-06: human-only.** It
+  deletes shared index state driving other collaborators' preview engines;
+  the CAP-12 render loop never touches captures; CAP-2's read surface
+  covers observation. See the Phase 4 checklist entry.
 - **Q-5 (Phase 6):** Under the 2026-07-28 stateless model (sessions removed),
   how does the hub keep automerge connections warm across an agent's requests?
   Working assumption: a per-user pool keyed by token subject with idle
