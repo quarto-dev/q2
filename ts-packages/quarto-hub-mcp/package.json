@@ -29,7 +29,8 @@
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist dist-bundle",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "eval": "npm run build && node eval/run.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
@@ -42,8 +43,10 @@
   "devDependencies": {
     "@automerge/automerge-repo": "2.6.0-alpha.5",
     "@automerge/automerge-repo-network-websocket": "2.6.0-alpha.5",
+    "@modelcontextprotocol/inspector": "^2.9.0",
     "@types/node": "^22.15.0",
     "@types/ws": "^8.18.1",
+    "ajv": "^8.17.1",
     "esbuild": "^0.28.0",
     "typescript": "~5.9.3",
     "undici": "^7.16.0",
