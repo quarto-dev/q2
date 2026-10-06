@@ -3,17 +3,14 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-// For `vsnprintf()` and `fprintf()`, which are variadic.
-// Otherwise rustc yells at us that we need to enable this.
-#![feature(c_variadic)]
-
-// Provide rust implementation of blessed stdlib functions to
-// tree-sitter itself and any grammars that have `scanner.c`.
-// Here is the list blessed for `scanner.c` usage:
-// https://github.com/tree-sitter/tree-sitter/blob/master/lib/src/wasm/stdlib-symbols.txt
-// But note that we need a few extra for tree-sitter itself.
+// C stdlib shims for wasm32 (malloc, snprintf, memcpy, etc.) are provided by
+// the shared wasm-c-shim crate — the single source of truth for these symbols
+// across the project's wasm32 builds (tree-sitter-language's upstream C stubs
+// are neutralized via [patch.crates-io]; see
+// claude-notes/plans/2026-04-20-wasm-shim-merge.md). The extern crate ensures
+// it's linked even though no Rust symbol is referenced.
 #[cfg(target_arch = "wasm32")]
-pub mod c_shim;
+extern crate wasm_c_shim;
 
 mod utils;
 
