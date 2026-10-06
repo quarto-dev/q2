@@ -27,6 +27,7 @@ export {
   isBinaryExtension,
   isTextExtension,
   inferMimeType,
+  normalizeProjectPath,
   projectSetKey,
 } from '@quarto/quarto-automerge-schema';
 
