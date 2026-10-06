@@ -25,8 +25,10 @@ import type {
   CallToolResult,
   Notification,
   ServerContext,
+  StandardSchemaWithJSON,
   ToolAnnotations,
 } from '@modelcontextprotocol/server';
+import { z } from 'zod';
 import { decodeJwt } from 'jose';
 import * as oauth from 'oauth4webapi';
 
@@ -67,6 +69,12 @@ const GOOGLE_AUTHORIZATION_ENDPOINT =
 
 export interface LastObservedAuthModeSource {
   lastObservedAuthMode(): 'no-auth' | 'requires-auth' | 'unknown';
+  /**
+   * The hub URL the connection manager is configured for — reported by
+   * `authenticate_status` (BP-13). Optional: minimal stubs may not know
+   * it; the status falls back to `'unknown'`.
+   */
+  readonly configuredServerUrl?: string;
 }
 
 export interface AuthFlowConfig {
@@ -126,11 +134,11 @@ export interface AuthToolsDeps {
   readonly openBrowser?: typeof defaultOpenBrowser;
 }
 
-export type AuthToolName = 'authenticate' | 'authenticate_clear';
+export type AuthToolName = 'authenticate' | 'authenticate_clear' | 'authenticate_status';
 
 /**
  * An auth tool's advertised metadata. Input schemas are not part of the
- * definition: both auth tools take no arguments and register with an
+ * definition: all auth tools take no arguments and register with an
  * empty zod schema at the registration layer (tools.ts).
  */
 export interface AuthToolDefinition {
@@ -138,6 +146,8 @@ export interface AuthToolDefinition {
   readonly title: string;
   readonly description: string;
   readonly annotations: ToolAnnotations;
+  /** The tool's `structuredContent` schema (BP-1); prose-text tools omit it. */
+  readonly outputSchema?: StandardSchemaWithJSON;
 }
 
 export const AUTH_TOOL_DEFINITIONS: readonly AuthToolDefinition[] = [
@@ -157,6 +167,26 @@ export const AUTH_TOOL_DEFINITIONS: readonly AuthToolDefinition[] = [
       destructiveHint: false,
       idempotentHint: false,
     },
+  },
+  {
+    name: 'authenticate_status',
+    title: 'Check Quarto Hub sign-in status',
+    description:
+      'Report whether this server holds Quarto Hub credentials: ' +
+      '`{ authenticated, hub, identity?, expiry? }`. Never opens a browser ' +
+      'or runs a sign-in flow — call this to check state before deciding ' +
+      'whether `authenticate` is needed.',
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+    },
+    outputSchema: z.object({
+      authenticated: z.boolean(),
+      hub: z.string(),
+      identity: z.string().optional(),
+      expiry: z.string().optional(),
+    }),
   },
   {
     name: 'authenticate_clear',
@@ -191,6 +221,18 @@ function errorResult(msg: string): CallToolResult {
   return { content: [{ type: 'text', text: msg }], isError: true };
 }
 
+/**
+ * A structured result (BP-1): `structuredContent` for hosts that
+ * validate against the tool's `outputSchema`, plus the same payload as
+ * a JSON text block (this module's convention for data answers).
+ */
+function structuredResult(payload: Record<string, unknown>): CallToolResult {
+  return {
+    content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
+    structuredContent: payload,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // AuthToolsState
 // ---------------------------------------------------------------------------
@@ -209,19 +251,54 @@ export class AuthToolsState {
   async handle(name: AuthToolName, ctx: AuthToolContext = {}): Promise<CallToolResult> {
     if (name === 'authenticate') return this.handleAuthenticate(ctx);
     if (name === 'authenticate_clear') return this.handleClear();
+    if (name === 'authenticate_status') return this.handleStatus();
     return errorResult(`Unknown auth tool: ${String(name)}`);
   }
 
   /**
-   * Run the loopback sign-in.
-   *
-   * MCP stdio hosts serialise `tools/call`; this handler intentionally
-   * has no concurrency guard. Two simultaneous calls is
-   * undefined-but-non-corrupting behaviour — PKCE and `state` bind each
-   * flow's tokens to its own callback, so the worst case is two browser
-   * tabs, not token cross-contamination.
+   * Serialize `authenticate` calls (BP-12). MCP stdio hosts serialise
+   * `tools/call`, but nothing in the protocol forbids a parallel host;
+   * an unguarded pair races to two browser tabs and two loopback
+   * listeners. With this mutex the behaviour is *defined*: the second
+   * call waits for the first to settle and — on the happy path —
+   * short-circuits on the credential the first just stored.
+   */
+  private authMutex: Promise<unknown> = Promise.resolve();
+
+  /**
+   * Run the loopback sign-in, serialized through {@link authMutex}.
    */
   async handleAuthenticate(ctx: AuthToolContext = {}): Promise<CallToolResult> {
+    const run = this.authMutex.then(() => this.handleAuthenticateFlow(ctx));
+    // The chain must survive a rejected flow without itself rejecting.
+    this.authMutex = run.catch(() => undefined);
+    return run;
+  }
+
+  /**
+   * Report the current credential state without triggering a flow
+   * (BP-13): `{ authenticated, hub, identity?, expiry? }` from the
+   * keyring — no browser, no listener, no network.
+   */
+  async handleStatus(): Promise<CallToolResult> {
+    const hub = this.deps.connectionManager.configuredServerUrl ?? 'unknown';
+    const bundle = await this.deps.credentialStore.read();
+    if (!bundle) {
+      return structuredResult({ authenticated: false, hub });
+    }
+    const email = extractEmail(bundle.idToken);
+    return structuredResult({
+      authenticated: true,
+      hub,
+      ...(email ? { identity: email } : {}),
+      expiry: bundle.idTokenExpiresAt.toISOString(),
+    });
+  }
+
+  /**
+   * Run the loopback sign-in.
+   */
+  private async handleAuthenticateFlow(ctx: AuthToolContext = {}): Promise<CallToolResult> {
     // 1. Already authenticated → short-circuit without touching Google.
     try {
       const idToken = await this.deps.refreshManager.getValidIdToken();
