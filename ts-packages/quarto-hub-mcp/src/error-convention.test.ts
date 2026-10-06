@@ -5,9 +5,9 @@
  * `isError` results exist "to enable model self-correction" (MCP tools
  * spec) — so every data-tool error names the failing parameter, the
  * current state, and the next tool to call, and path errors list up to
- * three closest existing paths. HY-1: the binary-file read error must
- * not send the agent to `read_binary_file_metadata`, a tool that does
- * not exist (binary reads arrive in read_file in Phase 2, CAP-4).
+ * three closest existing paths. HY-1: binary reads ride read_file
+ * itself (CAP-4) — nothing may send the agent to
+ * `read_binary_file_metadata`, a tool that does not exist.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -52,7 +52,7 @@ describe('actionable errors (ERG-4, HY-1)', () => {
     }
   });
 
-  it('read_file on a binary file does not name the phantom read_binary_file_metadata tool (HY-1)', async () => {
+  it('read_file reads binary files in place — the phantom read_binary_file_metadata era is over (HY-1, CAP-4)', async () => {
     const f = await startInMemoryMcp();
     try {
       const seed = await seedProject(f, [{ path: 'a.qmd', content: 'x\n' }]);
@@ -67,10 +67,11 @@ describe('actionable errors (ERG-4, HY-1)', () => {
         project: seed.indexDocId,
         path: 'img.png',
       });
-      expect(result.isError).toBe(true);
-      const text = textOf(result);
-      expect(text).toContain('binary');
-      expect(text).not.toContain('read_binary_file_metadata');
+      // CAP-4: binary reads succeed through read_file itself; no error,
+      // and certainly no pointer to a tool that does not exist.
+      expect(result.isError).not.toBe(true);
+      expect(JSON.stringify(result.content)).not.toContain('read_binary_file_metadata');
+      expect(result.structuredContent).toMatchObject({ path: 'img.png', type: 'binary' });
     } finally {
       await f.close();
     }
