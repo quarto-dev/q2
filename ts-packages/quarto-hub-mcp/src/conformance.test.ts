@@ -48,12 +48,14 @@ import {
 /** Tool budget (ERG-5): the default listing never exceeds this. */
 const TOOL_BUDGET = 24;
 
-/** Read-write mode lists these today (10 tools; auth tools need OAuth env). */
+/** Read-write mode lists these today (12 tools; auth tools need OAuth env). */
 const EXPECTED_RW_TOOLS = [
   'connect_project',
   'create_file',
+  'create_folder',
   'create_project',
   'delete_file',
+  'delete_folder',
   'list_files',
   'patch_file',
   'read_file',
@@ -256,6 +258,14 @@ const GOLDEN_RESULT_CASES: ReadonlyArray<{
       old_path: 'index.qmd',
       new_path: 'golden-renamed.qmd',
     }),
+  },
+  {
+    tool: 'create_folder',
+    args: (seed) => ({ project: seed.indexDocId, path: 'golden-folder' }),
+  },
+  {
+    tool: 'delete_folder',
+    args: (seed) => ({ project: seed.indexDocId, path: 'golden-folder' }),
   },
   {
     tool: 'create_project',
@@ -655,6 +665,8 @@ describe('tool titles (BP-9)', () => {
         create_file: 'Create a file',
         delete_file: 'Delete a file',
         rename_file: 'Rename a file',
+        create_folder: 'Create a folder',
+        delete_folder: 'Delete a folder',
         create_project: 'Create a project',
       });
     } finally {

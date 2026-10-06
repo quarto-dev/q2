@@ -23,6 +23,7 @@ import type {
 import {
   fileUnavailableMessage,
   inferMimeType,
+  normalizeProjectPath,
   type FilePayload,
   type SyncClient,
 } from '@quarto/quarto-sync-client';
@@ -207,6 +208,11 @@ function buildFileList(state: ProjectState): ListedFile[] {
   );
   for (const ghost of state.client.getUnavailableFiles()) {
     fileList.push({ path: ghost.path, status: 'unavailable', docId: ghost.docId });
+  }
+  // Explicit folder markers (CAP-6). Folders file paths merely imply are
+  // not listed — an empty folder exists only once created.
+  for (const folder of state.client.getFolderPaths()) {
+    fileList.push({ path: folder, type: 'folder' });
   }
   fileList.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   return fileList;
@@ -434,6 +440,8 @@ type DataToolName =
   | 'create_file'
   | 'delete_file'
   | 'rename_file'
+  | 'create_folder'
+  | 'delete_folder'
   | 'create_project';
 
 /**
@@ -490,6 +498,10 @@ async function handleTool(
       return handleDeleteFile(args, manager);
     case 'rename_file':
       return handleRenameFile(args, manager);
+    case 'create_folder':
+      return handleCreateFolder(args, manager);
+    case 'delete_folder':
+      return handleDeleteFolder(args, manager);
     case 'create_project':
       return handleCreateProject(args, manager);
   }
@@ -967,6 +979,89 @@ async function handleRenameFile(args: ToolArgs, manager: ConnectionManager): Pro
   });
 }
 
+/**
+ * Every folder an agent can mean: explicit markers plus the folders
+ * file paths imply (a/b/c.qmd implies `a` and `a/b`). Used for
+ * not-found suggestions — listings show explicit markers only (CAP-6).
+ */
+function allFolderCandidates(state: ProjectState): Set<string> {
+  const out = new Set<string>(state.client.getFolderPaths());
+  for (const p of allPaths(state)) {
+    const segs = p.split('/');
+    for (let i = 1; i < segs.length; i++) {
+      out.add(segs.slice(0, i).join('/'));
+    }
+  }
+  return out;
+}
+
+async function handleCreateFolder(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
+  const project = args.project as string;
+  const path = normalizeProjectPath(args.path as string);
+  if (path === '') {
+    return error(
+      'Error: create_folder requires a non-empty `path` — the folder to create within the project.',
+    );
+  }
+  const state = await manager.connect(project, { server: routedServer(args) });
+  if (state.files.has(path)) {
+    return error(
+      `Error: ${path} is a file, not a folder. Choose a different folder name, ` +
+        `or rename_file "${path}" first if it should move.`,
+    );
+  }
+  // Idempotent: the marker is a set member, not a creation event.
+  const existed = state.client.getFolderPaths().includes(path);
+  if (!existed) {
+    state.client.createFolder(path);
+  }
+  return structured({
+    path,
+    created: !existed,
+    ...(await syncField(args, manager, project, [])),
+  });
+}
+
+async function handleDeleteFolder(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
+  const project = args.project as string;
+  const path = normalizeProjectPath(args.path as string);
+  const recursive = args.recursive === true;
+  const state = await manager.connect(project, { server: routedServer(args) });
+
+  const markerExists = state.client.getFolderPaths().includes(path);
+  const contained = allPaths(state).filter((p) => p.startsWith(`${path}/`));
+  if (!markerExists && contained.length === 0) {
+    const near = closestPaths(path, allFolderCandidates(state));
+    let msg =
+      `Error: Folder not found: "${path}". Call list_files to see the project's files and folders.`;
+    if (near.length > 0) {
+      msg += ` Closest existing folders: ${near.map((p) => `"${p}"`).join(', ')}.`;
+    }
+    return error(msg);
+  }
+  if (contained.length > 0 && !recursive) {
+    const sample = contained.slice(0, 3).map((p) => `"${p}"`).join(', ');
+    return error(
+      `Error: Folder "${path}" is not empty — ${contained.length} file` +
+        `${contained.length === 1 ? '' : 's'} remain${contained.length === 1 ? 's' : ''} under it ` +
+        `(${sample}${contained.length > 3 ? ', …' : ''}). Pass \`recursive: true\` to delete ` +
+        'them together with the folder, or delete_file them individually first.',
+    );
+  }
+  for (const p of contained) {
+    state.client.deleteFile(p);
+  }
+  if (markerExists) {
+    state.client.deleteFolder(path);
+  }
+  return structured({
+    path,
+    deleted: true,
+    ...(contained.length > 0 ? { files_deleted: contained.length } : {}),
+    ...(await syncField(args, manager, project, [])),
+  });
+}
+
 async function handleCreateProject(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
   const files = (args.files as Array<{ path: string; content: string }>) ?? [];
   const result = await manager.createProject(files);
@@ -1094,6 +1189,19 @@ const outRenameFile = z.object({
   old_path: z.string(),
   new_path: z.string(),
   renamed: z.literal(true),
+  synced: z.boolean().optional(),
+});
+
+const outCreateFolder = z.object({
+  path: z.string(),
+  created: z.boolean(),
+  synced: z.boolean().optional(),
+});
+
+const outDeleteFolder = z.object({
+  path: z.string(),
+  deleted: z.literal(true),
+  files_deleted: z.number().optional(),
   synced: z.boolean().optional(),
 });
 
@@ -1366,6 +1474,48 @@ export function registerTools(
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
     },
     (args) => runDataTool('rename_file', args, manager),
+  );
+
+  server.registerTool(
+    'create_folder',
+    {
+      title: 'Create a folder',
+      description:
+        'Create a folder in a Quarto Hub project. Folders are explicit markers: a file at ' +
+        '`a/b/c.qmd` needs no folder to exist, but an EMPTY folder is listed only once created. ' +
+        'Idempotent — re-creating an existing folder reports `created: false`.',
+      inputSchema: z.object({
+        project: projectParam,
+        path: z.string().describe('The folder path to create (e.g. `assets/images`)'),
+        wait_for_sync: waitForSyncParam,
+      }),
+      outputSchema: outCreateFolder,
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    (args) => runDataTool('create_folder', args, manager),
+  );
+
+  server.registerTool(
+    'delete_folder',
+    {
+      title: 'Delete a folder',
+      description:
+        'Delete a folder from a Quarto Hub project. Refuses while files remain under the path ' +
+        'unless `recursive: true`, which deletes the contained files first (reported as ' +
+        '`files_deleted`).',
+      inputSchema: z.object({
+        project: projectParam,
+        path: z.string().describe('The folder path to delete'),
+        recursive: z
+          .boolean()
+          .optional()
+          .describe('Delete the files under the folder too (default false — refuse if non-empty).'),
+        wait_for_sync: waitForSyncParam,
+      }),
+      outputSchema: outDeleteFolder,
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
+    },
+    (args) => runDataTool('delete_folder', args, manager),
   );
 
   server.registerTool(
