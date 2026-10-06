@@ -34,6 +34,7 @@ import {
   AUTH_TOOL_DEFINITIONS,
   AuthToolsState,
   extractAuthContext,
+  type ProgressNotification,
 } from './auth/auth-tools.js';
 import { redactTokens } from './auth/redact.js';
 import { buildShareUrl, parseProjectRef, serversMatch } from './share-url.js';
@@ -456,20 +457,27 @@ type DataToolName =
  * optional — a schema-level `required` would reject the share-URL call
  * before normalization runs — so the requirement is enforced here,
  * after normalization.
+ *
+ * `wait_for_change` is deliberately absent: its `path` is genuinely
+ * optional since CAP-18 (omitted = project-wide watch). A share URL's
+ * `file=` still fills it as a default via normalizeArgs.
  */
 const PATH_DEFAULTABLE: ReadonlySet<DataToolName> = new Set([
   'read_file',
-  'wait_for_change',
   'write_file',
   'patch_file',
   'create_file',
   'delete_file',
 ]);
 
-/** Per-call extras threaded from the SDK request context (BP-3). */
+/** Per-call extras threaded from the SDK request context (BP-3, BP-4). */
 interface ToolExtras {
   /** The MCP request's cancellation signal, when the caller can cancel. */
   readonly signal?: AbortSignal;
+  /** Present only when the caller requested progress notifications (BP-4). */
+  readonly progressToken?: string | number;
+  /** Notification sender bound to the request (BP-4); token-gated by the caller. */
+  readonly sendNotification?: (n: ProgressNotification) => Promise<void>;
 }
 
 async function handleTool(
@@ -905,21 +913,93 @@ async function handleSearchFiles(args: ToolArgs, manager: ConnectionManager): Pr
   });
 }
 
+/**
+ * Progress cadence for the blocking watch (BP-4): an immediate
+ * `progress: 0` so the host shows life, then one notification per 5 s.
+ * Hosts with `resetTimeoutOnProgress` treat each as a liveness proof,
+ * which is what lets a 55 s poll outlive a short per-request timeout.
+ */
+const PROGRESS_INTERVAL_MS = 5000;
+
+/**
+ * Run `wait` under a progress ticker: emits `progress: 0` immediately
+ * and `elapsed / total` every {@link PROGRESS_INTERVAL_MS} until the
+ * wait settles. No-op without a progressToken (BP-4 is opt-in per
+ * request). The ticker is always torn down before the result returns,
+ * so no notification ever races the response.
+ */
+async function withWaitProgress<T>(
+  extras: ToolExtras,
+  totalMs: number,
+  watching: string,
+  wait: () => Promise<T>,
+): Promise<T> {
+  if (extras.progressToken === undefined || !extras.sendNotification) {
+    return wait();
+  }
+  const send = extras.sendNotification;
+  const token = extras.progressToken;
+  const startedAt = Date.now();
+  const emit = (progress: number) =>
+    send({
+      method: 'notifications/progress',
+      params: {
+        progressToken: token,
+        progress,
+        total: totalMs,
+        message: `watching ${watching} (${Math.round(progress / 1000)}s of ${Math.round(totalMs / 1000)}s)`,
+      },
+    }).catch(() => {
+      // A dead notification channel must not fail the wait itself.
+    });
+  const ticker = setInterval(() => {
+    void emit(Math.min(Date.now() - startedAt, totalMs));
+  }, PROGRESS_INTERVAL_MS);
+  try {
+    await emit(0);
+    return await wait();
+  } finally {
+    clearInterval(ticker);
+  }
+}
+
 async function handleWaitForChange(
   args: ToolArgs,
   manager: ConnectionManager,
   extras: ToolExtras,
 ): Promise<CallToolResult> {
   const project = args.project as string;
-  const path = args.path as string;
+  const path = typeof args.path === 'string' && args.path !== '' ? args.path : undefined;
   const rawTimeout = typeof args.timeout_seconds === 'number' ? args.timeout_seconds : 25;
   const timeoutSec = Math.max(1, Math.min(55, rawTimeout));
   const sinceHash = typeof args.since_hash === 'string' ? args.since_hash : undefined;
 
-  const result = await manager.waitForChange(project, path, timeoutSec * 1000, sinceHash, {
-    signal: extras.signal,
-    server: routedServer(args),
-  });
+  // Project-wide arm (CAP-18): no path → watch every file. `since_hash`
+  // becomes an exclusion filter for the caller's own write echo (ERG-8).
+  if (path === undefined) {
+    const result = await withWaitProgress(extras, timeoutSec * 1000, 'the whole project', () =>
+      manager.waitForAnyChange(project, timeoutSec * 1000, {
+        sinceHash,
+        signal: extras.signal,
+        server: routedServer(args),
+      }),
+    );
+    if (!result.changed) {
+      return structured({
+        changed: false,
+        changes: [],
+        message: `No change within ${timeoutSec}s. Call wait_for_change again to keep watching.`,
+      });
+    }
+    return structured({ changed: true, changes: result.changes });
+  }
+
+  const result = await withWaitProgress(extras, timeoutSec * 1000, path, () =>
+    manager.waitForChange(project, path, timeoutSec * 1000, sinceHash, {
+      signal: extras.signal,
+      server: routedServer(args),
+    }),
+  );
 
   if (!result.changed) {
     return structured({
@@ -1437,13 +1517,27 @@ const outReadFile = z.object({
 
 const outWaitForChange = z.object({
   changed: z.boolean(),
-  path: z.string(),
+  // Per-path arm: the watched path. Absent on the project-wide arm
+  // (CAP-18), which reports `changes` instead.
+  path: z.string().optional(),
   hash: z.string().nullable().optional(),
   removed: z.literal(true).optional(),
   type: z.string().optional(),
   mimeType: z.string().optional(),
   content: z.string().optional(),
   message: z.string().optional(),
+  // Project-wide arm (CAP-18): every file added, edited, or removed
+  // during the wait, with its post-change content hash (null on
+  // removal).
+  changes: z
+    .array(
+      z.object({
+        path: z.string(),
+        hash: z.string().nullable(),
+        kind: z.enum(['added', 'edited', 'removed']),
+      }),
+    )
+    .optional(),
 });
 
 const outWriteFile = z.object({
@@ -1660,14 +1754,24 @@ export function registerTools(
     {
       title: 'Watch for changes',
       description:
-        'Long-poll: block until a file in the project is edited by any collaborator, then return its ' +
-        'new content. Returns as soon as a change is observed, or after `timeout_seconds` with ' +
-        '`changed: false` (re-call to keep watching). The result includes a `hash`; pass it back as ' +
-        '`since_hash` on the next call so an edit landing between calls is never missed. Lets an agent ' +
-        'react to a live collaborator without busy-polling read_file.',
+        'Long-poll: block until something changes, then return it. With `path`, watches that file and ' +
+        'returns its new content on edit. Omit `path` to watch the whole project: returns ' +
+        '`changes: [{path, hash, kind}]` (kind is added/edited/removed) for any collaborator\'s ' +
+        'activity — pass your own just-written `hash` as `since_hash` so your own write\'s echo is ' +
+        'not reported back to you. Returns as soon as a change is observed, or after ' +
+        '`timeout_seconds` with `changed: false` (re-call to keep watching). On the per-file arm ' +
+        'the result includes a `hash`; pass it back as `since_hash` on the next call so an edit ' +
+        'landing between calls is never missed. Lets an agent react to a live collaborator without ' +
+        'busy-polling read_file.',
       inputSchema: z.object({
         project: projectParam,
-        path: z.string().describe('The file path within the project to watch').optional(),
+        path: z
+          .string()
+          .describe(
+            'The file path within the project to watch. Omit to watch the whole project ' +
+              '(result carries `changes` instead of content).',
+          )
+          .optional(),
         timeout_seconds: z
           .number()
           .describe('Max seconds to block before returning changed=false (default 25, clamped to 1-55)')
@@ -1676,18 +1780,27 @@ export function registerTools(
           .string()
           .optional()
           .describe(
-            'Optional hash from a prior result. If the file already differs from it, returns immediately ' +
-              '(closes the gap between polls).',
+            'Per-file arm: hash from a prior result — if the file already differs, returns ' +
+              'immediately (closes the gap between polls). Project-wide arm: your own post-write ' +
+              'hash — its echo is excluded from the result.',
           ),
       }),
       outputSchema: outWaitForChange,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false },
     },
     // The one blocking tool: thread the request's cancellation signal
-    // (BP-3) so a client cancel unregisters the waiter promptly. ctx is
-    // always present from the SDK; the optional chain keeps bare
-    // handler-level test harnesses working.
-    (args, ctx) => runDataTool('wait_for_change', args, manager, { signal: ctx?.mcpReq?.signal }),
+    // (BP-3) so a client cancel unregisters the waiter promptly, and
+    // the progressToken + notification channel (BP-4) so a host that
+    // asked for progress gets it. ctx is always present from the SDK;
+    // the optional chains keep bare handler-level test harnesses working.
+    (args, ctx) =>
+      runDataTool('wait_for_change', args, manager, {
+        signal: ctx?.mcpReq?.signal,
+        progressToken: ctx?.mcpReq?._meta?.progressToken,
+        sendNotification: ctx?.mcpReq
+          ? (n) => ctx.mcpReq.notify(n as unknown as Parameters<typeof ctx.mcpReq.notify>[0])
+          : undefined,
+      }),
   );
 
   server.registerTool(
