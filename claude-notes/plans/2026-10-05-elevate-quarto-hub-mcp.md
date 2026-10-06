@@ -534,7 +534,7 @@ intended.
   etiquette, auth, read-only, untrusted content).
 - [x] BP-18: validate the authorization URL (`https`, non-private host)
   before surfacing or opening it.
-- [ ] HY-6: fix bd-rgt8rglx (`TimeoutNegativeWarning`) and bd-2qnnrwbd
+- [x] HY-6: fix bd-rgt8rglx (`TimeoutNegativeWarning`) and bd-2qnnrwbd
   (deprecated `initSync()` params — un-deferred and re-scoped to the
   initSync wart only; both are Phase 1 children in braid, so both gate
   this phase's close).
