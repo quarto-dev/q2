@@ -185,4 +185,44 @@ export const TASKS = [
     },
     check: async (_ctx, finalText) => finalText.includes('deployed'),
   },
+
+  {
+    // Error-recovery (Phase 1, ERG-4/ERG-1): the agent's write is
+    // REFUSED on a stale expected_hash — by construction, since the
+    // prompt embeds a pre-collaboration hash — and it must recover
+    // (re-read, merge, retry) without losing anyone's content. One
+    // isError result is expected here; that is the point of the task.
+    id: 'stale-write-recovery',
+    prompt: (ctx) =>
+      MCP_ONLY +
+      `In Quarto Hub project ${ctx.projectId}, update the file notes.qmd ` +
+      'by appending the line `Line two.` on a new line. You previously ' +
+      "read this file (its content was exactly 'Line one.\\n', hash " +
+      `${ctx.staleHash}) — use that hash as expected_hash on your write ` +
+      'so a collaborator edit can never be clobbered. If the write is ' +
+      'refused, recover: re-read the file, keep EVERY line already ' +
+      'there, and retry so no content is lost. The final file must ' +
+      'contain every pre-existing line plus `Line two.`',
+    setup: async (ctx) => {
+      const { createHash } = await import('node:crypto');
+      const stale = 'Line one.\n';
+      ctx.staleHash =
+        'sha256:' + createHash('sha256').update(stale, 'utf8').digest('hex');
+      const { indexDocId } = await ctx.seedProject([
+        { path: 'notes.qmd', content: stale },
+      ]);
+      ctx.projectId = indexDocId;
+      // The collaborator edit lands before the agent starts, so the
+      // prompt-embedded hash is deterministically stale.
+      await ctx.editFile(indexDocId, 'notes.qmd', 'Line one.\nCollaborator was here.\n');
+    },
+    check: async (ctx) => {
+      const text = await ctx.readFile(ctx.projectId, 'notes.qmd');
+      return (
+        text !== undefined &&
+        text.includes('Collaborator was here.') &&
+        text.includes('Line two.')
+      );
+    },
+  },
 ];

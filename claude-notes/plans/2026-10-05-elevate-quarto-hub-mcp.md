@@ -565,6 +565,104 @@ intended.
 - [x] HY-3: `rm -rf dist` before `tsc` in the package scripts; confirm no test
   or packaging step consumes orphaned `dist/` modules.
 
+#### Phase 1 completion record (landed 2026-10-06, bd-zv8u2sxi)
+
+Everything above the checkpoint record plus the ergonomics batch, in
+twelve commits on `braid/bd-zv8u2sxi-hub-mcp-phase-1-correctness`
+(stacked on Phase 0's branch per the PR-stack rule):
+
+- **ERG-1** (9f1a91c63): `read_file` → `{path, hash, content}`;
+  `write_file`/`patch_file` → `{path, hash}` (+`created` on the create
+  arm) and accept `expected_hash` — a stale hash is refused with the
+  CURRENT content + hash and changes nothing (compare-and-swap).
+- **ERG-2** (06a72087a): every write waits ≤ 2 s for hub acknowledgement
+  and reports `synced: true|false` (`wait_for_sync: false` opts out);
+  new sync-client export `awaitDelivery(paths, ms)` over the exit
+  drain's `isDelivered`/`remote-heads` plumbing (additive, no behavior
+  change; the index doc always participates). Includes create_project.
+- **ERG-4 + HY-1** (491e3b862): every error names parameter / state /
+  next tool; path errors list ≤ 3 closest existing paths (bigram-Dice);
+  the phantom `read_binary_file_metadata` reference is gone.
+- **ERG-6 + ERG-10** (cc4ac70a4): `instructions` rewritten as the
+  ~15-line operating guide (workflow, hash etiquette, `synced`,
+  watching, auth, read-only notice when flagged, untrusted-content
+  note).
+- **BP-18** (5a41c8bea): authorization endpoint validated before
+  surfacing — https + public host, loopback only with the insecure
+  hatch; the Phase 0 `it.fails` net flipped. Also sank a latent
+  listener-promise leak the new early return exposed.
+- **HY-6** (cc2cf2dd7): the bundle's automerge init is now a generated
+  shim calling `initSync({ module })` (bd-2qnnrwbd closed);
+  `q2 mcp` startup emits zero stderr bytes. bd-rgt8rglx's
+  `TimeoutNegativeWarning` does not reproduce in the post-SDK-v2 stack;
+  a warm-keyring e2e pins both halves (closed).
+- **BP-3** (6d94d8abb): `ctx.mcpReq.signal` threads to
+  `waitForChange`; cancel unregisters the waiter + timer and rejects
+  AbortError (not a wrapped isError). The second `it.fails` net
+  flipped — zero expected-fails remain in the suite.
+- **BP-1** (ea3a8dba2): `outputSchema` + `structuredContent` on all ten
+  data tools (extended to `read_file` — the hash→`expected_hash` loop
+  is exactly what machine-readable structure is for). Text fallbacks
+  byte-compatible (`list_files` keeps the bare array; structure is
+  `{ files }`). Harness net armed: 10 golden cases + converse coverage
+  assertion.
+- **BP-10** (a2832908c): launcher injects `QUARTO_MCP_SERVER_VERSION` =
+  `0.32.0+<embed commit>[.dirty]`; standalone falls back to the bundle's
+  build-info stamp; `Implementation.description` + `websiteUrl` set and
+  verified on both eras.
+- **BP-9** (bf448859a): human titles on every tool; icons deferred to
+  Phase 5.
+- **BP-12 + BP-13** (2843f4a82): `authenticate` serialized (second call
+  sees the first's stored credential); `authenticate_status` reports
+  `{authenticated, hub, identity?, expiry?}` with no flow. Tool budget
+  13/24 with auth configured.
+- **HY-3** (54e12cff6): build script `rm -rf dist` first; bundle builds
+  from `src` so tests + `bin` were the only orphan consumers.
+- **bd-qt7h8h5g** (d404a005f, strand closed): manager keyed by
+  (server, indexDocId); share-URL `server=` routes the call, joined
+  authorless — the probe physically cannot attach a Bearer cross-origin;
+  foreign 401/403 → `ForeignHubAuthRequiredError`.
+
+**Phase-close gate.** `cargo xtask verify` green (14/14 — one
+pre-existing flake hit on the first run:
+`quarto-sync-client` `doc-inventory.test.ts` drops the binary doc under
+load, tracked as bd-c72wsugj / bd-fuw5gcni, unrelated to this phase's
+additive sync-client export; rerun green). `npm run test -w
+ts-packages/quarto-hub-mcp` green (29 files, 328 passed + 3 skips, 0
+expected-fail). e2e-auth 4/4 with the q2-launcher channel bound (embed
+at branch tip, freshness confirmed by `q2 mcp --launcher-info`).
+
+**E2E (real binary, recorded).** `./target/debug/q2 mcp --server
+ws://127.0.0.1:1/ws`, output inspected via jq: legacy `initialize` →
+`serverInfo { name: quarto-hub, version: 0.32.0+ea3a8dba2.dirty,
+description, websiteUrl }`, 2025-11-25; modern (camelCase envelope)
+`server/discover` → `supportedVersions: ["2026-07-28"]` + instructions,
+`tools/list` → `ttlMs: 3600000, cacheScope: "private"`; startup stderr
+zero bytes.
+
+**Eval suite (8 tasks — added `stale-write-recovery`, which drives a
+designed stale-hash refusal → merge → retry recovery):**
+`eval/results/2026-10-06T11-41-51/`
+
+| task | success | turns | tokens (in/out) | cost | isError | retries | duration |
+|------|---------|-------|-----------------|------|---------|---------|----------|
+| create-project | PASS | 4 | 98/683 | $0.75 | 0 | 0 | 23s |
+| read-and-report | PASS | 4 | 66/724 | $0.50 | 0 | 0 | 13s |
+| patch-typo | PASS | 6 | 130/1030 | $0.55 | 0 | 0 | 17s |
+| write-new-file | PASS | 6 | 130/1055 | $0.55 | 0 | 0 | 20s |
+| rename-file | PASS | 7 | 130/1074 | $0.56 | 0 | 0 | 21s |
+| collaborator-edit | PASS | 4 | 66/717 | $0.50 | 0 | 0 | 29s |
+| watch-live-edit | PASS | 5 | 98/1025 | $0.54 | 0 | 0 | 50s |
+| stale-write-recovery | PASS | 6 | 130/2160 | $0.64 | 1 | 1 | 51s |
+
+8/8 PASS, median 5.5 turns (baseline 4 — inside noise; the watch and
+recovery tasks are the long poles by design). `stale-write-recovery`'s
+single `isError` is the DESIGNED stale-hash refusal; the transcript
+shows the agent receiving the structured `stale_expected_hash` payload
+(current content + hash) and merging without an extra read. All other
+tasks' zero-`isError` streak holds through the result-shape changes
+(ERG-1/2, BP-1).
+
 ### Phase 2 — Complete the file and project surface
 
 No new protocol surfaces; pure tool additions over existing sync-client APIs.
