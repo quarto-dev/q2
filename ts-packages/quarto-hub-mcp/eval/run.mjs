@@ -41,6 +41,19 @@ const RESULTS_ROOT = path.join(__dirname, 'results');
 const MAX_TURNS = 30;
 const TASK_HARD_TIMEOUT_MS = 6 * 60 * 1000;
 
+// The render/docs tasks (Phase 4) need a real q2 for `q2 render` and the
+// embedded docs corpus. The eval server opts into --allow-render (its
+// fixtures are harness-controlled) and gets QUARTO_Q2_PATH when the
+// debug binary exists; q2-dependent tasks skip otherwise.
+const REPO_ROOT = path.resolve(PKG_ROOT, '..', '..');
+const Q2_BIN = path.join(
+  REPO_ROOT,
+  'target',
+  'debug',
+  process.platform === 'win32' ? 'q2.exe' : 'q2',
+);
+const Q2_AVAILABLE = existsSync(Q2_BIN);
+
 // ---------------------------------------------------------------------------
 // Preflight
 // ---------------------------------------------------------------------------
@@ -57,7 +70,13 @@ if (claudeVersion.status !== 0) {
 
 const onlyIdx = process.argv.indexOf('--only');
 const only = onlyIdx !== -1 ? process.argv[onlyIdx + 1] : undefined;
-const tasks = only ? TASKS.filter((t) => t.id === only) : TASKS;
+const tasks = (only ? TASKS.filter((t) => t.id === only) : TASKS).filter((t) => {
+  if (t.requiresQ2 && !Q2_AVAILABLE) {
+    console.error(`  (skipping ${t.id} — target/debug/q2 not built)`);
+    return false;
+  }
+  return true;
+});
 if (tasks.length === 0) {
   console.error(`no task matches --only ${only}; known: ${TASKS.map((t) => t.id).join(', ')}`);
   process.exit(1);
@@ -222,7 +241,8 @@ async function runTask(task, resultsDir) {
       mcpServers: {
         'quarto-hub': {
           command: process.execPath,
-          args: [SERVER_ENTRY, '--server', hub.url],
+          args: [SERVER_ENTRY, '--server', hub.url, '--allow-render'],
+          ...(Q2_AVAILABLE ? { env: { QUARTO_Q2_PATH: Q2_BIN } } : {}),
         },
       },
     }),

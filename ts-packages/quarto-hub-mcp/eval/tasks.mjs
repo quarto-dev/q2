@@ -344,4 +344,81 @@ export const TASKS = [
     check: async (ctx, _finalText) =>
       (await ctx.readFile(ctx.projectId, 'deploy.qmd')) === 'status: green\n',
   },
+  {
+    id: 'outline-and-section-edit',
+    prompt: (ctx) =>
+      MCP_ONLY +
+      `In Quarto Hub project ${ctx.projectId}, the file paper.qmd is a short ` +
+      'paper with Introduction, Methods, and Results sections. Replace the ' +
+      'ENTIRE Methods section (heading included — keep the heading itself) ' +
+      'with new content: "Participants were 42 volunteers recruited on ' +
+      'campus." — using the document structure, and leaving the other ' +
+      'sections exactly as they are. When done, reply with the heading of ' +
+      'the section you replaced.',
+    setup: async (ctx) => {
+      const { indexDocId } = await ctx.seedProject([
+        {
+          path: 'paper.qmd',
+          content:
+            '---\ntitle: Eval Paper\n---\n\n' +
+            '# Introduction\n\nWe study evals.\n\n' +
+            '# Methods\n\nOld methods paragraph.\n\n## Details\n\nOld detail text.\n\n' +
+            '# Results\n\nOld results.\n',
+        },
+      ]);
+      ctx.projectId = indexDocId;
+    },
+    check: async (ctx, _finalText) => {
+      const text = await ctx.readFile(ctx.projectId, 'paper.qmd');
+      if (text === undefined) return false;
+      return (
+        text.includes('# Methods\n\nParticipants were 42 volunteers recruited on campus.') &&
+        !text.includes('Old methods paragraph.') &&
+        !text.includes('## Details') &&
+        text.includes('# Introduction\n\nWe study evals.\n') &&
+        text.includes('# Results\n\nOld results.\n')
+      );
+    },
+  },
+  {
+    id: 'docs-lookup',
+    requiresQ2: true,
+    prompt: () =>
+      MCP_ONLY +
+      'A teammate asks: "I renamed a page in my Quarto website and now old ' +
+      'links break — how do I keep the old URL working?" Find the answer in ' +
+      'the documentation the server exposes (not the web), then reply with ' +
+      'the answer in one sentence AND the href of the documentation page ' +
+      'you found it on.',
+    setup: async () => {},
+    check: async (_ctx, finalText) => /aliases/.test(finalText),
+  },
+  {
+    id: 'fix-render-error',
+    requiresQ2: true,
+    prompt: (ctx) =>
+      MCP_ONLY +
+      `In Quarto Hub project ${ctx.projectId}, the file report.qmd fails to ` +
+      'render. Render it with the render tool, read the diagnostic, fix the ' +
+      'document so it renders cleanly, and confirm with a second render. ' +
+      'Reply with the error code the first render reported.',
+    setup: async (ctx) => {
+      const { indexDocId } = await ctx.seedProject([
+        {
+          path: 'report.qmd',
+          content:
+            '---\ntitle: Weekly Report\n---\n\n# Summary\n\nAll good.\n\n' +
+            '{{< include appendix.qmd >}}\n',
+        },
+      ]);
+      ctx.projectId = indexDocId;
+    },
+    check: async (ctx, finalText) => {
+      const report = await ctx.readFile(ctx.projectId, 'report.qmd');
+      if (report === undefined) return false;
+      const includeGone = !report.includes('appendix.qmd');
+      const appendixCreated = (await ctx.readFile(ctx.projectId, 'appendix.qmd')) !== undefined;
+      return (includeGone || appendixCreated) && /Q-17-2/.test(finalText);
+    },
+  },
 ];
