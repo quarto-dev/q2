@@ -44,7 +44,10 @@ import {
 } from './loopback.js';
 import type { AuthServerProvider } from './oauth-config.js';
 import { generatePkceParams } from './pkce.js';
-import { issuerAllowsInsecureRequests } from './oauth-config.js';
+import {
+  assertSafeAuthorizationEndpoint,
+  issuerAllowsInsecureRequests,
+} from './oauth-config.js';
 import { redactTokens } from './redact.js';
 import {
   type RefreshManager,
@@ -277,6 +280,17 @@ export class AuthToolsState {
     }
 
     try {
+      // BP-18: the authorization endpoint is *fetched* metadata — SSRF
+      // input. Validate it before the URL is surfaced anywhere (browser,
+      // progress notification, stderr log).
+      try {
+        assertSafeAuthorizationEndpoint(
+          as.authorization_endpoint ?? GOOGLE_AUTHORIZATION_ENDPOINT,
+        );
+      } catch (err) {
+        return errorResult(err instanceof Error ? err.message : String(err));
+      }
+
       const authUrl = this.buildAuthorizationUrl(as, {
         redirectUri: listener.redirectUri,
         codeChallenge: pkce.codeChallenge,
@@ -344,6 +358,10 @@ export class AuthToolsState {
     } finally {
       // Idempotent — settles a no-op if the flow already completed.
       listener.close();
+      // An early return (endpoint validation, exchange failure) leaves
+      // the listener's result promise un-awaited; sink it so an
+      // abandoned rejection never surfaces as unhandled.
+      void listener.result.catch(() => {});
     }
   }
 

@@ -532,7 +532,7 @@ intended.
   near-match paths) applied to every data tool.
 - [x] ERG-6: rewrite `instructions` as the operating guide (workflow,
   etiquette, auth, read-only, untrusted content).
-- [ ] BP-18: validate the authorization URL (`https`, non-private host)
+- [x] BP-18: validate the authorization URL (`https`, non-private host)
   before surfacing or opening it.
 - [ ] HY-6: fix bd-rgt8rglx (`TimeoutNegativeWarning`) and bd-2qnnrwbd
   (deprecated `initSync()` params — un-deferred and re-scoped to the
