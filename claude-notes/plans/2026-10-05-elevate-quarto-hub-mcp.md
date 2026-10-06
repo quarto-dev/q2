@@ -423,7 +423,7 @@ Test specifications (all red before implementation):
   execution error, not protocol error).
 - [x] Client-cancelled `wait_for_change` → prompt cancellation, no listener
   leak (BP-3; Phase 0 harness asserts).
-- [ ] `list_files` result carries `structuredContent` matching its
+- [x] `list_files` result carries `structuredContent` matching its
   `outputSchema`, with the JSON text fallback retained (BP-1).
 - [x] Dual-era handshake: a legacy client (`initialize`, `2025-11-25`) and a
   modern client (`server/discover`, per-request `_meta`) both list and call
@@ -541,10 +541,13 @@ intended.
 - [x] BP-3: thread `extra.signal` through `handleTool` →
   `ConnectionManager.waitForChange(..., { signal })` and connect paths where
   feasible; abort unregisters listeners.
-- [ ] BP-1: `outputSchema` + `structuredContent` for `connect_project`,
+- [x] BP-1: `outputSchema` + `structuredContent` for `connect_project`,
   `list_files`, `wait_for_change`, `create_project`, and every write tool
   (`{path, hash, synced}`) — and each tool added later; convention enforced
-  by the Phase 0 harness.
+  by the Phase 0 harness. (Extended to `read_file` too — Phase 1 reshaped
+  it for ERG-1, and the ERG-1 hash → `expected_hash` loop is exactly the
+  machine-read structuredContent is for. Auth tools stay prose-text: they
+  are interactive flows, not data.)
 - [ ] BP-10: launcher injects `QUARTO_MCP_SERVER_VERSION` (embed commit +
   workspace version); server reports it; fallback to a bundle-build-time
   stamp when run standalone. Also set `Implementation.description` and

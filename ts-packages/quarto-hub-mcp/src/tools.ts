@@ -39,6 +39,24 @@ function error(msg: string): CallToolResult {
 }
 
 /**
+ * A result that is machine-readable both ways (BP-1):
+ * `structuredContent` for hosts that validate against the tool's
+ * declared `outputSchema`, plus the same payload as a JSON text block
+ * for legacy clients and agents that read text. `textOverride` carries
+ * the pre-BP-1 text shape when that differs from the structured
+ * payload (e.g. list_files' bare array).
+ */
+function structured(
+  payload: Record<string, unknown>,
+  textOverride?: unknown,
+): CallToolResult {
+  return {
+    content: [{ type: 'text', text: JSON.stringify(textOverride ?? payload, null, 2) }],
+    structuredContent: payload,
+  };
+}
+
+/**
  * Shared description for every `project` parameter. Tells the model that a
  * quarto-hub.com share URL is accepted in place of a bare id — the server
  * extracts the id (and a default `path`) from it. See {@link parseProjectRef}.
@@ -305,13 +323,16 @@ async function handleTool(
 async function handleConnectProject(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
   const project = args.project as string;
   const state = await manager.connect(project);
-  return text(JSON.stringify({ project, files: buildFileList(state) }, null, 2));
+  return structured({ project, files: buildFileList(state) });
 }
 
 async function handleListFiles(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
   const project = args.project as string;
   const state = await manager.connect(project);
-  return text(JSON.stringify(buildFileList(state), null, 2));
+  const files = buildFileList(state);
+  // Text fallback stays the pre-BP-1 bare array; structuredContent is
+  // the object-wrapped form outputSchema requires.
+  return structured({ files }, files);
 }
 
 /**
@@ -361,9 +382,7 @@ async function handleReadFile(args: ToolArgs, manager: ConnectionManager): Promi
     // until then say so — never name a tool that does not exist.
     return error(`Error: ${path} is a binary file; read_file currently supports text files only.`);
   }
-  return text(
-    JSON.stringify({ path, hash: hashPayload(payload), content: payload.text }, null, 2),
-  );
+  return structured({ path, hash: hashPayload(payload), content: payload.text });
 }
 
 async function handleWaitForChange(
@@ -382,34 +401,31 @@ async function handleWaitForChange(
   });
 
   if (!result.changed) {
-    return text(
-      JSON.stringify(
-        {
-          changed: false,
-          path,
-          hash: result.hash,
-          message: `No change within ${timeoutSec}s. Call wait_for_change again (pass this hash as since_hash) to keep watching.`,
-        },
-        null,
-        2,
-      ),
-    );
+    return structured({
+      changed: false,
+      path,
+      hash: result.hash,
+      message: `No change within ${timeoutSec}s. Call wait_for_change again (pass this hash as since_hash) to keep watching.`,
+    });
   }
   if (result.payload === null) {
-    return text(JSON.stringify({ changed: true, removed: true, path }, null, 2));
+    return structured({ changed: true, removed: true, path });
   }
   if (result.payload.type === 'binary') {
-    return text(
-      JSON.stringify(
-        { changed: true, path, type: 'binary', mimeType: result.payload.mimeType, hash: result.hash },
-        null,
-        2,
-      ),
-    );
+    return structured({
+      changed: true,
+      path,
+      type: 'binary',
+      mimeType: result.payload.mimeType,
+      hash: result.hash,
+    });
   }
-  return text(
-    JSON.stringify({ changed: true, path, hash: result.hash, content: result.payload.text }, null, 2),
-  );
+  return structured({
+    changed: true,
+    path,
+    hash: result.hash,
+    content: result.payload.text,
+  });
 }
 
 async function handleWriteFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
@@ -436,18 +452,12 @@ async function handleWriteFile(args: ToolArgs, manager: ConnectionManager): Prom
       );
     }
     await state.client.createFile(path, content);
-    return text(
-      JSON.stringify(
-        {
-          path,
-          hash: hashPayload({ type: 'text', text: content }),
-          created: true,
-          ...(await syncField(args, manager, project, [path])),
-        },
-        null,
-        2,
-      ),
-    );
+    return structured({
+      path,
+      hash: hashPayload({ type: 'text', text: content }),
+      created: true,
+      ...(await syncField(args, manager, project, [path])),
+    });
   }
   if (existing.type === 'binary') {
     return error(`Error: ${path} is a binary file. Cannot write text content to it.`);
@@ -457,17 +467,11 @@ async function handleWriteFile(args: ToolArgs, manager: ConnectionManager): Prom
   }
 
   state.client.updateFileContent(path, content);
-  return text(
-    JSON.stringify(
-      {
-        path,
-        hash: hashPayload({ type: 'text', text: content }),
-        ...(await syncField(args, manager, project, [path])),
-      },
-      null,
-      2,
-    ),
-  );
+  return structured({
+    path,
+    hash: hashPayload({ type: 'text', text: content }),
+    ...(await syncField(args, manager, project, [path])),
+  });
 }
 
 async function handlePatchFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
@@ -513,17 +517,11 @@ async function handlePatchFile(args: ToolArgs, manager: ConnectionManager): Prom
     currentContent.slice(index + oldString.length);
 
   state.client.updateFileContent(path, newContent);
-  return text(
-    JSON.stringify(
-      {
-        path,
-        hash: hashPayload({ type: 'text', text: newContent }),
-        ...(await syncField(args, manager, project, [path])),
-      },
-      null,
-      2,
-    ),
-  );
+  return structured({
+    path,
+    hash: hashPayload({ type: 'text', text: newContent }),
+    ...(await syncField(args, manager, project, [path])),
+  });
 }
 
 async function handleCreateFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
@@ -542,18 +540,12 @@ async function handleCreateFile(args: ToolArgs, manager: ConnectionManager): Pro
   }
 
   await state.client.createFile(path, content);
-  return text(
-    JSON.stringify(
-      {
-        path,
-        hash: hashPayload({ type: 'text', text: content }),
-        created: true,
-        ...(await syncField(args, manager, project, [path])),
-      },
-      null,
-      2,
-    ),
-  );
+  return structured({
+    path,
+    hash: hashPayload({ type: 'text', text: content }),
+    created: true,
+    ...(await syncField(args, manager, project, [path])),
+  });
 }
 
 async function handleDeleteFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
@@ -570,13 +562,11 @@ async function handleDeleteFile(args: ToolArgs, manager: ConnectionManager): Pro
   }
 
   state.client.deleteFile(path);
-  return text(
-    JSON.stringify(
-      { path, deleted: true, ...(await syncField(args, manager, project, [])) },
-      null,
-      2,
-    ),
-  );
+  return structured({
+    path,
+    deleted: true,
+    ...(await syncField(args, manager, project, [])),
+  });
 }
 
 async function handleRenameFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
@@ -597,24 +587,18 @@ async function handleRenameFile(args: ToolArgs, manager: ConnectionManager): Pro
   }
 
   state.client.renameFile(oldPath, newPath);
-  return text(
-    JSON.stringify(
-      {
-        old_path: oldPath,
-        new_path: newPath,
-        renamed: true,
-        ...(await syncField(args, manager, project, [])),
-      },
-      null,
-      2,
-    ),
-  );
+  return structured({
+    old_path: oldPath,
+    new_path: newPath,
+    renamed: true,
+    ...(await syncField(args, manager, project, [])),
+  });
 }
 
 async function handleCreateProject(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
   const files = (args.files as Array<{ path: string; content: string }>) ?? [];
   const result = await manager.createProject(files);
-  return text(JSON.stringify({
+  return structured({
     indexDocId: result.indexDocId,
     files: result.files,
     ...(await syncField(
@@ -623,7 +607,7 @@ async function handleCreateProject(args: ToolArgs, manager: ConnectionManager): 
       result.indexDocId,
       result.files.map((f) => f.path),
     )),
-  }, null, 2));
+  });
 }
 
 // ============================================================================
@@ -653,6 +637,85 @@ async function runDataTool(
     return error(`Error in ${name}: ${redactTokens(message)}`);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Output schemas (BP-1)
+//
+// Every data tool declares the shape of its `structuredContent`. The
+// Phase 0 harness keeps a golden case per declaring tool
+// (conformance.test.ts GOLDEN_RESULT_CASES), so a schema added here
+// without a golden case (or a drifted result shape) fails the suite.
+// ---------------------------------------------------------------------------
+
+const outListedFile = z.object({
+  path: z.string(),
+  type: z.string().optional(),
+  status: z.literal('unavailable').optional(),
+  docId: z.string().optional(),
+});
+
+const outConnectProject = z.object({
+  project: z.string(),
+  files: z.array(outListedFile),
+});
+
+const outListFiles = z.object({ files: z.array(outListedFile) });
+
+const outReadFile = z.object({
+  path: z.string(),
+  hash: z.string(),
+  content: z.string(),
+});
+
+const outWaitForChange = z.object({
+  changed: z.boolean(),
+  path: z.string(),
+  hash: z.string().nullable().optional(),
+  removed: z.literal(true).optional(),
+  type: z.string().optional(),
+  mimeType: z.string().optional(),
+  content: z.string().optional(),
+  message: z.string().optional(),
+});
+
+const outWriteFile = z.object({
+  path: z.string(),
+  hash: z.string(),
+  created: z.literal(true).optional(),
+  synced: z.boolean().optional(),
+});
+
+const outPatchFile = z.object({
+  path: z.string(),
+  hash: z.string(),
+  synced: z.boolean().optional(),
+});
+
+const outCreateFile = z.object({
+  path: z.string(),
+  hash: z.string(),
+  created: z.literal(true),
+  synced: z.boolean().optional(),
+});
+
+const outDeleteFile = z.object({
+  path: z.string(),
+  deleted: z.literal(true),
+  synced: z.boolean().optional(),
+});
+
+const outRenameFile = z.object({
+  old_path: z.string(),
+  new_path: z.string(),
+  renamed: z.literal(true),
+  synced: z.boolean().optional(),
+});
+
+const outCreateProject = z.object({
+  indexDocId: z.string(),
+  files: z.array(z.object({ path: z.string(), docId: z.string() })),
+  synced: z.boolean().optional(),
+});
 
 /**
  * Register all tool handlers on the MCP server. Auth tools register
@@ -691,6 +754,7 @@ export function registerTools(
         'this throws an `AuthRequiredError` / `ReauthRequired` — call ' +
         '`authenticate` to sign in.',
       inputSchema: z.object({ project: projectParam }),
+      outputSchema: outConnectProject,
       annotations: ANNOT_READ,
     },
     (args) => runDataTool('connect_project', args, manager),
@@ -701,6 +765,7 @@ export function registerTools(
     {
       description: 'List all files in a connected Quarto Hub project.',
       inputSchema: z.object({ project: projectParam }),
+      outputSchema: outListFiles,
       annotations: ANNOT_READ,
     },
     (args) => runDataTool('list_files', args, manager),
@@ -714,6 +779,7 @@ export function registerTools(
         'pass `hash` back as `expected_hash` on write_file/patch_file so an edit a collaborator made ' +
         'since this read is never silently overwritten.',
       inputSchema: z.object({ project: projectParam, path: pathParam.optional() }),
+      outputSchema: outReadFile,
       annotations: ANNOT_READ,
     },
     (args) => runDataTool('read_file', args, manager),
@@ -743,6 +809,7 @@ export function registerTools(
               '(closes the gap between polls).',
           ),
       }),
+      outputSchema: outWaitForChange,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false },
     },
     // The one blocking tool: thread the request's cancellation signal
@@ -774,6 +841,7 @@ export function registerTools(
           ),
         wait_for_sync: waitForSyncParam,
       }),
+      outputSchema: outWriteFile,
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
     },
     (args) => runDataTool('write_file', args, manager),
@@ -800,6 +868,7 @@ export function registerTools(
           ),
         wait_for_sync: waitForSyncParam,
       }),
+      outputSchema: outPatchFile,
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
     },
     (args) => runDataTool('patch_file', args, manager),
@@ -815,6 +884,7 @@ export function registerTools(
         content: z.string().describe('Initial file content (defaults to empty)').default(''),
         wait_for_sync: waitForSyncParam,
       }),
+      outputSchema: outCreateFile,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
     },
     (args) => runDataTool('create_file', args, manager),
@@ -829,6 +899,7 @@ export function registerTools(
         path: z.string().describe('The file path to delete').optional(),
         wait_for_sync: waitForSyncParam,
       }),
+      outputSchema: outDeleteFile,
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
     },
     (args) => runDataTool('delete_file', args, manager),
@@ -844,6 +915,7 @@ export function registerTools(
         new_path: z.string().describe('The new file path'),
         wait_for_sync: waitForSyncParam,
       }),
+      outputSchema: outRenameFile,
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
     },
     (args) => runDataTool('rename_file', args, manager),
@@ -865,6 +937,7 @@ export function registerTools(
           .default([]),
         wait_for_sync: waitForSyncParam,
       }),
+      outputSchema: outCreateProject,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
     (args) => runDataTool('create_project', args, manager),

@@ -197,21 +197,62 @@ describe('schema conformance (BP-11, BP-14)', () => {
 // ============================================================================
 
 /**
- * Golden result-conformance cases. No tool declares an `outputSchema`
- * today (BP-1 lands in Phase 1), so this registry is deliberately empty:
- * the harness ships with the assertion wired. The moment a `tools/list`
- * entry declares an `outputSchema`, `registered coverage` below fails
- * until a golden case for that tool is added here — the net that keeps
- * every future structured result schema-checked.
+ * Golden result-conformance cases (BP-1, landed Phase 1). Every tool
+ * that declares an `outputSchema` must have a case here — the
+ * `registered coverage` test fails otherwise — and each golden call's
+ * `structuredContent` is validated against the declared schema.
  *
- * Each case names the tool and the arguments for a golden call against a
- * freshly seeded project; `structuredContent` of the result is then
- * validated against the tool's declared `outputSchema`.
+ * Cases run sequentially against one seeded project (`index.qmd`
+ * present); later cases may depend on earlier ones (create → delete).
  */
 const GOLDEN_RESULT_CASES: ReadonlyArray<{
   tool: string;
   args: (seed: SeededProject) => Record<string, unknown>;
-}> = [];
+}> = [
+  { tool: 'connect_project', args: (seed) => ({ project: seed.indexDocId }) },
+  { tool: 'list_files', args: (seed) => ({ project: seed.indexDocId }) },
+  {
+    tool: 'read_file',
+    args: (seed) => ({ project: seed.indexDocId, path: 'index.qmd' }),
+  },
+  {
+    tool: 'wait_for_change',
+    args: (seed) => ({ project: seed.indexDocId, path: 'index.qmd', timeout_seconds: 1 }),
+  },
+  {
+    tool: 'write_file',
+    args: (seed) => ({ project: seed.indexDocId, path: 'index.qmd', content: 'v2\n' }),
+  },
+  {
+    tool: 'patch_file',
+    args: (seed) => ({
+      project: seed.indexDocId,
+      path: 'index.qmd',
+      old_string: 'v2',
+      new_string: 'v3',
+    }),
+  },
+  {
+    tool: 'create_file',
+    args: (seed) => ({ project: seed.indexDocId, path: 'golden-new.qmd', content: 'new\n' }),
+  },
+  {
+    tool: 'delete_file',
+    args: (seed) => ({ project: seed.indexDocId, path: 'golden-new.qmd' }),
+  },
+  {
+    tool: 'rename_file',
+    args: (seed) => ({
+      project: seed.indexDocId,
+      old_path: 'index.qmd',
+      new_path: 'golden-renamed.qmd',
+    }),
+  },
+  {
+    tool: 'create_project',
+    args: () => ({ files: [{ path: 'p.qmd', content: 'x\n' }] }),
+  },
+];
 
 describe('result conformance (BP-1 net)', () => {
   it('registers a golden case for every tool that declares an outputSchema', async () => {
@@ -226,6 +267,46 @@ describe('result conformance (BP-1 net)', () => {
           `tool ${name} declares an outputSchema but has no golden result case`,
         ).toContain(name);
       }
+      // And the converse: no stale cases for schema-less tools.
+      for (const name of covered) {
+        expect(
+          withOutputSchema,
+          `golden case for ${name} but the tool declares no outputSchema`,
+        ).toContain(name);
+      }
+    } finally {
+      await f.close();
+    }
+  });
+
+  // The BP-1 contract, directly: structuredContent matching the
+  // declared outputSchema, with the JSON text fallback retained.
+  it('list_files carries structuredContent matching its outputSchema plus the JSON text fallback', async () => {
+    const f = await startInMemoryMcp();
+    try {
+      const seed = await seedProject(f, [{ path: 'index.qmd', content: 'x\n' }]);
+      const { tools } = await f.client.listTools();
+      const declared = tools.find((t) => t.name === 'list_files')?.outputSchema;
+      expect(declared, 'list_files declares no outputSchema').toBeDefined();
+
+      const result = await callTool(f, 'list_files', { project: seed.indexDocId });
+      expect(result.isError).not.toBe(true);
+      // Text fallback retained: the bare JSON array, as today.
+      const block = result.content[0];
+      expect(block?.type).toBe('text');
+      if (block?.type !== 'text') throw new Error('unreachable');
+      const fromText = JSON.parse(block.text) as Array<{ path: string; type: string }>;
+      expect(fromText).toEqual([{ path: 'index.qmd', type: 'text' }]);
+      // structuredContent: the same files, wrapped as an object.
+      const structured = result.structuredContent as { files?: unknown } | undefined;
+      expect(structured?.files).toEqual(fromText);
+
+      const ajv = new Ajv2020({ allErrors: true });
+      const validate = ajv.compile(declared!);
+      expect(
+        validate(structured),
+        `structuredContent fails its outputSchema: ${JSON.stringify(validate.errors)}`,
+      ).toBe(true);
     } finally {
       await f.close();
     }
