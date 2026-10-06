@@ -140,6 +140,11 @@ export function knownChangeHashes(doc: Doc<FileDocumentContent>): Set<string> {
   return new Set(A.getAllChanges(doc).map((c) => A.decodeChange(c).hash));
 }
 
+/** The document's current heads (pre-restore state for CAP-19's reversal trail). */
+export function currentHeads(doc: Doc<FileDocumentContent>): string[] {
+  return A.getHeads(doc);
+}
+
 /**
  * The document's text at `head`. Throws {@link UnknownChangeHashError}
  * when the hash is not in this document's change set, and a plain Error
