@@ -669,39 +669,163 @@ No new protocol surfaces; pure tool additions over existing sync-client APIs.
 
 Test specifications (red first):
 
-- [ ] Binary round-trip: `write_file` (`encoding: "base64"`) → `read_file`
+- [x] Binary round-trip: `write_file` (`encoding: "base64"`) → `read_file`
   returns an `image` block for a PNG and an embedded blob for a PDF, identical
   bytes, correct `mimeType`/`size`/`sha256`; `metadata_only` returns no bytes;
   the default tool count stays ≤ 24 (CAP-4/5, ERG-5, HY-1 closed for real).
-- [ ] `read_file` with `offset`/`limit` returns the requested lines; a file
+- [x] `read_file` with `offset`/`limit` returns the requested lines; a file
   over `max_bytes` returns `truncated: true` and a continuation hint;
   `list_files` entries carry `size`/`mimeType`/`lines` (ERG-3).
-- [ ] Folder lifecycle: create/list/delete; `list_files` includes folders
+- [x] Folder lifecycle: create/list/delete; `list_files` includes folders
   (CAP-6).
-- [ ] `search_files` returns ranked matches with snippets, honors a result
+- [x] `search_files` returns ranked matches with snippets, honors a result
   cap, skips binaries (CAP-7).
-- [ ] `get_project_info` shape: counts, identities, captures, ids, server,
+- [x] `get_project_info` shape: counts, identities, captures, ids, server,
   auth mode (CAP-2; golden-shape test through the Phase 0 harness).
-- [ ] `create_project` (with `name`), `connect_project`, and
+- [x] `create_project` (with `name`), `connect_project`, and
   `get_project_info` results embed a `shareUrl` that round-trips through
   `parseProjectRef` (CAP-1).
-- [ ] `list_projects` enumerates a project-set document passed by doc id or
+- [x] `list_projects` enumerates a project-set document passed by doc id or
   share URL (CAP-3 MVP).
 
 Work items:
 
-- [ ] CAP-4, CAP-5, CAP-6, CAP-7, CAP-2, CAP-1, CAP-3 (MVP), ERG-3 (each with
+- [x] CAP-4, CAP-5, CAP-6, CAP-7, CAP-2, CAP-1, CAP-3 (MVP), ERG-3 (each with
   `outputSchema` from day one; CAP-2 needs the
   `getIdentitiesFromIndex`/`getCapturesFromIndex` exports from the sync
   client; CAP-3 MVP uses the re-exported project-set helpers).
-- [ ] HY-5: `disconnect_project` tool (per-project teardown in
+- [x] HY-5: `disconnect_project` tool (per-project teardown in
   `ConnectionManager`; may need a small per-document release in the sync
   client).
-- [ ] CAP-17: user-facing docs page `docs/tools/q2-mcp.qmd` (or similar):
+- [x] CAP-17: user-facing docs page `docs/tools/q2-mcp.qmd` (or similar):
   install via `q2 mcp --print-config`, auth walkthrough, tool reference,
   `--read-only`, share-URL semantics, the collaboration model (hashes,
   `synced`), and the untrusted-content note (ERG-10). (Sidebar
   entry per the docs lint rules.)
+
+#### Phase 2 completion record (landed 2026-10-06, bd-oqp2kva8)
+
+All of the above, in eight commits on
+`braid/bd-oqp2kva8-hub-mcp-phase-2-file-project-surface` (stacked on
+Phase 1's branch per the PR-stack rule):
+
+- **Sync-client substrate** (793e2f7cf): `getIdentitiesFromIndex` /
+  `getCapturesFromIndex` moved to module level and exported (pure move);
+  new additive exports `updateBinaryFileContent` (in-place binary
+  replace keeping the doc's hash invariant in the client) and
+  `readProjectSetDoc` (one-shot project-set read over a temporary
+  repo+adapter); project-set types + `projectSetKey` re-exported. 13
+  new tests; full sync-client suite 180/180.
+- **CAP-4/5 + HY-1** (0d1155d8f): binary rides `read_file`/`write_file`
+  (ERG-5 rule (a), no sibling tools). Binary read: `image` block for
+  image MIME, embedded blob resource otherwise, structured
+  `{path, hash, type, mimeType, size}`; `metadata_only` skips the bytes.
+  Binary write: `encoding: "base64"` + optional `mime_type` (extension
+  inference), strict base64 validation, `expected_hash` works on
+  binaries (the stale refusal names the current hash and points at
+  read_file — bytes can't ride the error as text). The HY-1 interim
+  error is gone; its error-convention test flipped to the new contract.
+  **Note for Q-2 (Phase 5):** the blob resource's URI is
+  `hub://<indexDocId>/<path>` — an ephemeral reference for the result
+  payload only; Q-2 decides the public `hub://` resources contract.
+- **ERG-3** (c69cde0b2): `read_file` gains `offset`/`limit` (1-based
+  lines) and `max_bytes` (default 64 KB, cap 1 MB). Reads not reaching
+  EOF return `truncated: true` + `next_offset` + hint; windows are
+  line-aligned and byte-exact (walking `next_offset` reassembles the
+  file, pinned by test); a single line over the cap is byte-cut
+  (UTF-8-safe) with no line continuation and an explanatory hint.
+  `list_files` entries carry `size`/`mimeType` always and `lines` for
+  text. Two conformance goldens updated to the new entry shape.
+- **CAP-6** (bb49a2bc8): `create_folder` (idempotent, refuses a path
+  taken by a file) / `delete_folder` (refuses non-empty without
+  `recursive: true`, which deletes contained files first and reports
+  `files_deleted`). `list_files` includes explicit folder markers as
+  `type: "folder"`; folders merely implied by file paths are NOT
+  listed (deliberate — an empty folder exists only once created).
+- **CAP-7** (fa317be59): `search_files` — substring (case-insensitive
+  default) or regex; one 200-char snippet per matching line; ranked by
+  per-file count then path; `max_results` cap (default 20, hard 100)
+  with `truncated`/`total_matches`; binaries skipped; invalid regex is
+  an actionable error. Read-only tool → on the `--read-only` surface.
+- **CAP-1/2/3 + HY-5** (c3546da8d): `buildShareUrl` (the inverse of
+  `parseProjectRef`; `server=` only off the default hub, which moved to
+  share-url.ts). `create_project` gains `name`; `create_project`,
+  `connect_project`, `get_project_info` embed `shareUrl`.
+  `get_project_info` reports counts (files/binary/folders/unavailable),
+  identities + engine captures from the index sidecars, ids, server,
+  auth mode (foreign projects report `no-auth`), sync diagnostics.
+  `list_projects` enumerates a project-set by id or share URL
+  (`server=` routes authorless, same policy as project routing), sorted
+  by `lastAccessed`, each entry with a round-tripping shareUrl; a
+  project index id gets an actionable not-a-project-set error naming
+  `connect_project`. `disconnect_project` drops one project's
+  websocket+docs (pending `wait_for_change` polls are interrupted with
+  an honest error, never left hanging; bounded drain reports `synced`;
+  next call transparently reconnects) — session hygiene, not a project
+  write, so it sits on the read-only surface too. Tool budget 16/24
+  data tools (19/24 with auth) — matches the plan's tally exactly.
+- **Instructions + docs** (2b8b043ef): server `instructions` revised
+  for the new surface (living steering text). `docs/tools/q2-mcp.qmd`
+  (CAP-17): setup via `q2 mcp --print-config`, sign-in walkthrough,
+  share-URL semantics, collaboration model (hashes, `synced`, watching,
+  ranges), full tool reference, `--read-only`, untrusted-content note;
+  new Tools sidebar group; rendered with `q2` (one smart-quote error
+  fixed — plural possessive "collaborators'").
+- **Pin updates** (67653400f): `hub-mcp.test.ts` + `inspector-smoke.test.ts`
+  keep their own tool-list copies (dist-spawning; a stale dist masked
+  them locally — `cargo xtask verify`'s fresh build caught them). The
+  live-suite binary-read test flipped to the CAP-4 contract.
+- **Eval** (7068ffff4): two new tasks (`add-image-binary`,
+  `search-and-report`).
+
+**Phase-close gate.** `cargo xtask verify` green (14/14 — one
+pre-existing flake on the first run: `quarto-sync-client`
+`doc-inventory.test.ts`, the same bd-c72wsugj/bd-fuw5gcni flake Phase 1
+recorded; rerun green). `npm run test -w ts-packages/quarto-hub-mcp`
+green (39 files, 376 passed + 3 skips). Bundle rebuilt and embedded;
+freshness confirmed by `q2 mcp --launcher-info` (embed at branch tip,
+not dirty).
+
+**E2E (real binary, recorded).** Drove `./target/debug/q2 mcp
+--server <test-hub>` over stdio JSON-RPC (`McpTestClient` with a custom
+command; one-off script, transcript reviewed and discarded after
+recording): `tools/list` → 16 tools; `create_project` with `name` →
+shareUrl `…#/share/<id>?server=ws://127.0.0.1:51869/ws&name=Phase+2+e2e`;
+`write_file` base64 PNG → `{hash, mimeType: image/png, size: 70,
+synced: true}`; `read_file` → `image` block, bytes round-trip exact,
+`metadata_only` variant carries no bytes; `create_folder` →
+`list_files` shows `type: "folder"` plus `size`/`mimeType`/`lines` on
+file entries; `search_files` → ranked snippets; `read_file` window →
+`truncated: true, next_offset: 3` with hint; `get_project_info` → full
+shape (`auth_mode: "no-auth"`, counts, peers); `list_projects` on a
+hub-minted collection → entry with round-tripping shareUrl;
+`disconnect_project` → `{disconnected: true, synced: true}`;
+`delete_folder` recursive → `files_deleted: 1`. Output inspected for
+every call.
+
+**Eval suite (10 tasks — added `add-image-binary` and
+`search-and-report`):** `eval/results/2026-10-06T13-24-19/`
+
+| task | success | turns | tokens (in/out) | cost | isError | retries | duration |
+|------|---------|-------|-----------------|------|---------|---------|----------|
+| create-project | PASS | 3 | 66/508 | $0.59 | 0 | 0 | 11s |
+| read-and-report | PASS | 4 | 98/531 | $0.51 | 0 | 0 | 12s |
+| patch-typo | PASS | 6 | 130/1575 | $0.62 | 0 | 0 | 25s |
+| write-new-file | PASS | 6 | 130/1096 | $0.58 | 0 | 0 | 21s |
+| rename-file | PASS | 7 | 162/1218 | $0.59 | 0 | 0 | 37s |
+| collaborator-edit | PASS | 4 | 98/899 | $0.53 | 0 | 0 | 34s |
+| watch-live-edit | PASS | 5 | 130/1239 | $0.58 | 0 | 0 | 50s |
+| stale-write-recovery | PASS | 6 | 162/1796 | $0.65 | 1 | 1 | 49s |
+| add-image-binary | PASS | 6 | 130/1300 | $0.61 | 0 | 0 | 25s |
+| search-and-report | PASS | 4 | 66/566 | $0.50 | 0 | 0 | 25s |
+
+10/10 PASS, median 5 turns (Phase 1: 5.5 — inside noise, no
+regression). `add-image-binary` shows the agent discovering
+`encoding: "base64"` from the tool schema alone and landing a
+byte-exact PNG on the hub in 6 turns with zero errors;
+`search-and-report` answered `notes/deep.qmd:3` in 4 turns. The only
+`isError` remains the DESIGNED stale-hash refusal in
+`stale-write-recovery`.
 
 ### Phase 3 — Collaboration awareness
 
