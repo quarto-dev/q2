@@ -2,7 +2,7 @@
 
 **Strand:** bd-gnw9asuo (bug, P2). Child: bd-ckbqmupi. Discovered from bd-uk8zgkha (claude-notes website).
 **Branch:** `braid/bd-gnw9asuo-q2-render-json-errors`, off `origin/main` @ `7f70632cc`.
-**Status:** APPROVED 2026-10-06 (D1=a, D2=yes, D3=absolute, D4=dropped; R1–R6 deferred). Executing.
+**Status:** IMPLEMENTED 2026-10-06 (`70707f1ba`). D1=a, D2=yes, D3=absolute, D4=dropped; R1–R6 deferred. Not pushed.
 
 ## Overview
 
@@ -141,8 +141,12 @@ Rule 1 matters: page renders produce diagnostics whose coordinates are in `_quar
 (e.g. raw HTML in `website.page-footer`, Q-2-9). Tagging those with the page path would make the
 record point at the wrong file.
 
-**Out of scope, to file as follow-ups** (non-JSON writers outside the CLI's emission layer):
-- `tracing::warn!` from `quarto*` crates prints at the default filter (`quarto=warn`) as plain text.
+**Out of scope, filed as follow-ups** (non-JSON writers outside the CLI's emission layer).
+**bd-ho1n0wui** covers the pampa `eprintln!`s, the script-stderr replay and the internal fallbacks.
+**bd-hgam88i2** covers the `_quarto.yml` syntax-error location loss.
+- `tracing::warn!`: correction to the first draft. At the default filter, *no* render-path
+  `tracing` reaches stderr today, because of the target mismatch tracked as bd-f5rpd.
+  Fixing bd-f5rpd would expose about 28 `quarto-core` warns as plain text in the stream; noted on that strand.
 - pampa `eprintln!`s: `mediabag.fetch failed …` (`lua/mediabag.rs:190`), "shouldn't happen"
   parser warnings (`treesitter.rs:1221`, `language_specifier.rs:125`).
 - `quarto.log.output` from user Lua filters (`lua/quarto_api.rs:74`). This is user content, so it is
@@ -209,6 +213,11 @@ record point at the wrong file.
       `crates/quarto` is not a dependency of the WASM client.
 - [x] End-to-end on the real project (recorded below).
 - [x] Re-check claude-notes for records still lacking `source_file`; file follow-up strands (D2).
+      Result: only span-less, project-scoped Q-5-31 remains (correct per D2), so no D2 follow-up
+      is needed. Follow-ups from the audit: bd-ho1n0wui, bd-hgam88i2; comments on bd-f5rpd and
+      bd-ckbqmupi (item 1 fixed; item 2 = R1 still open). The verify-environment issues hit here are
+      already tracked: bd-0jtxndiy (`lint:css`), bd-h7aj71p6 (hub tests vs WASM),
+      bd-mmi6cizz (`npm install` rewrites `package-lock.json` on macOS).
 
 #### End-to-end record (2026-10-06)
 
