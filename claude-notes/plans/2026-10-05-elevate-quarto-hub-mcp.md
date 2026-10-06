@@ -435,7 +435,7 @@ Test specifications (all red before implementation):
   is refused with the current content + hash and changes nothing;
   `patch_file` with a matching `expected_hash` succeeds and returns the new
   `hash` (ERG-1).
-- [ ] `write_file` result carries `synced: true` once the in-process hub has
+- [x] `write_file` result carries `synced: true` once the in-process hub has
   acknowledged the change; with the hub stalled, `synced: false` within the
   bound, and the write still lands when the hub returns (ERG-2).
 - [ ] `read_file` on a missing path names `list_files` and the closest
@@ -524,7 +524,7 @@ intended.
 - [x] ERG-1: `hash` on `read_file`/`write_file`/`patch_file` results;
   `expected_hash` on `write_file`/`patch_file` (compare-and-swap, reusing
   `hashPayload`).
-- [ ] ERG-2: bounded delivery wait on all write tools (`synced`, default
+- [x] ERG-2: bounded delivery wait on all write tools (`synced`, default
   ≈2 s, `wait_for_sync: false` opt-out); needs one sync-client export
   (`awaitDelivery(path, ms)` over the existing `isDelivered`/`remote-heads`
   plumbing).
