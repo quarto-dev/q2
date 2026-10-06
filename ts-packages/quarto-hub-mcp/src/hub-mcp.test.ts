@@ -45,6 +45,7 @@ describe('MCP protocol', () => {
       'delete_folder',
       'disconnect_project',
       'get_file_history',
+      'get_outline',
       'get_project_info',
       'list_files',
       'list_presence',
@@ -94,6 +95,8 @@ describe('MCP protocol', () => {
         limit: { type: 'integer', minimum: 1, maximum: 9007199254740991, description: expect.any(String) },
         max_bytes: { type: 'integer', minimum: 16, maximum: 1048576, description: expect.any(String) },
         metadata_only: { type: 'boolean', description: expect.any(String) },
+        // CAP-11 section selector (Phase 4).
+        section: { type: 'string', description: expect.any(String) },
       },
       required: ['project'],
     });
@@ -135,6 +138,7 @@ describe('MCP protocol (read-only mode)', () => {
       'connect_project',
       'disconnect_project',
       'get_file_history',
+      'get_outline',
       'get_project_info',
       'list_files',
       'list_presence',

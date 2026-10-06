@@ -1009,10 +1009,10 @@ the rot was invisible; CI gap filed as bd-s0tm9sdq):
 
 Test specifications:
 
-- [ ] `get_outline` on a fixture qmd returns the expected heading tree;
+- [x] `get_outline` on a fixture qmd returns the expected heading tree;
   `read_file` with a `section` selector returns exactly that section's
   content (CAP-11).
-- [ ] `patch_file` with a `section` selector replaces exactly one section's
+- [x] `patch_file` with a `section` selector replaces exactly one section's
   content; concurrent outside edits are preserved (CRDT merge) (CAP-11).
 - [ ] `render_project` on a fixture project with a deliberate error returns
   `structuredContent.diagnostics[]` with the expected `Q-` code and source
@@ -1022,8 +1022,16 @@ Test specifications:
 
 Work items:
 
-- [ ] CAP-11 AST surface (post-S-1): `get_outline` + `section` selectors on
-  `read_file`/`patch_file`.
+- [x] CAP-11 AST surface (post-S-1): `get_outline` + `section` selectors on
+  `read_file`/`patch_file`. **Design refinement recorded:** the section
+  splice is computed from the parser's line locations against the *current*
+  text and applied through `updateFileContent` (automerge's diff) — the
+  sync-client `getFileAst`/`updateFileAst` AST-cache path was evaluated and
+  rejected: `writeQmd` re-serializes the whole document (clobbering +
+  writer-normalization risk) for zero gain over a line-range splice.
+  `section` replaces the whole range read_file shows (heading included) —
+  read/patch agree exactly; an empty `new_string` deletes the section; all
+  math is line-based (never byte offsets: automerge text is UTF-16).
 - [ ] CAP-12 `render_project` / `render_file`: launcher injects
   `QUARTO_Q2_PATH` (`current_exe`); server materializes the project via
   `exportProjectAsZip` → temp dir → `q2 render --json-errors`; parse the

@@ -46,6 +46,13 @@ import {
 } from './auth/auth-tools.js';
 import { redactTokens } from './auth/redact.js';
 import { buildShareUrl, parseProjectRef, serversMatch } from './share-url.js';
+import { loadQmdParser } from './qmd-parser.js';
+import {
+  extractOutline,
+  findSection,
+  replaceSection,
+  type OutlineEntry,
+} from './qmd-ast.js';
 
 function text(msg: string): CallToolResult {
   return { content: [{ type: 'text', text: msg }] };
@@ -449,6 +456,7 @@ type DataToolName =
   | 'list_files'
   | 'list_presence'
   | 'get_file_history'
+  | 'get_outline'
   | 'read_file'
   | 'search_files'
   | 'wait_for_change'
@@ -480,6 +488,7 @@ const PATH_DEFAULTABLE: ReadonlySet<DataToolName> = new Set([
   'create_file',
   'delete_file',
   'get_file_history',
+  'get_outline',
   'restore_file_version',
 ]);
 
@@ -521,6 +530,8 @@ async function handleTool(
       return handleListPresence(args, manager);
     case 'get_file_history':
       return handleGetFileHistory(args, manager);
+    case 'get_outline':
+      return handleGetOutline(args, manager);
     case 'read_file':
       return handleReadFile(args, manager);
     case 'search_files':
@@ -858,6 +869,134 @@ function binaryWriteMeta(
   return rest;
 }
 
+// ---------------------------------------------------------------------------
+// CAP-11: qmd structure (get_outline + `section` selectors)
+// ---------------------------------------------------------------------------
+
+/** Structured section metadata carried in read_file/patch_file results. */
+function sectionInfo(s: OutlineEntry): Record<string, unknown> {
+  return { name: s.title, level: s.level, heading_line: s.line, end_line: s.endLine };
+}
+
+/**
+ * Resolve a `section` selector against the file's current text. Shared by
+ * the read_file and patch_file section arms so both compute identical
+ * ranges — what read_file shows is exactly what patch_file replaces.
+ * Errors follow the ERG-4 convention (failing parameter, current state,
+ * next tool to call).
+ */
+async function resolveSection(
+  path: string,
+  text: string,
+  selector: string,
+): Promise<{ ok: true; section: OutlineEntry } | { ok: false; result: CallToolResult }> {
+  if (!path.endsWith('.qmd')) {
+    return {
+      ok: false,
+      result: error(
+        `Error: the \`section\` selector is supported for .qmd files only; ${path} is not ` +
+          'a qmd file. Read or patch it with offset/limit or old_string instead.',
+      ),
+    };
+  }
+  let parser;
+  try {
+    parser = await loadQmdParser();
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    return {
+      ok: false,
+      result: error(`Error: the qmd parser is unavailable — ${detail}`),
+    };
+  }
+  const ast = parser.parse(text);
+  if (ast === null) {
+    return {
+      ok: false,
+      result: error(
+        `Error: ${path} could not be parsed as qmd, so \`section\` cannot be resolved. ` +
+          'Read or patch it with offset/limit or old_string instead.',
+      ),
+    };
+  }
+  const found = findSection(ast, selector, splitLines(text).length);
+  if (found.ok) return { ok: true, section: found.section };
+  if (found.reason === 'ambiguous') {
+    return {
+      ok: false,
+      result: error(
+        `Error: section "${selector}" is ambiguous in ${path} — matches: ${found.matches.join(', ')}. ` +
+          'Section titles must match exactly one heading; patch with old_string for one of these, ' +
+          'or restructure the document.',
+      ),
+    };
+  }
+  const available =
+    found.available.length === 0
+      ? 'The document has no headings.'
+      : `Available sections: ${found.available
+          .slice(0, 10)
+          .map((t) => `"${t}"`)
+          .join(', ')}${found.available.length > 10 ? ', …' : ''}.`;
+  return {
+    ok: false,
+    result: error(
+      `Error: no section titled "${selector}" in ${path} (matching is exact and case-sensitive). ` +
+        `${available} Call get_outline for the full heading tree with line numbers.`,
+    ),
+  };
+}
+
+async function handleGetOutline(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
+  const project = args.project as string;
+  const path = args.path as string;
+  const state = await manager.connect(project, { server: routedServer(args) });
+  const payload = state.files.get(path);
+
+  if (!payload) {
+    const ghost = findUnavailable(state.client, path);
+    if (ghost) {
+      return unavailableFileError(path, ghost.docId);
+    }
+    return fileNotFoundError(path, state);
+  }
+  if (payload.type === 'binary') {
+    return error(`Error: ${path} is a binary file; get_outline applies to .qmd text files only.`);
+  }
+  if (!path.endsWith('.qmd')) {
+    return error(
+      `Error: get_outline is supported for .qmd files only; ${path} is not a qmd file. ` +
+        'Use read_file to read it.',
+    );
+  }
+  let parser;
+  try {
+    parser = await loadQmdParser();
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    return error(`Error: the qmd parser is unavailable — ${detail}`);
+  }
+  const ast = parser.parse(payload.text);
+  if (ast === null) {
+    return error(
+      `Error: ${path} could not be parsed as qmd. The file may contain syntax the parser ` +
+        'rejects; read it with read_file to inspect.',
+    );
+  }
+  const outline = extractOutline(ast, splitLines(payload.text).length);
+  return structured({
+    path,
+    hash: hashPayload(payload),
+    outline: outline.map((e) => ({
+      level: e.level,
+      title: e.title,
+      ...(e.id !== undefined ? { id: e.id } : {}),
+      line: e.line,
+      end_line: e.endLine,
+    })),
+  });
+}
+
 async function handleReadFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
   const project = args.project as string;
   const path = args.path as string;
@@ -899,6 +1038,33 @@ async function handleReadFile(args: ToolArgs, manager: ConnectionManager): Promi
       `Error: metadata_only applies to binary files only; ${path} is a text file — ` +
         'drop metadata_only to read its content.',
     );
+  }
+
+  // CAP-11: the `section` arm returns exactly one qmd section (heading
+  // line included), computed with the same range math patch_file uses.
+  if (typeof args.section === 'string') {
+    if (args.offset !== undefined || args.limit !== undefined) {
+      return error(
+        'Error: `section` and `offset`/`limit` are mutually exclusive — a section read already ' +
+          'selects its lines. Drop the window arguments, or drop `section` to page by line number.',
+      );
+    }
+    const maxBytes = typeof args.max_bytes === 'number' ? args.max_bytes : DEFAULT_MAX_BYTES;
+    const resolved = await resolveSection(path, payload.text, args.section);
+    if (!resolved.ok) return resolved.result;
+    const s = resolved.section;
+    const window = windowLines(payload.text, s.line, s.endLine - s.line + 1, maxBytes);
+    return structured({
+      path,
+      hash: hashPayload(payload),
+      type: 'text',
+      content: window.content,
+      truncated: window.truncated,
+      total_lines: window.totalLines,
+      next_offset: window.nextOffset,
+      ...(window.hint ? { hint: window.hint } : {}),
+      section: sectionInfo(s),
+    });
   }
 
   // ERG-3: line window + byte cap. offset is 1-based; the byte cap
@@ -1255,9 +1421,10 @@ async function handleWriteFileBinary(
 async function handlePatchFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
   const project = args.project as string;
   const path = args.path as string;
-  const oldString = args.old_string as string;
+  const oldString = args.old_string as string | undefined;
   const newString = args.new_string as string;
   const expectedHash = typeof args.expected_hash === 'string' ? args.expected_hash : undefined;
+  const sectionSel = typeof args.section === 'string' ? args.section : undefined;
   const state = await manager.connect(project, { server: routedServer(args) });
   const payload = state.files.get(path);
 
@@ -1271,12 +1438,44 @@ async function handlePatchFile(args: ToolArgs, manager: ConnectionManager): Prom
   if (payload.type === 'binary') {
     return error(`Error: ${path} is a binary file. Cannot patch.`);
   }
+  if (sectionSel !== undefined && oldString !== undefined) {
+    return error(
+      'Error: `section` and `old_string` are mutually exclusive — pick one edit style. ' +
+        'With `section`, new_string replaces the entire named section (heading line included).',
+    );
+  }
+  if (sectionSel === undefined && oldString === undefined) {
+    return error(
+      'Error: patch_file requires one of `old_string` (replace an exact substring) or ' +
+        '`section` (replace a named qmd section, heading included).',
+    );
+  }
   if (expectedHash !== undefined && hashPayload(payload) !== expectedHash) {
     return staleHashError('patch_file', path, payload.text);
   }
 
   const currentContent = payload.text;
-  const index = currentContent.indexOf(oldString);
+
+  // CAP-11: replace one qmd section wholesale (heading line included).
+  // The splice is computed against the *current* text, so a collaborator's
+  // edit outside the section survives the merge.
+  if (sectionSel !== undefined) {
+    const resolved = await resolveSection(path, currentContent, sectionSel);
+    if (!resolved.ok) return resolved.result;
+    const newContent = replaceSection(currentContent, resolved.section, newString);
+    state.client.updateFileContent(path, newContent);
+    return structured({
+      path,
+      hash: hashPayload({ type: 'text', text: newContent }),
+      section: sectionInfo(resolved.section),
+      ...(await syncField(args, manager, project, [path])),
+    });
+  }
+
+  // The guards above establish old_string is present whenever section is
+  // absent (same post-validation assertion pattern as `path`).
+  const old = oldString as string;
+  const index = currentContent.indexOf(old);
   if (index === -1) {
     return error(
       `Error: old_string not found in ${path}. The file may have changed since you read it — ` +
@@ -1284,7 +1483,7 @@ async function handlePatchFile(args: ToolArgs, manager: ConnectionManager): Prom
     );
   }
 
-  const secondIndex = currentContent.indexOf(oldString, index + 1);
+  const secondIndex = currentContent.indexOf(old, index + 1);
   if (secondIndex !== -1) {
     return error(`Error: old_string appears multiple times in ${path}. Provide a longer, unique string to match.`);
   }
@@ -1292,7 +1491,7 @@ async function handlePatchFile(args: ToolArgs, manager: ConnectionManager): Prom
   const newContent =
     currentContent.slice(0, index) +
     newString +
-    currentContent.slice(index + oldString.length);
+    currentContent.slice(index + old.length);
 
   state.client.updateFileContent(path, newContent);
   return structured({
@@ -1737,6 +1936,14 @@ const outListProjects = z.object({
 
 const outListFiles = z.object({ files: z.array(outListedFile) });
 
+/** Section metadata for the CAP-11 `section` arms of read_file/patch_file. */
+const outSectionInfo = z.object({
+  name: z.string(),
+  level: z.number(),
+  heading_line: z.number(),
+  end_line: z.number(),
+});
+
 const outReadFile = z.object({
   path: z.string(),
   hash: z.string(),
@@ -1748,6 +1955,21 @@ const outReadFile = z.object({
   total_lines: z.number().optional(),
   next_offset: z.number().nullable().optional(),
   hint: z.string().optional(),
+  section: outSectionInfo.optional(),
+});
+
+const outGetOutline = z.object({
+  path: z.string(),
+  hash: z.string(),
+  outline: z.array(
+    z.object({
+      level: z.number(),
+      title: z.string(),
+      id: z.string().optional(),
+      line: z.number(),
+      end_line: z.number(),
+    }),
+  ),
 });
 
 const outWaitForChange = z.object({
@@ -1788,6 +2010,7 @@ const outPatchFile = z.object({
   path: z.string(),
   hash: z.string(),
   synced: z.boolean().optional(),
+  section: outSectionInfo.optional(),
 });
 
 const outCreateFile = z.object({
@@ -1958,11 +2181,40 @@ export function registerTools(
             'Binary files only: return just `{ path, hash, type, mimeType, size }` without ' +
               'the bytes. Errors on text files.',
           ),
+        section: z
+          .string()
+          .optional()
+          .describe(
+            'qmd files only: return just the named section — the heading plus its content up ' +
+              'to the next same-or-higher heading (subsections included), exactly the range ' +
+              'get_outline reports and patch_file would replace. Mutually exclusive with ' +
+              'offset/limit. Call get_outline first to discover section titles.',
+          ),
       }),
       outputSchema: outReadFile,
       annotations: ANNOT_READ,
     },
     (args) => runDataTool('read_file', args, manager),
+  );
+
+  server.registerTool(
+    'get_outline',
+    {
+      title: 'Get document outline',
+      description:
+        'Return the heading tree of a .qmd file: every heading with its level, title, id, and ' +
+        '1-based line range (`line`..`end_line`, where the section ends just before the next ' +
+        'same-or-higher heading). The structural map of a document — use it before read_file ' +
+        'or patch_file with a `section` selector, or to aim read_file `offset`/`limit` at a ' +
+        'section without reading the whole file.',
+      inputSchema: z.object({
+        project: projectParam,
+        path: pathParam.optional(),
+      }),
+      outputSchema: outGetOutline,
+      annotations: ANNOT_READ,
+    },
+    (args) => runDataTool('get_outline', args, manager),
   );
 
   server.registerTool(
@@ -2207,13 +2459,32 @@ export function registerTools(
     {
       title: 'Patch a file',
       description:
-        'Apply a targeted edit to a text file by replacing a specific string. More context-efficient ' +
+        'Apply a targeted edit to a text file: replace an exact `old_string`, or replace an ' +
+        'entire qmd `section` (heading line included) with `new_string`. More context-efficient ' +
         'than write_file for small changes to large files. Returns `{ path, hash }`.',
       inputSchema: z.object({
         project: projectParam,
         path: pathParam.optional(),
-        old_string: z.string().describe('The exact string to find and replace'),
-        new_string: z.string().describe('The replacement string'),
+        old_string: z
+          .string()
+          .optional()
+          .describe('The exact string to find and replace. Required unless `section` is given.'),
+        new_string: z
+          .string()
+          .describe(
+            'The replacement string. With `section`, replaces the whole section — heading ' +
+              'line included — so repeat the heading (edit it to rename); an empty string ' +
+              'deletes the section. read_file with the same `section` value shows exactly ' +
+              'the range this replaces.',
+          ),
+        section: z
+          .string()
+          .optional()
+          .describe(
+            'qmd files only: replace the entire named section with `new_string` (get_outline ' +
+              'shows the candidates). The splice touches only the section\'s lines, so a ' +
+              'collaborator\'s edit elsewhere survives. Mutually exclusive with `old_string`.',
+          ),
         expected_hash: z
           .string()
           .optional()

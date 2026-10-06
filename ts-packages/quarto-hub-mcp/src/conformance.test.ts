@@ -49,7 +49,7 @@ import {
 /** Tool budget (ERG-5): the default listing never exceeds this. */
 const TOOL_BUDGET = 24;
 
-/** Read-write mode lists these today (19 tools; auth tools need OAuth env). */
+/** Read-write mode lists these today (20 tools; auth tools need OAuth env). */
 const EXPECTED_RW_TOOLS = [
   'connect_project',
   'create_file',
@@ -59,6 +59,7 @@ const EXPECTED_RW_TOOLS = [
   'delete_folder',
   'disconnect_project',
   'get_file_history',
+  'get_outline',
   'get_project_info',
   'list_files',
   'list_presence',
@@ -133,6 +134,7 @@ describe('in-memory fixture smoke', () => {
         'connect_project',
         'disconnect_project',
         'get_file_history',
+        'get_outline',
         'get_project_info',
         'list_files',
         'list_presence',
@@ -245,6 +247,11 @@ const GOLDEN_RESULT_CASES: ReadonlyArray<{
   {
     // Before rename_file moves index.qmd: the golden calls run in order.
     tool: 'get_file_history',
+    args: (seed) => ({ project: seed.indexDocId, path: 'index.qmd' }),
+  },
+  {
+    // index.qmd has no headings — an empty outline is a valid result.
+    tool: 'get_outline',
     args: (seed) => ({ project: seed.indexDocId, path: 'index.qmd' }),
   },
   {
@@ -732,6 +739,7 @@ describe('tool titles (BP-9)', () => {
         connect_project: 'Connect to a project',
         disconnect_project: 'Disconnect from a project',
         get_file_history: 'Get file history',
+        get_outline: 'Get document outline',
         get_project_info: 'Get project info',
         list_projects: 'List projects in a collection',
         list_files: 'List files',

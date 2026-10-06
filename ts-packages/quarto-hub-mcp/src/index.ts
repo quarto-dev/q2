@@ -191,7 +191,10 @@ function buildInstructions(readOnly: boolean): string {
     '\n2. list_files to see the project (entries carry size/lines; folders list as ' +
     '`type: "folder"`), search_files to find text across it, then read_file. Keep the ' +
     '`hash` every result carries. Large reads truncate at `max_bytes` (default 64 KB) — ' +
-    'a truncated result carries `next_offset`; call again with `offset` set to it.' +
+    'a truncated result carries `next_offset`; call again with `offset` set to it. For .qmd ' +
+    'files, get_outline gives the heading tree with line ranges, and read_file/patch_file ' +
+    'take a `section` selector — patch_file with `section` replaces exactly the range ' +
+    'read_file with the same selector shows (heading included).' +
     '\n3. Edit with patch_file (preferred) or write_file, passing that hash back as ' +
     '`expected_hash` — the write is refused if a collaborator edited since your read, and ' +
     'you get the current content + hash to merge against. Never write_file a file a human ' +
