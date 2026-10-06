@@ -32,7 +32,10 @@ const TOTAL_STEPS: u32 = 14;
 /// The hub-client CSS lint, exactly as CI's `Lint hub-client CSS` step in
 /// `.github/workflows/ts-test-suite.yml` runs it (from the repo root, via the
 /// npm workspace). Kept as a constant so a test can hold the two in sync.
-const CSS_LINT_ARGS: [&str; 4] = ["run", "lint:css", "-w", "hub-client"];
+/// `--if-present` matters: `-w hub-client` also matches the nested
+/// `hub-client/vscode-sync-experiment` workspace, which has no `lint:css`
+/// script; without the flag npm 11 errors after the clean hub-client run.
+const CSS_LINT_ARGS: [&str; 5] = ["run", "lint:css", "-w", "hub-client", "--if-present"];
 
 /// Configuration for the verify command.
 #[derive(Default)]
