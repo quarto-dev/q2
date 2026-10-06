@@ -151,7 +151,7 @@ imported EMF/WMF show as alt text in docx/pptx on the integration branch in betw
   all launch here (`test:harness` is chromium-only; run the pandoc-* spec with `--project=webkit --workers=1`,
   `playwright.harness.config.ts:65-67`). `hub-client/dist` is stale (Oct 3, lacks `convertMetafile`): needs
   `VITE_E2E=1 npm run build` plus `build:wasm` first. Extend to the imported-EMF case after T1.
-- [ ] **T1 Import stores SVG (the flip; after T4).** `convertMetafileToSvg(bytes, format): Promise<{svg: Uint8Array, width, height}>`.
+- [x] **T1 Import stores SVG (the flip; after T4).** `convertMetafileToSvg(bytes, format): Promise<{svg: Uint8Array, width, height}>`.
   - **Normalize ids** after serializing: renumber `EMFJS_[a-z]\d+` and `wmfjs_[a-z]\d+` by order of appearance; test that a
     clipped EMF converted twice in one session gives identical bytes.
   - **Store at 1x:** root `width`/`height` = inches x 96 (today's `metafileSize` bakes `SCALE=2`: `width="200px"` on
@@ -169,7 +169,7 @@ imported EMF/WMF show as alt text in docx/pptx on the integration branch in betw
     the Rust report text `report.rs:124` (Q-24-9 "couldn't be converted to PNG") and `:135` (Q-24-10 "converted to PNG")
     with their snapshots/tests, plus the stub text at `importService.ts:119`. The P5 UI has no PNG-specific assumption
     (`STUB_PNG` still works).
-- [ ] **T5 Docs and close-out.** Epic edits: I8 (now "stored as SVG; rasterized at docx/pptx export"), I15, **I9** (PNG
+- [x] **T5 Docs and close-out.** (Done in `f8689311e` and `6d52cfd2f`; two items consciously not done: the user-facing "export embeds a PNG" note has no natural page, and the `bd-myoj9kp5` reference was not added to the epic text. Import report header softened to "Notes from the import:".) Epic edits: I8 (now "stored as SVG; rasterized at docx/pptx export"), I15, **I9** (PNG
   bytes now enter the Rust wasm at export; scope-limited, since project SVGs are already in the VFS snapshot and R6
   already brings remote bytes in), **I12/I20** (names are stable only because ids are normalized), I16 (size basis flips
   from PNG to SVG). Update the D9 bullet in `pandoc-wasm-architecture.md` ("SVG images in docx/pptx" now rasterized).
@@ -194,6 +194,18 @@ Per-crate gate each task: `cargo clippy -p quarto-core --all-targets -- -D warni
 - Known latent issue shared with `_remote`: a literal `%` in a directory name is misread by the collector's percent-decode.
 
 ## Handoff log
+
+### STATE (2026-10-05, final): T0-T5 done; branch ready to finish
+
+T1 landed in `3764dd6b4` (on top of the WIP `c331944c6`). All of it is on `import/metafile-svg-media` only: the local `feature/hub-import` ref is still `448c270c1`, so T2-T4 (`70e23fac8`) have not landed there either.
+
+**Verified for T1:** vitest 135 files / 1602 tests green; `tsc -b` clean; `cargo clippy -p quarto-core -p quarto-error-catalog --all-targets -D warnings` clean; Playwright (throwaway configs on :5199 and :5198, because other worktrees' previews hold :5173 and :5174) `pandoc-import-emf` + `pandoc-svg-rasterize` 24/24 on Chromium and Firefox, 12/12 on WebKit; `import-dialog` 36/36 Chromium; P5 `import-document.spec.ts` 13/13 Chromium (rebuilt with `VITE_DEFAULT_SYNC_SERVER=/ws`). The Rust planner names converted media `<sha12>.<ext>` from the manifest's `ext`, so `.svg` needs no Rust change; no snapshot pins `.png` for converted media; Q-24-9/Q-24-10 docs pages now say SVG.
+**book3.wmf** (local only, not committed) through the real converter in all three browsers: 367x220 at 1x, 3267 B, elements svg/defs/clipPath/rect/polygon/ellipse, byte-identical when converted twice (it drifted `wmfjs_c0` -> `wmfjs_c1` before normalization), non-blank.
+**Workspace nextest (once, at the end):** 15965 passed, 202 skipped, 2 slow, 226 s. No live baseline was run (that needs a cold build in workspace-1 at `448c270c1`). What the run shows: 12 passing tests in the two new Rust modules (`rasterize_svg_images::`, `pandoc_svg_rasterize::`); one existing `pipeline.rs` test was renamed/updated, none removed. The delta against a baseline is therefore expected to be +12 passed, +0 skipped, but that is inferred from the run's test names, not measured.
+
+**T5 done** (Gordon approved the epic edits; committed in `f8689311e`). Not done: the user-facing export note and the `bd-myoj9kp5` cross-reference.
+
+**Decisions for Gordon still open** (unchanged): how faithful the SVG must be for T0 (book3 looks right by eye; no independent renderer); fix the rtf.js id counter upstream vs keep the normalization; odt out of scope; `bd-myoj9kp5` overlap. Made without confirmation: 192 dpi (pHYs 7560), 2048 cap, no pixel budget in T3, the T5 epic amendments.
 
 ### T2-T4 implementation notes (2026-10-05)
 

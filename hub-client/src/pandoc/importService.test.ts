@@ -147,15 +147,15 @@ describe('importDocument: the happy path', () => {
     ]);
   });
 
-  it('converts an EMF with the injected converter and passes the PNG to the plan', async () => {
+  it('converts an EMF with the injected converter and passes the SVG to the plan', async () => {
     const collected: RequestFile[] = [{ path: `${MEDIA}/media/x.emf`, bytes: new Uint8Array([5, 5, 5]) }];
-    const finish = { success: true, diagnostics: [], qmd: 'x', media_plan: [{ pandoc_path: `${MEDIA}/media/x.emf`, project_path: 'a_media/cccccccccccc.png' }] };
+    const finish = { success: true, diagnostics: [], qmd: 'x', media_plan: [{ pandoc_path: `${MEDIA}/media/x.emf`, project_path: 'a_media/cccccccccccc.svg' }] };
     const { svc, deps, wasm } = setup({ run: async () => success({ collected }), finish });
     const out = await svc.importDocument(docx(), 'a.qmd');
     expect(deps.convertImage).toHaveBeenCalledWith(expect.any(Uint8Array), 'emf');
     if (!out.ok) throw new Error('expected success');
     expect([...out.media[0].bytes]).toEqual([0x89, 0x50]);
-    expect(JSON.parse((wasm.finishImport.mock.calls[0] as unknown[])[3] as string)[0]).toMatchObject({ ext: 'png', converted_from: 'emf' });
+    expect(JSON.parse((wasm.finishImport.mock.calls[0] as unknown[])[3] as string)[0]).toMatchObject({ ext: 'svg', converted_from: 'emf' });
   });
 
   it('records a collect-limit warning as a skipped manifest entry and returns it among the diagnostics', async () => {

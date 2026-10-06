@@ -323,7 +323,7 @@ export const importDoc = {
   },
   writing: 'Adding the document to the project…',
   reportSucceeded: 'The document was imported.',
-  reportSucceededWithNotes: 'The document was imported. Some content could not be carried over:',
+  reportSucceededWithNotes: 'The document was imported. Notes from the import:',
   reportFailed: 'The document could not be imported, so nothing was added to the project.',
   groupErrors: (n: number) => (n === 1 ? '1 error' : `${n} errors`),
   groupWarnings: (n: number) => (n === 1 ? '1 warning' : `${n} warnings`),

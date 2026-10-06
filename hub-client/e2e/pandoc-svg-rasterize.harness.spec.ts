@@ -16,6 +16,7 @@ import path from 'node:path';
 import { unzipSync } from 'fflate';
 import { expect, test, type Page } from '@playwright/test';
 import type {} from './helpers/testHooks';
+import { loadImportRecording } from '../src/test-utils/pandocRecordings';
 
 /** 100 x 50 CSS px by its viewBox alone: browsers disagree on what that means (Chromium 300x150, WebKit 100x50). */
 const VIEWBOX_ONLY = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 50"><rect width="100" height="50" fill="#d00"/></svg>';
@@ -141,6 +142,49 @@ test('an SVG the canvas refuses still downloads, with a warning where the browse
     expect(warned, JSON.stringify(summary.diagnostics)).toBe(true);
     expect(new TextDecoder().decode(entries['word/document.xml'])).toContain('fo');
   }
+});
+
+test('an imported EMF (stored as SVG) is exported to docx as a PNG at the EMF\'s own size', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForFunction(() => !!window.__quartoTestReady);
+  await page.evaluate(async () => {
+    await window.__quartoTestReady;
+  });
+  const source = Buffer.from(loadImportRecording('emf-docx').source).toString('base64');
+  const downloaded = page.waitForEvent('download');
+  const summary = await page.evaluate(
+    async (base64) => {
+      const { wasmRenderer, pandoc } = window.__quartoTest!;
+      // The production import: the EMF comes back as `<hash>.svg`, which the project would store as is.
+      const imported = await pandoc.importDocument(base64, 'source.docx', 'emf-docx.qmd');
+      if (!imported.ok) return { error: JSON.stringify(imported.diagnostics) };
+      const svg = imported.media.find((m) => m.mimeType === 'image/svg+xml');
+      if (!svg) return { error: 'the import stored no SVG' };
+      await wasmRenderer.initWasm();
+      wasmRenderer.vfsClear();
+      wasmRenderer.vfsAddFile('/project/doc.qmd', `---\ntitle: EMF\n---\n\n![emf](${svg.projectPath})\n`);
+      wasmRenderer.vfsAddBinaryFile(`/project/${svg.projectPath}`, Uint8Array.from(atob(svg.base64), (c) => c.charCodeAt(0)));
+      const r = await pandoc.startDownload('/project/doc.qmd', 'docx');
+      return { ok: r.phase === 'done', phase: r.phase, diagnostics: r.diagnostics };
+    },
+    source,
+  );
+  expect(summary, JSON.stringify(summary)).toMatchObject({ ok: true });
+  const file = path.join(mkdtempSync(path.join(os.tmpdir(), 'q2-svg-raster-')), 'out.docx');
+  await (await downloaded).saveAs(file);
+  const entries = unzipSync(new Uint8Array(readFileSync(file)));
+
+  expect(Object.keys(entries).filter((n) => n.endsWith('.svg') || n.endsWith('.emf'))).toEqual([]);
+  const pngs = mediaPngs(entries, 'word/media/');
+  expect(pngs.length).toBe(1);
+  // The fixture EMF is 100 x 50 px at 96 dpi; rasterized at 2x.
+  expect([pngInfo(pngs[0][1]).width, pngInfo(pngs[0][1]).height]).toEqual([200, 100]);
+  expect(await painted(page, pngs[0][1]), 'a blank canvas has no opaque pixel').toBeGreaterThan(0);
+  const xml = new TextDecoder().decode(entries['word/document.xml']);
+  expect((xml.match(/<a:blip [^>]*r:embed="[^"]+"/g) ?? []).length).toBe(1);
+  const m = xml.match(/<wp:extent cx="(\d+)" cy="(\d+)"/)!;
+  expect(Math.abs(Number(m[1]) - Math.round((100 / 96) * EMU_PER_INCH))).toBeLessThanOrEqual(1);
+  expect(Math.abs(Number(m[2]) - Math.round((50 / 96) * EMU_PER_INCH))).toBeLessThanOrEqual(1);
 });
 
 test('typst keeps the SVG: nothing is rasterized for a format that reads SVG', async ({ page }) => {

@@ -1,6 +1,6 @@
 ---
 title: "Images Converted"
-description: "EMF or WMF images were converted to PNG so browsers can display them."
+description: "EMF or WMF images were converted to SVG so browsers can display them."
 code: Q-24-10
 subsystem: import
 status: stub
@@ -11,11 +11,11 @@ categories:
 
 # `Q-24-10` — Images Converted
 
-> EMF or WMF images were converted to PNG so browsers can display them.
+> EMF or WMF images were converted to SVG so browsers can display them.
 
 ## What this means
 
-The document embedded EMF or WMF images. They were converted to PNG in the browser and stored as PNG; the count says how many.
+The document embedded EMF or WMF images. They were converted to SVG in the browser and stored as PNG; the count says how many.
 
 ## Why this happens
 

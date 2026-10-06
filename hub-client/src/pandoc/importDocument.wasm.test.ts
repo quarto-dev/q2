@@ -6,7 +6,7 @@
  *
  * EMF/WMF conversion needs the DOM, so here the converter is injected: it fails (the original is stored,
  * `conversion_failed`, which is the manifest `expected.qmd` for `emf-docx` was written from) or returns a
- * canned PNG. The real converter runs in `e2e/pandoc-import-emf.harness.spec.ts`.
+ * canned SVG. The real converter runs in `e2e/pandoc-import-emf.harness.spec.ts`.
  *
  * Needs `node scripts/fetch-pandoc-wasm.mjs` and `npm run build:wasm`. Run with: npm run test:wasm
  */
@@ -46,8 +46,8 @@ interface Wasm {
 
 const expectedQmd = (name: string) => readFileSync(path.join(IMPORT_RECORDINGS, name, 'expected.qmd'), 'utf8');
 const extOf = (n: string) => n.slice(n.lastIndexOf('-') + 1);
-/** A canned PNG the fake converter returns. */
-const FAKE_PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+/** A canned SVG the fake converter returns. */
+const FAKE_SVG = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="1px" height="1px"/>');
 
 describe.skipIf(!pandocWasmAvailable())('importDocument against the real wasm', () => {
   let wasm: Wasm;
@@ -117,17 +117,17 @@ describe.skipIf(!pandocWasmAvailable())('importDocument against the real wasm', 
     expect(out.diagnostics.filter((d) => 'code' in d && d.code === 'Q-24-9')).not.toHaveLength(0);
   });
 
-  it('emf-docx with a converter that works links the PNGs, not the originals', async () => {
+  it('emf-docx with a converter that works links the SVGs, not the originals', async () => {
     const rec = loadImportRecording('emf-docx');
-    const convertImage = vi.fn(async () => FAKE_PNG);
+    const convertImage = vi.fn(async () => FAKE_SVG);
     const { svc } = make(convertImage);
     const out = await svc.importDocument(new File([rec.source.slice()], 'source.docx'), 'emf-docx.qmd');
     if (!out.ok) throw new Error(JSON.stringify(out.diagnostics));
     expect(convertImage).toHaveBeenCalledTimes(2);
-    const png = `emf-docx_media/${sha256(FAKE_PNG).slice(0, 12)}.png`;
-    // Both metafiles became the same PNG bytes, so they merge into one stored file.
-    expect(out.media.map((m) => m.projectPath)).toEqual([png]);
-    expect(out.qmd).toContain(png);
+    const svg = `emf-docx_media/${sha256(FAKE_SVG).slice(0, 12)}.svg`;
+    // Both metafiles became the same SVG bytes, so they merge into one stored file.
+    expect(out.media.map((m) => m.projectPath)).toEqual([svg]);
+    expect(out.qmd).toContain(svg);
     expect(out.qmd).not.toMatch(/\.(emf|wmf)\)/);
     expect(out.diagnostics.filter((d) => 'code' in d && d.code === 'Q-24-10')).not.toHaveLength(0);
   });

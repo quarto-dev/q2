@@ -121,18 +121,18 @@ pub fn image_conversion_failed(pandoc_path: &str) -> DiagnosticMessage {
     DiagnosticMessageBuilder::warning("Image conversion failed")
         .with_code("Q-24-9")
         .problem(format!(
-            "The image \"{}\" couldn't be converted to PNG; the original is stored, but browsers can't show it.",
+            "The image \"{}\" couldn't be converted to SVG; the original is stored, but browsers can't show it.",
             basename(pandoc_path)
         ))
         .build()
 }
 
-/// Q-24-10: images converted from EMF/WMF to PNG.
+/// Q-24-10: images converted from EMF/WMF to SVG.
 pub fn images_converted(count: usize) -> DiagnosticMessage {
     DiagnosticMessageBuilder::info("Images converted")
         .with_code("Q-24-10")
         .problem(format!(
-            "{} converted to PNG.",
+            "{} converted to SVG.",
             plural(count, "EMF/WMF image was", "EMF/WMF images were")
         ))
         .build()

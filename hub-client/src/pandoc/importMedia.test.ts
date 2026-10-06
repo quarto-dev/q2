@@ -10,7 +10,7 @@ const bytes = (n: number, fill = 1) => new Uint8Array(n).fill(fill);
 
 function deps(over: Partial<MediaDeps> = {}): MediaDeps {
   return {
-    convertImage: async (b) => new Uint8Array([0x89, 0x50, 0x4e, 0x47, b.byteLength]),
+    convertImage: async (b) => new Uint8Array([0x3c, 0x73, 0x76, 0x67, b.byteLength]),
     sha256: async (b) => `sha-${b.byteLength}-${b[0]}`,
     now: () => 0,
     maxImageBytes: MAX,
@@ -36,13 +36,13 @@ describe('buildMedia', () => {
     expect([...r.stored.keys()]).toEqual([`${DIR}/a.png`, `${DIR}/b.JPG`]);
   });
 
-  it('converts an EMF or WMF to PNG: the entry hashes the PNG, with ext png and converted_from', async () => {
+  it('converts an EMF or WMF to SVG: the entry hashes the SVG, with ext svg and converted_from', async () => {
     const convertImage = vi.fn(async (_b: Uint8Array, _f: 'emf' | 'wmf') => new Uint8Array([9, 9]));
     const r = await run([file('x.emf', bytes(100)), file('y.wmf', bytes(50))], deps({ convertImage }));
     expect(convertImage.mock.calls.map((c) => c[1])).toEqual(['emf', 'wmf']);
     expect(r.manifest).toEqual([
-      { pandoc_path: `${DIR}/x.emf`, status: 'stored', sha256: 'sha-2-9', ext: 'png', converted_from: 'emf' },
-      { pandoc_path: `${DIR}/y.wmf`, status: 'stored', sha256: 'sha-2-9', ext: 'png', converted_from: 'wmf' },
+      { pandoc_path: `${DIR}/x.emf`, status: 'stored', sha256: 'sha-2-9', ext: 'svg', converted_from: 'emf' },
+      { pandoc_path: `${DIR}/y.wmf`, status: 'stored', sha256: 'sha-2-9', ext: 'svg', converted_from: 'wmf' },
     ]);
     expect([...r.stored.get(`${DIR}/x.emf`)!.bytes]).toEqual([9, 9]);
   });
@@ -58,15 +58,15 @@ describe('buildMedia', () => {
     const convertImage = () => (++calls === 1 ? new Promise<Uint8Array>(() => undefined) : Promise.resolve(new Uint8Array([7])));
     const r = await run([file('x.emf', bytes(10)), file('y.emf', bytes(20))], deps({ convertImage }));
     expect(r.manifest[0]).toMatchObject({ ext: 'emf', conversion_failed: true });
-    expect(r.manifest[1]).toMatchObject({ ext: 'png', converted_from: 'emf' });
+    expect(r.manifest[1]).toMatchObject({ ext: 'svg', converted_from: 'emf' });
   });
 
-  it('keeps an original that fits when its PNG exceeds the limit', async () => {
+  it('keeps an original that fits when its SVG exceeds the limit (a bitmap-wrapping EMF inflates ~1.33x as base64)', async () => {
     const r = await run([file('x.emf', bytes(10))], deps({ maxImageBytes: 100, convertImage: async () => bytes(101) }));
     expect(r.manifest).toEqual([{ pandoc_path: `${DIR}/x.emf`, status: 'stored', sha256: 'sha-10-1', ext: 'emf', conversion_failed: true }]);
   });
 
-  it('skips an image when neither the original nor its PNG fits', async () => {
+  it('skips an image when neither the original nor its SVG fits', async () => {
     const r = await run([file('x.emf', bytes(150))], deps({ maxImageBytes: 100, convertImage: async () => bytes(200) }));
     expect(r.manifest).toEqual([{ pandoc_path: `${DIR}/x.emf`, status: 'skipped', reason: 'too-large', size: 150 }]);
     expect(r.stored.size).toBe(0);
@@ -99,7 +99,7 @@ describe('buildMedia', () => {
     });
     const r = await run([file('a.emf', bytes(5)), file('b.emf', bytes(6))], deps({ convertImage, now: () => t }));
     expect(convertImage).toHaveBeenCalledTimes(1);
-    expect(r.manifest[0]).toMatchObject({ ext: 'png', converted_from: 'emf' });
+    expect(r.manifest[0]).toMatchObject({ ext: 'svg', converted_from: 'emf' });
     expect(r.manifest[1]).toMatchObject({ ext: 'emf', conversion_failed: true });
   });
 
