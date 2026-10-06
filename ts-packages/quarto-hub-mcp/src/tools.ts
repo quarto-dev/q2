@@ -31,6 +31,12 @@ import {
 } from '@quarto/quarto-sync-client';
 import { ConnectionManager, hashPayload } from './connection-manager.js';
 import {
+  diffFileHistory,
+  formatUnifiedDiff,
+  listFileHistory,
+  UnknownChangeHashError,
+} from './file-history.js';
+import {
   AUTH_TOOL_DEFINITIONS,
   AuthToolsState,
   extractAuthContext,
@@ -440,6 +446,7 @@ type DataToolName =
   | 'list_projects'
   | 'list_files'
   | 'list_presence'
+  | 'get_file_history'
   | 'read_file'
   | 'search_files'
   | 'wait_for_change'
@@ -469,6 +476,7 @@ const PATH_DEFAULTABLE: ReadonlySet<DataToolName> = new Set([
   'patch_file',
   'create_file',
   'delete_file',
+  'get_file_history',
 ]);
 
 /** Per-call extras threaded from the SDK request context (BP-3, BP-4). */
@@ -507,6 +515,8 @@ async function handleTool(
       return handleListFiles(args, manager);
     case 'list_presence':
       return handleListPresence(args, manager);
+    case 'get_file_history':
+      return handleGetFileHistory(args, manager);
     case 'read_file':
       return handleReadFile(args, manager);
     case 'search_files':
@@ -641,6 +651,80 @@ async function handleListProjects(args: ToolArgs, manager: ConnectionManager): P
   return structured({
     ...(doc.name !== undefined ? { name: doc.name } : {}),
     projects,
+  });
+}
+
+async function handleGetFileHistory(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
+  const project = args.project as string;
+  const path = args.path as string;
+  const state = await manager.connect(project, { server: routedServer(args) });
+  const payload = state.files.get(path);
+  if (!payload) {
+    const ghost = findUnavailable(state.client, path);
+    if (ghost) {
+      return unavailableFileError(path, ghost.docId);
+    }
+    return fileNotFoundError(path, state);
+  }
+  if (payload.type === 'binary') {
+    return error(
+      `Error: get_file_history only supports text files; "${path}" is binary ` +
+        `(${payload.mimeType}). Binary content is all-or-nothing — there is no per-line ` +
+        'history or diff to show.',
+    );
+  }
+  const handle = state.client.getFileHandle(path);
+  const doc = handle?.doc();
+  if (!handle || !doc) {
+    return fileNotFoundError(path, state);
+  }
+
+  const fromHash = typeof args.from_hash === 'string' ? args.from_hash : undefined;
+  const toHash = typeof args.to_hash === 'string' ? args.to_hash : undefined;
+
+  // Diff mode (CAP-9 rule (a): the diff is a mode of this tool, not a sibling).
+  if (fromHash !== undefined || toHash !== undefined) {
+    if (fromHash === undefined) {
+      return error(
+        'Error: `to_hash` requires `from_hash` — the diff direction would be ambiguous. ' +
+          'Pass both (from `get_file_history` list mode), or pass `from_hash` alone to diff ' +
+          'against the current content.',
+      );
+    }
+    try {
+      const { fromText, toText, resolvedTo } = diffFileHistory(doc, fromHash, toHash);
+      const { diff, addedLines, removedLines } = formatUnifiedDiff(fromText, toText, path);
+      return structured({
+        path,
+        from_hash: fromHash,
+        to_hash: resolvedTo,
+        diff,
+        added_lines: addedLines,
+        removed_lines: removedLines,
+      });
+    } catch (err) {
+      if (err instanceof UnknownChangeHashError) {
+        return error(
+          `Error: ${err.message} in "${path}". Call get_file_history without ` +
+            '`from_hash`/`to_hash` to list the change hashes this file knows.',
+        );
+      }
+      throw err;
+    }
+  }
+
+  // List mode.
+  const rawLimit = typeof args.limit === 'number' ? args.limit : 20;
+  const limit = Math.max(1, Math.min(100, rawLimit));
+  const indexDoc = state.client.getIndexHandle()?.doc();
+  const identities = indexDoc ? getIdentitiesFromIndex(indexDoc) : {};
+  const result = listFileHistory(doc, identities, limit);
+  return structured({
+    path,
+    heads: result.heads,
+    entries: result.entries,
+    total_changes: result.totalChanges,
+    truncated: result.truncated,
   });
 }
 
@@ -1459,6 +1543,38 @@ const outListPresence = z.object({
   message: z.string().optional(),
 });
 
+const outHistoryEntry = z.object({
+  head: z.string(),
+  hash: z.string(),
+  seq: z.number(),
+  time: z.number(),
+  author: z.string(),
+  name: z.string().nullable(),
+  color: z.string().nullable(),
+  added_chars: z.number(),
+  removed_chars: z.number(),
+});
+
+// CAP-9: one tool, two modes (ERG-5 rule (a)) — a bounded change
+// listing, or a unified diff between two heads.
+const outGetFileHistory = z.union([
+  z.object({
+    path: z.string(),
+    heads: z.array(z.string()),
+    entries: z.array(outHistoryEntry),
+    total_changes: z.number(),
+    truncated: z.boolean(),
+  }),
+  z.object({
+    path: z.string(),
+    from_hash: z.string(),
+    to_hash: z.string(),
+    diff: z.string(),
+    added_lines: z.number(),
+    removed_lines: z.number(),
+  }),
+]);
+
 const outListedFile = z.object({
   path: z.string(),
   type: z.string().optional(),
@@ -1903,6 +2019,45 @@ export function registerTools(
       annotations: ANNOT_READ,
     },
     (args) => runDataTool('list_presence', args, manager),
+  );
+
+  server.registerTool(
+    'get_file_history',
+    {
+      title: 'Get file history',
+      description:
+        'History of one text file. List mode (default): the most recent changes, newest ' +
+        'first — each entry carries the change `head` (pass to `from_hash`/`to_hash` or ' +
+        'restore_file_version), the content `hash` after it, its author (with display ' +
+        'name/color when the project records them), timestamp, and added/removed character ' +
+        'counts. Diff mode: pass `from_hash` and `to_hash` (from a prior listing) for a ' +
+        'unified diff between those two versions; `from_hash` alone diffs that version ' +
+        'against the current content. Use it to answer "what changed since yesterday", to ' +
+        'review a collaborator\'s edit before building on it, or to pick a restore point ' +
+        'for restore_file_version.',
+      inputSchema: z.object({
+        project: projectParam,
+        path: pathParam.optional(),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(100)
+          .optional()
+          .describe('Max changes to return in list mode (default 20, cap 100).'),
+        from_hash: z
+          .string()
+          .optional()
+          .describe('Diff mode: the older change `head`. Alone, diffs against the current content.'),
+        to_hash: z
+          .string()
+          .optional()
+          .describe('Diff mode: the newer change `head` (requires `from_hash`).'),
+      }),
+      outputSchema: outGetFileHistory,
+      annotations: ANNOT_READ,
+    },
+    (args) => runDataTool('get_file_history', args, manager),
   );
 
   server.registerTool(
