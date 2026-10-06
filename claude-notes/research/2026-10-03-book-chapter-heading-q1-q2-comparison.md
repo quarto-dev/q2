@@ -28,7 +28,7 @@ One small book rendered with both tools (`quarto render` and `q2 render`):
 - part "Part Two" with `href: partpage.qmd` (`title: Part Page Title`)
 - `c3.qmd`: `title: C3`
 
-Nothing is hard-coded: "Preface" is just the scratch `index.qmd`'s title.
+Nothing is hard-coded: "Preface" is just the scratch `index.qmd`\'s title.
 
 ## Results
 

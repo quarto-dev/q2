@@ -1,4 +1,4 @@
-# Research: `qmd-syntax-helper`'s unclosed-delimiter autofix rules
+# Research: `qmd-syntax-helper`\'s unclosed-delimiter autofix rules
 
 **Date:** 2026-09-30
 **Status:** Research only — no decision made, no strand filed for the new

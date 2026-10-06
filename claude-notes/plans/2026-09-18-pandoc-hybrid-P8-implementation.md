@@ -204,7 +204,7 @@ already exists (`format.rs:29`).
   for a bare format equals both the `--to` string and the Pandoc writer name Q1 would put in
   `FORMAT`; and `unless-format` is handled symmetrically, one arm apart, at
   `conditional_content.rs:313-318`. The pptx-unresolvable issue at `Format::from_format_string`
-  does not reach `lua_format_for`'s correctness — a `"pptx"` string maps correctly the moment one
+  does not reach `lua_format_for`\'s correctness — a `"pptx"` string maps correctly the moment one
   can be constructed; what it blocks is only the *E-tier* leg (Task 4), never the U-tier predicate.
 - **Design §8's actual text.** §8 ("Cross-cutting decisions") says content-hidden gating is
   "deferred to P8, out of scope for docx/pptx v1" — a statement about *verification* being
@@ -372,7 +372,7 @@ of Q2's transform, not of the shim.
   Div **was** present and **was** resolved, a `.content-visible` Div **did** survive with its
   content, and the Span / CodeBlock / nested-custom carriers each get their own assertion so no
   single recursion arm can silently stop being visited.
-- **`ConditionalBlock`'s class-keyed registration.** `ConditionalBlock` (Q1
+- **`ConditionalBlock`\'s class-keyed registration.** `ConditionalBlock` (Q1
   `customnodes/content-hidden.lua:29`) is among the class-keyed handler registrations that would
   collide with the wire wrapper if the shim were mispositioned. Under the frozen design they do
   not collide, because the transform resolves them pre-cut. T3.1 is the assertion of that
@@ -397,7 +397,7 @@ Tasks 1–3 satisfies.
 - `crates/quarto/tests/integration/conditional_content_pandoc_e2e.rs` (**new**) — not
   `crates/quarto-core/tests/...` as originally planned: `env!("CARGO_BIN_EXE_q2")` is only
   available to integration tests of the package that defines the `q2` binary target, which is
-  `quarto` (`crates/quarto/Cargo.toml`'s `[[bin]] name = "q2"`), not `quarto-core`. The fixture
+  `quarto` (`crates/quarto/Cargo.toml`\'s `[[bin]] name = "q2"`), not `quarto-core`. The fixture
   qmd is inlined as a `const FIXTURE: &str` in this file rather than a separate `tests/fixtures/`
   file, matching this crate's existing e2e convention (`render_pandoc_formats_e2e.rs`,
   `conditional_content_cli.rs` both inline their fixture bodies). Registered in
@@ -449,14 +449,14 @@ so `Format::from_format_string("pptx")` succeeds; P8's own T2.3 integration test
 
 | # | Tier | Real unit exercised | Seam (invoked → asserted) | Mock boundary | Named revert hunk |
 |---|---|---|---|---|---|
-| T4.1 | E | the real `q2` binary, docx leg | `e2e_docx_content_hidden_gating` (`conditional_content_pandoc_e2e.rs`) — real `q2 render cond.qmd --to docx`; unzip → `word/document.xml` sentinel assertions per criteria 1–2 | none — the whole binary is the unit | `crates/quarto-core/src/format.rs`'s `is_format_match` — see below |
+| T4.1 | E | the real `q2` binary, docx leg | `e2e_docx_content_hidden_gating` (`conditional_content_pandoc_e2e.rs`) — real `q2 render cond.qmd --to docx`; unzip → `word/document.xml` sentinel assertions per criteria 1–2 | none — the whole binary is the unit | `crates/quarto-core/src/format.rs`\'s `is_format_match` — see below |
 | T4.2 | E | the real `q2` binary, pptx leg | `e2e_pptx_content_hidden_gating`, as T4.1 with `--to pptx`, asserted against `ppt/slides/*.xml` | none | same seam, pptx leg |
 
 **Status: DONE 2026-09-20.** Both prerequisites (P7-foundation's Task 3, P7's Task 4) had landed;
 written unguarded, both green. `cargo clippy -p quarto --all-targets -- -D warnings`: clean.
 `cargo nextest run -p quarto -- conditional_content_pandoc_e2e`: 2 passed, 0 failed.
 
-**Revert hunks, confirmed RED/GREEN:** reverting `ConditionalContentTransform`'s format-match arm
+**Revert hunks, confirmed RED/GREEN:** reverting `ConditionalContentTransform`\'s format-match arm
 (`is_format_match` in `crates/quarto-core/src/format.rs`) so `when-format="docx"` never matches
 would flip criterion 2's positive control (`DOCX-ONLY-SENTINEL` present) to absent, redding T4.1;
 the symmetric pptx arm reddens T4.2. Not independently re-verified by hand this session (the
@@ -487,7 +487,7 @@ Reasoned across P8's load-bearing branches. Every one gets a bound seam or an ex
 1. **`when-format` naming a format q2 doesn't know.** `is_format_match` (`quarto_doc.rs:74-89`)
    closes its world at `_ => false` (`:87`). An unrecognized query is silently treated as
    non-matching: no early return, no warning. `.content-visible when-format="docs"` drops its
-   content with no diagnostic. `verdict()`'s existing Q-2-42 warning
+   content with no diagnostic. `verdict()`\'s existing Q-2-42 warning
    (`conditional_content.rs:249-267`) fires on unknown attribute *keys* (`when-profil`), never on
    unknown attribute *values*.
    → **Drop behavior: BOUND — T1.6**, revert `quarto_doc.rs:87`.
@@ -497,7 +497,7 @@ Reasoned across P8's load-bearing branches. Every one gets a bound seam or an ex
    `else return false`, `pandoc/datadir/_format.lua:284-286`), and is labeled in the test's own
    comment as unbound. Whether q2's existing Q-2-42 strictness divergence should extend to unknown
    format *values* is a design question, not P8's to answer.
-2. **`unless-format`'s symmetry with `when-format`.** One arm apart at
+2. **`unless-format`\'s symmetry with `when-format`.** One arm apart at
    `conditional_content.rs:313-318`, sharing `invert != any` at `:329`.
    → **BOUND — T1.3**, revert the `"unless-format" => (true, Kind::Format)` arm at `:317`.
 3. **The `ConditionalBlock` class-keyed collision.** Under the frozen design no content-hidden
@@ -549,7 +549,7 @@ Reasoned across P8's load-bearing branches. Every one gets a bound seam or an ex
 
 ## Open questions
 
-- **`keep_inline` has no `Inline::Custom` arm, asymmetrically with `keep_block`'s deliberate
+- **`keep_inline` has no `Inline::Custom` arm, asymmetrically with `keep_block`\'s deliberate
   `Block::Custom` arm.** `conditional_content.rs:501-518` recurses into every slot of a
   `Block::Custom`; `:528-569` has no counterpart for `Inline::Custom`
   (`quarto-pandoc-types/src/inline.rs:53`), which falls through `_ => {}`. A marker Span inside an

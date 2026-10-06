@@ -35,7 +35,7 @@ html/revealjs (native), docx/pptx/epub/typst (already shipped).
 
 The four JS slide formats were the only untested bucket — every other tier
 sits in the same JS-incompatible class that docx/pptx/epub/typst already
-exercise. Tested 2026-09-24 by hand-replicating `PandocWriteStage`'s
+exercise. Tested 2026-09-24 by hand-replicating `PandocWriteStage`\'s
 invocation (`pandoc -f json -t <fmt> --data-dir <share>/pandoc/datadir
 -L <share>/filters/main.lua --standalone --wrap none`) against a fixture
 exercising slides, code, math, a callout, a table, and a crossref figure:
@@ -235,7 +235,7 @@ silently mis-fire if the tail were added naively:
    writer name (`format_defaults.rs:204`, from
    `pandoc_write.rs:566,582`). They coincide for the shipped four
    (except typst); the tail makes them diverge. The re-key must unify
-   both call sites, and `build_forwarded_args`' own format gates
+   both call sites, and `build_forwarded_args`\' own format gates
    (slide-level pptx-only, template-typst skip) need per-variant review.
 2. **`format-identifier.base-format` must be the format's canonical
    name, not the extension.** `insert_format_identifier()` currently
@@ -342,7 +342,7 @@ once per phase boundary.
       `insert_active_filters` to `FormatIdentifier`; unify the two
       `format_pandoc_defaults` call sites (extension at `params.rs:172`,
       writer name at `format_defaults.rs:204`); review
-      `build_forwarded_args`' format gates per variant.
+      `build_forwarded_args`\' format gates per variant.
 - [x] Add `FormatIdentifier::canonical_name()`; send it as
       `format-identifier.base-format`.
 - [x] Add `pandoc_writer_name_for` arms for `Gfm` → `"gfm"` and

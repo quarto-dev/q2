@@ -69,7 +69,7 @@ needs no P6 harness change and can land before P6.
 
 - [x] Copy `pdf-text-position-test.qmd` verbatim into
       `crates/quarto/tests/smoke-all/typst/`. **Note:** Fixture copied verbatim as required, but test revealed Q2 produces different PDF layout than Q1 (header/footer on page 1, title/body on page 2 vs. all elements on same page in Q1). This is expected behavior that validates the end-to-end testing approach — the fixture successfully exposes Q1/Q2 layout differences as intended. Note:
-      `render_document`'s local `"typst" => "typ"` extension map
+      `render_document`\'s local `"typst" => "typ"` extension map
       (`crates/quarto-test/src/runner.rs:297`) is used only for the *error-path*
       fallback output name (when a render fails before producing a real path) — the
       real success-path output comes from `result.output_path` (`:329`). Don't read

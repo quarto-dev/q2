@@ -131,7 +131,7 @@ sidebar block). Without it this task has nowhere to put the code and both lint r
 
 ## Task 2: The project-mode containment gate (design doc §13)
 
-**Scope.** Gate `WebsiteProjectType::post_render`'s hook sequence on
+**Scope.** Gate `WebsiteProjectType::post_render`\'s hook sequence on
 `format.identifier.is_html_based()`, so a website/book/manuscript project rendered to a Pandoc
 target does not write a sitemap of `.html` URLs that do not exist, and does not hard-fail in
 `write_alias_redirects` with an HTML-specific diagnostic. Matches Q1's own
@@ -213,7 +213,7 @@ before Task 3 but land T2.4/T2.5 with, or immediately after, Task 3.
   Task 1 adds `Pptx` to neither. So a refactor that routes this gate through `is_native()` by
   mistake is **behaviorally invisible** to any test that only checks outcomes. T2.6 pins the
   predicate's own table, and the gate must be written against `is_html_based()` because that is the
-  one whose *meaning* is "HTML family" — `is_native()`'s meaning ("renders in-process") is exactly
+  one whose *meaning* is "HTML family" — `is_native()`\'s meaning ("renders in-process") is exactly
   what Task 3 stops being true of a supported format.
 - **T2.3's expected value is `Ok`, which is also what a no-op render returns.** Pair it with the
   same non-empty-output assertion as T2.1.
@@ -222,7 +222,7 @@ before Task 3 but land T2.4/T2.5 with, or immediately after, Task 3.
 
 ## Task 3: Relax the format gate — admit **docx and pptx**, route through `render_qmd_to_pandoc`, wire the warning in
 
-**Scope.** Replace `render.rs`'s blanket non-native refusal with one that admits docx and pptx and
+**Scope.** Replace `render.rs`\'s blanket non-native refusal with one that admits docx and pptx and
 routes them to P4's Pandoc entry point, and emit Task 1's warning at the same site. Verified
 end-to-end for **both** formats.
 
@@ -336,10 +336,10 @@ neither does P7's docx/pptx-specific work depend on this task alone.
 ## Task 4: B3 shared services wired into the Pandoc tail (staged resources, rewritten links)
 
 This is this document's Task 4 (B3 shared services), distinct from
-`2026-09-18-pandoc-hybrid-P7-implementation.md`'s own Task 4 (the per-format invocation builder) —
+`2026-09-18-pandoc-hybrid-P7-implementation.md`\'s own Task 4 (the per-format invocation builder) —
 always disambiguate with the plan name when citing either from a third document.
 
-**Scope.** Confirm — with tests, not by reading — that `ResourceCollector`'s mediabag/resource
+**Scope.** Confirm — with tests, not by reading — that `ResourceCollector`\'s mediabag/resource
 staging and `LinkRewriteTransform` run **before** the wire-format handoff for a `Pandoc(fmt)`
 render, so images and relative links resolve in the produced docx/pptx. Both are classified **B3**
 (design doc §6): shared post-core services that cross the cut, needed by *any* Pandoc-tail format,

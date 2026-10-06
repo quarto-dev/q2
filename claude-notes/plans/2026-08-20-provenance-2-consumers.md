@@ -138,11 +138,11 @@ suite). `npm run build:all` green. Snapshots moved: **1** (`table-caption-attr.s
 source-ref, `"[30,70]"` -> `[30,70]`, quote exclusion one byte each end — the other 31 refs
 byte-identical, verified by hand-derivation twice).
 
-**The generality proof holds.** `callout.rs`'s length-arithmetic workaround is gone and
+**The generality proof holds.** `callout.rs`\'s length-arithmetic workaround is gone and
 `ProvenanceBuilder` now has a second consumer in a completely different decoder, which is what
 Phase 4 existed to demonstrate. Obligation 8 — the item with the worst failure mode in the epic
 — is discharged with an **injection experiment**, not the plan's reachability argument: wrapping
-diagnostic locations in a `Concat` corrupts `qmd-syntax-helper`'s output visibly (a splice at
+diagnostic locations in a `Concat` corrupts `qmd-syntax-helper`\'s output visibly (a splice at
 byte 0; a `replace_range` percent-encoding \~340 bytes), and 5 of 7 new tests catch it.
 
 ### Corrections to this plan made in session 2 — READ THESE BEFORE CONTINUING
@@ -277,8 +277,8 @@ in one wave (see `final-fix-report.md` for the full accounting):
 - **FIX-3 (Minor, one-liners):** the malformed `Concat` fixture in `config_sources.rs`
   (`(piece_a, 0)` -> `(piece_a, 8)`); the stale TS docstring invariant in `source-map.ts`; the
   `span_assert.rs` `OutOfBounds` `Display` impl now labels the arithmetic-derived `end` as
-  possibly approximate; `extract_quoted_text`'s doc comment now notes the unreachable
-  `SuspiciousDefault`-shaped degenerate case; `hash.rs`'s `Scalar` arm comment now notes the
+  possibly approximate; `extract_quoted_text`\'s doc comment now notes the unreachable
+  `SuspiciousDefault`-shaped degenerate case; `hash.rs`\'s `Scalar` arm comment now notes the
   `SourceInfo: !Hash` type-level enforcement (closing hand-off item (f)).
 - **FIX-4 (Minor):** `config_value_from_yaml` and its two helpers regated from `#[cfg(test)]`
   to `#[allow(dead_code)]`, paying off the cost recorded in session 2's correction 1 and Phase
@@ -453,7 +453,7 @@ only when the pieces tile the source without gaps.
   *exists* after the floor, so its revert lives in `quarto-source-map`, not in
   the crate that holds the test. Phase 6's "revert the floor → its own tests
   red" row does **not** cover it; add a row naming this test explicitly.
-- **`accum/`'s third reported column numerically equals its second truth
+- **`accum/`\'s third reported column numerically equals its second truth
   column** — both are `9:25`. A test asserting `25` for that element reads as
   fixed while sitting on the stale value. If T8's optional per-element check is
   added, assert all four positions as a set, or assert the third element by
@@ -545,7 +545,7 @@ it was wrong.
       `snap_span_widens_to_whole_characters` with the offset pair the two
       integration tests used (`21..28` over
       `"text: <span>Ask AI \u{2728}</span>"` — one pair, shared by both
-      tests), and **rewrite the two integration tests' names and doc
+      tests), and **rewrite the two integration tests\' names and doc
       comments** to say what they now cover (a span-carrying diagnostic still
       renders under each renderer) plus why they no longer cover the snap. Do
       not delete them and do not leave the names claiming a guarantee they lost

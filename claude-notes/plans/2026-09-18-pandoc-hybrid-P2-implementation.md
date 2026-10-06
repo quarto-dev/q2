@@ -151,7 +151,7 @@ acceptance item 5.)
   `assert_eq!(schema.types.keys().collect::<BTreeSet<_>>(), EXPECTED_EIGHT)`⟩ RED.
 - **T1.2** — Revert ⟨change `"route": "N"` to `"route": "R"` on the artifact's `Equation`
   entry⟩ → ⟨T1.2's per-type route-map `assert_eq!`⟩ RED.
-- **T1.3** — Revert ⟨replace `Route`'s `#[derive(Deserialize)]` enum with a plain `String`
+- **T1.3** — Revert ⟨replace `Route`\'s `#[derive(Deserialize)]` enum with a plain `String`
   field⟩ → ⟨T1.3's `assert!(from_str::<Schema>(BAD_ROUTE).is_err())`⟩ RED.
 - **T1.4** — Revert ⟨add an `"order": { "required": false, … }` entry under the artifact's
   `Proof` object⟩ → ⟨T1.4's `assert!(!proof.plain_data.contains_key("order"))`⟩ RED.
@@ -196,7 +196,7 @@ checklist item 5, and it is the only thing in P2 that binds the schema to real p
 - NEW `crates/quarto-core/tests/integration/custom_node_schema_conformance.rs`.
 - `crates/quarto-core/tests/integration/main.rs` — add `pub mod custom_node_schema_conformance;`
   keeping the list alphabetized (96 `pub mod` entries today).
-- Pattern to copy: `crates/quarto-core/tests/integration/crossref_fixtures.rs:29-129`'s
+- Pattern to copy: `crates/quarto-core/tests/integration/crossref_fixtures.rs:29-129`\'s
   `run_crossref(qmd)` helper, which already does parse → `RefTypeRegistry::builtin()` +
   `metadata::read` → `codeblock_shorthand::desugar_blocks` → `CalloutTransform` →
   `ExampleEmbedTransform` → `TheoremSugarTransform` → `ProofSugarTransform` →

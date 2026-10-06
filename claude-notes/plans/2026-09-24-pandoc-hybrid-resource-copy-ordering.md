@@ -43,7 +43,7 @@ pipeline stage, `ResourceCopyFlushStage`, between `PandocWriteStage` and
 exact same drain-and-copy `finalize_rendered_output` already does (same
 `OutputSink`/`enqueue_resource_copies` machinery, so the bd-cfl67
 allowed-roots validation is preserved, not bypassed), just early enough for
-`typst compile` to see the file. `finalize_rendered_output`'s own drain
+`typst compile` to see the file. `finalize_rendered_output`\'s own drain
 becomes a no-op afterward (`std::mem::take` already emptied
 `ctx.resource_copies`), so nothing is copied twice. Because
 `build_pandoc_pipeline_finishing_stages` (the book-merge tail) derives from
@@ -95,7 +95,7 @@ book single-file-merge path.
       `TypstCompileStage`. Input/output kind `RenderedOutput` (sits between
       `PandocWriteStage` and `TypstCompileStage`, passes the value through
       unchanged). Drains `ctx.resource_copies` via `std::mem::take`,
-      constructs an `OutputSink` from `ctx.resource_resolver`'s
+      constructs an `OutputSink` from `ctx.resource_resolver`\'s
       `allowed_output_roots()`, calls the existing
       `resource_copy_diagnostics::enqueue_resource_copies` +
       `OutputSink::flush` — the same two calls `finalize_rendered_output`
@@ -109,7 +109,7 @@ book single-file-merge path.
       `pandoc_finishing_stage_list_is_bounded_transforms_then_real_tail`,
       `typst_stage_list_appends_typst_compile_after_pandoc_write`.
 - [x] Register the new module in `stage/stages/mod.rs` (native-only `mod`/
-      `pub use`, mirroring `typst_compile`'s registration).
+      `pub use`, mirroring `typst_compile`\'s registration).
 - [x] Re-run and confirm GREEN: the new tests above, plus the full
       `pandoc_typst_*`/`book_single_file_merge*`/`pandoc_render_to_file`/
       `resource_copy*`/`resource_report*` suites for regressions (34 tests,

@@ -175,7 +175,7 @@ Total parses: 721; successful parses: 721; failed parses: 0
 ```
 
 Afterwards, the planted `markdown.dylib` still had its 17:38 mtime, so
-neither run read or rewrote it. `ts-test`'s `tree-sitter generate` left
+neither run read or rewrote it. `ts-test`\'s `tree-sitter generate` left
 no tracked files modified.
 
 ## Risks / tradeoffs (draft)

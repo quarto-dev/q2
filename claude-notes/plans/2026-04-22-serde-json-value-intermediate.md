@@ -146,7 +146,7 @@ every Value and memcpys its bytes into the output buffer; the output
 buffer itself doubles in capacity as it grows past thresholds,
 memcpying its entire current contents each time. Large documents
 amortize this cost across a larger working set with poorer cache
-locality — which is why `_platform_memmove`'s *fraction* climbs with
+locality — which is why `_platform_memmove`\'s *fraction* climbs with
 size.
 
 ### Why we do this today

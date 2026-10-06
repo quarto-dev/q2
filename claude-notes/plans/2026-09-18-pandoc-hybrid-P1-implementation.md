@@ -116,7 +116,7 @@ behavioral change to any existing format.**
 - **T1.3** — Revert ⟨the `pipeline_profile: …` initializer in `RenderContext::new`,
   `render.rs:442`, replacing it with `PipelineProfile::HtmlRender`⟩ →
   ⟨`assert_eq!(ctx.pipeline_profile, PipelineProfile::Pandoc("docx".into()))`⟩ RED.
-- **T1.4** — Revert ⟨any reordering or omission inside `build_transform_pipeline`'s
+- **T1.4** — Revert ⟨any reordering or omission inside `build_transform_pipeline`\'s
   `HtmlRender` path — e.g. drop `pipeline.push(Box::new(SectionizeTransform::new()))` at
   `pipeline.rs:1276`⟩ → ⟨the `assert_eq!` on the exact ordered name list⟩ RED.
 - **T1.5** — Revert ⟨the `RevealjsRender`/`RevealjsPreview` arm at `pipeline.rs:1264`, making every
@@ -135,7 +135,7 @@ corrected expected value still discriminates: `RevealjsRender != RevealjsPreview
 their surviving name lists differ too (the preview exclude-list is applied to one and not the
 other) — so T2.5 is the behavioral second anchor for the same cell.
 
-**A sibling trap the five-variant shape does not close, found here:** `q2-slides`'s *base* format
+**A sibling trap the five-variant shape does not close, found here:** `q2-slides`\'s *base* format
 is `"html"`, not `"revealjs"` (`format.rs:122`, `"q2-slides" => Some(("html", Some("preview")))`).
 Its reveal-family membership comes only from `is_revealjs_target` matching the **string**. So a
 `from_format` implementation that derives family from `format.identifier` instead of from
@@ -204,13 +204,13 @@ absent** (diverges from Preview's list, per design §6's `panel-tabset` row). `c
 
 After Task 5 lands, the list grows by exactly one: the Footnotes HTML-half's new `name()`.
 
-**`title-block` sub-item (P1 checklist "Fix `title_block.rs`'s non-HTML branch or confirm the
+**`title-block` sub-item (P1 checklist "Fix `title_block.rs`\'s non-HTML branch or confirm the
 exclude-list makes it moot").** Confirmed moot at the pipeline level by T2.3's exact-list
 assertion. The premise was re-verified empirically here against real pandoc **3.8.1** (the plan's
 verification was against an unnamed version): `pandoc -s t.md -t docx` on a document whose only
 metadata is `title: My Doc Title` and whose body has no heading emits
 `<w:pStyle w:val="Title"/>` carrying `My Doc Title`, and `-t pptx` emits the same title into
-`ppt/slides/slide1.xml`. So `should_add_h1`'s non-HTML `true` branch (`title_block.rs:65-75`,
+`ppt/slides/slide1.xml`. So `should_add_h1`\'s non-HTML `true` branch (`title_block.rs:65-75`,
 reached via `title_block.rs:97`) would genuinely duplicate the title. The *output-level* proof
 (no duplicate title in a real `.docx`) is **deferred — seam deferred until P7's per-format
 invocation builder**; P1 can only assert the transform does not run.
@@ -221,14 +221,14 @@ invocation builder**; P1 can only assert the transform does not run.
 2. `PANDOC_TRANSFORM_EXCLUDED` contains **every** transform in the HtmlRender pipeline whose
    `phase() == TransformPhase::Navigation` — asserted by a `phase()` query, with the resulting set
    asserted to have length 20 (T2.2).
-3. `build_transform_pipeline(Pandoc("docx"))`'s surviving ordered name list equals an exact
+3. `build_transform_pipeline(Pandoc("docx"))`\'s surviving ordered name list equals an exact
    `&[&str]` literal that **does** contain `conditional-content`, `callout`, `panel-tabset`,
    `shortcode-resolve`, `metadata-normalize`, `date-normalize`, `authors-normalize`,
    `code-block-generate`, `example-embed`, `theorem-sugar`, `proof-sugar`,
    `float-ref-target-sugar`, `equation-label`, `crossref-index`, `crossref-resolve`,
    `example-embed-render`, `link-rewrite`, `appendix-structure`, `resource-collector`, and does
    **not** contain any of the 38 (T2.3).
-4. `build_transform_pipeline(HtmlPreview)`'s surviving name list equals today's
+4. `build_transform_pipeline(HtmlPreview)`\'s surviving name list equals today's
    `build_q2_preview_transform_pipeline(...)` name list, captured as a literal pre-refactor (T2.5)
    — the preview-parity gate for "one mechanism serves Preview and Pandoc".
 5. `cargo nextest run -p quarto-core` green; zero `.snap` changes.
@@ -290,7 +290,7 @@ since its absence from an absence-list is not an assertion.
 
 ---
 
-## Task 3: Widen `panel_tabset.rs`'s self-gate — and only that one
+## Task 3: Widen `panel_tabset.rs`\'s self-gate — and only that one
 
 **Scope.** Widen the one self-gate whose early return defeats a deliberate, load-bearing inclusion,
 and add the positive regression test the plan calls for. Do **not** widen `draft_alert.rs`,
@@ -336,7 +336,7 @@ that keeps `panel-tabset` enabled). Neither is external to this plan.
 
 **Revert hunks, stated exactly:**
 
-- **T3.1** — Revert ⟨`panel_tabset.rs:109`'s widened first term back to the bare
+- **T3.1** — Revert ⟨`panel_tabset.rs:109`\'s widened first term back to the bare
   `!ctx.format.identifier.is_html_based()`⟩ → ⟨`assert!(ast_contains_custom_node(&ast, "Tabset"))`⟩
   RED. `is_html_based()` is `matches!(self, Html | Revealjs)` (`format.rs:66-68`), so for a docx
   `Format` the transform returns at `:113` and builds nothing — **while Task 2's exclude-list

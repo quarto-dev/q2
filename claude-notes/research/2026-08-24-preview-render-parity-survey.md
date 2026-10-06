@@ -125,7 +125,7 @@ the method in § 1); the strands carry verbatim snippets.
 
 `extensions/builtin-kbd-shortcode/test.qmd`: the preview wraps the
 shortcode's `RawInline` html in an attribute-less `<span>` — the same
-host-element constraint that made `RawBlock`'s bare `<div>` an unwrap rule.
+host-element constraint that made `RawBlock`\'s bare `<div>` an unwrap rule.
 A symmetric "unwrap attribute-less `<span>`" rule is the obvious analogue,
 but spans are inline: unwrapping changes which siblings the whitespace-edge
 rule sees, so it needs the same reasoning the `<div>` rule got before it is

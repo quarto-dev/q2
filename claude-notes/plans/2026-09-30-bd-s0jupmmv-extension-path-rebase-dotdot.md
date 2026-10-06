@@ -40,7 +40,7 @@ surfaces the bug because (a) the executed Lua filter list is absolute and
 
 ## Fix direction (from research)
 
-Mirror `rebase_candidate`'s `..`-leading refusal inside
+Mirror `rebase_candidate`\'s `..`-leading refusal inside
 `adjust_paths_to_document_dir`, keeping the absolute declaring-dir-resolved
 path — but **space-aware per key**:
 

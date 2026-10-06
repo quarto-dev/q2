@@ -170,7 +170,7 @@ open for 60s.
 
 **Fix surface (clean):** `repo.find<T>(id, options?: RepoFindOptions &
 AbortOptions)` accepts an `AbortSignal` (automerge-repo 2.5.6). Bound
-`findDoc`'s `repo.find` with `AbortSignal.timeout(N)` (e.g. 8s) so an unsynced
+`findDoc`\'s `repo.find` with `AbortSignal.timeout(N)` (e.g. 8s) so an unsynced
 doc fails fast into the existing `isUnavailableError`/retry/`markFileUnavailable`
 path instead of hanging 60s. Likely also: load file docs in parallel, and/or
 don't block the initial render on non-active file docs (load siblings in the

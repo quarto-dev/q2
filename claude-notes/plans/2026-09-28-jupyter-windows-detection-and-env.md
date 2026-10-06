@@ -144,7 +144,7 @@ Findings (2026-09-28) that shape the design:
   leg**. Jupyter-gated tests currently skip on both.
 - The Linux leg runs `endersonmenezes/free-disk-space` with
   **`remove_tool_cache: true`**, deleting `/opt/hostedtoolcache` — i.e. the
-  runners' preinstalled Pythons are deliberately wiped, justified by "no step
+  runners\' preinstalled Pythons are deliberately wiped, justified by "no step
   in this job uses /opt/hostedtoolcache/". Any python provisioning must be
   ordered **after** this step (re-downloading what was removed), or the step
   must stop removing the tool cache.
@@ -164,7 +164,7 @@ the tests that need it. Options:
       new job duplicates checkout/build (mitigated by Rust caches).
   (c) Status quo (skip everywhere) — rejected; that is bd-z09fx92g itself.
 
-- [ ] **4a. Research/spike (bd-ek7njozm)**: measure option (a)'s real cost on
+- [ ] **4a. Research/spike (bd-ek7njozm)**: measure option (a)\'s real cost on
       a PR leg (setup-uv cache warm vs cold, venv creation, kernelspec
       visibility to q2's search dirs on ubuntu + macOS); check how
       quarto-cli's CI handles this tradeoff; bring options to the team.

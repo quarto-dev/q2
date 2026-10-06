@@ -22,7 +22,7 @@ Only proceed once **both** print "merged". **Which worktree does this phase**:
 whichever of `workspace-2`/`workspace-5` finished its own track first and is sitting
 idle. If both are idle when you check, default to `workspace-2`. There's no
 correctness difference between the two — this phase's own topic branch starts from
-`feature/typst-testing`'s tip either way, and neither worktree's prior branch state
+`feature/typst-testing`\'s tip either way, and neither worktree's prior branch state
 matters once its own last phase has merged.
 
 ```bash
@@ -50,7 +50,7 @@ Continue directly to P10 in the same worktree you just used for P9.
 `external-sources/quarto-cli/tests/docs/smoke-all/typst/orange-book-margin/` — same
 shape as `orange-book` (P8) but adds `reference-location: margin`,
 `citation-location: margin`, `suppress-bibliography: true`,
-`grid.margin-width/gutter-width`. `index.qmd`'s front matter is the heaviest of the
+`grid.margin-width/gutter-width`. `index.qmd`\'s front matter is the heaviest of the
 four `orange-book*` fixtures: ~170 `ensureTypstFileRegexMatches`, ~180
 `ensurePdfRegexMatches` (body text uses invented Latin-ish anchor words —
 "Heliocircula", "Ankylosaura" — to avoid ambiguity in narrow-margin text), and **~24

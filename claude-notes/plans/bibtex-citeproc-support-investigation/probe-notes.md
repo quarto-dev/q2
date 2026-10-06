@@ -40,7 +40,7 @@ ordinary personal name — expected, since single bracing carries no protection 
 the BibTeX format itself; this is a known, universal BibTeX ambiguity, not something we
 need to solve.
 
-The critical finding is that `org1`'s *output shape* — `Person { name: "...",
+The critical finding is that `org1`\'s *output shape* — `Person { name: "...",
 given_name: "" }` — is indistinguishable from a genuine lone-mononym individual. Second
 probe, confirming this and checking whether the raw chunk data preserves the missing
 signal:
@@ -81,7 +81,7 @@ chunk is `Verbatim("World Health Organization")`, exactly matching that parsed
 `Person.name`. For "Voltaire," the only raw chunk is `Normal("Voltaire")` — no Verbatim
 match, so it correctly stays a plain family-only individual. Matching a parsed
 `Person.name`+empty-`given_name` against a same-text `Chunk::Verbatim` in the raw field
-is therefore a safe, precise signal, without needing `biblatex`'s private
+is therefore a safe, precise signal, without needing `biblatex`\'s private
 `split_token_lists_with_kw` (confirmed `pub(crate)`, not usable from outside the crate).
 
 ## 2. Pandoc's BibTeX → CSL-JSON title case-folding
@@ -102,7 +102,7 @@ mangled text. (b) is why "full LaTeX markup interpretation" is an explicitly def
 documented limitation rather than a v1 requirement.
 
 Traced (a) to primary source rather than inferring from output alone —
-`citeproc`'s `src/Citeproc/CaseTransform.hs` (fetched directly via `curl` from
+`citeproc`\'s `src/Citeproc/CaseTransform.hs` (fetched directly via `curl` from
 `raw.githubusercontent.com/jgm/citeproc/master/...`, not summarized):
 
 ```haskell
@@ -156,7 +156,7 @@ work.
 ## 3. `genre` field — confirmed no core-model change needed
 
 `rg -n 'genre' crates/quarto-citeproc/src` returned nothing — no dedicated field. But
-`crates/quarto-citeproc/src/reference.rs`'s generic variable lookup (used for e.g.
+`crates/quarto-citeproc/src/reference.rs`\'s generic variable lookup (used for e.g.
 `citation-label`) falls through to `self.other.get(name)` for any unrecognized variable
 name, so `reference.other.insert("genre", serde_json::Value::String(...))` is
 sufficient; the CSL rendering side already handles arbitrary `other` variables
@@ -172,7 +172,7 @@ bibliography path as raw Typst inline to dodge Pandoc's dot-escaping in Typst ou
 It never parses `.bib`/`.json` files itself — that always happened inside Pandoc's own
 bundled reader, invoked as an external subprocess by Quarto 1.
 
-## 5. `biblatex`'s own dependency tree (wasm32 risk assessment)
+## 5. `biblatex`\'s own dependency tree (wasm32 risk assessment)
 
 `paste`, `roman-numerals-rs`, `strum`, `unicode-normalization`, `unscanny` — all pure
 Rust, no libc/getrandom/IO bindings observed in their `Cargo.toml`s. Inferred low risk

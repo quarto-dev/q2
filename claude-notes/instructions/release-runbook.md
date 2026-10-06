@@ -274,7 +274,7 @@ section is what to know when the two interact.
   Windows against the fresh nightly and asserts `q2 --version`. A red
   `install-smoke` with a green pipeline means the installers or the
   release-notes contract regressed, not the build. The smoke steps pass
-  the job's `GH_TOKEN` so the installers' API lookup is not subject to
+  the job's `GH_TOKEN` so the installers\' API lookup is not subject to
   the shared-runner anonymous rate limit, and the installers retry the
   lookup through the seconds right after the release is replaced
   (bd-n9yh30c8). The installer's error names the HTTP status: a 403

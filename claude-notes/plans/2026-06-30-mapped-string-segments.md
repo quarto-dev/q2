@@ -23,13 +23,13 @@ here so the rationale survives.
    carry their *own* `MappedString` interface today (structurally identical but
    nominally distinct). Adding `segments` to only one would leave the api builders
    typed against a copy that lacks it — an object literal returning `segments`
-   would fail `tsc`'s excess-property check (`TS2353`). **Fix the root cause:**
+   would fail `tsc`\'s excess-property check (`TS2353`). **Fix the root cause:**
    make `@quarto/types` the single owner and have `@quarto/api` import from it
    (§0). The dependency direction is already correct — `@quarto/api` declares
    `"@quarto/types": "*"` and `@quarto/types` is runtime-free.
 2. **`segments` stays OPTIONAL (`segments?`).** We own every producer, but several
    build bare `{ value, map }` objects (the harness `rehydrateMappedString`, and
-   `@quarto/api/markdownRegex`'s own raw substring/concat impl). Optional keeps the
+   `@quarto/api/markdownRegex`\'s own raw substring/concat impl). Optional keeps the
    change purely additive — no producer is *forced* to grow `segments`, and no
    existing hand-built test fixture has to change. The cost is one well-defined
    fallback branch in the serializer (decision 3).
@@ -56,7 +56,7 @@ be fixed promptly and on its own, not gated behind A′.
 
 **The defect.** `MappedString` is `{ value, fileName?, map }`
 (`@quarto/types` `text.ts:17-34`; `@quarto/api` carries a duplicate at
-`mappedString/index.ts:38-42`). `@quarto/api`'s builders return plain object
+`mappedString/index.ts:38-42`). `@quarto/api`\'s builders return plain object
 literals whose piece structure lives **entirely in the `map` closure**:
 `mappedConcatInternal` (`mappedString/index.ts:200-230`) computes `offsets[]`
 (prefix-sum boundaries) + captures `strings[]` (child segments) but exposes
@@ -169,7 +169,7 @@ to the returned literals typechecks):
   `{ value, fileName, map, ...(source.segments ? { segments: () => clipRebase(...) } : {}) }`.
   The accessor's return type is `ReadonlyArray<…>`, **never `undefined`** — "propagate
   opacity" means *omit the accessor*, not implement one that returns `undefined`
-  (which would be a type error and would break `serializeMappedString`'s `ms.segments?.()`
+  (which would be a type error and would break `serializeMappedString`\'s `ms.segments?.()`
   call, which invokes the accessor and would get `undefined`, then `.map` throws).
 - **`mappedConcatInternal(strings)`** (`:200`) → **opaque iff any child is opaque**
   (the opacity invariant below). If **every** child exposes `segments`, attach
@@ -295,7 +295,7 @@ where provenance currently stops:
   Strings produced by `breakQuartoMd` / `partitionCellOptions` are therefore opaque
   to `serializeMappedString` even though their `.map()` resolves to real files. If a
   later plan needs faithful provenance *through* `breakQuartoMd`, the clean fix is to
-  refactor these raw builders to delegate to `mappedString`'s
+  refactor these raw builders to delegate to `mappedString`\'s
   `mappedSubstringInternal` / `mappedConcatInternal` (which now carry `segments`),
   rather than duplicating the segment logic a third time. **Out of scope for 1b.1.**
 
@@ -323,14 +323,14 @@ edits start landing.
 | ID | Real unit mounted (not mocked) | Seam: call → assertion surface | Mock boundary | Named revert hunk → which assertion reddens |
 |----|--------------------------------|--------------------------------|---------------|---------------------------------------------|
 | S1 | `fromString` (`mappedString/index.ts:268`) | `fromString("abc","f.qmd").segments()` → deep-equal `[{start:0,length:3,source:{file:"f.qmd",fileOffset:0}}]`; `fromString("abc").segments()[0].source` → `null` | none | In `fromString.segments()`, change the `source` expr `fileName ? {file:fileName,fileOffset:0} : null` → always `null` ⇒ the **file-segment** assertion (`source.file==="f.qmd"`) RED |
-| S2 | `mappedConcatInternal` via `mappedStringFromChunks` (`:233`/`:200`) | `mappedStringFromChunks(fromString(src,"f.qmd"),[{start:0,end:5},{start:5,end:10}]).segments()` → **length 2**, entries `{start:0,len:5,fileOffset:0}`,`{start:5,len:5,fileOffset:5}` | none | Replace `mappedConcatInternal.segments()`'s `strings.flatMap(...)` with a single whole-value segment `[{start:0,length:value.length,source:firstChild}]` ⇒ `.length===2` RED (becomes 1) |
+| S2 | `mappedConcatInternal` via `mappedStringFromChunks` (`:233`/`:200`) | `mappedStringFromChunks(fromString(src,"f.qmd"),[{start:0,end:5},{start:5,end:10}]).segments()` → **length 2**, entries `{start:0,len:5,fileOffset:0}`,`{start:5,len:5,fileOffset:5}` | none | Replace `mappedConcatInternal.segments()`\'s `strings.flatMap(...)` with a single whole-value segment `[{start:0,length:value.length,source:firstChild}]` ⇒ `.length===2` RED (becomes 1) |
 | S3 | `mappedSubstringInternal` via `mappedStringFromChunks` | substring window `[2,7)` of a single `"f.qmd"` leaf → `segments()` = `[{start:0,length:5,source:{file:"f.qmd",fileOffset:2}}]` | none | Remove the `+start` rebase on `source.fileOffset` in `mappedSubstringInternal.segments()` ⇒ `fileOffset===2` RED (becomes 0) |
 | S3b | `mappedSubstringInternal.segments()` clip/split (`:177`) | two-segment source (`[0,5)`+`[5,10)` of `"f.qmd"`), then substring `[3,8)` **straddling** the boundary → **two clipped** entries `{start:0,length:2,fileOffset:3}`,`{start:2,length:3,fileOffset:5}` | none | Remove the window-edge clip in `mappedSubstringInternal.segments()` (forward whole child segments unclipped) ⇒ the clipped-`length`(2,3 not 5,5) assertion RED |
 | S4 | `mappedConcatInternal` + `fromString` no-fileName branch | concat `[Range[0,3) of "f.qmd", bare-string "XX"]` → segment 0 `source.file==="f.qmd"`, segment 1 `source===null`, both spans intact | none | In `fromString.segments()` no-`fileName` branch, replace `source:null` with `source:{file:"?",fileOffset:0}` ⇒ the **bare-string** `segments()[1].source===null` assertion RED |
 | S5 | `serializeMappedString` (`mapped-source.ts:434`) over a **real** `@quarto/api` multi-piece MS | build via `mappedStringFromChunks` (2 file-backed chunks); **exercised-guard** `ms.segments!().length===2` first; then `serializeMappedString(ms)` → deep-equal the 2-entry `TsSourceMapEntry[]`, no coalescing | none | Restore the pre-change body `return []` (ignore `segments()`) ⇒ `serialize(ms)` deep-equal (2 entries) RED. **This is the assertion that proves the hole is closed.** |
 | S5b | `serializeMappedString` undefined-`segments` fallback | (a) bare `{value,map}` fixture (no `segments`) → `serializeMappedString` returns `[]`; (b) a fixture whose `segments()` returns one `source:null` whole-value entry → returns `[{start:0,length,source:null}]`; **assert (a) ≠ (b)** | none (hand-built fixtures) | Change the undefined-`segments` fallback from `return []` to synthesize `[{start:0,length:value.length,source:null}]` ⇒ the **`(a)!==(b)`** (opaque ≠ known-synthetic) assertion RED |
-| S6 | `mappedConcatInternal.segments()` contiguity across a 3-child concat (incl. one empty-string child) | assert `segments` starts non-decreasing, each `start==prev.start+prev.length`, `last.start+last.length===value.length` (full cover, no gap/overlap) | none | Remove the `+offsets[i]` shift in `mappedConcatInternal.segments()`'s `shiftSegments` ⇒ child starts collapse toward 0 ⇒ the `start==prev.start+prev.length` contiguity assertion RED. (Distinct hunk from S2's flatMap; S6 binds the rebase arithmetic, S2 binds the no-coalesce count.) |
-| **S7** | `rehydrateMappedString` (`mapped-source.ts:287`) **passthrough round-trip** | `serializeMappedString(rehydrateMappedString(value, wireEntries, reader))` → deep-equal the original `wireEntries` (rehydrate→serialize is identity on the wire) | in-memory `SourceReader` (`Record<path,string>`) | Remove the new `segments` property from `rehydrateMappedString`'s returned object ⇒ `serialize` hits the opaque fallback → `[]` ≠ `wireEntries` ⇒ round-trip-identity assertion RED |
+| S6 | `mappedConcatInternal.segments()` contiguity across a 3-child concat (incl. one empty-string child) | assert `segments` starts non-decreasing, each `start==prev.start+prev.length`, `last.start+last.length===value.length` (full cover, no gap/overlap) | none | Remove the `+offsets[i]` shift in `mappedConcatInternal.segments()`\'s `shiftSegments` ⇒ child starts collapse toward 0 ⇒ the `start==prev.start+prev.length` contiguity assertion RED. (Distinct hunk from S2's flatMap; S6 binds the rebase arithmetic, S2 binds the no-coalesce count.) |
+| **S7** | `rehydrateMappedString` (`mapped-source.ts:287`) **passthrough round-trip** | `serializeMappedString(rehydrateMappedString(value, wireEntries, reader))` → deep-equal the original `wireEntries` (rehydrate→serialize is identity on the wire) | in-memory `SourceReader` (`Record<path,string>`) | Remove the new `segments` property from `rehydrateMappedString`\'s returned object ⇒ `serialize` hits the opaque fallback → `[]` ≠ `wireEntries` ⇒ round-trip-identity assertion RED |
 | **S8** | `buildQuartoAPI` (`quarto-api.ts:115`) **public wiring** — add to the existing `quarto-api.test.ts` | `const q = buildQuartoAPI(makeFakeGlobal(), makeFakeHost()); expect(typeof q.mappedString.mappedStringFromChunks).toBe("function")`, then round-trip `q.mappedString.mappedStringFromChunks(...)` → `serializeMappedString` → faithful entries | **reuse the existing `makeFakeHost()`/`makeFakeGlobal()` in `quarto-api.test.ts` (`:20`/`:67`)** — do NOT hand-roll a `PlatformHost`; the \~12 existing pure-namespace tests already prove `buildQuartoAPI` is safe with this fake (it never eagerly touches the host during assembly) | Remove `mappedStringFromChunks` from the `mappedStringNs` literal (`quarto-api.ts:196`) ⇒ `q.mappedString.mappedStringFromChunks` is `undefined` ⇒ the `typeof==="function"` assertion RED. **tsc will NOT catch this** (the `as unknown as QuartoAPI` cast at `:231`); this runtime seam is the only guard. |
 | **S9** | `mappedConcatInternal` opacity propagation (the C1 fix) | `mappedStringFromChunks` with **one file-backed `Range` chunk + one foreign opaque `MappedString` chunk** (a bare `{ value, map }`, no `segments`) → the result has **no `segments`** (`result.segments === undefined`), and `serializeMappedString(result) === []` — **not** a `[{…, source:null}]` synthetic claim | none (hand-built foreign opaque chunk) | Change the "any child opaque ⇒ omit `segments`" branch to synthesize a `source: null` segment for the opaque child ⇒ `result.segments` becomes defined / `serialize` returns a null-segment entry ⇒ the `segments === undefined` (opacity-preserved, decision 3) assertion RED |
 
@@ -359,7 +359,7 @@ which can return `[]`:
 - **`markdownRegex` opacity (`breakQuartoMd`/`partitionCellOptions` → `[]`).** *Accepted-untested,
   deliberately.* Rationale: a test pinning "markdownRegex output serializes to `[]`" would be a
   change-detector that reddens the day someone makes those builders faithful — fighting the documented
-  intended evolution (delegate to `mappedString`'s now-`segments`-bearing builders). The opacity is a
+  intended evolution (delegate to `mappedString`\'s now-`segments`-bearing builders). The opacity is a
   documented v1 limitation, not a contract; pinning it would invert its meaning.
 - **`splitLines` / `normalizeNewlines` inherit `segments()`.** *Covered by delegation* — both route
   through `mappedSubstringInternal` + `mappedConcatInternal`, which S3/S3b/S2/S6 bind directly. No

@@ -51,7 +51,7 @@ Per this epic's own P5 precedent: **file separately, don't block the port on fix
 them.**
 
 1. **`font-paths:` (and brand.yml file-based fonts) are never wired to Typst's
-   `--font-path`.** `crates/quarto-core/src/stage/stages/typst_compile.rs`'s
+   `--font-path`.** `crates/quarto-core/src/stage/stages/typst_compile.rs`\'s
    `font_path_args()` only ever adds the vendored package-cache fonts dir — it never
    reads the `font-paths` metadata key at all (confirmed: zero matches for
    `"font-paths"` anywhere in `crates/**/*.rs`). Reproduced on 3 independent curated

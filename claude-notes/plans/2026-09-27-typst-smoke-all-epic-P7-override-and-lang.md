@@ -46,7 +46,7 @@ Minimal (2 files: `index.qmd` + `chapter1.qmd`), `lang: fr`, `lof/lot: true`. Te
 only 3 `ensureTypstFileRegexMatches` French-localization strings ("Chapitre", "Liste
 des Figures", "Liste des Tables"). **Correction, verified against the real fixture**:
 `index.qmd` *does* set `_quarto.render-project: true` (`index.qmd:4`), and
-`chapter1.qmd` is a real second chapter (`_quarto.yml`'s `book.chapters`) — this is
+`chapter1.qmd` is a real second chapter (`_quarto.yml`\'s `book.chapters`) — this is
 not a single-file-in-project case. It needs P6's whole-book harness like every other
 `orange-book*` fixture; don't strip `render-project: true` during the port on the
 assumption it's unnecessary, and don't let "minimal, 2 files" read as "doesn't need
@@ -71,7 +71,7 @@ comment).
 
 ## Checklist
 
-- [x] Copy both fixtures' tracked source files into
+- [x] Copy both fixtures\' tracked source files into
       `crates/quarto/tests/smoke-all/typst/{orange-book-lang,override-orange-book}/`.
       Excluded generated outputs and caches listed in each source fixture's
       `.gitignore`.
@@ -97,7 +97,7 @@ All P7 tasks finished successfully.
   - Project cache better distinguishes per-file/merged/global outputs
   - Skip behavior correctly triggers before project discovery
   - Per-file failure attribution improved
-- [x] Copy both fixtures' tracked source files into
+- [x] Copy both fixtures\' tracked source files into
       `crates/quarto/tests/smoke-all/typst/{orange-book-lang,override-orange-book}/`.
       Excluded generated outputs and caches listed in each source fixture's
       `.gitignore`.
@@ -131,7 +131,7 @@ directory made the write succeed; deleting the fixture's `.quarto/` first
 (`rm -rf crates/quarto/tests/smoke-all/typst/{orange-book-lang,override-orange-book}/.quarto`)
 reproduces the failure on every run, cold-cache or not.
 
-**Fix:** `crates/quarto-core/src/stage/stages/pandoc_write.rs`'s `PandocWriteStage`
+**Fix:** `crates/quarto-core/src/stage/stages/pandoc_write.rs`\'s `PandocWriteStage`
 now `create_dir_all`s `<project>/.quarto/` before building the filter params
 blob, whenever `!ctx.project.is_single_file` (the same condition
 `insert_project_keys` already gates the param on). This makes the directory's
@@ -140,7 +140,7 @@ render, rather than depending on some other chapter (or a stale directory from
 a previous run) having created it first.
 
 **Verification:**
-- With both fixtures' `.quarto/` deleted (cold): `SMOKE_FILTER=orange-book
+- With both fixtures\' `.quarto/` deleted (cold): `SMOKE_FILTER=orange-book
   cargo nextest run -p quarto --test integration -- smoke_all` → **3 passed**
   (`orange-book/index.qmd`, `orange-book-lang/index.qmd`,
   `override-orange-book/index.qmd`), 7 skipped (book chapters), 0 failed — a log

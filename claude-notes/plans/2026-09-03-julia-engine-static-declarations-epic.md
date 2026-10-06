@@ -86,7 +86,7 @@ investigation (`0f243f64c` on `julia-orphan-triage`).
   needed — q2's extension-contributed engines are registry-only).
 - **Step 3 done (2026-09-23, q2 branch `extension-subtree-infra`):** F5 fixed
   in q2 — `parse_claims_map` now lowercases claim keys at parse time (both the
-  map-entry and list-shorthand forms, mirroring `normalize_ext`'s
+  map-entry and list-shorthand forms, mirroring `normalize_ext`\'s
   file-extensions precedent) and `lookup_static_claim` lowercases the language
   at lookup, so a `{Julia}` cell hits the static/zero-load resolution path it
   already claimed dynamically. TDD: three new tests

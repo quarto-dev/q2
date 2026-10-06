@@ -6,7 +6,7 @@ read "Decided" items 2, 3, 5 first: this work is folded into the epic (not a sep
 plan), the research session that scoped it is gone, and the target is full predicate
 parity, not a reduced subset.
 **Depends on:** P1, P2 (P2 for the pinned fork's MCID surfacing; P1 because it adds
-the `pdf-extract` dependency to `quarto-test`'s `Cargo.toml` in the first place — see
+the `pdf-extract` dependency to `quarto-test`\'s `Cargo.toml` in the first place — see
 the note immediately below — which this phase must re-point at P2's fork before its
 own first checklist item can compile. An earlier draft of this doc and the epic's
 own phase table listed only `P2` here; that was incomplete).
@@ -73,7 +73,7 @@ Typst-produced PDFs today (Typst emits tagged PDFs by default; LaTeX/ConTeXt don
 The top-level call signature is `ensurePdfTextPositions(file, assertions,
 noMatchAssertions?)` — the same two-array (must-hold / must-NOT-hold) wrapper shape
 P1 documents for `ensureFileRegexMatches`. Confirmed by reading real fixtures:
-`margin-layout`'s files use the full `[[...], []]` two-array form, while
+`margin-layout`\'s files use the full `[[...], []]` two-array form, while
 `pdf-text-position-test.qmd` omits the second array entirely — the parser must
 accept both.
 
@@ -103,7 +103,7 @@ to the original inference-derived model:
 
 Q1's `pdf.js`-based predicate never hits either problem, but not because it has an
 explicit guard: `page.getStructTree()` hands back an *already page-scoped* subtree
-per page (so `pdf.js`'s own struct-tree walk never crosses a page boundary), and its
+per page (so `pdf.js`\'s own struct-tree walk never crosses a page boundary), and its
 marked-content identifiers are page-qualified strings (e.g. `"p2R_mc0"`), not bare
 integers. Neither structural guarantee exists for a `lopdf`-based walker reading a
 single document-wide `/StructTreeRoot` — P3 has to build both properties in
@@ -122,7 +122,7 @@ at all — regardless of whether `quarto-test`'s own `pdf-extract` dependency (a
 P1, re-pointed at the git fork by this phase per the note above) is scoped as a dev-
 or regular dependency. (`quarto-core`'s *own* copy of `pdf-extract` is
 `[dev-dependencies]`-scoped, which is why P2 needs no WASM note either — but that
-fact is about `quarto-core` specifically and doesn't carry over to `quarto-test`'s
+fact is about `quarto-core` specifically and doesn't carry over to `quarto-test`\'s
 separate, regular-dependency copy; don't conflate the two.) No `.claude/rules/wasm.md`
 action needed; pure Rust throughout, no platform-specific APIs, so
 `.claude/rules/cross-platform.md` needs no special handling either.
@@ -140,7 +140,7 @@ action needed; pure Rust throughout, no platform-specific APIs, so
       **Closed out in P10 (2026-09-29):** downloaded the real CI-pinned Typst 0.15.1
       binary (`typst-aarch64-apple-darwin` release asset) and re-ran smoke-all against
       it via `QUARTO_TYPST=<path-to-0.15.1-binary>` (no code change, just pointing the
-      pipeline's `find_binary` env override at the other binary). `margin-layout`'s
+      pipeline's `find_binary` env override at the other binary). `margin-layout`\'s
       full 86-fixture set (76 `ensurePdfTextPositions` assertions, the richest
       struct-tree exercise in the epic) — 81 passed, 5 pre-existing skips, 0 failed,
       identical to the 0.14.2 baseline. `orange-book`/`orange-book-margin` — same
@@ -180,7 +180,7 @@ action needed; pure Rust throughout, no platform-specific APIs, so
       hands it an already-page-scoped struct tree per page; a `lopdf`-based walker
       reading one document-wide tree must enforce this scoping explicitly (a real
       `/P` element spanning two pages was observed in the spike above — unioning its
-      descendants' bboxes without a page filter would mix two different pages'
+      descendants\' bboxes without a page filter would mix two different pages\'
       coordinate origins into one meaningless bbox). Page-filtered synthetic regression
       coverage exercises `/Pg` inheritance, MCID 0 on each page, and subtree bbox union.
 - [x] Implement the relation evaluator: 4 directional (`rightOf`, `leftOf`, `above`,
@@ -199,7 +199,7 @@ action needed; pure Rust throughout, no platform-specific APIs, so
 - [x] Implement the `role: "Decoration"` and `role: "Page"` escape hatches (no
       struct-tree lookup needed). Decoration uses first-match raw text-item bounds;
       Page uses the 1-based page media box. Role validation intentionally skips both.
-- [x] Wire `ensurePdfTextPositions` into `spec.rs`'s assertion parser: the two-array
+- [x] Wire `ensurePdfTextPositions` into `spec.rs`\'s assertion parser: the two-array
       `(assertions, noMatchAssertions?)` wrapper (second array must be optional —
       `pdf-text-position-test.qmd` omits it entirely); per-assertion
       `subject`/`relation`/`object`/`byMin`/`byMax`/`tolerance` fields; per-selector

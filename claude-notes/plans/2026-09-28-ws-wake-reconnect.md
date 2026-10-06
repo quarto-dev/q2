@@ -223,7 +223,7 @@ stays `(url, retryInterval)` as upstream:
 
 No UI change. The force-reconnect runs the existing chain: `onClose` →
 `peer-disconnected` (guarded by `remotePeerId`, set during the handshake) →
-`createSyncClient`'s `onConnectionChange(false)` → `setIsOnline(false)` →
+`createSyncClient`\'s `onConnectionChange(false)` → `setIsOnline(false)` →
 badge shows Offline; the reconnect flips it back. The badge is still wrong
 *during* an undetected half-open (see below) — only a heartbeat can fix that.
 

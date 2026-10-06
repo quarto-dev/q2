@@ -72,7 +72,7 @@ renders).
 **The custom crossref kind and brand injection are lower-risk than they look —
 verified during plan review, not just plausible.** A custom `crossref.custom` kind
 needs zero Lua-filter-level extension work: it's Q2's native mechanism
-(`crates/quarto-core/src/crossref/metadata.rs`'s `read_custom`, registered via
+(`crates/quarto-core/src/crossref/metadata.rs`\'s `read_custom`, registered via
 `RefTypeRegistry::register_custom`, `registry.rs:198`) declared purely in
 `_quarto.yml`, not in the vendored extension's own Lua. More importantly, **this
 exact scenario is already proven through the book-merge path on `main` today**:

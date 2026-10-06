@@ -83,7 +83,7 @@ if profile data says so.
 
 The remap was introduced for the no-frontmatter case. Once a user
 explicitly writes `format: html` in YAML they probably do mean
-plain HTML output. But `q2 preview`'s whole shape (AST iframe,
+plain HTML output. But `q2 preview`\'s whole shape (AST iframe,
 React reconciliation, DOM stability) is q2-preview-specific —
 falling back to `html` output is a degraded experience.
 

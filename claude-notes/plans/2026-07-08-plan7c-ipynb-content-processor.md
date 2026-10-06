@@ -57,7 +57,7 @@ resolved by closing bd-zlemoc6w as obsolete.
    The grand-plan table listed `bd-zlemoc6w (provenance)` as a 7c dependency, and
    bd-zlemoc6w's own text asserted "Plan 7c (.ipynb) depends on it for provenance."
    But bd-zlemoc6w is about the **wire path** (`TsMappedStringWithMap`/
-   `markdown_for_file`'s dropped `source_map`, for a TS engine converting a file
+   `markdown_for_file`\'s dropped `source_map`, for a TS engine converting a file
    over the wire), and this plan's ipynb converter is **native Rust, never touches
    the wire path at all** (plain `serde_json` + per-cell virtual `SourceFile`s
    built directly in-process). Gordon's call: the dependency claim came from an
@@ -184,7 +184,7 @@ upstream, and it lands in **Phase 1**, not Phase 4.
 away — `.map(|converted| (converted.markdown, converted.source_info))` drops
 `files` at `traits.rs:281` — and neither the engine-trait return type nor
 `LoadedSource` can carry them (`LoadedSource.conversion` holds only the engine
-name, `data.rs:223-228`). `convert`'s signature stays fixed; the transport from
+name, `data.rs:223-228`). `convert`\'s signature stays fixed; the transport from
 its caller to `ParseDocumentStage` and the error-path rebuild sites is the
 missing piece. Until it is chosen, decision 6's registration obligation is
 unimplementable.
