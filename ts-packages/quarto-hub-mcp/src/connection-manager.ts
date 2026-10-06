@@ -41,6 +41,7 @@ import {
 import type { CredentialStore } from './auth/credential-store.js';
 import { ReauthRequired, type RefreshManager } from './auth/refresh-manager.js';
 import { redactTokens } from './auth/redact.js';
+import { PresenceTracker, type PresenceSnapshotEntry } from './presence-tracker.js';
 import { serversMatch } from './share-url.js';
 
 // ---------------------------------------------------------------------------
@@ -191,6 +192,8 @@ interface ProjectState {
   sidecars: SidecarState;
   /** Pending project-wide waiters (CAP-18). */
   projectWaiters: Set<ProjectChangeWaiter>;
+  /** Passive presence observation (CAP-8) — never broadcasts (Q-3). */
+  presence: PresenceTracker;
   /** The sync server this project is connected through (bd-qt7h8h5g). */
   serverUrl: string;
 }
@@ -535,7 +538,9 @@ export class ConnectionManager {
       peerTimeoutMs: PEER_TIMEOUT_MS,
     });
 
-    const state: ProjectState = { client, files, waiters, sidecars, projectWaiters, serverUrl };
+    const presence = new PresenceTracker(client);
+    presence.attach();
+    const state: ProjectState = { client, files, waiters, sidecars, projectWaiters, presence, serverUrl };
     this.projects.set(this.projectKey(serverUrl, indexDocId), state);
     return state;
   }
@@ -737,16 +742,32 @@ export class ConnectionManager {
       resolveAuthorId,
     );
 
+    const presence = new PresenceTracker(client);
+    presence.attach();
     const state: ProjectState = {
       client,
       files: tempFiles,
       waiters,
       sidecars,
       projectWaiters,
+      presence,
       serverUrl: this.serverUrl,
     };
     this.projects.set(this.projectKey(this.serverUrl, result.indexDocId), state);
     return { indexDocId: result.indexDocId, files: result.files };
+  }
+
+  /**
+   * Passive presence snapshot for `list_presence` (CAP-8): every peer
+   * heard from recently, freshest first. Connects first if needed;
+   * observation starts at connect and never broadcasts anything (Q-3).
+   */
+  async observePresence(
+    indexDocId: string,
+    options?: { server?: string },
+  ): Promise<PresenceSnapshotEntry[]> {
+    const state = await this.connect(indexDocId, options);
+    return state.presence.snapshot();
   }
 
   /**
@@ -799,6 +820,7 @@ export class ConnectionManager {
     for (const w of [...state.projectWaiters]) {
       w.interrupt?.(interruptErr());
     }
+    state.presence.dispose();
     const report = await state.client.disconnect({
       drainMs: options?.drainMs ?? 0,
     });
@@ -867,10 +889,13 @@ export class ConnectionManager {
    */
   async disconnectAll(options?: DisconnectOptions): Promise<void> {
     const results = await Promise.all(
-      Array.from(this.projects.entries()).map(async ([indexDocId, s]) => ({
-        indexDocId,
-        report: await s.client.disconnect(options),
-      })),
+      Array.from(this.projects.entries()).map(async ([indexDocId, s]) => {
+        s.presence.dispose();
+        return {
+          indexDocId,
+          report: await s.client.disconnect(options),
+        };
+      }),
     );
     for (const { indexDocId, report } of results) {
       if (!report.drained) {
@@ -1114,6 +1139,7 @@ export class ConnectionManager {
     await Promise.all(
       entries.map(async ([, s]) => {
         try {
+          s.presence.dispose();
           await s.client.disconnect();
         } catch {
           console.error(

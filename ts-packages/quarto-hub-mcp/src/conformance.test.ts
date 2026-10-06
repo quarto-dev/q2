@@ -61,6 +61,7 @@ const EXPECTED_RW_TOOLS = [
   'get_errors',
   'get_project_info',
   'list_files',
+  'list_presence',
   'list_projects',
   'patch_file',
   'read_file',
@@ -133,6 +134,7 @@ describe('in-memory fixture smoke', () => {
         'get_errors',
         'get_project_info',
         'list_files',
+        'list_presence',
         'list_projects',
         'read_file',
         'search_files',
@@ -286,6 +288,10 @@ const GOLDEN_RESULT_CASES: ReadonlyArray<{
   },
   {
     tool: 'get_project_info',
+    args: (seed) => ({ project: seed.indexDocId }),
+  },
+  {
+    tool: 'list_presence',
     args: (seed) => ({ project: seed.indexDocId }),
   },
   {
@@ -702,6 +708,7 @@ describe('tool titles (BP-9)', () => {
         get_project_info: 'Get project info',
         list_projects: 'List projects in a collection',
         list_files: 'List files',
+        list_presence: 'List collaborators present',
         read_file: 'Read a file',
         search_files: 'Search files',
         wait_for_change: 'Watch for changes',
