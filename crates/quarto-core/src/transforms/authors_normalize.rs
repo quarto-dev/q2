@@ -92,10 +92,61 @@ impl AstTransform for AuthorsNormalizeTransform {
     }
 
     async fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
+        // Pandoc-hybrid targets (typst/docx/pptx/odt/...) run the vendored
+        // `authors.lua` filter downstream, which prefers `meta['authors']`
+        // over raw `meta['author']` when present (see `processAuthorMeta`'s
+        // "prefer to render 'authors' if it is available"). If we write our
+        // own normalized `authors`/`affiliations` here, authors.lua picks
+        // those up instead of the raw frontmatter and crashes indexing an
+        // affiliation ref as an Inlines table when it's actually our plain
+        // string id — the double-normalization bug this gate exists for.
+        //
+        // Every *other* key this transform writes (`by-author`,
+        // `by-affiliation`, `funding`, `labels`) is unconditionally
+        // recomputed and overwritten by `processAuthorMeta` itself once it
+        // runs on the raw data, so leaving them here is harmless noise for
+        // the Pandoc-hybrid leg. `rendered.has-title-block` and
+        // `quarto-template-params.title-block-categories` are Q2-only
+        // template-partial keys `authors.lua` never reads at all.
+        //
+        // Crucially, this transform is *also* the sole source of all these
+        // keys when a pandoc-hybrid-targeted document is rendered through
+        // the native HTML pipeline instead (`q2 preview` on a `format:
+        // typst`/`docx`/... document falls back to the HTML pipeline for
+        // its live preview — see `map_format_for_preview`'s doc comment,
+        // "explicit non-html formats are honoured as-is" — and that leg
+        // never invokes a real `pandoc` subprocess, so `authors.lua` never
+        // runs to backfill anything). Skipping the whole transform for
+        // every pandoc-hybrid-*identified* format (rather than just the
+        // real Pandoc-write leg) silently drops the preview's entire
+        // title-block/author rendering. So only the two raw-shadowing keys
+        // are skipped here — everything else stays unconditional.
+        let is_pandoc_hybrid = ctx.format.identifier.is_pandoc_hybrid();
+        let (prior_authors, prior_affiliations) = if is_pandoc_hybrid {
+            (
+                ast.meta.get("authors").cloned(),
+                ast.meta.get("affiliations").cloned(),
+            )
+        } else {
+            (None, None)
+        };
+
         let issues = normalize_authors_meta(&mut ast.meta);
         for issue in issues {
             ctx.diagnostics.push(DiagnosticMessage::warning(issue));
         }
+
+        if is_pandoc_hybrid {
+            match prior_authors {
+                Some(v) => ast.meta.insert_path(&["authors"], v),
+                None => ast.meta.remove("authors"),
+            }
+            match prior_affiliations {
+                Some(v) => ast.meta.insert_path(&["affiliations"], v),
+                None => ast.meta.remove("affiliations"),
+            }
+        }
+
         Ok(())
     }
 }
@@ -1035,5 +1086,104 @@ mod tests {
             by_author[1].get("letter").and_then(|v| v.as_plain_text()),
             Some("b".to_string())
         );
+    }
+
+    // AstTransform::transform gate: Pandoc-hybrid targets skip writing the
+    // raw-shadowing `authors`/`affiliations` keys (which would confuse the
+    // vendored `authors.lua`, the sole normalizer for that leg), but keep
+    // every other derived key (`by-author`, `labels`, ...) — those are
+    // either harmlessly overwritten again by `authors.lua` downstream, or
+    // (for a pandoc-hybrid-targeted document previewed through the native
+    // HTML pipeline, where `authors.lua` never runs at all) the only
+    // source of the preview's title-block metadata. See the transform's
+    // doc comment.
+    mod transform_gate {
+        use super::*;
+        use crate::format::Format;
+        use crate::project::{DocumentInfo, ProjectConfig, ProjectContext};
+        use crate::render::BinaryDependencies;
+        use std::path::PathBuf;
+
+        fn project() -> ProjectContext {
+            ProjectContext {
+                dir: PathBuf::from("/project"),
+                config: ProjectConfig::default(),
+                is_single_file: true,
+                files: vec![DocumentInfo::from_path("/project/doc.qmd")],
+                output_dir: PathBuf::from("/project"),
+                ..Default::default()
+            }
+        }
+
+        fn run(meta: ConfigValue, format: &str) -> ConfigValue {
+            let project = project();
+            let doc = DocumentInfo::from_path("/project/doc.qmd");
+            let format = Format::from_format_string(format).unwrap();
+            let binaries = BinaryDependencies::new();
+            let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+            let mut ast = Pandoc {
+                meta,
+                ..Default::default()
+            };
+            let transform = AuthorsNormalizeTransform::new();
+            pollster::block_on(transform.transform(&mut ast, &mut ctx)).unwrap();
+            ast.meta
+        }
+
+        #[test]
+        fn typst_target_leaves_raw_authors_key_untouched_but_still_derives_by_author() {
+            let meta = run(map(vec![("author", s("Norah Jones"))]), "typst");
+            // The raw-shadowing keys are not written (there was no
+            // `authors:`/`affiliations:` in the source, so they stay absent
+            // for authors.lua to populate from raw `author:`).
+            assert!(meta.get("authors").is_none());
+            assert!(meta.get("affiliations").is_none());
+            // But by-author/labels — needed by the HTML-preview fallback
+            // for a `format: typst` document, and harmlessly overwritten by
+            // authors.lua for a real Pandoc-hybrid render — are still
+            // derived.
+            assert!(meta.get("by-author").is_some());
+            assert!(meta.get("labels").is_some());
+            assert_eq!(
+                meta.get("author").and_then(|v| v.as_plain_text()),
+                Some("Norah Jones".to_string())
+            );
+        }
+
+        #[test]
+        fn typst_target_restores_a_preexisting_authors_key_rather_than_dropping_it() {
+            // Edge case: the document already declared a structured
+            // `authors:` key (rather than `author:`) directly. The gate
+            // must restore that original value, not just delete whatever
+            // normalize_authors_meta wrote — deleting a user-authored key
+            // would be its own data-loss bug.
+            let original_authors = arr(vec![s("verbatim-sentinel")]);
+            let meta = run(
+                map(vec![
+                    ("author", s("Norah Jones")),
+                    ("authors", original_authors.clone()),
+                ]),
+                "typst",
+            );
+            assert_eq!(
+                meta.get("authors")
+                    .and_then(|v| v.as_array())
+                    .map(|a| a.iter().map(|e| e.as_plain_text()).collect::<Vec<_>>()),
+                original_authors
+                    .as_array()
+                    .map(|a| a.iter().map(|e| e.as_plain_text()).collect::<Vec<_>>())
+            );
+        }
+
+        #[test]
+        fn html_target_still_normalizes_authors_key_too() {
+            let meta = run(map(vec![("author", s("Norah Jones"))]), "html");
+            assert!(meta.get("by-author").is_some());
+            assert!(meta.get("labels").is_some());
+            // Unlike the pandoc-hybrid case, HTML has no downstream Lua
+            // pass, so the Rust-normalized `authors` key is the one and
+            // only source and must be written.
+            assert!(meta.get("authors").is_some());
+        }
     }
 }

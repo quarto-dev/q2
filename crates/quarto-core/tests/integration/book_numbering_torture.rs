@@ -91,7 +91,10 @@ fn write_fixture(project_dir: &Path) {
     write(&project_dir.join("_quarto.yml"), BOOK_QUARTO_YML);
     write(
         &project_dir.join("index.qmd"),
-        "---\ntitle: Home\n---\n\nWelcome to the book.\n",
+        // Unnumbered, not `title: Home`: a front-matter title is now a
+        // numbered chapter heading (Q1 parity), which would shift every
+        // chapter number this test asserts on.
+        "# Home {.unnumbered}\n\nWelcome to the book.\n",
     );
     write(
         &project_dir.join("ch1.qmd"),

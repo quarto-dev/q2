@@ -386,7 +386,9 @@ fn project_fields_are_profile_aware() {
     assert_eq!(project.config.pre_render_scripts[0].command, "gen.py");
     assert_eq!(
         project.output_dir,
-        tmp.path().canonicalize().unwrap().join("_prod"),
+        quarto_system_runtime::canonicalize(tmp.path())
+            .unwrap()
+            .join("_prod"),
         "the resolved ProjectContext.output_dir must honor the overlay"
     );
 }
@@ -461,7 +463,9 @@ fn q_5_22_warning_span_binds_to_the_overlay_file() {
         )
         .collect();
     let matched = quarto_core::config_sources::bind_config_source(&mut ctx, location, candidates);
-    let overlay_path = tmp.path().canonicalize().unwrap().join("_quarto-prod.yml");
+    let overlay_path = quarto_system_runtime::canonicalize(tmp.path())
+        .unwrap()
+        .join("_quarto-prod.yml");
     assert_eq!(
         matched,
         Some(overlay_path.as_path()),
@@ -601,7 +605,7 @@ fn profile_config_paths_record_files_actually_read() {
         Some(&["a", "b"]),
     );
     let project = ok(result);
-    let root = tmp.path().canonicalize().unwrap();
+    let root = quarto_system_runtime::canonicalize(tmp.path()).unwrap();
     assert_eq!(
         project.config.profile_config_paths,
         vec![root.join("_quarto-a.yml"), root.join("_quarto.yml.local")],

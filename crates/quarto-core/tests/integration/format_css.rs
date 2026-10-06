@@ -46,7 +46,7 @@ use quarto_core::render_to_file::{RenderToFileOptions, render_to_file};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
 fn canonical(path: &Path) -> PathBuf {
-    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+    quarto_system_runtime::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 fn write(path: &Path, contents: &str) {
@@ -244,6 +244,53 @@ fn website_extension_css_relocated_to_quarto_contrib() {
         "../../site_libs/quarto-contrib/quarto-project/acme/widget/widget.css",
         "page two levels down",
     );
+}
+
+/// An in-tree extension may contribute css that lives outside the
+/// project (`bundled_file_exists` accepts any existing file). Nothing
+/// is shipped, but the link must stay a page-relative href to the
+/// source, never a filesystem-absolute path.
+#[test]
+fn extension_css_outside_project_links_page_relative() {
+    let temp = TempDir::new().unwrap();
+    let root = canonical(temp.path());
+    let project_dir = root.join("project");
+    write(&root.join("shared.css"), PROJECT_CSS);
+    write(
+        &project_dir.join("_quarto.yml"),
+        "project:\n  type: default\n",
+    );
+    write(
+        &project_dir.join("_extensions/acme/_extension.yml"),
+        "title: Acme\nversion: 1.0.0\ncontributes:\n  formats:\n    html:\n      css: ../../../shared.css\n",
+    );
+    write(
+        &project_dir.join("index.qmd"),
+        "---\ntitle: Home\nformat: acme-html\n---\n\nH.\n",
+    );
+
+    let runtime = runtime_arc();
+    let mut project = ProjectContext::discover(&project_dir, runtime.as_ref()).unwrap();
+    let options = RenderToFileOptions::default();
+    let project_type = project_type_for(&project);
+    let mut pipeline = ProjectPipeline::new(
+        &mut project,
+        project_type,
+        Format::html(),
+        "html",
+        &options,
+        runtime.clone(),
+    );
+    let summary = pollster::block_on(pipeline.run()).expect("pipeline");
+    assert!(
+        summary.pass1_failures.is_empty() && summary.pass2_failures.is_empty(),
+        "unexpected failures: pass1={:?} pass2={:?}",
+        summary.pass1_failures,
+        summary.pass2_failures
+    );
+
+    let html = read(&project_dir.join("index.html"));
+    assert_links_css(&html, "../shared.css", "page next to its source");
 }
 
 // ═══════════════════════════════════════════════════════════════════

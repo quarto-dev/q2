@@ -182,8 +182,7 @@ fn run_test_file_inner(
     project_root: Option<&Path>,
     mut project_cache: Option<&mut ProjectRenderCache>,
 ) -> Result<TestResult> {
-    let path = path
-        .canonicalize()
+    let path = quarto_system_runtime::canonicalize(path)
         .with_context(|| format!("failed to resolve path: {}", path.display()))?;
 
     // Read and parse YAML frontmatter
@@ -512,18 +511,14 @@ fn render_project_document(
         .files
         .iter()
         .map(|file| {
-            file.input
-                .canonicalize()
-                .unwrap_or_else(|_| file.input.clone())
+            quarto_system_runtime::canonicalize(&file.input).unwrap_or_else(|_| file.input.clone())
         })
         .collect();
     let project_messages = diagnostics_to_messages(&summary.project_diagnostics);
     let mut outputs = HashMap::new();
     for output in summary.outputs {
-        let input = output
-            .input_path
-            .canonicalize()
-            .unwrap_or(output.input_path);
+        let input =
+            quarto_system_runtime::canonicalize(&output.input_path).unwrap_or(output.input_path);
         outputs.insert(
             input,
             RenderOutput {

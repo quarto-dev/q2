@@ -144,7 +144,7 @@ jobs:
       # violations one day after the rule itself merged — bd-owmzraf6.)
       - name: Lint hub-client CSS
         shell: bash
-        run: npm run lint:css -w hub-client
+        run: npm run lint:css -w hub-client --if-present
 
       # Deno — needed for engine-host-deno deno-test and the freshness gate.
       # denoland/setup-deno is safe here: this workflow has no "Free disk space"

@@ -212,8 +212,7 @@ async fn run_admin(cmd: AdminCommand) -> anyhow::Result<()> {
             output,
             json,
         } => {
-            let canonical = data_dir
-                .canonicalize()
+            let canonical = quarto_system_runtime::canonicalize(&data_dir)
                 .map_err(|e| anyhow::anyhow!("cannot canonicalize {}: {e}", data_dir.display()))?;
             let automerge_dir = canonical.join("automerge");
             if !automerge_dir.is_dir() {
@@ -366,8 +365,7 @@ async fn main() -> anyhow::Result<()> {
     // Initialize storage based on mode
     let mut storage = if let Some(project) = &args.project {
         // Project mode: watch a local Quarto project
-        let project_root = project
-            .canonicalize()
+        let project_root = quarto_system_runtime::canonicalize(project)
             .expect("Failed to canonicalize project root");
 
         if args.data_dir.is_some() {

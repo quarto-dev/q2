@@ -133,8 +133,7 @@ async fn run(args: PreviewArgs) -> Result<()> {
         let raw = args
             .path
             .unwrap_or_else(|| std::env::current_dir().expect("cwd"));
-        let canonical = raw
-            .canonicalize()
+        let canonical = quarto_system_runtime::canonicalize(&raw)
             .with_context(|| format!("resolving project root {}", raw.display()))?;
         let resolved = resolve_project_and_initial_page(&canonical)?;
         (

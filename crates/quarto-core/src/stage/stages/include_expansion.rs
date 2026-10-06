@@ -281,7 +281,8 @@ impl IncludeExpander<'_> {
             let resolved = resolve_include_target(base_dir, &self.ctx.project.dir, &include_path);
 
             // Canonicalize for cycle detection
-            let canonical = resolved.canonicalize().unwrap_or_else(|_| resolved.clone());
+            let canonical =
+                quarto_system_runtime::canonicalize(&resolved).unwrap_or_else(|_| resolved.clone());
 
             // Check for circular includes
             if self.include_stack.contains(&canonical) {
@@ -562,7 +563,8 @@ impl IncludeExpander<'_> {
 
         for (line_idx, raw_path) in includes {
             let resolved = resolve_include_target(base_dir, &self.ctx.project.dir, &raw_path);
-            let canonical = resolved.canonicalize().unwrap_or_else(|_| resolved.clone());
+            let canonical =
+                quarto_system_runtime::canonicalize(&resolved).unwrap_or_else(|_| resolved.clone());
 
             // A file that embeds itself as a listing would recurse
             // forever: the spliced copy carries the same include line.
@@ -1497,6 +1499,56 @@ mod tests {
                 .any(|d| d.title.contains("Circular")),
             "Expected circular include diagnostic, got: {:?}",
             error.diagnostics
+        );
+    }
+
+    #[test]
+    fn self_include_is_caught_at_the_first_level_on_disk() {
+        // `doc.path` arrives in the runtime's canonical spelling (it is
+        // `DocumentInfo.input`); the cycle check must key on the same
+        // spelling, or the document gets spliced into itself once
+        // before the cycle is noticed.
+        use crate::format::Format;
+        use crate::project::{DocumentInfo, ProjectContext};
+        use quarto_system_runtime::{NativeRuntime, SystemRuntime};
+
+        let temp = tempfile::TempDir::new().unwrap();
+        std::fs::write(temp.path().join("doc.qmd"), "{{< include doc.qmd >}}\n").unwrap();
+        let runtime = NativeRuntime::new();
+        let dir = runtime.canonicalize(temp.path()).unwrap();
+        let doc_path = dir.join("doc.qmd");
+
+        let project = ProjectContext {
+            dir: dir.clone(),
+            is_single_file: true,
+            output_dir: dir.clone(),
+            ..Default::default()
+        };
+        let mut ctx = StageContext::new(
+            Arc::new(runtime),
+            Format::html(),
+            project,
+            DocumentInfo::from_path(&doc_path),
+        )
+        .unwrap();
+        let mut doc = parse_to_doc_ast("{{< include doc.qmd >}}\n", &doc_path.to_string_lossy());
+
+        let error = failure(expand_document_includes(&mut doc, &mut ctx).map(|()| HashSet::new()));
+        assert!(
+            error
+                .diagnostics
+                .iter()
+                .any(|d| d.title.contains("Circular")),
+            "expected a circular include diagnostic, got: {:?}",
+            error.diagnostics
+        );
+        assert!(
+            doc.recorded_includes.is_empty(),
+            "the document was spliced into itself before the cycle was caught: {:?}",
+            doc.recorded_includes
+                .iter()
+                .map(|e| &e.path)
+                .collect::<Vec<_>>()
         );
     }
 

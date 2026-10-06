@@ -1,4 +1,4 @@
-//! `q2 inline-css` — hidden helper for the Pandoc filter chain.
+//! `q2 call inline-css` — hidden helper for the Pandoc filter chain.
 //!
 //! Reads an HTML fragment on stdin and writes it to stdout with the rules of
 //! any `<style>` blocks moved onto the matching elements' `style` attributes.

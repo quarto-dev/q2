@@ -9,6 +9,7 @@
 pub mod bibliography;
 pub mod citeproc;
 pub mod config;
+pub mod images;
 pub mod links;
 pub mod merge;
 // Native-only: drives the render-to-file tail (`crate::render_to_file` is
@@ -26,6 +27,7 @@ pub(crate) mod single_file_render;
 
 pub use bibliography::{aggregate_chapter_citations, build_merged_bibliography};
 pub use citeproc::{set_suppress_bibliography, strip_citeproc_from_filters};
+pub use images::resolve_chapter_image_targets;
 pub use links::resolve_cross_chapter_links;
 pub use merge::merge_book_chapters;
 pub use project_type::{BookProjectType, is_supported_format};

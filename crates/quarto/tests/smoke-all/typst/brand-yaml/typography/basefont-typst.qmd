@@ -1,0 +1,22 @@
+---
+title: "Header logic"
+format:
+  typst:
+    keep-typ: true
+brand:
+  typography:
+    base:
+      family: Libertinus Serif
+_quarto:
+  tests:
+    typst:
+      ensureTypstFileRegexMatches:
+      -
+        - 'heading-family: \("Libertinus Serif",\)'
+---
+
+Some text.
+
+# Header logic so we have the same letters
+
+More text.

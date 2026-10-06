@@ -43,7 +43,7 @@ use quarto_core::project::pass2_renderer::{RenderToPreviewAstRenderer, WasmPassT
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
 fn canonical(path: &Path) -> PathBuf {
-    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+    quarto_system_runtime::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 fn write(path: &Path, contents: &str) {

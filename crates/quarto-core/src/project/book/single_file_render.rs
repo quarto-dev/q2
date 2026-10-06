@@ -295,6 +295,7 @@ pub(crate) async fn render_book_single_file(
         diagnostics.push(DiagnosticMessage::warning(issue));
     }
     crate::project::book::resolve_cross_chapter_links(&mut merged);
+    crate::project::book::resolve_chapter_image_targets(&mut merged);
 
     // Plan Decision 4/6: the merge step is the first thing that knows
     // this render is a book single-file merge — hand that down to
@@ -370,8 +371,12 @@ pub(crate) async fn render_book_single_file(
     let options = crate::render_to_file::RenderToFileOptions::default();
     let effective_options =
         apply_project_output_dir_to_options(&options, project, &synthetic_input);
-    let (output_path, output_dir, output_stem) =
-        determine_output_paths(&synthetic_input, &format.target_format, &effective_options)?;
+    let (output_path, output_dir, output_stem) = determine_output_paths(
+        &synthetic_input,
+        &format.target_format,
+        &effective_options,
+        runtime.as_ref(),
+    )?;
     runtime.dir_create(&output_dir, true).map_err(|e| {
         QuartoError::other(format!(
             "Failed to create output directory {}: {}",

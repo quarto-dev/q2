@@ -1,0 +1,29 @@
+---
+title: "Generic Font Families"
+brand: _brand.yml
+format:
+  typst:
+    keep-typ: true
+_quarto:
+  tests:
+    typst:
+      # Q1 PR #11918 asserts fixed fonts (Noto Sans, DejaVu Sans Mono). Q2
+      # picks the first available candidate per machine, so assert only that
+      # no generic keyword is emitted.
+      ensureTypstFileRegexMatches:
+        -
+          - 'font: \("[^"]+"'
+          - 'codefont: \("[^"]+"'
+        -
+          - '"serif"'
+          - '"sans-serif"'
+          - '"monospace"'
+---
+
+```{=typst}
+#set text(fallback: false)
+```
+
+# Heading
+
+Body text with `inline code`.

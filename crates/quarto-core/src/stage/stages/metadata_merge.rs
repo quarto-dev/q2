@@ -144,6 +144,7 @@ fn build_metadata_contribution_layers(
     extensions: &[Extension],
     base_format: &str,
     document_dir: &Path,
+    project_root: &Path,
 ) -> Vec<ConfigValue> {
     extensions
         .iter()
@@ -160,7 +161,7 @@ fn build_metadata_contribution_layers(
             }
             let wrapped = ConfigValue::new_map(entries, meta.source_info.clone());
             let mut flattened = resolve_format_config(&wrapped, base_format);
-            adjust_paths_to_document_dir(&mut flattened, &ext.path, document_dir);
+            adjust_paths_to_document_dir(&mut flattened, &ext.path, document_dir, project_root);
             Some(flattened)
         })
         .collect()
@@ -264,7 +265,12 @@ impl PipelineStage for MetadataMergeStage {
             .map_or_else(|| ctx.project.dir.clone(), |p| p.to_path_buf());
         let project_layer = ctx.project.config.metadata.as_ref().map(|m| {
             let mut flattened = resolve_format_config(m, base_format);
-            adjust_paths_to_document_dir(&mut flattened, &ctx.project.dir, &document_dir);
+            adjust_paths_to_document_dir(
+                &mut flattened,
+                &ctx.project.dir,
+                &document_dir,
+                &ctx.project.dir,
+            );
             // Mark path-shaped format values (css / theme / include-*) as
             // document-relative Path values against this layer's base
             // (bd-format-css-not-copied-crn3bjdz; generalized for
@@ -287,19 +293,25 @@ impl PipelineStage for MetadataMergeStage {
         // Layer 0 (lowest priority): extension `contributes.metadata`
         // (non-`project` keys; bd-ad7i1pc6 Phase 5). Sits below the
         // project config so everything user-written wins over it.
-        let metadata_contribution_layers =
-            build_metadata_contribution_layers(&ctx.extensions, base_format, &document_dir);
+        let metadata_contribution_layers = build_metadata_contribution_layers(
+            &ctx.extensions,
+            base_format,
+            &document_dir,
+            &ctx.project.dir,
+        );
 
         // Layer 2: Extension metadata (uses full target_format for lookup)
         // Adjust !path values from extension dir to document dir
         let is_book = ctx.project.config.project_kind == crate::project::ProjectKind::Book;
-        let extension_layer =
-            build_extension_metadata_layer(&ctx.extensions, target_format, is_book).map(
-                |(mut config, ext_dir)| {
-                    adjust_paths_to_document_dir(&mut config, &ext_dir, &document_dir);
-                    config
-                },
-            );
+        let extension_layer = build_extension_metadata_layer(
+            &ctx.extensions,
+            target_format,
+            is_book,
+        )
+        .map(|(mut config, ext_dir)| {
+            adjust_paths_to_document_dir(&mut config, &ext_dir, &document_dir, &ctx.project.dir);
+            config
+        });
 
         // Layer 3: Directory metadata layers (each flattened for base format)
         let dir_layer_entries: Vec<(PathBuf, ConfigValue)> = if !ctx.project.is_single_file {
@@ -2166,7 +2178,7 @@ mod tests {
             author: Some("Test".to_string()),
             version: None,
             quarto_required: None,
-            path: PathBuf::from("/extensions").join(name),
+            path: PathBuf::from("/project/_extensions").join(name),
             contributes: Contributes {
                 metadata: Some(metadata),
                 ..Default::default()
@@ -2189,7 +2201,12 @@ mod tests {
         ]);
         let ext = make_metadata_extension("meta-ext", meta);
 
-        let layers = build_metadata_contribution_layers(&[ext], "html", Path::new("/project"));
+        let layers = build_metadata_contribution_layers(
+            &[ext],
+            "html",
+            Path::new("/project"),
+            Path::new("/project"),
+        );
         assert_eq!(layers.len(), 1);
         let layer = &layers[0];
         assert!(
@@ -2216,11 +2233,16 @@ mod tests {
         let meta = config_map(vec![("css", css)]);
         let ext = make_metadata_extension("meta-ext", meta);
 
-        let layers = build_metadata_contribution_layers(&[ext], "html", Path::new("/project"));
+        let layers = build_metadata_contribution_layers(
+            &[ext],
+            "html",
+            Path::new("/project"),
+            Path::new("/project"),
+        );
         assert_eq!(layers.len(), 1);
         assert_eq!(
             layers[0].get("css").and_then(|v| v.as_str()),
-            Some("../extensions/meta-ext/assets/extra.css"),
+            Some("_extensions/meta-ext/assets/extra.css"),
             "Path-kind values rebase ext dir → document dir"
         );
     }
@@ -2232,7 +2254,12 @@ mod tests {
             config_map(vec![("pre-render", config_str("x.ts"))]),
         )]);
         let ext = make_metadata_extension("meta-ext", meta);
-        let layers = build_metadata_contribution_layers(&[ext], "html", Path::new("/project"));
+        let layers = build_metadata_contribution_layers(
+            &[ext],
+            "html",
+            Path::new("/project"),
+            Path::new("/project"),
+        );
         assert!(layers.is_empty());
     }
 

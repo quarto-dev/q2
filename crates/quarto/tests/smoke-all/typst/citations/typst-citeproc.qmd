@@ -1,0 +1,29 @@
+---
+title: "Citeproc and Typst"
+format:
+  typst:
+    keep-typ: true
+bibliography: refs.bib
+citeproc: true
+_quarto:
+  tests:
+    typst:
+      ensureTypstFileRegexMatches:
+      - ['<refs>', '<ref-Cronbach_1951>']
+      - ['\#bibliography\([^)]*\)']
+      ensurePdfRegexMatches:
+      # Q1's fixture expects the locator without "p." here; Q2 (like pandoc's
+      # citeproc) keeps it, as the no-citeproc fixture also asserts.
+      # Pandoc collapses the same-author cluster to "(Cronbach 1951a, 1951b)";
+      # Q2's citeproc repeats the author ("; Cronbach 1951b"), so accept both
+      # (see bd-citeproc-cluster-collapse-kns8uggw).
+      - ['\(Cronbach 1951a[,;] (Cronbach )?1951b\)', '\(Cronbach 1951a, p\. 42\)']
+      - []
+      noErrors: default
+---
+
+Hello [@Cronbach_1951; @Cronbach_1952]
+
+With locator: [@Cronbach_1951, p. 42]
+
+# References

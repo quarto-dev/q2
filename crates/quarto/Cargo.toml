@@ -13,7 +13,7 @@ path = "src/main.rs"
 
 [dependencies]
 clap.workspace = true
-# Backs the hidden `inline-css` subcommand (Q1's juice step). Default features
+# Backs the hidden `call inline-css` subcommand (Q1's juice step). Default features
 # (remote/file stylesheet loading, rayon) stay off.
 css-inline = { version = "0.21", default-features = false }
 # Global allocator for the native CLI; see the `#[global_allocator]` in main.rs.
@@ -94,6 +94,10 @@ openssl-sys = { version = "0.9", optional = true }
 vendored-openssl = ["dep:openssl-sys", "openssl-sys/vendored"]
 
 [dev-dependencies]
+# Tells whether a Windows path has a plain (non-`\\?\`) form, for the
+# wire-path precondition in the E2E tests (json_errors, render_cli_e2e,
+# render_scripts_cli).
+dunce = "1"
 tempfile = "3"
 pampa.workspace = true
 sha2 = "0.11"

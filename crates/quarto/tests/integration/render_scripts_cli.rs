@@ -32,8 +32,9 @@ fn write_file(path: &Path, contents: &str) {
     std::fs::write(path, contents).unwrap();
 }
 
+// Same function the runtime seam uses, so expected paths share its spelling.
 fn canonical(p: &Path) -> PathBuf {
-    p.canonicalize().unwrap_or_else(|_| p.to_path_buf())
+    quarto_system_runtime::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
 }
 
 /// Run `q2 render <args...>` from `cwd` with extra environment
@@ -222,16 +223,27 @@ fn post_render_script_receives_output_files() {
         dump_value(&dump, "QUARTO_PROJECT_INPUT_FILES").is_none(),
         "INPUT_FILES is pre-render-only"
     );
-    // Shared vars.
-    assert_eq!(
-        dump_value(&dump, "QUARTO_PROJECT_DIR").map(Path::new),
-        Some(project.as_path()),
-        "QUARTO_PROJECT_DIR should be the absolute project dir"
+    // Shared vars. `project` is spelled by the shared canonicalize, so
+    // these also pin that q2 emits the same spelling.
+    let project_dir = dump_value(&dump, "QUARTO_PROJECT_DIR").expect("PROJECT_DIR set");
+    assert!(
+        Path::new(project_dir).is_absolute(),
+        "QUARTO_PROJECT_DIR should be absolute: {project_dir}"
     );
     assert_eq!(
-        dump_value(&dump, "QUARTO_PROJECT_OUTPUT_DIR").map(Path::new),
-        Some(project.join("_site").as_path()),
-        "QUARTO_PROJECT_OUTPUT_DIR should be the absolute output dir"
+        Path::new(project_dir),
+        project.as_path(),
+        "QUARTO_PROJECT_DIR should be the project dir"
+    );
+    let output_dir = dump_value(&dump, "QUARTO_PROJECT_OUTPUT_DIR").expect("OUTPUT_DIR set");
+    assert!(
+        Path::new(output_dir).is_absolute(),
+        "QUARTO_PROJECT_OUTPUT_DIR should be absolute: {output_dir}"
+    );
+    assert_eq!(
+        Path::new(output_dir),
+        project.join("_site").as_path(),
+        "QUARTO_PROJECT_OUTPUT_DIR should be the output dir"
     );
 }
 
@@ -270,14 +282,56 @@ fn env_contract_full_render() {
             "INPUT_FILES should list {expected}; got: {listed:?}"
         );
     }
-    assert_eq!(
-        dump_value(&dump, "QUARTO_PROJECT_DIR").map(Path::new),
-        Some(project.as_path()),
+    // Same spelling as the shared canonicalize (`project`).
+    let project_dir = dump_value(&dump, "QUARTO_PROJECT_DIR").expect("PROJECT_DIR set");
+    assert!(
+        Path::new(project_dir).is_absolute(),
+        "QUARTO_PROJECT_DIR should be absolute: {project_dir}"
     );
+    assert_eq!(Path::new(project_dir), project.as_path());
     // Post-render-only var must be absent during pre-render.
     assert!(
         dump_value(&dump, "QUARTO_PROJECT_OUTPUT_FILES").is_none(),
         "OUTPUT_FILES is post-render-only"
+    );
+}
+
+/// `QUARTO_PROJECT_DIR` hands user scripts the plain path whenever one
+/// exists, so no Windows `\\?\` verbatim prefix. Runs from a plain cwd,
+/// as a user would, so any verbatim prefix comes from q2 itself.
+#[test]
+fn project_dir_env_is_a_plain_path() {
+    require_python!();
+    let temp = TempDir::new().unwrap();
+    let project = dunce::simplified(&std::fs::canonicalize(temp.path()).unwrap()).to_path_buf();
+    assert!(
+        !project.to_string_lossy().starts_with(r"\\?\"),
+        "test setup: the TEMP root gives the fixture no plain path form: {}",
+        project.display()
+    );
+    write_minimal_project(
+        &project,
+        "project:\n  type: website\n  output-dir: _site\n  pre-render: dump.py\n",
+    );
+    write_file(&project.join("dump.py"), &env_dump_script("pre-env.txt"));
+
+    let out = run_q2(&project, &[]);
+    assert!(
+        out.status.success(),
+        "render should succeed; stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let dump = read_env_dump(&project.join("pre-env.txt"));
+    let project_dir = dump_value(&dump, "QUARTO_PROJECT_DIR").expect("PROJECT_DIR set");
+    assert!(
+        !project_dir.starts_with(r"\\?\"),
+        "QUARTO_PROJECT_DIR must be a plain path, got: {project_dir}"
+    );
+    assert_eq!(
+        std::fs::canonicalize(project_dir).unwrap(),
+        std::fs::canonicalize(&project).unwrap(),
+        "QUARTO_PROJECT_DIR should be the project dir, got: {project_dir}"
     );
 }
 

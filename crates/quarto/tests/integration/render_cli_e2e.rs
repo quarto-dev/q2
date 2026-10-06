@@ -79,6 +79,44 @@ fn write_minimal_website(project_dir: &Path) {
 
 // === Tests ============================================================
 
+/// The `Rendering single file:` status line names the input by its
+/// plain path whenever one exists, so no Windows `\\?\` verbatim
+/// prefix. Runs from a plain cwd with a relative argument, as a user
+/// would, so any verbatim prefix comes from q2 itself.
+#[test]
+fn single_file_status_line_shows_a_plain_path() {
+    let temp = TempDir::new().unwrap();
+    let dir = dunce::simplified(&canonical(temp.path())).to_path_buf();
+    let fixture = dir.join("doc.qmd");
+    write_file(&fixture, "---\ntitle: Doc\n---\n\nBody.\n");
+    // The whole fixture path, not just its directory, must have a plain
+    // form: the file name can push a near-MAX_PATH directory past it.
+    assert!(
+        !dunce::simplified(&canonical(&fixture))
+            .to_string_lossy()
+            .starts_with(r"\\?\"),
+        "test setup: the TEMP root gives the fixture no plain path form: {}",
+        fixture.display()
+    );
+
+    let out = run_q2(&dir, &["doc.qmd"]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "render failed:\nstderr: {stderr}");
+    let shown = stderr
+        .lines()
+        .find_map(|l| l.strip_prefix("Rendering single file: "))
+        .unwrap_or_else(|| panic!("expected a status line; stderr:\n{stderr}"));
+    assert!(
+        !shown.starts_with(r"\\?\"),
+        "status line must show a plain path, got: {shown}"
+    );
+    assert_eq!(
+        canonical(Path::new(shown)),
+        canonical(&dir.join("doc.qmd")),
+        "status line must name the input, got: {shown}"
+    );
+}
+
 /// Test 53: `--clean-cache` wipes the profile cache and the
 /// nav-config-hash sentinel before the render runs. The
 /// subsequent render then re-populates the profile cache.
@@ -674,6 +712,77 @@ fn output_equal_to_input_refuses_and_preserves_source() {
     );
     let after = std::fs::read_to_string(&abs).expect("source still exists");
     assert_eq!(after, source, "source file must be untouched");
+}
+
+/// Runs `q2 render doc.qmd --output <output>` from `dir` and asserts the
+/// overwrite refusal plus an untouched source.
+fn assert_output_spelling_refused(dir: &Path, output: &Path) {
+    let source = "---\ntitle: T\n---\n\nhello\n";
+    let input = dir.join("doc.qmd");
+    write_file(&input, source);
+
+    let out = run_q2(dir, &["doc.qmd", "--output", output.to_str().unwrap()]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success(),
+        "expected refusal when --output {} names the input; stderr: {stderr}",
+        output.display(),
+    );
+    assert!(
+        stderr.contains("overwrite"),
+        "error should explain the overwrite refusal; got stderr: {stderr}",
+    );
+    let after = std::fs::read_to_string(&input).expect("source still exists");
+    assert_eq!(after, source, "source file must be untouched");
+}
+
+/// bd-1klbq2zd: the overwrite guard compares files, not spellings. A
+/// `sub/..` detour names the input on every OS (`sub/` exists, so the
+/// path resolves) yet differs lexically from it. The detour hangs off the
+/// plain form because `PathBuf::push` folds `..` away under a `\\?\` base.
+#[test]
+fn output_via_dotdot_spelling_of_input_refuses_and_preserves_source() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    std::fs::create_dir_all(dir.join("sub")).unwrap();
+    let detour = dunce::simplified(&dir)
+        .join("sub")
+        .join("..")
+        .join("doc.qmd");
+    assert!(
+        detour
+            .components()
+            .any(|c| c == std::path::Component::ParentDir),
+        "the output spelling must keep its `..`: {}",
+        detour.display(),
+    );
+    assert_output_spelling_refused(&dir, &detour);
+}
+
+/// bd-1klbq2zd: on Windows the same file has a plain `C:\…` and a
+/// verbatim `\\?\C:\…` spelling. q2 gives its canonicalized input the
+/// plain one (the shared canonicalize, not this file's std `canonical`),
+/// so the output uses the verbatim one and differs lexically from it.
+/// Elsewhere there is one spelling and this matches the test above
+/// without the detour.
+#[test]
+fn output_via_other_windows_spelling_of_input_refuses_and_preserves_source() {
+    let temp = TempDir::new().unwrap();
+    let dir = canonical(temp.path());
+    let q2_dir = quarto_system_runtime::canonicalize(temp.path()).unwrap();
+    let other = if cfg!(windows) {
+        // The shared canonicalize keeps `\\?\` only where no plain form
+        // exists (network share, past MAX_PATH); such a TEMP has no alias.
+        let spelled = q2_dir.display().to_string();
+        assert!(
+            !spelled.starts_with(r"\\?\"),
+            "test setup: TEMP must resolve to a local path with a plain form: {spelled}"
+        );
+        PathBuf::from(format!(r"\\?\{spelled}"))
+    } else {
+        dir.clone()
+    };
+    assert_output_spelling_refused(&dir, &other.join("doc.qmd"));
 }
 
 /// bd-6d2wj4zp S3: single-file format detection reads `.md` front

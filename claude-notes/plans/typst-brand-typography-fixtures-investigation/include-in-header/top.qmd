@@ -1,0 +1,10 @@
+---
+format:
+  typst:
+    keep-typ: true
+include-in-header:
+  text: |
+    #set text(weight: 100) // TOPLEVEL
+---
+
+hi
