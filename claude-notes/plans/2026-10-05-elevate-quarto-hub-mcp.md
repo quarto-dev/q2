@@ -421,7 +421,7 @@ Test specifications (all red before implementation):
 - [x] Wrong-typed argument (`path: 42`, missing `project`) → `isError` result
   naming the offending parameter and expected type (BP-2; SEP-1303 — tool
   execution error, not protocol error).
-- [ ] Client-cancelled `wait_for_change` → prompt cancellation, no listener
+- [x] Client-cancelled `wait_for_change` → prompt cancellation, no listener
   leak (BP-3; Phase 0 harness asserts).
 - [ ] `list_files` result carries `structuredContent` matching its
   `outputSchema`, with the JSON text fallback retained (BP-1).
@@ -538,7 +538,7 @@ intended.
   (deprecated `initSync()` params — un-deferred and re-scoped to the
   initSync wart only; both are Phase 1 children in braid, so both gate
   this phase's close).
-- [ ] BP-3: thread `extra.signal` through `handleTool` →
+- [x] BP-3: thread `extra.signal` through `handleTool` →
   `ConnectionManager.waitForChange(..., { signal })` and connect paths where
   feasible; abort unregisters listeners.
 - [ ] BP-1: `outputSchema` + `structuredContent` for `connect_project`,
