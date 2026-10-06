@@ -434,6 +434,7 @@ type DataToolName =
   | 'connect_project'
   | 'list_files'
   | 'read_file'
+  | 'search_files'
   | 'wait_for_change'
   | 'write_file'
   | 'patch_file'
@@ -486,6 +487,8 @@ async function handleTool(
       return handleListFiles(args, manager);
     case 'read_file':
       return handleReadFile(args, manager);
+    case 'search_files':
+      return handleSearchFiles(args, manager);
     case 'wait_for_change':
       return handleWaitForChange(args, manager, extras);
     case 'write_file':
@@ -684,6 +687,104 @@ async function handleReadFile(args: ToolArgs, manager: ConnectionManager): Promi
     total_lines: window.totalLines,
     next_offset: window.nextOffset,
     ...(window.hint ? { hint: window.hint } : {}),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// CAP-7: search_files
+// ---------------------------------------------------------------------------
+
+/** Snippet budget per match line. Long lines are centered on the match. */
+const SNIPPET_MAX_CHARS = 200;
+
+function makeSnippet(line: string, matchIndex: number, matchLength: number): string {
+  const trimmed = line.trim();
+  if (trimmed.length <= SNIPPET_MAX_CHARS) return trimmed;
+  // Center a SNIPPET_MAX_CHARS window on the match (in raw-line coords).
+  let start = Math.max(0, matchIndex - Math.floor((SNIPPET_MAX_CHARS - matchLength) / 2));
+  const end = Math.min(line.length, start + SNIPPET_MAX_CHARS);
+  start = Math.max(0, end - SNIPPET_MAX_CHARS);
+  const prefix = start > 0 ? '…' : '';
+  const suffix = end < line.length ? '…' : '';
+  return `${prefix}${line.slice(start, end).trim()}${suffix}`;
+}
+
+async function handleSearchFiles(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
+  const project = args.project as string;
+  const query = args.query as string;
+  const useRegex = args.regex === true;
+  const caseSensitive = args.case_sensitive === true;
+  const maxResults = typeof args.max_results === 'number' ? args.max_results : 20;
+  if (query === '') {
+    return error(
+      'Error: parameter `query` must not be empty — pass a substring (or a pattern with `regex: true`) to search for.',
+    );
+  }
+  const state = await manager.connect(project, { server: routedServer(args) });
+
+  // A line matcher: the match's start index in the line, or -1.
+  let matcher: (line: string) => number;
+  if (useRegex) {
+    let re: RegExp;
+    try {
+      re = new RegExp(query, caseSensitive ? '' : 'i');
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      return error(
+        `Error: parameter \`query\` is not a valid regular expression (${detail}). ` +
+          'Fix the pattern, or pass `regex: false` (the default) for a plain substring search.',
+      );
+    }
+    matcher = (line) => {
+      const m = re.exec(line);
+      return m === null ? -1 : m.index;
+    };
+  } else {
+    matcher = (line) =>
+      caseSensitive
+        ? line.indexOf(query)
+        : line.toLowerCase().indexOf(query.toLowerCase());
+  }
+
+  // Scan text files in path order; binaries and dangling entries have
+  // no searchable text. One snippet per matching line.
+  const perFile = new Map<string, Array<{ line: number; snippet: string }>>();
+  let totalMatches = 0;
+  let filesSearched = 0;
+  const paths = [...state.files.keys()].sort();
+  for (const path of paths) {
+    const payload = state.files.get(path)!;
+    if (payload.type !== 'text') continue;
+    filesSearched++;
+    const lines = splitLines(payload.text);
+    for (let i = 0; i < lines.length; i++) {
+      const idx = matcher(lines[i]);
+      if (idx === -1) continue;
+      totalMatches++;
+      const found = perFile.get(path) ?? [];
+      found.push({ line: i + 1, snippet: makeSnippet(lines[i], idx, query.length) });
+      perFile.set(path, found);
+    }
+  }
+
+  // Rank: per-file match count desc, then path asc (deterministic).
+  const ranked = [...perFile.entries()].sort(
+    (a, b) => b[1].length - a[1].length || (a[0] < b[0] ? -1 : 1),
+  );
+  const matches: Array<{ path: string; line: number; snippet: string }> = [];
+  for (const [path, fileMatches] of ranked) {
+    for (const m of fileMatches) {
+      if (matches.length >= maxResults) break;
+      matches.push({ path, line: m.line, snippet: m.snippet });
+    }
+    if (matches.length >= maxResults) break;
+  }
+
+  return structured({
+    matches,
+    total_matches: totalMatches,
+    files_searched: filesSearched,
+    truncated: totalMatches > matches.length,
   });
 }
 
@@ -1192,6 +1293,19 @@ const outRenameFile = z.object({
   synced: z.boolean().optional(),
 });
 
+const outSearchFiles = z.object({
+  matches: z.array(
+    z.object({
+      path: z.string(),
+      line: z.number(),
+      snippet: z.string(),
+    }),
+  ),
+  total_matches: z.number(),
+  files_searched: z.number(),
+  truncated: z.boolean(),
+});
+
 const outCreateFolder = z.object({
   path: z.string(),
   created: z.boolean(),
@@ -1319,6 +1433,35 @@ export function registerTools(
       annotations: ANNOT_READ,
     },
     (args) => runDataTool('read_file', args, manager),
+  );
+
+  server.registerTool(
+    'search_files',
+    {
+      title: 'Search files',
+      description:
+        'Search the content of every text file in a Quarto Hub project (binaries are skipped). ' +
+        'Plain substring by default (case-insensitive unless `case_sensitive`), or a regular ' +
+        'expression with `regex: true`. Returns matching lines as `{ path, line, snippet }` ' +
+        'ranked by per-file match count, capped by `max_results` (`truncated: true` when capped). ' +
+        'Use read_file with `offset` around a hit to see full context.',
+      inputSchema: z.object({
+        project: projectParam,
+        query: z.string().describe('The substring (or regex pattern with `regex: true`) to search for'),
+        regex: z.boolean().optional().describe('Treat `query` as a regular expression (default false)'),
+        case_sensitive: z.boolean().optional().describe('Case-sensitive matching (default false)'),
+        max_results: z
+          .number()
+          .int()
+          .min(1)
+          .max(100)
+          .optional()
+          .describe('Maximum matches to return (default 20, max 100)'),
+      }),
+      outputSchema: outSearchFiles,
+      annotations: ANNOT_READ,
+    },
+    (args) => runDataTool('search_files', args, manager),
   );
 
   server.registerTool(
