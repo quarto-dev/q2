@@ -12,6 +12,7 @@ import {
   seedProject,
   callTool,
 } from './in-memory-fixture.js';
+import { PARSER_UNAVAILABLE } from './test-setup.js';
 
 const QMD = [
   '---',
@@ -60,7 +61,7 @@ function structuredOf(result: { structuredContent?: unknown; content?: unknown }
   return sc as OutlineResult;
 }
 
-describe('get_outline (CAP-11)', () => {
+describe.skipIf(PARSER_UNAVAILABLE)('get_outline (CAP-11)', () => {
   it('returns the heading tree of a qmd file with line ranges', async () => {
     const f = await startInMemoryMcp();
     try {

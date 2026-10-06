@@ -30,10 +30,12 @@ server bundle (bd-sca6g1tu):
 - `quarto-hub-mcp-<version>.tar.gz` — the same MCP server that's embedded
   in `q2`, packaged as a self-contained Node bundle so it can be run
   directly (`node index.mjs`) without installing `q2`. One *universal*
-  bundle (not per-platform): `index.mjs` is byte-identical everywhere and
-  every `@napi-rs/keyring` platform addon is co-staged, so it runs on any
-  OS/arch with Node 24+. Built by the `hub-mcp-bundle` job; includes a
-  `README.md` and `NOTICE`.
+  bundle (not per-platform): `index.mjs` is byte-identical everywhere,
+  every `@napi-rs/keyring` platform addon is co-staged, and the
+  platform-independent `wasm-qmd-parser` pkg (CAP-11) is built once in
+  `web-payloads` and staged by every bundle leg without rebuilding, so it
+  runs on any OS/arch with Node 24+. Built by the `hub-mcp-bundle` job;
+  includes a `README.md` and `NOTICE`.
 - `quarto-hub-mcp-<version>.tar.gz.sha256` / `.minisig` — checksum +
   signature (same minisign key as the binaries; its `.sha256` is also
   folded into `checksums.sha256`).

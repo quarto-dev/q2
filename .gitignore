@@ -106,6 +106,7 @@ agents-docs-dist/
 # hub-mcp eval suite raw stream-json (bulky; the condensed transcript-*.md
 # and summary.json ARE committed per the plan's "commit the transcripts").
 ts-packages/quarto-hub-mcp/eval/results/*/raw/
+ts-packages/quarto-hub-mcp/.qmd-parser-unavailable
 
 # pandoc.wasm download cache and the served asset (scripts/fetch-pandoc-wasm.mjs)
 .cache/pandoc-wasm/
