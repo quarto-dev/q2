@@ -173,6 +173,59 @@ function unavailableFileError(path: string, docId: string): CallToolResult {
   );
 }
 
+// ---------------------------------------------------------------------------
+// ERG-4: actionable not-found errors (parameter, state, next tool, near paths)
+// ---------------------------------------------------------------------------
+
+/** Character bigrams of `s` — the similarity alphabet for near-path hints. */
+function bigrams(s: string): Set<string> {
+  const out = new Set<string>();
+  for (let i = 0; i < s.length - 1; i++) out.add(s.slice(i, i + 2));
+  return out;
+}
+
+/** Dice coefficient over character bigrams: cheap, deterministic typo ranking. */
+function pathSimilarity(a: string, b: string): number {
+  const A = bigrams(a);
+  const B = bigrams(b);
+  if (A.size === 0 || B.size === 0) return 0;
+  let overlap = 0;
+  for (const g of A) if (B.has(g)) overlap++;
+  return (2 * overlap) / (A.size + B.size);
+}
+
+/** Up to `limit` closest existing paths to `target`, best first (ties alphabetical). */
+function closestPaths(target: string, candidates: Iterable<string>, limit = 3): string[] {
+  return [...candidates]
+    .map((p) => ({ p, score: pathSimilarity(target, p) }))
+    .filter((c) => c.score > 0)
+    .sort((x, y) => y.score - x.score || (x.p < y.p ? -1 : 1))
+    .slice(0, limit)
+    .map((c) => c.p);
+}
+
+/** Every path the project knows about, loaded or dangling. */
+function allPaths(state: ProjectState): string[] {
+  return [...state.files.keys(), ...state.client.getUnavailableFiles().map((f) => f.path)];
+}
+
+/**
+ * The ERG-4 not-found error: names the failing parameter and the current
+ * state, points at `list_files`, and lists up to three closest existing
+ * paths so a typo self-corrects in one call instead of three.
+ */
+function fileNotFoundError(path: string, state: ProjectState): CallToolResult {
+  const paths = allPaths(state);
+  const near = closestPaths(path, paths);
+  let msg =
+    `Error: File not found: "${path}". The project has ` +
+    `${paths.length} file${paths.length === 1 ? '' : 's'}; call list_files to see them.`;
+  if (near.length > 0) {
+    msg += ` Closest existing paths: ${near.map((p) => `"${p}"`).join(', ')}.`;
+  }
+  return error(msg);
+}
+
 /** The data tools (everything except the auth tools). */
 type DataToolName =
   | 'connect_project'
@@ -294,10 +347,12 @@ async function handleReadFile(args: ToolArgs, manager: ConnectionManager): Promi
     if (ghost) {
       return unavailableFileError(path, ghost.docId);
     }
-    return error(`Error: File not found: ${path}`);
+    return fileNotFoundError(path, state);
   }
   if (payload.type === 'binary') {
-    return error(`Error: ${path} is a binary file. Use read_binary_file_metadata instead.`);
+    // HY-1 interim: binary reads land in read_file in Phase 2 (CAP-4);
+    // until then say so — never name a tool that does not exist.
+    return error(`Error: ${path} is a binary file; read_file currently supports text files only.`);
   }
   return text(
     JSON.stringify({ path, hash: hashPayload(payload), content: payload.text }, null, 2),
@@ -416,7 +471,7 @@ async function handlePatchFile(args: ToolArgs, manager: ConnectionManager): Prom
     if (ghost) {
       return unavailableFileError(path, ghost.docId);
     }
-    return error(`Error: File not found: ${path}`);
+    return fileNotFoundError(path, state);
   }
   if (payload.type === 'binary') {
     return error(`Error: ${path} is a binary file. Cannot patch.`);
@@ -428,7 +483,10 @@ async function handlePatchFile(args: ToolArgs, manager: ConnectionManager): Prom
   const currentContent = payload.text;
   const index = currentContent.indexOf(oldString);
   if (index === -1) {
-    return error(`Error: old_string not found in ${path}`);
+    return error(
+      `Error: old_string not found in ${path}. The file may have changed since you read it — ` +
+        'call read_file for the current content (and its hash), then retry with an exact substring.',
+    );
   }
 
   const secondIndex = currentContent.indexOf(oldString, index + 1);
@@ -495,7 +553,7 @@ async function handleDeleteFile(args: ToolArgs, manager: ConnectionManager): Pro
   // ghost entry (bd-vm5e5u10; the 2026-06-12 incident needed manual
   // index surgery precisely because this path didn't exist).
   if (!state.files.has(path) && !findUnavailable(state.client, path)) {
-    return error(`Error: File not found: ${path}`);
+    return fileNotFoundError(path, state);
   }
 
   state.client.deleteFile(path);
@@ -516,10 +574,13 @@ async function handleRenameFile(args: ToolArgs, manager: ConnectionManager): Pro
 
   // Renaming only edits the index, so a dangling entry can be renamed.
   if (!state.files.has(oldPath) && !findUnavailable(state.client, oldPath)) {
-    return error(`Error: File not found: ${oldPath}`);
+    return fileNotFoundError(oldPath, state);
   }
   if (state.files.has(newPath) || findUnavailable(state.client, newPath)) {
-    return error(`Error: Destination already exists: ${newPath}`);
+    return error(
+      `Error: Destination already exists: ${newPath} — rename_file does not overwrite. ` +
+        `Choose a different new_path, or delete_file "${newPath}" first if replacing it is intended.`,
+    );
   }
 
   state.client.renameFile(oldPath, newPath);

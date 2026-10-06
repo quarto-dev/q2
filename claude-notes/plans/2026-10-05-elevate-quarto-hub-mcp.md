@@ -438,7 +438,7 @@ Test specifications (all red before implementation):
 - [x] `write_file` result carries `synced: true` once the in-process hub has
   acknowledged the change; with the hub stalled, `synced: false` within the
   bound, and the write still lands when the hub returns (ERG-2).
-- [ ] `read_file` on a missing path names `list_files` and the closest
+- [x] `read_file` on a missing path names `list_files` and the closest
   existing paths (ERG-4); an unknown tool name is a JSON-RPC `-32602` error,
   not an `isError` result (BP-15).
 - [x] `tools/list` order is identical across calls and carries `ttlMs`
@@ -528,7 +528,7 @@ intended.
   ≈2 s, `wait_for_sync: false` opt-out); needs one sync-client export
   (`awaitDelivery(path, ms)` over the existing `isDelivered`/`remote-heads`
   plumbing).
-- [ ] ERG-4: error-message convention (parameter, state, next tool;
+- [x] ERG-4: error-message convention (parameter, state, next tool;
   near-match paths) applied to every data tool.
 - [ ] ERG-6: rewrite `instructions` as the operating guide (workflow,
   etiquette, auth, read-only, untrusted content).
@@ -555,7 +555,7 @@ intended.
 - [ ] BP-13: `authenticate_status` tool.
 - [x] HY-2: delete dead `registerAuthTools`. (Deleted with the BP-16
   migration — it was v1-only wiring; see the checkpoint record.)
-- [ ] HY-1: interim message fix — drop the phantom `read_binary_file_metadata`
+- [x] HY-1: interim message fix — drop the phantom `read_binary_file_metadata`
   reference (binary reads land in `read_file` in Phase 2, CAP-4).
 - [ ] bd-qt7h8h5g: multi-server `ConnectionManager` (per-call `server`
   override + share-URL `server=` honored; origin-scoped auth).
