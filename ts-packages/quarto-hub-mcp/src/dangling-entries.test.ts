@@ -118,13 +118,14 @@ describe('dangling index entries at the MCP tool surface', () => {
     expect(ghostRead.content[0]!.text).toContain("'ghost.qmd'");
     expect(ghostRead.content[0]!.text).toContain('unavailable');
 
-    // The project stays connected and usable in the same session.
+    // The project stays connected and usable in the same session
+    // (ERG-1: read results are { path, hash, content }).
     const realRead = await client.callTool('read_file', {
       project: indexDocId,
       path: 'real-one.qmd',
     });
     expect(realRead.isError).not.toBe(true);
-    expect(realRead.content[0]!.text).toBe('first real file\n');
+    expect(JSON.parse(realRead.content[0]!.text).content).toBe('first real file\n');
   }, 60000);
 
   it('delete_file of the ghost succeeds and removes the index entry', async () => {

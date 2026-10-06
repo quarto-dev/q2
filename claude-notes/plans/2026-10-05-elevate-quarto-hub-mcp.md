@@ -431,7 +431,7 @@ Test specifications (all red before implementation):
   (BP-16).
 - [ ] `initialize`/`server/discover` reports the real embedded version plus
   `description` and `websiteUrl` (BP-10).
-- [ ] `read_file` returns `hash`; `write_file` with a stale `expected_hash`
+- [x] `read_file` returns `hash`; `write_file` with a stale `expected_hash`
   is refused with the current content + hash and changes nothing;
   `patch_file` with a matching `expected_hash` succeeds and returns the new
   `hash` (ERG-1).
@@ -521,7 +521,7 @@ construction). Eval suite 7/7 PASS, median 4 turns, zero `isError`, zero
 retries (transcripts `eval/results/2026-10-06T10-32-53/`): turns/tokens
 in line with the Phase 0 baseline — the migration is agent-invisible, as
 intended.
-- [ ] ERG-1: `hash` on `read_file`/`write_file`/`patch_file` results;
+- [x] ERG-1: `hash` on `read_file`/`write_file`/`patch_file` results;
   `expected_hash` on `write_file`/`patch_file` (compare-and-swap, reusing
   `hashPayload`).
 - [ ] ERG-2: bounded delivery wait on all write tools (`synced`, default

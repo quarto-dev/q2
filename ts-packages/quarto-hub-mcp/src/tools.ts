@@ -21,7 +21,7 @@ import type {
   ToolAnnotations,
 } from '@modelcontextprotocol/server';
 import { fileUnavailableMessage, type FilePayload, type SyncClient } from '@quarto/quarto-sync-client';
-import { ConnectionManager } from './connection-manager.js';
+import { ConnectionManager, hashPayload } from './connection-manager.js';
 import {
   renderDiagnostics,
   type LocalRenderResult,
@@ -229,6 +229,35 @@ async function handleListFiles(args: ToolArgs, manager: ConnectionManager): Prom
   return text(JSON.stringify(buildFileList(state), null, 2));
 }
 
+/**
+ * ERG-1 compare-and-swap refusal: the file changed since the caller's
+ * read, so the write is refused. The payload carries the CURRENT content
+ * and its hash — the caller can merge and retry without an extra read.
+ */
+function staleHashError(
+  tool: 'write_file' | 'patch_file',
+  path: string,
+  currentText: string,
+): CallToolResult {
+  return error(
+    JSON.stringify(
+      {
+        error: 'stale_expected_hash',
+        message:
+          `${tool} refused: the file changed since you read it (expected_hash does not match ` +
+          'the current content). The current content and its hash are included here — merge ' +
+          'your changes against it and retry with the new expected_hash (or re-read with ' +
+          'read_file first).',
+        path,
+        hash: hashPayload({ type: 'text', text: currentText }),
+        content: currentText,
+      },
+      null,
+      2,
+    ),
+  );
+}
+
 async function handleReadFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
   const project = args.project as string;
   const path = args.path as string;
@@ -245,7 +274,9 @@ async function handleReadFile(args: ToolArgs, manager: ConnectionManager): Promi
   if (payload.type === 'binary') {
     return error(`Error: ${path} is a binary file. Use read_binary_file_metadata instead.`);
   }
-  return text(payload.text);
+  return text(
+    JSON.stringify({ path, hash: hashPayload(payload), content: payload.text }, null, 2),
+  );
 }
 
 async function handleWaitForChange(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
@@ -438,6 +469,7 @@ async function handleWriteFile(args: ToolArgs, manager: ConnectionManager): Prom
   const project = args.project as string;
   const path = args.path as string;
   const content = args.content as string;
+  const expectedHash = typeof args.expected_hash === 'string' ? args.expected_hash : undefined;
   const state = await manager.connect(project);
   const existing = state.files.get(path);
 
@@ -449,15 +481,46 @@ async function handleWriteFile(args: ToolArgs, manager: ConnectionManager): Prom
     if (ghost) {
       return unavailableFileError(path, ghost.docId);
     }
+    if (expectedHash !== undefined) {
+      return error(
+        `Error: write_file refused: expected_hash was given but ${path} does not exist in ` +
+          'the project (it may have been deleted since you read it). Call list_files to see ' +
+          'the current files; drop expected_hash to create a new file.',
+      );
+    }
     await state.client.createFile(path, content);
-    return text(`Created ${path}` + (await renderCheckSuffix(state.files, path, content)));
+    return text(
+      JSON.stringify(
+        {
+          path,
+          hash: hashPayload({ type: 'text', text: content }),
+          created: true,
+          renderCheck: (await renderCheckSuffix(state.files, path, content)).trim() || undefined,
+        },
+        null,
+        2,
+      ),
+    );
   }
   if (existing.type === 'binary') {
     return error(`Error: ${path} is a binary file. Cannot write text content to it.`);
   }
+  if (expectedHash !== undefined && hashPayload(existing) !== expectedHash) {
+    return staleHashError('write_file', path, existing.text);
+  }
 
   state.client.updateFileContent(path, content);
-  return text(`Updated ${path}` + (await renderCheckSuffix(state.files, path, content)));
+  return text(
+    JSON.stringify(
+      {
+        path,
+        hash: hashPayload({ type: 'text', text: content }),
+        renderCheck: (await renderCheckSuffix(state.files, path, content)).trim() || undefined,
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 async function handlePatchFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
@@ -465,6 +528,7 @@ async function handlePatchFile(args: ToolArgs, manager: ConnectionManager): Prom
   const path = args.path as string;
   const oldString = args.old_string as string;
   const newString = args.new_string as string;
+  const expectedHash = typeof args.expected_hash === 'string' ? args.expected_hash : undefined;
   const state = await manager.connect(project);
   const payload = state.files.get(path);
 
@@ -477,6 +541,9 @@ async function handlePatchFile(args: ToolArgs, manager: ConnectionManager): Prom
   }
   if (payload.type === 'binary') {
     return error(`Error: ${path} is a binary file. Cannot patch.`);
+  }
+  if (expectedHash !== undefined && hashPayload(payload) !== expectedHash) {
+    return staleHashError('patch_file', path, payload.text);
   }
 
   const currentContent = payload.text;
@@ -496,7 +563,17 @@ async function handlePatchFile(args: ToolArgs, manager: ConnectionManager): Prom
     currentContent.slice(index + oldString.length);
 
   state.client.updateFileContent(path, newContent);
-  return text(`Patched ${path}` + (await renderCheckSuffix(state.files, path, newContent)));
+  return text(
+    JSON.stringify(
+      {
+        path,
+        hash: hashPayload({ type: 'text', text: newContent }),
+        renderCheck: (await renderCheckSuffix(state.files, path, newContent)).trim() || undefined,
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 async function handleCreateFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
@@ -640,7 +717,10 @@ export function registerTools(
   server.registerTool(
     'read_file',
     {
-      description: 'Read the text content of a file in a Quarto Hub project.',
+      description:
+        'Read the text content of a file in a Quarto Hub project. Returns `{ path, hash, content }` — ' +
+        'pass `hash` back as `expected_hash` on write_file/patch_file so an edit a collaborator made ' +
+        'since this read is never silently overwritten.',
       inputSchema: z.object({ project: projectParam, path: pathParam.optional() }),
       annotations: ANNOT_READ,
     },
@@ -703,11 +783,21 @@ export function registerTools(
   server.registerTool(
     'write_file',
     {
-      description: 'Replace the entire content of a text file in a Quarto Hub project. Creates the file if it does not exist.',
+      description:
+        'Replace the entire content of a text file in a Quarto Hub project. Creates the file if it ' +
+        'does not exist. Returns `{ path, hash }`. Prefer patch_file for small changes to large files.',
       inputSchema: z.object({
         project: projectParam,
         path: pathParam.optional(),
         content: z.string().describe('The new file content'),
+        expected_hash: z
+          .string()
+          .optional()
+          .describe(
+            'Optional `hash` from a prior read_file/write_file result. When given, the write is ' +
+              'refused (returning the current content and its hash) if the file changed since — ' +
+              'compare-and-swap against collaborator edits.',
+          ),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
     },
@@ -717,12 +807,22 @@ export function registerTools(
   server.registerTool(
     'patch_file',
     {
-      description: 'Apply a targeted edit to a text file by replacing a specific string. More context-efficient than write_file for small changes to large files.',
+      description:
+        'Apply a targeted edit to a text file by replacing a specific string. More context-efficient ' +
+        'than write_file for small changes to large files. Returns `{ path, hash }`.',
       inputSchema: z.object({
         project: projectParam,
         path: pathParam.optional(),
         old_string: z.string().describe('The exact string to find and replace'),
         new_string: z.string().describe('The replacement string'),
+        expected_hash: z
+          .string()
+          .optional()
+          .describe(
+            'Optional `hash` from a prior read_file/patch_file result. When given, the patch is ' +
+              'refused (returning the current content and its hash) if the file changed since — ' +
+              'compare-and-swap against collaborator edits.',
+          ),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false },
     },
