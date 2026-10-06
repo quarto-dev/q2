@@ -14,6 +14,9 @@ default = ["console_error_panic_hook"]
 pampa = { path = "../pampa", default-features = false }
 wasm-bindgen = "0.2.89"
 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-c-shim = { path = "../wasm-c-shim" }
+
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires
 # all the `std::fmt` and `std::panicking` infrastructure, so isn't great for
@@ -22,3 +25,12 @@ console_error_panic_hook = { version = "0.1.7", optional = true }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.34"
+
+# Neutralize tree-sitter-language's upstream wasm32 stdio/stdlib/string C
+# stubs so this crate's c_shim.rs is the single source of truth for C stdlib
+# symbols (tree-sitter 0.26 compiles those stubs into libtree_sitter.rlib when
+# the tree-sitter-language links metadata is present, producing duplicate
+# strong symbols at link time). Same patch as the root workspace's and
+# wasm-quarto-hub-client's; see claude-notes/plans/2026-04-20-wasm-shim-merge.md.
+[patch.crates-io]
+tree-sitter-language = { path = "../tree-sitter-language-wasm-shim" }

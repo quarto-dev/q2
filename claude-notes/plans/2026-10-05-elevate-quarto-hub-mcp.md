@@ -934,11 +934,78 @@ the plan's tally exactly. Commits: CAP-18+BP-4 (4878e5b0b), CAP-8
 
 ### Phase 4 — Quarto-specific intelligence
 
-- [ ] **Spike S-1 (gates CAP-11):** qmd parser in Node. Compare (a)
+- [x] **Spike S-1 (gates CAP-11):** qmd parser in Node. Compare (a)
   `wasm-qmd-parser` built with a `nodejs` target and staged into the esbuild
   bundle (precedent: keyring `.node` staging), vs. (b) napi-rs module for
   `pampa`. Output: decision + measured bundle-size/startup cost. Time-boxed;
   failure mode = CAP-11 slips, rest of phase proceeds.
+
+#### S-1 spike record (2026-10-06, bd-738mbhpj)
+
+**Decision: (a) — `wasm-qmd-parser --target nodejs`, staged as an external
+package in `dist-bundle/node_modules/wasm-qmd-parser/`** (exactly the
+keyring `.node` pattern: esbuild `external`, Node resolves real files at
+runtime, the pkg's own `__dirname`-relative `readFileSync` of the `.wasm`
+keeps working — bundling it would break that, same as automerge's node
+entrypoint).
+
+Measurements (Apple Silicon, Node 24, `--release` build with wasm-pack's
+bundled wasm-opt):
+
+| metric | value |
+|---|---|
+| `.wasm` size | 4.61 MB raw / 1.24 MB gzip |
+| `require` + instantiation | 3.8 ms |
+| first parse (cold) | 17 ms |
+| warm parse, ~1 KB doc | 0.11 ms |
+| warm parse, 34 KB doc | 28 ms (linear scaling) |
+| bundle impact | +4.6 MB raw to `dist-bundle/` and the q2 embed; ~1.24 MB to gzipped channels |
+
+Option (b) napi-rs rejected: a new crate plus per-platform `.node` builds is
+a build axis the repo does not have (keyring is vendored from npm, not built
+here), size multiplies per staged platform (~4–8 MB × 4–5 targets vs one
+4.6 MB all-platform wasm), and the parse latency win is irrelevant when a
+34 KB document parses in 28 ms and tool calls are network-bound. Option (a)
+also guarantees parser parity with the web preview — same crate, same pampa.
+
+API facts pinned by the spike:
+
+- `parse_qmd(qmd, "true")` returns `{"success":true,"ast":"<json string>"}`
+  (double-encoded); locations ride every node as
+  `l: {b: {c,l,o}, e: {c,l,o}, f}` with byte offsets `o` — everything a
+  section selector needs. Parse is error-tolerant (unclosed fence still
+  returns `success: true`).
+- AST → qmd is `convert(astJson, "json", "qmd")`. **`write_qmd` is misnamed**
+  — it round-trips JSON to JSON; filed bd-1ldys1z6.
+- The generated CJS pkg survives Node's `cjs-module-lexer`: named ESM
+  imports (`import { parse_qmd } from 'wasm-qmd-parser'`) work, so the MCP
+  source uses ordinary imports with the package marked external.
+- Lazy-load story: the parser is only needed once a project with `.qmd`
+  files connects; 3.8 ms init makes even eager loading invisible.
+
+Build fixes the spike had to land first (the crate did not compile on
+`main` for *any* target — `build-wasm.yml` is `workflow_dispatch`-only, so
+the rot was invisible; CI gap filed as bd-s0tm9sdq):
+
+1. **Duplicate strong symbols** (`memcmp`, `vsnprintf`, `fclose`, …):
+   tree-sitter 0.26 compiles `tree-sitter-language`'s `wasm/src/*.c` into
+   `libtree_sitter.rlib`, colliding with the crate's `c_shim.rs`. Fixed with
+   the established repo pattern the crate was missing:
+   `[patch.crates-io] tree-sitter-language = { path =
+   "../tree-sitter-language-wasm-shim" }` (empty C stubs; see the 2026-04-20
+   wasm-shim-merge plan).
+2. **Undefined `snprintf`** after the patch: the crate's local `c_shim.rs`
+   predated the merged superset. Deleted it and swapped to the shared
+   `wasm-c-shim` crate (its symbol set is a strict superset; already used by
+   wasm-quarto-hub-client and pampa's wasm tests).
+3. **`panic_unwind does not have the panic strategy unwind`**: cargo
+   *concatenates* `target.*.rustflags` across config files, so the
+   workspace root's `panic=unwind,+exception-handling` (for hub-client's
+   Lua) leaks into this crate. Fixed in the crate's `.cargo/config.toml`
+   with a trailing `-C panic=abort` (rustc last-wins) — no Lua here, and
+   abort avoids the `-Zbuild-std`/rust-src requirement. Verified: bare
+   `wasm-pack build --target nodejs|--target web` both work with committed
+   config alone.
 
 Test specifications:
 
