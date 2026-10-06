@@ -39,12 +39,18 @@ describe('MCP protocol', () => {
     expect(names).toEqual([
       'connect_project',
       'create_file',
+      'create_folder',
       'create_project',
       'delete_file',
+      'delete_folder',
+      'disconnect_project',
+      'get_project_info',
       'list_files',
+      'list_projects',
       'patch_file',
       'read_file',
       'rename_file',
+      'search_files',
       'wait_for_change',
       'write_file',
     ]);
@@ -80,6 +86,11 @@ describe('MCP protocol', () => {
       properties: {
         project: { type: 'string', description: expect.any(String) },
         path: { type: 'string', description: expect.any(String) },
+        // ERG-3 ranges/truncation + CAP-4 metadata_only (Phase 2).
+        offset: { type: 'integer', minimum: 1, maximum: 9007199254740991, description: expect.any(String) },
+        limit: { type: 'integer', minimum: 1, maximum: 9007199254740991, description: expect.any(String) },
+        max_bytes: { type: 'integer', minimum: 16, maximum: 1048576, description: expect.any(String) },
+        metadata_only: { type: 'boolean', description: expect.any(String) },
       },
       required: ['project'],
     });
@@ -119,8 +130,12 @@ describe('MCP protocol (read-only mode)', () => {
     const names = tools.map(t => t.name).sort();
     expect(names).toEqual([
       'connect_project',
+      'disconnect_project',
+      'get_project_info',
       'list_files',
+      'list_projects',
       'read_file',
+      'search_files',
       'wait_for_change',
     ]);
   });
@@ -209,13 +224,21 @@ describe('live: connect and read', () => {
     expect(content.length).toBeGreaterThan(0);
   }, 15000);
 
-  it('should error on reading a binary file', async () => {
+  it('should read a binary file (CAP-4)', async () => {
     const result = await client.callTool('read_file', {
       project: HELLO_WORLD_DOC,
       path: 'code.png',
     });
-    expect(result.isError).toBe(true);
-    expect(result.content[0]!.text).toContain('binary file');
+    expect(result.isError).toBeUndefined();
+    // An image MIME type comes back as an `image` content block, with
+    // structured metadata alongside (Phase 2: binary rides read_file).
+    const imageBlock = result.content.find((b) => b.type === 'image') as
+      | { type: 'image'; data: string; mimeType: string }
+      | undefined;
+    expect(imageBlock).toBeDefined();
+    expect(imageBlock?.mimeType).toBe('image/png');
+    const meta = (result as { structuredContent?: Record<string, unknown> }).structuredContent;
+    expect(meta).toMatchObject({ path: 'code.png', type: 'binary', mimeType: 'image/png' });
   }, 15000);
 
   it('should error on reading a non-existent file', async () => {

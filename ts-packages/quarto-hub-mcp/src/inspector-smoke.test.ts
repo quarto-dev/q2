@@ -37,12 +37,18 @@ const SERVER_ENTRY = path.join(PKG_ROOT, 'dist', 'index.js');
 const EXPECTED_RW_TOOLS = [
   'connect_project',
   'create_file',
+  'create_folder',
   'create_project',
   'delete_file',
+  'delete_folder',
+  'disconnect_project',
+  'get_project_info',
   'list_files',
+  'list_projects',
   'patch_file',
   'read_file',
   'rename_file',
+  'search_files',
   'wait_for_change',
   'write_file',
 ];
