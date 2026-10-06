@@ -562,7 +562,7 @@ intended.
   reference (binary reads land in `read_file` in Phase 2, CAP-4).
 - [ ] bd-qt7h8h5g: multi-server `ConnectionManager` (per-call `server`
   override + share-URL `server=` honored; origin-scoped auth).
-- [ ] HY-3: `rm -rf dist` before `tsc` in the package scripts; confirm no test
+- [x] HY-3: `rm -rf dist` before `tsc` in the package scripts; confirm no test
   or packaging step consumes orphaned `dist/` modules.
 
 ### Phase 2 — Complete the file and project surface
