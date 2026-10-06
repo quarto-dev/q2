@@ -42,6 +42,7 @@ const EXPECTED_RW_TOOLS = [
   'delete_file',
   'delete_folder',
   'disconnect_project',
+  'docs',
   'get_file_history',
   'get_outline',
   'get_project_info',

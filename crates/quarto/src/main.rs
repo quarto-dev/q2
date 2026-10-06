@@ -778,6 +778,7 @@ enum DocsCommands {
 /// The four modes are mutually exclusive; bare invocation prints the
 /// llms.txt index.
 #[derive(clap::Args)]
+#[group(id = "jsonable", multiple = true, args = ["list", "embed_info"])]
 struct DocsLlmsArgs {
     /// Documentation page to print, as an href from the index or
     /// `--list` (e.g. `guides/authoring/figures.md`). The `.qmd` and
@@ -796,6 +797,10 @@ struct DocsLlmsArgs {
     /// page count)
     #[arg(long = "embed-info", conflicts_with = "href")]
     embed_info: bool,
+
+    /// Emit machine-readable JSON (requires `--list` or `--embed-info`)
+    #[arg(long, conflicts_with_all = ["href", "full"], requires = "jsonable")]
+    json: bool,
 }
 
 impl DocsLlmsArgs {
@@ -805,9 +810,9 @@ impl DocsLlmsArgs {
         if self.full {
             Mode::Full
         } else if self.list {
-            Mode::List
+            Mode::List { json: self.json }
         } else if self.embed_info {
-            Mode::EmbedInfo
+            Mode::EmbedInfo { json: self.json }
         } else if let Some(href) = self.href {
             Mode::Page(href)
         } else {

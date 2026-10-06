@@ -225,7 +225,9 @@ function buildInstructions(readOnly: boolean, allowRender: boolean): string {
     'get_file_history as a new, reversible change.' +
     '\n7. Housekeeping: get_project_info reports a project\'s shape and connection health; ' +
     'list_projects enumerates a collection from its share URL; create_folder/delete_folder ' +
-    'manage folders; disconnect_project releases a connection you no longer need.' +
+    'manage folders; disconnect_project releases a connection you no longer need. docs ' +
+    'answers Quarto usage questions from the embedded Quarto 2 documentation (query to ' +
+    'search, page to read).' +
     '\n\nAuth: if a call fails with AuthRequiredError/ReauthRequired, call `authenticate` — ' +
     'it opens the user\'s browser once and caches credentials in the OS keyring; ' +
     '`authenticate_clear` removes them.' +

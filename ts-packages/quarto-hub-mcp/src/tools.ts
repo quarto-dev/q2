@@ -62,6 +62,14 @@ import {
   removeRenderDir,
   runRender,
 } from './render.js';
+import {
+  DocsUnavailableError,
+  findPage,
+  loadDocsPages,
+  outDocsPage,
+  outDocsQuery,
+  searchDocs,
+} from './docs-tool.js';
 
 function text(msg: string): CallToolResult {
   return { content: [{ type: 'text', text: msg }] };
@@ -466,6 +474,7 @@ type DataToolName =
   | 'list_presence'
   | 'get_file_history'
   | 'get_outline'
+  | 'docs'
   | 'read_file'
   | 'search_files'
   | 'wait_for_change'
@@ -542,6 +551,8 @@ async function handleTool(
       return handleGetFileHistory(args, manager);
     case 'get_outline':
       return handleGetOutline(args, manager);
+    case 'docs':
+      return handleDocs(args);
     case 'read_file':
       return handleReadFile(args, manager);
     case 'search_files':
@@ -1107,6 +1118,55 @@ async function handleRender(
   } finally {
     removeRenderDir(dir);
   }
+}
+
+// ---------------------------------------------------------------------------
+// CAP-13: docs (embedded Quarto 2 documentation, no project needed)
+// ---------------------------------------------------------------------------
+
+async function handleDocs(args: ToolArgs): Promise<CallToolResult> {
+  const query = typeof args.query === 'string' && args.query.trim() !== '' ? args.query : undefined;
+  const page = typeof args.page === 'string' && args.page.trim() !== '' ? args.page : undefined;
+  if (query !== undefined && page !== undefined) {
+    return error('Error: `query` and `page` are mutually exclusive — search OR fetch per call.');
+  }
+  if (query === undefined && page === undefined) {
+    return error(
+      'Error: docs requires one of `query` (search the documentation) or `page` (fetch one page).',
+    );
+  }
+  let pages;
+  try {
+    pages = await loadDocsPages();
+  } catch (err) {
+    if (err instanceof DocsUnavailableError) {
+      return error(`Error: the documentation corpus is unavailable — ${err.message}`);
+    }
+    throw err;
+  }
+  if (query !== undefined) {
+    const maxResults =
+      typeof args.max_results === 'number' ? Math.min(Math.max(args.max_results, 1), 20) : 5;
+    const hits = searchDocs(query, pages);
+    return structured({
+      results: hits.slice(0, maxResults),
+      total_matches: hits.length,
+      truncated: hits.length > maxResults,
+    });
+  }
+  const found = findPage(pages, page!);
+  if (!found.ok) {
+    const suffix =
+      found.suggestions.length > 0
+        ? ` Closest pages: ${found.suggestions.map((s) => `"${s}"`).join(', ')}.`
+        : ' Call docs with `query` to search.';
+    return error(`Error: no documentation page matches "${page}".${suffix}`);
+  }
+  return structured({
+    href: found.page.href,
+    title: found.page.title,
+    markdown: found.page.content,
+  });
 }
 
 async function handleReadFile(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
@@ -2328,6 +2388,42 @@ export function registerTools(
       annotations: ANNOT_READ,
     },
     (args) => runDataTool('get_outline', args, manager),
+  );
+
+  server.registerTool(
+    'docs',
+    {
+      title: 'Search Quarto documentation',
+      description:
+        'Answer Quarto 2 usage questions from the documentation embedded in the q2 binary ' +
+        '(the same corpus `q2 docs llms` serves — no network, no project connection). ' +
+        '`query` searches page titles and full text and returns ranked `{href, title, snippet}` ' +
+        'hits; `page` fetches one page\'s markdown by href (extensionless and .qmd spellings ' +
+        'work). Typical flow: query, then page the best hit.',
+      inputSchema: z.object({
+        query: z
+          .string()
+          .optional()
+          .describe('Search the documentation (titles + full text). Mutually exclusive with `page`.'),
+        page: z
+          .string()
+          .optional()
+          .describe(
+            'Fetch one page by its href (e.g. `guides/authoring/figures.md`). ' +
+              'Mutually exclusive with `query`.',
+          ),
+        max_results: z
+          .number()
+          .int()
+          .min(1)
+          .max(20)
+          .optional()
+          .describe('Maximum search hits to return (default 5, max 20).'),
+      }),
+      outputSchema: z.union([outDocsQuery, outDocsPage]),
+      annotations: ANNOT_READ,
+    },
+    (args) => runDataTool('docs', args, manager),
   );
 
   server.registerTool(

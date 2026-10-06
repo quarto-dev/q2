@@ -39,10 +39,10 @@ pub enum Mode {
     Index,
     /// `--full`: llms-full.txt.
     Full,
-    /// `--list`: href + title per page.
-    List,
-    /// `--embed-info`: provenance of the embedded snapshot.
-    EmbedInfo,
+    /// `--list`: href + title per page (JSON array with `--json`).
+    List { json: bool },
+    /// `--embed-info`: provenance of the embedded snapshot (JSON with `--json`).
+    EmbedInfo { json: bool },
     /// `<href>`: one page.
     Page(String),
 }
@@ -55,12 +55,14 @@ pub fn execute(mode: Mode) -> anyhow::Result<()> {
     let out = match mode {
         Mode::Index => embed.index()?,
         Mode::Full => embed.full()?.to_string(),
-        Mode::List => embed
+        Mode::List { json: false } => embed
             .list()?
             .iter()
             .map(|p| format!("{}\t{}\n", p.href, p.title))
             .collect(),
-        Mode::EmbedInfo => embed.embed_info_text(),
+        Mode::List { json: true } => embed.list_json()?,
+        Mode::EmbedInfo { json: false } => embed.embed_info_text(),
+        Mode::EmbedInfo { json: true } => embed.embed_info_json(),
         Mode::Page(href) => embed.page(&href)?.to_string(),
     };
     write_stdout(&out)
@@ -96,7 +98,7 @@ pub struct EmbedInfo {
 }
 
 /// One page in `--list` output: companion href + page title.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, serde::Serialize)]
 pub struct PageEntry {
     pub href: String,
     pub title: String,
@@ -318,6 +320,34 @@ impl<'a> DocsEmbed<'a> {
             self.pages().len()
         )
     }
+
+    /// `--list --json`: the page list as a JSON array (bd-b6cocsxw).
+    /// Machine consumers (the `q2 mcp` docs tool) read this instead of
+    /// the tab-separated text form.
+    pub fn list_json(&self) -> Result<String, DocsLlmsError> {
+        let pages = self.list()?;
+        Ok(
+            serde_json::to_string_pretty(&pages).expect("PageEntry serialization cannot fail")
+                + "\n",
+        )
+    }
+
+    /// `--embed-info --json`: the same provenance as `embed_info_text`
+    /// in machine-readable form (bd-b6cocsxw). Works on placeholder
+    /// embeds (that is its job, like the text form).
+    pub fn embed_info_json(&self) -> String {
+        let info = self.embed_info();
+        format!(
+            "{}\n",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "placeholder": self.is_placeholder(),
+                "commit": info.commit,
+                "dirty": info.dirty,
+                "pages": self.pages().len(),
+            }))
+            .expect("embed-info JSON serialization cannot fail")
+        )
+    }
 }
 
 /// The page title is the first non-blank line iff it is an ATX `#`
@@ -518,6 +548,34 @@ mod tests {
             .map(|p| (p.href.as_str(), p.title.as_str()))
             .collect();
         assert_eq!(got, expect);
+    }
+
+    #[test]
+    fn list_json_matches_the_text_list() {
+        let e = real();
+        let json: Vec<serde_json::Value> =
+            serde_json::from_str(&e.list_json().unwrap()).expect("list_json parses");
+        let text = e.list().unwrap();
+        assert_eq!(json.len(), text.len());
+        for (j, t) in json.iter().zip(text.iter()) {
+            assert_eq!(j["href"].as_str().unwrap(), t.href);
+            assert_eq!(j["title"].as_str().unwrap(), t.title);
+        }
+    }
+
+    #[test]
+    fn embed_info_json_reports_real_and_placeholder_states() {
+        let real_info: serde_json::Value =
+            serde_json::from_str(&real().embed_info_json()).expect("embed_info_json parses");
+        assert_eq!(real_info["placeholder"], false);
+        assert_eq!(real_info["commit"], "abc1234");
+        assert_eq!(real_info["dirty"], false);
+        assert_eq!(real_info["pages"], 4);
+
+        let placeholder_info: serde_json::Value =
+            serde_json::from_str(&placeholder().embed_info_json()).expect("parses");
+        assert_eq!(placeholder_info["placeholder"], true);
+        assert_eq!(placeholder_info["pages"], 0);
     }
 
     // ---- page lookup + normalization -------------------------------
