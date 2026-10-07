@@ -294,6 +294,64 @@ describe.runIf(runSuite)('auth e2e (real hub + keyring + loopback)', () => {
     }
   }, 90000);
 
+  // ── startup stderr cleanliness with a cached credential (HY-6) ────
+
+  it('starts clean against a cached credential: no TimeoutNegativeWarning, no automerge deprecation (HY-6)', async () => {
+    // A fresh sign-in needs an unrevoked refresh token (earlier tests
+    // may have revoked it via authenticate_clear).
+    idp.counters.revokedTokens.length = 0;
+
+    // Warm the keyring with a full loopback sign-in and a project of
+    // our own (self-sufficient under -t selection).
+    let hy6ProjectId: string;
+    const d = new McpTestClient();
+    try {
+      await d.start(['--server', hubUrl], { env: serverEnv });
+      await authenticateViaLoopback(d);
+      expect(
+        await new AsyncEntry(KEYRING_SERVICE, keyringAccount).getPassword(),
+      ).toBeTruthy();
+      const created = await d.callTool('create_project', {
+        files: [{ path: 'hy6.qmd', content: 'hy6\n' }],
+      });
+      hy6ProjectId = (JSON.parse(created.content[0]!.text) as { indexDocId: string }).indexDocId;
+    } finally {
+      await d.stop();
+    }
+
+    // …then start a fresh process against that cached credential — the
+    // bd-rgt8rglx scenario — and connect. Prefer the q2 launcher (the
+    // bundle is where the automerge initSync deprecation fires); the
+    // dist fallback still binds the TimeoutNegativeWarning half.
+    const fresh = q2EmbedFresh();
+    if (!fresh.ok) {
+      // eslint-disable-next-line no-console
+      console.error(`[e2e-auth] HY-6: q2-launcher channel unavailable (${fresh.reason}); using dist build`);
+    }
+    const e = new McpTestClient();
+    try {
+      await e.start(['--server', hubUrl], {
+        env: serverEnv,
+        ...(fresh.ok ? { command: { program: q2Bin, args: ['mcp'] } } : {}),
+      });
+      const connected = await e.callTool('connect_project', { project: hy6ProjectId });
+      expect(connected.isError).not.toBe(true);
+      const noise = e.stderrLines.filter(
+        (l) =>
+          l.includes('TimeoutNegativeWarning') ||
+          l.includes('deprecated parameters') ||
+          l.includes('DeprecationWarning'),
+      );
+      expect(noise).toEqual([]);
+
+      // Leave the keyring empty for the mid-session test (same
+      // precondition the main test leaves).
+      await e.callTool('authenticate_clear', {});
+    } finally {
+      await e.stop();
+    }
+  }, 90000);
+
   /** Play the browser's role in the loopback+PKCE flow for `client`. */
   async function authenticateViaLoopback(client: McpTestClient): Promise<void> {
     const authPromise = client.callTool('authenticate', {});

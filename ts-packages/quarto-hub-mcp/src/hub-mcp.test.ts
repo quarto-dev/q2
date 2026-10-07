@@ -70,29 +70,35 @@ describe('MCP protocol', () => {
   it('should include proper input schemas on tools', async () => {
     const tools = await client.listTools();
     const readFile = tools.find(t => t.name === 'read_file');
+    // Post-SDK-v2 (BP-16): schemas are zod-derived and declare the
+    // 2020-12 dialect (BP-11, SEP-1613). `path` is no longer schema-
+    // required: a share URL's `file=` may supply it (see tools.ts
+    // PATH_DEFAULTABLE); the server enforces it post-normalization.
     expect(readFile?.inputSchema).toEqual({
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
       type: 'object',
       properties: {
         project: { type: 'string', description: expect.any(String) },
         path: { type: 'string', description: expect.any(String) },
       },
-      required: ['project', 'path'],
+      required: ['project'],
     });
   });
 
-  // A share URL whose server= names a hub other than this server's configured
-  // one (--server wss://dummy.example.com) must error *before* connecting, so no
-  // network is needed here. (bd-m4slev7a)
-  it('should reject a share URL pointing at a different hub', async () => {
+  // A share URL whose server= names a different hub now ROUTES the call
+  // to that hub (bd-qt7h8h5g) instead of being rejected. Here the foreign
+  // hub is a guaranteed-unreachable loopback port, so the call fails at
+  // the no-auth probe — with a connection error, not the old
+  // "restart with --server" rejection. Offline-deterministic.
+  it('should route (not reject) a share URL pointing at a different hub', async () => {
     const result = await client.callTool('connect_project', {
       project:
-        'https://quarto-hub.com/#/share/abc123?server=wss%3A%2F%2Fother.example.com%2Fws',
+        'https://quarto-hub.com/#/share/abc123?server=ws%3A%2F%2F127.0.0.1%3A1%2Fws',
     });
     expect(result.isError).toBe(true);
     const msg = result.content[0]!.text;
-    expect(msg).toContain('other.example.com');
-    expect(msg).toContain('dummy.example.com');
-    expect(msg).toContain('--server');
+    expect(msg).not.toContain('Restart quarto-hub-mcp');
+    expect(msg).not.toContain('targets Quarto Hub server');
   });
 });
 
@@ -120,13 +126,16 @@ describe('MCP protocol (read-only mode)', () => {
   });
 
   it('should reject unknown tools', async () => {
-    const result = await client.callTool('write_file', {
-      project: 'test',
-      path: 'test.qmd',
-      content: 'hello',
-    });
-    expect(result.isError).toBe(true);
-    expect(result.content[0]?.text).toContain('Unknown tool');
+    // Post-SDK-v2 (BP-15): a tool the server doesn't have (here a write
+    // tool in read-only mode) is a JSON-RPC -32602 protocol error, not
+    // an isError result — McpTestClient.callTool throws on it.
+    await expect(
+      client.callTool('write_file', {
+        project: 'test',
+        path: 'test.qmd',
+        content: 'hello',
+      }),
+    ).rejects.toThrow('Tool write_file not found');
   });
 });
 
@@ -297,7 +306,10 @@ describe('live: create project and mutate files', () => {
       content: '---\ntitle: Updated\n---\n\nUpdated content\n',
     });
     expect(result.isError).toBeUndefined();
-    expect(result.content[0]!.text).toContain('Updated');
+    // ERG-1: write results are { path, hash }.
+    const written = JSON.parse(result.content[0]!.text);
+    expect(written.path).toBe('hello.qmd');
+    expect(written.hash).toMatch(/^sha256:/);
 
     // Verify the update
     const readResult = await client.callTool('read_file', {
@@ -315,7 +327,10 @@ describe('live: create project and mutate files', () => {
       new_string: 'Patched content',
     });
     expect(result.isError).toBeUndefined();
-    expect(result.content[0]!.text).toContain('Patched');
+    // ERG-1: patch results are { path, hash }.
+    const patched = JSON.parse(result.content[0]!.text);
+    expect(patched.path).toBe('hello.qmd');
+    expect(patched.hash).toMatch(/^sha256:/);
 
     // Verify the patch
     const readResult = await client.callTool('read_file', {
@@ -343,14 +358,17 @@ describe('live: create project and mutate files', () => {
       content: 'Brand new file',
     });
     expect(result.isError).toBeUndefined();
-    expect(result.content[0]!.text).toContain('Created');
+    // ERG-1/ERG-2: create results are { path, hash, created, synced }.
+    const createdFile = JSON.parse(result.content[0]!.text);
+    expect(createdFile.created).toBe(true);
+    expect(createdFile.hash).toMatch(/^sha256:/);
 
-    // Verify it exists
+    // Verify it exists (ERG-1: read results are { path, hash, content }).
     const readResult = await client.callTool('read_file', {
       project: projectId,
       path: 'new-file.qmd',
     });
-    expect(readResult.content[0]!.text).toBe('Brand new file');
+    expect(JSON.parse(readResult.content[0]!.text).content).toBe('Brand new file');
   }, 15000);
 
   it('should error when creating a file that already exists', async () => {
@@ -370,7 +388,10 @@ describe('live: create project and mutate files', () => {
       new_path: 'renamed-file.qmd',
     });
     expect(result.isError).toBeUndefined();
-    expect(result.content[0]!.text).toContain('Renamed');
+    // ERG-2: rename results are { old_path, new_path, renamed, synced }.
+    const renamed = JSON.parse(result.content[0]!.text);
+    expect(renamed.renamed).toBe(true);
+    expect(renamed.new_path).toBe('renamed-file.qmd');
 
     // Old path should not exist
     const oldResult = await client.callTool('read_file', {
@@ -384,7 +405,7 @@ describe('live: create project and mutate files', () => {
       project: projectId,
       path: 'renamed-file.qmd',
     });
-    expect(newResult.content[0]!.text).toBe('Brand new file');
+    expect(JSON.parse(newResult.content[0]!.text).content).toBe('Brand new file');
   }, 15000);
 
   it('should delete a file', async () => {
@@ -393,7 +414,9 @@ describe('live: create project and mutate files', () => {
       path: 'renamed-file.qmd',
     });
     expect(result.isError).toBeUndefined();
-    expect(result.content[0]!.text).toContain('Deleted');
+    // ERG-2: delete results are { path, deleted, synced }.
+    const deletedFile = JSON.parse(result.content[0]!.text);
+    expect(deletedFile.deleted).toBe(true);
 
     // File should no longer exist
     const readResult = await client.callTool('read_file', {
@@ -420,12 +443,15 @@ describe('live: create project and mutate files', () => {
       content: 'Created via write_file',
     });
     expect(result.isError).toBeUndefined();
-    expect(result.content[0]!.text).toContain('Created');
+    // ERG-1: the create arm returns { path, hash, created: true }.
+    const created = JSON.parse(result.content[0]!.text);
+    expect(created.created).toBe(true);
+    expect(created.hash).toMatch(/^sha256:/);
 
     const readResult = await client.callTool('read_file', {
       project: projectId,
       path: 'created-via-write.qmd',
     });
-    expect(readResult.content[0]!.text).toBe('Created via write_file');
+    expect(JSON.parse(readResult.content[0]!.text).content).toBe('Created via write_file');
   }, 15000);
 });

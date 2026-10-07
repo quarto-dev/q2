@@ -9,7 +9,7 @@
 
 import { EventEmitter } from 'node:events';
 import { describe, it, expect, vi } from 'vitest';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult } from '@modelcontextprotocol/server';
 import type * as oauth from 'oauth4webapi';
 
 import {
@@ -242,7 +242,10 @@ function fakeBrowser(opts: { fail?: boolean } = {}): FakeBrowserControl {
 // ---------------------------------------------------------------------------
 
 function authMode(mode: 'no-auth' | 'requires-auth' | 'unknown'): LastObservedAuthModeSource {
-  return { lastObservedAuthMode: () => mode };
+  return {
+    lastObservedAuthMode: () => mode,
+    configuredServerUrl: 'wss://quarto-hub.com/ws',
+  };
 }
 
 interface MakeStateArgs {
@@ -306,9 +309,16 @@ function textOf(res: CallToolResult): string {
 // ===========================================================================
 
 describe('AUTH_TOOL_DEFINITIONS', () => {
-  it('exposes exactly authenticate and authenticate_clear', () => {
+  it('exposes exactly authenticate, authenticate_clear, and authenticate_status', () => {
     const names = AUTH_TOOL_DEFINITIONS.map((t) => t.name).sort();
-    expect(names).toEqual(['authenticate', 'authenticate_clear']);
+    expect(names).toEqual(['authenticate', 'authenticate_clear', 'authenticate_status']);
+  });
+
+  it('marks authenticate_status read-only and idempotent (it never runs a flow)', () => {
+    const status = AUTH_TOOL_DEFINITIONS.find((t) => t.name === 'authenticate_status')!;
+    expect(status.annotations?.readOnlyHint).toBe(true);
+    expect(status.annotations?.idempotentHint).toBe(true);
+    expect(status.outputSchema).toBeDefined();
   });
 
   it('marks authenticate non-idempotent / non-destructive and clear destructive / idempotent', () => {
@@ -795,5 +805,92 @@ describe('lazy discovery failure', () => {
     expect(textOf(res)).toMatch(/myaccount\.google\.com/);
     expect(await store.read()).toBeNull();
     expect(state.value).toBeNull();
+  });
+});
+
+// ===========================================================================
+// authenticate serialization (BP-12) + authenticate_status (BP-13)
+// ===========================================================================
+
+describe('authenticate concurrency guard (BP-12)', () => {
+  it('serializes concurrent authenticate calls — the second sees the first\u2019s result', async () => {
+    let releaseFirst: (() => void) | undefined;
+    let listenerCalls = 0;
+    const start: typeof startLoopbackListener = async (o: StartLoopbackOptions) => {
+      listenerCalls += 1;
+      const result = new Promise<{ code: string; state: string; params: URLSearchParams }>(
+        (resolve) => {
+          releaseFirst = () =>
+            resolve({
+              code: 'auth-code-xyz',
+              state: o.expectedState,
+              params: new URLSearchParams({ code: 'auth-code-xyz', state: o.expectedState }),
+            });
+        },
+      );
+      return {
+        port: 51234,
+        redirectUri: 'http://127.0.0.1:51234/callback',
+        result,
+        close: () => undefined,
+      };
+    };
+    const { fetch } = makeFetch(() => jsonResponse(200, tokenResponseBody()));
+    const { store } = emptyStore();
+    const state = makeState({
+      store,
+      startListener: start,
+      fetch,
+      openBrowser: fakeBrowser().open,
+    });
+
+    const a = state.handle('authenticate');
+    // A binds its listener and parks on the callback.
+    await vi.waitFor(() => expect(listenerCalls).toBe(1));
+
+    const b = state.handle('authenticate');
+    // B must not start its own flow while A is in flight.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(listenerCalls).toBe(1);
+
+    releaseFirst!();
+    const [resA, resB] = await Promise.all([a, b]);
+    expect(textOf(resA)).toContain('Authenticated as');
+    // B ran strictly after A's credential landed: it short-circuits.
+    expect(textOf(resB)).toContain('Already authenticated');
+    expect(listenerCalls).toBe(1);
+  });
+});
+
+describe('authenticate_status (BP-13)', () => {
+  it('reports unauthenticated with the hub URL and triggers no flow', async () => {
+    const { store } = emptyStore();
+    const listener = fakeListener({});
+    const browser = fakeBrowser();
+    const state = makeState({
+      store,
+      startListener: listener.start,
+      openBrowser: browser.open,
+    });
+    const res = await state.handle('authenticate_status');
+    expect(res.isError).not.toBe(true);
+    const payload = JSON.parse(textOf(res)) as Record<string, unknown>;
+    expect(payload.authenticated).toBe(false);
+    expect(payload.hub).toBe('wss://quarto-hub.com/ws');
+    // No flow: no listener, no browser.
+    expect(listener.recorded.calls).toBe(0);
+    expect(browser.calls).toEqual([]);
+  });
+
+  it('reports identity and expiry from the cached credential without a flow', async () => {
+    const { store } = await seededStore();
+    const listener = fakeListener({});
+    const state = makeState({ store, startListener: listener.start });
+    const res = await state.handle('authenticate_status');
+    const payload = JSON.parse(textOf(res)) as Record<string, unknown>;
+    expect(payload.authenticated).toBe(true);
+    expect(payload.identity).toBe(FAKE_EMAIL);
+    expect(payload.expiry).toBe(new Date(farFutureExp() * 1000).toISOString());
+    expect(listener.recorded.calls).toBe(0);
   });
 });

@@ -153,7 +153,18 @@ pub fn run(args: &[String]) -> Result<i32> {
     // Bundled quarto-hub.com defaults (release builds only): injected
     // into the child env for any hub variable the user hasn't set.
     let hub_defaults = defaults::bundled_defaults();
-    let extra_env = defaults::injections(&hub_defaults, |var| std::env::var(var).ok());
+    let mut extra_env: Vec<(&str, &str)> =
+        defaults::injections(&hub_defaults, |var| std::env::var(var).ok());
+    // BP-10: the server reports this build identity on its MCP
+    // Implementation record. The user env wins, as with the hub
+    // defaults.
+    let version_injection;
+    if std::env::var_os("QUARTO_MCP_SERVER_VERSION").is_none() {
+        version_injection = server_version_for_child(bundle::build_info_json());
+        if let Some(v) = &version_injection {
+            extra_env.push(("QUARTO_MCP_SERVER_VERSION", v.as_str()));
+        }
+    }
     delegate::delegate(
         &node.path,
         &extracted.dir.join("index.mjs"),
@@ -161,6 +172,27 @@ pub fn run(args: &[String]) -> Result<i32> {
         &extra_env,
         extracted.lock,
     )
+}
+
+/// The `QUARTO_MCP_SERVER_VERSION` value injected into the node child
+/// (BP-10): the workspace version plus the embedded bundle's build
+/// stamp — `0.32.0+5a41c8bea`, or with `.dirty` for a dirty-tree
+/// bundle. None for placeholder builds (the server then falls back to
+/// its own build-info stamp / package floor).
+fn server_version_for_child(build_info: Option<&str>) -> Option<String> {
+    let parsed: serde_json::Value = serde_json::from_str(build_info?).ok()?;
+    let commit = parsed.get("gitCommit")?.as_str()?;
+    let short: String = commit.chars().take(9).collect();
+    let dirty = parsed
+        .get("gitDirty")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    Some(format!(
+        "{}+{}{}",
+        env!("CARGO_PKG_VERSION"),
+        short,
+        if dirty { ".dirty" } else { "" }
+    ))
 }
 
 fn cache_root() -> Result<PathBuf> {
@@ -208,4 +240,37 @@ fn launcher_info() -> Result<String> {
         Err(e) => out.push_str(&format!("node: NOT FOUND — {}\n", e)),
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn server_version_joins_workspace_version_and_short_commit() {
+        let info = r#"{"gitCommit": "5a41c8bea40dbf1a96a9fa050dd4ca2bd247a51", "gitDirty": false, "builtAt": "2026-10-06T10:20:32.545Z"}"#;
+        assert_eq!(
+            server_version_for_child(Some(info)).unwrap(),
+            format!("{}+5a41c8bea", env!("CARGO_PKG_VERSION"))
+        );
+    }
+
+    #[test]
+    fn server_version_marks_a_dirty_tree() {
+        let info = r#"{"gitCommit": "0123456789abcdef", "gitDirty": true}"#;
+        assert_eq!(
+            server_version_for_child(Some(info)).unwrap(),
+            format!("{}+012345678.dirty", env!("CARGO_PKG_VERSION"))
+        );
+    }
+
+    #[test]
+    fn server_version_is_none_without_a_build_stamp() {
+        assert_eq!(server_version_for_child(None), None);
+        assert_eq!(server_version_for_child(Some("not json")), None);
+        assert_eq!(
+            server_version_for_child(Some(r#"{"gitDirty": false}"#)),
+            None
+        );
+    }
 }

@@ -22,7 +22,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { Ajv2020 } from 'ajv/dist/2020.js';
-import { ToolSchema } from '@modelcontextprotocol/sdk/types.js';
+import { ToolSchema } from '@modelcontextprotocol/core';
 
 import {
   ConnectionManager,
@@ -34,7 +34,8 @@ import {
   type KeyringBackend,
 } from './auth/credential-store.js';
 import { ReauthRequired, RefreshManager } from './auth/refresh-manager.js';
-import { AuthToolsState } from './auth/auth-tools.js';
+import { AUTH_TOOL_DEFINITIONS, AuthToolsState } from './auth/auth-tools.js';
+import { assertSafeAuthorizationEndpoint } from './auth/oauth-config.js';
 import type { LoopbackListener } from './auth/loopback.js';
 import {
   startInMemoryMcp,
@@ -196,21 +197,62 @@ describe('schema conformance (BP-11, BP-14)', () => {
 // ============================================================================
 
 /**
- * Golden result-conformance cases. No tool declares an `outputSchema`
- * today (BP-1 lands in Phase 1), so this registry is deliberately empty:
- * the harness ships with the assertion wired. The moment a `tools/list`
- * entry declares an `outputSchema`, `registered coverage` below fails
- * until a golden case for that tool is added here — the net that keeps
- * every future structured result schema-checked.
+ * Golden result-conformance cases (BP-1, landed Phase 1). Every tool
+ * that declares an `outputSchema` must have a case here — the
+ * `registered coverage` test fails otherwise — and each golden call's
+ * `structuredContent` is validated against the declared schema.
  *
- * Each case names the tool and the arguments for a golden call against a
- * freshly seeded project; `structuredContent` of the result is then
- * validated against the tool's declared `outputSchema`.
+ * Cases run sequentially against one seeded project (`index.qmd`
+ * present); later cases may depend on earlier ones (create → delete).
  */
 const GOLDEN_RESULT_CASES: ReadonlyArray<{
   tool: string;
   args: (seed: SeededProject) => Record<string, unknown>;
-}> = [];
+}> = [
+  { tool: 'connect_project', args: (seed) => ({ project: seed.indexDocId }) },
+  { tool: 'list_files', args: (seed) => ({ project: seed.indexDocId }) },
+  {
+    tool: 'read_file',
+    args: (seed) => ({ project: seed.indexDocId, path: 'index.qmd' }),
+  },
+  {
+    tool: 'wait_for_change',
+    args: (seed) => ({ project: seed.indexDocId, path: 'index.qmd', timeout_seconds: 1 }),
+  },
+  {
+    tool: 'write_file',
+    args: (seed) => ({ project: seed.indexDocId, path: 'index.qmd', content: 'v2\n' }),
+  },
+  {
+    tool: 'patch_file',
+    args: (seed) => ({
+      project: seed.indexDocId,
+      path: 'index.qmd',
+      old_string: 'v2',
+      new_string: 'v3',
+    }),
+  },
+  {
+    tool: 'create_file',
+    args: (seed) => ({ project: seed.indexDocId, path: 'golden-new.qmd', content: 'new\n' }),
+  },
+  {
+    tool: 'delete_file',
+    args: (seed) => ({ project: seed.indexDocId, path: 'golden-new.qmd' }),
+  },
+  {
+    tool: 'rename_file',
+    args: (seed) => ({
+      project: seed.indexDocId,
+      old_path: 'index.qmd',
+      new_path: 'golden-renamed.qmd',
+    }),
+  },
+  {
+    tool: 'create_project',
+    args: () => ({ files: [{ path: 'p.qmd', content: 'x\n' }] }),
+  },
+];
 
 describe('result conformance (BP-1 net)', () => {
   it('registers a golden case for every tool that declares an outputSchema', async () => {
@@ -225,6 +267,46 @@ describe('result conformance (BP-1 net)', () => {
           `tool ${name} declares an outputSchema but has no golden result case`,
         ).toContain(name);
       }
+      // And the converse: no stale cases for schema-less tools.
+      for (const name of covered) {
+        expect(
+          withOutputSchema,
+          `golden case for ${name} but the tool declares no outputSchema`,
+        ).toContain(name);
+      }
+    } finally {
+      await f.close();
+    }
+  });
+
+  // The BP-1 contract, directly: structuredContent matching the
+  // declared outputSchema, with the JSON text fallback retained.
+  it('list_files carries structuredContent matching its outputSchema plus the JSON text fallback', async () => {
+    const f = await startInMemoryMcp();
+    try {
+      const seed = await seedProject(f, [{ path: 'index.qmd', content: 'x\n' }]);
+      const { tools } = await f.client.listTools();
+      const declared = tools.find((t) => t.name === 'list_files')?.outputSchema;
+      expect(declared, 'list_files declares no outputSchema').toBeDefined();
+
+      const result = await callTool(f, 'list_files', { project: seed.indexDocId });
+      expect(result.isError).not.toBe(true);
+      // Text fallback retained: the bare JSON array, as today.
+      const block = result.content[0];
+      expect(block?.type).toBe('text');
+      if (block?.type !== 'text') throw new Error('unreachable');
+      const fromText = JSON.parse(block.text) as Array<{ path: string; type: string }>;
+      expect(fromText).toEqual([{ path: 'index.qmd', type: 'text' }]);
+      // structuredContent: the same files, wrapped as an object.
+      const structured = result.structuredContent as { files?: unknown } | undefined;
+      expect(structured?.files).toEqual(fromText);
+
+      const ajv = new Ajv2020({ allErrors: true });
+      const validate = ajv.compile(declared!);
+      expect(
+        validate(structured),
+        `structuredContent fails its outputSchema: ${JSON.stringify(validate.errors)}`,
+      ).toBe(true);
     } finally {
       await f.close();
     }
@@ -357,10 +439,11 @@ describe('security invariants', () => {
   });
 
   // BP-18: the authorization URL handed to the browser is built from
-  // *fetched* authorization-server metadata with no scheme/host check
-  // today. These pin the invariant the Phase 1 fix must implement: with
-  // the insecure-auth escape hatch unset, nothing but a public https URL
-  // may reach the browser (or the user). `it.fails` until then.
+  // *fetched* authorization-server metadata — SSRF input. These pin the
+  // invariant the Phase 1 fix landed: with the insecure-auth escape
+  // hatch unset, nothing but a public https URL may reach the browser
+  // (or the user). Landed red-by-construction as `it.fails` in Phase 0;
+  // flipped when the fix landed in Phase 1 (bd-zv8u2sxi).
   describe('authorization URL validation (BP-18)', () => {
     const BAD_ENDPOINTS = [
       'http://169.254.169.254/latest/meta-data', // link-local cloud metadata
@@ -413,7 +496,7 @@ describe('security invariants', () => {
       return { state, browserUrls };
     }
 
-    it.fails(
+    it(
       'refuses to hand a non-https or private-host authorization URL to the browser',
       async () => {
         // The escape hatch for local dev IdPs must be off for the default
@@ -441,6 +524,47 @@ describe('security invariants', () => {
       expect(browserUrls).toHaveLength(1);
       expect(browserUrls[0]).toMatch(/^https:\/\/idp\.example\.com\/authorize\?/);
     });
+
+    // Unit-level edge cases for the validator itself (conformance covers
+    // the integration path through `authenticate`).
+    describe('assertSafeAuthorizationEndpoint edge cases', () => {
+      const strictEnv = {} as NodeJS.ProcessEnv;
+      const REJECT = [
+        'javascript:alert(1)',
+        'data:text/html,<script>',
+        'file:///etc/passwd',
+        'http://169.254.169.254/', // link-local
+        'https://10.0.0.4/authorize', // private
+        'https://172.16.8.1/authorize', // private 172.16/12
+        'https://100.64.1.1/authorize', // CGNAT
+        'https://127.0.0.1/authorize', // loopback without the hatch
+        'https://[::1]/authorize', // v6 loopback
+        'https://[fc00::1]/authorize', // v6 unique-local
+        'https://[fe80::1]/authorize', // v6 link-local
+        'https://[::ffff:192.168.0.1]/authorize', // v4-mapped private
+        'https://localhost:8888/authorize', // named loopback without the hatch
+        'not a url',
+      ];
+      for (const endpoint of REJECT) {
+        it(`rejects ${endpoint}`, () => {
+          expect(() => assertSafeAuthorizationEndpoint(endpoint, strictEnv)).toThrow();
+        });
+      }
+      it('accepts a public https endpoint', () => {
+        expect(() =>
+          assertSafeAuthorizationEndpoint('https://idp.example.com/authorize', strictEnv),
+        ).not.toThrow();
+      });
+      it('accepts a loopback http endpoint only with the escape hatch', () => {
+        const hatchEnv = { QUARTO_HUB_MCP_ALLOW_INSECURE_AUTH: '1' } as NodeJS.ProcessEnv;
+        expect(() =>
+          assertSafeAuthorizationEndpoint('http://127.0.0.1:8888/authorize', hatchEnv),
+        ).not.toThrow();
+        expect(() =>
+          assertSafeAuthorizationEndpoint('http://127.0.0.1:8888/authorize', strictEnv),
+        ).toThrow();
+      });
+    });
   });
 });
 
@@ -449,11 +573,12 @@ describe('security invariants', () => {
 // ============================================================================
 
 describe('cancellation hygiene (BP-3)', () => {
-  // RED until Phase 1 threads extra.signal through handleTool →
-  // ConnectionManager.waitForChange: today the cancelled call's waiter
-  // (and its timeout timer) lives on until the timeout fires, leaking
-  // per-cancelled-call state in the connection manager.
-  it.fails(
+  // Phase 1 threads ctx.mcpReq.signal through handleTool →
+  // ConnectionManager.waitForChange: the cancelled call's waiter (and
+  // its timeout timer) is unregistered promptly, not when the timeout
+  // fires. Landed red-by-construction as `it.fails` in Phase 0; flipped
+  // when the fix landed in Phase 1 (bd-zv8u2sxi).
+  it(
     'cancelling wait_for_change mid-poll resolves as cancelled and frees the waiter',
     async () => {
       const f = await startInMemoryMcp();
@@ -466,7 +591,6 @@ describe('cancellation hygiene (BP-3)', () => {
             name: 'wait_for_change',
             arguments: { project: seed.indexDocId, path: 'live.qmd', timeout_seconds: 3 },
           },
-          undefined,
           { signal: controller.signal },
         );
 
@@ -497,4 +621,45 @@ describe('cancellation hygiene (BP-3)', () => {
     },
     30000,
   );
+});
+
+// ============================================================================
+// Tool titles (BP-9)
+// ============================================================================
+
+describe('tool titles (BP-9)', () => {
+  it('every listed tool carries a human-friendly title', async () => {
+    const f = await startInMemoryMcp();
+    try {
+      const { tools } = await f.client.listTools();
+      const titles = Object.fromEntries(tools.map((t) => [t.name, t.title]));
+      expect(titles).toEqual({
+        connect_project: 'Connect to a project',
+        list_files: 'List files',
+        read_file: 'Read a file',
+        wait_for_change: 'Watch for changes',
+        write_file: 'Write a file',
+        patch_file: 'Patch a file',
+        create_file: 'Create a file',
+        delete_file: 'Delete a file',
+        rename_file: 'Rename a file',
+        create_project: 'Create a project',
+      });
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('auth tools carry titles too', async () => {
+    // Auth tools register only with OAuth env configured; the definition
+    // table is the wire source, so assert it directly.
+    const titles = Object.fromEntries(
+      AUTH_TOOL_DEFINITIONS.map((t) => [t.name, (t as { title?: string }).title]),
+    );
+    expect(titles).toEqual({
+      authenticate: 'Sign in to Quarto Hub',
+      authenticate_clear: 'Clear Quarto Hub credentials',
+      authenticate_status: 'Check Quarto Hub sign-in status',
+    });
+  });
 });

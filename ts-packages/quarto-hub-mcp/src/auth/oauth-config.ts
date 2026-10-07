@@ -118,6 +118,103 @@ export function issuerAllowsInsecureRequests(issuer: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Authorization-endpoint validation (BP-18)
+// ---------------------------------------------------------------------------
+
+/** Decimal IPv4 octet, or NaN. */
+function ipv4Octets(hostname: string): number[] | undefined {
+  const parts = hostname.split('.');
+  if (parts.length !== 4) return undefined;
+  const nums = parts.map((p) => (/^\d{1,3}$/.test(p) ? Number(p) : NaN));
+  if (nums.some((n) => Number.isNaN(n) || n > 255)) return undefined;
+  return nums;
+}
+
+/**
+ * True for IP literals in private, loopback, link-local, CGNAT,
+ * benchmark, multicast, or reserved space — the destinations a
+ * metadata-derived authorization URL must never send a user to (SSRF).
+ * Hostnames are NOT checked: they require DNS (async here, and TOCTOU
+ * regardless); TLS and oauth4webapi's own checks are the backstop for
+ * named hosts.
+ */
+function isPrivateOrReservedHost(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  const v4 = ipv4Octets(h);
+  if (v4) {
+    const [a, b] = v4;
+    if (a === 0 || a === 10 || a === 127) return true; // unspecified, private, loopback
+    if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT 100.64/10
+    if (a === 169 && b === 254) return true; // link-local
+    if (a === 172 && b >= 16 && b <= 31) return true; // private 172.16/12
+    if (a === 192 && b === 168) return true; // private 192.168/16
+    if (a === 198 && (b === 18 || b === 19)) return true; // benchmarking 198.18/15
+    if (a >= 224) return true; // multicast + reserved
+    return false;
+  }
+  // IPv6 literals (URL hostnames keep their brackets). A hostname —
+  // which never contains a colon — is not an IP literal: not private.
+  const v6 = h.replace(/^\[|\]$/g, '');
+  if (v6 === '::' || v6 === '::1') return true; // unspecified, loopback
+  if (!v6.includes(':')) return false;
+  if (v6.startsWith('::ffff:')) {
+    const mapped = ipv4Octets(v6.slice(7));
+    if (mapped) return isPrivateOrReservedHost(mapped.join('.'));
+    return true; // unparseable mapped form — refuse
+  }
+  const firstGroup = parseInt(v6.split(':')[0] ?? '0', 16);
+  if (Number.isNaN(firstGroup)) return true; // malformed v6 literal — refuse
+  if ((firstGroup & 0xfe00) === 0xfc00) return true; // unique local fc00::/7
+  if ((firstGroup & 0xffc0) === 0xfe80) return true; // link-local fe80::/10
+  return false;
+}
+
+/**
+ * Validate an authorization endpoint from *fetched* IdP metadata before
+ * it is surfaced to the user or handed to the browser (BP-18). The
+ * metadata is SSRF input: accept `https:` on public hosts, plus
+ * loopback `http:`/`https:` only with the same escape hatch as
+ * `resolveIssuer` (`QUARTO_HUB_MCP_ALLOW_INSECURE_AUTH=1`, dev IdPs).
+ * Everything else — non-http(s) schemes, plain http to a public host,
+ * private/link-local/reserved IP literals — throws.
+ */
+export function assertSafeAuthorizationEndpoint(
+  endpoint: string,
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  let url: URL;
+  try {
+    url = new URL(endpoint);
+  } catch {
+    throw new Error(
+      `The identity provider's discovery metadata returned an invalid ` +
+        `authorization endpoint: ${JSON.stringify(endpoint)}`,
+    );
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+    throw new Error(
+      `The identity provider's discovery metadata returned a non-http(s) ` +
+        `authorization endpoint (${url.protocol}//…); refusing to open it.`,
+    );
+  }
+  if (env[ALLOW_INSECURE_VAR] === '1' && isLoopbackHost(url.hostname)) return;
+  if (url.protocol !== 'https:') {
+    throw new Error(
+      `The identity provider's discovery metadata returned a plain-http ` +
+        `authorization endpoint (${url.hostname}); refusing to open it. ` +
+        `https is required outside loopback development issuers.`,
+    );
+  }
+  if (isLoopbackHost(url.hostname) || isPrivateOrReservedHost(url.hostname)) {
+    throw new Error(
+      `The identity provider's discovery metadata returned an authorization ` +
+        `endpoint on a private or reserved address (${url.hostname}); ` +
+        `refusing to open it.`,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // AuthorizationServer discovery (cached)
 // ---------------------------------------------------------------------------
 

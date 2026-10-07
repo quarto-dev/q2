@@ -19,10 +19,9 @@
  * tool surface are exactly what a real client sees.
  */
 
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
+import type { CallToolResult } from '@modelcontextprotocol/client';
+import type { McpServer } from '@modelcontextprotocol/server';
 
 import { ConnectionManager } from './connection-manager.js';
 import { createServer } from './index.js';
@@ -34,7 +33,7 @@ export interface InMemoryMcpFixture {
   /** The connection manager under test — same instance the server uses. */
   readonly manager: ConnectionManager;
   /** The server under test. */
-  readonly server: Server;
+  readonly server: McpServer;
   /** A connected SDK client linked to the server. */
   readonly client: Client;
   /** Tear down client, server, manager connections, and hub. */
@@ -84,18 +83,16 @@ export interface SeededProject {
 }
 
 /**
- * `client.callTool` with the result typed as `CallToolResult`. The SDK's
- * no-`resultSchema` overload (1.x zod-compat) widens `content` to a loose
- * type; the harness asserts on result shapes constantly, so it casts once
- * here instead of at every call site. Cancellation tests that need
- * `RequestOptions` (signal) call `client.callTool` directly.
+ * `client.callTool` with the result typed as `CallToolResult`.
+ * Cancellation tests that need `RequestOptions` (signal) call
+ * `client.callTool` directly.
  */
 export async function callTool(
   fixture: InMemoryMcpFixture,
   name: string,
   args: Record<string, unknown>,
 ): Promise<CallToolResult> {
-  return (await fixture.client.callTool({ name, arguments: args })) as CallToolResult;
+  return fixture.client.callTool({ name, arguments: args });
 }
 
 /**

@@ -418,100 +418,250 @@ code).**
 
 Test specifications (all red before implementation):
 
-- [ ] Wrong-typed argument (`path: 42`, missing `project`) → `isError` result
+- [x] Wrong-typed argument (`path: 42`, missing `project`) → `isError` result
   naming the offending parameter and expected type (BP-2; SEP-1303 — tool
   execution error, not protocol error).
-- [ ] Client-cancelled `wait_for_change` → prompt cancellation, no listener
+- [x] Client-cancelled `wait_for_change` → prompt cancellation, no listener
   leak (BP-3; Phase 0 harness asserts).
-- [ ] `list_files` result carries `structuredContent` matching its
+- [x] `list_files` result carries `structuredContent` matching its
   `outputSchema`, with the JSON text fallback retained (BP-1).
-- [ ] Dual-era handshake: a legacy client (`initialize`, `2025-11-25`) and a
+- [x] Dual-era handshake: a legacy client (`initialize`, `2025-11-25`) and a
   modern client (`server/discover`, per-request `_meta`) both list and call
   tools against the same process, and `instructions` arrives on both paths
   (BP-16).
-- [ ] `initialize`/`server/discover` reports the real embedded version plus
+- [x] `initialize`/`server/discover` reports the real embedded version plus
   `description` and `websiteUrl` (BP-10).
-- [ ] `read_file` returns `hash`; `write_file` with a stale `expected_hash`
+- [x] `read_file` returns `hash`; `write_file` with a stale `expected_hash`
   is refused with the current content + hash and changes nothing;
   `patch_file` with a matching `expected_hash` succeeds and returns the new
   `hash` (ERG-1).
-- [ ] `write_file` result carries `synced: true` once the in-process hub has
+- [x] `write_file` result carries `synced: true` once the in-process hub has
   acknowledged the change; with the hub stalled, `synced: false` within the
   bound, and the write still lands when the hub returns (ERG-2).
-- [ ] `read_file` on a missing path names `list_files` and the closest
+- [x] `read_file` on a missing path names `list_files` and the closest
   existing paths (ERG-4); an unknown tool name is a JSON-RPC `-32602` error,
   not an `isError` result (BP-15).
-- [ ] `tools/list` order is identical across calls and carries `ttlMs`
+- [x] `tools/list` order is identical across calls and carries `ttlMs`
   (BP-17).
 - [ ] Startup against a cached credential emits no `TimeoutNegativeWarning`
   and no automerge deprecation warning on stderr (HY-6).
-- [ ] Concurrent `authenticate` calls serialize (BP-12).
-- [ ] `authenticate_status` reports `{authenticated, hub, identity?, expiry?}`
+- [x] Concurrent `authenticate` calls serialize (BP-12).
+- [x] `authenticate_status` reports `{authenticated, hub, identity?, expiry?}`
   without triggering a flow (BP-13).
-- [ ] Share URL naming a *different* `server=` now connects to that server
+- [x] Share URL naming a *different* `server=` now connects to that server
   instead of erroring (bd-qt7h8h5g): unit tests for multi-server manager
   keying + e2e against two in-process hubs; regression test that Bearer is
   never replayed cross-origin.
 
 Work items:
 
-- [ ] BP-16: migrate to SDK v2 (`@modelcontextprotocol/server` for the
+- [x] BP-16: migrate to SDK v2 (`@modelcontextprotocol/server` for the
   server, `@modelcontextprotocol/client` in tests): `McpServer.registerTool`
   with zod v4 input/output schemas, stdio transport from
   `@modelcontextprotocol/server/stdio`, dual-era enabled. Keep `handleTool`'s
   shape (transport-agnostic): the migration touches registration and types,
   not handler logic. Re-run `bundle.test.ts` and `q2 mcp --launcher-info`;
   Node floor is ≥ 20 (repo pins 24). Record Q-1's outcome.
-- [ ] BP-2: input validation comes from the v2 zod schemas (SEP-1303 error
+- [x] BP-2: input validation comes from the v2 zod schemas (SEP-1303 error
   shape); the hand-written JSON schemas are deleted, not duplicated.
-- [ ] BP-15: unknown tool → protocol error. BP-17: `ttlMs`/`cacheScope` on
+- [x] BP-15: unknown tool → protocol error. BP-17: `ttlMs`/`cacheScope` on
   `tools/list` (static list → long TTL).
-- [ ] **Checkpoint (intra-phase gate):** once the BP-16 migration and its
+- [x] **Checkpoint (intra-phase gate):** once the BP-16 migration and its
   free fallout (BP-2, BP-15, BP-17) land, run the full phase-close gate
   (`cargo xtask verify`, `npm run test -w ts-packages/quarto-hub-mcp`, eval
   suite) and commit before starting the ergonomics batch (ERG-1 onward). The
   dual-era handshake and wrong-typed-argument test specs must be green at
   this point. The migration is the riskiest single change in this plan;
   everything after it is small and independently revertable.
-- [ ] ERG-1: `hash` on `read_file`/`write_file`/`patch_file` results;
+
+#### Phase 1 checkpoint record (landed 2026-10-06, bd-zv8u2sxi)
+
+**BP-16 migration.** `@modelcontextprotocol/sdk` 1.x →
+`@modelcontextprotocol/server` 2.3.1 (pinned `~2.3.1`), with
+`@modelcontextprotocol/client` + `/core` 2.3.1 in devDeps for the harness.
+`registerTools` is now per-tool `McpServer.registerTool` calls with zod v4
+schemas (zod 4.4.3 dedupes workspace-wide); `handleTool` and every handler
+kept verbatim (transport-agnostic, revert = registration-only). The stdio
+entrypoint is `serveStdio(factory)` — the v2 entry that owns era
+classification and instance pinning — replacing hand-wired
+`server.connect(new StdioServerTransport())`, which in v2 serves **legacy
+only**: `supportedProtocolVersions` merely installs the discover handler;
+era pinning happens inside `serveStdio`'s `connectInstance` (SDK-internal
+`setNegotiatedProtocolVersion`). One migration-found wire detail: the
+2026-07-28 `_meta` envelope keys are camelCase
+(`io.modelcontextprotocol/protocolVersion`), not kebab-case. `path` became
+schema-optional on the six share-URL-`file=`-defaultable tools (zod
+validation runs before `normalizeArgs` can default it); the requirement is
+now enforced post-normalization with a message naming the share-URL
+affordance. HY-2's dead `registerAuthTools` went away with the migration.
+
+**Q-1 outcome (recorded).** The zod objection (`tools.ts:7-8`) is fully
+retired: zod v4 schemas are the single source for the advertised JSON
+Schema and runtime validation; zod 4.4.3's `~standard.jsonSchema`
+conversion keeps `.describe()` text and emits draft 2020-12 with a
+`$schema` declaration (BP-11 closed as fallout). Friction was all in the
+dual-era enablement described above — the migration guide does not
+surface that `server.connect()` + `StdioServerTransport` is legacy-only,
+nor that `InMemoryTransport` carries no era classification (the dual-era
+tests therefore drive `serveStdio` over a stdio-shaped in-memory wire —
+the production path).
+
+**E2E (real binary, recorded).** `cargo xtask build-hub-mcp-bundle &&
+cargo build --bin q2`; freshness confirmed by `q2 mcp --launcher-info`.
+Legacy: `initialize` → `2025-11-25`, `tools/list` → 12 tools, clean exit
+on stdin EOF. Modern (camelCase envelope): `server/discover` →
+`supportedVersions: ["2026-07-28"]` + instructions; `tools/list` → 12
+tools, `ttlMs: 3600000, cacheScope: "private"`. Both invocations against
+`./target/debug/q2 mcp --server ws://127.0.0.1:1/ws`, output inspected.
+
+**Checkpoint gate.** `cargo xtask verify` green (14/14);
+`npm run test -w ts-packages/quarto-hub-mcp` green (25 files, 274 passed
++ 2 expected-fail + 3 skips — the BP-3/BP-18 `it.fails` nets still red by
+construction). Eval suite 7/7 PASS, median 4 turns, zero `isError`, zero
+retries (transcripts `eval/results/2026-10-06T10-32-53/`): turns/tokens
+in line with the Phase 0 baseline — the migration is agent-invisible, as
+intended.
+- [x] ERG-1: `hash` on `read_file`/`write_file`/`patch_file` results;
   `expected_hash` on `write_file`/`patch_file` (compare-and-swap, reusing
   `hashPayload`).
-- [ ] ERG-2: bounded delivery wait on all write tools (`synced`, default
+- [x] ERG-2: bounded delivery wait on all write tools (`synced`, default
   ≈2 s, `wait_for_sync: false` opt-out); needs one sync-client export
   (`awaitDelivery(path, ms)` over the existing `isDelivered`/`remote-heads`
   plumbing).
-- [ ] ERG-4: error-message convention (parameter, state, next tool;
+- [x] ERG-4: error-message convention (parameter, state, next tool;
   near-match paths) applied to every data tool.
-- [ ] ERG-6: rewrite `instructions` as the operating guide (workflow,
+- [x] ERG-6: rewrite `instructions` as the operating guide (workflow,
   etiquette, auth, read-only, untrusted content).
-- [ ] BP-18: validate the authorization URL (`https`, non-private host)
+- [x] BP-18: validate the authorization URL (`https`, non-private host)
   before surfacing or opening it.
-- [ ] HY-6: fix bd-rgt8rglx (`TimeoutNegativeWarning`) and bd-2qnnrwbd
+- [x] HY-6: fix bd-rgt8rglx (`TimeoutNegativeWarning`) and bd-2qnnrwbd
   (deprecated `initSync()` params — un-deferred and re-scoped to the
   initSync wart only; both are Phase 1 children in braid, so both gate
   this phase's close).
-- [ ] BP-3: thread `extra.signal` through `handleTool` →
+- [x] BP-3: thread `extra.signal` through `handleTool` →
   `ConnectionManager.waitForChange(..., { signal })` and connect paths where
   feasible; abort unregisters listeners.
-- [ ] BP-1: `outputSchema` + `structuredContent` for `connect_project`,
+- [x] BP-1: `outputSchema` + `structuredContent` for `connect_project`,
   `list_files`, `wait_for_change`, `create_project`, and every write tool
   (`{path, hash, synced}`) — and each tool added later; convention enforced
-  by the Phase 0 harness.
-- [ ] BP-10: launcher injects `QUARTO_MCP_SERVER_VERSION` (embed commit +
+  by the Phase 0 harness. (Extended to `read_file` too — Phase 1 reshaped
+  it for ERG-1, and the ERG-1 hash → `expected_hash` loop is exactly the
+  machine-read structuredContent is for. Auth tools stay prose-text: they
+  are interactive flows, not data.)
+- [x] BP-10: launcher injects `QUARTO_MCP_SERVER_VERSION` (embed commit +
   workspace version); server reports it; fallback to a bundle-build-time
   stamp when run standalone. Also set `Implementation.description` and
   `websiteUrl` (shared with `server.json`, CAP-15).
-- [ ] BP-9: add `title` to all tools (and a Quarto icon if trivial — else
-  defer icons to Phase 5).
-- [ ] BP-12: `authenticate` mutex.
-- [ ] BP-13: `authenticate_status` tool.
-- [ ] HY-1: interim message fix — drop the phantom `read_binary_file_metadata`
+- [x] BP-9: add `title` to all tools (and a Quarto icon if trivial — else
+  defer icons to Phase 5). (Titles landed; icons deferred to Phase 5.)
+- [x] BP-12: `authenticate` mutex.
+- [x] BP-13: `authenticate_status` tool.
+- [x] HY-2: delete dead `registerAuthTools`. (Deleted with the BP-16
+  migration — it was v1-only wiring; see the checkpoint record.)
+- [x] HY-1: interim message fix — drop the phantom `read_binary_file_metadata`
   reference (binary reads land in `read_file` in Phase 2, CAP-4).
-- [ ] HY-2: delete dead `registerAuthTools`.
-- [ ] bd-qt7h8h5g: multi-server `ConnectionManager` (per-call `server`
+- [x] bd-qt7h8h5g: multi-server `ConnectionManager` (per-call `server`
   override + share-URL `server=` honored; origin-scoped auth).
-- [ ] HY-3: `rm -rf dist` before `tsc` in the package scripts; confirm no test
+- [x] HY-3: `rm -rf dist` before `tsc` in the package scripts; confirm no test
   or packaging step consumes orphaned `dist/` modules.
+
+#### Phase 1 completion record (landed 2026-10-06, bd-zv8u2sxi)
+
+Everything above the checkpoint record plus the ergonomics batch, in
+twelve commits on `braid/bd-zv8u2sxi-hub-mcp-phase-1-correctness`
+(stacked on Phase 0's branch per the PR-stack rule):
+
+- **ERG-1** (9f1a91c63): `read_file` → `{path, hash, content}`;
+  `write_file`/`patch_file` → `{path, hash}` (+`created` on the create
+  arm) and accept `expected_hash` — a stale hash is refused with the
+  CURRENT content + hash and changes nothing (compare-and-swap).
+- **ERG-2** (06a72087a): every write waits ≤ 2 s for hub acknowledgement
+  and reports `synced: true|false` (`wait_for_sync: false` opts out);
+  new sync-client export `awaitDelivery(paths, ms)` over the exit
+  drain's `isDelivered`/`remote-heads` plumbing (additive, no behavior
+  change; the index doc always participates). Includes create_project.
+- **ERG-4 + HY-1** (491e3b862): every error names parameter / state /
+  next tool; path errors list ≤ 3 closest existing paths (bigram-Dice);
+  the phantom `read_binary_file_metadata` reference is gone.
+- **ERG-6 + ERG-10** (cc4ac70a4): `instructions` rewritten as the
+  ~15-line operating guide (workflow, hash etiquette, `synced`,
+  watching, auth, read-only notice when flagged, untrusted-content
+  note).
+- **BP-18** (5a41c8bea): authorization endpoint validated before
+  surfacing — https + public host, loopback only with the insecure
+  hatch; the Phase 0 `it.fails` net flipped. Also sank a latent
+  listener-promise leak the new early return exposed.
+- **HY-6** (cc2cf2dd7): the bundle's automerge init is now a generated
+  shim calling `initSync({ module })` (bd-2qnnrwbd closed);
+  `q2 mcp` startup emits zero stderr bytes. bd-rgt8rglx's
+  `TimeoutNegativeWarning` does not reproduce in the post-SDK-v2 stack;
+  a warm-keyring e2e pins both halves (closed).
+- **BP-3** (6d94d8abb): `ctx.mcpReq.signal` threads to
+  `waitForChange`; cancel unregisters the waiter + timer and rejects
+  AbortError (not a wrapped isError). The second `it.fails` net
+  flipped — zero expected-fails remain in the suite.
+- **BP-1** (ea3a8dba2): `outputSchema` + `structuredContent` on all ten
+  data tools (extended to `read_file` — the hash→`expected_hash` loop
+  is exactly what machine-readable structure is for). Text fallbacks
+  byte-compatible (`list_files` keeps the bare array; structure is
+  `{ files }`). Harness net armed: 10 golden cases + converse coverage
+  assertion.
+- **BP-10** (a2832908c): launcher injects `QUARTO_MCP_SERVER_VERSION` =
+  `0.32.0+<embed commit>[.dirty]`; standalone falls back to the bundle's
+  build-info stamp; `Implementation.description` + `websiteUrl` set and
+  verified on both eras.
+- **BP-9** (bf448859a): human titles on every tool; icons deferred to
+  Phase 5.
+- **BP-12 + BP-13** (2843f4a82): `authenticate` serialized (second call
+  sees the first's stored credential); `authenticate_status` reports
+  `{authenticated, hub, identity?, expiry?}` with no flow. Tool budget
+  13/24 with auth configured.
+- **HY-3** (54e12cff6): build script `rm -rf dist` first; bundle builds
+  from `src` so tests + `bin` were the only orphan consumers.
+- **bd-qt7h8h5g** (d404a005f, strand closed): manager keyed by
+  (server, indexDocId); share-URL `server=` routes the call, joined
+  authorless — the probe physically cannot attach a Bearer cross-origin;
+  foreign 401/403 → `ForeignHubAuthRequiredError`.
+
+**Phase-close gate.** `cargo xtask verify` green (14/14 — one
+pre-existing flake hit on the first run:
+`quarto-sync-client` `doc-inventory.test.ts` drops the binary doc under
+load, tracked as bd-c72wsugj / bd-fuw5gcni, unrelated to this phase's
+additive sync-client export; rerun green). `npm run test -w
+ts-packages/quarto-hub-mcp` green (29 files, 328 passed + 3 skips, 0
+expected-fail). e2e-auth 4/4 with the q2-launcher channel bound (embed
+at branch tip, freshness confirmed by `q2 mcp --launcher-info`).
+
+**E2E (real binary, recorded).** `./target/debug/q2 mcp --server
+ws://127.0.0.1:1/ws`, output inspected via jq: legacy `initialize` →
+`serverInfo { name: quarto-hub, version: 0.32.0+ea3a8dba2.dirty,
+description, websiteUrl }`, 2025-11-25; modern (camelCase envelope)
+`server/discover` → `supportedVersions: ["2026-07-28"]` + instructions,
+`tools/list` → `ttlMs: 3600000, cacheScope: "private"`; startup stderr
+zero bytes.
+
+**Eval suite (8 tasks — added `stale-write-recovery`, which drives a
+designed stale-hash refusal → merge → retry recovery):**
+`eval/results/2026-10-06T11-41-51/`
+
+| task | success | turns | tokens (in/out) | cost | isError | retries | duration |
+|------|---------|-------|-----------------|------|---------|---------|----------|
+| create-project | PASS | 4 | 98/683 | $0.75 | 0 | 0 | 23s |
+| read-and-report | PASS | 4 | 66/724 | $0.50 | 0 | 0 | 13s |
+| patch-typo | PASS | 6 | 130/1030 | $0.55 | 0 | 0 | 17s |
+| write-new-file | PASS | 6 | 130/1055 | $0.55 | 0 | 0 | 20s |
+| rename-file | PASS | 7 | 130/1074 | $0.56 | 0 | 0 | 21s |
+| collaborator-edit | PASS | 4 | 66/717 | $0.50 | 0 | 0 | 29s |
+| watch-live-edit | PASS | 5 | 98/1025 | $0.54 | 0 | 0 | 50s |
+| stale-write-recovery | PASS | 6 | 130/2160 | $0.64 | 1 | 1 | 51s |
+
+8/8 PASS, median 5.5 turns (baseline 4 — inside noise; the watch and
+recovery tasks are the long poles by design). `stale-write-recovery`'s
+single `isError` is the DESIGNED stale-hash refusal; the transcript
+shows the agent receiving the structured `stale_expected_hash` payload
+(current content + hash) and merging without an extra read. All other
+tasks' zero-`isError` streak holds through the result-shape changes
+(ERG-1/2, BP-1).
 
 ### Phase 2 — Complete the file and project surface
 
