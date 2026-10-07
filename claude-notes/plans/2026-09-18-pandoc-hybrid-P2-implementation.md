@@ -755,7 +755,7 @@ bound seam or an explicit `accepted-untested: <rationale>`.
 
 ### 1. Schema-version mismatch handling, per consumer
 
-**Rust.** `accepted-untested: nothing reads the version at runtime, by decision.** P2's
+**Rust.** `accepted-untested: nothing reads the version at runtime, by decision.` P2\'s
 "Version placement/policy" bullet is explicit: "reject on mismatch is **deferred past v1**… the
 field exists so a *future* out-of-band consumer has something to check, **not because anything
 checks it yet**." A test asserting rejection behavior would be asserting behavior the plan
@@ -801,9 +801,9 @@ mirror is `seam deferred until P5's Lua contract test`.
   (`json::write`) and via the non-streaming path (`blocks_to_source_free_json`, `json.rs:1918`,
   which routes through `write_blocks` → `write_custom_block`), and asserts the two wrapper
   attribute maps are equal after source-key stripping.
-  **Revert:** ⟨delete the `if !custom.plain_data.is_null() { … "data-custom-data" … }` block at
-  `crates/pampa/src/writers/json.rs:1489-1494` (the *non-streaming* twin)⟩ → ⟨the parity
-  assertion⟩ RED. Note this is the one revert that T2.3 deliberately leaves green, which is
+  **Revert:** \⟨delete the `if !custom.plain_data.is_null() { … "data-custom-data" … }` block at
+  `crates/pampa/src/writers/json.rs:1489-1494` (the *non-streaming* twin)\⟩ → \⟨the parity
+  assertion\⟩ RED. Note this is the one revert that T2.3 deliberately leaves green, which is
   exactly why this seam is needed. **Whether to add a checklist item for it is Finding 1.**
 
 ### 3. The 8-type inventory's totality — what catches a 9th type shipping later?
@@ -819,7 +819,7 @@ mirror is `seam deferred until P5's Lua contract test`.
 - **P5's warning is confirmed accurate.** P5 asks for a bidirectional-totality assertion and
   warns the golden harness would not catch this, because an unhandled type's unwrap-and-drop path
   preserves slot content → zero-byte snapshot diff. Verified: the analogous TS behavior is
-  `dispatchers.tsx:668`'s `?? registry['__fallback__']`, which renders rather than fails; and
+  `dispatchers.tsx:668`\'s `?? registry['__fallback__']`, which renders rather than fails; and
   `registry.test.ts:81-95` is a hardcoded one-directional subset assertion, so it does not catch
   a 9th type either. **Nothing in the tree today catches a 9th wire type.**
 - **The mechanism that would**, matching this repo's three existing precedents for exactly this
@@ -833,7 +833,7 @@ mirror is `seam deferred until P5's Lua contract test`.
   (`float_ref_target.rs:346` and `:377`), so the literal grep yields **10** non-test hits for
   **8** types — not the 9 P2's caveat predicts.
   **Revert (if the rule lands):** ⟨add a `CustomNode::new("Sidenote", …)` call site in
-  `crates/quarto-core/src/transforms/` without a schema entry⟩ → ⟨`cargo xtask lint`'s
+  `crates/quarto-core/src/transforms/` without a schema entry⟩ → ⟨`cargo xtask lint`\'s
   `custom-node-schema-unlisted` check⟩ RED.
   **P2 has no checklist item for this and P5 depends on it — see Finding 7. Not decided here.**
 
@@ -929,7 +929,7 @@ correction in `6ec06d95d` says to add `order` to `Callout`, `FloatRefTarget`, `T
   calls `index_custom_target` for any inline custom node passing `has_crossref_plain_data`. Three
   independent corroborations: `crossref/mod.rs:83`'s own doc comment for `EQUATION` states "the
   specific numbering is stored in `plain_data.order` (set by the indexer)"; and
-  `ts-packages/preview-renderer/src/q2-preview/custom/Equation.tsx:36-41`'s `EquationPlainData`
+  `ts-packages/preview-renderer/src/q2-preview/custom/Equation.tsx:36-41`\'s `EquationPlainData`
   **already declares `order`**.
 - **`ExampleEmbed`.** `example_embed.rs:212-216` sets the triple when
   `valid_file.is_some() && is_demo_id(&id)`, so a numbered `#demo-` embed passes
@@ -1027,7 +1027,7 @@ a real loss:
    schema to be unreachable *from*), leaving `Tabset` as the sole entry. Pleasant side effect: 7
    schema types − 1 unreachable = the 6 with components, so that arithmetic is now exact rather
    than coincidental.
-4. **The cost.** Those two fixtures were the binding for `example_embed.rs:175-185`'s
+4. **The cost.** Those two fixtures were the binding for `example_embed.rs:175-185`\'s
    invalid-`file` degradation (Missing-test pass). That binding is **gone**; the path is now
    `accepted-untested` in P2, and its natural home is **P1 Task 4**, which owns
    `ExampleEmbedRenderTransform`\'s format-parameterization. Recorded in the Missing-test pass

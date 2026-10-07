@@ -30,7 +30,7 @@ small styling needed to make them look right.
 
 ### Why this shape
 
-Today the docs hand-author the illustrating snippet as a separate ```markdown
+Today the docs hand-author the illustrating snippet as a separate \`\`\`markdown
 fence *before* the embed div, and the embed plan
 (`2026-06-09-website-example-iframe-embed.md`, lines 25–27 & 293) explicitly
 scoped the snippet *out* of the feature ("hand-authored… out of scope"). This
@@ -50,8 +50,8 @@ loose coupling between a prose code fence and the div beneath it.
   `CustomNode("ExampleEmbed")`. The **entire div body** goes into the `body`
   slot. If the div id is `demo-…` *and* `file=` is valid, it writes the crossref
   triple `{ref_type:"demo", kind:"Demo", identifier}` so `CrossrefIndexTransform`
-  numbers it. `demo`/"Demo" is a built-in ref-type
-  (`crossref/registry.rs:104`), distinct from the theorem-like `exm`/"Example".
+  numbers it. `demo`/\"Demo\" is a built-in ref-type
+  (`crossref/registry.rs:104`), distinct from the theorem-like `exm`/\"Example\".
 - **Render** (`ExampleEmbedRenderTransform`, after `CrossrefRenderTransform`):
   builds a container `Div.embed-example` containing **(1)** the `<iframe>`
   RawBlock (page-relative `src` via `resolve_static_resource_href`, default
@@ -74,7 +74,7 @@ this is *site* CSS, not shipped by Quarto core.
 
 ### Authoring syntax (target)
 
-```markdown
+`````markdown
 ::: {#demo-fragments .embed-example-iframe file="/examples/presentations/03-fragments/slides.html"}
 ```` markdown
 ## Reveal on click
@@ -87,7 +87,7 @@ Appears on the first click.
 Fragments revealing content one step at a time.
 [View source](https://github.com/quarto-dev/q2/tree/main/examples/presentations/03-fragments)
 :::
-```
+`````
 
 Renders to: **code block → iframe → "Demo N: Fragments revealing… View source"**.
 
@@ -146,7 +146,7 @@ For each of the 8 examples:
 2. Move the section's canonical hand-authored code fence **into** the div as the
    first child (the snippet that best represents the deck).
 3. Replace the bare `[Example: NN-…]` link body with a one-sentence caption +
-   a `[View source](…github…)` link (so the numbered output reads
+   \+ a `[View source](…github…)` link (so the numbered output reads
    "Demo N: <sentence>. View source", not "Demo N: Example: NN-…").
 4. Optionally add `@demo-<slug>` cross-references in the prose where they read
    naturally (fragments already does this at line 136).

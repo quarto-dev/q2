@@ -70,8 +70,8 @@ Everything under `external-sources/quarto-cli`:
   (bool | CSS color | image path), `title-block-banner-color`
   (`body|body-bg|<color>`), `title-block-categories` (bool, default true).
 - **Banner colors in SCSS**: `templates/title-block.scss` functions
-  `bannerColor()` ($title-banner-color → $navbar-fg → $body-bg) and
-  `bannerBg()` ($title-banner-bg → $navbar-bg → $body-color); explicit
+  `bannerColor()` (\$title-banner-color → \$navbar-fg → \$body-bg) and
+  `bannerBg()` (\$title-banner-bg → \$navbar-bg → \$body-color); explicit
   user-specified colors/images arrive via the include-in-header style block
   instead.
 - **Not in the title block**: `license`, `copyright`, `citation` render in
@@ -268,7 +268,7 @@ until the epic is done and explicitly approved.
 
 Phase strands
 (all parent-child under bd-gx9cic8z, `blocks` deps encode the order
-0 → 1 → {2 → 3 → 5, 4, 6} → 7):
+0 → 1 → \{2 → 3 → 5, 4, 6\} → 7):
 
 | Phase | Strand |
 |---|---|
@@ -415,7 +415,7 @@ screenshots for banner/visual phases) before any phase is declared done.
   plain-text `description-meta` derived by
   `MetadataNormalizeTransform` (the Pandoc/Q1 head contract,
   explicit value wins); head keywords meta joins list values with
-  `, ` ($for/$sep$)
+  `, ` (\$for/\$sep\$)
 - [x] `has_title_block_content` extended with description / doi /
   date-modified / keywords / categories
 - [x] Lockstep: `PreviewTitleBlock.tsx` metadata grid additions (Q9):

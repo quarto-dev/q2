@@ -392,9 +392,9 @@ bodyEnvelope.before  → Pandoc include-before-body
 ```
 
 The `nav` object passed to templates contains:
-- `navbar`: { left: NavItem[], right: NavItem[], tools: [], collapse: bool, ... }
-- `sidebar`: { title, logo, contents: SidebarItem[], search: bool, ... }
-- `footer`: { left, center, right }
+- `navbar`: \{ left: NavItem\[\], right: NavItem\[\], tools: \[\], collapse: bool, ... \}
+- `sidebar`: \{ title, logo, contents: SidebarItem\[\], search: bool, ... \}
+- `footer`: \{ left, center, right \}
 - `layout`: "article" | "full" | "custom"
 - `language`: localization strings
 - `hasToc`: boolean

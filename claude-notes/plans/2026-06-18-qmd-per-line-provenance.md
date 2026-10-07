@@ -235,12 +235,12 @@ Per `prevalidating-test-seams`: each row names the **real unit** (the new/change
 pampa method, native Rust, **no mocks**), the **seam** (input qmd · call ·
 assertion on the returned `(bytes, spans|SourceInfo)`), and the **named revert →
 RED**. Tests live in `crates/pampa/tests/integration/` (registered in `main.rs`).
-The N\*/E\* fixtures are the research note's, with their observed-wrong numbers
+The N\*/E\* fixtures are the research note\'s, with their observed-wrong numbers
 flipped to **correct**. RED-first.
 
 ### Nest-in (Projection B — `write_block_with_line_spans`)
 
-| # | Fixture (research N*) | Assertion surface | Named revert → RED |
+| # | Fixture (research N\*) | Assertion surface | Named revert → RED |
 |---|---|---|---|
 | T-N1 | `> > A / > > / > > / > > B` (nested BlockQuote, double-blank) | the span for `B` resolves to **source line 3** (was Ls=2) | remove the `Paragraph` leaf bracket → no span / wrong anchor → RED |
 | T-N2 | `- outer / ⟂ - b / ∅ / ∅ / ⟂ - c` (BulletList sublist, loose) | the span covering `c` resolves to **source line 4** (was Ls=2) | drop the gap→synthesized handling → blank lines counted → wrong line → RED |
@@ -251,7 +251,7 @@ flipped to **correct**. RED-first.
 
 ### Engine (Projection A — `write_with_source_info`)
 
-| # | Fixture (research E*) | Assertion surface | Named revert → RED |
+| # | Fixture (research E\*) | Assertion surface | Named revert → RED |
 |---|---|---|---|
 | T-E1 | `Div` + prose + collapsing blanks + code (`BOOM`) | `map_offset(byteof BOOM)` resolves to **BOOM\'s source line** (was the fence line above) | revert recursion (track only top-level blocks) → BOOM inherits the Div's linear piece → wrong line → RED |
 | T-E2 | `BlockQuote` + blanks + code | `map_offset(BOOM)` → BOOM\'s source line | same revert → RED |

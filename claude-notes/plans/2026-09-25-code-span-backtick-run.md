@@ -9,7 +9,7 @@
 
 1. **Token-emission design accepted:** hidden external token emitted by
    `parse_code_span` for any in-span backtick run whose length differs from
-   the delimiter; the grammar's ``/[`]/`` alternative is removed.
+   the delimiter; the grammar's ```/[`]/``` alternative is removed.
 2. **Paragraph-start triple-backtick spans (case 30):** fix in this session
    if it works out; otherwise file a follow-up (uncommon, lower priority).
 3. **Unclosed backtick strings:** keep q2's strictness; a new diagnostic
@@ -120,7 +120,7 @@ pandoc_code_span: $ => prec.right(seq(
    backtick). `code_span_delimiter_length = 1`.
 2. Inside content at `` ``y `` the scanner counts a run of 2, which is not
    1, so it emits nothing and returns false.
-3. The **internal** lexer then matches ``/[`]/`` — one backtick — as content.
+3. The **internal** lexer then matches ```/[`]/``` — one backtick — as content.
 4. The scanner is called again at the *second* backtick of the run: run
    length 1 == delimiter, so it emits `CODE_SPAN_CLOSE`. The span is
    `x` + one backtick, closed by the middle of the run.
@@ -128,7 +128,7 @@ pandoc_code_span: $ => prec.right(seq(
    is refused and no internal rule accepts a lone backtick: parse error.
 
 So the scanner *does* implement the exact-length rule; the internal
-``/[`]/`` rule defeats it by splitting runs. Every failing case in the
+```/[`]/``` rule defeats it by splitting runs. Every failing case in the
 strand's table follows this pattern. A run *shorter* than the delimiter
 survives only because the split-off single backticks never equal the
 delimiter length.
@@ -136,7 +136,7 @@ delimiter length.
 **Consumer side** — `crates/pampa/src/pandoc/treesitter_utils/code_span_helpers.rs:75`
 walks the `content` node and concatenates raw bytes between structural
 `pandoc_soft_break` children. Hidden (underscore-prefixed) external tokens
-do not appear in the tree, so replacing ``/[`]/`` with a hidden external
+do not appear in the tree, so replacing ```/[`]/``` with a hidden external
 token changes nothing on the pampa side.
 
 **Baseline at HEAD** (`bash claude-notes/plans/code-span-backtick-run-investigation/run-cases.sh`):
@@ -145,13 +145,13 @@ token changes nothing on the pampa side.
 | --- | --- | --- | --- |
 | 01–04 | strand's four failing rows | ERROR | this bug |
 | 05–07 | strand's three OK rows | ok | |
-| 12 | `` ` `` ` `` (spec) | ERROR | this bug |
-| 13 | `` `  ``  ` `` (spec) | ERROR | this bug |
-| 17 | `` ` foo `` bar ` `` (spec) | ERROR | this bug |
+| 12 | ``` ` `` ` ``` (spec) | ERROR | this bug |
+| 13 | ``` `  ``  ` ``` (spec) | ERROR | this bug |
+| 17 | ``` ` foo `` bar ` ``` (spec) | ERROR | this bug |
 | 15 | `` `foo\`bar` `` (spec) | ERROR | trailing lone backtick after the span (q2 strictness, see Q3) |
-| 18, 19 | `*foo`*``, `[not a `link](/foo`)` | ERROR | Q-2-12 / unclosed bracket: q2 strictness, unrelated |
+| 18, 19 | ``` `*foo`*`` ```, ``` `[not a `link](/foo`)` ``` | ERROR | Q-2-12 / unclosed bracket: q2 strictness, unrelated |
 | 20–22 | unclosed backtick strings (spec says literal) | ERROR | uncoded parse error, q2 strictness (Q3) |
-| 30 | ```` ``` x ``` b ```` at paragraph start | ERROR | `level < 3` gate in `parse_fenced_code_block` (Q2) |
+| 30 | \`\`\`\` \`\`\` x \`\`\` b \`\`\`\` at paragraph start | ERROR | `level < 3` gate in `parse_fenced_code_block` (Q2) |
 | 31 | fence line inside an open span | ERROR | same split-run mechanism; CommonMark would interrupt the paragraph (Q4) |
 | 10, 11, 14, 16, 23 | remaining spec examples | ok | |
 
@@ -171,8 +171,8 @@ token changes nothing on the pampa side.
   `level != s->code_span_delimiter_length`, `EMIT_TOKEN` it (the run has
   already been consumed and `mark_end`ed). No new serialized state is
   needed: `code_span_delimiter_length` already round-trips.
-- **Phase 2 — Grammar: stop splitting runs.** In `pandoc_code_span`'s
-  content choice, replace `/[`]/` with `$._code_span_backtick_run`. Rebuild
+- **Phase 2 — Grammar: stop splitting runs.** In `pandoc_code_span`\'s
+  content choice, replace ```/[`]/``` with `$._code_span_backtick_run`. Rebuild
   (`tree-sitter generate; tree-sitter build`), run `tree-sitter test`, and
   refresh `baseline-after.txt` with the runner script.
 - **Phase 3 — Verify downstream.** `cargo xtask verify`; check the
@@ -189,9 +189,9 @@ token changes nothing on the pampa side.
 1. **Is the token-emission design acceptable?** Concretely: a new hidden
    external token that `parse_code_span` emits for any backtick run inside
    an open span whose length differs from the delimiter, and the grammar's
-   `/[`]/` alternative goes away. This is exactly the "track the opener
+   ``/[`]/`` alternative goes away. This is exactly the "track the opener
    length in the lexer" idea, and the state already exists. The alternative
-   of keeping `/[`]/` and instead having the scanner *refuse* to close in
+   of keeping ``/[`]/`` and instead having the scanner *refuse* to close in
    mid-run is impossible: by the time the scanner sees the second backtick
    the first is already gone, so the run length is unrecoverable without a
    new token. I see no cheaper option.
@@ -207,8 +207,8 @@ token changes nothing on the pampa side.
    Proposal: keep the strictness (consistent with q2's treatment of
    unclosed `*`, `~`, `'`) but give it a Q-code with the "add a matching
    closer or escape with `` \` ``" hint, as a separate strand. Agree?
-4. **Fence line inside an open span (case 31).** After the fix, `a `x` +
-   newline + ```` ``` ```` + newline + `b`` would parse as a three-line code
+4. **Fence line inside an open span (case 31).** After the fix, ``a `x`` +
+   newline + ```` ``` ```` + newline + ``b` `` would parse as a three-line code
    span whose content contains the fence line. CommonMark and pandoc
    instead let the fence interrupt the paragraph. bd-ilv8p deliberately
    made the soft-line-ending gate ignore fences inside spans, so this is
@@ -233,7 +233,7 @@ recovery (every symbol valid) from emitting it with a stale length.
 `level >= 3` run when the would-be info string contains a backtick and a
 matching closer exists, which fixes case 30 (decision 2).
 
-**Grammar** (`grammar.js`): the `/[`]/` alternative in `pandoc_code_span`
+**Grammar** (`grammar.js`): the ``/[`]/`` alternative in `pandoc_code_span`
 content became `$._code_span_backtick_run`; the token is declared in
 `externals` right after `_code_span_close`. Net symbol count is unchanged
 (one anonymous regex token out, one external in), and `STATE_COUNT` stayed
@@ -252,7 +252,7 @@ tests (`test_pandoc_code_span_inner_run_*` in
 `corpus-compare.txt`): of 158 prose lines holding an affected span, 154
 errored under the old grammar and 15 under the new one; 143 fixed, 0
 lines fixed-by-accident lost, 4 newly erroring. All 4 are malformed under
-the CommonMark rule itself (e.g. `` `` ``r x` `` `` closes at the
+the CommonMark rule itself (e.g. ``` `` ``r x` `` ``` closes at the
 second run, leaving a trailing unmatched backtick), so pandoc reads them
 the same way; they belong to the unclosed-run class. The 11 lines that
 error under both grammars are the same class plus unrelated strictness

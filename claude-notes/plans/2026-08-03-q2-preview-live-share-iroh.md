@@ -896,9 +896,9 @@ then went green with the implementation)*
 
 **Tests first:**
 
-- [x] CLI conflict matrix: `--join` × each of {path, `--share`,
+- [x] CLI conflict matrix: `--join` × each of \{path, `--share`,
   `--no-project`, `--allow-edit`, `--ui editor`, `--data-dir`,
-  `--preview-dir`} rejected; × {`--port`, `--no-browser`, `--host`} accepted
+  `--preview-dir`\} rejected; × \{`--port`, `--no-browser`, `--host`\} accepted
   *(done except `--ui editor`: the `--ui` flag itself is Phase 4
   (bd-jt1etjbn, not yet implemented), so its `--join` conflict lands
   there with the flag — noted in the Phase 4 items below. Conflicts
@@ -961,7 +961,7 @@ then went green with the implementation)*
   (`Endpoint::remote_info(EndpointId)` also exists, `endpoint.rs:1623`,
   but the per-connection API is the right one here)
   *(API change in quarto-p2p: `TunnelStatus::Connected` now carries a
-  `PathKind` ({Direct, Relay, Unknown}, Display-able), fed by a
+  `PathKind` (\{Direct, Relay, Unknown\}, Display-able), fed by a
   per-connection `paths_stream()` watcher task (used over
   `path_events()` because it yields the current snapshot on first
   poll — no missed initial selection). A `conn_generation` counter
@@ -1115,7 +1115,7 @@ required: `App.tsx:418-423`).
   `viewer`); an unknown value (`--ui monaco`) is rejected with the list
   of valid values; **`--ui` × `--join` rejected** (the one Phase 3
   conflict-matrix entry deferred here because the flag didn't exist
-  yet — extend `--join`'s `conflicts_with_all` in `main.rs` and add
+  yet — extend `--join`\'s `conflicts_with_all` in `main.rs` and add
   the parse test alongside Phase 3's `assert_join_conflict` helper)
   *(6 tests in `cli_parse_tests`, incl. the `--share --ui editor
   --allow-edit` composition; the conflict pinned as
@@ -1311,7 +1311,7 @@ for both legs.
   clippy clean on the three touched crates; **full `cargo xtask verify`
   (hub-client legs included, per this phase's policy) → "All
   verification steps passed!"**, output inspected. After verify's own
-  `build:wasm` re-run, the two dists' wasm stayed byte-identical
+  `build:wasm` re-run, the two dists\' wasm stayed byte-identical
   (sha `6a265987…` in both) — the dedupe precondition holds.
 
 ## Phase 5 — Spike: `--join https://quarto-hub.com/#/share/…`
@@ -1339,7 +1339,7 @@ Sketch (what research says is feasible):
   precedent. `/auth/actor` (per-project actor id) needs the same proxying
 - Open questions for the spike: bearer expiry mid-session (no refresh story on
   `/ws` — the hub validates once at upgrade, `server.rs:1595-1601`); whether
-  q2 grows a browserless Google login flow or shells out to `q2`'s existing
+  q2 grows a browserless Google login flow or shells out to `q2`\'s existing
   hub auth; identity/presence when several guests proxy through one bearer
 
 - [ ] Spike + design note + go/no-go

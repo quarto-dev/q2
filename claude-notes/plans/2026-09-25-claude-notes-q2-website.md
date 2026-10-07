@@ -156,6 +156,10 @@ whose original markup had an unbalanced backtick.
 | 2026-10-07, Q-2-7 cleared, star rules widened | 1208 / 1479 | 273 | 372 |
 | 2026-10-07, 12-file Haiku pilot, reviewed | 1220 / 1480 | 262 | 371 |
 | 2026-10-07, 50-file Haiku batch, reviewed | 1269 / 1480 | 213 | 350 |
+| 2026-10-07, batch 2 (+ task-item re-indent tree-wide) | 1326 / 1480 | 156 | 216 |
+| 2026-10-07, batch 3 | 1359 / 1480 | 123 | 212 |
+| 2026-10-07, batch 4 | 1391 / 1480 | 91 | — |
+| 2026-10-07, batch 5 | 1430 / 1480 | 52 | 182 |
 
 Remaining error classes (nightly .20261007): uncoded parse errors 372 (153 files),
 Q-2-12 33, Q-2-11 33, Q-2-41 24, Q-2-5 12, Q-2-35 11, Q-2-13 8, Q-2-2 7, plus a
@@ -223,7 +227,14 @@ Results. Pilot of 12: 6 right and minimal, 3 right but incomplete, 2 overreached
 agents\' own, 36 files touched only by backslashes or dedents, 4 wrong edits
 reverted (a correct code span rewritten with backslashes, emphasis deleted, a
 multi-line span restructured, pointless re-indentation), 1 damaged table row.
-About 8M tokens and 19 minutes for the batch of 50. The self-reported status is
+About 8-9M tokens and 15-19 minutes per batch of 50. Six batches ran on
+2026-10-07 (the user away for the later ones), each reviewed the same way; rules
+were added to the fixer prompt after each: `***` closers (write the inner
+italic with underscores), fence nesting (four backticks), wildcards repeated
+through a file, a wrapped line starting with `+`/`-`/`#`/`>` (escape it), tilde
+fences (not supported, bd-qcdweixf), braces and `$` in prose. The rule that
+mattered most: "if no rule names a fix, make no edit." Without it the agents
+invent one. The self-reported status is
 not reliable (the verifier agent is Haiku too); the standalone render is.
 
 What Haiku gets right that the scripts cannot: closing a bold the author

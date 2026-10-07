@@ -1476,12 +1476,12 @@ its content.
 | fixture | `cb.text` | new span | truth |
 |---|---|---|---|
 | ```` ```{python}\npython\n``` ```` | `python` | 12..18 | 12..18 ✅ |
-| ```` ````{python}\n```\n```` ```` | ```` ``` ```` | 13..16 | 13..16 ✅ |
-| ```` ````{python}\n```\n ```` (no closing fence) | ```` ``` ```` | 0..17 (whole block) | 13..16 ⚠️ |
-| ```` ````{python}\nx\n```\n ```` (no closing fence) | `` x\n``` `` | 0..19 (whole block) | 13..18 ⚠️ |
-| `` - item\n\n  ```{python}\n    x\n  ```\n `` | `  x` | 24..27 | 24..27 ✅ |
-| `` > ```{python}\n> > x\n> ```\n `` | `> x` | 16..19 | 16..19 ✅ (see below — this row does **not** exercise the fence bound) |
-| `` ```{python}\nprint('hi')\n `` (no closing fence) | `print('hi')` | 12..23 | 12..23 ✅ |
+| ````` ````{python}\n```\n```` ````` | ```` ``` ```` | 13..16 | 13..16 ✅ |
+| ````` ````{python}\n```\n ````` (no closing fence) | ```` ``` ```` | 0..17 (whole block) | 13..16 ⚠️ |
+| ````` ````{python}\nx\n```\n ````` (no closing fence) | ```` x\n``` ```` | 0..19 (whole block) | 13..18 ⚠️ |
+| ```` - item\n\n  ```{python}\n    x\n  ```\n ```` | `  x` | 24..27 | 24..27 ✅ |
+| ```` > ```{python}\n> > x\n> ```\n ```` | `> x` | 16..19 | 16..19 ✅ (see below — this row does **not** exercise the fence bound) |
+| ```` ```{python}\nprint('hi')\n ```` (no closing fence) | `print('hi')` | 12..23 | 12..23 ✅ |
 
 **Row 7 is the reassuring one, and it belongs in the record.** An error-recovery
 block with an *ordinary* body still resolves exactly (`12..23`), so rows 3–4's
@@ -1517,7 +1517,7 @@ now says the uniqueness is *unbroken by these probes*, not proven.
 
 **The `:1375` test did not move — measured, not assumed.**
 `nested_concat_cell_options_caption_resolves_correctly` consumes
-`body_source_for`'s output. Probing its fixture under both the new bounded
+`body_source_for`\'s output. Probing its fixture under both the new bounded
 search and the reverted whole-block search gives the **identical** span:
 
 ```
@@ -1549,7 +1549,7 @@ T7 hazard is LF-specific *in that fixture*: with CRLF `cb.text` is `"python\r"`,
 which the info string's `python}` does not contain, so even the whole-block
 search would have landed correctly there. The bounded search is right either way.
 
-Only the last row **discriminates** `is_fence_line`'s `\r` trim: it falls back to
+Only the last row **discriminates** `is_fence_line`\'s `\r` trim: it falls back to
 the whole block exactly as its LF twin does, whereas an untrimmed `"```\r"` would
 not have read as a fence, the region would have run to the block's end, and the
 search would have succeeded at `14..21`. The three well-formed rows resolve
@@ -1575,7 +1575,7 @@ T7).
 **Part A — the dead range computation.** `treesitter.rs:1002-1005` (the
 `range` binding plus the `IntermediateBaseText(text, range)` wrap) is
 deleted; `extract_quoted_text` now returns `String` directly. Narrowed
-`process_shortcode_string`'s parameter to `&dyn Fn() -> String` and dropped
+`process_shortcode_string`\'s parameter to `&dyn Fn() -> String` and dropped
 the callee's `let … else { panic!() }` — that `else` arm called
 `extract_quoted_text_fn()` a **second time** just to format the panic
 message, so narrowing the signature incidentally removes that double
@@ -1614,7 +1614,7 @@ both: each conversion's `read_violations`/`get_violations` path calls
 `pampa::readers::qmd::read` on exactly one file's content, so every
 diagnostic location it produces is necessarily in that file — a second
 file_id could never appear to be silently mismatched. Added the
-splice-safety-guard comment at `q_2_28.rs`'s `== ">}}}"` check (now
+splice-safety-guard comment at `q_2_28.rs`\'s `== ">}}}"` check (now
 :129-134): even a wrong `error_offset` cannot splice wrong bytes, because
 the check either finds the real `>}}}` shape or finds nothing.
 
@@ -1766,7 +1766,7 @@ measured it rather than accepting the reading: a single-piece `Concat` wrapping
 bytes, silently including the gap's `"AB"`; the honest content is `"6789CDE"` and
 the honest answer is `Err(Concat)`. (Probe run and reverted; not committed.)
 
-The hole **predates** this phase — `concat_pieces_are_contiguous`'s loop body is
+The hole **predates** this phase — `concat_pieces_are_contiguous`\'s loop body is
 unchanged by `63936764b` — but the same monotonicity that makes the narrowing
 safe makes the hole *more reachable*: a top-level `Substring` over a gappy
 `Concat` used to be refused wholesale, and now resolves whenever the touched
@@ -1888,7 +1888,7 @@ routed here; on HEAD the guarded block is `:904-919`, the call at `:916`). The p
 `config_diagnostics` in `execute_project` now reads
 `render_diagnostic_guarded(code, || diagnostic.to_text(None))`, with a comment
 saying the guard is **uniformity, not a fix**: `ctx = None` takes
-`to_text_with_renderer`'s structured-text branch and never reaches a renderer,
+`to_text_with_renderer`\'s structured-text branch and never reaches a renderer,
 so the byte-slicing path — the only known panic mechanism — is structurally
 unreachable here today. The comment also names what changes that:
 `config_sources` is built just above (`:884-889`), and the day it is bound and
@@ -1930,7 +1930,7 @@ post-wrap e2e backtrace above shows index 0 still reaching the Q-15-1 render.
 
 **(b) No existing fixture is perturbed.** The whole `quarto` suite is green
 after the wrap. Note this is suite-level evidence, not an enumeration of every
-fixture's config diagnostics; ground (a)'s producer analysis is what makes it a
+fixture's config diagnostics; ground (a)\'s producer analysis is what makes it a
 reason rather than a coincidence.
 
 **Plan 2 correction 1 — § Hand-off item 9** (appended as a dated block quote
@@ -2208,7 +2208,7 @@ content range**, not `SourceInfo::substring` over the whole-node provenance.
 The two agree at **run** granularity, not byte-exactly: a token whose `c0`
 falls *inside* a replacement maps to that run's `src.start` under the
 restriction and to `src.start + (c0 - run_start)` under a literal wrapper.
-Both land inside the same replacement's source range, which `span_for`'s
+Both land inside the same replacement's source range, which `span_for`\'s
 sub-character caveat already licenses, so this is a precision point rather than
 a difference in correctness. The restriction additionally keeps a token that
 lies wholly inside one verbatim run collapsing back to a plain `Original`, so
@@ -2254,7 +2254,7 @@ no reference, so its tiling is one verbatim run and its output is unchanged).
                             p[1]=[0,2] p[2]=[2,4] p[3]=[4,6]
 ```
 
-`dd` and `ee` now resolve to 16 and 19, and `aa*bb`'s three-piece `Concat` is
+`dd` and `ee` now resolve to 16 and 19, and `aa*bb`\'s three-piece `Concat` is
 § 7's worked tiling restricted to that token. This is the `r` coordinate-space
 change for escaped paragraphs on `--from commonmark`, observed rather than
 inferred.
@@ -2324,7 +2324,7 @@ newline ranges for suffix languages — so the suffix is elided, never rewritten
 and block-comment alike; it says nothing about languages q2 does not support.
 
 **Not lifted, and the reason is a missing consumer, not a missing capability.**
-`ProvenanceBuilder`'s `replacement(range, 0)` would express the deletion that
+`ProvenanceBuilder`\'s `replacement(range, 0)` would express the deletion that
 lifting it needs. No q2 language has a transforming option-line syntax, so
 there is no consumer. The header comment says this in those terms.
 
@@ -2435,12 +2435,12 @@ $ … | jq -c '.astContext.p[2], .astContext.p[7], .astContext.p[3,4,5,6]'
 The opening quote is file byte 20 and the closing quote byte 38: the value's
 source extent is **21..38**, quotes excluded, with each escape carried as its
 own piece. That is the value `theorem.rs:345` / `proof.rs:182` clone into the
-`Str`'s `source_info`. Output inspected directly; no test asserts these
+`Str`\'s `source_info`. Output inspected directly; no test asserts these
 numbers, and none was added — this is a cross-check, not a new seam.
 
 **The seventh site, appended to the census.** Plan 2's final fix wave (FIX-2)
 fixed a decoded/raw pairing in
-`crates/quarto-core/src/project/website_post_render.rs`'s `copy_footer_images`
+`crates/quarto-core/src/project/website_post_render.rs`\'s `copy_footer_images`
 that § 6's table predates. Verified 2026-08-23: `:222` now reads
 `let base = content_source_info.as_ref().unwrap_or(&cv.source_info);` and the
 comment at `:208-217` cites `config_markdown.rs:326`, which is byte-identical
@@ -2459,7 +2459,7 @@ restored. The row is appended to the findings doc's table with a dated note.
 > enumerations cannot be conflated.
 
 > **One census row is now stale, and the note says so.**
-> `codeblock_shorthand.rs:486`'s disposition still describes the pre-fix state;
+> `codeblock_shorthand.rs:486`\'s disposition still describes the pre-fix state;
 > Plan 3 Phase 6a fixed it (bounded between-fences search, guarded by
 > `body_source_for_locates_the_body_not_the_info_string`). Recorded in the
 > dated note rather than by rewriting the row, per that document's convention.
@@ -2470,7 +2470,7 @@ Closed **2026-08-22T22:20:45Z** as a **duplicate of `bd-1d6io`** (failure #2,
 "attr key range absorbs the inter-pair separator"); `bd-1d6io` is the superset
 and its close reason records this strand's three durable contributions in
 comment `c-qn11q3g6`. Verified by `braid show bd-49cbyqbt --json`. This is
-hand-off 4(c)'s second half, and it needed **no work in this plan**. Note that
+hand-off 4(c)\'s second half, and it needed **no work in this plan**. Note that
 `bd-1d6io` itself is **`in_progress`, not closed** — it is outside this epic
 (branch `braid/bd-1d6io-annotated-qmd-source-tracking`) and does not gate it.
 

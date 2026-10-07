@@ -85,7 +85,7 @@ tests, so ordering this suite after that step is enough.
 
 - `@quarto/annotated-qmd` — 154/156. `div-attrs.json - Div with attributes
   conversion` and `substring invariant - links.qmd: inline code` (an off-by-one:
-  got `' \`x = 5\`'`, expected `\'\`x = 5\`'`). Tracked by **bd-1d6io**
+  got ``' `x = 5`'``, expected ``'`x = 5`'``). Tracked by **bd-1d6io**
   (`in_progress`). Unchanged since #250 was filed.
 - `@quarto/preview-renderer` `test:integration` — one real assertion failure in
   `custom-components.integration.test.tsx > Equation > appends \tag\{N\} to the
@@ -155,7 +155,7 @@ The 5 failures:
 
 | Crate | Doctest | Cause |
 | --- | --- | --- |
-| `quarto-core` | `crossref::codeblock_shorthand` (lines 19, 34) | prose treated as Rust — smart quotes, backticks, em-dashes; `error: prefix \`cell\` is unknown`, `expected one of ! or ::, found Div` |
+| `quarto-core` | `crossref::codeblock_shorthand` (lines 19, 34) | prose treated as Rust — smart quotes, backticks, em-dashes; ``error: prefix `cell` is unknown``, `expected one of ! or ::, found Div` |
 | `quarto-core` | `engine::jupyter::text_execute::render_cell` (lines 535, 541) | same, plus a real `E0308` mismatched types |
 | `quarto-sass` | `bundle::assemble_themes` (`bundle.rs:769`) | **stale API**: `ThemeContext::new` gained a `runtime: &dyn SystemRuntime` parameter; the doctest still calls it with one argument (`E0061`) |
 

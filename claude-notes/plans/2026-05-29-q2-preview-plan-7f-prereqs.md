@@ -109,7 +109,7 @@ producers do not, which is exactly why those call sites use
 
 **Scope of the strict-reader rule.** Every JSON-wire-format struct that has an `s:` field must reject missing-`s:` on read. Per `crates/pampa/src/writers/json.rs:1068-1195` (Cell 1079, Row 1098, Head 1126, Body 1157, Foot 1187; Block at 1196; Inline at 718), the fields exist on: Block, Inline, Cell, Row, Head, Body, Foot. Apply the strict-reader rule uniformly to all of these in the reader update.
 
-**Error variant.** `JsonReadError::ExpectedSourceInfoRef` exists today at `crates/pampa/src/readers/json.rs:31` but fires when the field is *present but malformed*; its message ("Expected SourceInfo $ref, got inline SourceInfo") is wrong for the missing-entirely case. Add a new variant `MissingSourceInfoRef { node_path: String }` carrying the path-to-the-offender context. A JS-side debugger seeing this error in an `incremental_write_qmd` response should be able to find the responsible producer site immediately.
+**Error variant.** `JsonReadError::ExpectedSourceInfoRef` exists today at `crates/pampa/src/readers/json.rs:31` but fires when the field is *present but malformed*; its message ("Expected SourceInfo \$ref, got inline SourceInfo") is wrong for the missing-entirely case. Add a new variant `MissingSourceInfoRef { node_path: String }` carrying the path-to-the-offender context. A JS-side debugger seeing this error in an `incremental_write_qmd` response should be able to find the responsible producer site immediately.
 
 (Phase 4 work items are listed under the per-caller research finding above, which supersedes the earlier checklist.)
 
@@ -117,7 +117,7 @@ producers do not, which is exactly why those call sites use
 
 Two JSON top-level fields in `crates/pampa/src/writers/json.rs` get single-character names to match the rest of the wire format:
 
-- `attrS` (currently camelCase from `attr_s: AttrSourceJson`) → `a`. Apply `#[serde(rename = "a")]` to the field.
+- `attrS` (currently camelCase from `attr_s: AttrSourceJson`) → `a`. Apply `` #[serde(rename = "a")] `` to the field.
 - `sourceInfoPool` (currently camelCase from `source_info_pool: Vec<SourceInfoJson>`) → `p`. Same mechanism.
 
 Multi-character fields inside `AttrSourceJson` (`classes`, `id`, `kvs`) stay — they're Pandoc-standard. `pandoc-api-version` stays — Pandoc-legacy.
@@ -135,12 +135,12 @@ Keeping these separate matters because the union looks like a wholesale rewrite,
 
 Work items:
 
-- [x] Rust: apply `#[serde(rename = "a")]` to the `attr_s` field. The struct's `#[serde(rename_all = "camelCase")]` at `crates/pampa/src/writers/json.rs:146` would otherwise serialize it as `attrS`; the per-field rename overrides that. No separate fallback to remove — the macro effect is what the override replaces.
-- [x] Rust: apply `#[serde(rename = "p")]` to the `source_info_pool` field (same pattern).
+- [x] Rust: apply `` #[serde(rename = "a")] `` to the `attr_s` field. The struct's `` #[serde(rename_all = "camelCase")] `` at `crates/pampa/src/writers/json.rs:146` would otherwise serialize it as `attrS`; the per-field rename overrides that. No separate fallback to remove — the macro effect is what the override replaces.
+- [x] Rust: apply `` #[serde(rename = "p")] `` to the `source_info_pool` field (same pattern).
 - [x] Rust: update `crates/pampa/src/readers/json.rs` to read the renamed fields.
 - [x] TS: update `ts-packages/pandoc-types/src/types.ts` (every `attrS` field decl; `sourceInfoPool` decl); `ts-packages/preview-renderer/src/types/sourceInfo.ts` and `framework/Ast.tsx` (wire-format-facing); `ts-packages/annotated-qmd/src/{index.ts,block-converter.ts,inline-converter.ts}` (wire-format field accesses + local parameter rename `attrS → attrSource`); annotated-qmd `test/`, `README.md`, `debug-figure.js`, and `check_mismatches.py`. **Audit result 2026-06-01:** `hub-client/src/types/wasm-quarto-hub-client.d.ts` does not reference these keys (verified by `grep`); `hub-client/` and `q2-preview-spa/` likewise do not pattern-match on the renamed keys — they delegate to the TS type packages.
-- [x] Regenerate the 62 `.snap` fixtures in `crates/pampa/snapshots/json/`: `INSTA_UPDATE=always cargo nextest run -p pampa`. Diff confirmed pure-rename (`"attrS":` → `"a":`, `"sourceInfoPool":` → `"p":`) plus a refreshed snapshot-source header from the post-bd-xvdop integration-tests layout (`tests/test.rs` → `tests/integration/test.rs`). Per the commit-split note above, Phase 5 (renames) ships before Phase 4's pool-shift; both regenerate the same 62 files in sequence.
-- [x] Grep `claude-notes/` for `attrS` / `sourceInfoPool`; updated the two *active* references — `designs/provenance-contract.md` and `instructions/performance-profiling.md` — to use the new keys. Historical plans and research notes (k-197 progress, 2025-10-* designs, etc.) intentionally retain the old names since they describe state-as-of-then.
+- [x] Regenerate the 62 `.snap` fixtures in `crates/pampa/snapshots/json/`: `INSTA_UPDATE=always cargo nextest run -p pampa`. Diff confirmed pure-rename (`` "attrS": `` → `` "a": ``, `` "sourceInfoPool": `` → `` "p": ``) plus a refreshed snapshot-source header from the post-bd-xvdop integration-tests layout (`tests/test.rs` → `tests/integration/test.rs`). Per the commit-split note above, Phase 5 (renames) ships before Phase 4's pool-shift; both regenerate the same 62 files in sequence.
+- [x] Grep `claude-notes/` for `attrS` / `sourceInfoPool`; updated the two *active* references — `designs/provenance-contract.md` and `instructions/performance-profiling.md` — to use the new keys. Historical plans and research notes (k-197 progress, 2025-10-\* designs, etc.) intentionally retain the old names since they describe state-as-of-then.
 - [x] Verify the hub server (`crates/hub/`) treats AST JSON as opaque blob and does not pattern-match on `attrS` / `sourceInfoPool` field names. **Audit 2026-06-01:** `grep -rn '"attrS"\|"sourceInfoPool"\|attrS\|sourceInfoPool' crates/hub/` returns nothing — `crates/hub/` does not inspect either field, treats AST JSON as an opaque blob, no changes needed.
 - [x] Regenerate annotated-qmd example fixtures (`ts-packages/annotated-qmd/examples/*.json`, 20 files) and the `math-with-attr.json` test fixture by re-running the pampa CLI over their `.qmd` siblings. The committed fixtures were last regenerated 2025-10-24 (commit 2b2337be) and predate the rename; Phase 5's TS-side changes require the fixtures to use the new keys (`a`, `p`) or the tests can't read them at all.
 - [x] **Side-issue discovered during fixture regeneration** — 2 of 156 annotated-qmd tests fail (substring-invariant for inline code, div-attrs key-source assertion). Both fail in the same shape: writer-recorded start offsets are 1 char too early on inline-code and key-source spans, capturing the preceding whitespace. Filed as bd-1d6io; pre-existing pampa source-tracking regression unmasked by fixture regeneration. Phase 5 only renamed JSON keys — no offset computation was touched, so this is not a Phase 5 regression. Tracked separately so the off-by-one fix doesn't block Phase 5.
@@ -400,7 +400,7 @@ Why widen the enum rather than wire through three callers separately: provenance
   - `crates/quarto-citeproc/src/output.rs:1274` — landed as dedicated `By::citeproc()` (atomic).
   - `crates/quarto-config/src/materialize.rs:132, 152, 165` — landed as `By::programmatic_config()` / `By::unknown()` per site.
   - `crates/quarto-core/src/project/listing/feed/stage.rs:596, 602` — landed as `By::unknown()`. Same shape applied to the sibling sites in `feed/complete.rs` and `listing/post_render_upgrade/substitute.rs`.
-- [x] Change `SchemaError::InvalidStructure::location` to `Option<SourceInfo>`; update the 4 `None` sentinel sites (`schema/merge.rs:32, 51, 88`; `schema/mod.rs:250`), wrap the \~11 real-source sites in `helpers.rs:20, 40, 56, 70, 86, 95, 114, 125, 151, 158` in `Some(...)`. Actual scope was wider — 33 `Some(...)` wraps across helpers.rs, parser.rs, parsers/{combinators,enum,objects,ref,wrappers}.rs — applied via compile-error-driven sweep. Formatter at `error.rs:33-46` now branches on `Option`. New regression test `test_schema_error_invalid_structure_display_no_location`.
+- [x] Change `SchemaError::InvalidStructure::location` to `Option<SourceInfo>`; update the 4 `None` sentinel sites (`schema/merge.rs:32, 51, 88`; `schema/mod.rs:250`), wrap the \~11 real-source sites in `helpers.rs:20, 40, 56, 70, 86, 95, 114, 125, 151, 158` in `Some(...)`. Actual scope was wider — 33 `Some(...)` wraps across helpers.rs, parser.rs, parsers/\{combinators,enum,objects,ref,wrappers\}.rs — applied via compile-error-driven sweep. Formatter at `error.rs:33-46` now branches on `Option`. New regression test `test_schema_error_invalid_structure_display_no_location`.
 - [x] Refactor `InlineAttr::new` signature (at `crates/quarto-pandoc-types/src/inline.rs:340`); add `new_from_attr_source` convenience.
 - [x] Widen `PandocNativeIntermediate::IntermediateAttr` from `(Attr, AttrSourceInfo)` to `(Attr, AttrSourceInfo, SourceInfo)`. Updated every constructor site (5 production sites in `treesitter.rs` + `commonmark_attribute.rs` + `info_string.rs` + `language_specifier.rs`) and every consumer site (the three plan-named sites + 8 destructuring sites in `atx_heading`, `code_span_helpers`, `editorial_marks`, `fenced_code_block` ×2, `fenced_div_block`, `span_link_helpers` ×2).
 - [x] Update the **test-code** `InlineAttr::new` call sites (`quarto-pandoc-types/src/inline.rs:1455, 1474, 1491`; `pampa/src/filters.rs:1503, 1513, 2123`; `pampa/src/writers/plaintext.rs:887`; `pampa/src/lua/types.rs:2932`; `pampa/src/lua/filter.rs:2254`) to pass `SourceInfo::for_test()`. Two `inline.rs` tests migrated to `new_from_attr_source` since they specifically exercise the derive-from-AttrSourceInfo path.
@@ -456,7 +456,7 @@ Per-site landing summary:
   `Invocation`).
 - **quarto-navigation/src/** (16) — `By::programmatic_config()`
   for navigation-item construction without YAML context.
-- **quarto-yaml-validation/src/schema/{merge,mod}.rs** — fixed via
+- **quarto-yaml-validation/src/schema/\{merge,mod\}.rs** — fixed via
   the `Option<SourceInfo>` refactor in the InvalidStructure
   signature change.
 
@@ -504,7 +504,7 @@ The deprecation isn't just informational — it's an **enforcement mechanism**. 
 Once `-D deprecated` is green in CI:
 
 - No new `SourceInfo::default()` callers can land.
-- The "is this a real source or a sentinel?" question collapses to "what's the `By` kind?" — there's no longer an Original{FileId(0),0,0} sentinel to disambiguate.
+- The "is this a real source or a sentinel?" question collapses to "what's the `By` kind?" — there's no longer an Original\{FileId(0),0,0\} sentinel to disambiguate.
 - Writer dispatch can assume `Generated` nodes have well-formed `by` kinds and no defaults lurk.
 
 The Phase 6 audit step ("grep for `SourceInfo::default()`") is therefore redundant once the deprecation is in place — the compiler does the audit. Run the deprecation first, fix the failures, ship Phase 7.

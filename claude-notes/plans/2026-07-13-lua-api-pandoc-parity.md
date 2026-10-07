@@ -584,8 +584,8 @@ test exists and breaks, STOP and show it before deleting/updating.
 ### Phase 2c — missing constructors + userdata-ness (bd-sgfiiktn, in progress 2026-07-13)
 
 - [x] S0. Grow Track-1 coverage (Decision 3's "later" is now): vendored
-  the remaining 7 upstream files (test-{citation,listattributes,
-  metavalue,pandoc,simpletable,table,cell}.lua @ the same
+  the remaining 7 upstream files (test-\{citation,listattributes,
+  metavalue,pandoc,simpletable,table,cell\}.lua @ the same
   c2dc4e11 commit); runner gained per-file case-count floors.
   Corpus 133 → **203 cases; baseline 122 pass / 81 xfail** —
   the 58 new xfails are the empirical spec for this strand:
@@ -649,7 +649,7 @@ test exists and breaks, STOP and show it before deleting/updating.
   Haskell-show `__tostring`, deep `:clone`, and `Cell:walk`/
   `Row:walk` via new walk.rs entry points (typewise_cell/row,
   topdown_cell/row on the existing LuaWalker children map).
-  Fuzzy peekers match pandoc: `peekRowFuzzy` ({attr,cells} pair
+  Fuzzy peekers match pandoc: `peekRowFuzzy` (\{attr,cells\} pair
   or bare cell list), `peekCellFuzzy` (named contents/content or
   bare blocks), strict loud errors elsewhere (non-table row/cell
   lists, garbage alignments — previously silent defaults).
@@ -713,7 +713,7 @@ test exists and breaks, STOP and show it before deleting/updating.
   test-simpletable.lua xfails are now permanent `# DIVERGENCE`
   entries (Track-1 stays 21 xfail — 2 of them permanent; 182
   pass). New integration tests: test_simpletable_constructor_ /
-  test_utils_{to,from}_simple_table_raises_divergence_error.
+  test_utils_\{to,from\}_simple_table_raises_divergence_error.
   E2e: `q2 render` with a SimpleTable-calling filter fails with
   the Q-11-2 message + filter stack traceback (both entry-point
   shapes exercised through the real binary).
@@ -727,7 +727,7 @@ test exists and breaks, STOP and show it before deleting/updating.
   return (wraps the Q-11-3 detail without duplicating it),
   Q-11-5 invalid property assignment (read-only tag / unknown
   field) — adopted in the four fuzzy peekers, filter_return_error,
-  both element __newindex fallbacks, and the Inlines/Blocks
+  both element \_\_newindex fallbacks, and the Inlines/Blocks
   constructors. Ratchets: xfail parsing returns divergence flags;
   a passing `# DIVERGENCE` entry is reported as a stale registry
   entry; `divergence_xfails_are_registered` ties both xfail files

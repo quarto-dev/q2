@@ -87,10 +87,10 @@ characters.
 
 | fixture                                                  | pandoc behavior |
 |----------------------------------------------------------|-----------------|
-| `> > A \`code\n> > span\` nested.` (nested blockquote)   | `BlockQuote [ BlockQuote [ Para [ ... Code "code span" ... ] ] ]` |
-| `> A \`code\nspan\` lazy.` (lazy continuation — no `> ` on line 2) | `BlockQuote [ Para [ ... Code "code span" ... ] ]` |
-| `- Outer\n  - Inner \`code\n    span\` text` (nested list) | nested `BulletList` with `Code "code span"` |
-| `- a\n\n  In looser list, \`code\n  span\` here.` (loose list) | `BulletList` with `Para` containing `Code "code span"` |
+| ``> > A `code\n> > span` nested.`` (nested blockquote)   | `BlockQuote [ BlockQuote [ Para [ ... Code "code span" ... ] ] ]` |
+| ``> A `code\nspan` lazy.`` (lazy continuation — no `> ` on line 2) | `BlockQuote [ Para [ ... Code "code span" ... ] ]` |
+| ``- Outer\n  - Inner `code\n    span` text`` (nested list) | nested `BulletList` with `Code "code span"` |
+| ``- a\n\n  In looser list, `code\n  span` here.`` (loose list) | `BulletList` with `Para` containing `Code "code span"` |
 | `` `a  b` `` (doubled space inside code, single line)     | `Code "a  b"` — doubled space **preserved** |
 | `` `a \n b` `` (multi-line with surrounding spaces)       | ``Code "a   b"`` — `\n` → one space; surrounding spaces preserved |
 
@@ -123,7 +123,7 @@ processor needs a tweak.
 
 `crates/tree-sitter-qmd/tree-sitter-markdown/src/scanner.c`, function
 `parse_code_span` (lines 1607–1647), dispatched from the main inline
-scanner at line 2374 (case `'`'`):
+scanner at line 2374 (case ``'`'``):
 
 ```c
 // Look ahead within the same line to find a closing delimiter
@@ -172,7 +172,7 @@ pandoc_code_span: $ => prec.right(seq(
 )),
 ```
 
-`/[^`]+/` technically matches `\n`, but that is moot: the scanner's
+``/[^`]+/`` technically matches `\n`, but that is moot: the scanner's
 LINE_ENDING / SOFT_LINE_ENDING tokens are emitted token-by-token by the
 external scanner whenever `valid_symbols[*_LINE_ENDING]` is set. The
 grammar at this point does not list them as valid, so a real
@@ -433,15 +433,15 @@ Add to `crates/tree-sitter-qmd/tree-sitter-markdown/test/corpus/code_span.txt`:
 * Two-line code span inside `> ` block quote — content node should
   contain a `pandoc_soft_break` whose `block_continuation` consumes
   the `> ` prefix.
-* **Nested blockquote** — `> > A \`code\n> > span\` nested.` — both
+* **Nested blockquote** — ``> > A `code\n> > span` nested.`` — both
   layers of `> ` consumed by stacked `block_continuation` tokens.
-* **Lazy continuation in a blockquote** — `> A \`code\nspan\` lazy.` —
+* **Lazy continuation in a blockquote** — ``> A `code\nspan` lazy.`` —
   no `> ` on line 2; pandoc still ties it to the same blockquote.
 * Two-line code span inside a list item (continuation indent
   consumed by `block_continuation`).
-* **Nested list** — `- Outer\n  - Inner \`code\n    span\` text` —
+* **Nested list** — ``- Outer\n  - Inner `code\n    span` text`` —
   4-space inner-list continuation indent stripped.
-* **Loose list** — `- a\n\n  In looser list, \`code\n  span\` here.` —
+* **Loose list** — ``- a\n\n  In looser list, `code\n  span` here.`` —
   paragraph block inside a list item.
 * Unclosed multi-line opener: `` `open\nthen text ``  with a blank
   line following — should NOT form a code span; opener stays literal.

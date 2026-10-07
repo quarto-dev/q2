@@ -215,27 +215,27 @@ The bd-fu1a5g6l suppression is lifted: reveal honors
 ### Phase 4 — End-to-end verification (required before "done")
 
 - [x] **Native `q2 render` — VERIFIED in a real browser (Chrome DevTools).**
-      Invocation: `cargo run --bin q2 -- render deck.qmd` on a fixture with
-      ```` ```python ```` + `code-copy: true`, served over http and driven with
+      Invocation: `cargo run --bin q2 -- render deck.qmd` on a fixture
+      with ```` ```python ```` + `code-copy: true`, served over http and driven with
       Chrome DevTools MCP. Observed:
-      - HTML markup: `code-with-copy`, `code-copy-outer-scaffold`,
-        `class="code-copy-button"`, `<i class="bi"></i>` all present (1 each).
-      - Scripts linked by the reveal scaffold, in order:
-        `revealjs/clipboard.min.js` → `revealjs/code-copy-init.js` →
-        `revealjs/reveal.js`.
-      - Compiled reveal theme CSS contains `.code-copy-button` (6×) +
-        `.code-copy-outer-scaffold` (5×); idle icon color resolved to
-        `rgb(111,111,111)` = reveal's `lighten($body-color,30%)` (`$text-muted`).
-      - Computed styles: scaffold `position: relative`, button `border: 0px`
-        (the bd-fu1a5g6l empty-UA-box bug is gone), button `position: absolute`.
-      - **Hover-hide works:** icon `::before` background-image is `none` when not
-        hovering, paints the clipboard SVG on hover.
-      - **Risk #2 cleared:** reveal's hiding rule is scoped to
-        `.reveal .controls button`, not our `.slides` button.
-      - **Actually copies:** trusted click → `navigator.clipboard.readText()`
-        returned the exact code `def greet(name):\n    print(f"hello {name}")`.
-      - Screenshot: `claude-notes/plans/bd-lg6t6qfy-reveal-copy-button-render.png`
-        (styled clipboard icon, hover-only, over highlighted code).
+  - HTML markup: `code-with-copy`, `code-copy-outer-scaffold`,
+    `class="code-copy-button"`, `<i class="bi"></i>` all present (1 each).
+  - Scripts linked by the reveal scaffold, in order:
+    `revealjs/clipboard.min.js` → `revealjs/code-copy-init.js` →
+    `revealjs/reveal.js`.
+  - Compiled reveal theme CSS contains `.code-copy-button` (6×) +
+    `.code-copy-outer-scaffold` (5×); idle icon color resolved to
+    `rgb(111,111,111)` = reveal's `lighten(\$body-color,30%)` (`\$text-muted`).
+  - Computed styles: scaffold `position: relative`, button `border: 0px`
+    (the bd-fu1a5g6l empty-UA-box bug is gone), button `position: absolute`.
+  - **Hover-hide works:** icon `::before` background-image is `none` when not
+    hovering, paints the clipboard SVG on hover.
+  - **Risk #2 cleared:** reveal's hiding rule is scoped to
+    `.reveal .controls button`, not our `.slides` button.
+  - **Actually copies:** trusted click → `navigator.clipboard.readText()`
+    returned the exact code `def greet(name):\n    print(f"hello {name}")`.
+  - Screenshot: `claude-notes/plans/bd-lg6t6qfy-reveal-copy-button-render.png`
+    (styled clipboard icon, hover-only, over highlighted code).
 - [x] **`q2 preview` (WASM) — VERIFIED in a real browser (Chrome DevTools).**
       After `cargo xtask verify` (which rebuilt WASM + the q2-preview SPA) +
       `cargo build --bin q2`, ran `q2 preview deck.qmd` and inspected the deck

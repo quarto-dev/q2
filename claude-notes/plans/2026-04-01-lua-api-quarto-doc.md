@@ -197,16 +197,16 @@ executing script file, tracked via the script-dir stack.
   Reads `FORMAT` global at call time. Logic:
   1. Exact match: if `fmt == FORMAT`, return true
   2. Alias table (hardcoded, matching TS Quarto `_format.lua`):
-     - `"html"` → true if FORMAT in {html, html4, html5, epub, epub2,
-       epub3, revealjs, s5, slidy, slideous, dzslides}
+     - `"html"` → true if FORMAT in \{html, html4, html5, epub, epub2,
+       epub3, revealjs, s5, slidy, slideous, dzslides\}
      - `"html:js"` → true if `is_format("html")` and NOT
        `is_format("epub")`
-     - `"latex"` or `"pdf"` → true if FORMAT in {latex, beamer, pdf}
+     - `"latex"` or `"pdf"` → true if FORMAT in \{latex, beamer, pdf\}
      - `"epub"` → true if FORMAT starts with "epub"
-     - `"markdown"` → true if FORMAT in {markdown, markdown_github,
-       gfm, commonmark, commonmark_x, markua}
+     - `"markdown"` → true if FORMAT in \{markdown, markdown_github,
+       gfm, commonmark, commonmark_x, markua\}
      - `"asciidoc"` or `"asciidoctor"` → true if FORMAT in
-       {asciidoc, asciidoctor}
+       \{asciidoc, asciidoctor\}
      - Everything else → false (exact match only)
   3. Also register `quarto.doc.isFormat` as alias (TS Quarto provides
      both; `kbd.lua` uses both forms)

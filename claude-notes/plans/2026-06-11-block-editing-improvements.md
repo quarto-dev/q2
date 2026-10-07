@@ -915,8 +915,8 @@ Regenerate a clean buffer from the AST instead (reformatting accepted).
   `regenerate_nested_buffers` includes multi-line prefixed children (single- and
   multi-child), excludes single-line items and fenced-div children, keyed by `siKey`.
   *(P3.1, `f5cb3132` + `8a51bb92`. Restriction predicate: prefixing ancestor ∈
-  {BlockQuote,BulletList,OrderedList,DefinitionList} ∧ multi-line. + WASM export
-  + JS wrapper `regenerateNestedBuffers`. 14 integration tests; review APPROVED.)*
+  \{BlockQuote,BulletList,OrderedList,DefinitionList\} ∧ multi-line. + WASM export
+  \+ JS wrapper `regenerateNestedBuffers`. 14 integration tests; review APPROVED.)*
 - [x] Rust **`siKey` contract**: exact `"0:<r0>-<r1>:0"`. *(P3.1)*
 - [x] Rust **source fidelity**: a blockquote child with shortcode + inline math + raw
   span → buffer is source form, not expanded. *(P3.1)*

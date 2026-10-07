@@ -824,7 +824,7 @@ exported `buildCommand(metadata, extractPath, getUvFlags =
 constructUvCommand)`); `lib/cell-execution-regex.ts`,
 `lib/is-marimo-cell.ts`, `lib/render-output.ts`, `\_extensions/marimo/
 command.py`, `\_extensions/marimo/extract.py` are all byte-identical
-(`diff` empty) — confirms the brief's prediction that `2a2f312` "touched
+(`diff` empty) — confirms the brief's prediction that `2a2f312` \"touched
 only marimo-engine.ts + a new test file.\"
 
 Recopied `src/marimo-engine.ts` only. Rebundled with the same symlink
@@ -871,7 +871,7 @@ $ uv pip install --python <scratch>/venv/bin/python marimo   # resolved 0.23.13
 
 Document (`external-env.qmd`, front-matter `external-env: true`):
 
-```
+````
 ---
 title: "Marimo External-Env"
 external-env: true
@@ -881,7 +881,7 @@ external-env: true
 import marimo as mo
 21 + 21
 ```
-```
+````
 
 Rendered with `<scratch>/venv/bin` prepended to `PATH`:
 
@@ -896,7 +896,7 @@ Exit 0; rendered HTML contains `42` and the marimo markers
 *entirely absent* from `PATH` (`which uv` → not found, confirmed) — same
 scratch venv only, plus `deno` and `/usr/bin:/bin`. The render still
 succeeded, exit 0, same `42` + markers. This proves the code path taken
-was genuinely `buildCommand`'s `useExternalEnv` branch (`["python",
+was genuinely `buildCommand`\'s `useExternalEnv` branch (`["python",
 extractPath]`) and never fell through to the `uv` branch — if the
 external-env branch were broken or bypassed, this run would have failed
 outright with "uv: command not found."
@@ -1024,7 +1024,7 @@ pane is the inert source cell.
 resolution paths).** SC8's ratified two-part revert removes ONLY the `python:`
 claim ENTRY (keeping the `claims:` key and the other entries) and adds
 `claims-files: []`. That genuinely reddens (render fails jupyter-unavailable):
-with the static `claims:` map still present, `ts_engine`'s static short-circuit
+with the static `claims:` map still present, `ts_engine`\'s static short-circuit
 answers `claims_language` from the map alone — the missing `python` key resolves
 to a static None and marimo does not claim the cell; the dynamic `claimsLanguage`
 wire call fires ONLY when there is no static map at all, so it is never consulted.

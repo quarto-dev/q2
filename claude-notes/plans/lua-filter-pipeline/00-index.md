@@ -88,7 +88,7 @@ For each stage, we categorize side effects:
 | Finalize | 4 | 0 | 3 (mediabag, cites, deps) | 0 | 0 | 0 |
 | **Total** | **\~57** | **6** | **9** | **0** | **3** | **\~14** |
 
-*Shortcode file loading happens at init, env shortcode reads `os.getenv()`
+\*Shortcode file loading happens at init, env shortcode reads `os.getenv()`
 
 ### WASM Compatibility Summary
 
@@ -101,9 +101,9 @@ For each stage, we categorize side effects:
 | Layout | 6 | 1 (manuscripts) | 0 |
 | Post | \~22 | 0 | 2 (pdf-images, email)* |
 | Finalize | 4 | 3 (mediabag, cites, deps) | 0 |
-| **Total** | **\~57** | **7** | **4*** |
+| **Total** | **\~57** | **7** | **4\*** |
 
-*These blockers only apply to non-HTML output formats. **For HTML live preview, blocked = 0**.
+\*These blockers only apply to non-HTML output formats. **For HTML live preview, blocked = 0**.
 
 ---
 

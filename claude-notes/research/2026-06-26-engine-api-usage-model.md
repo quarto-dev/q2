@@ -256,9 +256,9 @@ the callers (the lens).
 
 | method | engines | Julia? | call sites (verbatim args) |
 |---|---|---|---|
-| `info` | J, Ju, Ma | **yes** | `quarto.console.info(`${firstPart}${sigLine}`)` (julia:738); `…info("Starting julia control server process…")` (julia:339); many more in julia (560-565,571,948-957,1016,…); `quarto.console.info(`Subprocess stderr: ${stderr}`)` (marimo:79); `quarto.console.info(`Running: ${command} ${args.join(" ")}`)` (marimo:314). jupyter uses bare `info()` from log.ts, not `quarto.console.info`. |
-| `error` | Ju, Ma | **yes** | `quarto.console.error("Execution of notebook returned undefined")` (julia:204); `…error("Could not create julia runtime directory.")` (julia:948); `quarto.console.error(`Error executing marimo: ${error}`)` (marimo:377). |
-| `warning` | Ma | no | `quarto.console.warning(`Pandoc conversion failed: ${result.stderr}`)` (marimo:134); `…warning(`Marimo cell ${marimoIndex} has no corresponding output`)` (marimo:335); `…warning(`Expected ${…} marimo cells…`)` (marimo:349). |
+| `info` | J, Ju, Ma | **yes** | ``quarto.console.info(`${firstPart}${sigLine}`)`` (julia:738); `…info("Starting julia control server process…")` (julia:339); many more in julia (560-565,571,948-957,1016,…); ``quarto.console.info(`Subprocess stderr: ${stderr}`)`` (marimo:79); ``quarto.console.info(`Running: ${command} ${args.join(" ")}`)`` (marimo:314). jupyter uses bare `info()` from log.ts, not `quarto.console.info`. |
+| `error` | Ju, Ma | **yes** | `quarto.console.error("Execution of notebook returned undefined")` (julia:204); `…error("Could not create julia runtime directory.")` (julia:948); ``quarto.console.error(`Error executing marimo: ${error}`)`` (marimo:377). |
+| `warning` | Ma | no | ``quarto.console.warning(`Pandoc conversion failed: ${result.stderr}`)`` (marimo:134); ``…warning(`Marimo cell ${marimoIndex} has no corresponding output`)`` (marimo:335); ``…warning(`Expected ${…} marimo cells…`)`` (marimo:349). |
 | `withSpinner` | K, J, Ju, Ma | **yes** | knitr: `quarto.console.withSpinner({message: kMessage, doneMessage:false}, knitrCb)` (rmd.ts:153-157) + (rmd.ts:171-177); jupyter: (jupyter.ts:183-189,206-212); julia: `quarto.console.withSpinner({message:"Checking Julia installation..."}, async()=>{await delay(3000);})` (julia:120-126); marimo: (marimo:240-245). |
 | `completeMessage` | K, J | no | `quarto.console.completeMessage(message)` (rmd.ts:95; jupyter.ts:130). |
 

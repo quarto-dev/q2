@@ -408,7 +408,7 @@ let mut result = engine.execute(&qmd, &exec_context)?;
 So mermaid emits QMD text. Literal HTML in QMD (e.g.
 `<pre class="mermaid">…</pre>` on its own lines, blank-separated)
 parses as `RawBlock(HTML, …)` via pampa's QMD reader (Pandoc
-convention). No need to emit `\`\`\`{=html}` raw-block fences
+convention). No need to emit ```` ```{=html} ```` raw-block fences
 unless we hit an edge case during impl.
 
 **F5. In-process engine convention is *text-level* fence scanning,
@@ -416,7 +416,7 @@ not AST parse-walk-serialize.** The biggest finding of the audit.
 `FixtureEngine` (`crates/quarto-core/src/engine/fixture.rs:120-250`,
 new in PR #238) is the only pure-Rust engine on the multi-engine
 branch and it works text-level: a hand-rolled fence scanner finds
-`{name}` cells and splices replacement text in. **Mermaid should
+``{name}`` cells and splices replacement text in. **Mermaid should
 mirror this** rather than go through pampa's parser:
 
 - Simpler. \~100 lines of text-walking vs. AST manipulation +
@@ -428,7 +428,7 @@ mirror this** rather than go through pampa's parser:
   plantuml/dot engines would all follow the same template.
 
 The cell shape mermaid matches is exactly the FixtureEngine pattern:
-opening fence `` ```{mermaid} `` ... source text ... closing fence
+opening fence ```` ```{mermaid} ```` ... source text ... closing fence
 `` ``` ``. Replacement text is the literal HTML for the `<pre class="mermaid">`
 wrapper, plus (once per document) the jsdelivr `<script>` block
 appended after the document body.
@@ -445,13 +445,13 @@ parse-and-reserialize), and reaches the HTML writer as a literal
 **F7. `EngineExecutionStage` resolves engines via
 `get_engine_with_fallback`** (multi-engine version). Unknown names
 fall back to markdown with a warning. So even before mermaid lands,
-`engine: [knitr, mermaidjs]` doesn't crash — it just warns and
+`engine: [knitr, mermaidjs]` doesn\'t crash — it just warns and
 no-ops on mermaidjs. This means landing the mermaid engine is
 **purely additive**: it changes the behavior of `mermaidjs` from
 "warn + skip" to "actually transform mermaid cells."
 
 **F8. Capture-splice path drops aux fields per-iteration in the
-fold.** Re-verified: `feature/multi-engine`'s
+fold.** Re-verified: `feature/multi-engine`\'s
 `crates/quarto-core/src/stage/stages/capture_splice.rs` still reads
 `result.markdown` only and comments "filters, includes,
 supporting_files — those are engine-side concerns the splice
@@ -480,10 +480,10 @@ scanner), register in always-block (native + WASM), add `"mermaidjs"`
 to `KNOWN_ENGINES`.
 
 - [ ] Add `MermaidEngine` in
-      `crates/quarto-core/src/engine/mermaid.rs` (single file like
-      `markdown.rs` / `fixture.rs`; a directory is overkill).
+  `crates/quarto-core/src/engine/mermaid.rs` (single file like
+  `markdown.rs` / `fixture.rs`; a directory is overkill).
   - `name() == "mermaidjs"`. Always available
-    (`is_available() == true`).
+  (`is_available() == true`).
   - `execute(input, ctx)`: scan `input` line-by-line for opening
     fences of the form `` ```{mermaid} ``; for each, find the
     matching closing fence; replace the entire fenced block with a
@@ -496,7 +496,7 @@ to `KNOWN_ENGINES`.
     bd-mqk49: when engines can declare per-format AST passes, route
     through a format-conditional transform instead. Today Q2 is
     HTML-only so format-locked emission is acceptable.
-  - Reuse `fixture.rs`'s `parse_opening_fence` / `is_closing_fence`
+  - Reuse `fixture.rs`\'s `parse_opening_fence` / `is_closing_fence`
     helpers if they get factored out, or inline the same logic
     (small enough).
 - [ ] Register in `EngineRegistry::new`

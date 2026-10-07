@@ -578,7 +578,7 @@ unrelated to this work.
 
 - [x] Hub-server-authored changes: `index.rs` (`transact` at `:118, :172,
   :191, :271, :306` — files map and capture sidecar) and `sync.rs` (`:164,
-  `:378` — filesystem import/update; the other grep hits are test-module
+  :378` — filesystem import/update; the other grep hits are test-module
   helpers). Stay authorless
   (D8): no code change; add a test asserting a server-written change decodes
   with `author: null` so a future `LoadOptions::author` is a deliberate act.
@@ -640,7 +640,7 @@ unrelated to this work.
      Observer client decodes the file doc's changes: keys resolve to
      exactly the two server-minted authors; three distinct random actors
      (creation client + two browsers); no actor equals an author;
-     identities map keyed `{authorA, authorB}`. Authors overlay in BOTH
+     identities map keyed `\{authorA, authorB\}`. Authors overlay in BOTH
      browsers keys each user's text by their author (per-word spans,
      aggregated per key in assertions). `__COMMENT_DIAG__.me` in the
      preview iframe reads authorA for alice, authorB for bob. Replay
@@ -658,7 +658,7 @@ unrelated to this work.
      `author: null` and attributes via bare-actor fallback (D8); overlay
      keyed correctly.
   4. **legacy continuity** — a pre-transition project crafted with raw
-     automerge (`A.from(..., {actor: aliceAuthorForProject})`, two changes,
+     automerge (`A.from(..., \{actor: aliceAuthorForProject\})`, two changes,
      `author: null` pinned) uploaded via `repo.import` with chosen doc
      IDs: overlay renders legacy text under the bare actor (= alice's
      author, D5), alice's NEW edit lands on the SAME key, the page shows
@@ -685,8 +685,8 @@ unrelated to this work.
   → All 14 steps passed 2026-09-30 (lints incl. CSS, Rust workspace build +
   nextest 15332 passed, ts-packages builds + MCP smoke, hub-client
   build:all + test:ci 1264 unit + 143 integration + 153 wasm, q2-preview-spa
-  build). The smoke_all typst fixtures needed the R packages `flextable`
-  and `gt` installed in the session library (environmental, installed
+  build). The smoke_all typst fixtures needed the R packages ``flextable``
+  and ``gt`` installed in the session library (environmental, installed
   0.10.1 / 1.3.0).
 - [ ] Close bd-6f21d4c6: record the outcome of the Carlos capture plan
   (forced H4 repro / IndexedDB export) or Gordon's waiver of the real

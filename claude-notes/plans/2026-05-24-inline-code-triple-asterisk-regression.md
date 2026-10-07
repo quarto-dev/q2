@@ -70,7 +70,7 @@ content inside the code span (`x***`, `*x***`) is fine.
 
 ## Root cause (confirmed by `pampa -v`)
 
-`pampa -v` on `a \`***\` z` shows:
+`pampa -v` on ``a `***` z`` shows:
 
 ```
 process version:0, version_count:1, state:2931, row:0, col:3
@@ -129,7 +129,7 @@ position after the opening backtick can hit the contract violation,
 because that is the only place the external scanner is asked for a
 lookahead before any content has been consumed by the regex. Three
 consecutive asterisks downstream (`x***`, `*x***`) are absorbed by
-the `/[^`\n\r]+/` regex during ordinary tokenization, never reaching
+the ``/[^`\n\r]+/`` regex during ordinary tokenization, never reaching
 the external dispatch on `*`. Four or more consecutive asterisks
 (`****`, `*****`) take the same path as three at the start — but
 `parse_star` only triggers TRIPLE_STAR for `star_count == 3 &&
@@ -175,11 +175,11 @@ the existing `unit_test_corpus_matches_pandoc_markdown` harness.
 
 Add at least three more fixtures to lock in the surrounding surface:
 
-- `inline-code-triple-star-only.qmd` — content is exactly `\`***\``
-- `inline-code-triple-star-prefix.qmd` — content is `\`***hello\``
-- `inline-code-triple-star-suffix.qmd` — content is `\`hello***\``
+- `inline-code-triple-star-only.qmd` — content is exactly `` `***` ``
+- `inline-code-triple-star-prefix.qmd` — content is `` `***hello` ``
+- `inline-code-triple-star-suffix.qmd` — content is `` `hello***` ``
   (already OK today; regression guard)
-- `inline-code-quad-star.qmd` — content is `\`****\``
+- `inline-code-quad-star.qmd` — content is `` `****` ``
   (regression guard for the "4+ stars is OK" boundary)
 
 ### 2. Tree-sitter corpus case
@@ -303,8 +303,8 @@ unconditional emission and kept failing.
   /tmp/repro.qmd`; confirmed scanner emits TRIPLE_STAR at column 3
   inside `pandoc_code_span` content (LR state 2931) where the token
   is not in valid_symbols. Root cause section updated above.
-- [x] **Write failing tree-sitter corpus test** for `\`***\``,
-  `\`***hello\``, and a `\`****\`` regression guard in
+- [x] **Write failing tree-sitter corpus test** for `` `***` ``,
+  `` `***hello` ``, and a `` `****` `` regression guard in
   `tree-sitter-markdown/test/corpus/code_span.txt` (cases 11/12/13).
   `tree-sitter test` reported the two regression cases failing with
   ERROR nodes before the fix.

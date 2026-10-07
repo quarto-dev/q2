@@ -875,7 +875,7 @@ feature sets.
   observation, classified pre-existing + out of scope: the inert
   pass-through emits the raw fence tag into the class
   (`class="{python}"`), which is the shared writer behavior for
-  brace-fenced blocks (a .qmd ```\{sql\} block routes to jupyter too, so
+  brace-fenced blocks (a .qmd \`\`\`\{sql\} block routes to jupyter too, so
   the same artifact exists there whenever a brace fence passes through
   unexecuted); execution/Phase-3 cell handling makes it moot.
 
@@ -956,7 +956,7 @@ options verbatim, closing fences glued onto the last code line
 newline, so every real-world code cell ends without `\n`; the Phase 2
 converter's `cell_wrap`/`format_output` emitted the closing fence's
 Generated piece as `{ticks}\n` unconditionally, gluing
-`plt.show()` + ``` onto one line — unparseable markdown, and
+`plt.show()` + \`\`\` onto one line — unparseable markdown, and
 unmatchable by the replay engine's fence alignment. All prior converter
 fixtures used `\n`-terminated sources, so no test caught it; only the
 mandated real-binary e2e did (CLAUDE.md's "tests verify the contract the
@@ -1020,8 +1020,7 @@ untouched by this diff.
   `ConversionStash`, `LoadedSource`, `ClaimedConversion` (cell.id and
   cell_type now flow from the ipynb converter — the transport finding
   resolved); `ParseDocumentStage` stamps
-  `FileOrigin::NotebookCell {notebook_path, cell_index, cell_id,
-  cell_type}` on every registered cell in BOTH contexts, and the
+  `FileOrigin::NotebookCell {notebook_path, cell_index, cell_id, cell_type}` on every registered cell in BOTH contexts, and the
   `run_pipeline` StageError rebuild site mirrors it. TDD: the
   per-cell-files test extended first (fixture gained nbformat 4.5 cell
   ids), observed RED on `origin: None`, then GREEN. quarto-core clippy
@@ -1031,8 +1030,7 @@ untouched by this diff.
   `ipynb_parse_error_json_carries_cell_origin` in
   `crates/quarto/tests/integration/json_errors.rs` renders a broken
   .ipynb through the real binary and asserts a diagnostic carries
-  `origin {kind: notebook_cell, notebook_path, cell_index: 1,
-  cell_id, cell_type}`. Passed first run — no q2 wire code was
+  `origin {kind: notebook_cell, notebook_path, cell_index: 1, cell_id, cell_type}`. Passed first run — no q2 wire code was
   needed: q2's consumer calls QER 0.3.2 `diagnostic_to_json`
   directly, and the item-1 commit attaches origin at both
   registration sites. Numbering note, deliberate: labels reserve

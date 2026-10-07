@@ -119,7 +119,7 @@ AnnotatedParse {
 - `schema-navigation.ts` - Navigate schemas by path
 - `schema-utils.ts` - Schema utilities (completions, walking)
 - `schema.ts` - Schema state management
-- `resolve.ts` - Resolve $ref references
+- `resolve.ts` - Resolve \$ref references
 
 **Validation flow**:
 ```typescript
@@ -462,7 +462,7 @@ Must preserve:
 3. **Context-aware completions** (based on formats, position)
 4. **Custom error messages** (from schema annotations)
 5. **Exhaustive completion** (auto-trigger)
-6. **Schema references** ($ref resolution)
+6. **Schema references** (\$ref resolution)
 
 ## Estimation
 

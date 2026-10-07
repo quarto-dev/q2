@@ -51,7 +51,7 @@ npm run build`.)
 
 ### Failure #1 — code-span scanner absorbs preceding whitespace
 
-Concrete syntax tree for `a \`x = 5\` b` at HEAD (`pampa -v`):
+Concrete syntax tree for ``a `x = 5` b`` at HEAD (`pampa -v`):
 
 ```
 pandoc_code_span      (0,1)-(0,9)
@@ -65,8 +65,8 @@ Control cases prove it is whitespace-absorption, not a fixed offset:
 | input | opening delimiter | Code range | verdict |
 |---|---|---|---|
 | `` `x = 5` b `` (col 0) | (0,0)-(0,1) | `[0,7]` | correct |
-| `a \`x = 5\` b` (1 space) | (0,1)-(0,3) | `[1,9]` | absorbs 1 space |
-| `a  \`x = 5\` b` (2 spaces) | (0,1)-(0,4) | `[1,10]` | absorbs **both** spaces |
+| ``a `x = 5` b`` (1 space) | (0,1)-(0,3) | `[1,9]` | absorbs 1 space |
+| ``a  `x = 5` b`` (2 spaces) | (0,1)-(0,4) | `[1,10]` | absorbs **both** spaces |
 
 No Pandoc semantic wants this (the Pandoc one-space-strip rule concerns spaces
 *inside* the backticks). `advance()` in
@@ -132,7 +132,7 @@ multi-kv attribute parsing was first written. **Not a regression; an original
 defect.**
 
 Oracles + logs live in `/tmp/bd-1d6io/` (oracle_code2.py, oracle_attr2.py,
-oracle_code_min.py, bisect-*.log).
+oracle_code_min.py, bisect-\*.log).
 
 ## Why CI stayed green for \~7 months (answers the "snapshots" question)
 

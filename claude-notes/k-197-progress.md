@@ -27,7 +27,7 @@
    - Tests passing
 
 4. **HorizontalRule** - `horizontal-rule.qmd/json` ✅
-   - Multiple horizontal rule styles (---, ***, ___)
+   - Multiple horizontal rule styles (---, \*\*\*, \_\_\_)
    - Tests passing
 
 5. **RawBlock** - `raw-block.qmd/json` ✅
@@ -125,6 +125,6 @@ Term 1
 
 - All fixtures use quarto-markdown-pandoc binary: `cargo run --bin quarto-markdown-pandoc -- -t json -i <file.qmd>`
 - JSON files must be regenerated with stderr redirected: `2>/dev/null` to avoid Cargo output in JSON
-- Custom attributes in Pandoc: Attr = [id, classes, [[key, value]]]
-- AttrSourceInfo = {id, classes, kvs: [[keySourceId, valueSourceId]]}
+- Custom attributes in Pandoc: Attr = \[id, classes, \[\[key, value\]\]\]
+- AttrSourceInfo = \{id, classes, kvs: \[\[keySourceId, valueSourceId\]\]\}
 - When kvs source IDs are null, test needs to validate differently
