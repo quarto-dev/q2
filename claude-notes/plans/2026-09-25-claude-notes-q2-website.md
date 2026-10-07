@@ -108,6 +108,7 @@ before accepting, and keep it for the long tail, not for whole documents.
 | bd-dollar-math-flanking-wzjx4hn8 | `$` without Pandoc's flanking rules: prices and shell prompts fail |
 | bd-unmatched-backtick-run-literal-tjfo21xq | unmatched backtick run: intentional rejection, needs a Q-code |
 | bd-uncoded-braces-indent-9eq8004k | braces in prose and indented lines fail without a Q-code |
+| bd-jfjyds7r | a setext heading (`===` underline) silently renders as a paragraph, no diagnostic |
 
 Shipped in 0.33.0-nightly.20260925: the code-span fix, the nested-project boundary,
 and the flanking fix for `*`, `~` and `^` (now literal, no error). `_` is half done:
@@ -272,8 +273,13 @@ plans/2026-09-29-typst-smoke-all-followup.md:85:4: 6. [**]`authors.lua` (shared 
    Known sources: code spans with long backtick runs (use a longer delimiter),
    `$ ` shell prompts in prose, braces in prose (Q-2-41 too), indented lines.
 3. Q-2-11 (unclosed `"`), Q-2-35 (indented code), Q-2-16 (`^`), then the warnings.
-4. Write the agent guidance doc (a "writing markdown for Q2" page) from the escaping
-   table above, and point `AGENTS.md` at it. Update plan templates, e.g. the
-   `` `main` @ `sha` `` header.
+4. ~~Write the agent guidance doc~~ Done 2026-10-07: `docs/guides/authoring/migrating-markdown.qmd`
+   (user-facing, served by `q2 agents-info`), `claude-notes/instructions/writing-notes.md`
+   (the habits, in frequency order), and pointers in `AGENTS.md`. The plan templates
+   need no change: they contain no indented code, and the `` `main` @ `sha` `` header
+   is literal text since the bare-`@` fix. The indented blocks in the notes are the
+   authoring habit (short command transcripts) plus two misindented continuations;
+   three more Q-2-35 are knock-on positions from an earlier error in the file, and
+   one is a multi-paragraph footnote, which q2 does not support.
 5. Site polish: `index` page (00-INDEX.md is stale), navigation, and whether CI
    should require a clean render.
