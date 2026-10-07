@@ -441,7 +441,7 @@ describe('format table and resolver', () => {
     };
 
   it('lists the downloadable formats in menu order', () => {
-    expect(formats().map((f) => f.key)).toEqual(['docx', 'pptx', 'epub', 'typst', 'typst-pdf']);
+    expect(formats().map((f) => f.key)).toEqual(['docx', 'odt', 'pptx', 'epub', 'typst', 'typst-pdf']);
     expect(formats().every((f) => f.available)).toBe(true);
     // `pdf` was hidden until host H8 wired the chain; nothing is hidden now.
     expect(formats().filter((f) => f.hidden)).toEqual([]);
