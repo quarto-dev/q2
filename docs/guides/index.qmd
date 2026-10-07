@@ -5,6 +5,7 @@ title: Guides
 ## Authoring
 
 - [Markdown basics](./authoring/markdown-basics.qmd)
+- [Migrating Markdown to Quarto 2](./authoring/migrating-markdown.qmd)
 - [Multiformat branding with `_brand.yml`](./authoring/brand.qmd)
 - [Lua filters](./authoring/lua-filters.qmd)
 

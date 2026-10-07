@@ -1,0 +1,113 @@
+---
+title: "Migrating Markdown to Quarto 2"
+description: "What changes when a document written for Pandoc, CommonMark or GitHub renders under q2, and how to fix each case."
+---
+
+## Overview
+
+Quarto 2 reads its own Markdown dialect, qmd. It is close to Pandoc
+Markdown, and most documents render unchanged. Where the two differ,
+the difference is usually deliberate: Pandoc guesses what you meant
+when markup is incomplete, and q2 reports an error instead. A lone
+`*` in a paragraph is literal text to Pandoc; to q2 it is an unclosed
+emphasis mark, because the next `*` on the page would have paired
+with it silently and you would never have noticed.
+
+This page lists what to change in a document that was written for
+Pandoc or another Markdown processor, and what to write differently
+in new documents. It is organized by what you see: an error that
+stops the render, a warning, or output that is quietly different.
+
+If you are an AI agent writing Markdown that q2 will render, this is
+the page to read; the examples below are the habits that most often
+need unlearning.
+
+## The one rule: a backslash makes any syntax character literal
+
+Any character that qmd uses for markup can be written literally by
+putting a backslash in front of it:
+
+``` qmd
+costs \$5 and \$10; the engines\' state; see \_quarto.yml;
+N \* D; pass \{ a, b \}; a \[bracketed\] note; an \<anonymous\> tag
+```
+
+renders as
+
+> costs \$5 and \$10; the engines\' state; see \_quarto.yml;
+> N \* D; pass \{ a, b \}; a \[bracketed\] note; an \<anonymous\> tag
+
+The escape is never wrong: `\A` is always a literal `A`, so a
+backslash that turns out to be unnecessary does no harm. An escaped
+`'` still renders as a typographic apostrophe. The other fix that
+is always available is a code span: `` `{ a, b }` `` needs no
+escapes at all, and is usually the better choice for text that *is*
+code.
+
+## Errors: the render stops
+
+Each of these is reported with a code and a location, and most of
+them point at the exact character to escape.
+
+| You wrote | Pandoc | q2 | Fix |
+|---|---|---|---|
+| `` `a.rs`'s `` (an apostrophe right after a code span, `_x_` or `**x**`) | apostrophe | Q-2-7, unclosed quote | `` `a.rs`\'s `` |
+| `the engines' state` (a plural possessive) | apostrophe | Q-2-10, close quote without an open | `engines\'` |
+| `_quarto.yml and _brand.yml` (a `_` at a word boundary) | literal | Q-2-5, unclosed emphasis | `\_quarto.yml` |
+| `Q-2-*` or `epub_*` (a `*` at the end of a word) | literal | Q-2-12, unclosed emphasis | `Q-2-\*` |
+| `$5 and $10`, `$ q2 render` (a `$` that is not inline math) | literal | parse error | `\$5`, or a code span |
+| `{ a, b }` or `{python}` in prose | literal | Q-2-41 (braces are reserved for attributes) or a parse error | `\{ a, b \}`, or a code span |
+| a lone `` ` `` in prose | literal | parse error | `` \` `` |
+| `` `has a ` inside` `` (a code span containing a backtick) | error too | parse error | double the delimiter: ``` ``has a ` inside`` ``` |
+| a code block indented four spaces | code block | Q-2-35 | a fenced block |
+| `term` / `: definition` (a definition list) | definition list | Q-2-54 | a list or a table |
+| `[^1]: First paragraph.` followed by an indented second paragraph | multi-paragraph note | Q-2-35 | keep the note to one paragraph |
+
+Two things make these easier to find than the table suggests. First,
+`q2 render` prints the opening delimiter for every "unclosed" error
+("This is the opening quote. If you need an apostrophe, escape it
+with a backslash."), not just the end of the block where it gave up.
+Second, when one of these is fixed, the parser gets further into the
+document and may report the next one; expect a few rounds on a long
+document that was never rendered with q2 before.
+
+Word-internal underscores are fine: `snake_case_name` renders as
+written. So does a `*`, `_`, `~` or `^` with whitespace on both sides
+(`a * b * c`), a `~` before a number (`~16 files`), and a bare `@`
+that is not a citation (`` `main` @ `6bee9ebe` ``). Earlier versions
+of q2 rejected some of these; if an old document carries escapes for
+them, the escapes are harmless.
+
+## Warnings: the render continues, but check the output
+
+| You wrote | Pandoc | q2 | Fix |
+|---|---|---|---|
+| `[text][ref]` and `[ref]: url` (a reference-style link) | link | Q-2-45 / Q-2-46; rendered as literal spans | an inline link `[text](url)` |
+| `[REVISED]`, `[x]` outside a task list (bare brackets) | literal | Q-2-49; rendered as a span | `\[REVISED\]`, or a code span |
+| `<anonymous>`, `<div>` (raw HTML in prose) | raw HTML | Q-2-9; passed through as raw HTML, so invisible in the page | `` `<anonymous>` `` when you mean the text |
+
+## Quiet differences: no diagnostic
+
+| You wrote | Pandoc | q2 | Fix |
+|---|---|---|---|
+| `Heading` over a line of `===` or `---` (a setext heading) | heading | a paragraph with the underline in it | `# Heading` |
+| `#Heading` (no space after the `#`) | heading, in some processors | a paragraph | `# Heading` |
+
+## Things that are the same
+
+Pipe tables, task lists (`- [ ]`, `- [x]`), autolinks in angle
+brackets, two-space and backslash line breaks, HTML comments,
+footnotes of one paragraph, `$x^2$` and `$$y$$` math, `~sub~`,
+`^sup^` and `~~strike~~`, smart quotes and dashes (`--`, `---`,
+`...`), nested lists, block quotes, and any Unicode punctuation or
+emoji in prose all render as they do in Pandoc.
+
+## Checking a document
+
+`q2 render file.md` reports every problem it finds in a file. For a
+whole project, `q2 render --json-errors` writes one JSON record per
+diagnostic to stderr, which is easier to tally than the human-readable
+report; each record carries the file, the position, and for
+"unclosed" errors the position of the opener. The
+[error reference](../../errors/index.qmd) has a page per code with
+more examples.
