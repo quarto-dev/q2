@@ -83,7 +83,7 @@ them.**
    generated Typst source, which doesn't accept that suffix (needs `pt`/conversion).
 
 6. **`authors.lua` (shared pandoc filter, not typst-specific) crashes on multi-author
-   + `affiliation:`-as-string metadata.** `pandoc-template-features.qmd`:
+   \+ `affiliation:`-as-string metadata.** `pandoc-template-features.qmd`:
    `attempt to index a nil value (field 'integer index')` in
    `modules/authors.lua:358`, called from `processAuthorMeta`. This is a shared-filter
    bug (author normalization runs for every format), just first surfaced here because
@@ -234,7 +234,7 @@ and a follow-up bead linking to the filed bug, Gordon's call on which.
    an empty/missing value somewhere in the generated
    `#set page(background: align(..., box(inset: ..., image("...", width: ...))))` call
    (empty image path, empty inset, empty alignment, empty width, in various
-   combinations — e.g. `customize-without-path.qmd`'s simple `padding: 2rem` produces
+   combinations — e.g. `customize-without-path.qmd`\'s simple `padding: 2rem` produces
    `box(inset: , image("", width: 300px))`, and `posit/brand-logo.qmd` produces
    `align(, box(inset: , image("", width: )))` — nothing from `brand.logo` metadata is
    reaching the generated call). This is a large, close-to-total gap in brand.yml logo
@@ -252,7 +252,7 @@ and a follow-up bead linking to the filed bug, Gordon's call on which.
    copy and Q1's current upstream (`diff` confirmed empty) — it is not broken code, it
    is being fed data in the wrong shape. Confirmed via direct instrumentation
    (`io.stderr:write` probes temporarily added at the crash site and at
-   `processAuthorMeta`'s entry, then reverted — not committed) that:
+   `processAuthorMeta`\'s entry, then reverted — not committed) that:
    - `crates/quarto-core/src/transforms/authors_normalize.rs`'s
      `AuthorsNormalizeTransform` (registered unconditionally in `pipeline.rs` — "Runs
      right after metadata-normalize; format-agnostic like Q1's authors.lua pass", no
@@ -273,7 +273,7 @@ and a follow-up bead linking to the filed bug, Gordon's call on which.
      Q2) succeeds cleanly — Q1 has no Rust-side pre-normalization step, so the shared
      Lua only ever sees raw metadata, its only supported input shape.
    - **Fix is not "small, scoped" as originally estimated** — it's an architecture
-     question, not a one-line patch. `AuthorsNormalizeTransform`'s own outputs
+     question, not a one-line patch. `AuthorsNormalizeTransform`\'s own outputs
      (`by-author`, `labels.abstract`, etc.) are read directly by the typst template
      (`resources/pandoc-filters/typst-template/typst-show.typ:8,10,30` — `$if(by-author)$`/
      `$for(by-author)$`/`$labels.abstract$`), so the transform cannot simply be
@@ -300,7 +300,7 @@ and a follow-up bead linking to the filed bug, Gordon's call on which.
    writing anything). That fixed the crash but broke something not caught until a
    follow-up review: `q2 preview` on a document whose frontmatter declares a
    pandoc-hybrid format (`format: typst`/`docx`/...) doesn't get the `q2-preview`
-   pseudo-format substitution — `map_format_for_preview`'s doc comment says
+   pseudo-format substitution — `map_format_for_preview`\'s doc comment says
    "explicit non-html formats are honoured as-is" — so it falls through to the
    *native HTML pipeline* (`render_qmd_to_html`) with `ctx.format.identifier` still
    `Typst`/`Docx`/etc. `authors.lua` never runs on that leg (no real `pandoc`

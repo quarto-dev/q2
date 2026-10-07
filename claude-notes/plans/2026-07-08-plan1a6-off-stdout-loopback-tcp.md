@@ -769,8 +769,8 @@ so they reach the cited helper rather than duplicating it.
   from the pre-swap state (would corrupt).
 - `pc_c_a_large_single_line_frame_parses` is **NOT obsolete** — it asserts a live,
   transport-relevant property (a **>1 MB single-line frame** round-trips through
-  `read_line`'s unbounded growth **intact**), which survives the swap and is **not**
-  covered by seam #10: `pc_c_a` uses a **>1 MB** frame to prove `read_line`'s
+  `read_line`\'s unbounded growth **intact**), which survives the swap and is **not**
+  covered by seam #10: `pc_c_a` uses a **>1 MB** frame to prove `read_line`\'s
   unbounded growth returns the payload byte-intact (*framing correctness*), whereas
   #10 — now a **small** payload against deliberately-shrunk socket buffers — asserts
   *deadlock-freedom* under back-pressure. Different sizes, different assertions, so
@@ -841,7 +841,7 @@ revert hunk.
 > All seam reverts re-verified cold by the orchestrator; two vacuity defects
 > found and fixed during verification (#2c weakened to a round-trip check →
 > tightened to assert connect() refused; #10 socket buffers set post-connect
-> → vacuous on macOS, fixed to set SO_*BUF before connect/listen + 8x-measured
+> → vacuous on macOS, fixed to set SO\_\*BUF before connect/listen + 8x-measured
 > payload). `cargo nextest run -p quarto-core` = 2803 passed, 34 skipped. Full
 > `cargo xtask verify` then surfaced two `-D warnings` failures that plain
 > build/nextest miss (`StartedDrains::{None,Tcp}` dead in the non-test lib build
@@ -857,7 +857,7 @@ revert hunk.
   workflow (not `cargo xtask verify`, per Coverage honesty) — CI-gated,
   as documented.
 - [x] Write `connectControl()` in a **new Deno-only module `control-transport.ts`**
-  (from scratch; D-CONNECT) — **added to `tsconfig.json`'s `exclude`** (NOT in
+  (from scratch; D-CONNECT) — **added to `tsconfig.json`\'s `exclude`** (NOT in
   `framing.ts`); it reads the token from **stdin** (only `--control` from
   `Deno.args`), dials, `setNoDelay`, `writeAll` the token pre-line on the
   socket. `main.ts` channel selection wires it into `runHost` (D-MAIN). (No
@@ -876,7 +876,7 @@ revert hunk.
 > reverting `{ reader: conn.readable }` (an empty/fresh `ReadableStream`
 > instead) reddens the round-trip assertion. `deno test --allow-all
 > --sloppy-imports` is the flag set that works (the module's `types.ts`
-> import pulls in `@quarto/types`'s `.js` internal specifiers, same reason
+> import pulls in `@quarto/types`\'s `.js` internal specifiers, same reason
 > `wire-parity.deno-test.ts` needs it). Also end-to-end smoke-tested the
 > rebuilt bundle directly (`deno run … dist/engine-host-deno.js --control
 > 127.0.0.1:<port>` against a real `nc -l` listener): the token was
@@ -895,7 +895,7 @@ revert hunk.
   (`seam9-stdio-baseline.html`, sha256 `809099c1…`; contains `cell-output` +
   `<code>2</code>` — julia executed over stdio). Confirmed DETERMINISTIC (identical
   sha on re-render), so byte-parity is a sound seam-#9 assertion.
-- [x] **Flip:** DONE (commit `ee5c312c5`). `ensure_started`'s init closure now binds an
+- [x] **Flip:** DONE (commit `ee5c312c5`). `ensure_started`\'s init closure now binds an
   ephemeral loopback `TcpListener`, generates a uuid token, passes
   `--control 127.0.0.1:<port>` on argv, and routes through `spawn_into_tcp` (token
   delivered on stdin). `StartedDrains::Tcp` is now the live production variant;
@@ -966,7 +966,7 @@ revert hunk.
 >   green + garbage red in the SAME reverted world ⇒ the RED is attributable to the
 >   garbage, not the revert. Restored → green.
 > - **Binding B (exercised-guard (ii) ↔ H-STDOUT / `stdout_loop`):** neutralizing
->   `stdout_loop`'s `info!` forward reddened both tests exactly at assertion (ii) (marker
+>   `stdout_loop`\'s `info!` forward reddened both tests exactly at assertion (ii) (marker
 >   never observed on the drain; only the two `engine_host` lifecycle markers captured)
 >   while (i) still passed (render succeeded over TCP). Restored → green. Tree clean
 >   after each revert.
@@ -992,7 +992,7 @@ revert hunk.
   the two `#[cfg(test)]` tests that bind it
   (`test_stray_lines_below_bound_are_skipped_not_fatal`,
   `test_malformed_beyond_bound_escalates_distinct_from_crash`). DONE — commit
-  `bd1af5c55`. `reader_loop`'s `Malformed` arm is now immediately fatal (a
+  `bd1af5c55`. `reader_loop`\'s `Malformed` arm is now immediately fatal (a
   single malformed frame on the private control socket → broadcast+kill); the
   counter + constant are gone (only prose-comment mentions remain); message
   reworded to name the control socket. `ts_process` module 40/40 green;
@@ -1002,7 +1002,7 @@ revert hunk.
   frame over `accept_and_handshake` + a dialer thread; recv-before-join since
   a >1 MB write blocks the dialer until the reader drains). Standing property
   test, no named revert hunk (like #10). `ts_process_framing_probe.rs` deleted
-  (its last probe migrated in-crate; `TcpReadHalf`'s field + `accept_and_handshake`
+  (its last probe migrated in-crate; `TcpReadHalf`\'s field + `accept_and_handshake`
   are private, so an external integration test cannot construct the read half).
 - [x] Deleted `StdioWriteHalf`/`StdioReadHalf`/`spawn_into` — commit `a66b7f12b`.
   - Production (`ensure_started`) was already on `spawn_into_tcp` (Phase 3).

@@ -77,8 +77,8 @@ failure modes, worth keeping both.
   `"chapter one's custom-kind float"`, `"expected the unpatched extension's own
   #part[...] emission"`) — extract each assertion's message string, grep the
   corresponding smoke-all fixture's front matter for the same literal text or
-  equivalent behavior, and tabulate {file:line, panic-message, mechanism,
-  ported/gap} for every assertion. Handle the six as **two different kinds of
+  equivalent behavior, and tabulate \{file:line, panic-message, mechanism,
+  ported/gap\} for every assertion. Handle the six as **two different kinds of
   check, not one uniform sweep**: `book_numbering_torture.rs`,
   `book_appendix_letter_parity.rs`, `book_part_appendix.rs`, and
   `book_numbering_pipeline.rs` assert on extracted PDF text (cross-reference
@@ -89,7 +89,7 @@ failure modes, worth keeping both.
   fixture's front matter, or explicitly accept the gap with a one-line reason.
   **Result**: 43 mechanism-level assertions tabulated across the six files;
   ~27 already had equivalent smoke-all coverage, 16 gaps found. One gap was
-  real and worth closing: no smoke-all fixture asserted the appendix chapters'
+  real and worth closing: no smoke-all fixture asserted the appendix chapters\'
   own *heading* text with its letter prefix (only body-construct numbering like
   "Theorem A.1" was checked) — confirmed by compiling `orange-book`'s `.typ`
   output and extracting PDF text with `pdftotext`, which showed the compiled
@@ -103,7 +103,7 @@ failure modes, worth keeping both.
   surface (`book_render_items`/`chapter_label_prefix`), synthetic negative/
   isolation-control tests no book fixture can express by construction, or
   docx/epub3-specific mechanisms orthogonal to this Typst-only epic.
-- [x] Add a short note to each of the six Rust files' module doc comment pointing at
+- [x] Add a short note to each of the six Rust files\' module doc comment pointing at
   the smoke-all fixtures that now provide overlapping end-to-end coverage, so a
   future reader doesn't assume these are the only book-numbering tests.
 - [x] Add a short section to this epic's `claude-notes/plans/2026-09-27-typst-smoke-all-epic.md`
@@ -125,7 +125,7 @@ failure modes, worth keeping both.
   `orange-book-margin` reproduced the identical single pre-existing failure
   (the embed gap) under both versions. No struct-tree regression from 0.14.2 to
   0.15.1; closed out P3's own deferred checklist item with this finding. Wall-
-  clock: this branch's full workspace run took 718.929s vs. `main`'s CI
+  clock: this branch's full workspace run took 718.929s vs. `main`\'s CI
   `macos-latest` baseline of 391.512s — a ~84% increase, disproportionate to
   the +107 test count (+0.7%) and attributable almost entirely to `smoke_all`
   itself (162.5s) compiling far more real PDF/Typst fixtures. Accepted as the

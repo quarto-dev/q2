@@ -196,7 +196,7 @@ under `/q2/` on Pages, immune to basename collisions, and app assets
   ports, 80-paragraph document, data-loc stamped on two blocks):
   SCROLL_TO_LINE 61 scrolled the frame 0 → 1865px; smooth scroll
   emitted PREVIEW_SCROLLED ratios; pointerup on the located block
-  posted CLICK_AT_LINE {line: 11, iframeY: 156}. Output inspected;
+  posted CLICK_AT_LINE \{line: 11, iframeY: 156\}. Output inspected;
   recorded 2026-09-10.
 
 ### Phase 4 — remaining functionality

@@ -101,7 +101,7 @@ Tests that cover non-Julia, non-markdown shapes:
 
 **Missing test in the plan (not a landed-code gap, a plan-spec gap):**
 Plan Phase 2 (plan1c.md:706-708): "Write test: implicit `{r}`+`{python}` → `[knitr]` (knitr `Interop` python; reticulate preserved)" — ✓ present.
-Plan Phase 2 (plan1c.md:707-708): "Write test: explicit `engine: [knitr, jupyter]`, `{r}`+`{python}` → `[knitr, jupyter]` with `ownership` = {r→knitr, python→jupyter}" — ✓ present.
+Plan Phase 2 (plan1c.md:707-708): "Write test: explicit `engine: [knitr, jupyter]`, `{r}`+`{python}` → `[knitr, jupyter]` with `ownership` = \{r→knitr, python→jupyter\}" — ✓ present.
 Plan Phase 2 (plan1c.md:712-713): "Write test: file-claim seed — a claimed `.echo`/`.jl` file makes the claimer `Primary`, and a second-language cell still resolves to its own owner (secondary)" — `- [ ]` in plan, not yet landed.
 
 The missing file-claim seed test is the only spec-level test gap directly named in the plan. It does not affect the landed code's correctness (seed logic is in `resolve_engines` and is code-covered via mock), but the E2E path (EngineClaimsFileStage → claimed_engine_name → resolve_engines) is covered only by the echo Phase 3 test (also not yet landed — it's a Phase 3 plan item).

@@ -108,16 +108,20 @@ so a ```` ```{=html} ```` fence is never pulled tight against its neighbour.
 
 ## End-to-end verification
 
-    $ q2 render index.qmd --to html
+```
+$ q2 render index.qmd --to html
+```
 
 on the reported shape (`<details>`/`<summary>` then prose with no blank line):
 
-    <details>
-    <summary>
-    Example custom instructions
-    </summary>
-    This example demonstrates how a <code>quarto.instructions.md</code> file shapes Positron
-    Assistant behavior for anything ending with <code>.instructions.md</code>.
+```
+<details>
+<summary>
+Example custom instructions
+</summary>
+This example demonstrates how a <code>quarto.instructions.md</code> file shapes Positron
+Assistant behavior for anything ending with <code>.instructions.md</code>.
+```
 
 Output inspected: the code spans are parsed and no literal backticks remain
 (`grep -c` for the backticked forms returns 0). Both repro fixtures are green
@@ -168,7 +172,7 @@ and never when a blank line would end the block. The writer and the blank-line
 rule now share one predicate, `html_writes_bare`, so they cannot drift.
 
 **Important — `write_orderedlist` was missed.** It has its own block loop,
-separate from `write_bulletlist`'s, so an ordered item's split interior came
+separate from `write_bulletlist`\'s, so an ordered item's split interior came
 back as a `Paragraph` while a bullet item's stayed `Plain`. The plan's claim of
 "every block container" was wrong. Fixed.
 

@@ -350,7 +350,7 @@ function call away.
   documents — `div-attrs.qmd` plus three in `tests/writers/ansi/` that the
   Phase 4 fixture guard could not see. Strictly better coverage.
 - [x] Refined `check_tightness` with a `retained: Option<&str>` parameter. The
-  corpus probe surfaced one false positive: `e.g. \`code\`` gives
+  corpus probe surfaced one false positive: ``e.g. `code` `` gives
   `Str [0..5]` a trailing source space, because the abbreviation handler
   substitutes NBSP and **keeps it in the node's text** — those 5 bytes are
   exactly what produced the node. Attr keys/values pass `None` and stay

@@ -375,7 +375,7 @@ that list does *not* contain), **P4 Task 9**, **Task 3 of this plan**.
 
 | # | Tier | Real unit exercised | Seam (invoked → asserted) | Mock boundary | Named revert hunk |
 |---|---|---|---|---|---|
-| T4.1 | I | `build_transform_pipeline` for `Pandoc("docx")` | Build → assert the ordered transform-name list **contains** `resource-collector` and `link-rewrite` | none | those two names' presence in the `Pandoc` arm / absence from the exclude list |
+| T4.1 | I | `build_transform_pipeline` for `Pandoc("docx")` | Build → assert the ordered transform-name list **contains** `resource-collector` and `link-rewrite` | none | those two names\' presence in the `Pandoc` arm / absence from the exclude list |
 | T4.2 | I | `LinkRewriteTransform` on a Pandoc-profile render | Run the pipeline on a fixture with `![cap](sub/pic.png)` and a relative `[text](other.qmd)` → assert the `Image.target` is the resolved staged href and the link target is rewritten | filesystem via `tempfile` | the `Image::target.0` rewrite in `link_rewrite.rs` |
 | T4.3 | **E** | the real binary + real pandoc | `q2 render img.qmd --to docx` → `word/media/` contains one entry; `word/_rels/document.xml.rels` has an `image`-typed relationship targeting it; **stderr contains no `Could not fetch resource`** | nothing mocked | the `resource-collector` entry in the `Pandoc` transform list |
 | T4.4 | **E** | same | The same fixture where the image path is authored project-root-absolute (`/sub/pic.png`) → same assertions | nothing mocked | the leading-`/` handling in `resolve_static_resource_href` |

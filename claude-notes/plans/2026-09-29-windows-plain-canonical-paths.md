@@ -317,7 +317,7 @@ Linux/macOS CI covers the rest, including the portable guard test.
 
 Layer 2 title: `Route canonical paths through one shared function`
 
-~~~~markdown
+````markdown
 Prepares the switch to plain Windows paths in the PR stacked on top of this one. On Windows, `std::fs::canonicalize` returns the verbatim `\\?\C:\…` form, and q2 canonicalizes in about 60 production call sites, most of them directly rather than through `SystemRuntime::canonicalize`. Changing the spelling in the runtime alone leaves plain and verbatim paths meeting in comparisons, prefix strips and map keys. A prototype of that switch failed about 130 tests on Windows and hid a product bug: `resources:` declared for a single-file preview dropped out of its dependency set.
 
 The shared function added here still calls `std::fs::canonicalize`, so no path spelling changes in this PR. The one behavior change is the overwrite guard below.
@@ -343,7 +343,7 @@ The guard in `render_to_file.rs` refused an `--output` equal to the input only l
 - [x] Same six crates with the shared function temporarily switched to plain paths: same results, `single_file_deps_resources_glob` fixed
 - [x] `cargo check -p quarto-system-runtime --target wasm32-unknown-unknown`
 - [ ] Linux and macOS CI, including the hub-client WASM build that compiles the routed `quarto-core` modules
-~~~~
+\~\~\~\~
 
 Layer 3 title: `Canonicalize to plain paths on Windows`
 
@@ -380,4 +380,4 @@ This also turns `json_errors::ipynb_parse_error_json_carries_cell_origin` from #
 - [x] Windows, the same six crate suites as the PR below: same results
 - [x] `cargo build --workspace` on Windows; `cargo check -p quarto-system-runtime --target wasm32-unknown-unknown`
 - [ ] Linux and macOS CI
-~~~~
+````

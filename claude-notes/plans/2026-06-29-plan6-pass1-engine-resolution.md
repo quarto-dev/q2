@@ -1091,25 +1091,25 @@ pinned version assert (`:1460`) live in the crate root
         printed exactly once per render.
   - [x] Message spec (engine as subject; portion is an impact clause;
         both fixes in the hint; no per-doc language reporting):
-        ```
-        Warning: engine extension `legacy-python` declares no static language claims
-        (_extensions/acme/legacy-python/_extension.yml), so engine resolution must
-        wait for render time. Execution-language indexing is unavailable for
-        3 of 12 documents.
+    ```
+    Warning: engine extension `legacy-python` declares no static language claims
+    (_extensions/acme/legacy-python/_extension.yml), so engine resolution must
+    wait for render time. Execution-language indexing is unavailable for
+    3 of 12 documents.
 
-          hint: declare the extension's claims statically in its _extension.yml —
-          e.g. `claims: [python]`, one line — or, if you cannot edit the extension,
-          supply its claim table in _quarto.yml:
+      hint: declare the extension's claims statically in its _extension.yml —
+      e.g. `claims: [python]`, one line — or, if you cannot edit the extension,
+      supply its claim table in _quarto.yml:
 
-            engines:
-              - legacy-python:
-                  claims: [python]
+        engines:
+          - legacy-python:
+              claims: [python]
 
-          Affected documents will then resolve at index time. Rendering is
-          unaffected.
-        ```
-        Multiple claims-less engines → one warning listing each engine +
-        path. A no-fall-through project emits nothing.
+      Affected documents will then resolve at index time. Rendering is
+      unaffected.
+    ```
+      Multiple claims-less engines → one warning listing each engine +
+      path. A no-fall-through project emits nothing.
   - [x] Tests: unit test for the message builder (single + multiple engines;
         counts) — **revert binding:** builder emits the wrong impact clause
         or omits a path → RED. The Phase-5 integration fixture asserts the
@@ -1153,20 +1153,20 @@ pinned version assert (`:1460`) live in the crate root
       `c.qmd` a `{python}` cell with no table). Rendered with the real binary
       `QUARTO_PERF_STATS=1 target/debug/q2 render <fixture>`.
   - [x] **Warning case (no project table).** Real-binary stderr:
-        ```
-        Warning: engine extension `legacy-python` declares no static language claims
-        so engine resolution must wait for render time. Execution-language indexing
-        is unavailable for 1 of 3 documents.
-        ✖ `legacy-python` (…/plan6-e2e/_extensions/legacy-python/_extension.yml)
-        ℹ declare the extension's claims statically in its _extension.yml — e.g.
-          `claims: [python]`, one line — or … supply its claim table in _quarto.yml:
-            engines:
-              - <engine-name>:
-                  claims: [<language>]
-          Affected documents will then resolve at index time. Rendering is unaffected.
-        perf.pass1-engine-resolution lifted=2 fell_through=1
-        ```
-        (a lifts P2, b lifts P4 via its frontmatter table, c falls through.)
+    ```
+    Warning: engine extension `legacy-python` declares no static language claims
+    so engine resolution must wait for render time. Execution-language indexing
+    is unavailable for 1 of 3 documents.
+    ✖ `legacy-python` (…/plan6-e2e/_extensions/legacy-python/_extension.yml)
+    ℹ declare the extension's claims statically in its _extension.yml — e.g.
+      `claims: [python]`, one line — or … supply its claim table in _quarto.yml:
+        engines:
+          - <engine-name>:
+              claims: [<language>]
+      Affected documents will then resolve at index time. Rendering is unaffected.
+    perf.pass1-engine-resolution lifted=2 fell_through=1
+    ```
+      (a lifts P2, b lifts P4 via its frontmatter table, c falls through.)
   - [x] **Lift case (add `engines: [{legacy-python: {claims: [python]}}]` to
         `_quarto.yml`, re-render):** warning **gone**;
         `perf.pass1-engine-resolution lifted=3 fell_through=0`. **Decision-9

@@ -189,7 +189,7 @@ end
 
 **Total**: 6 stages, 1 with heavy side effects, 2-3 with Pandoc API calls
 
-*`normalize-combined-1`: The `extract_latex_quartomarkdown_commands()` only runs for LaTeX output.
+\*`normalize-combined-1`: The `extract_latex_quartomarkdown_commands()` only runs for LaTeX output.
 
 **WASM Notes**:
 - `astpipeline-process-tables` is **blocking for WASM** when output is Typst (subprocess call to juice.ts)

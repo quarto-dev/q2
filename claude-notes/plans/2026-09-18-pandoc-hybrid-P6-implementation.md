@@ -691,7 +691,7 @@ Also requires everything Task 4 requires, plus **P1's HTML leg unchanged** (for 
 | T5.2 | I | Q2's native HTML leg (`render_document_to_file`, realistic config per CLAUDE.md's end-to-end rule) | same fixture → HTML → extract the three numbers → assert they equal T5.1's | none | `crossref_index.rs`'s `index_custom_target` order write |
 | T5.3 | L+I | the two legs jointly | assert the **number triple** extracted from T5.1 equals the triple from T5.2, element-wise | environment only | P5's order assignment (cross-plan) |
 | T5.4 | L | P5's Route-R `Proof` + `proof.lua`'s registered renderer | same render → assert the proof's `proof_types` label ("Proof") **and** its body text are present, and that **no digit** follows the label | environment only | **none — Finding 3 is a deliberate absence**; see below |
-| T5.5 | — | Finding 5's Tabset-containing-subfloat nesting | **cross-reference only — no test here.** P5 owns this fixture (its round-4 traversal sub-finding names "a `FloatRefTarget` inside a `Callout`'s `content` slot, exactly P6 Finding 5's fixture"); P6's own nesting coverage is **T2.4**. | — | P5's traversal direction |
+| T5.5 | — | Finding 5's Tabset-containing-subfloat nesting | **cross-reference only — no test here.** P5 owns this fixture (its round-4 traversal sub-finding names "a `FloatRefTarget` inside a `Callout`\'s `content` slot, exactly P6 Finding 5's fixture"); P6's own nesting coverage is **T2.4**. | — | P5's traversal direction |
 
 **Revert hunks, stated exactly:**
 
@@ -716,9 +716,9 @@ Also requires everything Task 4 requires, plus **P1's HTML leg unchanged** (for 
   `has_crossref_plain_data` returns false and the indexer skips it; and Q1's `proof.lua` renderer
   never reads `.order` even when `crossref_theorems` assigns one (P3's audit, independently
   confirmed). **Both sides agree, so "no number" is over-determined and unrevertable.** What *is*
-  bound is **D4**'s companion: revert ⟨P5's `Proof` dispatch arm, or the `plain_data.type` field
+  bound is **D4**\'s companion: revert ⟨P5's `Proof` dispatch arm, or the `plain_data.type` field
   P5 filed with P2 (P2 Task 3)⟩ → either the unwrap path fires (no "Proof" label) or
-  `proof.lua:81`'s `proof_types[proof_tbl.type:lower()]` crashes on nil → T5.4's label assertion
+  `proof.lua:81`\'s `proof_types[proof_tbl.type:lower()]` crashes on nil → T5.4's label assertion
   **RED**. That is the "the path was actually exercised" half, and without it T5.4's no-digit
   assertion passes on a document that never rendered a Proof at all.
 
@@ -767,7 +767,7 @@ Documentation only. Grouped per the instruction to group same-shape mechanical i
     `indexNextChapter` is `crossref/index.lua:31-43`, not `31-41`.
   - Record the schedulability resolution for the number-parity golden — **option (a), corrected**:
     a real `--to docx` render with a P6-local text extractor, *not* a `-t json` round-trip (see
-    Task 5's Prerequisite for why `-t json` selects the wrong renderer). `94f060ae9`'s ordering
+    Task 5's Prerequisite for why `-t json` selects the wrong renderer). `94f060ae9`\'s ordering
     problem is resolved, not deferred.
   - **Re-scope Finding 5's subfloat paragraph to "dormant" (added 2026-09-18, decided with
     Gordon).** Finding 5 currently claims nested subfloats inside a Route-R Tabset "get the same
@@ -792,7 +792,7 @@ Documentation only. Grouped per the instruction to group same-shape mechanical i
 
 **Acceptance criterion.** `grep -n 'callout.lua:467\|theorem.lua:220\|custom.lua:6-158\|index.lua:31-41'
 claude-notes/plans/2026-08-20-pandoc-hybrid-P6-numbering-wiring.md` returns nothing; each of P6's
-four open `- [ ]` items is either `- [x]` with a commit reference or annotated with the task that
+four open ``- [ ]`` items is either ``- [x]`` with a commit reference or annotated with the task that
 owns it; the plan states the golden's extraction mechanism in one sentence.
 
 **Prerequisite.** None for the citation half (schedulable immediately). The checkbox half follows
@@ -810,8 +810,8 @@ Tasks 1-5.
   repo.** The rationale is not "docs don't need tests": the *purpose* of correcting a citation is
   to keep a future reader pointed at the right line, and the behavior those lines describe is
   bound elsewhere — `crossref_callouts()` by **T2.2** (its absence under external mode is why an
-  unlabeled callout stays unnumbered), `theorem.lua:222`'s order read by **T4.4**,
-  `custom.lua`'s registration by **T3.2**, and `indexNextChapter`/`startAppendix` by nothing at
+  unlabeled callout stays unnumbered), `theorem.lua:222`\'s order read by **T4.4**,
+  `custom.lua`\'s registration by **T3.2**, and `indexNextChapter`/`startAppendix` by nothing at
   all, deliberately (Finding 5: no live Q2 input). Adding a `cargo xtask lint` rule for plan-file
   citations is out of P6's scope and is not proposed here. This is the same verdict P3's
   companion reached for its own Task 1.
@@ -833,7 +833,7 @@ Every load-bearing branch and structural contract in P6, with either a bound sea
    and numbered headers if the hunk is reverted). Two discriminators, one hunk, two unrelated
    surfaces — so a RED is attributable.
 
-2. **`sections.lua`'s collateral suppression (design doc §11).** **Bound at T4.2, as a labeled
+2. **`sections.lua`\'s collateral suppression (design doc §11).** **Bound at T4.2, as a labeled
    accepted-divergence golden — and this is a deliberate divergence from P3's companion, which
    logged the same item `accepted-untested`.** P3's three reasons were: (a) it needs P4's transport,
    which P3 cannot reach; (b) it would pin Q1-Lua behavior Q2's own renderer does not match,
@@ -879,7 +879,7 @@ Every load-bearing branch and structural contract in P6, with either a bound sea
    acquire a number** — `accepted-untested` for the absence, explicitly. The **D4** companion
    assertion (the `proof_types` label and the body text are present) *is* bound, and reddens on
    P5's Proof dispatch arm or on the missing `plain_data.type` field (P2 Task 3) — the latter via
-   `proof.lua:81`'s unguarded `proof_types[proof_tbl.type:lower()]`, a crash P5 flagged as a
+   `proof.lua:81`\'s unguarded `proof_types[proof_tbl.type:lower()]`, a crash P5 flagged as a
    confirmed, not conditional, extension request.
 
 6. **Finding 5's Tabset-containing-subfloat fixture — who owns it, and can it exercise what it

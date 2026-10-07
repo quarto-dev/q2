@@ -74,7 +74,7 @@ correction to the original analysis**:
   after Normalization) — using the same project-metadata-merged context every
   single-document render gets. Unlike citeproc, this isn't deferred past the merge
   point, so it needs no merge-specific machinery.
-- **`citation-location`/`grid.margin-width`/`grid.gutter-width` (a *different*
+- **`citation-location`/`grid.margin-width`/`grid.gutter-width`** (a *different*
   mechanism — the original "read by `FootnotesResolveTransform`" claim was wrong for
   these): that transform doesn't read `citation-location` at all — grep confirms the
   only other hit in `crates/quarto-core/src/` is an unrelated comment in
@@ -142,7 +142,7 @@ pandoc's native Typst writer).
 `meta.remove("bibliography"/"csl")` cleanup) whenever the merged doc's
 `citation-location` meta key is `"margin"`, and feed the crossref-phase document
 straight into the Navigation-onward finishing stages instead. This needs **no Lua
-or template changes** — `typst.lua`'s Pass 0 + `Cite` handler already handle
+or template changes** — `typst.lua`\'s Pass 0 + `Cite` handler already handle
 whatever document they're given correctly, and `finishing_stages` already runs
 exactly once on the whole merged AST (not per chapter), so there's no risk of
 reintroducing P8's cross-chapter numbering bug: that bug was about *each chapter*

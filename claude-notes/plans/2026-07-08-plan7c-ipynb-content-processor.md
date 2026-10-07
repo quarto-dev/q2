@@ -619,8 +619,7 @@ Found in the July-2026 audit of the live code; each is a work item:
   decisions item 3; lands via the upstream PR — open question 6,
   resolved — so this is in-phase).
   *(2026-09-24: landed upstream — posit-dev/quarto-error-reporting PR
-  #7, merged `a7821b1d`, released 0.3.1.)*
-
+  \#7, merged `a7821b1d`, released 0.3.1.)*
 ### Phase 1 (upstream) — quarto-error-reporting fix
 
 The upstream half of the flagship test, per Gordon's resolution of open
@@ -652,7 +651,7 @@ feature sets.
   labels, annotate-snippets extra group element; QER plan
   `claude-notes/plans/2026-09-24-concat-renderer-cross-piece.md`.)*
 - [x] Tests in QER covering **both feature gates** (ariadne and
-  annotate-snippets are separately `#[cfg]`'d): single-file passthrough
+  annotate-snippets are separately `#[cfg]`\'d): single-file passthrough
   (the percent/spin shape — all pieces root to one file), diagnostic
   rooted in the first `Concat` piece, in a later piece (today:
   wrong file label + snippet), a straddling span (today: silently
@@ -690,7 +689,7 @@ feature sets.
   item below. TDD: 5 new/updated tests RED on compile, then GREEN;
   clippy + per-crate nextest 4973 passed / 32 skipped.)*
 - [x] `Converted.files` transport (open question 7, **resolved 2026-09-24 —
-  option (a)**): `SourceConversionStage`'s processor-bearing arm (the
+  option (a)**): `SourceConversionStage`\'s processor-bearing arm (the
   `native_claims_file` → `Some(true)` branch, `source_conversion.rs:~205`)
   calls `content_processors::convert` directly instead of
   `engine.markdown_for_file` — today that trait hop's only job is to call
@@ -703,7 +702,7 @@ feature sets.
   placeholders by construction). Optional 6-line default trait helper
   `native_processor_for_file -> Option<ProcessorSpec>`, with
   `native_claims_file` refactored onto it, so the claim→spec lookup
-  exists exactly once. `convert`'s signature untouched; TsEngine, the
+  exists exactly once. `convert`\'s signature untouched; TsEngine, the
   wire path, knitr/jupyter (which override nothing), and the 7b trait
   tests untouched.
   *(Done 2026-09-24: `ClaimedConversion` struct; `Some(true)` arm calls

@@ -244,7 +244,7 @@ All claims below are grounded in source I read directly in this session:
 
 | Source | What I extracted |
 |---|---|
-| `claude-notes/research/2026-06-26-engine-api-usage-model.md` (full, 445 lines) | Parts A–D: all five engines' PROVIDES + CONSUMES, Julia-bias ledger, q2 gap table |
+| `claude-notes/research/2026-06-26-engine-api-usage-model.md` (full, 445 lines) | Parts A–D: all five engines\' PROVIDES + CONSUMES, Julia-bias ledger, q2 gap table |
 | `claude-notes/plans/2026-04-16-plan1a-protocol.md` (full, 958 lines) | Protocol types, `partitionedMarkdown` drop rationale, TsExecuteResult shape |
 | `claude-notes/plans/2026-04-16-plan1a-host.md` (first 749 lines) | Subprocess management, demux design, execution status |
 | `claude-notes/plans/2026-04-16-plan1a-engine.md` (first 766 lines) | Trait extensions, TsEngine struct, HtmlDependency handling |

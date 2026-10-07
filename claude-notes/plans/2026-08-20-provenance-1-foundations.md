@@ -333,7 +333,7 @@ return last.source_info.map_offset(last.length, ctx);
 
 where `last.length` is the piece's **content** length. For a verbatim piece
 that equals its source length and the answer is the true source end; for a
-replacement it does not. The comment above it claims the branch maps "to the
+replacement it does not. The comment above it claims the branch maps \"to the
 end of the last piece… like `Original`/`Substring`\'s `map_offset(length)`\" — and
 for `Original` that *is* the end offset. So `Concat` is inconsistent with the
 other variants in exactly the way `Location.offset` is inconsistent with
@@ -390,7 +390,7 @@ one-liner removes.
 
 ### `preimage_in` composes affinely over a `Concat` parent, and must not
 
-Found 2026-08-21 by the Plan 3 review session, verified here. `preimage_in`'s
+Found 2026-08-21 by the Plan 3 review session, verified here. `preimage_in`\'s
 `Substring` arm (`source_info.rs:453-456`) is
 
 ```rust
@@ -416,7 +416,7 @@ reproduced *inside* the fix for it, and it fails silently where
 is the **composition** level, which that rule does not reach.
 
 **Why it belongs in 0.1.2 rather than being noted.** `Substring{parent: Concat}`
-is the shape **every** AST node from a nested re-parse carries — `quarto-yaml`'s
+is the shape **every** AST node from a nested re-parse carries — `quarto-yaml`\'s
 `make_source_info` wraps its parent in exactly that (`parser.rs:344-361`), so it
 is what Plan 2's config path, Plan 2 Phase 4's attribute path and Plan 3's
 comrak path all produce. And `preimage_in` is the writer's verbatim-copy
@@ -443,13 +443,13 @@ this section changes:
 | `preimage_in` | `parent_range.start + start_offset` (`:453-456`) | `Some(hull)` | **wrong answer** |
 | TS `resolveChain` | `parentStart + localStart` (`source-map.ts:301-315`) | `Some(range)` from the pieces | **wrong answer** |
 
-`resolve_byte_range` has **arithmetic identical to `preimage_in`'s** and is safe
+`resolve_byte_range` has **arithmetic identical to `preimage_in`\'s** and is safe
 only because the thing it composes over refuses to answer. So the defect is not
 "someone wrote `+`" — it is "someone wrote `+` over a parent willing to hand back
 a flattened range."
 
 **That predicts where a fifth instance comes from, and it is a change someone
-would make thinking they were improving things.** `resolve_byte_range`'s doc says
+would make thinking they were improving things.** `resolve_byte_range`\'s doc says
 `Concat` "doesn't map cleanly to a single contiguous byte range" — while
 `preimage_in`, three functions away, *does* return a hull for a contiguous
 `Concat`. A reader who notices that asymmetry and "fixes" it by teaching
@@ -458,8 +458,8 @@ into silently wrong in one commit, with no test failing.
 
 **Do not make the `Concat` arms consistent with each other — in either
 direction.** They differ because their callers differ:
-`preimage_in`'s hull is an offset claim whose documentation must now say so
-(Phase 1), and `resolve_byte_range`'s `None` is load-bearing. Both directions
+`preimage_in`\'s hull is an offset claim whose documentation must now say so
+(Phase 1), and `resolve_byte_range`\'s `None` is load-bearing. Both directions
 arm the same downstream `Substring` arms:
 
 - *Don't teach `resolve_byte_range` to return a hull* — the case above.
@@ -503,7 +503,7 @@ the emitted value. So the refinement admits exactly the byte-substitution this
 epic is about. `None` is the sound answer.
 
 **And the regression it was meant to prevent is mostly not there.**
-`cell_options`' pieces come from `option_content_ranges`, which returns ranges
+`cell_options`\' pieces come from `option_content_ranges`, which returns ranges
 *within* each line **excluding** the `#| ` prefix
 (`cell_options/mod.rs:180-192`), so consecutive option lines leave a source gap
 where the next prefix sits — and a gappy `Concat` already yields `None` today,
@@ -520,7 +520,7 @@ and while Plan 2 Phase 4 and Plan 3 put them on real body nodes, neither traced
 that to `incremental.rs`. Second — and this is a new defect, not a caveat — the
 **bare `Concat` arm has the identical byte-identity gap**: measured, the fold
 shape above returns `Some(0..7)` from `preimage_in` *today*, with no `Substring`
-involved. So `preimage_in`'s hull is an **offset** claim, not a byte-identity
+involved. So `preimage_in`\'s hull is an **offset** claim, not a byte-identity
 claim, and any consumer using it to justify copying bytes needs more than it
 offers once `Concat`s can contain length-matched non-identical pieces. That
 cannot be fixed inside this function — it has no text to compare — so it is a
@@ -530,7 +530,7 @@ change.
 **Its own doc comment currently asserts the claim this retracts**, which is what
 would mislead the next reader. `source_info.rs:410-413` opens:
 
-> Byte range in `target` that this `SourceInfo`'s preimage covers, if any.
+> Byte range in `target` that this `SourceInfo`\'s preimage covers, if any.
 > This is the writer's "can I Verbatim-copy bytes from `target` for the node
 > carrying this source_info?" check.
 
@@ -543,7 +543,7 @@ copy needs byte-identity, which this function cannot supply.
 
 **Reachability: resolved as LATENT, and the safety is incidental.** Traced by
 the Plan 3 session, verified here. The one confirmed *copy* site is
-`incremental.rs:169-181`'s `KeepBefore` arm, whose `.get()` guard checks bounds
+`incremental.rs:169-181`\'s `KeepBefore` arm, whose `.get()` guard checks bounds
 rather than identity and would therefore be defeated by a fold piece. It is safe
 today for a reason that has nothing to do with `preimage_in`: its baseline is
 `capture_untransformed_ast_json` (`quarto-core/src/pipeline.rs:1006-1022`),
@@ -746,7 +746,7 @@ plain, single- and double-quoted — pass **0**, because folding in a flow scala
 strips all line-leading whitespace, so there is no indent to preserve and no
 rewind to perform.
 
-**Where the walk starts** (`raw`'s first byte):
+**Where the walk starts** (`raw`\'s first byte):
 
 | style | start | why |
 |---|---|---|
@@ -825,7 +825,7 @@ rather than promised away.
 **The walk is bounded by the value, not by the span.** It reads source past
 `source_info.end_offset()` when the value asks for it. This is what turns the
 three span-overflow shapes above into ordinary verbatim pieces —
-`|+`'s kept newlines collapse to a single verbatim piece over `"aaa\n\n\n"`,
+`|+`\'s kept newlines collapse to a single verbatim piece over `"aaa\n\n\n"`,
 and the trailing spaces map to `bbb   \n` at their true offsets. The natural
 implementation (slice the span, walk the slice) fails on all three.
 
@@ -833,7 +833,7 @@ implementation (slice the span, walk the slice) fails on all three.
 Phase 2 finishing).** Desync is a bug, not a data condition — with the four
 rules, the byte-identity tag, the header-skip rule *and its value-based
 predicate*, and the **style-conditional break-region entry** (rule 1, above —
-added after `strict-provenance`'s first CI run found a real desync) in place,
+added after `strict-provenance`\'s first CI run found a real desync) in place,
 the walker does not desync on any of the **43** measured shapes. (Every clause
 there is load-bearing, and each was established by a shape that desynced
 without it: `k: |` without the header-skip rule, a block scalar whose content
@@ -844,7 +844,7 @@ claim, not optimizations. The claim is "no measured shape desyncs", not a
 proof over all YAML — and it was already true-but-incomplete once, for exactly
 the reason it could be incomplete again: none of the 32 shapes measured
 through Phase 1 happened to contain a trailing space before a fold, so their
-absence of a desync was not evidence against one. `strict-provenance`'s CI
+absence of a desync was not evidence against one. `strict-provenance`\'s CI
 step is what actually found this one, on its first run, by parsing every
 scalar in the existing test suite rather than only the dedicated provenance
 fixtures — exactly the load-bearing check it exists to be, not merely a length
@@ -916,7 +916,7 @@ let content_si = p.finish();        // -> Original/Substring if contiguous,
                                     //    Concat otherwise
 ```
 
-**Two constructors are required.** `quarto-yaml`'s substring path has a parent
+**Two constructors are required.** `quarto-yaml`\'s substring path has a parent
 (`make_source_info` uses `SourceInfo::substring`, `parser.rs:344-361`), but its
 original-file path has none — it emits `Original{FileId(0), s, e}` directly.
 Without `in_file`, the crate would have to synthesise a whole-file
@@ -925,20 +925,20 @@ emitted shape for cases that are contiguous today.
 
 **Both constructors take an anchor offset**, because `finish()` must be
 total: an empty scalar produces **zero pieces** (three of the shapes in
-§ `quarto-yaml`'s API), and with no pieces there is nothing to infer a position
+§ `quarto-yaml`\'s API), and with no pieces there is nothing to infer a position
 from. `finish()` on an empty piece list returns a zero-length `Original` /
 `Substring` at the anchor. Signature therefore
 `in_file(file_id, anchor)` / `in_parent(parent, anchor)`, with the anchor being
 the scalar's span start.
 
-**The builder must never resolve absolute positions.** `in_parent`'s parent can
+**The builder must never resolve absolute positions.** `in_parent`\'s parent can
 itself be a `Concat`: cell options builds `SourceInfo::concat(concat_pieces)`
 and hands it to `quarto_yaml::parse_with_parent`
 (`quarto-core/src/cell_options/mod.rs:227-229`). `substring()` composes over a
 `Concat` parent correctly for `map_offset`, but `resolve_byte_range()` on it
-returns `None` (`source_info.rs:403`). So the builder — including `finish()`'s
+returns `None` (`source_info.rs:403`). So the builder — including `finish()`\'s
 contiguous-collapse decision — must **never call `resolve_byte_range`**, on the
-parent or on anything derived from it. (`in_file`'s ranges are absolute file
+parent or on anything derived from it. (`in_file`\'s ranges are absolute file
 offsets and that is fine; the invariant is about resolving, not about which
 coordinate space the caller works in.)
 This is the one parent shape that is not an `Original`, and it is the case the
@@ -987,13 +987,13 @@ observable** that distinguishes a collapsed run from a fold. Phase 1 carries the
 fold shape as a builder test for exactly that reason — it must not wait for
 Phase 2.
 
-**Zero-content pieces are STORED, not dropped.** `Concat::map_offset`'s
+**Zero-content pieces are STORED, not dropped.** `Concat::map_offset`\'s
 containing-piece test is `offset >= piece_start && offset < piece_end`, so a
 zero-content piece is unreachable through it and cannot affect the mapping —
 storing one is measured-harmless. The reason to keep it is the **source-tiling
 invariant**: a piece list that tiles its source contiguously is a testable
 property, and dropping a deletion breaks it by leaving a gap exactly where the
-deleted bytes were. `preimage_in`'s hull is the visible symptom of that gap
+deleted bytes were. `preimage_in`\'s hull is the visible symptom of that gap
 rather than the reason to care — that hull is an *offset* claim, and
 § `preimage_in` composes affinely makes it `None` for the
 `Substring{parent: Concat}` shape these values actually take. Measured on the
@@ -1092,7 +1092,7 @@ shape exercising the rule's other entry path — a source break where the
 *value* is at a tab rather than a space or newline (rule 1's text: "a value
 tab at a break therefore yields a zero-content piece and re-enters the
 loop") — none of the 32 fixtures has a value-side tab at a break position;
-`block | tab in content`'s tab is mid-content, not at a break, and produces
+`block | tab in content`\'s tab is mid-content, not at a break, and produces
 an ordinary verbatim piece. That path is asserted by the derivation rule's
 prose, not demonstrated by a fixture row.
 
@@ -1103,7 +1103,7 @@ escape, verbatim `b`: `0..1<-4..5`, `1..2<-5..7*`, `2..3<-7..8`. The calls are
 verbatim call coalesces with the replacement between them (coalescing is
 verbatim-adjacent-to-verbatim only), and the two verbatim pieces are not
 adjacent to each other either — so `finish()` returns a 3-piece `Concat`.
-This is the fold shape by another name: `crates/pampa`'s escape table differs
+This is the fold shape by another name: `crates/pampa`\'s escape table differs
 from YAML's (2:1 for `\t` vs. `\`+punctuation for pampa) but the call
 sequence — verbatim, replacement, verbatim — and the resulting uncollapsed
 3-piece `Concat` are identical in shape to what Phase 1's frozen "fold shape"
@@ -1166,7 +1166,7 @@ verbatim/replacement/verbatim, 3-piece, non-collapsing shape as cases 2 and
 starts. What the API cannot paper over is that `unescape_punctuation` is
 private with one caller, `extract_quoted_text` (`:28-36` in the same file),
 which **returns a bare `String` and discards offsets entirely** — confirmed
-by reading both functions — and `extract_quoted_text`'s own caller,
+by reading both functions — and `extract_quoted_text`\'s own caller,
 `key_value_value` at `crates/pampa/src/pandoc/treesitter.rs:1208-1212`,
 currently takes `node_location(node)` (the whole quote-inclusive node span)
 as the value's location, unadjusted for unescaping, which the
@@ -1175,11 +1175,11 @@ as the value's location, unadjusted for unescaping, which the
 verbatim as `value_range`.
 Threading a real piece list out therefore means changing the return type of
 two private functions and the shape of `value_range`, and downstream,
-`AttrSourceInfo.attributes[i].1`'s meaning change (already decided in this
+`AttrSourceInfo.attributes[i].1`\'s meaning change (already decided in this
 section) and the TypeScript consumers named above. That is a caller-side
 plumbing cost, not a builder deficiency: distinguishing it from an API
 finding per the task brief's own test, `verbatim`/`replacement`/`finish`
-already say everything `unescape_punctuation`'s loop needs to say. I did not
+already say everything `unescape_punctuation`\'s loop needs to say. I did not
 find, in either function, a case needing an operation absent from the
 sketch.
 
@@ -1193,7 +1193,7 @@ convention) and content equal to the decoded entity — for `&amp;` alone,
 sourcepos 5 bytes, content `"&"` 1 byte — but that atomic node is not what
 `convert_inline` receives whenever the entity has adjacent literal text,
 which is the ordinary case in prose (`x&amp;y`, `Ben &amp; Jerry's`), not a
-corner case. `postprocess_text_nodes`'s `NodeValue::Text` arm
+corner case. `postprocess_text_nodes`\'s `NodeValue::Text` arm
 (`mod.rs:2413-2419`, inside the range cited above) calls
 `postprocess_text_node_with_context` (`mod.rs:2491-2526`, not previously
 cited): it walks `node.next_sibling()` in a loop and, for every adjacent
@@ -1216,7 +1216,7 @@ verbatim/replacement/verbatim shape as cases 2, 3, and 6, so `finish()`
 returns a 3-piece `Concat`, uncollapsed. Tracing `tokenize_text_with_source`
 (`crates/comrak-to-pandoc/src/text.rs:91-157`) against the merged `"x&y"`
 node itself: every char is non-whitespace, so the per-char loop (`:98-131`)
-sets `current_word_start` once, at byte 0, and `'y'`'s own `abs_offset`
+sets `current_word_start` once, at byte 0, and `'y'`\'s own `abs_offset`
 (computed at `:99`) is never read anywhere — the guard at `:125-127` only
 assigns a word-start when none is already open. The node's single `Str`
 instead comes from the trailing-word branch (`:136-141`), whose end is
@@ -1244,13 +1244,13 @@ source against its decoded text — the same verbatim/escape-mismatch shape
 the YAML walker uses, with comrak's own escape/entity table
 (`entity::unescape` for `&...;`, an ASCII-punctuation check for `\`) — not
 just the one-classification-per-node shortcut this paragraph's first draft
-assumed. `postprocess_text_node_with_context`'s own `spxv` (the per-original-node
+assumed. `postprocess_text_node_with_context`\'s own `spxv` (the per-original-node
 sourcepos/length list it builds while merging, `mod.rs:2502-2515`) is
 consumed internally for comrak's own line-processing and is not exposed to
 `comrak-to-pandoc`, so that per-piece boundary information is gone by the
 time `convert_inline` runs; nothing short of re-deriving it against the raw
 source will recover it. Separately, and unrelated to entities:
-`postprocess_text_nodes`'s `coalesce_escaped` flag (which gates a *different*
+`postprocess_text_nodes`\'s `coalesce_escaped` flag (which gates a *different*
 merge, of `NodeValue::Escaped` backslash-escapes into a neighbor) defaults to
 `true` — q2 sets neither `parse.escaped_char_spans` nor
 `render.escaped_char_spans` (confirmed by grep, no hits in
@@ -1268,7 +1268,7 @@ children as Text") reads as though the merge does not happen.
 **API verdict: no decoder needs an operation the others do not.** All seven
 walkthroughs above reduce to the same three primitives — `verbatim`,
 `replacement` (including its `out_len == 0` and empty-source-range/synthesis
-special cases), and `finish`'s one-verbatim-piece collapse rule — and the
+special cases), and `finish`\'s one-verbatim-piece collapse rule — and the
 two constructors already cover both shapes a decoder can be rooted in
 (`in_file` for pampa's and comrak's file-rooted spans, `in_parent` for
 YAML's substring path). The three decoders differ only in *which side of the
@@ -1279,7 +1279,7 @@ builder-API one:
   in case 6 is entirely a plumbing cost — two private functions
   (`unescape_punctuation`, `extract_quoted_text`) discard offsets and return
   a bare `String`, and threading a piece list out crosses `value_range`,
-  `AttrSourceInfo.attributes[i].1`'s already-decided meaning change, and a
+  `AttrSourceInfo.attributes[i].1`\'s already-decided meaning change, and a
   TypeScript consumer. Per the task brief's own distinction, this is caller
   awkwardness, not an API insufficiency, and I recommend no API change for
   it.
@@ -1307,13 +1307,13 @@ Neither check the brief asked to distinguish — "API insufficiency" vs.
 "caller awkwardness" for pampa, and "does comrak need something YAML's
 walker lacks" — turned up a widening, once case 7 was corrected to describe
 comrak's actual merge behavior rather than the atomic-node reading an
-earlier draft assumed. Both non-YAML decoders' outstanding work is confined
+earlier draft assumed. Both non-YAML decoders\' outstanding work is confined
 to their own crates (Plan 2, Plan 3), consistent with what § The shared
 builder's "which side of the oracle boundary" paragraph and the shape table
 above already state; this review adds concrete call sequences and one
 traced bug (case 7) rather than revising either.
 
-### `quarto-yaml`'s API
+### `quarto-yaml`\'s API
 
 **Decided 2026-08-21: the change is additive, not breaking.** `Children` is a
 **private** enum, so renaming its `None` variant and giving it fields is an
@@ -1464,7 +1464,7 @@ a different repo, after a publish. Phase 1's own first item concedes the API
 
 Two consequences worth stating. Plan 2 unblocks **early**: its obligation 5
 gates on `Location.offset` flooring, which 0.1.2 delivers, so it no longer waits
-for Phase 2. And `quarto-yaml`'s own release therefore depends on
+for Phase 2. And `quarto-yaml`\'s own release therefore depends on
 `quarto-source-map` **0.1.3**, not 0.1.2 — see the requirement note below.
 
 - **`quarto-source-map` 0.1.2.** **Four** behaviors change; none breaks a
@@ -1491,7 +1491,7 @@ for Phase 2. And `quarto-yaml`'s own release therefore depends on
   0.1.2 up under `^0.1.0` with **no manifest edit** — a deliberate
   `cargo update` plus a lockfile change, which matters because CI builds
   `--locked`.
-- **`quarto-yaml` 0.1.3.** Under the additive design (§ `quarto-yaml`'s API) no
+- **`quarto-yaml` 0.1.3.** Under the additive design (§ `quarto-yaml`\'s API) no
   public signature changes, so this is a patch too, and **q2 needs no
   `quarto-yaml` edit** — its `quarto-yaml = "0.1.2"` pin accepts 0.1.3 under
   `^0.1.2`.
@@ -1571,7 +1571,7 @@ plans on 2026-08-21.
 
 **Obligations 3 and 10 are now live, not prospective** — this plan's own
 releases (§ Evidence, Phases 1 and 2) made them so. `quarto-source-map` 0.1.2
-published **2026-08-21T21:28:48Z**, so `quarto-error-reporting`'s two
+published **2026-08-21T21:28:48Z**, so `quarto-error-reporting`\'s two
 char-boundary regression tests (obligation 3) have **already** silently
 stopped exercising a mid-character renderer offset; this is not a risk to
 plan around, it has already happened. And q2's `Cargo.toml`/`Cargo.lock` still
@@ -1629,7 +1629,7 @@ lands.
    a sibling field, on a Rust-only survey. There is a live TypeScript consumer:
    `ts-packages/annotated-qmd/src/block-converter.ts:287` and
    `inline-converter.ts:322` read `attrSource.kvs[i]` and resolve them through a
-   `sourceReconstructor`, and `resolveChain`'s `Substring` arm composes affinely
+   `sourceReconstructor`, and `resolveChain`\'s `Substring` arm composes affinely
    (§ Risks). Gordon has decided TypeScript moves to content semantics with a
    **0.2.0 bump on `@quarto/annotated-qmd`**. Two things to settle there: whether the reconstructor
    wants the content span (probably — it reconstructs source for an editor,
@@ -1660,7 +1660,7 @@ a Phase 1 checklist bullet. They are at this altitude now so the deferral is as
 visible as the decision to defer.
 
 1. **Resolve the doc inconsistency the Phase 1 rewrite creates.** Phase 1
-   retracts `preimage_in`'s "this is the writer's can-I-Verbatim-copy check"
+   retracts `preimage_in`\'s "this is the writer's can-I-Verbatim-copy check"
    sentence, but the same claim is restated *in prose at a call site*:
    `pampa/src/writers/incremental.rs:162-168` reads "A kept block is
    Verbatim-copied out of `original_qmd`, so it must have a byte preimage in the
@@ -1703,7 +1703,7 @@ Something must carry content provenance through the merge.
 (`crates/pampa/src/pandoc/meta.rs:162`, scalar arm at `:241`), consumed at
 `:259` (`!md`), `:303` (annotated Markdown) and `:316` (`DocumentMetadata`
 default), and reached from `project/mod.rs:169` for project config. An earlier
-draft named `quarto-config`'s `config_value_from_yaml`
+draft named `quarto-config`\'s `config_value_from_yaml`
 (`convert.rs:26`) as the setter; verified, that function has **no production
 caller** — the only call sites outside its own recursion are its own tests, a
 `#[cfg(test)]` use at `materialize.rs:495`, and two locally-shadowed test
@@ -1758,11 +1758,11 @@ content provenance needs zero threading and is wrong: a `Concat` there makes
 (`quarto-core/src/config_sources.rs:90`, `:145`) return `None`, so the
 diagnostic loses its file binding and prints **no source snippet at all** —
 for exactly the escaped and multi-line values this epic fixes. It also trips
-`span_assert`'s existing `SpanProblem::Concat` (`quarto-config/src/span_assert.rs:159`)
+`span_assert`\'s existing `SpanProblem::Concat` (`quarto-config/src/span_assert.rs:159`)
 across 13 assertion sites.
 
 **Three constraints.** Set it in one place
-(`meta.rs:241`, `yaml_to_config_value`'s scalar arm), read it in one place
+(`meta.rs:241`, `yaml_to_config_value`\'s scalar arm), read it in one place
 (`parse_scalar_string_in_place`). A `None` may fall back to
 `source_info` **only** because non-YAML metadata carries `Generated`
 source_info, where offset arithmetic already yields `None`; document that
@@ -1803,7 +1803,7 @@ the real one.
 | `cell_options` single-option shape **through `Substring`** → `None` | same hunk | yes — `Some(hull)` before. **This is the one row that binds the documented behavior change** |
 | builder: all-verbatim → contiguous `SourceInfo`, not a 1-piece `Concat` | the abutting-verbatim merge in `push` | yes — N pieces before |
 | builder: **fold shape** stays a 3-piece `Concat` | the collapse predicate, reverted to "contiguous + equal totals" | yes — collapses to `Original{0,7}` before. **The row that binds R1/R3** |
-| builder: zero pieces → zero-length `SourceInfo` at the anchor | `finish()`'s empty-piece-list branch | yes — no other branch produces a position |
+| builder: zero pieces → zero-length `SourceInfo` at the anchor | `finish()`\'s empty-piece-list branch | yes — no other branch produces a position |
 | builder: `out_len == 0` piece is **stored**, source tiling gap-free | re-add the `if out == 0 { return }` drop in `push` | yes — piece count drops and the contiguity `debug_assert` fires |
 | builder: `in_parent` over a real `Concat` parent yields parent-relative pieces | make `finish()` consult `resolve_byte_range` | yes — `None` from the parent, so the builder cannot produce a result |
 
@@ -1836,12 +1836,12 @@ stay green.
   the *length* invariant, not desync detection. To bind it you would have to
   inject a deliberately-broken walker; not worth a permanent test, but do not
   read a green `strict-provenance` job as evidence that desync handling works.
-- **`preimage_in`'s doc rewrite** and the release notes. No test binds prose.
+- **`preimage_in`\'s doc rewrite** and the release notes. No test binds prose.
   The hand-off obligations exist because of this.
 - **The read-only audit item.** An observation with an § Evidence artifact, not a
   test.
-- **`Location.offset`'s effect on `pampa`'s JSON writer `"o"` fields and
-  `ts_engine`'s `file_offset`.** Phase 1 records the movement and must not fix
+- **`Location.offset`\'s effect on `pampa`\'s JSON writer `"o"` fields and
+  `ts_engine`\'s `file_offset`.** Phase 1 records the movement and must not fix
   it; the binding test is Plan 2's (hand-off obligation 6). Untested *here* on
   purpose.
 - **`test_location_health.rs:448` binds neither `offset_to_location` fix**, since
@@ -1915,7 +1915,7 @@ need re-anchoring regardless.
   `4da3385` snaps at four sites; this bullet and the next two cover the
   other three.
 - [x] **(same expiry)** Revert only the **ariadne detail-label** hunk — the
-  fourth and last of `4da3385`'s snap sites. **Result: not attributed.**
+  fourth and last of `4da3385`\'s snap sites. **Result: not attributed.**
   Reverting it left both regression tests green (§ Evidence) — neither
   target test's fixture builds a `DetailItem` with a location, so neither
   reaches the detail-label path. Three of the four hunks are attributed,
@@ -2006,7 +2006,7 @@ configured.
 - [x] Fix: `offset: safe_offset` (the floor loop already exists at
   `file_info.rs:116-120`; it currently floors `column` only) — Done in T3
   (commit `8e07717`).
-- [x] Fix `Concat`'s exclusive-end branch (`mapping.rs:64-70`) to use the last
+- [x] Fix `Concat`\'s exclusive-end branch (`mapping.rs:64-70`) to use the last
   piece's **source** length, not its content length (§ Design, with the
   three measured terminal shapes). Test all three: verbatim unchanged,
   replacement-terminated now reaching the true source end, and
@@ -2014,13 +2014,13 @@ configured.
   — Done in T3 (commit `0c65d52`); all three RED values matched the brief
   exactly (`Some(8)`→`Some(9)`, `None`→`Some(11)`, gating row unchanged at
   `Some(9)`).
-- [x] Fix `preimage_in`'s `Substring` arm (`source_info.rs:453-456`) to return
+- [x] Fix `preimage_in`\'s `Substring` arm (`source_info.rs:453-456`) to return
   `None` when the parent is a `Concat` (§ `preimage_in` composes affinely).
   Test the measured fixture: a gap-free `Concat` whose content is 4 bytes
   over source 1..6 yields `Some(1..6)` bare, and must yield `None` — not
   `Some(1..5)` — through a `substring(_, 0, 4)`. — Done in T3 (commit
   `0e900e2`); RED matched exactly (`Some(1..5)`→`None`).
-- [x] **Rewrite `preimage_in`'s doc comment** (`source_info.rs:410-413`), whose
+- [x] **Rewrite `preimage_in`\'s doc comment** (`source_info.rs:410-413`), whose
   "this is the writer's can-I-Verbatim-copy check" sentence is exactly the
   claim the byte-identity finding retracts. Wording is in § `preimage_in`
   composes affinely; Plan 3's consumer audit cites it, so get it in before
@@ -2058,7 +2058,7 @@ configured.
   production callers are `pampa/src/pandoc/treesitter.rs:1463-1464`,
   `:1485-1486` and `quarto-config/src/span_assert.rs:188`, and
   `pampa/tests/integration/test_location_health.rs:448` asserts the two
-  agree. Whether it moves depends on where those `Location`s' row/column
+  agree. Whether it moves depends on where those `Location`s\' row/column
   came from, which this plan has not established — so treat red *or* green
   there as **unknown until the smoke runs**, and record which you get
   rather than assuming either is the bug. — Done in T3 (commit `022f489`);
@@ -2073,7 +2073,7 @@ configured.
   sources and enumerating them is not this phase's job. Concretely: the
   third implementation `offset_to_location_bytes`
   (q2 `quarto-parse-errors/src/error_generation.rs:330`, whose mid-char
-  behavior this plan has **not** examined), and `quarto-yaml`'s own
+  behavior this plan has **not** examined), and `quarto-yaml`\'s own
   `Location` uses. **Fixes outside `quarto-source-map` do not ship in this
   phase's PR** — record them and hand them to Plan 3's audit.
 - [x] **(after the 0.1.2 bump below — on a branch off the 0.1.2 line, held for
@@ -2328,7 +2328,7 @@ them land together.
 - [x] **Attach provenance at the two production construction sites** —
   `parser.rs:513` (scalars) and the `Event::Alias` arm at `:634` — now that
   the walker exists to compute it. **No constructor signature changes**
-  (§ `quarto-yaml`'s API). The alias arm needs nothing beyond the default
+  (§ `quarto-yaml`\'s API). The alias arm needs nothing beyond the default
   `None` (§ Out of scope). This item, the walker above and the header-skip
   rule below are **one change**: attaching without the walker is impossible,
   and the walker desyncs without the rule. — Done in T10: attached at the
@@ -2634,7 +2634,7 @@ confirmed empty before starting the next.
 
   Matches the phase's expectation exactly (`write.rs:84`).
 
-- **Site 3 — the ariadne detail label.** Edit: reverted only `detail_span`'s
+- **Site 3 — the ariadne detail label.** Edit: reverted only `detail_span`\'s
   computation from `Self::snap_span_to_char_boundaries(&content,
   detail_start.location.offset, detail_end.location.offset)` back to the raw
   `detail_start.location.offset..detail_end.location.offset`. Same command as

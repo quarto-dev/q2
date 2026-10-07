@@ -833,7 +833,7 @@ audit trail; no decisions left for the L7 session.
 - **D17 (single canonical Q-12-13 message):** user-confirmed
   2026-05-07. Whether the sibling output file is missing or
   present-but-empty, the diagnostic uses one wording:
-  *"Listing item from {href} produced no preview content; using
+  *"Listing item from \{href\} produced no preview content; using
   static fallback description."* Easier to grep, easier to
   document. The cause distinction (file missing vs file empty)
   is recoverable from filesystem inspection if the user needs it.
@@ -976,7 +976,7 @@ per CLAUDE.md.
 
 ### Phase 3 — reader
 
-In `post_render_upgrade.rs`'s test module:
+In `post_render_upgrade.rs`\'s test module:
 
 14. **`extract_first_para_returns_first_p_text`** — given
     `<main class="content"><p>Hello.</p></main>`, returns
@@ -1011,7 +1011,7 @@ In `post_render_upgrade.rs`'s test module:
 
 ### Phase 4 — substitution: description
 
-In `post_render_upgrade.rs`'s test module:
+In `post_render_upgrade.rs`\'s test module:
 
 26. **`substitute_description_replaces_envelope_with_engine_first_para`**
     — given a host HTML containing the envelope and a sibling

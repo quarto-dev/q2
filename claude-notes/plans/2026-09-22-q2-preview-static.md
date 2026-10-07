@@ -423,7 +423,7 @@ has viewed; starts empty.
 | Event | Policy used | After |
 |---|---|---|
 | Boot | `Only(E)` = `None` | serve; browser opens the initial page |
-| `GET` of an HTML output whose input ∈ `unexecuted` ∖ E | `Subset({input})`, `Only(E ∪ {input})` | E ∪= {input}; `reload` with that target |
+| `GET` of an HTML output whose input ∈ `unexecuted` ∖ E | `Subset({input})`, `Only(E ∪ {input})` | E ∪= \{input\}; `reload` with that target |
 | Edit of input X | `Subset({X})`, `Only(E)` | unchanged (X executes only if it was viewed) |
 | Config / resource change | `Full`, `Only(E)` | unchanged |
 | `preview.engine: off` in `_quarto.yml` | always `None` | never executes (Q7) |

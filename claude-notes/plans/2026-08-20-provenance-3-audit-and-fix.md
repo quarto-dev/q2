@@ -454,7 +454,7 @@ before the comrak fix because it is worth more.
   invariant is that both read `&summary` and the guard's closures are
   `UnwindSafe` (`:1264-1269`), not that counting happens first. The guard's
   own doc (`:1255-1256`) is already right.
-  *(Anchor stale as of 2026-08-23 — noted, not rewritten: the claim holds,
+  \*(Anchor stale as of 2026-08-23 — noted, not rewritten: the claim holds,
   but on HEAD the guard's doc comment is `:1268-1270`, the `UnwindSafe`
   bound `:1290-1293`, and the rationale paragraph `:1278-1283`. See
   § Evidence → Phase 6 → 6d.)
@@ -475,7 +475,7 @@ before the comrak fix because it is worth more.
   mutation per path, record both outcomes in § Evidence, add a guard only
   if a path has none. Closes Plan 2 hand-off (g).
 - [ ] **Upstream doc-only PR in `~/src/quarto-error-reporting`** rewriting
-  `snap_span_to_char_boundaries`' doc comment (`src/diagnostic.rs:654-670`):
+  `snap_span_to_char_boundaries`\' doc comment (`src/diagnostic.rs:654-670`):
   keep the two-renderer panic claim (still true — ariadne 0.6.0 aborts on a
   mid-char end index; measured A/C/E in recommendations § 4); state that since
   `quarto-source-map` 0.1.2 every offset arriving via `map_offset` is already
@@ -565,7 +565,7 @@ the three measured facts that make it well-posed and the worked tiling.
   `readers/commonmark.rs:48` (`block.rs:37`'s `convert_document` is a second
   production caller, but it passes `None`, which routes `NodeValue::Text` to
   `tokenize_text` and never reaches the walker), whose
-  only non-test caller is `main.rs:332`'s `--from commonmark` arm — and no
+  only non-test caller is `main.rs:332`\'s `--from commonmark` arm — and no
   snapshot test in the workspace invokes that arm. (Enumerated over every
   `.rs` file under `crates/`; `crates/pampa` has 212 `.snap` files and none
   moved.)
@@ -587,7 +587,7 @@ Findings: § 6, "The workaround census". Six sites, **one deletion** — "the
 workarounds collapse" is a claim about capability, not deletions.
 
 - [x] Record the `cell_options` constraint (§ 6) in
-  `crates/quarto-core/src/cell_options/mod.rs`'s file-header comment (`:1-…`,
+  `crates/quarto-core/src/cell_options/mod.rs`\'s file-header comment (`:1-…`,
   the "Shared cell-options facility" block) and close the question. **Do not
   lift it** — there is no consumer.
 - [x] **Cross-check Plan 2's dispositions against § 6's census table.** Confirm:
@@ -625,7 +625,7 @@ workarounds collapse" is a claim about capability, not deletions.
   > prose at `:340-342`; § Evidence Phase 4 holds the *measurement* for the
   > shared attribute path (column 27 vs 26) instead. Both are quoted in
   > § Evidence.
-- [x] Record in § Evidence that `bd-49cbyqbt` (hand-off 4(c)'s second half) was
+- [x] Record in § Evidence that `bd-49cbyqbt` (hand-off 4(c)\'s second half) was
   closed 2026-08-22 as a duplicate of `bd-1d6io` — nothing to do here.
 - [x] Close `bd-mxa44voa` once all three plans are done. Its four children
   (`bd-gx2mal69`, `bd-jmquuiqh`, `bd-th2ah982`, `bd-x0o0pem3`) are already
@@ -688,7 +688,7 @@ production behaviour changed.
 
 #### Line-number rebase
 
-The findings' enumeration was taken at `816f4ed47`. Two rebases apply:
+The findings\' enumeration was taken at `816f4ed47`. Two rebases apply:
 
 1. `c9a77d18c` ("config_value: sweep call sites for Scalar's new struct-variant
    shape") added two lines at `incremental.rs:553`, moving every call site

@@ -83,7 +83,7 @@ Stable-actor-ID sites:
 | Doc application | `ts-packages/quarto-sync-client/src/client.ts:688-691` (`applyActorId`), `:699-710` (`createDoc`), `:732` (`findDoc`, also covers the self-heal re-fetch) | `automergeClone(doc, { actor })` / `automergeFrom(init, { actor })` |
 | Client state | `client.ts:1180` (`connect`), `:2025-2188` (`createNewProject`, via the `resolveActorId` callback parameter), `:2229` (`getActorId`) | `state.actorId` — the single "my actor" the client assumes today |
 | preview-runtime wrapper | `ts-packages/preview-runtime/src/automergeSync.ts:166` (`connect`), `:312-317` (`createNewProject`, `resolveActorId`), `:323` (`getActorId`) | Pass-through API used by hub-client and the q2 preview SPA |
-| Identity map | `ts-packages/quarto-automerge-schema/src/index.ts:66` (`identities?: Record<string, ActorIdentity>`), written via `setIdentity` at `client.ts:1264, 2094` | actorId → {name, color} for attribution UI |
+| Identity map | `ts-packages/quarto-automerge-schema/src/index.ts:66` (`identities?: Record<string, ActorIdentity>`), written via `setIdentity` at `client.ts:1264, 2094` | actorId → \{name, color\} for attribution UI |
 | Local fallback | `hub-client/src/services/userSettings.ts:32-40` (`actorIdFromUserId`) | Auth-disabled only — stable actor from IndexedDB `userId` |
 | **Current-user key** | `getActorId()` → `components/render/ReactPreview.tsx:906` (`currentActor`) → `Q2SandboxedPreviewIframe.tsx` → `ts-packages/preview-renderer/src/framework/CurrentActorContext.tsx` (`useCurrentActor()`, `actor === me` checks in user TSX: comments, kanban, drag); `hub-client/src/components/ReplayDrawer.tsx:357,520` (`--me` highlight); `DevHarness.tsx:487` (comment) | How the UI knows which changes are *mine* |
 | Replay attribution producer | `hub-client/src/services/attribution-runs.ts:269-285` (`replayChange`) | Replays history, stamps each attribution run with `decodeChange(change).actor` |
@@ -340,7 +340,7 @@ design — the spike did its job:
      in Compatibility is amended accordingly.
    - D1 is reinforced: `set_author` itself re-randomizes the actor when
      the value changes, and re-applying the *same* author is a no-op
-     (pinned: actor unchanged), so `findDoc`'s idempotent re-application
+     (pinned: actor unchanged), so `findDoc`\'s idempotent re-application
      is safe.
 2. **Absence surfaces as `undefined`, not `null`** in JS:
    `DecodedChange.author` and `getAuthorForActor` return `undefined` for
@@ -374,7 +374,7 @@ unrelated to this work.
 
 - [x] Tests first (`crates/quarto-hub/src/server.rs` / auth tests, following
   `claude-notes/instructions/testing.md`): `GET /auth/author?project=` returns
-  deterministic 64-hex equal to `/auth/actor`'s value for the same
+  deterministic 64-hex equal to `/auth/actor`\'s value for the same
   credential+project (D5), distinct per project, 401 unauthenticated / 403
   disallowed, 400 on missing `project`, works on both session-cookie and
   Bearer credential paths.

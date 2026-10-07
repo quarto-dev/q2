@@ -39,7 +39,7 @@ recommendation is to file it as its own strand.
 cargo run --bin q2 -- render q2-issue-683.qmd
 ```
 
-```
+````
 ---
 format: html
 engine: knitr
@@ -49,7 +49,7 @@ engine: knitr
 #| eval: true
 reactable::reactable(mtcars[1:2, 1:2])
 ```
-```
+````
 
 Observed (2026-09-18, `main` at a9475a57):
 

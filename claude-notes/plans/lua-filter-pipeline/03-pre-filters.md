@@ -279,7 +279,7 @@
 
 **Total**: 17 stages, 2 blocking for WASM, 2 with partial issues
 
-*`pre-shortcodes-filter`: User shortcode files loaded at init, `env` shortcode reads env vars
+\*`pre-shortcodes-filter`: User shortcode files loaded at init, `env` shortcode reads env vars
 
 **WASM Notes**:
 - `pre-server-shiny` is completely incompatible (subprocess calls)

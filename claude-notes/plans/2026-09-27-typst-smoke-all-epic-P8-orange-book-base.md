@@ -153,7 +153,7 @@ logo-path resolution against a synthetic merged document's directory context.
   engine-dependent." An unresolved shortcode call produces a Q-16-3
   "Shortcode handler not found" warning + an inline `**?embed**` marker, not a
   hard failure — engine-resolution for chapter1.qmd is driven only by its own
-  `” `{r}` code chunk (the `fig-cars` plot), which knitr/R (available on this
+  `{r}` code chunk (the `fig-cars` plot), which knitr/R (available on this
   dev machine) handles fine regardless. Verified empirically: with the
   `requires: jupyter` gate removed, `SMOKE_FILTER=typst/orange-book/index.qmd`
   got past R-engine execution (`processing file: chapter1.rmarkdown` succeeded)
@@ -161,7 +161,7 @@ logo-path resolution against a synthetic merged document's directory context.
   failure (see item 4) — with no jupyter involved at any point. Removed the
   `requires: jupyter` gate as based on an incorrect premise.
 
-  Net effect on scope: `embed`'s absence will cost a handful of assertions
+  Net effect on scope: `embed`\'s absence will cost a handful of assertions
   once item 4 unblocks — only 3 lines in `index.qmd` reference
   `fig-visualization`/`<sec-embedded-notebooks>` — not the whole fixture. Not
   a P8 task to fix (own epic, per D6); tracked here as an accepted, understood
@@ -189,7 +189,7 @@ logo-path resolution against a synthetic merged document's directory context.
   kept in the tree untouched as the real source. Generated
   `references.json` alongside it via `pandoc -f biblatex -t csljson
   references.bib -o references.json` (21/21 entries carried over cleanly)
-  and pointed `_quarto.yml`'s `bibliography:` at the `.json` file, with a
+  and pointed `_quarto.yml`\'s `bibliography:` at the `.json` file, with a
   comment marking this temporary and naming what to revert once
   bd-l6eh1635 merges (swap back to `references.bib`, delete
   `references.json`). This unblocks rendering *now* without depending on
@@ -228,7 +228,7 @@ logo-path resolution against a synthetic merged document's directory context.
   Verified: the `sec-basic-figures` citeproc error is gone; render now
   gets past citeproc entirely. Regression-checked broadly, not just the
   6-test subset — `cargo nextest run -p quarto-core -E` against all 15
-  book-*/orange_book_lua test files (63 tests) and the full `-p
+  book-\*/orange_book_lua test files (63 tests) and the full `-p
   quarto-core` suite (5282 tests) both green, no regressions. `cargo
   clippy -p quarto-core --all-targets -- -D warnings` clean.
 
@@ -286,7 +286,7 @@ logo-path resolution against a synthetic merged document's directory context.
   value (field 'brand')`. Root cause, confirmed via the retained
   `pandoc-input.json`: `brand: _brand.yml` (a bare path string)
   serializes to pandoc as `{"t": "MetaString", "c": "_brand.yml"}`. The
-  vendored `typst-brand-yaml.lua`'s guard
+  vendored `typst-brand-yaml.lua`\'s guard
   (`resources/pandoc-filters/filters/quarto-post/typst-brand-yaml.lua:261-263`,
   `if not meta.brand or pandoc.utils.type(meta.brand) == 'Inlines' then
   meta.brand = {} end`) was written for Q1's convention, where pandoc's
@@ -311,7 +311,7 @@ logo-path resolution against a synthetic merged document's directory context.
   **Decided (Gordon, 2026-09-28): option (1), the narrow Lua-filter
   patch.** Added `pandoc.utils.type(meta.brand) == 'string'` to the
   guard, marked `QUARTO2-PATCH`, and added the file to
-  `resources/pandoc-filters/README.md`'s "Ours vs. pinned" list.
+  `resources/pandoc-filters/README.md`\'s "Ours vs. pinned" list.
   Removed the `run.skip`. Regression tests: two new cases in
   `typst_brand.rs` (`test_logo_map_resolves_named_size_against_images`
   and `..._explicit_resource_not_treated_as_name_reference` — see bug
@@ -329,7 +329,7 @@ logo-path resolution against a synthetic merged document's directory context.
   Q1's `getLogo`/`getLogoResource` precedence in `brand.ts`, which
   checks `images` first and only falls back to treating the string as
   a literal path). Q2's `logo_map` (`typst_brand.rs`) never resolved
-  this: it took `brand.logo("medium")`'s raw `LogoEntry::Single(Path(
+  this: it took `brand.logo("medium")`\'s raw `LogoEntry::Single(Path(
   "test-logo"))` and emitted `"test-logo"` as the literal path
   verbatim. Same bug in `quarto_brand::Brand::favicon()` and
   `ResolvedBrand::logo_resource_relative_to()` — neither consulted
@@ -364,7 +364,7 @@ logo-path resolution against a synthetic merged document's directory context.
   `book_single_file_merge.rs::book_brand_logo_named_by_images_reference_resolves_relative_to_book_output_dir`
   — a real book render (via `orange-book`, Q2's default typst-book
   extension) with `_brand.yml`'s `small: test-logo` reference,
-  asserting the retained `.typ`'s logo path is `"../logo.svg"`, not
+  asserting the retained `.typ`\'s logo path is `"../logo.svg"`, not
   `"logo.svg"`. `cargo nextest run -p quarto-core -E
   'test(book_single_file_merge)'` and the full `-p quarto-brand -p
   quarto-core` suite (5387/5387) both green; `cargo clippy -p
@@ -373,7 +373,7 @@ logo-path resolution against a synthetic merged document's directory context.
   **Sixth bug — found and root-caused 2026-09-28 (bd-2lxj10z0
   filed, fixture workaround applied here).** The `fig-cars` mismatch
   (`unnamed-chunk-1-1.svg` on disk vs. `fig-cars-1.svg` expected by
-  `chapter2.qmd`/`appendix.qmd`/`appendix-b.qmd`'s hand-authored
+  `chapter2.qmd`/`appendix.qmd`/`appendix-b.qmd`\'s hand-authored
   `![...](chapter1_files/figure-typst/fig-cars-1.svg)` references)
   turned out to be **general to q2, not book-merge-specific** —
   confirmed by reproducing the identical stripped input to knitr in
@@ -457,7 +457,7 @@ logo-path resolution against a synthetic merged document's directory context.
   --all-targets -- -D warnings`: clean. This is a plan-scoped fix
   (found while directly blocking this same checklist item, not a
   digression) — implemented here, not filed as a bead, per
-  `CLAUDE.md`'s beads-vs-plans rule.
+  `CLAUDE.md`\'s beads-vs-plans rule.
 
   **Eighth bug — root-caused and fixed 2026-09-28** (ninth and tenth
   bugs surfaced and fixed along the way — see below). With
@@ -479,7 +479,7 @@ logo-path resolution against a synthetic merged document's directory context.
 
   Root cause, confirmed by reading the code and matching it against
   the actual diagnostic text: `crates/quarto-core/src/transforms/
-  crossref_index.rs`'s `visit_header` (around line 326) has
+  crossref_index.rs`\'s `visit_header` (around line 326) has
   `if unnumbered || !self.html { return; }` — for any non-HTML
   format (`self.html = ctx.format.identifier.is_html_based()`,
   false for Typst), this skips **both** the HTML-only `number` kv

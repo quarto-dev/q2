@@ -632,10 +632,10 @@ duplicating it literally here is the point, not a smell.
 **Implementation risk to surface at dispatch, not silently absorb.** `require`ing
 `crossref/equations.lua` or `common/pandoc.lua` in isolation may pull in globals the luaunit
 harness does not mock (the harness doc says the test "Mocks any filter-runtime globals it needs
-(param, tcontains, format_typst_float, quarto.log.*, _quarto.*)", which is a per-test manual
+(param, tcontains, format_typst_float, quarto.log.*, \_quarto.*)", which is a per-test manual
 effort, not a framework). If a file proves unrequirable in isolation, the fallback is **not** to
-drop the assertion: P5's checklist already carries "add a Layer-1 assertion that each Route-N
-function this shim calls is reachable," run inside a real pandoc-Lua probe. In that case record
+drop the assertion: P5's checklist already carries \"add a Layer-1 assertion that each Route-N
+function this shim calls is reachable,\" run inside a real pandoc-Lua probe. In that case record
 T5.1 as `seam deferred until P5's Layer-1 introspection harness` and say so in the PR.
 
 ---
@@ -672,7 +672,7 @@ task needs no pandoc, no transport, no shim.
 | # | Tier | Real unit exercised | Seam (invoked → asserted) | Mock boundary | Named revert hunk |
 |---|---|---|---|---|---|
 | T6.1a | I | the vendored tree's marker inventory | `crates/quarto-core/tests/integration/pandoc_filters_patch.rs` reads the three vendored files from disk → asserts each contains `QUARTO-PATCH(upstream PR quarto-dev/quarto-cli#` followed by digits (**not** the literal `#<N>`), and that the set of marker-bearing files equals a hard-coded expected list | none — real `std::fs` read of the real vendored tree | the `QUARTO-PATCH` comment at each of A1, A2, A3, A4/A5, A6 |
-| T6.1b | I | the vendored `main.lua`'s assignment gate, structurally | same file → asserts `main.lua` contains the new predicate call at the gate **and** does **not** contain the bare line `if enableCrossRef then` | none | A1 |
+| T6.1b | I | the vendored `main.lua`\'s assignment gate, structurally | same file → asserts `main.lua` contains the new predicate call at the gate **and** does **not** contain the bare line `if enableCrossRef then` | none | A1 |
 | T6.1c | I | the vendored tree's *whole* gate surface, exhaustively | same file → walks every `.lua` under the vendored filters root; asserts `crossref_present()` appears in `floatreftarget.lua` and `modules/callouts.lua`, **and** that the complete set of occurrences of the substring `param("enable-crossref"` equals exactly the three allow-listed ones (`main.lua`\'s param read; `layout/ipynb.lua` ×2) | none | A2, A4, A5, A6; and any *fifth* site a future re-pin introduces |
 | T6.2 | L | behavioral drift after a re-pin | `seam deferred until P5's Layer-1/Layer-2 contract tests` — P3's checklist item 6 says "confirm P5's contract test covers drift detection (no new mechanism needed beyond P5's existing plan)", and P5's plan agrees ("the same behavioral-tripwire philosophy P3 already established for its own 3-file patch"). **P5 is scheduled after P3.** See the Missing-test pass for the verdict on that ordering. | — | — |
 
@@ -778,9 +778,9 @@ rows, and now also the assertion that distinguishes A7's warn-and-skip from the 
 
 | # | Tier | Real unit exercised | Seam (invoked → asserted) | Mock boundary | Named revert hunk |
 |---|---|---|---|---|---|
-| T7.1 | L | vendored `main.lua`'s real filter-list construction, real `quarto_crossref_filters`, real `decorate_caption_with_crossref`, real `float_title_prefix` | M1 → unzip `word/document.xml`, assert a run containing `Figure\u{a0}1:` and a run containing `A caption here` | environment only: `QUARTO_SHARE_PATH`, `--data-dir`, `QUARTO_FILTER_PARAMS` (built by the test). No Lua is mocked. | A1's polarity |
+| T7.1 | L | vendored `main.lua`\'s real filter-list construction, real `quarto_crossref_filters`, real `decorate_caption_with_crossref`, real `float_title_prefix` | M1 → unzip `word/document.xml`, assert a run containing `Figure\u{a0}1:` and a run containing `A caption here` | environment only: `QUARTO_SHARE_PATH`, `--data-dir`, `QUARTO_FILTER_PARAMS` (built by the test). No Lua is mocked. | A1's polarity |
 | T7.2 | L | same | M2 → assert **no** `Figure` run; assert `A caption here` present; assert stderr has no `field 'order' is missing` | same | A1's polarity in the `A=false` direction |
-| T7.3 | L | same, plus `crossref/tables.lua`'s `float.order == nil` guard | M3 → assert no `Figure` run; assert `A caption here` present; **assert stderr contains `field 'order' is missing from float`** | same | A1's polarity; the assign-numbers conjunct |
+| T7.3 | L | same, plus `crossref/tables.lua`\'s `float.order == nil` guard | M3 → assert no `Figure` run; assert `A caption here` present; **assert stderr contains `field 'order' is missing from float`** | same | A1's polarity; the assign-numbers conjunct |
 | T7.4 | L | same | M4 → identical assertions to M3 | same | **A2**; the `crossref_present()` disjunct |
 | T7.5 | L | same | M5 → assertions identical to M1 | same | the `== "external"` literal |
 
@@ -1092,9 +1092,9 @@ explicit `accepted-untested`. Silent omission would read as "covered."
    take exactly the same branch as with `"quarto"`. There is no input that discriminates the two
    spellings, so no test can be written for it. Keep the literal for readability.
 
-7. **`sections.lua`'s suppression under external mode (design doc §11).** Under
+7. **`sections.lua`\'s suppression under external mode (design doc §11).** Under
    `crossref-numbering: external` the whole `quarto_crossref_filters` group is skipped, and
-   `sections()` is inside it (`main.lua`'s `crossref-combineFilters` entry lists
+   `sections()` is inside it (`main.lua`\'s `crossref-combineFilters` entry lists
    `file_metadata(), qmd(), sections(), crossref_figures(), equations(), crossref_theorems(),
    crossref_callouts()`) — so `number-sections: true` silently loses section numbers until
    `bd-5aklrxgi` lands. The decision not to fix it is frozen. **`accepted-untested` as a
@@ -1120,7 +1120,7 @@ explicit `accepted-untested`. Silent omission would read as "covered."
    names the PR, so whoever performs the re-pin has the pointer — which is precisely what
    T6.1a's digits-after-`#` assertion protects.
 
-9. **`layout/ipynb.lua:121,126`'s deliberate no-change.** **`accepted-untested`.** Both
+9. **`layout/ipynb.lua:121,126`\'s deliberate no-change.** **`accepted-untested`.** Both
    `add_renderer("PanelLayout", …)` calls pass the identical `render_ipynb_layout` callback
    (re-verified 2026-09-18, `:120-127`), so no input distinguishes patched from unpatched and no
    test can be written. Worth a one-line comment at the site in the vendored copy explaining why
@@ -1128,7 +1128,7 @@ explicit `accepted-untested`. Silent omission would read as "covered."
    T6.1c's allow-list reads as an unexplained exception, and a future implementer "completing the
    patch" would redden T6.1c for a change that alters nothing.
 
-10. **`customnodes/theorem.lua:278`'s implicit gate (`if order == nil then return el end`).**
+10. **`customnodes/theorem.lua:278`\'s implicit gate (`if order == nil then return el end`).**
    **`accepted-untested` within P3.** The plan says it "auto-adapts once P6 wires `order` onto
    the node," which is right, but it is unreachable in Task 7's matrix: `theorem.lua:67` declares
    `class_name = {}`, so a raw `::: {#thm-x}` Div is **not** parsed into a `Theorem` node by the
@@ -1209,7 +1209,7 @@ plan is open.
    not a failure, so the golden has to check the string"). That holds for floats —
    `crossref/tables.lua:229-231` guards `float.order == nil` explicitly. It does **not** hold for
    callouts: `modules/callouts.lua:17` passes `callout.order` straight into
-   `titlePrefix` → `numberOption` → `formatNumberOption`'s `local num = order.order`
+   `titlePrefix` → `numberOption` → `formatNumberOption`\'s `local num = order.order`
    (`crossref/format.lua:124,140`), with **no nil guard anywhere on that path**. Under
    `crossref-numbering: external`, a `#nte-`-labeled callout whose `order` Q2 has not injected
    therefore raises a Lua error and fails the render — and callout nodes *do* survive into
@@ -1218,7 +1218,7 @@ plan is open.
    `enable-crossref: false` early-returns and default mode always assigns.
 
    **RESOLVED 2026-09-18, decided with Gordon: add the missing `order == nil` guard to the PR.**
-   Landed as anchor **A7** in Task 3, mirroring `float_title_prefix`'s guard
+   Landed as anchor **A7** in Task 3, mirroring `float_title_prefix`\'s guard
    (`crossref/tables.lua:229-231`) line for line. Three consequences, all applied:
    - The plan's "degrades to a silent `warn()`, not an error" framing is now **true for this site
      too**, so it needed no correction — the guard makes the audit table right rather than the

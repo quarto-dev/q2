@@ -424,7 +424,7 @@ waits; nothing else blocks.
   threading), bd-spb7mobo (metadata-files decision),
   bd-ip1lrgra (Lua quarto.project.profile), bd-kzwt3xcu
   (preview watch/restart on profile-config change),
-  bd-47hhbmaj (auto-gitignore /_*.local). bd-mlj6 and
+  bd-47hhbmaj (auto-gitignore /\_\*.local). bd-mlj6 and
   bd-ev8mk1rp closed as implemented.
 - [x] Full gates: `cargo xtask verify` (full, WASM leg) green;
   PR #492 opened (label `feature-port`), CI green after one

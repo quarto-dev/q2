@@ -75,7 +75,7 @@ In `quarto-error-reporting` 0.3.2 (a crates.io version dep, `Cargo.lock:6154`), 
   - `:906` `std::fs::canonicalize(target)`. On any error it skips the link.
   - `:912` `url::Url::from_file_path(Self::plain_absolute_path(abs_path))`. The `url` crate turns `\` into `/`, adds the third slash (`file:///C:/…`), and percent-encodes.
   - `:919-927` adds the `#line:col` fragment only when `target == path`. For an origin link (notebook cell → `.ipynb`) there is no fragment.
-- `src/diagnostic.rs:944` `fn plain_absolute_path(p: PathBuf) -> PathBuf`. On Windows it strips `\\?\UNC\` → `\\` and `\\?\` → `` from the lossy string, and does nothing on other platforms.
+- `src/diagnostic.rs:944` `fn plain_absolute_path(p: PathBuf) -> PathBuf`. On Windows it strips ``\\?\UNC\`` → ``\\`` and ``\\?\`` → `` `` from the lossy string, and does nothing on other platforms.
 - **Visibility: private.** It is a bare `fn` on `DiagnosticMessage` behind `#[cfg(all(feature = "ariadne", not(target_family = "wasm")))]`, so q2 cannot call it. QER's own unit test (`:2705-2711`) calls it to compute its expected URL. That is fine inside QER, but it would be circular for us to copy it.
 
 ### Q2 — Existing helpers / deps usable by the test

@@ -92,7 +92,7 @@ seeded first-run samples, revocable/role-scoped links, sender UI redesign
 - [x] New `invitePreview.test.ts`: base64url JSON encode/decode unit tests
   (pure functions, no DOM).
 - [x] `InviteLanding.test.tsx` (jsdom pragma): renders both `kind`s ×
-  {signed-in, signed-out}; exact kicker/CTA copy per matrix (incl.
+  \{signed-in, signed-out\}; exact kicker/CTA copy per matrix (incl.
   "Join and open <start name>" / generic legacy text); payload block
   skipped when preview absent; no name input, no color swatches, no
   footnote below CTA; CTA busy state while joining.

@@ -298,7 +298,7 @@ with the correct provenance:
 
   **Positional-alignment safeguards** (review-pass 2026-05-22): the
   fix relies on the invariant *"`AttrSourceInfo.attributes[i]` is the
-  `(key_src, val_src)` for the i-th entry in `Attr.2`'s insertion
+  `(key_src, val_src)` for the i-th entry in `Attr.2`\'s insertion
   order."* This invariant holds in the parser's main path but **is
   not documented and is broken in two preexisting code paths**
   (duplicate-key handling in `commonmark_attribute.rs:41-49`;
@@ -410,8 +410,8 @@ comprehensive grep.
   `ShortcodeResolveTransform::resolve_shortcode`. General Lua filter
   dispatches (`UserFiltersStage`) leave `Generated { by: filter, ... }`
   intact — that is the steady-state for filter constructions, per
-  Plan 4 §"Filter constructions become Generated { by: filter, from:
-  [] }". The post-walk is not wired into the filter stage and should
+  Plan 4 §"Filter constructions become Generated \{ by: filter, from:
+  [] \}". The post-walk is not wired into the filter stage and should
   not be.
 - **Most transforms just need to preserve ctx.source_info**. The
   "audit and fix" is mostly bug fixes — ctx already has the info; the
@@ -621,7 +621,7 @@ below.)
   blocks: Div, BlockQuote, OrderedList, BulletList, DefinitionList,
   Figure, Table (cells), Custom (slot contents). The canonical
   reusable shape is in
-  `crates/quarto-core/src/transforms/shortcode_resolve.rs`'s own
+  `crates/quarto-core/src/transforms/shortcode_resolve.rs`\'s own
   `recurse_inline` (\~lines 945-1027) and `resolve_block`
   (\~lines 710-863), which already cover this set including Image's
   alt/caption content and Note's nested blocks. Model the new mutable
@@ -961,7 +961,7 @@ cross-file FileId issue genuinely requires anchoring at the
 parent-file level.
 
 The shortcode-resolution provenance change propagates to: q2-preview
-rendering (Plan 2A's framework atomic gate in `dispatch.tsx`'s `Node`
+rendering (Plan 2A's framework atomic gate in `dispatch.tsx`\'s `Node`
 detects `shortcode` kind via `ATOMIC_KINDS` and the
 JS-side `isAtomicSourceInfo` accessor), writer round-trip (the
 incremental writer Verbatim-copies the shared shortcode token bytes via

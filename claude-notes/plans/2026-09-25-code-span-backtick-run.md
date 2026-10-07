@@ -9,7 +9,7 @@
 
 1. **Token-emission design accepted:** hidden external token emitted by
    `parse_code_span` for any in-span backtick run whose length differs from
-   the delimiter; the grammar's `/[`]/` alternative is removed.
+   the delimiter; the grammar's ``/[`]/`` alternative is removed.
 2. **Paragraph-start triple-backtick spans (case 30):** fix in this session
    if it works out; otherwise file a follow-up (uncommon, lower priority).
 3. **Unclosed backtick strings:** keep q2's strictness; a new diagnostic
@@ -44,11 +44,13 @@ Filed 2026-09-24 by Carlos (bug, P2, open). An inline code span whose
 content contains a backtick run *longer* than its own delimiter fails with
 an uncoded `Parse error`:
 
-    a `x``y` b             -> Parse error   (2-run inside 1-delim)
-    a ` ```mermaid ` b     -> Parse error   (3 inside 1)
-    a `` ```{r} `` b       -> Parse error   (3 inside 2)
-    a ``` x````y ``` b     -> Parse error   (4 inside 3)
-    a `` `x` `` b          -> OK            (shorter inner run)
+```
+a `x``y` b             -> Parse error   (2-run inside 1-delim)
+a ` ```mermaid ` b     -> Parse error   (3 inside 1)
+a `` ```{r} `` b       -> Parse error   (3 inside 2)
+a ``` x````y ``` b     -> Parse error   (4 inside 3)
+a `` `x` `` b          -> OK            (shorter inner run)
+```
 
 CommonMark's rule: a closer is a backtick string of *exactly* the opener's
 length; any run of a different length (shorter **or longer**) is content.

@@ -549,10 +549,10 @@ identical to today" bar until this note. Pinned by
 | # | Tier | Real unit exercised | Seam (invoked → asserted) | Mock boundary | Named revert hunk |
 |---|---|---|---|---|---|
 | T5.1 | I (`tests/integration/pandoc_profile_cut.rs`) | the footnotes B1 half inside the real `Pandoc("docx")` pipeline | parse a two-footnote fixture, run the `Pandoc("docx")` pipeline → `Inline::Note` count == 2; no `id == "footnotes"` block; no `fnref\d+` Span | test `SystemRuntime` | **H5a**, the B1 half's `NoteReference`→`Note` resolution |
-| T5.5 | I (same file) | `collect_note_definitions`' placement in the B1 half | same fixture, `Pandoc("docx")` → zero `NoteDefinitionPara` / `NoteDefinitionFencedBlock` blocks survive | same | **H5c**, `collect_note_definitions`'s call site in the B1 half |
-| T5.6 | U (`pipeline.rs::tests`) | both halves' registration | build `HtmlRender` → the name list contains `"footnotes"` **then** `"footnotes-resolve"`, adjacent and in that order; build `Pandoc("docx")` → contains `"footnotes"` and **not** `"footnotes-resolve"` | `make_test_runtime()` | **H5b**, the `footnotes-resolve` push site / its exclude-list entry |
+| T5.5 | I (same file) | `collect_note_definitions`\' placement in the B1 half | same fixture, `Pandoc("docx")` → zero `NoteDefinitionPara` / `NoteDefinitionFencedBlock` blocks survive | same | **H5c**, `collect_note_definitions`\'s call site in the B1 half |
+| T5.6 | U (`pipeline.rs::tests`) | both halves\' registration | build `HtmlRender` → the name list contains `"footnotes"` **then** `"footnotes-resolve"`, adjacent and in that order; build `Pandoc("docx")` → contains `"footnotes"` and **not** `"footnotes-resolve"` | `make_test_runtime()` | **H5b**, the `footnotes-resolve` push site / its exclude-list entry |
 | T5.2 | U (`footnotes.rs::tests`, extending the existing tests at `:652+`) | `FootnotesTransform` HTML path | `HtmlRender` profile, same fixture → exact `Span#fnref1[Superscript[Link…]]` shape + `Div#footnotes` classes `["footnotes","section"]` | none | `create_footnote_ref` (`:473-514`) / `create_footnotes_section` (`:527+`) |
-| T5.3 | U | `FootnotesTransform::transform`'s early return | `reference-location: block`, then `section`, each under `HtmlRender` **and** `Pandoc("docx")` → AST unchanged (`Inline::Note` still standing, no `Div#footnotes`) | none | `footnotes.rs:109-114` |
+| T5.3 | U | `FootnotesTransform::transform`\'s early return | `reference-location: block`, then `section`, each under `HtmlRender` **and** `Pandoc("docx")` → AST unchanged (`Inline::Note` still standing, no `Div#footnotes`) | none | `footnotes.rs:109-114` |
 
 **Revert hunks, stated exactly:**
 
@@ -567,7 +567,7 @@ The three hunks this task creates, named now so the implementer cannot substitut
   `pipeline.push(...)` immediately after the existing `FootnotesTransform` push, and its
   `"footnotes-resolve"` entry in `PANDOC_TRANSFORM_EXCLUDED`. It owns `create_footnote_ref`
   (`:473-514`) and `create_footnotes_section` (`:527+`), moved rather than copied.
-- **H5c** — `collect_note_definitions`'s call site (`:118`) staying in the **B1** half.
+- **H5c** — `collect_note_definitions`\'s call site (`:118`) staying in the **B1** half.
 
 **Revert hunks, stated exactly:**
 
@@ -581,7 +581,7 @@ The three hunks this task creates, named now so the implementer cannot substitut
   block at all, so a fixture's inline footnote can satisfy T5.1's count while its `[^1]`/`[^1]:`
   pair silently leaks `NoteDefinitionPara` into the wire format. The fixture must contain **both
   forms** (the acceptance criterion says so) and T5.5 is the assertion that uses the second one.
-- **T5.6** — Revert ⟨**H5b**'s exclude-list entry⟩ → ⟨the `Pandoc("docx")` half of T5.6's
+- **T5.6** — Revert ⟨**H5b**\'s exclude-list entry⟩ → ⟨the `Pandoc("docx")` half of T5.6's
   assertion⟩ RED (the HTML chrome would run for docx). Separately revert ⟨H5b's push site⟩ →
   ⟨T5.6's `HtmlRender` adjacency assertion⟩ RED **and** T5.2 RED (no chrome is produced at all).
   **Note the adjacency assertion is doing real work**: if `footnotes-resolve` were registered at

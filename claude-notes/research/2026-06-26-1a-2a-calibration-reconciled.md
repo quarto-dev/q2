@@ -92,7 +92,7 @@ finding F1, and it is the concrete vindication of running this lens.
   `quarto-api/src/text/index.ts`, header note :9-11), and the `engine.postprocess` hook is
   **dropped** (RTQ Level-2: "no post-write DOM stage"). BUT: FC-1 adds `preserve` +
   `post_process` as `#[serde(default)]` **wire carriers** (RTQ:676-677), and **Plan 3 builds
-  the preserve *producer*** (`removeAndPreserveHtml`, plan `quarto-jupyter.md:134-136`).
+  the preserve _producer_** (`removeAndPreserveHtml`, plan `quarto-jupyter.md:134-136`).
 - **Plain language:** this is *not* "dropped-no-seam" (correcting the Opus agent, confirming
   Sonnet). The data seam exists (FC-1 carries `preserve`), and the producer exists (Plan 3).
   What is missing is the *consuming* restore stage, and — the real defect — **no plan
@@ -124,7 +124,7 @@ finding F1, and it is the concrete vindication of running this lens.
   `system.pandoc`/`path.*` bodies; the marimo-`pandoc` catch is resolved). This is purely a
   **propagation gap**: executing RTQ Item A must also (1) re-label the still-stubbed bodies
   `notYetImplementedError("Plan 2")` and (2) strike Plan 2's gating prose + the dead
-  `format.*` gate. This adjudicates the two agents' one divergence — Opus called pandoc
+  `format.*` gate. This adjudicates the two agents\' one divergence — Opus called pandoc
   "adequate" (true of the feature), Sonnet flagged the stub label (true of the current
   state); both are right about different layers.
 - **Recommended action:** add these two edits to RTQ Item A's checklist (it already says

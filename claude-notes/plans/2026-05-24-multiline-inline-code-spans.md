@@ -92,7 +92,7 @@ characters.
 | `- Outer\n  - Inner \`code\n    span\` text` (nested list) | nested `BulletList` with `Code "code span"` |
 | `- a\n\n  In looser list, \`code\n  span\` here.` (loose list) | `BulletList` with `Para` containing `Code "code span"` |
 | `` `a  b` `` (doubled space inside code, single line)     | `Code "a  b"` — doubled space **preserved** |
-| `` `a \n b` `` (multi-line with surrounding spaces)       | `Code "a   b"` — `\n` → one space; surrounding spaces preserved |
+| `` `a \n b` `` (multi-line with surrounding spaces)       | ``Code "a   b"`` — `\n` → one space; surrounding spaces preserved |
 
 The rule that falls out: **a code span absorbs all content (including
 otherwise-interruptive characters) up to its matching close, but is

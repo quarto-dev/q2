@@ -6,7 +6,7 @@
 ## Symptom
 
 `preview_static_e2e` tests flake on the ubuntu leg of CI with
-`no \`reload\` event within 30s` or `no \`render-start\` event within 30s`.
+``no `reload` event within 30s`` or ``no `render-start` event within 30s``.
 Which test fails varies from run to run. Every failing test edits a file right after connecting:
 
 | Run | Test | Missing event |
