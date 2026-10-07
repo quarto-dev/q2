@@ -26,6 +26,7 @@ import { getMarkRange, type Editor } from '@tiptap/core';
 import { shouldPlaceChromeBelow } from '../editChromeGeometry';
 import { ensureRichTextStyles } from './styles';
 import type { EditorialKind } from './schema';
+import { editorialAvailability } from './editorialSelection';
 import { requestOpenCommentOnSpan } from '../commentPending';
 import { ModeToggle } from './ModeToggle';
 import { EditTypeIndicator } from './EditTypeIndicator';
@@ -213,27 +214,35 @@ export function EditToolbar({
   };
 
   // ---- editorial marks (!! highlight, -- delete, ++ insert) ------------------
-  // Sets the editable `span` mark with an editorial `kind` on the selection
-  // (serializes as `[!! text]` etc.). Existing spans are never altered.
+  // Enabled only with text selected. Adds the editable `span` mark with an
+  // editorial `kind` (serializes as `[!! text]` etc.); when the selection is
+  // exactly an editorial span, only that kind is enabled and it removes the
+  // mark (see editorialSelection.ts). Existing spans are never otherwise altered.
+  const avail = editor
+    ? editorialAvailability(editor.state.doc, editor.state.selection.from, editor.state.selection.to)
+    : ({ mode: 'none' } as const);
+
   const applyEditorialMark = (kind: EditorialKind) => (e: MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (!editor) return;
-    const { doc, schema, selection } = editor.state;
-    const { from, to, $from, $to } = selection;
-    if (from === to || !doc.textBetween(from, to, ' ').trim()) {
-      setNotice('Select some text to mark');
-      return;
+    if (avail.mode === 'add') {
+      editor.chain().focus().setMark('span', { attr: ['', [], []], comments: [], kind }).run();
+    } else if (avail.mode === 'remove' && avail.kind === kind) {
+      const { mark, from, to } = avail;
+      const attr = mark.attrs.attr as [string, string[], unknown[]];
+      const bare = !attr[0] && attr[1].length === 0 && attr[2].length === 0 && mark.attrs.comments.length === 0;
+      editor
+        .chain()
+        .focus()
+        .command(({ tr }) => {
+          tr.removeMark(from, to, mark);
+          // A span carrying attrs/comments stays a plain span; a bare one disappears.
+          if (!bare) tr.addMark(from, to, mark.type.create({ ...mark.attrs, kind: '' }));
+          return true;
+        })
+        .run();
     }
-    if (!$from.sameParent($to)) {
-      setNotice('Select text within one paragraph');
-      return;
-    }
-    if (doc.rangeHasMark(from, to, schema.marks.span)) {
-      setNotice('Selection overlaps an existing span');
-      return;
-    }
-    editor.chain().focus().setMark('span', { attr: ['', [], []], comments: [], kind }).run();
   };
 
   const editorialButtons = (
@@ -242,18 +251,24 @@ export function EditToolbar({
       { sigil: '--', kind: 'delete', title: 'Mark selection as deleted', label: '--' },
       { sigil: '++', kind: 'insert', title: 'Mark selection as inserted', label: '++' },
     ] as const
-  ).map((b) => (
-    <button
-      key={b.sigil}
-      type="button"
-      title={b.title}
-      className={`q2-rt-tb-btn q2-rt-tb-${b.kind}`}
-      onMouseDown={(e) => e.preventDefault()}
-      onMouseUp={applyEditorialMark(b.kind)}
-    >
-      {b.label}
-    </button>
-  ));
+  ).map((b) => {
+    const removing = avail.mode === 'remove' && avail.kind === b.kind;
+    const enabled = avail.mode === 'add' || removing;
+    return (
+      <button
+        key={b.sigil}
+        type="button"
+        title={removing ? `Remove ${b.kind} mark` : b.title}
+        disabled={!enabled}
+        aria-pressed={removing}
+        className={`q2-rt-tb-btn q2-rt-tb-${b.kind}${removing ? ' q2-rt-tb-active' : ''}`}
+        onMouseDown={(e) => e.preventDefault()}
+        onMouseUp={applyEditorialMark(b.kind)}
+      >
+        {b.label}
+      </button>
+    );
+  });
 
   const commentButton = (
     <button
