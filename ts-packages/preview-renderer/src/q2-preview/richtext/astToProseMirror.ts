@@ -11,7 +11,7 @@
 // name-identical schema); tests serialize the node directly.
 
 import type { Mark, Node as PMNode } from '@tiptap/pm/model';
-import { richTextSchema, type ChipKind } from './schema';
+import { richTextSchema, type ChipKind, type EditorialKind } from './schema';
 import { type AstNode, type PoolEntry, nodeSource } from './ast';
 
 interface Ctx {
@@ -65,6 +65,12 @@ function withSink<T>(ctx: Ctx, fn: () => T): [T, string[]] {
 const S = richTextSchema;
 const M = S.marks;
 const N = S.nodes;
+
+const EDITORIAL_CLASSES: [string, EditorialKind][] = [
+  ['quarto-insert', 'insert'],
+  ['quarto-delete', 'delete'],
+  ['quarto-highlight', 'highlight'],
+];
 
 function chip(node: AstNode, kind: ChipKind, ctx: Ctx, fallback: string): PMNode {
   const src = nodeSource(node, ctx.pool, ctx.src) ?? fallback;
@@ -160,31 +166,34 @@ function inlines(items: AstNode[], marks: readonly Mark[], ctx: Ctx): PMNode[] {
           break;
         }
         const isShortcode = classes.includes('quarto-shortcode__');
-        // Synthesized / editorial-mark spans (`quarto-*`) stay opaque chips, and
-        // so does a span nested inside another span (one `span` mark per text).
-        if (isShortcode || classes.some((c) => c.startsWith('quarto-')) || marks.some((m) => m.type === M.span)) {
-          const editorialKind = classes.includes('quarto-insert')
-            ? 'insert'
-            : classes.includes('quarto-delete')
-              ? 'delete'
-              : classes.includes('quarto-highlight')
-                ? 'highlight'
-                : 'span';
-          out.push(chip(node, isShortcode ? 'shortcode' : editorialKind, ctx, ''));
+        // An editorial span (`[++ ]`/`[-- ]`/`[!! ]`) is an editable `span` mark
+        // with a `kind`; the qmd reader's `quarto-*` class is dropped here and
+        // re-expressed by the sigil on serialization.
+        const editorialClass = EDITORIAL_CLASSES.find(([c]) => classes.includes(c));
+        const kind: EditorialKind | '' = editorialClass ? editorialClass[1] : '';
+        const otherQuarto = classes.some((c) => c.startsWith('quarto-') && c !== editorialClass?.[0]);
+        // Other synthesized `quarto-*` spans stay opaque chips, and so does a span
+        // nested inside another span (one `span` mark per text).
+        if (isShortcode || otherQuarto || marks.some((m) => m.type === M.span)) {
+          out.push(chip(node, isShortcode ? 'shortcode' : 'span', ctx, ''));
           break;
         }
         // Authored span -> editable `span` mark. Its content is built under a
         // provisional mark while the comments inside it are collected; the
         // final mark (comments attached) then replaces the provisional one.
-        const spanAttr: SpanAttr = [attr?.[0] ?? '', [...classes], [...(attr?.[2] ?? [])]];
-        const provisional = M.span.create({ attr: spanAttr, comments: [] });
+        const spanAttr: SpanAttr = [
+          attr?.[0] ?? '',
+          classes.filter((c) => c !== editorialClass?.[0]),
+          [...(attr?.[2] ?? [])],
+        ];
+        const provisional = M.span.create({ attr: spanAttr, comments: [], kind });
         const [content, comments] = withSink(ctx, () =>
           inlines(asArray(children), marks.concat(provisional), ctx),
         );
         if (comments.length === 0) {
           out.push(...content);
         } else {
-          const final = M.span.create({ attr: spanAttr, comments });
+          const final = M.span.create({ attr: spanAttr, comments, kind });
           out.push(...content.map((n) => n.mark(n.marks.map((m) => (m === provisional ? final : m)))));
         }
         break;

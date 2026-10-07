@@ -43,6 +43,7 @@ export const SpanMark = Mark.create({
     return {
       attr: { default: EMPTY_SPAN_ATTR, rendered: false },
       comments: { default: [] as string[], rendered: false },
+      kind: { default: '', rendered: false },
     };
   },
 
@@ -55,6 +56,7 @@ export const SpanMark = Mark.create({
           return {
             attr: parseJson<SpanAttr>(el.getAttribute('data-attr'), EMPTY_SPAN_ATTR),
             comments: parseJson<string[]>(el.getAttribute('data-comments'), []),
+            kind: el.getAttribute('data-kind') ?? '',
           };
         },
       },
@@ -66,7 +68,8 @@ export const SpanMark = Mark.create({
     return [
       'span',
       mergeAttributes(HTMLAttributes, {
-        class: `q2-rt-span${comments.length ? ' q2-rt-span-commented' : ''}`,
+        class: `q2-rt-span${mark.attrs.kind ? ` q2-rt-span-${mark.attrs.kind}` : ''}${comments.length ? ' q2-rt-span-commented' : ''}`,
+        'data-kind': mark.attrs.kind,
         'data-attr': JSON.stringify(mark.attrs.attr ?? EMPTY_SPAN_ATTR),
         'data-comments': JSON.stringify(comments),
         title: comments.length

@@ -37,6 +37,10 @@ const FIXTURES: { name: string; qmd: string }[] = [
   { name: 'inline-math', qmd: 'Identity $e^{i\\pi}+1=0$ is neat.\n' },
   { name: 'crossref', qmd: 'See @fig-plot for details.\n' },
   { name: 'citation', qmd: 'Established [@knuth1984].\n' },
+  { name: 'editorial-insert', qmd: 'Please [++ add this] today.\n' },
+  { name: 'editorial-delete', qmd: 'The deadline is [-- Friday][++ Monday] now.\n' },
+  { name: 'editorial-highlight-marks', qmd: 'Note [!! the **bold** part] here.\n' },
+  { name: 'editorial-with-comment', qmd: 'Check [!! this part [>> is it right?]] soon.\n' },
   { name: 'raw-html-inline', qmd: 'Text with <span class="x">raw</span> inside.\n' },
 ];
 
