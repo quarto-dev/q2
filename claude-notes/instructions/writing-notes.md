@@ -31,6 +31,11 @@ The habits that most often break a note here, in order of frequency:
 11. A multi-paragraph footnote written Pandoc-style (`[^1]: First.` and an
     indented second paragraph). Write it as a block footnote: `::: ^1` on its
     own line, the paragraphs, `:::`.
+12. A shortcode quoted inside a fenced code block. Shortcodes expand inside
+    code blocks on purpose (textual inclusion of snippets), so a quoted
+    `{{< include "x.qmd" >}}` reports Q-17-2. Write it as `{{{< include "x.qmd" >}}}`
+    (triple braces; renders with double), or open the fence as
+    `` ```{.markdown shortcodes="false"} ``.
 
 Whitespace-flanked `*`, `~16`, `x^2` and a bare `@` (`` `main` @ `sha` ``) are
 literal text and need nothing. `snake_case` is fine.

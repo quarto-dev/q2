@@ -99,6 +99,33 @@ them, the escapes are harmless.
 | `[REVISED]`, `[x]` outside a task list (bare brackets) | literal | Q-2-49; rendered as a span | `\[REVISED\]`, or a code span |
 | `<anonymous>`, `<div>` (raw HTML in prose) | raw HTML | Q-2-9; passed through as raw HTML, so invisible in the page | `` `<anonymous>` `` when you mean the text |
 
+## Shortcodes inside code blocks
+
+Shortcodes are expanded inside fenced code blocks too, on purpose: an
+include shortcode in a code block pulls a reusable snippet into it
+textually. So a document that *quotes* a shortcode in a code block,
+as an example, gets the shortcode's effect instead of its text (for
+an include, a Q-17-2 "include file not found" error). Two ways to
+keep it literal:
+
+````{.qmd shortcodes="false"}
+```{.markdown shortcodes="false"}
+{{< include "snippet.qmd" >}}
+```
+````
+
+turns expansion off for the whole block, and the escaped form with
+triple braces
+
+````{.qmd shortcodes="false"}
+```markdown
+{{{< include "snippet.qmd" >}}}
+```
+````
+
+keeps one shortcode literal and renders it with the ordinary double
+braces. The triple-brace form works in prose as well.
+
 ## Quiet differences: no diagnostic
 
 | You wrote | Pandoc | q2 | Fix |
