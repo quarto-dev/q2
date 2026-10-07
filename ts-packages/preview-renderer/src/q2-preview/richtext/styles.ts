@@ -32,6 +32,11 @@ const CSS = `
   user-select: none;
   font-size: 0.8rem;
   line-height: 1;
+  /* An absolutely positioned box shrink-to-fits its containing block, so on a
+     narrow screen it would squeeze the buttons and wrap their labels (--, !!, ++).
+     Size to content instead; the buttons never wrap or shrink. */
+  width: max-content;
+  white-space: nowrap;
 }
 /* bd-pvcnea83: flip below the edit box when there is no room above (e.g. the
    first block of a title-less document, flush against the viewport top — the
@@ -48,6 +53,8 @@ const CSS = `
   background: none;
   border-radius: 3px;
   min-width: 1.6em;
+  flex-shrink: 0;
+  white-space: nowrap;
   padding: 0.25em 0.4em;
   font-size: 0.8rem;
   cursor: pointer;
