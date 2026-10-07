@@ -495,6 +495,18 @@ export class ConnectionManager {
   }
 
   /**
+   * Conformance-test seam (same family as {@link pendingWaiterCount}):
+   * the number of registered {@link onProjectEvent} listeners. Under
+   * one-server-per-request HTTP serving (CAP-16's loopback listener,
+   * Phase 6) every request constructs a fresh server — if the resource
+   * bridge's listener outlives its server, this count grows without
+   * bound. Production code has no reason to call this.
+   */
+  projectEventListenerCount(): number {
+    return this.projectEventListeners.size;
+  }
+
+  /**
    * Connect to a project. Walks the try-then-fallback auth policy,
    * then opens the sync client. Re-uses existing project state when
    * we've already connected.

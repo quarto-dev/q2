@@ -84,6 +84,14 @@ mode.
 
 ## Setup
 
+The server ships three ways: embedded in the `q2` binary (`q2 mcp` —
+recommended; it carries the quarto-hub.com OAuth client credentials),
+this npm package (`npx @quarto/hub-mcp`, Node.js 24+, also listed in
+the MCP Registry as `io.github.quarto-dev/hub-mcp`), and a `.mcpb`
+one-click bundle for Claude Desktop attached to each release. The npm
+and `.mcpb` channels carry **no** built-in OAuth client credentials —
+see below.
+
 You need two values from your hub operator:
 
 | Env var                          | Source                                    |

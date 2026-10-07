@@ -1,0 +1,67 @@
+{
+  "manifest_version": "0.3",
+  "name": "hub-mcp",
+  "display_name": "Quarto Hub",
+  "version": "0.1.0",
+  "description": "AI agent access to Quarto Hub projects: read, write, search, and watch project files over automerge sync.",
+  "long_description": "Gives an MCP-capable agent read/write access to files in Quarto Hub projects over Automerge sync, speaking the Model Context Protocol over stdio. Files change live as collaborators edit; every project file is also an attachable, subscribable MCP resource. Optionally renders projects for structured diagnostics (opt-in) and answers Quarto usage questions from an embedded documentation corpus.",
+  "author": {
+    "name": "Posit PBC",
+    "url": "https://posit.co"
+  },
+  "homepage": "https://github.com/quarto-dev/q2",
+  "documentation": "https://github.com/quarto-dev/q2/tree/main/ts-packages/quarto-hub-mcp",
+  "support": "https://github.com/quarto-dev/q2/issues",
+  "license": "MIT",
+  "keywords": ["quarto", "automerge", "collaboration", "mcp"],
+  "server": {
+    "type": "node",
+    "entry_point": "dist-bundle/index.mjs",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/dist-bundle/index.mjs"],
+      "env": {
+        "QUARTO_HUB_SERVER": "${user_config.server}",
+        "QUARTO_HUB_MCP_CLIENT_ID": "${user_config.client_id}",
+        "QUARTO_HUB_MCP_CLIENT_SECRET": "${user_config.client_secret}",
+        "QUARTO_HUB_MCP_ISSUER": "${user_config.issuer}"
+      }
+    }
+  },
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "node": ">=24"
+    }
+  },
+  "user_config": {
+    "server": {
+      "type": "string",
+      "title": "Sync server URL",
+      "description": "Automerge sync server for your Quarto Hub deployment.",
+      "required": false,
+      "default": "wss://quarto-hub.com/ws"
+    },
+    "client_id": {
+      "type": "string",
+      "title": "OAuth client ID",
+      "description": "OAuth client id for hubs that require sign-in. Leave blank for no-auth hubs.",
+      "required": false
+    },
+    "client_secret": {
+      "type": "string",
+      "title": "OAuth client secret",
+      "description": "OAuth client secret paired with the client ID. Stored by the host; never displayed.",
+      "required": false,
+      "sensitive": true
+    },
+    "issuer": {
+      "type": "string",
+      "title": "OIDC issuer",
+      "description": "Identity provider issuer URL (default: Google). Must be an https:// URL.",
+      "required": false
+    }
+  },
+  "tools_generated": false,
+  "prompts_generated": false
+}

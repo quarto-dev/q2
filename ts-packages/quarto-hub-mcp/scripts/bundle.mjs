@@ -54,7 +54,12 @@ import { stageQmdParser } from './stage-qmd-parser.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkgRoot = join(here, '..');
-const outDir = join(pkgRoot, 'dist-bundle');
+// HUB_MCP_BUNDLE_OUT lets the packaging scripts (pack-npm.mjs,
+// pack-mcpb.mjs) build into a PRIVATE directory: the test suite runs
+// packaging tests (which rebuild) concurrently with bundle.test.ts
+// (which spawns dist-bundle/index.mjs), and sharing one output dir is a
+// wipe-while-spawning race (bd-8iv9jty5).
+const outDir = process.env['HUB_MCP_BUNDLE_OUT'] ?? join(pkgRoot, 'dist-bundle');
 
 const NODE_TARGET = 'node24';
 

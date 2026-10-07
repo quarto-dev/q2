@@ -1,0 +1,46 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.quarto-dev/hub-mcp",
+  "title": "Quarto Hub",
+  "description": "Read, write, search, and watch files in Quarto Hub projects over automerge sync.",
+  "version": "0.1.0",
+  "websiteUrl": "https://quarto-hub.com",
+  "repository": {
+    "url": "https://github.com/quarto-dev/q2",
+    "source": "github",
+    "subfolder": "ts-packages/quarto-hub-mcp"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@quarto/hub-mcp",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "QUARTO_HUB_SERVER",
+          "description": "Automerge sync server URL. Defaults to wss://quarto-hub.com/ws.",
+          "isRequired": false
+        },
+        {
+          "name": "QUARTO_HUB_MCP_CLIENT_ID",
+          "description": "OAuth client id for hubs that require sign-in. Unset: the server runs unauthenticated (sufficient for no-auth hubs).",
+          "isRequired": false
+        },
+        {
+          "name": "QUARTO_HUB_MCP_CLIENT_SECRET",
+          "description": "OAuth client secret paired with QUARTO_HUB_MCP_CLIENT_ID.",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "QUARTO_HUB_MCP_ISSUER",
+          "description": "OIDC issuer override (default: Google). Must be an https:// URL.",
+          "isRequired": false
+        }
+      ]
+    }
+  ]
+}

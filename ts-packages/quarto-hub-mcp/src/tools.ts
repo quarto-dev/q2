@@ -223,6 +223,12 @@ function normalizeArgs(args: ToolArgs, configuredServer: string): ToolArgs {
   if (ref.file && (next.path === undefined || next.path === '')) {
     next.path = ref.file;
   }
+  // The project documents record no display name, so an incoming share
+  // URL's `name=` is the only source — stash it for the handlers that
+  // re-emit a shareUrl (connect_project, get_project_info).
+  if (ref.name) {
+    next.shareName = ref.name;
+  }
   return next;
 }
 
@@ -609,13 +615,48 @@ async function handleTool(
   }
 }
 
+/** hub-client's own display fallback for a nameless project. */
+const FALLBACK_PROJECT_NAME = 'Untitled project';
+
+/**
+ * The file a share link opens when the caller didn't name one: the
+ * project's `index.qmd`, else its first `.qmd`, else its first file —
+ * and plain `index.qmd` for an empty project (hub-client requires
+ * `file=`; bd-jtl4o0pt).
+ */
+function defaultShareFile(paths: string[]): string {
+  const sorted = [...paths].sort();
+  if (sorted.includes('index.qmd')) return 'index.qmd';
+  return sorted.find((p) => p.endsWith('.qmd')) ?? sorted[0] ?? 'index.qmd';
+}
+
+/** The `file=` for an emitted shareUrl: an incoming share URL's `file=`
+ * (normalizeArgs stashes it in `path`), else the project default. */
+function shareFileFor(args: ToolArgs, state: ProjectState): string {
+  if (typeof args.path === 'string' && args.path !== '') return args.path;
+  return defaultShareFile(Array.from(state.files.keys()));
+}
+
+/** The `name=` for an emitted shareUrl: an incoming share URL's `name=`
+ * (normalizeArgs stashes it in `shareName`), else the display fallback. */
+function shareNameFor(args: ToolArgs): string {
+  return typeof args.shareName === 'string' && args.shareName !== ''
+    ? args.shareName
+    : FALLBACK_PROJECT_NAME;
+}
+
 async function handleConnectProject(args: ToolArgs, manager: ConnectionManager): Promise<CallToolResult> {
   const project = args.project as string;
   const state = await manager.connect(project, { server: routedServer(args) });
   return structured({
     project,
     files: buildFileList(state),
-    shareUrl: buildShareUrl({ server: state.serverUrl, indexDocId: project }),
+    shareUrl: buildShareUrl({
+      server: state.serverUrl,
+      indexDocId: project,
+      file: shareFileFor(args, state),
+      name: shareNameFor(args),
+    }),
   });
 }
 
@@ -657,7 +698,12 @@ async function handleGetProjectInfo(args: ToolArgs, manager: ConnectionManager):
   return structured({
     project,
     server: state.serverUrl,
-    shareUrl: buildShareUrl({ server: state.serverUrl, indexDocId: project }),
+    shareUrl: buildShareUrl({
+      server: state.serverUrl,
+      indexDocId: project,
+      file: shareFileFor(args, state),
+      name: shareNameFor(args),
+    }),
     // A foreign project (share-URL `server=` routing) is always joined
     // authorless, so its effective mode is no-auth regardless of the
     // configured hub's observation.
@@ -711,7 +757,10 @@ async function handleListProjects(args: ToolArgs, manager: ConnectionManager): P
       shareUrl: buildShareUrl({
         server: entry.syncServer,
         indexDocId,
-        name: entry.description,
+        // topFiles is a per-user cache (ProjectSetEntrySummary); absent
+        // one, the link points at the conventional entry point.
+        file: defaultShareFile(entry.summary?.topFiles ?? []),
+        name: entry.description || FALLBACK_PROJECT_NAME,
       }),
     }))
     .sort((a, b) => (a.lastAccessed < b.lastAccessed ? 1 : a.lastAccessed > b.lastAccessed ? -1 : 0));
@@ -2064,7 +2113,8 @@ async function handleCreateProject(args: ToolArgs, manager: ConnectionManager): 
     shareUrl: buildShareUrl({
       server: manager.configuredServerUrl,
       indexDocId: result.indexDocId,
-      ...(name ? { name } : {}),
+      file: defaultShareFile(result.files.map((f) => f.path)),
+      name: name ?? FALLBACK_PROJECT_NAME,
     }),
     ...(await syncField(
       args,

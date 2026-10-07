@@ -33,6 +33,10 @@ import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { setSyncLogger } from '@quarto/quarto-sync-client';
 
 import { ConnectionManager } from './connection-manager.js';
+import {
+  conformanceRequestState,
+  registerConformanceFixtures,
+} from './conformance-fixtures.js';
 import { registerTools } from './tools.js';
 import { registerResources } from './resources.js';
 import { registerPrompts } from './prompts.js';
@@ -137,6 +141,15 @@ export interface CreateServerOptions {
    * filtered by the entry's `subscriptions/listen` router.
    */
   readonly era?: 'modern' | 'legacy';
+  /**
+   * Register the `test_*` conformance fixture surface (Phase 6,
+   * bd-8iv9jty5): the fixed tools/prompts/resources the official
+   * conformance suite is written against, plus the HMAC requestState
+   * codec the MRTR fixtures mint/verify with. TEST-ONLY — only the
+   * loopback listener (`http-loopback.ts`) sets this; production
+   * listings never expose fixture names.
+   */
+  readonly conformanceFixtures?: boolean;
 }
 
 /**
@@ -160,11 +173,19 @@ const SERVER_DESCRIPTION =
 const SERVER_WEBSITE_URL = 'https://quarto-hub.com';
 
 /**
+ * The package floor for the MCP `Implementation` version — kept equal to
+ * `package.json`'s `version` (pinned by a test in index.test.ts).
+ */
+export const PACKAGE_VERSION_FLOOR = '0.1.0';
+
+/**
  * The version reported on the MCP `Implementation` record (BP-10):
  * the launcher-injected `QUARTO_MCP_SERVER_VERSION` (`<q2 version>+
- * <embed commit>`) when running under `q2 mcp`; the bundle's own
- * `build-info.json` stamp when run standalone (npx); the package floor
- * otherwise (dev `tsc` builds, vitest).
+ * <embed commit>`) when running under `q2 mcp`; the npm package version
+ * (`build-info.json`'s `npmVersion`, written by scripts/pack-npm.mjs)
+ * when installed from the registry (CAP-15); the bundle's own
+ * `build-info.json` git stamp when run standalone from a checkout; the
+ * package floor otherwise (dev `tsc` builds, vitest).
  */
 export function resolveServerVersion(env: NodeJS.ProcessEnv = process.env): string {
   const injected = env['QUARTO_MCP_SERVER_VERSION'];
@@ -172,16 +193,20 @@ export function resolveServerVersion(env: NodeJS.ProcessEnv = process.env): stri
   try {
     const stamp = join(dirname(fileURLToPath(import.meta.url)), 'build-info.json');
     const info = JSON.parse(readFileSync(stamp, 'utf8')) as {
+      npmVersion?: unknown;
       gitCommit?: unknown;
       gitDirty?: unknown;
     };
+    if (typeof info.npmVersion === 'string' && info.npmVersion.length > 0) {
+      return info.npmVersion;
+    }
     if (typeof info.gitCommit === 'string' && info.gitCommit.length >= 7) {
-      return `0.0.1+${info.gitCommit.slice(0, 9)}${info.gitDirty === true ? '.dirty' : ''}`;
+      return `${PACKAGE_VERSION_FLOOR}+${info.gitCommit.slice(0, 9)}${info.gitDirty === true ? '.dirty' : ''}`;
     }
   } catch {
     // No build stamp next to the entry — a dev build.
   }
-  return '0.0.1';
+  return PACKAGE_VERSION_FLOOR;
 }
 
 /**
@@ -295,15 +320,28 @@ export function createServer(options: CreateServerOptions): McpServer {
       // `server/discover` with -32601 unless a modern revision is named
       // here. Legacy clients still `initialize` against the 2025 entries.
       supportedProtocolVersions: [...SUPPORTED_PROTOCOL_VERSIONS, '2026-07-28'],
+      // The MRTR state-integrity seam (SEP-2322): fixture instances
+      // share one HMAC codec so a flow's rounds verify across the
+      // per-request constructions of HTTP serving. Production (stdio)
+      // serving returns no input_required results and needs no codec.
+      ...(options.conformanceFixtures === true
+        ? { requestState: { verify: conformanceRequestState.verify } }
+        : {}),
     },
   );
 
   registerTools(server, manager, readOnly, authToolsState, allowRender ?? false);
-  registerResources(server, manager, { era: era ?? 'legacy' });
+  registerResources(server, manager, {
+    era: era ?? 'legacy',
+    fixtures: options.conformanceFixtures ?? false,
+  });
   registerPrompts(server, manager, {
     readOnly,
     allowRender: allowRender ?? false,
   });
+  if (options.conformanceFixtures === true) {
+    registerConformanceFixtures(server);
+  }
   return server;
 }
 
