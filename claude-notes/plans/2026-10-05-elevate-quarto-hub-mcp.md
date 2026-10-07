@@ -1244,6 +1244,37 @@ Work items:
   `resources/templates/list` (both static); `resources/list` /
   `resources/read` keep the no-cache default — files are live-edited
   data.
+
+  **Security considerations (Q-2):** a resource URI carries the
+  project's automerge doc id — a full bearer capability on no-auth
+  hubs, and a necessary (not sufficient) credential on authenticated
+  ones, where an allowlisted Bearer is also required. Share URLs
+  already distribute the (doc id, server) pair, but deliberately, by
+  the user's hand; resource URIs flow *automatically* — every
+  `resources/list` page, every `resource_link` in a write result,
+  every `resources/updated` notification, the `review-draft` embedded
+  resource — into model context, host transcripts, and provider logs,
+  channels that treat URIs as identifiers, not secrets (nothing
+  redacts doc ids the way `redactTokens` redacts Bearers). The leak
+  asymmetry matters: a leaked file's contents are a one-time
+  disclosure, but a leaked doc id is standing read/write access with
+  no rotation story (remediation is forking the document to a new
+  id), and `?server=` completes the locator+capability pair in one
+  string. Path placement remains correct — host normalizers lowercase
+  and base58 doc ids are case-sensitive — but it puts the capability
+  in the most-logged component of the URI; there is no better slot
+  (userinfo is deprecated and equally logged). Finally,
+  `resources/read` dials whatever `server=` names, which admits
+  prompt-injection-driven connects to foreign hubs via URIs embedded
+  in file contents; mitigations in place: the Bearer is never
+  replayed cross-origin (audience-bound), the insecure-transport gate
+  refuses Bearer over non-loopback `ws://`, and the no-auth attempt
+  runs first. Residual risk: a *no-auth* foreign hub connects
+  silently — a consent gate (dial only hubs previously seen from
+  user-supplied input) is the candidate fix, filed as bd-zc3ubxiv
+  with an implementation assessment.
+  User-facing warning added in `docs/tools/q2-mcp.qmd` ("Resources
+  and prompts").
 - [x] BP-6 prompts: `review-draft`, `collaborate-with-human`,
   `safe-edit-workflow` (read → patch → confirm), plus the render-flavored
   `fix-render-errors` (render → read diagnostics → patch → re-render) — all
