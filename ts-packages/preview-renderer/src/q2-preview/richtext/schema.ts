@@ -14,7 +14,7 @@
 
 import { Schema, type NodeSpec, type MarkSpec, type DOMOutputSpec } from '@tiptap/pm/model';
 
-export type ChipKind = 'math' | 'cite' | 'shortcode' | 'span' | 'raw' | 'block';
+export type ChipKind = 'math' | 'cite' | 'shortcode' | 'span' | 'raw' | 'block' | 'insert' | 'delete' | 'highlight';
 
 const pDOM: DOMOutputSpec = ['p', 0];
 const blockquoteDOM: DOMOutputSpec = ['blockquote', 0];
