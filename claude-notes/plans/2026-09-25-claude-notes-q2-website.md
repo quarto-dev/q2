@@ -2,11 +2,11 @@
 
 **Strand:** bd-uk8zgkha (epic)
 **Branch:** `braid/bd-uk8zgkha-claude-notes-website` (main checkout, no worktree; not pushed)
-**Status:** in progress. Mechanical escaping done for the literal-character classes;
-star emphasis needs manual review (queue below); uncoded parse errors not yet triaged.
-Merged with `main` on 2026-10-06 and again on 2026-10-07 (through PR 800), re-escaped
-to fixpoint on nightly .20261007; see "Bringing the branch up to date" below. Q-2-7 is
-at zero; the star queue below is current.
+**Status:** every note renders (1456 / 1456, 0 errors, 2026-10-07, nightly
+.20261007). Mechanical escaping, six per-file agent batches, and a hand tail; the
+star queue below is historical. Remaining: warnings (Q-2-49, Q-2-9, Q-16-3,
+Q-16-5), site polish, CI, and every merge from `main` needs the fixpoint script
+(and probably a small batch) for the notes it brings in.
 
 ## Goal
 
@@ -160,6 +160,8 @@ whose original markup had an unbalanced backtick.
 | 2026-10-07, batch 3 | 1359 / 1480 | 123 | 212 |
 | 2026-10-07, batch 4 | 1391 / 1480 | 91 | — |
 | 2026-10-07, batch 5 | 1430 / 1480 | 52 | 182 |
+| 2026-10-07, batch 6 (multi-error tail) | 1464 / 1480 | 18 | 15 |
+| 2026-10-07, last eleven by hand; fixtures excluded | 1456 / 1456 | 0 | 0 |
 
 Remaining error classes (nightly .20261007): uncoded parse errors 372 (153 files),
 Q-2-12 33, Q-2-11 33, Q-2-41 24, Q-2-5 12, Q-2-35 11, Q-2-13 8, Q-2-2 7, plus a
@@ -245,7 +247,25 @@ start of a continuation line), and it will delete or restyle markup when the
 rules do not name a fix. The hand follow-up after each batch was roughly a third
 of the files; worth it, but the review is the job, not the launch.
 
-## Manual review queue: star emphasis
+## Hand tail (2026-10-07)
+
+After six batches, 18 files. Every one cascaded from a single root, found by
+prefix-bisect (render the file's first N blocks until it fails;
+`scratchpad/bisect_root.py` in the session). Roots, in order of frequency:
+
+- A code span written with backslash-escaped backticks, `` `x\`y\`z` `` — the
+  backslash is literal inside a span, so the span closes early. Longer delimiters.
+- A span whose inner backtick run is as long as its delimiter, ``` `` ``r x` `` ```,
+  and a 4-backtick example inside a 4-backtick fence or span. One more backtick.
+- A span that starts a line with four backticks, read as a fence; reflow one word.
+- A wrapped line beginning with `+`, `{`, `#`: escape it.
+- `**bold *italic***`: write the inner italic with underscores.
+- A `---` rule directly above a heading, read as a YAML block; a front-matter value
+  containing ` #`; raw control characters in a regex; `N*` in a table header.
+- Six repro fixtures under `plans/code-span-backtick-run-investigation/cases/` and
+  the import spike's `losses.md` are supposed to fail; excluded in `_quarto.yml`.
+
+## Manual review queue: star emphasis (historical)
 
 Each line is `file:line:col` and the reported opener, in brackets. For each:
 find the real culprit in that paragraph, which may be a different star. Close
