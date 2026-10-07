@@ -77,9 +77,15 @@ describe('list_projects (CAP-3)', () => {
         syncServer: 'wss://quarto-hub.com/ws',
         description: 'Newer paper',
       });
-      // Every entry carries a share URL that round-trips to the project.
+      // Every entry carries a complete share URL — hub-client requires
+      // server/file/name (bd-jtl4o0pt) — that round-trips to the project.
+      // Entries carry no summary cache, so file= is the index.qmd fallback.
       for (const p of sc.projects) {
-        expect(parseProjectRef(p.shareUrl).project).toBe(p.indexDocId);
+        const ref = parseProjectRef(p.shareUrl);
+        expect(ref.project).toBe(p.indexDocId);
+        expect(ref.server).toBe(p.syncServer);
+        expect(ref.name).toBe(p.description);
+        expect(ref.file).toBe('index.qmd');
       }
     } finally {
       await f.close();

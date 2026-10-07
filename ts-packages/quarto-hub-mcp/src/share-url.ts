@@ -29,42 +29,40 @@ export interface ProjectRef {
 /**
  * The sync server used when neither `--server` nor `QUARTO_HUB_SERVER`
  * is given (bd-81cfshmw plan, "Zero-config default"). Lives here — the
- * URL module — so {@link buildShareUrl} can tell whether a `server=`
- * parameter is needed without an import cycle; re-exported by index.ts.
+ * URL module — and is re-exported by index.ts.
  */
 export const DEFAULT_SERVER_URL = 'wss://quarto-hub.com/ws';
 
 /** The Quarto Hub web app origin share links open in. */
 const HUB_WEB_ORIGIN = 'https://quarto-hub.com';
 
-/** Parts of a share URL — the inverse of {@link ProjectRef}. */
+/** Parts of a share URL — the inverse of {@link ProjectRef}. All four
+ * parts are required: hub-client's share route treats `server`, `file`,
+ * and `name` as mandatory and rejects the link as "incomplete" when any
+ * is missing (bd-jtl4o0pt). */
 export interface ShareUrlParts {
   /** The sync server the project is reached through (ws:// or wss://). */
   server: string;
   /** The project's bare automerge index document ID. */
   indexDocId: string;
   /** Human-readable project name (`name=`). */
-  name?: string;
-  /** A file to open (`file=`). */
-  file?: string;
+  name: string;
+  /** The file the link opens (`file=`). */
+  file: string;
 }
 
 /**
  * Build the quarto-hub.com share URL for a project (CAP-1) — the
  * clickable link an agent hands a human. The inverse of
  * {@link parseProjectRef}: every URL this builds round-trips through it.
- * `server=` is included only when the project lives on a non-default
- * sync server (production links stay clean).
+ * `server=` is always emitted, even for the default hub.
  */
 export function buildShareUrl(parts: ShareUrlParts): string {
   const params = new URLSearchParams();
-  if (!serversMatch(parts.server, DEFAULT_SERVER_URL)) {
-    params.set('server', parts.server);
-  }
-  if (parts.file) params.set('file', parts.file);
-  if (parts.name) params.set('name', parts.name);
-  const query = params.toString();
-  return `${HUB_WEB_ORIGIN}/#/share/${parts.indexDocId}${query === '' ? '' : `?${query}`}`;
+  params.set('server', parts.server);
+  params.set('file', parts.file);
+  params.set('name', parts.name);
+  return `${HUB_WEB_ORIGIN}/#/share/${parts.indexDocId}?${params.toString()}`;
 }
 
 /**
