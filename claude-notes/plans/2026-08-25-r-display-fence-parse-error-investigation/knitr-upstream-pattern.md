@@ -49,7 +49,7 @@ anywhere, not just at line start. Measured difference on the strand's
 |---|---|
 | q2 today (`` `r\s+ ``) | yes — fatal |
 | knitr upstream | **yes** — knitr itself has this hole |
-| `(^\|[^`])` port | no |
+| ``(^\|[^`])`` port | no |
 
-So the `(^|[^`])` guard is not merely a port; it fixes a case knitr
+So the ``(^|[^`])`` guard is not merely a port; it fixes a case knitr
 upstream still gets wrong. See `regex-candidates.out` for the full run.

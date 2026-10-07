@@ -1,9 +1,9 @@
 ---
 date: 2026-05-11
 branch: feature/q2-preview
-status: v3 — all open items resolved (2026-05-11 review #2). Ready to
+status: "v3 — all open items resolved (2026-05-11 review #2). Ready to
         spin up the hub-client decomposition sub-epic, after which
-        Phase A planning can begin.
+        Phase A planning can begin."
 beads: bd-kw93 (epic).
 ---
 

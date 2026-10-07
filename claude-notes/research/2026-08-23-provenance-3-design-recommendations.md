@@ -117,13 +117,13 @@ Phase 5 already classifies as out-of-epic.
 > `pampa::readers::qmd::read` + `body_source_for` on the landed bounded search:
 >
 > 1. **"A body consisting solely of fence characters" is not a hole** when the
->    closing fence is present. ```` ````{python}\n```\n```` ```` resolves to
+>    closing fence is present. ````` ````{python}\n```\n```` ````` resolves to
 >    `13..16`, the true body — because the region ends *at* the closing fence
 >    line, so the body's ```` ``` ```` matches at region offset 0.
 > 2. **The real hole is narrower, and its degradation is coarser than stated.**
 >    It is a body whose *last line* is made only of fence characters in a block
 >    that tree-sitter error recovery left **without** a closing fence
->    (```` ````{python}\n```\n ```` → `0..17`; ```` ````{python}\nx\n```\n ````
+>    (````` ````{python}\n```\n ````` → `0..17`; ````` ````{python}\nx\n```\n `````
 >    → `0..19`, truths `13..16` and `13..18`). The last-line test reads the
 >    body's own final line as the closing fence, the contiguous search then
 >    fails, and we take the **block-span fallback** — the whole block, not a span
@@ -194,7 +194,7 @@ doc § 6 already settled scope (wrong-span, not drifting); the plan asks only "d
 
 ### Options
 
-1. **Delete the dead computation and simplify the seam.** Change `process_shortcode_string`'s
+1. **Delete the dead computation and simplify the seam.** Change `process_shortcode_string`\'s
    parameter to `&dyn Fn() -> String`, have the closure return the decoded string, drop the
    `let … else { panic!() }`, and add a two-line comment at the construction site: *the arg's
    range is the quote-inclusive node span paired with the decoded string; no consumer offsets
@@ -221,7 +221,7 @@ Plan 2 Phase 4's attribute-value path is the template.
 
 ---
 
-## 3. A splice-safety guard for `q_2_28`'s `end_offset()` reader
+## 3. A splice-safety guard for `q_2_28`\'s `end_offset()` reader
 
 ### What is actually being asked
 

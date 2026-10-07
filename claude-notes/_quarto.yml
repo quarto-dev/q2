@@ -9,6 +9,9 @@ project:
     - "**/*.md"
     # session-specific symlink to the active plan (gitignored)
     - "!plans/CURRENT.md"
+    # repro fixtures that are meant to fail to parse (investigation inputs)
+    - "!plans/code-span-backtick-run-investigation/cases/**"
+    - "!research/2026-10-02-document-import-spike/losses.md"
 
 
 website:

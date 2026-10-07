@@ -99,7 +99,8 @@ the much richer target above. Group-level correspondence:
 `render.rs:626-633` hard-fails any `--to` target other than HTML/revealjs today, so
 "format-not-in-q2" is a large and expected bucket.
 
----
+***
+
 ## Catalog
 
 Each row: **file** · **format scope** · **status** · **Q2 location (ported) / recommended landing (gap)**. `⚑` = new-seam signal (would need a user-filter injection point Q2 lacks, or a whole missing subsystem). Evidence `file:line` anchors are in the per-agent notes; representative ones kept inline.

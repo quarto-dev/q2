@@ -58,7 +58,7 @@ strand bd-heading-id-drops-inline-content-fl84n3ql, not this one.)
 
 ## `markup-probe/` — does the TOC keep inline markup at all?
 
-Headings: `## Use \`code\` and *em* and **strong**` and
+Headings: ``## Use `code` and *em* and **strong**`` and
 `## Math $x+y$ and a [link](https://example.com)`.
 
 **Quarto 1** keeps the markup:

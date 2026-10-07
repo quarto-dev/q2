@@ -50,7 +50,7 @@ size:  13M
 size: 2748992 bytes
 dynamic imports: 0
 chunk refs: 0
-global export: globalThis["mermaid"] = globalThis.__esbuild_esm_mermaid_nm["mermaid"].default;
+global export: globalThis["mermaid"] = globalThis.\_\_esbuild_esm_mermaid_nm["mermaid"].default;
 
 ## Byte-identity vs Quarto 1's vendored copy
 07e37dfa97b337ccc85365d57eddf99b9706f09db3b59b260d0333b23b343c4b  package/dist/mermaid.min.js

@@ -404,13 +404,13 @@ and a follow-up bead linking to the filed bug, Gordon's call on which.
     real behavior differs between margin/book and plain-document contexts, or whether
     something more specific to these three fixtures is wrong, is unresolved. Do not
     attempt a fix without a dedicated research pass first.
-12. **[Corrected 2026-10-01, fixed by PR #772: pandoc already emits Skylighting output;
-    only plumbing and generated definitions were missing.]**
+12. **\[Corrected 2026-10-01, fixed by PR #772: pandoc already emits Skylighting output;
+    only plumbing and generated definitions were missing.\]**
     **Skylighting-based syntax highlighting for Typst is not implemented at all — the
     single largest capability gap found this session.** Q2's Typst output always uses
     Typst's own native/idiomatic code highlighter (bare ` ```python ` fenced blocks,
     colored by Typst itself at compile time), **regardless of the `syntax-highlighting:`
-    metadata setting**. Quarto's own Skylighting-based highlighting — Q1\'s *default*
+    metadata setting**. Quarto\'s own Skylighting-based highlighting — Q1\'s *default*
     mode, which generates `#Skylighting(...)`/`#KeywordTok`/`#StringTok`/etc. calls, a
     theme-specific `#show raw.where(block: true): set text(...)` styling block, and
     integrates with brand.yml's `monospace-*` tokens — has no implementation for Typst
@@ -444,7 +444,7 @@ and a follow-up bead linking to the filed bug, Gordon's call on which.
     or per-element PDF text styling. Only the single-mainfont/basefont case (already
     sampled by the predecessor plan) works.
 16. **Smart-quote heuristic gap: possessive apostrophe in a heading hard-errors.**
-    `## \`P(A|B)\` = Bayes\' Rule` fails to parse: `[Q-2-10] Closed Quote Without Matching
+    ``## `P(A|B)` = Bayes' Rule`` fails to parse: `[Q-2-10] Closed Quote Without Matching
     Open Quote`. Real Pandoc's smart-typography heuristic recognizes this extremely
     common English possessive-apostrophe pattern (no matching open quote nearby) and
     treats the `'` as an apostrophe, not a quote-close; Q2 hard-errors instead. Not
@@ -671,7 +671,7 @@ merges, not before.
 **In a draft PR, awaiting a merge decision:**
 - **#8** extra `#block[` wrapper around knitr/pandoc tables — **PR #767**
   (draft, open, mergeable), `bd-gb6u8qsz`.
-- **#4**'s real juice fix — **PR #766** (draft, open, mergeable),
+- **#4**\'s real juice fix — **PR #766** (draft, open, mergeable),
   `bd-sccaj7u4` (see above).
 
 **Still fully open, untouched:**
