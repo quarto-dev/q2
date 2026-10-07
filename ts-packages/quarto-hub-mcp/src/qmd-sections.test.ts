@@ -47,6 +47,9 @@ interface SectionRead {
   path: string;
   hash: string;
   content: string;
+  truncated?: boolean;
+  next_offset?: number | null;
+  hint?: string;
   section: { name: string; level: number; heading_line: number; end_line: number };
 }
 
@@ -83,6 +86,10 @@ describe.skipIf(PARSER_UNAVAILABLE)('read_file with a section selector (CAP-11)'
       expect(read.content).toBe('## Background\n\nBackground text.\n\n');
       expect(read.section).toEqual({ name: 'Background', level: 2, heading_line: 9, end_line: 12 });
       expect(read.hash).toMatch(/^sha256:/);
+      // A read covering the whole section is complete even though the
+      // file continues — truncated/next_offset report the byte cap only.
+      expect((read as { truncated?: boolean }).truncated).toBe(false);
+      expect((read as { next_offset?: number | null }).next_offset).toBeNull();
     } finally {
       await f.close();
     }
@@ -111,6 +118,29 @@ describe.skipIf(PARSER_UNAVAILABLE)('read_file with a section selector (CAP-11)'
       );
       expect(read.content).toBe('# Results\n\nResult text.\n');
       expect(read.section.end_line).toBe(23);
+      expect(read.truncated).toBe(false);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it('a section cut by max_bytes reports truncation with an in-section continuation', async () => {
+    const f = await startInMemoryMcp();
+    try {
+      const body = Array.from({ length: 100 }, (_, i) => `section line ${i + 1} ${'x'.repeat(40)}`).join('\n');
+      const project = await seed(f, `# Big\n\n${body}\n\n# Small\n\ntiny.\n`);
+      const read = structured<SectionRead>(
+        await callTool(f, 'read_file', {
+          project,
+          path: 'paper.qmd',
+          section: 'Big',
+          max_bytes: 1000,
+        }),
+      );
+      expect(read.truncated).toBe(true);
+      expect(read.next_offset).toBeGreaterThan(1);
+      expect(read.next_offset!).toBeLessThanOrEqual(read.section.end_line);
+      expect(read.hint).toMatch(/Section "Big" continues/);
     } finally {
       await f.close();
     }

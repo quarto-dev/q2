@@ -101,6 +101,55 @@ export interface RenderOutcome {
 /** Per-stream capture cap so a runaway log cannot exhaust memory. */
 const STREAM_CAP = 1024 * 1024;
 
+/**
+ * Run a loose-files render: one `q2 render <file> --json-errors`
+ * invocation per file (q2 refuses multiple paths without a project —
+ * Q-7-4), sequentially, under one shared deadline. Outcomes come back
+ * per file, in input order.
+ */
+export async function runRenderBatch(
+  opts: Omit<RunRenderOptions, 'targets'> & { files: string[] },
+): Promise<Array<{ file: string; outcome: RenderOutcome }>> {
+  const { q2Path, cwd, files, timeoutMs, signal } = opts;
+  const deadline = Date.now() + timeoutMs;
+  const results: Array<{ file: string; outcome: RenderOutcome }> = [];
+  for (const file of files) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0 || signal?.aborted) {
+      results.push({
+        file,
+        outcome: {
+          exitCode: null,
+          timedOut: true,
+          stdout: '',
+          stderr: '',
+          durationMs: 0,
+        },
+      });
+      continue;
+    }
+    const outcome = await runRender({
+      q2Path,
+      cwd,
+      targets: [file],
+      timeoutMs: remaining,
+      signal,
+    });
+    results.push({ file, outcome });
+    if (outcome.timedOut) {
+      // The deadline is shared: once one file hits it, the rest are over.
+      for (const rest of files.slice(files.indexOf(file) + 1)) {
+        results.push({
+          file: rest,
+          outcome: { exitCode: null, timedOut: true, stdout: '', stderr: '', durationMs: 0 },
+        });
+      }
+      break;
+    }
+  }
+  return results;
+}
+
 /** Run `q2 render <targets...> --json-errors` in `cwd`, bounded by timeout. */
 export function runRender(opts: RunRenderOptions): Promise<RenderOutcome> {
   const { q2Path, cwd, targets, timeoutMs, signal } = opts;
