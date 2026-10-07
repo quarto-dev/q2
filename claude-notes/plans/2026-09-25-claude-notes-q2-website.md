@@ -110,6 +110,7 @@ before accepting, and keep it for the long tail, not for whole documents.
 | bd-uncoded-braces-indent-9eq8004k | braces in prose and indented lines fail without a Q-code |
 | bd-jfjyds7r | a setext heading (`===` underline) silently renders as a paragraph, no diagnostic |
 | bd-fx3fr46j | Q-2-29 (indented footnote content) is never emitted; Q-2-35 fires instead |
+| bd-v8t4l69h | shortcodes are evaluated inside fenced code blocks (an include repro quoted in a fence fails with Q-17-2) |
 
 Shipped in 0.33.0-nightly.20260925: the code-span fix, the nested-project boundary,
 and the flanking fix for `*`, `~` and `^` (now literal, no error). `_` is half done:
