@@ -38,6 +38,10 @@ export class McpTestClient {
   readonly stderrLines: string[] = [];
   private stderrBuffer = '';
 
+  /** The `serverInfo` from the initialize handshake (captured by
+   * `start`), so tests can assert on the server's identity/version. */
+  serverInfo?: { name?: string; version?: string };
+
   /**
    * Start the MCP server process with the given arguments.
    *
@@ -106,11 +110,14 @@ export class McpTestClient {
     });
 
     // Initialize the MCP session
-    await this.sendRequest('initialize', {
+    const initResponse = await this.sendRequest('initialize', {
       protocolVersion: '2024-11-05',
       capabilities: {},
       clientInfo: { name: 'test-client', version: '1.0' },
     });
+    this.serverInfo = (
+      initResponse.result as { serverInfo?: { name?: string; version?: string } } | undefined
+    )?.serverInfo;
 
     // Send initialized notification
     this.sendNotification('notifications/initialized');

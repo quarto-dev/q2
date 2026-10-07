@@ -30,17 +30,21 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import type { CallToolResult } from '@modelcontextprotocol/client';
+import { InMemoryTransport } from '@modelcontextprotocol/server';
 import {
   createSyncClient,
   type SyncClient,
 } from '@quarto/quarto-sync-client';
 
+import { ConnectionManager } from './connection-manager.js';
+import { createServer } from './index.js';
 import {
   startInMemoryMcp,
   seedProject,
   callTool,
   type InMemoryMcpFixture,
 } from './in-memory-fixture.js';
+import { startTestHub } from './test-hub.js';
 import {
   buildFileResourceUri,
   parseFileResourceUri,
@@ -260,6 +264,32 @@ describe('resources/list + resources/read (BP-5)', () => {
       expect(t?.uriTemplate).toBe('hub://project/{indexDocId}/{path}');
     } finally {
       await f.close();
+    }
+  });
+});
+
+describe('per-request server lifecycle (CAP-16 loopback, Phase 6)', () => {
+  it('unhooks the project-event bridge when its server closes', async () => {
+    // One-server-per-request HTTP serving constructs a fresh McpServer
+    // per exchange around a SHARED ConnectionManager. If registerResources'
+    // manager listener outlived its server, N requests would leave N
+    // listeners fanning every project event out to dead instances.
+    const hub = await startTestHub();
+    const manager = new ConnectionManager({ serverUrl: hub.url });
+    try {
+      const baseline = manager.projectEventListenerCount();
+      const rounds = 25;
+      for (let i = 0; i < rounds; i++) {
+        const server = createServer({ manager, readOnly: false });
+        const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
+        await server.connect(serverSide);
+        await server.close();
+        await clientSide.close();
+      }
+      expect(manager.projectEventListenerCount()).toBe(baseline);
+    } finally {
+      await manager.disconnectAll({ drainMs: 0 });
+      await hub.stop();
     }
   });
 });
